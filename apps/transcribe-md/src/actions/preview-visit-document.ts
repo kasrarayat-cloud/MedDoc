@@ -215,6 +215,10 @@ export async function previewVisitDocumentAction(
       noteTemplateId: true,
       noteTemplateVersion: true,
       createdAt: true,
+      // ⚠️ RULING #267 — the VISIT'S OWN tenant. `user.practiceId` beside it is
+      // the AUTHOR's practice: two different columns, equal on today's data and
+      // not constrained to be.
+      practiceId: true,
       user: { select: { practiceId: true } },
     },
   });
@@ -343,10 +347,16 @@ export async function previewVisitDocumentAction(
       // and the signature will produce. The parameter is required on the shared
       // function so forgetting it is a compile error rather than a divergence.
       visitId,
-      practiceId: visit.user.practiceId,
-      // ⚠️ THE VISIT'S OWN DOCTOR, NOT THE REQUESTER. This read is
-      // practice-scoped, so a colleague previewing the record would otherwise
-      // stamp their id on the author's fill. Same actor fix as native-export's.
+      // ⚠️ RULING #267 — THE CHART OWNS THE NOTE, so the fill is scoped by the
+      // VISIT'S tenant. This read `visit.user.practiceId`, the AUTHOR's, while
+      // `sign-freeze.ts` reads the override table with the tenant's — so for a
+      // locum the PREVIEW showed a default that the FREEZE could not see, and
+      // the doctor signed a document without content they had watched appear.
+      practiceId: visit.practiceId,
+      // ⚠️ THE VISIT'S OWN DOCTOR, NOT THE REQUESTER — and this one is about the
+      // ACTOR, which is a different axis from the tenant above and stays as it
+      // is. This read is practice-scoped, so a colleague previewing the record
+      // would otherwise stamp their id on the author's fill.
       doctorId: visit.userId,
       noteTemplateId: templateId,
       noteTemplateVersion: templateVersion,

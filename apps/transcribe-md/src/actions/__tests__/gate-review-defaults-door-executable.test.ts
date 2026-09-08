@@ -226,6 +226,25 @@ function primeVisit(over: Record<string, unknown> = {}) {
     //
     // A fixture that gives two distinct things the same value cannot witness
     // them being confused.
+    //
+    // ⚠️ AND THERE ARE **THREE** VALUES HERE, NOT TWO — RULING #267. The split
+    // above separated the SESSION's practice from the AUTHOR's and stopped
+    // there, so `transcribe_visits."practiceId"` — the VISIT'S OWN TENANT, and
+    // the column every attached row is stamped with — was still borrowing one
+    // of the other two. That is the same disease one input over, and it is why
+    // `SF-1` survived the split that was supposed to end it.
+    //
+    // The three, and they are three different questions:
+    //   · `prac-1`            the SESSION's practice   — may this actor act?
+    //   · `visit-tenant-7`    the VISIT'S tenant       — what owns this chart?
+    //   · `author-practice-9` the AUTHOR's practice    — whose form fills it?
+    //
+    // ⚠️ THE TENANT IS DELIBERATELY **NOT** `prac-1`, even though production
+    // scoping makes them equal for any visit a door can reach. A fixture that
+    // reproduces the coincidence cannot witness the code depending on it — and
+    // the door's own comment already records that the equality is "a property
+    // of the data, not of the code".
+    practiceId: 'visit-tenant-7',
     user: { practiceId: 'author-practice-9' },
     ...over,
   });
@@ -412,16 +431,29 @@ describe('ROUND FOUR — a sign landing in the window cannot be written over', (
     expect(sql, 'the locked read does not re-assert the archive').toMatch(/"archivedAt"\s+IS NULL/);
     // ⚠️ AND THE PRACTICE IS BOUND, not interpolated or defaulted — a predicate
     // naming the column while binding nothing would satisfy the three above.
-    // ⚠️ THE SESSION'S PRACTICE, NOT THE VISIT AUTHOR'S. The fixture's visit is
-    // authored by `author-practice-9`; the session is `prac-1`; and the resolver
-    // filtered on the SESSION's. Binding the author's would re-assert the right
-    // column with the wrong value — not a narrower check, a different one — and
-    // it fails CLOSED, telling the doctor their visit is no longer available.
+    //
+    // ⚠️ THE **VISIT'S** TENANT — RULING #267, AND THIS ARM'S TITLE MOVED WITH
+    // IT. It used to say "the SESSION's practice, not the visit author's", and
+    // that was the best available answer while the fixture had only two values.
+    // With three, the honest one is neither: the lock re-asserts
+    // `transcribe_visits."practiceId"`, the VISIT'S OWN tenant, which is the
+    // same column the resolver filtered and the same value every attached row
+    // is stamped with. One derivation, one source.
+    //
+    // ⚠️ IN PRODUCTION THIS EQUALS THE SESSION'S PRACTICE BY CONSTRUCTION —
+    // `visitByIdScope` filters on this very column — so the change is invisible
+    // on real data and the fixture is deliberately built so it is NOT. A test
+    // that reproduces the coincidence cannot see the code resting on it.
+    //
+    // Binding the AUTHOR's practice (`author-practice-9`) would re-assert the
+    // right column with the wrong value — not a narrower check, a different
+    // one — and it fails CLOSED, telling the doctor their visit is no longer
+    // available.
     expect(
       params,
       'the locked read did not bind the visit id and the SESSION practice the ' +
         'resolver filtered with',
-    ).toEqual([VISIT, 'prac-1']);
+    ).toEqual([VISIT, 'visit-tenant-7']);
     expect(
       params,
       'the lock bound the visit AUTHOR practice — a different column from the ' +
@@ -720,6 +752,58 @@ describe('#204 — the door consults the PER-VISIT resolution', () => {
   });
 });
 
+describe("#267 — the CHART owns the note: one tenant, from the visit's own row", () => {
+  it('⚠️ the STORED row carries the VISIT tenant — not the author, not the requester', async () => {
+    // ⚠️ THIS IS `SF-1`, AND IT IS THE HALF THE SPLIT FIXTURE DID NOT CLOSE.
+    // `8cc89b7c` fixed the value handed to the LOCK and #260 ratified it; the
+    // value the ROW IS STAMPED WITH was left reading `visit.user.practiceId`.
+    // Three sources for one fact, two of which agree on production data.
+    await insert();
+    expect(overrideUpsert).toHaveBeenCalledTimes(1);
+    const created = (overrideUpsert.mock.calls[0][0] as { create: { practiceId: string } }).create;
+    expect(
+      created.practiceId,
+      'the override row is stamped with a practice that is not the visit tenant',
+    ).toBe('visit-tenant-7');
+    // POSITIVE CONTROL ON THE FIXTURE ITSELF: all three values must be
+    // DISTINCT, or this assertion passes by coincidence rather than by the code
+    // being right. #267's own words: a fixture that gives two distinct things
+    // the same value cannot witness them being confused.
+    expect(new Set(['prac-1', 'visit-tenant-7', 'author-practice-9']).size).toBe(3);
+  });
+
+  it("⚠️ the WRITE and the sign-time FREEZE agree — the defect was that they did not", async () => {
+    // ⚠️ THE ARM THAT MAKES `SF-1` UNABLE TO RECUR, and it is deliberately
+    // about the AGREEMENT rather than about either value. `sign-freeze.ts`
+    // reads `{ visitId, practiceId }` where `practiceId` is the value the SIGN
+    // route was scoped with — the visit's tenant. If the write is ever stamped
+    // with anything else, the freeze computes `overridesSha256` over an empty
+    // set and freezes a document without the doctor's own inserted default,
+    // silently, on a signed clinical record.
+    //
+    // Asserted against the READER'S predicate rather than against a literal:
+    // a literal here would be a fourth restatement of the same fact, and this
+    // whole ruling exists because there were three.
+    const freeze = readFileSync(
+      path.join(__dirname, '..', '..', 'lib', 'template-twin', 'sign-freeze.ts'),
+      'utf8',
+    );
+    expect(
+      freeze,
+      'sign-freeze no longer scopes the override read by { visitId, practiceId }',
+    ).toContain('where: { visitId, practiceId }');
+
+    await insert();
+    const created = (overrideUpsert.mock.calls[0][0] as { create: { practiceId: string } }).create;
+    // The lock's bound tenant IS the freeze's tenant — same column, same value.
+    const lockParams = lockedVisit.mock.calls[0].slice(1);
+    expect(
+      created.practiceId,
+      'the row is stamped with a practice the lock did not assert — the SF-1 shape',
+    ).toBe(lockParams[1]);
+  });
+});
+
 describe('#204 — the fill is asked the SAME question the preview asks', () => {
   it('⚠️ THE VISIT’S OWN DOCTOR, not the requester', async () => {
     await insert();
@@ -744,19 +828,26 @@ describe('#204 — the fill is asked the SAME question the preview asks', () => 
     expect(call).toMatchObject({
       visitId: VISIT,
       doctorId: 'author-1',
-      // ⚠️ THE VISIT AUTHOR'S PRACTICE, AND THIS ARM COULD NOT SAY SO UNTIL THE
-      // FIXTURE SPLIT THEM. Its title has always been "the visit's OWN doctor,
-      // not the requester" — but the session and the visit author both read
-      // `prac-1`, so the assertion held whichever value the door passed. Now the
-      // author is `author-practice-9` and the requester is `prac-1`, and the arm
-      // finally distinguishes what it claims to.
+      // ⚠️ THE **VISIT'S TENANT** — RULING #267, AND THIS IS THE THIRD ANSWER
+      // THIS ONE LINE HAS HAD. It was `prac-1` while the fixture conflated
+      // everything; then `author-practice-9` when the split separated the
+      // session from the author; it is `visit-tenant-7` now, because the
+      // question was never "whose practice is this?" but "what does this row
+      // belong to?", and the answer to that is the CHART.
       //
-      // ⚠️ AND THE FILL AND THE LOCK WANT DIFFERENT ONES, WHICH IS THE WHOLE
-      // TRAP: the FILL runs as the visit's own doctor (`author-practice-9`),
-      // while the LOCK re-asserts the tenancy the resolver filtered on
-      // (`prac-1`). Two correct answers to two different questions, and an hour
-      // ago the insert door gave the fill's answer to the lock.
-      practiceId: 'author-practice-9',
+      // ⚠️ THE PREVIOUS ANSWER WAS THE `SF-1` DEFECT, and it was measured: the
+      // fill and the preview scoped by the AUTHOR's practice while
+      // `sign-freeze.ts` reads the override table with the TENANT's. For a
+      // locum — practice B seeing practice A's patient, which the schema names
+      // as the reason this column exists — the doctor inserted a default,
+      // watched it appear in the preview, and signed a document without it.
+      //
+      // ⚠️ THE **ACTOR** IS A DIFFERENT AXIS AND HAS NOT MOVED: `doctorId` is
+      // still the visit's own doctor rather than the requester, one line above.
+      // Tenant and actor are two questions, and this arm's title — "the visit's
+      // own doctor, not the requester" — is about the second. #267 is about the
+      // first, and it says: not the author either. The visit's.
+      practiceId: 'visit-tenant-7',
       noteTemplateId: 'tpl-1',
       noteTemplateVersion: 3,
       generatedNote: 'A note.',

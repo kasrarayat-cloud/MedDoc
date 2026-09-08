@@ -102,6 +102,9 @@ async function resolveCertifiedTwinField(
         entities: unknown;
         soapFinal: string | null;
         createdAt: Date;
+        // ⚠️ #267 — the VISIT'S OWN tenant, beside the author's practice.
+        // Two different columns; the stored rows carry this one.
+        practiceId: string;
         user: { practiceId: string };
       };
       noteTemplateId: string;
@@ -126,6 +129,7 @@ async function resolveCertifiedTwinField(
       entities: true,
       soapFinal: true,
       createdAt: true,
+      practiceId: true, // #267 — the VISIT'S tenant; `user.practiceId` is the AUTHOR'S.
       user: { select: { practiceId: true } },
     },
   });
@@ -176,7 +180,43 @@ async function resolveCertifiedTwinField(
 
   return {
     ok: true,
-    practiceId: visit.user.practiceId,
+    // ⚠️ RULING #267 — THE CHART OWNS THE NOTE. This returned `practiceId` is
+    // what every row attached to this visit is STAMPED with, so it is the
+    // VISIT'S own tenant column and never the author's practice.
+    //
+    // ⚠️ IT USED TO BE `visit.user.practiceId`, AND THAT IS THE `SF-1` DEFECT.
+    // The schema states the rule this violated, at `TranscribeVisit.practiceId`:
+    // "the visit's tenant, DERIVED FROM THE PATIENT, never from the author. A
+    // locum from practice B seeing a patient of practice A creates a note in
+    // A ... NOTHING kept them agreeing." So for a locum the override row was
+    // stamped with B while `sign-freeze.ts` reads the table with A — the doctor
+    // inserted a default, watched it appear in the preview, and signed a
+    // document without it.
+    //
+    // ⚠️ AND THE TWO VALUES AGREEING ON PRODUCTION DATA IS THE COINCIDENCE, NOT
+    // THE DEFENCE — this file already says so about the LOCK's argument ("58 of
+    // 58 ... a property of the data, not of the code"). The same sentence was
+    // simply never applied to what the row is stamped WITH.
+    //
+    // AUTHORIZATION IS A SEPARATE QUESTION AND IS ANSWERED ABOVE, by
+    // `visitByIdScope(visitId, session.user.practiceId)`. That decides whether
+    // this actor may touch this visit. It is not a source for a stored value.
+    //
+    // ⚠️ AND THE `practiceId: true` LINE IN THE SELECT ABOVE IS DELIBERATELY ONE
+    // LINE — N8's RATCHET CAUGHT THIS BRANCH ON PROSE FOR THE SECOND TIME.
+    // `gate-practice-scope` decides a read is scoped by looking back FORTY LINES
+    // for an accessor call, and it FAILS SAFE: what it cannot see, it counts as
+    // unscoped. The `noteTemplate.findFirst` below carries a real practice
+    // predicate — a nested `templateTwinCompiledVersion: { practiceId }` — which
+    // is not an accessor, so it has always depended on `visitByIdScope` being
+    // inside that window. A five-line comment in the select pushed the distance
+    // from 37 lines to 42 and the ratchet went 0 -> 1 on a change that moved no
+    // read at all.
+    //
+    // ⚠️ SO THE EXPLANATION LIVES HERE AND THE SELECT KEEPS ONE LINE. If you
+    // need to write more up there, scope that read through an accessor first —
+    // do NOT raise the ratchet, and do not discover this by making it red.
+    practiceId: visit.practiceId,
     compiledVersionId: compiled.id,
     field,
     // Returned rather than re-read: the fill needs the same row this function
@@ -308,7 +348,12 @@ export async function setTemplateControlAction(
   if (!resolved.ok) return resolved;
   const { field, compiledVersionId } = resolved;
   const compiled = { id: compiledVersionId };
-  const visit = { user: { practiceId: resolved.practiceId } };
+  // ⚠️ #267 — NAMED FOR WHAT IT IS. This was `{ user: { practiceId: ... } }`,
+  // a synthetic wrapper that made the resolver's value LOOK like the author's
+  // practice at every use below. It is the VISIT's tenant and it now says so:
+  // a shape that misnames its own contents is how the SF-1 confusion survived
+  // review in the first place.
+  const visitPracticeId = resolved.practiceId;
 
   // ⚠️ THE DOOR'S ADMISSION SET MUST MIRROR THE FILL'S, OR SUCCESS IS A LIE.
   //
@@ -407,11 +452,19 @@ export async function setTemplateControlAction(
   // at the top of the action and never re-asserted, so a sign landing in the
   // window wrote a dropdown correction onto a SIGNED visit. A signed visit shows
   // no panel, so there is no Undo and the row is permanent.
-  const wroteOption = await underVisitLock(visitId, session.user.practiceId, async (tx) => {
+  // ⚠️ RULING #267 — THE LOCK RE-ASSERTS THE **VISIT'S** TENANT, ONE DERIVATION.
+  // The value is identical here — `visitByIdScope(visitId, session.user.
+  // practiceId)` filtered on this very column, so any visit this door can reach
+  // already has it — but it now comes from the SAME place the stored row does.
+  // The failure this closes was never a wrong value, it was THREE SOURCES for
+  // one fact with different subsystems reaching for different ones.
+  const wroteOption = await underVisitLock(visitId, visitPracticeId, async (tx) => {
     await tx.templateTwinFieldOverride.upsert({
     where: { visitId_fieldId: { visitId, fieldId } },
     create: {
-      practiceId: visit.user.practiceId,
+      // ⚠️ RULING #267 — the VISIT'S tenant, never the author's. See the
+      // resolver's return above for the SF-1 account.
+      practiceId: visitPracticeId,
       visitId,
       fieldId,
       overrideKind: 'option',
@@ -548,6 +601,8 @@ async function scaffoldDefaultAdmissible(input: {
       entities: unknown;
       soapFinal: string | null;
       createdAt: Date;
+      // ⚠️ #267 — the VISIT'S OWN tenant, beside the author's practice.
+      practiceId: string;
       user: { practiceId: string };
     };
     noteTemplateId: string;
@@ -597,7 +652,9 @@ async function scaffoldDefaultAdmissible(input: {
     // one the day either is edited, while every arm stayed green.
     const fillInput: ProcessTemplateTwinVisitInput = {
       visitId,
-      practiceId: visit.user.practiceId,
+      // ⚠️ RULING #267 — the VISIT'S tenant, never the author's. See the
+      // resolver's return above for the SF-1 account.
+      practiceId: visit.practiceId,
       // THE VISIT'S OWN DOCTOR, NOT THE REQUESTER — the same actor rule the
       // preview states: a colleague acting on the record must not restamp it.
       doctorId: visit.userId,
@@ -844,7 +901,13 @@ export async function insertScaffoldDefaultAction(
   // `transcribe_visits."practiceId"` equal to their author's, so the two values
   // never diverge on current data. That is a property of the data, not of the
   // code, and it is exactly the kind of coincidence a guard must not rest on.
-  const wrote = await underVisitLock(visitId, session.user.practiceId, async (tx) => {
+  // ⚠️ RULING #267 — THE LOCK RE-ASSERTS THE **VISIT'S** TENANT, ONE DERIVATION.
+  // The value is identical here — `visitByIdScope(visitId, session.user.
+  // practiceId)` filtered on this very column, so any visit this door can reach
+  // already has it — but it now comes from the SAME place the stored row does.
+  // The failure this closes was never a wrong value, it was THREE SOURCES for
+  // one fact with different subsystems reaching for different ones.
+  const wrote = await underVisitLock(visitId, practiceId, async (tx) => {
     await tx.templateTwinFieldOverride.upsert({
       where: { visitId_fieldId: { visitId, fieldId } },
       create: {
@@ -922,7 +985,13 @@ export async function undoScaffoldDefaultAction(
   // ⚠️ UNDER THE LOCK — ROUND FIVE. Round four locked the INSERT and left the
   // UNDO read-then-act, so a sign landing in this window deleted the doctor's
   // row against a record that was, by then, signed.
-  const deleted = await underVisitLock(visitId, session.user.practiceId, async (tx) =>
+  // ⚠️ RULING #267 — THE LOCK RE-ASSERTS THE **VISIT'S** TENANT, ONE DERIVATION.
+  // The value is identical here — `visitByIdScope(visitId, session.user.
+  // practiceId)` filtered on this very column, so any visit this door can reach
+  // already has it — but it now comes from the SAME place the stored row does.
+  // The failure this closes was never a wrong value, it was THREE SOURCES for
+  // one fact with different subsystems reaching for different ones.
+  const deleted = await underVisitLock(visitId, resolved.practiceId, async (tx) =>
     (
       await tx.templateTwinFieldOverride.deleteMany({
         where: { visitId, fieldId, overrideKind: 'scaffold_default' },

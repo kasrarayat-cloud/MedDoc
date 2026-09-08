@@ -112,7 +112,19 @@ const UNSIGNED = {
   status: 'READY',
   noteTemplateId: 'tpl-1',
   noteTemplateVersion: 1,
-  user: { practiceId: 'prac-1' },
+  // ⚠️ THREE DISTINCT VALUES — RULING #267, AND THIS FIXTURE IS `SF-2`.
+  // Round five found the SIBLING door's fixture still giving the session and
+  // the visit author ONE value (`prac-1`), so the exact defect `8cc89b7c` fixed
+  // in the insert door could be transplanted into the option door with 135 of
+  // 135 green. A fixture that gives two distinct things the same value cannot
+  // witness them being confused — and this one gave THREE things one value.
+  //
+  //   · `prac-1`            the SESSION's practice   — may this actor act?
+  //   · `visit-tenant-7`    the VISIT'S tenant       — what owns this chart?
+  //   · `author-practice-9` the AUTHOR's practice    — whose form fills it?
+  //
+  practiceId: 'visit-tenant-7',
+  user: { practiceId: 'author-practice-9' },
 };
 
 beforeEach(() => {
@@ -160,7 +172,10 @@ describe('F24-S5 write path — the correction reaches the database', () => {
     expect(arg).toMatchObject({
       where: { visitId_fieldId: { visitId: 'v1', fieldId: field.fieldId } },
       create: {
-        practiceId: 'prac-1',
+        // ⚠️ THE VISIT'S TENANT — #267. It read `prac-1` when the fixture gave
+        // every identity that one value, which is exactly why it could not
+        // witness the row being stamped with the wrong one.
+        practiceId: 'visit-tenant-7',
         visitId: 'v1',
         fieldId: field.fieldId,
         selectedOptionOrdinal: option.ordinal,
