@@ -311,7 +311,13 @@ function isJsonInput(value: unknown): value is Prisma.InputJsonValue {
   );
 }
 
-async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
+// ⚠️ EXPORTED FOR ONE REASON, AND THIS FILE ALREADY ARGUED FOR IT. The comment
+// at the admission call below records the stuck-chart incident and its cause in
+// as many words: *"THE JOIN BETWEEN THEM WAS NEVER EXERCISED, because no unit
+// test runs `processVisit`"* — two individually-correct billing steps with the
+// defect living in the seam. #294 moves the practice every one of those steps
+// reads, so the seam is finally driven: `gate-294-tenant-is-billed`.
+export async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
   const { visitId } = job.data;
 
   // T-M16.3: tracks which pipeline layer is currently running. Updated
@@ -347,7 +353,17 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       // at create time and HONORED below over active-template resolution. NULL for
       // the default ("auto") path → resolveActiveTemplate as before.
       noteTemplateId: true,
-      user: { select: { practiceId: true } },
+      // ⚠️ RULING #294 — THE VISIT'S OWN TENANT, AND IT IS NOT `user.practiceId`.
+      // `TranscribeVisit.practiceId` is derived from the PATIENT and is NOT
+      // NULL; `user.practiceId` is the AUTHOR's practice. On a locum visit — B
+      // seeing A's patient, the case the schema comment on that column exists
+      // for — they differ, and everything below keyed off the wrong one.
+      practiceId: true,
+      // ⚠️ `user: { select: { practiceId: true } }` WAS HERE AND IS GONE — #294.
+      // Nothing reads it any more, and a selected field holding the value this
+      // ruling exists to stop using is an invitation: the next person needing
+      // "a practice" finds one already in scope. A site that genuinely means the
+      // AUTHOR's practice re-adds this select by name, with its reason.
       // Fix-Pack 1 Q0-2 / audit Finding 01.1 — pull patient demographic
       // + safety context for L7c pediatric framing. Round 3 PR-D added
       // weightKg + allergies to TranscribeMdPatient; the FK is
@@ -363,7 +379,29 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
   });
   if (!visit) throw new Error(`Visit ${visitId} not found`);
 
-  const practiceId = visit.user.practiceId;
+  // ⚠️ RULING #294 — THE TENANT IS BILLED, AND THIS IS THE ONE DERIVATION.
+  //
+  //   A locum visit at practice A is A's chart, A's document, and A's usage.
+  //
+  // This bound `visit.user.practiceId` — the AUTHOR's practice — and fed
+  // TWENTY-FIVE sites from that one line, `admitVisitOrThrow` and
+  // `chargeVisitUsage` among them. For a locum from B seeing A's patient that
+  // admitted against B's balance, metered every AI call to B, filed the audit
+  // rows under B, and charged B for a note that lives in A's chart.
+  //
+  // ⚠️ THE TWENTY-FIVE WERE AUDITED BEFORE THIS LINE MOVED, and the answer was
+  // uniform — which is why one derivation is still the right shape:
+  //
+  //   23 of 25 pass an explicit `userId`/`doctorId` in the SAME call object, so
+  //           `practiceId` there is unmistakably the practice axis and the
+  //           author is already carried separately;
+  //    2 of 25 carry no author at all — `admitVisitOrThrow` and
+  //           `chargeVisitUsage`, which #294 names as taking the tenant.
+  //
+  // ZERO sites meant the author's practice. A site that ever does must take
+  // `visit.user.practiceId` BY NAME, so the next reader sees a decision rather
+  // than a leftover.
+  const practiceId = visit.practiceId;
   const startedAt = new Date();
 
   // Per-mode input validation. Keeps the branch bodies below simple.
@@ -1466,7 +1504,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       visitId,
       layer: currentLayer,
       userId: visit.userId,
-      practiceId: visit.user?.practiceId ?? null,
+      practiceId,
     });
 
     // T-M23.A: only persist FAILED on the final BullMQ attempt …
@@ -1488,7 +1526,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         targetType: 'TranscribeVisit',
         targetId: visitId,
         userId: visit.userId,
-        practiceId: visit.user?.practiceId ?? null,
+        practiceId,
         success: false,
         errorCode: 'AI_REFUSAL',
         metadata: {
@@ -1539,7 +1577,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       originalErr: err,
       reviewReason: buildUserFacingFailureReason(currentLayer, category, err),
       userId: visit.userId,
-      practiceId: visit.user?.practiceId ?? null,
+      practiceId,
     });
 
     // ── B8 step 3 — WHAT DID THIS FAILURE COST US, AND WHOSE FAULT WAS IT? ──
@@ -1632,7 +1670,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
           visitId,
           userId: visit.userId,
           userEmail: u?.email ?? null,
-          practiceId: visit.user?.practiceId ?? null,
+          practiceId,
           layer: currentLayer,
           category,
           scrubbedError: redactPhi(
@@ -2271,10 +2309,23 @@ async function main() {
   await startCleanupWorker();
 }
 
-main().catch((err) => {
-  console.error(
-    '[transcribe-md-worker] fatal:',
-    redactPhi(err instanceof Error ? err.message : err)
-  );
-  process.exit(1);
-});
+// ⚠️ THE ENTRYPOINT DOES NOT AUTO-START INSIDE A TEST RUNNER, AND THE GUARD
+// FAILS **OPEN FOR PRODUCTION** — which is the only direction it is allowed to
+// fail. `VITEST_WORKER_ID` is set by vitest inside its worker processes and
+// exists nowhere else, so an absent variable means START. A guard written the
+// other way round (start only when some expected variable is present) turns a
+// missing env var into a worker that never boots, and that is an outage.
+//
+// Why it is needed at all: `main()` ran on IMPORT, so the first unit test to
+// import this module for `processVisit` — the harness `worker.ts` has wanted
+// since the stuck-chart incident recorded above — booted a worker, failed on
+// Redis, and called `process.exit(1)` in the middle of the test run.
+if (!process.env.VITEST_WORKER_ID) {
+  main().catch((err) => {
+    console.error(
+      '[transcribe-md-worker] fatal:',
+      redactPhi(err instanceof Error ? err.message : err)
+    );
+    process.exit(1);
+  });
+}
