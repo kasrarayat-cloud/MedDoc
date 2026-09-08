@@ -31,8 +31,21 @@ const REPO = resolve(__dirname, '../../../../..');
 const HEAD = 'docs/foundation/RULINGS.md';
 const ARCHIVE_DIR = 'docs/foundation/rulings';
 
-/** A ruling index row: `| <date> | #<n> | …`. */
-const ROW_RE = /^\|\s*\d{4}-\d{2}-\d{2}\s*\|\s*#\d+\s*\|/;
+/**
+ * A ruling index row: `| <date> | #<n> | …` — and `#<n>(<part>)` too.
+ *
+ * ⚠️ WIDENED BY #273, BECAUSE THE NARROWER FORM SILENTLY DROPPED A REAL ROW.
+ * `#\d+\s*\|` requires the number to be followed immediately by the cell
+ * boundary, so `| 2026-09-02 | #162(c) | …` — which exists on `main` at
+ * `docs/foundation/RULINGS.md:278` — did not match. Measured before the change:
+ * this regex saw **169** rows and the guard being retired saw **170**, and the
+ * one it could not see was that row.
+ *
+ * That is the whole reason #273's "fold any UNIQUE arm before deleting" clause
+ * is not a formality: the coverage difference between the two guards was not an
+ * ARM at all, it was a REGEX, and no arm on either side would have reported it.
+ */
+const ROW_RE = /^\|\s*\d{4}-\d{2}-\d{2}\s*\|\s*#\d+(?:\([a-z0-9]{1,2}\))?\s*\|/i;
 
 /**
  * ⚠️ TWO ROWS UNDER ONE RULING NUMBER — THE COLLISION NOTHING WAS WATCHING.
@@ -84,7 +97,14 @@ export function duplicateRulingNumbers(head: string): string[] {
     const cells = row.split('|').map((c) => c.trim());
     // `| <date> | #<n> | <status> | <verdict> | …` -> cells[1..4] after the
     // leading empty cell the pipe produces.
-    const n = /^#(\d+)$/.exec(cells[2] ?? '')?.[1];
+    // ⚠️ THE PART SUFFIX IS PART OF THE KEY, PRESERVING THE RETIRED GUARD'S
+    // SEMANTICS EXACTLY. `gate-ledger-reachability` took the cell verbatim, so
+    // `#162(c)` was its own key and could never collide with `#162`. Measured:
+    // `#162(c)` is the ONLY parenthesised row on `main` and there is NO plain
+    // `#162` row, so it is a standalone ruling recorded under its part letter —
+    // not a clause of something else. Folding it into `162` would invent a
+    // collision that does not exist.
+    const n = /^#(\d+(?:\([a-z0-9]{1,2}\))?)$/i.exec(cells[2] ?? '')?.[1];
     const verdict = cells[4] ?? '';
     if (!n) continue;
     if (CLAUSE_MARKER.test(verdict)) continue;
@@ -231,3 +251,125 @@ describe('⚠️ ONE NUMBER, ONE RULING — the collision two lanes can create a
 // ledger row. That is the record-first rule working exactly as written, on a
 // test fixture — so the fixtures use numbers this commit records rather than
 // inventing three that will never exist. A synthetic number is still a citation.
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FOLDED IN FROM `gate-ledger-reachability` BY RULING #273 — ONE GUARD.
+// ---------------------------------------------------------------------------
+// #265(b) said "the first on `main` stays, the other lane deletes its copy on
+// rebase". Both had already merged, so there was no other lane and no race, and
+// #273 settled it on MERIT instead: this file is the exported,
+// separately-controlled implementation, so it is the one that survives.
+//
+// ⚠️ "FOLD ANY ARM UNIQUE TO THE OTHER" IS THE HALF THAT CAN GO WRONG SILENTLY,
+// AND THE ENUMERATION IS THE EVIDENCE. The retired describe had SIX arms. Read
+// one at a time against this file:
+//
+//   1 · base-row uniqueness             -> ALREADY COVERED (duplicateRulingNumbers)
+//   2 · every AMENDMENT has a base row  -> UNIQUE, folded below
+//   3 · its non-vacuity companion       -> UNIQUE, folded below
+//   4 · a part letter is never reused   -> UNIQUE, folded below
+//   5 · base + parts === rows.length    -> TAUTOLOGICAL, dropped, said so
+//   6 · parts > 0 (the shape is in use) -> UNIQUE, folded into arm 4's file
+//
+// ⚠️ AND THE LARGEST DIFFERENCE WAS NOT AN ARM AT ALL — it was `ROW_RE`, which
+// saw 169 rows against the retired guard's 170. See its comment above.
+const PART_CAPTURE = /^\(?([a-z0-9]{1,2})\)?[-\s)]*(?:—|-)/;
+
+const headText = () => readFileSync(resolve(REPO, HEAD), 'utf8');
+const archiveText = (): string[] =>
+  readdirSync(resolve(REPO, ARCHIVE_DIR))
+    .filter((f) => f.endsWith('.md'))
+    .map((f) => readFileSync(resolve(REPO, ARCHIVE_DIR, f), 'utf8'));
+
+/** Head rows as `{num, title}` — the retired guard's own shape. */
+function headRows(): Array<{ num: string; title: string }> {
+  return rowsIn(headText()).map((l) => {
+    const c = l.split('|').map((x) => x.trim());
+    return { num: c[2] ?? '', title: c[4] ?? '' };
+  });
+}
+
+describe('#273 — the arms folded across before the weaker guard was deleted', () => {
+  it('⚠️ every AMENDMENT cited has a base row — structure, not range', () => {
+    // Head + EVERY archive: an amendment may be cited in either, and reading
+    // only the head is the 2026-08-26 split's own failure mode. The first draft
+    // of this arm (in its old home) read the head alone and produced 24 FALSE
+    // accusations, including #100, #103, #106 and #109, because their base rows
+    // had been ARCHIVED. An instrument that reads one path answers about one path.
+    const corpus = [headText(), ...archiveText()].join('\n');
+    const amended = new Set([...corpus.matchAll(/#(\d+)\s*\([a-z]\)/g)].map((m) => m[1]!));
+    const base = new Set([
+      ...headRows()
+        .filter((r) => !PART_CAPTURE.test(r.title))
+        .map((r) => r.num.replace(/^#/, '').replace(/\(.*$/, '')),
+      ...[...corpus.matchAll(/^\|\s*[0-9]{4}-[0-9]{2}-[0-9]{2}\s*\|\s*\*?\*?#(\d+)/gm)].map(
+        (m) => m[1]!,
+      ),
+    ]);
+
+    // POSITIVE CONTROLS — without these an empty set difference is green for
+    // the wrong reason: the arm looked at nothing.
+    expect(
+      amended.size,
+      'no amendments extracted — the pattern found nothing, so this arm proves nothing',
+    ).toBeGreaterThanOrEqual(20);
+    expect(base.size, 'no base rows extracted').toBeGreaterThanOrEqual(50);
+
+    const orphaned = [...amended].filter((n) => !base.has(n)).sort();
+    expect(
+      orphaned,
+      'these amendments are cited with no base ruling row — the #162(b) shape: ' +
+        'the amendment is readable and the thing it amends is not',
+    ).toEqual([]);
+  });
+
+  it('⚠️ NON-VACUITY — the arm above CAN fail, proved on a synthetic corpus', () => {
+    // "0 violations" is otherwise indistinguishable from "the check does
+    // nothing". A real amendment number, with its base row withheld.
+    const amended = new Set(['162']);
+    const base = new Set(['163', '164']);
+    expect([...amended].filter((n) => !base.has(n))).toEqual(['162']);
+    // ...and it passes when the base IS present, so it is not always-red either.
+    expect([...amended].filter((n) => !new Set(['162', '163']).has(n))).toEqual([]);
+  });
+
+  it('a part letter is never reused within one ruling number', () => {
+    // ⚠️ NEEDED ITS OWN CAPTURING PATTERN. `CLAUSE_MARKER` above is a SKIP
+    // predicate with no capture group, so it can say "this is a clause" and not
+    // "which clause" — and this arm is entirely about which.
+    const seen = new Map<string, string[]>();
+    for (const r of headRows()) {
+      const m = PART_CAPTURE.exec(r.title);
+      if (!m) continue;
+      seen.set(r.num, [...(seen.get(r.num) ?? []), m[1]!]);
+    }
+    const dupes = [...seen.entries()]
+      .map(([n, v]) => [n, v.filter((x, i) => v.indexOf(x) !== i)] as const)
+      .filter(([, v]) => v.length > 0);
+    expect(dupes.map(([n, v]) => `${n}: ${v.join(',')}`)).toEqual([]);
+  });
+
+  it('⚠️ the multi-part shape really IS in use, and the head is populated', () => {
+    // The retired arm asserted `base + parts === rows.length`, which is
+    // TAUTOLOGICAL — `base` was DEFINED as `rows.length - parts`. Dropped, and
+    // replaced with the two claims it was standing in front of: the corpus is
+    // real, and the part shape this file's CLAUSE_MARKER exists for is actually
+    // exercised by it.
+    const rows = headRows();
+    expect(rows.length, 'the head is not populated — every arm above is vacuous').toBeGreaterThan(40);
+    expect(
+      rows.filter((r) => PART_CAPTURE.test(r.title)).length,
+      'no part rows — the clause-skip logic is untested by the live corpus',
+    ).toBeGreaterThan(0);
+  });
+
+  it('⚠️ ROW_RE SEES `#162(c)` — the row the retired guard saw and this one did not', () => {
+    // The regression control for the widening. Before #273 this file's ROW_RE
+    // matched 169 rows and the retired guard 170; the difference was this row.
+    const rows = rowsIn(headText());
+    expect(rows.some((l) => l.includes('| #162(c) |')), 'the parenthesised row is invisible again').toBe(true);
+    // and it is its OWN key, never folded into #162 — measured: there is no
+    // plain #162 row, so folding would invent a collision.
+    expect(duplicateRulingNumbers(headText())).toEqual([]);
+  });
+});

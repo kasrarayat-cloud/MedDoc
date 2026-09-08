@@ -55,7 +55,18 @@ merge result first exists, and it reds the **first post-merge run**:
   two index rows point at different files under one number
   (`gate-agents-md-size.test.ts`);
 - **rulings** — every ruling number has exactly ONE base row, and a part letter
-  is never reused within a number (`gate-ledger-reachability.test.ts`).
+  is never reused within a number.
+
+⚠️ **AMENDED 2026-09-08, ruling #273 — THE ARM MOVED FILE.** This entry named
+`gate-ledger-reachability.test.ts`, which held a duplicate of a property
+`gate-ruling-row-identity.test.ts` also guarded. #273 retired the weaker copy
+and **folded the part-letter arm into `gate-ruling-row-identity.test.ts`**,
+where it now lives. The retired file carries a note saying so.
+
+**Nothing about this entry's RULE changes** — only where its instrument lives.
+The correction is appended rather than substituted, per the canon convention:
+a reader arriving from an old citation should find out what happened, not find
+a filename quietly swapped under them.
 
 So a cross-branch collision that lands cleanly **dies within one citation instead
 of living silently forever.** It cannot be prevented at merge time by any check a
