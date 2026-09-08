@@ -48,8 +48,44 @@ DIR="$SHARED/.lens-$NAME"
 
 [ -e "$DIR" ] && { echo "🔴 $DIR already exists — reap it first." >&2; exit 1; }
 
+# ══════════════════════════════════════════════════════════════════════════════
+# ⚠️ THE REF IS RESOLVED IN THE **CALLER'S** WORKTREE, NEVER IN THE SHARED TREE.
+# ------------------------------------------------------------------------------
+# CANON: "a sealed sandbox pointed at the wrong tree — every guard said fine."
+#
+# `$SHARED` is this SCRIPT's repo root, i.e. /opt/meddoc-pro, which by standing
+# rule sits on `main`. Resolving `$REF` there meant a caller running from a
+# feature worktree and passing `HEAD` — the obvious, correct-looking invocation —
+# got a sandbox at **main's** HEAD instead of their own.
+#
+# MEASURED, 2026-09-08, on the #274 refutation pass: one lens was provisioned at
+# `bc544641` (main), where the file under review DID NOT EXIST. Every guard in
+# this script passed: the worktree was created, write-locked, hook-refused,
+# credential-free and marked. The sandbox was perfectly sealed around the wrong
+# commit, and the lens's prescribed `git diff origin/main..HEAD` showed an EMPTY
+# diff — which reads as "nothing to review" rather than as "you are in the wrong
+# tree". Only the agent noticing the file was missing caught it.
+#
+# A symbolic ref means different commits in different worktrees. Resolving it
+# where the CALLER stands is the only reading that can be right, and pinning it
+# to a full sha before `worktree add` removes the ambiguity entirely.
+# ══════════════════════════════════════════════════════════════════════════════
+CALLER="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+[ -n "$CALLER" ] || CALLER="$SHARED"
+REF_SHA="$(git -C "$CALLER" rev-parse --verify "${REF}^{commit}" 2>/dev/null || true)"
+if [ "${#REF_SHA}" -ne 40 ]; then
+  # FAIL-CLOSED. An unresolvable ref and a typo produce the same empty string,
+  # and a sandbox at the wrong commit is worse than no sandbox.
+  echo "🔴 REFUSING — cannot resolve '$REF' to a commit in $CALLER." >&2
+  echo "   (a sandbox at the wrong commit passes every guard and reviews nothing)" >&2
+  exit 1
+fi
+if [ "$CALLER" != "$SHARED" ]; then
+  echo "   ref '$REF' resolved in $CALLER -> ${REF_SHA:0:12}" >&2
+fi
+
 # ── The worktree, DETACHED. No branch exists to be pushed or moved. ──────────
-git -C "$SHARED" worktree add --detach "$DIR" "$REF" >/dev/null 2>&1
+git -C "$SHARED" worktree add --detach "$DIR" "$REF_SHA" >/dev/null 2>&1
 
 # ── Worktree-scoped config. `--worktree` needs the extension; enabling it is a
 #    documented, reversible git feature and it is what keeps the next line from
