@@ -143,6 +143,55 @@ const CRITICAL = ROUNDS('--rounds-critical');
 const READY_TEXT = ROUNDS('--rounds-ready-text');
 const ACCENT_TEXT = ROUNDS('--rounds-accent-text');
 
+/**
+ * ⚠️ RULING #292 — THE PRECONDITION IS **ASSERTED**, NOT NAMED AFTER THE FACT.
+ *
+ * Four places in this file do `signupFreshUser` → `clearCookies()` → navigate to
+ * a page that REDIRECTS AN AUTHENTICATED USER AWAY (`/login` and
+ * `/forgot-password` both do). When the session survives the clear, the
+ * navigation lands somewhere else entirely and the next locator waits out its
+ * full timeout for a field that is not late — it is on another page.
+ *
+ * The file used to meet that with a post-navigation assertion whose message
+ * called it "the flake". Naming a flake is not a control: it fires one step too
+ * late, on the wrong artifact, and it says the run is unreliable rather than
+ * saying which invariant broke. This asks the session endpoint directly, before
+ * anything navigates, so a surviving session fails HERE with that sentence.
+ *
+ * ⚠️ AND IT POSITIVE-CONTROLS FIRST, because "no user" is exactly what a broken
+ * probe returns too. A 404, an HTML error page, a renamed endpoint — every one
+ * of them yields `body.user === undefined` and would pass an
+ * unauthenticated-only check forever. So the probe must first be seen SAYING
+ * "authenticated" against the very session the clear is about to remove.
+ */
+async function clearSessionAndProveSignedOut(page: Page, where: string) {
+  const before = await page.request.get('/api/auth/session');
+  expect(
+    before.ok(),
+    `${where}: the session endpoint did not answer (HTTP ${before.status()}) — ` +
+      'the probe below cannot distinguish signed-out from broken',
+  ).toBe(true);
+  const beforeBody = (await before.json()) as { user?: { id?: string } } | null;
+  expect(
+    beforeBody?.user,
+    `${where}: signup left NO live session, so clearing one proves nothing and ` +
+      'the check below would pass whatever cookies do',
+  ).toBeTruthy();
+
+  await page.context().clearCookies();
+
+  const after = await page.request.get('/api/auth/session');
+  expect(after.ok(), `${where}: the session endpoint stopped answering after the clear`).toBe(true);
+  const afterBody = (await after.json()) as { user?: { id?: string } } | null;
+  expect(
+    afterBody?.user,
+    `${where}: THE SESSION SURVIVED clearCookies(). /login and /forgot-password ` +
+      'both redirect an authenticated user away, so the navigation below will land ' +
+      'on another page and the form locator will time out on a field that is not ' +
+      'slow — it is elsewhere.',
+  ).toBeFalsy();
+}
+
 test.describe('Rounds C1 — auth to tokens, flag-ON', () => {
   const violations: Finding[] = [];
   const inherited: Finding[] = [];
@@ -255,7 +304,7 @@ test.describe('Rounds C1 — auth to tokens, flag-ON', () => {
     const resetUser = await signupFreshUser(page, 'rounds-c1-reset');
     // Signup leaves us authenticated, and /forgot-password redirects a live
     // session to /dashboard.
-    await page.context().clearCookies();
+    await clearSessionAndProveSignedOut(page, 'forgot-password');
     await page.goto('/forgot-password');
     await page.getByLabel('Email').fill(resetUser.email);
     await page.getByRole('button', { name: /send reset link/i }).click();
@@ -325,7 +374,7 @@ test.describe('Rounds C1 — auth to tokens, flag-ON', () => {
 
     // ── MFA second factor, and the recovery-code toggle beside it ──────────
     const mfa = await signupFreshUser(page, 'rounds-c1-mfa');
-    await page.context().clearCookies();
+    await clearSessionAndProveSignedOut(page, 'login:mfa');
     enableMfaPromptOnly(mfa.email);
 
     await page.goto('/login');
@@ -352,8 +401,9 @@ test.describe('Rounds C1 — auth to tokens, flag-ON', () => {
     // This turns a 15s silent timeout into an immediate, diagnostic failure.
     await expect(
       page.locator('#email'),
-      'not on the login form — /login redirected us, so the signup session ' +
-        'survived clearCookies(). This is the flake; it is not a slow render.',
+      'not on the login form. The session precondition was ASSERTED above ' +
+        '(#292), so a surviving signup session is already ruled out — this is a ' +
+        'different cause and wants a different look.',
     ).toBeVisible({ timeout: 10_000 });
 
     await page.getByLabel('Email').fill(mfa.email);
@@ -376,7 +426,7 @@ test.describe('Rounds C1 — auth to tokens, flag-ON', () => {
 
     // ── The cross-app redirect panel ───────────────────────────────────────
     const cross = await signupFreshUser(page, 'rounds-c1-cross');
-    await page.context().clearCookies();
+    await clearSessionAndProveSignedOut(page, 'login:cross-app');
     setProductsMeddocProOnly(cross.email);
 
     await page.goto('/login');
@@ -393,7 +443,7 @@ test.describe('Rounds C1 — auth to tokens, flag-ON', () => {
     // sets RESEND_API_KEY to make a different test pass — this reddens and
     // says which invariant moved, instead of silently starting to matter.
     const unverified = await signupFreshUser(page, 'rounds-c1-verify');
-    await page.context().clearCookies();
+    await clearSessionAndProveSignedOut(page, 'login:unverified');
     await page.goto('/login');
     await page.getByLabel('Email').fill(unverified.email);
     await page.getByLabel('Password', { exact: true }).fill(TEST_PASSWORD);
