@@ -37,7 +37,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // declaration in the file, so a factory closing over a top-level `const` throws
 // `Cannot access 'prisma' before initialization` — and it throws at MODULE LOAD,
 // which vitest reports as "no tests" rather than as a failure in any arm.
-const { prisma, logAudit, getSession, queryRaw } = vi.hoisted(() => {
+const { prisma, logAudit, getSession, queryRaw, executeRaw } = vi.hoisted(() => {
   // ⚠️ RULING #268 — THE ROLE CHANGE NOW RUNS INSIDE A TRANSACTION, because the
   // practice advisory lock must be taken BEFORE the row write or two concurrent
   // demotions deadlock (measured 10 of 10). So this mock grew a `$transaction`.
@@ -54,6 +54,11 @@ const { prisma, logAudit, getSession, queryRaw } = vi.hoisted(() => {
   // proved in `gate-admin5-last-owner-invariant.test.ts`, against a tx that
   // reports the elevated levels — not here.
   const queryRaw = vi.fn(async () => [{ level: 'read committed' }]);
+  // ⚠️ THE LOCK IS AN **EXECUTE**. `pg_advisory_xact_lock` returns `void` and
+  // `$queryRaw` cannot deserialize a void column, so taking it as a query is a
+  // 500 against a real database. The double carries both, or it cannot witness
+  // the wrong one being chosen — which is exactly how the first version shipped.
+  const executeRaw = vi.fn(async () => 1);
   const user = {
     findUnique: vi.fn(),
     findFirst: vi.fn(),
@@ -65,11 +70,12 @@ const { prisma, logAudit, getSession, queryRaw } = vi.hoisted(() => {
     user,
     inviteCode: { create: vi.fn(), updateMany: vi.fn(), findMany: vi.fn() },
     $queryRaw: queryRaw,
+    $executeRaw: executeRaw,
     $transaction: vi.fn(async (fn: (tx: unknown) => unknown) =>
-      fn({ user, $queryRaw: queryRaw })
+      fn({ user, $queryRaw: queryRaw, $executeRaw: executeRaw })
     ),
   };
-  return { prisma, logAudit: vi.fn(), getSession: vi.fn(), queryRaw };
+  return { prisma, logAudit: vi.fn(), getSession: vi.fn(), queryRaw, executeRaw };
 });
 
 vi.mock('@meddoc/db', () => ({ default: prisma }));
@@ -361,7 +367,7 @@ describe('⚠️ role changes — the guards that keep a practice administrable'
     expect(res?.ok).toBe(true);
 
     // The lock query ran, and it is the advisory lock rather than the level probe.
-    const lockCalls = queryRaw.mock.calls.filter((c) =>
+    const lockCalls = (executeRaw.mock.calls as unknown as unknown[][]).filter((c) =>
       String(c[0]).includes('pg_advisory_xact_lock')
     );
     expect(lockCalls.length, 'the demotion never took the practice lock').toBe(1);
@@ -370,7 +376,7 @@ describe('⚠️ role changes — the guards that keep a practice administrable'
     // `invocationCallOrder` is vitest's global monotonic counter, so it orders
     // calls ACROSS two different spies, which is exactly what is needed here:
     // the lock is on `$queryRaw` and the write is on `user.updateMany`.
-    const lockAt = Math.min(...queryRaw.mock.invocationCallOrder);
+    const lockAt = Math.min(...executeRaw.mock.invocationCallOrder);
     const writeAt = Math.min(...prisma.user.updateMany.mock.invocationCallOrder);
     expect(prisma.user.updateMany).toHaveBeenCalledOnce();
     expect(

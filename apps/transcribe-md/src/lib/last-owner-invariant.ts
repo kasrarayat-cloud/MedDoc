@@ -196,6 +196,7 @@ export class IsolationLevelUnsupportedError extends Error {
 export async function withPracticeLock<T>(
   tx: {
     $queryRaw: <R = unknown>(q: TemplateStringsArray, ...v: unknown[]) => Promise<R>;
+    $executeRaw: (q: TemplateStringsArray, ...v: unknown[]) => Promise<number>;
   },
   practiceId: string,
   write: () => Promise<T>,
@@ -215,7 +216,20 @@ export async function withPracticeLock<T>(
   // never re-implemented here. A second hash function is a second reader of the
   // rule, and the two would take DIFFERENT locks while looking identical,
   // which is precisely the failure this helper exists to end.
-  await tx.$queryRaw`
+  //
+  // ⚠️ `$executeRaw`, NOT `$queryRaw`, AND THE FIRST VERSION OF THIS GOT IT
+  // WRONG. `pg_advisory_xact_lock` returns **`void`** — asserted from
+  // `pg_get_function_result`, not assumed — and `$queryRaw` has to DESERIALIZE
+  // the row it gets back. It cannot deserialize a void column, so the call
+  // throws and the route answers 500. Every unit arm passed because they mock
+  // the client; the e2e caught it against a real database, on the ordinary
+  // suspend of a solo owner.
+  //
+  // The repository already had the answer one package over:
+  // `billing-charge.ts:453` takes its advisory lock with `$executeRaw*` for
+  // exactly this reason. A statement whose result you do not read is an
+  // EXECUTE, not a QUERY.
+  await tx.$executeRaw`
     SELECT pg_advisory_xact_lock(hashtext(${PRACTICE_LOCK_KEY}), hashtext(${practiceId}))`;
 
   return write();

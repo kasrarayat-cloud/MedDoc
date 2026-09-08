@@ -568,11 +568,25 @@ describe('#268 — the practice lock is taken BEFORE any user-row write', () => 
 });
 
 describe('#269 — the guard refuses above READ COMMITTED', () => {
+  // ⚠️ THE DOUBLE CARRIES **BOTH** METHODS, AND ITS FIRST VERSION DID NOT —
+  // WHICH IS WHY THESE ARMS COULD NOT SEE A 500. The helper took its lock with
+  // `$queryRaw`, the double only had `$queryRaw`, so every arm here passed
+  // while the real route threw: `pg_advisory_xact_lock` returns `void` and
+  // `$queryRaw` cannot deserialize a void column. The e2e caught it on the
+  // ordinary suspend of a solo owner.
+  //
+  // A test double that offers FEWER methods than the client cannot witness the
+  // wrong one being chosen. Both are here now, and the arm below pins which one
+  // the lock uses.
   const txAt = (level: string) => ({
     $queryRaw: vi.fn(async () => [{ level }]) as unknown as <R>(
       q: TemplateStringsArray,
       ...v: unknown[]
     ) => Promise<R>,
+    $executeRaw: vi.fn(async () => 1) as unknown as (
+      q: TemplateStringsArray,
+      ...v: unknown[]
+    ) => Promise<number>,
   });
 
   it('READ COMMITTED is accepted, and the lock is actually taken', async () => {
@@ -581,9 +595,17 @@ describe('#269 — the guard refuses above READ COMMITTED', () => {
     await expect(withPracticeLock(tx, 'prac-1', write)).resolves.toBe('wrote');
     // ⚠️ NOT JUST "IT RESOLVED" — the lock query must have run. A helper that
     // checked the level and forgot the lock would satisfy a bare resolve.
-    const queries = (tx.$queryRaw as unknown as { mock: { calls: unknown[][] } }).mock.calls;
-    expect(queries.length, 'the lock query was never issued').toBe(2);
-    expect(String(queries[1][0]), 'the second query is not the advisory lock').toContain(
+    // ⚠️ THE LOCK IS AN **EXECUTE**, NOT A QUERY, AND THE DISTINCTION IS THE
+    // DIFFERENCE BETWEEN A WORKING ROUTE AND A 500. `pg_advisory_xact_lock`
+    // returns `void` (asserted from `pg_get_function_result`, not assumed) and
+    // `$queryRaw` must deserialize the row it gets back — it cannot deserialize
+    // a void column. `billing-charge.ts:453` already took its advisory lock the
+    // right way one package over.
+    const probes = (tx.$queryRaw as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    const locks = (tx.$executeRaw as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    expect(probes.length, 'the isolation probe was not a query').toBe(1);
+    expect(locks.length, 'the lock was never issued, or was issued as a QUERY').toBe(1);
+    expect(String(locks[0][0]), 'the executed statement is not the advisory lock').toContain(
       'pg_advisory_xact_lock',
     );
     expect(write).toHaveBeenCalledTimes(1);
@@ -603,8 +625,12 @@ describe('#269 — the guard refuses above READ COMMITTED', () => {
       // and the lock was never taken either — one query, the level probe.
       expect(
         (tx.$queryRaw as unknown as { mock: { calls: unknown[][] } }).mock.calls.length,
-        'the lock was taken inside a level that cannot be correct',
+        'more than the level probe ran inside a level that cannot be correct',
       ).toBe(1);
+      expect(
+        (tx.$executeRaw as unknown as { mock: { calls: unknown[][] } }).mock.calls.length,
+        'the lock was taken inside a level that cannot be correct',
+      ).toBe(0);
     },
   );
 
