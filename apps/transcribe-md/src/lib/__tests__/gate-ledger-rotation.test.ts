@@ -26,7 +26,16 @@
 // requires the specific proof that exists to catch it to actually fire.
 // ============================================================================
 
-import { copyFileSync, mkdtempSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import {
+  copyFileSync,
+  mkdtempSync,
+  readdirSync,
+  cpSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+  mkdirSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -36,6 +45,13 @@ import { describe, expect, it } from 'vitest';
 const REPO = join(__dirname, '..', '..', '..', '..', '..');
 const SPLITTER = join(REPO, 'scripts', 'lib', 'split-ledger.py');
 const ROTATE = join(REPO, 'scripts', 'rotate-ledger.sh');
+
+// ⚠️ ONE BUDGET, AND IT IS GENEROUS ON PURPOSE. The #290 arm spawns a real
+// vitest inside a staging tree it first has to build by copying `docs/` and
+// `scripts/`; measured on this box at ~11s warm. vitest's 5s default turned
+// this red on the first run, which is the `gate-lens-sandbox` lesson exactly —
+// an inner budget the outer one can never reach.
+const STAGED_GATES_BUDGET_MS = 180_000;
 const RELAY = join(REPO, 'docs', 'foundation', 'RELAY.md');
 
 const LIFT = JSON.stringify([
@@ -341,6 +357,143 @@ describe('rotation — banner-triggered, delegating, fail-closed', () => {
         'That is the half-apply #278 exists to end.',
     ).toBe(true);
   });
+
+  it('⚠️ #290 — A WIPED ARCHIVE INDEX FAILS THE STAGED GATES AND THE SWAP IS REFUSED', () => {
+    // ⚠️ THE SCRIPT'S OWN COMMENT CLAIMED THIS STEP EXISTED AND IT DID NOT. It
+    // read "the only write to the repository is the swap at the very end, after
+    // the post-conditions AND the ledger gates have passed there" — and no
+    // ledger gate ran anywhere in the file. A comment naming a step that does
+    // not exist is the sentence a reviewer checks instead of the code.
+    //
+    // The plant is the exact damage #278's own reference incident caused: the
+    // archive index wiped from "4 archives · 369,216 chars" to "0 archives · 0
+    // chars". The post-conditions CANNOT see it — the head shrank, the bytes
+    // moved, nothing is duplicated — which is why the real gates have to run.
+    const dir = mkdtempSync(join(tmpdir(), 'rot-gates-'));
+    mkdirSync(join(dir, 'scripts', 'lib'), { recursive: true });
+    mkdirSync(join(dir, 'docs', 'foundation', 'rulings'), { recursive: true });
+    // ⚠️ THE WHOLE `scripts/` AND `AGENTS.md`. The staged gates are the REAL
+    // ones: one of them greps AGENTS.md for the archive path and another shells
+    // out to `check-retirement-conditions.sh`. A fixture missing either makes
+    // them fail for a reason that has nothing to do with the wipe — and two
+    // refusals that read alike prove nothing, which is why the assertion below
+    // names the wiped-index arm rather than the refusal line.
+    cpSync(join(REPO, 'scripts'), join(dir, 'scripts'), { recursive: true });
+    copyFileSync(join(REPO, 'AGENTS.md'), join(dir, 'AGENTS.md'));
+    copyFileSync(ROTATE, join(dir, 'scripts', 'rotate-ledger.sh'));
+    // ⚠️ `apps` IS THE REAL ONE, AND THAT IS WHAT MAKES THIS ARM MEAN ANYTHING.
+    // The staging step needs a vitest and the two gate files; without them it
+    // returns 2 for a MISSING NODE_MODULES and prints the same refusal, so the
+    // arm would pass while proving nothing about the wipe. Two refusals that
+    // read identically prove nothing — which is why the assertion below is on
+    // the gate's own failing arm, not on the refusal line.
+    symlinkSync(join(REPO, 'apps'), join(dir, 'apps'));
+
+    // ⚠️ THE WHOLE `docs/foundation`, NOT JUST THE ROTATED FILE. The staged
+    // gates are the REAL ones and they read the whole ledger — RELAY.md
+    // included. A fixture carrying only RULINGS.md makes them ENOENT, which is
+    // a suite that never ran, not a gate that passed.
+    cpSync(join(REPO, 'docs', 'foundation'), join(dir, 'docs', 'foundation'), {
+      recursive: true,
+    });
+    const led = join(dir, 'docs', 'foundation', 'RULINGS.md');
+    writeFileSync(led, readFileSync(led, 'utf8') + '\n' + 'x'.repeat(200_000));
+
+    // A splitter that produces a rotation passing EVERY post-condition — the
+    // head shrinks, its bytes move, no archive heading survives in it — and
+    // wipes one archive's verbatim index rows on the way past.
+    writeFileSync(
+      join(dir, 'scripts', 'lib', 'split-ledger.py'),
+      [
+        'import sys, os, re, json',
+        'head, outdir = sys.argv[1], sys.argv[2]',
+        'if not os.environ.get("WRITE_HEAD"):',
+        '    print(json.dumps({"head_chars": 1})); sys.exit(0)',
+        '# ⚠️ SURGICAL. The head keeps everything but the padding: it shrinks, its',
+        '# bytes move, no archive heading appears in it, and its generated-index',
+        '# markers survive so `rulings-index.py` can still anchor. A stub head',
+        '# instead of this made the run refuse at the INDEX GENERATOR, one step',
+        '# before the gates — a refusal that reads the same and proves nothing.',
+        'src = open(head).read()',
+        'trimmed = src.rstrip("x").rstrip()',
+        'assert len(trimmed) < len(src), "the plant did not shrink the head"',
+        'open(head, "w").write(trimmed)',
+        '# ⚠️ FIXTURE PREPARATION, STATED RATHER THAN HIDDEN. Four archives predate',
+        '# the heading convention and carry only index rows, so no-duplication cannot',
+        '# be witnessed for them and the run stops at a CANNOT TELL one step before',
+        '# the gates. That is a real and separate finding; this arm\'s subject is the',
+        '# GATE STEP, so the plant gives those archives the heading they lack instead',
+        '# of arriving at a refusal that has nothing to do with the wipe.',
+        'for f in sorted(os.listdir(outdir)):',
+        '    if not f.endswith(".md") or f == "README.md":',
+        '        continue',
+        '    p = os.path.join(outdir, f)',
+        '    t = open(p).read()',
+        '    heads = [l for l in t.splitlines() if re.match(r"#{1,3} ", l)]',
+        '    if not any(re.search(r"20\\d\\d-\\d\\d-\\d\\d|#\\d+", h) for h in heads):',
+        '        # ⚠️ APPENDED, NEVER PREPENDED. `rulings-index.py` derives an',
+        '        # archive title from its FIRST heading, so prepending changed 134',
+        '        # derived rows and the generator refused ADD-ONLY. The witness only',
+        '        # has to EXIST in the file, not lead it.',
+        '        open(p, "w").write(t + "\\n\\n## Arc " + f[:-3] + "\\n")',
+        '# ⚠️ RULINGS ONLY. RELAY.md is over budget too and rotates FIRST, and its',
+        '# archives carry no index rows — so an unconditional plant aborted the run',
+        '# on the wrong ledger, one file before its subject.',
+        '#',
+        '# ⚠️ AND THE TEST IS ON THE **HEAD**, NOT THE ARCHIVE DIR. Since #278 the',
+        '# splitter is handed the STAGING archive dir, whose basename is `archives`',
+        '# for every ledger — so a check on `basename(outdir)` was false for BOTH',
+        '# files, the plant exited immediately, and the gates passed 43/43 on a tree',
+        '# nothing had been planted in. A control that silently plants nothing is',
+        '# indistinguishable from a guard that works.',
+        'if os.path.basename(head) != "RULINGS.md":',
+        '    sys.exit(0)',
+        'ROW = r"^\\|\\s*\\d{4}-\\d{2}-\\d{2}\\s*\\|\\s*#\\d+\\s*\\|.*$"',
+        'wiped = 0',
+        'for f in sorted(os.listdir(outdir)):',
+        '    if not f.endswith(".md") or f == "README.md":',
+        '        continue',
+        '    p = os.path.join(outdir, f)',
+        '    t = open(p).read()',
+        '    w = re.sub(ROW, "", t, flags=re.M)',
+        '    if w == t:',
+        '        continue          # this archive carries no verbatim rows to wipe',
+        '    open(p, "w").write(w)',
+        '    wiped = 1',
+        '    break',
+        '# ⚠️ THE PLANT PROVES ITS OWN APPLICATION. An unapplied mutation yields a',
+        '# green indistinguishable from a guard that works.',
+        'assert wiped, "no archive carried index rows — the plant would prove nothing"',
+        '',
+      ].join('\n'),
+    );
+
+    const before = readFileSync(led);
+    const r = spawnSync('bash', [join(dir, 'scripts', 'rotate-ledger.sh'), '--apply'], {
+      cwd: dir,
+      encoding: 'utf8',
+      timeout: STAGED_GATES_BUDGET_MS,
+    });
+    const out = r.stdout + r.stderr;
+
+    // POSITIVE CONTROL — THE GATES ACTUALLY RAN AND ACTUALLY FAILED. Without
+    // this the arm cannot tell "the gate caught the wipe" from "the staging
+    // step could not build a tree", and those refuse identically.
+    expect(out, `the staged gates never ran:\n${out}`).toMatch(/Tests +\d+ failed/);
+    expect(
+      out,
+      'the gates ran and something OTHER than the wiped index failed them',
+    ).toContain('one row per archived ruling');
+
+    expect(out).toContain('THE STAGED LEDGER FAILED ITS OWN GATES');
+    expect(r.status, 'a ledger that fails its own gates did not fail the run').not.toBe(0);
+
+    // AND THE SWAP DID NOT HAPPEN.
+    expect(
+      readFileSync(led).equals(before),
+      'the rotation reached the repository despite failing the ledger gates',
+    ).toBe(true);
+  }, STAGED_GATES_BUDGET_MS);
 
   it('refuses an unknown mode rather than guessing', () => {
     const r = spawnSync('bash', [ROTATE, '--wat'], { encoding: 'utf8' });
