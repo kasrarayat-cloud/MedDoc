@@ -12,13 +12,32 @@
 # the same class as a volume one layer up: the only artifact that makes a bad
 # deploy reversible, and unrebuildable from `main` once the tree has moved.
 #
-# THE KEEP SET IS A UNION, NOT AN INTERSECTION (ruling #137):
-#     · the last 10 DEPLOYS' pre-* tags,   PLUS
-#     · any tag whose deploy date is <= 14 days old.
-# Everything else is deletable. The owner's reasoning, recorded because it is
-# what sets the numbers: "a rollback target older than two weeks of schema
-# drift is a false promise anyway — rolling back across migrations 104->106
-# without a plan is not a button."
+# THE KEEP SET IS A UNION, NOT AN INTERSECTION (ruling #137, AMENDED BY #297):
+#     · the last 5 JUDGED deploys' pre-* tags,   PLUS
+#     · any tag whose deploy date is within 72 HOURS.
+# Everything else is deletable.
+#
+# ⚠️ #297 NARROWED BOTH ARMS, AND THE REASONING IS THE OWNER'S: "everything
+# older is a redeploy of an older commit anyway, not a rollback." A tag that
+# survives only because it is the 9th-newest is not a button anybody presses;
+# it is an old image with a name. The earlier numbers (10 deploys / 14 days)
+# were set against a slower cadence and, measured 2026-09-08, kept 72 of 72
+# tags — a keep-set that keeps everything is not a policy.
+#
+# ⚠️ AND "JUDGED" IS THE LOAD-BEARING WORD. A deploy is judged when it has a
+# §2.5 declaration in `docs/foundation/deploys/<YYYYMMDD>-<sha>.md`. An
+# UNJUDGED deploy's rollback tag is not a rollback target you would trust —
+# nobody wrote down what it was supposed to change — so it does not consume one
+# of the five. It is still protected by the 72-hour arm while it is fresh.
+#
+# ⚠️ THE JUDGED PROBE FAILS CLOSED. If the declarations directory is missing or
+# empty, NOTHING is judged, the five-deploy arm keeps nothing, and every tag
+# older than 72 hours becomes deletable in one step. That is the worst failure
+# this script could have, so a probe that finds zero declarations REFUSES
+# instead of proceeding. The previous reasoning, kept because it still sets the
+# 72-hour arm: "a rollback target older than two weeks of schema drift is a
+# false promise anyway — rolling back across migrations 104->106 without a plan
+# is not a button."
 #
 # NON-NEGOTIABLE SHAPE (ruling #137, RELAY F23):
 #   1. DRY-RUN BY DEFAULT.  Deleting requires --delete.
@@ -92,8 +111,15 @@
 # ============================================================================
 set -uo pipefail
 
-KEEP_DEPLOYS=10
-KEEP_DAYS=14
+KEEP_DEPLOYS=5          # ruling #297 — and only JUDGED deploys consume a slot
+# ⚠️ 72 HOURS IS REALISED AS A 3-DAY DATE BOUNDARY, AND THE ROUNDING IS TOWARD
+# KEEPING. A tag carries a DATE and no time, so "younger than 72h" cannot be
+# evaluated exactly: a tag dated three days ago may be 48h or 71h old. Keeping
+# anything dated within 3 days can therefore keep a tag up to ~96h old, and
+# never deletes one younger than 72h. Erring the other way would delete a tag
+# the ruling protects.
+KEEP_DAYS=3
+DEPLOY_DECL_DIR=docs/foundation/deploys
 REPO_PREFIX='meddoc-pro-'
 TAB=$'\t'
 # ⚠️ THE INTERNAL RECORD SEPARATOR IS NOT A TAB, AND THAT IS DELIBERATE.
@@ -261,7 +287,7 @@ say "  source            : $INVENTORY_SRC"
 say "  images seen       : $TOTAL_IMAGES  (positive control: non-zero, so the inventory traverses)"
 say "  ${REPO_PREFIX}* pre-* : $OURS_TOTAL  = $CAND_ROWS dated + $UNCLASSED_N unclassifiable"
 say "  today             : $NOW_DATE"
-say "  keep set          : last $KEEP_DEPLOYS deploys  UNION  deploy date >= $CUTOFF (<= $KEEP_DAYS days)"
+say "  keep set          : last $KEEP_DEPLOYS JUDGED deploys  UNION  deploy date >= $CUTOFF (<= $KEEP_DAYS days / 72h)   [ruling #297]"
 if [ "$FOREIGN" -gt 0 ]; then
   say "  co-tenant pre-*   : $FOREIGN — NOT OURS, never considered"
 fi
@@ -275,6 +301,36 @@ if [ "$CAND_ROWS" -eq 0 ]; then
   fi
   exit 0
 fi
+
+# ---------------------------------------------------------------------------
+# ⚠️ #297 — WHICH DEPLOYS WERE JUDGED, AND THE PROBE THAT REFUSES TO GUESS.
+# ---------------------------------------------------------------------------
+# A deploy is JUDGED when it carries a §2.5 declaration named
+# `<YYYYMMDD>-<sha>.md`. The tag `pre-<sha>-<YYYYMMDD>` was written BY the
+# deploy on that date, so the DATE is what joins the two — not the sha, which
+# names the commit being rolled back FROM rather than the one deployed.
+#
+# ⚠️ FAIL-CLOSED, AND THIS IS THE MOST IMPORTANT LINE IN THE FILE. If this
+# directory is missing, unreadable, or empty, then NO group is judged, the
+# five-deploy arm keeps NOTHING, and every tag past 72 hours becomes deletable
+# in a single run. A broken probe would therefore delete the entire rollback
+# path while printing a confident keep-list of zero. So zero declarations is a
+# REFUSAL, not an answer.
+JUDGED_DATES=''
+if [ -d "$DEPLOY_DECL_DIR" ]; then
+  JUDGED_DATES=$(find "$DEPLOY_DECL_DIR" -maxdepth 1 -name '[0-9]*-*.md' -printf '%f\n' 2>/dev/null \
+                 | cut -c1-8 | grep -E '^[0-9]{8}$' | sort -u)
+fi
+JUDGED_N=$(nlines "$JUDGED_DATES")
+if [ "$JUDGED_N" -eq 0 ]; then
+  say "🔴 CANNOT TELL — no §2.5 declarations found under '$DEPLOY_DECL_DIR'."
+  say "   #297 keeps the last $KEEP_DEPLOYS JUDGED deploys, so with nothing judged the"
+  say "   keep-set would collapse to the ${KEEP_DAYS}-day arm alone and this run would"
+  say "   offer to delete the whole rollback path. Refusing rather than answering."
+  say "   Run from the repository root, or fix the path."
+  exit 2
+fi
+say "  judged deploys    : $JUDGED_N dated declaration(s) under $DEPLOY_DECL_DIR"
 
 # Deploy groups, newest first. Dedupe to one row per deploy keeping that
 # deploy's newest image, then order by: embedded date DESC, newest CreatedAt
@@ -307,11 +363,19 @@ while IFS="$SEP" read -r gdate gcreated gsuffix; do
     [ -n "${gdate:-}${gcreated:-}" ] && SKIPPED_GROUPS=$((SKIPPED_GROUPS + 1))
     continue
   fi
-  rank=$((rank + 1))
+  # ⚠️ #297 — ONLY A **JUDGED** DEPLOY CONSUMES ONE OF THE FIVE. An unjudged
+  # deploy is skipped for ranking rather than counted-and-dropped: counting it
+  # would let five unjudged deploys exhaust the whole arm and evict five real
+  # rollback targets, which is the opposite of what the ruling asks for.
+  judged=0
+  printf '%s\n' "$JUDGED_DATES" | grep -qxF "$gdate" && judged=1
   why=''
-  [ "$rank" -le "$KEEP_DEPLOYS" ] && why='recent-10'
+  if [ "$judged" = 1 ]; then
+    rank=$((rank + 1))
+    [ "$rank" -le "$KEEP_DEPLOYS" ] && why="judged-top-${KEEP_DEPLOYS}"
+  fi
   if [ ! "$gdate" \< "$CUTOFF" ]; then
-    if [ -n "$why" ]; then why="recent-10 + <=${KEEP_DAYS}d"; else why="<=${KEEP_DAYS}d"; fi
+    if [ -n "$why" ]; then why="${why} + <=${KEEP_DAYS}d"; else why="<=${KEEP_DAYS}d"; fi
   fi
   if [ -n "$why" ]; then
     KEEP_GROUPS=$((KEEP_GROUPS + 1))
