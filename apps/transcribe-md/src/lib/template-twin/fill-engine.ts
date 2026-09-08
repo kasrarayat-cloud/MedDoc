@@ -378,8 +378,34 @@ export type TemplateTwinOverrideRow = {
 
 export interface ProcessTemplateTwinVisitInput {
   visitId: string;
-  practiceId: string;
-  doctorId: string;
+  /**
+   * ⚠️ RULING #287 — THE CHART'S PRACTICE, AND IT DOES BOTH JOBS ON PURPOSE.
+   *
+   * This was `practiceId`, and one slot was answering two questions: it scoped
+   * the VISIT (`transcribe_visits.practiceId`, the tenant) and it validated the
+   * TEMPLATE's provenance against `sourceArtifact.practiceId` (the template
+   * owner). Those are different columns and nothing constrains them equal — the
+   * schema says so at `TranscribeVisit.practiceId`: *"derived from the PATIENT,
+   * never from the author … NOTHING kept them agreeing."*
+   *
+   * ⚠️ SO NEITHER VALUE WAS RIGHT, AND BOTH LANES HAD BEEN WRONG IN OPPOSITE
+   * DIRECTIONS. Passing the author's practice (what `main` did) made the visit
+   * lookups find nothing on a locum visit; passing the tenant's (what #267 did)
+   * made provenance throw `TEMPLATE_PROVENANCE_MISMATCH` and withheld the
+   * document entirely.
+   *
+   * #287 decides the product question the split exposed: **a visit is documented
+   * in the TENANT practice's format.** A locum from B seeing A's patient fills
+   * A's active template; B's template never fills a visit in A. So one value is
+   * correct for both jobs — provenance compares the template's owner against the
+   * TENANT — and the parameter is named for the fact rather than for the caller.
+   */
+  tenantPracticeId: string;
+  /**
+   * WHO ACTED — audit and attribution, and #287 says NEVER A SCOPE. It reaches
+   * `userId` on the audit rows and nothing else; no query filters on it.
+   */
+  authorUserId: string;
   noteTemplateId: string;
   noteTemplateVersion: number;
   inputMode: EncounterInputMode;
@@ -447,7 +473,21 @@ export async function readAndPrepareTemplateTwinFill(
     const row = await prisma.noteTemplate.findFirst({
       where: {
         id: input.noteTemplateId,
-        doctorId: input.doctorId,
+        // #287 — THE CHART'S PRACTICE SELECTS THE TEMPLATE. This filtered on
+        // `doctorId` (the actor), so a locum documenting A's patient selected
+        // the LOCUM's template and provenance below then compared B against A:
+        // TEMPLATE_PROVENANCE_MISMATCH on a visit whose form exists and is
+        // certified. `practiceId` is the tenant, and `sourceArtifact.practiceId`
+        // below confirms it on a SECOND column — two independent reads of one
+        // decision, which is why both stay.
+        //
+        // ⚠️ THE SYSTEM DEFAULT IS UNAFFECTED, and that is measured rather than
+        // hoped: it has `doctorId = NULL` AND `practiceId = NULL` (the
+        // `note_templates_practice_iff_doctor` constraint ties the two), so a
+        // non-null filter excluded it before this change and excludes it after.
+        // It carries no compiled twin either, so it exits at the certification
+        // guard below as it always did.
+        practiceId: input.tenantPracticeId,
         version: input.noteTemplateVersion,
       },
       select: {
@@ -508,7 +548,7 @@ export async function readAndPrepareTemplateTwinFill(
     }
     if (
       row.version !== input.noteTemplateVersion ||
-      compiled.sourceArtifact.practiceId !== input.practiceId ||
+      compiled.sourceArtifact.practiceId !== input.tenantPracticeId ||
       compiled.sourceArtifact.validationStatus !== 'accepted' ||
       !compiled.sourceArtifact.objectKey
     ) {
@@ -557,7 +597,7 @@ export async function readAndPrepareTemplateTwinFill(
     });
     const storage = input.storage ?? createTemplateTwinArtifactStore();
     const source = await storage.readSourceArtifact({
-      practiceId: input.practiceId,
+      practiceId: input.tenantPracticeId,
       objectKey: compiled.sourceArtifact.objectKey,
       expectedSha256: compiled.sourceArtifact.sha256,
       expectedSizeBytes: compiled.sourceArtifact.sizeBytes,
@@ -593,11 +633,11 @@ export async function readAndPrepareTemplateTwinFill(
     // as well as the visit so a cross-tenant id cannot return a record at all.
     // Widening this select is a PHI decision, not a convenience.
     const visitPatient = await prisma.transcribeVisit.findFirst({
-      where: { id: input.visitId, practiceId: input.practiceId },
+      where: { id: input.visitId, practiceId: input.tenantPracticeId },
       select: { patient: { select: { name: true, dateOfBirth: true } } },
     });
     const clinicianOverrides = await prisma.templateTwinFieldOverride.findMany({
-      where: { visitId: input.visitId, practiceId: input.practiceId },
+      where: { visitId: input.visitId, practiceId: input.tenantPracticeId },
       orderBy: { fieldId: 'asc' },
       select: {
         fieldId: true,
@@ -683,7 +723,7 @@ export async function processTemplateTwinVisit(
   const claimedTemplate = await prisma.transcribeVisit.updateMany({
     where: {
       id: input.visitId,
-      userId: input.doctorId,
+      practiceId: input.tenantPracticeId,
       deletedAt: null,
       archivedAt: null,
       status: { not: 'SIGNED' },
@@ -782,7 +822,7 @@ export async function processTemplateTwinVisit(
 
   const storedOutput = prepared.render
     ? await storage.storeOutputArtifact({
-        practiceId: input.practiceId,
+        practiceId: input.tenantPracticeId,
         visitId: input.visitId,
         manifestSha256: prepared.manifestSha256,
         bytes: prepared.render.document,
@@ -873,7 +913,7 @@ export async function processTemplateTwinVisit(
   // system-context allowlist for no reason — and the allowlist gate caught it
   // going 1 -> 2 on this file, which is exactly its job.
   const visitNow = await prisma.transcribeVisit.findFirst({
-    where: visitByIdScope(input.visitId, asPracticeId(input.practiceId)),
+    where: visitByIdScope(input.visitId, asPracticeId(input.tenantPracticeId)),
     select: { status: true, signedAt: true },
   });
   if (visitNow?.status === 'SIGNED' || visitNow?.signedAt != null) {
@@ -892,8 +932,8 @@ export async function processTemplateTwinVisit(
       action: 'TEMPLATE_TWIN_SIGN_BLOCKED',
       targetType: 'TranscribeVisit',
       targetId: input.visitId,
-      userId: input.doctorId,
-      practiceId: input.practiceId,
+      userId: input.authorUserId,
+      practiceId: input.tenantPracticeId,
       metadata: {
         fill_discarded_post_signature: true,
         compiledVersionId: compiled.id,
@@ -964,7 +1004,7 @@ export async function processTemplateTwinVisit(
       await prisma.$transaction(
         async (tx) => {
           const still = await tx.transcribeVisit.findFirst({
-            where: { id: input.visitId, practiceId: input.practiceId },
+            where: { id: input.visitId, practiceId: input.tenantPracticeId },
             select: { status: true, signedAt: true },
           });
           if (still?.status === 'SIGNED' || still?.signedAt != null) {
@@ -975,7 +1015,7 @@ export async function processTemplateTwinVisit(
           }
           await tx.templateTwinFillManifest.create({
             data: {
-              practiceId: input.practiceId,
+              practiceId: input.tenantPracticeId,
               visitId: input.visitId,
               ...writeData,
             },
@@ -1003,8 +1043,8 @@ export async function processTemplateTwinVisit(
       action: 'TEMPLATE_TWIN_RENDER_VERIFIED',
       targetType: 'TranscribeVisit',
       targetId: input.visitId,
-      userId: input.doctorId,
-      practiceId: input.practiceId,
+      userId: input.authorUserId,
+      practiceId: input.tenantPracticeId,
       metadata: {
         compiledVersionId: compiled.id,
         templateVersion: row.version,

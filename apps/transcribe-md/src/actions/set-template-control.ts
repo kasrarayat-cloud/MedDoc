@@ -654,10 +654,10 @@ async function scaffoldDefaultAdmissible(input: {
       visitId,
       // ⚠️ RULING #267 — the VISIT'S tenant, never the author's. See the
       // resolver's return above for the SF-1 account.
-      practiceId: visit.practiceId,
+      tenantPracticeId: visit.practiceId,
       // THE VISIT'S OWN DOCTOR, NOT THE REQUESTER — the same actor rule the
       // preview states: a colleague acting on the record must not restamp it.
-      doctorId: visit.userId,
+      authorUserId: visit.userId,
       noteTemplateId: resolved.noteTemplateId,
       noteTemplateVersion: resolved.noteTemplateVersion,
       inputMode:

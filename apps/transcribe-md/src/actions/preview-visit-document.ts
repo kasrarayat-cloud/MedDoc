@@ -30,7 +30,9 @@ import {
   type CachedFill,
 } from '@/lib/docx-preview/fill-cache';
 import { generateVisitDocx } from '@/lib/docx-generator';
-import { readAndPrepareTemplateTwinFill } from '@/lib/template-twin/fill-engine';
+import { readAndPrepareTemplateTwinFill,
+  TemplateTwinFillError,
+} from '@/lib/template-twin/fill-engine';
 import { TemplateDocIRSchema } from '@/lib/template-twin/ir';
 import { scaffoldDefaultOfferable } from '@/lib/template-twin/clinician-override';
 import { loadVisitExportData } from '@/lib/visit-export-server';
@@ -46,7 +48,17 @@ export type VisitPreviewMiss =
   /** The fill ran and produced no document (nothing renderable yet). */
   | 'no_render'
   /** The fill itself failed. Named, so it is never a blank screen. */
-  | 'fill_failed';
+  | 'fill_failed'
+  /**
+   * ⚠️ RULING #287 — THE TENANT PRACTICE HAS NO ACTIVE CERTIFIED TEMPLATE.
+   *
+   * A visit is documented in the TENANT's format, so a locum from B seeing A's
+   * patient fills A's template. When A has none, the honest outcome is "this
+   * practice has no form yet" — a styled export with a NAMED reason — and NOT a
+   * provenance error. The old shape reported `TEMPLATE_PROVENANCE_MISMATCH` for
+   * a state that is entirely ordinary, which reads to a reader as corruption.
+   */
+  | 'no_tenant_template';
 
 export interface VisitPreviewResult extends Omit<NativePreviewResult, 'reason'> {
   reason: NativePreviewResult['reason'] | VisitPreviewMiss | null;
@@ -352,12 +364,12 @@ export async function previewVisitDocumentAction(
       // `sign-freeze.ts` reads the override table with the tenant's — so for a
       // locum the PREVIEW showed a default that the FREEZE could not see, and
       // the doctor signed a document without content they had watched appear.
-      practiceId: visit.practiceId,
+      tenantPracticeId: visit.practiceId,
       // ⚠️ THE VISIT'S OWN DOCTOR, NOT THE REQUESTER — and this one is about the
       // ACTOR, which is a different axis from the tenant above and stays as it
       // is. This read is practice-scoped, so a colleague previewing the record
       // would otherwise stamp their id on the author's fill.
-      doctorId: visit.userId,
+      authorUserId: visit.userId,
       noteTemplateId: templateId,
       noteTemplateVersion: templateVersion,
       inputMode:
@@ -436,6 +448,19 @@ export async function previewVisitDocumentAction(
       return [{ fieldId: f.fieldId, label: f.originalLabel, scaffoldText: text, inserted }];
     });
   } catch (err) {
+    // ⚠️ #287 — "THE TENANT HAS NO FORM" IS AN OUTCOME, NOT A FAILURE. It is the
+    // ordinary state for a practice that has not uploaded one, and for every
+    // locum visit into such a practice. Reporting it as `fill_failed` alongside
+    // real errors is how an expected state gets read as a defect.
+    if (
+      err instanceof TemplateTwinFillError &&
+      err.code === 'CERTIFIED_TEMPLATE_NOT_FOUND'
+    ) {
+      console.info(
+        `[visit-preview] visit=${visitId} the tenant practice has no active certified template; the styled note renders`,
+      );
+      return miss('no_tenant_template');
+    }
     const cls = err instanceof Error ? err.constructor.name : 'Unknown';
     console.warn(
       `[visit-preview] visit=${visitId} fill failed (${cls}); the styled note still renders`,

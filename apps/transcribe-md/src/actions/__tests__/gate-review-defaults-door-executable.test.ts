@@ -827,7 +827,7 @@ describe('#204 — the fill is asked the SAME question the preview asks', () => 
     const call = readAndPrepare.mock.calls[0][0] as Record<string, unknown>;
     expect(call).toMatchObject({
       visitId: VISIT,
-      doctorId: 'author-1',
+      authorUserId: 'author-1',
       // ⚠️ THE **VISIT'S TENANT** — RULING #267, AND THIS IS THE THIRD ANSWER
       // THIS ONE LINE HAS HAD. It was `prac-1` while the fixture conflated
       // everything; then `author-practice-9` when the split separated the
@@ -842,12 +842,16 @@ describe('#204 — the fill is asked the SAME question the preview asks', () => 
       // as the reason this column exists — the doctor inserted a default,
       // watched it appear in the preview, and signed a document without it.
       //
-      // ⚠️ THE **ACTOR** IS A DIFFERENT AXIS AND HAS NOT MOVED: `doctorId` is
-      // still the visit's own doctor rather than the requester, one line above.
+      // ⚠️ THE **ACTOR** IS A DIFFERENT AXIS AND HAS NOT MOVED: `authorUserId`
+      // is still the visit's own doctor rather than the requester, one line up.
       // Tenant and actor are two questions, and this arm's title — "the visit's
       // own doctor, not the requester" — is about the second. #267 is about the
       // first, and it says: not the author either. The visit's.
-      practiceId: 'visit-tenant-7',
+      //
+      // ⚠️ #287 GAVE THE TWO QUESTIONS TWO NAMES, which is why this line
+      // reads `tenantPracticeId` now. One slot was answering both, and the
+      // two lanes had shipped opposite wrong answers into it.
+      tenantPracticeId: 'visit-tenant-7',
       noteTemplateId: 'tpl-1',
       noteTemplateVersion: 3,
       generatedNote: 'A note.',

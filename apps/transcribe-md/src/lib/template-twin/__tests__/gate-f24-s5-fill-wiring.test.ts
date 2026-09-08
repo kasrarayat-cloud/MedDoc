@@ -133,8 +133,8 @@ async function run(
   return readAndPrepareTemplateTwinFill({
     ...(simulateOverrides ? { simulateOverrides } : {}),
     visitId: 'v1',
-    practiceId: 'prac-1',
-    doctorId: 'doc-1',
+    tenantPracticeId: 'prac-1',
+    authorUserId: 'doc-1',
     noteTemplateId: 'tpl-1',
     noteTemplateVersion: 1,
     inputMode: 'dictation',
@@ -296,8 +296,8 @@ describe('F24-S5 — the READ PATH carries the correction into the fill', () => 
     await expect(
       processTemplateTwinVisit({
         visitId: 'v1',
-        practiceId: 'prac-1',
-        doctorId: 'doc-1',
+        tenantPracticeId: 'prac-1',
+        authorUserId: 'doc-1',
         simulateOverrides: [
           { fieldId: selects[0].fieldId, overrideKind: 'option', selectedOptionOrdinal: 0 },
         ],

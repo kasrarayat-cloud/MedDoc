@@ -347,6 +347,15 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       // at create time and HONORED below over active-template resolution. NULL for
       // the default ("auto") path → resolveActiveTemplate as before.
       noteTemplateId: true,
+      // ⚠️ #287 — THE VISIT'S OWN TENANT, WHICH IS NOT `user.practiceId`.
+      // `practiceId` at :366 below is bound from `visit.user.practiceId` —
+      // the AUTHOR's practice — and feeds ~25 sites in this pipeline. On a
+      // locum visit (B seeing A's patient) those differ, and the schema
+      // comment on `TranscribeVisit.practiceId` says which one owns the
+      // chart: A. The Template Twin fill step is re-pointed at this column;
+      // the rest of the pipeline is NOT, because it reaches admission and
+      // billing and that is an owner call, not a rename.
+      practiceId: true,
       user: { select: { practiceId: true } },
       // Fix-Pack 1 Q0-2 / audit Finding 01.1 — pull patient demographic
       // + safety context for L7c pediatric framing. Round 3 PR-D added
@@ -1330,8 +1339,8 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // visit or signing — the result is advisory; native export falls back to styled.
     const twinFill = await runTemplateTwinFillStep({
       visitId,
-      practiceId,
-      doctorId: visit.userId,
+      tenantPracticeId: visit.practiceId,
+      authorUserId: visit.userId,
       noteTemplateId: noteTemplate.id,
       noteTemplateVersion: noteTemplate.version,
       inputMode: visit.inputMode,
