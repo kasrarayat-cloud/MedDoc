@@ -1441,7 +1441,12 @@ const WITNESSED_GUARDS = new Set<string>();
     expect(src).not.toMatch(/if \(!isMappingTypeCompatible\(field, mapping\)\) \{/);
     expect(src).not.toMatch(/if \(mapping\.sourceType === 'manual'\) \{/);
     expect(src).not.toMatch(/if \(mapping\.sourceType === 'verified_note_selection'\) \{/);
-    expect(src).not.toMatch(/field\.required\s*\|\|\s*\n?\s*mapping\.required/);
+    // ⚠️ COMMENTS STRIPPED — #275/#272 landed a comment in the resolver that
+    // QUOTES this disjunction while explaining why the predicate moved to
+    // `ir.ts`. A raw-source regex reports that prose as a restatement.
+    expect(
+      src.split('\n').filter((l) => !l.trimStart().startsWith('//') && !l.trimStart().startsWith('*')).join('\n'),
+    ).not.toMatch(/field\.required\s*\|\|\s*\n?\s*mapping\.required/);
 
     // 3 · ⚠️ AND ONE BEHAVIOURAL CONTROL PER KNOWN GUARD, because (1) and (2)
     // are both statements about text. Delegating to the wrong function, or to a
@@ -1534,10 +1539,19 @@ const WITNESSED_GUARDS = new Set<string>();
   it('⚠️ THERE IS EXACTLY ONE COPY — the resolver IMPORTS the predicate', () => {
     const src = readFileSync(join(__dirname, '..', 'resolver', 'index.ts'), 'utf-8');
     expect(src).toContain("from '../unmentioned-policy'");
-    expect(src).toContain('requiresClinicianInput(field, mapping)');
+    // ⚠️ THE SYMBOL MOVED, THE INVARIANT DID NOT — #275 lifted the five
+    // disjuncts into `ir.ts` as `fieldDemandsInput` so the validator and the
+    // resolver read ONE definition. This arm follows the predicate rather than
+    // its old name.
+    expect(src).toContain('fieldDemandsInput(field, mapping)');
     // The inline chain that used to live here must not come back. Matching the
     // SPELLING is deliberate: a second copy is only dangerous if it is a copy.
-    expect(src).not.toMatch(/field\.required\s*\|\|\s*\n?\s*mapping\.required/);
+    // ⚠️ COMMENTS STRIPPED — #275/#272 landed a comment in the resolver that
+    // QUOTES this disjunction while explaining why the predicate moved to
+    // `ir.ts`. A raw-source regex reports that prose as a restatement.
+    expect(
+      src.split('\n').filter((l) => !l.trimStart().startsWith('//') && !l.trimStart().startsWith('*')).join('\n'),
+    ).not.toMatch(/field\.required\s*\|\|\s*\n?\s*mapping\.required/);
   });
 
   // ══════════════════════════════════════════════════════════════════════════
