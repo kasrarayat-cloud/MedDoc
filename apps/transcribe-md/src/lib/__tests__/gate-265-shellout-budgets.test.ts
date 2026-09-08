@@ -116,9 +116,28 @@ function collectSites(): Site[] {
     });
 
     code.forEach((line, i) => {
-      const hit = /\btimeout:\s*([A-Za-z_$][\w$]*|[0-9_]+)/.exec(line);
+      // ⚠️ AND A TEMPLATE INTERPOLATION IS NOT A CALL SITE — THE SECOND TIME
+      // THIS PROBE MATCHED ITSELF. Stripping comments fixed the first
+      // (`gate-lens-sandbox`'s prose). This one is worse and it only surfaced in
+      // CI: the `show()` helper twenty lines below formats a finding as
+      // `` `… timeout: ${s.inner} …` ``, the regex captured the `$`, and the
+      // gate reported ITS OWN REPORTING STRING as an unresolvable budget.
+      //
+      // ⚠️ IT PASSED LOCALLY FOR THE WORST POSSIBLE REASON: the scan reads
+      // `git ls-files`, and when I ran it the file was still UNTRACKED — so the
+      // gate could not see itself. It went green because its watched set
+      // excluded the one file that would have failed it, and the set changed the
+      // moment it was committed.
+      //
+      //   THE INSTRUMENT WAS FINE. THE UNIVERSE IT WAS ASKED ABOUT WAS WRONG.
+      //
+      // The gate DOES still scan itself, deliberately — it is a test file that
+      // shells out, and exempting it by name would be a hand-kept list of one.
+      const hit = /\btimeout:\s*(?!\$\{)([A-Za-z_$][\w$]*|[0-9_]+)/.exec(line);
       if (!hit) return;
       const inner = hit[1]!;
+      // belt: a bare `$` can only come from an interpolation the guard missed
+      if (inner === '$') return;
 
       // the enclosing `it`'s budget: the first `}, X);` at or after this line
       let outer: string | null = null;
@@ -166,6 +185,27 @@ describe('#265(c) — a shell-out timeout is bounded by its own `it` budget', ()
     expect(SITES.length, 'the scan matched nothing — the matcher is broken').toBeGreaterThan(0);
     // and it is looking at a real corpus, not one file
     expect(new Set(SITES.map((s) => s.file)).size).toBeGreaterThan(1);
+  });
+
+  it('⚠️ WATCHED-SET CONTROL — the scan can SEE THIS FILE, and an untracked file is invisible', () => {
+    // ⚠️ THIS ARM EXISTS BECAUSE THE GATE SHIPPED GREEN AND FAILED IN CI ON ITS
+    // FIRST RUN. The scan reads `git ls-files`; when it was run locally this file
+    // was still UNTRACKED, so the gate could not see itself, and the one file
+    // that would have failed it was outside the universe it was asked about.
+    //
+    //   THE INSTRUMENT WAS FINE. THE SET IT MEASURED WAS WRONG — the failure
+    //   this house names WATCHED-SET, and no ordinary positive control catches
+    //   it, because the instrument answers perfectly about a smaller world.
+    //
+    // Naming this file specifically is not a hand-kept list: it is the ONE file
+    // whose invisibility the gate cannot otherwise detect, because a gate that
+    // cannot see itself reports the same green either way.
+    const files = testFiles();
+    expect(files.length, 'git ls-files returned an implausibly small corpus').toBeGreaterThan(100);
+    expect(
+      files.some((f) => f.endsWith('gate-265-shellout-budgets.test.ts')),
+      'this gate is not in its own watched set — it is untracked, and it is therefore not measuring itself',
+    ).toBe(true);
   });
 
   it('⚠️ NON-VACUITY — the predicate CAN fail, proved on a synthetic site', () => {
