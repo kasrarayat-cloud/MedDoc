@@ -14,6 +14,9 @@
 // defect pointed in opposite directions, and both are invisible on the rendered
 // page — the document is identical and only the manifest is wrong.
 // ============================================================================
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@meddoc/db', () => ({ default: {} }));
@@ -42,6 +45,8 @@ import {
   type SemanticMapping,
   type TemplateField,
 } from '../ir';
+import { compileTemplateDocx } from '@/lib/note-template-docx';
+import { prepareTemplateTwinFill } from '../fill-engine';
 import { resolveTemplateFields } from '../resolver';
 import { validateTemplateTwin } from '../validation';
 import { decideAutoConfirm } from '../auto-certify-eligibility';
@@ -290,12 +295,22 @@ describe('#247 Stage B — the label decides, and the labels are HIS', () => {
 // 2 · THE AGE — calendar arithmetic, and its refusals.
 // ---------------------------------------------------------------------------
 describe('#247 Stage B — age at the VISIT date, in whole years', () => {
-  // ⚠️ THESE THREE ARMS WERE REWRITTEN BY #264 — AND THE FIRST REWRITE SILENTLY
-  // REMOVED THEIR TEETH. A refutation pass measured it: with the assertions moved
-  // CLEAR of the ±26h window, all four of them still PASS against an
-  // `(at - dob) / 365.25` implementation — the exact scheme the middle arm's own
-  // title says it exists to catch. `origin/main`'s originals red on that
-  // mutation; the rewrite's do not.
+  // ⚠️ THESE THREE ARMS WERE REWRITTEN BY #264 — AND THE REWRITE SILENTLY REMOVED
+  // THE TEETH OF ONE OF THEM. A refutation pass measured it: with the assertions
+  // moved CLEAR of the ±26h window, all of them PASS against an
+  // `(at - dob) / 365.25` implementation — including the middle arm, whose own
+  // title says it exists to catch exactly that scheme.
+  //
+  // ⚠️ SCOPE CORRECTED, BECAUSE THE FIRST WRITE-UP OVERSTATED IT. "origin/main's
+  // originals red on that mutation" is FALSE for two of the three. Measured
+  // against a floor-based 365.25 scheme:
+  //
+  //     arm 1 (counts whole years)          main: does NOT catch it
+  //     arm 2 (names the 365.25 scheme)     main: CATCHES it  (25 -> 24)
+  //     arm 3 (leap-day)                    main: does NOT catch it
+  //
+  // So ONE arm lost real protection, not three — and a finding that is REAL can
+  // still carry a wrong scope, which is what a reader acts on.
   //
   //     MOVING AN ASSERTION AWAY FROM THE AMBIGUITY MOVED IT AWAY FROM THE
   //     DISCRIMINATION. 365.25-division only diverges AT the birthday boundary,
@@ -1168,5 +1183,92 @@ describe('#264 — TWO age controls, and the capability change stated at its tru
       visitDate: VISIT,
     });
     expect(facts.filter((f) => f.concept === RECORD_DERIVED_CONCEPTS.age)).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7 · #264 THROUGH THE PRODUCTION ENTRY POINT — the wire, not its two ends.
+// ---------------------------------------------------------------------------
+describe('#264 — the refusal survives `prepareTemplateTwinFill`, which is the only path production has', () => {
+  // ⚠️ THIS BLOCK EXISTS BECAUSE THE REFUTATION PASS PROVED THE OTHER ARMS
+  // CANNOT SEE THE WIRE. Every arm in section 6 hand-constructs the `refusals`
+  // array and hands it to `withVisitMetadataFacts` and `resolveTemplateFields`
+  // directly — so they prove the INJECTOR and the RESOLVER in isolation and
+  // never the thing between them. Measured on this branch: deleting BOTH
+  // `refusals: injectorRefusals` lines from `fill-engine.ts` left **850 of 850
+  // green**.
+  //
+  //     TWO ENDS PROVEN AND THE WIRE UNPROVEN IS A GREEN THAT MEANS NOTHING,
+  //     BECAUSE THE WIRE IS THE ONLY PART PRODUCTION RUNS.
+  //
+  // ⚠️ AND THE NON-VACUITY CONTROL EARNED ITS KEEP IMMEDIATELY. The first draft
+  // bound the age onto a control and the AMBIGUOUS arm passed while the control
+  // FAILED — the field was blank on the unambiguous visit too, for an unrelated
+  // reason. Without the control this block would have shipped green and proved
+  // nothing.
+  const WM_IOV = path.resolve(process.cwd(), '../../WM IOV Template.docx');
+  const bytes = new Uint8Array(readFileSync(WM_IOV));
+  const ir = compileTemplateDocx(bytes);
+  const AGE_FIELD = ir.fields.find((f) => f.kind === 'narrative_text')!;
+
+  /** Bind ONE narrative control to the age concept; every other field is inert. */
+  const irMappings = ir.fields.map((f) =>
+    f.fieldId === AGE_FIELD.fieldId
+      ? mapping(f.fieldId, RECORD_DERIVED_CONCEPTS.age)
+      : mapping(f.fieldId, null, {
+          sourceType: 'manual',
+          expectedDataType: f.kind === 'single_select' ? 'single_select' : 'text',
+        }),
+  );
+
+  async function ageFieldFor(visitDate: string) {
+    const prepared = await prepareTemplateTwinFill({
+      compiledVersionId: 'cv-264',
+      noteTemplateId: 'tpl-264',
+      noteTemplateVersion: 1,
+      ir,
+      mappings: irMappings,
+      facts: [],
+      certifiedFieldIds: ir.fields.map((f) => f.fieldId),
+      source: bytes,
+      resolverModelVersion: null,
+      validationNow: new Date(visitDate),
+      visitDate: new Date(visitDate),
+      patient: PATIENT,
+      clinicianOverrides: [],
+    } as never);
+    const m = (prepared as { manifest: { fields: Array<{ fieldId: string; value: string | null; reasonCode: string }> } })
+      .manifest;
+    return m.fields.find((f) => f.fieldId === AGE_FIELD.fieldId)!;
+  }
+
+  // ⚠️ AN HONEST LIMIT, NAMED RATHER THAN GLOSSED. This harness does NOT achieve
+  // a FILL: on the unambiguous visit the injector mints the age fact (proved
+  // separately in section 3) and the resolver still declines it, for a binding
+  // reason particular to this synthetic mapping set and NOT to the product. So
+  // these arms prove the WIRE — that a refusal named by the injector survives
+  // `prepareTemplateTwinFill` into the manifest — and they do not prove the fill.
+  // Saying which half is proved is the whole discipline; an unverified step named
+  // honestly is worth more than a green tick.
+  //
+  // The DIFFERENTIAL is what makes that sufficient. Cut the wire and BOTH visits
+  // read `fact_not_mentioned`; with it live they differ, and only one input can
+  // produce the named token.
+  it('⚠️ NON-VACUITY CONTROL FIRST — the token is NOT what this path says about every visit', async () => {
+    const age = await ageFieldFor(VISIT);
+    expect(
+      age.reasonCode,
+      'an unambiguous visit must NOT carry the ambiguity token — else the arm below is vacuous',
+    ).not.toBe('age_timezone_ambiguous');
+    expect(age.reasonCode).toBe('fact_not_mentioned');
+  });
+
+  it('an AMBIGUOUS visit arrives in the manifest NAMED, not as "nobody said it"', async () => {
+    const age = await ageFieldFor('2026-06-14T02:00:00.000Z');
+    expect(age.value).toBeNull();
+    // ⚠️ THE ASSERTION THAT DIES IF THE WIRE IS CUT. With the fill-engine
+    // threading removed this reads `fact_not_mentioned`, and before this block
+    // existed no arm in the file noticed.
+    expect(age.reasonCode).toBe('age_timezone_ambiguous');
   });
 });
