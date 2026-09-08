@@ -81,4 +81,32 @@ export GIT_CONFIG_GLOBAL=/dev/null
 export LENS_SANDBOX=1
 ENV
 
+# ── AND THE TREE IS MADE RUNNABLE, OR THE LENS MEASURES THE WRONG REPOSITORY. ──
+#
+# ⚠️ ADDED 2026-09-07, AFTER A LENS SPENT ITS BUDGET ON VOID RESULTS. A round-
+# eight lens reported ~24 test files failing in its sandbox with
+# `Failed to resolve import "react/jsx-dev-runtime"` and
+# `@meddoc/auth resolves to /opt/meddoc-pro/packages/auth/src/index.ts, outside
+# this worktree`. It caught that itself and correctly discarded every claim
+# resting on those files — but a lens that has to notice its own harness is
+# broken is a lens spending its budget on the harness.
+#
+# ⚠️ AND THE FAILURE MODE IS WORSE THAN "SOME TESTS DO NOT RUN". A raw
+# `node_modules` symlink resolves `@meddoc/*` to the SHARED tree, so a green in
+# here can be a green about code the sandbox does not contain. The repository
+# already has one door for this and this script was not using it.
+#
+# Non-fatal: a sandbox that cannot install is still useful for reading, and
+# saying so beats refusing to build one.
+if [ -f "$SHARED/scripts/setup-worktree.sh" ]; then
+    if ( cd "$DIR" && bash "$SHARED/scripts/setup-worktree.sh" >/dev/null 2>&1 ); then
+        :
+    else
+        echo "⚠️  setup-worktree.sh failed in $DIR — .tsx and packages/* results in" >&2
+        echo "    this sandbox are NOT trustworthy. Read-only lenses are fine." >&2
+    fi
+else
+    echo "⚠️  setup-worktree.sh not found — sandbox is read-only-safe only." >&2
+fi
+
 echo "$DIR"
