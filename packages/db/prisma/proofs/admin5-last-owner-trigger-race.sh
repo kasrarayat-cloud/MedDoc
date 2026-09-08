@@ -436,12 +436,50 @@ sed -n '/CREATE OR REPLACE FUNCTION users_last_owner_guard()/,/^\$fn\$ LANGUAGE 
 sed -n '/CREATE OR REPLACE FUNCTION users_no_orphan_member()/,/^\$fn\$ LANGUAGE plpgsql;/p'  "$MIGRATION" > "$OUT/g2.sql"
 awk '/PERFORM pg_advisory_xact_lock\(/{skip=4} skip>0{skip--; next} {print}' "$OUT/g1.sql" > "$OUT/g1n.sql"
 awk '/PERFORM pg_advisory_xact_lock\(/{skip=4} skip>0{skip--; next} {print}' "$OUT/g2.sql" > "$OUT/g2n.sql"
+# ══ RULING #279 — THE ORDER ARM. A SECOND MUTANT THAT MOVES THE LOCK RATHER
+#    THAN DELETING IT. ═══════════════════════════════════════════════════════
+#
+# ⚠️ THE PRESENCE ARMS CANNOT TELL THESE TWO MUTATIONS APART, WHICH IS `V3`.
+# `LOCK-CONTROL` and `ROW-LOCK-CONTROL` assert the lock EXISTS; `prosrc` still
+# reads PRESENT when it has merely been moved after its own count, so both stay
+# green. Deleting it is not the same defect as mis-ordering it, and only one of
+# them was ever exercised.
+#
+# ⚠️ AND THE FIRST ATTEMPT TO CLOSE `V3` LOOKED LIKE A REFUTATION. Moving the
+# lock and running the DEMOTION race gave **0/12** — because that guard takes
+# `FOR UPDATE` on every sibling row BEFORE it counts (#253), and those row locks
+# serialise the writers whatever the advisory lock does. The order genuinely
+# does not matter there.
+#
+# It matters HERE, and the reason is already recorded as `MIG-2`/`DOOR-2`: an
+# INSERT creates a row no `FOR UPDATE` can lock, because a phantom cannot be
+# locked. Where the row locks have nothing to grip, the advisory lock is the
+# ONLY ordering that exists — so this is the one race whose outcome its position
+# can change. Measured before this arm was written: MOVED 10/12, SHIPPED 0/12.
+mk_moved() {  # $1 = source fn, $2 = destination, $3 = practice key expression
+  awk -v KEY="$3" '
+    /PERFORM pg_advisory_xact_lock\(/ {skip=4}
+    skip>0 {skip--; next}
+    {print}
+    /INTO members_left|INTO owners_now/ {pend=1}
+    pend && /;[[:space:]]*$/ && !done {
+      print "    PERFORM pg_advisory_xact_lock(hashtext(\x27users_last_owner_guard\x27), hashtext(" KEY "));";
+      done=1; pend=0 }
+  ' "$1" > "$2"
+}
+mk_moved "$OUT/g1.sql" "$OUT/g1m.sql" 'OLD."practiceId"'
+mk_moved "$OUT/g2.sql" "$OUT/g2m.sql" 'NEW."practiceId"'
+
 # ⚠️ ASSERT THE MUTATION APPLIED. An unapplied mutation yields a green that
 # proves nothing and is indistinguishable from a guard that works.
 before=$(grep -c pg_advisory_xact_lock "$OUT/g1.sql" "$OUT/g2.sql" | awk -F: '{s+=$2} END{print s}')
 after=$(grep -c  pg_advisory_xact_lock "$OUT/g1n.sql" "$OUT/g2n.sql" | awk -F: '{s+=$2} END{print s}')
-echo "    mutation applied: advisory-lock occurrences $before -> $after"
+moved=$(grep -c  pg_advisory_xact_lock "$OUT/g1m.sql" "$OUT/g2m.sql" | awk -F: '{s+=$2} END{print s}')
+echo "    mutation applied: advisory-lock occurrences $before -> $after (deleted), $moved (moved)"
 [ "$before" = 2 ] && [ "$after" = 0 ] || { echo "🔴 MUTATION DID NOT APPLY — every result below would be meaningless."; exit 1; }
+# ⚠️ THE MOVED MUTANT MUST STILL CONTAIN THE LOCK, or it is the DELETE mutation
+# wearing a different name and this arm measures nothing new.
+[ "$moved" = 2 ] || { echo "🔴 THE MOVED MUTANT LOST ITS LOCK ($moved of 2) — it would be a duplicate of the delete arm."; exit 1; }
 
 # ⚠️ THE SAVEPOINT CLAIM IS MEASURED ON EVERY RUN, NOT BELIEVED. The comment
 # above race B's scripts documents what a savepoint rollback does to an advisory
@@ -464,11 +502,17 @@ for _ in $(seq $N); do r=$(race_b "$OUT/g1.sql" "$OUT/g2.sql"); printf '%s' "$r"
   case "$r" in V*) W=$((W+1));; esac
   case "$r" in *o) OW=$((OW+1));; *\?) QW=$((QW+1));; esac; done
 echo "   -> $W/$N VIOLATIONS, $OW/$N overlapped, $QW/$N no-witness"
+printf "    LOCK MOVED after the count (%d runs): " "$N"; M=0; OM=0; QM=0
+for _ in $(seq $N); do r=$(race_b "$OUT/g1m.sql" "$OUT/g2m.sql"); printf '%s' "$r"
+  case "$r" in V*) M=$((M+1));; esac
+  case "$r" in *o) OM=$((OM+1));; *\?) QM=$((QM+1));; esac; done
+echo "   -> $M/$N VIOLATIONS, $OM/$N overlapped, $QM/$N no-witness"
 echo
 echo "=== VERDICT ==="
 echo "raceA subject   : $S"
 echo "raceA control#1 : $C1"
 echo "raceB           : without lock $V/$N violations, with lock $W/$N"
+echo "raceB order arm : lock MOVED after the count $M/$N violations (#279)"
 
 # ⚠️ THE HARNESS ASSERTS ITS OWN 2x2 AND EXITS NON-ZERO IF IT DOES NOT HOLD.
 # Its adversarial pass found it PRINTED the numbers and asserted nothing, so it
@@ -514,6 +558,22 @@ elif [ "$OW" -eq 0 ]; then
   cannot_tell=1
 else
   say "🟢 raceB: 0 violations WITH the advisory lock, and $OW/$N runs genuinely overlapped INSIDE the conflicting statement"
+fi
+# ══ RULING #279 — THE ORDER ARM'S VERDICT. ════════════════════════════════
+# The three cells together are the claim: the lock is load-bearing (V > 0), its
+# POSITION is load-bearing (M > 0), and the shipped order holds (W = 0). A
+# harness that only ever deleted the lock could say the first and the third and
+# was silent on the second, which is `V3`.
+if [ "$QM" -gt 0 ]; then
+  say "🔴 raceB order arm: $QM/$N runs produced NO WITNESS — the arm cannot be read."; fail=1
+elif [ "$M" -gt 0 ]; then
+  say "🟢 raceB order arm: $M/$N violations with the lock MOVED after the count — its POSITION is load-bearing, not merely its presence (#279)"
+elif [ "$OM" -eq 0 ]; then
+  say "🟡 raceB ORDER ARM INCONCLUSIVE: 0/$N violations AND 0/$N overlapped — the racers never met, so the arm was never given the chance to fire. Not evidence that order is irrelevant."
+  cannot_tell=1
+else
+  say "🔴 raceB ORDER ARM DID NOT FIRE: 0/$N violations with the lock MOVED, but $OM/$N runs DID overlap. Either the guard no longer depends on the lock's position — in which case the advisory lock in the INSERT path is redundant and should go — or this arm has stopped discriminating. Canon 121: delete the mechanism or delete the control, never keep both."
+  fail=1
 fi
 # ⚠️ THREE STATES, BECAUSE "THE CONTROL DID NOT FIRE" HAS TWO CAUSES AND THEY
 # ARE NOT THE SAME FINDING. Exit 2 is CANNOT-TELL, not refusal — the house

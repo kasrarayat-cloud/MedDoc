@@ -593,7 +593,7 @@ SELECT 'LOCK-CONTROL (pg_locks): the ORPHAN guard holds its own advisory lock',
        '0|1', got, CASE WHEN got = '0|1' THEN 'PASS' ELSE 'FAIL' END
   FROM (SELECT t210_orphan_lock_probe() AS got) q;
 
--- ⚠️ `V3` IS OPEN AND NARROWED, NOT CLOSED — AND THE ATTEMPT IS WORTH RECORDING.
+-- ⚠️ `V3` IS CLOSED — RULING #279 — AND THE ROUTE THERE IS WORTH RECORDING.
 --
 -- Round five's `V3`: this arm and its sibling assert the advisory lock's
 -- PRESENCE, never its ORDER, so the lock could be moved AFTER its own count and
@@ -613,14 +613,24 @@ SELECT 'LOCK-CONTROL (pg_locks): the ORPHAN guard holds its own advisory lock',
 -- the demotion path those row locks are what serialise the writers; the advisory
 -- lock's position relative to the counts does not change the outcome.
 --
--- ⚠️ SO THE HONEST STATE IS: no arm asserts the order, and no failing input has
--- been found for the removal guard's demotion path. That is NOT the same as "the
--- order does not matter" — the INSERT path has no `FOR UPDATE` to fall back on,
--- because a phantom cannot be locked (`MIG-2`, `DOOR-2`), and that path was not
--- exercised by this experiment. Whoever closes `V3` should start there.
+-- ⚠️ AND THE INSERT PATH WAS THE ANSWER — RULING #279. The demotion race was
+-- the wrong input, not a refutation. An INSERT creates a row no `FOR UPDATE` can
+-- lock, because a phantom cannot be locked (`MIG-2`, `DOOR-2`); where the row
+-- locks have nothing to grip, the advisory lock is the ONLY ordering that
+-- exists. Run against `raceB` — insert-a-member versus suspend-a-solo-owner —
+-- the same moved-lock mutation gives:
 --
--- Recorded rather than left as a green, because the next session to read `V3`
--- would otherwise repeat this and reach the same 0/12 without knowing why.
+--     raceB order arm : lock MOVED after the count   10/12 violations
+--     raceB           : without lock 12/12,  with lock 0/12
+--
+-- That cell is now part of the harness and fails it if the position ever stops
+-- mattering. THE PRESENCE ARMS BELOW ARE UNCHANGED and still cannot see a moved
+-- lock — which is correct: they answer a different question, and the order arm
+-- is where order is asserted.
+--
+-- ⚠️ THE GENERAL LESSON IS THE ONE WORTH KEEPING: a mutation that fails to
+-- reproduce a defect has not refuted it, it has told you the input was wrong.
+-- 0/12 on the demotion race read exactly like a clean bill of health.
 
 INSERT INTO arm_result
 SELECT 'LOCK-CONTROL (pg_locks): 0 held before the counted write, 1 held after',
