@@ -368,24 +368,49 @@ q_() { docker exec -i "$PGC" psql -U "$U" -d "$DB" -X -q < "$1" >/dev/null 2>&1;
 # The check below is here so the claim is measured on every run rather than
 # believed: it is the same probe, inline, and it FAILS THE HARNESS if Postgres
 # ever behaves differently than this comment says.
+# ⚠️ IT READS **BEFORE AND AFTER**, AND THE "BEFORE" IS THE WHOLE CONTROL —
+# ROUND FIVE, `R5-RACE-4` / `V2`. The first version of this probe read the count
+# only AFTER the rollback and asserted it was 0. But 0 is ALSO what you read when
+# the lock was NEVER ACQUIRED — a mistyped classid, a renamed function, a lock
+# call that quietly did nothing — so it could not distinguish "the savepoint
+# released it" from "there was nothing to release", and it would have reported
+# the documented conclusion in both cases.
+#
+# ⚠️ THAT IS THE SHAPE RULING #260 RATIFIED THIS PROBE BY NAME FOR AVOIDING, and
+# it had it: the fact was re-measured on every run and the measurement could
+# never say NO. Re-measuring an unfalsifiable claim is not a control.
+#
+# The measurement is now the TRANSITION 1 -> 0. `before` must read 1 or the probe
+# refuses without opinion about savepoints at all, because it has not observed
+# the thing whose release it is about to time.
 assert_savepoint_semantics() {
-  local got
-  got=$(docker exec -i "$PGC" psql -U "$U" -d "$DB" -X -Atq <<'PROBE'
+  local out before after
+  out=$(docker exec -i "$PGC" psql -U "$U" -d "$DB" -X -Atq <<'PROBE'
 BEGIN;
 SAVEPOINT s1;
 SELECT pg_advisory_xact_lock(424242, 1);
+SELECT 'BEFORE=' || count(*) FROM pg_locks
+ WHERE locktype='advisory' AND pid=pg_backend_pid() AND classid=424242;
 ROLLBACK TO SAVEPOINT s1;
-SELECT count(*) FROM pg_locks
+SELECT 'AFTER=' || count(*) FROM pg_locks
  WHERE locktype='advisory' AND pid=pg_backend_pid() AND classid=424242;
 ROLLBACK;
 PROBE
 )
-  got=$(printf '%s' "$got" | tr -d '[:space:]' | tail -c 1)
-  if [ "$got" != "0" ]; then
-    echo "🔴 SAVEPOINT SEMANTICS CHANGED — a savepoint rollback no longer releases the advisory lock (read '$got', expected 0). The comment above and the ON_ERROR_ROLLBACK approximation must both be re-derived before this harness is trusted." >&2
+  before=$(printf '%s\n' "$out" | sed -n 's/^BEFORE=//p' | tr -d '[:space:]')
+  after=$(printf '%s\n' "$out" | sed -n 's/^AFTER=//p'  | tr -d '[:space:]')
+
+  # POSITIVE CONTROL FIRST. Without an observed lock there is nothing to
+  # release, and a 0 after the rollback would mean nothing whatever.
+  if [ "$before" != "1" ]; then
+    echo "🔴 SAVEPOINT PROBE IS VACUOUS — the advisory lock was never observed HELD (BEFORE read '$before', expected 1). Every reading after the rollback is meaningless: 0 is what an unheld lock reads too. Fix the probe before trusting any race result below." >&2
     return 1
   fi
-  echo "   savepoint probe: a savepoint rollback RELEASES the advisory lock (0 held) — as documented above" >&2
+  if [ "$after" != "0" ]; then
+    echo "🔴 SAVEPOINT SEMANTICS CHANGED — a savepoint rollback no longer releases the advisory lock (AFTER read '$after', expected 0). The comment above and the ON_ERROR_ROLLBACK approximation must both be re-derived before this harness is trusted." >&2
+    return 1
+  fi
+  echo "   savepoint probe: advisory lock HELD=$before then RELEASED=$after by a savepoint rollback — measured as a transition, not as a bare zero" >&2
   return 0
 }
 cat > "$OUT/rb-a.sql" <<'SQL'
