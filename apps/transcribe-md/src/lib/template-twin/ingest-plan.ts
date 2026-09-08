@@ -71,96 +71,75 @@ import {
 } from './ir';
 
 /**
- * A field's IDENTITY — never its position, and never a bare opaque number.
+ * A field's IDENTITY. Two of them, both SEMANTIC, and nothing else.
  *
- * ══ THREE ROUNDS OF REFUTATION SHAPED THIS, AND EACH FOUND THE SAME ERROR ══
+ * ══ FOUR ROUNDS OF REFUTATION, FOUR BLOCKING DEFECTS, ONE ERROR ════════════
  *
- * ROUND 1 · the key was `partName + path + ordinal + kind`. `path` is a
- *   sibling-index XPath and `ordinal` a document-wide counter, so both shift in
- *   lockstep: inserting one control at the top of the real 80-control form
- *   mis-paired 3 of 3 certified dispositions.
+ * R1 · `partName + path + ordinal + kind`. Both moving parts are positional and
+ *      shift in lockstep; one inserted control mis-paired 3 of 3 on the real
+ *      form.
+ * R2 · the replacement claimed "a collision never mis-transfers". FALSE — first
+ *      wins guarded the SOURCE map only, so two controls claimed one certified
+ *      row and a LEFT leg finding was certified to print the RIGHT leg's.
+ * R3 · `sdtId` called STABLE on a `28/80, 28 distinct` measurement taken from
+ *      ONE document. The owner's form assigns ids with `nextId += 1` per control
+ *      IN DOCUMENT ORDER, so one dropped clause renumbered everything and walked
+ *      the exam narrative fifteen rows sideways, every one `certified`.
+ * R4 · pairing `sdtId` with the LABEL was supposed to refuse that renumber,
+ *      because "control N inherits N-1's id, whose LABEL is a different
+ *      question". ⚠️ THAT SENTENCE IS FALSE ON THE REAL DOCUMENT. Measured:
  *
- * ROUND 2 · the replacement asserted "a collision never mis-transfers". FALSE —
- *   first-wins guarded the SOURCE map and nothing guarded the TARGET side, so
- *   two controls sharing a key both claimed one certified row and a LEFT leg
- *   finding was certified to print the RIGHT leg's concept.
+ *        80 fields · 26 distinct labels · 14 ADJACENT pairs sharing a label
+ *        1 tag · 1 alias · 28 sdtIds · only 10 with an sdtId AND a unique label
  *
- * ROUND 3 · `sdtId` was called "Word's own control id: STABLE", measured
- *   `28/80, 28 distinct, 28 matched`. That measurement was taken on ONE
- *   document — `WM IOV Template.docx`, whose ids are Word-generated 32-bit
- *   randoms (1519045110, -1477830258, …).
+ *      Six consecutive controls read "CLINICAL INDICATIONS: Choose an item.…"
+ *      and eight read "The … from the … to the …", because 79 of 80 carry no
+ *      alias and the compiler derives their label from surrounding text. On real
+ *      bytes re-stamped with the owner's id scheme, a single deletion mis-paired
+ *      **14 of 14** transfers, all `certified`, every bijection guard satisfied.
  *
- *   ⚠️ IT IS FALSE FOR THE DOCUMENT THIS PRIMITIVE EXISTS TO SERVE. The owner's
- *   53-control consult form is emitted by `regenerate-consult-form.ts` with
- *   `let nextId = 900_036` and `nextId += 1` per control IN DOCUMENT ORDER
- *   (:157, :165, :187, :199). Its `sdtId` IS A POSITIONAL COUNTER. Drop one ROS
- *   clause and every downstream id shifts by one — a clean renumber, so the key
- *   stays unique on both sides and every source row is consumed once. All three
- *   bijection guards are SATISFIED and the exam narrative walks one organ system
- *   sideways:
+ * ⚠️ THE SAME ERROR EVERY TIME: A PROPERTY MEASURED ON ONE DOCUMENT AND STATED
+ * AS UNIVERSAL — and `sdtId` produced a blocking defect in TWO CONSECUTIVE
+ * ROUNDS, once alone and once paired.
  *
- *       exam_lungs   <- the certified concept of exam_neck
- *       exam_cv      <- exam_lungs
- *       exam_abdomen <- exam_cv        … 15 rows, every one `certified`
+ * ══ SO THE ID PATH IS DELETED, NOT NARROWED ════════════════════════════════
  *
- *   That is round one's defect wearing a different attribute's clothes.
+ * A label-uniqueness precondition would make the pairing sound and would buy
+ * TEN controls of eighty, while adding a fourth chance for a subtle hole in the
+ * one function that decides which clinical meaning lands on which control.
+ * That is not a trade worth taking here. What remains is:
  *
- * ⚠️ THE ERROR IS THE SAME ONE THREE TIMES: A PROPERTY MEASURED ON ONE DOCUMENT
- * AND STATED AS UNIVERSAL. OOXML's `CT_SdtId` guarantees neither uniqueness nor
- * stability; "Word persists it" is one authoring tool's behaviour, and this
- * repository holds two files that contradict it — the owner's form, and
- * `sample-operative-note.docx` (hand-assigned 101-112, 201, 301…).
+ *   1. `fieldId` — universal and EXACT, true only for identical bytes. This is
+ *      the re-issue act in full: same artifact, same 53 ids, everything
+ *      transfers, nothing inferred.
  *
- * ══ SO AN IDENTITY IS A CONJUNCTION THAT CANNOT SHIFT AS A UNIT ═════════════
+ *   2. `tag` — the author's SEMANTIC name (`exam_lungs`, `telehealth_consent`).
+ *      It means the same control wherever it moves and whatever it is renamed
+ *      to, because a human wrote it to mean that.
  *
- *   1. `fieldId` — universal, exact, and true only for IDENTICAL bytes. This is
- *      the re-issue act's whole case, and it needs nothing else.
+ * ⚠️ AND THE COST IS REAL, SO IT IS WRITTEN DOWN RATHER THAN DISCOVERED. On
+ * CHANGED bytes, a control with no tag does not transfer — it re-proposes. On
+ * `WM IOV Template.docx` that is 79 of 80. On the owner's consult form the 18
+ * controls its generator adds all carry tags and survive; whatever the blank
+ * source contributes does not, unless it carries tags of its own.
  *
- *   2. `tag` — the author's SEMANTIC name (`exam_lungs`, `telehealth_consent`),
- *      emitted by the generator at :111 and already extracted by the compiler at
- *      `compiler.ts:904`. It was available in round two and DISCARDED on the
- *      strength of `tag 1/80` — measured, again, only on WM IOV. A semantic name
- *      means the same control wherever it moves and whatever it is renamed to.
- *
- *   3. `sdtId` **paired with the LABEL** — never alone. A positional renumber
- *      hands control N the id of control N-1, whose label is different; so
- *      requiring both to agree refuses exactly the shift that defeated round
- *      one and round three, while keeping the 28 WM IOV controls whose random
- *      ids and stable labels both survive an edit.
- *
- * Every key carries `partName` (a `w:id` is unique within a PART, not across the
- * package — the compiler walks body, headers and footers into ONE list) and
- * `kind` (a control Word kept the id of but the doctor turned from a text box
- * into a dropdown is a different question with the same name).
- *
- * A field offering none of these re-proposes. That is a smaller transfer than
- * any of the three earlier keys claimed, and it is the only one that has
- * survived being attacked.
+ * That is a smaller transfer than every earlier key CLAIMED, and the only one
+ * that has not been shown to hand a patient's clinical value to the wrong
+ * question. **A re-proposal is a question to the doctor; a mis-transfer is a
+ * wrong answer wearing a certification.**
  */
 export type IdentityKey = string & { readonly __brand: 'IdentityKey' };
 
-/**
- * The identities this field can be recognised by, strongest first. A field may
- * offer several; a match on any of them is a match, and `planTransfer` requires
- * whichever one resolves to be unique on BOTH sides.
- */
 export function identityKeys(field: TemplateField): IdentityKey[] {
   const b = field.rendererBinding;
-  const part = b.partName;
   const keys: IdentityKey[] = [`fid\u0000${field.fieldId}` as IdentityKey];
 
-  const tag = b.tag;
-  if (tag !== null && tag !== '') {
-    keys.push(`tag\u0000${part}\u0000${tag}\u0000${field.kind}` as IdentityKey);
-  }
-
-  // ⚠️ THE LABEL IS LOAD-BEARING HERE, NOT DECORATION. `sdtId` alone is what
-  // mis-paired fifteen certified clinical concepts on the owner's own form.
-  const sdtId = b.sdtId;
-  if (sdtId !== null && sdtId !== '') {
-    keys.push(
-      `sdt\u0000${part}\u0000${sdtId}\u0000${field.originalLabel}\u0000${field.kind}` as IdentityKey,
-    );
+  // ⚠️ TRIMMED AND CASE-SENSITIVE, AND EMPTY IS NOT AN IDENTITY. A tag of ""
+  // or "   " names nothing; treating it as a key would collapse every untagged
+  // control in the document into one identity.
+  const tag = (b.tag ?? '').trim();
+  if (tag !== '') {
+    keys.push(`tag\u0000${b.partName}\u0000${tag}\u0000${field.kind}` as IdentityKey);
   }
   return keys;
 }

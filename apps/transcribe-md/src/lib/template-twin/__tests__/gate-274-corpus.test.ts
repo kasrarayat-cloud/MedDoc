@@ -137,39 +137,40 @@ function editDocumentXml(bytes: Buffer, edit: (xml: string) => string): Buffer {
 }
 
 /**
- * The marker a control is certified to, and it is the control's STABLE
- * identity — its semantic tag where it has one, its label otherwise.
+ * ⚠️ THE MEASURE IS INDEPENDENT OF THE THING IT MEASURES, AND THE FIRST TWO
+ * VERSIONS WERE NOT.
  *
- * ⚠️ THE FIRST VERSION USED THE LABEL ALONE, AND THE MEASURE WAS WRONG RATHER
- * THAN THE CODE. On the rename arm it reported:
+ * v1 keyed the expected concept on `originalLabel`. That called every legitimate
+ * RENAME a mis-pair, because a renamed control correctly keeps its certification
+ * via its tag.
  *
- *     "Lungs:  (reworded)  <-  CONCEPT::Lungs"
+ * v2 keyed it on `tag ?? originalLabel` — the SAME two attributes `identityKeys`
+ * matches on. ⚠️ THAT IS CIRCULAR, AND ROUND FOUR PROVED IT COSTS A DEFECT: on
+ * the real document, where 14 ADJACENT pairs share a label, two controls sharing
+ * a label also share a concept STRING, so handing clause #1's certified
+ * disposition to clause #2 read as CORRECT. On the decisive run the identity
+ * measure scored **14 of 14 wrong** and this corpus scored **ZERO**.
  *
- * as a mis-pair. That is the tag path WORKING: the doctor re-worded the
- * question, the semantic tag still names the control, and its certified
- * disposition correctly followed. A measure keyed on the label calls every
- * legitimate rename a defect — which would have pushed me to "fix" the one
- * behaviour the tag path exists to provide.
+ *     A MEASURE BUILT FROM THE ATTRIBUTES UNDER TEST CANNOT SEE A DEFECT IN
+ *     THOSE ATTRIBUTES. It agrees with the code by construction.
  *
- *   A CONTROL'S CERTIFICATION FOLLOWS ITS IDENTITY, SO THE MEASURE MUST TOO.
- *
- * A control WITHOUT a tag falls back to its label, which is correct for exactly
- * the same reason: with no tag, the label IS part of its identity, so a rename
- * genuinely makes it a control the transfer can no longer recognise — and it
- * must re-propose rather than inherit.
+ * So a control is certified to its DOCUMENT POSITION in the source — an index,
+ * which no identity key reads and which is unique by definition — and the
+ * expected position is supplied by the transformation itself, which knows what
+ * it moved. The measure and the mechanism now share nothing.
  */
-function stableMarker(f: TemplateDocIR['fields'][number]): string {
-  return f.rendererBinding.tag ?? f.originalLabel;
-}
+type PositionPlan = {
+  /** For target index j, the source index whose disposition it must receive, or null. */
+  readonly expect: ReadonlyArray<number | null>;
+};
 
-/** Certify every field to a concept naming ITSELF, so a mis-pair is visible. */
-function certifyAll(ir: TemplateDocIR): Map<string, SemanticMapping> {
+function certifyByPosition(ir: TemplateDocIR): Map<string, SemanticMapping> {
   return new Map(
-    ir.fields.map((f) => [
+    ir.fields.map((f, i) => [
       f.fieldId,
       {
         fieldId: f.fieldId,
-        clinicalConcept: `CONCEPT::${stableMarker(f)}`,
+        clinicalConcept: `SRC#${i}`,
         status: 'certified',
       } as unknown as SemanticMapping,
     ]),
@@ -177,25 +178,54 @@ function certifyAll(ir: TemplateDocIR): Map<string, SemanticMapping> {
 }
 
 /**
- * THE MEASUREMENT, and it is deliberately NOT a transfer count.
- *
- * ⚠️ THE COUNT WAS RIGHT IN ALL THREE ROUNDS WHILE THE PAIRING WAS WRONG. Round
- * three transferred 52 of 52 with fifteen concepts on the wrong controls, and
- * `expectTransferCount` passed. Only "did this control get ITS OWN concept"
- * distinguishes them.
+ * Every transfer that landed on a control other than the one the transformation
+ * says it belongs to. `expect[j] === null` means "this target must NOT inherit".
  */
-function misPairs(source: TemplateDocIR, target: TemplateDocIR): string[] {
-  const certified = certifyAll(source);
-  const plan = planTransfer({ target, sourceIr: source, certifiedByFieldId: certified });
-  const markerOf = new Map(target.fields.map((f) => [f.fieldId, stableMarker(f)]));
-  const labelOf = new Map(target.fields.map((f) => [f.fieldId, f.originalLabel]));
-  return plan.transferred
-    .filter((t) => t.mapping.clinicalConcept !== `CONCEPT::${markerOf.get(t.fieldId)}`)
-    .map((t) => `${labelOf.get(t.fieldId)} <- ${t.mapping.clinicalConcept}`);
+function misPairsByPosition(
+  source: TemplateDocIR,
+  target: TemplateDocIR,
+  plan: PositionPlan,
+): string[] {
+  const certified = certifyByPosition(source);
+  const result = planTransfer({ target, sourceIr: source, certifiedByFieldId: certified });
+  const indexOf = new Map(target.fields.map((f, i) => [f.fieldId, i]));
+  const wrong: string[] = [];
+  for (const t of result.transferred) {
+    const j = indexOf.get(t.fieldId)!;
+    const want = plan.expect[j];
+    const got = String(t.mapping.clinicalConcept);
+    if (want === null || want === undefined) {
+      wrong.push(`target#${j} (${target.fields[j]!.originalLabel}) inherited ${got} and must not have`);
+    } else if (got !== `SRC#${want}`) {
+      wrong.push(`target#${j} (${target.fields[j]!.originalLabel}) expected SRC#${want}, got ${got}`);
+    }
+  }
+  return wrong;
+}
+
+/** IDENTICAL documents: target j must receive source j. */
+function identityPlan(n: number): PositionPlan {
+  return { expect: Array.from({ length: n }, (_, i) => i) };
+}
+
+/**
+ * A document with one control REMOVED at `removedAt`: target j maps to source j
+ * below the cut and j+1 above it. This is the shape that has now defeated three
+ * different keys, so the corpus states it explicitly rather than inferring it.
+ */
+function afterRemovalPlan(n: number, removedAt: number, tagged: (j: number) => boolean): PositionPlan {
+  return {
+    expect: Array.from({ length: n }, (_, j) => {
+      const src = j < removedAt ? j : j + 1;
+      // Only a TAGGED control may inherit across a renumber; everything else
+      // must re-propose. `null` asserts exactly that.
+      return tagged(j) ? src : null;
+    }),
+  };
 }
 
 function transferCount(source: TemplateDocIR, target: TemplateDocIR): number {
-  return planTransfer({ target, sourceIr: source, certifiedByFieldId: certifyAll(source) })
+  return planTransfer({ target, sourceIr: source, certifiedByFieldId: certifyByPosition(source) })
     .transferred.length;
 }
 
@@ -207,34 +237,51 @@ const ARM_BUDGET_MS = 60_000;
 describe('#274 CORPUS · WM IOV Template.docx (real bytes)', () => {
   const base = readFileSync(WM_IOV);
   const baseIr = compileTemplateDocx(base);
+  const tagOf = (ir: TemplateDocIR, j: number) => (ir.fields[j]!.rendererBinding.tag ?? '').trim();
 
-  it('POSITIVE CONTROL — the document compiled and carries controls to mis-pair', () => {
-    // Without this, "zero mis-pairs" is also what an empty document returns.
-    expect(baseIr.fields.length).toBeGreaterThan(50);
-  });
+  it('POSITIVE CONTROL — the document is the one every claim was measured on', () => {
+    // ⚠️ THESE NUMBERS ARE THE ARGUMENT FOR THE CURRENT DESIGN, so the corpus
+    // asserts them rather than trusting a comment. 79 of 80 controls carry no
+    // tag, labels repeat, and FOURTEEN ADJACENT PAIRS share one — which is what
+    // defeated the sdtId+label pairing in round four.
+    expect(baseIr.fields.length).toBe(80);
+    const labels = baseIr.fields.map((f) => f.originalLabel);
+    expect(new Set(labels).size, 'distinct labels').toBe(26);
+    let adjacent = 0;
+    for (let i = 1; i < labels.length; i += 1) if (labels[i] === labels[i - 1]) adjacent += 1;
+    expect(adjacent, 'adjacent pairs sharing a label').toBe(14);
+    expect(baseIr.fields.filter((f) => (f.rendererBinding.tag ?? '').trim() !== '').length).toBe(1);
+  }, ARM_BUDGET_MS);
 
   it('1 · IDENTICAL bytes — everything transfers, nothing mis-paired', () => {
-    expect(misPairs(baseIr, compileTemplateDocx(base))).toEqual([]);
-    expect(transferCount(baseIr, compileTemplateDocx(base))).toBe(baseIr.fields.length);
+    const target = compileTemplateDocx(base);
+    expect(misPairsByPosition(baseIr, target, identityPlan(target.fields.length))).toEqual([]);
+    expect(transferCount(baseIr, target)).toBe(baseIr.fields.length);
+  }, ARM_BUDGET_MS);
+
+  it('⚠️ 3 · one control DROPPED — the renumber that mis-paired 14 of 14', () => {
+    // The decisive case. Every untagged control MUST re-propose; only the single
+    // tagged one may inherit, and only if it survived the cut.
+    const mutated = editDocumentXml(base, (xml) => xml.replace(/<w:sdt>[\s\S]*?<\/w:sdt>/, ''));
+    const target = compileTemplateDocx(mutated);
+    const removedAt = 0;
+    const plan = afterRemovalPlan(target.fields.length, removedAt, (j) => tagOf(target, j) !== '');
+    expect(
+      misPairsByPosition(baseIr, target, plan),
+      'a renumber walked a certified concept onto a same-label neighbour',
+    ).toEqual([]);
   }, ARM_BUDGET_MS);
 
   it('2 · one control INSERTED at the top', () => {
     const mutated = editDocumentXml(base, (xml) =>
-      xml.replace(
-        /(<w:body[^>]*>)/,
-        `$1<w:p>${sdt('INSERTED PROBE', 'inserted_probe', 990001, 'x')}</w:p>`,
-      ),
+      xml.replace(/(<w:body[^>]*>)/, `$1<w:p>${sdt('INSERTED PROBE', 'inserted_probe', 990001, 'x')}</w:p>`),
     );
-    const ir = compileTemplateDocx(mutated);
-    expect(ir.fields.length).toBe(baseIr.fields.length + 1);
-    expect(misPairs(baseIr, ir), 'an insert walked a concept sideways').toEqual([]);
-  }, ARM_BUDGET_MS);
-
-  it('3 · one control DROPPED — the renumber case', () => {
-    const mutated = editDocumentXml(base, (xml) => xml.replace(/<w:sdt>[\s\S]*?<\/w:sdt>/, ''));
-    const ir = compileTemplateDocx(mutated);
-    expect(ir.fields.length).toBeLessThan(baseIr.fields.length);
-    expect(misPairs(baseIr, ir), 'a drop walked a concept sideways').toEqual([]);
+    const target = compileTemplateDocx(mutated);
+    // target j>0 corresponds to source j-1; only tagged controls may inherit.
+    const plan: PositionPlan = {
+      expect: target.fields.map((_, j) => (j > 0 && tagOf(target, j) !== '' ? j - 1 : null)),
+    };
+    expect(misPairsByPosition(baseIr, target, plan), 'an insert mis-paired').toEqual([]);
   }, ARM_BUDGET_MS);
 
   it('4 · a COPY-PASTED control — same id, same label, twice', () => {
@@ -242,21 +289,23 @@ describe('#274 CORPUS · WM IOV Template.docx (real bytes)', () => {
       const m = /<w:sdt>[\s\S]*?<\/w:sdt>/.exec(xml)!;
       return xml.replace(m[0], `${m[0]}${m[0]}`);
     });
-    const ir = compileTemplateDocx(mutated);
-    expect(misPairs(baseIr, ir), 'a copy-paste claimed a certified disposition').toEqual([]);
+    const target = compileTemplateDocx(mutated);
+    const plan: PositionPlan = { expect: target.fields.map(() => null) };
+    expect(misPairsByPosition(baseIr, target, plan), 'a copy-paste claimed a disposition').toEqual([]);
   }, ARM_BUDGET_MS);
 
-  it('5 · a LABEL RENAME — the doctor re-words a question', () => {
+  it('5 · a LABEL RENAME — an untagged control must NOT inherit', () => {
     const mutated = editDocumentXml(base, (xml) =>
       xml.replace(/<w:alias w:val="([^"]+)"\/>/, '<w:alias w:val="$1 (reworded)"/>'),
     );
-    expect(misPairs(baseIr, compileTemplateDocx(mutated)), 'a rename mis-paired').toEqual([]);
+    const target = compileTemplateDocx(mutated);
+    const plan: PositionPlan = {
+      expect: target.fields.map((_, j) => (tagOf(target, j) !== '' ? j : null)),
+    };
+    expect(misPairsByPosition(baseIr, target, plan), 'a rename mis-paired').toEqual([]);
   }, ARM_BUDGET_MS);
 });
 
-// ══════════════════════════════════════════════════════════════════════════════
-// DOCUMENT 2 · the OWNER'S 53-control form — POSITIONAL sdtIds, semantic tags
-// ══════════════════════════════════════════════════════════════════════════════
 describe("#274 CORPUS · the owner's consult form (generator's own vocabulary)", () => {
   /**
    * The 18 controls the rule ADDS, at the ids and tags it assigns them.
@@ -287,19 +336,33 @@ describe("#274 CORPUS · the owner's consult form (generator's own vocabulary)",
 
   const base = readFileSync(WM_IOV);
   const pack = (added: string): TemplateDocIR =>
-    compileTemplateDocx(
-      editDocumentXml(base, (xml) => xml.replace(/(<w:body[^>]*>)/, `$1${added}`)),
-    );
+    compileTemplateDocx(editDocumentXml(base, (xml) => xml.replace(/(<w:body[^>]*>)/, `$1${added}`)));
 
   const sourceIr = pack(buildAdded(null, null));
+  const tagAt = (ir: TemplateDocIR, j: number) => (ir.fields[j]!.rendererBinding.tag ?? '').trim();
 
-  it('POSITIVE CONTROL — the ids really are DENSE SEQUENTIAL, and tags are present', () => {
-    // ⚠️ If this ever fails, the corpus has stopped reproducing the property it
-    // was built for and every arm below is measuring something else.
-    // ⚠️ SELECTED BY TAG, NOT BY AN ID RANGE. The first version filtered on
-    // `Number(sdtId) >= FIRST_ADDED_SDT_ID`, which also swept up WM IOV's
-    // Word-generated randoms (2004953067 > 900036) and made the density check
-    // measure a set it was never about.
+  /**
+   * ⚠️ THE EXPECTATION IS BUILT FROM THE TAG CORRESPONDENCE, WHICH THE
+   * TRANSFORMATION KNOWS AND THE MEASURE DOES NOT INFER. For each target index,
+   * the source index carrying the SAME tag — or null when the control has no tag
+   * and therefore must re-propose.
+   */
+  function tagPlan(target: TemplateDocIR): PositionPlan {
+    const srcByTag = new Map<string, number>();
+    sourceIr.fields.forEach((f, i) => {
+      const t = (f.rendererBinding.tag ?? '').trim();
+      if (t !== '' && !srcByTag.has(t)) srcByTag.set(t, i);
+    });
+    return {
+      expect: target.fields.map((_, j) => {
+        const t = tagAt(target, j);
+        if (t === '') return null;
+        return srcByTag.has(t) ? srcByTag.get(t)! : null;
+      }),
+    };
+  }
+
+  it('POSITIVE CONTROL — the ids ARE dense sequential and every added control is tagged', () => {
     const addedTags = new Set<string>([
       ...ROS_CLAUSES.map(([t]) => t),
       ...EXAM_CLAUSES.map(([t]) => t),
@@ -314,42 +377,42 @@ describe("#274 CORPUS · the owner's consult form (generator's own vocabulary)",
     expect(ids[ids.length - 1]! - ids[0]!, 'the ids are not dense — not the shipped shape').toBe(
       ids.length - 1,
     );
-    expect(added.every((f) => f.rendererBinding.tag), 'a rule-added control lost its tag').toBe(true);
   }, ARM_BUDGET_MS);
 
   it('1 · IDENTICAL bytes', () => {
-    expect(misPairs(sourceIr, pack(buildAdded(null, null)))).toEqual([]);
+    const target = pack(buildAdded(null, null));
+    expect(misPairsByPosition(sourceIr, target, identityPlan(target.fields.length))).toEqual([]);
   }, ARM_BUDGET_MS);
 
   it('⚠️ 3 · one ROS clause DROPPED — EVERY downstream sdtId shifts by one', () => {
-    // THE ROUND-THREE DEFECT. Before the label pairing and the tag path, this
-    // transferred 52 of 52 with FIFTEEN concepts on the wrong controls, every
-    // one `certified`, and all three bijection guards satisfied.
+    // THE ROUND-THREE DEFECT. Before the tag path this transferred 52 of 52 with
+    // FIFTEEN concepts on the wrong controls, every one `certified`, and all
+    // three bijection guards satisfied.
     const target = pack(buildAdded(2, null));
-    const wrong = misPairs(sourceIr, target);
-    expect(wrong, 'a renumber walked the exam narrative sideways').toEqual([]);
+    expect(
+      misPairsByPosition(sourceIr, target, tagPlan(target)),
+      'a renumber walked the exam narrative sideways',
+    ).toEqual([]);
   }, ARM_BUDGET_MS);
 
   it('⚠️ 5 · a LABEL RENAME — the TAG must still carry it', () => {
-    // The rename defeats the sdtId+label fallback by design; only the semantic
-    // tag survives, which is why the tag path exists.
     const target = pack(buildAdded(null, 'exam_lungs'));
-    expect(misPairs(sourceIr, target), 'a rename mis-paired').toEqual([]);
+    expect(misPairsByPosition(sourceIr, target, tagPlan(target)), 'a rename mis-paired').toEqual([]);
+    // and it must actually TRANSFER — a measure satisfied by transferring
+    // nothing would pass the line above and prove nothing.
     const renamed = target.fields.find((f) => f.rendererBinding.tag === 'exam_lungs')!;
-    const plan = planTransfer({
-      target,
-      sourceIr,
-      certifiedByFieldId: certifyAll(sourceIr),
-    });
-    const carried = plan.transferred.find((t) => t.fieldId === renamed.fieldId);
-    expect(carried, 'the renamed control lost its certification — the tag path is dead').toBeDefined();
+    const plan = planTransfer({ target, sourceIr, certifiedByFieldId: certifyByPosition(sourceIr) });
+    expect(
+      plan.transferred.find((t) => t.fieldId === renamed.fieldId),
+      'the renamed control lost its certification — the tag path is dead',
+    ).toBeDefined();
   }, ARM_BUDGET_MS);
 
   it('⚠️ 3+5 · a DROP **and** a RENAME together — ids shift AND the label moves', () => {
-    // Neither fallback can carry this: the id renumbered and the label changed.
-    // Only the tag names the control, and this is the arm that proves the
-    // precedence order is doing real work rather than being decoration.
     const target = pack(buildAdded(2, 'exam_lungs'));
-    expect(misPairs(sourceIr, target), 'drop + rename mis-paired').toEqual([]);
+    expect(
+      misPairsByPosition(sourceIr, target, tagPlan(target)),
+      'drop + rename mis-paired',
+    ).toEqual([]);
   }, ARM_BUDGET_MS);
 });
