@@ -80,8 +80,28 @@ services:
     #    a throwaway compose project, never against this data.
     volumes:
       - pgdata_encrypted:/var/lib/postgresql/data
-    ports:
-      - "127.0.0.1:5432:5432"   # only accessible from localhost
+    # ⚠️ RULING #281 — PRODUCTION POSTGRES IS NOT PUBLISHED TO THE HOST.
+    #
+    # This used to carry `- "127.0.0.1:5432:5432"  # only accessible from
+    # localhost`. The comment was true and it was not a control: every process
+    # on this box is "localhost", and a diagnostic probe written for the QA
+    # database reached PRODUCTION through it. It was stopped by WRONG
+    # CREDENTIALS — luck standing in for a guard, on the database holding every
+    # patient record.
+    #
+    # ⚠️ AND THE PORT BOUGHT NOTHING. Audited before removal: every host-side
+    # consumer already goes through `docker exec` — deploy-prod.sh, the
+    # assert-migrations and check-* family, annotate-backfill, the artifact
+    # scanners. `restore-drill.sh` is the one script that binds a host port and
+    # it publishes its OWN throwaway container on 5433. The `localhost:5432` in
+    # the CI workflows is a GitHub SERVICE CONTAINER, not this file.
+    #
+    # So the access path is unchanged and the accident class is gone. To reach
+    # this database, name the container:
+    #     docker exec -i meddoc-pro-postgres-1 psql -U meddoc -d meddoc
+    #
+    # `gate-prod-postgres-unpublished` holds this, and MinIO and Redis are
+    # audited separately (they still publish, and their own row says why).
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U meddoc"]
       interval: 5s
