@@ -760,6 +760,97 @@ export const TemplateTwinFillManifestSchema = z
   .strict();
 export type TemplateTwinFillManifest = z.infer<typeof TemplateTwinFillManifestSchema>;
 
+// ══ #272 — THE RECORD-DERIVED REFUSAL VOCABULARY, IN ONE PLACE ═════════════
+//
+// A record-derived value is one the PATIENT RECORD supplies — a name, an age.
+// When the record cannot supply it, the field is blank for a NAMED reason, and
+// ruling #272 says that blank must never withhold the document:
+//
+//   A WITHHELD CONSULT OVER ONE AMBIGUOUS AGE IS THE WRONG TRADE.
+//   A DOCTOR TYPING "61" IS THE RIGHT ONE.
+//
+// ⚠️ IT LIVES HERE, AND NOT BESIDE THE INJECTOR, BECAUSE IT HAS THREE READERS
+// AND A RULE WITH THREE READERS DRIFTS. The resolver knows a refusal by the
+// CHANNEL it arrived on; `validation/index.ts` sees only a status and a
+// reasonCode and must reach the same verdict; and the injector is where the
+// tokens are minted. `ir.ts` is the module all three already import, so the
+// list is shared rather than copied.
+//
+// ⚠️ AND THE DRIFT IS ARMED, NOT TRUSTED: `gate-272` asserts that every reason
+// the injector can emit is a member of this set. Adding a refusal reason
+// without adding it here would otherwise produce a blank that silently blocks
+// the document again — the exact regression #272 exists to end, arriving
+// through the one door nobody watches.
+export const RECORD_DERIVED_REFUSAL_REASONS = [
+  'age_input_absent',
+  'age_unparseable',
+  'age_implausible',
+  'age_timezone_ambiguous',
+] as const;
+
+export type RecordDerivedRefusalReason = (typeof RECORD_DERIVED_REFUSAL_REASONS)[number];
+
+/** Is this reasonCode a record-derived refusal? The ONE reader of the list. */
+/**
+ * One refusal on the record-derived channel — the shape BOTH ends agree on.
+ *
+ * ⚠️ EXPORTED SO THERE IS ONE DECLARATION, NOT FOUR STRUCTURAL COPIES. #275's
+ * re-pass found the channel typed `unfilled: string` at both ends and in three
+ * test-local literals. A writer landing an unregistered token compiled fine,
+ * collected `neverBlocks` from the resolver (which opts out by CHANNEL), then
+ * failed `isRecordDerivedRefusal` at the validator (which re-classifies by
+ * TOKEN) — and the document was withheld again, the exact outcome #272 exists
+ * to prevent. The membership arm could not see it, because it probes four
+ * fixed tokens.
+ *
+ * `required_${...}` is the form the resolver uses when the blank DOES escalate;
+ * typing it keeps the two spellings of one token from drifting apart.
+ */
+/**
+ * Does this field DEMAND a value from somebody — i.e. is a blank here something
+ * that must be escalated rather than simply left empty?
+ *
+ * ⚠️ ONE PREDICATE, TWO READERS, AND THEY HAD ALREADY DRIFTED. #275's re-pass
+ * measured the resolver asking FIVE disjuncts and the validator asking THREE:
+ * `field.unknownPolicy === 'requires_input'` and
+ * `mapping.blankPolicy === 'requires_input'` were absent from the validator.
+ * Both sides were "correct" in isolation and each arm pointed at one reader,
+ * which is this repository's own named failure class — the same shape as
+ * `fromPersistedMapping` and `narrativeSentence`, and the reason those are
+ * exported rather than re-implemented.
+ *
+ * ⚠️ THE DRIFT WAS MASKED, WHICH IS WHY NO ARM SAW IT. `semantic-mapping`
+ * derives `blankPolicy`, `unknownPolicy` and `required` from the SAME field, so
+ * the two disjuncts the validator lacks can only arise together with one it
+ * has. That coupling is incidental — one refactor from gone — and it is what
+ * turns a latent asymmetry into a document that renders when it should have
+ * been escalated. The predicate is shared so the question cannot be asked two
+ * ways again.
+ */
+export function fieldDemandsInput(
+  field: Pick<TemplateField, 'required' | 'unknownPolicy'>,
+  mapping: Pick<SemanticMapping, 'required' | 'unknownPolicy' | 'blankPolicy'> | undefined,
+): boolean {
+  return Boolean(
+    field.required ||
+      mapping?.required ||
+      field.unknownPolicy === 'requires_input' ||
+      mapping?.unknownPolicy === 'requires_input' ||
+      mapping?.blankPolicy === 'requires_input',
+  );
+}
+
+export type RecordDerivedRefusal = {
+  fieldId: string;
+  unfilled: RecordDerivedRefusalReason;
+  required: `required_${RecordDerivedRefusalReason}`;
+};
+
+export function isRecordDerivedRefusal(reasonCode: string | null | undefined): boolean {
+  if (!reasonCode) return false;
+  return (RECORD_DERIVED_REFUSAL_REASONS as readonly string[]).includes(reasonCode);
+}
+
 export function templateTwinCounts(
   fields: readonly FieldResolution[],
   definitions: readonly TemplateField[],

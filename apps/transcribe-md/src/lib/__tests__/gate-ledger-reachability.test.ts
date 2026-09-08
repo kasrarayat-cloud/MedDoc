@@ -77,6 +77,9 @@ describe('rotate-ledger: every manifest anchor exists in the file it names', () 
 // `WRITE_HEAD` gates the head rewrite inside the splitter. Without it the
 // archives are written, the head is untouched, and the script reports success —
 // so the content exists twice and the head is still oversize.
+/** #265(c) — ONE budget for the subprocess AND its `it`. */
+const SWEEP_BUDGET_MS = 20_000;
+
 describe('rotate-ledger: --apply passes WRITE_HEAD, and refuses to claim a rotation it did not perform', () => {
   const src = R('scripts/rotate-ledger.sh');
 
@@ -226,6 +229,16 @@ describe('the standing instructions name the archive directories', () => {
     expect(s).not.toMatch(/grep -qE '\^#\+ \(✅\|🟢\) F\[0-9\]\+ —' "\$LEDGER"/);
   });
 
+  // ⚠️ ONE BUDGET, USED TWICE — #265(c). It was `timeout: 90_000` inside an
+  // `it` that stated `20_000`, so the subprocess clock could never be reached:
+  // vitest kills the test at 20s whatever the child is doing. The 90s described
+  // an intention nothing enforced, and the number that actually governed was in
+  // a different place. Same shape as `c4e778a2`, at a different ratio.
+  //
+  // 20s is the REAL clock and the measurement below is why it is the survivor:
+  // the arm runs in ~3.0s warm and 4.5s cold, so 20s is a ~4.4x margin under
+  // parallel load. Raising both to 90s would only make a hang take 90s to
+  // report.
   // The sweep shells out and walks head + archives: ~3.0s warm, and a COLD
   // worktree measured 4.5s — past vitest's 5s default, which turned a passing
   // gate red on a fresh checkout. A false red costs a citation; the arm is not
@@ -238,13 +251,13 @@ describe('the standing instructions name the archive directories', () => {
         cwd: REPO,
         encoding: 'utf8',
         stdio: 'pipe',
-        timeout: 90_000,
+        timeout: SWEEP_BUDGET_MS,
       });
     } catch (e) {
       out = String((e as { stdout?: string }).stdout ?? '');
     }
     expect(out).toContain('ledger closure-vocabulary present=1');
-  }, 20_000);
+  }, SWEEP_BUDGET_MS);
 });
 
 describe('RULINGS — one number, one ruling', () => {
