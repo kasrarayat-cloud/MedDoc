@@ -91,6 +91,7 @@ import {
   requiresClinicianInput,
   canOmitWhenUnmentioned,
   omitBranchUnreachable,
+  OMIT_LADDER_PRE_CONCEPT,
   OMIT_GUARD_NAMES,
   OMIT_GUARD_TOKEN_PREFIXES,
   OMIT_CONTROL_LABEL,
@@ -1155,6 +1156,78 @@ const WITNESSED_GUARDS = new Set<string>();
     },
     ROW_LIMIT_CONTROL_BUDGET_MS,
   );
+
+  it("⚠️ EVERY LADDER ROW'S `status` IS PINNED — the column nothing watched", () => {
+    // ⚠️ ROUND EIGHT, `FG-2`. `resolver/index.ts:473` passes `guard.status`
+    // straight into `makeResolution`, so this column decides what the DOCTOR is
+    // shown — and no arm read it. Measured: flipping `manual_source_not_filled`
+    // from `not_mentioned` to `needs_clinician_input` survived **51 of 51 here
+    // and 893 of 893 across the whole template-twin suite**.
+    //
+    // ⚠️ AND THE FLIP IS NOT COSMETIC. The guard's own comment records what that
+    // status did the last time it was wrong: "four such fields refused the
+    // native document on every visit, forever, and the export fell back to the
+    // styled path". `needs_clinician_input` is BLOCKING at visit time;
+    // `not_mentioned` is a blank the certificate attests to. One enum apart.
+    //
+    // ⚠️ THE EXPECTED VALUES ARE LITERALS, AND THE FIRST VERSION OF THIS ARM WAS
+    // VACUOUS FOR WANT OF THEM. It drove the real resolver and asserted
+    // `resolution.status === guard.status` — but the resolver READS
+    // `guard.status`, so both sides moved together and BOTH flips passed 52/52.
+    // A control that re-derives its expectation from the thing under test agrees
+    // with it by construction. The pin has to come from outside the table:
+    // these five are the CLINICAL meaning, and changing one means arguing that
+    // the doctor should be blocked differently.
+    const EXPECTED: Record<string, { status: string; why: string }> = {
+      // A type disagreement is a configuration error a human must resolve.
+      semantic_mapping_type_mismatch: { status: 'needs_clinician_input', why: 'a mis-typed mapping is a real error' },
+      // Likewise unsupported — the twin cannot answer it at all.
+      field_or_mapping_unsupported: { status: 'needs_clinician_input', why: 'nothing can fill an unsupported field' },
+      // ⚠️ NOT BLOCKING, AND THIS IS THE ONE WITH A BODY COUNT. A MANUAL field
+      // carries no concept BY CONSTRUCTION and the certificate attests it
+      // renders blank; blocking on it refused the native document forever.
+      manual_source_not_filled: { status: 'not_mentioned', why: 'a designed blank is not an error' },
+      // Same shape: the picks bridge answers it, so the baseline is honestly blank.
+      awaiting_note_selection: { status: 'not_mentioned', why: 'another component answers it' },
+      // No concept means nobody decided what this field means yet.
+      clinical_concept_unmapped: { status: 'needs_clinician_input', why: 'an unmapped field is unconfigured' },
+    };
+    const INPUTS: Record<string, [Partial<TemplateField>, Partial<SemanticMapping>]> = {
+      semantic_mapping_type_mismatch: [{ kind: 'checkbox' }, { expectedDataType: 'number' }],
+      field_or_mapping_unsupported: [{}, { status: 'unsupported' }],
+      manual_source_not_filled: [{}, { sourceType: 'manual' }],
+      awaiting_note_selection: [{}, { sourceType: 'verified_note_selection' }],
+      clinical_concept_unmapped: [{}, { clinicalConcept: null }],
+    };
+
+    // POSITIVE CONTROL ON THE MAPS THEMSELVES: a row added to the ladder later
+    // is silently unwatched otherwise — the exact shape this arm exists to end.
+    const rows = OMIT_LADDER_PRE_CONCEPT.map((g) => g.guard);
+    expect(rows.filter((g) => !(g in INPUTS)), 'a ladder row has no input here').toEqual([]);
+    expect(rows.filter((g) => !(g in EXPECTED)), 'a ladder row has no pinned status').toEqual([]);
+
+    for (const guard of OMIT_LADDER_PRE_CONCEPT) {
+      const [f, m] = INPUTS[guard.guard]!;
+      const { resolution } = resolveOne(f, m);
+      // The row was actually REACHED, or every assertion below is about some
+      // other guard and passes for the wrong reason.
+      expect(
+        resolution.reasonCode,
+        `the input for ${guard.guard} exits at a different guard`,
+      ).toBe(guard.reasonCode);
+      // 1 · the TABLE still declares the pinned value...
+      expect(
+        guard.status,
+        `${guard.guard} changed status — ${EXPECTED[guard.guard]!.why}`,
+      ).toBe(EXPECTED[guard.guard]!.status);
+      // 2 · ...and the RESOLVER actually produced it. Both, because the table
+      // could be right while the resolver stopped reading it.
+      expect(
+        resolution.status,
+        `the resolver did not honour ${guard.guard}'s declared status`,
+      ).toBe(EXPECTED[guard.guard]!.status);
+    }
+  });
 
   it('⚠️ THE OFFER DELEGATES — it holds no opinion the resolver does not — #258', () => {
     // ⚠️ THE IDENTITY CHECK THAT REPLACES A MIRROR. Ruling #258 ended the class
