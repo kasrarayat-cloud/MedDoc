@@ -791,6 +791,27 @@ export const RECORD_DERIVED_REFUSAL_REASONS = [
 export type RecordDerivedRefusalReason = (typeof RECORD_DERIVED_REFUSAL_REASONS)[number];
 
 /** Is this reasonCode a record-derived refusal? The ONE reader of the list. */
+/**
+ * One refusal on the record-derived channel — the shape BOTH ends agree on.
+ *
+ * ⚠️ EXPORTED SO THERE IS ONE DECLARATION, NOT FOUR STRUCTURAL COPIES. #275's
+ * re-pass found the channel typed `unfilled: string` at both ends and in three
+ * test-local literals. A writer landing an unregistered token compiled fine,
+ * collected `neverBlocks` from the resolver (which opts out by CHANNEL), then
+ * failed `isRecordDerivedRefusal` at the validator (which re-classifies by
+ * TOKEN) — and the document was withheld again, the exact outcome #272 exists
+ * to prevent. The membership arm could not see it, because it probes four
+ * fixed tokens.
+ *
+ * `required_${...}` is the form the resolver uses when the blank DOES escalate;
+ * typing it keeps the two spellings of one token from drifting apart.
+ */
+export type RecordDerivedRefusal = {
+  fieldId: string;
+  unfilled: RecordDerivedRefusalReason;
+  required: `required_${RecordDerivedRefusalReason}`;
+};
+
 export function isRecordDerivedRefusal(reasonCode: string | null | undefined): boolean {
   if (!reasonCode) return false;
   return (RECORD_DERIVED_REFUSAL_REASONS as readonly string[]).includes(reasonCode);

@@ -15,6 +15,7 @@ import {
   type EncounterFact,
   type FieldResolution,
   type FieldResolutionStatus,
+  type RecordDerivedRefusal,
   type SemanticMapping,
   type TemplateField,
 } from '../ir';
@@ -61,7 +62,13 @@ export interface ResolveTemplateFieldsInput {
    * blank the doctor cannot act on — they would look for the dictation. So the
    * refusal travels with its reason and lands in `reasonCode`.
    */
-  refusals?: ReadonlyArray<{ fieldId: string; unfilled: string; required: string }>;
+  /**
+   * ⚠️ SAME TYPE AS THE INJECTOR WRITES, DERIVED FROM `ir.ts` — see the note on
+   * `withVisitMetadataFacts`'s own `refusals`. Two ends of one channel, one
+   * vocabulary; `string` here would let an unregistered token in through the
+   * READING end even with the writing end tightened.
+   */
+  refusals?: ReadonlyArray<RecordDerivedRefusal>;
 }
 
 interface ConvertedValue {
@@ -306,6 +313,15 @@ function missingResolution(
   /** Overrides the reason when the field is unfilled for a NAMED reason more
    *  specific than "nothing was said" — the reason must survive, the false
    *  evidence trail must not. */
+  /**
+   * ⚠️ DELIBERATELY WIDER THAN `RecordDerivedRefusal`, AND #275's RE-PASS PROVED
+   * WHY. Tightening this to the record-derived vocabulary looked right and
+   * failed the typecheck at :685, where the TEMPORALITY path passes
+   * `temporality_not_approved` through the same parameter. This parameter is
+   * "a named reason a field is blank" in general; the record-derived CHANNEL —
+   * `ResolveTemplateFieldsInput.refusals` — is the narrow one, and it is the
+   * only one that carries `neverBlocks`.
+   */
   reason?: { unfilled: string; required: string; neverBlocks?: boolean },
   /** TRUE at exactly one call site: the one reached because NO fact carries
    *  this field's approved concept. That is the only site where "the encounter

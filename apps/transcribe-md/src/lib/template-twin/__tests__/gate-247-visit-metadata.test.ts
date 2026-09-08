@@ -39,6 +39,7 @@ import {
 import {
   RECORD_DERIVED_REFUSAL_REASONS,
   isRecordDerivedRefusal,
+  type RecordDerivedRefusal,
   EncounterFactSchema,
   SemanticMappingSchema,
   TemplateFieldSchema,
@@ -1089,7 +1090,7 @@ describe('#264 — a refused age reaches the resolver as a NAMED reason', () => 
   const AMBIGUOUS_VISIT = '2026-06-14T02:00:00Z';
 
   it('the injector NAMES the refusal instead of skipping silently', () => {
-    const refusals: Array<{ fieldId: string; unfilled: string; required: string }> = [];
+    const refusals: RecordDerivedRefusal[] = [];
     const out = withVisitMetadataFacts({
       fields,
       mappings,
@@ -1111,7 +1112,7 @@ describe('#264 — a refused age reaches the resolver as a NAMED reason', () => 
   });
 
   it('names NOTHING when the age is unambiguous — the collector is not noise', () => {
-    const refusals: Array<{ fieldId: string; unfilled: string; required: string }> = [];
+    const refusals: RecordDerivedRefusal[] = [];
     const out = withVisitMetadataFacts({
       fields,
       mappings,
@@ -1125,7 +1126,7 @@ describe('#264 — a refused age reaches the resolver as a NAMED reason', () => 
   });
 
   it('⚠️ THE WHOLE POINT — the manifest says WHY, not "nobody said it"', () => {
-    const refusals: Array<{ fieldId: string; unfilled: string; required: string }> = [];
+    const refusals: RecordDerivedRefusal[] = [];
     const facts = withVisitMetadataFacts({
       fields,
       mappings,
@@ -1178,7 +1179,7 @@ describe('#264 — a refused age reaches the resolver as a NAMED reason', () => 
       { ...mapping(AGE_ID, RECORD_DERIVED_CONCEPTS.age), unmentionedPolicy: 'omit' },
     ] as typeof mappings;
 
-    const refusals: Array<{ fieldId: string; unfilled: string; required: string }> = [];
+    const refusals: RecordDerivedRefusal[] = [];
     const facts = withVisitMetadataFacts({
       fields,
       mappings: omitMappings,
@@ -1219,6 +1220,13 @@ describe('#264 — a refused age reaches the resolver as a NAMED reason', () => 
       fields,
       mappings,
       facts,
+      // ⚠️ `@ts-expect-error` IS THE ARM, NOT A SUPPRESSION — #275's re-pass.
+      // The channel is typed `RecordDerivedRefusal` precisely so an unregistered
+      // token cannot be written; this arm needs to write one anyway, to prove
+      // the RUNTIME still fails safe. An expect-error that stops erroring is
+      // itself a tsc failure, so if the type is ever widened back to `string`
+      // this line goes red — which is the guard the membership arm could not be.
+      // @ts-expect-error — deliberately unregistered; the type now forbids it
       refusals: [{ fieldId: `ttf_${'f'.repeat(24)}`, unfilled: 'x', required: 'y' }],
     });
     expect(out.find((f) => f.fieldId === AGE_ID)!.value).toBe('68');
@@ -1245,7 +1253,7 @@ describe('#264 — TWO age controls, and the capability change stated at its tru
     //
     // Found by a refutation pass, on the module's own documented two-control
     // shape — the header control and the letter's opening line.
-    const refusals: Array<{ fieldId: string; unfilled: string; required: string }> = [];
+    const refusals: RecordDerivedRefusal[] = [];
     const facts = withVisitMetadataFacts({
       fields: twoFields,
       mappings: twoMappings,
@@ -1423,7 +1431,7 @@ describe('#272 — a REQUIRED control with an ambiguous age still RENDERS', () =
   const AMBIGUOUS = '2026-06-14T02:00:00.000Z';
 
   function resolve(visitDate: string) {
-    const refusals: Array<{ fieldId: string; unfilled: string; required: string }> = [];
+    const refusals: RecordDerivedRefusal[] = [];
     const facts = withVisitMetadataFacts({
       fields,
       mappings,
@@ -1552,6 +1560,10 @@ describe('#272 — the three readers of the refusal vocabulary cannot drift', ()
         fields,
         mappings,
         facts: [],
+        // @ts-expect-error — `judge` takes an arbitrary string ON PURPOSE: the
+        // whole point is to drive a token the vocabulary does NOT contain and
+        // watch the validator fail closed. See the note on the arm above; if
+        // the channel type is widened back this stops erroring and tsc fails.
         refusals: [{ fieldId: AGE_ID, unfilled: reasonCode, required: `required_${reasonCode}` }],
       });
       const v = validateTemplateTwin({ fields, mappings, resolutions, facts: [] } as never) as {

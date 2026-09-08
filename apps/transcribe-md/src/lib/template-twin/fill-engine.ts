@@ -33,6 +33,7 @@ import {
   TemplateTwinFillManifestSchema,
   templateTwinCounts,
   type FieldResolution,
+  type RecordDerivedRefusal,
   type SemanticMapping,
   type TemplateDocIR,
   type TemplateTwinFillManifest,
@@ -232,7 +233,7 @@ export async function prepareTemplateTwinFill(
   // blank it produced arrives at the resolver labelled with WHY rather than as
   // "nobody said it". Declared here because this is the only layer that both
   // calls the injector and calls the resolver.
-  const injectorRefusals: Array<{ fieldId: string; unfilled: string; required: string }> = [];
+  const injectorRefusals: RecordDerivedRefusal[] = [];
 
   const facts = withProcedureDateFact({
     fields: ir.fields,

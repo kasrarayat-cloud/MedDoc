@@ -39,6 +39,7 @@ import {
   type EncounterFact,
   type SemanticMapping,
   type TemplateField,
+  type RecordDerivedRefusal,
   type RecordDerivedRefusalReason,
 } from './ir';
 import {
@@ -305,7 +306,20 @@ export function withVisitMetadataFacts(input: {
    * Optional, so every existing caller — the certification path included — is
    * undisturbed and simply does not learn the reason.
    */
-  refusals?: Array<{ fieldId: string; unfilled: string; required: string }>;
+  /**
+   * ⚠️ THE VOCABULARY IS THE TYPE, NOT A CONVENTION — #272, tightened by
+   * #275's re-pass. This was `unfilled: string`, and the comment two hundred
+   * lines below explicitly invites a second writer ("a missing name is simply
+   * missing"). A writer landing an UNREGISTERED token compiles, gets
+   * `neverBlocks` from the resolver because the opt-out keys on the CHANNEL,
+   * then fails `isRecordDerivedRefusal` at the validator — which re-classifies
+   * by TOKEN — and the document is withheld again. The membership arm could
+   * not see it: it probes four fixed tokens, so it is green by construction.
+   *
+   * Typing the channel makes the drift a COMPILE error rather than a runtime
+   * one, which is the only version of this guard that cannot be vacuous.
+   */
+  refusals?: RecordDerivedRefusal[];
 }): EncounterFact[] {
   const facts = [...input.facts];
   const patient = input.patient;
