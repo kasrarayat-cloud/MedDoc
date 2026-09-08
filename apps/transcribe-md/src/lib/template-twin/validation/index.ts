@@ -23,6 +23,7 @@ import {
   type TemplateTable,
   type UnsupportedElement,
   type TemplateTwinValidationResult,
+  fieldDemandsInput,
   isRecordDerivedRefusal,
 } from '../ir';
 import { parseExplicitNumberAndUnit } from '../encounter-facts';
@@ -658,10 +659,14 @@ export function validateTemplateTwin(
         'The patient record could not supply this value; it is blank for a named reason.',
         field.fieldId,
       );
-    } else if (
-      resolution.status === 'not_mentioned' &&
-      (field.required || mapping.required || mapping.unknownPolicy === 'requires_input')
-    ) {
+      // ⚠️ THE SAME PREDICATE THE RESOLVER ASKS, IMPORTED RATHER THAN RETYPED.
+      // #275's re-pass measured this list at THREE disjuncts against the
+      // resolver's FIVE — `field.unknownPolicy` and `mapping.blankPolicy` were
+      // missing — so a blank the resolver would have escalated could reach here
+      // and produce `valid: true` with ZERO issues. Reachable only because
+      // `semantic-mapping` happens to couple the policies today; that coupling
+      // is incidental, and this seam is where the two readers must not differ.
+    } else if (resolution.status === 'not_mentioned' && fieldDemandsInput(field, mapping)) {
       add('REQUIRED_FIELD_NOT_MENTIONED', 'blocking', 'A required field was not mentioned.', field.fieldId);
     }
 

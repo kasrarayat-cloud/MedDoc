@@ -15,6 +15,7 @@ import {
   type EncounterFact,
   type FieldResolution,
   type FieldResolutionStatus,
+  fieldDemandsInput,
   type RecordDerivedRefusal,
   type SemanticMapping,
   type TemplateField,
@@ -361,13 +362,10 @@ function missingResolution(
   // This does NOT weaken `needs_clinician_input` in general: the escalation
   // stands for every other route in, and `neverBlocks` is set ONLY by the
   // injector-refusal channel, whose members are record-derived by construction.
-  const requiresInput =
-    !reason?.neverBlocks &&
-    (field.required ||
-      mapping.required ||
-      field.unknownPolicy === 'requires_input' ||
-      mapping.unknownPolicy === 'requires_input' ||
-      mapping.blankPolicy === 'requires_input');
+  // ⚠️ THE DISJUNCTION MOVED TO `ir.ts` AND IS NOT RESTATED HERE — #275's
+  // re-pass found the validator asking a NARROWER version of this same
+  // question. One predicate, two readers.
+  const requiresInput = !reason?.neverBlocks && fieldDemandsInput(field, mapping);
   const unmentionedScaffold =
     conceptUnmatched && reason === undefined && facts.length > 0;
 

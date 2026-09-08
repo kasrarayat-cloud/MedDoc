@@ -38,6 +38,7 @@ import {
 } from '../visit-metadata';
 import {
   RECORD_DERIVED_REFUSAL_REASONS,
+  fieldDemandsInput,
   isRecordDerivedRefusal,
   type RecordDerivedRefusal,
   EncounterFactSchema,
@@ -1580,5 +1581,92 @@ describe('#272 — the three readers of the refusal vocabulary cannot drift', ()
     const stranger = judge('some_reason_nobody_registered');
     expect(stranger.valid, 'an UNREGISTERED reason must still block — fail-closed').toBe(false);
     expect(stranger.issues.some((i) => i.code === 'REQUIRED_FIELD_NOT_MENTIONED')).toBe(true);
+  });
+
+  // ==========================================================================
+  // ⚠️ THE ARM ABOVE PROVED FAIL-CLOSED FOR **ONE** OF THE FIVE WAYS A FIELD
+  // CAN DEMAND INPUT, AND #275's RE-PASS MEASURED THE OTHER FOUR.
+  //
+  // The resolver asked FIVE disjuncts; the validator asked THREE. On the two
+  // shapes only the resolver knew about — `field.unknownPolicy` and
+  // `mapping.blankPolicy` — an unregistered token produced `valid: true` with
+  // ZERO issues: no block, no warning, nothing. The single fixture picked
+  // `mapping.required`, which both readers happened to share.
+  //
+  //     TWO READERS OF ONE PROPERTY, ONE ARM POINTED AT EACH — the failure
+  //     class this repository already has `fromPersistedMapping` and
+  //     `narrativeSentence` exported for.
+  //
+  // ⚠️ AND THE DRIFT WAS MASKED, WHICH IS WHY IT SURVIVED. `semantic-mapping`
+  // derives blankPolicy, unknownPolicy and required from the same field, so the
+  // two "silent" shapes can only arise alongside one the validator has. That
+  // coupling is incidental — one refactor from gone — so this sweeps the shapes
+  // DIRECTLY rather than through the producer that currently hides them.
+  // ==========================================================================
+  describe('#272 — fail-closed on EVERY shape that demands input, not just the one', () => {
+    const SHAPES: Array<{ name: string; field: Record<string, unknown>; mapping: Record<string, unknown> }> = [
+      { name: 'field.required',                 field: { required: true },                      mapping: {} },
+      { name: 'mapping.required',               field: {},                                      mapping: { required: true } },
+      { name: "field.unknownPolicy",            field: { unknownPolicy: 'requires_input' },     mapping: {} },
+      { name: "mapping.unknownPolicy",          field: {},                                      mapping: { unknownPolicy: 'requires_input' } },
+      { name: "mapping.blankPolicy",            field: {},                                      mapping: { blankPolicy: 'requires_input' } },
+    ];
+
+    const judgeShape = (shape: (typeof SHAPES)[number], reasonCode: string) => {
+      const fields = [{ ...field(AGE_ID, 'Age'), ...shape.field }] as ReturnType<typeof field>[];
+      const mappings = [
+        { ...mapping(AGE_ID, RECORD_DERIVED_CONCEPTS.age), ...shape.mapping },
+      ] as ReturnType<typeof mapping>[];
+      const resolutions = resolveTemplateFields({
+        fields,
+        mappings,
+        facts: [],
+        // @ts-expect-error — an unregistered token is the point; see the note
+        // on the arm above. The channel type forbids it, the runtime must not.
+        refusals: [{ fieldId: AGE_ID, unfilled: reasonCode, required: `required_${reasonCode}` }],
+      });
+      return validateTemplateTwin({ fields, mappings, resolutions, facts: [] } as never) as {
+        valid: boolean;
+        issues: Array<{ code: string; severity: string }>;
+      };
+    };
+
+    it('an UNREGISTERED reason blocks on all five — none of them renders silently', () => {
+      const silent = SHAPES.filter((shape) => {
+        const v = judgeShape(shape, 'some_reason_nobody_registered');
+        return v.valid && v.issues.length === 0;
+      }).map((s) => s.name);
+      expect(silent, 'these shapes produced valid:true with ZERO issues').toEqual([]);
+    });
+
+    it('and a REGISTERED reason renders on all five — the ruling, not merely fail-closed', () => {
+      // ⚠️ WITHOUT THIS THE ARM ABOVE IS BOUGHT BY BLOCKING EVERYTHING. #272's
+      // whole product is that the registered refusal does NOT withhold, so the
+      // two arms have to pull in opposite directions.
+      const withheld = SHAPES.filter((shape) => !judgeShape(shape, 'age_timezone_ambiguous').valid)
+        .map((s) => s.name);
+      expect(withheld, 'a record-derived refusal withheld the document').toEqual([]);
+    });
+
+    it('POSITIVE CONTROL — the five shapes really are five distinct predicates', () => {
+      // ⚠️ A sweep over shapes that all reduce to the same thing is one fixture
+      // wearing five names. Each must make `fieldDemandsInput` true ON ITS OWN.
+      for (const shape of SHAPES) {
+        expect(
+          fieldDemandsInput(
+            { required: false, unknownPolicy: 'blank', ...shape.field } as never,
+            { required: false, unknownPolicy: 'blank', blankPolicy: 'blank', ...shape.mapping } as never,
+          ),
+          `${shape.name} does not demand input on its own`,
+        ).toBe(true);
+      }
+      expect(
+        fieldDemandsInput(
+          { required: false, unknownPolicy: 'blank' } as never,
+          { required: false, unknownPolicy: 'blank', blankPolicy: 'blank' } as never,
+        ),
+        'the baseline shape must NOT demand input, or every arm above is vacuous',
+      ).toBe(false);
+    });
   });
 });

@@ -806,6 +806,40 @@ export type RecordDerivedRefusalReason = (typeof RECORD_DERIVED_REFUSAL_REASONS)
  * `required_${...}` is the form the resolver uses when the blank DOES escalate;
  * typing it keeps the two spellings of one token from drifting apart.
  */
+/**
+ * Does this field DEMAND a value from somebody — i.e. is a blank here something
+ * that must be escalated rather than simply left empty?
+ *
+ * ⚠️ ONE PREDICATE, TWO READERS, AND THEY HAD ALREADY DRIFTED. #275's re-pass
+ * measured the resolver asking FIVE disjuncts and the validator asking THREE:
+ * `field.unknownPolicy === 'requires_input'` and
+ * `mapping.blankPolicy === 'requires_input'` were absent from the validator.
+ * Both sides were "correct" in isolation and each arm pointed at one reader,
+ * which is this repository's own named failure class — the same shape as
+ * `fromPersistedMapping` and `narrativeSentence`, and the reason those are
+ * exported rather than re-implemented.
+ *
+ * ⚠️ THE DRIFT WAS MASKED, WHICH IS WHY NO ARM SAW IT. `semantic-mapping`
+ * derives `blankPolicy`, `unknownPolicy` and `required` from the SAME field, so
+ * the two disjuncts the validator lacks can only arise together with one it
+ * has. That coupling is incidental — one refactor from gone — and it is what
+ * turns a latent asymmetry into a document that renders when it should have
+ * been escalated. The predicate is shared so the question cannot be asked two
+ * ways again.
+ */
+export function fieldDemandsInput(
+  field: Pick<TemplateField, 'required' | 'unknownPolicy'>,
+  mapping: Pick<SemanticMapping, 'required' | 'unknownPolicy' | 'blankPolicy'> | undefined,
+): boolean {
+  return Boolean(
+    field.required ||
+      mapping?.required ||
+      field.unknownPolicy === 'requires_input' ||
+      mapping?.unknownPolicy === 'requires_input' ||
+      mapping?.blankPolicy === 'requires_input',
+  );
+}
+
 export type RecordDerivedRefusal = {
   fieldId: string;
   unfilled: RecordDerivedRefusalReason;
