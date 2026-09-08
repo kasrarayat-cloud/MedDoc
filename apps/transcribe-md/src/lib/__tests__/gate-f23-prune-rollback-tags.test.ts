@@ -10,7 +10,7 @@
 // ── WHAT THIS GATE WATCHES, DIFFED AGAINST WHAT RULING #137 NAMES ───────────
 // #137 and RELAY F23 name six things. Each is a describe block below:
 //
-//   "KEEP SET: the last 10 deploys' pre-* tags PLUS any tag <= 14 days old.
+//   "KEEP SET (ruling #297): the last 5 JUDGED deploys' pre-* tags PLUS any tag <= 72h old.
 //    Union, not intersection."              -> `the keep set is a UNION`
 //   "the 10-deploy arm and the 14-day arm are proved SEPARATELY, because a
 //    union whose arms are only ever tested together cannot show that either
@@ -66,7 +66,7 @@ const SETTINGS = join(REPO_ROOT, '.claude/settings.json');
 // "Today" for every arm. Fixed, so the arms describe a date arithmetic that
 // cannot drift into passing (or failing) with the wall clock.
 const TODAY = '20260821';
-const CUTOFF = '20260807'; // TODAY - 14 days, inclusive
+const CUTOFF = '20260818'; // TODAY - 3 days (72h), inclusive — ruling #297
 
 let TMP: string;
 
@@ -101,7 +101,7 @@ function line(r: Row): string {
  */
 function run(
   rows: Row[],
-  opts: { args?: string[]; inUse?: string[]; now?: string; failOn?: string; rawInventory?: string } = {},
+  opts: { args?: string[]; inUse?: string[]; now?: string; failOn?: string; rawInventory?: string; judged?: string[] } = {},
 ): Run {
   const dir = join(TMP, `r${seq++}`);
   execFileSync('mkdir', ['-p', join(dir, 'bin')]);
@@ -131,6 +131,27 @@ function run(
     PRUNE_ROLLBACK_TAGS_INVENTORY: invFile,
     PRUNE_ROLLBACK_TAGS_NOW: opts.now ?? TODAY,
   };
+  // ⚠️ #297 — THE FIXTURE DECLARES WHICH DEPLOYS WERE JUDGED. A deploy is
+  // judged when a §2.5 declaration `<YYYYMMDD>-<sha>.md` exists for its date,
+  // and only a judged deploy consumes one of the five keep slots. Default:
+  // every date present in the inventory is judged, so the arms that are about
+  // RANKING can be written without thinking about judgement. `judged: [...]`
+  // overrides it, and `judged: []` exercises the fail-closed probe.
+  const declDir = join(dir, 'decls');
+  execFileSync('mkdir', ['-p', declDir]);
+  // ⚠️ READ FROM THE INVENTORY THAT WILL ACTUALLY BE USED, not from `rows`. The
+  // `rawInventory` arms pass `rows: []`, so deriving from `rows` wrote ZERO
+  // declarations and the fail-closed probe refused them — a harness gap that
+  // looked exactly like a policy failure.
+  const inventoryText = opts.rawInventory ?? rows.map(line).join('\n');
+  const judgedDates =
+    opts.judged ??
+    [...new Set([...inventoryText.matchAll(/-(\d{8})(?:\s|$)/gm)].map((m) => m[1]))];
+  for (const d of judgedDates as string[]) {
+    writeFileSync(join(declDir, `${d}-deadbeef.md`), '# synthetic declaration\n');
+  }
+  env.PRUNE_ROLLBACK_TAGS_JUDGED_DIR = declDir;
+
   if (opts.inUse) {
     const f = join(dir, 'inuse.txt');
     writeFileSync(f, opts.inUse.join('\n') + '\n');
@@ -235,65 +256,135 @@ describe('F23 — non-vacuity, asserted before any partition is believed', () =>
   });
 });
 
+describe('#297 — JUDGED is load-bearing, and the probe for it fails CLOSED', () => {
+  it('⚠️ ZERO DECLARATIONS IS A REFUSAL, NOT AN ANSWER — and nothing is deleted', () => {
+    // ⚠️ THE WORST FAILURE THIS SCRIPT COULD HAVE. #297 keeps the last five
+    // JUDGED deploys, so if the declarations directory is missing or empty then
+    // NOTHING is judged, the count arm keeps nothing, and every tag past 72h
+    // becomes deletable in a single run — the script would offer to delete the
+    // entire rollback path while printing a confident keep-list of zero.
+    const r = run(deploys(12, '20260701'), { judged: [], args: ['--delete'] });
+
+    expect(r.code, 'a broken judged-probe did not refuse').toBe(2);
+    expect(r.out).toContain('CANNOT TELL');
+    // AND THE ACT DID NOT HAPPEN. A refusal that still deletes is not a refusal.
+    expect(r.rmi, 'it deleted despite refusing').toEqual([]);
+  });
+
+  it('⚠️ AN UNJUDGED DEPLOY CONSUMES NO SLOT — five unjudged cannot evict five real ones', () => {
+    // Counting an unjudged deploy toward the five would let a run of unjudged
+    // deploys exhaust the arm and evict five genuine rollback targets, which is
+    // the opposite of what #297 asks for. Here the six NEWEST deploys are
+    // unjudged; the five older judged ones must still hold every slot.
+    const rows = deploys(11, '20260701');
+    const judged = ['20260626', '20260625', '20260624', '20260623', '20260622'];
+    const r = run(rows, { judged });
+    const kept = keepReasons(r.out);
+
+    expect(Object.keys(kept).sort()).toEqual(
+      [
+        'pre-a0000005-20260626',
+        'pre-a0000006-20260625',
+        'pre-a0000007-20260624',
+        'pre-a0000008-20260623',
+        'pre-a0000009-20260622',
+      ].sort(),
+    );
+    for (const reason of Object.values(kept)) expect(reason).toBe('judged-top-5');
+
+    // …and the six unjudged NEWER deploys are the ones that go, which is the
+    // whole point: recency alone does not buy a slot.
+    expect(deletable(r.out)).toHaveLength(6);
+  });
+});
+
 describe('F23 — the keep set is a UNION, and each arm is proved ALONE', () => {
-  // ARM 1 ALONE. Every deploy is far older than 14 days, so the date arm can
-  // keep nothing. Only the last-10 arm is load-bearing here.
-  it('THE 10-DEPLOY ARM ALONE — 12 ancient deploys, newest 10 kept, oldest 2 deleted', () => {
+  // ARM 1 ALONE. Every deploy is far older than 72 hours, so the date arm can
+  // keep nothing. Only the judged-top-5 arm is load-bearing here.
+  it('THE 5-JUDGED-DEPLOY ARM ALONE — 12 ancient deploys, newest 5 kept, oldest 7 deleted', () => {
     const rows = deploys(12, '20260701'); // all ~7 weeks old
     const r = run(rows);
     const kept = keepReasons(r.out);
 
-    expect(Object.keys(kept)).toHaveLength(10);
+    expect(Object.keys(kept)).toHaveLength(5);
     // Every survivor is here on the COUNT arm and nothing else — if the date
-    // arm were contributing, a reason would read `<=14d`.
-    for (const reason of Object.values(kept)) expect(reason).toBe('recent-10');
+    // arm were contributing, a reason would read `<=3d`.
+    for (const reason of Object.values(kept)) expect(reason).toBe('judged-top-5');
 
     expect(deletable(r.out)).toEqual([
+      'meddoc-pro-transcribe-md:pre-a0000005-20260626',
+      'meddoc-pro-transcribe-md:pre-a0000006-20260625',
+      'meddoc-pro-transcribe-md:pre-a0000007-20260624',
+      'meddoc-pro-transcribe-md:pre-a0000008-20260623',
+      'meddoc-pro-transcribe-md:pre-a0000009-20260622',
       'meddoc-pro-transcribe-md:pre-a000000a-20260621',
       'meddoc-pro-transcribe-md:pre-a000000b-20260620',
     ]);
   });
 
-  // ARM 2 ALONE. Thirteen deploys, twelve of them inside 14 days. Ranks 11 and
-  // 12 are OUTSIDE the last-10 arm and survive anyway — so the date arm is
-  // demonstrably keeping something the count arm would have deleted.
-  it('THE 14-DAY ARM ALONE — ranks #11 and #12 survive on the date arm only', () => {
-    const rows = [...deploys(12, '20260821'), ...deploys(1, '20260801')];
-    const r = run(rows);
+  // ARM 2 ALONE. Four deploys inside 72 hours plus one ancient. With the
+  // judged arm deliberately EMPTIED (nothing judged), the count arm keeps
+  // nothing at all — so every survivor here is the date arm's doing, and the
+  // ancient one going proves the date arm is not simply keeping everything.
+  //
+  // ⚠️ THIS IS THE ARM THAT CHANGED MOST UNDER #297, and the reason is worth
+  // stating: with 5 slots and a 3-day window the two arms overlap so heavily
+  // that "rank #11 survives on the date arm" is no longer constructible. The
+  // clean way to prove ONE arm alone is now to switch the other OFF, which the
+  // `judged` seam makes possible.
+  it('THE 72-HOUR ARM ALONE — with NOTHING judged, only the date arm can keep', () => {
+    const rows = [...deploys(4, '20260821'), ...deploys(1, '20260801')];
+    // ⚠️ NOT `judged: []` — that is ZERO declarations, which the fail-closed
+    // probe REFUSES by design (with nothing judged the keep-set would collapse
+    // and the run would offer to delete the whole rollback path). The way to
+    // switch the count arm off is a declaration that exists and matches NO
+    // deploy here, which is also the "an unjudged deploy consumes no slot"
+    // case in its purest form.
+    const r = run(rows, { judged: ['20200101'] });
     const kept = keepReasons(r.out);
 
-    expect(Object.keys(kept)).toHaveLength(12);
-    const byRank = r.out
-      .split('\n')
-      .filter((l) => l.includes('rank #11') || l.includes('rank #12'))
-      .map((l) => l.trim());
-    expect(byRank).toHaveLength(2);
-    for (const l of byRank) expect(l).toContain('(<=14d)');
+    expect(Object.keys(kept)).toHaveLength(4);
+    for (const reason of Object.values(kept)) expect(reason).toBe('<=3d');
 
     // …and the one outside both arms goes.
     expect(deletable(r.out)).toEqual(['meddoc-pro-transcribe-md:pre-a0000000-20260801']);
   });
 
   it('a deploy satisfying BOTH arms says so, so the two are distinguishable in the output', () => {
-    const r = run(deploys(12, '20260821'));
+    // 8 daily deploys: ranks 1-4 are inside 72h AND inside the top 5 (both
+    // arms); rank 5 is top-5 only; ranks 6-8 are outside both.
+    const r = run(deploys(8, '20260821'));
     const kept = keepReasons(r.out);
-    expect(kept['pre-a0000000-20260821']).toBe('recent-10 + <=14d');
-    expect(kept['pre-a000000a-20260811']).toBe('<=14d');
+    expect(kept['pre-a0000000-20260821']).toBe('judged-top-5 + <=3d');
+    expect(kept['pre-a0000004-20260817']).toBe('judged-top-5');
   });
 
-  it('the 14-day boundary is INCLUSIVE — the cutoff date itself is kept, the day before is not', () => {
-    // 11 deploys packed onto recent dates so ranks 1-10 are spent, then the two
-    // boundary deploys, which can therefore only survive on the date arm.
+  it('the 72-hour boundary is INCLUSIVE — the cutoff date itself is kept, the day before is not', () => {
+    // ⚠️ THE FIXTURE PACKS TWO DEPLOYS PER DAY, AND #297 IS WHY. With five keep
+    // slots and a three-day window, five DAILY deploys always reach back past
+    // the window — the count arm strictly CONTAINS the date arm, and no tag can
+    // survive on the date arm alone. The date arm only adds something when more
+    // than five deploys land inside 72 hours, i.e. several in one day, which is
+    // this programme's actual cadence (two deploys on 2026-09-07).
+    //
+    // So: six deploys across three recent days spend ranks 1-5 and leave rank 6
+    // alive on the date arm, and the two boundary tags below sit at ranks 7-8
+    // where only the date arm can reach them.
     const rows = [
-      ...deploys(10, '20260821'),
-      { tag: `pre-b0000001-${CUTOFF}` }, // exactly 14 days old
-      { tag: 'pre-b0000002-20260806' }, // 15 days old
+      { tag: 'pre-a0000000-20260821', created: '2026-08-21 18:00:00 +0000 UTC' },
+      { tag: 'pre-a0000001-20260821', created: '2026-08-21 09:00:00 +0000 UTC' },
+      { tag: 'pre-a0000002-20260820', created: '2026-08-20 18:00:00 +0000 UTC' },
+      { tag: 'pre-a0000003-20260820', created: '2026-08-20 09:00:00 +0000 UTC' },
+      { tag: 'pre-a0000004-20260819', created: '2026-08-19 18:00:00 +0000 UTC' },
+      { tag: 'pre-a0000005-20260819', created: '2026-08-19 09:00:00 +0000 UTC' },
+      { tag: `pre-b0000001-${CUTOFF}`, created: '2026-08-18 09:00:00 +0000 UTC' }, // exactly 72h
+      { tag: 'pre-b0000002-20260817', created: '2026-08-17 09:00:00 +0000 UTC' }, // a day past
     ];
     const r = run(rows);
     const kept = keepReasons(r.out);
-    expect(kept[`pre-b0000001-${CUTOFF}`]).toBe('<=14d');
-    expect(kept['pre-b0000002-20260806']).toBeUndefined();
-    expect(deletable(r.out)).toEqual(['meddoc-pro-transcribe-md:pre-b0000002-20260806']);
+    expect(kept[`pre-b0000001-${CUTOFF}`]).toBe('<=3d');
+    expect(kept['pre-b0000002-20260817']).toBeUndefined();
+    expect(deletable(r.out)).toEqual(['meddoc-pro-transcribe-md:pre-b0000002-20260817']);
   });
 });
 
@@ -316,23 +407,30 @@ describe('F23 — the tag population has THREE shapes and all three are dated', 
     // The real host: `pre-7c42d2d7-20260820` points at an image built on the
     // 19th, because a pre-* tag names the image that was running BEFORE the
     // deploy. Ageing by CreatedAt would age every tag by one deploy interval.
-    // Here the CreatedAt is ancient and the tag date is today: it must be kept
-    // on the date arm, with ranks 1-10 spent so only the date arm can save it.
-    // Ranks 1-10 are spent by the ten deploys dated 20260821..20260812, so the
-    // extra one (dated 20260811, inside the window) can ONLY be kept by the
-    // date arm — and its CreatedAt is over a year and a half stale.
+    // ⚠️ THE FIXTURE PACKS TWO DEPLOYS PER DAY — #297 again. Five DAILY deploys
+    // reach back past a three-day window, so ranks 1-5 would already cover
+    // everything inside it and no tag could be kept by the date arm alone.
+    // Packing the days spends ranks 1-5 within the window and leaves rank 6
+    // inside it too, which is the only shape that isolates the date arm.
+    //
+    // The subject: rank 6's tag DATE is inside 72h while its CreatedAt is over
+    // a year and a half stale. Ageing by CreatedAt would delete it.
     const rows = [
-      ...deploys(10, '20260821'),
-      { tag: 'pre-c0000001-20260811', created: '2025-01-01 00:00:00 +0000 UTC' },
+      { tag: 'pre-a0000000-20260821', created: '2026-08-21 18:00:00 +0000 UTC' },
+      { tag: 'pre-a0000001-20260821', created: '2026-08-21 09:00:00 +0000 UTC' },
+      { tag: 'pre-a0000002-20260820', created: '2026-08-20 18:00:00 +0000 UTC' },
+      { tag: 'pre-a0000003-20260820', created: '2026-08-20 09:00:00 +0000 UTC' },
+      { tag: 'pre-a0000004-20260819', created: '2026-08-19 18:00:00 +0000 UTC' },
+      { tag: 'pre-c0000001-20260819', created: '2025-01-01 00:00:00 +0000 UTC' },
     ];
     const r = run(rows);
-    expect(keepReasons(r.out)['pre-c0000001-20260811']).toBe('<=14d');
+    expect(keepReasons(r.out)['pre-c0000001-20260819']).toBe('<=3d');
     expect(deletable(r.out)).toEqual([]);
   });
 });
 
 describe('F23 — what cannot be classified is KEPT, and named', () => {
-  const spent = deploys(10, '20260821'); // ranks 1-10 spent; nothing below is rescued by count
+  const spent = deploys(5, '20260821'); // ranks 1-5 spent; nothing below is rescued by count
 
   it('a pre-* tag with NO date token is kept and listed', () => {
     const r = run([...spent, { tag: 'pre-hotfix' }]);
@@ -363,11 +461,11 @@ describe('F23 — what cannot be classified is KEPT, and named', () => {
 });
 
 describe('F23 — the watched set is exactly meddoc-pro-* rollback tags', () => {
-  const spent = deploys(10, '20260821');
+  const spent = deploys(5, '20260821');
 
   it('a non-pre tag is never considered, whatever its age', () => {
     const r = run([...spent, { tag: 'latest' }, { tag: 'qa' }]);
-    expect(r.out).toContain('10  = 10 dated + 0 unclassifiable');
+    expect(r.out).toContain('5  = 5 dated + 0 unclassifiable');
     expect(r.rmi).toEqual([]);
     expect(r.out).not.toContain(':latest');
   });
@@ -387,7 +485,7 @@ describe('F23 — the watched set is exactly meddoc-pro-* rollback tags', () => 
 });
 
 describe('F23 — a container-backed image is HELD, never deleted', () => {
-  const spent = deploys(10, '20260821');
+  const spent = deploys(5, '20260821');
 
   it('an out-of-keep-set tag whose image backs a container is held', () => {
     const rows = [...spent, { tag: 'pre-aaaaaaa-20200101', id: 'deadbeef1234' }];
@@ -427,7 +525,7 @@ describe('F23 — a container-backed image is HELD, never deleted', () => {
     ].join('\n');
     const r = run([], { rawInventory: raw + '\n', inUse: ['sha256:none'] });
     expect(r.code).toBe(0); // not the group-reconciliation CANNOT TELL
-    expect(r.out).toContain('of 11 deploys SURVIVE');
+    expect(r.out).toContain('of 6 deploys SURVIVE');
     expect(deletable(r.out)).toEqual(['meddoc-pro-transcribe-md:pre-aaaaaaa-20200101']);
   });
 });
@@ -465,14 +563,14 @@ describe('F23 — CANNOT TELL is distinguishable from a clean zero', () => {
   });
 
   it('an unknown argument is exit 2 and nothing is deleted', () => {
-    const r = run(deploys(12, '20260701'), { args: ['--yolo'] });
+    const r = run(deploys(7, '20260701'), { args: ['--yolo'] });
     expect(r.code).toBe(2);
     expect(r.rmi).toEqual([]);
   });
 });
 
 describe('F23 — ruling #137 clause 1: DRY RUN IS THE DEFAULT', () => {
-  const rows = deploys(12, '20260701'); // 2 deploys outside the keep set
+  const rows = deploys(7, '20260701'); // 7 deploys, 5 kept, 2 outside the keep set (ruling #297)
 
   it('with no flag, the run REPORTS a non-empty delete list and issues no rmi', () => {
     const r = run(rows);
@@ -491,8 +589,8 @@ describe('F23 — ruling #137 clause 1: DRY RUN IS THE DEFAULT', () => {
   it('…and the control: --delete on the SAME input does issue exactly those two', () => {
     const r = run(rows, { args: ['--delete'] });
     expect(r.rmi).toEqual([
-      'meddoc-pro-transcribe-md:pre-a000000a-20260621',
-      'meddoc-pro-transcribe-md:pre-a000000b-20260620',
+      'meddoc-pro-transcribe-md:pre-a0000005-20260626',
+      'meddoc-pro-transcribe-md:pre-a0000006-20260625',
     ]);
     expect(r.code).toBe(0);
   });
@@ -500,7 +598,7 @@ describe('F23 — ruling #137 clause 1: DRY RUN IS THE DEFAULT', () => {
 
 describe('F23 — ruling #137 clause 2: THE KEEP-LIST IS PRINTED FIRST', () => {
   it('KEEP precedes DELETABLE, and both precede any deletion', () => {
-    const r = run(deploys(12, '20260701'), { args: ['--delete'] });
+    const r = run(deploys(7, '20260701'), { args: ['--delete'] });
     const keep = r.out.indexOf('──────── KEEP');
     const del = r.out.indexOf('──────── DELETABLE');
     const act = r.out.indexOf('──────── DELETING BY NAME');
@@ -510,16 +608,16 @@ describe('F23 — ruling #137 clause 2: THE KEEP-LIST IS PRINTED FIRST', () => {
   });
 
   it('the keep block NAMES the survivors — a count alone is not a keep-list', () => {
-    const r = run(deploys(12, '20260701'));
+    const r = run(deploys(7, '20260701'));
     const seg = r.out.slice(r.out.indexOf('──────── KEEP'), r.out.indexOf('──────── DELETABLE'));
     expect(seg).toContain('pre-a0000000-20260701');
-    expect(seg.split('\n').filter((l) => l.includes('✔ pre-'))).toHaveLength(10);
+    expect(seg.split('\n').filter((l) => l.includes('✔ pre-'))).toHaveLength(5);
   });
 });
 
 describe('F23 — ruling #137 clause 3: DELETION IS BY NAME', () => {
   it('every docker invocation that removes anything is `rmi <repo:tag>`', () => {
-    const r = run(deploys(12, '20260701'), { args: ['--delete'] });
+    const r = run(deploys(7, '20260701'), { args: ['--delete'] });
     const removing = r.argv.filter((a) => a[0] === 'rmi' || a[0] === 'image' || a[0] === 'system');
     expect(removing.length).toBeGreaterThan(0);
     for (const a of removing) {
@@ -530,7 +628,7 @@ describe('F23 — ruling #137 clause 3: DELETION IS BY NAME', () => {
   });
 
   it('no invocation ever carries prune, --all or --filter', () => {
-    const r = run(deploys(12, '20260701'), { args: ['--delete'] });
+    const r = run(deploys(7, '20260701'), { args: ['--delete'] });
     const flat = r.argv.map((a) => a.join(' ')).join('\n');
     expect(flat).not.toMatch(/\bprune\b/);
     expect(flat).not.toMatch(/--all\b/);
@@ -568,20 +666,20 @@ describe('F23 — ruling #137 clause 3: DELETION IS BY NAME', () => {
 
 describe('F23 — a failed deletion is reported, not swallowed', () => {
   it('a single failure yields exit 1, names the tag, and does not abort the rest', () => {
-    const rows = deploys(12, '20260701');
+    const rows = deploys(7, '20260701');
     const r = run(rows, {
       args: ['--delete'],
-      failOn: 'meddoc-pro-transcribe-md:pre-a000000a-20260621',
+      failOn: 'meddoc-pro-transcribe-md:pre-a0000005-20260626',
     });
     expect(r.code).toBe(1);
-    expect(r.out).toContain('FAILED meddoc-pro-transcribe-md:pre-a000000a-20260621');
+    expect(r.out).toContain('FAILED meddoc-pro-transcribe-md:pre-a0000005-20260626');
     // BOTH were attempted — a failure mid-list must not stop the remainder.
     expect(r.rmi).toHaveLength(2);
     expect(r.out).toContain('deleted 1, failed 1');
   });
 
   it('…and the control: with nothing told to fail, the same input exits 0', () => {
-    const r = run(deploys(12, '20260701'), { args: ['--delete'] });
+    const r = run(deploys(7, '20260701'), { args: ['--delete'] });
     expect(r.code).toBe(0);
     expect(r.out).toContain('retired BY NAME');
   });
@@ -590,7 +688,7 @@ describe('F23 — a failed deletion is reported, not swallowed', () => {
 describe('F23 — the reconciliation is observed, not derived', () => {
   it('every dated tag lands in exactly one bucket and the buckets sum', () => {
     const rows = [
-      ...deploys(12, '20260701', ['meddoc-pro-transcribe-md', 'meddoc-pro-transcribe-md-worker']),
+      ...deploys(7, '20260701', ['meddoc-pro-transcribe-md', 'meddoc-pro-transcribe-md-worker']),
       { tag: 'pre-nodate' },
       { repo: 'someone-else', tag: 'pre-aaaaaaa-20200101' },
     ];
@@ -598,10 +696,10 @@ describe('F23 — the reconciliation is observed, not derived', () => {
     const m = r.out.match(/reconciliation\s+: (\d+) dated tags = (\d+) kept\/held \+ (\d+) deletable/);
     expect(m).not.toBeNull();
     const [, total, kept, del] = (m as RegExpMatchArray).map(Number);
-    expect(total).toBe(24);
+    expect(total).toBe(14); // 7 deploys × 2 repositories
     expect(kept + del).toBe(total);
-    expect(del).toBe(4); // 2 deploys × 2 repositories
-    expect(r.out).toContain('25  = 24 dated + 1 unclassifiable');
+    expect(del).toBe(4); // the 2 deploys outside the keep set × 2 repositories
+    expect(r.out).toContain('15  = 14 dated + 1 unclassifiable');
     expect(r.out).toContain('co-tenant pre-*   : 1');
   });
 });

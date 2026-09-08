@@ -119,7 +119,14 @@ KEEP_DEPLOYS=5          # ruling #297 — and only JUDGED deploys consume a slot
 # never deletes one younger than 72h. Erring the other way would delete a tag
 # the ruling protects.
 KEEP_DAYS=3
-DEPLOY_DECL_DIR=docs/foundation/deploys
+# ⚠️ ANCHORED TO THE SCRIPT, NOT TO `cwd`. A relative path here resolves against
+# whatever directory invoked the script — which for the gate is
+# `apps/transcribe-md`, where no such directory exists, so the fail-closed probe
+# below would refuse every run for a reason that has nothing to do with the
+# repository. The override exists for the same reason the INVENTORY/NOW/INUSE
+# overrides do: so the gate can drive this against a synthetic tree.
+_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEPLOY_DECL_DIR="${PRUNE_ROLLBACK_TAGS_JUDGED_DIR:-$_SELF_DIR/../../docs/foundation/deploys}"
 REPO_PREFIX='meddoc-pro-'
 TAB=$'\t'
 # ⚠️ THE INTERNAL RECORD SEPARATOR IS NOT A TAB, AND THAT IS DELIBERATE.
