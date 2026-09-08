@@ -329,4 +329,30 @@ async function main(): Promise<void> {
   }
 }
 
-void main();
+// ══════════════════════════════════════════════════════════════════════════════
+// ⚠️ RUN ONLY WHEN INVOKED DIRECTLY — NEVER ON IMPORT.
+// ------------------------------------------------------------------------------
+// `gate-274-corpus` imports this module's vocabulary (`sdt`, `ROS_CLAUSES`,
+// `EXAM_CLAUSES`, `FIRST_ADDED_SDT_ID`) so its fixture is the SHIPPED rule
+// rather than a retyped copy. A bare `void main()` at module scope meant that
+// import EXECUTED THE REGENERATION SCRIPT — the full suite reported
+// `Tests 6464 passed` and `Errors 1 error`, an unhandled rejection from a
+// script nobody asked to run.
+//
+// ⚠️ AND IT NEARLY GOT PAST ME TWICE: the filtered run I had been reading was
+// grepped for `Tests |Test Files`, which cannot show a line beginning `Errors`.
+// A green read through a filter that could not display the failure.
+//
+// ⚠️ THE RISK IS NOT THE NOISE. This script WRITES A FILE when given an output
+// path. It is guarded here by argument absence under vitest, which is luck
+// rather than design — so the guard is explicit.
+// ══════════════════════════════════════════════════════════════════════════════
+const invokedDirectly = (() => {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  return entry.endsWith('regenerate-consult-form.ts') || entry.endsWith('regenerate-consult-form.js');
+})();
+
+if (invokedDirectly) {
+  void main();
+}
