@@ -367,9 +367,25 @@ if [ "$DEL_GROUPS" -gt 0 ]; then
       # whole delete-list as container-backed and report a cheerful zero. The
       # id match is a substring one on purpose: `docker images` gives a 12-char
       # short id and `docker inspect` gives `sha256:<64hex>` containing it.
+      # ⚠️ BASH-NATIVE, NOT `printf | grep -q` — THE F30 CLASS, AND THESE TWO
+      # ARE THE DANGEROUS DIRECTION. `grep -q` exits 0 the instant it matches
+      # and CLOSES the pipe; `printf` then dies of SIGPIPE (141); `set -o
+      # pipefail` (line 93) promotes the pipeline's status to that 141 — so a
+      # MATCH is reported as a MISS.
+      #
+      # ⚠️ HERE A FALSE MISS LEAVES `held=0` ON AN IMAGE A CONTAINER IS USING,
+      # so the tag is printed as `✗` and joins DELETE_REFS. That is a rollback
+      # tag deleted while in use — the artifact ruling #137 exists to protect,
+      # and unrebuildable from `main` once the tree has moved.
+      #
+      # The id match stays a SUBSTRING one on purpose (`docker images` gives a
+      # 12-char short id, `docker inspect` gives `sha256:<64hex>` containing
+      # it), and the emptiness guard stays load-bearing: `*""*` matches
+      # everything, exactly as `grep -qF -- ""` did.
       held=0
-      if [ -n "${id:-}" ] && printf '%s\n' "$IN_USE" | grep -qF -- "$id"; then held=1; fi
-      if printf '%s\n' "$IN_USE" | grep -qxF -- "$reftag"; then held=1; fi
+      if [ -n "${id:-}" ] && [[ "$IN_USE" == *"$id"* ]]; then held=1; fi
+      # Line-exact, as `-x` was: the needle is wrapped in newlines on both sides.
+      if [[ $'\n'"$IN_USE"$'\n' == *$'\n'"$reftag"$'\n'* ]]; then held=1; fi
       if [ "$held" = "1" ]; then
         say "  ⏸ $reftag — HELD, a container references this image"
         HELD=$((HELD + 1))
@@ -387,7 +403,14 @@ DEL_REF_COUNT=$(nlines "$DELETE_REFS")
 KEPT_REFS=''
 while IFS="$SEP" read -r s reftag id created; do
   [ -z "${reftag:-}" ] && continue
-  printf '%s\n' "$DELETE_REFS" | grep -qxF -- "$reftag" && continue
+  # ⚠️ THE SAME F30 CLASS, AND THIS ONE EXPLAINS THE OBSERVED SYMPTOM. A false
+  # miss here means a reftag already in DELETE_REFS is not recognised, so it is
+  # ALSO added to KEPT_REFS — the tag lands in BOTH buckets,
+  # `KEPT_REF_COUNT + DEL_REF_COUNT` exceeds `CAND_ROWS`, and the reconciliation
+  # below refuses with "the buckets do not reconcile" and exits 2 BEFORE any
+  # removal. `gate-f23`'s red is exactly that: "expected 0 to be greater than 0"
+  # on the arm that asserts something was removed.
+  [[ $'\n'"$DELETE_REFS"$'\n' == *$'\n'"$reftag"$'\n'* ]] && continue
   KEPT_REFS="${KEPT_REFS}${reftag}"$'\n'
 done <<< "$CANDIDATES"
 KEPT_REF_COUNT=$(nlines "$KEPT_REFS")
