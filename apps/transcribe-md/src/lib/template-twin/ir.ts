@@ -7,6 +7,7 @@
 // ============================================================================
 
 import { z } from 'zod';
+import { requiresClinicianInput } from './unmentioned-policy';
 
 export const TEMPLATE_TWIN_IR_SCHEMA_VERSION = 1 as const;
 export const TEMPLATE_TWIN_COMPILER_VERSION = 'template-docx-compiler/1.0.0';
@@ -831,13 +832,18 @@ export function fieldDemandsInput(
   field: Pick<TemplateField, 'required' | 'unknownPolicy'>,
   mapping: Pick<SemanticMapping, 'required' | 'unknownPolicy' | 'blankPolicy'> | undefined,
 ): boolean {
-  return Boolean(
-    field.required ||
-      mapping?.required ||
-      field.unknownPolicy === 'requires_input' ||
-      mapping?.unknownPolicy === 'requires_input' ||
-      mapping?.blankPolicy === 'requires_input',
-  );
+  // ⚠️ IT DELEGATES — #258/#270, ONE IMPLEMENTATION. This was a second,
+  // byte-identical statement of the same five disjuncts, and the module that
+  // claimed to be the single source imported a symbol NOTHING CALLED: the
+  // resolver read this copy while the confirm panel and the certification
+  // writer read the other. Identical bodies meant correct behaviour and a live
+  // exposure — edit either and the offer moves without the honouring, or the
+  // reverse, which is the drift `unmentioned-policy.ts` exists to prevent.
+  //
+  // The body lives THERE and not here because that module is client-imported
+  // and may not value-import this one: doing so puts 320,991 bytes of zod into
+  // the client bundle. See its header.
+  return requiresClinicianInput(field, mapping);
 }
 
 export type RecordDerivedRefusal = {
@@ -918,3 +924,22 @@ export function templateTwinCounts(
     ).length,
   };
 }
+
+// ============================================================================
+// ⚠️ MOVED HERE FROM `semantic-mapping/index.ts` — FOR THE CLIENT BOUNDARY.
+// ----------------------------------------------------------------------------
+// This is a pure kind -> expected-type switch with no dependencies, and it is
+// the ONE definition of that mapping. It lived beside `isMappingTypeCompatible`
+// until `unmentioned-policy.ts` needed it: that module is imported as a VALUE
+// by the `'use client'` confirm surface, and `semantic-mapping/index.ts` pulls
+// `@meddoc/ai` (`modelClient`) — so importing it there would have dragged the
+// AI client into the browser graph to ask a question about a switch statement.
+//
+// `ir.ts` imports zod and nothing else, so it is safe from the client.
+// `semantic-mapping/index.ts` RE-EXPORTS it, so every existing caller — four
+// in that file, four in tests — resolves unchanged. One copy, two addresses.
+
+// ⚠️ RE-EXPORTED, NOT REDEFINED. The body lives in `field-kind-data-type.ts`, a
+// true leaf with no value imports, because this file value-imports zod and a
+// `'use client'` module needs that switch without the 105 schemas. One copy.
+export { expectedDataTypeForFieldKind } from './field-kind-data-type';

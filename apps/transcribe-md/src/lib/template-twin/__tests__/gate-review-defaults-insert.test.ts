@@ -19,11 +19,15 @@
 //
 // ⚠️ AND WHAT THIS FILE DOES *NOT* MEASURE, SAID PLAINLY BECAUSE AN EARLIER
 // HEADER CLAIMED OTHERWISE AND AN ADVERSARIAL PASS CAUGHT IT:
-//   · THE AUDIT ROW. `logAudit` is not exercised here at all. That the insert
-//     writes DEFAULT_INSERTED_BY_DOCTOR and the undo writes
-//     DEFAULT_INSERT_UNDONE is asserted NOWHERE executable — the enum values
-//     are pinned only by the Prisma enum, the TS union and the migration
-//     agreeing. Named as a gap rather than implied as covered.
+//   · THE AUDIT ROW. `logAudit` is not exercised HERE. ⚠️ **CLOSED ELSEWHERE,
+//     2026-09-07, and this note is corrected rather than left standing:** that
+//     the insert writes DEFAULT_INSERTED_BY_DOCTOR and the undo writes
+//     DEFAULT_INSERT_UNDONE is now asserted executably in
+//     `src/actions/__tests__/gate-review-defaults-door-executable.test.ts`,
+//     which drives both actions and asserts each action name — and reds when
+//     the undo is made to emit the insert's label. A gap note that outlives its
+//     gap is worse than no note: the next reader trusts it and re-adds the
+//     coverage, or trusts it and believes the enum values are unwatched.
 //   · THE UNDO's server half. Its CLIENT half is measured in the panel gate.
 //   · "the client cannot supply the TEXT" is a STRUCTURAL guarantee, not a
 //     tested one: `insertScaffoldDefaultAction(visitId, fieldId)` takes no text

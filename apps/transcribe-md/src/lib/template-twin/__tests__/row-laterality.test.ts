@@ -13,6 +13,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { matchMeasurementFact, rowLateralityVerdict } from '../bridge-evidence';
+import { resolveTemplateFields } from '../resolver';
+import { field, mapping, factFor } from './resolver-probe';
 import type { EncounterFact } from '../ir';
 
 const sidedFact = (laterality: EncounterFact['laterality']): EncounterFact =>
@@ -138,14 +140,54 @@ describe('one rule, both callers', () => {
     // needs_clinician_input about an encounter that had said nothing about
     // them. Row addressing belongs to the bridge, which matches by vein label
     // and then requires the fact to satisfy laterality AND segment.
-    const { readFileSync } = require('node:fs') as typeof import('node:fs');
-    const { join } = require('node:path') as typeof import('node:path');
-    const src = readFileSync(join(__dirname, '..', 'resolver', 'index.ts'), 'utf-8');
-    expect(src, 'the resolver still resolves fixed-grid cells from raw facts').toContain(
-      "if (field.rendererBinding.bindingType === 'table_cell' && !field.rowPrototype)",
-    );
-    // A repeating-row prototype must NOT be caught by that rule — it expands one
-    // row per fact, so there is nothing to address.
-    expect(src).toContain('!field.rowPrototype');
+    // ⚠️ THIS ARM USED TO READ THE RESOLVER'S SOURCE — `expect(src).toContain(
+    // "if (field.rendererBinding.bindingType === 'table_cell' && …")`. Ruling
+    // #258 replaced that inline `if` with a shared table walk, and this arm reds
+    // while the BEHAVIOUR it is named for was byte-for-byte unchanged. A proof
+    // that fails on a rename and survives a regression is measuring the wrong
+    // thing (#237). It drives the resolver now.
+    //
+    // The fact carries the cell's OWN concept, so the candidate set is non-empty
+    // and the deferral branch is the one under test — which is exactly the shape
+    // the comment above describes: 26 cells, one shared concept, no way to tell
+    // the SFJ row from the knee row.
+    const cell = field('7', {
+      rendererBinding: { ...field('7').rendererBinding, bindingType: 'table_cell' },
+    });
+    const deferred = resolveTemplateFields({
+      fields: [cell],
+      mappings: [mapping(cell, 'ros.cardiovascular')],
+      facts: [factFor('8', 'ros.cardiovascular', 'Reflux time two point four seconds.')],
+      allowUncertifiedForSyntheticTest: true,
+    })[0]!;
+    expect(
+      deferred.status,
+      'the resolver still resolves fixed-grid cells from raw facts',
+    ).toBe('not_mentioned');
+    expect(deferred.value).toBeNull();
+    expect(deferred.sourceFactIds).toEqual([]);
+
+    // A repeating-row PROTOTYPE must NOT be caught by that rule — it expands one
+    // row per fact, so there is nothing to address and it keeps resolving.
+    const proto = field('9', {
+      rendererBinding: { ...field('9').rendererBinding, bindingType: 'table_cell' },
+      rowPrototype: true,
+    });
+    const resolved = resolveTemplateFields({
+      fields: [proto],
+      mappings: [mapping(proto, 'ros.cardiovascular')],
+      facts: [factFor('a', 'ros.cardiovascular', 'Reflux time two point four seconds.')],
+      allowUncertifiedForSyntheticTest: true,
+    })[0]!;
+    // ⚠️ THE ASSERTION IS "IT USED THE FACT", NOT A PARTICULAR STATUS. The
+    // prototype resolves `supported` here rather than `filled` — a narrative
+    // field whose fact is a sentence — and pinning the status would make this
+    // arm a statement about value derivation instead of about row addressing.
+    // What the guard decides is whether the fact is CONSULTED at all.
+    expect(
+      resolved.sourceFactIds,
+      'a repeating-row prototype was deferred as if it were a fixed-grid cell',
+    ).not.toEqual([]);
+    expect(resolved.status).not.toBe('not_mentioned');
   });
 });
