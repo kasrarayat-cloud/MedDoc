@@ -65,6 +65,13 @@ export async function freezeNativeManifestForSigning(input: {
       noteSha256: true,
       // F24-S5 — the override half of the bound identity.
       overridesSha256: true,
+      // ⚠️ #247 — WHEN THIS MANIFEST WAS PRODUCED, against when the PATIENT
+      // ROW was last written. The record became a fill input with family 3, so
+      // a demographic correction between the fill and the signature otherwise
+      // freezes a name the preview no longer shows. Two more columns on a read
+      // that already happens — the common path stays one indexed lookup, which
+      // is what `gate-sign-freeze` asserts.
+      updatedAt: true,
       visit: {
         select: {
           soapFinal: true,
@@ -75,6 +82,7 @@ export async function freezeNativeManifestForSigning(input: {
           inputMode: true,
           transcriptText: true,
           entities: true,
+          patient: { select: { updatedAt: true } },
         },
       },
     },
@@ -108,6 +116,8 @@ export async function freezeNativeManifestForSigning(input: {
       manifestOverridesSha256: manifest.overridesSha256,
       soapFinal: manifest.visit.soapFinal,
       currentOverrides,
+      manifestUpdatedAt: manifest.updatedAt,
+      patientUpdatedAt: manifest.visit.patient?.updatedAt ?? null,
     }).ok
   ) {
     return { state: 'already_fresh', manifestId: manifest.id };
@@ -138,10 +148,10 @@ export async function freezeNativeManifestForSigning(input: {
     await Promise.race([
       processTemplateTwinVisit({
         visitId,
-        practiceId,
+        tenantPracticeId: practiceId,
         // ⚠️ THE VISIT'S OWN DOCTOR, never the signer. They are usually the same
         // person and must not be assumed to be.
-        doctorId: v.userId,
+        authorUserId: v.userId,
         noteTemplateId: v.noteTemplateId,
         noteTemplateVersion: v.noteTemplateVersion,
         inputMode: mapInputMode(v.inputMode),

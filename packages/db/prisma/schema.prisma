@@ -136,6 +136,13 @@ enum AuditAction {
   // SUPER_ADMIN grants. Conflating the two would make a practice demotion and a
   // super-admin grant indistinguishable in an append-only trail.
   PRACTICE_SEAT_INVITED
+
+  /// ADMIN-3a — the `Practice` write path. `PRACTICE_ARCHIVED` is the value
+  /// ruling #226 named as missing, and being missing was one of the two reasons
+  /// it could not execute.
+  PRACTICE_UPDATED
+  PRACTICE_ARCHIVED
+  PRACTICE_RESTORED
   PRACTICE_ROLE_CHANGED
   /// The administration guard refused a caller. A gate nothing records is one
   /// path away from not existing — the sign route's own reasoning.

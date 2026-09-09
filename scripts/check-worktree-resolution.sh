@@ -75,6 +75,36 @@ for p in $PKGS; do
   esac
 done
 
+# ============================================================================
+# ⚠️ AND THE SAME QUESTION FOR PRISMA, BECAUSE THE ANSWER WAS DIFFERENT.
+# ----------------------------------------------------------------------------
+# The @meddoc/* arms above check that a worktree READS its own source. This arm
+# checks that it WRITES its own generated client — a different property, and the
+# one that was false on 2026-09-07 when `prisma generate` in a worktree rewrote
+# the SHARED client while a peer had seven test processes running.
+#
+# The session that did it verified `node_modules` was a real DIRECTORY and
+# concluded the write was isolated. That is not the question:
+# `node_modules/@prisma` was a symlink, so resolution left the tree.
+#
+#   A REAL DIRECTORY IS NOT AN ISOLATED RESOLUTION. ASK NODE, NOT ls.
+# ============================================================================
+PRISMA_OUT="$(node -e 'try{console.log(require.resolve("@prisma/client"))}catch(e){console.log("UNRESOLVABLE")}' 2>/dev/null || echo UNRESOLVABLE)"
+if [ "$PRISMA_OUT" = "UNRESOLVABLE" ]; then
+  echo "🟡 @prisma/client — unresolvable from this tree (not installed here?)"
+else
+  PRISMA_REAL="$(realpath "$PRISMA_OUT")"
+  case "$PRISMA_REAL" in
+    "$ROOT"/*) echo "🟢 @prisma/client -> local (generate writes INSIDE this tree)" ;;
+    *)
+      echo "🔴 @prisma/client resolves OUTSIDE this worktree:"
+      echo "     tree:     $ROOT"
+      echo "     resolved: $PRISMA_REAL"
+      echo "   prisma generate here would rewrite a client another SESSION may be using."
+      rc=1 ;;
+  esac
+fi
+
 if [ "$rc" != 0 ]; then
   echo
   echo "   ⚠️ ANY GREEN MEASURED HERE ON A packages/* CHANGE IS VOID."

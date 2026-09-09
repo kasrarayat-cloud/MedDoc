@@ -22,6 +22,12 @@ import {
 } from '@/actions/template-twin-mappings';
 import type { TemplateTwinWorkspace } from '@/lib/template-twin/client-types';
 import { REGISTRY_CONCEPTS } from '@/lib/template-twin/concept-registry';
+import {
+  canOmitWhenUnmentioned,
+  OMIT_CONTROL_LABEL,
+  OMIT_CONTROL_HINT,
+  OMIT_INERT_LABEL,
+} from '@/lib/template-twin/unmentioned-policy';
 import type { SemanticMapping } from '@/lib/template-twin/ir';
 
 export interface NativeTemplateListItem {
@@ -419,11 +425,47 @@ type ConfirmClass = 'attest' | 'confirm' | 'choose';
 // UNOBSERVABLE. Testing the pure function directly is what makes it fire.
 export function confirmClassOf(mapping: SemanticMapping): ConfirmClass {
   if (mapping.sourceType === 'manual') return 'attest';
+  // ⚠️ #247 — `visit_metadata` IS NOT A FOURTH CLASS, AND THIS LINE IS WHY IT
+  // ISN'T ONE. The ruling declined a fourth confirm act, so a record-derived
+  // control confirms through the ordinary `confirm` row, with the same button,
+  // the same picker and the same code path. What it does NOT do is ride the
+  // BULK shortcut — see `bulkConfirmable` below, which is a different question
+  // from what class the row is.
+  if (mapping.sourceType === 'visit_metadata') return 'confirm';
   // ⚠️ STRUCTURAL, AND IT OUTRANKS CONCEPT PRESENCE. An enumerated pick stays
   // the doctor's to answer even when the model proposer has already put a
   // concept in the box.
   if (mapping.sourceType === 'verified_note_selection') return 'choose';
   return mapping.clinicalConcept ? 'confirm' : 'choose';
+}
+
+/**
+ * MAY THE BULK BUTTON SWEEP THIS ROW?
+ *
+ * ⚠️ A NARROWER QUESTION THAN `confirmClassOf`, AND #247 IS WHY THE TWO ARE NOW
+ * DIFFERENT FUNCTIONS. The class answers *which act does this row take*; this
+ * answers *may that act be performed on a row nobody scrolled to*.
+ *
+ * The owner's ruling says a `visit_metadata` mapping never auto-confirms,
+ * because "a control that prints a patient's NAME requires a human to have seen
+ * it". `planAutoConfirm` honours that. "Confirm all N proposed" is a HUMAN act
+ * and would defeat the same requirement through a different door: it certifies
+ * every row of the class at once, including ones below the fold of a scrolling
+ * list. Same outcome, different costume.
+ *
+ * ⚠️ EXCLUDING IT IS NOT THE FOURTH CONFIRM ACT THE RULING DECLINED. The row
+ * keeps the ordinary `confirm` class, the ordinary button, the ordinary picker
+ * and the ordinary writer — nothing new to learn and nothing new to click. It
+ * simply is not included in a shortcut whose entire purpose is not reading the
+ * rows. The cost is one click on the one or two controls that print a patient's
+ * identity.
+ *
+ * ⚠️ AND IT IS A CALL, NOT A QUOTE — recorded here so it can be overruled by
+ * reading one function. The ruling states (1) never auto-confirm and (2) no
+ * fourth act; it does not name the bulk button, which sits between them.
+ */
+export function bulkConfirmable(mapping: SemanticMapping): boolean {
+  return confirmClassOf(mapping) === 'confirm' && mapping.sourceType !== 'visit_metadata';
 }
 
 /** The doctor's confirmation, applied. Mirrors `fieldsReady`'s two demands:
@@ -459,10 +501,72 @@ function ReviewWorkspace({
   );
   const [saving, startSave] = useTransition();
   const draftById = new Map(draft.map((m) => [m.fieldId, m]));
+  // The field definition beside its mapping — `setMapping` needs it to decide
+  // whether an `omit` is still offerable after the edit it is applying.
+  const fieldsById = new Map(fields.map((f) => [f.field.fieldId, f.field]));
   const readOnly = !workspace.canEdit || workspace.template.certificationStatus === 'certified';
 
   function setMapping(fieldId: string, next: SemanticMapping) {
-    setDraft((prev) => prev.map((m) => (m.fieldId === fieldId ? next : m)));
+    // ⚠️ WITHDRAWING THE OFFER MUST WITHDRAW THE VALUE. Found by a peer
+    // session's independent pass, and it produced a state a doctor could not
+    // leave:
+    //
+    //   tick "expected blank" -> set the concept picker back to "— choose a
+    //   concept —" -> Save.
+    //
+    // The offer is gated on `canOmitWhenUnmentioned`, which a null concept makes
+    // false, so the checkbox DISAPPEARS — but the stored `unmentionedPolicy`
+    // stayed `'omit'` and was still sent. The writer then refuses the WHOLE
+    // batch with `MAPPING_INVALID` ("The approved mapping for field 1 is
+    // incomplete or incompatible"), nothing on the page names the field or the
+    // cause, and the only control that could clear it is hidden by the same
+    // now-false predicate that is causing the refusal.
+    //
+    // ⚠️ AND IT IS THE ROOT OF TWO MORE: a ticked omit silently SURVIVING a
+    // concept re-map (so a field the doctor never ruled on stops being counted),
+    // and two clicks persisting an omit the resolver refuses with the control
+    // hidden. One funnel, one normalisation.
+    //
+    // ⚠️ THE CLAIM THAT ONCE STOOD HERE — "three findings closed" — WAS FALSE
+    // FOR THE RE-MAP, and it was repeated verbatim in the panel gate's header
+    // and in this change's own commit message. Three places asserting a closure
+    // that one condition did not deliver. Round five measured it; clause (2)
+    // below is what actually closes it.
+    //
+    // The value is cleared HERE rather than at each call site because there are
+    // three call sites today and a fourth would not think to do it.
+    const fieldDef = fieldsById.get(fieldId);
+    setDraft((prev) =>
+      prev.map((m) => {
+        if (m.fieldId !== fieldId) return m;
+
+        // (1) the offer is no longer available at all — A -> null
+        const unofferable =
+          next.unmentionedPolicy != null &&
+          fieldDef !== undefined &&
+          !canOmitWhenUnmentioned(fieldDef, next);
+
+        // (2) ⚠️ THE CONCEPT MOVED — A -> B. ROUND FIVE.
+        //
+        // The comment above claimed this case closed and it was NOT: the
+        // normalisation fires only when the offer becomes UNAVAILABLE, and
+        // re-mapping `ros.cardiovascular` to `exam.vascular` leaves
+        // `canOmitWhenUnmentioned` TRUE. So the checkbox stayed rendered, stayed
+        // TICKED, and the payload carried the doctor's "do not ask me about
+        // this" judgement — made about a concept they are no longer mapping —
+        // onto one they never ruled on. The row was simultaneously dropped to
+        // `needs_confirmation`, so the CONCEPT had to be re-confirmed while the
+        // OMIT was not re-asked.
+        //
+        // ⚠️ THE JUDGEMENT IS ABOUT A CONCEPT, SO IT DOES NOT SURVIVE THE
+        // CONCEPT. Any move — A -> B or A -> null — re-asks.
+        const reMapped =
+          next.unmentionedPolicy != null &&
+          m.clinicalConcept !== next.clinicalConcept;
+
+        return unofferable || reMapped ? { ...next, unmentionedPolicy: null } : next;
+      }),
+    );
   }
 
   // ⚠️ THE WRITER DEMANDS THE EXACT COMPILER FIELD SET (`FIELD_SET_MISMATCH`,
@@ -488,7 +592,7 @@ function ReviewWorkspace({
     (m) => m.status === 'certified' && !m.clinicalConcept && m.sourceType !== 'manual',
   );
   const dirty = draft.some((m, i) => m !== fields[i]?.mapping);
-  const proposedPending = unconfirmed.filter((m) => confirmClassOf(m) === 'confirm');
+  const proposedPending = unconfirmed.filter(bulkConfirmable);
   const byStatus = fields.reduce<Record<string, number>>((acc, f) => {
     const s = f.field.detectionStatus;
     acc[s] = (acc[s] ?? 0) + 1;
@@ -610,7 +714,7 @@ function ReviewWorkspace({
             onClick={() =>
               setDraft((prev) =>
                 prev.map((m) =>
-                  m.status !== 'certified' && confirmClassOf(m) === 'confirm'
+                  m.status !== 'certified' && bulkConfirmable(m)
                     ? confirmed(m, m.clinicalConcept)
                     : m,
                 ),
@@ -667,6 +771,140 @@ function ReviewWorkspace({
                       ? ` → ${m.clinicalConcept}`
                       : ' · no concept yet'}
                 </div>
+
+                {/* ⚠️ REVIEW-DEFAULTS item 2 — THE `omit` DOOR.
+                    Offered ONLY where `canOmitWhenUnmentioned` says the
+                    resolver would honour it. That predicate is IMPORTED from
+                    the module the resolver itself calls, not restated here:
+                    a surface must never offer an act its writer would refuse,
+                    and a required field returns `needs_clinician_input` before
+                    the policy is ever consulted.
+
+                    ⚠️ AND THE WORDS ARE NOT "OMIT THIS LINE". Both a null
+                    policy and an `omit` take the same bounded clear, so the
+                    PAGE is identical; the only difference is whether the
+                    doctor is counted and prompted. The copy says that, and
+                    an arm pins it. */}
+                {!readOnly && canOmitWhenUnmentioned(f.field, m) && (
+                  <label
+                    htmlFor={`twin-omit-${m.fieldId}`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 6,
+                      marginTop: 6,
+                      cursor: saving ? 'default' : 'pointer',
+                    }}
+                  >
+                    <input
+                      id={`twin-omit-${m.fieldId}`}
+                      type="checkbox"
+                      data-testid={`twin-omit-toggle-${m.fieldId}`}
+                      disabled={saving}
+                      checked={m.unmentionedPolicy === 'omit'}
+                      onChange={(e) => {
+                        // ⚠️ NULL, NOT `undefined` AND NOT `'keep'`. The column
+                        // is nullable and NULL is the fail-closed state: a
+                        // field nobody ruled on stays counted as blank and the
+                        // doctor keeps being told about it. `'keep'` does not
+                        // exist — #194 deleted it, and the schema refuses it.
+                        setMapping(m.fieldId, {
+                          ...m,
+                          unmentionedPolicy: e.target.checked ? 'omit' : null,
+                        });
+                      }}
+                      style={{ marginTop: 2, flexShrink: 0 }}
+                    />
+                    <span style={{ minWidth: 0 }}>
+                      <span
+                        style={{
+                          fontFamily: sans,
+                          fontSize: 11.5,
+                          color: 'var(--color-linear-text-2)',
+                        }}
+                      >
+                        {OMIT_CONTROL_LABEL}
+                      </span>
+                      <span
+                        style={{
+                          display: 'block',
+                          fontFamily: sans,
+                          fontSize: 10.5,
+                          color: 'var(--color-linear-text-3)',
+                          marginTop: 1,
+                        }}
+                      >
+                        {OMIT_CONTROL_HINT}
+                      </span>
+                    </span>
+                  </label>
+                )}
+
+                {/* A certified version is IMMUTABLE, so the choice cannot be
+                    changed here — but it must still be VISIBLE, or a doctor
+                    cannot tell why a field stopped being counted.
+
+                    ⚠️ AND IT SAYS **WHICH** OF THE TWO STATES IT IS IN. The
+                    first cut rendered the label whenever the policy was
+                    `'omit'`, while the editable control one block up was gated
+                    by `canOmitWhenUnmentioned` — so the two arms of one feature
+                    disagreed about the predicate, and a stored `omit` on a
+                    field the resolver refuses would have asserted "do not ask
+                    me about this" on a version nobody can correct.
+
+                    The writer now refuses to persist that state at all
+                    (`certification-lifecycle.ts`), so this branch should be
+                    unreachable. It is rendered HONESTLY rather than hidden
+                    anyway: hiding it would trade a false statement for an
+                    unreadable one, and a doctor looking at an immutable version
+                    is entitled to see what is actually stored on it. If the
+                    inert variant ever appears, it names itself. */}
+                {readOnly && m.unmentionedPolicy === 'omit' && (
+                  <div
+                    data-testid={
+                      canOmitWhenUnmentioned(f.field, m)
+                        ? `twin-omit-readonly-${m.fieldId}`
+                        : `twin-omit-readonly-inert-${m.fieldId}`
+                    }
+                    style={{
+                      fontFamily: sans,
+                      fontSize: 10.5,
+                      color: 'var(--color-linear-text-3)',
+                      marginTop: 4,
+                    }}
+                  >
+                    {canOmitWhenUnmentioned(f.field, m)
+                      ? OMIT_CONTROL_LABEL
+                      : OMIT_INERT_LABEL}
+                  </div>
+                )}
+                {/* ⚠️ #247 — WHERE THE VALUE COMES FROM, IN WORDS, ON THE ROW
+                    THE DOCTOR IS AGREEING TO.
+
+                    The ruling declined a FOURTH confirm act: this is not its
+                    own class, it is an ordinary `confirm` row. What makes the
+                    click meaningful is that the row says what it will print
+                    and where that comes from — a value read out of the chart,
+                    not something the clinician dictated. The concept line
+                    above says `visit_metadata.patient_name`, which is precise
+                    and says nothing at all to a doctor.
+
+                    Keyed on `sourceType`, the same structural discriminator
+                    `confirmClassOf` uses, so the caption cannot disagree with
+                    the class. */}
+                {m.sourceType === 'visit_metadata' && (
+                  <div
+                    data-testid={`twin-record-provenance-${m.fieldId}`}
+                    style={{
+                      fontFamily: mono,
+                      fontSize: 10.5,
+                      color: 'var(--color-linear-text-3)',
+                      marginTop: 2,
+                    }}
+                  >
+                    from the patient record — not dictated
+                  </div>
+                )}
                 {/* ⚠️ #208 — THE DECLARED SCOPE IS SHOWN, BECAUSE A SCOPE IS A
                     CLAIM ABOUT COVERAGE AND THE DOCTOR IS CONFIRMING IT.
 

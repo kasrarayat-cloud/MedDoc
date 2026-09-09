@@ -61,7 +61,7 @@ describe('F5 — the fallback carries the compiler-decided concepts', () => {
     expect(isRegisteredConcept('not.a.real.concept')).toBe(false);
   });
 
-  it('partitions the real form into 5 manual / 53 proposed / 22 still-unproposed', async () => {
+  it('partitions the real form into 4 manual / 54 proposed / 22 still-unproposed', async () => {
     const ir = await realForm();
     const mappings = fallbackSemanticMappings(ir);
     expect(mappings.length).toBe(ir.fields.length);
@@ -74,8 +74,39 @@ describe('F5 — the fallback carries the compiler-decided concepts', () => {
       else if (m.clinicalConcept !== null) buckets.proposed += 1;
       else buckets.unproposed += 1;
     }
-    expect(buckets).toEqual({ manual: 5, proposed: 53, unproposed: 22 });
+    // ⚠️ 5/53 -> 4/54 BY EXACTLY ONE FIELD, AND #247 IS THE REASON. The form's
+    // `REFERRING PHYSICIAN` control left `manual` and became a concepted
+    // `extraction` field: the referring clinician is DICTATED, so a blank a
+    // human retypes every visit was never the right answer for it. Nothing else
+    // moved — the technologist, the machine, the location and the address are
+    // still the four nobody says aloud, and the 22 enumerated picks are
+    // untouched.
+    expect(buckets).toEqual({ manual: 4, proposed: 54, unproposed: 22 });
     expect(buckets.manual + buckets.proposed + buckets.unproposed).toBe(80);
+    // ⚠️ AND THE ONE THAT MOVED IS NAMED, not merely counted. A partition arm
+    // that only reconciles totals is satisfied by ANY one-field swap between
+    // those two buckets; this says WHICH, so a future change that moves the
+    // technologist instead reddens here rather than passing.
+    const referring = mappings.find(
+      (m) => /^referring/i.test(ir.fields.find((f) => f.fieldId === m.fieldId)!.originalLabel),
+    )!;
+    // ⚠️ `verified_note_selection`, NOT `extraction`, AND THE FORM IS WHY —
+    // measured rather than assumed, and the first draft of this arm assumed.
+    // On WM_IOV the referring clinician is an ENUMERATED dropdown of the
+    // practice's own referrers, so the enumerated arm of `classifyFieldSource`
+    // claims it and the doctor's adopted pick answers it. On the owner's GI
+    // consult letter the same label is a free-text control, so it classifies
+    // `extraction` and the dictated fact fills it (recorded in
+    // `docs/foundation/mutations/20260903-transfer-certification-to-active.md`,
+    // which shows that field as `extraction` before it was pinned to `manual`).
+    //
+    // ⚠️ THE CONCEPT IS THE SAME ON BOTH, AND THAT IS THE POINT OF PINNING IT
+    // AT THE LABEL. A field's SOURCE depends on the shape the form gave it; its
+    // MEANING does not.
+    expect([referring.sourceType, referring.clinicalConcept]).toEqual([
+      'verified_note_selection',
+      'visit_metadata.referring_physician',
+    ]);
   });
 
   it('BOTH DIRECTIONS: some are proposed, some are deliberately not, and the unproposed are exactly the enumerated picks', async () => {

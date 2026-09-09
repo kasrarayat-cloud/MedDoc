@@ -150,6 +150,40 @@ export function temporalityMatches(
 export function conceptMatches(fact: EncounterFact, mapping: SemanticMapping): boolean {
   const factConcept = normalizeConcept(fact.concept);
 
+  // ⚠️ #247 — A RECORD-DERIVED FACT MATCHES BY **EXACT CONCEPT ONLY**, NEVER
+  // THROUGH A SYNONYM OR A DECLARED SCOPE. Found by two refutation lenses, on
+  // the finished diff, with measured output.
+  //
+  // `approvedSynonyms` and `conceptScope` are widenings a PHYSICIAN approves so
+  // that DICTATED evidence can reach a control whose form spells the concept
+  // differently. A record value is not evidence and has no spelling — it is one
+  // column of one row — so there is nothing for a synonym to be a synonym OF.
+  //
+  // Two demonstrated consequences of letting it through, both blocking or
+  // worse:
+  //
+  //   · a mapping citing `visit_metadata.patient_name` with `approvedSynonyms:
+  //     ['chief_complaint']` and a dictated chief-complaint fact of the same
+  //     value resolves `supported` over BOTH facts — which the validator's own
+  //     `SUPPORTED_STATUS_CITES_RECORD_EVIDENCE` arm then refuses as blocking,
+  //     and `fill-engine.ts` turns a blocking issue into `render: null`. The
+  //     doctor loses the WHOLE native document.
+  //   · the injector's "real evidence wins" guard keys on exact concept
+  //     equality while the resolver matched on the wider set, so the two were
+  //     answering different questions about the same pair. This makes them one
+  //     question.
+  //
+  // ⚠️ IT DOES NOT NARROW ANY EXISTING BEHAVIOUR. No `visit_record` fact has
+  // ever been reachable through a synonym: the class was created in this arc,
+  // and its two producers emit `procedure_date`-shaped and `visit_metadata.*`
+  // concepts that no shipped synonym list mentions.
+  if (fact.sourceType === 'visit_record') {
+    return (
+      !!mapping.clinicalConcept &&
+      normalizeConcept(mapping.clinicalConcept) === factConcept
+    );
+  }
+
   // ⚠️ #179(1) — AN UNNAMED ROS CONCEPT CANNOT ANSWER A CLAUSE THAT NAMES
   // SYMPTOMS. `ros.<system>.other` carries a real finding the doctor stated, so
   // it must reach the note somewhere — but it names a symptom outside the

@@ -57,6 +57,11 @@ export interface EncounterEntitySnapshot {
   past_medical_history?: ReadonlyArray<
     EvidenceSnapshot & { condition: string }
   >;
+  /** #246 family 1. ⚠️ OPTIONAL, per canon 133 — every existing caller and
+   *  every fixture builds this snapshot without the key. */
+  past_surgical_history?: ReadonlyArray<
+    EvidenceSnapshot & { procedure: string }
+  >;
   medications?: ReadonlyArray<
     EvidenceSnapshot & {
       name: string;
@@ -81,7 +86,16 @@ export interface EncounterEntitySnapshot {
     alcohol?: (EvidenceSnapshot & { status: string }) | null;
     drugs?: (EvidenceSnapshot & { status: string }) | null;
     occupation?: (EvidenceSnapshot & { value: string }) | null;
+    /** #246 family 2 — keyed `status`, matching the three status-shaped
+     *  siblings rather than occupation's `value`. The projector reads this
+     *  key literally; there is no shared constant binding the two. */
+    marital_status?: (EvidenceSnapshot & { status: string }) | null;
   };
+  /** #246 family 4 — a NUMBER on the extraction axis (canon 134). */
+  total_time_minutes?: (EvidenceSnapshot & { minutes: number }) | null;
+  /** #247 family 3 — the DICTATED referrer. Keyed `name`, matching the L3
+   *  field; optional for canon 133's hand-mirrored-interface reason. */
+  referring_physician?: (EvidenceSnapshot & { name: string }) | null;
   ros?: ReadonlyArray<
     EvidenceSnapshot & {
       system: string;
@@ -133,6 +147,16 @@ interface AddFactOptions {
   /** Structured overrides. Prose paths leave these unset and keep the inferred
    *  values, so every existing fact is byte-identical. */
   polarity?: EncounterFact['polarity'];
+  /**
+   * A STATED tense, the sibling of the stated polarity above.
+   *
+   * ⚠️ #247 — IT EXISTS BECAUSE `defaultTemporality` IS NOT A DEFAULT. It is
+   * the value `inferTemporality` falls back to when its regexes match nothing,
+   * so a concept whose own evidence quote contains a tense keyword can never
+   * reach it. That is canon 135's shape on the other axis: where the layer
+   * KNOWS the answer it states it, rather than passing a hint to a guesser.
+   */
+  temporality?: EncounterFact['temporality'];
   laterality?: EncounterFact['laterality'];
   number?: number;
   unit?: string;
@@ -585,11 +609,9 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
         concept: options.concept,
         value: options.value,
         polarity,
-        temporality: inferTemporality(
-          options.value,
-          quote,
-          options.defaultTemporality,
-        ),
+        temporality:
+          options.temporality ??
+          inferTemporality(options.value, quote, options.defaultTemporality),
         experiencer: options.experiencer ?? 'patient',
         laterality: options.laterality ?? inferLaterality(options.value, quote),
         number: options.number ?? numberAndUnit.number,
@@ -650,6 +672,26 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
       path: `past_medical_history.${index}.condition`,
       concept: 'past_medical_history',
       value: item.condition,
+      evidence: item,
+      defaultTemporality: 'historical',
+    });
+  }
+
+  // #246 family 1 — the same shape and the same temporality as the block
+  // above, and deliberately SEPARATE. A form asking for surgeries on their own
+  // must not be filled from the medical history, which is exactly what the
+  // proposer did on the owner's form before this existed.
+  //
+  // ⚠️ THE WORDING HERE IS DELIBERATE. An earlier version of this comment used
+  // the two words the (2a) census greps for, and reddened that arm from PROSE —
+  // canon 117's reddened-by-prose, the same defect as greened-by-prose and it
+  // travels with it. The arm was right: a form it cannot read would be silently
+  // unwatched.
+  for (const [index, item] of (entities.past_surgical_history ?? []).entries()) {
+    add({
+      path: `past_surgical_history.${index}.procedure`,
+      concept: 'past_surgical_history',
+      value: item.procedure,
       evidence: item,
       defaultTemporality: 'historical',
     });
@@ -731,6 +773,123 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
   }
   if (social?.occupation) {
     add({ path: 'social_history.occupation', concept: 'social_history.occupation', value: social.occupation.value, evidence: social.occupation, defaultTemporality: 'current' });
+  }
+  // #246 family 2 — reads `.status`, matching the L3 key chosen above.
+  if (social?.marital_status) {
+    add({ path: 'social_history.marital_status', concept: 'social_history.marital_status', value: social.marital_status.status, evidence: social.marital_status, defaultTemporality: 'current' });
+  }
+
+  // #247 family 3 — THE DICTATED REFERRING CLINICIAN.
+  //
+  // ⚠️ AN ORDINARY `encounter_evidence` FACT, AND ITS NEIGHBOURS IN THE
+  // `visit_metadata.*` REGISTRY FAMILY ARE NOT. `add()` stamps
+  // `sourceType: 'encounter_evidence'` on everything it emits, and that is
+  // CORRECT here and only here: the clinician said this. Patient name and age
+  // share the concept prefix and are injected somewhere else entirely
+  // (`withVisitMetadataFacts`, `sourceType: 'visit_record'`) precisely so the
+  // manifest never has to guess which of the three it is looking at.
+  //
+  // ⚠️ BOTH POLARITY AND TENSE ARE **STATED**, AND THE FIRST DRAFT STATED
+  // NEITHER. It argued that this value is the spoken name, therefore locatable,
+  // therefore safe for the ordinary inference. Two refutation lenses measured
+  // what the inference actually does to a referral sentence, and it is wrong on
+  // both axes for the same reason: the inference reads the words AROUND the
+  // value, and a referral sentence is made of exactly those words.
+  //
+  //   POLARITY. `UNCERTAINTY` is /possible|possibly|maybe|may|might|uncertain|
+  //   unclear|suspected|question of/ over value + quote. Measured:
+  //     "Referred by Dr. Lee for POSSIBLE inflammatory bowel disease."
+  //     "Dr. Osei referred her for SUSPECTED celiac disease."
+  //     "She was referred by Dr. Lee in MAY for evaluation."
+  //   -> polarity `uncertain` -> resolution `ambiguous` -> `FIELD_AMBIGUOUS`,
+  //   which is BLOCKING because `clinicallyMaterial: true` is hard-coded at all
+  //   twelve compiler emission sites -> `render: null` -> **the doctor loses
+  //   the whole native document**. The hedge is about the DIAGNOSIS; the
+  //   referral is not in doubt. And the prompt only permits this field when the
+  //   dictation names a referrer, so an unstated one is `null` rather than a
+  //   denial — there is no denial for the inference to protect.
+  //
+  //   TENSE. `PLANNED` is /plan|will|schedule|REFER(RED|RAL)?|start|follow-up/,
+  //   so **the very word that identifies a referral sentence** stamps the fact
+  //   `planned`. Measured: "She was referred by Dr. Ramirez for further
+  //   evaluation." -> `planned`, and so did this file's own certification
+  //   sentence. Against a mapping declaring `temporality: 'current'` — which
+  //   the proposer explicitly invites the model to propose — that is
+  //   `temporality_not_approved`: a permanently blank control with validation
+  //   green. And the frozen manifest records a referral that HAPPENED as
+  //   planned, which is the same "the manifest says something untrue" class
+  //   #247 exists to end.
+  //
+  // `defaultTemporality` cannot fix the second: it is the fallback used when
+  // the regexes match NOTHING, and here one of them always matches.
+  if (entities.referring_physician) {
+    add({
+      path: 'referring_physician.name',
+      concept: 'visit_metadata.referring_physician',
+      value: entities.referring_physician.name,
+      evidence: entities.referring_physician,
+      defaultTemporality: 'current',
+      polarity: 'affirmed',
+      temporality: 'current',
+      // The referrer is another clinician, not the patient. `experiencer`
+      // exists for exactly this: a fact ABOUT someone other than the subject.
+      experiencer: 'other',
+    });
+  }
+
+  // #246 family 4 — TOTAL ENCOUNTER TIME.
+  //
+  // ⚠️ THE VALUE IS A STRING AND THE NUMBER TRAVELS BESIDE IT. `add()` accepts
+  // string | number | boolean, but the controls this fills compile
+  // `narrative_text`, and the narrative deriver returns `fact.value` only when
+  // it is a string. `String(minutes)` is what reaches the document; `number`
+  // carries the machine-readable quantity for any numeric control.
+  //
+  // ⚠️ AND IT CARRIES NO UNIT, DELIBERATELY. The resolver's number arm refuses
+  // a value with an unapproved unit, so "45 minutes" would fail where "45"
+  // resolves — canon 134's trap, avoided at the source rather than patched at
+  // the reader.
+  if (entities.total_time_minutes) {
+    add({
+      path: 'total_time_minutes.minutes',
+      concept: 'total_time_minutes',
+      value: String(entities.total_time_minutes.minutes),
+      number: entities.total_time_minutes.minutes,
+      evidence: entities.total_time_minutes,
+      defaultTemporality: 'current',
+      // ⚠️ POLARITY IS STATED, NOT INFERRED, AND THE ADVERSARIAL PASS IS WHY.
+      //
+      // A TOTAL TIME IS A QUANTITY. There is no such thing as a denied total —
+      // the prompt only permits this field when the clinician states one aloud,
+      // so it is affirmed by construction.
+      //
+      // Left to `inferPolarity` it was DENIED on plainly affirmative dictation,
+      // by two measured routes, because this is the only concept whose value is
+      // a RENDERING of a number rather than the spoken text:
+      //
+      //   "No fever, total time 25 minutes."                    -> denied
+      //        the digits ARE locatable, but `CLAUSE_BREAK` is /[.;\n]/ and a
+      //        COMMA is not one, so an unrelated ROS denial governs the number
+      //
+      //   "Total time of forty minutes spent, no separate ..."  -> denied
+      //        the quote SPELLS the number, so `String(40)` is unlocatable and
+      //        polarity falls back to the UNSCOPED whole-quote denial test —
+      //        the very form the scoping arms exist to narrow
+      //
+      // A denied fact is then withheld by `denialOutcome` for every kind except
+      // checkbox, so the doctor's own billing figure renders BLANK; on a
+      // narrative control the reason is certification-exempt, so it blanks
+      // SILENTLY and the template still certifies green.
+      //
+      // ⚠️ AND THE SELF-TEST WOULD NOT HAVE CAUGHT IT. Its sentence spells
+      // "forty five minutes" against a projected "45", so it takes the
+      // unlocatable route too — and passed only because that one sentence
+      // happens to contain no denial token.
+      //
+      // Same doctrine as the ROS block above (Q1 §02.9): where the layer KNOWS
+      // the polarity, it states it and stops guessing it back out of the prose.
+      polarity: 'affirmed',
+    });
   }
 
   for (const [index, item] of (entities.ros ?? []).entries()) {

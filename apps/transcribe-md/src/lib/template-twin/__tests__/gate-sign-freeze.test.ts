@@ -109,7 +109,7 @@ describe('the sign-time freeze', () => {
     expect(out).toEqual({ state: 'regenerated' });
     expect(processFill).toHaveBeenCalledTimes(1);
     // ⚠️ The fill is attributed to the VISIT'S doctor, never the signer.
-    expect(processFill.mock.calls[0][0]).toMatchObject({ doctorId: 'doc-1' });
+    expect(processFill.mock.calls[0][0]).toMatchObject({ authorUserId: 'doc-1' });
     // ⚠️ And the claim is VERIFIED by a re-read, not assumed from a non-throw.
     expect(findFirst).toHaveBeenCalledTimes(2);
   });

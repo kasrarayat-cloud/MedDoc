@@ -113,7 +113,18 @@ export type FillVariant = 'twin' | 'styled';
 // "we did not compute it" and renders NOTHING — so every visit with a warm
 // cache would silently have no "Your blanks" panel until its note changed.
 // Found by an adversarial pass; the shape changed and the key did not.
-const KEY_VERSION = 'v6';
+//
+// ⚠️ v7 — OWNER RULING #203, AND IT IS v6's TRAP ONE STEP SUBTLER. The #1018
+// fix changes WHICH FIELDS `insertableDefaults` CONTAINS without changing its
+// SHAPE: the offer is withdrawn on the per-visit `reasonCode` instead of the
+// mapping's static policy. A warm v6 entry therefore deserialises perfectly and
+// serves the PRE-FIX offer list — the one that offers a default on every omit
+// field — for up to the 30-minute TTL after deploy. Nothing would look wrong.
+//
+// v6's own comment says "the shape changed and the key did not". This is
+// **the CONTENTS changed and the key did not**, which no schema check can see.
+// FOURTH instance of this class in this file; the three above are its record.
+const KEY_VERSION = 'v7';
 
 function key(visitId: string, soapVersion: number, variant: FillVariant): string {
   return `visitdoc:${KEY_VERSION}:${variant}:${visitId}:${soapVersion}`;

@@ -104,6 +104,118 @@ else
   say "         hooksPath $before_hooks -> $after_hooks"; fail=1
 fi
 
+# ── ARM 6 · THE SANDBOX MEASURES ITSELF, NOT THE SHARED TREE ────────────────
+#
+# ⚠️ THIS ARM IS NOT ABOUT TESTS RUNNING. It is about WHICH TREE a green
+# describes. A worktree with a raw `node_modules` symlink resolves `@meddoc/*`
+# to the SHARED tree, so a lens can run a suite, watch it pass, and have proved
+# something about code its sandbox does not contain — while every guard above
+# this line is still 🟢. The sandbox was sealed and pointed at the wrong
+# repository.
+#
+# Observed 2026-09-07: a round-eight lens reported ~24 files failing with
+# `Failed to resolve import "react/jsx-dev-runtime"` and `@meddoc/auth resolves
+# to /opt/meddoc-pro/packages/auth/src/index.ts, outside this worktree`. It
+# caught that itself and discarded every claim resting on those files — but a
+# lens that has to notice its own harness is broken is a lens spending its
+# budget on the harness, and the QUIET half of that failure (a green about the
+# wrong tree) produces no error message at all.
+#
+# The POSITIVE CONTROL is the first clause: the package must exist in the SHARED
+# tree too. Without it this arm passes in a checkout that has no workspace
+# packages at all — the vacuity this house keeps finding one input over.
+if [ ! -d "$SHARED/packages/auth" ]; then
+  say "🔴 ARM 6  no packages/auth in the shared tree — this arm cannot mean anything here"; fail=1
+else
+  resolved="$(readlink -f "$DIR/node_modules/@meddoc/auth" 2>/dev/null || echo MISSING)"
+  case "$resolved" in
+    "$DIR"/*)
+      say "🟢 ARM 6  @meddoc/auth resolves INSIDE the sandbox: $resolved" ;;
+    MISSING)
+      say "🔴 ARM 6  @meddoc/auth does not resolve at all — a suite run here proves nothing"; fail=1 ;;
+    *)
+      say "🔴 ARM 6  @meddoc/auth resolves OUTSIDE the sandbox: $resolved"
+      say "         a green in this sandbox would be a green about ANOTHER TREE'S CODE"; fail=1 ;;
+  esac
+fi
+
+# ── ARM 7 · A FAILURE AFTER CREATION LEAVES **NO SANDBOX**, NOT AN UNARMED ONE ─
+#
+# ⚠️ THE ARM EXISTS BECAUSE THE ARTIFACT WAS OBSERVED, 2026-09-09. A parallel
+# batch produced two directories checked out at the right commit with NO arming:
+# pushurl unset, the repository's real hooks, no `.lens-env.sh`. The script
+# exited non-zero and the tree STAYED. Every arm above this line would have been
+# 🟢 about a sandbox nobody handed out, while the unarmed one sat on disk looking
+# built — and a caller testing `[ -d "$DIR" ]` rather than `$?` would hand it to
+# an agent that can commit and push out of it.
+#
+# THE INJECTION IS DETERMINISTIC, because the race is not. A `git` shim on PATH
+# passes everything through EXCEPT the `remote.origin.pushurl` arming write,
+# which it silently drops. Creation therefore succeeds, arming is incomplete,
+# and the script's own assertion must catch it and tear the tree down. This
+# tests the GUARD, not the trigger — which is the point: the mechanism that
+# produced the two real ones is NOT proven (a three-way concurrent reproduction
+# did not reproduce it), so arming against the shape is the honest fix.
+SHIM="$(mktemp -d)"
+REALGIT="$(command -v git)"
+cat > "$SHIM/git" <<SHIMEOF
+#!/usr/bin/env bash
+for a in "\$@"; do
+  [ "\$a" = "remote.origin.pushurl" ] && exit 0
+done
+exec "$REALGIT" "\$@"
+SHIMEOF
+chmod +x "$SHIM/git"
+VICTIM="lens-teardown-$$"
+VICTIM_DIR="$SHARED/.lens-$VICTIM"
+if PATH="$SHIM:$PATH" bash "$SHARED/scripts/make-lens-sandbox.sh" "$VICTIM" >/dev/null 2>&1; then
+  say "🔴 ARM 7  the builder RETURNED SUCCESS with the arming write suppressed"; fail=1
+elif [ -e "$VICTIM_DIR" ]; then
+  say "🔴 ARM 7  the builder failed but LEFT THE UNARMED SANDBOX at $VICTIM_DIR"; fail=1
+else
+  say "🟢 ARM 7  a failure after creation left no sandbox behind"
+fi
+rm -rf "$SHIM"
+"$REALGIT" -C "$SHARED" worktree prune >/dev/null 2>&1 || true
+
+# ── ARM 8 · THE REAPER CAN REMOVE AN UNARMED SANDBOX ────────────────────────
+#
+# ⚠️ THE TWO SCRIPTS USED TO COMPOSE INTO A DEADLOCK. `reap` refused any
+# `.lens-*` directory with no `.lens-hooks` — which is EXACTLY what a partial
+# creation leaves — so the sanctioned tool was guaranteed to refuse the one
+# directory it most needed to remove. Measured: `.lens-o2-door-offer` sat in the
+# shared tree from an earlier session for that reason, holding a single 32K
+# vitest cache file that `git worktree remove` had left behind.
+#
+# Built by hand rather than by breaking the builder, so this arm keeps meaning
+# something if the builder changes.
+ORPHAN="$SHARED/.lens-orphan-$$"
+"$REALGIT" -C "$SHARED" worktree add --detach "$ORPHAN" HEAD >/dev/null 2>&1 || true
+if [ ! -d "$ORPHAN" ]; then
+  say "🔴 ARM 8  could not build an unarmed sandbox to test the reaper against"; fail=1
+elif [ -d "$ORPHAN/.lens-hooks" ]; then
+  say "🔴 ARM 8  the hand-built orphan is armed — this arm would prove nothing"; fail=1
+elif bash "$SHARED/scripts/reap-lens-sandbox.sh" "$ORPHAN" >/dev/null 2>&1 && [ ! -e "$ORPHAN" ]; then
+  say "🟢 ARM 8  the reaper removed an UNARMED sandbox"
+else
+  say "🔴 ARM 8  the reaper REFUSED an unarmed sandbox — the deadlock is back"; fail=1
+fi
+"$REALGIT" -C "$SHARED" worktree remove --force "$ORPHAN" >/dev/null 2>&1 || true
+"$REALGIT" -C "$SHARED" worktree prune >/dev/null 2>&1 || true
+
+# ── ARM 9 · NEGATIVE CONTROL — THE REAPER STILL REFUSES A PATH OUTSIDE ───────
+# ⚠️ ARM 8 loosened a refusal, so this arm proves the loosening is BOUNDED.
+# Without it, "the reaper reaps unarmed sandboxes" and "the reaper reaps
+# anything named .lens-*" are indistinguishable, and the second is a foot-gun.
+OUTSIDE="$(mktemp -d)/.lens-not-ours"
+mkdir -p "$OUTSIDE"
+if bash "$SHARED/scripts/reap-lens-sandbox.sh" "$OUTSIDE" >/dev/null 2>&1; then
+  say "🔴 ARM 9  the reaper removed a .lens-* dir OUTSIDE the shared tree"; fail=1
+else
+  say "🟢 ARM 9  reaper still refuses an unarmed .lens-* outside the shared tree"
+fi
+rm -rf "$(dirname "$OUTSIDE")"
+
 bash "$SHARED/scripts/reap-lens-sandbox.sh" "$DIR" >/dev/null 2>&1 || say "⚠️  could not reap $DIR"
 
 say ""

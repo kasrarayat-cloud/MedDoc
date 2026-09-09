@@ -33,6 +33,7 @@ import {
   TemplateTwinFillManifestSchema,
   templateTwinCounts,
   type FieldResolution,
+  type RecordDerivedRefusal,
   type SemanticMapping,
   type TemplateDocIR,
   type TemplateTwinFillManifest,
@@ -46,6 +47,10 @@ import {
   type ClinicianOverrideDeclineReason,
 } from './clinician-override';
 import { withProcedureDateFact } from './procedure-date';
+import {
+  withVisitMetadataFacts,
+  type VisitPatientRecord,
+} from './visit-metadata';
 import {
   resolveTemplateFields,
   withApprovedPracticeDefaultFacts,
@@ -94,6 +99,19 @@ export interface PrepareTemplateTwinFillInput {
   /** The visit (encounter) date — deterministically fills a DATE OF PROCEDURE
    *  content control as metadata (never AI). Absent → the control is left blank. */
   visitDate?: Date | string | null;
+  /**
+   * #247 — THE PATIENT RECORD, NARROWED TO THE TWO COLUMNS THAT MAY BE PRINTED.
+   *
+   * ⚠️ OPTIONAL HERE AND LOADED BY THE SHARED READER, NOT BY FIVE CALLERS. The
+   * certification self-test constructs this input directly and must NEVER pass
+   * one (`assertNoRecordDerivedFacts` refuses if it does), so the parameter
+   * cannot be required. Every REAL fill goes through
+   * `readAndPrepareTemplateTwinFill`, which loads it from the visit — the same
+   * shape, and for the same reason, as F24-S5's clinician overrides: behaviour
+   * on the shared function beats four caller-side checklists kept complete by
+   * hand.
+   */
+  patient?: VisitPatientRecord | null;
   /** The LIVE brain's generated note — its picks + table measurements are bridged
    *  onto the resolver baseline. When absent, only the evidence resolver runs
    *  (behaviour-identical to the pre-bridge fill path). */
@@ -207,14 +225,31 @@ export async function prepareTemplateTwinFill(
   // (deterministic metadata, never AI), then let the evidence resolver fill it —
   // so the resolution is independently validated like any other, never a bare
   // overlay. No-op when there is no such control / no visit date.
+  // #247 — THE PATIENT RECORD'S OWN VALUES, INJECTED AS `visit_record` FACTS
+  // BEFORE THE DATE, so the two metadata injectors compose in one direction and
+  // each still sees any real dictated fact that would outrank it. A no-op when
+  // no record was threaded through, which is exactly the certification path.
+  // ⚠️ #264 — the collector the metadata injector names its refusals into, so a
+  // blank it produced arrives at the resolver labelled with WHY rather than as
+  // "nobody said it". Declared here because this is the only layer that both
+  // calls the injector and calls the resolver.
+  const injectorRefusals: RecordDerivedRefusal[] = [];
+
   const facts = withProcedureDateFact({
     fields: ir.fields,
     mappings,
     visitDate: input.visitDate,
-    facts: withApprovedPracticeDefaultFacts({
+    facts: withVisitMetadataFacts({
       fields: ir.fields,
       mappings,
-      facts: input.facts,
+      patient: input.patient,
+      visitDate: input.visitDate,
+      refusals: injectorRefusals,
+      facts: withApprovedPracticeDefaultFacts({
+        fields: ir.fields,
+        mappings,
+        facts: input.facts,
+      }),
     }),
   });
   const baseline = resolveTemplateFields({
@@ -223,6 +258,7 @@ export async function prepareTemplateTwinFill(
     facts,
     certifiedFieldIds: input.certifiedFieldIds,
     allowUncertifiedForSyntheticTest: input.allowUncertifiedForSyntheticTest,
+    refusals: injectorRefusals,
   });
   // Overlay the LIVE brain's CHOICE_SLOT picks + dictated table measurements onto
   // the evidence baseline. Real evidence always wins (bridge fills only where the
@@ -327,10 +363,49 @@ function asJson(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
 }
 
+/**
+ * The STORED shape of a clinician override row, as read from
+ * `templateTwinFieldOverride`. Distinct from `ClinicianFieldOverride`, which is
+ * the DOMAIN shape the fill consumes — the read path converts one to the other,
+ * so a simulated row must be in THIS shape to merge before that conversion.
+ */
+export type TemplateTwinOverrideRow = {
+  fieldId: string;
+  selectedOptionOrdinal: number | null;
+  overrideKind: string;
+  insertedText: string | null;
+};
+
 export interface ProcessTemplateTwinVisitInput {
   visitId: string;
-  practiceId: string;
-  doctorId: string;
+  /**
+   * ⚠️ RULING #287 — THE CHART'S PRACTICE, AND IT DOES BOTH JOBS ON PURPOSE.
+   *
+   * This was `practiceId`, and one slot was answering two questions: it scoped
+   * the VISIT (`transcribe_visits.practiceId`, the tenant) and it validated the
+   * TEMPLATE's provenance against `sourceArtifact.practiceId` (the template
+   * owner). Those are different columns and nothing constrains them equal — the
+   * schema says so at `TranscribeVisit.practiceId`: *"derived from the PATIENT,
+   * never from the author … NOTHING kept them agreeing."*
+   *
+   * ⚠️ SO NEITHER VALUE WAS RIGHT, AND BOTH LANES HAD BEEN WRONG IN OPPOSITE
+   * DIRECTIONS. Passing the author's practice (what `main` did) made the visit
+   * lookups find nothing on a locum visit; passing the tenant's (what #267 did)
+   * made provenance throw `TEMPLATE_PROVENANCE_MISMATCH` and withheld the
+   * document entirely.
+   *
+   * #287 decides the product question the split exposed: **a visit is documented
+   * in the TENANT practice's format.** A locum from B seeing A's patient fills
+   * A's active template; B's template never fills a visit in A. So one value is
+   * correct for both jobs — provenance compares the template's owner against the
+   * TENANT — and the parameter is named for the fact rather than for the caller.
+   */
+  tenantPracticeId: string;
+  /**
+   * WHO ACTED — audit and attribution, and #287 says NEVER A SCOPE. It reaches
+   * `userId` on the audit rows and nothing else; no query filters on it.
+   */
+  authorUserId: string;
   noteTemplateId: string;
   noteTemplateVersion: number;
   inputMode: EncounterInputMode;
@@ -350,6 +425,24 @@ export interface ProcessTemplateTwinVisitInput {
   visitDate?: Date | string | null;
   resolverModelVersion: string | null;
   storage?: TemplateTwinArtifactStore;
+  /**
+   * SIMULATION ONLY — override rows that are NOT yet in the database, merged
+   * over the ones that are, so a caller can ask *"what would this fill look
+   * like if I wrote this?"* BEFORE it writes.
+   *
+   * ⚠️ THIS EXISTS BECAUSE A GUARD THAT READS THE PRE-WRITE STATE CANNOT SEE A
+   * WRITE THAT BREAKS THE DOCUMENT. Round four of #1018's pass found it twice,
+   * from two independent lenses: an insert onto a `rowPrototype` narrative_text
+   * field, and one onto a `laterality: 'required'` mapping. Either makes
+   * `finalizeTemplateTwinFill` return `render: null` for the WHOLE fill; the
+   * offer then returns `miss('no_render')` and the surface draws no panel — and
+   * with no panel there is no Undo button, so the row is permanent and the
+   * doctor's document never renders again.
+   *
+   * Nothing is persisted by passing this: it changes what the fill is computed
+   * FROM, never what is stored. `processTemplateTwinVisit` REFUSES it outright.
+   */
+  simulateOverrides?: readonly TemplateTwinOverrideRow[];
 }
 
 /** What the read+prepare phase produces. The persistence phase needs the rows
@@ -380,7 +473,21 @@ export async function readAndPrepareTemplateTwinFill(
     const row = await prisma.noteTemplate.findFirst({
       where: {
         id: input.noteTemplateId,
-        doctorId: input.doctorId,
+        // #287 — THE CHART'S PRACTICE SELECTS THE TEMPLATE. This filtered on
+        // `doctorId` (the actor), so a locum documenting A's patient selected
+        // the LOCUM's template and provenance below then compared B against A:
+        // TEMPLATE_PROVENANCE_MISMATCH on a visit whose form exists and is
+        // certified. `practiceId` is the tenant, and `sourceArtifact.practiceId`
+        // below confirms it on a SECOND column — two independent reads of one
+        // decision, which is why both stay.
+        //
+        // ⚠️ THE SYSTEM DEFAULT IS UNAFFECTED, and that is measured rather than
+        // hoped: it has `doctorId = NULL` AND `practiceId = NULL` (the
+        // `note_templates_practice_iff_doctor` constraint ties the two), so a
+        // non-null filter excluded it before this change and excludes it after.
+        // It carries no compiled twin either, so it exits at the certification
+        // guard below as it always did.
+        practiceId: input.tenantPracticeId,
         version: input.noteTemplateVersion,
       },
       select: {
@@ -441,7 +548,7 @@ export async function readAndPrepareTemplateTwinFill(
     }
     if (
       row.version !== input.noteTemplateVersion ||
-      compiled.sourceArtifact.practiceId !== input.practiceId ||
+      compiled.sourceArtifact.practiceId !== input.tenantPracticeId ||
       compiled.sourceArtifact.validationStatus !== 'accepted' ||
       !compiled.sourceArtifact.objectKey
     ) {
@@ -490,7 +597,7 @@ export async function readAndPrepareTemplateTwinFill(
     });
     const storage = input.storage ?? createTemplateTwinArtifactStore();
     const source = await storage.readSourceArtifact({
-      practiceId: input.practiceId,
+      practiceId: input.tenantPracticeId,
       objectKey: compiled.sourceArtifact.objectKey,
       expectedSha256: compiled.sourceArtifact.sha256,
       expectedSizeBytes: compiled.sourceArtifact.sizeBytes,
@@ -512,8 +619,25 @@ export async function readAndPrepareTemplateTwinFill(
     //
     // Ordered for determinism; the unique index on (visitId, fieldId) means
     // there is at most one row per field, and `overridesIdentity` sorts anyway.
+    // #247 — THE PATIENT RECORD, READ HERE FOR THE SAME REASON THE OVERRIDES
+    // ARE. Five call sites reach this function (the worker's fill step, the
+    // native export, the sign freeze, the pre-sign preview and the worker's own
+    // inline step) and FOUR of them never loaded a patient. Threading a
+    // parameter through all five would have made "did you remember the patient
+    // record?" a per-caller checklist item — and a control that prints a
+    // patient's NAME is the last place to rely on remembering. Loading it in
+    // the one shared reader makes every path carry it by construction.
+    //
+    // ⚠️ TWO COLUMNS, PRACTICE-SCOPED. `name` and `dateOfBirth` are the only
+    // fields anything downstream may print, and the `where` names the practice
+    // as well as the visit so a cross-tenant id cannot return a record at all.
+    // Widening this select is a PHI decision, not a convenience.
+    const visitPatient = await prisma.transcribeVisit.findFirst({
+      where: { id: input.visitId, practiceId: input.tenantPracticeId },
+      select: { patient: { select: { name: true, dateOfBirth: true } } },
+    });
     const clinicianOverrides = await prisma.templateTwinFieldOverride.findMany({
-      where: { visitId: input.visitId, practiceId: input.practiceId },
+      where: { visitId: input.visitId, practiceId: input.tenantPracticeId },
       orderBy: { fieldId: 'asc' },
       select: {
         fieldId: true,
@@ -522,6 +646,19 @@ export async function readAndPrepareTemplateTwinFill(
         insertedText: true,
       },
     });
+    // ⚠️ SIMULATED ROWS ARE MERGED BY `fieldId`, NOT APPENDED. The unique index
+    // is on (visitId, fieldId), so appending would hand the fill two rows for
+    // one field — a state the database cannot hold, which would make the
+    // simulation answer about a universe that cannot exist.
+    const effectiveOverrides = input.simulateOverrides?.length
+      ? [
+          ...clinicianOverrides.filter(
+            (o) => !input.simulateOverrides!.some((p) => p.fieldId === o.fieldId),
+          ),
+          ...input.simulateOverrides,
+        ].sort((a, b) => a.fieldId.localeCompare(b.fieldId))
+      : clinicianOverrides;
+
     const prepared = await prepareTemplateTwinFill({
       compiledVersionId: compiled.id,
       noteTemplateId: row.id,
@@ -534,6 +671,7 @@ export async function readAndPrepareTemplateTwinFill(
       resolverModelVersion: input.resolverModelVersion,
       validationNow: input.validationNow,
       visitDate: input.visitDate,
+      patient: visitPatient?.patient ?? null,
       markerText,
       generatedNote: input.generatedNote,
       // ⚠️ THE DATABASE ROW IS NOT THE DOMAIN TYPE, AND THE NARROWING HAPPENS
@@ -544,7 +682,7 @@ export async function readAndPrepareTemplateTwinFill(
       // second layer, because a constraint added in a migration protects rows
       // written after it and this code also runs against whatever is already
       // stored.
-      clinicianOverrides: clinicianOverrides.flatMap((o): ClinicianFieldOverride[] => {
+      clinicianOverrides: effectiveOverrides.flatMap((o): ClinicianFieldOverride[] => {
         if (o.overrideKind === 'scaffold_default') {
           return o.insertedText
             ? [{ kind: 'scaffold_default' as const, fieldId: o.fieldId, insertedText: o.insertedText }]
@@ -564,13 +702,64 @@ export async function readAndPrepareTemplateTwinFill(
 export async function processTemplateTwinVisit(
   input: ProcessTemplateTwinVisitInput,
 ): Promise<PreparedTemplateTwinFill> {
+  // ⚠️ A SIMULATED FILL MUST NEVER BE PERSISTED, AND THIS IS THE MECHANISM
+  // RATHER THAN THE CONVENTION. This function passes its input straight down to
+  // `readAndPrepareTemplateTwinFill`, so `simulateOverrides` would reach the
+  // fill — and the manifest is then stamped `overridesIdentity(clinicianOverrides)`
+  // from the rows that ARE stored, producing a manifest asserting an identity
+  // the rendered document does not correspond to. That is verbatim the drift
+  // this file's own comment says `note-identity.ts` exists to prevent.
+  //
+  // Simulation is a READ-side capability. The writer refuses it.
+  if (input.simulateOverrides?.length) {
+    throw new Error(
+      'processTemplateTwinVisit: refusing a simulated fill. `simulateOverrides` is read-side only — persisting it would stamp a manifest identity the document does not correspond to.',
+    );
+  }
+
+  // ⚠️ THE TENANT MUST OWN THIS TEMPLATE **BEFORE** ANYTHING IS PINNED.
+  //
+  // The claim below writes `noteTemplateId` onto the visit and its `OR` makes
+  // that write STICKY: once a visit carries an id, only that id can ever claim
+  // it again. Validation used to happen AFTER, inside
+  // `readAndPrepareTemplateTwinFill` — so a template the tenant does not own was
+  // pinned first and rejected second, and the visit was left permanently bound
+  // to a template that can never fill it. Every later run, with any id, throws
+  // `TEMPLATE_PROVENANCE_MISMATCH`.
+  //
+  // ⚠️ IT IS REACHABLE, AND THIS BRANCH IS WHAT MADE IT SO. `worker.ts` selects
+  // the template by `doctorId: visit.userId` — the AUTHOR — while this function
+  // now validates against `tenantPracticeId`. On `main` both ends sat on the
+  // author's axis and agreed, so a locum's visit rendered the wrong practice's
+  // form: wrong, but recoverable. Splitting the axes turned that into NO
+  // document, a false explanation, and an irreversible pin. A regression is not
+  // excused by the defect it replaced.
+  //
+  // This read is the same predicate `readAndPrepareTemplateTwinFill` applies a
+  // few lines later, run first and read-only, so a refusal costs one query and
+  // leaves the row untouched.
+  const tenantOwnsTemplate = await prisma.noteTemplate.findFirst({
+    where: {
+      id: input.noteTemplateId,
+      practiceId: input.tenantPracticeId,
+      version: input.noteTemplateVersion,
+    },
+    select: { id: true },
+  });
+  if (!tenantOwnsTemplate) {
+    throw new TemplateTwinFillError(
+      'CERTIFIED_TEMPLATE_NOT_FOUND',
+      'The selected Template Twin version is not this practice\'s, and nothing has been pinned.',
+    );
+  }
+
   // Persist the first selected version before source I/O, resolution, model-
   // derived evidence processing, or rendering. A retry must never switch to a
   // newly activated template after partial work against this version.
   const claimedTemplate = await prisma.transcribeVisit.updateMany({
     where: {
       id: input.visitId,
-      userId: input.doctorId,
+      practiceId: input.tenantPracticeId,
       deletedAt: null,
       archivedAt: null,
       status: { not: 'SIGNED' },
@@ -669,7 +858,7 @@ export async function processTemplateTwinVisit(
 
   const storedOutput = prepared.render
     ? await storage.storeOutputArtifact({
-        practiceId: input.practiceId,
+        practiceId: input.tenantPracticeId,
         visitId: input.visitId,
         manifestSha256: prepared.manifestSha256,
         bytes: prepared.render.document,
@@ -760,7 +949,7 @@ export async function processTemplateTwinVisit(
   // system-context allowlist for no reason — and the allowlist gate caught it
   // going 1 -> 2 on this file, which is exactly its job.
   const visitNow = await prisma.transcribeVisit.findFirst({
-    where: visitByIdScope(input.visitId, asPracticeId(input.practiceId)),
+    where: visitByIdScope(input.visitId, asPracticeId(input.tenantPracticeId)),
     select: { status: true, signedAt: true },
   });
   if (visitNow?.status === 'SIGNED' || visitNow?.signedAt != null) {
@@ -779,8 +968,8 @@ export async function processTemplateTwinVisit(
       action: 'TEMPLATE_TWIN_SIGN_BLOCKED',
       targetType: 'TranscribeVisit',
       targetId: input.visitId,
-      userId: input.doctorId,
-      practiceId: input.practiceId,
+      userId: input.authorUserId,
+      practiceId: input.tenantPracticeId,
       metadata: {
         fill_discarded_post_signature: true,
         compiledVersionId: compiled.id,
@@ -851,7 +1040,7 @@ export async function processTemplateTwinVisit(
       await prisma.$transaction(
         async (tx) => {
           const still = await tx.transcribeVisit.findFirst({
-            where: { id: input.visitId, practiceId: input.practiceId },
+            where: { id: input.visitId, practiceId: input.tenantPracticeId },
             select: { status: true, signedAt: true },
           });
           if (still?.status === 'SIGNED' || still?.signedAt != null) {
@@ -862,7 +1051,7 @@ export async function processTemplateTwinVisit(
           }
           await tx.templateTwinFillManifest.create({
             data: {
-              practiceId: input.practiceId,
+              practiceId: input.tenantPracticeId,
               visitId: input.visitId,
               ...writeData,
             },
@@ -890,8 +1079,8 @@ export async function processTemplateTwinVisit(
       action: 'TEMPLATE_TWIN_RENDER_VERIFIED',
       targetType: 'TranscribeVisit',
       targetId: input.visitId,
-      userId: input.doctorId,
-      practiceId: input.practiceId,
+      userId: input.authorUserId,
+      practiceId: input.tenantPracticeId,
       metadata: {
         compiledVersionId: compiled.id,
         templateVersion: row.version,

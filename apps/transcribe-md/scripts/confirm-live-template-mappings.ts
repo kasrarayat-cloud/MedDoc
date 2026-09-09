@@ -1,7 +1,30 @@
 // ============================================================================
+// ⛔ SPENT 2026-09-07 — THIS SCRIPT MUST NOT RUN AGAIN. See `assertNotSpent()`.
+// ----------------------------------------------------------------------------
+// It ran twice against production and its PLAN is now WRONG on four of its
+// eleven rows. Rulings #246 and #247 gave `Referring MD`, `Patient`, `Age` and
+// `Total minutes` real concepts; this file still pins all four to
+// `manual`/NULL, which is the state those rulings exist to end. Re-running it —
+// after a re-upload, say, when re-confirming a fresh compiled version looks like
+// the obvious move — would SILENTLY REVERT them, under a ruled-mutation
+// declaration that reads like authority.
+//
+// Found by a refutation lens on #247's own diff, which also noted the sharper
+// half: THIS FILE IS CITED AS EVIDENCE BY THE CHANGE THAT CONTRADICTS IT.
+// `concept-registry.ts` and `gate-247-visit-metadata.test.ts` both quote its
+// `/^patient$/i` and `/^age$/i` rules as the measurement of the owner's LABELS,
+// and neither noticed the same table now disagrees about the ANSWER. A file can
+// be right about the question and wrong about the answer, and quoting half of
+// it is how that survives.
+//
+// ⚠️ IT IS REFUSED RATHER THAN CORRECTED, DELIBERATELY. Updating the PLAN would
+// make it a live re-confirmation tool, and re-confirming a template is exactly
+// what the CERTIFY path is for. A one-shot ruled mutation whose act is done is
+// history, and history that can still be executed is not history.
+// ----------------------------------------------------------------------------
 // (c) — THE LIVE-TEMPLATE CONFIRMATIONS. Ruling #158, as amended 2026-08-31.
 // ----------------------------------------------------------------------------
-// A RULED MUTATION. The only door is:
+// A RULED MUTATION. The only door WAS:
 //
 //   bash scripts/run-ruled-mutation.sh --declaration <path> -- \
 //     npx tsx apps/transcribe-md/scripts/confirm-live-template-mappings.ts --commit
@@ -120,7 +143,29 @@ function decide(label: string, current: { concept: string | null; sourceType: st
   };
 }
 
+/**
+ * ⛔ The refusal. Exported so an arm can drive it rather than re-stating it.
+ *
+ * There is no override token on purpose: a bypass here is indistinguishable
+ * from the mistake it exists to prevent, and the legitimate route — re-certify
+ * the template through the certify path — is the one already built.
+ */
+// ⚠️ TYPED `void`, NOT `never`, AND THAT IS NOT SLOPPINESS. A `never` return
+// makes every statement after the call unreachable, so `tsc` narrows the whole
+// body to `never` and reports ten errors in code that is deliberately being
+// KEPT — the point of this refusal is that the historical act stays readable.
+export function assertNotSpent(): void {
+  throw new Error(
+    'REFUSED: confirm-live-template-mappings is SPENT. It ran against production ' +
+      'on 2026-09-01 and 2026-09-03, and rulings #246/#247 have since given ' +
+      'Referring MD / Patient / Age / Total minutes real concepts. This PLAN still ' +
+      'pins all four to manual/NULL, so re-running it would silently revert them. ' +
+      'To re-confirm a template, use the certify path.',
+  );
+}
+
 async function main() {
+  assertNotSpent();
   // ⚠️ NAME THE TARGET OUT LOUD. A ruled mutation that cannot say which
   // database it is about is not auditable.
   const dbHost = new URL(process.env.DATABASE_URL ?? 'postgres://unknown/unknown').hostname;
@@ -190,6 +235,31 @@ async function main() {
       required: m.required,
       blankPolicy: m.blankPolicy,
       unknownPolicy: m.unknownPolicy,
+      // ⚠️ CARRIED THROUGH AS DEFENCE-IN-DEPTH — AND THE CLAIM THAT USED TO
+      // STAND HERE WAS FALSE. It said re-running this script "would have wiped
+      // every `omit` a doctor had set". The adversarial pass refuted it and the
+      // refutation is worth keeping, because a comment that overstates a danger
+      // teaches the next reader a wrong model of this file.
+      //
+      // What is TRUE: the writer coerces `mapping.unmentionedPolicy ?? null`
+      // (`certification-lifecycle.ts:521`), so a payload that omits the field
+      // does write NULL over it. What is FALSE is that this script could ever
+      // get that far — the `expectedSha` comparison below aborts on CONFLICT
+      // before the update loop, and a literal re-run also trips the
+      // already-approved and CERTIFIED row guards at :153-154. MEASURED: zero
+      // `templateTwinSemanticMapping.update` calls in the omit case.
+      //
+      // So the field is carried here so that FIXING `expectedSha` — which this
+      // change also does — cannot quietly turn this script into the erasing
+      // caller the old comment imagined.
+      //
+      // ⚠️ AND THE CAST BELOW IS WHY NOTHING CAUGHT IT. `as unknown as
+      // SemanticMapping` makes a missing field a compile-time non-event, so the
+      // one instrument that would have named this stayed silent. The field is
+      // added here rather than the cast removed because the cast also absorbs
+      // the `sourceType`/`expectedDataType` widening this script relies on —
+      // removing it is a separate change with its own blast radius.
+      unmentionedPolicy: m.unmentionedPolicy,
       practiceDefault: null,
       status: 'certified',
     } as unknown as SemanticMapping;
@@ -247,6 +317,22 @@ async function main() {
       required: m.required,
       blankPolicy: m.blankPolicy,
       unknownPolicy: m.unknownPolicy,
+      // ⚠️ THE SECOND BUILDER, AND THE FIRST PASS PATCHED ONLY THE OTHER ONE.
+      // This projection feeds `templateTwinMappingsSha256` to produce the
+      // `expectedSha` the writer compares against its own `beforeHash`. The
+      // hash ELIDES a null (`mapping-hash.ts:22`) but carries an explicit
+      // `'omit'`, so the moment any field on the target template has one, the
+      // two hashes diverge and `updateTemplateTwinMappings` throws
+      // `CONFLICT — 'This mapping draft changed in another tab.'` before
+      // writing anything. MEASURED: server `dee7e99f…` vs script `21bd6434…`
+      // with an omit present; identical without one.
+      //
+      // ⚠️ THE FAILURE IS FAIL-CLOSED AND STILL WORTH FIXING, because the error
+      // NAMES THE WRONG CAUSE. It says another tab changed the draft, so the
+      // operator reloads — and the reload never helps, because the divergence
+      // is in this file. A refusal that misdirects costs more than one that
+      // just says no.
+      unmentionedPolicy: m.unmentionedPolicy,
       practiceDefault: m.practiceDefault,
       status: m.mappingStatus === 'CERTIFIED' ? 'certified'
         : m.mappingStatus === 'RECOGNIZED' ? 'recognized' : 'needs_confirmation',

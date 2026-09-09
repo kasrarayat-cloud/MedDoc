@@ -117,12 +117,18 @@ describe('withProcedureDateFact', () => {
 });
 
 describe('procedure-date fill is INDEPENDENTLY VALID (resolve → validate)', () => {
-  it('the injected fact resolves to a supported ISO date that passes validation', () => {
+  it('the injected fact resolves to a RECORD-DERIVED ISO date that passes validation', () => {
     const mapping = dateMapping(DOP, 'date of procedure');
     const facts = withProcedureDateFact({ fields: [DOP], mappings: [mapping], facts: [], visitDate: VISIT });
     const resolutions = resolveTemplateFields({ fields: [DOP], mappings: [mapping], facts, certifiedFieldIds: [DOP.fieldId] });
     const dop = resolutions.find((r) => r.fieldId === DOP.fieldId)!;
-    expect(dop.status).toBe('supported');
+    // ⚠️ #247 — WAS 'supported', AND THE MOVE IS THE POINT OF THE RULING, NOT A
+    // RE-BASELINE. The visit date is read off the record; nobody dictated it.
+    // `supported` asserts dictated support, and the manifest said exactly that
+    // for as long as this arm expected it — which is the misattribution the
+    // `visit_record` class and this status exist to end. The value and the
+    // validity are unchanged, which is the other half of the claim.
+    expect(dop.status).toBe('record_derived');
     expect(dop.value).toBe('2026-07-23');
 
     const v = validateTemplateTwin({

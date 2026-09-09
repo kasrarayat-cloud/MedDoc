@@ -1,5 +1,19 @@
 # ADMIN arc — read-only recon of the four owner-ordered rows
 
+> ⚠️ **SUPERSEDED 2026-09-09 by `admin-arc-recon-9rows-20260909.md`.**
+>
+> This recon covers **five** of the arc's **nine** rows. It predates the split of
+> ADMIN-2 into ADMIN-2 (subdomain) + ADMIN-2b (apex domains), and predates
+> ADMIN-6 and DELETE-MEDDOC-PRO entirely. The nine-row pass re-checked its claims
+> rather than copying them and found **57 that had drifted**, listed per row
+> there.
+>
+> **Two conclusions survive and are carried forward, not discarded:** the ADMIN-0
+> baseline, and *"the verb for ADMIN is PORT, not BUILD"* — the system-admin
+> console remains the design source. Do not work from the table below; work from
+> the nine-row table, which cites this one where it still holds.
+
+
 **2026-09-04 · Design/Admin session · owner ruling #176.**
 Eleven agents, each verdict re-derived by a second agent told to assume the
 first called something EXISTS that is only PARTIAL. Every load-bearing figure

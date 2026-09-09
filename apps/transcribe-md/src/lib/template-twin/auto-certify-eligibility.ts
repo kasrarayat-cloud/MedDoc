@@ -115,6 +115,37 @@ export interface AutoConfirmCandidate {
  * into 'model' provenance by satisfying the ordinary conditions.
  */
 export function decideAutoConfirm(c: AutoConfirmCandidate): AutoConfirmDecision {
+  // ⚠️ OWNER RULING, #247 — A `visit_metadata` MAPPING NEVER AUTO-CONFIRMS, AND
+  // IT IS REFUSED FIRST SO NO LATER ARM CAN CONFIRM IT BY SATISFYING SOMETHING
+  // ELSE.
+  //
+  // "A control that prints a patient's NAME requires a human to have seen it."
+  // Every other class this function confirms puts CLINICAL content on the page,
+  // and a wrong clinical value is wrong in a way the doctor reading the note
+  // can see. A wrong IDENTITY is different in kind: it is the one error that
+  // makes the whole document belong to somebody else, and nothing further down
+  // the page contradicts it.
+  //
+  // ⚠️ AND THE MACHINE HAS NO STANDING HERE. Auto-confirm's whole argument is
+  // that the model may accept a mapping the DOCUMENT decided. It did decide
+  // this one — `classifyFieldSource` reads the label — so the model would be
+  // confirming a proposal nobody ever doubted, and the value of the human act
+  // is not the concept check. It is that a person looked at a control that
+  // prints a patient's name and agreed it should.
+  //
+  // ⚠️ THIS IS A REFUSAL TO CONFIRM, NOT A REFUSAL TO CERTIFY. The doctor's
+  // ordinary confirm in the review workspace carries it — ruling #247 declines
+  // a fourth confirm act — so the template still certifies in one sitting. What
+  // it costs is exactly one click that a human has to make.
+  if (c.sourceType === 'visit_metadata') {
+    return {
+      confirm: false,
+      provenance: null,
+      reason:
+        'this control prints a value from the patient record — confirm it yourself',
+    };
+  }
+
   // A manual field has no concept BY CONSTRUCTION — nothing dictates who the
   // technologist on shift was. It is ready when attested, renders blank.
   if (c.sourceType === 'manual') {

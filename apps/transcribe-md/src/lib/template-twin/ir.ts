@@ -7,6 +7,7 @@
 // ============================================================================
 
 import { z } from 'zod';
+import { requiresClinicianInput } from './unmentioned-policy';
 
 export const TEMPLATE_TWIN_IR_SCHEMA_VERSION = 1 as const;
 export const TEMPLATE_TWIN_COMPILER_VERSION = 'template-docx-compiler/1.0.0';
@@ -472,6 +473,20 @@ export const EncounterFactSchema = z
         // fact, so it carries its own identity and anchor.
         'verified_note_selection',
         'clinician_correction',
+        /**
+         * #247 — A VALUE TAKEN FROM THE PATIENT RECORD, NOT FROM THE DICTATION.
+         *
+         * Its own class rather than a reuse, and per-visit by construction:
+         * `approved_practice_default` is PRACTICE-wide, and a patient's name is
+         * not a property of a practice.
+         *
+         * ⚠️ PROVENANCE IS THE WHOLE POINT. The fill path is built on cited
+         * evidence, so a record value that borrowed `encounter_evidence` would
+         * make the frozen manifest say the doctor SAID it. That is not
+         * hypothetical — `withProcedureDateFact` did exactly that until this
+         * value existed, and the manifest recorded the visit date as dictated.
+         */
+        'visit_record',
       ])
       .default('encounter_evidence'),
     concept: z.string().min(1).max(160),
@@ -589,6 +604,36 @@ export const FieldResolutionStatusSchema = z.enum([
    * `kept_default` proof kind it drives, separate them — evaluated-and-kept
    * from never-looked-at.
    */
+  /**
+   * #247 — THE VALUE CAME OFF THE PATIENT RECORD, AND THE RESOLUTION SAYS SO.
+   *
+   * ⚠️ IT IS POPULATED, LIKE `supported`, AND IT IS NOT `supported`. Both put a
+   * value on the document and both cite facts. What separates them is the only
+   * question a reader of a signed note actually asks: *did the clinician say
+   * this?* A patient's name printed on a consult letter was read out of the
+   * chart, and a manifest reporting it as `supported` beside a dictated
+   * assessment makes those two indistinguishable at the one place the
+   * distinction is recoverable.
+   *
+   * Measured against every existing member before it was added:
+   *   supported                 asserts DICTATED support. That is the claim
+   *                             being corrected, so it cannot be the carrier.
+   *   approved_practice_default a PRACTICE-wide policy value the practice
+   *                             approved once. This is PER-VISIT and belongs to
+   *                             one patient — `approved_practice_default` is
+   *                             refused for family 3 in the ruling itself, for
+   *                             exactly that reason.
+   *   not_mentioned             NOT_MENTIONED_HAS_EVIDENCE is blocking the
+   *                             moment a citation exists, and this citation is
+   *                             the point.
+   *
+   * ⚠️ AND THE SOURCE OF TRUTH IS THE FACT, NEVER THIS STATUS. The resolver
+   * derives it from `sourceType === 'visit_record'` on the cited facts and the
+   * validator re-derives it independently, in both directions — so a
+   * `record_derived` resolution citing dictation, and a `supported` resolution
+   * citing the record, are both BLOCKING. A label nothing checks is decoration.
+   */
+  'record_derived',
 ]);
 export type FieldResolutionStatus = z.infer<typeof FieldResolutionStatusSchema>;
 
@@ -692,6 +737,22 @@ export const TemplateTwinFillManifestSchema = z
          * manifest already persisted still parses.
          */
         omitted: z.number().int().nonnegative().optional(),
+        /**
+         * ⚠️ #247 — RECORD-DERIVED FILLS, COUNTED SEPARATELY BECAUSE `filled`
+         * CANNOT TELL THE DOCTOR WHICH ONES HE SAID. They are a SUBSET of
+         * `filled`, not a sibling bucket, so nothing double-counts and nothing
+         * falls into no bucket.
+         *
+         * ⚠️ `.optional()` AND EMITTED ONLY WHEN NON-ZERO — a deliberate
+         * departure from `omitted`, which is always emitted. The sign gate
+         * re-verifies a STORED manifest by recomputing these counts and
+         * comparing shas (`certification-lifecycle.ts`), so a key that appears
+         * unconditionally changes the recomputed sha of every manifest already
+         * on disk and fails a document nobody touched. Zero record-derived
+         * fills therefore produces byte-identical counts to before this
+         * existed.
+         */
+        recordDerived: z.number().int().nonnegative().optional(),
         conflicts: z.number().int().nonnegative(),
         criticalUnresolved: z.number().int().nonnegative(),
       })
@@ -699,6 +760,102 @@ export const TemplateTwinFillManifestSchema = z
   })
   .strict();
 export type TemplateTwinFillManifest = z.infer<typeof TemplateTwinFillManifestSchema>;
+
+// ══ #272 — THE RECORD-DERIVED REFUSAL VOCABULARY, IN ONE PLACE ═════════════
+//
+// A record-derived value is one the PATIENT RECORD supplies — a name, an age.
+// When the record cannot supply it, the field is blank for a NAMED reason, and
+// ruling #272 says that blank must never withhold the document:
+//
+//   A WITHHELD CONSULT OVER ONE AMBIGUOUS AGE IS THE WRONG TRADE.
+//   A DOCTOR TYPING "61" IS THE RIGHT ONE.
+//
+// ⚠️ IT LIVES HERE, AND NOT BESIDE THE INJECTOR, BECAUSE IT HAS THREE READERS
+// AND A RULE WITH THREE READERS DRIFTS. The resolver knows a refusal by the
+// CHANNEL it arrived on; `validation/index.ts` sees only a status and a
+// reasonCode and must reach the same verdict; and the injector is where the
+// tokens are minted. `ir.ts` is the module all three already import, so the
+// list is shared rather than copied.
+//
+// ⚠️ AND THE DRIFT IS ARMED, NOT TRUSTED: `gate-272` asserts that every reason
+// the injector can emit is a member of this set. Adding a refusal reason
+// without adding it here would otherwise produce a blank that silently blocks
+// the document again — the exact regression #272 exists to end, arriving
+// through the one door nobody watches.
+export const RECORD_DERIVED_REFUSAL_REASONS = [
+  'age_input_absent',
+  'age_unparseable',
+  'age_implausible',
+  'age_timezone_ambiguous',
+] as const;
+
+export type RecordDerivedRefusalReason = (typeof RECORD_DERIVED_REFUSAL_REASONS)[number];
+
+/** Is this reasonCode a record-derived refusal? The ONE reader of the list. */
+/**
+ * One refusal on the record-derived channel — the shape BOTH ends agree on.
+ *
+ * ⚠️ EXPORTED SO THERE IS ONE DECLARATION, NOT FOUR STRUCTURAL COPIES. #275's
+ * re-pass found the channel typed `unfilled: string` at both ends and in three
+ * test-local literals. A writer landing an unregistered token compiled fine,
+ * collected `neverBlocks` from the resolver (which opts out by CHANNEL), then
+ * failed `isRecordDerivedRefusal` at the validator (which re-classifies by
+ * TOKEN) — and the document was withheld again, the exact outcome #272 exists
+ * to prevent. The membership arm could not see it, because it probes four
+ * fixed tokens.
+ *
+ * `required_${...}` is the form the resolver uses when the blank DOES escalate;
+ * typing it keeps the two spellings of one token from drifting apart.
+ */
+/**
+ * Does this field DEMAND a value from somebody — i.e. is a blank here something
+ * that must be escalated rather than simply left empty?
+ *
+ * ⚠️ ONE PREDICATE, TWO READERS, AND THEY HAD ALREADY DRIFTED. #275's re-pass
+ * measured the resolver asking FIVE disjuncts and the validator asking THREE:
+ * `field.unknownPolicy === 'requires_input'` and
+ * `mapping.blankPolicy === 'requires_input'` were absent from the validator.
+ * Both sides were "correct" in isolation and each arm pointed at one reader,
+ * which is this repository's own named failure class — the same shape as
+ * `fromPersistedMapping` and `narrativeSentence`, and the reason those are
+ * exported rather than re-implemented.
+ *
+ * ⚠️ THE DRIFT WAS MASKED, WHICH IS WHY NO ARM SAW IT. `semantic-mapping`
+ * derives `blankPolicy`, `unknownPolicy` and `required` from the SAME field, so
+ * the two disjuncts the validator lacks can only arise together with one it
+ * has. That coupling is incidental — one refactor from gone — and it is what
+ * turns a latent asymmetry into a document that renders when it should have
+ * been escalated. The predicate is shared so the question cannot be asked two
+ * ways again.
+ */
+export function fieldDemandsInput(
+  field: Pick<TemplateField, 'required' | 'unknownPolicy'>,
+  mapping: Pick<SemanticMapping, 'required' | 'unknownPolicy' | 'blankPolicy'> | undefined,
+): boolean {
+  // ⚠️ IT DELEGATES — #258/#270, ONE IMPLEMENTATION. This was a second,
+  // byte-identical statement of the same five disjuncts, and the module that
+  // claimed to be the single source imported a symbol NOTHING CALLED: the
+  // resolver read this copy while the confirm panel and the certification
+  // writer read the other. Identical bodies meant correct behaviour and a live
+  // exposure — edit either and the offer moves without the honouring, or the
+  // reverse, which is the drift `unmentioned-policy.ts` exists to prevent.
+  //
+  // The body lives THERE and not here because that module is client-imported
+  // and may not value-import this one: doing so puts 320,991 bytes of zod into
+  // the client bundle. See its header.
+  return requiresClinicianInput(field, mapping);
+}
+
+export type RecordDerivedRefusal = {
+  fieldId: string;
+  unfilled: RecordDerivedRefusalReason;
+  required: `required_${RecordDerivedRefusalReason}`;
+};
+
+export function isRecordDerivedRefusal(reasonCode: string | null | undefined): boolean {
+  if (!reasonCode) return false;
+  return (RECORD_DERIVED_REFUSAL_REASONS as readonly string[]).includes(reasonCode);
+}
 
 export function templateTwinCounts(
   fields: readonly FieldResolution[],
@@ -717,8 +874,14 @@ export function templateTwinCounts(
     'needs_clinician_input',
     'denial_withheld',
   ]);
+  // #247 — see the schema comment: PRESENT ONLY WHEN NON-ZERO, so a manifest
+  // stored before this status existed recomputes to the same sha.
+  const recordDerived = fields.filter(
+    (field) => field.status === 'record_derived',
+  ).length;
   return {
     filled: fields.filter((field) => field.value !== null).length,
+    ...(recordDerived > 0 ? { recordDerived } : {}),
     needsReview: fields.filter((field) => unresolved.has(field.status)).length,
     // ⚠️ #194 — AN `omit` IS NOT COUNTED, AND A NULL POLICY IS. Both take the
     // bounded clear, so the PAGE is identical; the difference is what the doctor
@@ -761,3 +924,22 @@ export function templateTwinCounts(
     ).length,
   };
 }
+
+// ============================================================================
+// ⚠️ MOVED HERE FROM `semantic-mapping/index.ts` — FOR THE CLIENT BOUNDARY.
+// ----------------------------------------------------------------------------
+// This is a pure kind -> expected-type switch with no dependencies, and it is
+// the ONE definition of that mapping. It lived beside `isMappingTypeCompatible`
+// until `unmentioned-policy.ts` needed it: that module is imported as a VALUE
+// by the `'use client'` confirm surface, and `semantic-mapping/index.ts` pulls
+// `@meddoc/ai` (`modelClient`) — so importing it there would have dragged the
+// AI client into the browser graph to ask a question about a switch statement.
+//
+// `ir.ts` imports zod and nothing else, so it is safe from the client.
+// `semantic-mapping/index.ts` RE-EXPORTS it, so every existing caller — four
+// in that file, four in tests — resolves unchanged. One copy, two addresses.
+
+// ⚠️ RE-EXPORTED, NOT REDEFINED. The body lives in `field-kind-data-type.ts`, a
+// true leaf with no value imports, because this file value-imports zod and a
+// `'use client'` module needs that switch without the 105 schemas. One copy.
+export { expectedDataTypeForFieldKind } from './field-kind-data-type';
