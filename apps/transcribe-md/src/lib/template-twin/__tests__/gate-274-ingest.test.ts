@@ -372,15 +372,26 @@ describe("#274 · ⚠️ AMBIGUITY IS PER-KEY — the owner's form proved it", (
   // ══════════════════════════════════════════════════════════════════════════
   // THE RULED ACT'S OWN GUARD CAUGHT THIS, BEFORE A ROW MOVED.
   //
-  // The owner's 53-control form carries 53 tags but only 35 DISTINCT ones —
-  // `plan` five times, `impression` four, `past_medical_history` three. The
+  // The owner's 53-control form carries 53 tags but only 35 DISTINCT ones. The
   // first bijection asked whether EVERY key a field answers to is unique and
-  // disqualified the field entirely if any one was shared. So eighteen controls
-  // whose `fieldId` is unique and EXACT — the re-issue re-ingests the very
-  // artifact the certified version was compiled from — were refused because a
-  // DIFFERENT key of theirs was ambiguous.
+  // disqualified the field entirely if any one was shared. So every control
+  // with a shared tag was refused — even though its `fieldId` is unique and
+  // EXACT, the re-issue re-ingesting the very artifact the certified version
+  // was compiled from.
   //
-  // Measured: 20 planned where 43 was declared. TRANSFER_COUNT_MISMATCH.
+  // ⚠️ MEASURED ON `18a7ae19`, NOT INFERRED. EIGHT tags are shared, not three:
+  // plan x5, impression x4, patient_is_a_pleasant_age_... x4, family_history
+  // x3, past_medical_history x3, past_surgical_history x3, allergies x2,
+  // the_patient_medications_were_reviewed_an x2. That is 26 controls sharing a
+  // tag, 23 of them among the 43 `extraction` rows.
+  //
+  //     18 IS THE SURPLUS (53 - 35), NOT A CONTROL COUNT. An earlier version of
+  //     this comment said "eighteen controls" in both this file and
+  //     ingest-plan.ts; both members of a shared pair are refused, not just the
+  //     extra one.
+  //
+  // Measured: 20 planned where 43 was declared (43 - 23 = 20, exactly).
+  // TRANSFER_COUNT_MISMATCH.
   //
   //     AMBIGUITY IS A PROPERTY OF A KEY, NOT OF A CONTROL.
   // ══════════════════════════════════════════════════════════════════════════
@@ -402,6 +413,12 @@ describe("#274 · ⚠️ AMBIGUITY IS PER-KEY — the owner's form proved it", (
   it('and the shared TAG still carries nothing when the fieldIds differ', () => {
     // changed bytes: ids rotate, so only the tag could match — and it is shared,
     // so nothing may transfer. The safety property is untouched.
+    //
+    // ⚠️ REGRESSION GUARD, NOT A PROOF OF THE PER-KEY DELTA — measured, and
+    // stated because the commit that added it claimed otherwise. Run against
+    // the PRE-#1087 per-FIELD code this arm ALSO passes: old and new both
+    // refuse everything here, for different reasons. It is worth keeping and it
+    // does not discriminate.
     const src = ir([withTag('ttf_' + 'a'.repeat(24), 'plan', 'Plan A'), withTag('ttf_' + 'b'.repeat(24), 'plan', 'Plan B')]);
     const certs = new Map([
       ['ttf_' + 'a'.repeat(24), certified('ttf_' + 'a'.repeat(24), 'concept_a')],
@@ -413,8 +430,15 @@ describe("#274 · ⚠️ AMBIGUITY IS PER-KEY — the owner's form proved it", (
   });
 
   it('a UNIQUE tag still carries across rotated ids, beside ambiguous siblings', () => {
-    // ⚠️ THE MIXED CASE, which is what the real form is: one unique tag among
-    // duplicates. It must still work.
+    // one unique tag among duplicates, with the ids rotated.
+    //
+    // ⚠️ REGRESSION GUARD, NOT A PROOF OF THE PER-KEY DELTA. This arm's own
+    // comment used to read "THE MIXED CASE, which is what the real form is",
+    // and the commit message advertised it as such. It is neither. Measured
+    // against the PRE-#1087 code it passes unchanged: `exam_lungs` is unique on
+    // BOTH sides, so the per-FIELD rule never disqualified it either. The real
+    // form's mixed case is IDENTICAL bytes with shared and unique tags side by
+    // side — the arm below, which is the one that discriminates.
     const src = ir([
       withTag('ttf_' + 'e'.repeat(24), 'plan', 'Plan A'),
       withTag('ttf_' + 'f'.repeat(24), 'plan', 'Plan B'),
@@ -433,6 +457,94 @@ describe("#274 · ⚠️ AMBIGUITY IS PER-KEY — the owner's form proved it", (
     const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
     expect(plan.transferred).toHaveLength(1);
     expect(plan.transferred[0]!.mapping.clinicalConcept).toBe('c_lungs');
+  });
+
+  it("⚠️ THE REAL FORM'S MIXED CASE — shared and unique tags side by side, IDENTICAL bytes", () => {
+    // ⚠️ THIS IS THE ARM THE COMMIT CLAIMED TO HAVE AND DID NOT, and it is the
+    // shape the ruled act actually runs: the re-issue re-ingests the very
+    // artifact the certified version was compiled from, so the bytes — and
+    // therefore every `fieldId` — are IDENTICAL on both sides.
+    //
+    // MEASURED ON THE CERTIFIED VERSION `18a7ae19`: 53 controls, 53 tags, 35
+    // distinct. EIGHT tags are shared, covering 26 controls; 27 controls have a
+    // tag of their own. Of the 43 `extraction` rows the act transfers, 23 sit
+    // on a shared tag and 20 do not.
+    //
+    // Under the PRE-#1087 per-FIELD rule this arm yields 2 of 5 — only the
+    // unique-tag controls survive, and 43 - 23 = 20 is that same subtraction on
+    // the real document. Under the shipped per-KEY rule it yields 5 of 5.
+    // THAT is what makes this arm load-bearing where the two above are not.
+    const shared = ['ttf_' + 's'.repeat(24), 'ttf_' + 't'.repeat(24), 'ttf_' + 'u'.repeat(24)];
+    const unique = ['ttf_' + 'v'.repeat(24), 'ttf_' + 'w'.repeat(24)];
+    const doc = ir([
+      ...shared.map((id, i) => withTag(id, 'plan', `Plan ${i}`)),
+      withTag(unique[0]!, 'impression', 'Impression'),
+      withTag(unique[1]!, 'exam_lungs', 'Lungs'),
+    ]);
+    const all = [...shared, ...unique];
+    const certs = new Map(all.map((id, i) => [id, certified(id, `concept_${i}`)]));
+
+    // identical bytes => the SAME document on both sides
+    const plan = planTransfer({ target: doc, sourceIr: doc, certifiedByFieldId: certs });
+
+    expect(plan.transferred, 'a shared tag still blocked its own exact fieldId').toHaveLength(5);
+    expect(plan.reproposed).toEqual([]);
+    // ⚠️ AND EACH ROW LANDS ON ITS OWN CONTROL. A count is not a pairing —
+    // five transfers that cite the wrong sources would satisfy the line above.
+    for (const [i, id] of all.entries()) {
+      const row = plan.transferred.find((t) => t.fieldId === id);
+      expect(row, `no row for ${id}`).toBeDefined();
+      expect(row!.fromFieldId, 'a disposition landed on a different control').toBe(id);
+      expect(row!.mapping.clinicalConcept).toBe(`concept_${i}`);
+    }
+    expect(new Set(plan.transferred.map((t) => t.fromFieldId)).size).toBe(5);
+  });
+
+  it('⚠️ a NUL inside a w:tag cannot borrow another control identity', () => {
+    // ⚠️ THE REGRESSION THE REFUTATION PASS FOUND, kept as a test so the lossy
+    // parse cannot come back. `ambiguityKeyFor` used to recover the ambiguity
+    // key by splitting the joined MATCH key on NUL and keeping three fields:
+    //
+    //     match     tag \0 <part> \0 x \0 y \0 <kind>      (tag is "x\0y")
+    //     recovered tag \0 <part> \0 x                      <- a DIFFERENT control's key
+    //
+    // ⚠️ AND THE SIBLING BELOW IS LOAD-BEARING, NOT SCENERY. Without a control
+    // whose tag is exactly `x`, the truncated key has count 0, `keyIsUnique` is
+    // false and the old code failed CLOSED — so an arm without it passes under
+    // BOTH implementations and proves nothing. The pass measured that
+    // precondition explicitly; this arm encodes it.
+    //
+    // Pre-#1087 the per-FIELD rule refused these (it read the real 4-segment
+    // key, count 2). The lossy parse made them read as UNIQUE — so this was a
+    // regression, and the arm discriminates in that direction.
+    const P = 'ttf_' + 'k'.repeat(24);
+    const Q = 'ttf_' + 'l'.repeat(24);
+    const R = 'ttf_' + 'r'.repeat(24);
+    // P and Q genuinely share the NUL-bearing tag; R owns the truncation of it.
+    const src = ir([withTag(P, 'x\u0000y', 'A'), withTag(Q, 'x\u0000y', 'B'), withTag(R, 'x', 'Plain')]);
+    const certs = new Map([
+      [P, certified(P, 'c_p')],
+      [Q, certified(Q, 'c_q')],
+      [R, certified(R, 'c_r')],
+    ]);
+
+    // identical bytes: every exact fieldId carries, and each onto ITSELF.
+    const same = planTransfer({ target: src, sourceIr: src, certifiedByFieldId: certs });
+    expect(same.transferred).toHaveLength(3);
+    for (const row of same.transferred) expect(row.fromFieldId).toBe(row.fieldId);
+
+    // rotated ids: only tags are left. The shared NUL-bearing tag names nobody,
+    // so P and Q inherit NOTHING; R's own unique tag still carries.
+    const tgt = ir([
+      withTag('ttf_' + 'm'.repeat(24), 'x\u0000y', 'A'),
+      withTag('ttf_' + 'z'.repeat(24), 'x\u0000y', 'B'),
+      withTag('ttf_' + 'n'.repeat(24), 'x', 'Plain'),
+    ]);
+    const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
+    expect(
+      plan.transferred.map((t) => t.mapping.clinicalConcept),
+      'a NUL-bearing shared tag carried a disposition',
+    ).toEqual(['c_r']);
   });
 });
 
@@ -764,12 +876,47 @@ describe('#274 · ⚠️ AN AMBIGUOUS KEY TRANSFERS TO NOBODY — the bijection'
   });
 
   it('⚠️ ONE certified row is consumed by AT MOST ONE control', () => {
-    // The property stated directly, rather than through a fixture: no two
-    // transferred rows may cite the same source.
-    const src = ir([dup('ttf_' + 'n'.repeat(24), '700', 'Only one')]);
-    const certs = new Map([['ttf_' + 'n'.repeat(24), certified('ttf_' + 'n'.repeat(24), 'the_concept')]]);
-    const tgt = ir([dup('ttf_' + 'o'.repeat(24), '700', 'Only one'), dup('ttf_' + 'p'.repeat(24), '700', 'Copy')]);
+    // ⚠️ THIS ARM WAS VACUOUS UNTIL 2026-09-09, AND ITS OLD FIXTURE IS WHY IT
+    // IS WRITTEN OUT AT LENGTH NOW. It used to give BOTH target controls the
+    // tag `700`, so the TARGET-side uniqueness check refused both before the
+    // `consumed` guard was ever reached: `transferred` was `[]` and the
+    // assertion reduced to `new Set([]).size === [].length` — 0 === 0, true for
+    // every possible implementation, including one with no guard at all.
+    // Measured: DELETING the `consumed` Set left the whole suite green,
+    // 1045/1045. A test that cannot fail is not a test.
+    //
+    // The shape below actually reaches the guard. Source A carries tag `plan`
+    // and IS certified; source B carries tag `zzz` and is not. The two target
+    // controls are their ids SWAPPED:
+    //
+    //   target bbbb/plan  — its own `fid` finds source B, which has no
+    //                       certified row, so it falls through to the TAG key
+    //                       and legitimately claims source A.
+    //   target aaaa/qqq   — its own `fid` finds source A, which is now
+    //                       CONSUMED. Only the guard stops it claiming A a
+    //                       second time.
+    //
+    // With the guard: 1 transfer, A consumed once, aaaa re-proposed.
+    // Without it:     2 transfers BOTH citing A — two controls wearing one
+    //                 clinical meaning, which is the harm the guard exists for.
+    const A = 'ttf_' + 'a'.repeat(24);
+    const B = 'ttf_' + 'b'.repeat(24);
+    const src = ir([dup(A, 'plan', 'Plan'), dup(B, 'zzz', 'Other')]);
+    const certs = new Map([[A, certified(A, 'clinical.plan')]]);
+    const tgt = ir([dup(B, 'plan', 'Plan'), dup(A, 'qqq', 'Other')]);
+
     const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
+
+    // ⚠️ THE LENGTH IS ASSERTED FIRST AND ON PURPOSE. Distinctness alone is
+    // satisfiable by an empty array, which is exactly how this arm went
+    // vacuous the first time.
+    expect(plan.transferred, 'the guard-reaching path did not transfer').toHaveLength(1);
+    expect(plan.transferred[0]!.fieldId).toBe(B);
+    expect(plan.transferred[0]!.fromFieldId).toBe(A);
+    expect(plan.transferred[0]!.mapping.clinicalConcept).toBe('clinical.plan');
+    // A is spent, so the control that would otherwise claim it is re-proposed.
+    expect(plan.reproposed, 'the second claimant was not re-proposed').toContain(A);
+
     const sources = plan.transferred.map((t) => t.fromFieldId);
     expect(new Set(sources).size, 'a certified row was consumed twice').toBe(sources.length);
   });
