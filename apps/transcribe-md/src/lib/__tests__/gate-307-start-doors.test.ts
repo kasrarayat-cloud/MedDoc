@@ -13,6 +13,12 @@
 //      persisted at CREATE time; it reads no compose file. The object is
 //      `Exited (143)`, its image is present, its network alias and its baked
 //      `DATABASE_URL` (sha-identical to the live app's) are intact.
+//      ⚠️ AND IT REVIVES THE BAKED 2026-05-05 IMAGE, NOT HEAD — an unaudited
+//      build carrying unlocked `isActive` / `deactivatedAt` writers and an
+//      unlocked `users` DELETE, with `withPracticeLock` absent from the whole
+//      bundle. `practiceRole` is not in it; that column landed two days after
+//      the container last ran. Different verb, different code — "it restores
+//      the four writers" would have been wrong in both directions.
 //      ⚠️ **THIS GATE DOES NOT CLOSE THAT DOOR** — closing it means
 //      `docker rm`, an irreversible production deletion, which is an owner act.
 //      What this gate enforces is that the DECLARATION keeps naming it.
