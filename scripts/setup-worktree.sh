@@ -16,22 +16,69 @@ TARGET="$(cd "$TARGET" && pwd)"
 [ "$TARGET" != "$SHARED" ] || { echo "🔴 setup-worktree: refusing to rewrite the SHARED tree's node_modules."; exit 1; }
 [ -d "$TARGET/packages" ] || { echo "🔴 setup-worktree: $TARGET has no packages/."; exit 1; }
 
+# ⚠️ RULING #282 — THE MIRROR REFUSES A REAL-DIRECTORY DESTINATION, NAMING IT.
+#
+# `ln -sfn SRC DST` does NOT replace DST when DST is a REAL DIRECTORY. It puts
+# the link INSIDE it, as `DST/$(basename SRC)` — and `-f` makes it overwrite
+# whatever was already there under that name. `-n` does not help: it only stops
+# dereferencing a symlink-to-directory, and a real directory is not one.
+#
+# ⚠️ MEASURED, ON A WORKTREE THAT ALREADY HAD A REAL `npm install`: **680
+# packages** received a self-nested `pkg/pkg -> /shared/node_modules/pkg` link,
+# and for `decimal.js` — a package whose own main file shares the package's name
+# — the link OVERWROTE THE REAL FILE. The tree then failed with
+# `Cannot find module '.../decimal.js/decimal.js'`, and the vitest pool could not
+# start at all.
+#
+# ⚠️ AND IT PRINTED `🟢 linked N entries` THE WHOLE TIME. `n` counted `ln`
+# invocations that returned 0, which every one of those did — they succeeded at
+# creating a link in the wrong place. That is the *"a script that prints a number
+# it does not act on"* family, with the number counting intentions.
+#
+# The old line only ever removed a SYMLINK destination (`[ -L "$dst" ] && rm`),
+# which is the one case that was already safe. A real directory is the dangerous
+# one and it was the one left standing.
 link_tree() {  # $1 = source node_modules, $2 = destination
   local src="$1" dst="$2"
   [ -d "$src" ] || return 0
   [ -L "$dst" ] && rm "$dst"          # a SYMLINK only; never the target
   mkdir -p "$dst"
-  local n=0
+  local n=0 refused=0
   for e in "$src"/* "$src"/.bin; do
     [ -e "$e" ] || continue
     local b; b="$(basename "$e")"
     [ "$b" = "@meddoc" ] && continue
+    # ⚠️ THE REFUSAL, AND IT NAMES THE PATH. A destination that is a real
+    # directory (not a symlink to one) would swallow the link instead of being
+    # replaced by it, so the mirror does not guess — it stops and says which.
+    if [ -d "$dst/$b" ] && [ ! -L "$dst/$b" ]; then
+      if [ "$refused" -eq 0 ]; then
+        echo "🔴 setup-worktree: REFUSING — the destination already holds REAL directories." >&2
+        echo "   \`ln -sfn\` would nest the link INSIDE each one and report success," >&2
+        echo "   and with -f it overwrites any file of the same name. That is how a" >&2
+        echo "   tree with a real \`npm install\` lost 680 packages and its decimal.js." >&2
+        echo "   Remove the directory and re-run, or use the tree as it is:" >&2
+      fi
+      refused=$((refused + 1))
+      [ "$refused" -le 5 ] && echo "     $dst/$b" >&2
+      continue
+    fi
     ln -sfn "$e" "$dst/$b" && n=$((n+1))
   done
+  if [ "$refused" -gt 0 ]; then
+    echo "   ... and $((refused > 5 ? refused - 5 : 0)) more" >&2
+    echo "🔴 setup-worktree: $refused real-directory destination(s); nothing further was linked into ${dst#$TARGET/}." >&2
+    return 1
+  fi
   echo "   linked $n entries into ${dst#$TARGET/}"
 }
 
-link_tree "$SHARED/node_modules" "$TARGET/node_modules"
+link_tree "$SHARED/node_modules" "$TARGET/node_modules" || {
+  echo "🔴 setup-worktree: STOPPING. The tree was NOT made runnable, and nothing" >&2
+  echo "   further was linked — a half-mirrored tree resolves @meddoc/* to the" >&2
+  echo "   SHARED tree, so a green in it can be a green about another tree's code." >&2
+  exit 1
+}
 mkdir -p "$TARGET/node_modules/@meddoc"
 for pkg in "$TARGET"/packages/*; do
   [ -d "$pkg" ] || continue
@@ -41,7 +88,10 @@ echo "   @meddoc/* -> $TARGET/packages/*  (LOCAL)"
 
 for app in "$TARGET"/apps/*; do
   [ -d "$app" ] || continue
-  link_tree "$SHARED/apps/$(basename "$app")/node_modules" "$app/node_modules"
+  link_tree "$SHARED/apps/$(basename "$app")/node_modules" "$app/node_modules" || {
+    echo "🔴 setup-worktree: STOPPING at $app — see above." >&2
+    exit 1
+  }
 done
 
 # ── PRISMA GETS REAL DIRECTORIES, NOT SYMLINKS. ─────────────────────────────
