@@ -226,7 +226,27 @@ jobs:
         run: npx playwright install chromium
         working-directory: apps/transcribe-md
 
-      - name: Run test pipeline (seed + vitest + playwright)
+      # ⚠️ DMP-a, ROUND TWO — THIS STEP WAS THE COUPLING THE FIRST PASS MISSED,
+      # THREE LINES BELOW ONE IT EDITED. `npm run test:all` resolved at the
+      # repo root to `npm run test:all -w meddoc-pro`, so DELETE-MEDDOC-PRO
+      # made it exit 1 with `npm error No workspaces found: --workspace=
+      # meddoc-pro` — in the `test` job, which is a REQUIRED context, so every
+      # PR would have been unmergeable until somebody deleted this step under
+      # pressure. Measured with the app moved out of the tree: EXIT=1 absent,
+      # EXIT=0 present.
+      #
+      # ⚠️ AND THE STEP NAME WAS A LIE THE WHOLE TIME. That workspace's
+      # `test:all` is an echo (the CRM decommission), so this step has run NO
+      # seed, NO vitest and NO playwright since. The name is corrected rather
+      # than the behaviour: what this job would need in order to gate anything
+      # again is a separate decision, filed — not something to smuggle into a
+      # decoupling fix. The in-scope unit suite is gated by the `unit` job
+      # below; e2e by `.github/workflows/e2e.yml`.
+      #
+      # The coupling is fixed at the SHARED SEAM — root `package.json`'s
+      # `test:all` — so every other caller of it is fixed too, and
+      # `gate-dmp-a-workspace-coupling` reds if any workflow acquires a new one.
+      - name: Run root test:all (a no-op echo since the CRM decommission)
         run: npm run test:all
 
       - name: Upload Playwright report on failure
