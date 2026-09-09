@@ -1,4 +1,4 @@
-# §2.5 DECLARATION — the composed deploy of `2d33a226`
+# §2.5 DECLARATION — the composed deploy of `51dea72d`
 
 **Written and committed BEFORE the deploy. Owner-ruled STRICT**, above what the
 script's own logic would require: it is code-only (repo migrations 115 = applied
@@ -18,7 +18,7 @@ a rollback tag's name, and not typed. `git merge-base --is-ancestor` confirms it
 is an ancestor of the head, so the range is a well-formed fast-forward.
 
 ```
-HEAD = 2d33a2261122...   (the merge of #1076)
+HEAD = 51dea72ddb680e6ba1af81c230339ffcf5eaef4d   (the merge of #1079)
 ```
 
 ⚠️ **AMENDED BEFORE THE DEPLOY, NOT AFTER — THREE TIMES NOW, AND THE THIRD IS
@@ -130,6 +130,37 @@ committed `2026-09-08T18:28:05Z`) names runtime files that appear in this range 
 is what makes its code reachable. It is judged separately, after this deploy, on
 its own act — deferred here **by name**, which is what the rule requires rather
 than silence.
+
+## ⚠️ FOURTH AMENDMENT — THE TRANSFER SELECTS BY SOURCE TYPE
+
+**#1079, and the guard in the HELD re-issue declaration is what found it.**
+
+Measured on the certified version `18a7ae19`:
+
+| sourceType | mappingStatus | count |
+|---|---|---|
+| `extraction` | CERTIFIED | **43** |
+| `manual` | CERTIFIED | **10** |
+
+**All fifty-three are `CERTIFIED`.** `planTransfer` filtered on `mappingStatus`
+alone, so it would have transferred **53**, while the ruling says *transfer the
+43, re-propose the ten*. The split the ruling names is by **source type**, and
+the two are easy to conflate here because one implies the other.
+
+> **A declaration whose numbers come from the RULING rather than from the CODE
+> is the only thing that can disagree with the code.**
+
+`expectTransferCount: 43` would have aborted the act *after* it had already read
+production. The disagreement surfaced before a row moved.
+
+**The passenger:** `ingest.ts` and `re-issue-form.ts` gain a required
+`transfer-source-types` selection — the same vocabulary `transfer-args.ts`
+already requires for the standalone tool, whose own comment records that an
+empty selection once selected **zero of 53** and failed closed. Never defaulted
+for a ruled act.
+
+**What the act will now do:** transfer the **43** `extraction` rows, re-propose
+the **10** `manual` ones — which are precisely the rows the owner then confirms.
 
 ## ⚠️ THE ADVISORY ROW — its own judgement, owner-ruled
 
