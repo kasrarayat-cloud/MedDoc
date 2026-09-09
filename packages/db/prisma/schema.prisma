@@ -3680,12 +3680,19 @@ model PlatformRate {
   marginNumerator   Int
   marginDenominator Int
 
-  /// The instant this rate begins to apply. ⚠️ FORWARD-ONLY BY **CONSTRAINT**,
+  /// The instant this rate begins to apply. **NULL on the way in means
+  /// "immediately"** — the BEFORE INSERT trigger fills it with the server's own
+  /// `clock_timestamp()`, so it is never null at rest and can never be in the
+  /// past. ⚠️ Round 3 stamped `createdAt` with `clock_timestamp()` and thereby
+  /// made every honest spelling of "now" refusable BY MICROSECONDS; NULL is the
+  /// one spelling that cannot lose that race.
+  ///
+  /// ⚠️ FORWARD-ONLY BY **CONSTRAINT**,
   /// not by policy: `platform_rates_forward_only` refuses `effectiveFrom <
   /// createdAt`. Anchoring the READ to the usage instant stops a backlog being
   /// re-priced by the run clock; it does NOT stop a backdated row, and the
   /// first version of this file claimed otherwise — #178.
-  effectiveFrom DateTime @db.Timestamptz(6)
+  effectiveFrom DateTime? @db.Timestamptz(6)
 
   /// ⚠️ WHO CHANGED IT — AND THE LINK IS NULLABLE WHILE THE FACT IS NOT.
   ///

@@ -8,7 +8,7 @@ One migration, `20260909060000_admin4_platform_rate`.
 | # | quantity | before | after |
 |---|---|---|---|
 | 1 | `platform_rates` table | does not exist | exists, **0 rows** |
-| 2 | `platform_rates` CHECK constraints | — | **3** (`margin_bounds`, `previous_pair`, `forward_only`) |
+| 2 | `platform_rates` CHECK constraints | — | **5** (`margin_bounds`, `previous_pair`, `previous_bounds`, `actor_present`, `forward_only`) |
 | 2b | `platform_rates` TRIGGERS | — | **4** (`stamp_created_before_insert`, `no_update`, `no_delete`, `no_truncate`) |
 | 3 | `platform_rates` FK to `users` | — | **1**, `ON DELETE SET NULL` |
 | 4 | index on `effectiveFrom` | — | **1** |
@@ -142,3 +142,33 @@ Also from round 3, all fixed:
   a type, not enforcement.**
 
 Rows 4–10 unaffected.
+
+## ⚠️ AMENDED A FOURTH TIME — round 4, and the first finding was my own regression
+
+Round 4 applied the migration byte-for-byte to a real PG 16.13 and attacked it.
+
+⚠️ **Round 3's `clock_timestamp()` fix had stranded the writer completely.**
+`effectiveFrom = now()` was **refused by nine microseconds** — `now()` is
+transaction-start, the stamp is statement-time. Every honest spelling failed;
+only a *guessed* future offset landed (+1 ms refused, +10 ms accepted), and
+Prisma sends a client-computed `new Date()` which is earlier still. **The writer
+#178 calls for could not have set a rate at all**, and the refusal would have
+read like an attack being blocked. Fail-closed is the rule; **stranding is not**.
+
+`effectiveFrom` is now **nullable on the way in**, meaning *immediately*, filled
+by the trigger from the server's own clock. Both properties at once: no
+retroactive window, and one spelling that cannot lose the race.
+
+Three more, all verified on the same database:
+
+- the self-verify counted by **`relname`**, so a decoy `archive.platform_rates`
+  made it report 4 triggers while `public` had 3 — **certifying a table that had
+  lost its TRUNCATE arm**. Now `regclass`, matching the prior art verbatim.
+- `changedByLabel NOT NULL` accepted **`''`** — a price change with no actor.
+  New CHECK.
+- the **previous** pair accepted `0/0` and `-7/-1`. New CHECK, same bounds as the
+  current value. **Row 2 goes 3 → 5.**
+
+**Measured after the fixes, on the real database:** immediate ✅ · backdated
+refused · TRUNCATE refused · blank actor refused · `0/0` previous refused ·
+out-of-bounds refused · UPDATE refused · a legitimate future row lands.

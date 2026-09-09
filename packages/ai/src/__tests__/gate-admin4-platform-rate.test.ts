@@ -470,6 +470,23 @@ describe('ADMIN-4 round 3 — the operation refuses, it does not merely document
     );
     expect(sql, 'no self-verify — `prisma migrate dev` cannot see triggers').toContain('$verify$');
     expect(sql, 'the verify block does not count the TRUNCATE arm').toContain('n_trig <> 4');
+    // ⚠️ ROUND 4 — `regclass`, not `relname`. Without a namespace filter the
+    // verify block counts same-named relations in OTHER schemas: measured, a
+    // decoy `archive.platform_rates` made it count 4 while `public` had 3, and
+    // it CERTIFIED a table that had lost its TRUNCATE arm.
+    expect(sql, 'the verify block asks by name, not by regclass').toContain(
+      "tgrelid = '\"platform_rates\"'::regclass",
+    );
+    // ⚠️ AND "EFFECTIVE IMMEDIATELY" MUST BE EXPRESSIBLE. Round 3's
+    // clock_timestamp() stamp made every honest spelling of "now" refusable by
+    // MICROSECONDS — measured on PG 16.13, `effectiveFrom = now()` refused by 9µs
+    // — so the writer #178 calls for could not have set a rate at all. NULL is
+    // the one spelling that cannot lose that race.
+    expect(sql, 'NULL effectiveFrom does not mean "immediately"').toContain(
+      'NEW."effectiveFrom" := NEW."createdAt"',
+    );
+    expect(sql, 'the actor may still be blank').toContain('platform_rates_actor_present');
+    expect(sql, 'the PREVIOUS pair is unbounded').toContain('platform_rates_previous_bounds');
     expect(sql, 'createdAt uses transaction-start time, not statement time').toContain(
       'clock_timestamp()',
     );

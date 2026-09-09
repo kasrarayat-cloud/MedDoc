@@ -22,7 +22,9 @@ CREATE TABLE "platform_rates" (
     "id" TEXT NOT NULL,
     "marginNumerator" INTEGER NOT NULL,
     "marginDenominator" INTEGER NOT NULL,
-    "effectiveFrom" TIMESTAMPTZ(6) NOT NULL,
+    -- NULLABLE ON THE WAY IN — the BEFORE INSERT trigger fills it with the
+    -- server's own clock and it is never null at rest. See the trigger.
+    "effectiveFrom" TIMESTAMPTZ(6),
     "changedByUserId" TEXT,
     -- ⚠️ THE ACTOR SNAPSHOT, AND IT IS NOT REDUNDANT WITH THE FK.
     -- The FK detaches on user deletion (the house rule: audit rows DETACH, never
@@ -61,6 +63,32 @@ ALTER TABLE "platform_rates" ADD CONSTRAINT "platform_rates_margin_bounds" CHECK
 -- is worse than none, because it reads as a complete one.
 ALTER TABLE "platform_rates" ADD CONSTRAINT "platform_rates_previous_pair" CHECK (
   ("previousNumerator" IS NULL) = ("previousDenominator" IS NULL)
+);
+
+-- ⚠️ THE ACTOR CANNOT BE BLANK — ROUND 4. `NOT NULL` does not stop `''`, so a
+-- price change could be written with no recorded actor of any kind: measured,
+-- `changedByLabel = ''` with `changedByUserId = NULL` was accepted. The column's
+-- own comment claims "the writer cannot omit it"; NOT NULL alone did not deliver
+-- that. Every other invariant here is enforced by the DATABASE precisely so it
+-- does not depend on whichever writer remembers — the actor was the one that did.
+ALTER TABLE "platform_rates" ADD CONSTRAINT "platform_rates_actor_present" CHECK (
+  length(btrim("changedByLabel")) > 0
+);
+
+-- ⚠️ AND THE PREVIOUS PAIR OBEYS THE SAME BOUNDS AS THE CURRENT ONE — ROUND 4.
+-- `previous_pair` checked only that the two are NULL together, so `0/0` and
+-- `-7/-1` were both accepted. The margin CHECK's own comment names this hazard
+-- one paragraph earlier — "A ZERO OR NEGATIVE DENOMINATOR IS A DIVISION FAULT,
+-- NOT A BAD SETTING" — and it was applied to the current value and not to the
+-- recorded previous one, which exists to BE READ ("so the history reads without
+-- a self-join"). A `0/0` previous value reads as a complete history too.
+ALTER TABLE "platform_rates" ADD CONSTRAINT "platform_rates_previous_bounds" CHECK (
+  "previousNumerator" IS NULL OR (
+        "previousDenominator" > 0
+    AND "previousNumerator"   > 0
+    AND "previousNumerator" >= "previousDenominator"
+    AND "previousNumerator" <= 5 * "previousDenominator"
+  )
 );
 
 -- ⚠️ FORWARD-ONLY IS ENFORCED HERE, NOT MERELY STATED.
@@ -122,6 +150,28 @@ BEGIN
     -- retroactive window from a `pg_sleep(3)` before the INSERT. The admin
     -- writer #178 calls for will run inside a transaction.
     NEW."createdAt" := clock_timestamp();
+    -- ⚠️ NULL MEANS "EFFECTIVE IMMEDIATELY", AND WITHOUT IT ROUND 3's FIX
+    -- STRANDED THE WRITER COMPLETELY.
+    --
+    -- Round 3 stamped `createdAt` with `clock_timestamp()` to close a measured
+    -- 3.011s retroactive window. Correct — and it made `effectiveFrom = now()`
+    -- REFUSED BY NINE MICROSECONDS, because `now()` is transaction-start and the
+    -- stamp is statement-time. Measured on a real PG 16.13: every spelling an
+    -- honest writer has — `now()`, `CURRENT_TIMESTAMP`, `statement_timestamp()`,
+    -- even `clock_timestamp()` itself — was refused, and only a GUESSED future
+    -- offset landed (+1ms refused, +10ms accepted). Prisma sends a
+    -- client-computed `new Date()`, always earlier still, and cannot send a raw
+    -- SQL expression through `create()` at all.
+    --
+    -- So the writer #178 calls for could not have set a rate AT ALL, and the
+    -- refusal would have read like an attack being blocked. Fail-closed is the
+    -- rule; STRANDING is not, and this was a strand.
+    --
+    -- NULL is the one spelling that cannot be in the past. The server decides
+    -- what "now" means, which is the property fix C was really after.
+    IF NEW."effectiveFrom" IS NULL THEN
+        NEW."effectiveFrom" := NEW."createdAt";
+    END IF;
     IF NEW."effectiveFrom" < NEW."createdAt" THEN
         RAISE EXCEPTION
           'platform_rates: effectiveFrom % precedes insertion at % — a rate takes effect when it is set or later, never before (ADMIN-4, #178)',
@@ -215,17 +265,23 @@ DECLARE
     n_check int;
 BEGIN
     SELECT count(*) INTO n_trig
-      FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
-     WHERE c.relname = 'platform_rates' AND NOT t.tgisinternal;
+      FROM pg_trigger t
+     -- ⚠️ `regclass`, NOT `relname` — ROUND 4. `relname` has no namespace
+     -- filter, so ANY same-named relation in another schema is counted too.
+     -- Measured: with a decoy `archive.platform_rates` carrying one trigger,
+     -- this block counted 4 while `public.platform_rates` had 3 — and CERTIFIED
+     -- a table that had lost its TRUNCATE arm. The right question asked of the
+     -- wrong universe. The prior art this copies uses regclass for this reason.
+     WHERE t.tgrelid = '"platform_rates"'::regclass AND NOT t.tgisinternal;
     IF n_trig <> 4 THEN
         RAISE EXCEPTION 'platform_rates: expected 4 triggers, found %', n_trig;
     END IF;
 
     SELECT count(*) INTO n_check
-      FROM pg_constraint con JOIN pg_class c ON c.oid = con.conrelid
-     WHERE c.relname = 'platform_rates' AND con.contype = 'c';
-    IF n_check <> 3 THEN
-        RAISE EXCEPTION 'platform_rates: expected 3 CHECK constraints, found %', n_check;
+      FROM pg_constraint con
+     WHERE con.conrelid = '"platform_rates"'::regclass AND con.contype = 'c';
+    IF n_check <> 5 THEN
+        RAISE EXCEPTION 'platform_rates: expected 5 CHECK constraints, found %', n_check;
     END IF;
 END;
 $verify$;
