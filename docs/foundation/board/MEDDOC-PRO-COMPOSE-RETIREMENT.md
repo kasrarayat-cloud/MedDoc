@@ -73,3 +73,24 @@ PINNED in `gate-289-derived-door-list.test.ts` — an arm that fails if the set
 grows **or shrinks**, with a positive control that the matcher still fires on
 the pinned file — until **DELETE-MEDDOC-PRO** (filed as an arc row in
 `RELAY.md`) removes the code. The pin retires with that row and not before.
+
+## ⚠️ AND A HAZARD THIS FILING ALMOST WALKED INTO
+
+`docs/audit-reports/admin-arc-recon-20260904.md` found that
+`apps/meddoc-pro/src/app/system-admin/` is **the only worked provisioning design
+in the repository**, and that **ADMIN's verb is PORT, not BUILD**. It names the
+danger explicitly against the old `A6` row:
+
+> *"If A6 runs first, the only worked provisioning design is destroyed. A6's
+> preconditions need amending before A6 runs."*
+
+**`A6` is no longer in `RELAY.md`.** So that warning had nothing to attach to
+until `DELETE-MEDDOC-PRO` was filed — by me, for an unrelated reason (the
+deadlock), without having read it. **That is how a named hazard gets re-created:
+not by ignoring the warning, but by creating a new row the warning does not
+point at.** The precondition is now carried on that row.
+
+**Nothing here is blocked by it.** Removing the compose service and image
+reference deletes **no code**; it is the half that closes the door. The port —
+or a capture of the design and the audited action shapes — gates only the
+**code deletion**.
