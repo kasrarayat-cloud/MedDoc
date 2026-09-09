@@ -52,15 +52,41 @@ ALTER TABLE "platform_rates"
 -- The bounds are #178's own: >= 1.0 and <= 5.0. Expressed as a cross-multiply
 -- so it stays integer arithmetic here too — `n >= d` is `n/d >= 1`, and
 -- `n <= 5d` is `n/d <= 5`.
+--
+-- ⚠️ `5::bigint`, NOT `5` — ROUND 5, AND WITHOUT IT THE TWO ENCODINGS OF #178's
+-- BOUNDS WERE NOT THE SAME RULE. `5 * "marginDenominator"` is int4*int4, and
+-- `int4mul` RAISES rather than widening: measured on PG 16.15, every legal
+-- margin with a denominator above 429,496,729 (= floor(int4max/5)) aborted with
+-- `ERROR: integer out of range` — SQLSTATE 22003, raised in `int4mul`, naming
+-- NEITHER the constraint nor the column — while the exported TypeScript mirror
+-- `isUsableMargin` returned `true` for the identical pair. Measured:
+-- 1500000000/1000000000 (exactly 1.5), 2000000000/500000000 (exactly 4.0) and
+-- 429496730/429496730 (exactly 1.0) were all refused; 429496729/429496729 was
+-- accepted.
+--
+-- It was a false-REJECTION band only, and that is provable rather than surveyed:
+-- if `5*d` overflows then `5d > int4max >= n`, so every row that triggered it
+-- would have satisfied the ceiling anyway. No out-of-bounds margin could ever
+-- be admitted by it. But the whole product of ADMIN-4 is that a number is not
+-- encoded twice in two places free to drift, and this file and
+-- `price-table.ts:isUsableMargin` disagreed over a range of legal inputs.
+-- ⚠️ AND A REFUSAL THAT NAMES NOTHING BREAKS THIS FILE'S OWN STANDARD — "a
+-- refusal is evidence only when you know WHAT refused".
 ALTER TABLE "platform_rates" ADD CONSTRAINT "platform_rates_margin_bounds" CHECK (
       "marginDenominator" > 0
   AND "marginNumerator"   > 0
   AND "marginNumerator" >= "marginDenominator"
-  AND "marginNumerator" <= 5 * "marginDenominator"
+  AND "marginNumerator" <= 5::bigint * "marginDenominator"
 );
 
 -- The previous value is present or absent as a PAIR — a half-recorded history
 -- is worse than none, because it reads as a complete one.
+--
+-- ⚠️ THIS CHECK, AND `previous_bounds` BELOW, ARE NOW BELT AND BRACES: the pair
+-- is DERIVED by the BEFORE INSERT trigger and the caller has no opinion about
+-- it (see `platform_rates_stamp_created`). They are kept, not deleted, because
+-- a trigger `prisma migrate dev` cannot see is one regeneration from being
+-- absent — and then these are the only thing left.
 ALTER TABLE "platform_rates" ADD CONSTRAINT "platform_rates_previous_pair" CHECK (
   ("previousNumerator" IS NULL) = ("previousDenominator" IS NULL)
 );
@@ -71,8 +97,37 @@ ALTER TABLE "platform_rates" ADD CONSTRAINT "platform_rates_previous_pair" CHECK
 -- own comment claims "the writer cannot omit it"; NOT NULL alone did not deliver
 -- that. Every other invariant here is enforced by the DATABASE precisely so it
 -- does not depend on whichever writer remembers — the actor was the one that did.
+--
+-- ⚠️ AND ROUND 4 CLOSED `''` AND LEFT THE CLASS — ROUND 5. `btrim/1`'s DEFAULT
+-- TRIM SET IS THE SPACE CHARACTER AND NOTHING ELSE. Measured on PG 16.15 against
+-- round 4's constraint: `''` and `'   '` were refused BY NAME, and a TAB, a
+-- `\n\r`, U+00A0 (no-break space), U+2007 (figure space) and U+3000
+-- (ideographic space) were each ACCEPTED — a permanent, uncorrectable price
+-- change whose only recorded actor is invisible, with `changedByUserId` NULL.
+-- That is verbatim the state the paragraph above says is impossible.
+--
+-- ⚠️ THE OBVIOUS REPAIRS ALSO LEAVE THE CLASS OPEN, WHICH IS WHY THE SET IS
+-- WRITTEN OUT. Measured on the same database: `btrim(x, E' \t\n\r')` ACCEPTS
+-- U+00A0, and so does `x ~ '[^[:space:]]'` — POSIX `[:space:]` does not class
+-- NBSP here, and `\S` behaves the same. `[[:graph:]]` accepts NBSP and rejects
+-- U+3000. A locale-dependent character class is the wrong instrument for a
+-- locale-independent invariant, so the blanks are ENUMERATED: the ASCII
+-- controls, every Unicode space separator, the two line/paragraph separators,
+-- and the zero-width/invisible formatting characters that render as nothing
+-- without being classed as space anywhere.
+--
+-- Verified: all 24 of those inputs score 0 and are refused; `kasra@example.com`,
+-- an accented Latin name, a Cyrillic name, a CJK name and a single letter all
+-- score > 0 and are accepted. The positive controls matter as much as the
+-- refusals — a constraint that refused every actor would score full marks here
+-- and make the ADMIN-4 writer unusable.
 ALTER TABLE "platform_rates" ADD CONSTRAINT "platform_rates_actor_present" CHECK (
-  length(btrim("changedByLabel")) > 0
+  length(btrim("changedByLabel",
+        E' \t\n\r' || chr(11) || chr(12)
+     || U&'\0085\00a0\1680\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200a'
+     || U&'\2028\2029\202f\205f\3000'
+     || U&'\200b\200c\200d\2060\feff'
+  )) > 0
 );
 
 -- ⚠️ AND THE PREVIOUS PAIR OBEYS THE SAME BOUNDS AS THE CURRENT ONE — ROUND 4.
@@ -87,7 +142,10 @@ ALTER TABLE "platform_rates" ADD CONSTRAINT "platform_rates_previous_bounds" CHE
         "previousDenominator" > 0
     AND "previousNumerator"   > 0
     AND "previousNumerator" >= "previousDenominator"
-    AND "previousNumerator" <= 5 * "previousDenominator"
+    -- `5::bigint` for the same reason as the current pair above — the same
+    -- int4 overflow reproduced here verbatim (previous 430000000/430000000 ->
+    -- `integer out of range`).
+    AND "previousNumerator" <= 5::bigint * "previousDenominator"
   )
 );
 
@@ -138,9 +196,11 @@ ALTER TABLE "platform_rates" ADD CONSTRAINT "platform_rates_forward_only" CHECK 
 -- CLASS. Two triggers close it, both copied in shape from `ledger_entries`,
 -- which this repository already protects exactly this way.
 
--- 1 — `createdAt` IS SERVER-AUTHORITATIVE. A supplied value is overwritten, not
---     rejected: refusing would break the ordinary `create()` that omits it, and
---     the point is that the column means "when the server saw this row".
+-- 1 — `createdAt` IS SERVER-AUTHORITATIVE, AND SO IS THE PREVIOUS PAIR. A
+--     supplied value is overwritten, not rejected: refusing would break the
+--     ordinary `create()` that omits it, and the point is that the column means
+--     "when the server saw this row". Round 5 extends the same rule to
+--     `previousNumerator`/`previousDenominator` — see the derivation below.
 CREATE OR REPLACE FUNCTION platform_rates_stamp_created() RETURNS trigger AS $fn$
 BEGIN
     -- ⚠️ `clock_timestamp()`, NOT `now()`. `now()` is TRANSACTION START time, so
@@ -178,6 +238,56 @@ BEGIN
           NEW."effectiveFrom", NEW."createdAt"
           USING ERRCODE = 'check_violation';
     END IF;
+
+    -- ═══════════════════════════════════════════════════════════════════════
+    -- ⚠️ ROUND 5 — `previous*` WAS AN UNCHECKED CALLER CLAIM, AND THE PRIOR ART
+    -- THIS FILE SAYS IT COPIED DERIVES EVERY DERIVABLE COLUMN INSTEAD.
+    -- ═══════════════════════════════════════════════════════════════════════
+    --
+    -- Measured on PG 16.15 against round 4's table, four inserts in order:
+    --
+    --   R1 3/2  (no pair)      R2 4/1 claiming previous 5/1   -- actual: 3/2
+    --   R3 2/1  (no pair)      R4 3/1 claiming previous 1/1   -- actual: 2/1
+    --
+    -- ALL FOUR ACCEPTED. R2 permanently records that the platform margin went
+    -- 5.0 -> 4.0 when it went 1.5 -> 4.0; R3 is the SECOND change and is
+    -- byte-indistinguishable from a first row. And because UPDATE, DELETE and
+    -- TRUNCATE are all refused, the false history is UNCORRECTABLE in band —
+    -- correcting it means deliberately disabling this table's central guarantee.
+    --
+    -- ⚠️ AND IT IS NOT A WRITER-DISCIPLINE PROBLEM, WHICH IS WHY NO WRITER COULD
+    -- HAVE FIXED IT. Two HONEST writers, each reading the current rate and
+    -- recording it, falsify each other: nothing serialized the read of "what it
+    -- is now" against the write of "what it is now". `ledger_entries_derive()`
+    -- takes `pg_advisory_xact_lock` for exactly this reason and states the rule
+    -- this trigger now follows — *"the caller does not get an opinion"*.
+    --
+    -- ⚠️ THE ANCHOR IS `createdAt`, NOT `effectiveFrom`, AND THE DIFFERENCE IS
+    -- THE WHOLE REASON THIS DERIVATION IS PERMANENT. `previous*` means **the
+    -- margin in effect at the instant this change was WRITTEN** — #178's audit
+    -- row is "actor, timestamp, old -> new", and "old" is what the operator was
+    -- changing away from when they made the change.
+    --
+    -- Anchored to `createdAt` the answer can never be falsified by a later row:
+    -- `platform_rates_forward_only` guarantees every later row has
+    -- `effectiveFrom >= its own createdAt > this row's createdAt`, so no future
+    -- insert can ever fall inside `effectiveFrom <= NEW."createdAt"`.
+    -- Anchored to `effectiveFrom` it COULD be: a row scheduled +30d, then a row
+    -- inserted afterwards effective +1d, retroactively changes which rate the
+    -- scheduled row supersedes — correct when written, permanently wrong later,
+    -- in a table that cannot be corrected.
+    PERFORM pg_advisory_xact_lock(hashtext('platform_rates'), 0);
+
+    SELECT p."marginNumerator", p."marginDenominator"
+      INTO NEW."previousNumerator", NEW."previousDenominator"
+      FROM "platform_rates" p
+     WHERE p."effectiveFrom" <= NEW."createdAt"
+     ORDER BY p."effectiveFrom" DESC, p."createdAt" DESC
+     LIMIT 1;
+    -- Unconditional: `SELECT ... INTO` with no matching row sets BOTH targets to
+    -- NULL, so the pair is NULL exactly when no margin was in effect at the
+    -- write instant, and whatever the caller sent is discarded either way.
+
     RETURN NEW;
 END;
 $fn$ LANGUAGE plpgsql;

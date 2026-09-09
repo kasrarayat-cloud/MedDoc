@@ -3711,7 +3711,31 @@ model PlatformRate {
   changedByLabel  String
   changedBy       User?   @relation("PlatformRateChangedBy", fields: [changedByUserId], references: [id], onDelete: SetNull)
 
-  /// What it was immediately before. NULL on the seed row only.
+  /// ⚠️ THE MARGIN IN EFFECT WHEN THIS CHANGE WAS **WRITTEN** — DERIVED BY THE
+  /// DATABASE, NOT SUPPLIED. #178's audit row is "actor, timestamp, old -> new",
+  /// and "old" is what the operator was changing away from at the moment they
+  /// made the change. `platform_rates_stamp_created()` takes a table-scoped
+  /// `pg_advisory_xact_lock` and overwrites both columns from the row in effect
+  /// at `createdAt`; whatever a caller sends is discarded.
+  ///
+  /// ⚠️ AN EARLIER VERSION OF THIS COMMENT SAID "What it was immediately before.
+  /// NULL on the seed row only." BOTH HALVES WERE FALSE, and measurably so.
+  /// The pair was a CALLER CLAIM: measured on PG 16.15, a row could record a
+  /// previous value that was never in effect (4/1 claiming previous 5/1 while
+  /// superseding 3/2) and a SECOND change could carry no pair at all — and
+  /// neither could ever be corrected, because UPDATE, DELETE and TRUNCATE are
+  /// all refused. Two HONEST concurrent writers falsified each other too;
+  /// nothing serialized the read against the write.
+  ///
+  /// NULL now means exactly one thing: **no margin was in effect at the instant
+  /// this row was written.** That is the first row — and also a row written
+  /// while only FUTURE-dated rates existed, which is why the claim is stated
+  /// this way rather than as "the seed row".
+  ///
+  /// Anchoring to `createdAt` rather than `effectiveFrom` is what makes the
+  /// answer permanent: `platform_rates_forward_only` guarantees every later row
+  /// has `effectiveFrom >= its own createdAt > this row's createdAt`, so no
+  /// future insert can ever fall inside the derivation's predicate.
   previousNumerator   Int?
   previousDenominator Int?
 
