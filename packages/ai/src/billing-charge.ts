@@ -191,6 +191,12 @@ export function componentsOf(row: ChargeableUsageRow): UsageComponent[] {
 
 /** One component that WAS priced, with the rate that priced it. */
 export interface PricedComponent {
+  /** ⚠️ ADMIN-4 — the instant this component's usage row was created. The
+   *  margin's read instant is DERIVED from the max of these, so the anchor
+   *  cannot be moved above a skip: a row that was not priced has no `at` here.
+   *  Round 2 moved round 1's free-standing tracking statement one line and
+   *  every test stayed green. */
+  at: Date;
   usageEventId: string;
   provider: string;
   modelName: string;
@@ -219,6 +225,10 @@ export type ChargeDecision =
       /** ADMIN-4 — the rate that ACTUALLY applied, carried so the ledger stamps
        *  the row it used rather than a literal somebody hopes still matches. */
       margin: MarginRate;
+      /** The ledger fields, built from `margin` at the moment it was applied.
+       *  ⚠️ The write site SPREADS this and passes nothing — see `stamp:` in
+       *  `priceUsageRows` for why an argument was the wrong shape. */
+      stamp: { multiplier: string; platformRateId: string };
       priced: PricedComponent[];
     }
   | {
@@ -317,7 +327,6 @@ export async function priceUsageRows(
    * instants in one visit the rate that applies is the one in effect when the
    * last billable component was produced, not the first.
    */
-  let chargeInstant = new Date(0);
 
   for (const row of rows) {
     // ⚠️ A MOCK ROW IS NEVER CHARGED. Ruling 66 put `unitsSource` in a COLUMN
@@ -362,8 +371,16 @@ export async function priceUsageRows(
         });
         continue;
       }
-      if (row.createdAt > chargeInstant) chargeInstant = row.createdAt;
       priced.push({
+        // ⚠️ THE INSTANT RIDES THE PRICED COMPONENT — ROUND 2, CLASS FIX.
+        // Round 1 tracked it in a separate `chargeInstant` statement inside the
+        // loop, and round 2 moved that statement ONE LINE UP — above the
+        // non-billable-provider skip rather than above the mock skip round 1
+        // had covered — and every test stayed green. A statement that can be
+        // moved is a statement somebody will move. Carried on the row that
+        // actually PRICED, "latest priced instant" is true by construction and
+        // there is nothing left to hoist.
+        at: row.createdAt,
         usageEventId: row.id,
         provider,
         modelName: row.modelName,
@@ -399,6 +416,8 @@ export async function priceUsageRows(
   // this — so a lookup that is not `marginAt` would otherwise deliver an
   // out-of-bounds rate straight into the arithmetic. A `1/2` row bills HALF
   // cost and stamps an id that resolves cleanly.
+  // Derived from the priced set itself — see the note on `at` above.
+  const chargeInstant = priced.reduce((mx, p) => (p.at > mx ? p.at : mx), new Date(0));
   const found = await marginLookup(chargeInstant);
   const marginAtInstant = found && isUsableMargin(found) ? found : null;
   if (!marginAtInstant) {
@@ -415,6 +434,13 @@ export async function priceUsageRows(
     costMicroUsd: pricedSoFar,
     chargeMicroUsd: chargeMicroUsd(pricedSoFar, marginAtInstant),
     margin: marginAtInstant,
+    // ⚠️ THE STAMP IS BUILT HERE, FROM THE RATE THAT WAS JUST APPLIED — ROUND 2.
+    // Round 1 extracted `marginStamp()` so the write site could be asserted,
+    // and round 2 substituted its ARGUMENT: `marginStamp({...3/2})` beside a
+    // 7/4 charge passed every arm, because the arm greps for the TOKEN. The
+    // repair closed the literal spelling and left the class. With the stamp on
+    // the decision there is no argument at the write site to get wrong.
+    stamp: marginStamp(marginAtInstant),
     priced,
   };
 }
@@ -611,7 +637,7 @@ export async function commitVisitCharge(args: CommitVisitChargeArgs): Promise<Co
             // so the two could drift apart and the ledger would still look
             // right. The id is stamped with it: a stamp you cannot resolve to
             // a row is a number with a story, not a record.
-            ...marginStamp(decision.margin),
+            ...decision.stamp,
             draw: {
               bucket: draw.bucket,
               amountMicroUsd: draw.amountMicroUsd.toString(),

@@ -16,6 +16,9 @@
 // failure-cost observer, `worker.ts:1658 -> billing-failure.ts -> priceUsageRows`
 // — which is running in production now.
 // ============================================================================
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import { marginStamp, priceUsageRows, type ChargeableUsageRow } from '../billing-charge';
@@ -269,15 +272,19 @@ describe('ADMIN-4 — the LEDGER STAMP is asserted, at the seam that writes it',
     expect(marginStamp(RATE(9, 5, 'pr_b')).multiplier).not.toBe('3/2');
   });
 
-  it('⚠️ AND THE WRITE SITE USES IT — not a second copy', async () => {
-    // A pure builder proves nothing if the ledger still spells the fields out.
-    const { readFileSync } = await import('node:fs');
-    const { join } = await import('node:path');
+  it('⚠️ SUPERSEDED BY ROUND 2 — this asserted the INSTANCE, and round 2 broke it', () => {
+    // This arm asserted the write site contained `...marginStamp(`. Round 2
+    // showed why that is the wrong assertion: substituting the ARGUMENT —
+    // `marginStamp({...3/2})` beside a 7/4 charge — satisfies it exactly, and
+    // 783 of 783 tests stayed green while the ledger recorded a stamp that
+    // contradicted the rate that priced it.
+    //
+    // ⚠️ KEPT AS A NAMED SUPERSESSION RATHER THAN DELETED, because the next
+    // reader deserves to know that greping for the fix's SPELLING is the shape
+    // that failed here. The real assertion is in the round-2 block: the write
+    // site spreads `decision.stamp` and has no argument to get wrong.
     const src = readFileSync(join(__dirname, '..', 'billing-charge.ts'), 'utf8');
-    const pricing = src.slice(src.indexOf('          pricing: {'));
-    const block = pricing.slice(0, pricing.indexOf('\n          },'));
-    expect(block, 'the ledger builds the stamp itself').toContain('...marginStamp(');
-    expect(block, 'a literal multiplier survived at the write site').not.toMatch(/multiplier:\s*[`'"]/);
+    expect(src).toContain('stamp: marginStamp(marginAtInstant)');
   });
 });
 
@@ -324,5 +331,104 @@ describe('ADMIN-4 — a missing rate is a FAILURE, not a free visit', () => {
     const i = src.indexOf("result.reason === 'balance_unreadable'");
     expect(i).toBeGreaterThan(-1);
     expect(src.slice(i, i + 200)).toContain("charged: 'failed'");
+  });
+});
+
+describe('ADMIN-4 round 2 — the repairs closed INSTANCES; these close the CLASSES', () => {
+  it('⚠️ THE STAMP HAS NO ARGUMENT AT THE WRITE SITE — a wrong one cannot be passed', () => {
+    // ROUND 2's FINDING: round 1 extracted `marginStamp()` so the write site
+    // could be asserted, and the arm greps for the TOKEN `...marginStamp(`.
+    // Substituting the ARGUMENT — `marginStamp({...3/2})` beside a 7/4 charge —
+    // satisfied both that grep and the "no literal multiplier" check, wrote a
+    // stamp of '3/2' next to a platformRateId that RESOLVES to the 7/4 row, and
+    // left 783 of 783 tests green.
+    //
+    // The class fix is that there is no argument: the decision carries the
+    // stamp, built where the rate was applied, and the ledger spreads it.
+    const src = readFileSync(join(__dirname, '..', 'billing-charge.ts'), 'utf8');
+    const pricing = src.slice(src.indexOf('          pricing: {'));
+    const block = pricing.slice(0, pricing.indexOf('\n          },'));
+    expect(block, 'the write site spreads the decision, not a call').toContain('...decision.stamp');
+    expect(block, 'the write site calls marginStamp again — an argument to get wrong').not.toContain(
+      'marginStamp(',
+    );
+    expect(block, 'a literal multiplier survived').not.toMatch(/multiplier:\s*[`'"]/);
+  });
+
+  it('⚠️ AND THE STAMP ON THE DECISION IS THE RATE THAT PRICED', async () => {
+    const d = await priceUsageRows(
+      [usageRow({ inputTokens: 1000 })],
+      priceEverything,
+      async () => RATE(7, 4, 'pr_74'),
+    );
+    expect(d.charge).toBe(true);
+    if (!d.charge) return;
+    expect(d.stamp).toEqual({ multiplier: '7/4', platformRateId: 'pr_74' });
+    expect(d.chargeMicroUsd).toBe(1750n);
+  });
+
+  it('⚠️ THE INSTANT IS DERIVED FROM THE PRICED SET — no statement left to hoist', async () => {
+    // ROUND 2 moved round 1's free-standing anchor ONE LINE UP — above the
+    // non-billable-provider skip instead of above the mock skip round 1 had
+    // covered — and everything stayed green. The sibling skip was uncovered.
+    //
+    // Now the instant rides the PRICED component, so a row that never priced
+    // has no instant to contribute, whatever the loop order becomes.
+    const seen: Date[] = [];
+    await priceUsageRows(
+      [
+        usageRow({ id: 'a', createdAt: new Date('2026-08-10T00:00:00Z'), inputTokens: 1 }),
+        usageRow({ id: 'b', createdAt: new Date('2026-08-12T00:00:00Z'), inputTokens: 1 }),
+        // skipped by unitsSource
+        usageRow({ id: 'c', unitsSource: 'mock', createdAt: new Date('2026-08-20T00:00:00Z'), inputTokens: 1 }),
+        // skipped by provider — THE SIBLING ROUND 1's FIX DID NOT COVER
+        usageRow({ id: 'd', provider: 'resend', createdAt: new Date('2026-08-25T00:00:00Z'), inputTokens: 1 }),
+      ],
+      priceEverything,
+      async (at) => {
+        seen.push(at);
+        return RATE(3, 2);
+      },
+    );
+    expect(seen).toHaveLength(1);
+    expect(
+      seen[0]!.toISOString(),
+      'a row that never priced moved the margin anchor',
+    ).toBe('2026-08-12T00:00:00.000Z');
+  });
+
+  it('⚠️ THE GUARD SHIPS WITH THE ARITHMETIC — the barrel withheld it', async () => {
+    // ROUND 2: `@meddoc/ai` exported `chargeMicroUsd` and `MarginRate` and NOT
+    // `isUsableMargin`, so an app-side caller could compute
+    // `chargeMicroUsd(1000n, {1,2}) === 500n` — the platform billing HALF its
+    // own cost, the exact case round 1 said it had closed. A public surface
+    // that ships an operation without its precondition has enforced nothing.
+    const ai = await import('../index');
+    expect(Object.keys(ai), '`isUsableMargin` is not on the public surface').toContain(
+      'isUsableMargin',
+    );
+    expect(ai.isUsableMargin({ id: 'x', marginNumerator: 1, marginDenominator: 2 })).toBe(false);
+    expect(ai.isUsableMargin({ id: 'x', marginNumerator: 3, marginDenominator: 2 })).toBe(true);
+  });
+
+  it('⚠️ FORWARD-ONLY IS SERVER-AUTHORITATIVE AND APPEND-ONLY — the CHECK alone trusted the writer', () => {
+    // ROUND 2: `platform_rates_forward_only` compares two columns the WRITER
+    // supplies. Prisma generates `createdAt?` for a `@default(now())` field, so
+    // `{effectiveFrom: last month, createdAt: last month, 5/1}` satisfies it and
+    // prices every uncharged visit since at 5x. An UPDATE re-prices
+    // retroactively without touching either column at all.
+    const sql = readFileSync(
+      join(__dirname, '..', '..', '..', 'db', 'prisma', 'migrations',
+        '20260909060000_admin4_platform_rate', 'migration.sql'),
+      'utf8',
+    );
+    expect(sql, 'createdAt is not server-stamped').toContain('NEW."createdAt" := now()');
+    expect(sql, 'no append-only trigger').toContain('platform_rates_no_update');
+    expect(sql, 'no delete refusal').toContain('platform_rates_no_delete');
+    // ⚠️ AND THE DETACH IS CARVED OUT, or this trigger holds user deletion
+    // hostage: `changedByUserId` is ON DELETE SET NULL, which fires an UPDATE.
+    expect(sql, 'the ON DELETE SET NULL detach is not permitted').toContain(
+      "OLD.\"changedByUserId\" IS NOT NULL",
+    );
   });
 });

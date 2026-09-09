@@ -9,6 +9,7 @@ One migration, `20260909060000_admin4_platform_rate`.
 |---|---|---|---|
 | 1 | `platform_rates` table | does not exist | exists, **0 rows** |
 | 2 | `platform_rates` CHECK constraints | — | **3** (`margin_bounds`, `previous_pair`, `forward_only`) |
+| 2b | `platform_rates` TRIGGERS | — | **3** (`stamp_created_before_insert`, `no_update`, `no_delete`) |
 | 3 | `platform_rates` FK to `users` | — | **1**, `ON DELETE SET NULL` |
 | 4 | index on `effectiveFrom` | — | **1** |
 
@@ -89,4 +90,29 @@ is visible:
 
 **No row above 4 changes**, and rows 5–10 are unaffected: this remains an
 additive migration over an empty table.
+
+## ⚠️ AMENDED AGAIN AFTER ROUND 2 — and the pattern is the finding
+
+Round 2 aimed three lenses at round 1's *repairs* and broke four of them. **Each
+round-1 fix had closed the INSTANCE it was shown and left the CLASS:**
+
+| round 1 fixed | round 2 broke it by |
+|---|---|
+| `marginStamp()` extracted so the stamp is assertable | substituting its **argument** — the arm greps for the token |
+| the anchor moved below the `unitsSource` skip | hoisting it above the **sibling** skip one line below |
+| `forward_only` CHECK | supplying **`createdAt`** too — Prisma generates it optional |
+| bounds enforced at the point of use | importing `chargeMicroUsd` from the **barrel**, which withheld the guard |
+
+**Row 2b is new: three triggers.** `createdAt` is now server-stamped
+(`NEW."createdAt" := now()`), and the table is append-only — because the CHECK
+compared two columns *the writer supplies*, and an `UPDATE` re-priced
+retroactively without touching either.
+
+⚠️ **And the append-only trigger carves out exactly one update — the
+`ON DELETE SET NULL` detach of `changedByUserId`.** Without it, the rate history
+would hold user deletion hostage. `ledger_entries` documents that same hole one
+table over and solves it the same way; `changedByLabel` is why the actor
+survives the detach.
+
+**Rows 4–10 are unaffected.** Still additive, still an empty table.
 

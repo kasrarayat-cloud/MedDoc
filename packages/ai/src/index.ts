@@ -236,6 +236,13 @@ export {
 export { drainApiUsage, pendingApiUsageWrites } from './api-usage';
 export {
   chargeMicroUsd,
+  // ⚠️ EXPORTED BESIDE THE ARITHMETIC — ROUND 2. The barrel shipped
+  // `chargeMicroUsd` and `MarginRate` and WITHHELD the guard, so any app-side
+  // caller could compute a charge at an out-of-bounds rate: `chargeMicroUsd(
+  // 1000n, {1, 2})` returns 500n, the platform billing HALF its own cost —
+  // which is the exact case round 1 said it had closed. A public surface that
+  // ships the operation without its precondition has not enforced anything.
+  isUsableMargin,
   marginAt,
   type MarginRate,
   costMicroUsd,

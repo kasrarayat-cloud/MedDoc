@@ -91,3 +91,81 @@ ALTER TABLE "platform_rates" ADD CONSTRAINT "platform_rates_forward_only" CHECK 
 -- does not run; the FAILURE-COST OBSERVER does run and will now record
 -- `no_margin_rate` instead of a cost, which is the honest reading until an
 -- operator sets the rate through the ADMIN-4 surface.
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ⚠️ ROUND 2 — THE FORWARD-ONLY CHECK ABOVE CONSTRAINS A HONEST WRITER ONLY.
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- `platform_rates_forward_only` compares two columns THE WRITER SUPPLIES.
+-- Prisma generates `createdAt?: Date | string` for a `@default(now())` field,
+-- so a caller may pass BOTH:
+--
+--     { effectiveFrom: '2026-08-01', createdAt: '2026-08-01', 5/1 }
+--
+-- — the CHECK is satisfied (equal), the bounds pass, and `marginAt` then prices
+-- every uncharged August visit at 5x cost. And an `UPDATE` re-prices
+-- retroactively without touching either column at all.
+--
+-- Round 1 closed the INSTANCE it was shown (a wall-clock read) and left the
+-- CLASS. Two triggers close it, both copied in shape from `ledger_entries`,
+-- which this repository already protects exactly this way.
+
+-- 1 — `createdAt` IS SERVER-AUTHORITATIVE. A supplied value is overwritten, not
+--     rejected: refusing would break the ordinary `create()` that omits it, and
+--     the point is that the column means "when the server saw this row".
+CREATE OR REPLACE FUNCTION platform_rates_stamp_created() RETURNS trigger AS $fn$
+BEGIN
+    NEW."createdAt" := now();
+    IF NEW."effectiveFrom" < NEW."createdAt" THEN
+        RAISE EXCEPTION
+          'platform_rates: effectiveFrom % precedes insertion at % — a rate takes effect when it is set or later, never before (ADMIN-4, #178)',
+          NEW."effectiveFrom", NEW."createdAt"
+          USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+END;
+$fn$ LANGUAGE plpgsql;
+
+CREATE TRIGGER "platform_rates_stamp_created_before_insert"
+    BEFORE INSERT ON "platform_rates"
+    FOR EACH ROW EXECUTE FUNCTION platform_rates_stamp_created();
+
+-- 2 — APPEND-ONLY. A rate history that can be edited is not a history, and the
+--     whole product of #178 is "an audit row saying who changed it". An UPDATE
+--     is how that row becomes a lie without anything appearing to change.
+CREATE OR REPLACE FUNCTION platform_rates_append_only() RETURNS trigger AS $fn$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION
+          'platform_rates: DELETE is refused. A rate history that can be erased is not a history (ADMIN-4, #178).'
+          USING ERRCODE = 'P0001';
+    END IF;
+
+    -- ⚠️ THE ONE PERMITTED UPDATE — AND WITHOUT IT THIS TRIGGER BLOCKS USER
+    -- DELETION ENTIRELY. `changedByUserId` carries `ON DELETE SET NULL`, so
+    -- removing a user fires an UPDATE here; a blanket refusal would make the
+    -- rate history hold accounts hostage. `ledger_entries` documents this exact
+    -- hole one table over and solves it the same way.
+    --
+    -- Every other column is compared WHOLESALE via jsonb, so a column added
+    -- later is covered without anybody remembering to come back here.
+    IF OLD."changedByUserId" IS NOT NULL
+       AND NEW."changedByUserId" IS NULL
+       AND (to_jsonb(NEW) - 'changedByUserId') = (to_jsonb(OLD) - 'changedByUserId')
+    THEN
+        RETURN NEW;
+    END IF;
+
+    RAISE EXCEPTION
+      'platform_rates is append-only: a rate change is a NEW ROW (ADMIN-4, #178). The only permitted update is ON DELETE SET NULL detaching changedByUserId, with every other column unchanged.'
+      USING ERRCODE = 'P0001';
+END;
+$fn$ LANGUAGE plpgsql;
+
+CREATE TRIGGER "platform_rates_no_update"
+    BEFORE UPDATE ON "platform_rates"
+    FOR EACH ROW EXECUTE FUNCTION platform_rates_append_only();
+
+CREATE TRIGGER "platform_rates_no_delete"
+    BEFORE DELETE ON "platform_rates"
+    FOR EACH ROW EXECUTE FUNCTION platform_rates_append_only();
