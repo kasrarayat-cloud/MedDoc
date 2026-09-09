@@ -300,14 +300,39 @@ declaration_resolve() {
   # directories open in front of the author. An error made twice with the rule
   # in hand is an error the tooling should make impossible, so the refusal now
   # goes and looks.
+  #
+  # ⚠️ AND THE HINT ITSELF HAD A WATCHED-SET FAILURE — FOUND 2026-09-09, BY
+  # WATCHING IT MISS. It globbed ONE directory for basenames containing `decl`.
+  # Meanwhile `docs/deploy-declarations/` held TEN declaration-shaped files that
+  # NOTHING IN THIS REPOSITORY READS, and not one of them would have been found:
+  # the word "declaration" is in the DIRECTORY name, never in the basenames
+  # (`307-retire-meddoc-pro-service-20260909.md`, `admin1-seats-20260905.md`).
+  # Measured that day: the refusal fired, printed two unrelated files from
+  # `docs/deploy-reports/`, and stayed silent about the declaration actually
+  # written for the tree being shipped.
+  #
+  # ⚠️ A HINT THAT NAMES THE WRONG FILE IS WORSE THAN NO HINT, because the
+  # operator reads "these look like declarations" and concludes theirs is not
+  # among them. So the search is now DERIVED from the tree — every tracked
+  # markdown under `docs/` whose PATH carries `decl`, minus this gate's own
+  # directory and the mutation gate's — rather than one remembered glob.
   local misfiled
-  misfiled="$(ls -1t docs/deploy-reports/*decl*.md docs/deploy-reports/*declaration*.md 2>/dev/null | head -3)"
+  misfiled="$(
+    git ls-files -- 'docs/*.md' 'docs/**/*.md' 2>/dev/null \
+      | grep -Ei 'decl' \
+      | grep -v "^${dir%/}/" \
+      | grep -v '^docs/foundation/mutations/' \
+      | tr '\n' '\0' \
+      | xargs -0 -r ls -1t 2>/dev/null \
+      | head -5
+  )" || true
   if [ -n "$misfiled" ]; then
     echo "   ⚠️ BUT THESE LOOK LIKE DECLARATIONS, AND THEY ARE IN THE WRONG PLACE:"
     echo "$misfiled" | sed "s|^|        |"
     echo
+    echo "      $dir/  is where THIS GATE looks. Nothing else is read."
     echo "      docs/deploy-reports/  is where deploy EVIDENCE is filed."
-    echo "      docs/foundation/deploys/  is where THIS GATE looks."
+    echo "      docs/deploy-declarations/  is read by NOTHING — measured 2026-09-09."
     echo
     echo "      If one of those is the declaration for this deploy, re-path it:"
     echo "        git mv <file> $dir/$(date -u +%Y%m%d)-${head_short}.md"

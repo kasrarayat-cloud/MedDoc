@@ -3,6 +3,26 @@
 **Written and committed BEFORE the act.** Branch
 `fix/307-retire-meddoc-pro-service`. **Config only — no migration, no code.**
 
+> 🔴 **THIS FILE IS NOT WHERE THE DEPLOY GATE LOOKS, AND THE DEPLOY WILL REFUSE
+> UNTIL IT IS MOVED.** `scripts/deploy-prod.sh:140` sets
+> `DECL_DIR="docs/foundation/deploys"`. **Nothing in this repository reads
+> `docs/deploy-declarations/`** — measured 2026-09-09, `grep -rn` over
+> `*.sh`/`*.ts`/`*.yml` returns only references this change itself created — and
+> nine other declarations are sitting here unread. Run against this tree, the
+> resolver said:
+>
+>     🔴 REFUSING — no delta declaration covers the tree you are shipping.
+>        expected: docs/foundation/deploys/20260909-d96ab444.md
+>
+> **THE MOVE IS NOT PERFORMED HERE, DELIBERATELY.** The expected name carries the
+> sha of the commit that will deploy, which does not exist until the merge; and a
+> malformed name in `docs/foundation/deploys/` **refuses every deploy from every
+> lane**, so guessing one is a blast radius this session is not entitled to
+> create. Per canon: `git mv` it to `<UTC-date>-<deploying-sha>.md`, keep the
+> body **byte-identical** (verify by sha, not by eye), and say so — a declaration
+> re-pathed after the fact is trustworthy only if its ORIGINAL commit timestamp
+> still provably precedes the act. This file's does.
+
 > ⚠️ **REVISED 2026-09-09 AFTER AN ADVERSARIAL PASS UPHELD SIX FINDINGS AGAINST
 > THE FIRST DRAFT.** The first draft claimed *"nobody CAN start it"* and
 > nominated a row that **cannot move in response to this change** as the one
