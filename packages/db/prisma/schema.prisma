@@ -759,7 +759,8 @@ model Practice {
 // ============================================================================
 
 model User {
-  id String @id @default(cuid())
+  id                  String         @id @default(cuid())
+  platformRateChanges PlatformRate[] @relation("PlatformRateChangedBy")
 
   // === NextAuth standard fields ===
   /// User's email — unique, lowercased at application layer
@@ -3653,6 +3654,54 @@ model WaitlistEntry {
 /// for an unknown model (`pricing.ts:131`), which is why an unpriced model bills
 /// nothing instead of erroring — DISCOVERY §D.3 names it. The lookup over this
 /// table returns `null` and its callers must handle it; see `price-table.ts`.
+/// THE PLATFORM MARGIN — ADMIN-4, ruling #178.
+///
+/// ⚠️ THIS EXISTS BECAUSE THE MARGIN WAS ALREADY SHIPPED AS A CONSTANT, AND
+/// #178 WAS RULED TO FORECLOSE EXACTLY THAT. `price-table.ts` computed
+/// `costMicro * 3n / 2n` and `billing-charge.ts` stamped the literal string
+/// `'3/2'` onto every ledger row — both landed 2026-08-11, three weeks BEFORE
+/// the ruling that forbids "a rate nobody can change without a deploy, and —
+/// worse — a rate with no audit row saying who changed it".
+///
+/// ⚠️ AN EXACT RATIO IN INTEGERS, NEVER A FLOAT. `price-table.ts` states the
+/// reason and it is not pedantry: `1.5` is exactly representable in binary64,
+/// but `cost * 1.5` is a Number, so any cost above 2^53 micro-dollars silently
+/// loses precision. The margin is therefore a numerator and a denominator, and
+/// the arithmetic stays `bigint` end to end.
+///
+/// FORWARD-ONLY, INSERT-NEVER-UPDATE, effective-dated — the shape `PriceRate`
+/// already uses one layer down. A change is a NEW ROW; the previous value is
+/// carried on it so the history reads without a self-join, and so a reader can
+/// see what changed without reconstructing it.
+model PlatformRate {
+  id String @id @default(cuid())
+
+  /// The margin as `numerator / denominator`. The shipped constant was 3/2.
+  marginNumerator   Int
+  marginDenominator Int
+
+  /// The instant this rate begins to apply. ⚠️ FORWARD-ONLY BY POLICY: a change
+  /// takes effect at the next metering cycle and never retroactively — #178.
+  effectiveFrom DateTime @db.Timestamptz(6)
+
+  /// ⚠️ WHO CHANGED IT. Nullable ONLY for the seed row, which no human set;
+  /// every later row must carry an actor, and the gate asserts it.
+  changedByUserId String?
+  changedBy       User?   @relation("PlatformRateChangedBy", fields: [changedByUserId], references: [id], onDelete: SetNull)
+
+  /// What it was immediately before. NULL on the seed row only.
+  previousNumerator   Int?
+  previousDenominator Int?
+
+  /// Why. Free text, shown beside the change in the money view.
+  note String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([effectiveFrom])
+  @@map("platform_rates")
+}
+
 model PriceRate {
   id String @id @default(cuid())
 

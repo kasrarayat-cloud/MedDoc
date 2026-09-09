@@ -70,6 +70,8 @@ import { DRAW_ORDER, splitCharge, type BucketDraw, type LedgerBucket } from './b
 import {
   audioSeconds as audioQuantity,
   chargeMicroUsd,
+  marginAt,
+  type MarginRate,
   costMicroUsd,
   rateAt,
   tokens,
@@ -213,6 +215,9 @@ export type ChargeDecision =
       charge: true;
       costMicroUsd: bigint;
       chargeMicroUsd: bigint;
+      /** ADMIN-4 — the rate that ACTUALLY applied, carried so the ledger stamps
+       *  the row it used rather than a literal somebody hopes still matches. */
+      margin: MarginRate;
       priced: PricedComponent[];
     }
   | {
@@ -225,7 +230,14 @@ export type ChargeDecision =
        *                      from `unpriced` because it is not a gap in our
        *                      knowledge, and B9 must not chase it.
        */
-      reason: 'unpriced' | 'nothing_billable';
+      /**
+       * `no_margin_rate`   — ADMIN-4: the platform has NO configured margin at
+       *                      this instant. ⚠️ REFUSES RATHER THAN DEFAULTING.
+       *                      A default here would re-create exactly what #178
+       *                      forbade — billing at a rate nobody set and no row
+       *                      records.
+       */
+      reason: 'unpriced' | 'nothing_billable' | 'no_margin_rate';
       unpriced: UnpricedComponent[];
       /** What WOULD have been charged for the components that did price. Never
        *  written anywhere — it exists so an operator can see the size of what is
@@ -259,9 +271,28 @@ export async function priceUsageRows(
     deliveryMode: DeliveryMode;
     at: Date;
   }) => Promise<PriceRateRow | null> = rateAt,
+  /** ADMIN-4 — the platform margin in effect. Injectable for the same reason
+   *  `lookup` is: so a gate can drive the absent case without a database. */
+  marginLookup: (at: Date) => Promise<MarginRate | null> = marginAt,
 ): Promise<ChargeDecision> {
   const priced: PricedComponent[] = [];
   const unpriced: UnpricedComponent[] = [];
+  /**
+   * ADMIN-4 — the instant the MARGIN is read at: the latest `createdAt` among
+   * the rows that actually priced.
+   *
+   * ⚠️ NOT `new Date()`. The vendor rate is looked up at `row.createdAt` a few
+   * lines below, and a margin read at wall-clock time would price the same
+   * usage against a rate that was not in effect when it happened — so a rate
+   * change would retroactively re-price a backlog the moment the worker caught
+   * up. #178 rules the change forward-only, and that is only true if BOTH
+   * lookups are anchored to the usage rather than to the run.
+   *
+   * ⚠️ LATEST rather than earliest, because a charge is one act: with several
+   * instants in one visit the rate that applies is the one in effect when the
+   * last billable component was produced, not the first.
+   */
+  let chargeInstant = new Date(0);
 
   for (const row of rows) {
     // ⚠️ A MOCK ROW IS NEVER CHARGED. Ruling 66 put `unitsSource` in a COLUMN
@@ -306,6 +337,7 @@ export async function priceUsageRows(
         });
         continue;
       }
+      if (row.createdAt > chargeInstant) chargeInstant = row.createdAt;
       priced.push({
         usageEventId: row.id,
         provider,
@@ -331,11 +363,27 @@ export async function priceUsageRows(
       pricedSoFarMicroUsd: 0n,
     };
   }
+  // ⚠️ ADMIN-4 — THE MARGIN IS READ, AND ITS ABSENCE REFUSES.
+  //
+  // Read at the LATEST priced instant rather than `new Date()`, so the rate
+  // applied is the one that was in effect for the usage being charged and not
+  // the one in effect when the job happened to run. #178 rules the change
+  // forward-only; that is only true if the read is anchored to the usage.
+  const marginAtInstant = await marginLookup(chargeInstant);
+  if (!marginAtInstant) {
+    return {
+      charge: false,
+      reason: 'no_margin_rate',
+      unpriced: [],
+      pricedSoFarMicroUsd: pricedSoFar,
+    };
+  }
   // ONE rounding step, on the TOTAL. See the warning above.
   return {
     charge: true,
     costMicroUsd: pricedSoFar,
-    chargeMicroUsd: chargeMicroUsd(pricedSoFar),
+    chargeMicroUsd: chargeMicroUsd(pricedSoFar, marginAtInstant),
+    margin: marginAtInstant,
     priced,
   };
 }
@@ -527,7 +575,13 @@ export async function commitVisitCharge(args: CommitVisitChargeArgs): Promise<Co
             visitId: args.visitId,
             costMicroUsd: decision.costMicroUsd.toString(),
             chargeMicroUsd: decision.chargeMicroUsd.toString(),
-            multiplier: '3/2',
+            // ⚠️ ADMIN-4 — THE RATE THAT APPLIED, NOT A LITERAL. This read
+            // `'3/2'` — a hard-coded string beside a hard-coded computation,
+            // so the two could drift apart and the ledger would still look
+            // right. The id is stamped with it: a stamp you cannot resolve to
+            // a row is a number with a story, not a record.
+            multiplier: `${decision.margin.marginNumerator}/${decision.margin.marginDenominator}`,
+            platformRateId: decision.margin.id,
             draw: {
               bucket: draw.bucket,
               amountMicroUsd: draw.amountMicroUsd.toString(),

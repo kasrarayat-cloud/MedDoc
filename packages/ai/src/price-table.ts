@@ -247,6 +247,52 @@ export function costMicroUsd(quantity: Quantity, rate: PriceRateRow): bigint {
  * Half-up at the micro-dollar is inherited from {@link divRoundHalfUp}. Cent
  * rounding is a DISPLAY concern and appears nowhere in this path.
  */
-export function chargeMicroUsd(costMicro: bigint): bigint {
-  return divRoundHalfUp(costMicro * 3n, 2n);
+export function chargeMicroUsd(costMicro: bigint, margin: MarginRate): bigint {
+  return divRoundHalfUp(costMicro * BigInt(margin.marginNumerator), BigInt(margin.marginDenominator));
+}
+
+/**
+ * The platform margin as an EXACT RATIO — ADMIN-4, ruling #178.
+ *
+ * ⚠️ THE SECOND ARGUMENT IS REQUIRED, AND ITS REQUIREDNESS IS THE FAIL-CLOSED.
+ * A default of `3/2` here would restore the whole defect: the compiler would
+ * stop asking callers where the rate came from, and a caller that could not
+ * read one would silently bill at the old constant. There is no default, so
+ * "the rate is missing" cannot be spelled in this file at all — it has to be
+ * decided by whoever tried to read it.
+ */
+export interface MarginRate {
+  readonly id: string;
+  readonly marginNumerator: number;
+  readonly marginDenominator: number;
+}
+
+/**
+ * The margin in effect at one instant, or `null` if none is configured.
+ *
+ * Same shape as {@link rateAt} one layer down, deliberately: greatest
+ * `effectiveFrom` not after the instant, forward-only, no `effectiveTo` because
+ * a later row supersedes by being later. `null` means **the platform has no
+ * configured margin**, which is a refusal and never a default.
+ *
+ * ⚠️ AND IT IS `null` ON AN EMPTY TABLE BY DESIGN. The migration deliberately
+ * seeds nothing: a seeded 3/2 would make the migration the thing that decided
+ * the rate, with no actor and no note — the same defect one layer up, in a
+ * migration's clothes.
+ */
+export async function marginAt(at: Date): Promise<MarginRate | null> {
+  const rows = (await prisma.platformRate.findMany({
+    where: { effectiveFrom: { lte: at } },
+    orderBy: [{ effectiveFrom: 'desc' }, { createdAt: 'desc' }],
+    take: 1,
+    select: { id: true, marginNumerator: true, marginDenominator: true },
+  })) as unknown as MarginRate[];
+  const row = rows[0];
+  if (!row) return null;
+  // ⚠️ THE DB CHECK ALREADY REFUSES A ZERO DENOMINATOR, AND THIS STILL ASKS.
+  // A constraint protects the WRITE; this protects the READ, which is also
+  // reached by a fixture, a seed script and any future importer that writes
+  // through a different door.
+  if (row.marginDenominator <= 0 || row.marginNumerator <= 0) return null;
+  return row;
 }
