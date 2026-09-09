@@ -46,12 +46,66 @@ function run(body: string, refs: string[] = []) {
   return { code, out, text: readFileSync(f, 'utf8') };
 }
 
+/**
+ * ⚠️ A REAL MERGE, WITH ROWS OUTSIDE THE CONFLICT REGION — AND THAT SHAPE IS
+ * THE POINT.
+ *
+ * Every arm here used to run the resolver on a BARE temp file whose entire
+ * content was the conflict. Under that fixture the region IS the file, so the
+ * whole-file membership check and the region check are the same check, and a
+ * resolver that verified only the region looked correct. On the first REAL
+ * conflict — hundreds of rows outside the markers — it reported every one of
+ * them as INVENTED and refused a perfectly good union.
+ *
+ * So the fixture now does what a merge does: a base carrying `outside`, two
+ * branches that each rewrite one line, and `git merge` to produce genuine
+ * stages 2 and 3.
+ */
+function runMerged(ours: string[], theirs: string[], outside: string[] = [], refs: string[] = []) {
+  const dir = mkdtempSync(join(tmpdir(), 'unionmerge-'));
+  const git = (...a: string[]) => execFileSync('git', a, { cwd: dir, encoding: 'utf8' });
+  git('init', '-q', '-b', 'main');
+  git('config', 'user.email', 'a@b.c');
+  git('config', 'user.name', 'gate');
+  const rel = 'RULINGS.md';
+  const f = join(dir, rel);
+  const base = ['# L', '', ...outside, 'SLOT', ''].join('\n');
+  writeFileSync(f, base);
+  git('add', '-A');
+  git('commit', '-qm', 'base');
+  git('checkout', '-q', '-b', 'theirs');
+  writeFileSync(f, base.replace('SLOT', theirs.join('\n')));
+  git('commit', '-qam', 'theirs');
+  git('checkout', '-q', 'main');
+  writeFileSync(f, base.replace('SLOT', ours.join('\n')));
+  git('commit', '-qam', 'ours');
+  try {
+    git('merge', '-q', 'theirs');
+  } catch {
+    /* the conflict is the point */
+  }
+  let code = 0;
+  let out = '';
+  try {
+    out = execFileSync('python3', [SCRIPT, rel, ...refs], {
+      cwd: dir,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (e) {
+    const err = e as { status?: number; stdout?: string; stderr?: string };
+    code = err.status ?? -1;
+    out = `${err.stdout ?? ''}${err.stderr ?? ''}`;
+  }
+  return { code, out, text: readFileSync(f, 'utf8') };
+}
+
 const conflict = (ours: string[], theirs: string[]) =>
   ['# L', '', '<<<<<<< HEAD', ...ours, '=======', ...theirs, '>>>>>>> other', ''].join('\n');
 
 describe('union-ledger-conflict — the union', () => {
   it('takes BOTH sides when the numbers are disjoint', () => {
-    const r = run(conflict([row(1), row(2)], [row(3)]));
+    const r = runMerged([row(1), row(2)], [row(3)]);
     expect(r.code).toBe(0);
     for (const n of [1, 2, 3]) expect(r.text).toContain(`| #${n} |`);
     expect(r.text).not.toMatch(/<<<<<<<|=======|>>>>>>>/);
@@ -63,8 +117,8 @@ describe('union-ledger-conflict — the union', () => {
     // direction — otherwise landing the reshape re-inflates the ledger.
     const prose = row(7, 5);
     const pointer = row(7, 4);
-    expect(run(conflict([prose], [pointer])).text).toContain(pointer);
-    expect(run(conflict([prose], [pointer])).text).not.toContain(prose);
+    expect(runMerged([prose], [pointer]).text).toContain(pointer);
+    expect(runMerged([prose], [pointer]).text).not.toContain(prose);
   });
 });
 
@@ -112,7 +166,7 @@ describe('union-ledger-conflict — THE REFUSAL, which is the product', () => {
   });
 
   it('POSITIVE CONTROL — it does NOT refuse a clean union, or the arms above prove nothing', () => {
-    const r = run(conflict([row(1)], [row(2)]));
+    const r = runMerged([row(1)], [row(2)]);
     expect(r.code).toBe(0);
     expect(r.out).toContain('union verified by membership');
   });
@@ -152,19 +206,10 @@ describe('union-ledger-conflict — the dedupe that the conflict region cannot s
     // git auto-merges rows it can reconcile, so a PROSE row can survive outside
     // the markers while this script emits the POINTER row for the same ruling
     // inside them. Both land, and only a downstream ledger gate notices.
-    const body = [
-      '# L',
-      '',
-      row(9, 5), // the prose row, auto-merged outside the conflict
-      '',
-      '<<<<<<< HEAD',
-      row(1),
-      '=======',
-      row(9), // the pointer row for the SAME ruling
-      '>>>>>>> other',
-      '',
-    ].join('\n');
-    const r = run(body);
+    // ⚠️ THROUGH A REAL MERGE, so the prose row is genuinely OUTSIDE the region
+    // and stages 2/3 exist. Hand-building the file made the region the whole
+    // file, which is the fixture shape that hid the universe defect.
+    const r = runMerged([row(1)], [row(9)], [row(9, 5)]);
     expect(r.code).toBe(0);
     const nine = r.text.split('\n').filter((l) => /^\|\s*2026-09-08\s*\|\s*#9\s*\|/.test(l));
     expect(nine, 'the same ruling landed twice').toHaveLength(1);
@@ -178,11 +223,48 @@ describe('union-ledger-conflict — the dedupe that the conflict region cannot s
     // than the duplicate it fixes.
     const a = `| 2026-09-08 | #116 | OWNER-RULING | (a) the first clause | [\`x.md\`](rulings/x.md) |`;
     const b = `| 2026-09-08 | #116 | OWNER-RULING | (c) a LATER correction | [\`x.md\`](rulings/x.md) |`;
-    const r = run(conflict([a], [b]));
+    const r = runMerged([a], [b]);
     expect(r.code).toBe(0);
     expect(r.text).toContain('(a) the first clause');
     expect(r.text, 'a recorded amendment was deleted as a duplicate').toContain(
       '(c) a LATER correction',
     );
+  });
+});
+
+describe('union-ledger-conflict — the universe the checks ask about', () => {
+  it('⚠️ ROWS OUTSIDE THE REGION ARE NOT "INVENTED" — the refusal that refused a real merge', () => {
+    // THE DEFECT: `invented = after - (o | t)` computed `o`/`t` from the CONFLICT
+    // REGION. A real ledger conflict has hundreds of rows outside the markers, so
+    // every one of them scored as invented and the resolver refused the first
+    // genuine merge it was ever pointed at — two regions of ten and seven rows
+    // against a 191-ruling file, and it named 175 numbers as invented.
+    //
+    // No previous arm could see it: they all built the file by hand, so the
+    // region WAS the file and the two universes coincided.
+    const outside = [3, 4, 5, 6, 7, 8, 10, 11, 12].map((n) => row(n));
+    const r = runMerged([row(1)], [row(2)], outside);
+    expect(r.out, 'a row outside the markers was called invented').not.toContain('INVENTED');
+    expect(r.code, 'a clean union with untouched rows was refused').toBe(0);
+    // and every untouched row is still there
+    for (const n of [3, 12]) {
+      expect(r.text, `row ${n} was dropped`).toContain(`| #${n} |`);
+    }
+    expect(r.out).toMatch(/whole-file sides: ours=\d+ theirs=\d+/);
+  });
+
+  it('⚠️ CANNOT-TELL REFUSES RATHER THAN QUIETLY ANSWERING A SMALLER QUESTION', () => {
+    // THE SECOND DEFECT, AND THE WORSE ONE. Invoked from a DIFFERENT repository
+    // than the file lives in, `git show :2:<path>` answers about the caller's
+    // repo, finds nothing, and the old code fell back to the region-only check
+    // WITHOUT SAYING SO. A weaker answer given silently is the shape this repo
+    // has a name for.
+    //
+    // With no merge in progress and no refs there is no whole-file side to
+    // verify against, so the only honest outcome is a refusal.
+    const r = run(conflict([row(1)], [row(2)]));
+    expect(r.code, 'cannot-tell did not refuse').toBe(2);
+    expect(r.out).toContain('CANNOT TELL');
+    expect(r.out).toContain('REFUSING');
   });
 });

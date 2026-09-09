@@ -132,6 +132,44 @@ def dedupe(path):
     return len(drop)
 
 
+def repo_root_of(path):
+    """The repository that OWNS this file — never the caller's cwd."""
+    d = os.path.dirname(os.path.abspath(path)) or '.'
+    r = subprocess.run(['git', 'rev-parse', '--show-toplevel'],
+                       cwd=d, capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def stage_membership(path):
+    """
+    WHOLE-FILE membership of each side, from the MERGE INDEX.
+
+    ⚠️ THIS IS THE UNIVERSE THE LOST/INVENTED CHECKS MUST ASK ABOUT, AND THE
+    FIRST VERSION ASKED THE CONFLICT REGION INSTEAD. A real ledger conflict has
+    hundreds of rows OUTSIDE the markers; measured against region membership,
+    every one of them is "invented", so the resolver refuses every real merge it
+    was built for. Its arms could not see this because they all construct files
+    where the whole file IS the region.
+
+    Stages 2 and 3 are ours and theirs as git recorded them, so they are the
+    authoritative whole-file sides and need no ref to be named by hand.
+    Returns None when they cannot be read — which the caller treats as
+    CANNOT-TELL, not as agreement.
+    """
+    root = repo_root_of(path)
+    if root is None:
+        return None
+    rel = os.path.relpath(os.path.abspath(path), root)
+    out = []
+    for stage in (2, 3):
+        r = subprocess.run(['git', 'show', f':{stage}:{rel}'],
+                           cwd=root, capture_output=True, text=True)
+        if r.returncode != 0:
+            return None
+        out.append(nums_of(r.stdout))
+    return out[0], out[1]
+
+
 def main():
     if len(sys.argv) < 2:
         sys.stderr.write(USAGE)
@@ -161,17 +199,47 @@ def main():
         lost = sorted(want - after)
         if lost:
             print(f'🔴 LOST from {label}: {lost}'); bad = True
+
+    # ── the WHOLE-FILE sides, which is the universe these checks are about ──
+    root = repo_root_of(path)
+    stages = stage_membership(path)
+    universe = None
+    if stages is not None:
+        s_o, s_t = stages
+        universe = s_o | s_t
+        print(f'  whole-file sides: ours={len(s_o)} theirs={len(s_t)}')
+        for label, want in (('ours', s_o), ('theirs', s_t)):
+            lost = sorted(want - after)
+            if lost:
+                print(f'🔴 LOST from whole-file {label}: {lost}'); bad = True
+
     for ref in refs:
+        # ⚠️ IN THE FILE'S OWN REPOSITORY. Run from elsewhere, `git show` answers
+        # about the CALLER's repo — where the ref may not exist — and the check
+        # was silently weaker rather than refusing.
         txt = subprocess.run(['git', 'show', f'{ref}:{path}'],
-                             capture_output=True, text=True).stdout
-        lost = sorted(nums_of(txt) - after)
+                             cwd=root or '.', capture_output=True, text=True).stdout
+        rn = nums_of(txt)
+        universe = rn if universe is None else (universe | rn)
+        lost = sorted(rn - after)
         if lost:
             print(f'🔴 LOST vs {ref}: {lost}'); bad = True
         else:
             print(f'  ✔ every ruling on {ref} survives')
-    invented = sorted(after - (o | t))
-    if invented and not refs:
-        print(f'🔴 INVENTED (on neither side): {invented}'); bad = True
+
+    # ⚠️ FAIL CLOSED ON CANNOT-TELL. No merge stages and no refs means there is
+    # no whole-file side to compare against — and the previous form quietly fell
+    # back to the CONFLICT REGION, which reports every untouched row as invented.
+    # A weaker answer given silently is the failure this repo has a name for.
+    if universe is None:
+        print('🔴 CANNOT TELL — no merge stages for this path and no refs given, '
+              'so there is no whole-file side to verify against. Run it on a file '
+              'with an unresolved merge, or name refs explicitly.')
+        bad = True
+    else:
+        invented = sorted(after - universe)
+        if invented:
+            print(f'🔴 INVENTED (on neither side): {invented}'); bad = True
     print(f'  rulings after: {len(after)}   chars: {len(after_txt)}')
     if bad:
         print('🔴 REFUSING — this is not a union.'); sys.exit(2)
