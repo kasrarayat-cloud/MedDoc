@@ -88,68 +88,29 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── Next.js App (MedDoc Pro) ──
-  meddoc-pro:
-    build:
-      context: .
-      dockerfile: apps/meddoc-pro/Dockerfile
-    restart: unless-stopped
-    # Phase 19 — h16-cap-drop. Node app, binds 3000 inside the
-    # container, runs as uid 1001 (USER in Dockerfile). No need for
-    # any of the default Docker capabilities.
-    cap_drop:
-      - ALL
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    mem_limit: 512m
-    cpus: '1.0'
-    # T-M16.3: app-level health — hits /api/health which checks
-    # postgres. 30s start_period covers Next cold-start + Prisma client
-    # init; without it the first check fires before the app is ready
-    # and the container reports "unhealthy" until a retry passes.
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "--spider", "http://127.0.0.1:3000/api/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    depends_on:
-      postgres:
-        condition: service_healthy
-      # Phase 1B v2 — meddoc-pro publishes to Redis from logAudit() for
-      # the admin SSE stream. We don't gate on `service_healthy` here
-      # (the publish path is fire-and-forget and skipped when the
-      # client isn't `ready`), but `service_started` keeps the
-      # dependency explicit so a fresh `docker compose up` brings
-      # redis up first.
-      redis:
-        condition: service_started
-    env_file:
-      - .env
-    environment:
-      DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:-changeme_in_production}@postgres:5432/meddoc?schema=public
-      # Phase 1B v2 — explicit Redis URL for the audit-stream publish
-      # path and the /api/admin/stream/activity subscriber. Same value
-      # the singleton in lib/redis.ts defaults to, but spelled out so
-      # the next person reading the compose file doesn't have to grep
-      # for it.
-      REDIS_URL: redis://redis:6379
-      # Canonical external URL NextAuth uses to build callbacks. Override
-      # via PUBLIC_URL in .env once you move to a real domain (e.g.,
-      # https://meddoc.example.com). Must match exactly what users see in
-      # the browser — if they hit http://1.2.3.4 but AUTH_URL says
-      # https://meddoc.example.com, the auth callback mismatches.
-      AUTH_URL: ${PUBLIC_URL:-http://5.231.107.93}
-      NEXTAUTH_URL: ${PUBLIC_URL:-http://5.231.107.93}  # v4 compat name
-      AUTH_TRUST_HOST: "true"  # redundant (also hardcoded in auth.config.ts) — safe belt-and-braces
-    ports:
-      # Bound to loopback only — public traffic goes through Caddy. Kept
-      # for dev debugging (e.g., curl http://127.0.0.1:3001 from the host).
-      - "127.0.0.1:3001:3000"
-
+  # ── MedDoc Pro (CRM) — SERVICE REMOVED, ruling #307 ────────────────────────
+  #
+  # ⚠️ THE SERVICE DEFINITION IS GONE ON PURPOSE, AND THIS NOTE IS THE RECORD.
+  #
+  # The container had been `Exited (143)` for five weeks and `pro.quillmd.com`
+  # answers **410 by design** — but the service stayed DEFINED here, one
+  # `docker compose up` from reviving FOUR UNLOCKED `users` WRITERS whose
+  # missing practice lock was MEASURED to deadlock the locked doors, the locked
+  # side losing and its write silently gone (#268's shape).
+  #
+  # "Nobody starts it" and "nobody CAN start it" are different properties. This
+  # removes the second gap.
+  #
+  # ⚠️ THIS DELETES NO CODE. `apps/meddoc-pro/` is untouched; DELETE-MEDDOC-PRO
+  # removes it, and only AFTER the console port lands — the recon found that app
+  # holds THE ONLY WORKED PROVISIONING DESIGN in the repository, and DMP-c found
+  # it also holds ONE OF B7's THREE RULED PROMO DOORS (the reactivation grant).
+  #
+  # ⚠️ THE CO-TENANT BASELINE TRAVELS WITH THIS CHANGE: `pro.quillmd.com` MUST
+  # STILL ANSWER 410. A change AWAY from 410 is the finding, not the 410 itself
+  # (#265(d) — `scripts/check-cotenants.sh` is the expectation table).
+  #
+  # Reversal: `git revert` this commit. The image and the app both still exist.
   # ── Redis (BullMQ broker + ephemeral state) ──
   # Introduced in M2 for the batch pipeline. Internal-only — bound to
   # loopback for ops visibility, but apps reach it via the compose
@@ -290,7 +251,7 @@ services:
       retries: 3
       start_period: 15s
     depends_on:
-      - meddoc-pro
+      # meddoc-pro removed — ruling #307
       - marketing
       - transcribe-md
     ports:
