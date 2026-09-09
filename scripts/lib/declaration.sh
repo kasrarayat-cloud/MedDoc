@@ -300,14 +300,35 @@ declaration_resolve() {
   # directories open in front of the author. An error made twice with the rule
   # in hand is an error the tooling should make impossible, so the refusal now
   # goes and looks.
+  # ⚠️ AND THERE IS A FOURTH DIRECTORY, WHICH THIS HINT DID NOT LOOK IN.
+  #
+  # AGENTS.md's table names THREE. `docs/deploy-declarations/` is a fourth, it
+  # is not in that table, no gate scans it, and MEASURED 2026-09-09 it holds
+  # TEN declarations — including `admin3a-practice-write-20260909.md` for an
+  # already-merged row and `admin4-platform-rate-20260909.md` for a live one.
+  #
+  # ⚠️ AND THE NAME PATTERN WOULD HAVE MISSED THEM ANYWAY: **0 of those 10
+  # match `*decl*`.** They are named for their SUBJECT (`rc2-20260815.md`,
+  # `f1-numbering-20260815.md`) — which is the natural way to name a
+  # declaration, and the way the READ directories name them too. So the hint
+  # was doubly blind: the wrong directory, and a filename pattern that does not
+  # describe how declarations are actually named.
+  #
+  # Hence: search the whole directory rather than a name pattern inside it. A
+  # directory no gate reads has exactly one legitimate population, and every
+  # file in it is worth naming when a deploy is refusing for want of one.
   local misfiled
-  misfiled="$(ls -1t docs/deploy-reports/*decl*.md docs/deploy-reports/*declaration*.md 2>/dev/null | head -3)"
+  misfiled="$(ls -1t docs/deploy-reports/*decl*.md docs/deploy-reports/*declaration*.md \
+                     docs/deploy-declarations/*.md 2>/dev/null | head -5)"
   if [ -n "$misfiled" ]; then
     echo "   ⚠️ BUT THESE LOOK LIKE DECLARATIONS, AND THEY ARE IN THE WRONG PLACE:"
     echo "$misfiled" | sed "s|^|        |"
     echo
-    echo "      docs/deploy-reports/  is where deploy EVIDENCE is filed."
-    echo "      docs/foundation/deploys/  is where THIS GATE looks."
+    echo "      docs/deploy-reports/       is where deploy EVIDENCE is filed."
+    echo "      docs/deploy-declarations/  is read by NOTHING — a FOURTH"
+    echo "                                 directory the three-directory table"
+    echo "                                 does not name."
+    echo "      docs/foundation/deploys/   is where THIS GATE looks."
     echo
     echo "      If one of those is the declaration for this deploy, re-path it:"
     echo "        git mv <file> $dir/$(date -u +%Y%m%d)-${head_short}.md"

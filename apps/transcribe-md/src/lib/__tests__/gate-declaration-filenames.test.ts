@@ -27,11 +27,24 @@
 // script refuses.
 // ============================================================================
 import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-const REPO = join(process.cwd(), '..', '..');
+// ⚠️ DERIVED FROM THIS FILE, NOT FROM THE CALLER'S CWD.
+//
+// This was `join(process.cwd(), '..', '..')`, which silently assumes vitest was
+// invoked from `apps/transcribe-md`. CI does, so it is green there — but run the
+// same file from the repository root and REPO becomes `/opt`, `readdirSync`
+// throws ENOENT at collection time, and the whole suite reports
+// `Tests  no tests` with a failed SUITE. That reads as "this gate is broken"
+// rather than "you ran it from somewhere else", and it cost a session exactly
+// that confusion on 2026-09-09.
+//
+// `__dirname` is where the file IS, which is the only reading that cannot
+// depend on who invoked it — the same lesson `make-lens-sandbox.sh` and
+// `reap-lens-sandbox.sh` already carry in their headers for the shell side.
+const REPO = resolve(__dirname, '..', '..', '..', '..', '..');
 const DECL_DIR = join(REPO, 'docs', 'foundation', 'deploys');
 const LIB = join(REPO, 'scripts', 'lib', 'declaration.sh');
 
@@ -118,5 +131,42 @@ describe('§2.5 — every file in docs/foundation/deploys is a name the deploy g
     // And the two hard refusals this file mirrors are still the script's.
     expect(lib).toContain('*[!0-9a-fA-F]*');
     expect(lib).toContain('-lt 7');
+  });
+
+  it('⚠️ THE MISFILED HINT LOOKS IN THE DIRECTORY WHERE MISFILED DECLARATIONS ACTUALLY ARE', () => {
+    // ⚠️ THE HINT WAS WATCHING THE WRONG WRONG-PLACE, AND IT WAS DOUBLY BLIND.
+    //
+    // It searched `docs/deploy-reports/*decl*.md` only — the 2026-08-21 case it
+    // was written for. MEASURED 2026-09-09: `docs/deploy-declarations/` is a
+    // FOURTH directory that AGENTS.md's three-directory table does not name,
+    // nothing scans it, and it held TEN declarations — including one for an
+    // already-merged row and one for a live branch.
+    //
+    // And the name pattern would have missed them even with the directory
+    // added: **0 of those 10 matched `*decl*`**, because declarations are named
+    // for their SUBJECT, which is how the READ directories name them too.
+    //
+    // WHAT WOULD MAKE THIS FAIL: someone narrowing the glob back to a filename
+    // pattern, or dropping the fourth directory from it. Both restore a hint
+    // that stays silent in exactly the case it exists for.
+    const lib = readFileSync(LIB, 'utf8');
+    expect(
+      lib,
+      'the misfiled-declaration hint no longer searches docs/deploy-declarations/ — ' +
+        'the directory that actually holds misfiled declarations',
+    ).toContain('docs/deploy-declarations/*.md');
+
+    // The directory is searched WHOLE, not by a name pattern — the second half
+    // of the defect. A `docs/deploy-declarations/*decl*.md` would satisfy the
+    // arm above and still find nothing.
+    expect(
+      lib.includes('docs/deploy-declarations/*decl*'),
+      'the fourth directory is being filtered by a name pattern again — 0 of its ' +
+        'real files match *decl*, so this finds nothing',
+    ).toBe(false);
+
+    // And the refusal text names it, so a reader meeting the hint learns the
+    // directory is unread rather than merely being handed a path.
+    expect(lib).toContain('is read by NOTHING');
   });
 });
