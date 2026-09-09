@@ -1,0 +1,291 @@
+#!/usr/bin/env bash
+# ============================================================================
+# ADMIN-4 — DOES `platform_rates` STILL ENFORCE #178, IN THE DATABASE?
+# ----------------------------------------------------------------------------
+#     platform_rates_stamp_created_before_insert   createdAt + effectiveFrom
+#                                                  + THE PREVIOUS PAIR (derived)
+#     platform_rates_no_update                     refuses UPDATE (one hole)
+#     platform_rates_no_delete                     refuses DELETE
+#     platform_rates_no_truncate                   refuses TRUNCATE
+#
+# ⚠️ WHY A SCRIPT AND NOT A TEST. `gate-admin4-platform-rate.test.ts` reads the
+# migration as TEXT, because CI has no Postgres. A source read cannot tell you
+# that a trigger is INSTALLED, ENABLED, or that it does what its body says — and
+# Prisma has no syntax for a trigger, so a regenerated migration silently omits
+# all four and `prisma migrate diff` reports no drift. `check-ledger-append-only.sh`
+# makes exactly this split one table over, and states the cost: *"every test
+# green. The only observable difference is that money can now be edited."*
+#
+# ⚠️ AND FOUR OF THE FIVE ARMS BELOW EXIST BECAUSE THE SOURCE-ONLY GATE COULD NOT
+# SEE THE DEFECT. Round 5's refutation pass found, on a database with this
+# migration applied byte-for-byte, that a rate row could record a previous value
+# that was never in effect; that a legal in-bounds margin was refused with an
+# unnamed `integer out of range`; and that a TAB was an accepted actor. The
+# shipped gate was green throughout all three, because it asserted that
+# CONSTRAINT NAMES appear in the file.
+#
+# ── ARMS ───────────────────────────────────────────────────────────────────
+#
+#   STRUCTURAL (always, READ-ONLY, safe on production)
+#     All four triggers exist BY NAME **and** are enabled ('O' in tgenabled),
+#     and all five CHECKs exist by name. ⚠️ Name alone is not enough:
+#     `ALTER TABLE … DISABLE TRIGGER` leaves the row in `pg_trigger` and stops it
+#     firing, which passes a name-only check and enforces nothing.
+#
+#   DERIVATION (--attempt)
+#     The four inserts round 5 measured as producing a FALSE HISTORY are
+#     attempted, with deliberately wrong `previous*` values, and the stored rows
+#     must show the DERIVED pair instead. This is the arm that proves the trigger
+#     IGNORES the caller rather than trusting it — a trigger that merely
+#     VALIDATED would reject these inserts, which is a different (weaker)
+#     contract.
+#
+#   BOUNDS (--attempt)
+#     Every case in `scripts/fixtures/platform-rate-bounds-cases.json` is
+#     attempted, and the database's answer must match the `usable` flag — the
+#     SAME file the TypeScript arm drives `isUsableMargin` with. ⚠️ THIS IS THE
+#     CLASS FIX for "#178's bound encoded twice in two places free to drift":
+#     widening a hand-written list closes instances, deriving both sides from one
+#     list closes the class. A refusal must also NAME `platform_rates_margin_bounds`
+#     — an unnamed `integer out of range` is the round-5 defect and FAILS here.
+#
+#   ACTOR (--attempt)
+#     Every blank the round-5 finding measured as ACCEPTED is attempted and must
+#     be refused, plus positive controls (an email, a CJK name, a Cyrillic name,
+#     an accented name) which must be ACCEPTED. Without those a constraint that
+#     refused every actor would score full marks while making ADMIN-4's writer
+#     unusable — the same trap `check-ledger-append-only.sh` names.
+#
+#   REFUSAL (--attempt)
+#     UPDATE, DELETE and TRUNCATE are each attempted and each must be refused BY
+#     THIS TABLE'S OWN MESSAGE, not merely by "an error happened". Plus the
+#     POSITIVE CONTROL that the one PERMITTED update — the `ON DELETE SET NULL`
+#     detach — still succeeds, or the trigger holds account deletion hostage.
+#
+# ⚠️ EVERY WRITE IS INSIDE `BEGIN … ROLLBACK`. AGENTS.md, earned on 2026-08-05
+# when a mutation proof dropped a live constraint and nulled 21 signers: "any
+# write inside a gate that a constraint is supposed to refuse belongs in
+# BEGIN; … ROLLBACK;. Then the attempt is observable and never consequential."
+# Residue is asserted at the end, on a fresh connection.
+#
+# ── USAGE ──────────────────────────────────────────────────────────────────
+#   bash scripts/check-platform-rates-invariants.sh                # structural
+#   bash scripts/check-platform-rates-invariants.sh --attempt      # + behaviour
+#   PSQL='docker exec -i <container> psql -U postgres -d <db>' \
+#     bash scripts/check-platform-rates-invariants.sh --attempt
+# ============================================================================
+set -uo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CASES="$HERE/fixtures/platform-rate-bounds-cases.json"
+
+ATTEMPT=0
+for a in "$@"; do [ "$a" = "--attempt" ] && ATTEMPT=1; done
+
+# The connection. Override with PSQL for a throwaway container.
+PSQL="${PSQL:-psql -v ON_ERROR_STOP=0 -q}"
+
+fails=0
+pass() { printf '  \033[32mPASS\033[0m  %s\n' "$1"; }
+fail() { printf '  \033[31mFAIL\033[0m  %s\n' "$1"; fails=$((fails + 1)); }
+
+q() { $PSQL -tAc "$1" 2>&1; }
+
+# --------------------------------------------------------------------------
+echo '── POSITIVE CONTROL ON THE INSTRUMENT ─────────────────────────────────'
+# ⚠️ A BROKEN CONNECTION AND A CLEAN DATABASE PRODUCE THE SAME ZERO. Every
+# count below is meaningless until this answers, so it runs first and exits.
+probe="$(q "SELECT to_regclass('public.platform_rates') IS NOT NULL")"
+if [ "$probe" != "t" ]; then
+  fail "cannot reach platform_rates (psql said: ${probe})"
+  echo
+  echo "CANNOT TELL — refusing to report a green from an instrument that is not answering."
+  exit 2
+fi
+pass "the runner reaches public.platform_rates"
+
+# --------------------------------------------------------------------------
+echo '── STRUCTURAL (read-only) ─────────────────────────────────────────────'
+for t in platform_rates_stamp_created_before_insert platform_rates_no_update \
+         platform_rates_no_delete platform_rates_no_truncate; do
+  en="$(q "SELECT tgenabled FROM pg_trigger WHERE tgrelid='\"platform_rates\"'::regclass AND tgname='${t}'")"
+  case "$en" in
+    O) pass "trigger ${t} exists and is ENABLED" ;;
+    '') fail "trigger ${t} is MISSING" ;;
+    *)  fail "trigger ${t} exists but tgenabled='${en}' — a disabled trigger enforces nothing" ;;
+  esac
+done
+
+for c in platform_rates_margin_bounds platform_rates_previous_pair \
+         platform_rates_actor_present platform_rates_previous_bounds \
+         platform_rates_forward_only; do
+  n="$(q "SELECT count(*) FROM pg_constraint WHERE conrelid='\"platform_rates\"'::regclass AND contype='c' AND conname='${c}'")"
+  [ "$n" = "1" ] && pass "CHECK ${c} present" || fail "CHECK ${c} MISSING"
+done
+
+# ⚠️ THE int4 OVERFLOW IS VISIBLE IN THE STORED PREDICATE, so it is checked
+# structurally too — a database restored from a pre-round-5 dump carries the
+# int4 form and every bounds arm below would then fail with an unnamed 22003.
+for c in platform_rates_margin_bounds platform_rates_previous_bounds; do
+  def="$(q "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid='\"platform_rates\"'::regclass AND conname='${c}'")"
+  case "$def" in
+    *"(5)::bigint"*|*"5::bigint"*) pass "${c} cross-multiplies in bigint" ;;
+    *) fail "${c} still multiplies in int4 — it refuses legal margins with an unnamed 22003: ${def}" ;;
+  esac
+done
+
+if [ "$ATTEMPT" = "0" ]; then
+  echo
+  echo "structural only. Re-run with --attempt on a QA/test database for the behavioural arms."
+  [ "$fails" = "0" ] && exit 0 || exit 1
+fi
+
+# --------------------------------------------------------------------------
+echo '── DERIVATION — the caller does not get an opinion (--attempt) ────────'
+# The four inserts round 5 measured as producing a permanent FALSE HISTORY.
+derived="$(q "
+BEGIN;
+INSERT INTO platform_rates (id,\"marginNumerator\",\"marginDenominator\",\"changedByLabel\") VALUES ('r5R1',3,2,'op@x');
+INSERT INTO platform_rates (id,\"marginNumerator\",\"marginDenominator\",\"changedByLabel\",\"previousNumerator\",\"previousDenominator\") VALUES ('r5R2',4,1,'op@x',5,1);
+INSERT INTO platform_rates (id,\"marginNumerator\",\"marginDenominator\",\"changedByLabel\") VALUES ('r5R3',2,1,'op@x');
+INSERT INTO platform_rates (id,\"marginNumerator\",\"marginDenominator\",\"changedByLabel\",\"previousNumerator\",\"previousDenominator\") VALUES ('r5R4',3,1,'op@x',1,1);
+SELECT string_agg(id||'='||coalesce(\"previousNumerator\"||'/'||\"previousDenominator\",'null'), ' ' ORDER BY \"createdAt\")
+  FROM platform_rates WHERE id LIKE 'r5R%';
+ROLLBACK;")"
+# r5R1 has no predecessor ONLY on an empty table; on a seeded one it inherits the
+# live rate, so the assertion is on the CHAIN, which holds either way.
+case "$derived" in
+  *"r5R2=3/2"*) pass "a caller-claimed previous of 5/1 was DISCARDED and derived as 3/2" ;;
+  *) fail "the previous pair is still a caller claim: ${derived}" ;;
+esac
+case "$derived" in
+  *"r5R3=4/1"*) pass "a second change with NO pair was derived as 4/1, not left null" ;;
+  *) fail "a non-first change carried no previous pair: ${derived}" ;;
+esac
+case "$derived" in
+  *"r5R4=2/1"*) pass "a caller-claimed previous of 1/1 was DISCARDED and derived as 2/1" ;;
+  *) fail "the previous pair is still a caller claim: ${derived}" ;;
+esac
+
+# --------------------------------------------------------------------------
+echo '── BOUNDS — both encodings answer ONE shared list (--attempt) ─────────'
+if [ ! -f "$CASES" ]; then
+  fail "the shared bounds list is missing at ${CASES} — this arm cannot run"
+else
+  # ⚠️ Read with python3, not a hand-rolled grep: the list is the contract and a
+  # parser that silently skipped a row would make this arm quietly narrower.
+  # ⚠️ THE CASES ARE READ INTO AN ARRAY FIRST, NOT PIPED INTO THE LOOP.
+  # `docker exec -i` (the documented PSQL override) READS STDIN, so a
+  # `while read … done < <(…)` loop that calls psql per row has its remaining
+  # input EATEN by the first call. Measured while writing this file: the loop ran
+  # 1 of 16 cases and every arm passed. The `ncases` control below is the only
+  # reason that was visible at all — which is why it is here.
+  mapfile -t _rows < <(python3 -c "
+import json,sys
+for c in json.load(open('$CASES'))['cases']:
+    print('%s|%d|%d|%s' % (c['id'], c['n'], c['d'], c['usable']))
+")
+  ncases=0
+  for _row in "${_rows[@]}"; do
+    IFS='|' read -r id n d usable <<< "$_row"
+    [ -z "${id:-}" ] && continue
+    ncases=$((ncases + 1))
+    out="$(q "BEGIN; INSERT INTO platform_rates (id,\"marginNumerator\",\"marginDenominator\",\"changedByLabel\") VALUES ('r5b_${id}',${n},${d},'ops@example.test'); ROLLBACK;")"
+    if [ "$usable" = "True" ]; then
+      case "$out" in
+        *ERROR*) fail "${id} (${n}/${d}) is legal under #178 and isUsableMargin, and the DB refused it: ${out}" ;;
+        *)       pass "${id} (${n}/${d}) accepted, as isUsableMargin says" ;;
+      esac
+    else
+      case "$out" in
+        *"platform_rates_margin_bounds"*) pass "${id} (${n}/${d}) refused BY NAME" ;;
+        *ERROR*) fail "${id} (${n}/${d}) was refused, but NOT by name — a refusal is evidence only when you know what refused: ${out}" ;;
+        *)       fail "${id} (${n}/${d}) is out of bounds under #178 and the DB ACCEPTED it" ;;
+      esac
+    fi
+  done
+  # POSITIVE CONTROL ON THE LOOP ITSELF: an empty list would print no FAILs and
+  # read exactly like a clean pass.
+  [ "$ncases" -ge 10 ] && pass "the shared list supplied ${ncases} cases" \
+    || fail "the shared list supplied only ${ncases} cases — this arm is near-vacuous"
+fi
+
+# --------------------------------------------------------------------------
+echo '── ACTOR — every blank round 5 measured as accepted (--attempt) ───────'
+actor_case() { # $1 = label, $2 = SQL expression for the label, $3 = expect refuse|accept
+  out="$(q "BEGIN; INSERT INTO platform_rates (id,\"marginNumerator\",\"marginDenominator\",\"changedByLabel\") VALUES ('r5a',3,2,${2}); ROLLBACK;")"
+  if [ "$3" = "refuse" ]; then
+    case "$out" in
+      *"platform_rates_actor_present"*) pass "actor ${1} refused BY NAME" ;;
+      *ERROR*) fail "actor ${1} refused, but not by platform_rates_actor_present: ${out}" ;;
+      *) fail "actor ${1} was ACCEPTED — a permanent price change with no readable actor" ;;
+    esac
+  else
+    case "$out" in
+      *ERROR*) fail "actor ${1} is a REAL label and was refused: ${out}" ;;
+      *) pass "actor ${1} accepted" ;;
+    esac
+  fi
+}
+actor_case "'' (empty)"          "''"                    refuse
+actor_case "spaces"              "'   '"                 refuse
+actor_case "TAB"                 "E'\t'"                 refuse
+actor_case "LF+CR"               "E'\n\r'"               refuse
+actor_case "VT"                  "chr(11)"               refuse
+actor_case "FF"                  "chr(12)"               refuse
+actor_case "U+00A0 NBSP"         "U&'\\00a0'"            refuse
+actor_case "U+2007 figure space" "U&'\\2007'"            refuse
+actor_case "U+3000 ideographic"  "U&'\\3000'"            refuse
+actor_case "U+200B zero-width"   "U&'\\200b'"            refuse
+actor_case "U+FEFF BOM"          "U&'\\feff'"            refuse
+actor_case "mixed blanks"        "E' \t'||U&'\\00a0\\3000\\feff'" refuse
+# ⚠️ POSITIVE CONTROLS. Without these a constraint that refused EVERY actor
+# scores full marks above while making the ADMIN-4 writer unusable.
+actor_case "an email"            "'kasra@example.com'"   accept
+actor_case "a CJK name"          "U&'\\738b\\5c0f\\660e'" accept
+actor_case "a Cyrillic name"     "U&'\\0418\\0432\\0430\\043d'" accept
+actor_case "an accented name"    "U&'\\00c9lodie'"       accept
+
+# --------------------------------------------------------------------------
+echo '── REFUSAL — append-only, by this table’s own message (--attempt) ─────'
+refusal() { # $1 = what, $2 = SQL, $3 = expected message fragment
+  out="$(q "BEGIN; INSERT INTO platform_rates (id,\"marginNumerator\",\"marginDenominator\",\"changedByLabel\") VALUES ('r5x',3,2,'op@x'); ${2} ROLLBACK;")"
+  case "$out" in
+    *"$3"*) pass "$1 refused by platform_rates' own message" ;;
+    *ERROR*) fail "$1 was refused by something ELSE — a refusal is evidence only when you know what refused: ${out}" ;;
+    *) fail "$1 was NOT refused" ;;
+  esac
+}
+refusal "UPDATE"   "UPDATE platform_rates SET \"marginNumerator\"=4 WHERE id='r5x';" "append-only"
+refusal "DELETE"   "DELETE FROM platform_rates WHERE id='r5x';"                      "DELETE is refused"
+refusal "TRUNCATE" "TRUNCATE platform_rates;"                                        "TRUNCATE is refused"
+refusal "backdated INSERT" "INSERT INTO platform_rates (id,\"marginNumerator\",\"marginDenominator\",\"changedByLabel\",\"effectiveFrom\",\"createdAt\") VALUES ('r5y',5,1,'op@x',now()-interval '1 month',now()-interval '1 month');" "never before"
+
+# ⚠️ THE POSITIVE CONTROL FOR THE APPEND-ONLY ARM. The ONE permitted update is
+# the `ON DELETE SET NULL` detach; without it this trigger holds user deletion
+# hostage, which is the bug the carve-out exists to prevent.
+det="$(q "
+BEGIN;
+INSERT INTO users (id) VALUES ('r5u') ON CONFLICT DO NOTHING;
+INSERT INTO platform_rates (id,\"marginNumerator\",\"marginDenominator\",\"changedByLabel\",\"changedByUserId\") VALUES ('r5d',3,2,'op@x','r5u');
+UPDATE platform_rates SET \"changedByUserId\"=NULL WHERE id='r5d';
+SELECT 'DETACH_OK';
+ROLLBACK;")"
+case "$det" in
+  *DETACH_OK*) pass "the ON DELETE SET NULL detach still succeeds" ;;
+  *) fail "the permitted detach is refused — this trigger holds account deletion hostage: ${det}" ;;
+esac
+
+# --------------------------------------------------------------------------
+echo '── RESIDUE — every write above was inside BEGIN … ROLLBACK ────────────'
+res="$(q "SELECT count(*) FROM platform_rates WHERE id LIKE 'r5%'")"
+[ "$res" = "0" ] && pass "no residue (0 rows matching r5%)" \
+  || fail "${res} row(s) survived — a write escaped its transaction"
+
+echo
+if [ "$fails" = "0" ]; then
+  echo "ALL ARMS PASSED."
+  exit 0
+fi
+echo "${fails} ARM(S) FAILED."
+exit 1
