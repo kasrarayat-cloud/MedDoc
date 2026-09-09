@@ -297,6 +297,89 @@ export function marginStamp(margin: MarginRate): {
   };
 }
 
+/** The `charge: true` arm of {@link ChargeDecision}, on its own. */
+export type ChargeableDecision = Extract<ChargeDecision, { charge: true }>;
+
+/**
+ * THE LEDGER'S `pricing` JSON FOR ONE DRAW — pure, and EXPORTED SO IT CAN BE
+ * DRIVEN.
+ *
+ * ⚠️ ROUND 5 — IT WAS AN OBJECT LITERAL AT AN UNDRIVABLE WRITE SITE, AND THE
+ * ONLY GUARD ON IT WAS A SOURCE GREP THAT MEASURED THE WRONG THING.
+ * `commitVisitCharge` calls `assertProdDatabase()` as its first statement, so
+ * no test could ever observe what it wrote; the gate therefore sliced the
+ * literal out of the file as TEXT and asserted, of that slice, that no
+ * `multiplier:` or `platformRateId:` KEY appeared after `...decision.stamp`.
+ *
+ * Measured against round 4: adding a module-level
+ * `const LEGACY = { multiplier: '3/2', platformRateId: 'legacy' }` and a second
+ * SPREAD — `...LEGACY,` on the line after `...decision.stamp,` — writes
+ * `multiplier: '3/2'` beside a charge computed at 7/4, stamping an id that
+ * resolves to no row, and the whole suite stays GREEN. A later spread is a
+ * second writer of the same field exactly as a later key is; the round-3 regex
+ * was written for "any `multiplier:` key at all" and a spread carries no key.
+ *
+ * ⚠️ THE CLASS IS "A SECOND WRITER OF THIS FIELD", AND A GREP CAN ONLY EVER
+ * ENUMERATE SPELLINGS OF ONE. So the object is built HERE, by a function that
+ * returns it, and the gate ASSERTS THE RETURNED VALUE — a second writer in any
+ * spelling changes what comes back, and the assertion is on the value rather
+ * than on the text that produced it. The write site is left with no literal to
+ * mutate: `pricing: buildUsagePricing({...})`.
+ *
+ * SPEC §2.2's versioned snapshot: WHICH rates priced this, and what the
+ * pre-multiplier cost was. Stored so a later rate change can never re-price
+ * history and so B9 can explain the number line by line.
+ *
+ * ⚠️ THE SNAPSHOT IS THE WHOLE VISIT'S, ON EVERY ROW, AND THAT IS DELIBERATE.
+ * The components priced ONE charge; the split is a settlement decision taken
+ * afterwards and is not a property of any rate. Apportioning the components
+ * across buckets would invent a per-component bucket attribution the pricing
+ * never made. So each row carries the full derivation plus `draw`, which says
+ * what THIS row settled — and B9 sums `draw.amountMicroUsd` across a visit's
+ * rows to get back to `chargeMicroUsd`, rather than summing `components` twice.
+ * The `visitId` is what joins them.
+ */
+export function buildUsagePricing(args: {
+  visitId: string;
+  decision: ChargeableDecision;
+  draw: BucketDraw;
+  ofBuckets: number;
+}): {
+  visitId: string;
+  costMicroUsd: string;
+  chargeMicroUsd: string;
+  multiplier: string;
+  platformRateId: string;
+  draw: { bucket: LedgerBucket; amountMicroUsd: string; ofBuckets: number };
+  components: ReadonlyArray<Record<string, string | null>>;
+} {
+  const { visitId, decision, draw, ofBuckets } = args;
+  return {
+    visitId,
+    costMicroUsd: decision.costMicroUsd.toString(),
+    chargeMicroUsd: decision.chargeMicroUsd.toString(),
+    // ⚠️ ADMIN-4 — THE RATE THAT APPLIED, NOT A LITERAL. This read `'3/2'` — a
+    // hard-coded string beside a hard-coded computation, so the two could drift
+    // apart and the ledger would still look right. The id is stamped with it: a
+    // stamp you cannot resolve to a row is a number with a story, not a record.
+    ...decision.stamp,
+    draw: {
+      bucket: draw.bucket,
+      amountMicroUsd: draw.amountMicroUsd.toString(),
+      ofBuckets,
+    },
+    components: decision.priced.map((p) => ({
+      usageEventId: p.usageEventId,
+      provider: p.provider,
+      modelName: p.modelName,
+      unitType: p.unitType,
+      deliveryMode: p.deliveryMode,
+      rateId: p.rateId,
+      costMicroUsd: p.costMicroUsd.toString(),
+    })),
+  };
+}
+
 export async function priceUsageRows(
   rows: readonly ChargeableUsageRow[],
   lookup: (args: {
@@ -615,44 +698,19 @@ export async function commitVisitCharge(args: CommitVisitChargeArgs): Promise<Co
           // backstop for the day this line is edited.
           amountMicroUsd: -draw.amountMicroUsd,
           idempotencyKey: visitChargeKey(args.visitId, draw.bucket),
-          // SPEC §2.2's versioned snapshot: WHICH rates priced this, and what
-          // the pre-multiplier cost was. Stored so a later rate change can never
-          // re-price history and so B9 can explain the number line by line.
-          //
-          // ⚠️ THE SNAPSHOT IS THE WHOLE VISIT'S, ON EVERY ROW, AND THAT IS
-          // DELIBERATE. The components priced ONE charge; the split is a
-          // settlement decision taken afterwards and is not a property of any
-          // rate. Apportioning the components across buckets would invent a
-          // per-component bucket attribution the pricing never made. So each row
-          // carries the full derivation plus `draw`, which says what THIS row
-          // settled — and B9 sums `draw.amountMicroUsd` across a visit's rows to
-          // get back to `chargeMicroUsd`, rather than summing `components`
-          // twice. The `visitId` is what joins them.
-          pricing: {
+          // ⚠️ NO OBJECT LITERAL HERE — ROUND 5. The snapshot is built by
+          // `buildUsagePricing`, a pure exported function the gate DRIVES, so
+          // the assertion is on the value that reaches the ledger rather than
+          // on the text of a literal at a write site no test can execute. A
+          // second writer of `multiplier` — a later key OR a later spread —
+          // changes the returned object and reds a behavioural arm; the grep it
+          // replaces could only ever enumerate spellings. See the function.
+          pricing: buildUsagePricing({
             visitId: args.visitId,
-            costMicroUsd: decision.costMicroUsd.toString(),
-            chargeMicroUsd: decision.chargeMicroUsd.toString(),
-            // ⚠️ ADMIN-4 — THE RATE THAT APPLIED, NOT A LITERAL. This read
-            // `'3/2'` — a hard-coded string beside a hard-coded computation,
-            // so the two could drift apart and the ledger would still look
-            // right. The id is stamped with it: a stamp you cannot resolve to
-            // a row is a number with a story, not a record.
-            ...decision.stamp,
-            draw: {
-              bucket: draw.bucket,
-              amountMicroUsd: draw.amountMicroUsd.toString(),
-              ofBuckets: draws.length,
-            },
-            components: decision.priced.map((p) => ({
-              usageEventId: p.usageEventId,
-              provider: p.provider,
-              modelName: p.modelName,
-              unitType: p.unitType,
-              deliveryMode: p.deliveryMode,
-              rateId: p.rateId,
-              costMicroUsd: p.costMicroUsd.toString(),
-            })),
-          },
+            decision,
+            draw,
+            ofBuckets: draws.length,
+          }),
         },
         select: { id: true },
       });

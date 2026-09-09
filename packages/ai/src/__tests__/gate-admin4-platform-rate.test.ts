@@ -21,8 +21,19 @@ import { join } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { marginStamp, priceUsageRows, type ChargeableUsageRow } from '../billing-charge';
-import { chargeMicroUsd, divRoundHalfUp, type MarginRate, type PriceRateRow } from '../price-table';
+import {
+  buildUsagePricing,
+  marginStamp,
+  priceUsageRows,
+  type ChargeableUsageRow,
+} from '../billing-charge';
+import {
+  chargeMicroUsd,
+  divRoundHalfUp,
+  isUsableMargin,
+  type MarginRate,
+  type PriceRateRow,
+} from '../price-table';
 
 function usageRow(over: Partial<ChargeableUsageRow> = {}): ChargeableUsageRow {
   return {
@@ -59,6 +70,59 @@ const RATE = (n: number, d: number, id = 'pr_1'): MarginRate => ({
   id,
   marginNumerator: n,
   marginDenominator: d,
+});
+
+const MIGRATION_PATH = join(
+  __dirname, '..', '..', '..', 'db', 'prisma', 'migrations',
+  '20260909060000_admin4_platform_rate', 'migration.sql',
+);
+const migrationSql = readFileSync(MIGRATION_PATH, 'utf8');
+const chargeSrcRaw = readFileSync(join(__dirname, '..', 'billing-charge.ts'), 'utf8');
+
+/** Executable SQL only — prose must never satisfy a code assertion. The
+ *  canonical form, byte-identical to `gate-b5-ledger-append-only.test.ts`. */
+function stripSqlComments(sql: string): string {
+  return sql
+    .split('\n')
+    .map((line) => {
+      const i = line.indexOf('--');
+      return i === -1 ? line : line.slice(0, i);
+    })
+    .join('\n');
+}
+
+/** Executable TypeScript only. The canonical form, byte-identical to
+ *  `gate-b8-pipeline-seam.test.ts`. */
+const stripTs = (src: string) =>
+  src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .filter((l) => !l.trim().startsWith('//'))
+    .join('\n');
+
+const sqlOnly = stripSqlComments(migrationSql);
+const chargeSrc = stripTs(chargeSrcRaw);
+
+describe('ADMIN-4 round 5 — the strippers are positive-controlled BEFORE anything trusts them', () => {
+  // ⚠️ EVERY `not.toContain` BELOW IS VACUOUS IF A STRIPPER RETURNS ''. A broken
+  // stripper and a clean file produce identical output, so the instrument is
+  // measured first — AGENTS.md, "positive-control every zero".
+  it('the SQL stripper removes prose and keeps SQL', () => {
+    expect(sqlOnly).toContain('CREATE TABLE "platform_rates"');
+    expect(sqlOnly.length).toBeGreaterThan(1500);
+    // A phrase that exists ONLY in the header prose must be gone…
+    expect(migrationSql).toContain('THE MARGIN IS AN EXACT RATIO IN INTEGERS');
+    expect(sqlOnly).not.toContain('THE MARGIN IS AN EXACT RATIO IN INTEGERS');
+    // …and a line whose SQL precedes a trailing comment keeps its SQL.
+    expect(sqlOnly).toContain('CREATE TRIGGER "platform_rates_no_truncate"');
+  });
+
+  it('the TS stripper removes prose and keeps code', () => {
+    expect(chargeSrc).toContain('export async function priceUsageRows(');
+    expect(chargeSrc.length).toBeGreaterThan(2000);
+    expect(chargeSrcRaw).toContain('THE EFFECT — the only thing here that writes');
+    expect(chargeSrc).not.toContain('THE EFFECT — the only thing here that writes');
+  });
 });
 
 describe('ADMIN-4 — a missing margin REFUSES, and never defaults', () => {
@@ -207,7 +271,51 @@ describe('ADMIN-4 — the constant is GONE from the source', () => {
     const { join } = await import('node:path');
     const src = readFileSync(join(__dirname, '..', 'price-table.ts'), 'utf8');
     expect(src).toContain('export function chargeMicroUsd');
-    expect(src, 'divRoundHalfUp is no longer the rounding used').toContain('divRoundHalfUp');
+    // ⚠️ SCOPED TO THE FUNCTION — ROUND 5. This greped the WHOLE file, where
+    // `divRoundHalfUp` is DEFINED (:204) and separately used by `costMicroUsd`
+    // (:221). It therefore could never fail for the reason its own message
+    // states, even if `chargeMicroUsd` stopped using it entirely — a control
+    // whose pattern is guaranteed to be present measures nothing.
+    const body = src.slice(src.indexOf('export function chargeMicroUsd'));
+    const fn = body.slice(0, body.indexOf('\n}'));
+    expect(fn, 'divRoundHalfUp is no longer the rounding used').toContain('divRoundHalfUp');
+  });
+
+  it('⚠️ ROUND 5 — THE SECOND ARGUMENT IS REQUIRED, AND ITS ARITY SAYS SO', async () => {
+    // ⚠️ THE ARM ABOVE CLAIMS TO ASSERT "the literal itself is gone" AND IS
+    // BLIND TO THE DEFAULT-PARAMETER SPELLING, WHICH IS THE PR's OWN PROOF-TABLE
+    // ROW. Measured: changing the signature to
+    //     chargeMicroUsd(costMicro: bigint, margin: MarginRate = { id: 'compiled-in',
+    //                    marginNumerator: 3, marginDenominator: 2 })
+    // leaves `/\b3n\b/` unmatched — `marginNumerator: 3` is a plain Number, not a
+    // bigint literal — leaves `margin.marginNumerator` present in the unchanged
+    // body, type-checks, and makes `ai.chargeMicroUsd(1000n)` return 1500n from
+    // the PUBLIC BARREL: ruling #178's exact defect, restored in one line, with
+    // the whole suite green.
+    //
+    // ⚠️ AND NO BEHAVIOURAL ARM CAN SEE IT, DEDUCTIVELY: the pristine signature
+    // REQUIRES two arguments, so no tsc-clean call site can omit one, so no
+    // call-based arm can ever exercise the default. The property is a property
+    // of the SIGNATURE, and `Function.prototype.length` is the one runtime
+    // instrument that reads it: a default parameter drops it from 2 to 1.
+    const { chargeMicroUsd: fn } = await import('../price-table');
+    expect(fn.length, 'chargeMicroUsd grew a default — the rate can be omitted again').toBe(2);
+
+    // POSITIVE CONTROL ON THE INSTRUMENT ITSELF, so a change to how `.length`
+    // behaves cannot make the assertion above vacuously true. These two are
+    // written here rather than derived from the subject, deliberately.
+    const twoRequired = (_a: number, _b: number) => 0;
+    const oneDefaulted = (_a: number, _b = 1) => 0;
+    expect(twoRequired.length).toBe(2);
+    expect(oneDefaulted.length, '`.length` no longer counts defaults — this arm is inert').toBe(1);
+
+    // …and the source says the same thing, so a rename cannot quietly satisfy
+    // the arity check with a different second parameter.
+    const src = readFileSync(join(__dirname, '..', 'price-table.ts'), 'utf8');
+    expect(
+      src,
+      'the chargeMicroUsd signature no longer takes a REQUIRED MarginRate',
+    ).toMatch(/export function chargeMicroUsd\(costMicro: bigint, margin: MarginRate\): bigint/);
   });
 });
 
@@ -335,33 +443,112 @@ describe('ADMIN-4 — a missing rate is a FAILURE, not a free visit', () => {
 });
 
 describe('ADMIN-4 round 2 — the repairs closed INSTANCES; these close the CLASSES', () => {
-  it('⚠️ THE STAMP HAS NO ARGUMENT AT THE WRITE SITE — a wrong one cannot be passed', () => {
+  it('⚠️ SUPERSEDED BY ROUND 5 — three rounds of regex could not close "a second writer"', () => {
     // ROUND 2's FINDING: round 1 extracted `marginStamp()` so the write site
-    // could be asserted, and the arm greps for the TOKEN `...marginStamp(`.
+    // could be asserted, and the arm greped for the TOKEN `...marginStamp(`.
     // Substituting the ARGUMENT — `marginStamp({...3/2})` beside a 7/4 charge —
-    // satisfied both that grep and the "no literal multiplier" check, wrote a
-    // stamp of '3/2' next to a platformRateId that RESOLVES to the 7/4 row, and
-    // left 783 of 783 tests green.
+    // satisfied it, and 783 of 783 stayed green.
+    // ROUND 3 then required "any `multiplier:` KEY at all, not a quoted
+    // literal", because `multiplier: ['3','2'].join('/')` after the spread had
+    // walked past the quote-anchored version.
+    // ⚠️ ROUND 5's FINDING: A LATER **SPREAD** IS A SECOND WRITER TOO, AND
+    // CARRIES NO KEY. Measured on round 4: a module-level
+    // `const LEGACY = { multiplier: '3/2', platformRateId: 'legacy' }` plus
+    // `...LEGACY,` on the line after `...decision.stamp,` writes '3/2' beside a
+    // charge computed at 7/4, stamps an id resolving to no row, and all four
+    // assertions above pass — because there is no `multiplier:` token in the
+    // block at all. `tsc --strict` emits nothing for spread-after-spread either.
     //
-    // The class fix is that there is no argument: the decision carries the
-    // stamp, built where the rate was applied, and the ledger spreads it.
-    const src = readFileSync(join(__dirname, '..', 'billing-charge.ts'), 'utf8');
-    const pricing = src.slice(src.indexOf('          pricing: {'));
-    const block = pricing.slice(0, pricing.indexOf('\n          },'));
-    expect(block, 'the write site spreads the decision, not a call').toContain('...decision.stamp');
-    expect(block, 'the write site calls marginStamp again — an argument to get wrong').not.toContain(
+    // ⚠️ A GREP CAN ONLY EVER ENUMERATE SPELLINGS OF ONE WRITER. So the object
+    // is no longer a literal at an undrivable write site: `buildUsagePricing`
+    // returns it, the arms below DRIVE it, and the assertion is on the VALUE.
+    // Kept as a named supersession rather than deleted, because the next reader
+    // deserves to know that three rounds of tightening a regex is the shape
+    // that failed here.
+    expect(chargeSrc, 'the pricing snapshot is a literal again — a second writer can be added')
+      .toMatch(/\bpricing: buildUsagePricing\(\{/);
+  });
+
+  it('⚠️ ROUND 5 — THE LEDGER SNAPSHOT IS DRIVEN, AND ITS STAMP IS THE RATE THAT PRICED', async () => {
+    const decision = await priceUsageRows(
+      [usageRow({ inputTokens: 1000 })],
+      priceEverything,
+      async () => RATE(7, 4, 'pr_74'),
+    );
+    expect(decision.charge).toBe(true);
+    if (!decision.charge) return;
+
+    const pricing = buildUsagePricing({
+      visitId: 'v1',
+      decision,
+      draw: { bucket: 'paid', amountMicroUsd: 1750n },
+      ofBuckets: 1,
+    });
+
+    // THE ASSERTION THE THREE REGEXES WERE TRYING TO MAKE. A second writer of
+    // either field — a later key, a later spread, a wrapper, a rename — changes
+    // what comes back here, whatever it is spelled like.
+    expect(pricing.multiplier, 'the ledger stamp is not the rate that priced').toBe('7/4');
+    expect(pricing.platformRateId).toBe('pr_74');
+    // The stamp must AGREE with the arithmetic beside it: 1000 µ$ at 7/4.
+    expect(pricing.costMicroUsd).toBe('1000');
+    expect(pricing.chargeMicroUsd).toBe('1750');
+    expect(BigInt(pricing.costMicroUsd) * 7n / 4n).toBe(BigInt(pricing.chargeMicroUsd));
+  });
+
+  it('⚠️ ROUND 5 NON-VACUITY — a DIFFERENT rate produces a different stamp', async () => {
+    // Or the arm above passes on a builder that returns a constant. Two rates,
+    // two stamps, and neither is the historical literal.
+    for (const [n, d, id, charge] of [
+      [3, 2, 'pr_32', '1500'],
+      [9, 5, 'pr_95', '1800'],
+    ] as const) {
+      const decision = await priceUsageRows(
+        [usageRow({ inputTokens: 1000 })],
+        priceEverything,
+        async () => RATE(n, d, id),
+      );
+      if (!decision.charge) throw new Error(`${n}/${d} was refused — the fixture is wrong`);
+      const pricing = buildUsagePricing({
+        visitId: 'v1',
+        decision,
+        draw: { bucket: 'promo', amountMicroUsd: BigInt(charge) },
+        ofBuckets: 1,
+      });
+      expect(pricing.multiplier).toBe(`${n}/${d}`);
+      expect(pricing.platformRateId).toBe(id);
+      expect(pricing.chargeMicroUsd).toBe(charge);
+    }
+  });
+
+  it('⚠️ ROUND 5 — AND THE CALL SITE CANNOT WRAP IT, EITHER', () => {
+    // The behavioural arms above catch a second writer INSIDE the builder. They
+    // cannot see `pricing: { ...buildUsagePricing(…), ...LEGACY }` at the call
+    // site, because that never calls the builder's own object into evidence.
+    // So the one remaining source assertion is that `pricing:` is the CALL and
+    // nothing else — no object literal to add a key or a spread to — and that
+    // neither field is written anywhere in the whole write function.
+    const commit = chargeSrc.slice(chargeSrc.indexOf('export async function commitVisitCharge'));
+    expect(commit.length, 'commitVisitCharge was not found — this arm is vacuous').toBeGreaterThan(500);
+    expect(commit, 'the pricing snapshot is wrapped in a literal again').toMatch(
+      /\bpricing: buildUsagePricing\(\{/,
+    );
+    expect(commit, 'the write site writes `multiplier` itself').not.toMatch(/\bmultiplier\s*:/);
+    expect(commit, 'the write site writes `platformRateId` itself').not.toMatch(
+      /\bplatformRateId\s*:/,
+    );
+    expect(commit, 'the write site calls marginStamp again — an argument to get wrong').not.toContain(
       'marginStamp(',
     );
-    // ⚠️ ROUND 3 — ANY `multiplier:` KEY AT ALL, NOT A QUOTED LITERAL.
-    // The old regex required a quote right after the colon, so
-    // `multiplier: ['3','2'].join('/')` placed AFTER the spread walked past it
-    // and 803 of 803 stayed green while the ledger recorded '3/2' beside a 7/4
-    // charge. A later key overrides a spread; the class is "a second writer of
-    // this field", not "a literal".
-    expect(block, 'the ledger writes `multiplier` itself — a later key overrides the spread').not.toMatch(
-      /\bmultiplier\s*:/,
+    // …and the builder itself has exactly ONE spread. A second one is the
+    // round-5 defect wherever it is placed.
+    const builder = chargeSrc.slice(
+      chargeSrc.indexOf('export function buildUsagePricing'),
+      chargeSrc.indexOf('export async function priceUsageRows'),
     );
-    expect(block, 'the ledger writes `platformRateId` itself').not.toMatch(/\bplatformRateId\s*:/);
+    expect(builder.length, 'buildUsagePricing was not found — this arm is vacuous').toBeGreaterThan(200);
+    expect(builder.match(/\.\.\./g) ?? [], 'a second spread in the pricing builder').toHaveLength(1);
+    expect(builder).toContain('...decision.stamp');
   });
 
   it('⚠️ AND THE STAMP ON THE DECISION IS THE RATE THAT PRICED', async () => {
@@ -445,6 +632,130 @@ describe('ADMIN-4 round 2 — the repairs closed INSTANCES; these close the CLAS
     expect(sql, 'the ON DELETE SET NULL detach is not permitted').toContain(
       "OLD.\"changedByUserId\" IS NOT NULL",
     );
+  });
+});
+
+describe('ADMIN-4 round 5 — the SQL invariants the migration claims, asserted on the SQL', () => {
+  // ⚠️ WHAT THIS BLOCK DOES AND DOES NOT CLAIM. CI has no Postgres, so a source
+  // read is the only half that can run here — the same split
+  // `gate-b5-ledger-append-only.test.ts` makes, and for the same reason: a
+  // trigger is invisible to Prisma, so a regenerated migration omits it and
+  // `prisma migrate diff` reports no drift. The BEHAVIOURAL half is
+  // `scripts/check-platform-rates-invariants.sh`, which attempts every input
+  // below against a real database inside `BEGIN … ROLLBACK`.
+  //
+  // Every assertion here runs against `sqlOnly`, never the raw file: this
+  // migration's prose says "integer out of range", "btrim" and "5 *" because it
+  // EXPLAINS why they were wrong, and prose is the one place the words you are
+  // grepping for are guaranteed to appear.
+
+  it('⚠️ THE PREVIOUS PAIR IS DERIVED, NOT ACCEPTED — the caller has no opinion', () => {
+    // ROUND 5's FINDING: `previousNumerator`/`previousDenominator` were CALLER
+    // CLAIMS. Measured on PG 16.15 against round 4, four inserts in order —
+    // R1 3/2, R2 4/1 claiming previous 5/1, R3 2/1 with no pair, R4 3/1
+    // claiming previous 1/1 — were ALL ACCEPTED. R2 permanently recorded that
+    // the platform margin went 5.0 -> 4.0 when it went 1.5 -> 4.0; R3 was the
+    // SECOND change and byte-indistinguishable from a first row, contradicting
+    // `schema.prisma`'s "NULL on the seed row only". UPDATE, DELETE and
+    // TRUNCATE are all refused, so the false history was UNCORRECTABLE.
+    //
+    // ⚠️ AND NO WRITER DISCIPLINE COULD HAVE FIXED IT. Two HONEST writers, each
+    // reading the current rate and recording it, falsify each other — measured:
+    // without the lock, a concurrent B recorded previous 3/2 while its actual
+    // predecessor was A = 4/1. The prior art this migration says it copies takes
+    // `pg_advisory_xact_lock` for exactly this reason.
+    expect(sqlOnly, 'the derivation is not serialized — two honest writers falsify each other')
+      .toContain("PERFORM pg_advisory_xact_lock(hashtext('platform_rates'), 0);");
+    expect(sqlOnly, 'the previous pair is not derived — it is still a caller claim').toContain(
+      'INTO NEW."previousNumerator", NEW."previousDenominator"',
+    );
+    // ⚠️ ANCHORED TO `createdAt`, NOT `effectiveFrom`, AND THAT IS WHAT MAKES IT
+    // PERMANENT: forward-only guarantees every later row has
+    // `effectiveFrom >= its own createdAt > this row's createdAt`, so no future
+    // insert can fall inside this predicate. Anchored to `effectiveFrom` a row
+    // scheduled ahead could be retroactively falsified by one inserted later
+    // and effective sooner — in a table that cannot be corrected.
+    expect(sqlOnly, 'the derivation is anchored to effectiveFrom — a later row can falsify it')
+      .toContain('WHERE p."effectiveFrom" <= NEW."createdAt"');
+    // The CHECKs are kept as belt and braces, and must not be dropped on the
+    // grounds that the trigger now makes them unfalsifiable — the trigger is the
+    // thing `prisma migrate dev` cannot see.
+    expect(sqlOnly).toContain('platform_rates_previous_pair');
+    expect(sqlOnly).toContain('platform_rates_previous_bounds');
+  });
+
+  it('⚠️ THE BOUNDS CROSS-MULTIPLY IS `bigint` ON BOTH PAIRS — int4 overflowed', () => {
+    // ROUND 5's FINDING: `5 * "marginDenominator"` is int4*int4, and `int4mul`
+    // RAISES rather than widening. Measured on PG 16.15: 1500000000/1000000000
+    // (exactly 1.5), 2000000000/500000000 (exactly 4.0), 2147483647/2147483647
+    // and 429496730/429496730 (exactly 1.0) each aborted with
+    // `ERROR: integer out of range` — SQLSTATE 22003 raised in `int4mul`, naming
+    // NEITHER the constraint nor the column — while the exported TypeScript
+    // mirror `isUsableMargin` returned `true` for every one of them.
+    //
+    // It was a false-REJECTION band only, provably: if `5*d` overflows then
+    // `5d > int4max >= n`, so any such row would have satisfied the ceiling
+    // anyway. But #178's bound was encoded twice in two places free to drift,
+    // which is the defect ADMIN-4 exists to remove one layer up.
+    expect(sqlOnly, 'the ceiling is int4 arithmetic again — it overflows on legal input')
+      .not.toMatch(/\b5 \* "(margin|previous)Denominator"/);
+    expect(sqlOnly).toContain('5::bigint * "marginDenominator"');
+    expect(sqlOnly).toContain('5::bigint * "previousDenominator"');
+  });
+
+  it('⚠️ THE ACTOR CHECK TRIMS A NAMED UNICODE SET — `btrim/1` trims SPACE only', () => {
+    // ROUND 5's FINDING: round 4 closed `''` and left the CLASS. `btrim/1`'s
+    // default trim set is the space character and nothing else, so measured on
+    // PG 16.15 a TAB, `\n\r`, U+00A0, U+2007 and U+3000 were each ACCEPTED as
+    // the actor of a permanent, uncorrectable price change with a NULL FK.
+    //
+    // ⚠️ AND THE OBVIOUS REPAIRS LEAVE IT OPEN: `btrim(x, E' \t\n\r')` accepts
+    // U+00A0, and so does `x ~ '[^[:space:]]'` — POSIX `[:space:]` does not
+    // class NBSP here. A locale-dependent character class is the wrong
+    // instrument for a locale-independent invariant, so the set is ENUMERATED.
+    expect(sqlOnly, 'the single-argument btrim is back — it trims SPACE only')
+      .not.toMatch(/btrim\("changedByLabel"\)\)/);
+    expect(sqlOnly).toContain('btrim("changedByLabel",');
+    // Named codepoints, one per class of blank the finding measured as accepted.
+    for (const [codepoint, what] of [
+      ['\\00a0', 'U+00A0 no-break space'],
+      ['\\2007', 'U+2007 figure space'],
+      ['\\3000', 'U+3000 ideographic space'],
+      ['\\2028', 'U+2028 line separator'],
+      ['\\feff', 'U+FEFF byte-order mark'],
+    ] as const) {
+      expect(sqlOnly, `${what} is no longer trimmed — it is an accepted actor again`).toContain(
+        codepoint,
+      );
+    }
+    expect(sqlOnly, 'the ASCII control blanks (VT, FF) are no longer trimmed').toContain(
+      'chr(11) || chr(12)',
+    );
+  });
+
+  it('⚠️ THE TWO ENCODINGS OF #178’s BOUNDS ANSWER THE SAME LIST', () => {
+    // ⚠️ THE CASES ARE READ FROM A FILE, NOT WRITTEN HERE, and the SQL half of
+    // this gate (`scripts/check-platform-rates-invariants.sh`) reads the SAME
+    // file. Widening a hand-written list closes instances; deriving BOTH sides
+    // from one list closes the class — a case added there is answered by both
+    // encodings or by neither, and the two can no longer drift silently.
+    const cases = JSON.parse(
+      readFileSync(join(__dirname, '..', '..', '..', '..', 'scripts', 'fixtures',
+        'platform-rate-bounds-cases.json'), 'utf8'),
+    ).cases as Array<{ id: string; n: number; d: number; usable: boolean }>;
+
+    // POSITIVE CONTROL ON THE LIST ITSELF: an all-true or all-false list would
+    // make this arm pass on a predicate that answered everything one way.
+    expect(cases.length).toBeGreaterThan(10);
+    expect(cases.filter((c) => c.usable).length).toBeGreaterThan(0);
+    expect(cases.filter((c) => !c.usable).length).toBeGreaterThan(0);
+
+    for (const c of cases) {
+      expect(
+        isUsableMargin({ id: c.id, marginNumerator: c.n, marginDenominator: c.d }),
+        `${c.id}: isUsableMargin disagrees with the shared bounds list on ${c.n}/${c.d}`,
+      ).toBe(c.usable);
+    }
   });
 });
 
