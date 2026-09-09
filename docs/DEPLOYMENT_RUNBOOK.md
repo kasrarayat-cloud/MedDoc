@@ -2290,3 +2290,37 @@ applies** — the light lane is two runners on one box and can still saturate. W
 changed is that the jobs which took 26–36 minutes each no longer queue behind
 each other.
 
+### THE LIGHT LANE STAYS — AND THE ONE TRIGGER THAT RETIRES IT ANYWAY
+
+**Owner ruling, 2026-09-04.** `docs/proposals/ci-light-lane-retirement-20260904.md`
+recommended keeping the self-hosted box for the light lane and re-deciding on the
+invoice. **That recommendation is ACCEPTED**, with one trigger added:
+
+> ⚠️ **IF THE BOX BALLOONS OR WEDGES AGAIN, IT IS RETIRED — REGARDLESS OF COST.**
+> **Maintenance burden is a cost too**, and the proposal priced only the invoice.
+
+**What that closes.** The proposal's arithmetic was honest about dollars
+($51–185/month to move the light lane, measured) and silent about the other
+column: the virtio-balloon, the sshd, and the "wedge" false alarms all lived on
+that box, and every one of them cost a session's attention at a moment when
+something else was mid-flight. A machine that needs watching is not free merely
+because its invoice is zero.
+
+**The trigger is deliberately a MEASURED EVENT, not a judgement** — so checking it
+is a lookup, not an argument:
+
+- **BALLOON** — `lsmod | grep balloon` returns a hit, or `free -m` total drops
+  below the recorded steady state. ⚠️ Note `lsmod` is SILENT about built-ins; if
+  the driver is `=y` it will not appear, so the memory figure is the authority.
+  See `docs/canon/80-lsmod-is-silent-about-built-ins.md`.
+- **WEDGE** — a runner holds a job with no progress while `Runner.Worker` is
+  absent, by the discriminator above. ⚠️ Read it at the JOB level: a run reports
+  `in_progress` while its jobs merely queue, so run-level status will call a
+  starved queue a wedge and a wedge a healthy run.
+
+**On the trigger firing, retirement is maintenance, not a proposal** — move the
+light lane to `ubuntu-latest` and decommission. No further owner decision is
+required, because this ruling IS that decision, made in advance while nothing was
+on fire. That is the point of writing it down now: the moment the box misbehaves
+is the worst moment to be re-litigating whether it is worth keeping.
+
