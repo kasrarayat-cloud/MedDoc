@@ -94,6 +94,7 @@
       "Bash(tmux has-session:*)",
       "Bash(tmux list-panes:*)",
       "Bash(bash scripts/check-ledger-append-only.sh:*)",
+      "Bash(bash scripts/check-platform-rates-invariants.sh:*)",
       "Bash(bash scripts/check-hooks-installed.sh:*)",
       "Bash(bash scripts/check-amendment-reachability.sh:*)",
       "Bash(bash scripts/check-deploy-records-tracked.sh:*)",
