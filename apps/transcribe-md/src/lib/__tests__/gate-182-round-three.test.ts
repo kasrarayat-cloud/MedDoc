@@ -44,9 +44,46 @@ const NO_IDENTITY_CHECK_REQUIRED: Record<string, string> = {
     'practiceId, role, or any patient data.',
 };
 
+/**
+ * ⚠️ ONE STRING, USED TWICE — the argument grep receives, and the thing the
+ * SCOPE arm measures. That sharing is what lets the arm fail: a rescope moves
+ * the population AND the measurement together, so the two derivations below
+ * stop agreeing. Never re-spell it at either use site.
+ */
+const CONSUMER_SCAN_ROOTS = 'apps/*/src';
+
+/**
+ * The directories the scan ACTUALLY reaches: the same roots string, handed to
+ * the same shell, from the same cwd grep runs in — so this expansion IS grep's
+ * expansion. ⚠️ Deliberately NOT read off this file's own source; that is the
+ * defect being repaired.
+ */
+function scannedDirs(roots: string): string[] {
+  return execSync(`ls -d ${roots} 2>/dev/null || true`, { cwd: REPO, encoding: 'utf8' })
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    // sh leaves an unmatched glob as its own literal, and a path that does not
+    // exist was never scanned.
+    .filter((p) => existsSync(join(REPO, p)))
+    .sort();
+}
+
+/** Every app that HAS sources — enumerated from the tree, never from a name. */
+function appSourceDirs(): string[] {
+  return readdirSync(join(REPO, 'apps'), { withFileTypes: true })
+    // sh globs skip dot-directories, so RIGHT must skip them too — otherwise a
+    // stray `apps/.something/src` reds this arm for a reason that has nothing
+    // to do with the scan's scope.
+    .filter((d) => d.isDirectory() && !d.name.startsWith('.'))
+    .map((d) => `apps/${d.name}/src`)
+    .filter((p) => existsSync(join(REPO, p)))
+    .sort();
+}
+
 describe('#182 round 3 — every session consumer refuses an unverified token', () => {
   const consumers = execSync(
-    "grep -rln 'await auth()' apps/*/src --include='*.ts' --include='*.tsx' " +
+    `grep -rln 'await auth()' ${CONSUMER_SCAN_ROOTS} --include='*.ts' --include='*.tsx' ` +
       "| grep -v '__tests__' | grep -v '\\.test\\.'",
     { cwd: REPO, encoding: 'utf8' },
   )
@@ -54,10 +91,38 @@ describe('#182 round 3 — every session consumer refuses an unverified token', 
     .map((l) => l.trim())
     .filter(Boolean);
 
-  it('NON-VACUITY: the enumeration finds the real population, across apps', () => {
+  it('NON-VACUITY: the enumeration finds the real population', () => {
     expect(consumers.length, 'the consumer grep found nothing — every arm below is vacuous').toBeGreaterThan(12);
-    // it must reach BEYOND transcribe-md, or the cross-app blindness of round
-    // two is simply re-created inside the gate
+  });
+
+  it('⚠️ POSITIVE CONTROL: the tree can still EXPRESS a cross-app claim', () => {
+    // Without this, "the scan covers every app" is satisfied by a tree holding
+    // exactly ONE app, and the SCOPE arm below becomes a tautology of a new
+    // shape rather than a check. `apps/` is enumerated, never named.
+    expect(
+      appSourceDirs().length,
+      'apps/ holds fewer than two source trees, so there is no cross-app ' +
+        'property left to assert. RETIRE this describe deliberately — do not ' +
+        'let it pass empty.',
+    ).toBeGreaterThan(1);
+  });
+
+  it('⚠️ POSITIVE CONTROL: the comparison REJECTS a single-app scope', () => {
+    // Aimed where the answer is NOT predetermined — it plants the exact defect
+    // the SCOPE arm names and requires the comparison to say NO. The planted
+    // scope is DERIVED from the tree, so no app name is hard-coded here either.
+    const oneApp = appSourceDirs()[0];
+    expect(
+      scannedDirs(oneApp),
+      `the planted single-app scope ${oneApp} resolves to nothing — this control is vacuous`,
+    ).toEqual([oneApp]);
+    expect(
+      scannedDirs(oneApp),
+      'a one-app scope compared EQUAL to the whole tree — the SCOPE arm below cannot fail',
+    ).not.toEqual(appSourceDirs());
+  });
+
+  it('SCOPE: the enumeration scans EVERY app, not one', () => {
     // ⚠️ DMP-a — THE CLAIM IS ABOUT THE ENUMERATION'S **SCOPE**, NOT ITS HITS.
     //
     // This asserted a consumer exists under `apps/meddoc-pro/`, which is right
@@ -72,14 +137,27 @@ describe('#182 round 3 — every session consumer refuses an unverified token', 
     // `apps/marketing`, which has no session consumers and never will. Found by
     // actually deleting the app and re-running, not by reading.
     //
-    // What round two's blindness was about is the SCAN: the enumeration must
-    // glob `apps/*/src` rather than one app's path. That is true whatever apps
-    // exist, and it is what is asserted.
-    const enumeration = readFileSync(__filename, 'utf8');
+    // ⚠️ AND THE SECOND REWRITE WAS THE WORST OF THE THREE — IT COULD NOT FAIL.
+    // It did `readFileSync(__filename)` and asserted the file CONTAINED the
+    // literal `apps/*/src`, while the assertion's own argument was the third
+    // occurrence of that literal in the file. A probe whose pattern appears in
+    // the searcher cannot return false: rescoping the grep to one app left it
+    // GREEN, in the merge-gating `unit` job, on the very defect its failure
+    // message names. Refutation round, upheld 2 of 2.
+    //
+    // What round two's blindness was about is the SCAN. So the property is
+    // MEASURED, from two independent derivations that must agree:
+    //   LEFT   what the scan reaches — the same roots string, expanded by the
+    //          same shell from the same cwd that grep runs in.
+    //   RIGHT  what exists — `apps/` enumerated off the filesystem.
+    // Rescoping the roots moves LEFT and not RIGHT, so the arm reds. Deleting
+    // an app moves BOTH, so DELETE-MEDDOC-PRO stays green — which is the whole
+    // point of DMP-a.
     expect(
-      enumeration,
+      scannedDirs(CONSUMER_SCAN_ROOTS),
       'the enumeration is scoped to one app — the cross-app blindness of round two, re-created inside the gate',
-    ).toContain("apps/*/src");  });
+    ).toEqual(appSourceDirs());
+  });
 
   it('each consumer gates on the IDENTITY, or is a named exemption with a reason', () => {
     const ungated = consumers.filter((c) => {
