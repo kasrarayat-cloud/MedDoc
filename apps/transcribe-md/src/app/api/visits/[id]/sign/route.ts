@@ -37,6 +37,7 @@ import {
   isImagingReportSpecialty,
   ultrasoundSpecialtyEnabled,
 } from '@meddoc/shared/specialties';
+import { autoAcceptIcdDecisions } from '@/lib/icd-auto-accept';
 import { emAppliesToVisit } from '@/lib/note-shape';
 import { templateNativeDocxEnabled } from '@/config/template-native-docx';
 import { invalidateVisitFills } from '@/lib/docx-preview/fill-cache';
@@ -772,11 +773,32 @@ export const POST = withApiHandler<{ id: string }>(
       // erasure race with a smaller window, which is not the same as a closed
       // one. Serializable makes the pair atomic; the expensive work stays
       // outside, so the transaction holds for one round trip.
+      // ⚠️ HOISTED SO THE LOG AND THE AUDIT ROWS CAN FIRE **AFTER** THE WRITE.
+      // The pass found the `log.info` emitting from INSIDE the transaction,
+      // before `updateMany` — so it survived a rollback and it fired on a lost
+      // CAS, asserting an acceptance of the very code the doctor had just
+      // rejected. That is the defect this route already names one field over:
+      // *"⚠️ NOT `VISIT_SIGNED` — THIS REQUEST SIGNED NOTHING."*
+      let autoIcdAdded: string[] = [];
+
       const signWrite = (frozenId: string | null) =>
         prisma.$transaction(async (tx) => {
           const fresh = await tx.transcribeVisit.findFirst({
             where: visitByIdScope(visitId, session.user.practiceId),
-            select: { cptCodes: true, emPendingChange: true },
+            // ⚠️ `icdCodes`/`icdDecisions` ARE READ HERE AND NOT FROM THE
+            // CAPTURE AT ENTRY, for the same reason `emPendingChange` is. The
+            // compare-and-swap below keys on `soapVersion`, and a coding
+            // decision does not move it — so a doctor rejecting a code in the
+            // seconds between entry and this write is INVISIBLE to the CAS.
+            // Auto-accepting from the captured map would then overwrite that
+            // rejection with a machine-written acceptance, on a signed record,
+            // with nothing anywhere reporting it.
+            select: {
+              cptCodes: true,
+              emPendingChange: true,
+              icdCodes: true,
+              icdDecisions: true,
+            },
           });
           const freshBlob = (fresh?.cptCodes ?? null) as {
             em?: { override?: { code?: string } };
@@ -848,6 +870,69 @@ export const POST = withApiHandler<{ id: string }>(
                   },
                 } as Prisma.InputJsonValue);
 
+          // ── SIGN-TIME AUTO-ACCEPT ────────────────────────────────────
+          // A suggested code the doctor never touched is written ACCEPTED with
+          // `auto: true`, so the signed record says what was coded instead of
+          // leaving the question open forever. The rule lives in
+          // `icd-auto-accept.ts`; it ADDS and never REPLACES, so a decision the
+          // doctor made — a REJECTION above all — passes through untouched.
+          //
+          // ⚠️ WRITTEN ONLY WHEN IT ADDED SOMETHING. An unconditional write
+          // would rewrite the whole column on every signature, which is the
+          // narrowing hazard `ICD_DECISION_RECORD_KEYS` exists for: any field a
+          // deployed reader does not know about would be stripped on a
+          // signature that changed nothing.
+          // ⚠️ THE CODES THE DOCTOR HAS EVER **CLEARED**, READ FROM THE
+          // APPEND-ONLY TRAIL. `cleared` deletes the record, so the column
+          // cannot tell "never touched" from "the doctor took this OFF the
+          // record" — and the auto-accept read the second as the first, then
+          // stamped the reversal `auto: true`. Found by the adversarial pass,
+          // reachable through the shipped UI with no rollback and no repair.
+          //
+          // ⚠️ IN THE SAME TRANSACTION AS THE READ IT GUARDS. Outside it, a
+          // clear committing in between would be invisible exactly when it
+          // matters most.
+          //
+          // ⚠️ IF THE TRAIL CANNOT BE READ, THE AUTO-ACCEPT IS SKIPPED — the
+          // SIGNATURE IS NOT. Three behaviours were available and only one is
+          // right: proceeding with an empty set silently re-arms the defect
+          // this read exists to close; failing the request stops a doctor
+          // signing a finished note because of a bookkeeping table. Skipping
+          // degrades exactly to the behaviour before this feature — every code
+          // stays HELD and reaches the doctor — which is the direction that
+          // asks a question rather than answering one.
+          let everCleared: Set<string> | null = new Set<string>();
+          try {
+            const clearedRows = await tx.auditLog.findMany({
+              where: {
+                targetType: 'TranscribeVisit',
+                targetId: visitId,
+                action: 'ICD_CODE_DECISION_CLEARED',
+              },
+              select: { metadata: true },
+            });
+            for (const row of clearedRows) {
+              const code = (row.metadata as { code?: unknown } | null)?.code;
+              if (typeof code === 'string' && code.length > 0) everCleared.add(code.toUpperCase());
+            }
+          } catch (err) {
+            everCleared = null;
+            log.warn('api:visits:sign', 'icd auto-accept SKIPPED — the cleared-code trail is unreadable', {
+              visitId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+
+          const autoIcd = everCleared
+            ? autoAcceptIcdDecisions(
+                fresh?.icdCodes ?? null,
+                fresh?.icdDecisions ?? null,
+                { at: new Date().toISOString(), byUserId: userId },
+                everCleared,
+              )
+            : { decisions: {}, added: [] };
+          autoIcdAdded = autoIcd.added;
+
           return tx.transcribeVisit.updateMany({
         where: {
           ...visitByIdScope(visitId, session.user.practiceId),
@@ -894,6 +979,13 @@ export const POST = withApiHandler<{ id: string }>(
           // unrepresentable anyway — this is the code side of the same rule, so
           // the constraint never has to fire in normal operation.
           signedBy: userId,
+          // ⚠️ IN THE SAME `updateMany` AS THE SIGNATURE, deliberately — the
+          // same argument `signedBy` carries one field up. A follow-up update
+          // would leave a window in which the record is SIGNED and the codes it
+          // attests to are still undecided.
+          ...(autoIcd.added.length > 0
+            ? { icdDecisions: autoIcd.decisions as unknown as Prisma.InputJsonValue }
+            : {}),
           ...(mergedCpt !== undefined ? { cptCodes: mergedCpt } : {}),
           // E/M visible-confirm: the gate above verified the explicit
           // acknowledgement — MARK (not clear) the record so the row
@@ -1093,6 +1185,44 @@ export const POST = withApiHandler<{ id: string }>(
       // document is never re-derived. Preview-side only; nothing here is read
       // by this route's own gates.
       void invalidateVisitFills(visitId);
+
+      // ── THE MACHINE'S CODING DECISIONS, AUDITED LIKE THE DOCTOR'S ────────
+      //
+      // ⚠️ AFTER THE WRITE AND ONLY ON `count === 1`. Emitting inside the
+      // transaction meant a rolled-back or CAS-lost signature still claimed the
+      // acceptance — of the very code the doctor had just rejected, in the
+      // interleaving the pass measured.
+      //
+      // ⚠️ AND IT IS AN AUDIT ROW, NOT ONLY A LOG LINE. Every DOCTOR decision
+      // writes `ICD_CODE_ACCEPTED` / `_REJECTED` / `_CLEARED`, and the decision
+      // route calls that trail "the one log a coding dispute reads". The
+      // machine's acceptances wrote nothing there, so a reconstruction of "who
+      // decided this code" attributed every one of them to the doctor BY
+      // OMISSION. `auto: true` is not a substitute: it lives in the same
+      // mutable JSONB column the record itself does, and this file's narrower
+      // is documented to strip unknown keys in a rollback window. The
+      // append-only trail is the one store that cannot be narrowed.
+      if (updated.count === 1 && autoIcdAdded.length > 0) {
+        log.info('api:visits:sign', 'icd auto-accept at signature', {
+          visitId,
+          // COUNT and CODES — an ICD code is not patient context, and the codes
+          // are what makes a later dispute answerable. No quote, no
+          // description, nothing the note said.
+          added: autoIcdAdded.length,
+          codes: autoIcdAdded,
+        });
+        for (const code of autoIcdAdded) {
+          void logAudit({
+            action: 'ICD_CODE_AUTO_ACCEPTED',
+            targetId: visitId,
+            targetType: 'TranscribeVisit',
+            // The same shape the doctor's own decisions record — `{code,
+            // fromState, toState}` and nothing else. `fromState: null` is the
+            // honest value: the code carried no decision at all.
+            metadata: { code, fromState: null, toState: 'accepted', auto: true },
+          });
+        }
+      }
 
       if (updated.count === 0) {
         // Another concurrent request got there first. Re-read.
