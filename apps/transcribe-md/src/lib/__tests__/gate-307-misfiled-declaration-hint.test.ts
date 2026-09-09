@@ -7,8 +7,9 @@
 // error had been made twice in one day with the rule in hand.
 //
 // ⚠️ IT LOOKED IN ONE DIRECTORY, FOR BASENAMES CONTAINING `decl`. Measured
-// 2026-09-09 on this branch: `docs/deploy-declarations/` holds TEN
-// declaration-shaped files that NOTHING IN THIS REPOSITORY READS —
+// 2026-09-09 on this branch: `docs/deploy-declarations/` held ten
+// declaration-shaped files that NOTHING IN THIS REPOSITORY READS (the count is
+// not the point and it grew again the same afternoon) —
 // `grep -rn deploy-declarations` over *.sh/*.ts/*.yml returns only references
 // this PR itself created — and not one would have been found, because the word
 // "declaration" is in the DIRECTORY name and never in the basenames
