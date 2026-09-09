@@ -115,7 +115,13 @@ ALTER TABLE "platform_rates" ADD CONSTRAINT "platform_rates_forward_only" CHECK 
 --     the point is that the column means "when the server saw this row".
 CREATE OR REPLACE FUNCTION platform_rates_stamp_created() RETURNS trigger AS $fn$
 BEGIN
-    NEW."createdAt" := now();
+    -- ⚠️ `clock_timestamp()`, NOT `now()`. `now()` is TRANSACTION START time, so
+    -- a writer that opens a transaction, does other work, then inserts, stores a
+    -- rate "effective" earlier than the moment it was actually written — by
+    -- exactly the transaction's duration. Measured on a real Postgres: 3.011s of
+    -- retroactive window from a `pg_sleep(3)` before the INSERT. The admin
+    -- writer #178 calls for will run inside a transaction.
+    NEW."createdAt" := clock_timestamp();
     IF NEW."effectiveFrom" < NEW."createdAt" THEN
         RAISE EXCEPTION
           'platform_rates: effectiveFrom % precedes insertion at % — a rate takes effect when it is set or later, never before (ADMIN-4, #178)',
@@ -169,3 +175,57 @@ CREATE TRIGGER "platform_rates_no_update"
 CREATE TRIGGER "platform_rates_no_delete"
     BEFORE DELETE ON "platform_rates"
     FOR EACH ROW EXECUTE FUNCTION platform_rates_append_only();
+
+-- ⚠️ 3 — AND `TRUNCATE`, WHICH FIRES NEITHER OF THE ABOVE.
+--
+-- Row-level triggers do not see TRUNCATE. Measured on a real Postgres 16:
+-- DELETE, UPDATE, a backdated INSERT, `INSERT … ON CONFLICT DO UPDATE` and a
+-- `COPY` were each refused BY NAME — and `TRUNCATE "platform_rates";` emptied
+-- the table, 2 rows to 0, silently.
+--
+-- ⚠️ THE PRIOR ART THIS MIGRATION SAYS IT COPIED HAS THIS ARM, AND ITS COMMENT
+-- IS THE WARNING I WALKED PAST: `ledger_entries_append_only_before_truncate` —
+-- *"TRUNCATE FIRES NEITHER OF THE ABOVE … it is the arm most likely to be left
+-- out."* It was.
+--
+-- The cost is not abstract: truncating this table makes every already-written
+-- `ledger_entries.pricing.platformRateId` unresolvable, which is verbatim the
+-- §2.5 declaration's own failure criterion.
+CREATE OR REPLACE FUNCTION platform_rates_no_truncate() RETURNS trigger AS $fn$
+BEGIN
+    RAISE EXCEPTION
+      'platform_rates: TRUNCATE is refused. The rate history is the product of #178 — an audit row saying who changed it — and every ledger row references it by id.'
+      USING ERRCODE = 'P0001';
+END;
+$fn$ LANGUAGE plpgsql;
+
+CREATE TRIGGER "platform_rates_no_truncate"
+    BEFORE TRUNCATE ON "platform_rates"
+    FOR EACH STATEMENT EXECUTE FUNCTION platform_rates_no_truncate();
+
+-- ⚠️ 4 — THE MIGRATION VERIFIES ITSELF, because `prisma migrate dev` cannot see
+-- triggers at all and would regenerate this file without them. This diff quotes
+-- `scripts/check-ledger-append-only.sh` TWICE — *"prisma migrate dev … silently
+-- omits them … every test green. The only observable difference is that money
+-- can now be edited"* — and then did not add the guard that quote argues for.
+-- Both cited prior-art migrations carry one; this is theirs.
+DO $verify$
+DECLARE
+    n_trig  int;
+    n_check int;
+BEGIN
+    SELECT count(*) INTO n_trig
+      FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
+     WHERE c.relname = 'platform_rates' AND NOT t.tgisinternal;
+    IF n_trig <> 4 THEN
+        RAISE EXCEPTION 'platform_rates: expected 4 triggers, found %', n_trig;
+    END IF;
+
+    SELECT count(*) INTO n_check
+      FROM pg_constraint con JOIN pg_class c ON c.oid = con.conrelid
+     WHERE c.relname = 'platform_rates' AND con.contype = 'c';
+    IF n_check <> 3 THEN
+        RAISE EXCEPTION 'platform_rates: expected 3 CHECK constraints, found %', n_check;
+    END IF;
+END;
+$verify$;

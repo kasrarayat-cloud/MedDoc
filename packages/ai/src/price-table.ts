@@ -248,6 +248,17 @@ export function costMicroUsd(quantity: Quantity, rate: PriceRateRow): bigint {
  * rounding is a DISPLAY concern and appears nowhere in this path.
  */
 export function chargeMicroUsd(costMicro: bigint, margin: MarginRate): bigint {
+  // ⚠️ THE OPERATION ENFORCES ITS OWN PRECONDITION — ROUND 3, AND ROUND 2's FIX
+  // WAS NOT ENOUGH. Round 2 EXPORTED `isUsableMargin` beside this function,
+  // which made the guard DISCOVERABLE and left the domain unchanged:
+  // `chargeMicroUsd(1000n, {1, 2})` still returned 500n, the platform billing
+  // HALF its own cost, from the public barrel. A precondition somebody must
+  // remember to call is not enforcement — it is documentation with a type.
+  if (!isUsableMargin(margin)) {
+    throw new Error(
+      `chargeMicroUsd: refusing an out-of-bounds margin ${margin.marginNumerator}/${margin.marginDenominator} (#178 bounds: >= 1.0, <= 5.0)`,
+    );
+  }
   return divRoundHalfUp(costMicro * BigInt(margin.marginNumerator), BigInt(margin.marginDenominator));
 }
 

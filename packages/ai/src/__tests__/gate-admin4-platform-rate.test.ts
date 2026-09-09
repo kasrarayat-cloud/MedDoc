@@ -352,7 +352,16 @@ describe('ADMIN-4 round 2 — the repairs closed INSTANCES; these close the CLAS
     expect(block, 'the write site calls marginStamp again — an argument to get wrong').not.toContain(
       'marginStamp(',
     );
-    expect(block, 'a literal multiplier survived').not.toMatch(/multiplier:\s*[`'"]/);
+    // ⚠️ ROUND 3 — ANY `multiplier:` KEY AT ALL, NOT A QUOTED LITERAL.
+    // The old regex required a quote right after the colon, so
+    // `multiplier: ['3','2'].join('/')` placed AFTER the spread walked past it
+    // and 803 of 803 stayed green while the ledger recorded '3/2' beside a 7/4
+    // charge. A later key overrides a spread; the class is "a second writer of
+    // this field", not "a literal".
+    expect(block, 'the ledger writes `multiplier` itself — a later key overrides the spread').not.toMatch(
+      /\bmultiplier\s*:/,
+    );
+    expect(block, 'the ledger writes `platformRateId` itself').not.toMatch(/\bplatformRateId\s*:/);
   });
 
   it('⚠️ AND THE STAMP ON THE DECISION IS THE RATE THAT PRICED', async () => {
@@ -422,13 +431,47 @@ describe('ADMIN-4 round 2 — the repairs closed INSTANCES; these close the CLAS
         '20260909060000_admin4_platform_rate', 'migration.sql'),
       'utf8',
     );
-    expect(sql, 'createdAt is not server-stamped').toContain('NEW."createdAt" := now()');
+    // ⚠️ `clock_timestamp()` — round 3. `now()` is transaction-START time, so a
+    // writer that works then inserts stores a rate effective earlier than it
+    // was written, by the transaction's duration (measured: 3.011s).
+    expect(sql, 'createdAt is not server-stamped').toContain('NEW."createdAt" := clock_timestamp()');
+    expect(sql, 'now() is transaction-start time — the retroactive window returns').not.toContain(
+      'NEW."createdAt" := now()',
+    );
     expect(sql, 'no append-only trigger').toContain('platform_rates_no_update');
     expect(sql, 'no delete refusal').toContain('platform_rates_no_delete');
     // ⚠️ AND THE DETACH IS CARVED OUT, or this trigger holds user deletion
     // hostage: `changedByUserId` is ON DELETE SET NULL, which fires an UPDATE.
     expect(sql, 'the ON DELETE SET NULL detach is not permitted').toContain(
       "OLD.\"changedByUserId\" IS NOT NULL",
+    );
+  });
+});
+
+describe('ADMIN-4 round 3 — the operation refuses, it does not merely document', () => {
+  it('⚠️ `chargeMicroUsd` REFUSES an out-of-bounds margin from the public barrel', async () => {
+    const ai = await import('../index');
+    expect(() => ai.chargeMicroUsd(1000n, { id: 'x', marginNumerator: 1, marginDenominator: 2 })).toThrow(
+      /out-of-bounds margin 1\/2/,
+    );
+    expect(() => ai.chargeMicroUsd(1000n, { id: 'x', marginNumerator: 100, marginDenominator: 1 })).toThrow();
+    // NON-VACUITY: an in-bounds rate still computes.
+    expect(ai.chargeMicroUsd(1000n, { id: 'x', marginNumerator: 3, marginDenominator: 2 })).toBe(1500n);
+  });
+
+  it('⚠️ TRUNCATE IS REFUSED — row triggers do not see it, and the prior art says so', () => {
+    const sql = readFileSync(
+      join(__dirname, '..', '..', '..', 'db', 'prisma', 'migrations',
+        '20260909060000_admin4_platform_rate', 'migration.sql'),
+      'utf8',
+    );
+    expect(sql, 'no TRUNCATE arm — measured: it emptied the table 2 rows to 0').toContain(
+      'BEFORE TRUNCATE ON "platform_rates"',
+    );
+    expect(sql, 'no self-verify — `prisma migrate dev` cannot see triggers').toContain('$verify$');
+    expect(sql, 'the verify block does not count the TRUNCATE arm').toContain('n_trig <> 4');
+    expect(sql, 'createdAt uses transaction-start time, not statement time').toContain(
+      'clock_timestamp()',
     );
   });
 });

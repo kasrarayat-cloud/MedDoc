@@ -9,7 +9,7 @@ One migration, `20260909060000_admin4_platform_rate`.
 |---|---|---|---|
 | 1 | `platform_rates` table | does not exist | exists, **0 rows** |
 | 2 | `platform_rates` CHECK constraints | — | **3** (`margin_bounds`, `previous_pair`, `forward_only`) |
-| 2b | `platform_rates` TRIGGERS | — | **3** (`stamp_created_before_insert`, `no_update`, `no_delete`) |
+| 2b | `platform_rates` TRIGGERS | — | **4** (`stamp_created_before_insert`, `no_update`, `no_delete`, `no_truncate`) |
 | 3 | `platform_rates` FK to `users` | — | **1**, `ON DELETE SET NULL` |
 | 4 | index on `effectiveFrom` | — | **1** |
 
@@ -116,3 +116,29 @@ survives the detach.
 
 **Rows 4–10 are unaffected.** Still additive, still an empty table.
 
+## ⚠️ AMENDED A THIRD TIME — round 3, and one lens used a real database
+
+Round 3 ran the migration byte-for-byte on a throwaway `postgres:16-alpine` and
+attacked it. DELETE, UPDATE, a backdated INSERT, `ON CONFLICT DO UPDATE` and
+`COPY` were each refused by name. **`TRUNCATE "platform_rates";` emptied the
+table, 2 rows to 0, silently** — row-level triggers do not see it.
+
+⚠️ **The prior art this migration says it copied has that arm, and its comment
+is the warning I walked past:** *"TRUNCATE FIRES NEITHER OF THE ABOVE … it is
+the arm most likely to be left out."* It was. **Row 2b goes 3 → 4.**
+
+Also from round 3, all fixed:
+
+- the migration now **verifies itself** (`DO $verify$`, 4 triggers / 3 CHECKs).
+  `prisma migrate dev` cannot see triggers and would regenerate this file
+  without them — the exact class this diff quoted *twice* and did not guard.
+- `createdAt` is stamped with **`clock_timestamp()`**, not `now()`:
+  transaction-start time gave a retroactive window equal to the writing
+  transaction's duration (**measured: 3.011s**).
+- `chargeMicroUsd` now **refuses** an out-of-bounds margin itself. Round 2
+  exported the guard beside it, which made it discoverable and left the domain
+  unchanged — `chargeMicroUsd(1000n, {1,2})` still returned 500n from the public
+  barrel. **A precondition somebody must remember to call is documentation with
+  a type, not enforcement.**
+
+Rows 4–10 unaffected.
