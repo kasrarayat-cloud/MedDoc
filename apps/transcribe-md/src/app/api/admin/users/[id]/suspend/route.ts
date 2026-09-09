@@ -14,6 +14,7 @@ import prisma from '@meddoc/db';
 
 import { adminApi } from '@/lib/admin-api-gate';
 import { logAudit } from '@/lib/audit';
+import { withPracticeLock, wouldStrandPractice } from '@/lib/last-owner-invariant';
 
 const Body = z.object({ reason: z.string().trim().max(500).optional() });
 
@@ -47,17 +48,37 @@ export const POST = adminApi('users:suspend', async (req, ctx) => {
   });
   if (!user) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
+  // ── RULING #210 — the FRIENDLY REFUSAL. ────────────────────────────────────
+  // Enforcement is the `users_last_owner_guard` trigger; without this block the
+  // write still cannot strand the practice, but the caller gets a 500 carrying
+  // a Postgres error instead of a sentence naming the remedy.
+  const lastOwner = await wouldStrandPractice(id);
+  if (lastOwner.wouldStrand) {
+    return NextResponse.json(
+      { error: lastOwner.reason, reason: 'LAST_OWNER', membersLeft: lastOwner.membersLeft },
+      { status: 409 }
+    );
+  }
+
   const now = new Date();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (prisma.user as any).update({
-    where: { id },
-    data: {
-      suspendedAt: now,
-      suspendedBy: ctx.session.user.id,
-      suspendedReason: parsed.data.reason ?? null,
-      forceLogoutAt: now,
-    },
-  });
+  // ⚠️ RULING #268 — THE PRACTICE LOCK BEFORE THE ROW WRITE. Suspending an
+  // active owner removes a seat, so this write reaches the guard's locking path
+  // and can be one half of the measured deadlock. `user.practiceId` is read
+  // from the row above, which is the practice the trigger will key on.
+  await prisma.$transaction((tx) =>
+    withPracticeLock(tx, user.practiceId, async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (tx.user as any).update({
+        where: { id },
+        data: {
+          suspendedAt: now,
+          suspendedBy: ctx.session.user.id,
+          suspendedReason: parsed.data.reason ?? null,
+          forceLogoutAt: now,
+        },
+      });
+    }),
+  );
 
   await logAudit({
     action: 'USER_SUSPENDED',

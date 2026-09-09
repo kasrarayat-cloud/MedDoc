@@ -24,6 +24,7 @@ import {
   type AdminRefusal,
 } from '@/lib/practice-admin';
 import { hashInviteCode, normalizeInviteCode } from '@/lib/signup-invite';
+import { withPracticeLock } from '@/lib/last-owner-invariant';
 
 const MEMBERS_PATH = '/settings/members';
 
@@ -227,15 +228,31 @@ export async function changeMemberRoleAction(
   // trail, which is worse than a missing one. Count 0 means the row moved, so
   // we refuse rather than write, and the trail says nothing rather than
   // something wrong.
-  const { count } = await prisma.user.updateMany({
-    where: {
-      id: target.id,
-      practiceId: guard.practiceId,
-      deactivatedAt: null,
-      practiceRole: target.practiceRole,
-    },
-    data: { practiceRole: parsed.data.role },
-  });
+  // ⚠️ RULING #268 — THE PRACTICE LOCK IS TAKEN BEFORE THE UPDATE, NOT BY THE
+  // TRIGGER AFTERWARDS. Two admins demoting two DIFFERENT owners of the same
+  // practice deadlocked 10 of 10 at the default isolation level, because each
+  // held its own row lock before the trigger could reach for the shared one.
+  // Taking it here means the second writer blocks on the LOCK, before it has
+  // taken any row lock at all, so there is no cycle to detect.
+  //
+  // ⚠️ THE COMPARE-AND-SET BELOW IS UNCHANGED AND STILL LOAD-BEARING. The lock
+  // orders the writers; the `practiceRole` in the WHERE is what makes the write
+  // conditional on nothing having moved. A lock is not a substitute for it —
+  // the row can still have changed before this transaction started.
+  const { count } = await prisma.$transaction((tx) =>
+    withPracticeLock(tx, guard.practiceId, async () => {
+      const r = await tx.user.updateMany({
+        where: {
+          id: target.id,
+          practiceId: guard.practiceId,
+          deactivatedAt: null,
+          practiceRole: target.practiceRole,
+        },
+        data: { practiceRole: parsed.data.role },
+      });
+      return r;
+    }),
+  );
 
   if (count === 0) {
     // The row changed between the read and the write. We cannot know it is

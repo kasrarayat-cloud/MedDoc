@@ -62,6 +62,16 @@ export interface IngestTemplateTwinInput {
   transferFrom?: string;
 
   /**
+   * Which `sourceType`s carry across. `undefined`/`null` = all of them.
+   *
+   * ⚠️ A RULED ACT PASSES IT EXPLICITLY. The re-issue transfers `extraction`
+   * only — 43 of the 53 certified rows — and re-proposes the 10 `manual` ones,
+   * because a `manual` field is one the doctor fills by hand and has no
+   * extraction rule to carry.
+   */
+  transferSourceTypes?: ReadonlySet<string> | null;
+
+  /**
    * ⚠️ PRE-GUARDS, ALL CHECKED BEFORE STEP (2) WRITES ANYTHING. The compile is
    * pure — `compiler.ts` holds no `prisma` and no `await` — which is what makes
    * that possible.
@@ -98,6 +108,26 @@ function sha256(bytes: Uint8Array): string {
 async function readCertified(
   compiledVersionId: string,
   practiceId: string,
+  /**
+   * ⚠️ WHICH `sourceType`s CARRY ACROSS — `null` means ALL, and it is never
+   * defaulted for a ruled act.
+   *
+   * Measured on the owner's certified version `18a7ae19`: **43 `extraction` +
+   * 10 `manual`, and ALL FIFTY-THREE are `CERTIFIED`.** So filtering on
+   * `mappingStatus` alone transfers 53, while the ruling says *transfer the 43,
+   * re-propose the ten*. The split the ruling names is by SOURCE TYPE, not by
+   * status, and the two are easy to conflate because one implies the other here.
+   *
+   * ⚠️ THE DECLARED GUARD IS WHAT CAUGHT IT: `expectTransferCount: 43` would
+   * have aborted the act against a plan of 53. A declaration whose numbers come
+   * from the ruling rather than from the code is the only thing that can
+   * disagree with the code.
+   *
+   * `transfer-args.ts` already makes `--transfer-source-types` REQUIRED for the
+   * standalone transfer tool, and its own comment records why: an empty
+   * selection once selected ZERO of 53 and failed closed. Same vocabulary here.
+   */
+  sourceTypes: ReadonlySet<string> | null,
 ): Promise<{ ir: TemplateDocIR; certified: Map<string, SemanticMapping> }> {
   const from = await prisma.templateTwinCompiledVersion.findUnique({
     where: { id: compiledVersionId },
@@ -119,7 +149,12 @@ async function readCertified(
     ir: from.compiledDocumentIr as unknown as TemplateDocIR,
     certified: new Map(
       from.fields
-        .filter((f) => f.mapping !== null && f.mapping.mappingStatus === 'CERTIFIED')
+        .filter(
+          (f) =>
+            f.mapping !== null &&
+            f.mapping.mappingStatus === 'CERTIFIED' &&
+            (sourceTypes === null || sourceTypes.has(f.mapping.sourceType)),
+        )
         .map((f) => [
           f.fieldId,
           fromPersistedMapping(f.fieldId, f.mapping as Parameters<typeof fromPersistedMapping>[1]),
@@ -166,7 +201,11 @@ export async function ingestTemplateTwin(
 
   let plan: TransferPlan = { transferred: [], reproposed: ir.fields.map((f) => f.fieldId) };
   if (input.transferFrom) {
-    const source = await readCertified(input.transferFrom, input.actor.practiceId);
+    const source = await readCertified(
+      input.transferFrom,
+      input.actor.practiceId,
+      input.transferSourceTypes ?? null,
+    );
     plan = planTransfer({ target: ir, sourceIr: source.ir, certifiedByFieldId: source.certified });
   }
 

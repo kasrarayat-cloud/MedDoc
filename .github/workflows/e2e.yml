@@ -340,6 +340,68 @@ jobs:
       - name: Migrate schema → meddoc_qa_test
         run: docker compose -f docker-compose.qa.yml run --rm db-migrate
 
+      # ── RULING #210's PROOFS, RUN WHERE A LIVE DATABASE EXISTS. ──────────
+      # ⚠️ THIS STEP EXISTS BECAUSE ITS ABSENCE WAS THE HEADLINE FINDING OF THE
+      # CHANGE'S OWN ADVERSARIAL PASS: "nothing runs either proof in CI". The
+      # unit job declares no `services:` and deliberately leaves DATABASE_URL
+      # unset, so a trigger cannot be exercised there — the gate in
+      # `gate-admin5-last-owner-invariant.test.ts` watches the SOURCE and says
+      # so outright. This job is the only place in the pipeline with a real
+      # Postgres carrying the real migrations, so it is the only place the
+      # BEHAVIOUR can be proven.
+      #
+      # It runs immediately after `db-migrate` and before any seed, so a failure
+      # here is unambiguous: the migration ran and the trigger does not behave.
+      # Every arm creates and rolls back its own fixture, so the database is
+      # byte-unchanged and the seeds that follow are unaffected.
+      - name: Prove the last-owner trigger (ruling #210 — 45 deterministic arms)
+        run: >
+          docker compose -f docker-compose.qa.yml exec -T postgres
+          psql -U meddoc -d meddoc_qa_test -X -v ON_ERROR_STOP=1
+          -f - < packages/db/prisma/proofs/admin5-last-owner-trigger-arms.sql
+          | tee /tmp/t210-arms.out
+          && grep -q '🟢 all arms ran and passed' /tmp/t210-arms.out
+
+      # ⚠️ THE RACE HARNESS IS TIMING-DEPENDENT, SO IT HAS THREE OUTCOMES AND
+      # THIS STEP KEEPS THEM APART. Exit 0 = every predicted cell held. Exit 1 =
+      # a prediction was REFUTED, which is a real finding and fails the job.
+      # Exit 2 = CANNOT-TELL — the two transactions never overlapped on this
+      # runner, so the negative control was never given the chance to fire.
+      #
+      # Exit 2 must not be read as a pass and must not fail the build: "the race
+      # did not happen here" and "the lock is redundant" are different facts,
+      # and the harness distinguishes them with an overlap witness taken from
+      # the racers' own transaction intervals. Treating them alike is how a
+      # flaky red becomes a re-run and then a habit.
+      - name: Prove the advisory lock races (ruling #210 — 2x2 with its control)
+        run: |
+          set +e
+          bash packages/db/prisma/proofs/admin5-last-owner-trigger-race.sh 2>&1 | tee race.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          # ⚠️ EXIT 2 IS A PASS ONLY WHEN THE WITNESS SAYS THE RACE GENUINELY DID
+          # NOT OCCUR — RULING #240(e). It used to be a catch-all: ANY exit 2
+          # became a ::warning and a passing job, so a harness that could not tell
+          # for a BAD reason rode green. A dead control is a FAILURE.
+          #
+          # The harness prints RACE_CANNOT_TELL_REASON=no_overlap on exactly the
+          # one survivable path. Requiring it here means a future exit 2 added for
+          # some other reason FAILS this step until somebody decides otherwise —
+          # which is the right default for a step whose green is otherwise
+          # compatible with "cannot tell".
+          case "$rc" in
+            0) echo "::notice::race harness PASSED — every predicted cell held" ;;
+            2)
+              if grep -q '^RACE_CANNOT_TELL_REASON=no_overlap$' race.log; then
+                echo "::warning::race harness CANNOT TELL — the transactions never overlapped on this runner. Not a pass and not a refutation; re-run or widen the sentinel."
+              else
+                echo "::error::race harness exited 2 WITHOUT the no-overlap witness — cannot-tell for an unstated reason is a failure, not a warning"
+                exit 1
+              fi
+              ;;
+            *) echo "::error::race harness REFUTED a prediction — see the log above"; exit 1 ;;
+          esac
+
       # The #278 fail-closed db-guard (assertNonProdDatabase) refuses to seed
       # unless DATABASE_URL is a positively non-prod DB. meddoc_qa_test carries
       # the qa/test marker, so it proceeds; a prod URL here would abort.
