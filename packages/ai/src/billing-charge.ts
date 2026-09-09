@@ -70,6 +70,7 @@ import { DRAW_ORDER, splitCharge, type BucketDraw, type LedgerBucket } from './b
 import {
   audioSeconds as audioQuantity,
   chargeMicroUsd,
+  isUsableMargin,
   marginAt,
   type MarginRate,
   costMicroUsd,
@@ -262,6 +263,30 @@ export type ChargeDecision =
  * exists to prevent, and `claude-sonnet-5` already carries two periods with a
  * handover on 2026-09-01 — so this is live, not hypothetical.
  */
+/**
+ * The margin fields written onto `ledger_entries.pricing`.
+ *
+ * ⚠️ EXTRACTED SO IT CAN BE ASSERTED. The refutation pass reverted the stamp to
+ * the literal `'3/2'` beside a correctly-configured 7/4 rate and **835 of 835
+ * tests stayed green**: nothing anywhere read the value written to the ledger.
+ * `commitVisitCharge` calls `assertProdDatabase()` as its first statement, so
+ * the write site cannot be driven from a test at all — which is exactly why
+ * that seam was unguarded, and why the builder now lives outside it.
+ *
+ * ⚠️ THE ID TRAVELS WITH THE RATIO. A stamp you cannot resolve to a row is a
+ * number with a story rather than a record — and a ratio without an id cannot
+ * be checked against the rate that was in effect.
+ */
+export function marginStamp(margin: MarginRate): {
+  multiplier: string;
+  platformRateId: string;
+} {
+  return {
+    multiplier: `${margin.marginNumerator}/${margin.marginDenominator}`,
+    platformRateId: margin.id,
+  };
+}
+
 export async function priceUsageRows(
   rows: readonly ChargeableUsageRow[],
   lookup: (args: {
@@ -369,7 +394,13 @@ export async function priceUsageRows(
   // applied is the one that was in effect for the usage being charged and not
   // the one in effect when the job happened to run. #178 rules the change
   // forward-only; that is only true if the read is anchored to the usage.
-  const marginAtInstant = await marginLookup(chargeInstant);
+  // ⚠️ VALIDATED AT THE POINT OF USE, NOT ONLY AT THE POINT OF READ.
+  // `marginLookup` is injectable — that is the whole reason a gate can drive
+  // this — so a lookup that is not `marginAt` would otherwise deliver an
+  // out-of-bounds rate straight into the arithmetic. A `1/2` row bills HALF
+  // cost and stamps an id that resolves cleanly.
+  const found = await marginLookup(chargeInstant);
+  const marginAtInstant = found && isUsableMargin(found) ? found : null;
   if (!marginAtInstant) {
     return {
       charge: false,
@@ -580,8 +611,7 @@ export async function commitVisitCharge(args: CommitVisitChargeArgs): Promise<Co
             // so the two could drift apart and the ledger would still look
             // right. The id is stamped with it: a stamp you cannot resolve to
             // a row is a number with a story, not a record.
-            multiplier: `${decision.margin.marginNumerator}/${decision.margin.marginDenominator}`,
-            platformRateId: decision.margin.id,
+            ...marginStamp(decision.margin),
             draw: {
               bucket: draw.bucket,
               amountMicroUsd: draw.amountMicroUsd.toString(),

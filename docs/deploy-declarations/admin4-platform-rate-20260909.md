@@ -8,7 +8,7 @@ One migration, `20260909060000_admin4_platform_rate`.
 | # | quantity | before | after |
 |---|---|---|---|
 | 1 | `platform_rates` table | does not exist | exists, **0 rows** |
-| 2 | `platform_rates` CHECK constraints | — | **2** (`margin_bounds`, `previous_pair`) |
+| 2 | `platform_rates` CHECK constraints | — | **3** (`margin_bounds`, `previous_pair`, `forward_only`) |
 | 3 | `platform_rates` FK to `users` | — | **1**, `ON DELETE SET NULL` |
 | 4 | index on `effectiveFrom` | — | **1** |
 
@@ -69,3 +69,24 @@ which returns to the compiled constant with the revert.
 - `BILLING_ENFORCED` appearing anywhere in the prod compose (row 10)
 - a ledger row written with a `multiplier` that does not resolve to a
   `platform_rates.id`
+
+## ⚠️ AMENDED AFTER THE ADVERSARIAL PASS — before the act, and this is why §2.5 is written first
+
+Four lenses returned **26 findings**. Six were real defects in this change and
+are fixed; the declaration is amended rather than re-written, so the correction
+is visible:
+
+- **row 2 was `2` CHECKs, now `3`.** `platform_rates_forward_only` was added:
+  `effectiveFrom >= createdAt`. The pass showed that anchoring the READ to the
+  usage instant does **not** make the rate forward-only — a backdated row is
+  selected by `effectiveFrom <= at` like any other, so inserting
+  `{effectiveFrom: last month, 5/1}` would re-price every uncharged visit since
+  then, at a stamp that resolves cleanly. My comment claimed forward-only was
+  achieved; it was policy. It is now a constraint.
+- **a new NOT NULL column, `changedByLabel`.** The FK detaches on user deletion
+  (the house rule for audit rows), which would have erased *who changed the
+  price* — the half of #178 that is not about the rate.
+
+**No row above 4 changes**, and rows 5–10 are unaffected: this remains an
+additive migration over an empty table.
+

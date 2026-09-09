@@ -3680,13 +3680,28 @@ model PlatformRate {
   marginNumerator   Int
   marginDenominator Int
 
-  /// The instant this rate begins to apply. ⚠️ FORWARD-ONLY BY POLICY: a change
-  /// takes effect at the next metering cycle and never retroactively — #178.
+  /// The instant this rate begins to apply. ⚠️ FORWARD-ONLY BY **CONSTRAINT**,
+  /// not by policy: `platform_rates_forward_only` refuses `effectiveFrom <
+  /// createdAt`. Anchoring the READ to the usage instant stops a backlog being
+  /// re-priced by the run clock; it does NOT stop a backdated row, and the
+  /// first version of this file claimed otherwise — #178.
   effectiveFrom DateTime @db.Timestamptz(6)
 
-  /// ⚠️ WHO CHANGED IT. Nullable ONLY for the seed row, which no human set;
-  /// every later row must carry an actor, and the gate asserts it.
+  /// ⚠️ WHO CHANGED IT — AND THE LINK IS NULLABLE WHILE THE FACT IS NOT.
+  ///
+  /// The FK detaches on user deletion, which is this codebase's rule for audit
+  /// rows. Detaching a rate change would erase who changed the price — the half
+  /// of #178 that is not about the rate at all — so the ACTOR IS SNAPSHOTTED
+  /// beside the link, `NOT NULL`, and survives the detach.
+  ///
+  /// ⚠️ AN EARLIER VERSION OF THIS COMMENT SAID "nullable ONLY for the seed row
+  /// … and the gate asserts it". Both halves were false: the table ships EMPTY
+  /// by design so there is no seed row to exempt, and no gate asserted anything
+  /// — the writer does not exist yet.
   changedByUserId String?
+  /// Immutable snapshot of the actor, e.g. their email at the time of the
+  /// change. Survives user deletion.
+  changedByLabel  String
   changedBy       User?   @relation("PlatformRateChangedBy", fields: [changedByUserId], references: [id], onDelete: SetNull)
 
   /// What it was immediately before. NULL on the seed row only.

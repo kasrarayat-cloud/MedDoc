@@ -18,7 +18,7 @@
 // ============================================================================
 import { describe, expect, it, vi } from 'vitest';
 
-import { priceUsageRows, type ChargeableUsageRow } from '../billing-charge';
+import { marginStamp, priceUsageRows, type ChargeableUsageRow } from '../billing-charge';
 import { chargeMicroUsd, divRoundHalfUp, type MarginRate, type PriceRateRow } from '../price-table';
 
 function usageRow(over: Partial<ChargeableUsageRow> = {}): ChargeableUsageRow {
@@ -123,11 +123,26 @@ describe('ADMIN-4 — the rate is read at the USAGE instant, never at wall clock
     // #178 rules the change forward-only. That is only TRUE if the read is
     // anchored to the usage: a margin read at `new Date()` would re-price a
     // backlog against whatever rate is current when the worker catches up.
+    // ⚠️ THE THIRD ROW IS THE WHOLE ARM, AND ITS ABSENCE MADE THIS VACUOUS.
+    // The first fixture was two rows that BOTH price, so "latest of ALL rows"
+    // and "latest of PRICED rows" coincided — and the refutation pass hoisted
+    // the anchor above the `unitsSource !== 'vendor'` filter, produced a 33%
+    // over-charge driven by a MOCK row (which ruling 66 says must never
+    // influence money), and this arm stayed GREEN.
+    //
+    // `c` is a MOCK row, later than both vendor rows and never priced. If the
+    // anchor moves above the filters, the margin is read at ITS instant.
     const seen: Date[] = [];
     await priceUsageRows(
       [
         usageRow({ id: 'a', createdAt: new Date('2026-08-10T00:00:00Z'), inputTokens: 1 }),
         usageRow({ id: 'b', createdAt: new Date('2026-08-12T00:00:00Z'), inputTokens: 1 }),
+        usageRow({
+          id: 'c',
+          unitsSource: 'mock',
+          createdAt: new Date('2026-08-20T00:00:00Z'),
+          inputTokens: 1,
+        }),
       ],
       priceEverything,
       async (at) => {
@@ -136,9 +151,10 @@ describe('ADMIN-4 — the rate is read at the USAGE instant, never at wall clock
       },
     );
     expect(seen).toHaveLength(1);
-    expect(seen[0]!.toISOString(), 'the margin was read at the wrong instant').toBe(
-      '2026-08-12T00:00:00.000Z',
-    );
+    expect(
+      seen[0]!.toISOString(),
+      'the margin was read at the wrong instant — a NON-PRICED row moved the anchor',
+    ).toBe('2026-08-12T00:00:00.000Z');
   });
 
   it('⚠️ NEGATIVE CONTROL — it is not simply passing "now"', () => {
@@ -189,5 +205,124 @@ describe('ADMIN-4 — the constant is GONE from the source', () => {
     const src = readFileSync(join(__dirname, '..', 'price-table.ts'), 'utf8');
     expect(src).toContain('export function chargeMicroUsd');
     expect(src, 'divRoundHalfUp is no longer the rounding used').toContain('divRoundHalfUp');
+  });
+});
+
+describe('ADMIN-4 — the bounds are enforced on the READ, not only by the database', () => {
+  // ⚠️ THE FIRST VERSION OF THIS GUARD CHECKED `<= 0` ONLY, AND ITS COMMENT
+  // CLAIMED TO PROTECT THE READ. A `1/2` row passed it and the platform billed
+  // HALF its own cost; `100/1` billed a hundred times. Both stamp an id that
+  // resolves, so the §2.5 declaration's own failure criterion never fires.
+  //
+  // The bounds lived ONLY in a Postgres CHECK that Prisma cannot model — the
+  // class `scripts/check-ledger-append-only.sh` already documents: "prisma
+  // migrate dev … silently omits them … every test green."
+  it.each([
+    ['below 1.0 — the platform bills less than cost', 1, 2],
+    ['above 5.0 — #178\'s ceiling', 51, 10],
+    ['wildly above', 100, 1],
+    ['zero denominator', 3, 0],
+    ['negative numerator', -3, 2],
+  ])('⚠️ REFUSES a rate %s', async (_name, n, d) => {
+    const decision = await priceUsageRows(
+      [usageRow({ inputTokens: 1000 })],
+      priceEverything,
+      async () => RATE(n, d),
+    );
+    expect(decision.charge, `a ${n}/${d} rate was accepted and billed`).toBe(false);
+  });
+
+  it('⚠️ NON-VACUITY — the edges of the allowed range are ACCEPTED', async () => {
+    // Or the arm above passes on a guard that refuses everything, which is the
+    // failure a bounds check is most likely to introduce.
+    for (const [n, d, expected] of [
+      [1, 1, 1000n],
+      [5, 1, 5000n],
+    ] as const) {
+      const decision = await priceUsageRows(
+        [usageRow({ inputTokens: 1000 })],
+        priceEverything,
+        async () => RATE(n, d),
+      );
+      expect(decision.charge, `${n}/${d} is inside the bounds and was refused`).toBe(true);
+      if (decision.charge) expect(decision.chargeMicroUsd).toBe(expected);
+    }
+  });
+});
+
+describe('ADMIN-4 — the LEDGER STAMP is asserted, at the seam that writes it', () => {
+  it('⚠️ the stamp carries the ratio AND the row id', () => {
+    // The refutation pass reverted this to the literal `'3/2'` beside a
+    // configured 7/4 rate and 835 of 835 tests stayed green — nothing read what
+    // reached the ledger. `commitVisitCharge` calls `assertProdDatabase()`
+    // first, so the write site cannot be driven; the builder is extracted for
+    // exactly that reason.
+    expect(marginStamp(RATE(7, 4, 'pr_seven_quarters'))).toEqual({
+      multiplier: '7/4',
+      platformRateId: 'pr_seven_quarters',
+    });
+  });
+
+  it('⚠️ it is DERIVED — a literal cannot survive here', () => {
+    expect(marginStamp(RATE(3, 2, 'pr_a')).multiplier).toBe('3/2');
+    expect(marginStamp(RATE(9, 5, 'pr_b')).multiplier).toBe('9/5');
+    expect(marginStamp(RATE(9, 5, 'pr_b')).multiplier).not.toBe('3/2');
+  });
+
+  it('⚠️ AND THE WRITE SITE USES IT — not a second copy', async () => {
+    // A pure builder proves nothing if the ledger still spells the fields out.
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const src = readFileSync(join(__dirname, '..', 'billing-charge.ts'), 'utf8');
+    const pricing = src.slice(src.indexOf('          pricing: {'));
+    const block = pricing.slice(0, pricing.indexOf('\n          },'));
+    expect(block, 'the ledger builds the stamp itself').toContain('...marginStamp(');
+    expect(block, 'a literal multiplier survived at the write site').not.toMatch(/multiplier:\s*[`'"]/);
+  });
+});
+
+describe('ADMIN-4 — a missing rate is a FAILURE, not a free visit', () => {
+  it('⚠️ `no_margin_rate` must NOT route like `nothing_billable`', async () => {
+    // ⚠️ THE FIRST VERSION LET IT FALL THROUGH TO `declined`, WHICH IS
+    // BYTE-IDENTICAL ROUTING TO A GENUINELY FREE VISIT. The worker logs
+    // `outcome: charge.charged` and NOT `reason`, so a platform with no
+    // configured margin would bill nothing forever and the only artifact would
+    // be a line indistinguishable from a mocked run.
+    //
+    // `declined` is a DECISION about a real visit: we looked, and there is
+    // nothing to charge. "I do not know the rate" is not that decision — it is
+    // the class `balance_unreadable` already occupies, and the code says so.
+    //
+    // Read from SOURCE: `chargeVisitUsage` is not drivable here (its collaborators
+    // hit the database), and the routing is a two-line branch whose absence is
+    // the entire defect.
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const src = readFileSync(join(__dirname, '..', 'billing-pipeline.ts'), 'utf8');
+
+    const iNoMargin = src.indexOf("result.decision.reason === 'no_margin_rate'");
+    expect(iNoMargin, '`no_margin_rate` is not routed at all').toBeGreaterThan(-1);
+
+    // it must resolve to `failed`, and BEFORE the generic `declined` return
+    const after = src.slice(iNoMargin, iNoMargin + 400);
+    expect(after, '`no_margin_rate` does not route to `failed`').toContain("charged: 'failed'");
+    const iDeclined = src.indexOf("return { charged: 'declined'");
+    expect(iDeclined, 'the generic declined return vanished — this arm is now vacuous').toBeGreaterThan(-1);
+    expect(
+      iNoMargin,
+      '`no_margin_rate` is routed AFTER the generic decline, so it never reaches its branch',
+    ).toBeLessThan(iDeclined);
+  });
+
+  it('⚠️ POSITIVE CONTROL — `balance_unreadable` still routes to `failed` too', async () => {
+    // The precedent this reasons from must still be there; if somebody
+    // "simplifies" it to `declined`, the argument above is gone and the arm
+    // should not keep passing on a file that no longer makes it.
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const src = readFileSync(join(__dirname, '..', 'billing-pipeline.ts'), 'utf8');
+    const i = src.indexOf("result.reason === 'balance_unreadable'");
+    expect(i).toBeGreaterThan(-1);
+    expect(src.slice(i, i + 200)).toContain("charged: 'failed'");
   });
 });

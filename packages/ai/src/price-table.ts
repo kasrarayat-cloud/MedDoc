@@ -280,6 +280,31 @@ export interface MarginRate {
  * the rate, with no actor and no note — the same defect one layer up, in a
  * migration's clothes.
  */
+/**
+ * Is this margin usable — #178's bounds, in integer arithmetic.
+ *
+ * ⚠️ ONE PREDICATE, BECAUSE THE FIRST VERSION HAD THE CHECK IN THE WRONG PLACE.
+ * It lived only inside {@link marginAt}, and `priceUsageRows` accepts ANY
+ * lookup — so a fixture, a seed script or a future importer supplying its own
+ * reader bypassed the bounds completely. That is not hypothetical: every arm in
+ * the ADMIN-4 gate injects a lookup, which is exactly how it was found.
+ *
+ * ⚠️ AND THE BOUNDS OTHERWISE EXIST ONLY IN A POSTGRES `CHECK` THAT PRISMA
+ * CANNOT MODEL. `scripts/check-ledger-append-only.sh` documents that class in
+ * this repo already: *"prisma migrate dev … silently omits them … every test
+ * green. The only observable difference is that money can now be edited."*
+ *
+ * Same bounds as the migration, same cross-multiply, so both stay integer:
+ * `n >= d` is `n/d >= 1`, and `n <= 5d` is `n/d <= 5`.
+ */
+export function isUsableMargin(m: MarginRate): boolean {
+  if (!Number.isInteger(m.marginNumerator) || !Number.isInteger(m.marginDenominator)) return false;
+  if (m.marginDenominator <= 0 || m.marginNumerator <= 0) return false;
+  if (m.marginNumerator < m.marginDenominator) return false;
+  if (m.marginNumerator > 5 * m.marginDenominator) return false;
+  return true;
+}
+
 export async function marginAt(at: Date): Promise<MarginRate | null> {
   const rows = (await prisma.platformRate.findMany({
     where: { effectiveFrom: { lte: at } },
@@ -289,10 +314,22 @@ export async function marginAt(at: Date): Promise<MarginRate | null> {
   })) as unknown as MarginRate[];
   const row = rows[0];
   if (!row) return null;
-  // ⚠️ THE DB CHECK ALREADY REFUSES A ZERO DENOMINATOR, AND THIS STILL ASKS.
-  // A constraint protects the WRITE; this protects the READ, which is also
-  // reached by a fixture, a seed script and any future importer that writes
-  // through a different door.
-  if (row.marginDenominator <= 0 || row.marginNumerator <= 0) return null;
-  return row;
+  // ⚠️ THE READ ENFORCES THE **BOUNDS**, NOT MERELY NON-ZERO — AND THE FIRST
+  // VERSION OF THIS GUARD DID NOT, WHICH IS A MONEY DEFECT AND NOT A TIGHTENING.
+  //
+  // It checked `<= 0` only, and its comment claimed to protect the read "for
+  // the reason the constraint protects the write". It did not: a row of `1/2`
+  // passed it and the platform billed HALF its own cost; `100/1` passed it and
+  // billed a hundred times. Both stamp a `platform_rates.id` that resolves
+  // cleanly, so the §2.5 declaration's own failure criterion — "a multiplier
+  // that does not resolve to a row" — would never have fired.
+  //
+  // ⚠️ AND THE BOUNDS EXISTED ONLY IN A POSTGRES `CHECK` THAT PRISMA CANNOT
+  // MODEL AND NOTHING ASSERTS. This repo already documents that exact class in
+  // `scripts/check-ledger-append-only.sh`: *"prisma migrate dev … silently omits
+  // them … every test green. The only observable difference is that money can
+  // now be edited."* A constraint you cannot see from TypeScript is one
+  // `migrate dev` from being absent.
+  //
+  return isUsableMargin(row) ? row : null;
 }

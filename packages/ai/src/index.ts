@@ -236,6 +236,8 @@ export {
 export { drainApiUsage, pendingApiUsageWrites } from './api-usage';
 export {
   chargeMicroUsd,
+  marginAt,
+  type MarginRate,
   costMicroUsd,
   divRoundHalfUp,
   rateAt,

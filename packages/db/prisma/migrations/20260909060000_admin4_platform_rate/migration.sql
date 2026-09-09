@@ -24,6 +24,12 @@ CREATE TABLE "platform_rates" (
     "marginDenominator" INTEGER NOT NULL,
     "effectiveFrom" TIMESTAMPTZ(6) NOT NULL,
     "changedByUserId" TEXT,
+    -- ⚠️ THE ACTOR SNAPSHOT, AND IT IS NOT REDUNDANT WITH THE FK.
+    -- The FK detaches on user deletion (the house rule: audit rows DETACH, never
+    -- delete). Detaching a rate change would erase WHO CHANGED THE PRICE, which
+    -- is the half of #178 that is not about the rate at all. NOT NULL: the
+    -- writer cannot omit it, and there is no seed row to exempt.
+    "changedByLabel" TEXT NOT NULL,
     "previousNumerator" INTEGER,
     "previousDenominator" INTEGER,
     "note" TEXT,
@@ -55,6 +61,22 @@ ALTER TABLE "platform_rates" ADD CONSTRAINT "platform_rates_margin_bounds" CHECK
 -- is worse than none, because it reads as a complete one.
 ALTER TABLE "platform_rates" ADD CONSTRAINT "platform_rates_previous_pair" CHECK (
   ("previousNumerator" IS NULL) = ("previousDenominator" IS NULL)
+);
+
+-- ⚠️ FORWARD-ONLY IS ENFORCED HERE, NOT MERELY STATED.
+--
+-- The first version of this migration called the column "FORWARD-ONLY BY
+-- POLICY" and the pricing comment claimed anchoring the READ to the usage
+-- instant achieved it. IT DOES NOT. Anchoring stops the RUN clock re-pricing a
+-- backlog; it says nothing about a row whose `effectiveFrom` precedes its own
+-- insertion. A backdated row is selected by `effectiveFrom <= at` exactly like
+-- any other, so inserting `{effectiveFrom: last month, 5/1}` today RE-PRICES
+-- every uncharged visit since then, at a stamp that resolves cleanly and looks
+-- correct.
+--
+-- A rate takes effect when it is set or later. Never before.
+ALTER TABLE "platform_rates" ADD CONSTRAINT "platform_rates_forward_only" CHECK (
+  "effectiveFrom" >= "createdAt"
 );
 
 -- ⚠️ NO SEED ROW IS INSERTED HERE, AND THAT IS THE POINT.
