@@ -1,4 +1,4 @@
-# §2.5 DECLARATION — the composed deploy of `be1b48bb`
+# §2.5 DECLARATION — the composed deploy of `2d33a226`
 
 **Written and committed BEFORE the deploy. Owner-ruled STRICT**, above what the
 script's own logic would require: it is code-only (repo migrations 115 = applied
@@ -18,10 +18,27 @@ a rollback tag's name, and not typed. `git merge-base --is-ancestor` confirms it
 is an ancestor of the head, so the range is a well-formed fast-forward.
 
 ```
-HEAD = be1b48bb45ed12645f231e41a36b8c9f3076f6c0
+HEAD = 2d33a2261122...   (the merge of #1076)
 ```
 
-⚠️ **AMENDED BEFORE THE DEPLOY, NOT AFTER — TWICE.** The first version named
+⚠️ **AMENDED BEFORE THE DEPLOY, NOT AFTER — THREE TIMES NOW, AND THE THIRD IS
+THE ONE THAT CHANGED THE PAYLOAD.** A peer landed **#1076** while this was
+staged: *"the audit gate went red repo-wide — two CRITICAL Next RCEs, eight HIGH
+in the docx path."*
+
+**THE CARRY-FORWARD DOES NOT APPLY TO IT.** The ruling permits carrying a
+declaration forward from its declared ancestor *if what follows is docs-only*.
+`package-lock.json` is not docs — it decides what is inside the image. So the
+head moves and the passenger list grows rather than the declaration being waved
+through on a technicality.
+
+⚠️ **AND THIS IS THE "OVERTAKEN, NOT OVERRIDDEN" SHAPE, CAUGHT EARLY.** Nobody
+bypassed anything: the peer fixed a real vulnerability correctly, this lane
+declared a deploy correctly, and the two met in one tree. The only reason it was
+noticed is that the range is RE-DERIVED before each attempt instead of being
+carried in the head of whoever wrote it down first.
+
+**AMENDED BEFORE THE DEPLOY, NOT AFTER — TWICE PREVIOUSLY.** The first version named
 `8cd1705f`. That commit's `CI` came back RED (`gate-265-shellout-budgets`, two
 violations only visible once the merges put the files in one tree), the batch
 failed as a unit exactly as its own declaration required, and the fix plus the
@@ -55,6 +72,13 @@ a row per runtime passenger below.
 | `template-twin/fill-engine.ts` | typed refusal collector | a refusal not reaching the resolver |
 | `scripts/regenerate-consult-form.ts` | constants exported; `main()` guarded | the script running on import |
 | `scripts/re-issue-form.ts` | **the ruled act's entry point** — #274 shipped the seam without the door | it performs the act; a defect here is the act misfiring |
+| **`package-lock.json`** | **#1076 — two CRITICAL Next RCEs and eight HIGH in the docx path** | ⚠️ a dependency bump is a different risk class from the rest of this payload: it changes code nobody here wrote. 178 insertions / 167 deletions. **This is also the strongest reason to ship promptly** — production is currently running the vulnerable tree |
+
+⚠️ **TEST FILES SHIP BUT ARE INERT — MEASURED.** `find /app/apps/transcribe-md/src
+-name '*.test.ts'` returns **340** inside the running image, so the fifteen gate
+files in this range are technically in the payload. Nothing executes them at
+runtime; they are recorded here so the diff and the passenger list reconcile,
+and so nobody later reads their absence as an omission.
 
 ⚠️ **AND ROOT `scripts/` IS NOT A PASSENGER — MEASURED, NOT ASSUMED.** The range
 also moves `scripts/prove-mutation.sh`, `scripts/make-lens-sandbox.sh`,
@@ -106,6 +130,42 @@ committed `2026-09-08T18:28:05Z`) names runtime files that appear in this range 
 is what makes its code reachable. It is judged separately, after this deploy, on
 its own act — deferred here **by name**, which is what the rule requires rather
 than silence.
+
+## ⚠️ THE ADVISORY ROW — its own judgement, owner-ruled
+
+A dependency bump is code nobody here wrote, so it gets a row of its own rather
+than riding in the passenger table.
+
+**BEFORE — read from the RUNNING image, not from a lockfile:**
+
+| package | running (vulnerable) | declared |
+|---|---|---|
+| `next` | **16.2.11** | **16.3.4** |
+| `sharp` | **0.35.3** | **0.35.4** |
+| `@xmldom/xmldom` | **0.8.13** | **0.8.15** |
+
+⚠️ **`docker exec … cat node_modules/<pkg>/package.json` IS THE AUTHORITY HERE,
+NOT `package-lock.json`.** The lockfile says what a build SHOULD resolve; the
+image says what is actually executing. Those have diverged in this repository
+before — the `sharp` optional-dependency splice is on record — and the whole
+point of an advisory judgement is what is running, not what was intended.
+
+**AFTER — the same three read the same way.** All three must move to the
+declared versions. A package that does not move is THE FINDING, whatever the
+build log said.
+
+**AND THE MAMMOTH WITNESS:** a `.docx` round-trip fill on the deployed image.
+
+⚠️ **WHY A WITNESS AT ALL:** eight of the HIGH advisories are in the **docx
+path**, which is the path this deploy's other twelve passengers all serve. A
+version number moving proves the package changed; it does not prove the document
+pipeline still works. The witness is the cheap thing that does.
+
+⚠️ **AND IT USES THE BLANK TRACKED FIXTURE, NEVER A PATIENT'S DOCUMENT.** A real
+doctor's visit is never a smoke target — not to confirm a deploy, not once. The
+fixture is `WM IOV Template.docx`, a customer's BLANK form with no clinical
+content, and the round-trip is compile-and-render only: nothing is signed,
+adopted or exported, and no visit is touched.
 
 ## POST-DEPLOY COMPARISON
 
