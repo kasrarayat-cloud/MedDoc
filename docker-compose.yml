@@ -98,19 +98,55 @@ services:
   # missing practice lock was MEASURED to deadlock the locked doors, the locked
   # side losing and its write silently gone (#268's shape).
   #
-  # "Nobody starts it" and "nobody CAN start it" are different properties. This
-  # removes the second gap.
+  # ⚠️ WHAT THIS CLOSES, STATED AT ITS ACTUAL WIDTH — AND THE FIRST DRAFT OF THIS
+  # COMMENT DID NOT. It said *"'Nobody starts it' and 'nobody CAN start it' are
+  # different properties. This removes the second gap."* **It removes ONE VERB.**
   #
-  # ⚠️ THIS DELETES NO CODE. `apps/meddoc-pro/` is untouched; DELETE-MEDDOC-PRO
-  # removes it, and only AFTER the console port lands — the recon found that app
-  # holds THE ONLY WORKED PROVISIONING DESIGN in the repository, and DMP-c found
-  # it also holds ONE OF B7's THREE RULED PROMO DOORS (the reactivation grant).
+  # CLOSED here:  `docker compose up -d meddoc-pro`, and every compose-mediated
+  #               spelling of it, including a bare project-wide `up -d`.
+  # CLOSED with it (same change, elsewhere):  `npm run start|dev|build
+  #               -w meddoc-pro` — the docker-free door — and the `Caddyfile`
+  #               route, which now answers 410 instead of proxying a service
+  #               that no longer exists.
+  # ⚠️ STILL OPEN:  `docker start meddoc-pro-meddoc-pro-1`. The container OBJECT
+  #               survives the removal of the SERVICE: `docker start` is a daemon
+  #               call against config baked at CREATE time and reads NO compose
+  #               file. That object is still `Exited (143)` with a live image, a
+  #               `meddoc-pro` network alias and a currently-valid production
+  #               `DATABASE_URL`. Closing it needs `docker rm`, an irreversible
+  #               production deletion — an OWNER act, recorded in the §2.5
+  #               declaration and deliberately not performed by this change.
+  # ⚠️ ALSO STILL OPEN:  the on-disk `.next/standalone` bundle, which boots the
+  #               same app with no service, no image and no container.
   #
-  # ⚠️ THE CO-TENANT BASELINE TRAVELS WITH THIS CHANGE: `pro.quillmd.com` MUST
-  # STILL ANSWER 410. A change AWAY from 410 is the finding, not the 410 itself
-  # (#265(d) — `scripts/check-cotenants.sh` is the expectation table).
+  # So: **nobody can start it VIA COMPOSE.** The declaration
+  # `docs/deploy-declarations/307-retire-meddoc-pro-service-20260909.md` carries
+  # the full residual-door table, and `gate-307-start-doors` reds if that table
+  # stops naming them.
   #
-  # Reversal: `git revert` this commit. The image and the app both still exist.
+  # ⚠️ THIS DELETES NO CODE. `apps/meddoc-pro/` is untouched except for three
+  # script values that now refuse; DELETE-MEDDOC-PRO removes the app, and only
+  # AFTER the console port lands — the recon found it holds THE ONLY WORKED
+  # PROVISIONING DESIGN in the repository, and DMP-c found it also holds ONE OF
+  # B7's THREE RULED PROMO DOORS (the reactivation grant).
+  #
+  # ⚠️ THE CO-TENANT BASELINE TRAVELS WITH THIS CHANGE — BUT `pro.quillmd.com`
+  # ANSWERING 410 IS **NOT** A DETECTOR FOR IT, AND THE FIRST DRAFT SAID IT WAS.
+  # The 410 is emitted by HOST nginx from a dedicated `server` block with no
+  # `proxy_pass` (`/etc/nginx/sites-available/quillmd:82-97`), so it is
+  # unconditional and upstream-independent: it reads the same whether this
+  # service exists, whether the container runs, and whatever this file says.
+  # ⚠️ `docker start meddoc-pro-meddoc-pro-1` would leave that row GREEN while
+  # the retired CRM served against the production clinical database. The rows
+  # that can actually detect a revival are the CONTAINER rows — see the §2.5
+  # declaration. `scripts/check-cotenants.sh` remains the expectation table
+  # (#265(d)); its reason field is corrected in this change, because it said
+  # "Caddy answers Gone" and the measured answers were nginx 410 at the edge and
+  # Caddy 502 behind it.
+  #
+  # Reversal: revert this change IN FULL — it spans the service block, the
+  # `Caddyfile` route and the run scripts, and reverting only one leaves an
+  # inconsistent tree. The image and the app both still exist.
   # ── Redis (BullMQ broker + ephemeral state) ──
   # Introduced in M2 for the batch pipeline. Internal-only — bound to
   # loopback for ops visibility, but apps reach it via the compose
