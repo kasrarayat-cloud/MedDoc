@@ -45,6 +45,34 @@ import {
   approvedPracticeDefaultAnchorId,
   approvedPracticeDefaultFactId,
 } from '../practice-default';
+// ⚠️ #288 — THE SHARED PREDICATE. This module used to carry three of its five
+// clauses inline; see the call site for what that cost.
+import { OMIT_LADDER_PRE_CONCEPT } from '../unmentioned-policy';
+
+/**
+ * The reason codes for blanks the ladder produces BY DESIGN — DERIVED from the
+ * table, never listed.
+ *
+ * ⚠️ CALLING THE SHARED PREDICATE WAS NOT ENOUGH, AND THE GATE SAID SO. For a
+ * MANUAL field carrying `required: true`, `requiresClinicianInput` is TRUE — the
+ * resolver never consults it there because `manual_source_not_filled` fires
+ * first, but the predicate itself still answers yes. So a validator that merely
+ * swapped its partial copy for the real function would have blocked the very
+ * fields the swap was meant to stop blocking.
+ *
+ * The rule is not "ask the predicate"; it is **do not re-decide what the ladder
+ * has already decided**. A row whose status is `not_mentioned` is a blank the
+ * certificate attests to — a MANUAL field carries no concept by construction, a
+ * `verified_note_selection` is answered by the picks bridge — and re-deciding it
+ * here is how the harm arrived one module later.
+ *
+ * ⚠️ DERIVED SO A SIXTH ROW CANNOT BE FORGOTTEN. Adding a `not_mentioned` row to
+ * the ladder extends this set automatically; a hand-written list would be the
+ * tenth mirror.
+ */
+const DESIGNED_BLANK_REASONS = new Set(
+  OMIT_LADDER_PRE_CONCEPT.filter((g) => g.status === 'not_mentioned').map((g) => g.reasonCode),
+);
 
 export const TEMPLATE_TWIN_VALIDATOR_VERSION =
   'template-field-validator/1.0.0';
@@ -666,7 +694,33 @@ export function validateTemplateTwin(
       // and produce `valid: true` with ZERO issues. Reachable only because
       // `semantic-mapping` happens to couple the policies today; that coupling
       // is incidental, and this seam is where the two readers must not differ.
-    } else if (resolution.status === 'not_mentioned' && fieldDemandsInput(field, mapping)) {
+    // ⚠️ AND THE LADDER IS NOT RE-DECIDED — RULING #288. #275 closed the MIRROR
+    // here (three disjuncts against the resolver's five, now one shared
+    // predicate) and did not close the HARM, which round nine found as `NM-1`:
+    // a MANUAL field carrying `required: true` still satisfies
+    // `fieldDemandsInput`, so this branch still blocked it.
+    //
+    // ⚠️ AND WIDENING THE PREDICATE MADE THAT WORSE, NOT BETTER. Two more clause
+    // combinations now qualify, so more designed blanks reach this test than
+    // before #275 — a correct fix to one half enlarging the other half's blast
+    // radius.
+    //
+    // The two ladder rows that return `not_mentioned` WITHOUT consulting the
+    // predicate — `manual_source_not_filled`, `awaiting_note_selection` — exist
+    // because blocking on them "refused the native document on every visit,
+    // forever, and the export fell back to the styled path". A MANUAL field
+    // carries no concept by construction; a `verified_note_selection` is
+    // answered by the picks bridge. Neither is a field the clinician can fill,
+    // so `valid: false` here withholds the doctor's own form for a blank the
+    // certificate attests to.
+    //
+    // ⚠️ THE RULE IS NOT "ASK THE PREDICATE", IT IS "DO NOT RE-DECIDE WHAT THE
+    // LADDER DECIDED". Asking the predicate is what #275 already did.
+    } else if (
+      resolution.status === 'not_mentioned' &&
+      !DESIGNED_BLANK_REASONS.has(resolution.reasonCode ?? '') &&
+      fieldDemandsInput(field, mapping)
+    ) {
       add('REQUIRED_FIELD_NOT_MENTIONED', 'blocking', 'A required field was not mentioned.', field.fieldId);
     }
 

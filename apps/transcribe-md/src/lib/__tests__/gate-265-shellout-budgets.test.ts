@@ -62,6 +62,10 @@ function testFiles(): string[] {
   return out.split('\n').filter(Boolean);
 }
 
+/** WHERE the enclosing budget was read from — recorded so the reader for each
+ *  shape has a control that fails when that shape stops being exercised. */
+type OuterForm = 'inline' | 'multiline' | 'helper' | 'default';
+
 interface Site {
   file: string;
   line: number;
@@ -72,6 +76,7 @@ interface Site {
   outerLiteral: boolean;
   innerMs: number | null;
   outerMs: number | null;
+  outerForm: OuterForm;
 }
 
 const NUM = /^[0-9_]+$/;
@@ -194,12 +199,38 @@ function collectSites(): Site[] {
       }
 
       // the enclosing `it`'s budget: the first `}, X);` at or after this line
+      //
+      // ⚠️ AND THE BUDGET IS NOT ALWAYS ON THAT LINE. The first reader matched
+      // only the one-line close `}, BUDGET);` and reported `<vitest default>`
+      // for every arm written as
+      //
+      //     },
+      //     ROW_LIMIT_CONTROL_BUDGET_MS,
+      //   );
+      //
+      // which prettier produces whenever the `it(` call is itself multi-line.
+      // That is a FALSE POSITIVE on the one arm this gate exists to protect —
+      // it reported an unreachable 180s budget on an arm that had declared 180s
+      // correctly, so the fix it invites is deleting a real budget. An
+      // instrument that names the wrong culprit is worse than one that stays
+      // quiet, because somebody acts on it.
       let outer: string | null = helperContract;
+      let outerForm: OuterForm = helperContract === null ? 'default' : 'helper';
       for (let j = i; helperContract === null && j < lines.length; j += 1) {
         const close = /^\s*\},\s*([A-Za-z_$][\w$]*|[0-9_]+)\s*\);?\s*$/.exec(code[j]!);
         if (close) {
           outer = close[1]!;
+          outerForm = 'inline';
           break;
+        }
+        // the same close, spread over three lines
+        if (/^\s*\},\s*$/.test(code[j]!)) {
+          const arg = /^\s*([A-Za-z_$][\w$]*|[0-9_]+),?\s*$/.exec(code[j + 1] ?? '');
+          if (arg && /^\s*\);?\s*$/.test(code[j + 2] ?? '')) {
+            outer = arg[1]!;
+            outerForm = 'multiline';
+            break;
+          }
         }
         // an `it(` opening before any close means the timeout is not inside an
         // it that states a budget — vitest's default governs.
@@ -221,6 +252,7 @@ function collectSites(): Site[] {
         outerLiteral: outer !== null && NUM.test(outer),
         innerMs,
         outerMs,
+        outerForm,
       });
     });
   }
@@ -273,9 +305,26 @@ describe('#265(c) — a shell-out timeout is bounded by its own `it` budget', ()
       outerLiteral: false,
       innerMs: 120_000,
       outerMs: VITEST_DEFAULT_TIMEOUT_MS,
+      outerForm: 'default',
     };
     expect(bad.innerMs! > bad.outerMs!).toBe(true);
     expect(bad.innerLiteral).toBe(true);
+  });
+
+  it('⚠️ CONTROL — the MULTI-LINE budget reader is exercised by the real corpus', () => {
+    // The reader for `},\n  BUDGET,\n);` was added because its absence produced
+    // a false positive naming a correctly-budgeted arm. A reader nothing
+    // exercises rots silently, and the next person to meet that false positive
+    // will delete a real budget to satisfy the gate. So this arm reds if the
+    // corpus stops containing that shape — at which point somebody decides
+    // whether to drop the reader, rather than discovering it broken later.
+    const ml = SITES.filter((s) => s.outerForm === 'multiline');
+    expect(
+      ml.map(show),
+      'no shell-out site declares its budget on its own line — the multi-line reader is unexercised',
+    ).not.toEqual([]);
+    // and it recovered a REAL number, not merely a token
+    for (const s of ml) expect(s.outerMs, `${s.file}:${s.line}`).toBeGreaterThan(0);
   });
 
   it('the shell-out timeout NEVER EXCEEDS the enclosing `it` budget', () => {
