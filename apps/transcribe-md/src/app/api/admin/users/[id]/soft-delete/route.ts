@@ -17,6 +17,7 @@ import prisma from '@meddoc/db';
 
 import { adminApi } from '@/lib/admin-api-gate';
 import { logAudit } from '@/lib/audit';
+import { withPracticeLock, wouldStrandPractice } from '@/lib/last-owner-invariant';
 
 const Body = z.object({ confirmEmail: z.string().email().max(254) });
 
@@ -60,16 +61,35 @@ export const POST = adminApi('users:soft-delete', async (req, ctx) => {
     );
   }
 
+  // ── RULING #210 — the FRIENDLY REFUSAL. ────────────────────────────────────
+  // Enforcement is the `users_last_owner_guard` trigger; without this block the
+  // write still cannot strand the practice, but the caller gets a 500 carrying
+  // a Postgres error instead of a sentence naming the remedy.
+  const lastOwner = await wouldStrandPractice(id);
+  if (lastOwner.wouldStrand) {
+    return NextResponse.json(
+      { error: lastOwner.reason, reason: 'LAST_OWNER', membersLeft: lastOwner.membersLeft },
+      { status: 409 }
+    );
+  }
+
   const now = new Date();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (prisma.user as any).update({
-    where: { id },
-    data: {
-      softDeletedAt: now,
-      softDeletedBy: ctx.session.user.id,
-      forceLogoutAt: now,
-    },
-  });
+  // ⚠️ RULING #268 — THE PRACTICE LOCK BEFORE THE ROW WRITE. Soft-deleting an
+  // active owner removes a seat, so this write reaches the guard's locking path
+  // and can be one half of the measured deadlock.
+  await prisma.$transaction((tx) =>
+    withPracticeLock(tx, user.practiceId, async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (tx.user as any).update({
+        where: { id },
+        data: {
+          softDeletedAt: now,
+          softDeletedBy: ctx.session.user.id,
+          forceLogoutAt: now,
+        },
+      });
+    }),
+  );
 
   await logAudit({
     action: 'USER_SOFT_DELETED',
