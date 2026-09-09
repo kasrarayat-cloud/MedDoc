@@ -81,15 +81,25 @@ function appSourceDirs(): string[] {
     .sort();
 }
 
-describe('#182 round 3 — every session consumer refuses an unverified token', () => {
-  const consumers = execSync(
-    `grep -rln 'await auth()' ${CONSUMER_SCAN_ROOTS} --include='*.ts' --include='*.tsx' ` +
-      "| grep -v '__tests__' | grep -v '\\.test\\.'",
+/**
+ * The consumer enumeration, over whatever roots it is given.
+ * `|| true` because grep exits 1 on no match, and an app with no session
+ * consumers (apps/marketing) is a legitimate answer, not an error.
+ */
+function consumersUnder(roots: string): string[] {
+  return execSync(
+    `grep -rln 'await auth()' ${roots} --include='*.ts' --include='*.tsx' ` +
+      "| grep -v '__tests__' | grep -v '\\.test\\.' || true",
     { cwd: REPO, encoding: 'utf8' },
   )
     .split('\n')
     .map((l) => l.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .sort();
+}
+
+describe('#182 round 3 — every session consumer refuses an unverified token', () => {
+  const consumers = consumersUnder(CONSUMER_SCAN_ROOTS);
 
   it('NON-VACUITY: the enumeration finds the real population', () => {
     expect(consumers.length, 'the consumer grep found nothing — every arm below is vacuous').toBeGreaterThan(12);
@@ -157,6 +167,29 @@ describe('#182 round 3 — every session consumer refuses an unverified token', 
       scannedDirs(CONSUMER_SCAN_ROOTS),
       'the enumeration is scoped to one app — the cross-app blindness of round two, re-created inside the gate',
     ).toEqual(appSourceDirs());
+  });
+
+  it('POPULATION: the enumeration finds every consumer any app holds', () => {
+    // ⚠️ THE SCOPE ARM ABOVE MEASURES THE DECLARED ROOTS, AND THAT IS A HOLE
+    // ONE LAYER UP — re-spell the path at the CALL SITE and leave the constant
+    // alone, and it stays green while the population silently loses an app.
+    // Found by refuting the repair rather than by trusting it; the previous two
+    // rewrites of this arm both failed on the step after the one they fixed.
+    //
+    // So the POPULATION is compared too, and this side does not care how the
+    // scan is spelled: LEFT is whatever `consumers` actually contains, RIGHT is
+    // the same enumeration run once per app directory found on disk. Narrow the
+    // scan ANYWHERE — the constant, an inlined literal, a bypassed helper — and
+    // LEFT loses a file RIGHT still has.
+    //
+    // ⚠️ IT IS NOT A SUBSTITUTE FOR THE SCOPE ARM AND DOES NOT SUPERSEDE IT.
+    // A scan narrowed to the apps that happen to have consumers today passes
+    // THIS and fails THAT, and it is exactly round two's blindness pointed at
+    // whichever app gains its first consumer tomorrow. Two arms, two defects.
+    expect(
+      consumers,
+      'the enumeration missed a consumer that a per-app scan finds — it is not reaching every app',
+    ).toEqual(appSourceDirs().flatMap((d) => consumersUnder(d)).sort());
   });
 
   it('each consumer gates on the IDENTITY, or is a named exemption with a reason', () => {
