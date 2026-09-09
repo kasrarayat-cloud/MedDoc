@@ -3682,10 +3682,32 @@ model PlatformRate {
 
   /// The instant this rate begins to apply. **NULL on the way in means
   /// "immediately"** — the BEFORE INSERT trigger fills it with the server's own
-  /// `clock_timestamp()`, so it is never null at rest and can never be in the
-  /// past. ⚠️ Round 3 stamped `createdAt` with `clock_timestamp()` and thereby
-  /// made every honest spelling of "now" refusable BY MICROSECONDS; NULL is the
-  /// one spelling that cannot lose that race.
+  /// `clock_timestamp()`, so it is never null at rest and is never earlier than
+  /// the STATEMENT that set it. ⚠️ Round 3 stamped `createdAt` with
+  /// `clock_timestamp()` and thereby made every honest spelling of "now"
+  /// refusable BY MICROSECONDS; NULL is the one spelling that cannot lose that
+  /// race.
+  ///
+  /// ⚠️ THIS COMMENT USED TO SAY "can never be in the past" AND THAT IS FALSE —
+  /// ROUND 5, AND IT IS A DOCUMENTED LIMIT RATHER THAN A CLOSED ONE.
+  /// `clock_timestamp()` is evaluated at INSERT time and the row becomes
+  /// readable at COMMIT time, so between those two instants the row's own
+  /// `effectiveFrom` is already in the past while no reader can see it.
+  /// Measured on PG 16.15: a writer holding its transaction open for 5s stamped
+  /// `effectiveFrom = 15:18:13.077`, committed at `15:18:18.084`, and the SAME
+  /// `marginAt` query for a fixed instant 1.99s after that `effectiveFrom`
+  /// returned the OLD rate during the transaction and the NEW rate after it.
+  ///
+  /// ⚠️ NO DDL CLOSES IT, WHICH IS WHY THE MIGRATION IS UNCHANGED. Commit time
+  /// is unobtainable for a column in Postgres; `now()` is strictly worse
+  /// (transaction-start); and a guessed future offset is what round 4 rejected
+  /// because it stranded the writer. Any real closure is READER-side — a shared
+  /// advisory lock, or a visibility watermark — and lives in `price-table.ts`,
+  /// which is ordinary TypeScript editable at any time. The window's floor is
+  /// the writing transaction's commit latency, and a writer that supplies its
+  /// own future `effectiveFrom` avoids it entirely (measured: the divergence
+  /// disappears at `clock_timestamp() + 30s`). The ADMIN-4 writer does not
+  /// exist yet; when it lands, that is the cheap mitigation.
   ///
   /// ⚠️ FORWARD-ONLY BY **CONSTRAINT**,
   /// not by policy: `platform_rates_forward_only` refuses `effectiveFrom <

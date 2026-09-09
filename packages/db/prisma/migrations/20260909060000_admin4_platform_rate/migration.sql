@@ -161,6 +161,32 @@ ALTER TABLE "platform_rates" ADD CONSTRAINT "platform_rates_previous_bounds" CHE
 -- correct.
 --
 -- A rate takes effect when it is set or later. Never before.
+--
+-- ⚠️ AND "SET" MEANS THE **INSERT STATEMENT**, NOT THE COMMIT — ROUND 5, RECORDED
+-- BECAUSE IT LOOKS LIKE A DEFECT AND IS NOT CLOSABLE HERE.
+--
+-- `clock_timestamp()` is evaluated inside the INSERT; the row becomes readable
+-- at COMMIT. Between those two instants the row's own `effectiveFrom` is already
+-- in the past while no reader can see it. Measured on PG 16.15: a writer holding
+-- its transaction open 5s stamped `effectiveFrom = 15:18:13.077` and committed
+-- at `15:18:18.084`; the SAME `marginAt` query for one fixed usage instant
+-- inside that window returned the OLD rate during the transaction and the NEW
+-- rate afterwards. The consequence is not an over-charge — under READ COMMITTED
+-- the charge serialized before the commit, so applying the old rate is the
+-- defensible answer — it is that `platform_rates` afterwards asserts a rate was
+-- in effect at an instant no reader could have seen it.
+--
+-- ⚠️ NO SPELLING AT THIS LINE CLOSES IT, and that is the whole reason nothing
+-- here changed. Postgres does not expose commit time to a column. `now()` is
+-- strictly worse (transaction-start — the very window round 3 closed). The only
+-- remaining spelling is a GUESSED future offset, which is exactly what round 4
+-- rejected because it stranded the writer completely. Any real closure is
+-- READER-side (a shared advisory lock between the writer and `marginAt`, or a
+-- visibility watermark) and lives in ordinary TypeScript that can be edited any
+-- day; a migration cannot be. The floor of the window is the writing
+-- transaction's commit latency, and a writer supplying its own FUTURE
+-- `effectiveFrom` avoids it completely — measured, the divergence disappears at
+-- `clock_timestamp() + 30s`.
 ALTER TABLE "platform_rates" ADD CONSTRAINT "platform_rates_forward_only" CHECK (
   "effectiveFrom" >= "createdAt"
 );

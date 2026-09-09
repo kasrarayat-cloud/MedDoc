@@ -172,3 +172,64 @@ Three more, all verified on the same database:
 **Measured after the fixes, on the real database:** immediate ✅ · backdated
 refused · TRUNCATE refused · blank actor refused · `0/0` previous refused ·
 out-of-bounds refused · UPDATE refused · a legitimate future row lands.
+
+---
+
+## ⚠️ AMENDED A FIFTH TIME — round 5, and ONE ROW HERE IS AN OPERATIONAL PRECONDITION
+
+Round 5's refutation pass upheld ten findings. Seven were fixed (see the commits
+on `feat/admin4-platform-rate`); three were adjudicated as the ruled property and
+are recorded rather than changed. **One of them adds a precondition to the flag
+flip and it belongs in this document, because this is what the person flipping
+the flag reads.**
+
+### THE PRECONDITION
+
+> **Write the first `platform_rates` row BEFORE `BILLING_ENFORCED` is turned on.**
+
+`platform_rates_forward_only` — a guard ROUND 1 of this branch added deliberately,
+because a backdated row re-pricing every uncharged visit was the defect that pass
+found — means **a rate can never reach usage that predates it.** Every backdating
+route was re-measured on PG 16.15 and each is refused BY NAME:
+`INSERT` with a past `effectiveFrom`, `INSERT` with `createdAt` backdated too,
+`UPDATE`, and `DELETE`-then-reinsert.
+
+So usage metered between the flag going on and the first rate being written can
+never be charged. That is ruling #178 working (*"forward only, past bills are
+never rewritten"*, and *"a missing multiplier REFUSES, never bills 0"*), not a
+gap — **and the window is empty under correct sequencing**, because nothing gates
+a `platform_rates` write on the flag.
+
+⚠️ **What is NOT lost, so the trade is judged on what it actually costs:**
+`api_usage_events` rows are never updated or deleted by anything in the tree, so
+any uncharged visit stays permanently enumerable as *"a usage event with no
+ledger row"* — the recovery `commitVisitCharge` already names and B9 exists to
+do — and the exact micro-dollar figure is recomputable from those immutable rows
+forever. The documented offset is an `adjustment` ledger row.
+
+### THE OTHER TWO ADJUDICATIONS, recorded so they are not re-raised
+
+- **The margin is read ONCE, at the LATEST priced instant, and applies to the
+  whole charge.** Measured: a two-instant visit spanning a rate change bills the
+  whole cost at the later rate (1000 µ$ -> 5000 at 5/1, not 800×3/2 + 200×5/1 =
+  2200). That is #178's own anchor — *"the multiplier in effect at BILLING
+  TIME"* — and reading at the last USAGE instant is strictly tighter than
+  billing time. Per-component anchoring is prescribed nowhere and is
+  unrepresentable in the ruled stamp, which carries ONE multiplier per ledger
+  line. **Pinned by a test; changing it is a money-policy call for the owner.**
+- **A rate is EFFECTIVE at its INSERT statement and VISIBLE at COMMIT**, so
+  between those two instants it is already in the past and unreadable. Measured:
+  a 5s transaction produced two different answers to one fixed-instant query.
+  **No DDL closes it** — commit time is unobtainable, `now()` is worse, and a
+  guessed future offset is what round 4 rejected for stranding the writer. Any
+  closure is reader-side TypeScript. Recorded in the migration and the schema;
+  the schema's claim that `effectiveFrom` *"can never be in the past"* was FALSE
+  and is corrected.
+
+### ROW 2 IS UNCHANGED AT 5 CHECKS AND 4 TRIGGERS
+
+Round 5 changed the CONTENT of two CHECKs (`bigint` cross-multiply) and one CHECK
+(the actor's trim set), and extended the existing BEFORE INSERT trigger to derive
+`previous*` under an advisory lock. **No constraint or trigger was added or
+removed**, so the migration's own self-verify block still expects 4 and 5, and the
+declared counts in this document still hold.

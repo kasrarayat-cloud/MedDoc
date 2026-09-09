@@ -635,6 +635,97 @@ describe('ADMIN-4 round 2 — the repairs closed INSTANCES; these close the CLAS
   });
 });
 
+describe('ADMIN-4 round 5 — TWO ADJUDICATED BEHAVIOURS, PINNED so round 6 meets a decision', () => {
+  // ⚠️ BOTH OF THESE WERE RAISED AS DEFECTS AND BOTH ARE THE RULED PROPERTY.
+  // They are pinned here rather than argued again, because an unrecorded
+  // decision decays: the next pass re-derives the same question and an
+  // unanswered question becomes "probably fine" through repetition alone.
+  // Changing either is a MONEY-POLICY call under #178 and belongs to the owner.
+
+  it('⚠️ ADJUDICATED — the margin is read ONCE, at the LATEST priced instant, and applies to the WHOLE charge', async () => {
+    // RAISED AS: "the single margin read at the MAX priced instant applies a
+    // rate change RETROACTIVELY to every earlier component of the same visit."
+    // The mechanism is real and reproduced below. It is #178's own anchor:
+    // "every metered charge records the multiplier IN EFFECT AT BILLING TIME on
+    // its own ledger line", effect "at the next metering cycle", direction
+    // "forward only — PAST BILLS are never rewritten". Reading at the latest
+    // USAGE instant is strictly tighter than billing time, never looser.
+    //
+    // Per-component anchoring is prescribed nowhere and is unrepresentable in
+    // the ruled stamp: ledger_entries.pricing carries ONE {multiplier,
+    // platformRateId} per line, so a blended charge would stamp a multiplier
+    // that cannot reproduce chargeMicroUsd from costMicroUsd.
+    const rateOld = RATE(3, 2, 'pr_old');
+    const rateNew = RATE(5, 1, 'pr_new');
+    const NEW_FROM = new Date('2026-08-11T12:00:00Z');
+    const seen: Date[] = [];
+
+    const decision = await priceUsageRows(
+      [
+        // 800 µ$ metered on 2026-08-10 — a day and a half BEFORE pr_new exists
+        usageRow({ id: 'a', createdAt: new Date('2026-08-10T00:00:00Z'), inputTokens: 800 }),
+        usageRow({ id: 'b', createdAt: new Date('2026-08-12T00:00:00Z'), inputTokens: 200 }),
+      ],
+      priceEverything,
+      async (at) => {
+        seen.push(at);
+        return at >= NEW_FROM ? rateNew : rateOld;
+      },
+    );
+
+    // ONE read, at the latest priced instant. Both halves are the pinned choice.
+    expect(seen.map((d) => d.toISOString())).toEqual(['2026-08-12T00:00:00.000Z']);
+    expect(decision.charge).toBe(true);
+    if (!decision.charge) return;
+    expect(decision.costMicroUsd).toBe(1000n);
+    // 1000 µ$ × 5/1, NOT 800×3/2 + 200×5/1 = 2200. Written down deliberately.
+    expect(
+      decision.chargeMicroUsd,
+      'the anchor moved — that is a MONEY-POLICY change under #178, not a refactor',
+    ).toBe(5000n);
+    expect(decision.stamp).toEqual({ multiplier: '5/1', platformRateId: 'pr_new' });
+    // AND THE PROPERTY THE STAMP EXISTS FOR: the recorded multiplier reproduces
+    // the charge from the cost. A blended per-component rate could not.
+    expect(decision.costMicroUsd * 5n / 1n).toBe(decision.chargeMicroUsd);
+  });
+
+  it('⚠️ ADJUDICATED — a rate set AFTER the usage does not reach it: the refusal is #178, not a gap', async () => {
+    // RAISED AS: "the pre-rate usage backlog is PERMANENTLY unbillable."
+    // True, and it is the specification. #178: "forward only, past bills are
+    // never rewritten" and "a missing multiplier REFUSES, never bills 0".
+    // Every backdating route is refused BY NAME in the database — by guards
+    // ROUND 1 OF THIS BRANCH ADDED, because the opposite behaviour (a backdated
+    // row re-pricing every uncharged visit at a stamp that resolves cleanly) was
+    // the defect that pass found.
+    //
+    // ⚠️ AND THE REFUSAL REPORTS WHAT IT DECLINED, so it can never read as
+    // "there was nothing to bill" — that is the half that keeps the uncharged
+    // set findable by B9 as "a usage event with no ledger row".
+    const RATE_FROM = new Date('2026-08-01T00:00:00Z');
+    const before = await priceUsageRows(
+      [usageRow({ createdAt: new Date('2026-07-31T23:59:59Z'), inputTokens: 1000 })],
+      priceEverything,
+      async (at) => (at >= RATE_FROM ? RATE(3, 2, 'pr_first') : null),
+    );
+    expect(before.charge).toBe(false);
+    if (before.charge) return;
+    expect(before.reason).toBe('no_margin_rate');
+    expect(before.pricedSoFarMicroUsd, 'the refusal reads as a zero').toBe(1000n);
+
+    // NON-VACUITY: the SAME code charges the instant the usage falls inside the
+    // rate's period. Without this the arm passes on a pricer that refuses
+    // everything — and the finding would then be right.
+    const after = await priceUsageRows(
+      [usageRow({ createdAt: new Date('2026-08-01T00:00:01Z'), inputTokens: 1000 })],
+      priceEverything,
+      async (at) => (at >= RATE_FROM ? RATE(3, 2, 'pr_first') : null),
+    );
+    expect(after.charge).toBe(true);
+    if (!after.charge) return;
+    expect(after.chargeMicroUsd).toBe(1500n);
+  });
+});
+
 describe('ADMIN-4 round 5 — the SQL invariants the migration claims, asserted on the SQL', () => {
   // ⚠️ WHAT THIS BLOCK DOES AND DOES NOT CLAIM. CI has no Postgres, so a source
   // read is the only half that can run here — the same split

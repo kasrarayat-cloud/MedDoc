@@ -403,12 +403,56 @@ export async function priceUsageRows(
    * lines below, and a margin read at wall-clock time would price the same
    * usage against a rate that was not in effect when it happened — so a rate
    * change would retroactively re-price a backlog the moment the worker caught
-   * up. #178 rules the change forward-only, and that is only true if BOTH
-   * lookups are anchored to the usage rather than to the run.
+   * up. #178 rules the change forward-only, and anchoring to the usage rather
+   * than to the RUN is what keeps a slow worker from re-pricing a backlog.
    *
    * ⚠️ LATEST rather than earliest, because a charge is one act: with several
    * instants in one visit the rate that applies is the one in effect when the
    * last billable component was produced, not the first.
+   *
+   * ═══════════════════════════════════════════════════════════════════════
+   * ⚠️ ROUND 5 — THE TWO LOOKUPS DO **NOT** MIRROR EACH OTHER, AND AN EARLIER
+   * VERSION OF THIS COMMENT SAID THEY DID.
+   * ═══════════════════════════════════════════════════════════════════════
+   *
+   * It read: *"#178 rules the change forward-only, and that is only true if
+   * BOTH lookups are anchored to the usage."* That sentence is FALSE, and
+   * measurably so. The VENDOR rate is looked up PER COMPONENT at that
+   * component's own instant; the MARGIN is looked up ONCE, at max(instants),
+   * and multiplied into the SUM. Measured against this unmodified function:
+   *
+   *   row a  2026-08-10  800 µ$ cost      pr_old 3/2 from 2026-08-01
+   *   row b  2026-08-12  200 µ$ cost      pr_new 5/1 from 2026-08-11T12:00
+   *   -> chargeMicroUsd 5000, stamp {"multiplier":"5/1","platformRateId":"pr_new"}
+   *
+   * 80% of that cost was metered more than a day BEFORE pr_new took effect and
+   * is billed at pr_new anyway. Per-component anchoring would give 2200.
+   *
+   * ⚠️ AND THAT IS THE RULED ANSWER, WHICH IS WHY THE CODE IS UNCHANGED AND THE
+   * COMMENT IS. Ruling #178 fixes the anchor: *"every metered charge records
+   * the multiplier IN EFFECT AT BILLING TIME on its own ledger line"*, effect
+   * *"at the next metering cycle"*, direction *"forward only — PAST BILLS are
+   * never rewritten"*. Billing time for that visit is >= 2026-08-12, after
+   * pr_new took effect, so 5/1 on the whole charge is what #178 prescribes.
+   * Reading at max(priced instant) is a self-imposed TIGHTENING of the ruled
+   * anchor — it can never reach past the last usage instant, where a wall-clock
+   * read could — not a violation of it. "Forward only" governs rewriting bills
+   * that EXIST; `ledger_entries` is append-only and the charge is written once
+   * per (visit, bucket).
+   *
+   * ⚠️ AND PER-COMPONENT ANCHORING IS UNREPRESENTABLE IN THE RULED STAMP, so
+   * "just fix it" is not available. `ledger_entries.pricing` carries ONE
+   * {multiplier, platformRateId} per line and `components` does not carry
+   * per-component instants, so a blended charge would stamp a multiplier that
+   * CANNOT REPRODUCE `chargeMicroUsd` from `costMicroUsd` — precisely the
+   * "number with a story" the stamp exists to prevent — and splitting rows per
+   * margin period collides with the per-(visit, bucket) idempotency key.
+   *
+   * Which anchor is right (max, min, per-component, or wall-clock billing time)
+   * is a MONEY-POLICY call and therefore the owner's. It is surfaced rather than
+   * decided here. What was a defect, and is fixed, is a comment asserting a
+   * property the code does not have. The arm below pins the anchor as a chosen
+   * behaviour so the next round meets a decision instead of an accident.
    */
 
   for (const row of rows) {
@@ -503,6 +547,43 @@ export async function priceUsageRows(
   const chargeInstant = priced.reduce((mx, p) => (p.at > mx ? p.at : mx), new Date(0));
   const found = await marginLookup(chargeInstant);
   const marginAtInstant = found && isUsableMargin(found) ? found : null;
+  // ═════════════════════════════════════════════════════════════════════════
+  // ⚠️ ROUND 5, ADJUDICATED: THIS REFUSAL LOOKS LIKE A DEFECT AND IS THE
+  // SPECIFICATION. Recorded here so round 6 meets the answer, not the question.
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // THE FINDING, and it is correct on every measurement: usage that predates
+  // the FIRST `platform_rates` row can never be charged. Verified on a real
+  // PG 16.15 with the migration applied byte-for-byte — every route to make a
+  // rate cover an earlier instant is refused BY NAME:
+  //
+  //   INSERT effectiveFrom = now()-1h              -> 'precedes insertion … never before'
+  //   INSERT effectiveFrom AND createdAt backdated -> same (the trigger overwrites createdAt)
+  //   UPDATE effectiveFrom                         -> 'platform_rates is append-only'
+  //   DELETE and re-insert                         -> 'DELETE is refused'
+  //
+  // ⚠️ EVERY ONE OF THOSE REFUSALS IS A GUARD THIS BRANCH ADDED ON PURPOSE, in
+  // round 1, because the adversarial pass had found the OPPOSITE behaviour to be
+  // the defect: inserting `{effectiveFrom: last month, 5/1}` re-priced every
+  // uncharged visit since then at a stamp that resolved cleanly. Ruling #178 is
+  // explicit — "forward only, past bills are never rewritten" — and equally
+  // explicit that "a missing multiplier REFUSES, never bills 0". So the finding
+  // measured the successful closure of a prior finding.
+  //
+  // ⚠️ WHAT IS NOT LOST, and this is the half that makes the trade acceptable:
+  // `loadVisitChargeableUsage` is a pure `findMany` and NOTHING in the tree
+  // updates or deletes `api_usage_events`. Every uncharged visit therefore stays
+  // permanently enumerable as "a usage event with no ledger row" — which
+  // `commitVisitCharge`'s own `balance_unreadable` comment names as the designed
+  // recovery, and which B9 exists to do. The exact micro-dollar figure is
+  // recomputable from those immutable rows forever, and the documented offset is
+  // an `adjustment` ledger row.
+  //
+  // ⚠️ WHAT IS OWED IS AN OPERATIONAL PRECONDITION, NOT A CODE CHANGE:
+  // **write the first `platform_rates` row BEFORE `BILLING_ENFORCED` is turned
+  // on.** Nothing gates rate writes on the flag, so the window is empty under
+  // correct sequencing and is forced by nothing in the code. It is recorded in
+  // the §2.5 declaration, where the person flipping the flag will meet it.
   if (!marginAtInstant) {
     return {
       charge: false,
