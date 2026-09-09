@@ -288,7 +288,35 @@ admin.quillmd.com {
     }
 }
 
-# ─── pro.quillmd.com — MedDoc Pro CRM (internal admin) ────────────────────
+# ─── pro.quillmd.com — MedDoc Pro CRM, TERMINATED (ruling #307) ─────────────
+#
+# ⚠️ THIS BLOCK USED TO PROXY TO A SERVICE THAT NO LONGER EXISTS.
+#
+# `meddoc-pro` was removed from `docker-compose.yml` (#307) and this block still
+# read `reverse_proxy meddoc-pro:3000`. Nothing went red, because HOST nginx
+# terminates `pro.quillmd.com` with an unconditional `return 410` and Caddy is
+# never consulted for that hostname — so the dangling upstream was invisible.
+#
+# ⚠️ INVISIBLE IS NOT HARMLESS, AND THE ORDERING IS THE HAZARD.
+# `DEPLOYMENT_RUNBOOK.md` §3.5's restore procedure deletes the nginx 410 block
+# and reloads nginx BEFORE it touches the container. The moment that reload
+# lands, this block is what answers — and with a dead upstream that is a **502
+# wearing the retirement's place**, which `scripts/check-cotenants.sh` names as
+# THE FINDING for this host.
+#
+# So the two layers now agree instead of one masking the other: nginx answers
+# Gone at the edge, Caddy answers Gone behind it. Removing either control alone
+# no longer produces a 502, and `check-cotenants.sh`'s "Caddy answers Gone" is
+# true of the tree rather than merely believed.
+#
+# ⚠️ THIS IS NOT A SECOND RETIREMENT DECISION — the owner ruling that took the
+# host offline stands unchanged. It only removes the way this file could
+# contradict it.
+#
+# RESTORING pro.quillmd.com NEEDS **THREE** REVERSALS, NOT TWO — the nginx 410
+# block, this block, and the compose service. §3.5 carries the ordered
+# procedure; the `@internal path` 404 that used to live here went with the
+# upstream, because with no upstream there is no handler to hide.
 pro.quillmd.com {
     log {
         output stdout
@@ -299,20 +327,7 @@ pro.quillmd.com {
 
     import security_headers_mode_b
 
-    # Defense-in-depth carried over from the MODE A :80 block. The
-    # /api/internal/* endpoints are service-to-service (scribe →
-    # meddoc-pro) authenticated by shared token + IP allowlist at the
-    # app layer; Caddy 404s the path at the edge so external probes
-    # can't even reach the handler.
-    @internal path /api/internal/*
-    respond @internal 404
-
-    reverse_proxy meddoc-pro:3000 {
-        header_up Host {host}
-        header_up X-Real-IP {client_ip}
-        header_up X-Forwarded-For {client_ip}
-        header_up X-Forwarded-Proto {scheme}
-    }
+    respond "MedDoc Pro was decommissioned on 2026-05-04 and taken offline on 2026-08-04." 410
 }
 
 # ==========================================================================
