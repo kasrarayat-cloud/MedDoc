@@ -21,7 +21,7 @@
 // appears tomorrow is watched tomorrow.
 // ============================================================================
 import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
@@ -58,11 +58,28 @@ describe('#182 round 3 — every session consumer refuses an unverified token', 
     expect(consumers.length, 'the consumer grep found nothing — every arm below is vacuous').toBeGreaterThan(12);
     // it must reach BEYOND transcribe-md, or the cross-app blindness of round
     // two is simply re-created inside the gate
+    // ⚠️ DMP-a — THE CLAIM IS ABOUT THE ENUMERATION'S **SCOPE**, NOT ITS HITS.
+    //
+    // This asserted a consumer exists under `apps/meddoc-pro/`, which is right
+    // while that app has one and turns CI RED on `main` the moment
+    // DELETE-MEDDOC-PRO removes it. A6, the nine-row recon and #307's own
+    // filing all reasoned from "CI never touches meddoc-pro" — measured off the
+    // BUILD lines, true and incomplete: this is a MERGE-GATING test that reads
+    // it and asserts the directory is in the population.
+    //
+    // ⚠️ AND THE FIRST REWRITE OF THIS ARM WAS ALSO WRONG — it demanded a hit
+    // in whatever other app exists, so with `meddoc-pro` gone it failed on
+    // `apps/marketing`, which has no session consumers and never will. Found by
+    // actually deleting the app and re-running, not by reading.
+    //
+    // What round two's blindness was about is the SCAN: the enumeration must
+    // glob `apps/*/src` rather than one app's path. That is true whatever apps
+    // exist, and it is what is asserted.
+    const enumeration = readFileSync(__filename, 'utf8');
     expect(
-      consumers.some((c) => c.startsWith('apps/meddoc-pro/')),
-      'the enumeration does not cross app boundaries — round two lived exactly there',
-    ).toBe(true);
-  });
+      enumeration,
+      'the enumeration is scoped to one app — the cross-app blindness of round two, re-created inside the gate',
+    ).toContain("apps/*/src");  });
 
   it('each consumer gates on the IDENTITY, or is a named exemption with a reason', () => {
     const ungated = consumers.filter((c) => {
@@ -172,7 +189,15 @@ describe('#182 round 3 — apps/meddoc-pro is RECORDED, not verified', () => {
     // the source — it never reads the marker itself. If that app is ever
     // revived, this is the note that says its session handling was never
     // independently checked.
-    const src = readFileSync(join(REPO, 'apps/meddoc-pro/src/lib/auth.ts'), 'utf8');
+    // ⚠️ DMP-a — this THREW when the file went. The note it carries is about a
+    // retired app; once the app is deleted the note has served its purpose and
+    // the arm must not be the thing that fails.
+    const p = join(REPO, 'apps/meddoc-pro/src/lib/auth.ts');
+    if (!existsSync(p)) {
+      expect(existsSync(join(REPO, 'apps/meddoc-pro')), 'the app is gone — this note is discharged').toBe(false);
+      return;
+    }
+    const src = readFileSync(p, 'utf8');
     expect(src, 'meddoc-pro now reads the marker — update this note').not.toContain(
       'sessionVerifyFailed',
     );

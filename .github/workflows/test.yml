@@ -161,7 +161,11 @@ jobs:
       - name: Resolve Playwright version (for cache key)
         id: pw-version
         run: |
-          ver=$(node -p "require('./apps/meddoc-pro/package.json').devDependencies['@playwright/test']")
+          # ⚠️ DMP-a — READ FROM THE APP CI ACTUALLY TESTS. This read
+          # `apps/meddoc-pro/package.json`, a retired app slated for deletion,
+          # for a cache key used by the transcribe-md Playwright run. Deleting
+          # that app would have broken this job for a reason unrelated to it.
+          ver=$(node -p "require('./apps/transcribe-md/package.json').devDependencies['@playwright/test']")
           echo "version=${ver}" >> "$GITHUB_OUTPUT"
 
       # Same key namespace as a11y.yml on purpose — that workflow already
@@ -215,12 +219,12 @@ jobs:
       - name: Install Playwright system deps (apt half of --with-deps)
         timeout-minutes: 5
         run: npx playwright install-deps chromium
-        working-directory: apps/meddoc-pro
+        working-directory: apps/transcribe-md
 
       - name: Install Playwright Chromium (browser half of --with-deps)
         timeout-minutes: 5
         run: npx playwright install chromium
-        working-directory: apps/meddoc-pro
+        working-directory: apps/transcribe-md
 
       - name: Run test pipeline (seed + vitest + playwright)
         run: npm run test:all
@@ -230,7 +234,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: apps/meddoc-pro/playwright-report/
+          path: apps/transcribe-md/playwright-report/
           retention-days: 7
 
       - name: Upload Playwright traces on failure
@@ -238,7 +242,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-test-results
-          path: apps/meddoc-pro/test-results/
+          path: apps/transcribe-md/test-results/
           retention-days: 7
 
   # ──────────────────────────────────────────────────────────────────

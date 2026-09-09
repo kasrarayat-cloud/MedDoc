@@ -26,7 +26,7 @@
 // `suspendedAt` to a profile update; this one reds.
 // ============================================================================
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -313,6 +313,14 @@ describe('ruling #289 — the OTHER app writes the same table, and the derivatio
   ];
 
   it('⚠️ the cross-app unlocked-writer set has not changed — grown OR fixed', () => {
+    // ⚠️ DMP-a — the pin retires WITH the app, not before. While
+    // `apps/meddoc-pro` exists the set is asserted exactly; once
+    // DELETE-MEDDOC-PRO removes it there is nothing to pin and the risk is
+    // gone, which is the outcome the pin was filed to reach.
+    if (!existsSync(OTHER_APP)) {
+      expect(PINNED.length, 'the app is gone — delete PINNED and this arm').toBeGreaterThan(0);
+      return;
+    }
     const files = execFileSync('git', ['ls-files', 'src'], { cwd: OTHER_APP, encoding: 'utf8' })
       .split('\n')
       .filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.includes('__tests__'));
@@ -333,6 +341,8 @@ describe('ruling #289 — the OTHER app writes the same table, and the derivatio
   });
 
   it('⚠️ POSITIVE CONTROL — the pin is measuring, not restating itself', () => {
+    // DMP-a — retires with the app, exactly as the arm above does.
+    if (!existsSync(OTHER_APP)) return;
     // The matcher must actually fire on that file's real content; a pin that
     // passes because the derivation found nothing would be green forever.
     const src = stripComments(readFileSync(join(OTHER_APP, 'src/app/system-admin/actions.ts'), 'utf8'));
