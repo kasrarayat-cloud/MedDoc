@@ -119,6 +119,53 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # ⚠️ THE ROWS GATE DIFFS base...HEAD, AND A SHALLOW CLONE FAILS CLOSED.
+          # Measured on this gate's own first CI run (34052168551): the default
+          # depth-1 checkout plus a `--depth=200` fetch of the base still shares
+          # no common ancestor, so `git merge-base` found none and the gate
+          # exited 2 — CANNOT TELL, correctly refusing to pass on a broken
+          # instrument. ⚠️ `e2e.yml:65` had already solved this and left the
+          # reason in a comment ("a shallow clone would fail CLOSED"); I wired a
+          # second, shallower spelling one file over rather than reading it.
+          fetch-depth: 0
+
+      # ⚠️ §2.5 ROWS AT PR-OPEN — THE GATE FOR A RULE THAT DID NOT WORK TWICE.
+      # A deployer can measure what a change TOUCHES. Only its author can say
+      # what it is SUPPOSED to do, and therefore what would be a FINDING.
+      # Measured: b54a3b3a shipped 8 passengers with 0 rows; 832f8e81 shipped 16
+      # with 1 — and one of the unrowed ones was an IRREVERSIBLE enum migration.
+      # The rule was written after the first and had not changed behaviour by the
+      # second, so it becomes mechanism.
+      #
+      # Placed EARLY and read-only: it costs seconds and fails before the heavy
+      # work, so an author learns on the PR rather than at a deploy.
+      - name: §2.5 rows are authored at PR-open (runtime PRs only)
+        if: github.event_name == 'pull_request'
+        run: |
+          # ⚠️ THE BASE IS THE PR'S OWN base.sha, NOT `origin/<base_ref>` — the
+          # same source `e2e.yml` uses. A branch ref moves: if `main` advances
+          # while this run is queued, `origin/main` names a tree the PR was
+          # never diffed against, and the runtime file set changes underneath
+          # the answer. A sha cannot drift.
+          # ⚠️ AND THE HEAD IS THE PR'S OWN head.sha, NOT `HEAD`. On a
+          # `pull_request` event `actions/checkout` checks out the MERGE REF
+          # (`refs/pull/N/merge`) — my branch already merged into CURRENT main.
+          # `base.sha` is main as it stood when the PR was opened. So
+          # `base.sha..HEAD` spans BOTH my commits AND every commit main gained
+          # while the PR waited, and the gate bills this PR for other people's
+          # merged files.
+          #
+          # MEASURED on this PR's own run 34055449559: it reported **9** runtime
+          # files where the branch touches **4**. The other five
+          # (`deploy-prod.sh`, `lib/declaration.sh`, `reap-session-scratch.sh`
+          # and two gates) arrived on main from PR #989 and PR #1009 while this
+          # one sat in the queue. ⚠️ **The error GROWS the longer a PR waits**,
+          # which is exactly when an author is least able to explain it.
+          PR_NUMBER="${{ github.event.pull_request.number }}" \
+            bash scripts/check-pr-rows-file.sh \
+              "${{ github.event.pull_request.base.sha }}" \
+              "${{ github.event.pull_request.head.sha }}"
 
       - uses: actions/setup-node@v4
         with:
