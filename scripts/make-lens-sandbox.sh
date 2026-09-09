@@ -84,8 +84,53 @@ if [ "$CALLER" != "$SHARED" ]; then
   echo "   ref '$REF' resolved in $CALLER -> ${REF_SHA:0:12}" >&2
 fi
 
+# ══════════════════════════════════════════════════════════════════════════════
+# ⚠️ FROM HERE ON, A FAILURE MUST LEAVE **NO SANDBOX**, NOT AN UNARMED ONE.
+# ------------------------------------------------------------------------------
+# MEASURED 2026-09-09. A parallel batch of eleven sandboxes produced TWO that
+# were checked out at the right commit and NOT ARMED: `remote.origin.pushurl`
+# unset, `core.hooksPath` still pointing at the repository's real hooks, and no
+# `.lens-env.sh` at all. The script exited non-zero — and the DIRECTORY STAYED.
+#
+# That artifact is the exact thing this file exists to prevent. It is worse than
+# no sandbox, because it looks like one: `ls` shows it, `git -C` answers from
+# it, and a caller that tests `[ -d "$DIR" ]` instead of the exit status hands a
+# lens agent a tree it can commit and push out of. The guards did not fail —
+# they were never installed, and nothing said so.
+#
+# ⚠️ THE MECHANISM IS NOT PROVEN AND IS RECORDED AS UNPROVEN. A deliberate
+# three-way concurrent reproduction on the same box, minutes later, did NOT
+# reproduce it — all three came out armed. A race sampled coarsely is a race
+# missed, so that is not a refutation; but neither is it a demonstration, and
+# this comment must not claim one. What IS proven is the shape: this script had
+# ZERO traps and discarded `worktree add`'s exit status, so ANY failure after
+# the worktree exists leaves the unarmed tree behind.
+#
+# So the fix is not "find the race" — it is fail-closed teardown plus a
+# self-assertion, which is correct whatever the trigger turns out to be.
+# ══════════════════════════════════════════════════════════════════════════════
+CREATED=0
+teardown_if_failed() {
+  rc=$?
+  [ "$rc" -eq 0 ] && return 0
+  [ "$CREATED" -eq 1 ] || return 0
+  echo "🔴 creation FAILED after the worktree existed — tearing it down." >&2
+  echo "   an UNARMED sandbox that looks built is the artifact this prevents." >&2
+  git -C "$SHARED" worktree remove --force "$DIR" >/dev/null 2>&1 || true
+  [ -e "$DIR" ] && rm -rf "$DIR"
+  git -C "$SHARED" worktree prune >/dev/null 2>&1 || true
+  return 0
+}
+trap teardown_if_failed EXIT
+
 # ── The worktree, DETACHED. No branch exists to be pushed or moved. ──────────
-git -C "$SHARED" worktree add --detach "$DIR" "$REF_SHA" >/dev/null 2>&1
+# ⚠️ THE EXIT STATUS IS CHECKED. It used to be discarded with `>/dev/null 2>&1`
+# and no `||`, so a failed `worktree add` fell through into the arming steps.
+if ! git -C "$SHARED" worktree add --detach "$DIR" "$REF_SHA" >/dev/null 2>&1; then
+  echo "🔴 REFUSING — \`git worktree add\` failed for $DIR at ${REF_SHA:0:12}." >&2
+  exit 1
+fi
+CREATED=1
 
 # ── Worktree-scoped config. `--worktree` needs the extension; enabling it is a
 #    documented, reversible git feature and it is what keeps the next line from
@@ -143,6 +188,33 @@ if [ -f "$SHARED/scripts/setup-worktree.sh" ]; then
     fi
 else
     echo "⚠️  setup-worktree.sh not found — sandbox is read-only-safe only." >&2
+fi
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ⚠️ THE SANDBOX ASSERTS ITS OWN ARMING BEFORE IT IS HANDED OVER.
+# ------------------------------------------------------------------------------
+# A stated invariant is a wish until something asserts it — this file's own
+# doctrine, applied to this file. `arm-lens-sandbox.sh` proves the guards REFUSE,
+# but it only ever runs against a sandbox that was built successfully; nothing
+# checked that a returned path is armed at all. This is the cheap structural
+# half: four properties, read back from git and the filesystem rather than
+# assumed from the fact that the lines above executed.
+#
+# It is a POSITIVE-CONTROL-shaped check on purpose: it reads the values, it does
+# not trust that setting them worked.
+# ══════════════════════════════════════════════════════════════════════════════
+armed_pushurl="$(git -C "$DIR" config --get remote.origin.pushurl 2>/dev/null || echo UNSET)"
+armed_hooks="$(git -C "$DIR" config --get core.hooksPath 2>/dev/null || echo UNSET)"
+arming_fault=""
+[ "$armed_pushurl" = "/dev/null" ] || arming_fault="$arming_fault pushurl=[$armed_pushurl]"
+[ "$armed_hooks" = "$DIR/.lens-hooks" ] || arming_fault="$arming_fault hooksPath=[$armed_hooks]"
+[ -x "$DIR/.lens-hooks/pre-commit" ] || arming_fault="$arming_fault pre-commit-not-executable"
+[ -x "$DIR/.lens-hooks/pre-push" ] || arming_fault="$arming_fault pre-push-not-executable"
+[ -f "$DIR/.lens-env.sh" ] || arming_fault="$arming_fault no-lens-env.sh"
+if [ -n "$arming_fault" ]; then
+  echo "🔴 REFUSING — the sandbox was created but is NOT ARMED:$arming_fault" >&2
+  echo "   handing this path back would give a lens a tree it can write out of." >&2
+  exit 1
 fi
 
 echo "$DIR"
