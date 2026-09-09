@@ -69,3 +69,36 @@ The archive must make the **currently unreachable** state reachable **and
 reversible**: a practice with no live members, which can be brought back whole.
 If the built door cannot restore a practice it archived, it has re-created the
 defect it was filed to replace.
+
+## ⚠️ PRIOR ART THIS FILING DID NOT CITE — FOUND BY THE NINE-ROW RECON
+
+**Two standing rulings already cover this row, and both are unexecuted.**
+
+**RULING #226** orders the exact act: *"the six test practices and their seven
+inactive users are ARCHIVED — a ruled mutation with a committed declaration,
+executed through the audited admin path, restorable: soft archive, never hard
+delete."* **No declaration exists** — `docs/foundation/mutations/` ends at
+`20260903-transfer-certification-to-active.md`. Its own *TWO MEASURED FACTS*
+record why it has never run:
+
+> *"NO ADMIN PATH WRITES A PRACTICE ROW … The admin API exposes users,
+> audit-logs, usage, system, hipaa, threats — no practices. And there is no
+> `PRACTICE_ARCHIVED` among the 156 `AuditAction` values."*
+
+⚠️ **#226 IS BLOCKED ON EXACTLY THIS ROW'S SUBSTRATE.** So ADMIN-6 is not a new
+capability with a fresh justification — it is the missing floor under a ruling
+that has been standing since 2026-09-07. **A builder working this row discharges
+#226 whether or not they know it**, which is precisely why it is cited here now.
+
+**RULING #222** and `board/THE-SIX-ZERO-OWNER-PRACTICES.md` supply the
+population: all six practices tabled by id, name, created date and member / live
+/ visit counts — five QA signup shells minted 2026-05-03, one April test clinic
+— plus the query that de-escalates them (*practices with a LIVE member and NO
+able owner: **0***) and the shape to honour: **archive the PRACTICE and leave
+the user rows to the ordinary path.** Arms 28–32 on PR #1036 already assert that
+a zero-owner practice stays writable *precisely so this cleanup is possible*.
+
+⚠️ **I FILED THIS ROW WITHOUT EITHER CITATION.** The recon found them; review did
+not. The lesson is the one the ledger keeps re-teaching — **a capability filed as
+new is a claim that nothing already covers it**, and that claim is checkable by
+grep before the row is written.
