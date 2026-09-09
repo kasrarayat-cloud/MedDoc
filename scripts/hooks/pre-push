@@ -108,6 +108,85 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   fi
 done
 
+# ══════════════════════════════════════════════════════════════════════════════
+# ⚠️ TYPECHECK BEFORE THE PUSH — vitest TRANSPILES WITHOUT TYPECHECKING.
+# ------------------------------------------------------------------------------
+# Owner-ruled 2026-09-08, after a commit that did not compile reached origin and
+# CI caught it:
+#
+#     gate-274-ingest.test.ts(39,3): error TS2300: Duplicate identifier 'partName'
+#
+# The suite had been run and was GREEN — 25 arms — because vitest strips types
+# rather than checking them. A runtime green says NOTHING about tsc, and the
+# author (me) read one as the other.
+#
+#   THE SLIP IS CHEAP TO MAKE AND THE HOOK IS THE ONLY PLACE THAT CANNOT FORGET.
+#
+# ⚠️ THE EXIT CODE IS THE AUTHORITY, NEVER A GREP OF THE OUTPUT. `tsc` prints
+# nothing on success, so `grep -q error` on a clean run is a false GREEN, and a
+# grep on a failed run depends on a message format nobody promised us. This
+# repository has a canon entry for exactly that shape.
+#
+# FAIL-CLOSED on cannot-tell: no npx, no tsconfig, or a runner that dies for its
+# own reasons all REFUSE. A broken instrument and a clean tree both print
+# nothing, and only the exit code tells them apart.
+#
+# SKIPPED for a delete-only push (nothing to typecheck) and overridable by the
+# same DECLARE_CANCELLATION door the in-flight check uses, because a hook that
+# cannot be got past in an emergency is a hook people uninstall.
+# ══════════════════════════════════════════════════════════════════════════════
+typecheck_before_push() {
+  local root tsconfig
+  root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -n "$root" ] || { echo "🔴 pre-push REFUSED — cannot find the repo root to typecheck." >&2; return 1; }
+  tsconfig="$root/apps/transcribe-md/tsconfig.json"
+  if [ ! -f "$tsconfig" ]; then
+    echo "🔴 pre-push REFUSED — no tsconfig at $tsconfig; cannot tell whether this compiles." >&2
+    return 1
+  fi
+  command -v npx >/dev/null 2>&1 || { echo "🔴 pre-push REFUSED — npx unavailable; cannot typecheck." >&2; return 1; }
+
+  echo "pre-push: typechecking…" >&2
+  local out rc
+  out="$(cd "$root" && npx tsc --noEmit -p "$tsconfig" 2>&1)"
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
+    {
+      echo ""
+      echo "🔴 pre-push REFUSED — this tree does not typecheck (tsc exit $rc)."
+      echo ""
+      printf '%s
+' "$out" | head -20 | sed 's/^/    /'
+      echo ""
+      echo "  ⚠️ THE TEST SUITE PASSING DOES NOT MEAN THIS COMPILES. vitest strips"
+      echo "     types; it does not check them. That is how a duplicate identifier"
+      echo "     reached origin with 25 green arms behind it."
+      echo ""
+      echo "  Fix it, or state the override:"
+      echo "      DECLARE_CANCELLATION=\"...why this must go out uncompiled...\" git push …"
+      echo ""
+    } >&2
+    return 1
+  fi
+  return 0
+}
+
+# ⚠️ ITS OWN DOOR, NOT THE CANCELLATION ONE. The first draft of this block
+# skipped the typecheck whenever DECLARE_CANCELLATION was set — so a
+# declaration saying "I am knowingly discarding somebody's runs" would silently
+# have bought "I am knowingly pushing code that does not compile". Those are
+# different claims and a session making the first has not made the second.
+# One exemption must never buy another.
+if [ -n "${DECLARE_TYPECHECK_SKIP:-}" ]; then
+  if [ "${#DECLARE_TYPECHECK_SKIP}" -lt 12 ]; then
+    echo "🔴 pre-push REFUSED — DECLARE_TYPECHECK_SKIP must be a REASON, not a token." >&2
+    exit 1
+  fi
+  echo "pre-push: typecheck SKIPPED — ${DECLARE_TYPECHECK_SKIP}" >&2
+else
+  typecheck_before_push || exit 1
+fi
+
 if [ "$busy_total" -eq 0 ]; then
   exit 0
 fi

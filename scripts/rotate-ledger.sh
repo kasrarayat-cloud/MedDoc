@@ -477,6 +477,27 @@ except Exception: print(10**9)' 2>/dev/null)
     exit 2
   fi
 
+  # ══ THE SWAP — THE ONLY WRITE TO THE REPOSITORY IN THIS WHOLE LOOP. ═══════
+  # Reached only if every post-condition above passed on the staged copy. Until
+  # this line runs, `git status` is clean and a `kill -9` costs nothing.
+  mkdir -p "$real_outdir"
+  cp "$f" "$real_f"
+  cp -a "$outdir/." "$real_outdir/"
+  staged_chars="$after_chars"
+  f="$real_f"; outdir="$real_outdir"
+  rm -rf "$STAGE"; trap - EXIT
+
+  # ⚠️ AND THE SWAP IS VERIFIED, not assumed. `cp` can fail on a full disk or a
+  # read-only tree and this script has already been burned once by trusting a
+  # write it did not check.
+  landed_chars="$(wc -m < "$f" | tr -d ' ')"
+  if [ "$landed_chars" != "$staged_chars" ]; then
+    echo "🔴 rotate-ledger: THE SWAP DID NOT LAND — $f is $landed_chars chars, staged was $staged_chars."
+    echo "   The rotation was computed and proved on a copy and the copy did not"
+    echo "   reach the repository. Nothing here is trustworthy; investigate before rerunning."
+    exit 2
+  fi
+
   echo "   ✔ $f: $before_chars → $after_chars chars, $before_archives → $(ls -1 "$outdir" 2>/dev/null | wc -l | tr -d ' ') archive files, no duplication"
 done
 
