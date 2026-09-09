@@ -219,8 +219,8 @@ All eight secrets were considered compromised and rotated through the vendor con
 ### Operator step (Kasra, post-PR-A merge)
 
 - [ ] Paste the eight new values into `/opt/meddoc-pro/.env`
-- [ ] `docker compose up -d --force-recreate postgres minio redis transcribe-md transcribe-md-worker meddoc-pro marketing` (postgres + minio first to pick up the new root credentials, then app tier)
-- [ ] Smoke-verify: `curl -sI https://app.quillmd.com` returns 307; `curl -sI https://pro.quillmd.com` returns 200; kick off a test visit and confirm the AI pipeline reaches Claude / Deepgram / OpenAI from worker logs
+- [ ] `docker compose up -d --force-recreate postgres minio redis transcribe-md transcribe-md-worker marketing` (postgres + minio first to pick up the new root credentials, then app tier — `meddoc-pro` was in this list until ruling #307 removed the service)
+- [ ] Smoke-verify: `curl -sI https://app.quillmd.com` returns 307; `curl -sI https://pro.quillmd.com` returns **410** (it was 200 when this list was written; the host was deliberately retired 2026-08-04); kick off a test visit and confirm the AI pipeline reaches Claude / Deepgram / OpenAI from worker logs
 - [ ] Confirm `.env` mode is still `0600` after the paste (`stat -c '%a %n' /opt/meddoc-pro/.env`)
 
 ### Audit exposure (post-rotation)

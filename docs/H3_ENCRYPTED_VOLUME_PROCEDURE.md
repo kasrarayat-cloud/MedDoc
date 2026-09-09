@@ -85,7 +85,7 @@ for HIPAA Safe Harbor per the published Hetzner attestation.
 ```bash
 # Stop everything that writes to postgres or minio
 cd /opt/meddoc-pro
-docker compose stop transcribe-md transcribe-md-worker meddoc-pro marketing minio
+docker compose stop transcribe-md transcribe-md-worker marketing minio
 docker compose stop postgres-backup postgres
 
 # rsync postgres data dir

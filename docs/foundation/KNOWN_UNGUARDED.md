@@ -61,9 +61,20 @@ serves 410"*. **The 410 is real and the deletion is not.** Measured 2026-09-07:
 | the app is deleted | ❌ `apps/meddoc-pro/` is **still in the tree**; `docker-compose.yml:92` still defines the service; the `Caddyfile` still carries a `pro.quillmd.com` block; the container `meddoc-pro-meddoc-pro-1` is **`Exited (143) 4 weeks ago`** — stopped, not removed |
 
 **So the doors are unreachable today because of ONE LINE IN AN nginx CONFIG**,
-which is a deployment fact and not a code fact. `docker compose up meddoc-pro`
-plus a config edit restores them, and neither action would look like re-opening
-a security hole to whoever performed it.
+which is a deployment fact and not a code fact. A single revival command plus a
+config edit restores them, and neither action would look like re-opening a
+security hole to whoever performed it.
+
+⚠️ **AMENDED 2026-09-09, ruling #307 — THE COMPOSE DOOR IS GONE AND THE CHEAPER
+ONE IS NOT.** The row above measured `docker-compose.yml:92` as still defining
+the service; #307 removed that definition, so the compose-mediated revival named
+in the original wording no longer resolves. **The container OBJECT survives the
+service removal**: `meddoc-pro-meddoc-pro-1` is still `Exited (143)` with its
+image, network alias and a currently-valid `DATABASE_URL` baked in, and
+`docker start meddoc-pro-meddoc-pro-1` revives it **without reading any compose
+file at all**. So the sentence's force is unchanged and its verb is different —
+which is precisely why the argument for #210 was never allowed to rest on the
+app being gone.
 
 **This does not change the ruling's conclusion — it changes what the conclusion
 rests on.** The right reason these doors are out of scope is the second half of
