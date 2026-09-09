@@ -44,9 +44,11 @@ import {
   ACTIVE_OWNER_WHERE,
   IsolationLevelUnsupportedError,
   LIVE_MEMBER_WHERE,
+  RESTORABLE_MEMBER_WHERE,
   PRACTICE_LOCK_KEY,
   activeOwnerSql,
   liveMemberSql,
+  restorableMemberSql,
   withPracticeLock,
   wouldStrandPractice,
 } from '../last-owner-invariant';
@@ -390,6 +392,41 @@ describe('ruling #210 — one definition of an active practice OWNER', () => {
     expect(generated.size, 'the live-member predicate collapsed to nothing').toBe(4);
   });
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // ROUND FINDING 1 — "RESTORABLE" IS A THIRD PREDICATE AND GETS THE SAME
+  // TREATMENT, because the reason #239 exists applies to it identically: two
+  // readers of one rule, and the copy that drifts is the one nobody watches.
+  // ══════════════════════════════════════════════════════════════════════════
+  it('`restorableMemberSql` emits exactly the migration\'s restorable-member predicate', () => {
+    const body = fnBody('users_is_restorable_member', '$fn$ LANGUAGE sql IMMUTABLE;')
+      .replace(/^[\s\S]*?\bSELECT\b/, '')
+      .replace(/;\s*$/, '');
+    const generated = new Set(
+      restorableMemberSql('u').split(/\bAND\b/i).map((c) => c.replace(/\s+/g, ' ').trim()),
+    );
+    const migration = new Set(
+      body.split(/\bAND\b/i).map((c) => c.replace(/\s+/g, ' ').trim()),
+    );
+    expect(generated, 'the generator and the migration disagree clause-for-clause').toEqual(migration);
+    expect(generated.size, 'the restorable predicate collapsed to nothing').toBe(1);
+  });
+
+  it('⚠️ RESTORABLE IS STRICTLY WIDER THAN LIVE — or it closes nothing', () => {
+    // THE WHOLE POINT OF THE FINDING: a SUSPENDED member is not live and IS
+    // stranded. If these two predicates ever name the same columns, exemption 2
+    // is back to counting live members and the unrecoverable state returns.
+    const live = new Set(Object.keys(LIVE_MEMBER_WHERE));
+    const restorable = new Set(Object.keys(RESTORABLE_MEMBER_WHERE));
+    expect(restorable.size, 'restorable must be the weaker test').toBeLessThan(live.size);
+    for (const c of restorable) {
+      expect(live.has(c), `${c} must also be a live-member column`).toBe(true);
+    }
+    expect(
+      live.has('suspendedAt') && !restorable.has('suspendedAt'),
+      'a suspended member must count as restorable — that is the trap this closes',
+    ).toBe(true);
+  });
+
   it('ruling #239 — the TS filter names the same columns as the SQL', () => {
     const cols = new Set(
       [...fnBody('users_is_live_member', '$fn$ LANGUAGE sql IMMUTABLE;')
@@ -425,9 +462,22 @@ describe('ruling #239 — the friendly refusal counts LIVE members, not rows', (
     userFindUnique.mockResolvedValue(OWNER);
   });
 
-  /** `count` is called twice: [0] able owners left, [1] live members left. */
-  const counts = (ownersLeft: number, membersLeft: number) => {
-    userCount.mockResolvedValueOnce(ownersLeft).mockResolvedValueOnce(membersLeft);
+  /**
+   * `count` calls, in order: [0] able owners left, [1] live members left, and —
+   * only when [1] is 0 — [2] trapped restorable non-owners, [3] restorable
+   * owners who could rescue the practice.
+   *
+   * ⚠️ THE LAST TWO ARE MOCKED EXPLICITLY AND DEFAULT TO ZERO ON PURPOSE. Left
+   * unmocked they resolve `undefined`, `undefined > 0` is false, and every arm
+   * below would go on passing while measuring nothing — the exact shape the
+   * non-vacuity arm at the top of this block exists to catch one level up.
+   */
+  const counts = (ownersLeft: number, membersLeft: number, trapped = 0, rescuers = 0) => {
+    userCount
+      .mockResolvedValueOnce(ownersLeft)
+      .mockResolvedValueOnce(membersLeft)
+      .mockResolvedValueOnce(trapped)
+      .mockResolvedValueOnce(rescuers);
   };
 
   it('⚠️ NON-VACUITY — the last able owner WITH a live member DOES strand', async () => {
@@ -450,6 +500,54 @@ describe('ruling #239 — the friendly refusal counts LIVE members, not rows', (
   it('exemption 2 — nobody left to strand', async () => {
     counts(0, 0);
     expect((await wouldStrandPractice('u1')).wouldStrand).toBe(false);
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ROUND FINDING 1 — EXEMPTION 2 IS NARROWED, AND THESE ARE ITS ARMS.
+  //
+  // Two ordinary admin clicks used to reach a practice with no active owner and
+  // a SUSPENDED clinician who could then never be unsuspended: the orphan arm
+  // refuses it and names two remedies, NEITHER OF WHICH EXISTS in the product
+  // (`softDeletedAt` is cleared nowhere; every role-writing door demands OWNER).
+  // ══════════════════════════════════════════════════════════════════════════
+  it('⚠️ A SUSPENDED MEMBER IS STILL STRANDED — the unrecoverable state is refused', async () => {
+    // no live members, but one restorable non-owner and no restorable owner
+    counts(0, 0, 1, 0);
+    const v = await wouldStrandPractice('u1');
+    expect(
+      v.wouldStrand,
+      'the last owner may leave a practice whose only other member can never be ' +
+        'brought back — the state the migration calls worse than no guard',
+    ).toBe(true);
+    expect(v.wouldStrand && v.reason).toContain('suspended or deactivated');
+  });
+
+  it('⚠️ A RESTORABLE **OWNER** IS A RESCUER, so this is NOT refused', async () => {
+    // The narrowing must not be wider than the trap. A suspended OWNER can be
+    // unsuspended — `users_no_orphan_member` short-circuits on
+    // `users_is_active_owner(NEW)` — so the practice is recoverable and the
+    // write stays legal. Without this arm the fix would quietly cost a
+    // capability nobody agreed to lose.
+    counts(0, 0, 1, 1);
+    expect((await wouldStrandPractice('u1')).wouldStrand).toBe(false);
+  });
+
+  it('⚠️ NOBODY RESTORABLE AT ALL — still exempt, as before', async () => {
+    counts(0, 0, 0, 0);
+    expect((await wouldStrandPractice('u1')).wouldStrand).toBe(false);
+  });
+
+  it('⚠️ THE TRAPPED COUNT IS FILTERED BY `RESTORABLE_MEMBER_WHERE` AND EXCLUDES OWNERS', async () => {
+    counts(0, 0, 1, 0);
+    await wouldStrandPractice('u1');
+    const trappedQuery = userCount.mock.calls[2][0] as { where: Record<string, unknown> };
+    for (const [column, value] of Object.entries(RESTORABLE_MEMBER_WHERE)) {
+      expect(trappedQuery.where[column], `the trapped count does not filter on ${column}`).toBe(value);
+    }
+    expect(
+      trappedQuery.where.practiceRole,
+      'the trapped count includes OWNERS, so a rescuer would be counted as a victim',
+    ).toEqual({ not: 'OWNER' });
   });
 
   it('⚠️ THE MEMBER COUNT IS FILTERED BY `LIVE_MEMBER_WHERE` — kills the bare row count', async () => {

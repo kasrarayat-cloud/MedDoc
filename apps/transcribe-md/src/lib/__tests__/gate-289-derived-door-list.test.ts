@@ -37,9 +37,30 @@ const MIGRATION = join(
   '20260907040000_admin5_last_owner_trigger', 'migration.sql',
 );
 
-/** Every write shape that reaches a `users` row — INCLUDING the `as any` cast. */
+/**
+ * Every write shape that reaches a `users` row — INCLUDING the `as any` cast.
+ *
+ * ⚠️ ROUND FINDING 3 — THE RECEIVER NAME IS NO LONGER AN ALLOW-LIST. It read
+ * `(?:prisma|tx|client|db)`, so a door written as
+ * `prisma.$transaction(async (t) => t.user.update({...}))` — a one-letter
+ * parameter name — was INVISIBLE, and the gate stayed 7/7 green on a planted,
+ * unlocked door that nulls `practiceRole`. Renaming that parameter `t` -> `tx`,
+ * changing nothing else, reddened it: the identifier was the whole difference.
+ *
+ * A client can be bound to any identifier, so the receiver is now ANY
+ * identifier. That over-matches by design — a false positive costs a stated
+ * exemption, a false negative costs an unlocked door nobody sees.
+ */
 const USER_WRITE =
-  /(?:\(\s*)?(?:prisma|tx|client|db)\s*\.\s*user\s*(?:as\s+\w+\s*\)\s*)?\.\s*(?:update|updateMany|create|createMany|delete|deleteMany|upsert)\b/;
+  /(?:\(\s*)?[A-Za-z_$][\w$]*\s*\.\s*user\s*(?:as\s+\w+\s*\)\s*)?\.\s*(?:update|updateMany|create|createMany|delete|deleteMany|upsert)\b/;
+
+/**
+ * ⚠️ AND RAW SQL IS A DOOR TOO — SAME FINDING. The same planted route rewritten
+ * as `prisma.$executeRaw\`UPDATE "users" SET "practiceRole"='CLINICIAN' ...\``
+ * also scored 7/7 green. The ORM shape is a convention; the table is the fact.
+ */
+const RAW_USER_WRITE =
+  /\$(?:execute|query)(?:Raw|RawUnsafe)[\s\S]{0,80}?(?:UPDATE|INSERT\s+INTO|DELETE\s+FROM)\s+"?users"?/i;
 
 const stripComments = (s: string) =>
   s
@@ -50,14 +71,24 @@ const stripComments = (s: string) =>
 function sourceFiles(): string[] {
   return execFileSync('git', ['ls-files', 'src'], { cwd: APP, encoding: 'utf8' })
     .split('\n')
-    .filter((f) => f.endsWith('.ts') && !f.includes('__tests__') && !f.endsWith('.test.ts'));
+    // ⚠️ `.tsx` TOO — ROUND FINDING 3. `'use server'` actions are legal in `.tsx`,
+    // and this filter excluded the extension outright: a byte-identical file
+    // named `.tsx` was invisible at 7/7 green and reddened the moment it was
+    // renamed `.ts`. The extension was the whole difference.
+    .filter(
+      (f) =>
+        (f.endsWith('.ts') || f.endsWith('.tsx')) &&
+        !f.includes('__tests__') &&
+        !f.endsWith('.test.ts') &&
+        !f.endsWith('.test.tsx'),
+    );
 }
 
 /** Files that write a `users` row, derived — never listed. */
 function writers(): { file: string; src: string; locked: boolean }[] {
   return sourceFiles()
     .map((file) => ({ file, src: stripComments(readFileSync(join(APP, file), 'utf8')) }))
-    .filter((f) => USER_WRITE.test(f.src))
+    .filter((f) => USER_WRITE.test(f.src) || RAW_USER_WRITE.test(f.src))
     .map((f) => ({ ...f, locked: f.src.includes('withPracticeLock') }));
 }
 
@@ -225,5 +256,90 @@ describe('#289 — the door universe is derived from the filesystem', () => {
     );
     const locked = new Set(WRITERS.filter((w) => w.locked).map((w) => w.file));
     expect(named.filter((f) => !locked.has(f))).toEqual([]);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// ⚠️ THE DERIVATION'S UNIVERSE IS ONE APP, AND THE DATABASE IS SHARED — ROUND
+// FINDING 2. NOT HIDDEN, PINNED.
+// ════════════════════════════════════════════════════════════════════════════
+//
+// Everything above derives from `git ls-files src` with `cwd: apps/transcribe-md`
+// — 952 files, none of them `apps/meddoc-pro`. That second app talks to the SAME
+// database through the SAME `@meddoc/db` client and contains FOUR unlocked
+// `users` writers, all of which write predicate columns. The gate is green and
+// structurally cannot see any of them.
+//
+// ⚠️ AND THE MISSING LOCK IS LOAD-BEARING, MEASURED — not argued. Two
+// individually legal concurrent writes on a three-owner practice, one through
+// transcribe-md's locked `suspend` and one through meddoc-pro's unlocked
+// `deactivateUserAction`, produced:
+//
+//   ERROR: deadlock detected
+//   ... waits for ExclusiveLock on advisory lock; blocked by ...
+//   CONTEXT: SELECT 1 FROM "users" u WHERE u."practiceId" = OLD."practiceId" ...
+//            FOR UPDATE   -- inside users_last_owner_guard()
+//
+// The LOCKED door lost, and its write silently did not happen — byte-for-byte
+// the #268 shape, reinstated by a door the derivation is scoped away from.
+//
+// ⚠️ THESE CANNOT BE `EXEMPT`, AND THAT IS THE POINT. The exemption list is
+// machine-checked against the migration's predicate columns; these four write
+// `isActive`, `deactivatedAt` and `practiceRole`, so a prose exemption would be
+// rejected by the arm that exists to stop prose exemptions rotting.
+//
+// So the set is PINNED instead: named, counted, and failing the moment it
+// changes in either direction. `meddoc-pro` is decommissioned — its container
+// has been `Exited (143)` for five weeks — but it is still a defined service in
+// `docker-compose.yml` and one `docker compose up` from live. Whether to lock
+// these doors, delete the app, or accept the risk explicitly is not a call this
+// gate can make; what it CAN do is stop the risk being invisible.
+describe('ruling #289 — the OTHER app writes the same table, and the derivation cannot see it', () => {
+  const OTHER_APP = join(APP, '..', 'meddoc-pro');
+  /**
+   * The unlocked cross-app writers, AS MEASURED — never as remembered.
+   *
+   * ⚠️ I FIRST PINNED ONE FILE, BECAUSE THE ROUND NAMED FOUR *ACTIONS* AND I
+   * READ THAT AS FOUR *DOORS IN ONE FILE*. The derivation says four FILES, and
+   * `system-admin/actions.ts` is only the loudest of them. Transcribing a
+   * finding's number without re-deriving its subject is how a pin ends up
+   * understating exactly the risk it exists to hold still.
+   */
+  const PINNED = [
+    'src/app/dashboard/settings/actions.ts',
+    'src/app/system-admin/actions.ts',
+    'src/lib/nextauth.ts',
+    'src/lib/session-log.ts',
+  ];
+
+  it('⚠️ the cross-app unlocked-writer set has not changed — grown OR fixed', () => {
+    const files = execFileSync('git', ['ls-files', 'src'], { cwd: OTHER_APP, encoding: 'utf8' })
+      .split('\n')
+      .filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.includes('__tests__'));
+    const unlocked = files
+      .map((file) => ({ file, src: stripComments(readFileSync(join(OTHER_APP, file), 'utf8')) }))
+      .filter((f) => USER_WRITE.test(f.src) || RAW_USER_WRITE.test(f.src))
+      .filter((f) => !f.src.includes('withPracticeLock'))
+      .map((f) => f.file)
+      .sort();
+
+    expect(
+      unlocked,
+      'the cross-app unlocked `users`-writer set moved. If it GREW, a new door ' +
+        'can deadlock the locked ones (#268) and nothing else will say so. If it ' +
+        'SHRANK, the door was fixed — delete it from PINNED and say so, because a ' +
+        'pin that overstates the risk teaches the next reader to discount it.',
+    ).toEqual(PINNED);
+  });
+
+  it('⚠️ POSITIVE CONTROL — the pin is measuring, not restating itself', () => {
+    // The matcher must actually fire on that file's real content; a pin that
+    // passes because the derivation found nothing would be green forever.
+    const src = stripComments(readFileSync(join(OTHER_APP, 'src/app/system-admin/actions.ts'), 'utf8'));
+    expect(USER_WRITE.test(src), 'the pinned file no longer matches USER_WRITE').toBe(true);
+    expect(src.includes('withPracticeLock'), 'the pinned file now takes the lock').toBe(false);
+    for (const col of ['isActive', 'deactivatedAt', 'practiceRole']) {
+      expect(src, `${col} is no longer written there`).toContain(col);
+    }
   });
 });

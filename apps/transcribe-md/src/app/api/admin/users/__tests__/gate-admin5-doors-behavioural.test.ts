@@ -208,7 +208,23 @@ describe('#289 — every writer is DRIVEN, not read', () => {
     },
   );
 
-  it.each(LOCK_ONLY_DOORS)(
+  // ⚠️ ROUND FINDING 4 — POINTED AT **EVERY** DOOR, NOT JUST THE LOCK-ONLY FOUR.
+  //
+  // This arm was `it.each(LOCK_ONLY_DOORS)`, so `suspend` and `soft-delete` —
+  // the ONLY two doors that remove an owner seat, and therefore the only two
+  // that can reach the trigger's `pg_advisory_xact_lock` — had a "takes the
+  // lock" arm and NOTHING about ordering.
+  //
+  // MEASURED: splitting either door into two transactions, lock-first in
+  // TEXTUAL order, left both gates green at 16/16 and 7/7. `pg_advisory_xact_lock`
+  // is transaction-scoped, so it is released at the first commit and the row
+  // write runs unserialized — the #268 deadlock fully restored, by an edit that
+  // still reads correctly top to bottom.
+  //
+  // The arm itself was never broken: the identical mutation applied to
+  // `unsuspend`, a LOCK_ONLY door, reddened it. It was simply not aimed at the
+  // two doors the deadlock was measured on.
+  it.each([...DOORS, ...LOCK_ONLY_DOORS])(
     '⚠️ %s writes INSIDE the lock, never beside it',
     async (_name, POST, body) => {
       // ⚠️ THE ARM ABOVE PASSES ON A DOOR THAT TAKES THE LOCK AND THEN WRITES

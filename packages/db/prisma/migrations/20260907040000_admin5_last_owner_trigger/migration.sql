@@ -187,11 +187,47 @@ COMMENT ON FUNCTION users_is_active_owner("users") IS
     'Ruling #210. The ONE definition of an active practice OWNER: a seat whose holder can actually administer the practice. Counting an owner who cannot authenticate implements a proxy for the invariant rather than the invariant.';
 
 -- ── The guard. ──────────────────────────────────────────────────────────────
+-- ⚠️ AND A THIRD PREDICATE, BECAUSE "LIVE" IS THE WRONG QUESTION FOR THE
+-- ESCAPE HATCH — ROUND FINDING 1.
+--
+-- `users_is_live_member` asks "can this person use the practice RIGHT NOW".
+-- Exemption 2 asks a different question: "is anyone STRANDED if the last owner
+-- goes". A SUSPENDED member is not live and IS stranded, so counting live
+-- members let two ordinary admin clicks reach a state the guard then refuses to
+-- leave, FOREVER:
+--
+--   1. suspend the only clinician   -> allowed, they are no longer "live"
+--   2. soft-delete the only owner   -> members_left = 0, so ALLOWED
+--   3. unsuspend the clinician      -> REFUSED by users_no_orphan_member, with
+--                                      "Restore or appoint an owner first"
+--
+-- ⚠️ NEITHER REMEDY THAT SENTENCE NAMES EXISTS. `softDeletedAt` is written in
+-- exactly one place in the app and CLEARED NOWHERE, so the owner cannot be
+-- restored; and every role-writing door goes through `requirePracticeAdmin`,
+-- which demands `practiceRole = 'OWNER'` — so in an ownerless practice nobody
+-- can appoint one. The practice is unrecoverable through the product.
+--
+-- THIS FILE NAMES THAT CLASS TWICE AS "WORSE THAN NO GUARD" AND THEN SHIPPED IT
+-- IN ITS OWN `RAISE`.
+--
+-- A member is RESTORABLE when they are not soft-deleted: suspension and
+-- deactivation both have doors that clear them, soft-delete has none.
+CREATE OR REPLACE FUNCTION users_is_restorable_member(u "users") RETURNS boolean AS $fn$
+    SELECT u."softDeletedAt" IS NULL;
+$fn$ LANGUAGE sql IMMUTABLE;
+
+COMMENT ON FUNCTION users_is_restorable_member("users") IS
+  'A member who could still be brought back: not soft-deleted. Exemption 2 counts '
+  'these, not live members — a suspended member is not live and is still stranded.';
+
 CREATE OR REPLACE FUNCTION users_last_owner_guard() RETURNS trigger AS $fn$
 DECLARE
     owners_left  BIGINT;
     members_left BIGINT;
     self_remains BOOLEAN;
+    -- ROUND FINDING 1 — the two halves exemption 2 actually needs.
+    trapped_left BIGINT;   -- restorable NON-owners, who would be stranded
+    rescuer_left BIGINT;   -- restorable OWNERS, who could recover the practice
 BEGIN
     -- ⚠️ THE RETURN VALUES BELOW ARE IGNORED. This runs as an AFTER constraint
     -- trigger, where the result is discarded; they are kept because plpgsql
@@ -355,7 +391,43 @@ BEGIN
         members_left := members_left + 1;
     END IF;
 
-    IF members_left = 0 THEN
+    -- ⚠️ EXEMPTION 2, NARROWED — "nobody is left to strand" now means nobody
+    -- RESTORABLE is left to strand. Counted in two halves because they answer
+    -- opposite questions and one cancels the other:
+    --
+    --   trapped_left — restorable NON-owners. `users_no_orphan_member` refuses
+    --                  to make any of them live again while the practice has no
+    --                  active owner, so each one is a person locked out for good.
+    --   rescuer_left — restorable OWNERS. That arm SHORT-CIRCUITS on
+    --                  `users_is_active_owner(NEW)`, so restoring one of these
+    --                  is allowed and puts the practice back on its feet. Their
+    --                  presence means the state is recoverable and must NOT be
+    --                  refused.
+    --
+    -- So the refusal is `trapped_left > 0 AND rescuer_left = 0` — exactly the
+    -- unrecoverable corner, and nothing wider. Suspending a solo OWNER stays
+    -- legal, because that owner is their own rescuer.
+    SELECT count(*) FILTER (WHERE u."practiceRole" <> 'OWNER'::"PracticeRole"),
+           count(*) FILTER (WHERE u."practiceRole" =  'OWNER'::"PracticeRole")
+      INTO trapped_left, rescuer_left
+      FROM "users" u
+     WHERE u."practiceId" = OLD."practiceId"
+       AND u."id" <> OLD."id"
+       AND users_is_restorable_member(u);
+
+    -- The row itself stays behind on an UPDATE — the #256 lesson, applied to
+    -- this count too rather than only to the live one.
+    IF TG_OP = 'UPDATE'
+       AND NEW."practiceId" = OLD."practiceId"
+       AND users_is_restorable_member(NEW) THEN
+        IF NEW."practiceRole" = 'OWNER'::"PracticeRole" THEN
+            rescuer_left := rescuer_left + 1;
+        ELSE
+            trapped_left := trapped_left + 1;
+        END IF;
+    END IF;
+
+    IF members_left = 0 AND NOT (trapped_left > 0 AND rescuer_left = 0) THEN
         IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
         RETURN NEW;
     END IF;

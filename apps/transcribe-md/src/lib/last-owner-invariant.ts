@@ -28,6 +28,7 @@
 // ============================================================================
 
 import prisma from '@meddoc/db';
+import { PRACTICE_ADMIN_ROLE } from './practice-roles';
 
 /**
  * The ONE definition of an active practice OWNER, as a Prisma filter.
@@ -108,6 +109,30 @@ export function activeOwnerSql(alias: string): string {
  * #221 gave "able owner" one predicate. This is the same rule for the other
  * half, and the same gate reads both against the migration's SQL.
  */
+/**
+ * ⚠️ RESTORABLE, WHICH IS A DIFFERENT QUESTION FROM LIVE — ROUND FINDING 1.
+ *
+ * Exemption 2 asks "is anyone STRANDED if the last owner goes", and a SUSPENDED
+ * member is not live and is very much stranded. Counting live members let two
+ * ordinary admin clicks — suspend the only clinician, then soft-delete the only
+ * owner — reach a practice with no active owner whose clinician can then NEVER
+ * be unsuspended: `users_no_orphan_member` refuses it and names two remedies,
+ * neither of which exists. `softDeletedAt` is written in one place and cleared
+ * NOWHERE, and every role-writing door demands `practiceRole === 'OWNER'`, so an
+ * ownerless practice cannot appoint one.
+ *
+ * A member is restorable when they are not soft-deleted: suspension and
+ * deactivation have doors that clear them, soft-delete has none.
+ */
+export const RESTORABLE_MEMBER_WHERE = {
+  softDeletedAt: null,
+} as const;
+
+/** The SAME predicate as raw SQL — see `liveMemberSql` for why this exists. */
+export function restorableMemberSql(alias: string): string {
+  return whereToSql(RESTORABLE_MEMBER_WHERE, alias);
+}
+
 export const LIVE_MEMBER_WHERE = {
   isActive: true,
   deactivatedAt: null,
@@ -119,6 +144,18 @@ export const LIVE_MEMBER_WHERE = {
 export function liveMemberSql(alias: string): string {
   return whereToSql(LIVE_MEMBER_WHERE, alias);
 }
+
+/**
+ * ⚠️ ITS OWN SENTENCE, BECAUSE THE SITUATION IS ITS OWN — the same reasoning as
+ * #256. `LAST_OWNER_REFUSAL` says "transfer ownership to another member", and
+ * here there is no member who can receive it: they are all suspended or
+ * deactivated. Naming a remedy nobody can perform is the defect this whole file
+ * calls worse than no refusal.
+ */
+export const STRANDS_RESTORABLE_REFUSAL =
+  'This is the practice’s last active owner, and the remaining member(s) are ' +
+  'suspended or deactivated. Restoring them afterwards would be refused, so ' +
+  'reinstate a member and transfer ownership, or remove them, first.';
 
 export const LAST_OWNER_REFUSAL =
   'This is the practice’s last active owner. Transfer ownership to another member first.';
@@ -279,8 +316,37 @@ export async function wouldStrandPractice(userId: string): Promise<LastOwnerVerd
   ]);
 
   if (ownersLeft > 0) return { wouldStrand: false };
-  // Exemption 2 — nobody left to strand.
-  if (membersLeft === 0) return { wouldStrand: false };
+
+  // ⚠️ EXEMPTION 2, NARROWED TO MATCH THE TRIGGER — ROUND FINDING 1.
+  // "Nobody left to strand" now means nobody RESTORABLE. Two halves, because
+  // they cancel: a restorable NON-owner is a person locked out for good (the
+  // orphan arm will not make them live again), while a restorable OWNER is a
+  // rescuer — that arm short-circuits on `users_is_active_owner`, so restoring
+  // one is allowed and puts the practice back on its feet.
+  if (membersLeft === 0) {
+    const [trappedLeft, rescuerLeft] = await Promise.all([
+      prisma.user.count({
+        where: {
+          practiceId: user.practiceId,
+          id: { not: user.id },
+          practiceRole: { not: PRACTICE_ADMIN_ROLE },
+          ...RESTORABLE_MEMBER_WHERE,
+        },
+      }),
+      prisma.user.count({
+        where: {
+          practiceId: user.practiceId,
+          id: { not: user.id },
+          practiceRole: PRACTICE_ADMIN_ROLE,
+          ...RESTORABLE_MEMBER_WHERE,
+        },
+      }),
+    ]);
+    if (trappedLeft > 0 && rescuerLeft === 0) {
+      return { wouldStrand: true, reason: STRANDS_RESTORABLE_REFUSAL, membersLeft: trappedLeft };
+    }
+    return { wouldStrand: false };
+  }
 
   return { wouldStrand: true, reason: LAST_OWNER_REFUSAL, membersLeft };
 }
