@@ -28,7 +28,51 @@ import { MIN_CERTIFIED_FILLED_FIELDS } from '../src/lib/template-twin/certificat
 import { extractTemplateTwinEntities } from '../src/worker/layers/03-extract-entities';
 import { createEphemeralVisitNoteGenerator } from '../src/worker/template-twin-note-generator';
 
-const COMPILED_VERSION_ID = '9e758c45-ac65-4996-bea8-6fc1f8b1c96c';
+/**
+ * ⚠️ PARAMETERISED, AND THE HARD-CODED CONSTANT IS GONE — the same treatment
+ * #1055 gave the transfer tool, for the same reason.
+ *
+ * It read `'9e758c45-ac65-4996-bea8-6fc1f8b1c96c'`, a PAST act's target. A
+ * one-shot script pinned to the version it was written for cannot certify the
+ * next one, and the failure is quiet in the worst way: point it at today's
+ * problem and it silently certifies YESTERDAY'S template, reporting success.
+ *
+ * ⚠️ REQUIRED, NEVER DEFAULTED — no "the active one", no "the newest". A default
+ * here picks a clinical template on the operator's behalf. `--compiled-version`
+ * must be stated, and `--expect-fields` must match what is found, so the
+ * declaration and the act have to agree about which document is being
+ * certified before anything is written.
+ */
+function requiredArg(name: string): string {
+  const i = process.argv.indexOf(`--${name}`);
+  if (i < 0 || i + 1 >= process.argv.length) {
+    console.error(`🔴 certify: missing required argument --${name}`);
+    console.error('   Nothing was certified.');
+    process.exit(2);
+  }
+  const v = process.argv[i + 1]!;
+  if (v.startsWith('--') || v.trim() === '') {
+    console.error(`🔴 certify: --${name} needs a value`);
+    console.error('   Nothing was certified.');
+    process.exit(2);
+  }
+  return v;
+}
+
+function requiredInt(name: string): number {
+  const raw = requiredArg(name);
+  // ⚠️ STRICT — `parseInt('53x')` is 53, and a count that accepts garbage is a
+  // guard reporting a number nobody meant.
+  if (!/^\d+$/.test(raw)) {
+    console.error(`🔴 certify: --${name} must be a plain integer, got '${raw}'`);
+    console.error('   Nothing was certified.');
+    process.exit(2);
+  }
+  return Number(raw);
+}
+
+const COMPILED_VERSION_ID = requiredArg('compiled-version');
+const EXPECT_FIELDS = requiredInt('expect-fields');
 const COMMIT = process.argv.includes('--commit');
 // ⚠️ CERTIFY AGAINST THE PROOF ALREADY STORED, RATHER THAN MINTING A NEW ONE.
 // The first --commit run was killed (SIGTERM) AFTER the synthetic test wrote its
@@ -52,6 +96,18 @@ async function main() {
     },
   });
   if (!compiled) throw new Error('compiled version not found');
+  // ⚠️ THE DECLARED SHAPE, CHECKED BEFORE ANYTHING IS WRITTEN. If the caller
+  // and the database disagree about how many controls this template has, they
+  // are talking about different documents — and certification is the act that
+  // makes one of them fillable.
+  if (compiled.fields.length !== EXPECT_FIELDS) {
+    console.error(
+      `🔴 certify: --expect-fields ${EXPECT_FIELDS} but ${COMPILED_VERSION_ID} has ${compiled.fields.length}`,
+    );
+    console.error('   Nothing was certified.');
+    process.exit(2);
+  }
+  console.log(`target   : ${COMPILED_VERSION_ID}  (${compiled.fields.length} fields, as declared)`);
   const doctorId = compiled.noteTemplate.doctorId!;
   const practiceId = compiled.noteTemplate.practiceId!;
   const doctor = await prisma.user.findUnique({ where: { id: doctorId }, select: { id: true, email: true } });
