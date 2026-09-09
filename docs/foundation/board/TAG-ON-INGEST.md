@@ -39,7 +39,44 @@ this item exists for: a doctor who edits and re-uploads their own form loses
 every certification, and there is nothing in the document to prevent it —
 because the document never carried anything to identify its controls by.
 
-## ⚠️ AND ONE PREMISE OF THE RULING IS NOT VERIFIED — SAID PLAINLY
+## ✅ SETTLED 2026-09-09 — THE MEASUREMENT RAN, AND THE OWNER WAS RIGHT
+
+The re-issue act's recorded measurement, taken from the pinned artifact's
+inflated XML before the act and gating nothing:
+
+```
+w:tag attributes on the artifact : 53
+w:sdt controls on the artifact   : 53
+xml parts inflated and scanned   : 13
+```
+
+**53 of 53. Every control carries a tag.** The section below argued 18 was the
+verifiable floor and 53 unconfirmed; **that was wrong and is kept as written**,
+because the correction is the point. What could be proved *from the repository*
+was 18; what is true of the artifact is 53.
+
+⚠️ **AND THE `parts` LINE IS WHY THE NUMBER IS TRUSTWORTHY.** An earlier draft of
+the census scanned the COMPRESSED package and would have reported **0** — a
+`.docx` is a zip, so `<w:tag` lives in deflated bytes. Reporting the count of
+inflated XML parts alongside the total is what makes a zero readable as "no
+tags" rather than "nothing was opened".
+
+⚠️ **BUT 53 TAGS IS NOT 53 IDENTITIES — AND THAT IS THE FINDING THIS ITEM MUST
+CARRY FORWARD.** Measured on the certified version: **53 tags, 35 DISTINCT.**
+`plan` appears five times, `impression` four, `past_medical_history` three. A
+tag shared by five controls identifies none of them.
+
+> **THE SCOPE THIS CHANGES:** TAG-ON-INGEST is narrower than filed for
+> *coverage* — the owner's form needs no derived tags at all — and **wider than
+> filed for UNIQUENESS**. A derived tag must be unique per control, which the
+> owner's own authored tags are not. Deriving `plan_1 … plan_5` would give the
+> form five identities where it has one; that is a product decision about
+> whether a re-upload should preserve those five controls' certifications
+> individually, and it is the real question this item now asks.
+
+---
+
+## THE ORIGINAL ARGUMENT, KEPT AS WRITTEN AND NOW SUPERSEDED
 
 The ruling states the owner's form is **53/53 tagged**. What is verifiable from
 this repository is **18 of 53**:
