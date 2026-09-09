@@ -30,7 +30,9 @@ import {
   type CachedFill,
 } from '@/lib/docx-preview/fill-cache';
 import { generateVisitDocx } from '@/lib/docx-generator';
-import { readAndPrepareTemplateTwinFill } from '@/lib/template-twin/fill-engine';
+import { readAndPrepareTemplateTwinFill,
+  TemplateTwinFillError,
+} from '@/lib/template-twin/fill-engine';
 import { TemplateDocIRSchema } from '@/lib/template-twin/ir';
 import { scaffoldDefaultOfferable } from '@/lib/template-twin/clinician-override';
 import { loadVisitExportData } from '@/lib/visit-export-server';
@@ -38,15 +40,24 @@ import { loadNativeTemplateDocxForVisit } from '@/lib/template-twin/native-expor
 import type { NativePreviewResult } from './preview-native-document';
 
 /** Why there is no document to show. Every one is surfaced, and none is fatal. */
-export type VisitPreviewMiss =
-  /** Neither a certified twin NOR a styled document could be produced. */
-  | 'not_template_visit'
-  /** Template uploaded and compiled, but never certified. */
-  | 'not_certified'
-  /** The fill ran and produced no document (nothing renderable yet). */
-  | 'no_render'
-  /** The fill itself failed. Named, so it is never a blank screen. */
-  | 'fill_failed';
+// ⚠️ NO VALUE RE-EXPORT FROM THIS FILE. It is `'use server'`, and SWC refuses:
+// "Only async functions are allowed to be exported in a `use server` file."
+// A `export { X } from './y'` re-export is refused even when the binding is a
+// plain const, because the compiler cannot know what it is — measured against
+// this repo's own Next 16.2.11 binding, with three controls: removing the line
+// clears it, a plain `export const` in a use-server file is FINE, and a clean
+// use-server file is fine. So it is the RE-EXPORT form specifically.
+//
+// ⚠️ AND IT BROKE THE BUILD WITHOUT BREAKING A SINGLE TEST. vitest transpiles
+// with esbuild, which does not implement the restriction — 6564 arms green on a
+// tree that `next build` refuses. Worse, the one gate that would have loaded
+// this module was re-pointed at the leaf by the SAME commit that added this
+// line, so the fix removed its own witness.
+//
+// Consumers import the leaf directly. Nothing needed this.
+import type { VisitPreviewMiss } from '@/lib/visit-preview-misses';
+
+export type { VisitPreviewMiss };
 
 export interface VisitPreviewResult extends Omit<NativePreviewResult, 'reason'> {
   reason: NativePreviewResult['reason'] | VisitPreviewMiss | null;
@@ -215,6 +226,10 @@ export async function previewVisitDocumentAction(
       noteTemplateId: true,
       noteTemplateVersion: true,
       createdAt: true,
+      // ⚠️ RULING #267 — the VISIT'S OWN tenant. `user.practiceId` beside it is
+      // the AUTHOR's practice: two different columns, equal on today's data and
+      // not constrained to be.
+      practiceId: true,
       user: { select: { practiceId: true } },
     },
   });
@@ -343,11 +358,17 @@ export async function previewVisitDocumentAction(
       // and the signature will produce. The parameter is required on the shared
       // function so forgetting it is a compile error rather than a divergence.
       visitId,
-      practiceId: visit.user.practiceId,
-      // ⚠️ THE VISIT'S OWN DOCTOR, NOT THE REQUESTER. This read is
-      // practice-scoped, so a colleague previewing the record would otherwise
-      // stamp their id on the author's fill. Same actor fix as native-export's.
-      doctorId: visit.userId,
+      // ⚠️ RULING #267 — THE CHART OWNS THE NOTE, so the fill is scoped by the
+      // VISIT'S tenant. This read `visit.user.practiceId`, the AUTHOR's, while
+      // `sign-freeze.ts` reads the override table with the tenant's — so for a
+      // locum the PREVIEW showed a default that the FREEZE could not see, and
+      // the doctor signed a document without content they had watched appear.
+      tenantPracticeId: visit.practiceId,
+      // ⚠️ THE VISIT'S OWN DOCTOR, NOT THE REQUESTER — and this one is about the
+      // ACTOR, which is a different axis from the tenant above and stays as it
+      // is. This read is practice-scoped, so a colleague previewing the record
+      // would otherwise stamp their id on the author's fill.
+      authorUserId: visit.userId,
       noteTemplateId: templateId,
       noteTemplateVersion: templateVersion,
       inputMode:
@@ -394,7 +415,17 @@ export async function previewVisitDocumentAction(
     // reads them too — the manifest does not carry mappings.
     const defs = await prisma.templateTwinFieldDefinition.findMany({
       where: { compiledVersionId: compiled.id },
-      select: { fieldId: true, mapping: { select: { clinicalConcept: true } } },
+      // ⚠️ `clinicalConcept` ONLY, AND THE SHRINK IS DELIBERATE. This select
+      // used to also fetch `unmentionedPolicy` so `scaffoldDefaultOfferable`
+      // could decide the omit from the MAPPING. It no longer decides it from
+      // the mapping at all — it reads `reasonCode` off the resolution, which is
+      // the per-visit answer and is already in `byFieldId` below. A column
+      // fetched for a decision nobody makes here is how the last version's
+      // comment ended up describing a guard that could not work.
+      select: {
+        fieldId: true,
+        mapping: { select: { clinicalConcept: true } },
+      },
     });
     const mappingByFieldId = new Map(
       defs.map((d) => [d.fieldId, d.mapping ?? null] as const),
@@ -416,6 +447,19 @@ export async function previewVisitDocumentAction(
       return [{ fieldId: f.fieldId, label: f.originalLabel, scaffoldText: text, inserted }];
     });
   } catch (err) {
+    // ⚠️ #287 — "THE TENANT HAS NO FORM" IS AN OUTCOME, NOT A FAILURE. It is the
+    // ordinary state for a practice that has not uploaded one, and for every
+    // locum visit into such a practice. Reporting it as `fill_failed` alongside
+    // real errors is how an expected state gets read as a defect.
+    if (
+      err instanceof TemplateTwinFillError &&
+      err.code === 'CERTIFIED_TEMPLATE_NOT_FOUND'
+    ) {
+      console.info(
+        `[visit-preview] visit=${visitId} the tenant practice has no active certified template; the styled note renders`,
+      );
+      return miss('no_tenant_template');
+    }
     const cls = err instanceof Error ? err.constructor.name : 'Unknown';
     console.warn(
       `[visit-preview] visit=${visitId} fill failed (${cls}); the styled note still renders`,

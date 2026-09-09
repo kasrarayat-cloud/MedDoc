@@ -27,15 +27,50 @@ const visitFindFirst = vi.fn();
 const templateFindFirst = vi.fn();
 const overrideUpsert = vi.fn();
 const defFindUnique = vi.fn();
+const lockedVisit = vi.fn();
 const invalidate = vi.fn();
 const audit = vi.fn();
 
+// ⚠️ THE DROPDOWN DOOR NOW WRITES UNDER A LOCK — ROUND FIVE.
+// It used to be a bare upsert: the status was read at the top of the action and
+// never re-asserted, so a sign landing in the window wrote a correction onto a
+// SIGNED visit, where there is no panel and therefore no Undo. Round four fixed
+// exactly this on the INSERT door and left this one; the fix now lives in one
+// `underVisitLock` helper that all three writers call.
+//
+// ⚠️ THE TRANSACTIONAL CLIENT IS A **DIFFERENT OBJECT** from the top-level one,
+// deliberately. A mock that returns the same client makes `tx.` and `prisma.`
+// the same function, and the one mistake that matters here — taking the write
+// out of the transaction, so the lock guards a row the write never touches —
+// becomes invisible.
+const onTx = { upsert: false, queryRaw: false };
+
+const dbRoot = {
+  transcribeVisit: { findFirst: (...a: unknown[]) => visitFindFirst(...a) },
+  noteTemplate: { findFirst: (...a: unknown[]) => templateFindFirst(...a) },
+  templateTwinFieldOverride: { upsert: (...a: unknown[]) => overrideUpsert(...a) },
+  templateTwinFieldDefinition: { findUnique: (...a: unknown[]) => defFindUnique(...a) },
+  $queryRaw: (...a: unknown[]) => lockedVisit(...a),
+};
+
+const dbTx = {
+  ...dbRoot,
+  templateTwinFieldOverride: {
+    upsert: (...a: unknown[]) => {
+      onTx.upsert = true;
+      return overrideUpsert(...a);
+    },
+  },
+  $queryRaw: (...a: unknown[]) => {
+    onTx.queryRaw = true;
+    return lockedVisit(...a);
+  },
+};
+
 vi.mock('@meddoc/db', () => ({
   default: {
-    transcribeVisit: { findFirst: (...a: unknown[]) => visitFindFirst(...a) },
-    noteTemplate: { findFirst: (...a: unknown[]) => templateFindFirst(...a) },
-    templateTwinFieldOverride: { upsert: (...a: unknown[]) => overrideUpsert(...a) },
-    templateTwinFieldDefinition: { findUnique: (...a: unknown[]) => defFindUnique(...a) },
+    ...dbRoot,
+    $transaction: (fn: (client: unknown) => unknown) => fn(dbTx),
   },
 }));
 vi.mock('@/lib/auth', () => ({
@@ -77,10 +112,30 @@ const UNSIGNED = {
   status: 'READY',
   noteTemplateId: 'tpl-1',
   noteTemplateVersion: 1,
-  user: { practiceId: 'prac-1' },
+  // ⚠️ THREE DISTINCT VALUES — RULING #267, AND THIS FIXTURE IS `SF-2`.
+  // Round five found the SIBLING door's fixture still giving the session and
+  // the visit author ONE value (`prac-1`), so the exact defect `8cc89b7c` fixed
+  // in the insert door could be transplanted into the option door with 135 of
+  // 135 green. A fixture that gives two distinct things the same value cannot
+  // witness them being confused — and this one gave THREE things one value.
+  //
+  //   · `prac-1`            the SESSION's practice   — may this actor act?
+  //   · `visit-tenant-7`    the VISIT'S tenant       — what owns this chart?
+  //   · `author-practice-9` the AUTHOR's practice    — whose form fills it?
+  //
+  // ⚠️ AND THE THIRD ANSWER CHANGED UNDER #287: the AUTHOR's practice fills
+  // nothing. The tenant owns the chart, the document AND the template. This
+  // value is kept in the fixture ONLY so a read that still reaches for it can
+  // be caught — see the read arm below.
+  practiceId: 'visit-tenant-7',
+  user: { practiceId: 'author-practice-9' },
 };
 
 beforeEach(() => {
+  onTx.upsert = false;
+  onTx.queryRaw = false;
+  // The visit is READY unless an arm says otherwise — the lock's happy path.
+  lockedVisit.mockResolvedValue([{ status: 'READY', signedAt: null }]);
   visitFindFirst.mockReset();
   templateFindFirst.mockReset();
   overrideUpsert.mockReset();
@@ -121,7 +176,10 @@ describe('F24-S5 write path — the correction reaches the database', () => {
     expect(arg).toMatchObject({
       where: { visitId_fieldId: { visitId: 'v1', fieldId: field.fieldId } },
       create: {
-        practiceId: 'prac-1',
+        // ⚠️ THE VISIT'S TENANT — #267. It read `prac-1` when the fixture gave
+        // every identity that one value, which is exactly why it could not
+        // witness the row being stamped with the wrong one.
+        practiceId: 'visit-tenant-7',
         visitId: 'v1',
         fieldId: field.fieldId,
         selectedOptionOrdinal: option.ordinal,
@@ -305,6 +363,81 @@ describe('F24-S5 write path — the correction reaches the database', () => {
       const out = await run(field.fieldId, selectableOf(field)[0].displayText);
       expect(out.ok, `${field.fieldId} could not be set`).toBe(true);
       expect(overrideUpsert).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ROUND FIVE — THE SIGN WINDOW, ON THIS DOOR TOO.
+  // Round four closed it on the INSERT door and left the other two writers in
+  // the same file read-then-act. These arms are the ones that were missing.
+  // ══════════════════════════════════════════════════════════════════════════
+  it('⚠️ THE WRITE HAPPENS ON THE **LOCKED** CONNECTION — kills `tx.` -> `prisma.`', async () => {
+    const f = selects[0];
+    const res = await run(f.fieldId, selectableOf(f)[0].displayText);
+    expect(res.ok).toBe(true);
+    expect(onTx.queryRaw, 'the FOR UPDATE re-read ran OUTSIDE the transaction').toBe(true);
+    expect(
+      onTx.upsert,
+      'the correction was written on the top-level client, NOT the transactional ' +
+        'one — the lock then guards a row this write never touches',
+    ).toBe(true);
+  });
+
+  it('⚠️ THE RE-READ IS A REAL `FOR UPDATE` ON THE VISIT ROW', async () => {
+    const f = selects[0];
+    await run(f.fieldId, selectableOf(f)[0].displayText);
+    const sql = String((lockedVisit.mock.calls[0][0] as { strings?: string[] }).strings?.join('?') ?? lockedVisit.mock.calls[0][0]);
+    expect(sql).toMatch(/FOR UPDATE/);
+    expect(sql).toMatch(/transcribe_visits/);
+  });
+
+  it('⚠️ REFUSES when the visit was SIGNED while the form was being checked', async () => {
+    lockedVisit.mockResolvedValue([{ status: 'SIGNED', signedAt: new Date() }]);
+    const f = selects[0];
+    const res = await run(f.fieldId, selectableOf(f)[0].displayText);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/signed while your form was being checked/);
+    expect(overrideUpsert, 'a correction was written onto a signed visit').not.toHaveBeenCalled();
+    expect(audit, 'an audit row claims a doctor act on a signed record').not.toHaveBeenCalled();
+  });
+
+  it('⚠️ BOTH SPELLINGS — `signedAt` alone refuses, even with status still READY', async () => {
+    lockedVisit.mockResolvedValue([{ status: 'READY', signedAt: new Date() }]);
+    const f = selects[0];
+    const res = await run(f.fieldId, selectableOf(f)[0].displayText);
+    expect(res.ok).toBe(false);
+    expect(overrideUpsert).not.toHaveBeenCalled();
+  });
+});
+
+describe('#287 — the READ is scoped by the tenant, not only the write', () => {
+  it('⚠️ THE TEMPLATE SELECT ASKS FOR THE TENANT — the arm that was missing', async () => {
+    // ⚠️ THIS FIXTURE ALREADY SPLIT THE THREE IDENTITIES AND ONLY THE WRITE WAS
+    // CHECKED. `templateFindFirst` was `mockResolvedValue`d and its ARGUMENT
+    // never inspected, so the mock handed back the template whichever practice
+    // the predicate named — and the select sat on `visit.user.practiceId` while
+    // #267 moved the return and #287 moved the fill to the tenant. On `main`
+    // both read the author and AGREED; the branch made them disagree, and for a
+    // locum visit this door answered "This visit's form is not certified" about
+    // a form that IS certified and on the doctor's screen.
+    //
+    // That door is the ONLY surface that can reach an enumerated content
+    // control, so the failure has no remedy and travels to signature.
+    const field = selects[0];
+    await run(field.fieldId, selectableOf(field)[0].displayText);
+
+    // POSITIVE CONTROL: an arm that never reached the select proves nothing.
+    expect(templateFindFirst, 'the door never selected a template').toHaveBeenCalled();
+    for (const call of templateFindFirst.mock.calls) {
+      const seen = JSON.stringify((call[0] as { where?: unknown })?.where ?? {});
+      expect(
+        seen.includes('author-practice-9'),
+        `the template select reached for the AUTHOR's practice: ${seen}`,
+      ).toBe(false);
+      expect(
+        seen.includes('visit-tenant-7'),
+        `the template select named no tenant at all: ${seen}`,
+      ).toBe(true);
     }
   });
 });

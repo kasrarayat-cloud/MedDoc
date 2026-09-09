@@ -25,6 +25,7 @@ import {
   type TemplateField,
 } from './ir';
 import { isMappingTypeCompatible } from './semantic-mapping';
+import { canOmitWhenUnmentioned } from './unmentioned-policy';
 import { templateTwinMappingsSha256 } from './mapping-hash';
 import { readTemplateTwinWorkspace } from './workspace-read';
 import type { TemplateTwinWorkspace } from './client-types';
@@ -465,7 +466,22 @@ export async function updateTemplateTwinMappings(input: {
           // never produce a value, so no evidence rule is relaxed.
           (mapping.status === 'certified' &&
             !mapping.clinicalConcept &&
-            mapping.sourceType !== 'manual')
+            mapping.sourceType !== 'manual') ||
+          // ⚠️ AN `omit` THE RESOLVER COULD NEVER READ IS REFUSED AT THE WRITER.
+          //
+          // REVIEW-DEFAULTS item 2's control is offered only where
+          // `canOmitWhenUnmentioned` is true, and this is the same predicate
+          // saying so from the server side. Closing it HERE rather than only in
+          // the panel is the stronger of the two fixes: it makes the state
+          // unreachable instead of merely unrendered, so a stale client, a
+          // replayed payload, or a future second surface cannot persist a
+          // policy that would then be DISPLAYED as in force on an immutable
+          // certified version the doctor cannot correct.
+          //
+          // One copy, three callers — `unmentioned-policy.ts` is imported by the
+          // resolver, the confirm surface, and now the writer.
+          (mapping.unmentionedPolicy === 'omit' &&
+            !canOmitWhenUnmentioned(field, mapping))
         ) {
           throw new TemplateTwinLifecycleError(
             'MAPPING_INVALID',

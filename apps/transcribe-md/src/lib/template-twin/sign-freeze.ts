@@ -148,10 +148,10 @@ export async function freezeNativeManifestForSigning(input: {
     await Promise.race([
       processTemplateTwinVisit({
         visitId,
-        practiceId,
+        tenantPracticeId: practiceId,
         // ⚠️ THE VISIT'S OWN DOCTOR, never the signer. They are usually the same
         // person and must not be assumed to be.
-        doctorId: v.userId,
+        authorUserId: v.userId,
         noteTemplateId: v.noteTemplateId,
         noteTemplateVersion: v.noteTemplateVersion,
         inputMode: mapInputMode(v.inputMode),

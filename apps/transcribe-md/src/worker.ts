@@ -347,6 +347,15 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       // at create time and HONORED below over active-template resolution. NULL for
       // the default ("auto") path → resolveActiveTemplate as before.
       noteTemplateId: true,
+      // ⚠️ #287 — THE VISIT'S OWN TENANT, WHICH IS NOT `user.practiceId`.
+      // `practiceId` at :366 below is bound from `visit.user.practiceId` —
+      // the AUTHOR's practice — and feeds ~25 sites in this pipeline. On a
+      // locum visit (B seeing A's patient) those differ, and the schema
+      // comment on `TranscribeVisit.practiceId` says which one owns the
+      // chart: A. The Template Twin fill step is re-pointed at this column;
+      // the rest of the pipeline is NOT, because it reaches admission and
+      // billing and that is an owner call, not a rename.
+      practiceId: true,
       user: { select: { practiceId: true } },
       // Fix-Pack 1 Q0-2 / audit Finding 01.1 — pull patient demographic
       // + safety context for L7c pediatric framing. Round 3 PR-D added
@@ -752,14 +761,35 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     let templateResolutionFailed = false;
     try {
       // Honor an explicit per-visit pick (chosen on the new-visit form) over
-      // active-template resolution. Scoped: the row must be the doctor's own or
-      // the shared system default. A stale/invalid pick falls through to the
+      // active-template resolution. A stale/invalid pick falls through to the
       // normal active resolution so generation never breaks on a bad id.
+      //
+      // ⚠️ #302 — THE TENANT'S TEMPLATES ARE IN SCOPE HERE TOO, AND FORGETTING
+      // THIS LOOKUP IS HOW THE FIX WOULD HALF-APPLY. It is the door a per-visit
+      // pick comes through; leaving it keyed on `doctorId` alone would mean the
+      // resolver honoured the chart's format while an explicit pick still could
+      // not name it, and the failure would appear only for visits that used the
+      // new-visit form — the shape #287's own defect had.
       const picked = visit.noteTemplateId
         ? await prisma.noteTemplate.findFirst({
             where: {
               id: visit.noteTemplateId,
-              OR: [{ doctorId: visit.userId ?? '' }, { isSystemDefault: true }],
+              // ⚠️ #302 / LENS A1 — THE AUTHOR DISJUNCT IS GONE, AND ITS
+              // ABSENCE IS THE FIX. `OR` is a DISJUNCTION: keeping
+              // `{ doctorId }` beside `{ practiceId }` meant a locum's own
+              // practice-B template satisfied the query on `doctorId` alone,
+              // `picked` short-circuited past the resolver entirely, and B's
+              // sections built the L4 prompt for A's chart — the exact
+              // wrong-practice document #287 exists to stop, re-entering
+              // through the door #302 had just widened.
+              //
+              // Nothing is lost by deleting it. The T7 tenancy migration
+              // backfilled `note_templates.practiceId` from the doctor and
+              // enforces a BICONDITIONAL — a template has a practice IFF it
+              // has a doctor — so every doctor-owned template in scope
+              // ALREADY matches `{ practiceId: visit.practiceId }`. The
+              // disjunct could only ever add OUT-of-scope rows.
+              OR: [{ practiceId: visit.practiceId }, { isSystemDefault: true }],
             },
           })
         : null;
@@ -767,6 +797,10 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         picked ??
           (await resolveActiveTemplate({
             doctorId: visit.userId ?? '',
+            // ⚠️ #302 — THE CHART'S PRACTICE SELECTS THE FORMAT. `doctorId`
+            // above is attribution and a preference; this is the scope. A
+            // locum from B documenting A's patient fills A's format.
+            tenantPracticeId: visit.practiceId,
             encounterType: visit.specialty,
           }))
       );
@@ -811,6 +845,16 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
             (await prisma.noteTemplate.count({
               where: {
                 doctorId: visit.userId ?? '',
+                // ⚠️ #302 / LENS A2 — THE PROBE IS SCOPED TOO, OR IT RAISES A
+                // FALSE ALARM ON CORRECT BEHAVIOUR. This asks "does the
+                // clinician have a format that should have applied?" to explain
+                // why the system default was used. Unscoped, it counted the
+                // author's templates at OTHER practices, so a locum correctly
+                // rendering practice A's standard layout was told "you have an
+                // activated note format for this visit type" — about a form
+                // belonging to practice B, on the note they are about to sign.
+                // The comment below names the cost of exactly that.
+                practiceId: visit.practiceId,
                 status: 'active',
                 isSystemDefault: false,
                 // Their format for THIS visit type, or their catch-all. A
@@ -1330,8 +1374,8 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // visit or signing — the result is advisory; native export falls back to styled.
     const twinFill = await runTemplateTwinFillStep({
       visitId,
-      practiceId,
-      doctorId: visit.userId,
+      tenantPracticeId: visit.practiceId,
+      authorUserId: visit.userId,
       noteTemplateId: noteTemplate.id,
       noteTemplateVersion: noteTemplate.version,
       inputMode: visit.inputMode,

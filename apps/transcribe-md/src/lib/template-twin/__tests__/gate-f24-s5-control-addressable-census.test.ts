@@ -242,8 +242,8 @@ async function fill(
   overrideFindMany.mockResolvedValue(overrides);
   const out = await readAndPrepareTemplateTwinFill({
     visitId: 'v1',
-    practiceId: 'prac-1',
-    doctorId: 'doc-1',
+    tenantPracticeId: 'prac-1',
+    authorUserId: 'doc-1',
     noteTemplateId: 'tpl-1',
     noteTemplateVersion: 1,
     inputMode: 'dictation',

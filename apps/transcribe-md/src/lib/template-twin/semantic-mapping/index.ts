@@ -35,6 +35,7 @@ import {
   type TemplateDocIR,
   type TemplateField,
   type TemplateTwinFieldKind,
+  expectedDataTypeForFieldKind,
 } from '../ir';
 
 const DEFAULT_MODEL =
@@ -278,33 +279,10 @@ export class SemanticMappingInvariantError extends Error {
   }
 }
 
-export function expectedDataTypeForFieldKind(
-  kind: TemplateTwinFieldKind,
-): SemanticMapping['expectedDataType'] | null {
-  switch (kind) {
-    case 'narrative_text':
-      return 'text';
-    case 'single_select':
-      return 'single_select';
-    case 'multi_select':
-      return 'multi_select';
-    case 'checkbox':
-      return 'boolean';
-    case 'date':
-      return 'date';
-    case 'number':
-      return 'number';
-    case 'measurement':
-      return 'measurement';
-    case 'fixed_table':
-    case 'repeating_table':
-      return 'table';
-    case 'static':
-    case 'conditional_block':
-    case 'unsupported':
-      return null;
-  }
-}
+// ⚠️ RE-EXPORTED, NOT REDEFINED. The body moved to `ir.ts` so the client-safe
+// `unmentioned-policy.ts` can reach it without importing this module (which
+// pulls `@meddoc/ai`). Everything that imported it from here still resolves.
+export { expectedDataTypeForFieldKind };
 
 export function isMappingTypeCompatible(
   field: TemplateField,

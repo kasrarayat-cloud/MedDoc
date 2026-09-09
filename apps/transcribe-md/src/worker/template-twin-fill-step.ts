@@ -59,8 +59,8 @@ async function isCertifiedTwinTemplate(noteTemplateId: string): Promise<boolean>
 
 export async function runTemplateTwinFillStep(input: {
   visitId: string;
-  practiceId: string;
-  doctorId: string;
+  tenantPracticeId: string;
+  authorUserId: string;
   noteTemplateId: string;
   noteTemplateVersion: number;
   inputMode: string;
@@ -82,8 +82,8 @@ export async function runTemplateTwinFillStep(input: {
     const prepared = await withTimeout(
       processTemplateTwinVisit({
         visitId: input.visitId,
-        practiceId: input.practiceId,
-        doctorId: input.doctorId,
+        tenantPracticeId: input.tenantPracticeId,
+        authorUserId: input.authorUserId,
         noteTemplateId: input.noteTemplateId,
         noteTemplateVersion: input.noteTemplateVersion,
         inputMode: mapInputMode(input.inputMode),

@@ -230,9 +230,22 @@ export const SCAFFOLD_INSERTABLE_KINDS: ReadonlySet<string> = new Set(['narrativ
  */
 export function scaffoldDefaultOfferable(input: {
   field: { kind?: string; scaffolded?: boolean; scaffoldText?: string | null };
+  // ⚠️ `clinicalConcept` ONLY. This used to also carry `unmentionedPolicy`,
+  // because the omit decision was taken from the MAPPING — a static property,
+  // true on every visit or none, deciding a per-visit question. It is taken
+  // from the resolution's `reasonCode` now, so advertising the policy here
+  // would invite the same mistake back and would be a column the caller
+  // fetches for a decision nobody makes.
   mapping: { clinicalConcept?: string | null } | null | undefined;
-  /** The field's CURRENT resolution, or null when none has been computed. */
-  current: { status?: string; value?: unknown } | null | undefined;
+  /**
+   * The field's CURRENT resolution, or null when none has been computed.
+   *
+   * ⚠️ `reasonCode` IS THE POINT OF THIS PARAMETER NOW. The call site already
+   * passed this exact object and already read `r.reasonCode` one line above;
+   * the type simply did not name it, so the callee could not see the only
+   * input that answers the question it was asking.
+   */
+  current: { status?: string; value?: unknown; reasonCode?: string | null } | null | undefined;
 }): boolean {
   const { field, mapping, current } = input;
   if (field.scaffolded !== true) return false;
@@ -240,6 +253,61 @@ export function scaffoldDefaultOfferable(input: {
   if (!SCAFFOLD_INSERTABLE_KINDS.has(field.kind ?? '')) return false;
   // The fill declines forever without a concept — see the overlay's own note.
   if (!mapping?.clinicalConcept) return false;
+  // ⚠️ ONLY WHEN THE RESOLVER WOULD ACTUALLY HONOUR IT — AND THE FIRST CUT OF
+  // THIS CLAUSE DID NOT ASK. A peer session measured the consequence and it is
+  // strictly worse than not ticking at all: on a field the resolver refuses the
+  // omit for (a `manual` source, a fixed-grid cell), the count does NOT move —
+  // the blank stays in `notMentioned` and the doctor is still prompted — while
+  // this clause removed their remedy anyway. Reproduced before fixing:
+  //
+  //   MANUAL field, stored omit:   canOmitWhenUnmentioned false
+  //                                scaffoldDefaultOfferable false   <- remedy gone
+  //   EXTRACTION control:          canOmitWhenUnmentioned true
+  //
+  // ⚠️ AND IT WAS A FOURTH SPELLING OF THE RULE. This file's own header says
+  // ONE DEFINITION, THREE CALLERS; I added a bare `=== 'omit'` test beside a
+  // shared predicate written precisely so nobody would. The predicate is called
+  // instead — one definition, one more caller.
+  
+  //
+  // REVIEW-DEFAULTS item 2's control says, in the doctor's own words,
+  // "Expected blank — do not ask me about this". Without this clause the field
+  // is still listed in the "Your blanks" panel under the heading "Nothing was
+  // dictated for these" — because an `omit` resolution is `not_mentioned` with
+  // `value: null`, and `scaffoldTargetIsBlank` is true for exactly that shape.
+  // So the control's label was false: the doctor ticked it and was asked again
+  // on the very next visit.
+  //
+  // ⚠️ IT IS THE **OFFER** THAT IS WITHDRAWN, NOT AN APPLIED DEFAULT. The
+  // caller keeps an ALREADY-INSERTED default listed (`inserted ||` in
+  // `preview-visit-document.ts`) so Undo stays reachable for a doctor who
+  // inserted before setting the policy, and `applyClinicianOverrides` is
+  // deliberately NOT given this clause — a stored override the doctor did
+  // assert must still apply, or the fill silently drops their own words.
+  // ⚠️ THE PER-VISIT OUTCOME, NOT THE CONFIRM-TIME CAPABILITY. This clause first
+  // read `mapping.unmentionedPolicy === 'omit' && canOmitWhenUnmentioned(...)`.
+  // Both halves are STATIC properties of the mapping, and an adversarial pass
+  // measured what that costs: the resolver honours an omit only when
+  // `conceptUnmatched && reason === undefined && facts.length > 0`
+  // (`resolver/index.ts:262`), all three per-VISIT. So on a visit where the
+  // omit does NOT fire — no facts extracted, or the concept dictated at a
+  // temporality the mapping does not approve — the field stays in
+  // `notMentioned`, the surface says "1 still blank", AND the offer was
+  // withdrawn anyway.
+  //
+  // ⚠️ THAT IS VERBATIM THE STATE THE PARAGRAPH ABOVE CALLS "STRICTLY WORSE
+  // THAN NOT TICKING AT ALL". The previous commit closed the STATIC half of it
+  // (a `manual` source, a fixed-grid cell) and left the per-visit half open —
+  // and because the guard had been dead code until that commit, fixing the
+  // dead code is what made the remaining half reachable. Measured over 7 visit
+  // shapes for one omit-ticked field: 5 were false rejections, 1 was correct.
+  //
+  // `unmentionedPolicy` and `canOmitWhenUnmentioned` are NOT consulted here.
+  // `omitted_unsupported_default` is emitted only on the branch that honours
+  // the omit, so it already implies both — and unlike them it is true of THIS
+  // visit. The predicate keeps its confirm-time callers, where the question
+  // genuinely is "can this choice ever matter?".
+  if (current?.reasonCode === 'omitted_unsupported_default') return false;
   return scaffoldTargetIsBlank(current);
 }
 
