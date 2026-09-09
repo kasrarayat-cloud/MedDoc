@@ -1,9 +1,19 @@
 # ============================================================================
-# CI — runs the same pipeline as `npm run test:all` locally
+# CI
 # ----------------------------------------------------------------------------
-# Seeds tenancy fixtures + super-admin, runs Vitest adversarial suite, then
-# Playwright E2E suite. Playwright's webServer block boots `next dev` on its
-# own — no separate server step needed.
+# ⚠️ THIS HEADER USED TO READ "runs the same pipeline as `npm run test:all`
+# locally — seeds tenancy fixtures + super-admin, runs Vitest adversarial suite,
+# then Playwright E2E suite". NONE OF THAT HAS HAPPENED SINCE THE CRM WAS
+# DECOMMISSIONED: root `test:all` delegated to that workspace, whose `test:all`
+# is an echo. The description outlived the behaviour by months, and a reader
+# checking whether CI covered something would have believed it.
+#
+# WHAT ACTUALLY GATES MERGE, measured, not described:
+#   `unit`      — vitest in apps/transcribe-md (folds in packages/*/src)
+#   `typecheck` — tsc --noEmit on apps/transcribe-md
+#   `audit`     — npm audit, high+critical
+#   `test`      — services + prisma migrate deploy. NO tests. See its own step.
+#   e2e / a11y / secrets-scan live in their own workflows.
 #
 # The tests don't call OpenAI: unit tests are pure or mock the client, E2E
 # tests stop before the voice/AI flow (see tests/e2e/assistant.spec.ts). A
@@ -463,9 +473,11 @@ jobs:
   # ──────────────────────────────────────────────────────────────────
   # In-scope unit gate (chore/ci-unit-gate-and-marketing-copy).
   # ----------------------------------------------------------------------------
-  # GAP this closes: the `test` job above runs `npm run test:all`, which
-  # delegates to the decommissioned meddoc-pro workspace and is now a no-op
-  # echo — so NO unit tests gated merge. The whole transcribe-md + packages/*
+  # GAP this closes: the `test` job above runs `npm run test:all`, which is a
+  # no-op echo — so NO unit tests gated merge. (⚠️ CORRECTED 2026-09-09: it used
+  # to reach that echo by DELEGATING to the decommissioned meddoc-pro workspace,
+  # which is the coupling DMP-a removed. The echo now lives at the repo root; the
+  # gap this job closes is unchanged, and so is the job's vacuity.) The whole transcribe-md + packages/*
   # suite (1500+ tests incl. the caution-first allergy merge, refusal
   # categorization, admin-gate structural test, rx-warning identity, dose
   # validator, db-guard, …) rotted unenforced (proven by the 2026-06-11
