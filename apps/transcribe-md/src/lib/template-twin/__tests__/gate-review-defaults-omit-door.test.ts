@@ -498,7 +498,7 @@ const WITNESSED_GUARDS = new Set<string>();
     //
     // `TemplateTwinDetectionStatusSchema` has FOUR members. This literal named
     // TWO, so `recognized` and `needs_confirmation` were absent from every row
-    // of an 870,912-row matrix that describes itself as exhaustive — the same
+    // of a matrix that describes itself as exhaustive — the same
     // shape as the hand-written dataType list that "killed 73.4% of the rows",
     // and invisible for exactly the same reason: nothing compared the literal
     // to its source. A value the compiler can emit and the matrix never varies
@@ -596,14 +596,16 @@ const WITNESSED_GUARDS = new Set<string>();
 
     // ── the exact product, and the budget the RESOLVER gets ────────────────
     // ⚠️ THERE IS NO SAMPLE AND NO SEED. The product over the traced read set is
-    // 870,912 rows, and classifying every one of them — building the two objects
-    // and walking the guards — was MEASURED at 724 ms. So the enumeration is
+    // 3,483,648 rows since the status columns were derived from their enum
+    // (#303), and classifying every one of them — building the two objects and
+    // walking the guards — costs a few seconds. So the enumeration is
     // exhaustive and failure mode (4) is gone by construction: there is no seed
     // literal left for a green to be a property of.
     //
     // ⚠️ THE BUDGET MOVED TO WHERE THE COST ACTUALLY IS. Driving the REAL
-    // resolver costs ~160 µs a row (three zod parses), so 870,912 of those is
-    // ~70 s. The resolver therefore sees at most `RESOLVE_CAP` rows PER STRATUM,
+    // resolver costs ~160 µs a row (three zod parses), so 3,483,648 of those
+    // would be ~9 minutes. The resolver therefore sees at most `RESOLVE_CAP`
+    // rows PER STRATUM,
     // spread evenly through the enumeration rather than taken from the front —
     // a contiguous prefix correlates with the low-order dimensions, which is a
     // smaller version of the same blindness this redesign exists to end.
@@ -772,10 +774,30 @@ const WITNESSED_GUARDS = new Set<string>();
     // refused and come straight back as disagreements.
     const certificationUnreachable: string[] = [];
     const certificationTokenUnreachable: string[] = [];
+    //
+    // ⚠️ AND THE FIRST VERSION OF THIS ASKED ITS QUESTION IN A UNIVERSE
+    // PRODUCTION IS NEVER IN — passing an EMPTY `certifiedFieldIds`. That is
+    // not what a fill does: `fill-engine.ts` pushes EVERY compiled field id
+    // into the set (a fill cannot proceed otherwise) and passes it at the
+    // resolve call. The guard is
+    //   `m.status !== 'certified' || (f.detectionStatus !== 'certified' && !ids.has(f.fieldId))`
+    // so emptying the set makes the second disjunct live and fires the guard on
+    // the whole `detectionStatus` column — which the compiler never sets to
+    // `'certified'`.
+    //
+    // MEASURED over the 4x4 of (detectionStatus, status): the empty set lets
+    // ONE combination through, production's set lets FOUR. The three extra —
+    // `status='certified'` with `detectionStatus` recognized/needs_confirmation
+    // — REACH THE OMIT BRANCH in production and were being set aside as
+    // unreachable. A planted `!offered && honoured` divergence on exactly that
+    // shape was absorbed by the category and the arm stayed GREEN.
+    //
+    // So the set is built the way a fill builds it. It is one field here, so
+    // that is its id — the point is that it is POPULATED, not empty.
     const refusedByCertification = (f: TemplateField, m: SemanticMapping) =>
       resolverLadderExit(f, m, {
         allowUncertified: false,
-        certifiedFieldIds: new Set<string>(),
+        certifiedFieldIds: new Set<string>([f.fieldId]),
       })?.reasonCode === 'field_or_mapping_not_certified';
 
     for (const row of rows) {
@@ -930,6 +952,27 @@ const WITNESSED_GUARDS = new Set<string>();
           'disagreement, including a real one. A fully certified field and ' +
           'mapping must pass the certification guard.',
       ).toBe(false);
+      // ⚠️ AND THE UNIVERSE ITSELF IS ASSERTED, because the defect this control
+      // failed to catch was not a constant — it was the RIGHT question asked
+      // with an empty `certifiedFieldIds`. A field the fill has certified must
+      // pass the guard even when its IR `detectionStatus` is not `'certified'`,
+      // which is EVERY field of EVERY certified template in production: the
+      // compiler emits recognized/needs_confirmation/unsupported and
+      // certification writes `'CERTIFIED'` to the field-definition rows without
+      // rewriting the IR.
+      const irShapedField = field('1', { detectionStatus: 'recognized' });
+      expect(
+        refusedByCertification(
+          irShapedField,
+          mapping(irShapedField, 'ros.cardiovascular', {
+            status: 'certified',
+            unmentionedPolicy: 'omit',
+          }),
+        ),
+        'the probe is refusing a row PRODUCTION REACHES — `certifiedFieldIds` is ' +
+          'empty or does not contain this field, so the guard is firing on the ' +
+          'detectionStatus column, which no compiled IR ever sets to certified.',
+      ).toBe(false);
       const uncertifiedMapping = mapping(certifiedField, 'ros.cardiovascular', {
         status: 'recognized',
         unmentionedPolicy: 'omit',
@@ -941,8 +984,8 @@ const WITNESSED_GUARDS = new Set<string>();
       ).toBe(true);
     }
     // ⚠️ AND EVERY ROW OF A SMALL STRATUM IS RESOLVED, NOT JUST COUNTED. The
-    // rarest exit here is `multi_concept_checkbox_deferred` at **16 rows in
-    // 870,912** — 1 in 54,432, which is why no uniform sample of any practical
+    // rarest exit here is `multi_concept_checkbox_deferred` at **144 rows in
+    // 3,483,648** — 1 in 24,192, which is why no uniform sample of any practical
     // size could reach it and why the previous arm never witnessed the eighth
     // guard at all. Classification is exhaustive; the cap only bounds how many
     // of a LARGE stratum reach the resolver.

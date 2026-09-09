@@ -774,11 +774,22 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         ? await prisma.noteTemplate.findFirst({
             where: {
               id: visit.noteTemplateId,
-              OR: [
-                { doctorId: visit.userId ?? '' },
-                { practiceId: visit.practiceId },
-                { isSystemDefault: true },
-              ],
+              // ⚠️ #302 / LENS A1 — THE AUTHOR DISJUNCT IS GONE, AND ITS
+              // ABSENCE IS THE FIX. `OR` is a DISJUNCTION: keeping
+              // `{ doctorId }` beside `{ practiceId }` meant a locum's own
+              // practice-B template satisfied the query on `doctorId` alone,
+              // `picked` short-circuited past the resolver entirely, and B's
+              // sections built the L4 prompt for A's chart — the exact
+              // wrong-practice document #287 exists to stop, re-entering
+              // through the door #302 had just widened.
+              //
+              // Nothing is lost by deleting it. The T7 tenancy migration
+              // backfilled `note_templates.practiceId` from the doctor and
+              // enforces a BICONDITIONAL — a template has a practice IFF it
+              // has a doctor — so every doctor-owned template in scope
+              // ALREADY matches `{ practiceId: visit.practiceId }`. The
+              // disjunct could only ever add OUT-of-scope rows.
+              OR: [{ practiceId: visit.practiceId }, { isSystemDefault: true }],
             },
           })
         : null;
@@ -834,6 +845,16 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
             (await prisma.noteTemplate.count({
               where: {
                 doctorId: visit.userId ?? '',
+                // ⚠️ #302 / LENS A2 — THE PROBE IS SCOPED TOO, OR IT RAISES A
+                // FALSE ALARM ON CORRECT BEHAVIOUR. This asks "does the
+                // clinician have a format that should have applied?" to explain
+                // why the system default was used. Unscoped, it counted the
+                // author's templates at OTHER practices, so a locum correctly
+                // rendering practice A's standard layout was told "you have an
+                // activated note format for this visit type" — about a form
+                // belonging to practice B, on the note they are about to sign.
+                // The comment below names the cost of exactly that.
+                practiceId: visit.practiceId,
                 status: 'active',
                 isSystemDefault: false,
                 // Their format for THIS visit type, or their catch-all. A
