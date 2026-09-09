@@ -178,9 +178,14 @@ export type IdentityKey = string & { readonly __brand: 'IdentityKey' };
  * live the moment the ordinary upload path uses this primitive — which is
  * exactly the path #274 split it out to serve.
  *
- * Building both keys together removes the parse, and with it the class: the
- * two keys cannot disagree about which control they describe, whatever bytes
- * the tag contains. The readers are now ONE.
+ * Building both keys together removes the parse, and with it that class: the
+ * two keys cannot disagree about which control they describe. The readers are
+ * now ONE.
+ *
+ * ⚠️ THAT WAS NOT SUFFICIENT ON ITS OWN, AND THE CLAIM HERE USED TO SAY IT WAS.
+ * Removing the lossy PARSE left a lossy JOIN — see `seg` below, which closes it
+ * for any bytes in any component rather than borrowing an invariant from
+ * another module.
  *
  * The distinction the pair encodes is unchanged and is round five's finding:
  * **AMBIGUITY is counted WITHOUT `kind`; MATCHING still requires it**, because
@@ -193,9 +198,42 @@ export interface IdentityKeyPair {
   readonly ambiguity: IdentityKey;
 }
 
+/**
+ * One segment of a key, LENGTH-PREFIXED so the encoding is injective.
+ *
+ * ⚠️ A PLAIN DELIMITER JOIN IS NOT INJECTIVE, AND THE REFUTATION PASS OVER THE
+ * FIRST VERSION OF THIS FILE PROVED IT WITH A CONCRETE PAIR:
+ *
+ *     (partName "a\0b", tag "x")   ->  tag \0 a\0b \0 x
+ *     (partName "a",     tag "b\0x") ->  tag \0 a \0 b\0x
+ *
+ * Byte-identical. Two controls in DIFFERENT parts, carrying DIFFERENT tags,
+ * collapse to one key — and each is unique on its own side, so both uniqueness
+ * gates pass and one inherits the other's certified clinical disposition.
+ *
+ * ⚠️ AND THE FIRST FIX HERE DID NOT CLOSE IT. Building both keys at one site
+ * removed the lossy *parse*; it left the lossy *join*. The guarantee then rested
+ * on `partName` being NUL-free — which is true, and is enforced in a DIFFERENT
+ * MODULE (`note-template-docx/zip-directory.ts` rejects NUL in an entry name and
+ * requires printable ASCII; the compiler looks every structural part up in the
+ * zip). **A cross-module invariant nothing here asserts is not a property of
+ * this code.** The day a synthesized or imported IR reaches `planTransfer`, the
+ * join silently stops being injective and no test would say so.
+ *
+ * Length-prefixing makes the encoding injective for ANY bytes in ANY component,
+ * with no invariant borrowed from anywhere. `${s.length}` cannot itself shift a
+ * boundary: it is read before the delimiter, so the reader always knows how many
+ * characters follow.
+ *
+ * These keys are computed in memory and never persisted, so the encoding is free
+ * to change — verified: the only consumers are `countKeys`, `planTransfer`'s two
+ * loops, and the tests.
+ */
+const seg = (s: string): string => `${s.length}\u0000${s}`;
+
 export function identityKeyPairs(field: TemplateField): IdentityKeyPair[] {
   const b = field.rendererBinding;
-  const fid = `fid\u0000${field.fieldId}` as IdentityKey;
+  const fid = `fid${seg(field.fieldId)}` as IdentityKey;
   const pairs: IdentityKeyPair[] = [{ match: fid, ambiguity: fid }];
 
   // ⚠️ TRIMMED AND CASE-SENSITIVE, AND EMPTY IS NOT AN IDENTITY. A tag of ""
@@ -204,8 +242,8 @@ export function identityKeyPairs(field: TemplateField): IdentityKeyPair[] {
   const tag = (b.tag ?? '').trim();
   if (tag !== '') {
     pairs.push({
-      match: `tag\u0000${b.partName}\u0000${tag}\u0000${field.kind}` as IdentityKey,
-      ambiguity: `tag\u0000${b.partName}\u0000${tag}` as IdentityKey,
+      match: `tag${seg(b.partName)}${seg(tag)}${seg(field.kind)}` as IdentityKey,
+      ambiguity: `tag${seg(b.partName)}${seg(tag)}` as IdentityKey,
     });
   }
   return pairs;
@@ -366,8 +404,20 @@ export function planTransfer(input: {
    * theirs was ambiguous.
    *
    * ⚠️ MEASURED ON THE CERTIFIED VERSION ITSELF (`18a7ae19`), NOT INFERRED —
-   * and the first version of this comment got it wrong, which is why the
-   * numbers are now written down with their query. **EIGHT** tags are shared,
+   * and the first version of this comment got it wrong, which is why the query
+   * is written out below rather than the numbers alone:
+   *
+   *     WITH f AS (SELECT btrim(fd."rendererBinding"->>'tag') AS tag, m."sourceType"
+   *                FROM template_twin_field_definitions fd
+   *                LEFT JOIN template_twin_semantic_mappings m
+   *                       ON m."fieldDefinitionId" = fd.id
+   *                WHERE fd."compiledVersionId" = '<the certified version>'),
+   *          g AS (SELECT f.*, count(*) OVER (PARTITION BY tag) AS n FROM f)
+   *     SELECT "sourceType", CASE WHEN n > 1 THEN 'shared' ELSE 'unique' END, count(*)
+   *     FROM g GROUP BY 1, 2;
+   *
+   * (Structure and blank-form metadata only — no patient data is read.)
+   * **EIGHT** tags are shared,
    * not three: `plan`×5, `impression`×4, `patient_is_a_pleasant_age_...`×4,
    * `family_history`×3, `past_medical_history`×3, `past_surgical_history`×3,
    * `allergies`×2, `the_patient_medications_were_reviewed_an`×2. That is

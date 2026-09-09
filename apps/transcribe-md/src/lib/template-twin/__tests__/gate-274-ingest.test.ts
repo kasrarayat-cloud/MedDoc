@@ -31,7 +31,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { type SemanticMapping, type TemplateDocIR, type TemplateField } from '../ir';
-import { identityKeys, planTransfer } from '../ingest-plan';
+import { identityKeyPairs, identityKeys, planTransfer } from '../ingest-plan';
 
 /** A compiled field, shaped as the compiler emits it. */
 function field(over: {
@@ -545,6 +545,70 @@ describe("#274 · ⚠️ AMBIGUITY IS PER-KEY — the owner's form proved it", (
       plan.transferred.map((t) => t.mapping.clinicalConcept),
       'a NUL-bearing shared tag carried a disposition',
     ).toEqual(['c_r']);
+  });
+
+  it('⚠️ a NUL in the PART NAME cannot collide with a tag — the join is INJECTIVE', () => {
+    // ⚠️ THE SECOND HALF OF THE SAME CLASS, and the first fix did NOT close it.
+    // Removing the lossy PARSE left a lossy JOIN: with a plain delimiter,
+    //
+    //     (partName "a\u0000b", tag "x")    -> tag \0 a\0b \0 x
+    //     (partName "a",     tag "b\u0000x") -> tag \0 a \0 b\0x
+    //
+    // are BYTE-IDENTICAL. Two controls in different parts with different tags
+    // collapse to one key, each unique on its own side, so both uniqueness gates
+    // pass and one inherits the other's certified clinical disposition.
+    //
+    // Measured against the pre-length-prefix code: it TRANSFERRED (1 row,
+    // cross-part, arriving certified) where its own parent had refused. The
+    // length-prefixed encoding refuses it, and does so for ANY bytes in ANY
+    // component rather than borrowing partName's NUL-freedom from another module.
+    const S = 'ttf_' + 's'.repeat(24);
+    const T = 'ttf_' + 't'.repeat(24);
+    const src = ir([field({ fieldId: S, tag: 'x', label: 'A', partName: 'a\u0000b' })]);
+    const tgt = ir([field({ fieldId: T, tag: 'b\u0000x', label: 'B', partName: 'a' })]);
+    const certs = new Map([[S, certified(S, 'concept_S')]]);
+
+    const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
+    expect(
+      plan.transferred,
+      'a partName NUL collided with a tag and carried a disposition across parts',
+    ).toEqual([]);
+    expect(plan.reproposed).toEqual([T]);
+  });
+
+  it('⚠️ the key encoding is INJECTIVE — stated as the property, not a fixture', () => {
+    // The regression guard for the whole class: no two DISTINCT (partName, tag,
+    // kind) triples may produce the same key, whatever bytes they contain.
+    //
+    // ⚠️ THE TAG KEY ONLY, AND THE FIRST VERSION OF THIS ARM GOT THAT WRONG.
+    // It looped over BOTH pairs and keyed the expectation on (partName, tag) —
+    // but the `fid` key does not depend on either, so every iteration reused the
+    // same fieldId and the arm reported the fid key as a collision with itself.
+    // The arm failed, which is the arm working; the defect was in the fixture.
+    const parts = ['a', 'a\u0000b', 'a\u0000', '', 'ab'];
+    const tags = ['x', 'b\u0000x', '\u0000x', 'bx'];
+    const seen = new Map<string, string>();
+    let built = 0;
+    for (const partName of parts) {
+      for (const tag of tags) {
+        const f = field({ fieldId: 'ttf_' + 'q'.repeat(24), tag, label: 'L', partName });
+        const tagPair = identityKeyPairs(f)[1];
+        expect(tagPair, `no tag key for partName=${JSON.stringify(partName)} tag=${JSON.stringify(tag)}`).toBeDefined();
+        for (const key of [tagPair!.match, tagPair!.ambiguity]) {
+          const input = JSON.stringify([partName, tag, key === tagPair!.match]);
+          const prior = seen.get(key);
+          if (prior !== undefined) {
+            expect(prior, `two DISTINCT inputs share the key ${JSON.stringify(key)}`).toBe(input);
+          }
+          seen.set(key, input);
+          built += 1;
+        }
+      }
+    }
+    // ⚠️ POSITIVE CONTROL — without it, a loop that built nothing passes.
+    // 5 partNames x 4 tags x 2 keys = 40, all distinct.
+    expect(built).toBe(40);
+    expect(seen.size).toBe(40);
   });
 });
 
