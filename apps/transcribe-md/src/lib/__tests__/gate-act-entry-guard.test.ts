@@ -77,6 +77,7 @@ describe('a ruled-act script is guarded against running on import', () => {
       'expect-sha256',
       'expect-fields',
       'expect-transfer',
+      'transfer-source-types',
     ]) {
       expect(src, `re-issue-form.ts stopped requiring --${required}`).toContain(`'${required}'`);
     }
