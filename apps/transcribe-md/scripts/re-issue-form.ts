@@ -100,11 +100,24 @@ async function main(): Promise<void> {
   const expectSha = arg('expect-sha256');
   const expectFields = intArg('expect-fields');
   const expectTransfer = intArg('expect-transfer');
+  // ⚠️ REQUIRED, NEVER DEFAULTED — the same rule `transfer-args.ts` applies to
+  // the standalone tool. All 53 rows on the certified version are CERTIFIED;
+  // the 43/10 the ruling names is a SOURCE-TYPE split. Defaulting to "all"
+  // would transfer 53 while the declaration says 43, and the guard would abort
+  // an act that had already read production.
+  const sourceTypes = new Set(
+    arg('transfer-source-types')
+      .split(',')
+      .map((t) => t.trim())
+      .filter((t) => t !== ''),
+  );
+  if (sourceTypes.size === 0) die('--transfer-source-types selected nothing');
 
   console.log('=== RE-ISSUE — ruling #263 ===');
   console.log(`   artifact      ${artifactId}`);
   console.log(`   transfer from ${transferFrom}`);
   console.log(`   expect        ${expectFields} fields, ${expectTransfer} transferred`);
+  console.log(`   source types  ${[...sourceTypes].join(', ')}`);
   console.log(`   expect sha    ${expectSha}`);
 
   // ── read the stored bytes. The store verifies the digest itself. ──────────
@@ -166,6 +179,7 @@ async function main(): Promise<void> {
       source: bytes,
       actor: { userId, userEmail, practiceId },
       transferFrom,
+      transferSourceTypes: sourceTypes,
       guards: {
         expectSourceSha256: expectSha,
         expectFieldIds,

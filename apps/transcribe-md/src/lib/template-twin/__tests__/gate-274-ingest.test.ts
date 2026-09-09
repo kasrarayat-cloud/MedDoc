@@ -290,6 +290,59 @@ describe('#274 · ⚠️ AN INSERT MUST NOT RE-PAIR EVERY DOWNSTREAM CONTROL', (
   });
 });
 
+describe('#274 · ⚠️ the SOURCE-TYPE split — 43 of 53, not 53 of 53', () => {
+  // ══════════════════════════════════════════════════════════════════════════
+  // MEASURED ON THE OWNER'S CERTIFIED VERSION `18a7ae19`:
+  //
+  //     extraction | CERTIFIED | 43
+  //     manual     | CERTIFIED | 10
+  //
+  // ALL FIFTY-THREE ARE `CERTIFIED`. So a filter on `mappingStatus` alone
+  // transfers 53, while the ruling says *transfer the 43, re-propose the ten* —
+  // and the split it names is by SOURCE TYPE. The two are easy to conflate
+  // because here one implies the other.
+  //
+  // ⚠️ THE DECLARED GUARD IS WHAT CAUGHT IT. `expectTransferCount: 43` would
+  // have aborted the act against a plan of 53 — a declaration whose numbers come
+  // from the RULING rather than from the CODE is the only thing that can
+  // disagree with the code.
+  //
+  // These arms drive `planTransfer` directly with the two shapes, since the
+  // filter is applied by the caller building the certified map.
+  // ══════════════════════════════════════════════════════════════════════════
+  const tagged = (fieldId: string, tag: string) => field({ fieldId, tag, label: tag });
+  const src = ir([
+    tagged('ttf_' + 'x'.repeat(24), 'extracted_one'),
+    tagged('ttf_' + 'y'.repeat(24), 'manual_one'),
+  ]);
+  const tgt = ir([
+    tagged('ttf_' + 'z'.repeat(24), 'extracted_one'),
+    tagged('ttf_' + 'w'.repeat(24), 'manual_one'),
+  ]);
+  const withType = (fieldId: string, concept: string, sourceType: string) =>
+    ({ ...certified(fieldId, concept), sourceType }) as ReturnType<typeof certified>;
+
+  it('ALL certified rows transfer when no source type is selected', () => {
+    const certs = new Map([
+      ['ttf_' + 'x'.repeat(24), withType('ttf_' + 'x'.repeat(24), 'c_extract', 'extraction')],
+      ['ttf_' + 'y'.repeat(24), withType('ttf_' + 'y'.repeat(24), 'c_manual', 'manual')],
+    ]);
+    expect(planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs }).transferred).toHaveLength(2);
+  });
+
+  it('⚠️ filtering to `extraction` leaves the manual one to RE-PROPOSE', () => {
+    // what the caller does: build the map from the selected source types only
+    const certs = new Map([
+      ['ttf_' + 'x'.repeat(24), withType('ttf_' + 'x'.repeat(24), 'c_extract', 'extraction')],
+    ]);
+    const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
+    expect(plan.transferred).toHaveLength(1);
+    expect(plan.transferred[0]!.mapping.clinicalConcept).toBe('c_extract');
+    // the manual control is re-proposed, which is what the owner then confirms
+    expect(plan.reproposed).toEqual(['ttf_' + 'w'.repeat(24)]);
+  });
+});
+
 describe('#274 · nothing certified means nothing transfers', () => {
   it('an EMPTY certified map re-proposes everything', () => {
     const plan = planTransfer({ target: SOURCE, sourceIr: SOURCE, certifiedByFieldId: new Map() });
