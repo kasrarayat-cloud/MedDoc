@@ -23,6 +23,28 @@
  *   · the sandbox's config leaks into the SHARED repo  -> ARM 5
  *   · `gh` becomes reachable from a lens environment   -> ARM 3 / ARM 4
  *   · the arming script stops naming WHICH guard fired -> ARM 2's own text
+ *   · a failed creation leaves an UNARMED sandbox on disk -> ARM 7
+ *   · the reaper refuses the artifact a partial creation
+ *     leaves, so the two scripts deadlock                 -> ARM 8
+ *   · that loosening grows into "reap anything .lens-*"    -> ARM 9
+ *
+ * ⚠️ ARMS 7-9 COME FROM AN OBSERVED ARTIFACT, 2026-09-09, NOT A HYPOTHETICAL.
+ * A parallel batch of eleven sandboxes produced TWO that were checked out at the
+ * right commit and NOT ARMED — `remote.origin.pushurl` unset, the repository's
+ * REAL hooks in force, no `.lens-env.sh`. `make-lens-sandbox.sh` had zero traps
+ * and discarded `git worktree add`'s exit status, so any failure after creation
+ * left the tree behind; `reap-lens-sandbox.sh` then refused it for carrying no
+ * `.lens-hooks`, which is precisely what such a tree lacks. The two composed
+ * into a deadlock, and `.lens-o2-door-offer` had been stuck in the shared tree
+ * since an earlier session because of it.
+ *
+ * ⚠️ THE TRIGGER IS UNPROVEN AND IS RECORDED AS UNPROVEN. A deliberate
+ * three-way concurrent reproduction did NOT reproduce it. A race sampled
+ * coarsely is a race missed, so that is not a refutation — but it is not a
+ * demonstration either, and ARM 7 therefore injects the failure
+ * DETERMINISTICALLY (a `git` shim that drops the pushurl write) rather than
+ * racing for it. The guard is armed against the SHAPE, which is correct
+ * whatever the trigger turns out to be.
  */
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
@@ -46,7 +68,8 @@ const MAKE = resolve(ROOT, 'scripts/make-lens-sandbox.sh');
  *
  * ⚠️ AND IT FAILED IN CI ON EXACTLY THAT. `Error: Test timed out in 5000ms`,
  * on a run whose only changes were elsewhere. Measured on this box: the script
- * completes in **5.19s**, exit 0, all seven arms green (it was 2.13s and six
+ * completed in **5.19s**, exit 0, all seven arms green — and **11.79s with ten
+ * arms** after 2026-09-09, still an order of magnitude inside the budget (it was 2.13s and six
  * arms before ARM 6; the builder now installs the workspace, and a measurement
  * left stale is the same defect as a number nobody acts on) — a 2.3× margin for a test
  * that shells out to `git worktree add` while 450 other test files run beside
@@ -81,7 +104,11 @@ describe('the lens sandbox is armed', () => {
     // The verdict, and the arms behind it, so a failure names itself in CI.
     expect(out, `arming output:\n${out}`).toContain('LENS SANDBOX ARMED');
     expect(code, `arm-lens-sandbox.sh exited ${code}:\n${out}`).toBe(0);
-    for (const arm of ['ARM 0', 'ARM 1', 'ARM 2', 'ARM 3', 'ARM 4', 'ARM 5', 'ARM 6']) {
+    // ⚠️ ARMS 7-9 ADDED 2026-09-09. Enumerated here, not just present in the
+    // script, because an arm nothing asserts can be deleted silently — which is
+    // the same class as the defect they were added for.
+    for (const arm of ['ARM 0', 'ARM 1', 'ARM 2', 'ARM 3', 'ARM 4', 'ARM 5', 'ARM 6',
+                       'ARM 7', 'ARM 8', 'ARM 9']) {
       expect(out, `${arm} did not report`).toContain(arm);
     }
     // ⚠️ ON THE **VERDICT LINES**, NOT THE WHOLE OUTPUT. A passing ARM 1 quotes
