@@ -142,6 +142,9 @@ describe('static check — every email schema has .max(254)', () => {
       'src/app/api/admin/users/[id]/grant-admin/route.ts',
       'src/app/api/admin/users/[id]/revoke-admin/route.ts',
       'src/app/api/admin/users/[id]/soft-delete/route.ts',
+      // console port (#310 step 3): deactivate's confirmEmail, create's email
+      'src/app/api/admin/users/[id]/deactivate/route.ts',
+      'src/app/api/admin/users/route.ts',
       'src/app/api/visits/[id]/export/email/route.ts',
       'src/app/api/visits/[id]/sign/route.ts',
       'src/app/api/auth/forgot-password/route.ts',

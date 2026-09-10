@@ -44,6 +44,12 @@ describe('Admin self-action guards (P1-E)', () => {
     ['reset-password (admin)', 'apps/transcribe-md/src/app/api/admin/users/[id]/reset-password/route.ts'],
     ['unsuspend', 'apps/transcribe-md/src/app/api/admin/users/[id]/unsuspend/route.ts'],
     ['grant-admin', 'apps/transcribe-md/src/app/api/admin/users/[id]/grant-admin/route.ts'],
+    // The console port (#310 step 3) — every ported door whose target can be
+    // the actor is enrolled here in the same change that adds it.
+    ['deactivate', 'apps/transcribe-md/src/app/api/admin/users/[id]/deactivate/route.ts'],
+    ['reactivate', 'apps/transcribe-md/src/app/api/admin/users/[id]/reactivate/route.ts'],
+    ['profile', 'apps/transcribe-md/src/app/api/admin/users/[id]/profile/route.ts'],
+    ['sessions revoke', 'apps/transcribe-md/src/app/api/admin/users/[id]/sessions/[sid]/revoke/route.ts'],
   ])('%s blocks self-target with 403', (_name, path) => {
     expect(hasSelfActionGuard(readSource(path))).toBe(true);
   });

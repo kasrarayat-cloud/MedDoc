@@ -10,10 +10,6 @@ import bcrypt from 'bcryptjs';
 import prisma, { isDatabaseHealthy } from '@meddoc/db';
 import { requireRole } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
-// B7 step 3c, door 3 of 3 — the SUBPATH, not the barrel: `@meddoc/ai` re-exports
-// the whole clinical pipeline, and this app needs one function and none of the
-// vendor SDKs behind it.
-import { grantPromoCredit } from '@meddoc/ai/billing-grant';
 import { assertSamePracticeUser, TenantScopeError } from '@/lib/tenancy';
 import { validatePassword } from '@/lib/password-schema';
 import { addMockUser, updateMockUser, deleteMockUser } from './mock-users';
@@ -118,49 +114,14 @@ export async function activateUserAction(userId: string): Promise<ActionResult> 
         },
       });
 
-      // ⚠️ B7 STEP 3c, DOOR 3 OF 3 — THE REACTIVATION GRANT. Ruling #99: "the
-      // reactivation path grants the promo exactly as the signup path does",
-      // which is what dissolved the 175-vs-197 choice. The backfill funds
-      // practices with an ACTIVE member; the 6 whose members are all
-      // deactivated are funded HERE, the moment anyone returns — rather than
-      // pre-minted into limbo on a table that refuses deletes.
-      //
-      // This is the T6 no-downgrade principle pointed at the wallet, and it
-      // sits beside T6's own role restore for exactly that reason: a returning
-      // account arrives with everything its class entitles it to, minted at
-      // arrival.
-      //
-      // ⚠️ THE THIRD DOOR IS FOUND BY ITS PREDICATE, NOT BY AN ORM VERB. T6's
-      // CHECK sweep is the precedent and the warning — 24 user write sites, 15
-      // of them `update`, and a `create`-shaped sweep sees none of them. The
-      // predicate is "a practice with an active member has a promo grant", and
-      // the write that can falsify it is this one.
-      //
-      // ⚠️ NOT IN A TRANSACTION WITH THE UPDATE ABOVE, AND THAT IS THE SAFE
-      // DIRECTION HERE. Unlike signup — where an unfunded practice would be a
-      // brand-new account that never worked — this account already exists and
-      // already works. A grant failure must not un-reactivate a person; it
-      // leaves them active and unfunded, which the backfill's own re-run and a
-      // subsequent reactivation both repair, because the key is idempotent.
-      if (target?.practiceId) {
-        const grant = await grantPromoCredit(target.practiceId);
-        if (grant.granted) {
-          await logAudit({
-            action: 'PROMO_GRANT_CREDITED',
-            targetType: 'Practice',
-            targetId: target.practiceId,
-            practiceId: target.practiceId,
-            metadata: {
-              door: 'reactivation',
-              bucket: 'promo',
-              reactivatedUserId: userId,
-              amountMicroUsd: grant.amountMicroUsd.toString(),
-              balanceAfter: grant.balanceAfter.toString(),
-              seq: grant.seq.toString(),
-            },
-          });
-        }
-      }
+      // ⚠️ B7 STEP 3c's DOOR 3 OF 3 — THE REACTIVATION GRANT — MOVED OUT OF
+      // THIS FILE ON 2026-09-10 (console port, ruling #310 step 3). It now
+      // lives in `apps/transcribe-md/src/app/api/admin/users/[id]/reactivate/
+      // route.ts`, where it is REACHABLE; this app serves 410. It is DELETED
+      // here rather than left beside the port, because two copies would make
+      // four grant callers against the three rulings #99/#100 authorized, and
+      // `gate-b7s3b-promo-grant` still walks this directory to red if one
+      // reappears.
     } else {
       updateMockUser(userId, { isActive: true });
     }

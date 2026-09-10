@@ -394,8 +394,12 @@ describe('B7 step 3b — the writer ships UNWIRED, enumerated rather than claime
     'apps/transcribe-md/src/actions/auth.ts',
     // door 2 — every practice that already exists (one-shot, guarded)
     'apps/transcribe-md/scripts/backfill-promo-grants.ts',
-    // door 3 — a practice whose members were all deactivated, funded on return
-    'apps/meddoc-pro/src/app/system-admin/actions.ts',
+    // door 3 — a practice whose members were all deactivated, funded on return.
+    // ⚠️ PORTED 2026-09-10 (ruling #310 step 3) out of the dark
+    // `apps/meddoc-pro/src/app/system-admin/actions.ts`, whose grant block was
+    // DELETED in the same change. The walker below still reads meddoc-pro, so
+    // a grant reappearing there makes four callers and reds this list.
+    'apps/transcribe-md/src/app/api/admin/users/[id]/reactivate/route.ts',
   ];
 
   // HAND-RUN PROOFS. Not reachable from the worker, any route, or any job —
