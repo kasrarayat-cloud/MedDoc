@@ -102,3 +102,75 @@ a zero-owner practice stays writable *precisely so this cleanup is possible*.
 not. The lesson is the one the ledger keeps re-teaching — **a capability filed as
 new is a claim that nothing already covers it**, and that claim is checkable by
 grep before the row is written.
+
+## ⚠️ CORRECTIONS, 2026-09-10 — FOUND WHILE BUILDING THE ROW
+
+**Appended, never rewritten.** The text above is kept as written, because the
+corrections are the point.
+
+**1 · #226 WAS EXECUTED. "No declaration exists" was a search of the wrong
+directory.** The act ran on 2026-09-07 as a raw-SQL one-shot under ruling #230,
+which put its declaration in `docs/deploy-declarations/` deliberately (a
+non-sha filename in `docs/foundation/deploys/` blocks the next deploy):
+
+| artifact | where | commit |
+|---|---|---|
+| declaration | `docs/deploy-declarations/20260907-r226-archive-six-test-practices.md` | `071b80ab`, 08:35:42Z |
+| the one-shot | `scripts/execute-r226-archive.sql` | ran 08:36:52Z |
+| judgement, **9 of 9** | `docs/deploy-reports/20260907-r226-archive-JUDGEMENT.md` | `fca86bb0`, 08:38:04Z |
+| on `main` | PR #1041 | `ef21f059` |
+
+The recon's "`docs/foundation/mutations/` ends at …" was true and answered the
+wrong question. **A declaration can live in either directory; grep both.**
+
+**What remains of #226 is only #230's deferral: the six `PRACTICE_ARCHIVED`
+audit rows.** They are a separate ruled mutation that the lead runs. They are
+not part of the ADMIN-6 build.
+
+**2 · "ARCHIVING THE PRACTICE WHILE LEAVING MEMBERS LIVE IS EXACTLY THE SPLIT
+STATE THE GUARD REFUSES" — WRONG.** `users_last_owner_guard` and
+`users_no_orphan_member` read `users` columns only. Neither reads
+`practices.isActive`, and there is no trigger on `practices` at all
+(measured in the migrations). The guard refuses *live members with zero active
+owners*, whatever the practice flag says. So an archive that writes only the
+practice row trips nothing.
+
+**3 · THE SHAPE THAT WAS BUILT IS DESIGN A: ONLY THE PRACTICE ROW IS WRITTEN.**
+The branch is `feat/admin6-practice-archive`, not yet merged.
+
+- **The members are archived in effect, not in their rows.** Three doors now
+  read the flag through one predicate (`@meddoc/db/practice-admits`):
+  - login;
+  - every request (`validateSession`), which ends the session;
+  - invite redemption.
+- **The worker is deliberately not a door**, because it is on the clinical
+  generation path. The act refuses while any visit is in flight instead.
+- **No `users` row changes**, so neither trigger fires. A restore returns every
+  member exactly as they were, including any earlier suspension or
+  deactivation.
+- **Proven on a real Postgres:** the md5 hash over every `users` row is
+  identical before and after both the archive and the restore.
+
+**Why this satisfies #306.** #306 says the act "archives the practice AND its
+members together". Per #200, that binds the invariant, not the mechanism:
+
+- no member of an archived practice can sign in, keep a session, or be invited
+  in;
+- one act brings them all back.
+
+**The acceptance question above is answered yes.** An archived practice has no
+live members, and it can be brought back whole.
+
+**Design B would suspend every member instead.** It was rejected, because it
+would need all of the following:
+
+- a multi-row statement to get past the guard;
+- a stored record of who was already suspended, so a restore could tell them
+  apart;
+- `withPracticeLock`;
+- a new writer on #289's door list;
+- a `forceLogoutAt` bump.
+
+It would also leave the OWNER-invite hole open (T3 in the ADMIN-6 research). Design A has
+none of these costs, and #222's own recommendation was *"archive the PRACTICE and
+leave the user rows to the ordinary path."*
