@@ -905,34 +905,27 @@ describe('ADMIN-4 round 5 — the SQL invariants the migration claims, asserted 
     expect(sqlOnly).toContain('5::bigint * "previousDenominator"');
   });
 
-  it('⚠️ THE ACTOR CHECK TRIMS A NAMED UNICODE SET — `btrim/1` trims SPACE only', () => {
-    // ROUND 5's FINDING: round 4 closed `''` and left the CLASS. `btrim/1`'s
-    // default trim set is the space character and nothing else, so measured on
-    // PG 16.15 a TAB, `\n\r`, U+00A0, U+2007 and U+3000 were each ACCEPTED as
-    // the actor of a permanent, uncorrectable price change with a NULL FK.
+  it('⚠️ ROUND 6 — THE ACTOR MUST CONTAIN A LETTER OR DIGIT, by Unicode category through ICU — not an enumerated blank set', () => {
+    // ROUND 5 enumerated a trim set and asserted its NAMED codepoints here —
+    // an arm that could only ever test the codepoints the constraint already
+    // listed. Round 6 measured 21 invisible or control code points ACCEPTED
+    // as the only actor (chr(1), chr(27), chr(127), U+200E, U+00AD, U+2061,
+    // U+E0020, …). The class is closed by INVERTING the rule: at least one
+    // L*/Nd code point, classified by ICU (the Unicode Character Database),
+    // not by the server's libc locale — under "C", `[[:alnum:]]` refuses é,
+    // И and 王.
     //
-    // ⚠️ AND THE OBVIOUS REPAIRS LEAVE IT OPEN: `btrim(x, E' \t\n\r')` accepts
-    // U+00A0, and so does `x ~ '[^[:space:]]'` — POSIX `[:space:]` does not
-    // class NBSP here. A locale-dependent character class is the wrong
-    // instrument for a locale-independent invariant, so the set is ENUMERATED.
-    expect(sqlOnly, 'the single-argument btrim is back — it trims SPACE only')
-      .not.toMatch(/btrim\("changedByLabel"\)\)/);
-    expect(sqlOnly).toContain('btrim("changedByLabel",');
-    // Named codepoints, one per class of blank the finding measured as accepted.
-    for (const [codepoint, what] of [
-      ['\\00a0', 'U+00A0 no-break space'],
-      ['\\2007', 'U+2007 figure space'],
-      ['\\3000', 'U+3000 ideographic space'],
-      ['\\2028', 'U+2028 line separator'],
-      ['\\feff', 'U+FEFF byte-order mark'],
-    ] as const) {
-      expect(sqlOnly, `${what} is no longer trimmed — it is an accepted actor again`).toContain(
-        codepoint,
-      );
-    }
-    expect(sqlOnly, 'the ASCII control blanks (VT, FF) are no longer trimmed').toContain(
-      'chr(11) || chr(12)',
-    );
+    // ⚠️ SOURCE HALF ONLY. The behavioural half is the script's ACTOR sweep,
+    // whose must-refuse set is DERIVED from Unicode general category by an
+    // oracle that shares nothing with this spelling.
+    const at = sqlOnly.indexOf('ADD CONSTRAINT "platform_rates_actor_present"');
+    expect(at, 'the reader cannot find the actor constraint').toBeGreaterThan(-1);
+    const check = sqlOnly.slice(at, sqlOnly.indexOf(');', at));
+    expect(check, 'the actor rule is not "contains a letter or digit"').toContain("~ '[[:alnum:]]'");
+    expect(check, 'the class is read through the server locale, not ICU — "C" refuses non-ASCII names')
+      .toContain('COLLATE "und-x-icu"');
+    expect(check, 'an enumerated trim set is back — it can only ever close instances').not.toMatch(/btrim/);
+    expect(check, 'codepoints are being enumerated again').not.toMatch(/U&'/);
   });
 
   it('⚠️ THE TWO ENCODINGS OF #178’s BOUNDS ANSWER THE SAME LIST', () => {

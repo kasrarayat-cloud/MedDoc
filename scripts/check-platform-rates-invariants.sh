@@ -383,6 +383,101 @@ actor_case "an email"            "'kasra@example.com'"   accept
 actor_case "a CJK name"          "U&'\\738b\\5c0f\\660e'" accept
 actor_case "a Cyrillic name"     "U&'\\0418\\0432\\0430\\043d'" accept
 actor_case "an accented name"    "U&'\\00c9lodie'"       accept
+# ⚠️ ROUND 6 — the named inputs the round-6 pass measured as ACCEPTED under round
+# 5's enumerated trim set. Kept by name so a regression is legible in the log.
+actor_case "chr(1) SOH"          "chr(1)"                refuse
+actor_case "chr(27) ESC"         "chr(27)"               refuse
+actor_case "chr(127) DEL"        "chr(127)"              refuse
+actor_case "U+200E LRM (Cf)"     "U&'\\200e'"            refuse
+actor_case "U+00AD soft hyphen"  "U&'\\00ad'"            refuse
+actor_case "U+2800 braille blank" "U&'\\2800'"           refuse
+actor_case "U+2061 function app." "U&'\\2061'"           refuse
+actor_case "U+202E RLO"          "U&'\\202e'"            refuse
+actor_case "a single digit"      "'7'"                   accept
+actor_case "an Arabic name"      "U&'\\0639\\0644\\064a'" accept
+
+# ⚠️ ROUND 6 — THE SWEEP. The named cases above can only test code points
+# somebody thought of, which is exactly how round 5's enumeration passed its own
+# arm while 21 invisible actors were accepted. So the must-REFUSE set is DERIVED:
+# every assigned code point whose Unicode general category is NOT a letter (L*)
+# or decimal digit (Nd), per python's `unicodedata` — an oracle that shares
+# nothing with the constraint's spelling. Private-use (Co) is sampled, Cn and
+# surrogates are skipped. A sample of letters and digits from long-stable
+# scripts must be ACCEPTED, or the constraint strands the writer. Each attempt
+# runs in its own subtransaction and is rolled back; a refusal counts only if it
+# NAMES platform_rates_actor_present.
+qs() { printf '%s\n' "$1" | $PSQL -tA 2>&1; }
+SWEEP_SQL="$(python3 - <<'PY'
+import unicodedata
+ALNUM = {'Lu', 'Ll', 'Lt', 'Lm', 'Lo', 'Nd'}
+FILLERS = [0x115F, 0x1160, 0x3164, 0xFFA0]   # Lo, yet Default_Ignorable
+refuse, accept = [], []
+for cp in range(1, 0x110000):
+    if 0xD800 <= cp <= 0xDFFF:
+        continue
+    cat = unicodedata.category(chr(cp))
+    if cat == 'Cn':
+        continue
+    if cat == 'Co':
+        if cp in (0xE000, 0xF8FF, 0xF0000, 0x10FFFD):
+            refuse.append(cp)
+        continue
+    if cat not in ALNUM:
+        refuse.append(cp)
+for a, b in [(0x30, 0x39), (0x41, 0x5A), (0x61, 0x7A), (0xC0, 0x24F), (0x391, 0x3C9),
+             (0x410, 0x44F), (0x5D0, 0x5EA), (0x627, 0x64A), (0x660, 0x669), (0x905, 0x939),
+             (0xE01, 0xE30), (0x3041, 0x3096), (0x30A1, 0x30FA), (0x4E00, 0x4EFF), (0xAC00, 0xACFF)]:
+    for cp in range(a, b + 1):
+        if unicodedata.category(chr(cp)) in ALNUM and cp not in FILLERS:
+            accept.append(cp)
+def sweep(name, cps, want_refused):
+    w = 'true' if want_refused else 'false'
+    return f"""DO $sw$
+DECLARE cp int; odd int[] := '{{}}'; other int[] := '{{}}'; cname text; n int := 0;
+BEGIN
+  FOREACH cp IN ARRAY ARRAY[{','.join(map(str, cps))}]::int[] LOOP
+    n := n + 1;
+    BEGIN
+      INSERT INTO platform_rates (id,"marginNumerator","marginDenominator","changedByLabel") VALUES ('r6sw',3,2,chr(cp));
+      RAISE EXCEPTION 'r6sw accepted' USING ERRCODE = 'P0R06';
+    EXCEPTION
+      WHEN SQLSTATE 'P0R06' THEN IF {w} THEN odd := odd || cp; END IF;
+      WHEN check_violation THEN
+        GET STACKED DIAGNOSTICS cname = CONSTRAINT_NAME;
+        IF cname IS DISTINCT FROM 'platform_rates_actor_present' THEN other := other || cp;
+        ELSIF NOT {w} THEN odd := odd || cp; END IF;
+    END;
+  END LOOP;
+  RAISE NOTICE 'SWEEP {name} n=% odd=% other=% first=%', n, coalesce(array_length(odd, 1), 0),
+    coalesce(array_length(other, 1), 0),
+    coalesce((SELECT string_agg('U+' || upper(to_hex(x)), ',') FROM unnest(odd[1:12]) AS x), '-');
+END $sw$;"""
+print('BEGIN;')
+print(sweep('REFUSE', refuse, True))
+print(sweep('ACCEPT', accept, False))
+print(sweep('RESIDUAL', FILLERS, True))
+print('ROLLBACK;')
+print(f"SELECT 'UNIDATA {unicodedata.unidata_version} refuse-set {len(refuse)} accept-set {len(accept)}';")
+PY
+)"
+sw="$(qs "$SWEEP_SQL")"
+sweep_field() { printf '%s' "$sw" | sed -n "s/.*SWEEP $1 n=\([0-9]*\) odd=\([0-9]*\) other=\([0-9]*\) first=\([^ ]*\).*/\\$2/p" | head -1; }
+echo "  (oracle: $(printf '%s' "$sw" | grep -o 'UNIDATA [^|]*' | head -1))"
+rn="$(sweep_field REFUSE 1)"; rodd="$(sweep_field REFUSE 2)"; rother="$(sweep_field REFUSE 3)"; rfirst="$(sweep_field REFUSE 4)"
+an="$(sweep_field ACCEPT 1)"; aodd="$(sweep_field ACCEPT 2)"; aother="$(sweep_field ACCEPT 3)"; afirst="$(sweep_field ACCEPT 4)"
+xodd="$(sweep_field RESIDUAL 2)"
+if [ -z "$rn" ] || [ -z "$an" ]; then
+  unknown "the derived actor sweep did not run: $(printf '%s' "$sw" | grep -m1 ERROR)"
+else
+  if [ "$rn" -lt 1000 ]; then fail "the derived refuse-set held only ${rn} code points — near-vacuous"
+  elif [ "$rodd" != "0" ]; then fail "${rodd} of ${rn} non-letter, non-digit code points were ACCEPTED as the only actor (first: ${rfirst})"
+  elif [ "$rother" != "0" ]; then fail "${rother} refuse-set code points were refused by a DIFFERENT constraint — a refusal is evidence only when you know what refused"
+  else pass "every one of ${rn} non-letter, non-digit code points (derived from Unicode category) is refused BY NAME"; fi
+  if [ "$an" -lt 500 ]; then fail "the derived accept-set held only ${an} code points — near-vacuous"
+  elif [ "$aodd" != "0" ] || [ "$aother" != "0" ]; then fail "${aodd} real letters/digits were REFUSED (first: ${afirst}) — the writer is stranded"
+  else pass "all ${an} sampled letters and digits (Latin, Greek, Cyrillic, Hebrew, Arabic, Devanagari, Thai, kana, CJK, Hangul) are accepted"; fi
+  printf '  NOTE  known residual, recorded not hidden: %s of 4 Hangul fillers (Lo, Default_Ignorable) are accepted as an actor\n' "${xodd:-?}"
+fi
 
 # --------------------------------------------------------------------------
 echo '── REFUSAL — append-only, by this table’s own message (--attempt) ─────'

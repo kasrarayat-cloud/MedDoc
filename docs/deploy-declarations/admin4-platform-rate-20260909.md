@@ -245,3 +245,16 @@ Round 5 changed the CONTENT of two CHECKs (`bigint` cross-multiply) and one CHEC
 `previous*` under an advisory lock. **No constraint or trigger was added or
 removed**, so the migration's own self-verify block still expects 4 and 5, and the
 declared counts in this document still hold.
+
+**Round 6 changed CONTENT again, and still added and removed nothing.** The
+actor CHECK is no longer a trim set, because the enumeration left 21 invisible
+or control actors accepted. It is now "contains a letter or digit", with Unicode
+general category read through the ICU collation `und-x-icu`. Production and QA
+each hold that collation, counted read-only on 2026-09-10. The migration fails
+loudly where it is absent. The derivation trigger now refuses above READ
+COMMITTED, takes its lock before stamping `createdAt`, and reads a
+schema-qualified table. All three functions carry
+`SET search_path = pg_catalog, public, pg_temp`, and the self-verify block
+asserts those three pins as well as the 4 triggers and 5 CHECKs. So a
+post-deploy check of row 2 should also expect all three functions' `proconfig`
+to hold the pin.

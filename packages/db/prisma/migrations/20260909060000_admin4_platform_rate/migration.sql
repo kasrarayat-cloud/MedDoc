@@ -121,13 +121,49 @@ ALTER TABLE "platform_rates" ADD CONSTRAINT "platform_rates_previous_pair" CHECK
 -- score > 0 and are accepted. The positive controls matter as much as the
 -- refusals — a constraint that refused every actor would score full marks here
 -- and make the ADMIN-4 writer unusable.
+--
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ⚠️ ROUND 6 — THE PARAGRAPH ABOVE IS SUPERSEDED: THE ENUMERATION CLOSED
+-- INSTANCES AND LEFT THE CLASS, THE SAME SHAPE IT CRITICISES IN ROUND 4.
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- Measured on PG 16.15 against round 5's enumerated trim set: 21 inputs were
+-- ACCEPTED as the only recorded actor, each a single code point with
+-- changedByUserId NULL — chr(1), chr(27), chr(127) (ASCII controls, which the
+-- paragraph above claims are covered), U+200E/200F (LRM/RLM, category Cf —
+-- the SAME category as the enumerated U+200B and U+FEFF), U+00AD, U+034F,
+-- U+061C, U+180E, U+2061–2064, U+202A/202E, U+2066/2069, U+FE0F, U+E0020,
+-- U+1D159 and U+2800. A trim set is an open list of "things that are blank";
+-- nobody can finish writing it down.
+--
+-- So the rule is INVERTED to a class that is closed and DERIVED: the actor
+-- must contain AT LEAST ONE LETTER OR DIGIT — Unicode general category L* or
+-- Nd — rather than "must not be only blanks". Every control, format, space,
+-- mark, symbol and punctuation code point fails it by construction, without
+-- being named.
+--
+-- ⚠️ `COLLATE "und-x-icu"` IS WHAT MAKES IT LOCALE-INDEPENDENT, WHICH WAS
+-- ROUND 5's OBJECTION TO A CHARACTER CLASS, AND THE OBJECTION WAS RIGHT FOR
+-- libc. Postgres classifies regex characters by the COLLATION OF THE INPUT:
+-- under libc "C" `[[:alnum:]]` is ASCII-only (measured: é, И and 王 all
+-- false — a Cyrillic or CJK name would be refused and the writer stranded);
+-- under a libc locale it is whatever glibc says. Under an ICU collation it is
+-- ICU's `u_isalnum` — the Unicode Character Database's general category, the
+-- same on every server. Measured on this image: é, И, 王, ١ (Arabic-Indic one)
+-- true; U+200E, U+00AD, U+2800, U+E0020, '.', '²' false. `und-x-icu` exists
+-- wherever Postgres was built with ICU: counted read-only 2026-09-10 on the
+-- production and QA databases (1 each). On a server without ICU this migration
+-- FAILS LOUDLY at this line, never silently.
+--
+-- ⚠️ KNOWN RESIDUAL, RECORDED RATHER THAN HIDDEN: the four Hangul fillers
+-- U+115F, U+1160, U+3164 and U+FFA0 are general category Lo — Unicode classes
+-- them as LETTERS — yet render as nothing (they are Default_Ignorable). A label
+-- made ONLY of fillers is accepted. Postgres 16 exposes no Default_Ignorable
+-- property, and closing them here would mean enumerating code points again —
+-- the move this block exists to stop. `check-platform-rates-invariants.sh`
+-- reports them as a residual on every run so the gap stays visible.
 ALTER TABLE "platform_rates" ADD CONSTRAINT "platform_rates_actor_present" CHECK (
-  length(btrim("changedByLabel",
-        E' \t\n\r' || chr(11) || chr(12)
-     || U&'\0085\00a0\1680\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200a'
-     || U&'\2028\2029\202f\205f\3000'
-     || U&'\200b\200c\200d\2060\feff'
-  )) > 0
+  ("changedByLabel" COLLATE "und-x-icu") ~ '[[:alnum:]]'
 );
 
 -- ⚠️ AND THE PREVIOUS PAIR OBEYS THE SAME BOUNDS AS THE CURRENT ONE — ROUND 4.
