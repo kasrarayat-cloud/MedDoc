@@ -47,6 +47,8 @@ import {
   type NativeTemplateListItem,
 } from './note-format/native-template-manager';
 import { PracticeMembersPanel } from './practice-members-panel';
+import { PracticeSlugClaim } from './practice-slug-claim';
+import { isMachineSlug } from '@/lib/practice-write';
 import {
   listOutstandingInvites,
   listPracticeMembers,
@@ -340,6 +342,24 @@ export default async function SettingsPage({
     />
   );
 
+  // ── ADMIN-2a — the practice address name (owners only) ──────────────────
+  // ⚠️ READ AND DRAWN ONLY FOR AN OWNER. `claimPracticeSlug` re-reads the role
+  // and the slug itself; `claimable` only decides which control is drawn, so a
+  // doctor is not offered a claim the server will refuse.
+  const practiceRow =
+    canAdminister && user.practiceId
+      ? await prisma.practice.findUnique({
+          where: { id: user.practiceId },
+          select: { slug: true, isActive: true },
+        })
+      : null;
+  const practiceAddressPanel = practiceRow ? (
+    <PracticeSlugClaim
+      currentSlug={practiceRow.slug}
+      claimable={practiceRow.isActive && isMachineSlug(practiceRow.slug)}
+    />
+  ) : null;
+
   // Native-DOCX certify-once workspace (flag-gated). Flag OFF → nativeSlot is
   // null and the note-format section renders byte-identical to today.
   //
@@ -417,7 +437,12 @@ export default async function SettingsPage({
         title: 'Members',
         subtitle:
           'Everyone in your practice. Signing is the only thing a role changes — a tech prepares and delivers notes, and cannot sign them.',
-        content: membersPanel,
+        content: (
+          <>
+            {practiceAddressPanel}
+            {membersPanel}
+          </>
+        ),
       },
       {
         id: 'note-format',
@@ -860,6 +885,7 @@ export default async function SettingsPage({
             title="Members"
             subtitle="Everyone in your practice. Signing is the only thing a role changes — a tech prepares and delivers notes, and cannot sign them."
           >
+            {practiceAddressPanel}
             {membersPanel}
           </Section>
 
