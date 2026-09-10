@@ -3,11 +3,13 @@
 // ----------------------------------------------------------------------------
 // The claims, each with the arm that would fail if it were false:
 //   · it confirms EXACTLY the ten, and passes the 43 through BY REFERENCE
-//   · it refuses when anything differs from the state the decisions were
-//     made against — a drifted proposal, a row already certified, a count
-//   · the table itself is sound: ten distinct ids, one manual, two
+//   · it refuses when ANY attribute differs from the proposal the decisions
+//     were made against — the drift matrix is DERIVED from the schema's keys,
+//     so an attribute added later is covered or this file goes red
+//   · a second run, a wrong version, a wrong count refuse
+//   · the table itself is sound: ten distinct ids, one kind change, two
 //     visit_metadata, every confirmed concept registered
-//   · the arguments refuse vacuous and malformed counts
+//   · the audit accounting and the arguments refuse vacuous input
 // ============================================================================
 import { describe, expect, it, vi } from 'vitest';
 
@@ -18,16 +20,20 @@ import { isRegisteredConcept } from '../concept-registry';
 import { SemanticMappingSchema, type SemanticMapping } from '../ir';
 import {
   RULING_312,
+  canonicalJson,
   countFailedGuards,
+  missingAuditTargets,
   parseConfirmArgs,
   planConfirmation,
+  withoutAddress,
   type ConfirmField,
   type ConfirmTable,
 } from '../confirm-plan';
 
 const VERSION = RULING_312.compiledVersionId;
+const DRIFT = 'decided fields whose proposal DRIFTED from the judged one';
 
-function mapping(fieldId: string, over: Partial<SemanticMapping> = {}): SemanticMapping {
+function certifiedMapping(fieldId: string): SemanticMapping {
   return SemanticMappingSchema.parse({
     fieldId,
     sourceType: 'extraction',
@@ -43,27 +49,23 @@ function mapping(fieldId: string, over: Partial<SemanticMapping> = {}): Semantic
     unknownPolicy: 'blank',
     practiceDefault: null,
     status: 'certified',
-    ...over,
   });
 }
 
 const hex24 = (n: number) => n.toString(16).padStart(24, '0');
 
-/** The 53-field shape as the re-issue left it: 43 certified, the ten as proposed. */
+/** The 53-field shape as the re-issue left it: 43 certified, the ten exactly as judged. */
 function reissued(): ConfirmField[] {
   const decided: ConfirmField[] = RULING_312.decisions.map((d) => ({
     fieldId: d.fieldId,
     displayOrder: d.displayOrder,
     originalLabel: d.label,
-    mapping: mapping(d.fieldId, {
-      sourceType: d.proposed.sourceType,
-      clinicalConcept: d.proposed.clinicalConcept,
-      status: d.proposed.status,
-    }),
+    // Through the STRICT schema, as the writer's reader would return it.
+    mapping: SemanticMappingSchema.parse({ fieldId: d.fieldId, ...d.judged }),
   }));
   const certified: ConfirmField[] = Array.from({ length: 43 }, (_, i) => {
     const fieldId = `ttf_${hex24(1000 + i)}`;
-    return { fieldId, displayOrder: 100 + i, originalLabel: `Certified ${i}`, mapping: mapping(fieldId) };
+    return { fieldId, displayOrder: 100 + i, originalLabel: `Certified ${i}`, mapping: certifiedMapping(fieldId) };
   });
   return [...decided, ...certified].sort((a, b) => a.displayOrder - b.displayOrder);
 }
@@ -77,6 +79,15 @@ function plan(fields = reissued(), table: ConfirmTable = RULING_312, expectOver 
 function refusedOn(p: ReturnType<typeof plan>): string[] {
   expect(p.ok).toBe(false);
   return p.ok ? [] : p.failed;
+}
+
+const PATIENT = 'ttf_e59e5a33c5975f8b3744dc2f';
+
+function withPatient(over: Partial<SemanticMapping>): ConfirmField[] {
+  const fields = reissued();
+  const i = fields.findIndex((f) => f.fieldId === PATIENT);
+  fields[i] = { ...fields[i]!, mapping: SemanticMappingSchema.parse({ ...fields[i]!.mapping, ...over }) };
+  return fields;
 }
 
 describe('#312 · the planner confirms exactly the ten', () => {
@@ -113,16 +124,15 @@ describe('#312 · the planner confirms exactly the ten', () => {
     if (!p.ok) throw new Error('expected ok');
     for (const d of RULING_312.decisions) {
       const i = fields.findIndex((f) => f.fieldId === d.fieldId);
-      const before = fields[i]!.mapping;
       const after = p.payload[i]!;
       expect(after.sourceType).toBe(d.confirmAs.sourceType);
       expect(after.clinicalConcept).toBe(d.confirmAs.clinicalConcept);
       expect(after.status).toBe('certified');
       const strip = (m: SemanticMapping) => {
-        const { sourceType: _s, clinicalConcept: _c, status: _t, ...rest } = m;
+        const { sourceType: _s, clinicalConcept: _c, status: _t, ...rest } = withoutAddress(m);
         return rest;
       };
-      expect(strip(after)).toEqual(strip(before));
+      expect(canonicalJson(strip(after))).toBe(canonicalJson(strip(fields[i]!.mapping)));
     }
   });
 
@@ -149,58 +159,68 @@ describe('#312 · the planner confirms exactly the ten', () => {
   });
 });
 
-describe('#312 · it refuses anything that is not the state the decisions were made against', () => {
-  it('⚠️ a DRIFTED proposal refuses the whole act — a doctor edit is never overwritten', () => {
-    const fields = reissued();
-    const i = fields.findIndex((f) => f.fieldId === 'ttf_e59e5a33c5975f8b3744dc2f');
-    fields[i] = { ...fields[i]!, mapping: { ...fields[i]!.mapping, sourceType: 'manual', clinicalConcept: null } };
-    expect(refusedOn(plan(fields))).toContain('decided fields whose proposal DRIFTED from the judged one');
+describe('#312 · ANY drift from the judged proposal refuses the whole act', () => {
+  // ⚠️ DERIVED FROM THE SCHEMA, NOT WRITTEN BY HAND. The first draft compared
+  // seven attributes, and the refutation pass certified an edited Marital row
+  // (`blankPolicy`, `approvedSynonyms`) that nobody judged. Every key the
+  // mapping schema has, except the address, must refuse when it alone moves.
+  // A key the schema gains later has no alternate here and fails the coverage
+  // arm below — the matrix cannot silently fall behind the schema.
+  const ALTERNATE: Record<string, unknown> = {
+    sourceType: 'extraction',
+    clinicalConcept: 'visit_metadata.patient_age',
+    expectedDataType: 'number',
+    polarityBehavior: 'affirmative_only',
+    temporality: 'historical',
+    laterality: 'optional',
+    unitPolicy: 'optional',
+    approvedSynonyms: ['Single'],
+    conceptScope: ['visit_metadata.patient_name'],
+    required: true,
+    blankPolicy: 'requires_input',
+    unknownPolicy: 'requires_input',
+    unmentionedPolicy: 'omit',
+    practiceDefault: 'Jane Doe',
+    status: 'needs_confirmation',
+  };
+  const KEYS = Object.keys(SemanticMappingSchema.shape).filter((k) => k !== 'fieldId');
+
+  it('⚠️ coverage: every schema key has an alternate, and nothing else does', () => {
+    expect([...KEYS].sort()).toEqual(Object.keys(ALTERNATE).sort());
   });
 
-  it('a policy that appeared since the judgement is drift', () => {
-    const fields = reissued();
-    const i = fields.findIndex((f) => f.fieldId === 'ttf_86cf11d77e63d9e64a6b045b');
-    fields[i] = { ...fields[i]!, mapping: { ...fields[i]!.mapping, unmentionedPolicy: 'omit' } };
-    expect(refusedOn(plan(fields))).toContain('decided fields whose proposal DRIFTED from the judged one');
+  it.each(KEYS)('⚠️ drift in `%s` alone refuses', (key) => {
+    const fields = withPatient({ [key]: ALTERNATE[key] } as Partial<SemanticMapping>);
+    const i = fields.findIndex((f) => f.fieldId === PATIENT);
+    // The alternate really differs — an arm whose mutation equals the original proves nothing.
+    expect(canonicalJson(withoutAddress(fields[i]!.mapping))).not.toBe(
+      canonicalJson(RULING_312.decisions.find((d) => d.fieldId === PATIENT)!.judged),
+    );
+    expect(refusedOn(plan(fields))).toContain(DRIFT);
   });
 
-  // ⚠️ ONE ARM PER COMPARED ATTRIBUTE, EACH MOVING ONLY THAT ATTRIBUTE. The arm
-  // above moves sourceType AND concept together, so a check that stopped
-  // comparing sourceType stayed green behind the concept check. Measured: that
-  // mutation left all 33 arms passing before these were added.
-  it.each([
-    ['sourceType only', { sourceType: 'extraction' as const }],
-    ['concept only', { clinicalConcept: 'visit_metadata.patient_age' }],
-    ['status only', { status: 'needs_confirmation' as const }],
-    ['practiceDefault only', { practiceDefault: 'Jane Doe' }],
-  ])('⚠️ drift in %s refuses', (_what, over) => {
-    const fields = reissued();
-    const i = fields.findIndex((f) => f.fieldId === 'ttf_e59e5a33c5975f8b3744dc2f');
-    expect(fields[i]!.mapping.clinicalConcept).toBe('visit_metadata.patient_name');
-    fields[i] = { ...fields[i]!, mapping: { ...fields[i]!.mapping, ...over } };
-    expect(refusedOn(plan(fields))).toContain('decided fields whose proposal DRIFTED from the judged one');
-  });
-
-  it('a moved displayOrder is drift', () => {
-    const fields = reissued();
-    const i = fields.findIndex((f) => f.fieldId === 'ttf_e59e5a33c5975f8b3744dc2f');
-    fields[i] = { ...fields[i]!, displayOrder: 99 };
-    expect(refusedOn(plan(fields))).toContain('decided fields whose proposal DRIFTED from the judged one');
+  it('a REORDERED synonym list is a different proposal', () => {
+    expect(refusedOn(plan(withPatient({ approvedSynonyms: ['Name', 'Pt Name', 'Patient Name'] })))).toContain(DRIFT);
   });
 
   it('a relabelled field is drift, even with an identical mapping', () => {
     const fields = reissued();
     const i = fields.findIndex((f) => f.fieldId === 'ttf_73ef2a9a25aa550b8ad8e170');
     fields[i] = { ...fields[i]!, originalLabel: 'Date of birth' };
-    expect(refusedOn(plan(fields))).toContain('decided fields whose proposal DRIFTED from the judged one');
+    expect(refusedOn(plan(fields))).toContain(DRIFT);
   });
 
-  it('a decided row that is already certified refuses — the act has run, or someone confirmed it', () => {
+  it('a moved displayOrder is drift', () => {
     const fields = reissued();
-    const i = fields.findIndex((f) => f.fieldId === 'ttf_ec2796a89b78ab1fb6f2b889');
-    fields[i] = { ...fields[i]!, mapping: { ...fields[i]!.mapping, status: 'certified' } };
-    const failed = refusedOn(plan(fields));
-    expect(failed).toContain('decided fields that are ALREADY certified');
+    const i = fields.findIndex((f) => f.fieldId === PATIENT);
+    fields[i] = { ...fields[i]!, displayOrder: 99 };
+    expect(refusedOn(plan(fields))).toContain(DRIFT);
+  });
+});
+
+describe('#312 · it refuses anything else that is not the judged state', () => {
+  it('a decided row that is already certified refuses — the act has run, or someone confirmed it', () => {
+    expect(refusedOn(plan(withPatient({ status: 'certified' })))).toContain('decided fields that are ALREADY certified');
   });
 
   it('⚠️ RE-RUNNING the planner on its own output refuses — the act cannot apply twice', () => {
@@ -224,11 +244,10 @@ describe('#312 · it refuses anything that is not the state the decisions were m
 
   it('a decision naming a field that is not on the version refuses', () => {
     const fields = reissued().filter((f) => f.fieldId !== 'ttf_ef6e199276f1691e18cf84d8');
-    const failed = refusedOn(plan(fields));
-    expect(failed).toContain('decisions naming a field NOT on this version');
+    expect(refusedOn(plan(fields))).toContain('decisions naming a field NOT on this version');
   });
 
-  it('the wrong compiled version refuses before anything else matters', () => {
+  it('the wrong compiled version refuses', () => {
     const p = planConfirmation({
       compiledVersionId: '18a7ae19-0d23-44a5-8e98-5459081782be',
       fields: reissued(),
@@ -240,14 +259,40 @@ describe('#312 · it refuses anything that is not the state the decisions were m
 
   it('⚠️ an EMPTY field set refuses — every count would otherwise read 0 === 0', () => {
     const empty: ConfirmTable = { ...RULING_312, decisions: [] };
-    const failed = refusedOn(plan([], empty, { fields: 0, alreadyCertified: 0, confirm: 0 }));
-    expect(failed).toContain('the field set is non-empty');
+    expect(refusedOn(plan([], empty, { fields: 0, alreadyCertified: 0, confirm: 0 }))).toContain(
+      'the field set is non-empty',
+    );
   });
 
   it('a duplicated decision refuses', () => {
     const dup: ConfirmTable = { ...RULING_312, decisions: [...RULING_312.decisions, RULING_312.decisions[0]!] };
-    const failed = refusedOn(plan(reissued(), dup, { confirm: 11 }));
-    expect(failed).toContain('decisions sharing a fieldId');
+    expect(refusedOn(plan(reissued(), dup, { confirm: 11 }))).toContain('decisions sharing a fieldId');
+  });
+
+  it('a decision judged against an already-certified proposal refuses', () => {
+    const [first, ...rest] = RULING_312.decisions;
+    const bad: ConfirmTable = { ...RULING_312, decisions: [{ ...first!, judged: { ...first!.judged, status: 'certified' } }, ...rest] };
+    expect(refusedOn(plan(reissued(), bad))).toContain('decisions judged against an already-CERTIFIED proposal');
+  });
+
+  it('⚠️ a table confirming a MANUAL row WITH a concept refuses — manual carries no evidence', () => {
+    const bad: ConfirmTable = {
+      ...RULING_312,
+      decisions: RULING_312.decisions.map((d) =>
+        d.confirmAs.sourceType === 'manual' ? { ...d, confirmAs: { sourceType: 'manual', clinicalConcept: 'plan' } } : d,
+      ),
+    };
+    expect(refusedOn(plan(reissued(), bad))).toContain('manual confirmations carrying a concept');
+  });
+
+  it('⚠️ a table confirming a MODEL-FILLED row with NO concept refuses — the writer would certify an empty slot', () => {
+    const bad: ConfirmTable = {
+      ...RULING_312,
+      decisions: RULING_312.decisions.map((d) =>
+        d.label === 'Marital status' ? { ...d, confirmAs: { sourceType: 'extraction', clinicalConcept: null } } : d,
+      ),
+    };
+    expect(refusedOn(plan(reissued(), bad))).toContain('non-manual confirmations carrying NO concept');
   });
 
   it('a mapping addressed to a different field refuses', () => {
@@ -264,10 +309,7 @@ describe('#312 · it refuses anything that is not the state the decisions were m
   });
 
   it('a refusal reports EVERY failing guard, not just the first', () => {
-    const fields = reissued();
-    const i = fields.findIndex((f) => f.fieldId === 'ttf_e59e5a33c5975f8b3744dc2f');
-    fields[i] = { ...fields[i]!, mapping: { ...fields[i]!.mapping, status: 'certified' } };
-    const failed = refusedOn(plan(fields, RULING_312, { fields: 99 }));
+    const failed = refusedOn(plan(withPatient({ status: 'certified' }), RULING_312, { fields: 99 }));
     expect(failed.length).toBeGreaterThanOrEqual(3);
   });
 });
@@ -281,11 +323,15 @@ describe('#312 · the table itself', () => {
     for (const d of ds) expect(d.fieldId).toMatch(/^ttf_[a-f0-9]{24}$/);
   });
 
+  it('every judged proposal is a valid mapping', () => {
+    for (const d of ds) expect(() => SemanticMappingSchema.parse({ fieldId: d.fieldId, ...d.judged })).not.toThrow();
+  });
+
   it('⚠️ exactly ONE row is not confirmed as proposed, and it is telehealth', () => {
     const changed = ds.filter(
       (d) =>
-        d.confirmAs.sourceType !== d.proposed.sourceType ||
-        d.confirmAs.clinicalConcept !== d.proposed.clinicalConcept,
+        d.confirmAs.sourceType !== d.judged.sourceType ||
+        d.confirmAs.clinicalConcept !== d.judged.clinicalConcept,
     );
     expect(changed.map((d) => d.label)).toEqual(['Telehealth consent']);
   });
@@ -308,6 +354,27 @@ describe('#312 · the table itself', () => {
   });
 });
 
+describe('#312 · canonical comparison', () => {
+  it('key order does not matter, absent and undefined are the same, array order does', () => {
+    expect(canonicalJson({ a: 1, b: [1, 2] })).toBe(canonicalJson({ b: [1, 2], a: 1 }));
+    expect(canonicalJson({ a: 1, u: undefined })).toBe(canonicalJson({ a: 1 }));
+    expect(canonicalJson({ b: [1, 2] })).not.toBe(canonicalJson({ b: [2, 1] }));
+    expect(canonicalJson({ n: null })).not.toBe(canonicalJson({}));
+  });
+});
+
+describe('#312 · the audit accounting', () => {
+  it('names exactly what is owed and missing, in order, once', () => {
+    expect(missingAuditTargets(['a', 'b', 'c'], ['b'])).toEqual(['a', 'c']);
+    expect(missingAuditTargets(['a', 'b'], ['a', 'b', 'b'])).toEqual([]);
+    expect(missingAuditTargets(['a', 'a'], [])).toEqual(['a']);
+  });
+
+  it('⚠️ an empty present set means EVERYTHING is owed, never nothing', () => {
+    expect(missingAuditTargets(['a', 'b'], [])).toEqual(['a', 'b']);
+  });
+});
+
 describe('#312 · the arguments', () => {
   const OK = [
     '--compiled-version', VERSION,
@@ -317,13 +384,19 @@ describe('#312 · the arguments', () => {
   ];
 
   it('parses the declared invocation, dry run by default', () => {
-    const r = parseConfirmArgs(OK);
-    expect(r).toEqual({
+    expect(parseConfirmArgs(OK)).toEqual({
       ok: true,
-      args: { compiledVersion: VERSION, expectFields: 53, expectCertified: 43, expectConfirm: 10, commit: false },
+      args: {
+        compiledVersion: VERSION,
+        expectFields: 53,
+        expectCertified: 43,
+        expectConfirm: 10,
+        commit: false,
+        reissueAudit: false,
+      },
     });
-    const c = parseConfirmArgs([...OK, '--commit']);
-    expect(c.ok && c.args.commit).toBe(true);
+    const c = parseConfirmArgs([...OK, '--commit', '--reissue-audit']);
+    expect(c.ok && c.args.commit && c.args.reissueAudit).toBe(true);
   });
 
   it.each([
@@ -331,6 +404,7 @@ describe('#312 · the arguments', () => {
     [[...OK.slice(0, 2), '--expect-fields', '53x', ...OK.slice(4)], 'plain integer'],
     [['--compiled-version', 'd2120cdd', ...OK.slice(2)], 'full uuid'],
     [[...OK, '--expect-fields', '53'], 'twice'],
+    [[...OK, '--commit', '--commit'], 'twice'],
     [[...OK, '--force'], 'unknown'],
     [['--compiled-version', VERSION, '--expect-fields', '0', '--expect-certified', '0', '--expect-confirm', '0'], 'vacuously'],
     [['--compiled-version', VERSION, '--expect-fields', '53', '--expect-certified', '43', '--expect-confirm', '9'], 'must equal'],
