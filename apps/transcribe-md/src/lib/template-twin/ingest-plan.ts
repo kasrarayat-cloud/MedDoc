@@ -403,7 +403,8 @@ export function planTransfer(input: {
    * every control with a shared tag was refused because a DIFFERENT key of
    * theirs was ambiguous.
    *
-   * ⚠️ MEASURED ON THE CERTIFIED VERSION ITSELF (`18a7ae19`), NOT INFERRED —
+   * ⚠️ MEASURED ON THE CERTIFIED VERSION ITSELF
+   * (`18a7ae19-0d23-44a5-8e98-5459081782be`), NOT INFERRED —
    * and the first version of this comment got it wrong, which is why the query
    * is written out below rather than the numbers alone:
    *
@@ -411,10 +412,22 @@ export function planTransfer(input: {
    *                FROM template_twin_field_definitions fd
    *                LEFT JOIN template_twin_semantic_mappings m
    *                       ON m."fieldDefinitionId" = fd.id
-   *                WHERE fd."compiledVersionId" = '<the certified version>'),
+   *                WHERE fd."compiledVersionId" = '18a7ae19-0d23-44a5-8e98-5459081782be'),
    *          g AS (SELECT f.*, count(*) OVER (PARTITION BY tag) AS n FROM f)
    *     SELECT "sourceType", CASE WHEN n > 1 THEN 'shared' ELSE 'unique' END, count(*)
    *     FROM g GROUP BY 1, 2;
+   *     -- -> extraction/shared 23 · extraction/unique 20 · manual/shared 3 · manual/unique 7
+   *
+   *     SELECT btrim(fd."rendererBinding"->>'tag') AS tag, count(*) AS n
+   *     FROM template_twin_field_definitions fd
+   *     WHERE fd."compiledVersionId" = '18a7ae19-0d23-44a5-8e98-5459081782be'
+   *     GROUP BY 1 HAVING count(*) > 1 ORDER BY n DESC, 1;
+   *     -- -> the eight shared tags below; count(DISTINCT tag) over all 53 is 35
+   *
+   * ⚠️ ROUND THREE FOUND THE FIRST QUERY UNRUNNABLE AS WRITTEN: its WHERE held a
+   * placeholder, and the text-typed column matched nothing — a silent zero with
+   * exit 0. Both queries were re-run read-only against production before this
+   * comment was written, and their outputs are the numbers quoted here.
    *
    * (Structure and blank-form metadata only — no patient data is read.)
    * **EIGHT** tags are shared,

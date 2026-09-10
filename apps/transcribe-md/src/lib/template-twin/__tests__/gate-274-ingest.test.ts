@@ -576,39 +576,127 @@ describe("#274 · ⚠️ AMBIGUITY IS PER-KEY — the owner's form proved it", (
     expect(plan.reproposed).toEqual([T]);
   });
 
-  it('⚠️ the key encoding is INJECTIVE — stated as the property, not a fixture', () => {
-    // The regression guard for the whole class: no two DISTINCT (partName, tag,
-    // kind) triples may produce the same key, whatever bytes they contain.
+  // The NUL character, built rather than typed: a literal control character in
+  // a source file is invisible in review, and an escape in a template literal is
+  // one keystroke away from being a different string.
+  const NUL = String.fromCharCode(0);
+
+  it('⚠️ a DIGIT in a part name cannot absorb the tag\'s length prefix — the partName segment is pinned', () => {
+    // ⚠️ ROUND THREE: no arm pinned the partName length prefix. Deleting it from
+    // that one segment (`tag${b.partName}`, or with only a NUL before it) left
+    // the whole suite green, because no fixture partName held a DIGIT, and real
+    // OOXML part names do ('word/header1.xml'). With the prefix gone these two
+    // collide: (partName 'a3<NUL>', tag 'x') and (partName 'a', tag '1<NUL>x').
+    const S = 'ttf_' + 's'.repeat(24);
+    const T = 'ttf_' + 't'.repeat(24);
+    const src = ir([field({ fieldId: S, tag: `1${NUL}x`, label: 'A', partName: 'a' })]);
+    const tgt = ir([field({ fieldId: T, tag: 'x', label: 'B', partName: `a3${NUL}` })]);
+    const certs = new Map([[S, certified(S, 'concept_S')]]);
+
+    const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
+    expect(
+      plan.transferred,
+      'a digit-bearing partName absorbed a length prefix and carried a disposition across parts',
+    ).toEqual([]);
+    expect(plan.reproposed).toEqual([T]);
+  });
+
+  it.each([
+    // Round three's two counterexamples, each let through by a WEAKER length
+    // encoding with the whole suite green. The first needs no NUL anywhere:
+    // printable part names the zip path would accept.
+    ['a length prefix without its NUL', { partName: '1', tag: 'abcdefghi1z' }, { partName: '11abcdefghi', tag: 'z' }],
+    ['a NUL placed before the length', { partName: '1', tag: `abcdefgh${NUL}2zz` }, { partName: `${NUL}12abcdefgh`, tag: 'zz' }],
+  ])('⚠️ %s cannot make two parts collide', (_what, s, t) => {
+    const S = 'ttf_' + 's'.repeat(24);
+    const T = 'ttf_' + 't'.repeat(24);
+    const src = ir([field({ fieldId: S, ...s, label: 'A' })]);
+    const tgt = ir([field({ fieldId: T, ...t, label: 'B' })]);
+    const certs = new Map([[S, certified(S, 'concept_S')]]);
+
+    const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
+    expect(plan.transferred).toEqual([]);
+    expect(plan.reproposed).toEqual([T]);
+  });
+
+  it('⚠️ a field\'s TWO keys encode partName and tag identically — they differ only by the kind', () => {
+    // Round three's verifier found a second class inside the first finding: drop
+    // the prefix from the MATCH line only and the two keys of ONE field diverge.
+    // The ambiguity gates stay satisfied while the lookup runs on the collided
+    // match key. Two readers of one identity must never disagree about it —
+    // asserted without naming the encoding, so a legitimate change of encoding
+    // does not have to touch this arm.
+    const suffixes = new Map<string, string>();
+    const cases: Array<[string, string, string]> = [
+      ['word/document.xml', 'plan', 'narrative_text'],
+      [`a3${NUL}`, 'x', 'short_text'],
+      ['word/header1.xml', `1${NUL}x`, 'number'],
+      ['1', 'abcdefghi1z', 'short_text'],
+      ['11abcdefghi', 'z', 'number'],
+    ];
+    for (const [partName, tag, kind] of cases) {
+      const pair = identityKeyPairs(field({ fieldId: 'ttf_' + 'q'.repeat(24), partName, tag, kind, label: 'L' }))[1]!;
+      expect(pair.match.startsWith(pair.ambiguity), JSON.stringify([partName, tag])).toBe(true);
+      const suffix = pair.match.slice(pair.ambiguity.length);
+      const prior = suffixes.get(kind);
+      if (prior !== undefined) expect(suffix, `kind ${kind} encoded differently for two fields`).toBe(prior);
+      suffixes.set(kind, suffix);
+    }
+    // POSITIVE CONTROL: different kinds really are distinguished.
+    expect(suffixes.size).toBe(3);
+    expect(new Set(suffixes.values()).size).toBe(3);
+  });
+
+  it('⚠️ the key encoding is INJECTIVE over an alphabet that can confuse a length prefix', () => {
+    // ⚠️ ROUND THREE: the previous version of this arm was a FIXTURE — no
+    // component held a digit and `kind` never varied, so `${s.length}${s}` (no
+    // NUL) passed it while colliding on printable, NUL-free input. This alphabet
+    // carries digits, NUL, a space, two-digit lengths, a real part name and both
+    // of round three's counterexamples, and the kind varies.
     //
-    // ⚠️ THE TAG KEY ONLY, AND THE FIRST VERSION OF THIS ARM GOT THAT WRONG.
-    // It looped over BOTH pairs and keyed the expectation on (partName, tag) —
-    // but the `fid` key does not depend on either, so every iteration reused the
-    // same fieldId and the arm reported the fid key as a collision with itself.
-    // The arm failed, which is the arm working; the defect was in the fixture.
-    const parts = ['a', 'a\u0000b', 'a\u0000', '', 'ab'];
-    const tags = ['x', 'b\u0000x', '\u0000x', 'bx'];
+    // ⚠️ THE TAG IS TRIMMED BY DESIGN (an identity is its trimmed tag), so no tag
+    // atom carries leading or trailing whitespace — NUL is not whitespace — and
+    // none is blank (a blank tag is not an identity at all).
+    const parts = [
+      '', 'a', '1', NUL, '11', `1${NUL}`, 'a1', `${NUL}1`, `a3${NUL}`,
+      `${NUL}12abcdefgh`, ' 12abcdefgh', 'abcdefghi1', '11abcdefghi', 'word/header1.xml',
+    ];
+    const tags = [
+      'a', '1', NUL, '11', `1${NUL}`, 'a1', `${NUL}1`, `1${NUL}x`, 'x', 'z', 'zz',
+      'abcdefghi1z', `abcdefgh${NUL}2zz`, '1abcdefghij',
+    ];
+    const kinds = ['short_text', 'number'];
+    // The alphabet itself is sound: no duplicates, no tag the trim would change.
+    expect(new Set(parts).size).toBe(parts.length);
+    expect(new Set(tags).size).toBe(tags.length);
+    for (const t of tags) expect(t.trim(), JSON.stringify(t)).toBe(t);
+
     const seen = new Map<string, string>();
     let built = 0;
     for (const partName of parts) {
       for (const tag of tags) {
-        const f = field({ fieldId: 'ttf_' + 'q'.repeat(24), tag, label: 'L', partName });
-        const tagPair = identityKeyPairs(f)[1];
-        expect(tagPair, `no tag key for partName=${JSON.stringify(partName)} tag=${JSON.stringify(tag)}`).toBeDefined();
-        for (const key of [tagPair!.match, tagPair!.ambiguity]) {
-          const input = JSON.stringify([partName, tag, key === tagPair!.match]);
-          const prior = seen.get(key);
-          if (prior !== undefined) {
-            expect(prior, `two DISTINCT inputs share the key ${JSON.stringify(key)}`).toBe(input);
+        for (const kind of kinds) {
+          const pair = identityKeyPairs(field({ fieldId: 'ttf_' + 'q'.repeat(24), tag, kind, label: 'L', partName }))[1];
+          expect(pair, `no tag key for ${JSON.stringify([partName, tag])}`).toBeDefined();
+          const keys: Array<[string, string]> = [
+            [pair!.match, JSON.stringify(['match', partName, tag, kind])],
+            [pair!.ambiguity, JSON.stringify(['ambiguity', partName, tag])],
+          ];
+          for (const [key, input] of keys) {
+            const prior = seen.get(key);
+            if (prior !== undefined) {
+              expect(prior, `two DISTINCT inputs share the key ${JSON.stringify(key)}`).toBe(input);
+            }
+            seen.set(key, input);
+            built += 1;
           }
-          seen.set(key, input);
-          built += 1;
         }
       }
     }
-    // ⚠️ POSITIVE CONTROL — without it, a loop that built nothing passes.
-    // 5 partNames x 4 tags x 2 keys = 40, all distinct.
-    expect(built).toBe(40);
-    expect(seen.size).toBe(40);
+    // ⚠️ POSITIVE CONTROL — a loop that built nothing passes every assertion.
+    expect(built).toBe(parts.length * tags.length * kinds.length * 2);
+    // Every match key distinct; each ambiguity key shared by exactly its kinds.
+    expect(seen.size).toBe(parts.length * tags.length * kinds.length + parts.length * tags.length);
   });
 });
 
