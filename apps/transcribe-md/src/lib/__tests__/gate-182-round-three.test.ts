@@ -20,7 +20,7 @@
 // third pass: the consumer list is GREPPED FROM THE TREE, and a consumer that
 // appears tomorrow is watched tomorrow.
 // ============================================================================
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -360,14 +360,34 @@ describe('#182 round 3 — apps/meddoc-pro is RECORDED, not verified', () => {
     // ⚠️ DMP-a — this THREW when the file went. The note it carries is about a
     // retired app; once the app is deleted the note has served its purpose and
     // the arm must not be the thing that fails.
-    const p = join(REPO, 'apps/meddoc-pro/src/lib/auth.ts');
-    if (!existsSync(p)) {
-      expect(existsSync(join(REPO, 'apps/meddoc-pro')), 'the app is gone — this note is discharged').toBe(false);
-      return;
+    //
+    // ⚠️ ROUND SIX (R2), 2026-09-10 — KEYED ON THE TRACKED SET, AND ON THE
+    // MODULE'S PLACE RATHER THAN THE APP'S NAME. The DMP-a form discharged on
+    // `!existsSync(auth.ts)` and then asserted `existsSync('apps/meddoc-pro')`
+    // was false. A real `git rm -r apps/meddoc-pro` does not remove the
+    // directory where it has IGNORED leftovers — the shared tree carries
+    // `.next/`, `node_modules/`, `.env`, `next-env.d.ts` and `playwright-report/`
+    // there, and this worktree carries `node_modules/` — so the arm RED on a
+    // genuine deletion locally while a clean CI clone stayed green: one
+    // deletion, two answers. And keyed on the NAME, a renamed app discharged
+    // the note while its auth module still existed under the new name.
+    //
+    // So the subject is every TRACKED `apps/*/src/lib/auth.ts` outside the
+    // product app, wherever it lives; the note follows a rename, and it is
+    // discharged only when none is tracked AND nothing of the app is.
+    const trackedUnder = (spec: string) =>
+      execFileSync('git', ['ls-files', '--', spec], { cwd: REPO, encoding: 'utf8' }).split('\n').filter(Boolean);
+    const otherAuth = trackedUnder('apps/*/src/lib/auth.ts').filter((f) => !f.startsWith('apps/transcribe-md/'));
+    for (const f of otherAuth) {
+      expect(readFileSync(join(REPO, f), 'utf8'), `${f} now reads the marker — update this note`).not.toContain(
+        'sessionVerifyFailed',
+      );
     }
-    const src = readFileSync(p, 'utf8');
-    expect(src, 'meddoc-pro now reads the marker — update this note').not.toContain(
-      'sessionVerifyFailed',
-    );
+    if (otherAuth.length === 0) {
+      expect(
+        trackedUnder('apps/meddoc-pro'),
+        'the CRM\'s auth module left the tracked tree but the app did not — it MOVED; re-point this note, do not let it discharge',
+      ).toEqual([]);
+    }
   });
 });
