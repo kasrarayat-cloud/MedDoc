@@ -859,6 +859,10 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
   // total. Otherwise NO fact: both controls take the bounded clear, counted as
   // still blank, and the doctor types the figure. The reason logged is a fixed
   // token — no quote, no number — so the log is not a PHI surface.
+  // ⚠️ #314 v2 — the SENTENCE(S) of `input.contextText` the quote sits in are
+  // judged, never the quote alone (total-time-grounding.ts). So `contextText`
+  // must be the text L3 read — `groundingContextFor` decides that for the
+  // worker and every re-fill door, and a door that passed '' would blank this.
   const totalTime = entities.total_time_minutes;
   const totalTimeGrounding = totalTime
     ? groundTotalTime({

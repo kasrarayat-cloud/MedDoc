@@ -152,15 +152,38 @@ describe('#246 — the projector emits them, and DISCRIMINATES', () => {
       return conceptOf(f, 'total_time_minutes')[0]?.polarity;
     };
 
+    // ⚠️ #314 v2 RE-FIXTURED BOTH ROUTES, AND DID NOT WEAKEN EITHER. The two
+    // quotes that first proved them ("No fever, ..." / "..., no separate
+    // procedure performed.") carry "no", and #314 v2 refuses a total whose
+    // sentence carries a negation — so they no longer produce a fact at all
+    // (pinned in the arm below). Each route is now driven by a denial cue that
+    // `inferPolarity` reads and #314 does not treat as negating the total:
+    // "denies" (a predicate) and "negative for". Removing the stated
+    // `polarity: 'affirmed'` reds BOTH lines — measured, see the #314 v2
+    // amendment's mutation table.
+    //
     // Route 1 — the digits ARE locatable, but CLAUSE_BREAK is /[.;\n]/ and a
     // COMMA is not one, so an unrelated ROS denial used to govern the number.
-    expect(polarityOf('No fever, total time 25 minutes.', 25)).toBe('affirmed');
+    expect(polarityOf('Denies fever, total time 25 minutes.', 25)).toBe('affirmed');
     // Route 2 — the quote SPELLS the number, so String(40) is unlocatable and
     // polarity fell back to the UNSCOPED whole-quote denial test.
-    expect(polarityOf('Total time of forty minutes spent, no separate procedure performed.', 40)).toBe('affirmed');
+    expect(polarityOf('Total time of forty minutes spent, negative for any separate procedure.', 40)).toBe('affirmed');
     // And a clean quote was always fine — this is the control that says the
     // arms above are about the denial routes, not about polarity in general.
     expect(polarityOf('Total time 25 minutes.', 25)).toBe('affirmed');
+  });
+
+  it('⚠️ #314 v2 — the ORIGINAL route fixtures now produce NO total at all', () => {
+    // Recorded, not hidden: the sentence carries "no", so the total is refused
+    // (`negation_in_sentence`) and the billing line is left blank for the doctor.
+    // The polarity arm above therefore had to move to cues #314 does not refuse.
+    for (const [quote, minutes] of [
+      ['No fever, total time 25 minutes.', 25],
+      ['Total time of forty minutes spent, no separate procedure performed.', 40],
+    ] as const) {
+      const f = project({ total_time_minutes: { minutes, evidence_quote: quote } });
+      expect(conceptOf(f, 'total_time_minutes'), quote).toHaveLength(0);
+    }
   });
 
   it('⚠️ DISCRIMINATION: polarity inference still WORKS everywhere else', () => {

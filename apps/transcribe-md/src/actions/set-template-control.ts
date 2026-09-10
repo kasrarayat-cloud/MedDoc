@@ -35,6 +35,7 @@ import { SCAFFOLD_INSERTABLE_KINDS } from '@/lib/template-twin/clinician-overrid
 import { scaffoldDefaultOfferable } from '@/lib/template-twin/clinician-override';
 import type { ProcessTemplateTwinVisitInput } from '@/lib/template-twin/fill-engine';
 import { readAndPrepareTemplateTwinFill } from '@/lib/template-twin/fill-engine';
+import { groundingContextFor } from '@/lib/template-twin/grounding-context';
 
 export interface SetTemplateControlResult {
   ok: boolean;
@@ -99,6 +100,7 @@ async function resolveCertifiedTwinField(
         userId: string;
         inputMode: string | null;
         transcriptText: string | null;
+        rawTextInput: string | null;
         entities: unknown;
         soapFinal: string | null;
         createdAt: Date;
@@ -128,6 +130,8 @@ async function resolveCertifiedTwinField(
       userId: true,
       inputMode: true,
       transcriptText: true,
+      // #314 v2 — a text_notes visit's source; see grounding-context.ts.
+      rawTextInput: true,
       entities: true,
       soapFinal: true,
       createdAt: true,
@@ -624,6 +628,7 @@ async function scaffoldDefaultAdmissible(input: {
       userId: string;
       inputMode: string | null;
       transcriptText: string | null;
+      rawTextInput: string | null;
       entities: unknown;
       soapFinal: string | null;
       createdAt: Date;
@@ -691,7 +696,8 @@ async function scaffoldDefaultAdmissible(input: {
           : visit.inputMode === 'text_notes'
             ? 'text'
             : 'conversation',
-      contextText: visit.transcriptText ?? '',
+      // ⚠️ #314 v2 — the SAME text the preview and the freeze ground against.
+      contextText: groundingContextFor(visit),
       entities: visit.entities,
       generatedNote: visit.soapFinal,
       validationNow: new Date(),
