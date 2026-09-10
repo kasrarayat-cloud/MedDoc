@@ -392,11 +392,18 @@ describe('#312 · the arguments', () => {
         expectCertified: 43,
         expectConfirm: 10,
         commit: false,
-        reissueAudit: false,
       },
     });
-    const c = parseConfirmArgs([...OK, '--commit', '--reissue-audit']);
-    expect(c.ok && c.args.commit && c.args.reissueAudit).toBe(true);
+    const c = parseConfirmArgs([...OK, '--commit']);
+    expect(c.ok && c.args.commit).toBe(true);
+  });
+
+  it('⚠️ the deleted recovery door is REFUSED, not silently ignored', () => {
+    // Round two proved `--reissue-audit` could attest a #311(d) confirmation the
+    // act never performed. It is gone; a caller who half-remembers it is told.
+    const r = parseConfirmArgs([...OK, '--reissue-audit', '--commit']);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toContain('unknown argument');
   });
 
   it.each([

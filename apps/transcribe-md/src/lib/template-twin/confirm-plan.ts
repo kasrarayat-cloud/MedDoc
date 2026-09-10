@@ -428,10 +428,9 @@ export function planConfirmation(input: {
  * The audit targets this door owes and has not written, in the order owed.
  *
  * ⚠️ WHY THIS EXISTS: `logAudit` NEVER THROWS. A failed insert is a line on
- * stderr and the mappings are already committed, so a re-run of the confirm
- * refuses (the rows are certified) and the missing record could never be
- * re-issued. The door counts what it wrote, and `--reissue-audit` writes only
- * what this returns.
+ * stderr, so the door reads its rows back and refuses — exit 1 — on any
+ * shortfall. It does NOT re-issue: a recovery that cannot tell whose hands
+ * confirmed a row is a false-record generator (round two).
  */
 export function missingAuditTargets(
   expected: readonly string[],
@@ -451,18 +450,19 @@ export interface ConfirmArgs {
   expectCertified: number;
   expectConfirm: number;
   commit: boolean;
-  /** Write ONLY the audit rows the act owes and did not write. */
-  reissueAudit: boolean;
 }
 
 export type ConfirmArgsResult = { ok: true; args: ConfirmArgs } | { ok: false; reason: string };
 
 const USAGE =
   'usage: confirm-reissued-form.ts --compiled-version <uuid> --expect-fields <n> ' +
-  '--expect-certified <n> --expect-confirm <n> [--reissue-audit] [--commit]';
+  '--expect-certified <n> --expect-confirm <n> [--commit]';
 
 const VALUED = ['compiled-version', 'expect-fields', 'expect-certified', 'expect-confirm'];
-const FLAGS = ['commit', 'reissue-audit'];
+// ⚠️ ONE FLAG. A `--reissue-audit` recovery door existed for one commit and
+// round two proved it could attest a confirmation it never performed; it is
+// deleted, and an unknown flag is refused, so it cannot be half-remembered.
+const FLAGS = ['commit'];
 
 /**
  * Every valued argument is REQUIRED and nothing is defaulted: a default is a
@@ -526,7 +526,6 @@ export function parseConfirmArgs(argv: readonly string[]): ConfirmArgsResult {
       expectCertified: c,
       expectConfirm: k,
       commit: flags.has('commit'),
-      reissueAudit: flags.has('reissue-audit'),
     },
   };
 }
