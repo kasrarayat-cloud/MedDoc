@@ -26,6 +26,10 @@
 //      depend on catalog ORDER, full-visit-flow.spec.ts:48 selectOption
 //      {index:1} and visits/new/page.tsx pickerSpecialties[0]).
 //      templateId MUST equal id — specialties.test.ts enforces it.
+//      reportKind ('office' | 'imaging') on EVERY row. An 'imaging' row MUST
+//      name a reportBuilder the worker implements (worker/note-templates/
+//      imaging-report-builders.ts) — `tsc` and gate-admin3-imaging-report-
+//      builders.test.ts both refuse one that does not.
 //      SPECIALTY_IDS / the Zod enum / all four pickers derive from here.
 //   2. specialty-guidance.ts — a SPECIALTY_GUIDANCE entry keyed by
 //      templateId. Two coverage gates go red without it. Keep it
@@ -59,29 +63,63 @@
 // at the API edge — DB rows can only contain values that exist here.
 // ============================================================================
 
+// ── REPORT KIND — the imaging rule as catalog DATA (ADMIN-3 PR-1, #197) ─────
+// Every row declares what KIND of document it produces. 'imaging' rows are an
+// imaging REPORT (no office E/M level, no CPT/E&M layer, flag-gated in the
+// pickers and at L4); 'office' rows are a clinic note. This used to be the
+// literal `id === 'ultrasound'` — a one-member set hard-coded in three readers.
+//
+// ⚠️ AN 'imaging' ROW MUST NAME ITS OWN `reportBuilder`, and the worker must
+// implement that name (worker/note-templates/imaging-report-builders.ts). L4's
+// template + prompt builder and the worker's post-L6 table rebuild are KEYED
+// BY THAT NAME, so a second imaging row can never silently inherit the
+// ultrasound prompt, template and venous-duplex table rebuild. The type below
+// refuses a builderless imaging row at `tsc`; gate-admin3-imaging-report-
+// builders.test.ts refuses it at `vitest` (which does not type-check).
+export type ReportKind = 'office' | 'imaging';
+/** Every imaging-report builder NAME the worker implements. The worker's
+ *  registry is typed `{ [K in ImagingReportBuilderName]: … }`, so adding a
+ *  name here without implementing it fails `tsc`. */
+export const IMAGING_REPORT_BUILDERS = ['ultrasound'] as const;
+export type ImagingReportBuilderName = (typeof IMAGING_REPORT_BUILDERS)[number];
+type CatalogRow =
+  | {
+      readonly id: string;
+      readonly label: string;
+      readonly templateId: string;
+      readonly reportKind: 'office';
+    }
+  | {
+      readonly id: string;
+      readonly label: string;
+      readonly templateId: string;
+      readonly reportKind: 'imaging';
+      readonly reportBuilder: ImagingReportBuilderName;
+    };
+
 export const SPECIALTIES = [
-  { id: 'unspecified',     label: 'Unspecified',     templateId: 'generic' },
-  { id: 'primary-care',    label: 'Primary Care',    templateId: 'primary-care' },
-  { id: 'cardiology',      label: 'Cardiology',      templateId: 'cardiology' },
-  { id: 'psychiatry',      label: 'Psychiatry',      templateId: 'psychiatry' },
-  { id: 'pediatrics',      label: 'Pediatrics',      templateId: 'pediatrics' },
-  { id: 'ob-gyn',          label: 'OB-GYN',          templateId: 'ob-gyn' },
-  { id: 'dermatology',     label: 'Dermatology',     templateId: 'dermatology' },
-  { id: 'orthopedics',     label: 'Orthopedics',     templateId: 'orthopedics' },
-  { id: 'urgent-care',     label: 'Urgent Care',     templateId: 'urgent-care' },
-  { id: 'pain-management', label: 'Pain Management', templateId: 'pain-management' },
-  { id: 'weight-management', label: 'Weight Management', templateId: 'weight-management' },
-  { id: 'bariatric-surgery', label: 'Bariatric Surgery', templateId: 'bariatric-surgery' },
-  { id: 'vascular-surgery', label: 'Vascular Surgery', templateId: 'vascular-surgery' },
-  { id: 'gastroenterology', label: 'Gastroenterology', templateId: 'gastroenterology' },
+  { id: 'unspecified',     label: 'Unspecified',     templateId: 'generic', reportKind: 'office' },
+  { id: 'primary-care',    label: 'Primary Care',    templateId: 'primary-care', reportKind: 'office' },
+  { id: 'cardiology',      label: 'Cardiology',      templateId: 'cardiology', reportKind: 'office' },
+  { id: 'psychiatry',      label: 'Psychiatry',      templateId: 'psychiatry', reportKind: 'office' },
+  { id: 'pediatrics',      label: 'Pediatrics',      templateId: 'pediatrics', reportKind: 'office' },
+  { id: 'ob-gyn',          label: 'OB-GYN',          templateId: 'ob-gyn', reportKind: 'office' },
+  { id: 'dermatology',     label: 'Dermatology',     templateId: 'dermatology', reportKind: 'office' },
+  { id: 'orthopedics',     label: 'Orthopedics',     templateId: 'orthopedics', reportKind: 'office' },
+  { id: 'urgent-care',     label: 'Urgent Care',     templateId: 'urgent-care', reportKind: 'office' },
+  { id: 'pain-management', label: 'Pain Management', templateId: 'pain-management', reportKind: 'office' },
+  { id: 'weight-management', label: 'Weight Management', templateId: 'weight-management', reportKind: 'office' },
+  { id: 'bariatric-surgery', label: 'Bariatric Surgery', templateId: 'bariatric-surgery', reportKind: 'office' },
+  { id: 'vascular-surgery', label: 'Vascular Surgery', templateId: 'vascular-surgery', reportKind: 'office' },
+  { id: 'gastroenterology', label: 'Gastroenterology', templateId: 'gastroenterology', reportKind: 'office' },
   // Ultrasound is an IMAGING-REPORT specialty, NOT a SOAP clinic visit: its
   // templateId routes L4 to the ultrasound report generator (Exam/Indication/
   // Technique/Comparison/Findings/Impression), not the SOAP scaffold. Kept in
   // the catalog so Zod accepts it; the PICKER only shows it when the
   // NEXT_PUBLIC_ULTRASOUND_SPECIALTY flag is on (default OFF — see
   // ultrasoundSpecialtyEnabled / visibleSpecialties below).
-  { id: 'ultrasound', label: 'Ultrasound', templateId: 'ultrasound' },
-] as const;
+  { id: 'ultrasound', label: 'Ultrasound', templateId: 'ultrasound', reportKind: 'imaging', reportBuilder: 'ultrasound' },
+] as const satisfies readonly CatalogRow[];
 
 export type Specialty = (typeof SPECIALTIES)[number];
 export type SpecialtyId = Specialty['id'];
@@ -111,9 +149,16 @@ export function ultrasoundSpecialtyEnabled(): boolean {
 
 /** Specialty ids that produce an IMAGING REPORT (not a SOAP clinic note).
  *  Drives the L4 report-type routing + the E/M suppression (an imaging report
- *  has no office-visit E/M level). */
+ *  has no office-visit E/M level).
+ *
+ *  ⚠️ AN EXACT-ID CATALOG MATCH, deliberately NOT `findSpecialty(id)`: that
+ *  resolver has a legacy-label fallback and maps every unknown to
+ *  'unspecified', and the house pins that a LABEL ('Ultrasound') answers false
+ *  here (review-read-only-paper.test.ts). Byte-identical to the literal
+ *  `id === 'ultrasound'` it replaced for every input — pinned by
+ *  specialties-report-kind-oracle.test.ts in both flag states. */
 export function isImagingReportSpecialty(id: string | null | undefined): boolean {
-  return id === 'ultrasound';
+  return SPECIALTIES.some((s) => s.id === id && s.reportKind === 'imaging');
 }
 
 /** DOES AN OFFICE-VISIT E/M LEVEL APPLY TO THIS VISIT AT ALL?
@@ -147,13 +192,21 @@ export function emAppliesToSpecialty(id: string | null | undefined): boolean {
 
 /** Catalog filtered for the pickers: hides flag-gated specialties (Ultrasound)
  *  unless their flag is on. `forVisitCreate` additionally drops 'unspecified'.
- *  When the flag is OFF this returns exactly the pre-ultrasound list. */
+ *  When the flag is OFF this returns exactly the pre-ultrasound list.
+ *
+ *  ⚠️ Reads `reportKind`, not the id: the picker and the L4 route must agree
+ *  on WHICH rows are imaging, or a row could be offered with the flag off and
+ *  then routed as a SOAP note. The flag keeps its literal
+ *  `process.env.NEXT_PUBLIC_…` read (ultrasoundSpecialtyEnabled) so Next.js
+ *  still inlines it into the client bundles — a data-driven
+ *  `process.env[row.flag]` would NOT be inlined and would hide Ultrasound
+ *  client-side in production. */
 export function visibleSpecialties(opts?: {
   forVisitCreate?: boolean;
 }): readonly Specialty[] {
   const usOn = ultrasoundSpecialtyEnabled();
   return (opts?.forVisitCreate ? SPECIALTIES_FOR_VISIT_CREATE : SPECIALTIES).filter(
-    (s) => (s.id === 'ultrasound' ? usOn : true)
+    (s) => (s.reportKind === 'imaging' ? usOn : true)
   );
 }
 
@@ -193,6 +246,13 @@ const LEGACY_TO_ID: Record<string, SpecialtyId> = {
   gynecology: 'ob-gyn',
   'obstetrics-gynecology': 'ob-gyn',
 };
+
+/** Every legacy value `findSpecialty` resolves. Exported (read-only) so the
+ *  report-kind oracle DERIVES its input universe from the real map rather than
+ *  a hand-copied list that could drift from it. */
+export const LEGACY_SPECIALTY_KEYS: readonly string[] = Object.freeze(
+  Object.keys(LEGACY_TO_ID)
+);
 
 /** Look up the catalog entry by id, with legacy-value fallback.
  *  Returns 'unspecified' for any id we can't resolve so callers
