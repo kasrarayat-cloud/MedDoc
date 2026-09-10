@@ -16,11 +16,15 @@ import { useRouter } from 'next/navigation';
 import { Ic } from '@/components/ui/icon';
 
 interface Props {
-  userRole: string;
+  /** Computed on the SERVER by `isMfaDisableLocked` (lib/super-admin.ts):
+   *  the same predicate /api/mfa/disable refuses on. This panel used to
+   *  compare `role === 'SUPER_ADMIN'`, so a platform SUPER_ADMIN, who is
+   *  role DOCTOR in production, was shown a Disable button. */
+  disableLocked: boolean;
   verifiedAt: string | null;
 }
 
-export function MfaManagementPanel({ userRole, verifiedAt }: Props) {
+export function MfaManagementPanel({ disableLocked, verifiedAt }: Props) {
   const router = useRouter();
   const [isDialogOpen, setDialogOpen] = useState(false);
   const [password, setPassword] = useState('');
@@ -30,7 +34,7 @@ export function MfaManagementPanel({ userRole, verifiedAt }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const isSuperAdmin = userRole === 'SUPER_ADMIN';
+  const isSuperAdmin = disableLocked;
 
   async function disableMfa() {
     setLoading(true);
@@ -153,7 +157,7 @@ export function MfaManagementPanel({ userRole, verifiedAt }: Props) {
           }}
         >
           MFA cannot be disabled on SUPER_ADMIN accounts. To remove the
-          factor, demote the role first.
+          factor, remove SUPER_ADMIN from the account first.
         </div>
       ) : (
         <button

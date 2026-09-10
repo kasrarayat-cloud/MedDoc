@@ -21,7 +21,8 @@
 import { headers } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 
-import { Product } from '@prisma/client';
+import { hasSuperAdminProduct } from '@/lib/super-admin';
+import { APP_URL } from '@/lib/constants';
 import { auth } from '@/lib/nextauth';
 import { logAudit } from '@/lib/audit';
 import { isAdminSessionStale } from '@/lib/admin-session-freshness';
@@ -49,17 +50,17 @@ export default async function AdminLayout({
   // a DB read when the JWT doesn't carry it. Same strategy as Phase 1B
   // admin APIs will use; kept local to the layout so we don't leak the
   // Prisma dependency into every admin page.
-  let hasSuperAdmin = products?.includes(Product.SUPER_ADMIN) ?? false;
+  // ONE predicate, shared with the API gate and the MFA-disable lock
+  // (lib/super-admin.ts). It is array-only: a bare string no longer passes
+  // by substring the way `'SUPER_ADMIN'.includes('SUPER_ADMIN')` did.
+  let hasSuperAdmin = hasSuperAdminProduct(products);
   if (!hasSuperAdmin && session?.user?.id) {
     const prisma = (await import('@meddoc/db')).default;
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: { products: true },
     });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    hasSuperAdmin = (user?.products as any[] | undefined)?.includes(
-      Product.SUPER_ADMIN
-    ) ?? false;
+    hasSuperAdmin = hasSuperAdminProduct(user?.products);
   }
 
   if (!hasSuperAdmin) {
@@ -81,7 +82,16 @@ export default async function AdminLayout({
       select: { mfaEnabled: true },
     });
     if (!mfaUser?.mfaEnabled) {
-      redirect('/settings/security/mfa?reason=super_admin_required');
+      // ⚠️ ABSOLUTE, ON THE APP HOST. admin.quillmd.com's Caddy allowlist
+      // (the admin block of the tracked Caddyfile) serves only /api/auth,
+      // /api/admin, static files, the login pages, /admin and /; everything
+      // else, /settings and /api/mfa included, hits `respond "Not Found" 404`.
+      // A RELATIVE redirect from an admin-host render therefore stranded the
+      // operator on a bare Not Found. APP_URL is the one app-host constant,
+      // baked at build time (CI and QA bake their own host, so there it is
+      // the same origin). Cookies are HOST-ONLY: the operator signs in again
+      // on the app host, enrols there, then signs back in here with a code.
+      redirect(`${APP_URL.replace(/\/+$/, '')}/settings/security/mfa?reason=super_admin_required`);
     }
   }
 

@@ -20,6 +20,7 @@ import { redirect } from 'next/navigation';
 
 import prisma from '@meddoc/db';
 import { auth } from '@/lib/nextauth';
+import { isMfaDisableLocked } from '@/lib/super-admin';
 import { AppFrame } from '@/components/ui/app-frame';
 import { MfaEnrollmentPanel } from './mfa-enrollment-panel';
 import { MfaManagementPanel } from './mfa-management-panel';
@@ -45,6 +46,7 @@ export default async function MfaSettingsPage({
       id: true,
       email: true,
       role: true,
+      products: true,
       mfaEnabled: true,
       mfaVerifiedAt: true,
     },
@@ -126,7 +128,7 @@ export default async function MfaSettingsPage({
 
         {user.mfaEnabled ? (
           <MfaManagementPanel
-            userRole={user.role}
+            disableLocked={isMfaDisableLocked(user)}
             verifiedAt={user.mfaVerifiedAt?.toISOString() ?? null}
           />
         ) : (

@@ -25,7 +25,7 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 import prisma from '@meddoc/db';
-import { Product } from '@prisma/client';
+import { hasSuperAdminProduct } from '@/lib/super-admin';
 
 import { auth } from '@/lib/nextauth';
 import { logAudit } from '@/lib/audit';
@@ -75,12 +75,46 @@ export function adminApi(
     // after a SUPER_ADMIN revocation. Cheap (indexed PK lookup).
     const userRow = await prisma.user.findUnique({
       where: { id: sessionOrNull.user.id },
-      select: { products: true, isActive: true },
+      select: { products: true, isActive: true, mfaEnabled: true },
     });
     if (!userRow || !userRow.isActive) return notFoundResponse();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const products = (userRow.products as any[] | undefined) ?? [];
-    if (!products.includes(Product.SUPER_ADMIN)) return notFoundResponse();
+    // ONE predicate for "is a platform SUPER_ADMIN", shared with the page
+    // gate and the MFA-disable lock: lib/super-admin.ts.
+    if (!hasSuperAdminProduct(userRow.products)) return notFoundResponse();
+
+    // ── MFA PARITY WITH THE PAGE GATE ────────────────────────────────────
+    // `app/admin/layout.tsx` requires MFA before any /admin/* PAGE renders,
+    // and its own comment says that closes shadow-audit HIPAA_FINDING_001.
+    // This gate did not check it at all (measured `grep -ci mfa` on this file
+    // -> 0 on 2026-09-04), so every /api/admin/* endpoint — including the
+    // writes that suspend, soft-delete, force-logout, reset a password, edit a
+    // practice, and grant or revoke SUPER_ADMIN — was reachable by a session
+    // the pages refuse. The control existed on one door of two.
+    //
+    // ⚠️ NO ENDPOINT COUNT IS WRITTEN HERE, ON PURPOSE. This comment said "29"
+    // and was wrong one merge later: PATCH /api/admin/practices/[id] made it
+    // 30. The set is derived where it is enforced — the readdir in
+    // tests/api/admin-gate-coverage.test.ts — and nowhere else.
+    //
+    // ⚠️ READ FRESH FROM THE DB, NEVER FROM THE JWT, for the same reason the
+    // page gate states: enrolment happens IN-SESSION, so a cached flag is stale
+    // exactly when it matters — the moment an operator enrols to get in.
+    // It costs no extra query; `mfaEnabled` rides the row already being read.
+    //
+    // ⚠️ THIS LOCKS OUT EVERY SUPER_ADMIN WHO HAS NOT ENROLLED, AND THAT IS
+    // SURVIVABLE ONLY BECAUSE ENROLMENT IS NOT BEHIND THIS GATE. Everything
+    // /settings/security/mfa fetches, and every route under /api/mfa/**, carries
+    // no `adminApi` wrapper; gate-mfa-recovery-path-open.test.ts DERIVES that
+    // set and pins it. ⚠️ Recovery happens on the APP host: admin.quillmd.com's
+    // Caddy allowlist 404s /settings/* and /api/mfa/*. Production, read-only
+    // counts 2026-09-10: 2 SUPER_ADMIN accounts, 1 of them enrolled.
+    //
+    // Proved by DRIVING this function, not by reading it:
+    // gate-admin-api-mfa-behavioural.test.ts.
+    //
+    // Silent 404 like every other refusal here — same disclosure-minimising
+    // posture, deliberately consistent rather than a special case.
+    if (!userRow.mfaEnabled) return notFoundResponse();
 
     // Phase 19 — h16-admin-session-7day. Reject admin API calls on
     // sessions older than 12 h even though the cookie stays valid
