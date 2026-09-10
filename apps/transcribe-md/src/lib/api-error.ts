@@ -33,6 +33,10 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { SessionUnverifiableError } from '@meddoc/auth';
 import { redactPhi } from '@meddoc/ai';
 
+/** Kept equal to `PracticeHostRefusedError.DIGEST` (lib/practice-host.ts) —
+ *  pinned by an arm in gate-admin2-session-host-reconcile.test.ts. */
+export const PRACTICE_HOST_REFUSED_DIGEST = 'PRACTICE_HOST_REFUSED';
+
 export interface ApiErrorBody {
   error: string;
   /** T-M16.4: machine-readable error taxonomy. Clients that care
@@ -120,6 +124,24 @@ export function withApiHandler<P extends Record<string, string>>(
           503,
         );
         response.headers.set('Retry-After', '2');
+        response.headers.set('X-Response-Time', `${ms}ms`);
+        response.headers.set('Server-Timing', `app;dur=${ms}`);
+        return response;
+      }
+
+      // ⚠️ ADMIN-2 (#196) — A PRACTICE HOST THAT DOES NOT ADMIT THIS SESSION
+      // ANSWERS 403, BY NAME, not a generic 500. Matched on the DIGEST rather
+      // than the class so this module, imported by every route, does not pull
+      // in the host resolver's database client. The source of the string is
+      // `PracticeHostRefusedError.DIGEST` (lib/practice-host.ts); an arm pins
+      // the two equal. Unreachable with PRACTICE_HOST_ROUTING off.
+      if ((err as { digest?: unknown } | null)?.digest === PRACTICE_HOST_REFUSED_DIGEST) {
+        const ms = Date.now() - t0;
+        const response = apiError(
+          'this account is not admitted on this practice address — you have not been signed out',
+          403,
+          { code: PRACTICE_HOST_REFUSED_DIGEST },
+        );
         response.headers.set('X-Response-Time', `${ms}ms`);
         response.headers.set('Server-Timing', `app;dur=${ms}`);
         return response;

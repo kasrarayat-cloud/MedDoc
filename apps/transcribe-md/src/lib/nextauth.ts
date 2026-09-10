@@ -27,6 +27,7 @@ import { Product } from '@prisma/client';
 import { redactPhi } from '@meddoc/ai';
 import { isEmailDeliveryEnabled } from '@/lib/email-enabled';
 import { logAudit } from '@/lib/audit';
+import { loginHostRefusal, practiceHostRoutingEnabled } from '@/lib/practice-host';
 
 /** 7 days. Longer than meddoc-pro (8hr) because TranscribeMD is a solo
  *  consumer surface, not a PHI-heavy clinical tool. */
@@ -217,6 +218,30 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             errorCode: 'NO_TRANSCRIBE_MD_ENTITLEMENT',
           });
           return null;
+        }
+
+        // ⚠️ ADMIN-2 (#196) — ON A PRACTICE HOST, ONLY THAT PRACTICE'S MEMBERS
+        // SIGN IN. Placed AFTER the password check, so a wrong password still
+        // counts toward lockout exactly as before, and BEFORE MFA and the
+        // counter reset, so a refused sign-in neither consumes a second factor
+        // nor records a login. The user-facing answer stays the generic one (no
+        // oracle for "this email belongs to another practice"); the audit row
+        // names it. Fails closed on anything it cannot read. With
+        // PRACTICE_HOST_ROUTING off this block is skipped entirely.
+        if (practiceHostRoutingEnabled()) {
+          const hostRefusal = await loginHostRefusal(user.practiceId);
+          if (hostRefusal) {
+            void logAudit({
+              action: 'LOGIN_FAILED',
+              userId: user.id,
+              userEmail: user.email,
+              practiceId: user.practiceId,
+              success: false,
+              errorCode: 'PRACTICE_HOST_REFUSED',
+              metadata: { reason: hostRefusal.reason, host: hostRefusal.host },
+            });
+            return null;
+          }
         }
 
         // MFA gate (closes shadow-audit HIPAA_FINDING_001). When a user

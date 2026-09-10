@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
-import { headers } from 'next/headers';
 
 import { auth } from '@/lib/nextauth';
+import { requestHost } from '@/lib/practice-host';
 import { AuthShell } from '@/components/ui/auth-shell';
 import { LoginForm } from './login-form';
 import { VerifyToast } from './verify-toast';
@@ -24,10 +24,9 @@ export default async function LoginPage() {
     // `/dashboard`. The strict Caddy block on admin.quillmd.com returns
     // 404 for `/dashboard`, so without this branch the user would land
     // on a blank page after a refresh.
-    const h = await headers();
-    const host = (h.get('x-forwarded-host') ?? h.get('host') ?? '')
-      .toLowerCase()
-      .split(':')[0];
+    // ADMIN-2 — the Host header ONLY (lib/practice-host.ts); a client-sent
+    // `x-forwarded-host` no longer chooses the branch.
+    const host = (await requestHost()) ?? '';
     const isAdminHost =
       host === 'admin.quillmd.com' || host.startsWith('admin.');
     redirect(isAdminHost ? '/admin' : recoveryHref());
