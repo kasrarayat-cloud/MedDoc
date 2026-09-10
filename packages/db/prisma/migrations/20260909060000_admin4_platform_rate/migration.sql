@@ -229,13 +229,64 @@ ALTER TABLE "platform_rates" ADD CONSTRAINT "platform_rates_forward_only" CHECK 
 --     `previousNumerator`/`previousDenominator` — see the derivation below.
 CREATE OR REPLACE FUNCTION platform_rates_stamp_created() RETURNS trigger AS $fn$
 BEGIN
+    -- ═══════════════════════════════════════════════════════════════════════
+    -- ⚠️ ROUND 6 — THREE WAYS THE DERIVED PREVIOUS PAIR COULD STILL BE FALSE,
+    -- each measured on PG 16 against round 5's trigger, each permanent (UPDATE,
+    -- DELETE and TRUNCATE are refused, so a false row cannot be corrected).
+    -- ═══════════════════════════════════════════════════════════════════════
+    --
+    -- (a) ABOVE READ COMMITTED THE LOCK SERIALIZES NOTHING. The SELECT below
+    --     reads the TRANSACTION snapshot, taken at the INSERT's start — before
+    --     the lock wait — and never refreshed. Measured: seed 3/2; B inserts
+    --     2/1 and holds its transaction; A runs `BEGIN ISOLATION LEVEL
+    --     REPEATABLE READ; INSERT 4/1; COMMIT` with the INSERT as its only
+    --     statement. A recorded previous = 3/2; the rate in effect at A's
+    --     createdAt was B's 2/1. SERIALIZABLE recorded the same, with NO 40001:
+    --     a serial order A-before-B is consistent with every read, because the
+    --     anchor is wall-clock time and visibility follows serialization order.
+    --     Ruling #269 measured this exact shape on the last-owner guard and
+    --     refuses BY NAME; this is the same refusal.
+    IF current_setting('transaction_isolation') <> 'read committed' THEN
+        RAISE EXCEPTION
+          'platform_rates: cannot derive the previous rate at isolation level % — this insert must run at READ COMMITTED; a snapshot taken before the platform_rates lock never refreshes, so the previous pair would be read from before a competing rate committed (ADMIN-4, ruling #269)',
+          current_setting('transaction_isolation')
+          USING ERRCODE = '0A000';
+    END IF;
+
+    -- (b) THE LOCK IS TAKEN **BEFORE** `createdAt` IS STAMPED. Round 5 stamped
+    --     first and locked afterwards, so the stamp order and the lock order
+    --     could disagree: a writer stamped at t1 could lose the lock to one
+    --     stamped at t2 > t1, which then derived without seeing t1's row even
+    --     though t1's row was in effect at t2 by the derivation's own
+    --     predicate. Measured at the DEFAULT isolation with honest writers:
+    --     16 writers x 300 inserts → 2–8 of 4800 rows false; 2 x 3000 → 1–2
+    --     of 6000. Moving this one line above the stamp: 0, 0, 0 and 0.
+    --     With the lock first, every later stamp is taken AFTER the earlier
+    --     writer committed, and READ COMMITTED gives the SELECT below a fresh
+    --     snapshot that contains it. Transaction-scoped; released at COMMIT.
+    PERFORM pg_advisory_xact_lock(hashtext('platform_rates'), 0);
+
+    -- (c) THE NAMES ARE PINNED. Unqualified, `platform_rates` resolved
+    --     through the CALLER's search_path, where `pg_temp` comes first for
+    --     relations — measured: a session TEMP table named `platform_rates`
+    --     supplied the previous pair (5/1 recorded; the real latest was 4/1),
+    --     needing only the default TEMP privilege. And `clock_timestamp()`
+    --     unqualified lost to a `public.clock_timestamp()` under
+    --     `SET LOCAL search_path = public, pg_catalog`, back-dating a rate to
+    --     2026-08-01 with every trigger still enabled. So the table is
+    --     schema-qualified, the clock is `pg_catalog.`-qualified, and every
+    --     function in this file carries `SET search_path = pg_catalog, public,
+    --     pg_temp` — `pg_temp` LAST and explicit, because the verifier measured
+    --     that `pg_catalog, public` alone still let the TEMP table win: an
+    --     unlisted pg_temp is searched FIRST for relations.
+
     -- ⚠️ `clock_timestamp()`, NOT `now()`. `now()` is TRANSACTION START time, so
     -- a writer that opens a transaction, does other work, then inserts, stores a
     -- rate "effective" earlier than the moment it was actually written — by
     -- exactly the transaction's duration. Measured on a real Postgres: 3.011s of
     -- retroactive window from a `pg_sleep(3)` before the INSERT. The admin
     -- writer #178 calls for will run inside a transaction.
-    NEW."createdAt" := clock_timestamp();
+    NEW."createdAt" := pg_catalog.clock_timestamp();
     -- ⚠️ NULL MEANS "EFFECTIVE IMMEDIATELY", AND WITHOUT IT ROUND 3's FIX
     -- STRANDED THE WRITER COMPLETELY.
     --
@@ -302,11 +353,18 @@ BEGIN
     -- inserted afterwards effective +1d, retroactively changes which rate the
     -- scheduled row supersedes — correct when written, permanently wrong later,
     -- in a table that cannot be corrected.
-    PERFORM pg_advisory_xact_lock(hashtext('platform_rates'), 0);
-
+    --
+    -- ⚠️ THE LOCK IS ALREADY HELD — taken at the top of this function, before
+    -- the stamp. See (b) there for why it cannot live here any more.
+    --
+    -- ⚠️ `ORDER BY "effectiveFrom" DESC, "createdAt" DESC` IS LOAD-BEARING and
+    -- is `marginAt`'s own order. `ORDER BY "createdAt" DESC` alone records the
+    -- most recently WRITTEN row, which is not the one in effect when a row was
+    -- scheduled ahead: A 3/2; S 5/1 effective +2s; B 2/1; then C after S took
+    -- effect — `createdAt DESC` records B (2/1), `marginAt` says S (5/1).
     SELECT p."marginNumerator", p."marginDenominator"
       INTO NEW."previousNumerator", NEW."previousDenominator"
-      FROM "platform_rates" p
+      FROM "public"."platform_rates" p
      WHERE p."effectiveFrom" <= NEW."createdAt"
      ORDER BY p."effectiveFrom" DESC, p."createdAt" DESC
      LIMIT 1;
@@ -316,7 +374,8 @@ BEGIN
 
     RETURN NEW;
 END;
-$fn$ LANGUAGE plpgsql;
+$fn$ LANGUAGE plpgsql
+  SET search_path = pg_catalog, public, pg_temp;
 
 CREATE TRIGGER "platform_rates_stamp_created_before_insert"
     BEFORE INSERT ON "platform_rates"
@@ -352,7 +411,8 @@ BEGIN
       'platform_rates is append-only: a rate change is a NEW ROW (ADMIN-4, #178). The only permitted update is ON DELETE SET NULL detaching changedByUserId, with every other column unchanged.'
       USING ERRCODE = 'P0001';
 END;
-$fn$ LANGUAGE plpgsql;
+$fn$ LANGUAGE plpgsql
+  SET search_path = pg_catalog, public, pg_temp;
 
 CREATE TRIGGER "platform_rates_no_update"
     BEFORE UPDATE ON "platform_rates"
@@ -383,7 +443,8 @@ BEGIN
       'platform_rates: TRUNCATE is refused. The rate history is the product of #178 — an audit row saying who changed it — and every ledger row references it by id.'
       USING ERRCODE = 'P0001';
 END;
-$fn$ LANGUAGE plpgsql;
+$fn$ LANGUAGE plpgsql
+  SET search_path = pg_catalog, public, pg_temp;
 
 CREATE TRIGGER "platform_rates_no_truncate"
     BEFORE TRUNCATE ON "platform_rates"
@@ -397,9 +458,25 @@ CREATE TRIGGER "platform_rates_no_truncate"
 -- Both cited prior-art migrations carry one; this is theirs.
 DO $verify$
 DECLARE
-    n_trig  int;
-    n_check int;
+    n_trig   int;
+    n_check  int;
+    n_pinned int;
 BEGIN
+    -- ⚠️ ROUND 6 — EVERY FUNCTION HERE RUNS WITH A PINNED search_path. Without
+    -- it a caller's TEMP table or a shadowing `public.clock_timestamp()` rewrote
+    -- the derived history (see `platform_rates_stamp_created`). Asserted by
+    -- identity (`regprocedure`), so a same-named function elsewhere cannot be
+    -- counted in its place.
+    SELECT count(*) INTO n_pinned
+      FROM pg_proc p
+     WHERE p.oid IN ('platform_rates_stamp_created()'::regprocedure,
+                     'platform_rates_append_only()'::regprocedure,
+                     'platform_rates_no_truncate()'::regprocedure)
+       AND p.proconfig @> ARRAY['search_path=pg_catalog, public, pg_temp'];
+    IF n_pinned <> 3 THEN
+        RAISE EXCEPTION 'platform_rates: expected 3 functions with a pinned search_path, found %', n_pinned;
+    END IF;
+
     SELECT count(*) INTO n_trig
       FROM pg_trigger t
      -- ⚠️ `regclass`, NOT `relname` — ROUND 4. `relname` has no namespace

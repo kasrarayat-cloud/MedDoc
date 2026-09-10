@@ -151,6 +151,39 @@ for c in platform_rates_margin_bounds platform_rates_previous_bounds; do
   esac
 done
 
+# ⚠️ ROUND 6 — EVERY FUNCTION RUNS WITH A PINNED search_path, READ FROM THE LIVE
+# CATALOGUE. Unpinned, a caller's TEMP `platform_rates` supplied the derived
+# previous pair, and a `public.clock_timestamp()` back-dated a rate with every
+# trigger still enabled. Read here rather than from the migration file because
+# a later `CREATE OR REPLACE` is invisible to the file and visible to pg_proc.
+for f in platform_rates_stamp_created platform_rates_append_only platform_rates_no_truncate; do
+  cfg="$(q "SELECT coalesce(array_to_string(proconfig, ';'), '') FROM pg_proc WHERE oid = to_regprocedure('${f}()')")"
+  case "$cfg" in
+    *"search_path=pg_catalog, public, pg_temp"*) pass "${f} pins search_path (pg_catalog first, pg_temp last)" ;;
+    *) fail "${f} resolves names through the CALLER's search_path (proconfig: '${cfg}')" ;;
+  esac
+done
+
+# ⚠️ ROUND 6 — AND THE LIVE BODY REFUSES ABOVE READ COMMITTED, THEN LOCKS, THEN
+# STAMPS. Measured with the stamp before the lock: 80 of 4800 derived pairs false
+# at the DEFAULT isolation with 16 honest writers; with the lock first, 0. The
+# body is read with its `--` comments STRIPPED, because the comments name every
+# one of these words — a probe whose pattern appears in the prose cannot fail.
+order="$(q "SELECT CASE
+    WHEN s IS NULL                                            THEN 'MISSING'
+    WHEN position('transaction_isolation' in s) = 0           THEN 'NO_ISOLATION_REFUSAL'
+    WHEN position('pg_advisory_xact_lock' in s) = 0           THEN 'NO_LOCK'
+    WHEN position('NEW.\"createdAt\" :=' in s) = 0            THEN 'NO_STAMP'
+    WHEN position('transaction_isolation' in s) > position('pg_advisory_xact_lock' in s) THEN 'LOCK_BEFORE_ISOLATION_CHECK'
+    WHEN position('pg_advisory_xact_lock' in s) > position('NEW.\"createdAt\" :=' in s)  THEN 'STAMP_BEFORE_LOCK'
+    ELSE 'ISOLATION_LOCK_STAMP' END
+  FROM (SELECT regexp_replace(prosrc, '--[^\n]*', '', 'g') AS s FROM pg_proc
+         WHERE oid = to_regprocedure('platform_rates_stamp_created()')) x")"
+case "$order" in
+  ISOLATION_LOCK_STAMP) pass "the live derivation refuses above READ COMMITTED, then locks, then stamps createdAt" ;;
+  *) fail "the live derivation is out of order (${order}) — honest concurrent writers can record a false previous pair" ;;
+esac
+
 if [ "$ATTEMPT" = "0" ]; then
   echo
   echo "structural only. Re-run with --attempt on a QA/test database for the behavioural arms."
@@ -189,6 +222,88 @@ case "$derived" in
   *"r5R4=2/1"*) pass "a caller-claimed previous of 1/1 was DISCARDED and derived as 2/1" ;;
   *) fail "the previous pair is still a caller claim: ${derived}" ;;
 esac
+
+PR_COLS="id,\"marginNumerator\",\"marginDenominator\",\"changedByLabel\""
+
+# --------------------------------------------------------------------------
+echo '── ORDER — the previous pair follows marginAt’s own order (--attempt) ─'
+# ⚠️ ROUND 6 — every insert in the DERIVATION arm above has effectiveFrom equal to
+# createdAt, so `ORDER BY "effectiveFrom" DESC, "createdAt" DESC` and a plausible
+# "newest row" rewrite (`ORDER BY "createdAt" DESC`) agree on all of them —
+# measured, the rewrite passed every arm. A row SCHEDULED ahead separates them:
+# A 3/2; S 5/1 effective +400ms; B 2/1; wait; C. At C's createdAt S is in effect
+# (marginAt says 5/1); `createdAt DESC` records B (2/1). The reference is
+# computed with marginAt's order in the same transaction, not hard-coded alone.
+ord="$(q "BEGIN;
+INSERT INTO platform_rates (${PR_COLS}) VALUES ('r6oA',3,2,'op@x');
+INSERT INTO platform_rates (${PR_COLS},\"effectiveFrom\") VALUES ('r6oS',5,1,'op@x', clock_timestamp() + interval '400 milliseconds');
+INSERT INTO platform_rates (${PR_COLS}) VALUES ('r6oB',2,1,'op@x');
+SELECT pg_sleep(0.6);
+INSERT INTO platform_rates (${PR_COLS}) VALUES ('r6oC',4,1,'op@x');
+SELECT 'PREV=' || \"previousNumerator\" || '/' || \"previousDenominator\" FROM platform_rates WHERE id='r6oC';
+SELECT 'REF=' || p.\"marginNumerator\" || '/' || p.\"marginDenominator\"
+  FROM platform_rates p, platform_rates c
+ WHERE c.id='r6oC' AND p.id <> 'r6oC' AND p.\"effectiveFrom\" <= c.\"createdAt\"
+ ORDER BY p.\"effectiveFrom\" DESC, p.\"createdAt\" DESC LIMIT 1;
+ROLLBACK;")"
+case "$ord" in
+  *"PREV=5/1"*"REF=5/1"*) pass "a row scheduled ahead is recorded as the previous rate once in effect (5/1, as marginAt reads)" ;;
+  *"REF=5/1"*) fail "the previous pair is not the rate marginAt says was in effect — the derivation order drifted: ${ord}" ;;
+  *) unknown "the ORDER scenario did not set up as designed (the reference is not the scheduled row): ${ord}" ;;
+esac
+
+# --------------------------------------------------------------------------
+echo '── ISOLATION — the derivation refuses above READ COMMITTED (--attempt) '
+# ⚠️ ROUND 6 — measured before the refusal existed: at REPEATABLE READ and at
+# SERIALIZABLE a racing insert recorded previous 3/2 where 2/1 was in effect, and
+# SERIALIZABLE raised NO 40001. The snapshot predates the lock; ruling #269.
+for lvl in "REPEATABLE READ" "SERIALIZABLE"; do
+  out="$(q "BEGIN ISOLATION LEVEL ${lvl}; INSERT INTO platform_rates (${PR_COLS}) VALUES ('r6iso',3,2,'op@x'); ROLLBACK;")"
+  case "$out" in
+    *"cannot derive the previous rate at isolation level"*) pass "an insert at ${lvl} is refused BY NAME" ;;
+    *ERROR*) fail "an insert at ${lvl} was refused by something ELSE: ${out}" ;;
+    *) fail "an insert at ${lvl} was ACCEPTED — its previous pair is read from a snapshot older than the lock" ;;
+  esac
+done
+# POSITIVE CONTROL, or the two arms above pass on a trigger that refuses everything.
+out="$(q "BEGIN ISOLATION LEVEL READ COMMITTED; INSERT INTO platform_rates (${PR_COLS}) VALUES ('r6iso',3,2,'op@x'); SELECT 'RC_OK'; ROLLBACK;")"
+case "$out" in
+  *RC_OK*) pass "an insert at READ COMMITTED is accepted" ;;
+  *) fail "an insert at READ COMMITTED was refused — the writer is stranded: ${out}" ;;
+esac
+
+# --------------------------------------------------------------------------
+echo '── SHADOW — no name resolves through the caller (--attempt) ───────────'
+# ⚠️ ROUND 6 — (1) a session TEMP table named platform_rates, needing only the
+# default TEMP privilege, supplied the previous pair; (2) a public.clock_timestamp()
+# under SET LOCAL search_path back-dated a rate to 2026-08-01.
+sh1="$(q "BEGIN;
+INSERT INTO public.platform_rates (${PR_COLS}) VALUES ('r6s1',3,2,'op@x');
+INSERT INTO public.platform_rates (${PR_COLS}) VALUES ('r6s2',4,1,'op@x');
+CREATE TEMP TABLE platform_rates (\"marginNumerator\" int, \"marginDenominator\" int, \"effectiveFrom\" timestamptz, \"createdAt\" timestamptz) ON COMMIT DROP;
+INSERT INTO pg_temp.platform_rates VALUES (5,1,'2000-01-01','2000-01-01');
+INSERT INTO public.platform_rates (${PR_COLS}) VALUES ('r6s3',2,1,'op@x');
+SELECT 'PREV=' || \"previousNumerator\" || '/' || \"previousDenominator\" FROM public.platform_rates WHERE id='r6s3';
+ROLLBACK;")"
+case "$sh1" in
+  *"PREV=4/1"*) pass "a caller's TEMP platform_rates does not reach the derivation (previous 4/1, the real one)" ;;
+  *"PREV=5/1"*) fail "a caller's TEMP table supplied the previous pair (5/1) — the table name is not qualified" ;;
+  *) unknown "the TEMP-shadow scenario could not run: ${sh1}" ;;
+esac
+sh2="$(q "BEGIN;
+CREATE FUNCTION public.clock_timestamp() RETURNS timestamptz LANGUAGE sql AS \$\$ SELECT '2000-01-01 00:00:00+00'::timestamptz \$\$;
+SET LOCAL search_path = public, pg_catalog;
+INSERT INTO public.platform_rates (${PR_COLS}) VALUES ('r6c1',3,2,'op@x');
+SELECT 'AGE_S=' || floor(extract(epoch FROM (pg_catalog.clock_timestamp() - \"effectiveFrom\")))::bigint FROM public.platform_rates WHERE id='r6c1';
+ROLLBACK;")"
+age="$(printf '%s' "$sh2" | sed -n 's/.*AGE_S=\(-\{0,1\}[0-9]*\).*/\1/p' | head -1)"
+if [ -z "$age" ]; then
+  unknown "the clock-shadow scenario could not run (this role may lack CREATE on public; the proconfig arm still covers it): ${sh2}"
+elif [ "$age" -le 60 ]; then
+  pass "a shadowing public.clock_timestamp() does not back-date a rate (effective ${age}s ago)"
+else
+  fail "a shadowing public.clock_timestamp() back-dated a rate by ${age}s — the clock is not pg_catalog-qualified"
+fi
 
 # --------------------------------------------------------------------------
 echo '── BOUNDS — both encodings answer ONE shared list (--attempt) ─────────'

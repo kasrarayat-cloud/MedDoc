@@ -641,7 +641,11 @@ describe('ADMIN-4 round 2 — the repairs closed INSTANCES; these close the CLAS
     // ⚠️ `clock_timestamp()` — round 3. `now()` is transaction-START time, so a
     // writer that works then inserts stores a rate effective earlier than it
     // was written, by the transaction's duration (measured: 3.011s).
-    expect(sql, 'createdAt is not server-stamped').toContain('NEW."createdAt" := clock_timestamp()');
+    // ROUND 6: `pg_catalog.`-qualified — an unqualified name lost to a caller's
+    // `public.clock_timestamp()` and back-dated a rate (see the derivation arm).
+    expect(sql, 'createdAt is not server-stamped').toContain(
+      'NEW."createdAt" := pg_catalog.clock_timestamp()',
+    );
     expect(sql, 'now() is transaction-start time — the retroactive window returns').not.toContain(
       'NEW."createdAt" := now()',
     );
@@ -837,6 +841,49 @@ describe('ADMIN-4 round 5 — the SQL invariants the migration claims, asserted 
     // thing `prisma migrate dev` cannot see.
     expect(sqlOnly).toContain('platform_rates_previous_pair');
     expect(sqlOnly).toContain('platform_rates_previous_bounds');
+  });
+
+  it('⚠️ ROUND 6 — the derivation refuses above READ COMMITTED, LOCKS BEFORE IT STAMPS, and resolves no name through the caller', () => {
+    // Three defects round 6 measured on PG 16, each a permanent false history:
+    //  (a) REPEATABLE READ / SERIALIZABLE read a pre-lock snapshot → previous 3/2
+    //      recorded where 2/1 was in effect, no 40001 raised;
+    //  (b) createdAt stamped BEFORE the lock → 80 of 4800 rows false at the
+    //      DEFAULT isolation with 16 honest writers; 0 with the lock first;
+    //  (c) unqualified names → a TEMP `platform_rates` supplied the previous
+    //      pair, and a `public.clock_timestamp()` back-dated a rate.
+    // ⚠️ THIS IS THE SOURCE HALF ONLY. It reads this file, which is immutable
+    // once applied; a later `CREATE OR REPLACE` is invisible here. The
+    // behavioural half is `scripts/check-platform-rates-invariants.sh
+    // --attempt` (ISOLATION, SHADOW and ORDER arms, plus the structural read of
+    // the LIVE function body and proconfig).
+    const fnStart = sqlOnly.indexOf('CREATE OR REPLACE FUNCTION platform_rates_stamp_created()');
+    const fnEnd = sqlOnly.indexOf('$fn$ LANGUAGE plpgsql', fnStart);
+    expect(fnStart, 'the reader cannot find the derivation function').toBeGreaterThan(-1);
+    expect(fnEnd).toBeGreaterThan(fnStart);
+    const body = sqlOnly.slice(fnStart, fnEnd);
+    const iso = body.indexOf("current_setting('transaction_isolation') <> 'read committed'");
+    const lock = body.indexOf("PERFORM pg_advisory_xact_lock(hashtext('platform_rates'), 0);");
+    const stamp = body.indexOf('NEW."createdAt" := pg_catalog.clock_timestamp();');
+    const derive = body.indexOf('INTO NEW."previousNumerator", NEW."previousDenominator"');
+    expect(iso, '(a) no refusal above READ COMMITTED').toBeGreaterThan(-1);
+    expect(lock, '(a) the lock is taken before the isolation is checked').toBeGreaterThan(iso);
+    expect(stamp, '(b) createdAt is stamped BEFORE the lock — stamp order and lock order can disagree')
+      .toBeGreaterThan(lock);
+    expect(derive).toBeGreaterThan(stamp);
+    expect(body, '(c) the table resolves through the caller’s search_path').toContain(
+      'FROM "public"."platform_rates" p',
+    );
+    expect(body, 'the derivation order is not marginAt’s order').toContain(
+      'ORDER BY p."effectiveFrom" DESC, p."createdAt" DESC',
+    );
+    // (c) EVERY function in the file is pinned — counted, not listed.
+    const fns = (sqlOnly.match(/CREATE OR REPLACE FUNCTION/g) ?? []).length;
+    const pinned = (
+      sqlOnly.match(/\$fn\$ LANGUAGE plpgsql\s+SET search_path = pg_catalog, public, pg_temp;/g) ?? []
+    ).length;
+    expect(fns, 'the reader found no functions — this arm is measuring nothing').toBeGreaterThan(0);
+    expect(pinned, '(c) a function resolves names through the caller’s search_path').toBe(fns);
+    expect(sqlOnly, 'the $verify$ block does not assert the pins').toContain('n_pinned <> 3');
   });
 
   it('⚠️ THE BOUNDS CROSS-MULTIPLY IS `bigint` ON BOTH PAIRS — int4 overflowed', () => {
