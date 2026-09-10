@@ -60,7 +60,7 @@ Symptoms: postgres container restart-loops; `psql` returns "could not access sta
 
 ```bash
 # 1. Stop the cluster
-docker compose stop postgres transcribe-md transcribe-md-worker meddoc-pro marketing
+docker compose stop postgres transcribe-md transcribe-md-worker marketing
 
 # 2. Identify the most recent good backup
 ls -la /opt/meddoc-pro/backups/last/
@@ -93,7 +93,7 @@ docker run --rm \
   /app/node_modules/.bin/prisma migrate deploy
 
 # 7. Restart app tier
-docker compose up -d transcribe-md transcribe-md-worker meddoc-pro marketing
+docker compose up -d transcribe-md transcribe-md-worker marketing
 
 # 8. Verify
 docker compose ps

@@ -14,8 +14,17 @@
 # A check that merely required 2xx/3xx would go RED on the deliberate
 # retirement, and a check that accepted anything would go green on a 502 wearing
 # the retirement's place. Both are useless. The expected status is therefore
-# declared PER HOST, and a change AWAY from it is the finding — including a
-# change away from 410, which would mean the retired CRM started serving again.
+# declared PER HOST, and a change AWAY from it is the finding.
+#
+# ⚠️ CORRECTED 2026-09-09 — AND THE CORRECTION IS TO A CLAIM THIS FILE MADE ABOUT
+# ITSELF. The sentence above used to end "...including a change away from 410,
+# which would mean the retired CRM started serving again", and the pro row said
+# "Caddy answers Gone". BOTH WERE WRONG ABOUT WHICH LAYER ANSWERS, and the error
+# was load-bearing: a §2.5 declaration cited this row as the evidence that the
+# CRM had not come back. It cannot be. HOST NGINX emits that 410 from a block
+# with no proxy_pass, so nothing behind it is consulted and the code is identical
+# whether the container runs or not. THIS CHECK WATCHES THE EDGE. A container
+# revival is a CONTAINER question and is watched by container state, not by HTTP.
 #
 # ⚠️ THIS IS NOT `check-ingress-tls.sh`. That one asks whether a fresh TLS
 # handshake completes per SNI; it says nothing about what the application
@@ -39,7 +48,7 @@ EXPECTED=(
   "www.quillmd.com|200|the same site on the www host. MASTER.md STEP 0.6 names FIVE hosts and this table shipped with FOUR — the watched-set failure INSIDE the check written to cure watched-set failures. Keep every entry on ONE line: the floor is derived by cutting field 2, and a wrapped reason is parsed as extra expected codes."
   "app.quillmd.com|307|unauthenticated redirect to login"
   "admin.quillmd.com|404|the documented adminApi() 404-gate — admin is INVISIBLE, not merely forbidden"
-  "pro.quillmd.com|410|DELIBERATELY RETIRED. The meddoc-pro CRM container was stopped (SIGTERM) on ~2026-08-04 and Caddy answers Gone. A change AWAY from 410 is the finding: either it started serving again, or a 502 is wearing its place."
+  "pro.quillmd.com|410|DELIBERATELY RETIRED by owner ruling; ruling #307 then removed the compose service. CORRECTED 2026-09-09 — this row previously read 'Caddy answers Gone', which was FALSE and made it read as a revival detector. MEASURED: the 410 comes from HOST NGINX (/etc/nginx/sites-available/quillmd, a dedicated server block with NO proxy_pass), so it is UNCONDITIONAL AND UPSTREAM-INDEPENDENT; Caddy direct on 127.0.0.1:8443 with that SNI answered 502. THIS ROW THEREFORE CANNOT DETECT THE CRM RUNNING AGAIN: docker start of the retired container leaves it green. Since #307 the Caddy block answers 410 too, so a 502 can no longer wear its place either. A change away from 410 IS still the finding, but it is an INGRESS event: the nginx block tidied away and the host falling through to a co-tenant (sites-enabled/dealhunter declares server_name 5.231.107.93 _; and sorts first in the glob), a TLS failure, or somebody running the documented restore. For a REVIVAL, watch the container instead: docker inspect meddoc-pro-meddoc-pro-1 --format {{.State.Status}} must read exited."
 )
 
 have() { command -v "$1" >/dev/null 2>&1; }

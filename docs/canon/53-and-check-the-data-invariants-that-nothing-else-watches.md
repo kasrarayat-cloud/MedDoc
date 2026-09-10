@@ -81,6 +81,40 @@ state.
 > retirement's place**. So the expected code is declared per host with its
 > reason, and a change AWAY from 410 is the finding.
 
+⚠️ **AMENDED 2026-09-09, ruling #307 — THE PARAGRAPH ABOVE NAMES THE WRONG LAYER,
+AND THE SUPERSEDED WORDING IS KEPT BECAUSE THE CORRECTION IS THE POINT.** It says
+*"Caddy answers Gone"*. It does not. **MEASURED:**
+
+| probe | answer |
+|---|---|
+| `curl -sI https://pro.quillmd.com` | `HTTP/2 410`, **`server: nginx/1.24.0 (Ubuntu)`** |
+| Caddy direct, same SNI, `--resolve pro.quillmd.com:8443:127.0.0.1` | **`HTTP/2 502`, `server: Caddy`** |
+
+The 410 comes from a dedicated `server { server_name pro.quillmd.com; location /
+{ return 410 … } }` in `/etc/nginx/sites-available/quillmd` with **no
+`proxy_pass`** — so nothing behind nginx is consulted, and the **502 the
+paragraph warns about was already sitting behind a green row.**
+
+⚠️ **AND THE ERROR WAS LOAD-BEARING, NOT COSMETIC.** Because the reason field
+read as a revival detector, a §2.5 declaration nominated that row as *"the one
+that matters"* and listed it first under what would make the change look failed.
+**It cannot fire on a revival**: `docker start` of the retired container leaves
+`pro.quillmd.com` at 410 and this check green, while the CRM serves on
+`127.0.0.1:3001` against the production clinical database. *A control that is
+green by construction is worse than an absent one, because it is spent as
+evidence.*
+
+> **THE GENERALISABLE HALF: "WATCH IT WITH THE RIGHT ANSWER" HAS A SECOND
+> CLAUSE — *AND KNOW WHICH LAYER IS ANSWERING*.** An expected status is a claim
+> about a RESPONDER as much as about a code. This row had the right number and
+> the wrong responder for eleven months, and no amount of watching would have
+> found that; only probing the layers separately did.
+
+The row's reason field is corrected in `scripts/check-cotenants.sh` in the same
+change, and #307 additionally made the Caddy block answer 410 itself — so the
+sentence *"Caddy answers Gone"* is now TRUE of the tree, having been false when
+it was written. **It is still not what the check measures.**
+
 ⚠️ **AND ITS DISCRIMINATION CONTROL IS DERIVED FROM THE TABLE, NOT A CONSTANT.**
 The first draft hardcoded "at least 3 distinct codes", which is arbitrary: it
 does not scale when a host is added and it cannot tell a legitimate

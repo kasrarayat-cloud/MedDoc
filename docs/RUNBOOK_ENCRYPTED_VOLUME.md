@@ -87,7 +87,7 @@ ls -lh /root/pre-h8-migration-*.dump
 
 ```bash
 cd /opt/meddoc-pro
-docker compose stop meddoc-pro patient-app meddoc-pro-clinician
+docker compose stop transcribe-md transcribe-md-worker marketing
 docker compose stop postgres
 ```
 
@@ -166,7 +166,7 @@ docker compose exec -T postgres pg_isready -U meddoc -d meddoc
 ### 2.6 Bring app services back up
 
 ```bash
-docker compose up -d meddoc-pro patient-app meddoc-pro-clinician
+docker compose up -d transcribe-md transcribe-md-worker marketing
 docker compose ps
 ```
 
@@ -208,7 +208,7 @@ match — restore the original named volume.
 
 ```bash
 cd /opt/meddoc-pro
-docker compose stop meddoc-pro patient-app meddoc-pro-clinician postgres
+docker compose stop transcribe-md transcribe-md-worker marketing postgres
 
 # Revert docker-compose.yml on this host so postgres uses the
 # original named volume again. Easiest path: check out the previous
@@ -218,14 +218,14 @@ git -C /opt/meddoc-pro checkout HEAD~1 -- docker-compose.yml    # adjust to the 
 
 docker compose up -d postgres
 docker compose exec -T postgres pg_isready -U meddoc -d meddoc
-docker compose up -d meddoc-pro patient-app meddoc-pro-clinician
+docker compose up -d transcribe-md transcribe-md-worker marketing
 ```
 
 If the original `pgdata` volume was somehow corrupted, restore from
 the dump captured in §2.1:
 
 ```bash
-docker compose stop meddoc-pro patient-app meddoc-pro-clinician
+docker compose stop transcribe-md transcribe-md-worker marketing
 docker compose exec -T postgres dropdb -U meddoc meddoc
 docker compose exec -T postgres createdb -U meddoc meddoc
 cat /root/pre-h8-migration-*.dump \

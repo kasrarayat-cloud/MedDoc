@@ -86,12 +86,11 @@ docker compose run --rm db-migrate
 # Build app images (ONE service at a time — the 2 GB VPS OOM-kills
 # parallel builds).
 docker compose build marketing
-docker compose build meddoc-pro
 docker compose build transcribe-md
 docker compose build transcribe-md-worker
 
 # Start the rest
-docker compose up -d marketing meddoc-pro transcribe-md transcribe-md-worker
+docker compose up -d marketing transcribe-md transcribe-md-worker
 ```
 
 ### 1.5 Verify
@@ -1235,21 +1234,60 @@ docker compose -f /opt/meddoc-pro/docker-compose.yml up -d --no-deps --force-rec
 now; the *code* deletion stays scheduled last (`docs/foundation/RELAY.md` A6).
 Full reasoning in `docs/foundation/DISCOVERY.md` §A.2.
 
-Two independent controls, both reversible:
+⚠️ **THERE ARE NOW THREE CONTROLS, NOT TWO — ruling #307 ADDED ONE AND REMOVED
+ANOTHER, AND THE RESTORE *ORDER* IS THE PART THAT BITES.**
 
-1. **Edge.** `/etc/nginx/sites-available/quillmd` — `pro.quillmd.com` was
-   removed from the `:443` `server_name` and given its own `server` block that
-   answers **410**. It deliberately STAYS on the `:80` `server_name`.
-2. **Container.** `docker compose stop meddoc-pro`. `restart: unless-stopped`
-   means an explicit stop survives a daemon restart.
+1. **Edge (host nginx).** `/etc/nginx/sites-available/quillmd` — `pro.quillmd.com`
+   was removed from the `:443` `server_name` and given its own `server` block
+   that answers **410**. It deliberately STAYS on the `:80` `server_name`.
+   ⚠️ **THIS IS THE LAYER THAT ANSWERS TODAY** — measured `server: nginx/1.24.0
+   (Ubuntu)`, not Caddy, and the block has no `proxy_pass`, so **nothing in the
+   compose stack is consulted for this hostname.**
+2. **Ingress (Caddy).** The repo `Caddyfile`'s `pro.quillmd.com` block answers
+   **410** too, since #307. It used to `reverse_proxy meddoc-pro:3000`, so
+   removing control 1 on its own exposed a **502** — see the ordering trap below.
+3. **Compose service.** ⚠️ **THERE IS NO `meddoc-pro` SERVICE ANY MORE** (ruling
+   #307). `docker compose stop` and `docker compose up -d` **named with that
+   service both now fail — `no such service: meddoc-pro`.** The container OBJECT
+   `meddoc-pro-meddoc-pro-1` still exists, `Exited (143)`, and
+   `docker start meddoc-pro-meddoc-pro-1` still revives it: see
+   `docs/deploy-declarations/307-retire-meddoc-pro-service-20260909.md`, which
+   records that door rather than claiming to have closed it.
 
 `scripts/deploy-prod.sh` names its services explicitly
 (`up -d transcribe-md transcribe-md-worker`, `up -d gotenberg`), so **a normal
-deploy will not resurrect it.** A bare `docker compose up -d` would.
+deploy will not resurrect it.** Since #307 a bare `docker compose up -d` will
+not either — but `docker start meddoc-pro-meddoc-pro-1` still will.
 
-**To restore:** delete the 410 block, put `pro.quillmd.com` back on the `:443`
-`server_name`, `nginx -t`, `systemctl reload nginx`, then
-`docker compose up -d meddoc-pro`.
+**To restore — IN THIS ORDER, and the order is the whole point:**
+
+1. `git revert` the #307 commit on `main`, so the compose service AND the Caddy
+   `reverse_proxy` exist again, and deploy that tree.
+   ⚠️ **WITHOUT THIS STEP, STEP 2 ERRORS `no such service: meddoc-pro`.**
+2. Bring the service up by name and confirm it is healthy.
+3. Recreate `caddy` so it picks up the restored upstream, and confirm
+   `curl -skI --resolve pro.quillmd.com:8443:127.0.0.1
+   https://pro.quillmd.com:8443/` is no longer 502.
+4. **ONLY THEN touch the edge**: delete the 410 block, put `pro.quillmd.com`
+   back on the `:443` `server_name`, `nginx -t`, `systemctl reload nginx`.
+5. `bash scripts/check-cotenants.sh`, and change its expected code for this host
+   in the same commit — otherwise it goes red on the restoration it was asked for.
+
+⚠️ **THE OLD PROCEDURE DISMANTLED THE EDGE FIRST, AND THAT WAS THE DEFECT.** It
+read *"delete the 410 block … then `docker compose up -d` naming `meddoc-pro`"*.
+After
+#307 that last step errors, and the earlier steps have already reloaded nginx
+without the only control terminating the host — landing on exactly the state
+`scripts/check-cotenants.sh` names as THE FINDING, *"a 502 wearing its place"*.
+**The safety control comes down LAST, after the thing behind it is proven up.**
+
+⚠️ **AND THE LIVE HOST CARRIES ITS OWN COPY OF THE OLD ORDER.**
+`/etc/nginx/sites-enabled/quillmd:79-81` repeats the four-step procedure *inside
+the very block step 4 deletes*, and names a `--profile retired` invocation for a
+profile that **has never existed in this compose file**. Editing host config is a
+production act and this commit does not perform one, so **that comment is still
+wrong on the box** — whoever restores this host must correct it in the same
+change.
 
 #### Three things that will bite whoever touches this
 
@@ -1290,7 +1328,7 @@ That is not a failure.
 ls -lh /opt/meddoc-pro/backups/
 
 # Stop apps (keep postgres running)
-docker compose stop transcribe-md transcribe-md-worker meddoc-pro marketing caddy
+docker compose stop transcribe-md transcribe-md-worker marketing caddy
 
 # Drop and recreate the database (DESTRUCTIVE — do NOT skip the backup step)
 docker compose exec -T postgres psql -U meddoc -d postgres -c "DROP DATABASE meddoc;"
@@ -1304,7 +1342,7 @@ gunzip -c /opt/meddoc-pro/backups/pre_<label>_<date>.sql.gz | \
 docker compose exec postgres psql -U meddoc -d meddoc -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
 # Restart apps
-docker compose start caddy marketing meddoc-pro transcribe-md transcribe-md-worker
+docker compose start caddy marketing transcribe-md transcribe-md-worker
 
 # Verify (see §1.5)
 ```
@@ -1317,11 +1355,13 @@ MinIO objects are NOT in the pg_dump — audio lives in the bucket and is cascad
 
 ### 5.1 `502 Bad Gateway` on port 80
 
-Caddy can't reach the meddoc-pro container. Usually: the app container is down or still booting.
+Caddy can't reach the app container. Usually: it is down or still booting.
+(This used to name `meddoc-pro`; that service was removed by ruling #307 and the
+live app behind Caddy is `transcribe-md`.)
 
 ```bash
-docker compose logs --tail 50 meddoc-pro
-docker compose restart caddy meddoc-pro
+docker compose logs --tail 50 transcribe-md
+docker compose restart caddy transcribe-md
 ```
 
 ### 5.1a `502` with every container HEALTHY — the nginx→Caddy handshake
@@ -1860,8 +1900,8 @@ bundle to pick them up (NEXT_PUBLIC_* is a build-time embed). The
 server side picks them up on container recreate.
 
 ```bash
-docker compose build meddoc-pro transcribe-md transcribe-md-worker
-docker compose up -d --force-recreate meddoc-pro transcribe-md \
+docker compose build transcribe-md transcribe-md-worker
+docker compose up -d --force-recreate transcribe-md \
   transcribe-md-worker
 ```
 

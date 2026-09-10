@@ -322,11 +322,11 @@ The old plaintext `pgdata` named volume is preserved (NOT deleted). To revert:
 
 ```bash
 cd /opt/meddoc-pro
-docker compose stop transcribe-md transcribe-md-worker meddoc-pro postgres-backup postgres
+docker compose stop transcribe-md transcribe-md-worker postgres-backup postgres
 cp docker-compose.yml.pre-h8 docker-compose.yml
 docker compose up -d postgres
 # Wait healthy, then bring dependents back
-docker compose up -d transcribe-md transcribe-md-worker meddoc-pro postgres-backup
+docker compose up -d transcribe-md transcribe-md-worker postgres-backup
 ```
 
 This swaps the bind-mount line back to the original `pgdata:/var/lib/postgresql/data` and removes the `PGDATA` env var. Old data on the named volume picks up immediately; encrypted volume can be removed later with `cryptsetup close pg-encrypted && rm /opt/meddoc-pro/secrets/pgdata.luks`.

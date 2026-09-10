@@ -57,6 +57,13 @@ RUN npm run db:generate
 
 # Build Next.js via the workspace script
 ENV NEXT_TELEMETRY_DISABLED=1
+# ⚠️ THIS STEP REFUSES SINCE RULING #307 — DELIBERATELY, AND IT IS NOT A BUG.
+# `apps/meddoc-pro`'s `build` script now exits 1: the CRM is retired and
+# rebuilding it from source is one of the doors #307 closes (the compose service
+# removal alone left `npm run build|start -w meddoc-pro` wide open). The existing
+# image is untouched. To build this again, revert the #307 change in full — see
+# docs/deploy-declarations/307-retire-meddoc-pro-service-20260909.md, which
+# records this as an accepted capability loss.
 RUN npm run build -w meddoc-pro
 
 # ── Stage 3: Production Runner ──

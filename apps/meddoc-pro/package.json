@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "echo '[meddoc-pro] RETIRED by ruling #307. The CRM is decommissioned: this app carries FOUR UNLOCKED users writers (no withPracticeLock) and its env resolves to the PRODUCTION clinical database. Running it is the hazard #307 exists to remove. To restore, revert the #307 change in full — see docs/DEPLOYMENT_RUNBOOK.md 3.5.' >&2; exit 1",
+    "build": "echo '[meddoc-pro] RETIRED by ruling #307. The CRM is decommissioned: this app carries FOUR UNLOCKED users writers (no withPracticeLock) and its env resolves to the PRODUCTION clinical database. Running it is the hazard #307 exists to remove. To restore, revert the #307 change in full — see docs/DEPLOYMENT_RUNBOOK.md 3.5.' >&2; exit 1",
+    "start": "echo '[meddoc-pro] RETIRED by ruling #307. The CRM is decommissioned: this app carries FOUR UNLOCKED users writers (no withPracticeLock) and its env resolves to the PRODUCTION clinical database. Running it is the hazard #307 exists to remove. To restore, revert the #307 change in full — see docs/DEPLOYMENT_RUNBOOK.md 3.5.' >&2; exit 1",
     "lint": "eslint",
     "seed:e2e-admin": "tsx scripts/seed-e2e-admin.ts",
     "seed:e2e": "tsx scripts/seed-tenancy-fixtures.ts",

@@ -35,7 +35,7 @@ shred -u .env.bak       # purge the backup — it contains the old secret
 unset NEW
 
 # 3. Recreate all services that read AUTH_SECRET
-docker compose up -d --force-recreate meddoc-pro transcribe-md
+docker compose up -d --force-recreate transcribe-md
 
 # 4. Verify
 docker compose exec transcribe-md printenv AUTH_SECRET | head -c 10
@@ -57,10 +57,11 @@ Goal: zero dropped jobs during rotation. The trick is to provision the new key, 
 $EDITOR .env    # replace the value for the key you're rotating
 
 # 3. Recreate the services that consume it:
-#    - ANTHROPIC_API_KEY: meddoc-pro + transcribe-md + transcribe-md-worker
-#    - OPENAI_API_KEY: meddoc-pro + transcribe-md + transcribe-md-worker (T-M14.1)
+#    - ANTHROPIC_API_KEY: transcribe-md + transcribe-md-worker
+#    - OPENAI_API_KEY: transcribe-md + transcribe-md-worker (T-M14.1)
 #    - DEEPGRAM_API_KEY: transcribe-md-worker only
-docker compose up -d --force-recreate transcribe-md-worker transcribe-md meddoc-pro
+#    (meddoc-pro was in all three lists until ruling #307 removed the service.)
+docker compose up -d --force-recreate transcribe-md-worker transcribe-md
 
 # 4. Verify the new key is live
 docker compose exec transcribe-md-worker printenv ANTHROPIC_API_KEY | head -c 15
@@ -113,7 +114,7 @@ unset NEW
 
 # 4. Recreate EVERY service that reads DATABASE_URL.
 #    This is ALL app services — compose injects it into each.
-docker compose up -d --force-recreate meddoc-pro transcribe-md transcribe-md-worker
+docker compose up -d --force-recreate transcribe-md transcribe-md-worker
 
 # 5. Verify
 docker compose exec -T postgres psql -U meddoc -d meddoc -c "SELECT 1;"

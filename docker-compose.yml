@@ -88,68 +88,65 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── Next.js App (MedDoc Pro) ──
-  meddoc-pro:
-    build:
-      context: .
-      dockerfile: apps/meddoc-pro/Dockerfile
-    restart: unless-stopped
-    # Phase 19 — h16-cap-drop. Node app, binds 3000 inside the
-    # container, runs as uid 1001 (USER in Dockerfile). No need for
-    # any of the default Docker capabilities.
-    cap_drop:
-      - ALL
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    mem_limit: 512m
-    cpus: '1.0'
-    # T-M16.3: app-level health — hits /api/health which checks
-    # postgres. 30s start_period covers Next cold-start + Prisma client
-    # init; without it the first check fires before the app is ready
-    # and the container reports "unhealthy" until a retry passes.
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "--spider", "http://127.0.0.1:3000/api/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    depends_on:
-      postgres:
-        condition: service_healthy
-      # Phase 1B v2 — meddoc-pro publishes to Redis from logAudit() for
-      # the admin SSE stream. We don't gate on `service_healthy` here
-      # (the publish path is fire-and-forget and skipped when the
-      # client isn't `ready`), but `service_started` keeps the
-      # dependency explicit so a fresh `docker compose up` brings
-      # redis up first.
-      redis:
-        condition: service_started
-    env_file:
-      - .env
-    environment:
-      DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:-changeme_in_production}@postgres:5432/meddoc?schema=public
-      # Phase 1B v2 — explicit Redis URL for the audit-stream publish
-      # path and the /api/admin/stream/activity subscriber. Same value
-      # the singleton in lib/redis.ts defaults to, but spelled out so
-      # the next person reading the compose file doesn't have to grep
-      # for it.
-      REDIS_URL: redis://redis:6379
-      # Canonical external URL NextAuth uses to build callbacks. Override
-      # via PUBLIC_URL in .env once you move to a real domain (e.g.,
-      # https://meddoc.example.com). Must match exactly what users see in
-      # the browser — if they hit http://1.2.3.4 but AUTH_URL says
-      # https://meddoc.example.com, the auth callback mismatches.
-      AUTH_URL: ${PUBLIC_URL:-http://5.231.107.93}
-      NEXTAUTH_URL: ${PUBLIC_URL:-http://5.231.107.93}  # v4 compat name
-      AUTH_TRUST_HOST: "true"  # redundant (also hardcoded in auth.config.ts) — safe belt-and-braces
-    ports:
-      # Bound to loopback only — public traffic goes through Caddy. Kept
-      # for dev debugging (e.g., curl http://127.0.0.1:3001 from the host).
-      - "127.0.0.1:3001:3000"
-
+  # ── MedDoc Pro (CRM) — SERVICE REMOVED, ruling #307 ────────────────────────
+  #
+  # ⚠️ THE SERVICE DEFINITION IS GONE ON PURPOSE, AND THIS NOTE IS THE RECORD.
+  #
+  # The container had been `Exited (143)` for five weeks and `pro.quillmd.com`
+  # answers **410 by design** — but the service stayed DEFINED here, one
+  # `docker compose up` from reviving FOUR UNLOCKED `users` WRITERS whose
+  # missing practice lock was MEASURED to deadlock the locked doors, the locked
+  # side losing and its write silently gone (#268's shape).
+  #
+  # ⚠️ WHAT THIS CLOSES, STATED AT ITS ACTUAL WIDTH — AND THE FIRST DRAFT OF THIS
+  # COMMENT DID NOT. It said *"'Nobody starts it' and 'nobody CAN start it' are
+  # different properties. This removes the second gap."* **It removes ONE VERB.**
+  #
+  # CLOSED here:  `docker compose up -d meddoc-pro`, and every compose-mediated
+  #               spelling of it, including a bare project-wide `up -d`.
+  # CLOSED with it (same change, elsewhere):  `npm run start|dev|build
+  #               -w meddoc-pro` — the docker-free door — and the `Caddyfile`
+  #               route, which now answers 410 instead of proxying a service
+  #               that no longer exists.
+  # ⚠️ STILL OPEN:  `docker start meddoc-pro-meddoc-pro-1`. The container OBJECT
+  #               survives the removal of the SERVICE: `docker start` is a daemon
+  #               call against config baked at CREATE time and reads NO compose
+  #               file. That object is still `Exited (143)` with a live image, a
+  #               `meddoc-pro` network alias and a currently-valid production
+  #               `DATABASE_URL`. Closing it needs `docker rm`, an irreversible
+  #               production deletion — an OWNER act, recorded in the §2.5
+  #               declaration and deliberately not performed by this change.
+  # ⚠️ ALSO STILL OPEN:  the on-disk `.next/standalone` bundle, which boots the
+  #               same app with no service, no image and no container.
+  #
+  # So: **nobody can start it VIA COMPOSE.** The declaration
+  # `docs/deploy-declarations/307-retire-meddoc-pro-service-20260909.md` carries
+  # the full residual-door table, and `gate-307-start-doors` reds if that table
+  # stops naming them.
+  #
+  # ⚠️ THIS DELETES NO CODE. `apps/meddoc-pro/` is untouched except for three
+  # script values that now refuse; DELETE-MEDDOC-PRO removes the app, and only
+  # AFTER the console port lands — the recon found it holds THE ONLY WORKED
+  # PROVISIONING DESIGN in the repository, and DMP-c found it also holds ONE OF
+  # B7's THREE RULED PROMO DOORS (the reactivation grant).
+  #
+  # ⚠️ THE CO-TENANT BASELINE TRAVELS WITH THIS CHANGE — BUT `pro.quillmd.com`
+  # ANSWERING 410 IS **NOT** A DETECTOR FOR IT, AND THE FIRST DRAFT SAID IT WAS.
+  # The 410 is emitted by HOST nginx from a dedicated `server` block with no
+  # `proxy_pass` (`/etc/nginx/sites-available/quillmd:82-97`), so it is
+  # unconditional and upstream-independent: it reads the same whether this
+  # service exists, whether the container runs, and whatever this file says.
+  # ⚠️ `docker start meddoc-pro-meddoc-pro-1` would leave that row GREEN while
+  # the retired CRM served against the production clinical database. The rows
+  # that can actually detect a revival are the CONTAINER rows — see the §2.5
+  # declaration. `scripts/check-cotenants.sh` remains the expectation table
+  # (#265(d)); its reason field is corrected in this change, because it said
+  # "Caddy answers Gone" and the measured answers were nginx 410 at the edge and
+  # Caddy 502 behind it.
+  #
+  # Reversal: revert this change IN FULL — it spans the service block, the
+  # `Caddyfile` route and the run scripts, and reverting only one leaves an
+  # inconsistent tree. The image and the app both still exist.
   # ── Redis (BullMQ broker + ephemeral state) ──
   # Introduced in M2 for the batch pipeline. Internal-only — bound to
   # loopback for ops visibility, but apps reach it via the compose
@@ -290,7 +287,7 @@ services:
       retries: 3
       start_period: 15s
     depends_on:
-      - meddoc-pro
+      # meddoc-pro removed — ruling #307
       - marketing
       - transcribe-md
     ports:
