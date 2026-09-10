@@ -17,6 +17,8 @@
 // imaging type is a behaviour change and must be judged as one.
 // ============================================================================
 
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
@@ -80,6 +82,25 @@ describe.each(FLAG_STATES.map((v) => [show(v), v] as const))(
     });
   }
 );
+
+describe('THE FLAG READ STAYS A LITERAL, so Next.js can still inline it', () => {
+  it('ultrasoundSpecialtyEnabled reads process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY by name', () => {
+    // Behaviour cannot see this: under vitest `process.env[name]` and the
+    // literal read return the same value. In a Next.js CLIENT bundle only the
+    // literal is replaced at build time — a computed read ships as a runtime
+    // lookup of an env var the browser does not have, so the flag reads OFF
+    // client-side and Ultrasound silently disappears from every picker in
+    // production (where the flag is ON). So the form is pinned, not the value.
+    const src = readFileSync(path.join(__dirname, 'specialties.ts'), 'utf8');
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
+    const body = /export function ultrasoundSpecialtyEnabled\(\): boolean \{([\s\S]*?)\n\}/.exec(code);
+    expect(body, 'ultrasoundSpecialtyEnabled must still exist').not.toBeNull();
+    expect(body![1].trim()).toBe("return process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY === 'true';");
+    expect(code, 'no computed process.env[...] read anywhere in the catalog').not.toMatch(
+      /process\.env\s*\[/
+    );
+  });
+});
 
 describe('THE ORACLE IS NOT VACUOUS', () => {
   it('the universe is derived from the real catalog and the real legacy map', () => {

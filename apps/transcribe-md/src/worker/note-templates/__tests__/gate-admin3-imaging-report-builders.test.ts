@@ -191,9 +191,25 @@ describe('KEYED BY NAME — both consumers look the builder up, neither binds ul
 
   it('the worker\'s post-L6 table rebuild is the row\'s builder, not the venous pass', () => {
     const code = stripComments(read('src/worker.ts'));
-    expect(code).toContain('imagingReportBuilderFor(visit.specialty)');
-    expect(code).toContain('.reconcileFinalNote(polished.soapFinal)');
     expect(code).not.toMatch(/\breconcileMeasurementTables\b/);
+    // ⚠️ PINNED BY EXACT FORM, not by `toContain`. No unit test executes this
+    // part of worker.ts, so a contains-check would stay green on
+    // `emAppliesToSpecialty(x) ? null : imagingReportBuilderFor(x)` — which
+    // silently stops rebuilding tables on every imaging visit whenever the
+    // flag is off, where the old gate (`isImagingReportSpecialty`) was
+    // flag-agnostic. The correct form is knowable, so assert it by equality.
+    const decl = /\n\s*(const imagingReportBuilder = [^\n]*)/.exec(code);
+    expect(decl, 'worker.ts must still declare imagingReportBuilder').not.toBeNull();
+    expect(decl![1]).toBe('const imagingReportBuilder = imagingReportBuilderFor(visit.specialty);');
+    const body = /\n(\s*if \(imagingReportBuilder\) \{[\s\S]*?\n\s*\}\n)/.exec(code);
+    expect(body, 'worker.ts must still apply the builder').not.toBeNull();
+    expect(body![1].replace(/\s+/g, ' ').trim()).toBe(
+      'if (imagingReportBuilder) { polished = { ...polished, soapFinal: ' +
+        'imagingReportBuilder.reconcileFinalNote(polished.soapFinal), }; }'
+    );
+    // And exactly one such pass — a second, unconditional one would also be
+    // a behaviour change.
+    expect(code.match(/\.reconcileFinalNote\(/g)?.length).toBe(1);
   });
 
   it('CENSUS — outside their own modules, only the registry names the ultrasound builders', () => {
