@@ -8,6 +8,7 @@ import prisma from '@meddoc/db';
 import type { TransactionClient } from '@meddoc/db';
 import { AuthTokenPurpose, PracticeRole, Product, UserRole } from '@prisma/client';
 import { signIn as nextAuthSignIn } from '@/lib/nextauth';
+import { requestHost } from '@/lib/practice-host';
 import { createAuthToken } from '@/lib/auth-tokens';
 import { isEmailDeliveryEnabled } from '@/lib/email-enabled';
 import { isAutoConfirmDomain } from '@/lib/email-auto-confirm';
@@ -389,10 +390,12 @@ function isSessionTrackingRefusal(err: unknown): boolean {
  *  page after a successful sign-in. */
 async function postLoginRedirectFor(): Promise<string> {
   try {
-    const h = await headers();
-    const host = (h.get('x-forwarded-host') ?? h.get('host') ?? '')
-      .toLowerCase()
-      .split(':')[0];
+    // ADMIN-2 — the Host header ONLY, through the one reader. This used to
+    // prefer `x-forwarded-host`, which neither ingress hop sets and the trusted
+    // Caddy hop passes through from the client (lib/practice-host.ts header).
+    // For every honest request the two are equal, so this changes nothing but
+    // a forged header's reach.
+    const host = (await requestHost()) ?? '';
     if (host === 'admin.quillmd.com' || host?.startsWith('admin.')) {
       return '/admin';
     }
