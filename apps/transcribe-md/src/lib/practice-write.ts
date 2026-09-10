@@ -54,7 +54,9 @@ export type PracticeWriteRefusal =
   | 'invalid_slug'
   | 'reserved_slug'
   | 'slug_taken'
-  | 'no_change';
+  | 'no_change'
+  // ADMIN-2a — the caller's `ifSlugIs` precondition no longer held.
+  | 'changed_under_you';
 
 /**
  * ⚠️ THE RESERVED NAMES — ADMIN-2 KEYS HOSTNAMES ON THIS COLUMN.
@@ -68,7 +70,31 @@ const RESERVED_SLUGS = new Set([
   'static', 'assets', 'cdn', 'status', 'health', 'auth', 'login', 'signup',
   'billing', 'support', 'help', 'docs', 'blog', 'test', 'staging', 'qa', 'dev',
   'preview', 'internal', 'system', 'root', 'localhost',
+  // ⚠️ ADMIN-2a, 2026-09-10 — names that ALREADY EXIST in the quillmd.com zone
+  // or are mail/infra labels. A wildcard record does not cover a name the zone
+  // already has, so a practice given one would never resolve to us.
+  // MEASURED with dig: `send` carries MX `feedback-smtp.us-east-1.amazonses.com`
+  // and an SPF TXT (live mail). `www`/`app`/`admin`/`staging` resolve and were
+  // already above. The rest do not resolve today; they are the labels mail
+  // clients and MTAs probe by convention, so a practice holding one would
+  // receive somebody's autodiscovery traffic.
+  'send', 'www2', 'mta-sts', 'autodiscover', 'autoconfig', 'quillmd',
+  'imap', 'pop', 'pop3', 'webmail',
 ]);
+
+/**
+ * ⚠️ THE MACHINE-SLUG NAMESPACE. Signup mints `solo-<rand>-<base36 ts>`
+ * (`actions/auth.ts`), and 195 of 199 production practices still carry one.
+ * ONE constant, two readers: the label guard refuses it (a human must not claim
+ * a name that looks machine-made), and the owner's one-time claim is allowed
+ * ONLY while the current slug is still in it. ADMIN-2 treats these hosts as
+ * unroutable, so it must import this rather than retype the prefix.
+ */
+const MACHINE_SLUG_PREFIX = 'solo-';
+
+export function isMachineSlug(slug: string): boolean {
+  return slug.startsWith(MACHINE_SLUG_PREFIX);
+}
 
 /**
  * A DNS label: lowercase alphanumerics and hyphens, 3–63 characters, not
@@ -77,10 +103,33 @@ const RESERVED_SLUGS = new Set([
  */
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$/;
 
-export function slugRefusal(slug: string): PracticeWriteRefusal | null {
+/**
+ * ⚠️ `--` IN POSITIONS 3–4 IS RESERVED BY RFC 5891 §4.2.3.1 ("R-LDH" labels).
+ * `xn--` is the one in use — punycode, i.e. a lookalike of some other script's
+ * name rendered in the address bar — and the others are reserved for future
+ * encodings. Refused as a class, not only as `xn--`.
+ */
+const RESERVED_LDH_RE = /^..--/;
+
+/**
+ * ⚠️ THE ONE PREDICATE FOR "MAY THIS BE A PRACTICE'S HOST LABEL". ADMIN-2's
+ * host classifier imports this; it must not grow a second copy. Pure — no
+ * database — so it can run before any read.
+ */
+export function practiceLabelRefusal(slug: string): PracticeWriteRefusal | null {
   if (!SLUG_RE.test(slug)) return 'invalid_slug';
+  if (slug.startsWith('xn--') || RESERVED_LDH_RE.test(slug)) return 'invalid_slug';
   if (RESERVED_SLUGS.has(slug)) return 'reserved_slug';
+  if (isMachineSlug(slug)) return 'reserved_slug';
   return null;
+}
+
+/** P2002 read STRUCTURALLY, not via `instanceof` — the sign route records why
+ *  (a Prisma error crossing a bundle or mock boundary keeps its shape, not its
+ *  prototype). MEASURED: `@prisma/adapter-pg` maps SQLSTATE 23505 to
+ *  `UniqueConstraintViolation`, which the client reports as `P2002`. */
+function isUniqueViolation(err: unknown): boolean {
+  return (err as { code?: unknown } | null)?.code === 'P2002';
 }
 
 /**
@@ -100,6 +149,13 @@ export async function updatePractice(args: {
   patch: PracticePatch;
   actorUserId: string;
   reason?: string;
+  /**
+   * ADMIN-2a — a COMPARE-AND-SET precondition: write only if the row's slug is
+   * still exactly this. The owner's one-time claim passes the machine slug it
+   * read, so two owners claiming at once cannot both succeed — the second's
+   * UPDATE matches zero rows and is refused, not applied over the first.
+   */
+  ifSlugIs?: string;
 }): Promise<PracticeWriteResult> {
   const keys = Object.keys(args.patch);
   // FAIL CLOSED on an unknown field, before reading anything.
@@ -117,20 +173,27 @@ export async function updatePractice(args: {
   });
   if (!before) return { ok: false, reason: 'not_found', detail: args.practiceId };
 
-  if (typeof args.patch.slug === 'string') {
-    const refusal = slugRefusal(args.patch.slug);
+  if (args.ifSlugIs !== undefined && before.slug !== args.ifSlugIs) {
+    return { ok: false, reason: 'changed_under_you', detail: before.slug };
+  }
+
+  // ⚠️ VALIDATED ONLY WHEN IT CHANGES. The guard is stricter than the rows it
+  // now governs: 195 practices hold a `solo-` slug the guard refuses. A patch
+  // that carries the CURRENT slug unchanged (a form sending every field) must
+  // not be refused for a value nobody is asking to write.
+  if (typeof args.patch.slug === 'string' && args.patch.slug !== before.slug) {
+    const refusal = practiceLabelRefusal(args.patch.slug);
     if (refusal) return { ok: false, reason: refusal, detail: args.patch.slug };
-    if (args.patch.slug !== before.slug) {
-      const taken = await prisma.practice.findUnique({
-        where: { slug: args.patch.slug },
-        select: { id: true },
-      });
-      // ⚠️ CHECKED HERE **AND** UNIQUE IN THE DATABASE. This read is for the
-      // MESSAGE — `slug_taken` rather than a raw constraint violation — and the
-      // column's own `@unique` is what actually holds under a race.
-      if (taken && taken.id !== before.id) {
-        return { ok: false, reason: 'slug_taken', detail: args.patch.slug };
-      }
+    const taken = await prisma.practice.findUnique({
+      where: { slug: args.patch.slug },
+      select: { id: true },
+    });
+    // ⚠️ CHECKED HERE **AND** UNIQUE IN THE DATABASE. This read is for the
+    // MESSAGE — `slug_taken` rather than a raw constraint violation — and the
+    // column's own `@unique` is what actually holds under a race (the P2002
+    // arm around the write below names that case too).
+    if (taken && taken.id !== before.id) {
+      return { ok: false, reason: 'slug_taken', detail: args.patch.slug };
     }
   }
 
@@ -144,10 +207,36 @@ export async function updatePractice(args: {
     return { ok: false, reason: 'no_change', detail: 'patch matches current values' };
   }
 
-  await prisma.practice.update({
-    where: { id: args.practiceId },
-    data: args.patch as Prisma.PracticeUpdateInput,
-  });
+  try {
+    if (args.ifSlugIs === undefined) {
+      await prisma.practice.update({
+        where: { id: args.practiceId },
+        data: args.patch as Prisma.PracticeUpdateInput,
+      });
+    } else {
+      // ⚠️ `updateMany`, NOT `update`, FOR THE COMPARE-AND-SET: it compiles to
+      // ONE `UPDATE … WHERE id AND slug` and reports a count, the shape
+      // `changeMemberRoleAction` already relies on. Count 0 = the slug moved
+      // between our read and this write, so we refuse and audit nothing.
+      const { count } = await prisma.practice.updateMany({
+        where: { id: args.practiceId, slug: args.ifSlugIs },
+        data: args.patch as Prisma.PracticeUpdateManyMutationInput,
+      });
+      if (count === 0) {
+        return { ok: false, reason: 'changed_under_you', detail: args.ifSlugIs };
+      }
+    }
+  } catch (err) {
+    // ⚠️ THE RACE THE `taken` READ ABOVE CANNOT CLOSE. Two writers can both see
+    // a slug free; the column's `@unique` then refuses the second, and that
+    // arrives here as P2002. Named as `slug_taken` instead of a raw 500 — but
+    // ONLY when this patch changes the slug, the one unique column it can
+    // write. Any other failure is rethrown, never relabelled.
+    if (isUniqueViolation(err) && 'slug' in changed) {
+      return { ok: false, reason: 'slug_taken', detail: String(args.patch.slug) };
+    }
+    throw err;
+  }
 
   const archiving = 'isActive' in changed && changed.isActive!.to === false;
   const restoring = 'isActive' in changed && changed.isActive!.to === true;

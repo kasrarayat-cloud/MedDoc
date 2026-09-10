@@ -26,7 +26,7 @@ vi.mock('../audit', () => ({ logAudit }));
 
 import {
   PRACTICE_WRITABLE_FIELDS,
-  slugRefusal,
+  practiceLabelRefusal as slugRefusal,
   updatePractice,
 } from '../practice-write';
 
@@ -101,8 +101,10 @@ describe('ADMIN-3a — the slug is a HOSTNAME, and is validated as one', () => {
   it('⚠️ NON-VACUITY — an ordinary slug passes', () => {
     expect(slugRefusal('northside')).toBeNull();
     expect(slugRefusal('north-side-clinic')).toBeNull();
-    // and the machine-generated shape ADMIN-2a exists to retire is itself valid
-    expect(slugRefusal('solo-a1b2c3d4-m1n2o3')).toBeNull();
+    // ⚠️ ADMIN-2a REVERSED THIS LINE ON PURPOSE. It used to assert the machine
+    // shape was valid; the `solo-` namespace is now RESERVED, so a human cannot
+    // claim a name that looks machine-made. Pinned in gate-admin2a-slug-claim.
+    expect(slugRefusal('solo-a1b2c3d4-m1n2o3')).toBe('reserved_slug');
   });
 
   it('a taken slug is refused by NAME, not by a constraint violation', async () => {
