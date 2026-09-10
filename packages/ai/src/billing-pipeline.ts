@@ -159,7 +159,12 @@ export type ChargeOutcome =
    *  nothing billable at all. B6's ruling 90(a). */
   | { charged: 'declined'; reason: string }
   /** The charge threw. See the note on the catch below. */
-  | { charged: 'failed'; detail: string };
+  | { charged: 'failed'; detail: string }
+  /** ADMIN-4 round 6 — the visit ALREADY carries its usage charge (a retry of a
+   *  READY visit, or a replay). Nothing was read into the wallet and nothing was
+   *  written. Not `failed` — no money was lost — and not `declined`, which is a
+   *  pricing statement; this is "the ledger already holds it, in these rows". */
+  | { charged: 'already_charged'; ledgerEntryIds: readonly string[] };
 
 /**
  * APPEND THIS VISIT'S USAGE DEBIT.
@@ -219,6 +224,11 @@ export async function chargeVisitUsage(args: {
     // drew between `balance_unreadable` and an empty wallet at admission.
     if (result.reason === 'balance_unreadable') {
       return { charged: 'failed', detail: result.detail };
+    }
+    // ADMIN-4 round 6 — a retry of a visit that is already on the ledger. The
+    // writer refused it inside its transaction, under the per-visit lock.
+    if (result.reason === 'already_charged') {
+      return { charged: 'already_charged', ledgerEntryIds: result.ledgerEntryIds };
     }
     // ⚠️ AND `no_margin_rate` IS `failed` FOR THE SAME REASON — ADMIN-4.
     //

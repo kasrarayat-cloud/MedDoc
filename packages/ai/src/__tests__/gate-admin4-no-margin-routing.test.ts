@@ -106,9 +106,15 @@ vi.mock('@meddoc/db', () => {
         return platformRateRows;
       },
     },
-    $queryRawUnsafe: async () => {
+    // ⚠️ ROUND 6 — THE STUB ANSWERS BY SQL, NOT BY POSITION. `commitVisitCharge`
+    // now asserts READ COMMITTED before its locks, and a stub that returned the
+    // balance rows to EVERY raw query would hand that assertion a balance row
+    // (no `level`) — the right refusal for the wrong reason.
+    $queryRawUnsafe: async (sql: string) => {
       dbCalls.push('$queryRawUnsafe');
-      return balanceRows;
+      if (sql.includes('transaction_isolation')) return [{ level: 'read committed' }];
+      if (sql.includes('"ledger_entries"')) return balanceRows;
+      throw new Error(`stub: unexpected raw SQL: ${sql.slice(0, 80)}`);
     },
     $executeRawUnsafe: async () => {
       dbCalls.push('$executeRawUnsafe');
@@ -119,6 +125,17 @@ vi.mock('@meddoc/db', () => {
       return fn(client);
     },
     ledgerEntry: {
+      // Round 6's already-charged check. Honours the `where` it is given rather
+      // than answering blindly, so a changed query shape cannot pass silently.
+      findMany: async ({ where }: { where: { idempotencyKey?: { in?: string[] } } }) => {
+        dbCalls.push('ledgerEntry.findMany');
+        const keys = where?.idempotencyKey?.in;
+        if (!Array.isArray(keys)) throw new Error('stub: ledgerEntry.findMany without idempotencyKey.in');
+        return ledgerWrites
+          .map((d, i) => ({ id: `ledger_${i + 1}`, key: d.idempotencyKey as string }))
+          .filter((r) => keys.includes(r.key))
+          .map((r) => ({ id: r.id }));
+      },
       create: async ({ data }: { data: Record<string, unknown> }) => {
         dbCalls.push('ledgerEntry.create');
         ledgerWrites.push(data);

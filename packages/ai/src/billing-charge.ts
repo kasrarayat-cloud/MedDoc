@@ -624,11 +624,20 @@ export async function priceUsageRows(
  *  whole transaction roll back — a visit that could pay would record nothing.
  *  The bucket is part of the identity of the row, so it is part of the key.
  *
- *  ⚠️ AND THE SPLIT IS STILL IDEMPOTENT AS A WHOLE, which is the property that
- *  matters: a retry re-derives the same draws from the same balances only if
- *  nothing landed, and if anything landed the balance has moved and the first
- *  colliding key aborts the retry. Partial double-charging is not reachable
- *  because both rows are written in ONE transaction — see the writer.
+ *  ⚠️ ADMIN-4 ROUND 6 — THE KEY IS **NOT** IDEMPOTENT AS A WHOLE, AND THIS
+ *  COMMENT USED TO SAY IT WAS. It read: *"if anything landed the balance has
+ *  moved and the first colliding key aborts the retry. Partial double-charging
+ *  is not reachable."* That does not follow. A retry collides only when its
+ *  bucket set OVERLAPS the first run's. Measured: a visit charged 6750 µ$
+ *  entirely from `promo` (key `…:promo`); other visits then drained promo to 0;
+ *  a Try-again on the still-READY visit re-derived the split as `paid:6750`
+ *  under key `…:paid` — a DIFFERENT key, accepted by the unique index against
+ *  the real B5 DDL — and the visit was debited 13 500 µ$ for a 6750 charge.
+ *
+ *  So the unique index is kept as the backstop for a same-bucket replay, and
+ *  the per-VISIT property is enforced by the writer: {@link commitVisitCharge}
+ *  refuses a visit that already carries ANY of {@link visitUsageKeys}, decided
+ *  inside its transaction under a per-visit lock. See the writer.
  *
  *  ⚠️ IDEMPOTENCY MATTERS MORE HERE THAN ANYWHERE. On a mutable table a double
  *  charge is an UPDATE away from fixed. On this one it can only be offset by an
@@ -637,6 +646,37 @@ export async function priceUsageRows(
 export function visitChargeKey(visitId: string, bucket: LedgerBucket): string {
   return `usage:visit:${visitId}:${bucket}`;
 }
+
+/**
+ * EVERY BUCKET IN THE DATABASE'S VOCABULARY, AS A RECORD THE COMPILER CHECKS.
+ *
+ * ⚠️ A RECORD, NOT AN ARRAY, BECAUSE A LIST CAN BE SHORT. `satisfies
+ * Record<LedgerBucket, true>` fails to compile if a bucket is MISSING and if one
+ * is INVENTED, so the key set below can never silently omit a bucket that a
+ * future split starts drawing from — which is exactly the shape of the defect
+ * this closes (a retry whose draw lands in a bucket the check did not look at).
+ */
+const EVERY_LEDGER_BUCKET = { paid: true, promo: true } as const satisfies Record<LedgerBucket, true>;
+
+/**
+ * EVERY idempotency key THIS WRITER CAN EVER EMIT FOR ONE VISIT.
+ *
+ * DERIVED from {@link visitChargeKey} over {@link EVERY_LEDGER_BUCKET}, never
+ * written out, so the check and the write cannot disagree about what a visit's
+ * usage row is called. Exact keys rather than a `LIKE 'usage:visit:<id>:%'`
+ * prefix: a prefix is one `%`/`_` in an id, or one `:` in a neighbouring id,
+ * away from matching a different visit.
+ */
+export function visitUsageKeys(visitId: string): string[] {
+  return (Object.keys(EVERY_LEDGER_BUCKET) as LedgerBucket[]).map((bucket) =>
+    visitChargeKey(visitId, bucket),
+  );
+}
+
+/** The advisory-lock namespace for "one usage charge per visit". Distinct from
+ *  the wallet's `hashtext('ledger_entries')` so it can never alias a wallet
+ *  lock; taken BEFORE the wallet locks by the only writer that takes it. */
+export const VISIT_CHARGE_LOCK_NAMESPACE = 'ledger_entries:visit_usage';
 
 export interface CommitVisitChargeArgs {
   practiceId: string;
@@ -670,7 +710,11 @@ export type CommitResult =
       chargeMicroUsd: bigint;
     }
   | { written: false; reason: 'not_chargeable'; decision: DeclinedChargeDecision }
-  | { written: false; reason: 'balance_unreadable'; detail: string };
+  | { written: false; reason: 'balance_unreadable'; detail: string }
+  /** ADMIN-4 round 6 — the visit ALREADY carries its usage charge, so nothing
+   *  was written. NOT a failure and NOT a pricing decline: the money for this
+   *  visit is on the ledger, and these are the rows that hold it. */
+  | { written: false; reason: 'already_charged'; ledgerEntryIds: readonly string[] };
 
 /**
  * APPEND ONE `usage` ROW FOR A VISIT — PRODUCTION ONLY.
@@ -698,6 +742,43 @@ export async function commitVisitCharge(args: CommitVisitChargeArgs): Promise<Co
   if (!decision.charge) return { written: false, reason: 'not_chargeable', decision };
 
   return prisma.$transaction(async (tx): Promise<CommitResult> => {
+    // ── ADMIN-4 ROUND 6 — READ COMMITTED OR NOTHING. ────────────────────────
+    //
+    // Everything below is "take a lock, THEN read" — the already-charged check
+    // and the balance both. Above READ COMMITTED the transaction's snapshot is
+    // taken at its FIRST statement, before any lock wait, and never refreshes:
+    // a competing charge that committed while we waited would be invisible, and
+    // the lock would serialize two writers that each believe they are first.
+    // Ruling #269 measured exactly this on the last-owner guard and REFUSES by
+    // name; `withPracticeLock` asserts the same thing first. Asserted, not
+    // assumed — Prisma inherits the database default, and a default is one
+    // `ALTER DATABASE … SET default_transaction_isolation` from being different.
+    const [iso] = await tx.$queryRawUnsafe<Array<{ level: string }>>(
+      `SELECT current_setting('transaction_isolation') AS level`,
+    );
+    const level = String(iso?.level ?? '').toLowerCase();
+    if (level !== 'read committed') {
+      throw new Error(
+        `commitVisitCharge: refusing to charge at isolation level ${JSON.stringify(level)} — ` +
+          'the per-visit and wallet locks only serialize reads taken AFTER them, which needs READ COMMITTED (ruling #269)',
+      );
+    }
+
+    // ── ADMIN-4 ROUND 6 — ONE USAGE CHARGE PER VISIT, decided HERE. ─────────
+    //
+    // ⚠️ THE WALLET LOCKS BELOW DO NOT SERIALIZE THIS. They are keyed on
+    // `args.practiceId`, and the worker passes the AUTHOR's practice (#287 in
+    // worker.ts, an open owner decision) — two charges of one visit can carry
+    // different practice ids and so take disjoint wallet locks. The visit lock
+    // is keyed on the visit and nothing else. Taken FIRST, and taken by no
+    // other writer, so there is no lock-order cycle with a grant or a top-up
+    // (each takes one wallet lock and never this one).
+    await tx.$executeRawUnsafe(
+      `SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))`,
+      VISIT_CHARGE_LOCK_NAMESPACE,
+      args.visitId,
+    );
+
     // ── THE LOCKS. Taken here, in DRAW_ORDER, before the balance is read. ────
     //
     // ⚠️ WITHOUT THIS THE SPLIT IS A READ-THEN-WRITE RACE, and the derive
@@ -722,6 +803,35 @@ export async function commitVisitCharge(args: CommitVisitChargeArgs): Promise<Co
         `SELECT pg_advisory_xact_lock(hashtext('ledger_entries'), hashtext($1))`,
         `${args.practiceId}:${bucket}`,
       );
+    }
+
+    // ── THE ALREADY-CHARGED CHECK — after every lock, before the balance. ────
+    //
+    // ⚠️ THIS IS THE DEFECT ROUND 6 FOUND, AND THE UNIQUE INDEX COULD NOT SEE
+    // IT. `idempotencyKey` is per (visit, BUCKET): a retry whose split lands in
+    // a bucket the first run did not use gets a key nothing collides with.
+    // Measured against the real B5 DDL: `usage:visit:V:promo -6750`, promo
+    // drained by other visits, then `usage:visit:V:paid -6750` → INSERT 0 1.
+    // One visit, 13 500 µ$ debited for a 6750 charge, on an append-only table.
+    //
+    // So the question asked is the PER-VISIT one — "does this visit carry ANY
+    // usage row this writer could have written?" — over the derived key set,
+    // not "does this (visit, bucket) exist?". A visit that already carries its
+    // charge is NOT re-priced and NOT re-debited, whatever its usage rows, the
+    // margin, or the wallet mix now say: a retry that re-ran a layer after its
+    // charge landed leaves that new usage uncharged and enumerable ("a usage
+    // event with no ledger row"), which is the fail-closed direction — it costs
+    // us, never the doctor.
+    const already = await tx.ledgerEntry.findMany({
+      where: { idempotencyKey: { in: visitUsageKeys(args.visitId) } },
+      select: { id: true },
+    });
+    if (already.length > 0) {
+      return {
+        written: false,
+        reason: 'already_charged',
+        ledgerEntryIds: already.map((r) => r.id),
+      };
     }
 
     // ── THE BALANCE. Same reader as admission, inside this transaction. ──────
