@@ -32,10 +32,15 @@ import {
   Crown,
   KeyRound,
   LogOut,
+  MonitorSmartphone,
   PauseCircle,
+  Pencil,
   PlayCircle,
   ShieldOff,
   Trash2,
+  UserCheck,
+  UserPlus,
+  UserX,
 } from 'lucide-react';
 
 import {
@@ -49,6 +54,20 @@ import {
 } from '../../_lib/admin-format';
 import type { ConfirmKind, UserDetail, UserListRow } from '../_types';
 
+import EditProfileModal from './EditProfileModal.client';
+
+/** One `user_sessions` row as GET /api/admin/users/[id]/sessions returns it —
+ *  never the bearer token, which the route does not select. */
+interface SessionRow {
+  id: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: string;
+  lastActiveAt: string;
+  expiresAt: string;
+  status: 'active' | 'expired' | 'invalidated';
+}
+
 interface Props {
   user: UserListRow;
   currentUserId: string;
@@ -58,6 +77,8 @@ interface Props {
   refetchKey: number;
   /** Parent calls this after a non-confirm action so the list re-renders. */
   onActed: () => void;
+  /** Opens "Add user" pre-filled with this user's practice. */
+  onAddUser?: (practiceId: string) => void;
   /** Phase 4 dual-theme prop. Phase 5 ignores it; kept for caller compat. */
   theme?: string;
 }
@@ -69,10 +90,16 @@ export default function UserDetailDrawer({
   onConfirm,
   refetchKey,
   onActed,
+  onAddUser,
 }: Props) {
   const [detail, setDetail] = useState<UserDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  // Sessions load on demand — the list is a user_sessions read, not part of
+  // the detail round-trip.
+  const [sessions, setSessions] = useState<SessionRow[] | null>(null);
+  const [sessionsState, setSessionsState] = useState<'idle' | 'loading' | 'error'>('idle');
 
   // Esc-to-close
   useEffect(() => {
@@ -146,7 +173,16 @@ export default function UserDetailDrawer({
         .json()
         .catch(() => ({}));
       if (res.ok && data.ok) {
-        toast.success(`${label}: ok`);
+        // Reactivation reports the promo grant's outcome; say it rather than
+        // swallow it, because 'failed' is something an operator must see.
+        const promo = (data as { promo?: string }).promo;
+        if (promo === 'failed') {
+          toast.warning(`${label}: ok — but the promo grant failed`, {
+            description: 'Recorded on the audit row; the backfill re-run repairs it.',
+          });
+        } else {
+          toast.success(`${label}: ok`, { description: promo ? `promo: ${promo}` : undefined });
+        }
         onActed();
       } else {
         toast.error(`${label} failed`, {
@@ -157,6 +193,45 @@ export default function UserDetailDrawer({
       toast.error(`${label} failed`, {
         description: err instanceof Error ? err.message : 'network error',
       });
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function loadSessions() {
+    setSessionsState('loading');
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/sessions`);
+      const data: { ok?: boolean; sessions?: SessionRow[] } = await res.json().catch(() => ({}));
+      if (res.ok && data.ok && data.sessions) {
+        setSessions(data.sessions);
+        setSessionsState('idle');
+      } else {
+        setSessionsState('error');
+      }
+    } catch {
+      setSessionsState('error');
+    }
+  }
+
+  async function revokeOne(sid: string) {
+    setBusyAction(`revoke:${sid}`);
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/sessions/${sid}/revoke`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      const data: { ok?: boolean; error?: string } = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        toast.success('Session revoked');
+        await loadSessions();
+        onActed();
+      } else {
+        toast.error('Revoke failed', { description: data.error ?? `HTTP ${res.status}` });
+      }
+    } catch (err) {
+      toast.error('Revoke failed', { description: err instanceof Error ? err.message : 'network error' });
     } finally {
       setBusyAction(null);
     }
@@ -224,9 +299,49 @@ export default function UserDetailDrawer({
                 onClick={() => actionPost('Force logout', 'force-logout')}
                 disabled={busyAction !== null}
               />
+              <ActionChip
+                icon={Pencil}
+                label="Edit"
+                tone="neutral"
+                onClick={() => {
+                  if (!isSelf) setEditing(true);
+                }}
+                disabled={busyAction !== null || isSelf || user.status === 'soft_deleted'}
+                selfBlock={isSelf}
+              />
+              {onAddUser && (
+                <ActionChip
+                  icon={UserPlus}
+                  label="Add user to this practice"
+                  tone="neutral"
+                  onClick={() => onAddUser(user.practiceId)}
+                  disabled={busyAction !== null}
+                />
+              )}
             </ActionGroup>
             <ActionGroup label="Reversible">
-              {user.status === 'suspended' ? (
+              {user.isDeactivated ? (
+                <ActionChip
+                  icon={UserCheck}
+                  label={busyAction === 'Reactivate' ? 'Working…' : 'Reactivate account'}
+                  tone="neutral"
+                  onClick={() => {
+                    if (!isSelf) actionPost('Reactivate', 'reactivate');
+                  }}
+                  disabled={busyAction !== null || isSelf || user.status === 'soft_deleted'}
+                  selfBlock={isSelf}
+                />
+              ) : (
+                <ActionChip
+                  icon={UserX}
+                  label="Deactivate account"
+                  tone="rose"
+                  onClick={() => onConfirm('deactivate', user)}
+                  disabled={busyAction !== null || isSelf || user.status === 'soft_deleted'}
+                  selfBlock={isSelf}
+                />
+              )}
+              {user.isSuspended ? (
                 <ActionChip
                   icon={PlayCircle}
                   label="Reinstate account"
@@ -283,6 +398,64 @@ export default function UserDetailDrawer({
                 selfBlock={isSelf}
               />
             </ActionGroup>
+          </DrawerSection>
+
+          {/* Sessions — user_sessions, revocable one row at a time */}
+          <DrawerSection label="Sessions">
+            {sessions === null ? (
+              <button
+                type="button"
+                onClick={loadSessions}
+                disabled={sessionsState === 'loading'}
+                className="qm-lin-btn h-7"
+              >
+                <MonitorSmartphone className="mr-1 h-3 w-3" />
+                {sessionsState === 'loading' ? 'Loading…' : 'Show sessions'}
+              </button>
+            ) : sessions.length === 0 ? (
+              <div className="text-xs text-linear-text-3">No sessions on record</div>
+            ) : (
+              <ul className="space-y-1.5">
+                {sessions.map((s) => (
+                  <li
+                    key={s.id}
+                    className="flex items-center justify-between gap-3 border-b border-linear-border pb-1.5 text-[11px] last:border-b-0 last:pb-0"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate font-mono text-linear-text-2">
+                        {s.ipAddress ?? 'unknown IP'}
+                        <span className="mx-1.5 text-linear-text-3">·</span>
+                        <span
+                          className={cls(
+                            s.status === 'active' ? 'text-linear-sage-bright' : 'text-linear-text-3'
+                          )}
+                        >
+                          {s.status}
+                        </span>
+                      </div>
+                      <div className="truncate text-linear-text-3" title={s.userAgent ?? undefined}>
+                        last seen {relativeTime(s.lastActiveAt)}
+                        {s.userAgent ? ` · ${s.userAgent}` : ''}
+                      </div>
+                    </div>
+                    {s.status === 'active' && (
+                      <button
+                        type="button"
+                        onClick={() => revokeOne(s.id)}
+                        disabled={busyAction !== null || isSelf}
+                        title={isSelf ? 'Use Sign out for your own session' : undefined}
+                        className="qm-lin-btn h-6 shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {busyAction === `revoke:${s.id}` ? 'Working…' : 'Revoke'}
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {sessionsState === 'error' && (
+              <div className="mt-2 text-xs text-linear-danger">Could not load sessions</div>
+            )}
           </DrawerSection>
 
           {/* This month */}
@@ -444,13 +617,23 @@ export default function UserDetailDrawer({
             All admin actions on this user are logged to the audit trail.
             {isSelf && (
               <span className="ml-2 text-linear-text-2">
-                You can&apos;t suspend, delete, or revoke your own admin access — ask
-                a peer.
+                You can&apos;t suspend, deactivate, edit, delete, or revoke your own
+                admin access — ask a peer.
               </span>
             )}
           </div>
         </div>
       </aside>
+      {editing && (
+        <EditProfileModal
+          user={user}
+          onCancel={() => setEditing(false)}
+          onSaved={() => {
+            setEditing(false);
+            onActed();
+          }}
+        />
+      )}
     </>
   );
 }
@@ -524,6 +707,13 @@ function StatusInline({ user }: { user: UserListRow }) {
       >
         <span className="h-1.5 w-1.5 rounded-full bg-linear-warning" />
         Suspended
+      </span>
+    );
+  if (user.status === 'deactivated')
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-linear-text-3">
+        <span className="h-1.5 w-1.5 rounded-full bg-linear-text-3" />
+        Deactivated
       </span>
     );
   return (

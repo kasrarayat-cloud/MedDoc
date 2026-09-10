@@ -4,7 +4,10 @@
 // Imported by both the server-side data layer and the client components.
 // ============================================================================
 
-export type UserStatus = 'active' | 'suspended' | 'soft_deleted';
+/** Display precedence: soft_deleted > deactivated > suspended > active. The
+ *  independent booleans on the row (`isSuspended`, `isDeactivated`) are what
+ *  the action chips key on, because one label cannot say "both". */
+export type UserStatus = 'active' | 'suspended' | 'deactivated' | 'soft_deleted';
 
 /** UI role label — derived from `User.role` + `Product.SUPER_ADMIN`
  *  presence in `User.products`. The row shows `DOCTOR+ADMIN` for the
@@ -21,6 +24,11 @@ export interface UserListRow {
   isSuperAdmin: boolean;
   products: string[];
   status: UserStatus;
+  /** Legacy `User.role` as stored — DOCTOR / STAFF / ADMIN / SUPER_ADMIN. */
+  legacyRole: string;
+  isSuspended: boolean;
+  /** `isActive = false` OR `deactivatedAt` set — either expression counts. */
+  isDeactivated: boolean;
   suspendedReason: string | null;
   softDeletedAt: string | null;
   softDeletedBy: string | null;
@@ -53,7 +61,7 @@ export interface UserStats {
   suspended: number;
 }
 
-export type StatusFilter = 'all' | 'active' | 'suspended' | 'deleted';
+export type StatusFilter = 'all' | 'active' | 'suspended' | 'deactivated' | 'deleted';
 export type RoleFilter = 'all' | 'doctor' | 'admin';
 /** Phase 6D — kasra is the founder of both products and needs to see
  *  both populations by default. The dashboard table also surfaces a
@@ -69,7 +77,7 @@ export interface ListParams {
   page: number;
 }
 
-export type ConfirmKind = 'soft_delete' | 'grant_admin' | 'revoke_admin';
+export type ConfirmKind = 'soft_delete' | 'grant_admin' | 'revoke_admin' | 'deactivate';
 
 /** Detail drawer extras — fetched on-demand from the existing
  *  GET /api/admin/users/[id] endpoint. */

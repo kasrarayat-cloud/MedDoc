@@ -328,7 +328,8 @@ describe('create — into an EXISTING practice only', () => {
   });
 
   it('practiceRole is REQUIRED — no silent OWNER default', async () => {
-    const { practiceRole: _drop, ...noRole } = body;
+    const noRole: Partial<typeof body> = { ...body };
+    delete noRole.practiceRole;
     const res = await post(noRole);
     expect(res.status).toBe(400);
   });

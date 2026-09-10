@@ -3,7 +3,7 @@
 // ============================================================================
 // Email-to-confirm modal — gate for destructive admin actions
 // ----------------------------------------------------------------------------
-// Three kinds: soft_delete, grant_admin, revoke_admin. Caller wires
+// Four kinds: soft_delete, grant_admin, revoke_admin, deactivate. Caller wires
 // `onConfirm` to the matching POST endpoint. The modal tracks its own
 // "in flight" state so the user can't double-click the destructive
 // button while the request is in flight.
@@ -69,6 +69,18 @@ const COPY: Record<
       </>
     ),
     cta: 'Revoke admin',
+  },
+  deactivate: {
+    title: 'Deactivate user?',
+    body: (
+      <>
+        The account is switched off and every active session ends. Nothing is
+        deleted: their practice role, visits and audit history are kept, and
+        a peer can <span className="font-medium text-linear-text">reactivate</span>{' '}
+        it later. The practice&apos;s last active owner cannot be deactivated.
+      </>
+    ),
+    cta: 'Deactivate',
   },
 };
 
