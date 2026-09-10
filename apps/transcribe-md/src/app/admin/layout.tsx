@@ -22,6 +22,7 @@ import { headers } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 
 import { hasSuperAdminProduct } from '@/lib/super-admin';
+import { APP_URL } from '@/lib/constants';
 import { auth } from '@/lib/nextauth';
 import { logAudit } from '@/lib/audit';
 import { isAdminSessionStale } from '@/lib/admin-session-freshness';
@@ -81,7 +82,16 @@ export default async function AdminLayout({
       select: { mfaEnabled: true },
     });
     if (!mfaUser?.mfaEnabled) {
-      redirect('/settings/security/mfa?reason=super_admin_required');
+      // ⚠️ ABSOLUTE, ON THE APP HOST. admin.quillmd.com's Caddy allowlist
+      // (the admin block of the tracked Caddyfile) serves only /api/auth,
+      // /api/admin, static files, the login pages, /admin and /; everything
+      // else, /settings and /api/mfa included, hits `respond "Not Found" 404`.
+      // A RELATIVE redirect from an admin-host render therefore stranded the
+      // operator on a bare Not Found. APP_URL is the one app-host constant,
+      // baked at build time (CI and QA bake their own host, so there it is
+      // the same origin). Cookies are HOST-ONLY: the operator signs in again
+      // on the app host, enrols there, then signs back in here with a code.
+      redirect(`${APP_URL.replace(/\/+$/, '')}/settings/security/mfa?reason=super_admin_required`);
     }
   }
 

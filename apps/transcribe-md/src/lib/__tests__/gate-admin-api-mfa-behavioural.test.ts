@@ -88,6 +88,7 @@ vi.mock('next/headers', () => ({
 
 import type { NextRequest } from 'next/server';
 import { adminApi } from '../admin-api-gate';
+import { APP_URL } from '../constants';
 import AdminLayout from '../../app/admin/layout';
 
 /** A session that CLAIMS everything — SUPER_ADMIN and an enrolled factor — in
@@ -212,9 +213,15 @@ describe('app/admin/layout.tsx — the PAGE gate, driven', () => {
       h.Redirect
     );
     expect(h.redirect).toHaveBeenCalledTimes(1);
-    expect((err as InstanceType<typeof h.Redirect>).url).toMatch(
-      /\/settings\/security\/mfa\?reason=super_admin_required$/
+    // ⚠️ ABSOLUTE, ON THE APP HOST. admin.quillmd.com's Caddy allowlist 404s
+    // /settings/*, so a RELATIVE redirect from an admin-host render lands on a
+    // bare "Not Found" and the operator is stranded. The target is built from
+    // the one APP_URL constant, imported here and never re-derived.
+    const target = (err as InstanceType<typeof h.Redirect>).url;
+    expect(target, 'the enrolment redirect is not the app host, so it 404s on the admin host').toBe(
+      `${APP_URL.replace(/\/+$/, '')}/settings/security/mfa?reason=super_admin_required`
     );
+    expect(new URL(target).origin).toBe(new URL(APP_URL).origin);
     expect(h.notFound).not.toHaveBeenCalled();
   });
 
