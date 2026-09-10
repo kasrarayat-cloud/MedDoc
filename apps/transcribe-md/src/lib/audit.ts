@@ -337,7 +337,18 @@ export type AuditAction =
   | 'PRACTICE_ROLE_CHANGED'
   /// ADMIN-1 — the administration guard refused a caller. The sign route's own
   /// reasoning: a gate nothing records is one path away from not existing.
-  | 'PRACTICE_ADMIN_REFUSED';
+  | 'PRACTICE_ADMIN_REFUSED'
+  // ADMIN-3a — the `Practice` WRITE path, the verb four rows and ruling #226
+  // waited on. `PRACTICE_ARCHIVED` is the value #226 named as missing, and its
+  // absence was one of the two reasons that ruling could not execute.
+  //
+  // ⚠️ AN ARCHIVE GETS ITS OWN ACTION RATHER THAN RIDING `PRACTICE_UPDATED`.
+  // It is the act #226 orders, and an act somebody has to find later must be
+  // greppable as itself, not hidden inside a generic edit with a diff in the
+  // metadata.
+  | 'PRACTICE_UPDATED'
+  | 'PRACTICE_ARCHIVED'
+  | 'PRACTICE_RESTORED';
 
 export interface AuditLogInput {
   action: AuditAction;

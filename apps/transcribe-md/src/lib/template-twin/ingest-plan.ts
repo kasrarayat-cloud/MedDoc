@@ -160,6 +160,21 @@ export type IdentityKey = string & { readonly __brand: 'IdentityKey' };
  * Two questions, two keys: **AMBIGUITY is counted without `kind`; MATCHING
  * still requires it.**
  */
+/**
+ * The ambiguity key an identity key is counted under.
+ *
+ * `identityKeys` carries `kind` on the tag key; `ambiguityKeys` deliberately
+ * does not, because `kind` is content-derived and mutable (round five). This
+ * maps one to the other so uniqueness is counted on the stable form while
+ * matching still requires the full one.
+ */
+export function ambiguityKeyFor(key: IdentityKey): IdentityKey {
+  if (key.startsWith('fid\u0000')) return key;
+  // tag\0<part>\0<tag>\0<kind>  ->  tag\0<part>\0<tag>
+  const parts = key.split('\u0000');
+  return parts.slice(0, 3).join('\u0000') as IdentityKey;
+}
+
 export function ambiguityKeys(field: TemplateField): IdentityKey[] {
   const b = field.rendererBinding;
   const keys: IdentityKey[] = [`fid\u0000${field.fieldId}` as IdentityKey];
@@ -316,9 +331,34 @@ export function planTransfer(input: {
     return counts;
   };
 
-  /** Is EVERY ambiguity key this field answers to unique in that document? */
-  const unambiguous = (field: TemplateField, counts: Map<IdentityKey, number>): boolean =>
-    ambiguityKeys(field).every((k) => counts.get(k) === 1);
+  /**
+   * Is THIS key unique in that document?
+   *
+   * ⚠️ PER-KEY, NOT PER-FIELD — AND THE FIRST VERSION WAS PER-FIELD, WHICH THE
+   * RULED ACT'S OWN GUARD CAUGHT BEFORE A ROW MOVED.
+   *
+   * It asked whether EVERY key a field answers to is unique, and disqualified
+   * the field entirely if any one was shared. On the owner's form that is
+   * catastrophic for no reason: the 53 controls carry 53 tags but only **35
+   * DISTINCT** ones — `plan` five times, `impression` four, `past_medical_
+   * history` three — so eighteen controls share a tag with a sibling. Their
+   * `fieldId`s are unique and EXACT (the re-issue re-ingests the very artifact
+   * the certified version was compiled from), yet every one of them was
+   * refused because a DIFFERENT key of theirs was ambiguous.
+   *
+   * Measured: the act planned **20** transfers where the declaration said 43,
+   * and refused. `TRANSFER_COUNT_MISMATCH expected 43 actual 20`.
+   *
+   *     AMBIGUITY IS A PROPERTY OF A KEY, NOT OF A CONTROL. A shared tag makes
+   *     THAT TAG useless for identifying anyone; it says nothing about whether
+   *     the control's own `fieldId` names it exactly.
+   *
+   * The safety property is unchanged: a match still requires the MATCHED key to
+   * be unique on both sides, and a certified row is still consumed once. What
+   * changes is that a control is no longer punished for a key it did not use.
+   */
+  const keyIsUnique = (key: IdentityKey, counts: Map<IdentityKey, number>): boolean =>
+    counts.get(key) === 1;
 
   const sourceCounts = sourceIr ? countKeys(sourceIr.fields) : new Map<IdentityKey, number>();
   const targetCounts = countKeys(target.fields);
@@ -326,10 +366,13 @@ export function planTransfer(input: {
   const oldByIdentity = new Map<IdentityKey, string>();
   if (sourceIr) {
     for (const field of sourceIr.fields) {
-      // a source control any of whose ambiguity keys is shared names no one
-      // control, so it carries nothing at all.
-      if (!unambiguous(field, sourceCounts)) continue;
-      for (const key of identityKeys(field)) oldByIdentity.set(key, field.fieldId);
+      for (const key of identityKeys(field)) {
+        // Only an UNAMBIGUOUS key carries an identity. A shared key names no one
+        // control, so it is simply not registered; the field's other keys still
+        // are.
+        if (!keyIsUnique(ambiguityKeyFor(key), sourceCounts)) continue;
+        oldByIdentity.set(key, field.fieldId);
+      }
     }
   }
 
@@ -344,13 +387,11 @@ export function planTransfer(input: {
   for (const field of target.fields) {
     let fromFieldId: string | undefined;
     let mapping: SemanticMapping | undefined;
-    // ambiguous on the target side: this control is one of several answering to
-    // the same tag, so it cannot claim a disposition whatever its current kind.
-    if (!unambiguous(field, targetCounts)) {
-      reproposed.push(field.fieldId);
-      continue;
-    }
     for (const key of identityKeys(field)) {
+      // ambiguous on the target side: several controls here answer to this key,
+      // so THIS key cannot claim a disposition. Another key of this field may
+      // still be able to.
+      if (!keyIsUnique(ambiguityKeyFor(key), targetCounts)) continue;
       const candidate = oldByIdentity.get(key);
       if (candidate === undefined || consumed.has(candidate)) continue;
       const found = certifiedByFieldId.get(candidate);
