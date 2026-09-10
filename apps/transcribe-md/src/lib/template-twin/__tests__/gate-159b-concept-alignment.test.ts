@@ -47,6 +47,9 @@ const CONTEXT_TEXT = [
   'Plan: follow up in two weeks.',
   'Great saphenous vein diameter 5.2 mm on the right.',
   'Referred by Dr. Alan Whitfield for evaluation.',
+  // #314 — a total time becomes a fact only when its quote is IN the
+  // transcript, so the completeness fixture carries the sentence it cites.
+  'Total time forty five minutes.',
 ].join('\n');
 
 const FULL_ENTITIES = {

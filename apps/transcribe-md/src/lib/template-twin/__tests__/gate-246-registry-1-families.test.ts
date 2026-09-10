@@ -32,10 +32,26 @@ import { isListValuedNarrative } from '../field-value-derivation';
 import { EncounterFactSchema } from '../ir';
 
 const QUOTE = 'the doctor said so';
+
+/** Every `evidence_quote` in a fixture, at any depth. */
+function quotesIn(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap(quotesIn);
+  if (value && typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>).flatMap(([k, v]) =>
+      k === 'evidence_quote' && typeof v === 'string' ? [v] : quotesIn(v),
+    );
+  }
+  return [];
+}
+
 function project(entities: Record<string, unknown>) {
   return projectEncounterFacts({
     mode: 'dictation',
-    contextText: QUOTE,
+    // ⚠️ #314 — the transcript CARRIES every quote the fixture cites, as a real
+    // one does. A total time whose quote is not in the transcript is now
+    // withheld, and these arms are about the projector's concepts and polarity,
+    // not about grounding — `gate-314` owns that.
+    contextText: [QUOTE, ...quotesIn(entities)].join('\n'),
     entities: entities as unknown as Parameters<typeof projectEncounterFacts>[0]['entities'],
   });
 }
@@ -113,8 +129,10 @@ describe('#246 — the projector emits them, and DISCRIMINATES', () => {
   it('⚠️ total_time_minutes carries NO UNIT in its value, and the number beside it', () => {
     // canon 134's trap: the resolver's number arm refuses a value carrying a
     // unit, so "45 minutes" would fail where "45" resolves.
+    // ⚠️ #314 — a GROUNDED total: the quote states this number and says it is a
+    // total. `QUOTE` states neither, so it is now (correctly) withheld.
     const facts = project({
-      total_time_minutes: { minutes: 45, evidence_quote: QUOTE },
+      total_time_minutes: { minutes: 45, evidence_quote: 'Total time spent today was 45 minutes.' },
     });
     const [fact] = conceptOf(facts, 'total_time_minutes');
     expect(fact).toBeTruthy();
