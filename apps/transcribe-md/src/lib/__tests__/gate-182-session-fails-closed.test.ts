@@ -92,7 +92,17 @@ const jwt = (authConfig as any).callbacks.jwt as (a: {
 const LIVE_ROW = {
   id: 'us_1',
   expiresAt: new Date(Date.now() + 60 * 60 * 1000),
-  user: { isActive: true, suspendedAt: null, softDeletedAt: null, forceLogoutAt: null },
+  // ⚠️ ADMIN-6a — THE PRACTICE IS PART OF A LIVE SESSION NOW. `validateSession`
+  // fails CLOSED on an absent practice (D2), so a fixture without one is an
+  // archived member, not a healthy one — and this positive control redded the
+  // moment D2 landed, which is it doing its job.
+  user: {
+    isActive: true,
+    suspendedAt: null,
+    softDeletedAt: null,
+    forceLogoutAt: null,
+    practice: { isActive: true },
+  },
 };
 
 beforeEach(() => {

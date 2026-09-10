@@ -24,6 +24,7 @@
 
 import prisma from '@meddoc/db';
 import type { TransactionClient } from '@meddoc/db';
+import { PRACTICE_ADMITS_SELECT, practiceAdmits } from '@meddoc/db/practice-admits';
 import { randomUUID, createHash } from 'node:crypto';
 
 /** Default TTL for the UserSession row (not the JWT). The JWT's own
@@ -92,7 +93,17 @@ export async function validateSession(sessionToken: string) {
     where: { sessionToken },
     include: {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      user: { select: { isActive: true, suspendedAt: true, softDeletedAt: true, forceLogoutAt: true } as any },
+      user: {
+        select: {
+          isActive: true,
+          suspendedAt: true,
+          softDeletedAt: true,
+          forceLogoutAt: true,
+          // ADMIN-6a D2 — the member's PRACTICE, through the one predicate's
+          // own select. Same JOIN depth as the user lookup it rides on.
+          practice: { select: PRACTICE_ADMITS_SELECT },
+        } as any,
+      },
     },
   });
   if (!row) return null;
@@ -118,8 +129,20 @@ export async function validateSession(sessionToken: string) {
         suspendedAt?: Date | null;
         softDeletedAt?: Date | null;
         forceLogoutAt?: Date | null;
+        practice?: { isActive?: unknown } | null;
       }
     | undefined;
+  // ⚠️ ADMIN-6a D2 — AN ARCHIVED PRACTICE ENDS EVERY ONE OF ITS SESSIONS HERE.
+  // A `null` from this function is the DEFINITIVE answer (#182(1)): the jwt
+  // callback returns null and the cookie goes. That one line covers every
+  // `auth()`, `getSession()`/`requireSession()` and `adminApi()` caller in both
+  // apps, which is why the practice flag needs no per-route check.
+  //
+  // ⚠️ FAIL-CLOSED ON ABSENCE, DELIBERATELY OUTSIDE `if (user)`. The user and
+  // its practice are NOT NULL foreign keys, so in production both always load;
+  // the only way to reach an absent practice is a select that forgot it, and
+  // that must refuse rather than admit. `practiceAdmits` treats absence as no.
+  if (!practiceAdmits(user?.practice)) return null;
   if (user) {
     if (user.isActive === false) return null;
     if (user.suspendedAt) return null;

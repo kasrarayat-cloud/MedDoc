@@ -61,9 +61,44 @@ import {
   consumeDbInviteCode,
 } from '@/lib/signup-invite';
 import { logAudit } from '@/lib/audit';
+import { PRACTICE_ADMITS_SELECT, practiceAdmits } from '@meddoc/db/practice-admits';
 // B7 step 3c, door 1 of 3 — see the call site inside the signup transaction.
 import { grantPromoCredit } from '@meddoc/ai';
 import { recoveryHref } from '@/lib/recovery-href';
+
+/**
+ * ADMIN-6a D3 — thrown inside the signup transaction when an invite names a
+ * practice that no longer admits members, so the whole transaction (user,
+ * invite spend) rolls back and the catch maps it to the uniform invite message.
+ * Not exported: a `'use server'` file may export async functions only.
+ */
+const INVITE_PRACTICE_NOT_ADMITTING = 'INVITE_PRACTICE_NOT_ADMITTING';
+
+/**
+ * ⚠️ THE SAME ANSWER AS EVERY OTHER INVITE REFUSAL, ON PURPOSE. An invite into
+ * an archived practice is refused with `INVITE_REJECTED_MESSAGE`, not with
+ * "that practice is closed": distinguishing reasons tells a prober which codes
+ * are real. The reason goes to the audit row for the operator only.
+ */
+function inviteIntoArchivedPracticeRefused(
+  raw: Record<string, unknown>,
+  practiceId: string,
+): FormErrorState {
+  void logAudit({
+    action: 'SIGNUP_REJECTED_NO_INVITE',
+    targetType: 'Practice',
+    targetId: practiceId,
+    userId: null,
+    practiceId,
+    success: false,
+    metadata: { reason: 'practice_archived' },
+  });
+  return {
+    ok: false,
+    errors: { inviteCode: INVITE_REJECTED_MESSAGE },
+    values: { email: String(raw.email ?? ''), name: String(raw.name ?? '') },
+  };
+}
 
 export interface FormErrorState {
   ok: false;
@@ -464,6 +499,23 @@ export async function signupAction(
     };
   }
 
+  // ⚠️ ADMIN-6a D3, PRE-CHECK — AN INVITE INTO AN ARCHIVED PRACTICE IS REFUSED
+  // HERE, BEFORE THE EMAIL LOOKUP BELOW, AND THE ORDER IS THE POINT. The
+  // authoritative check is inside the transaction (a practice can be archived
+  // between here and there), but if it were the ONLY check, a holder of such a
+  // code would get an email-existence oracle: an existing email takes PR-F's
+  // identical-response branch below and never reaches the transaction, while a
+  // new one would come back "invite rejected".
+  if (invite.source === 'db' && invite.membership) {
+    const target = await prisma.practice.findUnique({
+      where: { id: invite.membership.practiceId },
+      select: PRACTICE_ADMITS_SELECT,
+    });
+    if (!practiceAdmits(target)) {
+      return inviteIntoArchivedPracticeRefused(raw, invite.membership.practiceId);
+    }
+  }
+
   // Round 3 PR-F (A02-P1-001) — signup anti-enumeration.
   //
   // Pre-PR-F: existing-email path returned a UI-distinct error
@@ -564,11 +616,21 @@ export async function signupAction(
       // were "meant" to point at, so inventing one would be a guess wearing a
       // migration's authority.
       const membership = invite.source === 'db' ? invite.membership : null;
+      //
+      // ⚠️ ADMIN-6a D3, AUTHORITATIVE — the practice must still ADMIT members
+      // at the moment the account is created, not merely exist. A throw here
+      // rolls back the user and the invite spend together; the catch below
+      // maps it to the uniform invite refusal.
       const practice = membership
-        ? await tx.practice.findUniqueOrThrow({
-            where: { id: membership.practiceId },
-            select: { id: true },
-          })
+        ? await tx.practice
+            .findUnique({
+              where: { id: membership.practiceId },
+              select: { id: true, ...PRACTICE_ADMITS_SELECT },
+            })
+            .then((p) => {
+              if (!p || !practiceAdmits(p)) throw new Error(INVITE_PRACTICE_NOT_ADMITTING);
+              return { id: p.id };
+            })
         : await tx.practice.create({
             data: {
               name: `Solo — ${parsed.data.name}`,
@@ -673,6 +735,14 @@ export async function signupAction(
       }
     });
   } catch (err) {
+    if (
+      err instanceof Error &&
+      err.message === INVITE_PRACTICE_NOT_ADMITTING &&
+      invite.source === 'db' &&
+      invite.membership
+    ) {
+      return inviteIntoArchivedPracticeRefused(raw, invite.membership.practiceId);
+    }
     console.error('[signup] create failed:', err);
     return {
       ok: false,
