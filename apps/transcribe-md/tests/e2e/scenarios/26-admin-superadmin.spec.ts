@@ -71,6 +71,30 @@ test('scenario 26: privilege boundary — a non-admin doctor is DENIED admin acc
     { data: { reason: 'should never run' } },
   );
   expect(suspend.status(), 'suspend must be 404 for a non-admin').toBe(404);
+
+  // 4. THE CONSOLE PORT (#310 step 3) — every ported door is gated exactly
+  //    like the doors above. Listed by hand, as this scenario always has been:
+  //    a door added to the tree is not probed here until it is added here.
+  const auditPage = await page.goto('/admin/audit');
+  expect(auditPage?.status(), '/admin/audit must 404 for a non-admin').toBe(404);
+
+  const sessions = await page.request.get('/api/admin/users/some-user-id/sessions');
+  expect(sessions.status(), 'GET sessions must be 404 for a non-admin').toBe(404);
+
+  const PORTED_POSTS: Array<[string, Record<string, unknown>]> = [
+    ['/api/admin/users/some-user-id/deactivate', { confirmEmail: 'whoever@example.com' }],
+    ['/api/admin/users/some-user-id/reactivate', {}],
+    ['/api/admin/users/some-user-id/profile', { name: 'should never run' }],
+    ['/api/admin/users/some-user-id/sessions/some-session-id/revoke', {}],
+    [
+      '/api/admin/users',
+      { email: 'never@example.com', name: 'x', practiceId: 'p', practiceRole: 'CLINICIAN' },
+    ],
+  ];
+  for (const [path, data] of PORTED_POSTS) {
+    const res = await page.request.post(path, { data });
+    expect(res.status(), `POST ${path} must be 404 for a non-admin`).toBe(404);
+  }
 });
 
 test('scenario 26: unauthenticated access to an admin API is denied (404) — route existence not revealed', async ({
