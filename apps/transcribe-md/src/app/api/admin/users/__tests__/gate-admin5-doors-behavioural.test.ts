@@ -25,15 +25,29 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { prisma, wouldStrandPractice, logAudit, withPracticeLock } = vi.hoisted(() => ({
+const {
+  prisma,
+  wouldStrandPractice,
+  wouldOrphanMember,
+  logAudit,
+  withPracticeLock,
+  grantPromoCredit,
+  createAuthToken,
+  sendPasswordResetEmail,
+} = vi.hoisted(() => ({
   prisma: {
-    user: { findUnique: vi.fn(), update: vi.fn() },
+    user: { findUnique: vi.fn(), update: vi.fn(), create: vi.fn() },
+    practice: { findUnique: vi.fn() },
     $transaction: vi.fn(),
     $queryRaw: vi.fn(async () => [{ level: 'read committed' }]),
   },
   wouldStrandPractice: vi.fn(),
+  wouldOrphanMember: vi.fn(),
   logAudit: vi.fn(),
   withPracticeLock: vi.fn(),
+  grantPromoCredit: vi.fn(),
+  createAuthToken: vi.fn(),
+  sendPasswordResetEmail: vi.fn(),
 }));
 
 // ⚠️ THE GATE IS BYPASSED, THE DOOR IS NOT. `adminApi` becomes a pass-through
@@ -50,9 +64,17 @@ vi.mock('@meddoc/db', () => ({ default: prisma }));
 vi.mock('@/lib/audit', () => ({ logAudit }));
 vi.mock('@/lib/last-owner-invariant', () => ({
   wouldStrandPractice,
+  wouldOrphanMember,
   withPracticeLock,
   LAST_OWNER_REFUSAL: 'refusal-text',
 }));
+// The console port's doors reach these; stubbed so the arms measure the door.
+vi.mock('@meddoc/ai/billing-grant', () => ({ grantPromoCredit }));
+vi.mock('@/lib/auth-tokens', () => ({ createAuthToken }));
+vi.mock('@/lib/email', () => ({ sendPasswordResetEmail }));
+vi.mock('@/lib/email-enabled', () => ({ isEmailDeliveryEnabled: () => false }));
+vi.mock('@/lib/email-auto-confirm', () => ({ isAutoConfirmDomain: () => false }));
+vi.mock('bcryptjs', () => ({ default: { hash: vi.fn(async () => 'hash') } }));
 
 import { POST as SUSPEND } from '../[id]/suspend/route';
 import { POST as SOFT_DELETE } from '../[id]/soft-delete/route';
@@ -60,6 +82,13 @@ import { POST as UNSUSPEND } from '../[id]/unsuspend/route';
 import { POST as FORCE_LOGOUT } from '../[id]/force-logout/route';
 import { POST as GRANT_ADMIN } from '../[id]/grant-admin/route';
 import { POST as REVOKE_ADMIN } from '../[id]/revoke-admin/route';
+// The console port (#310 step 3). ⚠️ `DOORS` AND `LOCK_ONLY_DOORS` ARE LISTED
+// BY IMPORT, so a door added to the tree is NOT exercised here until it is
+// added below — which is why every ported door is added in the same change.
+import { POST as DEACTIVATE } from '../[id]/deactivate/route';
+import { POST as REACTIVATE } from '../[id]/reactivate/route';
+import { POST as PROFILE } from '../[id]/profile/route';
+import { POST as CREATE } from '../route';
 
 const TARGET = 'target-9';
 const TARGET_EMAIL = 't@x.com';
@@ -70,9 +99,32 @@ const TARGET_EMAIL = 't@x.com';
 // the guard, so all four arms would have measured a rejected request rather
 // than the door — three of them by asserting things that are trivially true of
 // a 400. The body is per-door for that reason.
+// The row every door reads unless its own setup says otherwise: an ACTIVE
+// OWNER of `prac-7`. Carries the columns the ported doors read, so their no-op
+// refusals see a realistic row rather than `undefined`.
+const BASE_ROW = {
+  id: TARGET,
+  email: TARGET_EMAIL,
+  practiceId: 'prac-7',
+  practiceRole: 'OWNER',
+  role: 'DOCTOR',
+  name: 'Old Name',
+  isActive: true,
+  deactivatedAt: null,
+  suspendedAt: null,
+  softDeletedAt: null,
+};
+
+/** Per-door fixture tweak, run after `beforeEach`. */
+type Setup = () => void;
+const noSetup: Setup = () => {};
+
 const DOORS = [
-  ['suspend', SUSPEND, {}] as const,
-  ['soft-delete', SOFT_DELETE, { confirmEmail: TARGET_EMAIL }] as const,
+  ['suspend', SUSPEND, {}, noSetup] as const,
+  ['soft-delete', SOFT_DELETE, { confirmEmail: TARGET_EMAIL }, noSetup] as const,
+  // Deactivation removes an owner seat exactly as suspension does, so it gets
+  // the strand arms as well as the lock arms.
+  ['deactivate', DEACTIVATE, { confirmEmail: TARGET_EMAIL }, noSetup] as const,
 ];
 
 // ⚠️ RULING #289 — THE OTHER FOUR DOORS, DRIVEN FOR THE LOCK AND NOTHING ELSE.
@@ -92,10 +144,31 @@ const DOORS = [
 // moved the member predicate once already — and the migration's own header says
 // the door set is OPEN.
 const LOCK_ONLY_DOORS = [
-  ['unsuspend', UNSUSPEND, {}] as const,
-  ['force-logout', FORCE_LOGOUT, {}] as const,
-  ['grant-admin', GRANT_ADMIN, { confirmEmail: TARGET_EMAIL }] as const,
-  ['revoke-admin', REVOKE_ADMIN, { confirmEmail: TARGET_EMAIL }] as const,
+  ['unsuspend', UNSUSPEND, {}, noSetup] as const,
+  ['force-logout', FORCE_LOGOUT, {}, noSetup] as const,
+  ['grant-admin', GRANT_ADMIN, { confirmEmail: TARGET_EMAIL }, noSetup] as const,
+  ['revoke-admin', REVOKE_ADMIN, { confirmEmail: TARGET_EMAIL }, noSetup] as const,
+  // ⚠️ THE CONSOLE PORT'S ADDING DOORS. None removes an owner seat, so none
+  // answers the strand question; each makes or edits a `users` row, so each
+  // must lock. Reactivate and create ADD a live member — the orphan arm's
+  // locking path — which is the half of the #268 deadlock they could complete.
+  [
+    'reactivate',
+    REACTIVATE,
+    {},
+    () => prisma.user.findUnique.mockResolvedValue({ ...BASE_ROW, isActive: false, deactivatedAt: new Date() }),
+  ] as const,
+  ['profile', PROFILE, { name: 'New Name' }, noSetup] as const,
+  [
+    'create',
+    CREATE,
+    { email: 'new@x.com', name: 'New Person', practiceId: 'prac-7', practiceRole: 'CLINICIAN' },
+    () => {
+      // no account has this email; the practice exists
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.practice.findUnique.mockResolvedValue({ id: 'prac-7', name: 'Practice Seven' });
+    },
+  ] as const,
 ];
 
 const req = (body: unknown) =>
@@ -106,12 +179,13 @@ const req = (body: unknown) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
-  prisma.user.findUnique.mockResolvedValue({
-    id: TARGET,
-    email: TARGET_EMAIL,
-    practiceId: 'prac-7',
-  });
+  prisma.user.findUnique.mockResolvedValue({ ...BASE_ROW });
   prisma.user.update.mockResolvedValue({});
+  prisma.user.create.mockResolvedValue({ id: 'new-1' });
+  wouldOrphanMember.mockResolvedValue({ wouldOrphan: false });
+  grantPromoCredit.mockResolvedValue({ granted: false, reason: 'already_granted' });
+  createAuthToken.mockResolvedValue({ token: 'tok', id: 'tok-row' });
+  sendPasswordResetEmail.mockResolvedValue({ id: 'mail-1' });
   withPracticeLock.mockImplementation(
     async (_tx: unknown, _p: string, write: () => Promise<unknown>) => write()
   );
@@ -123,7 +197,8 @@ beforeEach(() => {
 describe('#251 — the doors are driven, so the refusal cannot be faked', () => {
   it.each(DOORS)(
     '⚠️ %s asks about the TARGET, not the acting admin — kills FG-1',
-    async (_name, POST, body) => {
+    async (_name, POST, body, setup) => {
+      setup();
       wouldStrandPractice.mockResolvedValue({ wouldStrand: false });
       await POST(req(body) as never);
 
@@ -141,7 +216,8 @@ describe('#251 — the doors are driven, so the refusal cannot be faked', () => 
 
   it.each(DOORS)(
     '⚠️ %s ACTS on the verdict — a 409 and NO write — kills FG-2',
-    async (_name, POST, body) => {
+    async (_name, POST, body, setup) => {
+      setup();
       wouldStrandPractice.mockResolvedValue({
         wouldStrand: true,
         reason: 'refusal-text',
@@ -164,7 +240,8 @@ describe('#251 — the doors are driven, so the refusal cannot be faked', () => 
 
   it.each(DOORS)(
     'POSITIVE CONTROL — %s DOES write when nobody is stranded',
-    async (_name, POST, body) => {
+    async (_name, POST, body, setup) => {
+      setup();
       // ⚠️ WITHOUT THIS, BOTH ARMS ABOVE PASS ON A DOOR THAT REFUSES
       // EVERYTHING. A guard that never writes satisfies "did not write on a
       // refusal" perfectly.
@@ -177,7 +254,8 @@ describe('#251 — the doors are driven, so the refusal cannot be faked', () => 
 
   it.each(DOORS)(
     '⚠️ %s takes the practice lock, on the TARGET practice — #268',
-    async (_name, POST, body) => {
+    async (_name, POST, body, setup) => {
+      setup();
       wouldStrandPractice.mockResolvedValue({ wouldStrand: false });
       await POST(req(body) as never);
       expect(withPracticeLock).toHaveBeenCalledTimes(1);
@@ -192,7 +270,8 @@ describe('#251 — the doors are driven, so the refusal cannot be faked', () => 
 describe('#289 — every writer is DRIVEN, not read', () => {
   it.each(LOCK_ONLY_DOORS)(
     '⚠️ %s takes the practice lock, on the TARGET practice',
-    async (_name, POST, body) => {
+    async (_name, POST, body, setup) => {
+      setup();
       const res = (await POST(req(body) as never)) as Response;
 
       // POSITIVE CONTROL FIRST. Every assertion below is satisfied by a door
@@ -226,20 +305,28 @@ describe('#289 — every writer is DRIVEN, not read', () => {
   // two doors the deadlock was measured on.
   it.each([...DOORS, ...LOCK_ONLY_DOORS])(
     '⚠️ %s writes INSIDE the lock, never beside it',
-    async (_name, POST, body) => {
+    async (_name, POST, body, setup) => {
+      setup();
       // ⚠️ THE ARM ABOVE PASSES ON A DOOR THAT TAKES THE LOCK AND THEN WRITES
       // OUTSIDE IT — call present, practice right, ordering wrong. So this one
       // makes the lock a no-op and asserts the write does not happen: if the
       // write is inside, an unrun callback means an unwritten row.
       withPracticeLock.mockImplementation(async () => undefined);
       prisma.user.update.mockClear();
+      prisma.user.create.mockClear();
 
-      await POST(req(body) as never);
+      await POST(req(body) as never).catch(() => undefined);
 
+      // ⚠️ BOTH VERBS. The create door writes with `create`, so an arm that
+      // watched `update` alone would pass on a create written beside the lock.
       expect(
         prisma.user.update,
         'the row was written even though the lock never ran its callback — ' +
           'the write is beside the lock, not inside it',
+      ).not.toHaveBeenCalled();
+      expect(
+        prisma.user.create,
+        'the row was CREATED even though the lock never ran its callback',
       ).not.toHaveBeenCalled();
     },
   );

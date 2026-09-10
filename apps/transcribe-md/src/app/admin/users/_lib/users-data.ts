@@ -61,6 +61,8 @@ interface RawUserRow {
   suspendedReason: string | null;
   softDeletedAt: Date | null;
   softDeletedBy: string | null;
+  isActive: boolean;
+  deactivatedAt: Date | null;
   practice_name: string;
 }
 
@@ -90,7 +92,16 @@ export async function fetchUserListPage(p: ListParams): Promise<UserListPage> {
   const params: unknown[] = [];
 
   if (p.status === 'active') {
-    where.push(`u."suspendedAt" IS NULL`, `u."softDeletedAt" IS NULL`);
+    where.push(
+      `u."suspendedAt" IS NULL`,
+      `u."softDeletedAt" IS NULL`,
+      `u."isActive" = true`,
+      `u."deactivatedAt" IS NULL`,
+    );
+  } else if (p.status === 'deactivated') {
+    // Either expression of "deactivated" — ruling #226 found rows carrying
+    // only one of the two.
+    where.push(`(u."isActive" = false OR u."deactivatedAt" IS NOT NULL)`, `u."softDeletedAt" IS NULL`);
   } else if (p.status === 'suspended') {
     where.push(`u."suspendedAt" IS NOT NULL`, `u."softDeletedAt" IS NULL`);
   } else if (p.status === 'deleted') {
@@ -144,6 +155,7 @@ export async function fetchUserListPage(p: ListParams): Promise<UserListPage> {
       u."practiceId", u."createdAt", u."lastLogin", u."lastLoginIp",
       u."suspendedAt", u."suspendedReason",
       u."softDeletedAt", u."softDeletedBy",
+      u."isActive", u."deactivatedAt",
       pr.name AS practice_name
     FROM users u
     JOIN practices pr ON pr.id = u."practiceId"
@@ -241,11 +253,14 @@ export async function fetchUserListPage(p: ListParams): Promise<UserListPage> {
           ? 'STAFF+ADMIN'
           : 'DOCTOR+ADMIN'
       : baseRole;
+    const isDeactivated = r.isActive === false || r.deactivatedAt !== null;
     const status: UserStatus = r.softDeletedAt
       ? 'soft_deleted'
-      : r.suspendedAt
-        ? 'suspended'
-        : 'active';
+      : isDeactivated
+        ? 'deactivated'
+        : r.suspendedAt
+          ? 'suspended'
+          : 'active';
     const spend = spendByUser.get(r.id) ?? { totalCostUsd: 0, byProvider: {} };
     return {
       id: r.id,
@@ -255,6 +270,9 @@ export async function fetchUserListPage(p: ListParams): Promise<UserListPage> {
       isSuperAdmin,
       products: r.products ?? [],
       status,
+      legacyRole: r.role ?? 'DOCTOR',
+      isSuspended: r.suspendedAt !== null,
+      isDeactivated,
       suspendedReason: r.suspendedReason,
       softDeletedAt: r.softDeletedAt?.toISOString() ?? null,
       softDeletedBy: r.softDeletedBy,

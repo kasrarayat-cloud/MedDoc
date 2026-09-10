@@ -12,7 +12,7 @@ import prisma from '@meddoc/db';
 
 import { adminApi } from '@/lib/admin-api-gate';
 import { logAudit } from '@/lib/audit';
-import { withPracticeLock } from '@/lib/last-owner-invariant';
+import { withPracticeLock, wouldOrphanMember } from '@/lib/last-owner-invariant';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,6 +38,22 @@ export const POST = adminApi('users:unsuspend', async (req, ctx) => {
     select: { id: true, email: true, practiceId: true },
   });
   if (!user) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  // ── `users_no_orphan_member`'s FRIENDLY REFUSAL — the console port found this
+  // door had none. Unsuspending a CLINICIAN or TECH into a practice with no
+  // active owner is refused by the trigger (23514), and until now the operator
+  // saw that as a raw 500 carrying a Postgres message.
+  const orphan = await wouldOrphanMember({
+    kind: 'update',
+    userId: id,
+    patch: { suspendedAt: null, suspendedBy: null, suspendedReason: null },
+  });
+  if (orphan.wouldOrphan) {
+    return NextResponse.json(
+      { error: orphan.reason, reason: 'NO_ACTIVE_OWNER', restorableOwners: orphan.restorableOwners },
+      { status: 409 }
+    );
+  }
 
   // ⚠️ RULING #268/#289 — THE PRACTICE LOCK BEFORE THE ROW WRITE, AND THIS
   // DOOR REALLY DOES REACH IT. Clearing `suspendedAt` makes a LIVE MEMBER of

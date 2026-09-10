@@ -33,6 +33,7 @@ import {
   ChevronRight,
   Crown,
   PauseCircle,
+  UserPlus,
   X,
 } from 'lucide-react';
 
@@ -54,6 +55,7 @@ import type {
   UserStats,
 } from '../_types';
 
+import AddUserModal from './AddUserModal.client';
 import ConfirmationModal from './ConfirmationModal.client';
 import UserDetailDrawer from './UserDetailDrawer.client';
 
@@ -84,6 +86,8 @@ export default function AdminUsers({
   const [selected, setSelected] = useState<UserListRow | null>(null);
   const [confirm, setConfirm] = useState<{ kind: ConfirmKind; user: UserListRow } | null>(null);
   const [refetchKey, setRefetchKey] = useState(0);
+  // null = closed; a string (possibly empty) = open, pre-filled with that practice
+  const [addUserPractice, setAddUserPractice] = useState<string | null>(null);
 
   // Debounce search → URL
   useEffect(() => {
@@ -135,7 +139,9 @@ export default function AdminUsers({
         ? 'soft-delete'
         : confirm.kind === 'grant_admin'
           ? 'grant-admin'
-          : 'revoke-admin';
+          : confirm.kind === 'deactivate'
+            ? 'deactivate'
+            : 'revoke-admin';
     try {
       const res = await fetch(`/api/admin/users/${confirm.user.id}/${path}`, {
         method: 'POST',
@@ -151,7 +157,9 @@ export default function AdminUsers({
             ? 'User soft-deleted'
             : confirm.kind === 'grant_admin'
               ? 'Admin granted'
-              : 'Admin revoked'
+              : confirm.kind === 'deactivate'
+                ? 'User deactivated'
+                : 'Admin revoked'
         );
         setConfirm(null);
         // Keep drawer open so the admin sees the updated state.
@@ -187,8 +195,18 @@ export default function AdminUsers({
               suspended
             </div>
           </div>
-          <div className="text-[11px] text-linear-text-3">
-            signed in as <span className="font-mono text-linear-text-2">{currentUserEmail}</span>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setAddUserPractice('')}
+              className="qm-lin-btn h-8"
+            >
+              <UserPlus className="mr-1 h-3 w-3" />
+              Add user
+            </button>
+            <div className="text-[11px] text-linear-text-3">
+              signed in as <span className="font-mono text-linear-text-2">{currentUserEmail}</span>
+            </div>
           </div>
         </div>
       </header>
@@ -213,6 +231,7 @@ export default function AdminUsers({
                 { value: 'all', label: 'All status' },
                 { value: 'active', label: 'Active' },
                 { value: 'suspended', label: 'Suspended' },
+                { value: 'deactivated', label: 'Deactivated' },
                 { value: 'deleted', label: 'Deleted' },
               ]}
             />
@@ -344,7 +363,18 @@ export default function AdminUsers({
           onClose={() => setSelected(null)}
           onConfirm={(kind, user) => setConfirm({ kind, user })}
           onActed={refresh}
+          onAddUser={(practiceId) => setAddUserPractice(practiceId)}
           refetchKey={refetchKey}
+        />
+      )}
+      {addUserPractice !== null && (
+        <AddUserModal
+          initialPracticeId={addUserPractice}
+          onCancel={() => setAddUserPractice(null)}
+          onCreated={() => {
+            setAddUserPractice(null);
+            refresh();
+          }}
         />
       )}
       {confirm && (
@@ -496,6 +526,13 @@ function StatusCell({ user }: { user: UserListRow }) {
       >
         <span className="h-1.5 w-1.5 rounded-full bg-linear-warning" />
         Suspended
+      </span>
+    );
+  if (user.status === 'deactivated')
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-linear-text-3">
+        <span className="h-1.5 w-1.5 rounded-full bg-linear-text-3" />
+        Deactivated
       </span>
     );
   return (

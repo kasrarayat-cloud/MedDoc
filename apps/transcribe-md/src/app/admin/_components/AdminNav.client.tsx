@@ -24,6 +24,10 @@ const ITEMS = [
   { href: '/admin/usage', label: 'API Usage' },
   { href: '/admin/threats', label: 'Threats' },
   { href: '/admin/hipaa', label: 'HIPAA' },
+  // Console port (#310 step 3): the audit trail had an API and no page, and
+  // the queue dashboard had a page and no link.
+  { href: '/admin/audit', label: 'Audit' },
+  { href: '/admin/queues', label: 'Queues' },
 ] as const;
 
 interface AdminNavProps {

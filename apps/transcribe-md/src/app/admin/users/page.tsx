@@ -60,7 +60,7 @@ export default async function UsersPage({ searchParams }: Props) {
 
 function parseStatus(v: string | string[] | undefined): StatusFilter {
   const s = typeof v === 'string' ? v : '';
-  if (s === 'active' || s === 'suspended' || s === 'deleted') return s;
+  if (s === 'active' || s === 'suspended' || s === 'deactivated' || s === 'deleted') return s;
   return 'all';
 }
 function parseRole(v: string | string[] | undefined): RoleFilter {

@@ -14,15 +14,23 @@
 // preference and it is not a description: each arm below is a thing that would
 // be FALSE if the key were wrong.
 //
-// ⚠️ WHY A SOURCE-LEVEL GATE AND NOT ONLY A BEHAVIOURAL ONE. Two of the three
-// doors cannot be exercised by a unit test — one is a Next server action inside
-// a signup transaction, the other lives in `apps/meddoc-pro`, which is
-// DECOMMISSIONED and is not typechecked or built by CI at all. A behavioural
-// test would therefore cover door 2 and silently claim the set. AGENTS.md's
-// shared-component rule prescribes exactly this fallback: where the behaviour
-// cannot live on the component, "make the missing case fail a test rather than
-// render quietly". The census below is that test, and it is the ONLY thing in
-// CI that reads meddoc-pro's source.
+// ⚠️ WHY A SOURCE-LEVEL GATE AND NOT ONLY A BEHAVIOURAL ONE. When this gate
+// was written, two of the three doors could not be exercised by a unit test —
+// one is a Next server action inside a signup transaction, the other lived in
+// `apps/meddoc-pro`, which is DECOMMISSIONED and is not typechecked or built by
+// CI at all. AGENTS.md's shared-component rule prescribes exactly this
+// fallback: where the behaviour cannot live on the component, "make the missing
+// case fail a test rather than render quietly".
+//
+// ⚠️ 2026-09-10 — DOOR 3 MOVED, AND IT IS NOW DRIVEN AS WELL AS READ. The
+// console port (ruling #310 step 3) put the reactivation door in transcribe-md
+// at `api/admin/users/[id]/reactivate/route.ts`, because the meddoc-pro copy
+// was unreachable (that app serves 410) and six practices had no route to
+// their promo at all. The meddoc-pro grant block was deleted in the same
+// change, so there are still exactly three callers. The census below now reads
+// the ported file; `reactivate-promo-grant.test.ts` beside that route DRIVES it
+// and proves the grant runs after the commit and outside the transaction —
+// the one property a source read cannot see.
 // ============================================================================
 
 import { readFileSync } from 'node:fs';
@@ -35,7 +43,7 @@ const REPO = '../..';
 
 const SIGNUP_DOOR = `${REPO}/apps/transcribe-md/src/actions/auth.ts`;
 const BACKFILL_DOOR = `${REPO}/apps/transcribe-md/scripts/backfill-promo-grants.ts`;
-const REACTIVATION_DOOR = `${REPO}/apps/meddoc-pro/src/app/system-admin/actions.ts`;
+const REACTIVATION_DOOR = `${REPO}/apps/transcribe-md/src/app/api/admin/users/[id]/reactivate/route.ts`;
 const SCHEMA = `${REPO}/packages/db/prisma/schema.prisma`;
 
 const read = (p: string) => readFileSync(p, 'utf8');
@@ -46,6 +54,29 @@ const read = (p: string) => readFileSync(p, 'utf8');
  *  words you are grepping for are guaranteed to appear. */
 function stripComments(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+}
+
+/**
+ * The bodies of every `data: { … }` object literal in a source, braces
+ * balanced. ⚠️ THE REACTIVATION ARM USED TO MATCH `isActive:\s*true` ANYWHERE,
+ * so a `select: { isActive: true }` — a READ — satisfied a check titled "every
+ * user-write that sets isActive:true grants". Scoped to `data:` it can only be
+ * satisfied by a write's payload.
+ */
+function dataBlocks(src: string): string[] {
+  const out: string[] = [];
+  const re = /\bdata:\s*\{/g;
+  for (let m = re.exec(src); m; m = re.exec(src)) {
+    const open = m.index + m[0].length - 1;
+    let depth = 0;
+    let end = open;
+    for (; end < src.length; end += 1) {
+      if (src[end] === '{') depth += 1;
+      else if (src[end] === '}' && (depth -= 1) === 0) break;
+    }
+    out.push(src.slice(open, end + 1));
+  }
+  return out;
 }
 
 describe('B7 step 3c — the idempotency key is occasion-free', () => {
@@ -165,13 +196,24 @@ describe('B7 step 3c — the door census', () => {
     // reactivation path, or moves this one into the live app, the census above
     // is what has to be updated, and this failing is how they find out.
     const src = stripComments(read(REACTIVATION_DOOR));
-    const reactivationWrites = [...src.matchAll(/isActive:\s*true/g)];
+    const reactivationWrites = dataBlocks(src).filter((b) => /\bisActive:\s*true\b/.test(b));
     expect(
       reactivationWrites.length,
-      'the reactivation site no longer sets isActive:true — the door moved, and ' +
-        'the grant must move with it',
+      'the reactivation site no longer WRITES isActive:true in a `data:` payload — ' +
+        'the door moved, and the grant must move with it',
     ).toBeGreaterThan(0);
     expect(src).toMatch(/grantPromoCredit\s*\(/);
+  });
+
+  it('POSITIVE CONTROL — the `data:`-scoped matcher tells a write from a read', () => {
+    // The arm above must not be satisfiable by a select — the exact weakness it
+    // was tightened to remove — and must still see a real write payload,
+    // including one with a nested object inside it.
+    const hits = (s: string) => dataBlocks(s).filter((b) => /\bisActive:\s*true\b/.test(b)).length;
+    expect(hits('prisma.user.findUnique({ where: { id }, select: { isActive: true } })')).toBe(0);
+    expect(hits('tx.user.update({ where: { id }, data: { isActive: true, deactivatedAt: null } })')).toBe(1);
+    expect(hits('tx.user.update({ data: { meta: { a: 1 }, isActive: true } })')).toBe(1);
+    expect(hits('tx.user.update({ data: { isActive: false } })')).toBe(0);
   });
 
   it('THE SIGNUP GRANT IS GUARDED BY `!membership` — a collision inside that transaction is fatal', () => {
