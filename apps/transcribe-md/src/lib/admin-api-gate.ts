@@ -83,14 +83,18 @@ export function adminApi(
     if (!products.includes(Product.SUPER_ADMIN)) return notFoundResponse();
 
     // ── MFA PARITY WITH THE PAGE GATE ────────────────────────────────────
-    // `app/admin/layout.tsx:69-86` requires MFA before any /admin/* PAGE
-    // renders, and its own comment says that closes shadow-audit
-    // HIPAA_FINDING_001. This gate did not check it at all: measured
-    // `grep -ci mfa admin-api-gate.ts` -> 0, positive-controlled against the
-    // page gate. So every one of the 29 /api/admin/* endpoints — including the
-    // 12 POSTs that suspend, soft-delete, force-logout, reset a password and
-    // grant or revoke SUPER_ADMIN — was reachable by a session the pages
-    // refuse. The control existed on one door of two.
+    // `app/admin/layout.tsx` requires MFA before any /admin/* PAGE renders,
+    // and its own comment says that closes shadow-audit HIPAA_FINDING_001.
+    // This gate did not check it at all (measured `grep -ci mfa` on this file
+    // -> 0 on 2026-09-04), so every /api/admin/* endpoint — including the
+    // writes that suspend, soft-delete, force-logout, reset a password, edit a
+    // practice, and grant or revoke SUPER_ADMIN — was reachable by a session
+    // the pages refuse. The control existed on one door of two.
+    //
+    // ⚠️ NO ENDPOINT COUNT IS WRITTEN HERE, ON PURPOSE. This comment said "29"
+    // and was wrong one merge later: PATCH /api/admin/practices/[id] made it
+    // 30. The set is derived where it is enforced — the readdir in
+    // tests/api/admin-gate-coverage.test.ts — and nowhere else.
     //
     // ⚠️ READ FRESH FROM THE DB, NEVER FROM THE JWT, for the same reason the
     // page gate states: enrolment happens IN-SESSION, so a cached flag is stale
@@ -98,13 +102,15 @@ export function adminApi(
     // It costs no extra query; `mfaEnabled` rides the row already being read.
     //
     // ⚠️ THIS LOCKS OUT EVERY SUPER_ADMIN WHO HAS NOT ENROLLED, AND THAT IS
-    // SURVIVABLE ONLY BECAUSE ENROLMENT IS NOT BEHIND THIS GATE. Verified:
-    // /settings/security/mfa and all three routes it calls — /api/mfa/enroll,
-    // /api/mfa/verify-enrollment, /api/mfa/disable — carry no `adminApi`
-    // wrapper, so the recovery path stays open. Measured on production
-    // 2026-09-04: 3 SUPER_ADMIN accounts, 0 with MFA enrolled, so this
-    // genuinely closes the surface until somebody enrols. That is the point;
-    // the pages already refuse them.
+    // SURVIVABLE ONLY BECAUSE ENROLMENT IS NOT BEHIND THIS GATE. Everything
+    // /settings/security/mfa fetches, and every route under /api/mfa/**, carries
+    // no `adminApi` wrapper; gate-mfa-recovery-path-open.test.ts DERIVES that
+    // set and pins it. ⚠️ Recovery happens on the APP host: admin.quillmd.com's
+    // Caddy allowlist 404s /settings/* and /api/mfa/*. Production, read-only
+    // counts 2026-09-10: 2 SUPER_ADMIN accounts, 1 of them enrolled.
+    //
+    // Proved by DRIVING this function, not by reading it:
+    // gate-admin-api-mfa-behavioural.test.ts.
     //
     // Silent 404 like every other refusal here — same disclosure-minimising
     // posture, deliberately consistent rather than a special case.
