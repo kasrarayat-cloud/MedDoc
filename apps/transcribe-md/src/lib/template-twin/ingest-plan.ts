@@ -161,42 +161,100 @@ export type IdentityKey = string & { readonly __brand: 'IdentityKey' };
  * still requires it.**
  */
 /**
- * The ambiguity key an identity key is counted under.
+ * The identity keys a field answers to, each PAIRED with the key its
+ * uniqueness is COUNTED under.
  *
- * `identityKeys` carries `kind` on the tag key; `ambiguityKeys` deliberately
- * does not, because `kind` is content-derived and mutable (round five). This
- * maps one to the other so uniqueness is counted on the stable form while
- * matching still requires the full one.
+ * ⚠️ ONE CONSTRUCTION SITE, DELIBERATELY — AND THE PREVIOUS SHAPE IS WHY.
+ * The pairing used to be recovered AFTER the fact by re-parsing the joined
+ * match key (`ambiguityKeyFor`: split on NUL, keep the first three fields).
+ * That is a LOSSY PARSE OF ITS OWN DELIMITER: a `w:tag` containing U+0000
+ * yields more than four fields, so the "ambiguity key" recovered from it was a
+ * TRUNCATION — a key describing a DIFFERENT control. A genuinely ambiguous tag
+ * could then read as unique and claim a certified clinical disposition.
+ *
+ * Found by the refutation pass over #1087 and LATENT rather than live: the
+ * act's only caller pins the artifact by sha and passes `expectFieldIds`, so
+ * every control matches on its own `fid` and no tag key is consulted. It goes
+ * live the moment the ordinary upload path uses this primitive — which is
+ * exactly the path #274 split it out to serve.
+ *
+ * Building both keys together removes the parse, and with it that class: the
+ * two keys cannot disagree about which control they describe. The readers are
+ * now ONE.
+ *
+ * ⚠️ THAT WAS NOT SUFFICIENT ON ITS OWN, AND THE CLAIM HERE USED TO SAY IT WAS.
+ * Removing the lossy PARSE left a lossy JOIN — see `seg` below, which closes it
+ * for any bytes in any component rather than borrowing an invariant from
+ * another module.
+ *
+ * The distinction the pair encodes is unchanged and is round five's finding:
+ * **AMBIGUITY is counted WITHOUT `kind`; MATCHING still requires it**, because
+ * `kind` is content-derived and mutable.
  */
-export function ambiguityKeyFor(key: IdentityKey): IdentityKey {
-  if (key.startsWith('fid\u0000')) return key;
-  // tag\0<part>\0<tag>\0<kind>  ->  tag\0<part>\0<tag>
-  const parts = key.split('\u0000');
-  return parts.slice(0, 3).join('\u0000') as IdentityKey;
+export interface IdentityKeyPair {
+  /** what a match must equal — carries `kind` on the tag key. */
+  readonly match: IdentityKey;
+  /** what uniqueness is counted under — no `kind`. */
+  readonly ambiguity: IdentityKey;
 }
 
-export function ambiguityKeys(field: TemplateField): IdentityKey[] {
-  const b = field.rendererBinding;
-  const keys: IdentityKey[] = [`fid\u0000${field.fieldId}` as IdentityKey];
-  const tag = (b.tag ?? '').trim();
-  if (tag !== '') {
-    keys.push(`tag\u0000${b.partName}\u0000${tag}` as IdentityKey);
-  }
-  return keys;
-}
+/**
+ * One segment of a key, LENGTH-PREFIXED so the encoding is injective.
+ *
+ * ⚠️ A PLAIN DELIMITER JOIN IS NOT INJECTIVE, AND THE REFUTATION PASS OVER THE
+ * FIRST VERSION OF THIS FILE PROVED IT WITH A CONCRETE PAIR:
+ *
+ *     (partName "a\0b", tag "x")   ->  tag \0 a\0b \0 x
+ *     (partName "a",     tag "b\0x") ->  tag \0 a \0 b\0x
+ *
+ * Byte-identical. Two controls in DIFFERENT parts, carrying DIFFERENT tags,
+ * collapse to one key — and each is unique on its own side, so both uniqueness
+ * gates pass and one inherits the other's certified clinical disposition.
+ *
+ * ⚠️ AND THE FIRST FIX HERE DID NOT CLOSE IT. Building both keys at one site
+ * removed the lossy *parse*; it left the lossy *join*. The guarantee then rested
+ * on `partName` being NUL-free — which is true, and is enforced in a DIFFERENT
+ * MODULE (`note-template-docx/zip-directory.ts` rejects NUL in an entry name and
+ * requires printable ASCII; the compiler looks every structural part up in the
+ * zip). **A cross-module invariant nothing here asserts is not a property of
+ * this code.** The day a synthesized or imported IR reaches `planTransfer`, the
+ * join silently stops being injective and no test would say so.
+ *
+ * Length-prefixing makes the encoding injective for ANY bytes in ANY component,
+ * with no invariant borrowed from anywhere. `${s.length}` cannot itself shift a
+ * boundary: it is read before the delimiter, so the reader always knows how many
+ * characters follow.
+ *
+ * These keys are computed in memory and never persisted, so the encoding is free
+ * to change — verified: the only consumers are `countKeys`, `planTransfer`'s two
+ * loops, and the tests.
+ */
+const seg = (s: string): string => `${s.length}\u0000${s}`;
 
-export function identityKeys(field: TemplateField): IdentityKey[] {
+export function identityKeyPairs(field: TemplateField): IdentityKeyPair[] {
   const b = field.rendererBinding;
-  const keys: IdentityKey[] = [`fid\u0000${field.fieldId}` as IdentityKey];
+  const fid = `fid${seg(field.fieldId)}` as IdentityKey;
+  const pairs: IdentityKeyPair[] = [{ match: fid, ambiguity: fid }];
 
   // ⚠️ TRIMMED AND CASE-SENSITIVE, AND EMPTY IS NOT AN IDENTITY. A tag of ""
   // or "   " names nothing; treating it as a key would collapse every untagged
   // control in the document into one identity.
   const tag = (b.tag ?? '').trim();
   if (tag !== '') {
-    keys.push(`tag\u0000${b.partName}\u0000${tag}\u0000${field.kind}` as IdentityKey);
+    pairs.push({
+      match: `tag${seg(b.partName)}${seg(tag)}${seg(field.kind)}` as IdentityKey,
+      ambiguity: `tag${seg(b.partName)}${seg(tag)}` as IdentityKey,
+    });
   }
-  return keys;
+  return pairs;
+}
+
+export function ambiguityKeys(field: TemplateField): IdentityKey[] {
+  return identityKeyPairs(field).map((p) => p.ambiguity);
+}
+
+export function identityKeys(field: TemplateField): IdentityKey[] {
+  return identityKeyPairs(field).map((p) => p.match);
 }
 
 export type IngestGuardFailure =
@@ -340,14 +398,53 @@ export function planTransfer(input: {
    * It asked whether EVERY key a field answers to is unique, and disqualified
    * the field entirely if any one was shared. On the owner's form that is
    * catastrophic for no reason: the 53 controls carry 53 tags but only **35
-   * DISTINCT** ones — `plan` five times, `impression` four, `past_medical_
-   * history` three — so eighteen controls share a tag with a sibling. Their
-   * `fieldId`s are unique and EXACT (the re-issue re-ingests the very artifact
-   * the certified version was compiled from), yet every one of them was
-   * refused because a DIFFERENT key of theirs was ambiguous.
+   * DISTINCT** ones. Their `fieldId`s are unique and EXACT (the re-issue
+   * re-ingests the very artifact the certified version was compiled from), yet
+   * every control with a shared tag was refused because a DIFFERENT key of
+   * theirs was ambiguous.
    *
-   * Measured: the act planned **20** transfers where the declaration said 43,
-   * and refused. `TRANSFER_COUNT_MISMATCH expected 43 actual 20`.
+   * ⚠️ MEASURED ON THE CERTIFIED VERSION ITSELF
+   * (`18a7ae19-0d23-44a5-8e98-5459081782be`), NOT INFERRED —
+   * and the first version of this comment got it wrong, which is why the query
+   * is written out below rather than the numbers alone:
+   *
+   *     WITH f AS (SELECT btrim(fd."rendererBinding"->>'tag') AS tag, m."sourceType"
+   *                FROM template_twin_field_definitions fd
+   *                LEFT JOIN template_twin_semantic_mappings m
+   *                       ON m."fieldDefinitionId" = fd.id
+   *                WHERE fd."compiledVersionId" = '18a7ae19-0d23-44a5-8e98-5459081782be'),
+   *          g AS (SELECT f.*, count(*) OVER (PARTITION BY tag) AS n FROM f)
+   *     SELECT "sourceType", CASE WHEN n > 1 THEN 'shared' ELSE 'unique' END, count(*)
+   *     FROM g GROUP BY 1, 2;
+   *     -- -> extraction/shared 23 · extraction/unique 20 · manual/shared 3 · manual/unique 7
+   *
+   *     SELECT btrim(fd."rendererBinding"->>'tag') AS tag, count(*) AS n
+   *     FROM template_twin_field_definitions fd
+   *     WHERE fd."compiledVersionId" = '18a7ae19-0d23-44a5-8e98-5459081782be'
+   *     GROUP BY 1 HAVING count(*) > 1 ORDER BY n DESC, 1;
+   *     -- -> the eight shared tags below; count(DISTINCT tag) over all 53 is 35
+   *
+   * ⚠️ ROUND THREE FOUND THE FIRST QUERY UNRUNNABLE AS WRITTEN: its WHERE held a
+   * placeholder, and the text-typed column matched nothing — a silent zero with
+   * exit 0. Both queries were re-run read-only against production before this
+   * comment was written, and their outputs are the numbers quoted here.
+   *
+   * (Structure and blank-form metadata only — no patient data is read.)
+   * **EIGHT** tags are shared,
+   * not three: `plan`×5, `impression`×4, `patient_is_a_pleasant_age_...`×4,
+   * `family_history`×3, `past_medical_history`×3, `past_surgical_history`×3,
+   * `allergies`×2, `the_patient_medications_were_reviewed_an`×2. That is
+   * **26 controls sharing a tag with a sibling**, of which **23** are among the
+   * 43 `extraction` rows the act transfers.
+   *
+   *     18 IS THE SURPLUS (53 − 35), NOT A CONTROL COUNT. Both members of a
+   *     shared pair are refused, not just the extra one — which is exactly the
+   *     arithmetic the earlier sentence lost.
+   *
+   * And that is what reconciles the refusal: of the 43 extraction rows, 20 had
+   * a unique tag and survived, 23 did not. The act planned **20** transfers
+   * where the declaration said 43, and refused —
+   * `TRANSFER_COUNT_MISMATCH expected 43 actual 20`. 43 − 23 = 20, exactly.
    *
    *     AMBIGUITY IS A PROPERTY OF A KEY, NOT OF A CONTROL. A shared tag makes
    *     THAT TAG useless for identifying anyone; it says nothing about whether
@@ -366,12 +463,12 @@ export function planTransfer(input: {
   const oldByIdentity = new Map<IdentityKey, string>();
   if (sourceIr) {
     for (const field of sourceIr.fields) {
-      for (const key of identityKeys(field)) {
+      for (const pair of identityKeyPairs(field)) {
         // Only an UNAMBIGUOUS key carries an identity. A shared key names no one
         // control, so it is simply not registered; the field's other keys still
         // are.
-        if (!keyIsUnique(ambiguityKeyFor(key), sourceCounts)) continue;
-        oldByIdentity.set(key, field.fieldId);
+        if (!keyIsUnique(pair.ambiguity, sourceCounts)) continue;
+        oldByIdentity.set(pair.match, field.fieldId);
       }
     }
   }
@@ -387,12 +484,12 @@ export function planTransfer(input: {
   for (const field of target.fields) {
     let fromFieldId: string | undefined;
     let mapping: SemanticMapping | undefined;
-    for (const key of identityKeys(field)) {
+    for (const pair of identityKeyPairs(field)) {
       // ambiguous on the target side: several controls here answer to this key,
       // so THIS key cannot claim a disposition. Another key of this field may
       // still be able to.
-      if (!keyIsUnique(ambiguityKeyFor(key), targetCounts)) continue;
-      const candidate = oldByIdentity.get(key);
+      if (!keyIsUnique(pair.ambiguity, targetCounts)) continue;
+      const candidate = oldByIdentity.get(pair.match);
       if (candidate === undefined || consumed.has(candidate)) continue;
       const found = certifiedByFieldId.get(candidate);
       if (found) {

@@ -31,7 +31,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { type SemanticMapping, type TemplateDocIR, type TemplateField } from '../ir';
-import { identityKeys, planTransfer } from '../ingest-plan';
+import { identityKeyPairs, identityKeys, planTransfer } from '../ingest-plan';
 
 /** A compiled field, shaped as the compiler emits it. */
 function field(over: {
@@ -372,15 +372,26 @@ describe("#274 · ⚠️ AMBIGUITY IS PER-KEY — the owner's form proved it", (
   // ══════════════════════════════════════════════════════════════════════════
   // THE RULED ACT'S OWN GUARD CAUGHT THIS, BEFORE A ROW MOVED.
   //
-  // The owner's 53-control form carries 53 tags but only 35 DISTINCT ones —
-  // `plan` five times, `impression` four, `past_medical_history` three. The
+  // The owner's 53-control form carries 53 tags but only 35 DISTINCT ones. The
   // first bijection asked whether EVERY key a field answers to is unique and
-  // disqualified the field entirely if any one was shared. So eighteen controls
-  // whose `fieldId` is unique and EXACT — the re-issue re-ingests the very
-  // artifact the certified version was compiled from — were refused because a
-  // DIFFERENT key of theirs was ambiguous.
+  // disqualified the field entirely if any one was shared. So every control
+  // with a shared tag was refused — even though its `fieldId` is unique and
+  // EXACT, the re-issue re-ingesting the very artifact the certified version
+  // was compiled from.
   //
-  // Measured: 20 planned where 43 was declared. TRANSFER_COUNT_MISMATCH.
+  // ⚠️ MEASURED ON `18a7ae19`, NOT INFERRED. EIGHT tags are shared, not three:
+  // plan x5, impression x4, patient_is_a_pleasant_age_... x4, family_history
+  // x3, past_medical_history x3, past_surgical_history x3, allergies x2,
+  // the_patient_medications_were_reviewed_an x2. That is 26 controls sharing a
+  // tag, 23 of them among the 43 `extraction` rows.
+  //
+  //     18 IS THE SURPLUS (53 - 35), NOT A CONTROL COUNT. An earlier version of
+  //     this comment said "eighteen controls" in both this file and
+  //     ingest-plan.ts; both members of a shared pair are refused, not just the
+  //     extra one.
+  //
+  // Measured: 20 planned where 43 was declared (43 - 23 = 20, exactly).
+  // TRANSFER_COUNT_MISMATCH.
   //
   //     AMBIGUITY IS A PROPERTY OF A KEY, NOT OF A CONTROL.
   // ══════════════════════════════════════════════════════════════════════════
@@ -402,6 +413,12 @@ describe("#274 · ⚠️ AMBIGUITY IS PER-KEY — the owner's form proved it", (
   it('and the shared TAG still carries nothing when the fieldIds differ', () => {
     // changed bytes: ids rotate, so only the tag could match — and it is shared,
     // so nothing may transfer. The safety property is untouched.
+    //
+    // ⚠️ REGRESSION GUARD, NOT A PROOF OF THE PER-KEY DELTA — measured, and
+    // stated because the commit that added it claimed otherwise. Run against
+    // the PRE-#1087 per-FIELD code this arm ALSO passes: old and new both
+    // refuse everything here, for different reasons. It is worth keeping and it
+    // does not discriminate.
     const src = ir([withTag('ttf_' + 'a'.repeat(24), 'plan', 'Plan A'), withTag('ttf_' + 'b'.repeat(24), 'plan', 'Plan B')]);
     const certs = new Map([
       ['ttf_' + 'a'.repeat(24), certified('ttf_' + 'a'.repeat(24), 'concept_a')],
@@ -413,8 +430,15 @@ describe("#274 · ⚠️ AMBIGUITY IS PER-KEY — the owner's form proved it", (
   });
 
   it('a UNIQUE tag still carries across rotated ids, beside ambiguous siblings', () => {
-    // ⚠️ THE MIXED CASE, which is what the real form is: one unique tag among
-    // duplicates. It must still work.
+    // one unique tag among duplicates, with the ids rotated.
+    //
+    // ⚠️ REGRESSION GUARD, NOT A PROOF OF THE PER-KEY DELTA. This arm's own
+    // comment used to read "THE MIXED CASE, which is what the real form is",
+    // and the commit message advertised it as such. It is neither. Measured
+    // against the PRE-#1087 code it passes unchanged: `exam_lungs` is unique on
+    // BOTH sides, so the per-FIELD rule never disqualified it either. The real
+    // form's mixed case is IDENTICAL bytes with shared and unique tags side by
+    // side — the arm below, which is the one that discriminates.
     const src = ir([
       withTag('ttf_' + 'e'.repeat(24), 'plan', 'Plan A'),
       withTag('ttf_' + 'f'.repeat(24), 'plan', 'Plan B'),
@@ -433,6 +457,246 @@ describe("#274 · ⚠️ AMBIGUITY IS PER-KEY — the owner's form proved it", (
     const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
     expect(plan.transferred).toHaveLength(1);
     expect(plan.transferred[0]!.mapping.clinicalConcept).toBe('c_lungs');
+  });
+
+  it("⚠️ THE REAL FORM'S MIXED CASE — shared and unique tags side by side, IDENTICAL bytes", () => {
+    // ⚠️ THIS IS THE ARM THE COMMIT CLAIMED TO HAVE AND DID NOT, and it is the
+    // shape the ruled act actually runs: the re-issue re-ingests the very
+    // artifact the certified version was compiled from, so the bytes — and
+    // therefore every `fieldId` — are IDENTICAL on both sides.
+    //
+    // MEASURED ON THE CERTIFIED VERSION `18a7ae19`: 53 controls, 53 tags, 35
+    // distinct. EIGHT tags are shared, covering 26 controls; 27 controls have a
+    // tag of their own. Of the 43 `extraction` rows the act transfers, 23 sit
+    // on a shared tag and 20 do not.
+    //
+    // Under the PRE-#1087 per-FIELD rule this arm yields 2 of 5 — only the
+    // unique-tag controls survive, and 43 - 23 = 20 is that same subtraction on
+    // the real document. Under the shipped per-KEY rule it yields 5 of 5.
+    // THAT is what makes this arm load-bearing where the two above are not.
+    const shared = ['ttf_' + 's'.repeat(24), 'ttf_' + 't'.repeat(24), 'ttf_' + 'u'.repeat(24)];
+    const unique = ['ttf_' + 'v'.repeat(24), 'ttf_' + 'w'.repeat(24)];
+    const doc = ir([
+      ...shared.map((id, i) => withTag(id, 'plan', `Plan ${i}`)),
+      withTag(unique[0]!, 'impression', 'Impression'),
+      withTag(unique[1]!, 'exam_lungs', 'Lungs'),
+    ]);
+    const all = [...shared, ...unique];
+    const certs = new Map(all.map((id, i) => [id, certified(id, `concept_${i}`)]));
+
+    // identical bytes => the SAME document on both sides
+    const plan = planTransfer({ target: doc, sourceIr: doc, certifiedByFieldId: certs });
+
+    expect(plan.transferred, 'a shared tag still blocked its own exact fieldId').toHaveLength(5);
+    expect(plan.reproposed).toEqual([]);
+    // ⚠️ AND EACH ROW LANDS ON ITS OWN CONTROL. A count is not a pairing —
+    // five transfers that cite the wrong sources would satisfy the line above.
+    for (const [i, id] of all.entries()) {
+      const row = plan.transferred.find((t) => t.fieldId === id);
+      expect(row, `no row for ${id}`).toBeDefined();
+      expect(row!.fromFieldId, 'a disposition landed on a different control').toBe(id);
+      expect(row!.mapping.clinicalConcept).toBe(`concept_${i}`);
+    }
+    expect(new Set(plan.transferred.map((t) => t.fromFieldId)).size).toBe(5);
+  });
+
+  it('⚠️ a NUL inside a w:tag cannot borrow another control identity', () => {
+    // ⚠️ THE REGRESSION THE REFUTATION PASS FOUND, kept as a test so the lossy
+    // parse cannot come back. `ambiguityKeyFor` used to recover the ambiguity
+    // key by splitting the joined MATCH key on NUL and keeping three fields:
+    //
+    //     match     tag \0 <part> \0 x \0 y \0 <kind>      (tag is "x\0y")
+    //     recovered tag \0 <part> \0 x                      <- a DIFFERENT control's key
+    //
+    // ⚠️ AND THE SIBLING BELOW IS LOAD-BEARING, NOT SCENERY. Without a control
+    // whose tag is exactly `x`, the truncated key has count 0, `keyIsUnique` is
+    // false and the old code failed CLOSED — so an arm without it passes under
+    // BOTH implementations and proves nothing. The pass measured that
+    // precondition explicitly; this arm encodes it.
+    //
+    // Pre-#1087 the per-FIELD rule refused these (it read the real 4-segment
+    // key, count 2). The lossy parse made them read as UNIQUE — so this was a
+    // regression, and the arm discriminates in that direction.
+    const P = 'ttf_' + 'k'.repeat(24);
+    const Q = 'ttf_' + 'l'.repeat(24);
+    const R = 'ttf_' + 'r'.repeat(24);
+    // P and Q genuinely share the NUL-bearing tag; R owns the truncation of it.
+    const src = ir([withTag(P, 'x\u0000y', 'A'), withTag(Q, 'x\u0000y', 'B'), withTag(R, 'x', 'Plain')]);
+    const certs = new Map([
+      [P, certified(P, 'c_p')],
+      [Q, certified(Q, 'c_q')],
+      [R, certified(R, 'c_r')],
+    ]);
+
+    // identical bytes: every exact fieldId carries, and each onto ITSELF.
+    const same = planTransfer({ target: src, sourceIr: src, certifiedByFieldId: certs });
+    expect(same.transferred).toHaveLength(3);
+    for (const row of same.transferred) expect(row.fromFieldId).toBe(row.fieldId);
+
+    // rotated ids: only tags are left. The shared NUL-bearing tag names nobody,
+    // so P and Q inherit NOTHING; R's own unique tag still carries.
+    const tgt = ir([
+      withTag('ttf_' + 'm'.repeat(24), 'x\u0000y', 'A'),
+      withTag('ttf_' + 'z'.repeat(24), 'x\u0000y', 'B'),
+      withTag('ttf_' + 'n'.repeat(24), 'x', 'Plain'),
+    ]);
+    const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
+    expect(
+      plan.transferred.map((t) => t.mapping.clinicalConcept),
+      'a NUL-bearing shared tag carried a disposition',
+    ).toEqual(['c_r']);
+  });
+
+  it('⚠️ a NUL in the PART NAME cannot collide with a tag — the join is INJECTIVE', () => {
+    // ⚠️ THE SECOND HALF OF THE SAME CLASS, and the first fix did NOT close it.
+    // Removing the lossy PARSE left a lossy JOIN: with a plain delimiter,
+    //
+    //     (partName "a\u0000b", tag "x")    -> tag \0 a\0b \0 x
+    //     (partName "a",     tag "b\u0000x") -> tag \0 a \0 b\0x
+    //
+    // are BYTE-IDENTICAL. Two controls in different parts with different tags
+    // collapse to one key, each unique on its own side, so both uniqueness gates
+    // pass and one inherits the other's certified clinical disposition.
+    //
+    // Measured against the pre-length-prefix code: it TRANSFERRED (1 row,
+    // cross-part, arriving certified) where its own parent had refused. The
+    // length-prefixed encoding refuses it, and does so for ANY bytes in ANY
+    // component rather than borrowing partName's NUL-freedom from another module.
+    const S = 'ttf_' + 's'.repeat(24);
+    const T = 'ttf_' + 't'.repeat(24);
+    const src = ir([field({ fieldId: S, tag: 'x', label: 'A', partName: 'a\u0000b' })]);
+    const tgt = ir([field({ fieldId: T, tag: 'b\u0000x', label: 'B', partName: 'a' })]);
+    const certs = new Map([[S, certified(S, 'concept_S')]]);
+
+    const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
+    expect(
+      plan.transferred,
+      'a partName NUL collided with a tag and carried a disposition across parts',
+    ).toEqual([]);
+    expect(plan.reproposed).toEqual([T]);
+  });
+
+  // The NUL character, built rather than typed: a literal control character in
+  // a source file is invisible in review, and an escape in a template literal is
+  // one keystroke away from being a different string.
+  const NUL = String.fromCharCode(0);
+
+  it('⚠️ a DIGIT in a part name cannot absorb the tag\'s length prefix — the partName segment is pinned', () => {
+    // ⚠️ ROUND THREE: no arm pinned the partName length prefix. Deleting it from
+    // that one segment (`tag${b.partName}`, or with only a NUL before it) left
+    // the whole suite green, because no fixture partName held a DIGIT, and real
+    // OOXML part names do ('word/header1.xml'). With the prefix gone these two
+    // collide: (partName 'a3<NUL>', tag 'x') and (partName 'a', tag '1<NUL>x').
+    const S = 'ttf_' + 's'.repeat(24);
+    const T = 'ttf_' + 't'.repeat(24);
+    const src = ir([field({ fieldId: S, tag: `1${NUL}x`, label: 'A', partName: 'a' })]);
+    const tgt = ir([field({ fieldId: T, tag: 'x', label: 'B', partName: `a3${NUL}` })]);
+    const certs = new Map([[S, certified(S, 'concept_S')]]);
+
+    const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
+    expect(
+      plan.transferred,
+      'a digit-bearing partName absorbed a length prefix and carried a disposition across parts',
+    ).toEqual([]);
+    expect(plan.reproposed).toEqual([T]);
+  });
+
+  it.each([
+    // Round three's two counterexamples, each let through by a WEAKER length
+    // encoding with the whole suite green. The first needs no NUL anywhere:
+    // printable part names the zip path would accept.
+    ['a length prefix without its NUL', { partName: '1', tag: 'abcdefghi1z' }, { partName: '11abcdefghi', tag: 'z' }],
+    ['a NUL placed before the length', { partName: '1', tag: `abcdefgh${NUL}2zz` }, { partName: `${NUL}12abcdefgh`, tag: 'zz' }],
+  ])('⚠️ %s cannot make two parts collide', (_what, s, t) => {
+    const S = 'ttf_' + 's'.repeat(24);
+    const T = 'ttf_' + 't'.repeat(24);
+    const src = ir([field({ fieldId: S, ...s, label: 'A' })]);
+    const tgt = ir([field({ fieldId: T, ...t, label: 'B' })]);
+    const certs = new Map([[S, certified(S, 'concept_S')]]);
+
+    const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
+    expect(plan.transferred).toEqual([]);
+    expect(plan.reproposed).toEqual([T]);
+  });
+
+  it('⚠️ a field\'s TWO keys encode partName and tag identically — they differ only by the kind', () => {
+    // Round three's verifier found a second class inside the first finding: drop
+    // the prefix from the MATCH line only and the two keys of ONE field diverge.
+    // The ambiguity gates stay satisfied while the lookup runs on the collided
+    // match key. Two readers of one identity must never disagree about it —
+    // asserted without naming the encoding, so a legitimate change of encoding
+    // does not have to touch this arm.
+    const suffixes = new Map<string, string>();
+    const cases: Array<[string, string, string]> = [
+      ['word/document.xml', 'plan', 'narrative_text'],
+      [`a3${NUL}`, 'x', 'short_text'],
+      ['word/header1.xml', `1${NUL}x`, 'number'],
+      ['1', 'abcdefghi1z', 'short_text'],
+      ['11abcdefghi', 'z', 'number'],
+    ];
+    for (const [partName, tag, kind] of cases) {
+      const pair = identityKeyPairs(field({ fieldId: 'ttf_' + 'q'.repeat(24), partName, tag, kind, label: 'L' }))[1]!;
+      expect(pair.match.startsWith(pair.ambiguity), JSON.stringify([partName, tag])).toBe(true);
+      const suffix = pair.match.slice(pair.ambiguity.length);
+      const prior = suffixes.get(kind);
+      if (prior !== undefined) expect(suffix, `kind ${kind} encoded differently for two fields`).toBe(prior);
+      suffixes.set(kind, suffix);
+    }
+    // POSITIVE CONTROL: different kinds really are distinguished.
+    expect(suffixes.size).toBe(3);
+    expect(new Set(suffixes.values()).size).toBe(3);
+  });
+
+  it('⚠️ the key encoding is INJECTIVE over an alphabet that can confuse a length prefix', () => {
+    // ⚠️ ROUND THREE: the previous version of this arm was a FIXTURE — no
+    // component held a digit and `kind` never varied, so `${s.length}${s}` (no
+    // NUL) passed it while colliding on printable, NUL-free input. This alphabet
+    // carries digits, NUL, a space, two-digit lengths, a real part name and both
+    // of round three's counterexamples, and the kind varies.
+    //
+    // ⚠️ THE TAG IS TRIMMED BY DESIGN (an identity is its trimmed tag), so no tag
+    // atom carries leading or trailing whitespace — NUL is not whitespace — and
+    // none is blank (a blank tag is not an identity at all).
+    const parts = [
+      '', 'a', '1', NUL, '11', `1${NUL}`, 'a1', `${NUL}1`, `a3${NUL}`,
+      `${NUL}12abcdefgh`, ' 12abcdefgh', 'abcdefghi1', '11abcdefghi', 'word/header1.xml',
+    ];
+    const tags = [
+      'a', '1', NUL, '11', `1${NUL}`, 'a1', `${NUL}1`, `1${NUL}x`, 'x', 'z', 'zz',
+      'abcdefghi1z', `abcdefgh${NUL}2zz`, '1abcdefghij',
+    ];
+    const kinds = ['short_text', 'number'];
+    // The alphabet itself is sound: no duplicates, no tag the trim would change.
+    expect(new Set(parts).size).toBe(parts.length);
+    expect(new Set(tags).size).toBe(tags.length);
+    for (const t of tags) expect(t.trim(), JSON.stringify(t)).toBe(t);
+
+    const seen = new Map<string, string>();
+    let built = 0;
+    for (const partName of parts) {
+      for (const tag of tags) {
+        for (const kind of kinds) {
+          const pair = identityKeyPairs(field({ fieldId: 'ttf_' + 'q'.repeat(24), tag, kind, label: 'L', partName }))[1];
+          expect(pair, `no tag key for ${JSON.stringify([partName, tag])}`).toBeDefined();
+          const keys: Array<[string, string]> = [
+            [pair!.match, JSON.stringify(['match', partName, tag, kind])],
+            [pair!.ambiguity, JSON.stringify(['ambiguity', partName, tag])],
+          ];
+          for (const [key, input] of keys) {
+            const prior = seen.get(key);
+            if (prior !== undefined) {
+              expect(prior, `two DISTINCT inputs share the key ${JSON.stringify(key)}`).toBe(input);
+            }
+            seen.set(key, input);
+            built += 1;
+          }
+        }
+      }
+    }
+    // ⚠️ POSITIVE CONTROL — a loop that built nothing passes every assertion.
+    expect(built).toBe(parts.length * tags.length * kinds.length * 2);
+    // Every match key distinct; each ambiguity key shared by exactly its kinds.
+    expect(seen.size).toBe(parts.length * tags.length * kinds.length + parts.length * tags.length);
   });
 });
 
@@ -764,12 +1028,47 @@ describe('#274 · ⚠️ AN AMBIGUOUS KEY TRANSFERS TO NOBODY — the bijection'
   });
 
   it('⚠️ ONE certified row is consumed by AT MOST ONE control', () => {
-    // The property stated directly, rather than through a fixture: no two
-    // transferred rows may cite the same source.
-    const src = ir([dup('ttf_' + 'n'.repeat(24), '700', 'Only one')]);
-    const certs = new Map([['ttf_' + 'n'.repeat(24), certified('ttf_' + 'n'.repeat(24), 'the_concept')]]);
-    const tgt = ir([dup('ttf_' + 'o'.repeat(24), '700', 'Only one'), dup('ttf_' + 'p'.repeat(24), '700', 'Copy')]);
+    // ⚠️ THIS ARM WAS VACUOUS UNTIL 2026-09-09, AND ITS OLD FIXTURE IS WHY IT
+    // IS WRITTEN OUT AT LENGTH NOW. It used to give BOTH target controls the
+    // tag `700`, so the TARGET-side uniqueness check refused both before the
+    // `consumed` guard was ever reached: `transferred` was `[]` and the
+    // assertion reduced to `new Set([]).size === [].length` — 0 === 0, true for
+    // every possible implementation, including one with no guard at all.
+    // Measured: DELETING the `consumed` Set left the whole suite green,
+    // 1045/1045. A test that cannot fail is not a test.
+    //
+    // The shape below actually reaches the guard. Source A carries tag `plan`
+    // and IS certified; source B carries tag `zzz` and is not. The two target
+    // controls are their ids SWAPPED:
+    //
+    //   target bbbb/plan  — its own `fid` finds source B, which has no
+    //                       certified row, so it falls through to the TAG key
+    //                       and legitimately claims source A.
+    //   target aaaa/qqq   — its own `fid` finds source A, which is now
+    //                       CONSUMED. Only the guard stops it claiming A a
+    //                       second time.
+    //
+    // With the guard: 1 transfer, A consumed once, aaaa re-proposed.
+    // Without it:     2 transfers BOTH citing A — two controls wearing one
+    //                 clinical meaning, which is the harm the guard exists for.
+    const A = 'ttf_' + 'a'.repeat(24);
+    const B = 'ttf_' + 'b'.repeat(24);
+    const src = ir([dup(A, 'plan', 'Plan'), dup(B, 'zzz', 'Other')]);
+    const certs = new Map([[A, certified(A, 'clinical.plan')]]);
+    const tgt = ir([dup(B, 'plan', 'Plan'), dup(A, 'qqq', 'Other')]);
+
     const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
+
+    // ⚠️ THE LENGTH IS ASSERTED FIRST AND ON PURPOSE. Distinctness alone is
+    // satisfiable by an empty array, which is exactly how this arm went
+    // vacuous the first time.
+    expect(plan.transferred, 'the guard-reaching path did not transfer').toHaveLength(1);
+    expect(plan.transferred[0]!.fieldId).toBe(B);
+    expect(plan.transferred[0]!.fromFieldId).toBe(A);
+    expect(plan.transferred[0]!.mapping.clinicalConcept).toBe('clinical.plan');
+    // A is spent, so the control that would otherwise claim it is re-proposed.
+    expect(plan.reproposed, 'the second claimant was not re-proposed').toContain(A);
+
     const sources = plan.transferred.map((t) => t.fromFieldId);
     expect(new Set(sources).size, 'a certified row was consumed twice').toBe(sources.length);
   });
