@@ -39,6 +39,7 @@
 
 import { isWordPlaceholderOption } from '../note-template-docx/placeholder-option';
 import { canonicalSha256 } from './canonical';
+import { requiredFactTemporality } from './fact-mapping-match';
 import {
   EncounterFactSchema,
   FieldResolutionSchema,
@@ -49,11 +50,29 @@ import {
   type TemplateField,
 } from './ir';
 
-/** One clinician correction, as stored. The ORDINAL is the value — see below. */
-export interface ClinicianFieldOverride {
-  fieldId: string;
-  selectedOptionOrdinal: number;
-}
+/** One clinician correction, as stored.
+ *
+ *  ⚠️ A DISCRIMINATED UNION SINCE REVIEW-DEFAULTS, AND THE DISCRIMINANT IS
+ *  REQUIRED RATHER THAN DEFAULTED. Two kinds now share this table and this
+ *  overlay, and they have opposite precedence rules: an `option` correction
+ *  WINS over whatever the bridges resolved, while a `scaffold_default` applies
+ *  ONLY to a field that is still blank. Defaulting the discriminant would make
+ *  a mis-shaped row silently take the winning arm — the more dangerous of the
+ *  two — so it is stated at every construction site. */
+export type ClinicianFieldOverride =
+  | {
+      kind: 'option';
+      fieldId: string;
+      /** The ORDINAL is the value — see the header. */
+      selectedOptionOrdinal: number;
+    }
+  | {
+      kind: 'scaffold_default';
+      fieldId: string;
+      /** The doctor's own compiled `scaffoldText`, as the writer read it from
+       *  the IR. Never client-supplied. */
+      insertedText: string;
+    };
 
 export interface ApplyClinicianOverridesInput {
   ir: TemplateDocIR;
@@ -103,7 +122,30 @@ export type ClinicianOverrideDeclineReason =
   | 'option_is_placeholder'
   /** No approved mapping, so the minted fact has no concept to satisfy and the
    *  validator would have nothing to check the citation against. */
-  | 'no_approved_concept';
+  | 'no_approved_concept'
+  /** A scaffold-default insert addressed a field the CURRENT compile does not
+   *  mark scaffolded. The template was recompiled under the insert. FAIL
+   *  CLOSED, exactly as `ordinal_not_in_options` does for the other kind. */
+  | 'not_scaffolded_in_current_compile'
+  /**
+   * ⚠️ THE RULE THAT KEEPS #194 TRUE, AND IT IS THE WHOLE REASON THIS KIND DOES
+   * NOT SIMPLY WIN LIKE THE OTHER ONE.
+   *
+   * A scaffold default applies ONLY to a field that is still blank. The click
+   * meant "there is nothing here, put my usual wording in" — it did not mean
+   * "replace whatever was dictated". Because the overlay runs AFTER the bridges
+   * and the row persists across every later fill, an unconditional apply would
+   * mean: doctor inserts a default into a blank field, later dictates that
+   * field for real, and the stored default OVERWRITES the dictation on the next
+   * recompute. That is the machine printing an undictated default over
+   * dictated content — the exact thing ruling #194 deleted, re-entering through
+   * the door built to honour it.
+   */
+  | 'field_already_filled'
+  /** A scaffold default addressed a control that cannot hold free text — a
+   *  dropdown, date, checkbox, table. Writing one BLOCKS THE WHOLE DOCUMENT at
+   *  validation, so this refuses rather than letting the fill fail. */
+  | 'field_kind_not_insertable';
 
 /** Stable provenance identity for one clinician correction.
  *
@@ -140,6 +182,255 @@ export function clinicianOverrideAnchorId(fieldId: string, factId: string): stri
  * rendered value by exact option lookup — the same check it makes of any cited
  * fact. Not one validator rule is relaxed to accommodate it.
  */
+/**
+ * The statuses a scaffold default may fill INTO.
+ *
+ * ⚠️ MIRRORS `UNFILLED` IN `bridge-fill.ts` DELIBERATELY, AND THE MIRROR IS
+ * STATED SO THE NEXT READER CHECKS BOTH. It is a copy rather than an import
+ * because the two answer different questions — that set decides whether a
+ * BRIDGE may overlay, this one decides whether a HUMAN's default may land in a
+ * gap — and collapsing them would tie a clinical-safety rule to a UI rule.
+ * If a status is added there, decide here on purpose rather than inherit it.
+ */
+const SCAFFOLD_INSERTABLE_STATUSES: ReadonlySet<string> = new Set([
+  'not_mentioned',
+  'needs_clinician_input',
+  'ambiguous',
+]);
+
+/**
+ * The field KINDS a scaffold default may be written into.
+ *
+ * ⚠️ FREE TEXT INTO A CONSTRAINED CONTROL BREAKS THE WHOLE DOCUMENT, NOT ONE
+ * FIELD. `isScaffolded` in the compiler is `no showingPlcHdr && visible text`
+ * and never reads `kind`, so a dropdown, date or checkbox shipping with default
+ * content compiles as scaffolded exactly like a narrative paragraph does. Write
+ * a sentence into one and `validation/index.ts` raises a BLOCKING per-kind
+ * issue (DROPDOWN_NOT_EXACT_OPTION, a date type error, …); `fill-engine`
+ * returns `render: null` for the entire fill; the preview returns `no_render`;
+ * and the surface unmounts — taking the panel, and therefore the UNDO button,
+ * with it. For a date or checkbox there is then no product path left to delete
+ * the row.
+ *
+ * So the kinds are named POSITIVELY and everything else is refused. A new kind
+ * added to the vocabulary is excluded until somebody decides otherwise, which
+ * is the direction that fails safe.
+ */
+export const SCAFFOLD_INSERTABLE_KINDS: ReadonlySet<string> = new Set(['narrative_text']);
+
+/**
+ * Is this field one the doctor may insert their own default into, RIGHT NOW?
+ *
+ * ⚠️ ONE DEFINITION, THREE CALLERS, AND THAT IS THE POINT. The panel decides
+ * what to OFFER, the server action decides what to ACCEPT, and this overlay
+ * decides what to APPLY. An adversarial pass found all three asking different
+ * questions: the panel offered fields the door accepted and the fill then
+ * declined forever, and offered constrained controls that broke the document.
+ * A surface must never offer an act its writer would refuse.
+ */
+export function scaffoldDefaultOfferable(input: {
+  field: { kind?: string; scaffolded?: boolean; scaffoldText?: string | null };
+  // ⚠️ `clinicalConcept` ONLY. This used to also carry `unmentionedPolicy`,
+  // because the omit decision was taken from the MAPPING — a static property,
+  // true on every visit or none, deciding a per-visit question. It is taken
+  // from the resolution's `reasonCode` now, so advertising the policy here
+  // would invite the same mistake back and would be a column the caller
+  // fetches for a decision nobody makes.
+  mapping: { clinicalConcept?: string | null } | null | undefined;
+  /**
+   * The field's CURRENT resolution, or null when none has been computed.
+   *
+   * ⚠️ `reasonCode` IS THE POINT OF THIS PARAMETER NOW. The call site already
+   * passed this exact object and already read `r.reasonCode` one line above;
+   * the type simply did not name it, so the callee could not see the only
+   * input that answers the question it was asking.
+   */
+  current: { status?: string; value?: unknown; reasonCode?: string | null } | null | undefined;
+}): boolean {
+  const { field, mapping, current } = input;
+  if (field.scaffolded !== true) return false;
+  if (!(field.scaffoldText ?? '').trim()) return false;
+  if (!SCAFFOLD_INSERTABLE_KINDS.has(field.kind ?? '')) return false;
+  // The fill declines forever without a concept — see the overlay's own note.
+  if (!mapping?.clinicalConcept) return false;
+  // ⚠️ ONLY WHEN THE RESOLVER WOULD ACTUALLY HONOUR IT — AND THE FIRST CUT OF
+  // THIS CLAUSE DID NOT ASK. A peer session measured the consequence and it is
+  // strictly worse than not ticking at all: on a field the resolver refuses the
+  // omit for (a `manual` source, a fixed-grid cell), the count does NOT move —
+  // the blank stays in `notMentioned` and the doctor is still prompted — while
+  // this clause removed their remedy anyway. Reproduced before fixing:
+  //
+  //   MANUAL field, stored omit:   canOmitWhenUnmentioned false
+  //                                scaffoldDefaultOfferable false   <- remedy gone
+  //   EXTRACTION control:          canOmitWhenUnmentioned true
+  //
+  // ⚠️ AND IT WAS A FOURTH SPELLING OF THE RULE. This file's own header says
+  // ONE DEFINITION, THREE CALLERS; I added a bare `=== 'omit'` test beside a
+  // shared predicate written precisely so nobody would. The predicate is called
+  // instead — one definition, one more caller.
+  
+  //
+  // REVIEW-DEFAULTS item 2's control says, in the doctor's own words,
+  // "Expected blank — do not ask me about this". Without this clause the field
+  // is still listed in the "Your blanks" panel under the heading "Nothing was
+  // dictated for these" — because an `omit` resolution is `not_mentioned` with
+  // `value: null`, and `scaffoldTargetIsBlank` is true for exactly that shape.
+  // So the control's label was false: the doctor ticked it and was asked again
+  // on the very next visit.
+  //
+  // ⚠️ IT IS THE **OFFER** THAT IS WITHDRAWN, NOT AN APPLIED DEFAULT. The
+  // caller keeps an ALREADY-INSERTED default listed (`inserted ||` in
+  // `preview-visit-document.ts`) so Undo stays reachable for a doctor who
+  // inserted before setting the policy, and `applyClinicianOverrides` is
+  // deliberately NOT given this clause — a stored override the doctor did
+  // assert must still apply, or the fill silently drops their own words.
+  // ⚠️ THE PER-VISIT OUTCOME, NOT THE CONFIRM-TIME CAPABILITY. This clause first
+  // read `mapping.unmentionedPolicy === 'omit' && canOmitWhenUnmentioned(...)`.
+  // Both halves are STATIC properties of the mapping, and an adversarial pass
+  // measured what that costs: the resolver honours an omit only when
+  // `conceptUnmatched && reason === undefined && facts.length > 0`
+  // (`resolver/index.ts:262`), all three per-VISIT. So on a visit where the
+  // omit does NOT fire — no facts extracted, or the concept dictated at a
+  // temporality the mapping does not approve — the field stays in
+  // `notMentioned`, the surface says "1 still blank", AND the offer was
+  // withdrawn anyway.
+  //
+  // ⚠️ THAT IS VERBATIM THE STATE THE PARAGRAPH ABOVE CALLS "STRICTLY WORSE
+  // THAN NOT TICKING AT ALL". The previous commit closed the STATIC half of it
+  // (a `manual` source, a fixed-grid cell) and left the per-visit half open —
+  // and because the guard had been dead code until that commit, fixing the
+  // dead code is what made the remaining half reachable. Measured over 7 visit
+  // shapes for one omit-ticked field: 5 were false rejections, 1 was correct.
+  //
+  // `unmentionedPolicy` and `canOmitWhenUnmentioned` are NOT consulted here.
+  // `omitted_unsupported_default` is emitted only on the branch that honours
+  // the omit, so it already implies both — and unlike them it is true of THIS
+  // visit. The predicate keeps its confirm-time callers, where the question
+  // genuinely is "can this choice ever matter?".
+  if (current?.reasonCode === 'omitted_unsupported_default') return false;
+  return scaffoldTargetIsBlank(current);
+}
+
+/**
+ * ⚠️ A WITHHELD DENIAL IS NULL BY CONSTRUCTION, AND IT IS NOT BLANK.
+ *
+ * This clause is copied from `bridge-fill.ts`, which learned it the expensive
+ * way, and its absence here was found by an adversarial pass with a full
+ * reproduction: `FieldResolutionSchema`'s superRefine FORCES `value === null`
+ * on every `denial_withheld` resolution, so a `value === null` test is true for
+ * 100% of them and any status allow-list placed after it never runs.
+ *
+ * The measured consequence: an encounter dictated as *"There are no varicose
+ * veins"* resolved `denial_withheld`; the stored default then applied, the
+ * document asserted *"Varicosities present in the great saphenous
+ * distribution"*, the FIELD_DENIAL_WITHHELD warning vanished, `needsReview`
+ * went 1 → 0, validation returned CLEAN — and sign-freeze would have frozen it
+ * into the signed record.
+ *
+ * **Withholding is a DECISION; absence is not.**
+ */
+export function scaffoldTargetIsBlank(
+  current: { status?: string; value?: unknown } | null | undefined,
+): boolean {
+  if (current == null) return true;
+  if (current.status === 'denial_withheld') return false;
+  return (
+    current.value === null ||
+    current.value === undefined ||
+    current.value === '' ||
+    SCAFFOLD_INSERTABLE_STATUSES.has(current.status ?? '')
+  );
+}
+
+/** Stable provenance identity for one inserted default.
+ *
+ *  Includes `noteSha256` for the same reason the correction fact does: the same
+ *  default asserted against a re-generated note is a DIFFERENT assertion and
+ *  must not silently reuse the prior manifest's fact or anchor. */
+export function scaffoldDefaultFactId(input: {
+  fieldId: string;
+  insertedText: string;
+  noteSha256: string;
+}): string {
+  return `ttfact_${canonicalSha256({
+    kind: 'clinician_scaffold_default',
+    fieldId: input.fieldId,
+    insertedText: input.insertedText,
+    noteSha256: input.noteSha256,
+  }).slice(0, 24)}`;
+}
+
+/**
+ * Provenance for a default the DOCTOR asserted.
+ *
+ * ⚠️ `sourceType: 'clinician_correction'` IS REUSED ON PURPOSE, AND IT IS NOT
+ * LAZINESS. The fact schema's source vocabulary is a clinical-provenance axis,
+ * and what happened here is exactly what that value means: a human, looking at
+ * their own form, asserted this value. Minting a new source type would widen a
+ * validated clinical enum for a UI distinction that the AUDIT trail already
+ * carries (`DEFAULT_INSERTED_BY_DOCTOR`) and that `reasonCode` already carries
+ * on the resolution.
+ *
+ * ⚠️ IT CARRIES THE MAPPING'S `clinicalConcept`, AND A CONCEPT IS REQUIRED —
+ * WHICH IS A BOUNDARY, NOT A LIMITATION. `factMatchesMapping` returns FALSE
+ * whenever the mapping has no `clinicalConcept` (validation/index.ts:188) and
+ * `SOURCE_FACT_CONCEPT_MISMATCH` is unconditional, so ANY cited fact on a
+ * concept-less mapping blocks — while `POPULATED_WITHOUT_EVIDENCE` blocks a
+ * populated value that cites nothing. There is therefore NO
+ * populated-with-evidence path for an administrative, concept-less field at
+ * all, and inventing one would mean a new status with its own validator arm.
+ *
+ * It is also the RIGHT boundary under the owner's split of ruling #194:
+ * administrative fields (identity, credentials, addresses, boilerplate) keep
+ * `approved_practice_default`, where certification-time approval is the human
+ * act and no dictation can contradict them. CLINICAL fields — the ones that
+ * carry concepts — are the ones a pre-approved sentence must never print on,
+ * and they are exactly the ones this door serves.
+ */
+export function buildScaffoldDefaultFact(input: {
+  field: Pick<TemplateField, 'fieldId' | 'originalLabel'>;
+  mapping: SemanticMapping;
+  insertedText: string;
+  noteSha256: string;
+}): EncounterFact {
+  const factId = scaffoldDefaultFactId({
+    fieldId: input.field.fieldId,
+    insertedText: input.insertedText,
+    noteSha256: input.noteSha256,
+  });
+  return EncounterFactSchema.parse({
+    factId,
+    sourceType: 'clinician_correction',
+    concept: input.mapping.clinicalConcept,
+    value: input.insertedText,
+    polarity: 'affirmed',
+    // ⚠️ MIRRORS THE OPTION ARM RATHER THAN HARDCODING. `factMatchesMapping`
+    // checks a declared temporality, so a fact that ignores the declaration
+    // blocks the whole document.
+    temporality: requiredFactTemporality(input.mapping),
+    experiencer: 'patient',
+    laterality:
+      input.mapping.laterality === 'not_applicable' ? 'not_applicable' : 'unknown',
+    number: null,
+    unit: null,
+    speaker: null,
+    sourceTranscriptOffsets: null,
+    audioTimestampSeconds: null,
+    evidenceAnchorIds: [clinicianOverrideAnchorId(input.field.fieldId, factId)],
+    // ⚠️ THE DOCTOR'S OWN CLICK IS THE EVIDENCE, AND THE QUOTE SAYS SO PLAINLY.
+    // Deliberately NOT a transcript quote — there is no utterance to cite, and
+    // inventing one would be a fabricated provenance for a real decision. The
+    // wording names the ACT rather than paraphrasing the value, because the
+    // value is already the fact's `value` and repeating it here would put the
+    // doctor's form text in two fields that can drift apart.
+    evidenceQuote: 'Clinician inserted their own default for this field at review.',
+    // `direct` for the same reason the correction fact is: a human said so, in
+    // the application, about their own form. `SUPPORTED_STATUS_CONFLICTS_WITH_QUALITY`
+    // blocks a supported field whose evidence is anything else.
+    quality: { asr: 'high', evidence: 'direct' },
+  });
+}
+
 export function buildClinicianOverrideFact(input: {
   field: Pick<TemplateField, 'fieldId' | 'originalLabel'>;
   mapping: SemanticMapping;
@@ -160,12 +451,7 @@ export function buildClinicianOverrideFact(input: {
     concept: input.mapping.clinicalConcept,
     value: input.optionValue,
     polarity: 'affirmed',
-    temporality:
-      input.mapping.temporality === 'historical' ||
-      input.mapping.temporality === 'planned' ||
-      input.mapping.temporality === 'current'
-        ? input.mapping.temporality
-        : 'current',
+    temporality: requiredFactTemporality(input.mapping),
     experiencer: 'patient',
     laterality:
       input.fieldLaterality !== 'unknown'
@@ -247,6 +533,71 @@ export function applyClinicianOverrides(
       decline(override.fieldId, 'field_not_in_template');
       continue;
     }
+
+    // ── REVIEW-DEFAULTS item 1: the doctor's own default, asserted at review ──
+    if (override.kind === 'scaffold_default') {
+      // ⚠️ RE-CHECKED AGAINST THE CURRENT COMPILE, NOT TRUSTED FROM THE ROW.
+      // Same discipline as `ordinal_not_in_options` on the other arm: the row
+      // was written against one compiled version and is being applied against
+      // whatever is compiled now.
+      if (field.scaffolded !== true) {
+        decline(override.fieldId, 'not_scaffolded_in_current_compile');
+        continue;
+      }
+
+      // ⚠️ BLANK-ONLY, AND THIS IS THE LINE THAT KEEPS RULING #194 TRUE.
+      // See `field_already_filled` for the full argument. In short: this row
+      // persists across every later fill, so an unconditional apply would let a
+      // default the doctor inserted into an empty field later OVERWRITE the
+      // dictation that filled it.
+      if (!SCAFFOLD_INSERTABLE_KINDS.has(field.kind)) {
+        decline(override.fieldId, 'field_kind_not_insertable');
+        continue;
+      }
+
+      if (!scaffoldTargetIsBlank(byId.get(field.fieldId))) {
+        decline(override.fieldId, 'field_already_filled');
+        continue;
+      }
+
+      // ⚠️ THE SAME CONCEPT REQUIREMENT AS THE OPTION ARM, AND FOR A STRONGER
+      // REASON. Without a concept the minted fact cannot satisfy
+      // `factMatchesMapping`, so the fill would be REFUSED at validation with
+      // `SOURCE_FACT_CONCEPT_MISMATCH` — a BLOCKING issue on the whole document
+      // caused by one click. Declining here costs the doctor one field; the
+      // alternative costs them the note.
+      const scaffoldMapping = mappingById.get(override.fieldId);
+      if (!scaffoldMapping?.clinicalConcept) {
+        decline(override.fieldId, 'no_approved_concept');
+        continue;
+      }
+      const fact = buildScaffoldDefaultFact({
+        field,
+        mapping: scaffoldMapping,
+        insertedText: override.insertedText,
+        noteSha256,
+      });
+      facts.push(fact);
+      byId.set(
+        field.fieldId,
+        FieldResolutionSchema.parse({
+          fieldId: field.fieldId,
+          status: 'supported',
+          value: override.insertedText,
+          sourceFactIds: [fact.factId],
+          evidenceAnchorIds: [...fact.evidenceAnchorIds],
+          // ⚠️ NULLABLE BUT NOT OPTIONAL — the schema is `.strict()` and
+          // `.nullable()`, so an omitted key is a parse ERROR while an explicit
+          // null is the correct answer. A scaffold default selects no option.
+          selectedOptionOrdinal: null,
+          reasonCode: 'clinician_scaffold_default',
+          clinicianReviewed: true,
+        }),
+      );
+      applied.add(field.fieldId);
+      continue;
+    }
+
     if (field.allowedOptions.length === 0) {
       decline(override.fieldId, 'field_has_no_options');
       continue;

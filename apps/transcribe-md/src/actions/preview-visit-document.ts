@@ -30,30 +30,72 @@ import {
   type CachedFill,
 } from '@/lib/docx-preview/fill-cache';
 import { generateVisitDocx } from '@/lib/docx-generator';
-import { readAndPrepareTemplateTwinFill } from '@/lib/template-twin/fill-engine';
+import { readAndPrepareTemplateTwinFill,
+  TemplateTwinFillError,
+} from '@/lib/template-twin/fill-engine';
+import { TemplateDocIRSchema } from '@/lib/template-twin/ir';
+import { scaffoldDefaultOfferable } from '@/lib/template-twin/clinician-override';
 import { loadVisitExportData } from '@/lib/visit-export-server';
 import { loadNativeTemplateDocxForVisit } from '@/lib/template-twin/native-export';
 import type { NativePreviewResult } from './preview-native-document';
 
 /** Why there is no document to show. Every one is surfaced, and none is fatal. */
-export type VisitPreviewMiss =
-  /** Neither a certified twin NOR a styled document could be produced. */
-  | 'not_template_visit'
-  /** Template uploaded and compiled, but never certified. */
-  | 'not_certified'
-  /** The fill ran and produced no document (nothing renderable yet). */
-  | 'no_render'
-  /** The fill itself failed. Named, so it is never a blank screen. */
-  | 'fill_failed';
+// ⚠️ NO VALUE RE-EXPORT FROM THIS FILE. It is `'use server'`, and SWC refuses:
+// "Only async functions are allowed to be exported in a `use server` file."
+// A `export { X } from './y'` re-export is refused even when the binding is a
+// plain const, because the compiler cannot know what it is — measured against
+// this repo's own Next 16.2.11 binding, with three controls: removing the line
+// clears it, a plain `export const` in a use-server file is FINE, and a clean
+// use-server file is fine. So it is the RE-EXPORT form specifically.
+//
+// ⚠️ AND IT BROKE THE BUILD WITHOUT BREAKING A SINGLE TEST. vitest transpiles
+// with esbuild, which does not implement the restriction — 6564 arms green on a
+// tree that `next build` refuses. Worse, the one gate that would have loaded
+// this module was re-pointed at the leaf by the SAME commit that added this
+// line, so the fix removed its own witness.
+//
+// Consumers import the leaf directly. Nothing needed this.
+import type { VisitPreviewMiss } from '@/lib/visit-preview-misses';
+
+export type { VisitPreviewMiss };
 
 export interface VisitPreviewResult extends Omit<NativePreviewResult, 'reason'> {
   reason: NativePreviewResult['reason'] | VisitPreviewMiss | null;
   /** How much of their form is actually filled — shown honestly above the page
    *  so blanks read as "not dictated yet" rather than "the export is broken". */
-  counts: { filled: number; needsReview: number; notMentioned: number } | null;
+  counts: {
+    filled: number;
+    needsReview: number;
+    notMentioned: number;
+  } | null;
   /** Changes whenever the underlying fill changes. The client uses it to tell
    *  a genuine update from a re-fetch that produced the same document. */
   fillSha: string | null;
+  /**
+   * REVIEW-DEFAULTS item 1 — the blank scaffolded controls the doctor has a
+   * default for, so the review surface can offer to insert them.
+   *
+   * ⚠️ THIS EXISTS BECAUSE THE DOCUMENT IS A CANVAS BITMAP. `DocumentPages`
+   * renders each page into a `<canvas role="img">`; there is no element for a
+   * field, no fieldId in the DOM and no hit-testing, so an in-place control has
+   * nowhere to attach. The list travels beside the page instead.
+   *
+   * ⚠️ PHI-FREE BY CONSTRUCTION, AND IT IS WORTH SAYING WHY IT IS SAFE. Both
+   * strings come from the doctor's OWN UPLOADED FORM — `originalLabel` is the
+   * control's caption and `scaffoldText` is the wording their template shipped
+   * with. Neither is derived from the transcript, the note or the patient. The
+   * resolved VALUE of a field is never included here.
+   */
+  insertableDefaults: {
+    fieldId: string;
+    /** The control's caption on the doctor's own form. */
+    label: string;
+    /** The wording their template ships with, compiled. */
+    scaffoldText: string;
+    /** True when this default is already inserted, so the surface offers UNDO
+     *  rather than a second insert. */
+    inserted: boolean;
+  }[] | null;
 }
 
 /**
@@ -88,6 +130,10 @@ async function styledDocument(
         data: hit.data,
         reason: hit.reason as VisitPreviewResult['reason'],
         counts: hit.counts,
+        // A cache entry written before this field existed carries no list, and
+        // null is the honest answer: 'we did not compute it', not 'there are
+        // none'. The surface renders nothing rather than an empty panel.
+        insertableDefaults: hit.insertableDefaults ?? null,
         fillSha: hit.fillSha,
       };
     }
@@ -110,6 +156,7 @@ async function styledDocument(
         data: Buffer.from(converted.pdf).toString('base64'),
         reason: note,
         counts: null,
+        insertableDefaults: null,
         fillSha: `styled:${soapVersion}`,
       }
     : {
@@ -117,14 +164,28 @@ async function styledDocument(
         data: docx.toString('base64'),
         reason: converted.reason,
         counts: null,
+        insertableDefaults: null,
         fillSha: `styled:${soapVersion}`,
       };
   if (format === 'pdf' && cacheable) await writeCachedFill(visitId, soapVersion, result, 'styled');
-  return { ok: true, ...result, reason: result.reason as VisitPreviewResult['reason'] };
+  return {
+    ok: true,
+    ...result,
+    insertableDefaults: result.insertableDefaults ?? null,
+    reason: result.reason as VisitPreviewResult['reason'],
+  };
 }
 
 function miss(reason: VisitPreviewResult['reason']): VisitPreviewResult {
-  return { ok: false, kind: null, data: null, reason, counts: null, fillSha: null };
+  return {
+    ok: false,
+    kind: null,
+    data: null,
+    reason,
+    counts: null,
+    insertableDefaults: null,
+    fillSha: null,
+  };
 }
 
 /** Which rendering the doctor asked for. 'word' hands over the true DOCX for
@@ -165,6 +226,10 @@ export async function previewVisitDocumentAction(
       noteTemplateId: true,
       noteTemplateVersion: true,
       createdAt: true,
+      // ⚠️ RULING #267 — the VISIT'S OWN tenant. `user.practiceId` beside it is
+      // the AUTHOR's practice: two different columns, equal on today's data and
+      // not constrained to be.
+      practiceId: true,
       user: { select: { practiceId: true } },
     },
   });
@@ -207,6 +272,7 @@ export async function previewVisitDocumentAction(
           data: Buffer.from(conv.pdf).toString('base64'),
           reason: null,
           counts: null,
+          insertableDefaults: null,
           fillSha: stored.outputSha256,
         }
       : {
@@ -215,6 +281,7 @@ export async function previewVisitDocumentAction(
           data: stored.bytes.toString('base64'),
           reason: conv.reason,
           counts: null,
+          insertableDefaults: null,
           fillSha: stored.outputSha256,
         };
   }
@@ -238,7 +305,7 @@ export async function previewVisitDocumentAction(
   const compiled = visit.noteTemplateId && visit.noteTemplateVersion != null
     ? await prisma.templateTwinCompiledVersion.findUnique({
         where: { noteTemplateId: visit.noteTemplateId },
-        select: { certificationStatus: true },
+        select: { id: true, certificationStatus: true, compiledDocumentIr: true },
       })
     : null;
 
@@ -255,6 +322,7 @@ export async function previewVisitDocumentAction(
 
   let docx: Buffer;
   let counts: VisitPreviewResult['counts'] = null;
+  let insertableDefaults: VisitPreviewResult['insertableDefaults'] = null;
   let fillSha: string;
 
   // The cache holds ONE rendering per note version; a Word request must not be
@@ -267,6 +335,7 @@ export async function previewVisitDocumentAction(
       data: cached.data,
       reason: cached.reason as VisitPreviewResult['reason'],
       counts: cached.counts,
+      insertableDefaults: cached.insertableDefaults ?? null,
       fillSha: cached.fillSha,
     };
   }
@@ -289,11 +358,17 @@ export async function previewVisitDocumentAction(
       // and the signature will produce. The parameter is required on the shared
       // function so forgetting it is a compile error rather than a divergence.
       visitId,
-      practiceId: visit.user.practiceId,
-      // ⚠️ THE VISIT'S OWN DOCTOR, NOT THE REQUESTER. This read is
-      // practice-scoped, so a colleague previewing the record would otherwise
-      // stamp their id on the author's fill. Same actor fix as native-export's.
-      doctorId: visit.userId,
+      // ⚠️ RULING #267 — THE CHART OWNS THE NOTE, so the fill is scoped by the
+      // VISIT'S tenant. This read `visit.user.practiceId`, the AUTHOR's, while
+      // `sign-freeze.ts` reads the override table with the tenant's — so for a
+      // locum the PREVIEW showed a default that the FREEZE could not see, and
+      // the doctor signed a document without content they had watched appear.
+      tenantPracticeId: visit.practiceId,
+      // ⚠️ THE VISIT'S OWN DOCTOR, NOT THE REQUESTER — and this one is about the
+      // ACTOR, which is a different axis from the tenant above and stays as it
+      // is. This read is practice-scoped, so a colleague previewing the record
+      // would otherwise stamp their id on the author's fill.
+      authorUserId: visit.userId,
       noteTemplateId: templateId,
       noteTemplateVersion: templateVersion,
       inputMode:
@@ -317,7 +392,74 @@ export async function previewVisitDocumentAction(
       notMentioned: prepared.manifest.counts.notMentioned,
     };
     fillSha = prepared.manifestSha256;
+
+    // ⚠️ DERIVED FROM THE COMPILED IR AND THE MANIFEST, NEVER FROM THE CLIENT.
+    // A field qualifies when the COMPILER marked it scaffolded and it carries
+    // text — `scaffolded` is a fact about the document's bytes, and ruling #192
+    // falsified three attempts to infer it from content, one of which printed
+    // "Enter assessment" onto a rendered note.
+    //
+    // The list keeps a field while it is still BLANK (there is something to
+    // insert) or while this doctor's default is ALREADY INSERTED (there is
+    // something to undo). A field filled from dictation drops off it entirely,
+    // which is the same blank-only rule the overlay enforces server-side —
+    // stated in two places because the surface must not offer an act the writer
+    // would decline.
+    const irForDefaults = TemplateDocIRSchema.parse(compiled.compiledDocumentIr);
+    const byFieldId = new Map(prepared.manifest.fields.map((f) => [f.fieldId, f]));
+    // ⚠️ ONE PREDICATE, SHARED WITH THE DOOR AND THE OVERLAY. An adversarial
+    // pass found three different tests here and offered acts the writer would
+    // refuse — including on fields the encounter had DENIED, under the caption
+    // "Nothing was dictated for these".
+    // The concepts come from the field DEFINITIONS, which is where the door
+    // reads them too — the manifest does not carry mappings.
+    const defs = await prisma.templateTwinFieldDefinition.findMany({
+      where: { compiledVersionId: compiled.id },
+      // ⚠️ `clinicalConcept` ONLY, AND THE SHRINK IS DELIBERATE. This select
+      // used to also fetch `unmentionedPolicy` so `scaffoldDefaultOfferable`
+      // could decide the omit from the MAPPING. It no longer decides it from
+      // the mapping at all — it reads `reasonCode` off the resolution, which is
+      // the per-visit answer and is already in `byFieldId` below. A column
+      // fetched for a decision nobody makes here is how the last version's
+      // comment ended up describing a guard that could not work.
+      select: {
+        fieldId: true,
+        mapping: { select: { clinicalConcept: true } },
+      },
+    });
+    const mappingByFieldId = new Map(
+      defs.map((d) => [d.fieldId, d.mapping ?? null] as const),
+    );
+    insertableDefaults = irForDefaults.fields.flatMap((f) => {
+      const text = (f.scaffoldText ?? '').trim();
+      const r = byFieldId.get(f.fieldId);
+      const inserted = r?.reasonCode === 'clinician_scaffold_default';
+      // An already-inserted default stays listed so the doctor can UNDO it;
+      // everything else must pass the same test the writer applies.
+      const offerable =
+        inserted ||
+        scaffoldDefaultOfferable({
+          field: f,
+          mapping: mappingByFieldId.get(f.fieldId) ?? null,
+          current: r ?? null,
+        });
+      if (!offerable || !text) return [];
+      return [{ fieldId: f.fieldId, label: f.originalLabel, scaffoldText: text, inserted }];
+    });
   } catch (err) {
+    // ⚠️ #287 — "THE TENANT HAS NO FORM" IS AN OUTCOME, NOT A FAILURE. It is the
+    // ordinary state for a practice that has not uploaded one, and for every
+    // locum visit into such a practice. Reporting it as `fill_failed` alongside
+    // real errors is how an expected state gets read as a defect.
+    if (
+      err instanceof TemplateTwinFillError &&
+      err.code === 'CERTIFIED_TEMPLATE_NOT_FOUND'
+    ) {
+      console.info(
+        `[visit-preview] visit=${visitId} the tenant practice has no active certified template; the styled note renders`,
+      );
+      return miss('no_tenant_template');
+    }
     const cls = err instanceof Error ? err.constructor.name : 'Unknown';
     console.warn(
       `[visit-preview] visit=${visitId} fill failed (${cls}); the styled note still renders`,
@@ -332,6 +474,7 @@ export async function previewVisitDocumentAction(
         data: Buffer.from(converted.pdf).toString('base64'),
         reason: null,
         counts,
+        insertableDefaults,
         fillSha,
       }
     : {
@@ -342,8 +485,14 @@ export async function previewVisitDocumentAction(
         data: Buffer.from(docx).toString('base64'),
         reason: converted.reason,
         counts,
+        insertableDefaults,
         fillSha,
       };
   if (format === 'pdf') await writeCachedFill(visitId, visit.soapVersion, result, 'twin');
-  return { ok: true, ...result, reason: result.reason as VisitPreviewResult['reason'] };
+  return {
+    ok: true,
+    ...result,
+    insertableDefaults: result.insertableDefaults ?? null,
+    reason: result.reason as VisitPreviewResult['reason'],
+  };
 }

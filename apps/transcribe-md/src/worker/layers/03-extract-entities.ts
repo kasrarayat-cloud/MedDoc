@@ -13,6 +13,15 @@
 // ============================================================================
 
 import { z } from 'zod';
+
+import {
+  ROS_SYSTEMS,
+  ROS_SYSTEMS_RESOLVED,
+  resolveRosFinding,
+  resolveRosSystem,
+  symptomsFor,
+  readableRosToken,
+} from '@/lib/template-twin/ros-lexicon';
 import {
   modelClient,
   type DeepgramUtterance,
@@ -107,6 +116,21 @@ export const ExtractedEntities = z.object({
     .nullable(),
   hpi: HpiDimensions.nullable(),
   past_medical_history: z.array(factWithEvidence('condition')).default([]),
+  /**
+   * #246 family 1 — SURGERIES ARE NOT CONDITIONS.
+   *
+   * Its own concept because a form asks for them separately, and because the
+   * proposer's nearest match is `past_medical_history` — which is how the
+   * owner's `Past Surgical History` controls came to be proposed onto the
+   * MEDICAL history concept. Certifying that would have printed the patient's
+   * conditions into a surgical field.
+   *
+   * ⚠️ `.default([])` IS LOAD-BEARING — canon 133. Without it this becomes a
+   * REQUIRED key and breaks the MOCK_AI fixture, the module-load parse in
+   * `sample-preview-transcript.ts`, and every resumed job (which CASTS rather
+   * than parses), all at once.
+   */
+  past_surgical_history: z.array(factWithEvidence('procedure')).default([]),
   medications: z
     .array(
       z.object({
@@ -166,13 +190,46 @@ export const ExtractedEntities = z.object({
       alcohol: liftStringToFact('status'),
       drugs: liftStringToFact('status'),
       occupation: liftStringToFact('value'),
+      /**
+       * #246 family 2 — a sub-concept beside `occupation`, not a new family.
+       *
+       * ⚠️ THE INNER KEY IS LOAD-BEARING AND THERE IS NO SHARED CONSTANT
+       * BINDING IT TO THE PROJECTOR. `smoking`/`alcohol`/`drugs` use `status`
+       * and `occupation` uses `value`; the projector reads each key LITERALLY.
+       * `status` is chosen to match the three status-shaped siblings, and the
+       * projector line below must read `social.marital_status.status`.
+       */
+      marital_status: liftStringToFact('status'),
     })
     .default({}),
   ros: z
     .array(
       z.object({
         // Q2 fix-pack — both system and finding meaningful.
+        /**
+         * ⚠️ #179(1) — A CLOSED PER-SYSTEM LEXICON, NOT FREE TEXT. The system
+         * must be one the lexicon names; the SYMPTOM below is meaningless
+         * without it.
+         */
         system: z.string().min(1),
+        /**
+         * ⚠️ THE MODEL PICKS FROM A LIST AND THE SCHEMA ENFORCES IT. Free text
+         * here was the root of two MEASURED defects, both of them the same
+         * root — a concept that could not ADDRESS a clause:
+         *
+         *   · the projector slugged this into `ros.<system>`, and
+         *     `field-value-derivation`'s checkbox arm reads ONLY
+         *     `fact.polarity` — the finding is discarded — so one affirmed
+         *     symptom ticked EVERY clause in that system;
+         *   · `ros` is not in ACCUMULATING_NARRATIVE_CONCEPTS, so a SECOND
+         *     affirmed symptom became `multiple_distinct_supported_values`
+         *     and the whole export conflicted.
+         *
+         * No amount of text matching downstream fixes that safely; #157(d)
+         * deleted that machinery rather than gate it. `other` is admitted so a
+         * symptom outside the list is never silently dropped, and it is
+         * excluded from every clause scope by construction.
+         */
         finding: z.string().min(1),
         /**
          * WHETHER THE PATIENT HAS THIS OR NOT — as DATA (Q1 audit §02.9).
@@ -197,7 +254,101 @@ export const ExtractedEntities = z.object({
         evidence_quote: z.string().min(1),
         speaker: z.string().optional(),
         timestamp: z.number().nonnegative().optional(),
+        /**
+         * ⚠️ THE DOCTOR'S OWN WORDS, KEPT ONLY WHEN THE LEXICON COULD NOT HOLD
+         * THEM. Set by the resolver below, never by the model. Without it a
+         * coerced symptom reaches the note and the document as the literal
+         * string `other`, and the doctor's "belching" is gone.
+         */
+        finding_verbatim: z.string().min(1).optional(),
+        /** Likewise for a system name the lexicon does not recognise. */
+        system_verbatim: z.string().min(1).optional(),
       })
+    )
+    /**
+     * ⚠️ #179(1) RESOLVES TO THE CLOSED SET. IT USED TO REFUSE INTO IT, AND THE
+     * REFUSAL DISCARDED THE WHOLE VISIT.
+     *
+     * The membership check was a `.superRefine` over the ARRAY, so one
+     * off-lexicon token failed the parse of the entire `ExtractedEntities`
+     * object — 13 other top-level clinical fields with it. MEASURED, against
+     * the shipped schema:
+     *
+     *   lowercase "heartburn"        PARSE OK   cc kept, meds 1, allergies 1
+     *   capitalised "Heartburn"      PARSE FAIL chief_complaint, medications
+     *                                           AND ALLERGIES all discarded
+     *   off-lexicon "burping"        PARSE FAIL  (same)
+     *   1 good + 1 capitalised       PARSE FAIL  (same)
+     *
+     * ⚠️ AND THE CAPITALISED ROW IS NOT A CURIOSITY: this repository's own
+     * comment records that L3 capitalises the finding habitually. Nothing on
+     * the model's side was ever told the lexicon either (see the prompt below),
+     * so attempt 1 of every call was blind to all 72 tokens.
+     *
+     * ⚠️ THE FILE'S OWN ALLERGIES FIELD CARRIES THE SENTENCE THIS VIOLATED:
+     * "SAFETY INVARIANT: `superseded` is a doctor-review hint ONLY — it must
+     * NEVER remove an allergy from a safety check." One capitalised ROS token
+     * removed every allergy on the visit.
+     *
+     * SO THE VERB CHANGES FROM REFUSE-THE-OBJECT TO RESOLVE-THE-ITEM, at the
+     * same seam and with the same authority. Normalise first (the projector's
+     * OWN normaliser, imported — `Heartburn` was already becoming `heartburn`
+     * one layer down), then coerce what remains to `other`, keeping the
+     * doctor's words. ORDER IS LOAD-BEARING: coerce-first would demote a real
+     * lexicon symptom that merely had a capital letter.
+     *
+     * ⚠️ IDEMPOTENT ON PURPOSE — the `??` preserves an existing verbatim. This
+     * schema is parsed a SECOND time at `sample-preview-transcript.ts`, at
+     * module load, and a transform that overwrote on re-parse would lose the
+     * original words on the second pass.
+     */
+    .transform((items, ctx) =>
+      items.map((item, index) => {
+        const system = resolveRosSystem(item.system);
+        const finding = resolveRosFinding(system, item.finding);
+        // ⚠️ ENFORCEMENT SURVIVES THE CHANGE — it just judges the RESOLVER's
+        // output instead of the model's, and it is INSIDE the transform
+        // because that is where `ctx` exists. If a future edit to
+        // `resolveRosSystem` or `resolveRosFinding` can emit something outside
+        // the closed set, this reds rather than letting an unregistered
+        // concept reach the projector. It cannot fire on model input: every
+        // value here has already been through a resolver whose range IS the
+        // closed set, which is exactly the property being asserted.
+        if (!ROS_SYSTEMS_RESOLVED.includes(system)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: [index, 'system'],
+            message: `resolver emitted unknown system "${system}"`,
+          });
+        } else if (!symptomsFor(system).includes(finding)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: [index, 'finding'],
+            message: `resolver emitted off-lexicon finding "${finding}" for ${system}`,
+          });
+        }
+        return {
+          ...item,
+          system,
+          finding,
+          // ⚠️ #218 — THE VERBATIM IS THE DOCTOR'S WORDS OR NOTHING, NEVER AN
+          // IDENTIFIER. The fallback below is legitimate and must stay: when
+          // the resolver coerces an off-lexicon symptom to `other`, the model's
+          // own word (`belching`) IS the doctor's word and is the only place it
+          // survives. What was wrong is that the same fallback ALSO fires when
+          // the model emitted a real lexicon token under a system that does not
+          // carry it (`endocrine` / `weight_loss`) — and then the thing landing
+          // in the doctor's-words field is a machine identifier. De-slugging the
+          // fallback keeps `belching` exactly as it was and turns `weight_loss`
+          // into `weight loss`, so no branch can seat an identifier here.
+          finding_verbatim:
+            finding === item.finding
+              ? item.finding_verbatim
+              : (item.finding_verbatim ?? readableRosToken(item.finding)),
+          system_verbatim:
+            system === item.system ? item.system_verbatim : (item.system_verbatim ?? item.system),
+        };
+      }),
     )
     .default([]),
   exam_findings: z
@@ -297,6 +448,58 @@ export const ExtractedEntities = z.object({
       })
     )
     .default([]),
+  /**
+   * #247 family 3 — THE REFERRING CLINICIAN, **DICTATED ONLY**.
+   *
+   * ⚠️ THE ONE MEMBER OF `visit_metadata.*` THAT IS NOT READ OFF THE RECORD,
+   * AND THE RULING TURNS ON THAT. Patient name and age are injected as
+   * `visit_record` facts by `withVisitMetadataFacts`; this one is an ORDINARY
+   * L3 extraction that becomes an ordinary `encounter_evidence` fact, because
+   * the clinician says it out loud — "she was referred by Dr. Ramirez" — and
+   * the record this product holds has no referring-physician column to read
+   * (grep of `schema.prisma` = 0; ruling #188 files adding one as its own
+   * product item).
+   *
+   * So: an unstated referrer is `null`, exactly like an unstated total time.
+   * Nothing here computes, remembers across visits, or carries a value forward
+   * from the practice — those are the three ways a "helpful" default would put
+   * a physician's name onto a letter nobody dictated.
+   *
+   * `liftStringToFact` for the same reason `marital_status` uses it: the model
+   * occasionally shortcuts a single-value field to a bare string, and losing
+   * the whole extraction call over that is worse than lifting it.
+   */
+  referring_physician: liftStringToFact('name'),
+  /**
+   * #246 family 4 — TOTAL ENCOUNTER TIME, AS A NUMBER.
+   *
+   * ⚠️ "A NUMBER" IS ABOUT THE EXTRACTION AXIS, NOT THE CONTROL — canon 134.
+   * The controls this fills (`Total minutes spent with patient`, `Total time
+   * minutes`) compile `narrative_text`, and `expectedDataTypeForFieldKind`
+   * reads the compiler's KIND and never the concept. The two are independent,
+   * so a number extracted here fills a prose control as a string.
+   *
+   * ⚠️ A SECOND PRODUCER OF THIS NUMBER ALREADY EXISTS, AND IT IS NOT
+   * RECONCILED HERE. `detectTimeBasedHints` (em-coding/deterministic.ts) reads
+   * total minutes by regex over the FINISHED NOTE, and its patterns all require
+   * a colon (`total time: 25 minutes`), so it misses prose like "approximately
+   * 25 minutes face-to-face" that this field catches. They have different
+   * reach. This field feeds the TWIN fill; the E/M time band still reads the
+   * regex, and which one wins is deliberately left to its own change rather
+   * than settled silently here.
+   *
+   * The bound matches the E/M scorer's own accepted range (0 < mins < 600).
+   * `.default(null)` for the same reason as every other optional family.
+   */
+  total_time_minutes: z
+    .object({
+      minutes: z.number().int().positive().max(599),
+      evidence_quote: z.string().min(1),
+      speaker: z.string().optional(),
+      timestamp: z.number().nonnegative().optional(),
+    })
+    .nullable()
+    .default(null),
 });
 export type ExtractedEntities = z.infer<typeof ExtractedEntities>;
 
@@ -379,7 +582,7 @@ export interface Layer3Output {
 // surface is testable + easy to eyeball.
 // ---------------------------------------------------------------------------
 
-const COMMON_CATEGORIES = [
+export const COMMON_CATEGORIES = [
   'Categories:',
   '- chief_complaint: {statement, evidence_quote, speaker?, timestamp?} or null',
   '- hpi: {onset?, duration?, quality?, severity?, location?, timing?,',
@@ -387,6 +590,15 @@ const COMMON_CATEGORIES = [
   '  speaker?, timestamp?} or null — each sub-field is a string; all',
   '  sub-fields are optional; one evidence_quote covers the paragraph.',
   '- past_medical_history: list of {condition, evidence_quote, ...}',
+  '- past_surgical_history: list of {procedure, evidence_quote, ...}',
+  '',
+  '  SURGERIES ARE NOT CONDITIONS. A prior OPERATION goes in',
+  '  past_surgical_history; a DIAGNOSIS or ongoing illness goes in',
+  '  past_medical_history. Put each item in exactly ONE of the two — never',
+  '  both. "cholecystectomy in 2019" is surgical; "gallstones" is medical.',
+  '  If the doctor names a condition AND the operation that treated it, that',
+  '  is two items, one in each list.',
+  '',
   '- medications: list of {name, dose?, route?, frequency?, evidence_quote, ...}',
   '- allergies: list of {substance, reaction?, evidence_quote,',
   '  superseded?, conflict_note?, ...}',
@@ -425,6 +637,7 @@ const COMMON_CATEGORIES = [
   '    alcohol:    {status, evidence_quote, speaker?, timestamp?}',
   '    drugs:      {status, evidence_quote, speaker?, timestamp?}',
   '    occupation: {value,  evidence_quote, speaker?, timestamp?}',
+  '    marital_status: {status, evidence_quote, speaker?, timestamp?}',
   '  If you have no evidence quote for a sub-field, OMIT that sub-field',
   '  entirely — do not emit it as a bare string.',
   '  CORRECT:  "social_history": { "occupation": { "value": "factory',
@@ -433,14 +646,35 @@ const COMMON_CATEGORIES = [
   '  WRONG:    "social_history": { "occupation": "factory operative" }',
   '- ros: list of {system, finding, polarity, evidence_quote,',
   '  laterality?, ...} (review of systems).',
+  // ⚠️ GENERATED FROM `ROS_LEXICON`, NEVER HAND-COPIED. The schema enforces
+  // this vocabulary; before this block nothing ever SHOWED it to the model.
+  // Measured on the assembled prompt: 1 of 72 symptom tokens and 0 of 13
+  // system names appeared, and the single hit was a false positive (the word
+  // "frequency" in the medications bullet). The model's only exposure to the
+  // list was the Zod error replayed AFTER a rejection — so on attempt 1 of
+  // every call it was guessing, and one wrong guess used to discard the whole
+  // extraction. One definition, interpolated: a second hand-written copy is
+  // how the prompt and the schema would drift apart again.
+  '    * system MUST be one of these, and finding MUST come from that',
+  '      system\'s list:',
+  ...ROS_SYSTEMS.map(
+    (system) => `        ${system}: ${symptomsFor(system).join(', ')}`,
+  ),
+  '    * These are snake_case identifiers, not prose. Use the identifier',
+  '      exactly as written above — lower case, underscores.',
+  '    * If the patient reports a symptom that is NOT in its system\'s',
+  '      list, use finding "other" and put the words the doctor actually',
+  '      used in finding_verbatim. Never invent a token, and never drop',
+  '      the symptom.',
   '    * polarity: REQUIRED, "affirmed" (the patient HAS it) or "denied"',
   '      (the patient does NOT). Never omit it and never guess it from the',
   '      shape of the sentence.',
   '    * Record the polarity of THIS finding, not of the sentence it came',
   '      from — one sentence can carry BOTH. "She denies chest pain but',
-  '      does get short of breath" is TWO entries: chest pain denied, AND',
-  '      shortness of breath affirmed. Do not let the denial swallow the',
-  '      rest of the sentence.',
+  '      does get short of breath" is TWO entries:',
+  '      {system: cardiovascular, finding: chest_pain, polarity: denied}',
+  '      AND {system: respiratory, finding: dyspnea, polarity: affirmed}.',
+  '      Do not let the denial swallow the rest of the sentence.',
   '    * Patients do not speak in charting language. "Any chest pain?" —',
   '      "None at all" is polarity "denied". So are "nope", "nothing like',
   '      that", "never had it". Absence of the word "no" is not absence of',
@@ -450,7 +684,8 @@ const COMMON_CATEGORIES = [
   '    * laterality: include it whenever a side was stated, and use the',
   '      side of THIS finding — never widen one side to bilateral because',
   '      the other was mentioned. "Numbness in the right hand, left hand is',
-  '      fine" is laterality "right". Omit the field when no side was',
+  '      fine" is {system: neurologic, finding: numbness, polarity:',
+  '      affirmed, laterality: right}. Omit laterality when no side was',
   '      stated; do not guess one.',
   '- exam_findings: list of {system, finding, evidence_quote, ...} — only',
   '  what the doctor stated/observed',
@@ -490,6 +725,23 @@ const COMMON_CATEGORIES = [
   '      do not supply one from your own knowledge.',
   '  A visit with no spoken code yields an EMPTY list, which is the normal',
   '  case for almost every visit.',
+  '',
+  '- referring_physician: {name, evidence_quote, speaker?, timestamp?} or null.',
+  '    The clinician who REFERRED this patient, only when the dictation names',
+  '    them — "referred by Dr. Ramirez", "sent over by her primary care',
+  '    physician Dr. Lee". Emit the name as spoken, with the title if it was',
+  '    said. This is the REFERRER, never the clinician dictating the note and',
+  '    never a colleague merely mentioned in passing ("I discussed it with',
+  '    Dr. Osei") — if the transcript does not say who referred the patient,',
+  '    the answer is null. Do not carry one over from context you were given.',
+  '',
+  '- total_time_minutes: {minutes, evidence_quote, speaker?, timestamp?}',
+  '    or null. The TOTAL time spent on this encounter, as an INTEGER number',
+  '    of minutes — "minutes": 45, never "45 minutes" and never a range.',
+  '    Emit it ONLY if the clinician states a total aloud. Do NOT compute it,',
+  '    do not sum separate durations, and do not infer it from timestamps:',
+  '    an unstated total is null, and a guessed one is a billing figure',
+  '    nobody said.',
 ].join('\n');
 
 function buildConversationPrompt(): { system: string; userPrefix: string } {

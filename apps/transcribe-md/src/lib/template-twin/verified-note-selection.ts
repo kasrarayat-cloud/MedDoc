@@ -23,6 +23,7 @@
 // ============================================================================
 
 import { canonicalSha256 } from './canonical';
+import { requiredFactTemporality } from './fact-mapping-match';
 import {
   EncounterFactSchema,
   type EncounterFact,
@@ -103,12 +104,7 @@ export function buildVerifiedNoteSelectionFact(input: {
     concept: input.mapping.clinicalConcept,
     value: input.optionValue,
     polarity: 'affirmed',
-    temporality:
-      input.mapping.temporality === 'historical' ||
-      input.mapping.temporality === 'planned' ||
-      input.mapping.temporality === 'current'
-        ? input.mapping.temporality
-        : 'current',
+    temporality: requiredFactTemporality(input.mapping),
     experiencer: 'patient',
     laterality:
       input.fieldLaterality !== 'unknown'

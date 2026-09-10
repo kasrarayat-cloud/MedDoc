@@ -127,8 +127,23 @@ export function compileTemplateDocx(
       staticSha256: part.staticSha256,
     })),
   );
+  // ⚠️ #191 — `scaffolded` IS EXCLUDED FROM THE STRUCTURE HASH, AND OMITTING
+  // THIS WOULD HAVE ORPHANED EVERY CERTIFIED TWIN IN THE DATABASE.
+  // `renderer.ts: assertSourceMatchesIr` re-compiles the immutable source on
+  // EVERY fill and compares it against the STORED IR of every template already
+  // compiled, so a moved structure hash does not merely stale a fixture pin —
+  // it fails `SOURCE_IR_MISMATCH` on every certified twin, every recompute path
+  // then degrades SILENTLY to the styled export, and a signature freezes a null
+  // pointer permanently. Measured once already at 10 of 10 twins.
+  //
+  // ⚠️ AND EXCLUDING IT LOSES NOTHING, WHICH IS WHY THIS IS NOT A DODGE.
+  // `scaffolded` is a PURE FUNCTION of bytes this hash already covers: the
+  // control's content and its `w:sdtPr` are both inside `sourceControlSha256`
+  // and `originalContentSha256`, which ARE hashed. A document whose
+  // scaffoldedness differs necessarily differs in those, so the hash cannot
+  // miss a real structural change by omitting a value derived from them.
   const structureSha256 = canonicalSha256({
-    fields: state.fields,
+    fields: state.fields.map(fieldForStructuralIdentity),
     tables: state.tables,
     nodes: state.nodes,
     unsupported: state.unsupported,
@@ -307,6 +322,70 @@ function processParagraph(
  * `emptied`; a second `w:pPr` defeated the numbering guard; a second `w:sdtPr`
  * defeated the selection exclusion. It is now one rule, once.
  */
+
+/**
+ * ⚠️ #191 — IS THIS CONTROL A SCAFFOLD? Non-empty default content that is NOT a
+ * Word placeholder. The ruling scopes the keep/omit policy to scaffolded
+ * controls, and the adversarial pass found that scope UNIMPLEMENTED — so a kept
+ * default applied to checkboxes and dates alike, and would have kept a
+ * dropdown's `Choose an item.` on a signed note.
+ *
+ * ⚠️ IT RESTS ON `w:showingPlcHdr`, A SIGNAL THE DOCUMENT DECLARES, AND NEVER
+ * ON THE PLACEHOLDER TEXT. That is canon 83, whose reference case is a rule
+ * matching Word's own "Choose an item." string: it blocked 28 of 28 dropdowns
+ * of the only real customer template, and the repair matched it in English
+ * only and blocked all 28 again in fr/de/es. A blocking rule's worst case is a
+ * doctor who cannot use their own form.
+ *
+ * MEASURED ON BOTH REAL DOCUMENTS BEFORE THIS SHIPPED:
+ *   `WM IOV Template.docx`  — 28 controls, 28 declare `showingPlcHdr`,
+ *                             0 empty, SCAFFOLDED **0**
+ *   the regenerated consult form — 53 controls, 0 placeholders, 0 empty,
+ *                             SCAFFOLDED **53**
+ * Both reconcile exactly to their totals, which is what says the partition has
+ * no unnamed bucket.
+ */
+function isScaffolded(
+  properties: OrderedXmlNode,
+  content: OrderedXmlNode,
+): boolean {
+  // ⚠️ `descendants`, not a direct-child check: "a second element of the same
+  // name" has cost this codebase three times, and a placeholder flag nested one
+  // level deeper would read as absent.
+  if (descendants(properties, "showingPlcHdr").length > 0) return false;
+  return visibleText(content).trim().length > 0;
+}
+
+/**
+ * ⚠️ THE ONE NORMALISER FOR STRUCTURAL IDENTITY, AND IT IS EXPORTED BECAUSE THE
+ * SECOND CALLER IS IN ANOTHER FILE.
+ *
+ * `scaffolded` and `scaffoldText` are DERIVED metadata (#191/#192): pure
+ * functions of bytes that `sourceControlSha256` and `originalContentSha256`
+ * already cover. They must not participate in any comparison that asks
+ * "is this the same document as the one we compiled before?", because every IR
+ * already in the database was written before they existed.
+ *
+ * ⚠️ TWO PLACES ASK THAT QUESTION AND THE FIRST FIX ONLY REACHED ONE. Stripping
+ * them from `structureSha256` was correct and MEASURABLY INSUFFICIENT:
+ * `renderer.ts: assertSourceMatchesIr` performs an INDEPENDENT raw comparison
+ * over the field arrays, which the strip never reached. Measured against a
+ * stored pre-#191 IR: `structureSha256` EQUAL, `canonicalSha256(fields)` NOT
+ * equal, render threw `SOURCE_IR_MISMATCH` -- and `native-export.ts` catches
+ * that and returns the generic STYLED export, so the doctor silently loses
+ * their own form with a `console.warn` as the only trace. That is the 10-of-10
+ * orphaning this metadata was designed to avoid, arriving through the door
+ * nobody watched.
+ *
+ * ⚠️ AND THE ARM THAT WAS SUPPOSED TO GUARD IT WATCHED THE WRONG SET. It
+ * asserted the strip was present in `structureSha256` -- true, and blind to the
+ * other comparison. Hence ONE function, exported, with both callers named here:
+ * a second copy would drift from this one the day either is fixed.
+ */
+export function fieldForStructuralIdentity(field: TemplateField): TemplateField {
+  const { scaffolded: _derived, scaffoldText: _text, ...rest } = field;
+  return rest as TemplateField;
+}
 
 /** Elements that carry content, wherever they appear inside a property block. */
 export const CONTENT_CARRIERS: ReadonlySet<string> = new Set([
@@ -728,7 +807,56 @@ function processContentControl(
     kind = "date";
   } else if (plainText || childrenOf(content).length > 0) {
     // Rich-text content controls have no dedicated type child in w:sdtPr.
-    kind = inferTextKind(identity.label ?? context.containerText ?? "");
+    //
+    // ⚠️ #216 — A SCAFFOLDED CONTROL IS ALWAYS `narrative_text`.
+    //
+    // `inferTextKind` is a CONTENT-CLASSIFYING HEURISTIC over a label, and it is
+    // sound for the short furniture labels it was written for ("Weight", "Temp",
+    // "Height"). It is not sound where the label IS the sentence: a scaffolded
+    // control's alias is its own default prose, so any clinical word the regex
+    // happens to list re-types the whole clause.
+    //
+    // MEASURED, and it is why this exists: control #13 of the regenerated
+    // consult form, alias "The patient denies unintentional weight loss or
+    // change in appetite", compiled `measurement` on the strength of the word
+    // "weight" — while the other five GI-ROS clauses (heartburn, nausea,
+    // abdominal pain, bowel, bleeding) correctly compiled `narrative_text`.
+    // The one clause that carries the GI ALARM FEATURE was the one mis-typed.
+    //
+    // ⚠️ SCOPED, DELIBERATELY, AND THE BLAST RADIUS IS MEASURED NOT ASSUMED.
+    // This branch is the ONLY one whose kind comes from a label regex — selects,
+    // checkboxes and dates are typed structurally from their own `w:sdtPr`
+    // child and are untouched. And `scaffolded` is assigned in exactly ONE place
+    // in this file (the field literal below), so this is the only site that can
+    // ever see a scaffolded control.
+    //
+    // ⚠️ THE PROSE TEST READS THE CONTROL'S OWN IDENTITY, NEVER THE PARAGRAPH.
+    // Its first form measured `identity.label ?? context.containerText`, and the
+    // container fallback is the PARAGRAPH — which already contains the control's
+    // own scaffold text. So an UNNAMED scaffolded control (no alias, no tag) had
+    // its word count taken from the surrounding sentence and re-typed to
+    // narrative_text on the strength of prose it did not own. The ruling's words
+    // are "the ALIAS is the sentence", and the alias is `identity.label`.
+    // A control with no identity of its own is not one this rule can speak about.
+    //
+    // ⚠️ AND THE JUSTIFICATION THIS COMMENT USED TO CARRY WAS FALSE. It read
+    // "production carries ZERO scaffolded controls, so no existing template's
+    // kinds move". That is a fact about the STORED IR, which predates
+    // `isScaffolded` — but `renderer.ts:assertSourceMatchesIr` RE-COMPILES the
+    // immutable source on EVERY fill and compares `structureSha256`. Measured:
+    // the owner's GI source compiles to `e9acc158…` before this change (exactly
+    // what production stores) and `169fdf2d…` after, so all three GI compiled
+    // versions — one of them ACTIVE and CERTIFIED — would begin failing
+    // `SOURCE_IR_MISMATCH` and degrade silently to the styled export. The
+    // 80-control ultrasound is byte-identical (`37813a60…`) and is unaffected.
+    // That trade is recorded as an accepted-capability loss, not assumed away.
+    const identityLabel = identity.label ?? null;
+    kind =
+      identityLabel !== null &&
+      isScaffolded(properties, content) &&
+      isProseLabel(identityLabel)
+        ? "narrative_text"
+        : inferTextKind(identityLabel ?? context.containerText ?? "");
   } else {
     addUnsupportedContentControl(
       state,
@@ -787,6 +915,10 @@ function processContentControl(
   const field: TemplateField = {
     fieldId,
     kind,
+    scaffolded: isScaffolded(properties, content),
+    ...(isScaffolded(properties, content)
+      ? { scaffoldText: visibleText(content).trim().slice(0, 2000) }
+      : {}),
     originalLabel: label.label,
     labelSource: label.source,
     displayOrder: state.nextDisplayOrder++,
@@ -1494,6 +1626,38 @@ function chooseFieldLabel(
     return { label: normalizedContainer, source: "same_container" };
   }
   return { label: `Field ${generatedOrdinal}`, source: "generated" };
+}
+
+/**
+ * Is this label PROSE rather than a field name? — ruling #216.
+ *
+ * ⚠️ THE RULING'S OWN WORDS ARE THE DISCRIMINATOR: kind inference "applies to
+ * short furniture labels, never to a control whose default content is prose
+ * (the alias IS the sentence)". So the test is the LABEL's shape, and a word
+ * count is the honest way to measure it.
+ *
+ * ⚠️ AND THE THRESHOLD IS MEASURED, NOT CHOSEN. Across all three real documents
+ * — the customer's 35-control GI form, the 80-control ultrasound report and the
+ * regenerated 53-control form — every label that reaches `inferTextKind`'s
+ * keyword lists is either ONE word or EIGHT-plus:
+ *
+ *     "Age"                                                         1 word
+ *     "{patient} is a pleasant {age}-year-old presenting for ..."    8 words
+ *     "The patient denies unintentional weight loss or change ..."  10 words
+ *
+ * There is nothing between 1 and 8, so 5 sits in the middle of a real gap with
+ * margin on both sides — and the longest legitimate FIELD NAME in these
+ * documents ("Total minutes spent with patient") is 5 words and stays
+ * classifiable. A threshold picked off a gap this wide is not a tuned constant.
+ *
+ * ⚠️ IT IS AND-ED WITH `isScaffolded` DELIBERATELY, WHICH IS STRICTLY MORE
+ * CONSERVATIVE THAN EITHER ALONE. A control with no default prose is not what
+ * this rule is about, and narrowing the blast radius is worth more here than
+ * elegance: a compiler change that re-types an existing template DE-CERTIFIES
+ * it.
+ */
+function isProseLabel(label: string): boolean {
+  return normalizeLabel(label).split(/\s+/).filter(Boolean).length > 5;
 }
 
 function inferTextKind(label: string): TemplateField["kind"] {

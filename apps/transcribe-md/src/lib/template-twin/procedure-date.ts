@@ -22,13 +22,10 @@ import {
   type SemanticMapping,
   type TemplateField,
 } from './ir';
+import { normalizeConcept, requiredFactTemporality } from './fact-mapping-match';
 
 const DATE_OF_PROCEDURE_LABEL_RE = /\bdate\s+of\s+procedure\b/i;
 const METADATA_ANCHOR = 'procedure-date-metadata';
-
-function normalizeConcept(value: string): string {
-  return value.normalize('NFKC').trim().toLocaleLowerCase('en-US');
-}
 
 /** ISO YYYY-MM-DD (UTC) from a Date or ISO-ish string; null when not an
  *  unambiguous calendar date (leave the control blank rather than guess). */
@@ -80,14 +77,17 @@ export function withProcedureDateFact(input: {
     // A 24-hex fact id derived from the field id (which is `ttf_<24hex>`) — a
     // stable, real (in-set) fact id, so the resolution is traceable.
     const factId = `ttfact_${field.fieldId.replace(/^ttf_/, '').slice(0, 24)}`;
-    const temporality =
-      mapping.temporality && mapping.temporality !== 'any'
-        ? mapping.temporality
-        : 'current';
+    const temporality = requiredFactTemporality(mapping);
     facts.push(
       EncounterFactSchema.parse({
         factId,
-        sourceType: 'encounter_evidence',
+        // ⚠️ #247 — WAS `encounter_evidence`, AND THAT WAS A LIE ABOUT
+        // PROVENANCE. This value is the visit's own encounter date read off the
+        // record; nobody said it. The frozen manifest recorded it as dictated
+        // for as long as this line read otherwise, which is the defect the
+        // `visit_record` class exists to prevent — so its one existing
+        // precedent moves onto it rather than being grandfathered.
+        sourceType: 'visit_record',
         concept,
         value: iso,
         polarity: 'affirmed',

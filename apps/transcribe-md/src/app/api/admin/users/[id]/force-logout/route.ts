@@ -13,6 +13,7 @@ import prisma from '@meddoc/db';
 
 import { adminApi } from '@/lib/admin-api-gate';
 import { logAudit } from '@/lib/audit';
+import { withPracticeLock } from '@/lib/last-owner-invariant';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,11 +40,22 @@ export const POST = adminApi('users:force-logout', async (req, ctx) => {
   if (!user) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const now = new Date();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (prisma.user as any).update({
-    where: { id },
-    data: { forceLogoutAt: now },
-  });
+  // ⚠️ RULING #289 — LOCKED THOUGH THIS DOOR CANNOT DEADLOCK TODAY, AND THE
+  // DISTINCTION IS WRITTEN DOWN RATHER THAN ASSUMED. `forceLogoutAt` is in
+  // NEITHER trigger predicate, so both guards exit at an exemption before
+  // reaching `pg_advisory_xact_lock`. That safety is a property of a COLUMN
+  // LIST, not of this door — #241a already moved the member predicate once —
+  // and the migration's own header says the door set is OPEN. A door safe
+  // only by coincidence is the sixth door that header warns about.
+  await prisma.$transaction((tx) =>
+    withPracticeLock(tx, user.practiceId, async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (tx.user as any).update({
+        where: { id },
+        data: { forceLogoutAt: now },
+      });
+    }),
+  );
 
   await logAudit({
     action: 'USER_FORCE_LOGOUT',

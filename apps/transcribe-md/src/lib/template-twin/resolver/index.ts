@@ -15,17 +15,30 @@ import {
   type EncounterFact,
   type FieldResolution,
   type FieldResolutionStatus,
+  fieldDemandsInput,
+  type RecordDerivedRefusal,
   type SemanticMapping,
   type TemplateField,
 } from '../ir';
 import { withoutPlaceholderOptions } from '../../note-template-docx/placeholder-option';
 import { parseExplicitNumberAndUnit } from '../encounter-facts';
-import { isMappingTypeCompatible } from '../semantic-mapping';
+import {
+  conceptMatches,
+  normalizeConcept,
+  requiredFactTemporality,
+  temporalityMatches,
+} from '../fact-mapping-match';
+import {
+  omitDeferralGuard,
+  practiceDefaultPreempts,
+  resolverLadderExit,
+} from '../unmentioned-policy';
 import {
   approvedPracticeDefaultAnchorId,
   approvedPracticeDefaultFactId,
 } from '../practice-default';
 import {
+  isEmptyText,
   isListValuedNarrative,
   joinListValuedNarrative,
 } from '../field-value-derivation';
@@ -40,6 +53,27 @@ export interface ResolveTemplateFieldsInput {
   certifiedFieldIds?: ReadonlyArray<string>;
   /** Certification tests may opt in; production resolution stays strict. */
   allowUncertifiedForSyntheticTest?: boolean;
+  /**
+   * ⚠️ #264 — FIELDS AN INJECTOR DECLINED TO ANSWER, WITH THE REASON.
+   *
+   * An injector that cannot compute a value today simply mints no fact, and the
+   * resolver then reaches its "no fact carries this concept" arm and reports
+   * `fact_not_mentioned` — *"nobody said it"*. For a record-derived value that
+   * is FALSE and it is the misleading direction: the patient record DID carry a
+   * date of birth, and the code declined to turn it into a number because the
+   * answer depended on a timezone nobody has recorded.
+   *
+   * A blank is the right output. A blank labelled "nobody mentioned it" is a
+   * blank the doctor cannot act on — they would look for the dictation. So the
+   * refusal travels with its reason and lands in `reasonCode`.
+   */
+  /**
+   * ⚠️ SAME TYPE AS THE INJECTOR WRITES, DERIVED FROM `ir.ts` — see the note on
+   * `withVisitMetadataFacts`'s own `refusals`. Two ends of one channel, one
+   * vocabulary; `string` here would let an unregistered token in through the
+   * READING end even with the writing end tightened.
+   */
+  refusals?: ReadonlyArray<RecordDerivedRefusal>;
 }
 
 interface ConvertedValue {
@@ -52,10 +86,6 @@ interface ConversionFailure {
 }
 
 type ConversionResult = ConvertedValue | ConversionFailure;
-
-function normalizeConcept(value: string): string {
-  return value.normalize('NFKC').trim().toLocaleLowerCase('en-US');
-}
 
 function unique<T>(values: ReadonlyArray<T>): T[] {
   return [...new Set(values)];
@@ -83,13 +113,47 @@ function makeResolution(
 ): FieldResolution {
   return FieldResolutionSchema.parse({
     fieldId,
-    status,
+    status: recordDerivedIfFromTheRecord(status, facts),
     value,
     ...evidenceFor(facts),
     selectedOptionOrdinal,
     reasonCode,
     clinicianReviewed: false,
   });
+}
+
+/**
+ * #247 — A SUPPORTED RESOLUTION WHOSE EVIDENCE IS THE PATIENT RECORD IS
+ * `record_derived`, NOT `supported`.
+ *
+ * ⚠️ ONE PROMOTION POINT, INSIDE `makeResolution`, AND NOT FIVE BRANCHES AT THE
+ * FIVE `'supported'` CALL SITES. This file mints `supported` in five places
+ * (direct evidence, exact options, multi-select, repeating rows, mixed-polarity
+ * narrative) and a sixth will be added by somebody who has never read this
+ * comment. A rule applied at every producer is a rule that will one day be
+ * applied at all but one of them — canon's partial-application family — and the
+ * failure mode here is silent: the document is identical and the manifest
+ * claims a record value was dictated.
+ *
+ * ⚠️ EVERY cited fact, not SOME. A field supported jointly by a dictated
+ * sentence and a record value is genuinely dictated in part, and calling the
+ * whole resolution record-derived would understate what the clinician said. The
+ * `visit_metadata` injector cannot produce that shape today — it refuses to
+ * inject when any fact already speaks to the concept — so this arm is
+ * conservative about a case that does not currently arise, which is the right
+ * direction for a claim about provenance.
+ *
+ * Only `supported` is promoted. A conflict is still a conflict, and a blank is
+ * still blank, whoever the evidence came from.
+ */
+function recordDerivedIfFromTheRecord(
+  status: FieldResolutionStatus,
+  facts: ReadonlyArray<EncounterFact>,
+): FieldResolutionStatus {
+  if (status !== 'supported' || facts.length === 0) return status;
+  return facts.every((fact) => fact.sourceType === 'visit_record')
+    ? 'record_derived'
+    : status;
 }
 
 export function isStrictIsoDate(value: string): boolean {
@@ -133,9 +197,18 @@ function convertValue(
 ): ConversionResult {
   switch (field.kind) {
     case 'narrative_text':
-      return typeof rawValue === 'string'
-        ? { value: rawValue, optionOrdinal: null }
-        : { code: 'text_value_not_string' };
+      // ⚠️ #218 — AN EMPTY STRING IS NOT A VALUE. Without this the blanked
+      // escape hatch resolves `supported` over an emptied control and the whole
+      // chain reports success: validator VALID with zero issues, renderer a
+      // `filled` proof, `counts.filled > 0` satisfied. Refusing here makes it a
+      // bounded clear that is COUNTED as blank, which is the honest outcome.
+      // The predicate is IMPORTED, not re-derived — this arm and
+      // `deriveFieldValueFromFact` are two implementations of one decision, and
+      // they have disagreed before.
+      if (typeof rawValue !== 'string') return { code: 'text_value_not_string' };
+      return isEmptyText(rawValue)
+        ? { code: 'text_value_empty' }
+        : { value: rawValue, optionOrdinal: null };
 
     case 'single_select': {
       if (typeof rawValue !== 'string') return { code: 'select_value_not_string' };
@@ -191,7 +264,14 @@ function practiceDefaultResolution(
   mapping: SemanticMapping,
   facts: ReadonlyArray<EncounterFact>,
 ): FieldResolution | null {
-  if (mapping.practiceDefault === null || mapping.status !== 'certified') {
+  // ⚠️ ONE PROPERTY, ONE READER — RULING #258. The confirm surface asks the same
+  // question ("does a default answer this before the policy is read?") and used
+  // to answer it with its own `!== null`. The `status` half stays HERE: in
+  // production it is unreachable (an uncertified mapping exits at the
+  // certification guard far above) and it matters only on the synthetic-test
+  // path, whereas at confirm time the mapping is being certified — so sharing it
+  // would offer a control that stops working the moment the doctor certifies.
+  if (!practiceDefaultPreempts(mapping) || mapping.status !== 'certified') {
     return null;
   }
   const parsed = parseExplicitNumberAndUnit(mapping.practiceDefault);
@@ -245,16 +325,74 @@ function missingResolution(
   /** Overrides the reason when the field is unfilled for a NAMED reason more
    *  specific than "nothing was said" — the reason must survive, the false
    *  evidence trail must not. */
-  reason?: { unfilled: string; required: string },
+  /**
+   * ⚠️ DELIBERATELY WIDER THAN `RecordDerivedRefusal`, AND #275's RE-PASS PROVED
+   * WHY. Tightening this to the record-derived vocabulary looked right and
+   * failed the typecheck at :685, where the TEMPORALITY path passes
+   * `temporality_not_approved` through the same parameter. This parameter is
+   * "a named reason a field is blank" in general; the record-derived CHANNEL —
+   * `ResolveTemplateFieldsInput.refusals` — is the narrow one, and it is the
+   * only one that carries `neverBlocks`.
+   */
+  reason?: { unfilled: string; required: string; neverBlocks?: boolean },
+  /** TRUE at exactly one call site: the one reached because NO fact carries
+   *  this field's approved concept. That is the only site where "the encounter
+   *  said nothing about this" is a true statement rather than a deferral. */
+  conceptUnmatched = false,
 ): FieldResolution {
   const practiceDefault = practiceDefaultResolution(field, mapping, facts);
   if (practiceDefault) return practiceDefault;
-  const requiresInput =
-    field.required ||
-    mapping.required ||
-    field.unknownPolicy === 'requires_input' ||
-    mapping.unknownPolicy === 'requires_input' ||
-    mapping.blankPolicy === 'requires_input';
+  // ══ #272 — A RECORD-DERIVED REFUSAL NEVER WITHHOLDS A DOCUMENT ═══════════
+  //
+  // `requiresInput` turns a blank into `needs_clinician_input`;
+  // `validation/index.ts:583-586` makes that BLOCKING; `fill-engine.ts:198`
+  // turns any blocking issue into `render: null`. So this path did not blank a
+  // field — it withheld the doctor's whole form.
+  //
+  //   A WITHHELD CONSULT OVER ONE AMBIGUOUS AGE IS THE WRONG TRADE.
+  //   A DOCTOR TYPING "61" IS THE RIGHT ONE.
+  //
+  // ⚠️ AND IT IS NOT SCOPED TO REQUIRED CONTROLS THE WAY THE READING SUGGESTS.
+  // `needsInputBlocks` is `critical || field.required || mapping.required`, and
+  // `critical` is `field.criticality !== 'routine' || field.clinicallyMaterial`
+  // — with `clinicallyMaterial` hard-coded TRUE at all twelve compiler sites.
+  // Measured in production: **238 of 238 rows carry `clinicallyMaterial = t`
+  // and `required = f`.** So `critical` is a CONSTANT TRUE, the `required`
+  // disjuncts are dead weight, and EVERY field reaching this status takes the
+  // document down. (Ruling #157(d) already filed that separately — *"a
+  // qualifier that is always true is a comment"*.)
+  //
+  // ⚠️ THE CODEBASE ALREADY ARGUES THE FIX, IN ITS OWN WORDS:
+  //   · `manual_source_not_filled` (:486) returns `not_mentioned`, and records
+  //     what the alternative cost — "four such fields refused the native
+  //     document on every visit, forever … the only effect was that the doctor
+  //     never got their own form back."
+  //   · `denial_withheld` is a warning UNCONDITIONALLY under #157(b) —
+  //     "refusing the OTHER hundred and forty-nine fields does not fill it."
+  //
+  // This does NOT weaken `needs_clinician_input` in general: the escalation
+  // stands for every other route in, and `neverBlocks` is set ONLY by the
+  // injector-refusal channel, whose members are record-derived by construction.
+  // ⚠️ THE DISJUNCTION MOVED TO `ir.ts` AND IS NOT RESTATED HERE — #275's
+  // re-pass found the validator asking a NARROWER version of this same
+  // question. One predicate, two readers.
+  const requiresInput = !reason?.neverBlocks && fieldDemandsInput(field, mapping);
+  const unmentionedScaffold =
+    conceptUnmatched && reason === undefined && facts.length > 0;
+
+  // ⚠️ #194 — THE KEEP BRANCH IS DELETED. It used to return `default_kept`
+  // here. Its premise was refuted, not merely its mechanism: it fired when
+  // `conceptCandidates.length === 0` -- when NO fact carried the field's
+  // concept -- and concept equality is the only test performed anywhere, so
+  // "nothing dictated contradicted this clause" was always a claim about the
+  // EMPTY SET. A scaffold reading "no varicosities, no oedema and no
+  // ulceration" was kept on a visit dictated as a large weeping ulcer with
+  // oedema and varicosities, because that fact carried `chief_complaint`.
+  //
+  // The machine never prints an undictated default. A doctor's own default is
+  // now a HUMAN act at review (REVIEW-DEFAULTS), where the click is their
+  // assertion and it fills through the normal human-typed path.
+
   return makeResolution(
     field.fieldId,
     requiresInput ? 'needs_clinician_input' : 'not_mentioned',
@@ -262,7 +400,14 @@ function missingResolution(
     [],
     requiresInput
       ? (reason?.required ?? 'required_fact_not_mentioned')
-      : (reason?.unfilled ?? 'fact_not_mentioned'),
+      : unmentionedScaffold && mapping.unmentionedPolicy === 'omit'
+        // #191 — the scaffold was cleared ON PURPOSE and the reason says so.
+        // `fact_not_mentioned` would read as "nobody looked".
+        // ⚠️ GATED ON THE SHARED PREDICATE, not on the policy alone: a named
+        // reason must survive, and a clearing nothing evaluated is not
+        // deliberate.
+        ? 'omitted_unsupported_default'
+        : (reason?.unfilled ?? 'fact_not_mentioned'),
   );
 }
 
@@ -320,12 +465,7 @@ export function withApprovedPracticeDefaultFacts(input: {
         concept: mapping.clinicalConcept,
         value: raw,
         polarity: denied ? 'denied' : 'affirmed',
-        temporality:
-          mapping.temporality === 'historical' ||
-          mapping.temporality === 'planned' ||
-          mapping.temporality === 'current'
-            ? mapping.temporality
-            : 'current',
+        temporality: requiredFactTemporality(mapping),
         experiencer: 'patient',
         laterality:
           mapping.laterality === 'not_applicable'
@@ -365,6 +505,7 @@ function resolveOne(
   allFacts: ReadonlyArray<EncounterFact>,
   allowUncertified: boolean,
   certifiedFieldIds: ReadonlySet<string>,
+  refusal?: { unfilled: string; required: string },
 ): FieldResolution {
   if (!mapping) {
     return makeResolution(
@@ -375,80 +516,99 @@ function resolveOne(
       'semantic_mapping_missing',
     );
   }
-  if (!isMappingTypeCompatible(field, mapping)) {
-    return makeResolution(
-      field.fieldId,
-      'needs_clinician_input',
-      null,
-      [],
-      'semantic_mapping_type_mismatch',
-    );
-  }
-  if (
-    !allowUncertified &&
-    (mapping.status !== 'certified' ||
-      (field.detectionStatus !== 'certified' &&
-        !certifiedFieldIds.has(field.fieldId)))
-  ) {
-    return makeResolution(
-      field.fieldId,
-      'needs_clinician_input',
-      null,
-      [],
-      'field_or_mapping_not_certified',
-    );
-  }
-  if (mapping.status === 'unsupported' || field.detectionStatus === 'unsupported') {
-    return makeResolution(
-      field.fieldId,
-      'needs_clinician_input',
-      null,
-      [],
-      'field_or_mapping_unsupported',
-    );
-  }
-  // A MANUAL field carries no concept BY CONSTRUCTION — nothing in any encounter
-  // can say who the technologist on shift was — and the certificate attests that
-  // it renders blank. Reporting it as an unmapped field turned a designed state
-  // into a configuration error, and at visit time that error is BLOCKING: four
-  // such fields refused the native document on every visit, forever, and the
-  // export fell back to the styled path. Nothing was made safer by that — the
-  // fields are blank in both documents — so the only effect was that the doctor
-  // never got their own form back.
-  if (mapping.sourceType === 'manual') {
-    return makeResolution(field.fieldId, 'not_mentioned', null, [], 'manual_source_not_filled');
-  }
-  // A VERIFIED NOTE SELECTION is answered by the adopted note's own pick, which
-  // only the picks bridge can read. Resolving it here from raw facts produced
-  // `select_value_not_exact_option` — needs-clinician-input, and BLOCKING at
-  // visit time — for fourteen dropdowns the note had already answered. Same
-  // shape as the fixed-grid rule: the component that can address it, addresses
-  // it; the baseline is honestly blank.
-  if (mapping.sourceType === 'verified_note_selection') {
-    return makeResolution(field.fieldId, 'not_mentioned', null, [], 'awaiting_note_selection');
-  }
-  if (!mapping.clinicalConcept) {
-    return makeResolution(
-      field.fieldId,
-      'needs_clinician_input',
-      null,
-      [],
-      'clinical_concept_unmapped',
-    );
+  // ⚠️ THE LADDER IS WALKED, NOT WRITTEN HERE — RULING #258, NO MIRROR.
+  //
+  // These five guards used to be five inline `if`s, and the confirm surface
+  // carried a hand-maintained copy of them so it could decide what to OFFER.
+  // That copy shipped EIGHT divergences in seven rounds; every repair widened a
+  // matrix so the copy's CURRENT divergences became visible, and none made the
+  // next one impossible. There is one copy now, it lives in `unmentioned-policy`
+  // (the leaf, because that module is value-imported by a `'use client'`
+  // component and this one value-imports zod), and both sides walk it.
+  //
+  // ⚠️ EACH ROW CARRIES ITS OWN `status` AND `reasonCode`, so nothing about the
+  // resolutions below changed — the same tokens, in the same order, from a table
+  // instead of from a sequence of statements.
+  // ⚠️ AND THE WALK ITSELF IS THE SHARED FUNCTION NOW — RULING #280. The loop
+  // that used to live here (the table walk plus the interleaved certification
+  // check, whose POSITION is behaviour) is `resolverLadderExit`, beside the
+  // table it walks. Two reasons, and the second is the one that forced it:
+  //
+  //   · #258's invariant is ONE implementation, and a loop here plus a loop in
+  //     `omitBranchUnreachable` was two walks of one table;
+  //   · the read set on this path could not be TRACED while it lived here.
+  //     `resolveTemplateFields` zod-parses its inputs and `parse` returns a NEW
+  //     object, so a Proxy on what the caller passes records zod touching every
+  //     key rather than this function's own reads. The arm therefore derived the
+  //     read set with a member-expression REGEX over two anchored byte ranges of
+  //     this file — and #251 retires text scanning as a proof of behaviour.
+  //     Measured: 4 reads inside the regions, 8 more outside them in this same
+  //     file, so a guard one function call away was invisible.
+  //
+  // Lifting it gives the tracer something it can wrap directly, on the far side
+  // of the parse.
+  const ladder = resolverLadderExit(field, mapping, {
+    allowUncertified,
+    certifiedFieldIds,
+  });
+  if (ladder) {
+    return makeResolution(field.fieldId, ladder.status, null, [], ladder.reasonCode);
   }
 
-  const approvedConcepts = new Set(
-    [mapping.clinicalConcept, ...mapping.approvedSynonyms].map(normalizeConcept),
-  );
+  // ⚠️ THE SHARED CONCEPT HALF, NOT A FOURTH OPEN-CODED COPY. This filter used
+  // to build its own approved-concept set, which meant #179(3)'s declared
+  // scope — checked by the validator — was invisible here. The resolver filled
+  // a field the validator then refused, and `fill-engine` turned that into a
+  // WITHHELD DOCUMENT rather than a wrong value.
   const conceptCandidates = allFacts.filter(
     (fact) =>
-      fact.sourceType !== 'approved_practice_default' &&
-      approvedConcepts.has(normalizeConcept(fact.concept)),
+      fact.sourceType !== 'approved_practice_default' && conceptMatches(fact, mapping),
   );
-  if (conceptCandidates.length === 0) {
-    return missingResolution(field, mapping, allFacts);
+  // ⚠️ #264 — A NAMED REFUSAL OUTRANKS "NOBODY SAID IT", AND IT IS CHECKED
+  // BEFORE the concept search rather than after. An injector that declined to
+  // compute a value mints no fact, so the concept search finds nothing and the
+  // arm below would report `fact_not_mentioned` — a true statement about the
+  // FACTS and a false one about the ENCOUNTER. The refusal is the more specific
+  // reason and the more specific reason wins.
+  //
+  // The value is still null and the field is still blank: this changes the
+  // LABEL on the blank, not the blank.
+  if (refusal) {
+    // ⚠️ `neverBlocks` — #272. The blank is NAMED and the document still
+    // renders. The opt-out is a property of the CHANNEL, not a token list
+    // somebody has to keep in step: only `withVisitMetadataFacts` writes here.
+    return missingResolution(field, mapping, allFacts, { ...refusal, neverBlocks: true });
   }
 
+  if (conceptCandidates.length === 0) {
+    // The ONLY site that earns #191's kept default: no fact in the encounter
+    // carries this field's approved concept, so the template's own sentence
+    // stands uncontradicted. The three other `missingResolution` sites are
+    // DEFERRALS with facts in hand — a grid row the resolver cannot address, a
+    // temporality the mapping did not approve — and a kept default there would
+    // answer a question that was actually asked.
+    return missingResolution(field, mapping, allFacts, undefined, true);
+  }
+
+  // ⚠️ #179(5) — A CHECKBOX ANSWERS FOR EXACTLY ONE SYMPTOM, AND THE REFUSAL
+  // HAS TO LIVE HERE BECAUSE THE FILL PATH NEVER REACHED THE OTHER ONE.
+  //
+  // `deriveFieldValueFromFact` already refuses a multi-scope tick, and the
+  // validator and the bridge both call it. The RESOLVER does not — it carries
+  // its own inline `case 'checkbox'` which reads ONLY `fact.polarity` and
+  // discards the finding. So the ruled refusal existed, was commented, was
+  // tested against the derivation helper, and had no effect whatever on the
+  // value actually written to the document.
+  //
+  // A box whose declared scope covers several symptoms cannot be answered by
+  // one fact: "affirmed" is ambiguous between them. Refused rather than
+  // guessed — an unticked box a clinician can tick is recoverable, a wrongly
+  // ticked one is not.
+  //
+  // ⚠️ A DEFERRAL, NOT A KEPT DEFAULT. Facts ARE in hand here, so #191's
+  // `conceptUnmatched` flag is deliberately not passed — the same reasoning as
+  // the fixed-grid cell below. The encounter DID speak to this field; the
+  // resolver simply cannot say which symptom it spoke about.
   // A FIXED-GRID TABLE CELL IS ADDRESSED BY ITS ROW, AND THE RESOLVER CANNOT
   // SEE ROWS.
   // Its only inputs are the field's concept and the fact set. In a 26-row vein
@@ -467,7 +627,24 @@ function resolveOne(
   // A repeating-row PROTOTYPE is the opposite case and keeps resolving here: it
   // expands one row per fact, so there is no row to address and no ambiguity to
   // resolve. Only the fixed grid — many rows, one shared concept — defers.
-  if (field.rendererBinding.bindingType === 'table_cell' && !field.rowPrototype) {
+  // ⚠️ BOTH DEFERRALS ARE ONE SHARED CALL NOW — RULING #258, NO MIRROR.
+  //
+  // These two were separate `if`s, and the confirm surface's copy of the ladder
+  // knew about NEITHER of them for most of its life: the fixed grid was the
+  // seventh divergence, found by a peer session's independent pass, and the
+  // multi-scope checkbox was the EIGHTH, found by round seven after the matrix
+  // had already been widened three times.
+  //
+  // ⚠️ THEY WERE INVISIBLE FOR A STRUCTURAL REASON, NOT A CARELESS ONE. The copy
+  // was built by walking the GUARD LADDER above, and these are not guards in that
+  // ladder — they are different CALL SITES of `missingResolution`, reached only
+  // once facts carry the field's concept. `:490`'s own comment says it: "The
+  // three other `missingResolution` sites are DEFERRALS with facts in hand."
+  // Three of the four cannot honour an omit, and the copy walked past all of
+  // them.
+  //
+  // A ninth deferral is added to `omitDeferralGuard` and both sides get it.
+  if (omitDeferralGuard(field, mapping) !== null) {
     return missingResolution(field, mapping, allFacts);
   }
 
@@ -493,11 +670,13 @@ function resolveOne(
         )
       : conceptCandidates;
 
-  const expectedTemporality = mapping.temporality;
-  const temporalCandidates =
-    expectedTemporality === null || expectedTemporality === 'any'
-      ? conceptCandidates
-      : conceptCandidates.filter((fact) => fact.temporality === expectedTemporality);
+  // ⚠️ SEPARATE FROM THE CONCEPT STAGE ON PURPOSE, AND THE TWO MUST NOT MERGE.
+  // `conceptCandidates.length === 0` is the ONE site that earns #191's kept
+  // practice default; this stage is a DEFERRAL that must not. A single combined
+  // predicate cannot tell them apart and would silently re-route kept defaults.
+  const temporalCandidates = conceptCandidates.filter((fact) =>
+    temporalityMatches(fact, mapping),
+  );
   if (temporalCandidates.length === 0) {
     // NOT ambiguous, and NOT cited. The mapping approves one temporality and no
     // fact carries it, so nothing was said about this field in the sense the
@@ -517,14 +696,40 @@ function resolveOne(
   // non-select this is every temporal candidate, exactly as before.
   const judged = temporalCandidates.filter((fact) => conflictCandidates.includes(fact));
 
-  const permitsFamily = normalizeConcept(mapping.clinicalConcept).startsWith(
-    'family_history.',
-  );
+  // ⚠️ NON-NULL BY THE PRE-CONCEPT TABLE'S `clinical_concept_unmapped` ROW,
+  // which returned above. TypeScript cannot see through the table walk, and a
+  // second `if` here would be exactly the duplicate decision ruling #258 just
+  // removed — so the guarantee is named and asserted, not re-tested.
+  const normalizedConcept = normalizeConcept(mapping.clinicalConcept!);
+  const permitsFamily = normalizedConcept.startsWith('family_history.');
+  /**
+   * ⚠️ #247 — THE REFERRING CLINICIAN IS THE ONE CONCEPT WHOSE SUBJECT IS NOT
+   * THE PATIENT, AND WITHOUT THIS LINE IT COULD NEVER RESOLVE AT ALL.
+   *
+   * `experiencer` answers "who is this fact ABOUT", and the projector emits
+   * `other` for the referrer because that is true — the fact is about a second
+   * physician. Every other concept in the registry describes the patient, so
+   * this gate is a correct default and a total refusal here: the field would
+   * come back `ambiguous / experiencer_not_approved` on every visit that
+   * dictated a referrer, which is precisely the visits it exists for.
+   *
+   * ⚠️ AND THE ALTERNATIVE WAS TO LIE IN THE PROJECTOR. Stamping the referrer
+   * `experiencer: 'patient'` would have made this arm pass with no change
+   * here — and written into the frozen manifest that a named outside physician
+   * is the patient. Same shape as the `encounter_evidence` misattribution that
+   * created the `visit_record` class: the cheap fix corrupts the audit trail
+   * rather than the render, so nothing fails and the record is wrong.
+   *
+   * Named by CONCEPT and by exactly one, like `permitsFamily` above.
+   */
+  const permitsOtherClinician =
+    normalizedConcept === 'visit_metadata.referring_physician';
   if (
     temporalCandidates.some(
       (fact) =>
         fact.experiencer !== 'patient' &&
-        !(permitsFamily && fact.experiencer === 'family'),
+        !(permitsFamily && fact.experiencer === 'family') &&
+        !(permitsOtherClinician && fact.experiencer === 'other'),
     )
   ) {
     return makeResolution(
@@ -837,6 +1042,9 @@ export function resolveTemplateFields(
   const facts = input.facts.map((fact) => EncounterFactSchema.parse(fact));
   const mappingById = new Map(mappings.map((mapping) => [mapping.fieldId, mapping]));
   const certifiedFieldIds = new Set(input.certifiedFieldIds ?? []);
+  const refusalByFieldId = new Map(
+    (input.refusals ?? []).map((r) => [r.fieldId, { unfilled: r.unfilled, required: r.required }]),
+  );
 
   return [...fields]
     .sort((a, b) => a.displayOrder - b.displayOrder || a.fieldId.localeCompare(b.fieldId))
@@ -847,6 +1055,7 @@ export function resolveTemplateFields(
         facts,
         input.allowUncertifiedForSyntheticTest === true,
         certifiedFieldIds,
+        refusalByFieldId.get(field.fieldId),
       ),
     );
 }

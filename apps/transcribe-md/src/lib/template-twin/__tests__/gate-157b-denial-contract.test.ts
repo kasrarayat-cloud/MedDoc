@@ -314,7 +314,7 @@ const NARRATIVE: readonly NarrativeCase[] = [
     // supply it themselves and `omit` this default, by name.
     label: 'Review of systems',
     controlId: '307',
-    concept: 'ros.constitutional',
+    concept: 'ros.constitutional.fever',
     deniedText: 'No fever or chills.',
     deniedEntities: {
       ros: [
@@ -477,7 +477,7 @@ const PLAN: Record<string, { concept: string; polarityBehavior: Behavior }> = {
   // ORDINARY self-negating default (see NARRATIVE) so the PLAN-iterating arms
   // exercise it like any other narrative; the R1 arms `omit` that default and
   // supply the stated-polarity fact themselves.
-  'Review of systems': { concept: 'ros.constitutional', polarityBehavior: 'explicit_denial_allowed' },
+  'Review of systems': { concept: 'ros.constitutional.fever', polarityBehavior: 'explicit_denial_allowed' },
 };
 
 // ── #157(c) FIXTURES ────────────────────────────────────────────────────────
@@ -963,6 +963,14 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
     // asserts EXACTLY this same rendering. That is what makes "a withheld
     // denial is a blank" a claim about the document rather than about a status.
     const { resolution: unmapped } = affirmed.byLabel('Assessment narrative');
+    // ⚠️ #192 RETURNED THIS ARM TO ITS ORIGINAL FORM, AND THAT IS THE RULING
+    // WORKING. #191 briefly made this `default_kept`, on the theory that a
+    // scaffold could be recognised from its content. It cannot -- the falsifying
+    // case is pinned in `gate-191-kept-default-survives-render`. Under #192 a
+    // kept default requires an EXPLICIT `unmentionedPolicy: 'keep'` on the
+    // mapping, this fixture declares none, and so the field behaves exactly as
+    // it did before the slice began. An undeclared control is unchanged by all
+    // of #191/#192, which is the fail-closed property the ruling buys.
     expect(unmapped.status).toBe('not_mentioned');
     expect(unmapped.value).toBeNull();
     expect(renderedTextOf(controlById(xml, '102'))).toBe(BLANK);
@@ -1068,12 +1076,12 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
     const facts = statedPolarityRos();
     expect(facts).toHaveLength(1);
     expect(facts[0]!.polarity).toBe('denied');
-    expect(facts[0]!.concept).toBe('ros.constitutional');
+    expect(facts[0]!.concept).toBe('ros.constitutional.fever');
     // ⚠️ NON-VACUITY: the quote carries no negation the SHIPPED vocabulary can
     // see either, so this fixture is not one that was denied by its own words.
     expect(EXPLICIT_DENIAL.test(facts[0]!.evidenceQuote)).toBe(false);
 
-    const driven = await drive({ omit: ['ros.constitutional'], extraFacts: facts });
+    const driven = await drive({ omit: ['ros.constitutional.fever'], extraFacts: facts });
     const { field, resolution } = driven.byLabel('Review of systems');
     expect(field.kind).toBe('narrative_text');
     expect(resolution.status).toBe('denial_withheld');
@@ -1123,7 +1131,12 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
         ros: [
           {
             system: 'constitutional',
-            finding: row.finding,
+            // ⚠️ #179 — THE ADDRESSED SYMPTOM, NOT THE QUOTE'S SUBJECT.
+            // `row.finding` documents what the sentence is about; under
+            // symptom granularity the concept must name the symptom the mapped
+            // field actually covers, or the fact addresses no clause at all.
+            // The quote is unchanged, and the quote is what these arms test.
+            finding: 'Fever',
             polarity: 'denied',
             evidence_quote: row.quote,
           },
@@ -1132,7 +1145,7 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
       expect([row.why, facts.length]).toEqual([row.why, 1]);
       expect([row.why, facts[0]!.polarity]).toEqual([row.why, 'denied']);
 
-      const driven = await drive({ omit: ['ros.constitutional'], extraFacts: facts });
+      const driven = await drive({ omit: ['ros.constitutional.fever'], extraFacts: facts });
       const { resolution } = driven.byLabel('Review of systems');
       expect([row.why, resolution.status]).toEqual([row.why, 'denial_withheld']);
       expect([row.why, resolution.value]).toEqual([row.why, null]);
@@ -1213,7 +1226,12 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
         ros: [
           {
             system: 'constitutional',
-            finding: row.finding,
+            // ⚠️ #179 — THE ADDRESSED SYMPTOM, NOT THE QUOTE'S SUBJECT.
+            // `row.finding` documents what the sentence is about; under
+            // symptom granularity the concept must name the symptom the mapped
+            // field actually covers, or the fact addresses no clause at all.
+            // The quote is unchanged, and the quote is what these arms test.
+            finding: 'Fever',
             polarity: 'denied',
             evidence_quote: row.text,
           },
@@ -1222,7 +1240,7 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
       expect([row.text, facts.length]).toEqual([row.text, 1]);
       expect([row.text, facts[0]!.polarity]).toEqual([row.text, 'denied']);
 
-      const driven = await drive({ omit: ['ros.constitutional'], extraFacts: facts });
+      const driven = await drive({ omit: ['ros.constitutional.fever'], extraFacts: facts });
       const { resolution } = driven.byLabel('Review of systems');
       expect([row.text, resolution.status]).toEqual([row.text, 'denial_withheld']);
       expect([row.text, resolution.reasonCode]).toEqual([
@@ -1457,6 +1475,14 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
     //     predicate could not tell them apart.
     expect(side.resolution.status).toBe('denial_withheld');
     expect(side.resolution.value).toBeNull();
+    // ⚠️ #192 RETURNED THIS ARM TO ITS ORIGINAL FORM, AND THAT IS THE RULING
+    // WORKING. #191 briefly made this `default_kept`, on the theory that a
+    // scaffold could be recognised from its content. It cannot -- the falsifying
+    // case is pinned in `gate-191-kept-default-survives-render`. Under #192 a
+    // kept default requires an EXPLICIT `unmentionedPolicy: 'keep'` on the
+    // mapping, this fixture declares none, and so the field behaves exactly as
+    // it did before the slice began. An undeclared control is unchanged by all
+    // of #191/#192, which is the fail-closed property the ruling buys.
     expect(category.resolution.status).toBe('not_mentioned');
     expect(category.resolution.value).toBeNull();
 
@@ -2297,7 +2323,11 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
         ros: [
           {
             system: 'constitutional',
-            finding: 'Fatigue',
+            // ⚠️ #179 — 'Fatigue' and 'Fever' are now DIFFERENT concepts and
+            // could never reach one field together. A mixed field is the same
+            // symptom asserted both ways, which is what this arm means by
+            // mixed; the quotes still differ and still carry the contrast.
+            finding: 'Fever',
             polarity: 'affirmed',
             evidence_quote: 'Fatigue and malaise.',
           },
@@ -2313,11 +2343,11 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
     const facts = build('Fever, chills, and night sweats.');
     expect(facts.map((f) => f.polarity)).toEqual(['affirmed', 'denied']);
 
-    const driven = await drive({ omit: ['ros.constitutional'], extraFacts: facts });
+    const driven = await drive({ omit: ['ros.constitutional.fever'], extraFacts: facts });
     const { field, resolution } = driven.byLabel('Review of systems');
     expect(resolution.status).toBe('supported');
     // THE AFFIRMED HALF PRINTS; THE DENIAL CONTRIBUTES ONLY ITS REASON TOKEN.
-    expect(resolution.value).toBe('Fatigue');
+    expect(resolution.value).toBe('Fever');
     expect(resolution.reasonCode).toBe(MIXED_POLARITY_REASON);
     expect(resolution.reasonCode).not.toContain(':');
     expect(resolution.sourceFactIds).toHaveLength(2); // the citation SURVIVES
@@ -2336,9 +2366,26 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
     expect(mine[0]!.message).toContain(MIXED_POLARITY_REASON);
 
     const xml = await driven.render();
-    expect(renderedTextOf(controlById(xml, '307'))).toBe('Fatigue');
+    expect(renderedTextOf(controlById(xml, '307'))).toBe('Fever');
+    // ⚠️ THE QUOTE IS NOW THE ONLY DISCRIMINATOR, AND THE REASON IS #179.
+    // This arm used to assert BOTH that the denied fact's QUOTE stayed out AND
+    // that its VALUE ('Fever') stayed out, while the affirmed value was
+    // 'Fatigue'. Under symptom granularity the two facts must share a concept
+    // to reach one field, and `value` IS the symptom token — so a mixed field's
+    // affirmed and denied values are IDENTICAL by construction. The old
+    // `not.toContain('<w:t>Fever</w:t>')` would now be asserting that the
+    // AFFIRMED value is absent, i.e. it would fail for the right output, and
+    // keeping it in any weakened form would test nothing.
+    //
+    // ⚠️ RECORDED AS A REAL LOSS OF DISCRIMINATION, not silently dropped: the
+    // value-leak channel is no longer observable on a mixed ROS field. What
+    // remains observable — and is what the denial contract actually promises —
+    // is that the DENIED SENTENCE reaches no part of the package.
     expect(xml).not.toContain('Fever, chills, and night sweats.');
-    expect(xml).not.toContain('<w:t>Fever</w:t>');
+    // and a token that occurs ONLY in the denied sentence, so this cannot pass
+    // by the affirmed quote happening to look similar
+    expect(xml).not.toContain('night sweats');
+    expect(xml).not.toContain('chills');
 
     // ══ C4, MEASURED RATHER THAN ARGUED. ═══════════════════════════════════
     // ⚠️ "NO JOIN OF DENIAL TEXT EXISTS" IS A CLAIM ABOUT WHAT THE OUTPUT
@@ -2358,7 +2405,7 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
     const values = new Set<string>();
     for (const quote of VARIANTS) {
       const run = await drive({
-        omit: ['ros.constitutional'],
+        omit: ['ros.constitutional.fever'],
         extraFacts: build(quote),
       });
       const mixed = run.byLabel('Review of systems').resolution;
@@ -2366,12 +2413,12 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
       expect([quote, mixed.reasonCode]).toEqual([quote, MIXED_POLARITY_REASON]);
       values.add(String(mixed.value));
       const runXml = await run.render();
-      expect([quote, renderedTextOf(controlById(runXml, '307'))]).toEqual([quote, 'Fatigue']);
+      expect([quote, renderedTextOf(controlById(runXml, '307'))]).toEqual([quote, 'Fever']);
       // NOT ONE CHARACTER OF THE DENIED SENTENCE REACHES THE PACKAGE.
       expect([quote, runXml.includes(quote)]).toEqual([quote, false]);
     }
     // ⚠️ ONE distinct value across three wildly different denied sentences.
-    expect([...values]).toEqual(['Fatigue']);
+    expect([...values]).toEqual(['Fever']);
     // NON-VACUITY for the variation itself: the three quotes really are
     // different, so "the output did not move" is a measurement.
     expect(new Set(VARIANTS).size).toBe(3);
@@ -2383,20 +2430,36 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
     // into a rendered field. `ros.*` is deliberately absent from
     // `ACCUMULATING_NARRATIVE_CONCEPTS`, so this is the live shape.
     const ros = (
-      rows: ReadonlyArray<{ finding: string; polarity: string; quote: string }>,
+      rows: ReadonlyArray<{ system?: string; finding: string; polarity: string; quote: string }>,
     ) =>
       projected(rows.map((r) => r.quote).join(' '), {
         ros: rows.map((r) => ({
-          system: 'constitutional',
+          system: r.system ?? 'constitutional',
           finding: r.finding,
           polarity: r.polarity,
           evidence_quote: r.quote,
         })),
       });
 
+    // ⚠️ THE ORIGINAL BASELINE OF THIS ARM IS UNREACHABLE AFTER #179, AND THAT
+    // IS THE RULING WORKING RATHER THAN A FIXTURE ROTTING.
+    //
+    // It used to affirm TWO symptoms and rely on both landing on ONE field as
+    // `multiple_distinct_supported_values` — the very conflict #179 was written
+    // to end ("a second affirmed finding conflicted the export"). Under symptom
+    // granularity each symptom carries its own concept and addresses its own
+    // clause, so two affirmed symptoms can no longer collide on one field. And
+    // because `value` IS the symptom token, two facts sharing a concept share a
+    // value, so that conflict is now unreachable for ROS BY CONSTRUCTION.
+    //
+    // The arm is therefore rebuilt rather than deleted: the invariant it exists
+    // for — a refusal never leaves a field BETTER than it was — is unchanged and
+    // still measurable, and the retired baseline is asserted positively below so
+    // nobody re-derives it. `headache` is HEENT, not constitutional; the old
+    // fixture filed it under constitutional, which the closed lexicon refuses.
     const AFFIRMED_TWO = [
-      { finding: 'Fatigue', polarity: 'affirmed', quote: 'Fatigue and malaise.' },
-      { finding: 'Headache', polarity: 'affirmed', quote: 'Headache since Tuesday.' },
+      { finding: 'fatigue', polarity: 'affirmed', quote: 'Fatigue and malaise.' },
+      { system: 'heent', finding: 'headache', polarity: 'affirmed', quote: 'Headache since Tuesday.' },
     ];
     const DENIED_ONE = {
       finding: 'Fever',
@@ -2407,32 +2470,64 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
     // WITH the denial -> the mixed contract REFUSES and the field is exactly
     // the conflict it already was.
     const mixed = await drive({
-      omit: ['ros.constitutional'],
+      omit: ['ros.constitutional.fever'],
       extraFacts: ros([...AFFIRMED_TWO, DENIED_ONE]),
     });
     const withDenial = mixed.byLabel('Review of systems').resolution;
-    expect(withDenial.status).toBe('conflict');
-    expect(withDenial.reasonCode).toBe('polarity_conflict');
+    expect(withDenial.status).toBe('denial_withheld');
+    // ⚠️ AND THE FIELD RENDERS NOTHING — which is the half that matters. The
+    // status token could be renamed; a value reaching a doctor could not.
+    expect(withDenial.value).toBeNull();
+
 
     // ⚠️ THE ISOLATING CONTROL, AND IT IS THE WHOLE ARM. Without the denial the
     // SAME two affirmed facts conflict too — so the mixed path took nothing
     // away. A refusal that merely looked correct would pass the row above.
     const affirmedOnly = await drive({
-      omit: ['ros.constitutional'],
+      omit: ['ros.constitutional.fever'],
       extraFacts: ros(AFFIRMED_TWO),
     });
     const noDenial = affirmedOnly.byLabel('Review of systems').resolution;
-    expect(noDenial.status).toBe('conflict');
-    expect(noDenial.reasonCode).toBe('multiple_distinct_supported_values');
+    expect(noDenial.status).toBe('not_mentioned');
+    expect(noDenial.value).toBeNull();
 
-    // Both are blocking, in both runs, exactly as before this ruling.
+    // ⚠️ THE INVARIANT, STATED AS THE COMPARISON IT ACTUALLY IS. Adding the
+    // denial did not IMPROVE the field: it was blank without the denial and it
+    // is blank with it. Neither run reaches `supported`, and neither prints.
+    expect([withDenial.value, noDenial.value]).toEqual([null, null]);
+    expect(withDenial.status).not.toBe('supported');
+
+    // ⚠️ THE RETIRED BASELINE, ASSERTED POSITIVELY SO IT CANNOT BE REBUILT BY
+    // ACCIDENT. Two affirmed symptoms now carry DIFFERENT concepts, which is
+    // exactly why they can no longer collide on one field.
+    const twoAffirmed = ros(AFFIRMED_TWO);
+    const concepts = twoAffirmed.map((f) => String(f.concept));
+    expect(new Set(concepts).size, 'two symptoms collapsed onto one concept').toBe(2);
+    expect(concepts).toEqual(['ros.constitutional.fatigue', 'ros.heent.headache']);
+
+    // ⚠️ NEITHER RUN BLOCKS ANY MORE, AND THAT IS #157(d) ARRIVING RATHER THAN
+    // A GUARD BEING LOOSENED. This used to assert FIELD_CONFLICT in BOTH runs,
+    // which is precisely the document-killer #157(d) exists to end: the field
+    // conflicted, the conflict was blocking, and `renderTemplateDocx` rejected —
+    // so one negative sentence cost the doctor the WHOLE document.
+    //
+    // With #179 the two affirmed symptoms address their own clauses instead of
+    // colliding here, and the denial renders the field BLANK. Blank and
+    // non-blocking is the promised end state. The invariant is unchanged — the
+    // denial still never leaves the field better than affirmed-alone — but the
+    // floor both runs sit on has risen from "blocked" to "blank".
     for (const run of [mixed, affirmedOnly]) {
       const { field } = run.byLabel('Review of systems');
       expect(
         run.validation.issues
           .filter((i) => i.fieldId === field.fieldId && i.severity === 'blocking')
           .map((i) => i.code),
-      ).toEqual(['FIELD_CONFLICT']);
+      ).toEqual([]);
+    }
+    // ⚠️ AND THE DOCUMENT MUST ACTUALLY RENDER — the half that matters to a
+    // doctor, and the half a status-only assertion cannot see.
+    for (const run of [mixed, affirmedOnly]) {
+      await expect(run.render()).resolves.toBeTruthy();
     }
   });
 

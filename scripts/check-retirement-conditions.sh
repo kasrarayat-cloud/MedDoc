@@ -171,6 +171,9 @@ REGISTRY=(
 "2026-08-21T09:00:00Z|human:needs a PRODUCTION DB READ (has a SECOND template shape certified end to end)|STATED 'when a second SHAPE certifies end-to-end'"
 "2026-08-21T12:20:00Z|relay_closed:F23|INFERRED — states no clause, but its point 2 reads 'The script does not exist yet — F23 builds it', which became FALSE when F23 landed. A false PRESENT-TENSE fact, delivered to every session"
 "2026-08-24T15:25:10Z|none|STATED none — one-shot union notice for a single named PR"
+"2026-09-04T22:05:00Z|file_exists:scripts/check-worktree-resolution.sh|STATED 're-run after the harness fix' — the notice retires once every affected lane has re-run its packages/* measurements. The probe existing is the CONDITION being pointed at, not the retirement itself: the lanes must still re-run. Retire by hand once Design/Admin and Data/Audit confirm, and not before"
+"2026-09-05T01:10:00Z|human:the composed deploy of b2c0ae96 is judged|STATED — the request retires when the deploy it feeds has been judged. Either the lanes supplied rows and they were composed, or the absence was recorded as a finding; both discharge it. Retire by hand with the judgement, not before"
+"2026-09-05T01:25:00Z|relay_closed:T2|STATED none — a POINTER to ruling #185. It retires when the T2 categoriser slice closes, because after that the ruling is history rather than something a session must read before building"
 )
 
 # ── read the entries the LAUNCHER counts: `### <ISO8601> — <title>` ──────────
@@ -179,11 +182,19 @@ mapfile -t HEADINGS < <(grep -E '^### [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{
 # ⚠️ NON-VACUITY FIRST. A regex that silently matched nothing would make every
 # bucket below empty and the partition would reconcile perfectly at zero.
 # NEVER normalise an impossible value into a plausible one.
+# One string, built once, so no reader of HEADINGS needs a subprocess at all.
+# Newline-delimited on both ends is what keeps `*"### $ts"*` a line-anchored
+# question rather than a substring one.
+HEADINGS_BLOB="$(printf '%s\n' "${HEADINGS[@]}")"
+
 if [ "${#HEADINGS[@]}" -lt 5 ]; then
   echo "🟡 only ${#HEADINGS[@]} INBOX entries parsed — the matcher is not reading this file. Can't tell."
   exit 2
 fi
-if ! printf '%s\n' "${HEADINGS[@]}" | grep -q '2026-08-20T16:40:00Z'; then
+# Same SIGPIPE hazard as the orphan loop below — and here a false miss aborts
+# the whole sweep with "can't tell", which is the failure mode a positive
+# control exists to make impossible.
+if [[ "$HEADINGS_BLOB" != *'2026-08-20T16:40:00Z'* ]]; then
   echo "🟡 positive control FAILED — the known entry 2026-08-20T16:40:00Z was not parsed. Can't tell."
   exit 2
 fi
@@ -208,8 +219,42 @@ echo "   · census(${#HEADINGS[@]}): $(printf '%s\n' "${HEADINGS[@]}" | sed -E '
 echo "   · registry(${#REGISTRY[@]}): $(printf '%s\n' "${REGISTRY[@]}" | cut -d'|' -f1 | tr '\n' ' ')"
 
 # ── instrument controls for the predicates that consult something external ───
+# ⚠️ THE NETWORK OBSERVATION IS INJECTABLE **IN ONE DIRECTION ONLY** — OFFLINE.
+#
+# `git ls-remote` is a LIVE call, and its result reaches stdout twice: on the
+# controls line below, and through the bucket assignment further down (an
+# unreachable origin moves `merged:` entries into cannot-tell, and the
+# per-branch probe at the `gone=` line never runs). So ANY caller that runs this
+# script twice and compares the two outputs is comparing the NETWORK as much as
+# the thing it meant to measure.
+#
+# That is not hypothetical: `gate-f30`'s cwd arm did exactly that and became an
+# intermittent CI red — passing 8 of 8 in isolation, failing roughly 1 in 4 in a
+# loaded batch, and reddening PR #952 on a change that had nothing to do with it.
+#
+# ⚠️ AND THE OVERRIDE CAN ONLY EVER MAKE THIS SWEEP **MORE** CONSERVATIVE. It
+# forces the OFFLINE path, which can only move entries INTO cannot-tell; there
+# is deliberately no way to force `NET_OK=1`. An override that could assert
+# "the network is fine" while it is not would make the per-branch probe return
+# nothing, read every branch as GONE, and report entries DUE FOR RETIREMENT that
+# are not — a manufactured green, which is the one thing a bypass must never be
+# able to do.
 NET_OK=0
-if git ls-remote --heads origin main 2>/dev/null | grep -q 'refs/heads/main'; then NET_OK=1; fi
+NET_FORCED=""
+if [ "${RETIREMENT_SWEEP_OFFLINE:-0}" = "1" ]; then
+  # ⚠️ THE MARKER IS SET **INSIDE THE BRANCH**, not from the variable's presence.
+  # Its first version read `${RETIREMENT_SWEEP_OFFLINE:+ · OFFLINE FORCED}` —
+  # which announces that the env var EXISTS, not that it took effect. A mutation
+  # that made the script ignore the override entirely left the marker printing,
+  # so the caller's non-vacuity check ("the pin actually took") passed on a
+  # script that had discarded the pin. A control must be downstream of the thing
+  # it certifies.
+  NET_OK=0
+  NET_FORCED=" · OFFLINE FORCED"
+else
+  _ls_main="$(git ls-remote --heads origin main 2>/dev/null || true)"
+  [[ "$_ls_main" == *'refs/heads/main'* ]] && NET_OK=1
+fi
 # ⚠️ A SECOND, SEPARATE CONTROL — and it is not implied by the first.
 # `merged:` asks TWO questions: is the branch gone (network), and is the file on
 # `origin/main` (a LOCAL ref). A CI checkout is routinely shallow or
@@ -222,7 +267,7 @@ REF_OK=0
 if git rev-parse --verify --quiet origin/main >/dev/null 2>&1; then REF_OK=1; fi
 LEDGER_OK=0
 if grep -qE '^#+ (✅|🟢) F[0-9]+ —' "${LEDGER_SET[@]}"; then LEDGER_OK=1; fi
-echo "   · controls: origin reachable=$NET_OK · origin/main resolvable=$REF_OK · ledger closure-vocabulary present=$LEDGER_OK ($LEDGER_LABEL)"
+echo "   · controls: origin reachable=$NET_OK · origin/main resolvable=$REF_OK · ledger closure-vocabulary present=$LEDGER_OK ($LEDGER_LABEL)${NET_FORCED}"
 echo
 
 declare -a B_DUE=() B_NOTDUE=() B_HUMAN=() B_NONE=() B_RETIRED=() B_UNREG=() B_CANT=()
@@ -248,7 +293,7 @@ for h in "${HEADINGS[@]}"; do
   case "$pred" in
     retired)
       # Cross-checked against the FILE, never taken from the registry's word.
-      if printf '%s' "$h" | grep -q 'RETIRED'; then B_RETIRED+=("$ts  $title")
+      if [[ "$h" == *'RETIRED'* ]]; then B_RETIRED+=("$ts  $title")
       else B_UNREG+=("$ts  $title   ⚠️ registry says RETIRED; the heading does not"); fi
       ;;
     none)
@@ -275,7 +320,10 @@ for h in "${HEADINGS[@]}"; do
       if [ "$NET_OK" -ne 1 ]; then B_CANT+=("$ts  $title   (origin unreachable — a branch cannot be called GONE)")
       elif [ "$REF_OK" -ne 1 ]; then B_CANT+=("$ts  $title   (origin/main does not resolve here — 'file absent' and 'ref missing' are NOT the same answer)")
       else
-        gone=1; git ls-remote --heads origin "$br" 2>/dev/null | grep -q "refs/heads/$br" && gone=0
+        # ⚠️ CAPTURE THEN MATCH. A false miss here calls a LIVE branch gone
+        # and can mark a retirement DUE — the expensive direction.
+        gone=1; _ls_br="$(git ls-remote --heads origin "$br" 2>/dev/null || true)"
+        [[ "$_ls_br" == *"refs/heads/$br"* ]] && gone=0
         landed=0; git cat-file -e "origin/main:$path" 2>/dev/null && landed=1
         if [ "$gone" -eq 1 ] && [ "$landed" -eq 1 ]; then
           B_DUE+=("$ts  $title
@@ -309,7 +357,19 @@ for row in "${REGISTRY[@]}"; do
   rts="${row%%|*}"
   # -F: a timestamp is a FIXED string, never a pattern. `grep -q` would also
   # match it appearing anywhere in a heading's title text.
-  printf '%s\n' "${HEADINGS[@]}" | grep -qF "### $rts" || ORPHANS+=("$rts")
+  # ⚠️ BASH-NATIVE, NOT `printf | grep -q`, AND THAT PIPELINE IS THE BUG.
+  # `grep -q` exits 0 the instant it matches and CLOSES the pipe; `printf` then
+  # dies of SIGPIPE (141); `set -o pipefail` (line 101) promotes the pipeline's
+  # status to that 141 — so a MATCH is reported as a MISS and the `||` records
+  # an orphan that is not one. Measured at 21 false misses in 54,000 probes
+  # where the match certainly existed: ~1 in 2,500, which over 18 rows is a
+  # ~0.7% chance per run of a red naming a DIFFERENT entry each time.
+  #
+  # That is every recorded symptom of this gate's flake, including the one the
+  # census line was added to expose: census and registry holding the SAME 18
+  # timestamps while a row is called an orphan. 25 clean local runs are exactly
+  # what a 1-in-2,500 rate predicts, so they never refuted it.
+  [[ "$HEADINGS_BLOB" == *"### $rts"* ]] || ORPHANS+=("$rts")
 done
 
 emit() {

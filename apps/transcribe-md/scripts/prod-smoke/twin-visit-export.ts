@@ -171,8 +171,8 @@ async function main() {
     const { processTemplateTwinVisit } = await import('@/lib/template-twin/fill-engine');
     await processTemplateTwinVisit({
       visitId: visit.id,
-      practiceId,
-      doctorId,
+      tenantPracticeId: practiceId,
+      authorUserId: doctorId,
       noteTemplateId: template!.id,
       noteTemplateVersion: template!.version,
       inputMode: 'text',

@@ -145,7 +145,12 @@ export async function loadNativeTemplateDocxForVisit(
     ? []
     : await prisma.templateTwinFieldOverride.findMany({
         where: { visitId, practiceId },
-        select: { fieldId: true, selectedOptionOrdinal: true },
+        select: {
+        fieldId: true,
+        selectedOptionOrdinal: true,
+        overrideKind: true,
+        insertedText: true,
+      },
       });
   const freshness = isSigned
     ? ({ ok: true, reason: 'match' } as const)
@@ -222,10 +227,19 @@ export async function loadOrComputeNativeTemplateDocxForVisit(
 
   try {
     const visit = await prisma.transcribeVisit.findFirst({
-      // ⚠️ PRACTICE-SCOPED, LIKE THE READ. A colleague requesting a document
-      // that has not been filled yet must get the SAME answer the author would,
-      // or the divergence simply moves into the fill window.
-      where: { id: visitId, user: { practiceId }, deletedAt: null },
+      // ⚠️ PRACTICE-SCOPED, LIKE THE READ — AND #287 IS WHAT MADE THAT
+      // SENTENCE TRUE. It said "like the read" while scoping through the
+      // RELATION (`user: { practiceId }` — the AUTHOR's practice) where the
+      // cached read at the top of this file scopes by the visit's own
+      // `practiceId` column (the TENANT). Those are equal only when the author
+      // belongs to the practice that owns the chart, which is precisely the
+      // case a locum is not.
+      //
+      // Measured consequence, and it is silent: for a locum's visit in
+      // practice A, the cached read FINDS the visit and the compute path finds
+      // NOTHING — `visit_not_eligible`, falling back to styled export. The
+      // divergence the comment promised to prevent, in the direction it named.
+      where: { id: visitId, practiceId, deletedAt: null },
       select: {
         status: true,
         inputMode: true,
@@ -237,16 +251,20 @@ export async function loadOrComputeNativeTemplateDocxForVisit(
         createdAt: true,
         signedAt: true,
         userId: true,
-        user: { select: { practiceId: true } },
       },
     });
+    // ⚠️ `!visit.user?.practiceId` WAS A CLAUSE HERE AND IS GONE, DELIBERATELY.
+    // It gated eligibility on the AUTHOR having a practice, which no longer
+    // decides anything: the fill below is handed `tenantPracticeId: practiceId`
+    // and `authorUserId: visit.userId`, and `TranscribeVisit.practiceId` is NOT
+    // NULL, so the scope above already guarantees a practice. The guard is
+    // redundant now, not removed-and-unreplaced.
     if (
       !visit ||
       visit.status === 'SIGNED' ||
       !visit.soapFinal ||
       !visit.noteTemplateId ||
-      visit.noteTemplateVersion == null ||
-      !visit.user?.practiceId
+      visit.noteTemplateVersion == null
     ) {
       return { native: null, reason: 'visit_not_eligible' };
     }
@@ -266,11 +284,13 @@ export async function loadOrComputeNativeTemplateDocxForVisit(
 
     await processTemplateTwinVisit({
       visitId,
-      practiceId: visit.user.practiceId,
+      // ⚠️ #287 — THE TENANT. This passed the AUTHOR's practice while line 59
+      // of this same file scoped the visit by the tenant parameter.
+      tenantPracticeId: practiceId,
       // ⚠️ THE VISIT'S OWN DOCTOR, NOT THE REQUESTER. The fill belongs to the
       // record; attributing it to whoever happened to click download would put
       // a colleague's id on the author's document.
-      doctorId: visit.userId,
+      authorUserId: visit.userId,
       noteTemplateId: visit.noteTemplateId,
       noteTemplateVersion: visit.noteTemplateVersion,
       inputMode: mapInputMode(visit.inputMode),

@@ -308,10 +308,46 @@ const NARRATIVE_SENTENCES: ReadonlyMap<string, string> = new Map([
     'past_medical_history',
     'Past medical history: hypertension and type 2 diabetes mellitus, both longstanding.',
   ],
+  [
+    'past_surgical_history',
+    'Past surgical history: laparoscopic cholecystectomy in twenty nineteen and an appendicectomy in childhood.',
+  ],
   ['family_history', 'Family history: hypertension in one parent; no other significant family history.'],
   [
     'social_history',
-    'Social history: never smoker, occasional alcohol, sedentary office occupation.',
+    'Social history: never smoker, occasional alcohol, sedentary office occupation, married.',
+  ],
+  // #246 family 2 — its OWN sentence, because the family sentence above is
+  // matched only for a field mapped to bare `social_history`. A control mapped
+  // to the sub-concept looks itself up first and would otherwise find nothing.
+  [
+    'social_history.marital_status',
+    'Social history, marital status: married.',
+  ],
+  // #246 family 4 — the total is SAID, because the extractor is forbidden from
+  // computing one. A self-test that never states it would leave the control
+  // not_mentioned and prove nothing about the concept.
+  [
+    'total_time_minutes',
+    'A total time of forty five minutes was spent on this encounter, including counselling and coordination of care.',
+  ],
+  // #247 family 3 — the DICTATED member of `visit_metadata.*`, and the only one
+  // that may appear here.
+  //
+  // ⚠️ `visit_metadata.patient_name` AND `.patient_age` HAVE NO SENTENCE AND
+  // MUST NOT ACQUIRE ONE. A sentence here becomes an `encounter_evidence` fact
+  // in the CERTIFICATION manifest — the artifact ruling #247 says never carries
+  // a real name — and, worse than the PHI question, it would certify the claim
+  // that a patient's name is DICTATED, which is the misattribution this whole
+  // family exists to end. Those two controls are honestly blank at
+  // certification, exactly as DATE OF PROCEDURE has always been, and they fill
+  // at visit time from the record.
+  //
+  // The referrer is a synthetic name in a synthetic encounter, the same class
+  // as every other value in this table.
+  [
+    'visit_metadata.referring_physician',
+    'The patient was referred by Dr. Alan Whitfield for further evaluation.',
   ],
   ['medication', 'Medications: lisinopril ten milligrams daily and metformin five hundred milligrams twice daily.'],
   ['allergy', 'Allergies: no known drug allergies.'],
@@ -327,6 +363,7 @@ const NARRATIVE_SENTENCES: ReadonlyMap<string, string> = new Map([
  *  is read from the form rather than guessed. `test.<slug>.result` is matched
  *  before `exam.` so a study result never reads as an examination. */
 const HPI_CONCEPT = /^hpi\.([a-z0-9_]+)$/;
+const ROS_CONCEPT = /^ros\.([a-z0-9_]+)\.([a-z0-9_]+)$/;
 const EXAM_CONCEPT = /^exam\.([a-z0-9_.]+)$/;
 const TEST_RESULT_CONCEPT = /^test\.([a-z0-9_]+)\.result$/;
 
@@ -354,6 +391,20 @@ function patternedNarrativeSentence(concept: string): string | null {
   if (hpi) {
     return `History of present illness, ${spellSlug(hpi[1])}: gradual, moderate, unchanged over three months.`;
   }
+  // ⚠️ #179(6) — ROS GETS A SENTENCE, OR THE SELF-TEST CANNOT SPEAK TO IT.
+  // The refutation pass found `ros.*` was the only registered patterned family
+  // with no narrative sentence, so NO ros mapping was ever exercised before a
+  // template certified. A family the certification proof cannot drive is a
+  // family whose fields certify on somebody else's evidence.
+  //
+  // The sentence AFFIRMS, deliberately. A denial would be indistinguishable
+  // from the template's own printed denial, so the proof would pass whether or
+  // not the fill worked — the fixture must be able to CONTRADICT the scaffold,
+  // which is the behaviour under test.
+  const ros = ROS_CONCEPT.exec(concept);
+  if (ros) {
+    return `Review of systems, ${spellSlug(ros[1])}: the patient reports ${spellSlug(ros[2])}.`;
+  }
   const exam = EXAM_CONCEPT.exec(concept);
   if (exam) {
     return `Examination of the ${spellSlug(exam[1])}: documented and unremarkable in this synthetic example.`;
@@ -361,8 +412,15 @@ function patternedNarrativeSentence(concept: string): string | null {
   return null;
 }
 
-/** The sentence this generator dictates for a concept, or null. */
-function narrativeSentence(concept: string): string | null {
+/**
+ * The sentence this generator dictates for a concept, or null.
+ *
+ * ⚠️ EXPORTED SO AN ARM CAN DRIVE IT RATHER THAN RE-IMPLEMENT IT — the same
+ * reasoning as `factMatchesMapping`, and exporting changes no behaviour. The
+ * alternative is an arm that reproduces the table-then-pattern lookup inline,
+ * which is a control that passes whatever the shipped lookup happens to do.
+ */
+export function narrativeSentence(concept: string): string | null {
   return NARRATIVE_SENTENCES.get(concept) ?? patternedNarrativeSentence(concept);
 }
 
@@ -370,8 +428,15 @@ function narrativeSentence(concept: string): string | null {
  * ⚠️ A KEY THE EXTRACTOR NEVER EMITS IS A SENTENCE THAT FILLS NOTHING.
  * Driven at module load rather than asserted in a test, because a test proves
  * the shipped table on the day it runs and this proves it on the day it loads.
- * `gate-f5i2-narrative-encounter.test.ts` also asserts it, with a mutation that
- * reddens both.
+ * ⚠️ CORRECTED 2026-09-05: this comment previously claimed
+ * `gate-f5i2-narrative-encounter.test.ts` "also asserts it, with a mutation
+ * that reddens both". IT DOES NOT — that file has ZERO references to this
+ * table, to `offRegistry`, or to this function. The load-time call below is
+ * real and does fire; the claimed test arm never existed. A source comment
+ * asserting coverage that does not exist is worse than no comment, because it
+ * is exactly what the next reader checks INSTEAD of the tests.
+ *
+ * The arm that does assert it is `gate-179-narrative-and-temporality.test.ts`.
  */
 function assertNarrativeKeysAreRegistered(): void {
   const offRegistry = [...NARRATIVE_SENTENCES.keys()].filter((c) => !isRegisteredConcept(c));

@@ -44,6 +44,131 @@ TARGET="${ROTATE_TARGET:-90000}"     # deliberately under F32's limit, so rotati
 BUDGET_CHECK="scripts/check-read-budget.sh"
 SPLITTER="scripts/lib/split-ledger.py"
 
+# ══ #290 — THE STAGED LEDGER IS JUDGED BY THE **REAL GATES**, NOT BY THIS FILE ══
+#
+# ⚠️ THIS SCRIPT'S OWN COMMENT ALREADY CLAIMED THIS STEP EXISTED. It read "the
+# only write to the repository is the swap at the very end, after the
+# post-conditions AND the ledger gates have passed there" — and no ledger gate
+# ran anywhere. A comment describing a step that does not exist is worse than no
+# comment: it is the sentence a reviewer checks against instead of the code.
+#
+# The gates are RUN, never re-implemented here. A bash re-statement of
+# `gate-ledger-reachability` would be a second reader of one rule, and the two
+# would agree until the day one of them was fixed.
+#
+# ⚠️ AND `docs/` AND `scripts/` ARE COPIED, NOT SYMLINKED — MEASURED, NOT
+# ASSUMED. The first version symlinked them, and `find -type f` DOES NOT DESCEND
+# A SYMLINKED DIRECTORY, so the retirement sweep read the head alone instead of
+# the head plus 26 archive files and reported `closure-vocabulary present=0`.
+# The instrument was perfect and the universe it was handed was wrong — the
+# WATCHED-SET failure, in a tree built by this script.
+#
+# The gate set is the two that READ THE LEDGER FILES. `gate-amendment-
+# reachability` is deliberately not here: it measures the whole repository
+# through git, and a staging copy is not a git worktree, so it would answer
+# about the wrong tree — the very failure the paragraph above records.
+ledger_gates_pass_on_stage() {
+  local stage_f="$1" stage_arc="$2" rel_f="$3" rel_arc="$4"
+  local G="$STAGE/gaterepo"
+  local APP="apps/transcribe-md"
+  local gates="src/lib/__tests__/gate-ruling-row-identity.test.ts
+src/lib/__tests__/gate-ledger-reachability.test.ts"
+
+  rm -rf "$G"; mkdir -p "$G/$APP/src/lib/__tests__" || return 2
+  cp -a "$REPO_DIR/docs" "$REPO_DIR/scripts" "$G/" || return 2
+  local e b
+  for e in "$REPO_DIR"/*; do
+    b="$(basename "$e")"
+    case "$b" in docs|apps|scripts) continue ;; esac
+    ln -s "$e" "$G/$b"
+  done
+  ln -s "$REPO_DIR/.git" "$G/.git" 2>/dev/null || true
+  ln -s "$REPO_DIR/$APP/node_modules" "$G/$APP/node_modules" || return 2
+  ln -s "$REPO_DIR/$APP/package.json" "$G/$APP/package.json" || return 2
+
+  # THE OVERLAY: the rotated head and archives, in place of the repository's.
+  cp "$stage_f" "$G/$rel_f" || return 2
+  rm -rf "${G:?}/$rel_arc"; mkdir -p "$G/$rel_arc" || return 2
+  cp -a "$stage_arc/." "$G/$rel_arc/" || return 2
+
+  # ── THE GENERATED INDEX IS **NOT** REGENERATED HERE, AND THAT IS A DECISION ─
+  #
+  # `rotate-ledger.sh` used to call `rulings-index.py` after rotation, guarded
+  # by `[ "$f" = "docs/foundation/RULINGS.md" ]` — and #278 had reassigned `$f`
+  # to the STAGING path long before that line, so the comparison has been FALSE
+  # on every run since. Dead code wearing a guard.
+  #
+  # ⚠️ AND REVIVING IT WOULD BE WORSE THAN THE BUG, WHICH IS WHY IT IS GONE
+  # RATHER THAN FIXED. Measured on the real ledger, 2026-09-08:
+  #
+  #     python3 scripts/lib/rulings-index.py --check
+  #     🔴 rulings-index: REFUSING — 134 existing row(s) would be altered or
+  #        removed. The head is hand-curated; this tool may only ADD.
+  #
+  # The generator is ADD-ONLY by design and the head carries 134 hand-curated
+  # rows it would rewrite. A revived call therefore refuses on every rotation,
+  # turning a dead step into a permanent blocker. Reconciling ADD-ONLY with a
+  # hand-curated head is a decision about what that index IS, not a repair to
+  # make in passing.
+  #
+  # ⚠️ WHAT IS LOST IS STATED RATHER THAN QUIETLY DROPPED: after a rotation of
+  # RULINGS.md the generated index block can name archives whose contents have
+  # moved. The gates below do NOT check that block. Whoever next rotates
+  # RULINGS.md owns it — and the head is under the rotation target today, so
+  # this is not currently reachable.
+
+  local g
+  for g in $gates; do
+    cp "$REPO_DIR/$APP/$g" "$G/$APP/src/lib/__tests__/" || return 2
+  done
+
+  # POSITIVE CONTROL — a run that executed NO test is not a pass. The gates are
+  # copied by name, so a rename upstream would silently empty this set and every
+  # rotation would sail through on an empty suite.
+  local out
+  out="$(cd "$REPO_DIR/$APP" && npx vitest run --no-color --root "$G/$APP" 2>&1)"
+  local rc=$?
+  printf '%s\n' "$out" | sed 's/^/     | /'
+
+  # ⚠️ THE OUTPUT IS STRIPPED OF ANSI BEFORE IT IS MATCHED, AND THAT — NOT
+  # SIGPIPE — IS WHAT BROKE THIS CHECK TWICE.
+  #
+  # vitest COLOURISES under CI and not on a local non-TTY run, so in GitHub
+  # Actions the summary line arrives as
+  #
+  #     Tests \e[22m \e[1m\e[32m43 passed
+  #
+  # with escape sequences sitting between `Tests` and the count. No pattern
+  # expecting whitespace there can match — `grep -qE 'Tests +[0-9]+ passed'`
+  # could not, and neither could the bash regex that replaced it. The staged
+  # gates printed `43 passed` and this said "ran NO tests", in both versions.
+  #
+  # ⚠️ THE FIRST DIAGNOSIS WAS WRONG AND IS RECORDED HERE BECAUSE IT WAS
+  # PLAUSIBLE. It was read as the F30 `printf | grep -q` SIGPIPE class — a real
+  # class, removed from `prune-rollback-tags.sh` the same day — and the fix for
+  # THAT changed nothing, because the failure was never about the pipe. A
+  # local green and a CI red is an ENVIRONMENT difference; SIGPIPE and colour
+  # both explain one, and only measuring the bytes tells them apart.
+  #
+  # `--no-color` above is the cause removed; the strip below is the belt, so a
+  # future runner that colourises anyway cannot silently re-open this.
+  local clean
+  clean="$(printf '%s' "$out" | sed -e 's/\x1b\[[0-9;]*[a-zA-Z]//g')"
+  # ⚠️ TWO INDEPENDENT PARTS, NOT ONE ADJACENCY. Requiring `Tests` and the count
+  # to sit next to each other is what colour broke, and a strip is only as good
+  # as its regex. Asking for the word and for "<n> passed" SEPARATELY cannot be
+  # broken by anything inserted between them — including an escape this strip
+  # does not know about.
+  if ! { [[ "$clean" == *Tests* ]] && [[ "$clean" =~ [0-9]+[[:space:]]+passed ]]; }; then
+    echo "🔴 rotate-ledger: the staged ledger gates ran NO tests. That is CANNOT"
+    echo "   TELL, not a pass — an empty suite is green."
+    return 2
+  fi
+  return $rc
+}
+
+
+
 # ── THE MANIFEST — which ledgers rotate, and what must STAY LIVE in each head ──
 # An anchor that does not match is a FATAL, never a skip: a silent no-op here
 # archives the live queue, which is the one outcome worse than an oversize file.
@@ -129,7 +254,9 @@ fi
 
 # POSITIVE CONTROL: the delegate must actually name files. A budget check that
 # names nothing is a broken instrument, and its silence reads exactly like health.
-if ! printf '%s' "$BUDGET_OUT" | grep -q 'RELAY\.md'; then
+# ⚠️ SAME CLASS, AND THIS ONE PREDATES #290 — a false MISS here reports the
+# budget delegate as not watching RELAY.md when it is.
+if ! [[ "$BUDGET_OUT" == *'RELAY.md'* ]]; then
   echo "🔴 rotate-ledger: CANNOT TELL — the budget check named no ledger."
   echo "   Positive control failed: its output does not mention RELAY.md at all."
   exit 2
@@ -175,6 +302,35 @@ for f in $NEEDED; do
   before_chars="$(wc -m < "$f" | tr -d ' ')"
   before_archives=$(ls -1 "$outdir" 2>/dev/null | wc -l | tr -d ' ')
 
+  # ══ RULING #278 — ATOMIC. THE REAL FILES ARE NOT TOUCHED UNTIL EVERY CHECK
+  #    BELOW HAS PASSED ON A COPY. ═══════════════════════════════════════════
+  #
+  # ⚠️ THIS SCRIPT USED TO MUTATE AND **THEN** REFUSE, AND BOTH LEDGERS WERE
+  # DAMAGED BY IT IN ONE RUN. Its RULINGS pass aborted with "the new head is
+  # 149903 chars, over the 120000 budget" — AFTER the splitter had already
+  # rewritten the head and wiped the archive index from 4 archives / 369,216
+  # chars to "0 archives · 0 chars". Its RELAY pass printed ✔ SUCCESS and did
+  # the same thing; `gate-ledger-reachability` went red with "expected 0 to be
+  # greater than or equal to 20". Both files had to be reverted by hand.
+  #
+  # ⚠️ AND THE REFUSAL ITSELF CLAIMED OTHERWISE — "Nothing was written for this
+  # file. This is CANNOT TELL, not success." That sentence was FALSE at the
+  # moment it printed, because `WRITE_HEAD=1` had already run.
+  #
+  # A script that half-applies is not fixed by making the failure rarer. It is
+  # fixed by making the failure incapable of reaching the file: everything
+  # happens in $STAGE, and the only write to the repository is the swap at the
+  # very end, after the post-conditions AND the ledger gates have passed there.
+  STAGE="$(mktemp -d)"
+  trap 'rm -rf "$STAGE"' EXIT
+  stage_head="$STAGE/$(basename "$f")"
+  stage_out="$STAGE/archives"
+  cp "$f" "$stage_head"
+  mkdir -p "$stage_out"
+  if [ -d "$outdir" ]; then cp -a "$outdir/." "$stage_out/" 2>/dev/null || true; fi
+  real_f="$f"; real_outdir="$outdir"
+  f="$stage_head"; outdir="$stage_out"
+
   dates=$(grep -oE '^#{1,2} .*(20[0-9]{2}-[0-9]{2}-[0-9]{2})' "$f" \
           | grep -oE '20[0-9]{2}-[0-9]{2}-[0-9]{2}' | sort -u)
   chosen=""
@@ -191,6 +347,7 @@ except Exception: print(10**9)' 2>/dev/null)
     LIFT="$lift_json" KEEP_SINCE="$chosen" WRITE_HEAD=1 python3 "$SPLITTER" "$f" "$outdir" || {
       echo "🔴 rotate-ledger: the splitter REFUSED on $f. Its five proofs are mandatory."
       echo "   Nothing was written for this file. This is CANNOT TELL, not success."
+      echo "   (TRUE since #278: the splitter ran against a staging copy.)"
       exit 2; }
   else
     LIFT="$lift_json" WRITE_HEAD=1 python3 "$SPLITTER" "$f" "$outdir" || {
@@ -232,12 +389,36 @@ except Exception: print(10**9)' 2>/dev/null)
   # archive — a heading is the cheapest witness that a section is present, and
   # the splitter's own P3 census already proves headings are neither lost nor
   # invented across the partition.
+  #
+  # ⚠️ AND THE WITNESS MUST **IDENTIFY THE ARC**, WHICH THE FIRST HEADING DOES
+  # NOT. Measured on the real ledger: two archives begin with boilerplate —
+  # `## The index` and `## What is NOT in here, deliberately` — and both of
+  # those lines also live in the head, permanently and correctly. Using the
+  # first heading made this check report duplication for every rotation of
+  # RULINGS.md, so `--apply` on the real ledger REFUSED and rotation was
+  # impossible. A false positive on the one file the script exists to rotate.
+  #
+  # ⚠️ AND "THE FIRST **UNIQUE** HEADING" DOES NOT FIX IT EITHER — measured, not
+  # reasoned. `## The index` appears in exactly ONE archive, so it is unique and
+  # still boilerplate; meanwhile two archives had no unique heading at all and
+  # became CANNOT TELL. Uniqueness is the wrong property.
+  #
+  # An archive here IS a dated arc, so its identifying heading carries a DATE or
+  # a RULING NUMBER. Boilerplate carries neither. That is the witness, and where
+  # an archive has no such heading the answer is CANNOT TELL for that file —
+  # never "no duplication", because finding no witness is the quiet way to pass.
   dup=0
   for arc in "$outdir"/*.md; do
     [ -f "$arc" ] || continue
     case "$(basename "$arc")" in README.md) continue ;; esac
-    h="$(grep -m1 -E '^#{1,3} ' "$arc" 2>/dev/null)"
-    [ -n "$h" ] || continue
+    h="$(grep -E '^#{1,3} ' "$arc" 2>/dev/null \
+         | grep -m1 -E '20[0-9]{2}-[0-9]{2}-[0-9]{2}|#[0-9]+')"
+    if [ -z "$h" ]; then
+      echo "🔴 rotate-ledger: CANNOT TELL — $(basename "$arc") has no heading naming"
+      echo "   a date or a ruling number, so no-duplication cannot be witnessed there."
+      dup=$((dup + 1))
+      continue
+    fi
     if grep -Fxq "$h" "$f"; then
       [ "$dup" -eq 0 ] && echo "🔴 rotate-ledger: CANNOT TELL — content is in BOTH the head and an archive."
       echo "     $(basename "$arc"): $h"
@@ -251,17 +432,70 @@ except Exception: print(10**9)' 2>/dev/null)
     exit 2
   fi
 
-  # ── RULINGS CARRIES A SECOND GENERATED BLOCK, AND ROTATION INVALIDATES IT ──
-  # The rulings index is built FROM the archives, so archiving more rulings
-  # moves rows that the head still claims. Regenerating here keeps the two in
-  # step by construction; leaving it to a human is how an index goes stale
-  # while every gate stays green.
-  if [ "$f" = "docs/foundation/RULINGS.md" ] && [ -f scripts/lib/rulings-index.py ]; then
-    python3 scripts/lib/rulings-index.py || {
-      echo "🔴 rotate-ledger: CANNOT TELL — RULINGS.md was rotated and its index"
-      echo "   could not be regenerated. The head now points at archives that have"
-      echo "   moved. Fix the generator before landing this."
-      exit 2; }
+  # ── THE GENERATED INDEX IS REBUILT IN THE STAGING TREE, NOT HERE ──────────
+  # It used to run at this point, guarded by `[ "$f" = "docs/foundation/RULINGS.md" ]`
+  # — and #278 had already reassigned `$f` to the STAGING path three hundred
+  # lines above, so that comparison has been FALSE on every run since. The
+  # regeneration was dead code wearing a guard.
+  #
+  # ⚠️ AND THE OBVIOUS REPAIR — compare `$real_f` and keep the call here — IS
+  # WORSE THAN THE BUG. `rulings-index.py` derives its ROOT from its own
+  # location, so invoking it as `scripts/lib/rulings-index.py` rewrites the
+  # REPOSITORY's RULINGS.md: a write outside the swap, in the function whose
+  # entire purpose is that there are none. It now runs from the staging tree's
+  # own copy of the script, against the staging tree's own ledger, inside
+  # `ledger_gates_pass_on_stage` — where its output is then judged by the gates
+  # before anything reaches the repository.
+
+  # ── #290: THE REAL LEDGER GATES, ON THE STAGED COPY, BEFORE THE SWAP ──────
+  if ! ledger_gates_pass_on_stage "$f" "$outdir" "$real_f" "$real_outdir"; then
+    echo "🔴 rotate-ledger: THE STAGED LEDGER FAILED ITS OWN GATES. Refusing the swap."
+    echo "   The rotation was computed on a copy and that copy does not satisfy the"
+    echo "   invariants the repository is held to, so it never reaches the repository."
+    echo '   git status is clean; nothing here needs undoing.'
+    exit 2
+  fi
+
+  # ══ THE SWAP — THE ONLY WRITE TO THE REPOSITORY IN THIS WHOLE LOOP. ═══════
+  # Reached only if every post-condition above passed on the staged copy. Until
+  # this line runs, `git status` is clean and a `kill -9` costs nothing.
+  mkdir -p "$real_outdir"
+  cp "$f" "$real_f"
+  cp -a "$outdir/." "$real_outdir/"
+  staged_chars="$after_chars"
+  f="$real_f"; outdir="$real_outdir"
+  rm -rf "$STAGE"; trap - EXIT
+
+  # ⚠️ AND THE SWAP IS VERIFIED, not assumed. `cp` can fail on a full disk or a
+  # read-only tree and this script has already been burned once by trusting a
+  # write it did not check.
+  landed_chars="$(wc -m < "$f" | tr -d ' ')"
+  if [ "$landed_chars" != "$staged_chars" ]; then
+    echo "🔴 rotate-ledger: THE SWAP DID NOT LAND — $f is $landed_chars chars, staged was $staged_chars."
+    echo "   The rotation was computed and proved on a copy and the copy did not"
+    echo "   reach the repository. Nothing here is trustworthy; investigate before rerunning."
+    exit 2
+  fi
+
+  # ══ THE SWAP — THE ONLY WRITE TO THE REPOSITORY IN THIS WHOLE LOOP. ═══════
+  # Reached only if every post-condition above passed on the staged copy. Until
+  # this line runs, `git status` is clean and a `kill -9` costs nothing.
+  mkdir -p "$real_outdir"
+  cp "$f" "$real_f"
+  cp -a "$outdir/." "$real_outdir/"
+  staged_chars="$after_chars"
+  f="$real_f"; outdir="$real_outdir"
+  rm -rf "$STAGE"; trap - EXIT
+
+  # ⚠️ AND THE SWAP IS VERIFIED, not assumed. `cp` can fail on a full disk or a
+  # read-only tree and this script has already been burned once by trusting a
+  # write it did not check.
+  landed_chars="$(wc -m < "$f" | tr -d ' ')"
+  if [ "$landed_chars" != "$staged_chars" ]; then
+    echo "🔴 rotate-ledger: THE SWAP DID NOT LAND — $f is $landed_chars chars, staged was $staged_chars."
+    echo "   The rotation was computed and proved on a copy and the copy did not"
+    echo "   reach the repository. Nothing here is trustworthy; investigate before rerunning."
+    exit 2
   fi
 
   echo "   ✔ $f: $before_chars → $after_chars chars, $before_archives → $(ls -1 "$outdir" 2>/dev/null | wc -l | tr -d ' ') archive files, no duplication"

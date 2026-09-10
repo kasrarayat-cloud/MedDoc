@@ -70,6 +70,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         recoveryCode: { label: 'Recovery', type: 'text' },
       },
       async authorize(credentials) {
+        // ⚠️ #182(4) — HOISTED TO authorize's SCOPE ON PURPOSE. It is set deep
+        // inside the MFA branch and read at the RETURN, so a block-scoped
+        // declaration compiles nowhere useful. It carries the matched recovery
+        // hash forward to the jwt callback, which consumes it only once the
+        // sign-in has actually completed.
+        let pendingRecoveryHash: string | null = null;
         const email =
           typeof credentials?.email === 'string'
             ? credentials.email.trim().toLowerCase()
@@ -239,27 +245,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             if (matched) {
               mfaPassed = true;
               usedRecovery = true;
-              // Drop the consumed recovery code from the array. Best
-              // effort — if this update fails we still let the login
-              // proceed (the alternative is locking the user out
-              // because we couldn't update the audit trail).
-              await prisma.user
-                .update({
-                  where: { id: user.id },
-                  data: {
-                    mfaBackupCodes: {
-                      set: user.mfaBackupCodes.filter(
-                        (h: string) => h !== matched,
-                      ),
-                    },
-                  },
-                })
-                .catch((err: unknown) => {
-                  console.error(
-                    '[auth] recovery-code consumption failed:',
-                    redactPhi(err instanceof Error ? err.message : err),
-                  );
-                });
+              // ⚠️ #182(4) — THE CODE IS NOT CONSUMED HERE ANY MORE. IT IS
+              // CONSUMED ON A **COMPLETED** SIGN-IN.
+              //
+              // `authorize()` runs BEFORE the jwt callback, and #182(c) makes
+              // that callback REFUSE the sign-in when session tracking fails.
+              // Consuming here therefore burned a single-use recovery code on a
+              // sign-in that never completed — and the doctor was then told
+              // "Invalid recovery code", so each retry burned another one. A
+              // doctor with ten codes could exhaust their entire recovery set
+              // against a database blip, while being told the codes were bad.
+              //
+              // The hash is handed forward on the returned user instead, and
+              // `packages/auth`'s jwt callback deletes it AFTER
+              // `recordSessionLogin` has succeeded. ⚠️ It is deliberately NOT
+              // copied onto the token — a recovery-code hash must never travel
+              // in a JWT.
+              pendingRecoveryHash = matched;
             }
           }
 
@@ -313,7 +315,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name: user.name,
           role: user.role as UserRole,
           practiceId: user.practiceId,
-        };
+          // ⚠️ #182(4) — carried to the jwt callback, consumed there ONLY once
+          // the sign-in completes, and never written onto the token.
+          pendingRecoveryHash,
+          mfaBackupCodes: pendingRecoveryHash ? user.mfaBackupCodes : undefined,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any;
       },
     }),
   ],

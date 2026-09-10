@@ -87,7 +87,13 @@ export function manifestMatchesNote(
  */
 export interface OverrideIdentityMember {
   fieldId: string;
-  selectedOptionOrdinal: number;
+  /** NULL for a `scaffold_default` row — the ordinal only names a value on the
+   *  `option` arm. */
+  selectedOptionOrdinal: number | null;
+  /** Absent on rows selected before REVIEW-DEFAULTS widened the table; treated
+   *  as `'option'`, which is what every such row was. */
+  overrideKind?: string | null;
+  insertedText?: string | null;
 }
 
 /**
@@ -100,8 +106,33 @@ export interface OverrideIdentityMember {
 export function overridesIdentity(
   overrides: readonly OverrideIdentityMember[],
 ): string {
+  // ⚠️ THE KIND AND THE INSERTED TEXT ARE PART OF THE IDENTITY, AND OMITTING
+  // THEM WOULD MAKE REVIEW-DEFAULTS SILENTLY DO NOTHING. This hash is what tells
+  // the manifest it is stale. A scaffold-default insert carries a NULL ordinal,
+  // so a tuple of (fieldId, ordinal) would be byte-identical before and after
+  // the click: the manifest would read FRESH, no recompute would run, and the
+  // doctor's inserted default would never reach the document — while every
+  // gate reported success. That is the F24-S5 defect exactly, which is why its
+  // header says being an input is not enough on its own.
+  // ⚠️ AN `option` ROW HASHES EXACTLY AS IT ALWAYS DID — BYTE-IDENTICALLY — AND
+  // THAT IS A COMPATIBILITY REQUIREMENT, NOT A STYLE CHOICE.
+  //
+  // The first version of this widening emitted a 4-tuple for EVERY row. An
+  // adversarial pass measured the consequence: every `overridesSha256` already
+  // stored for a non-empty override set becomes wrong on deploy, so every visit
+  // carrying a dropdown correction reads STALE at once and re-fills. The
+  // migration ships columns and migrates no data, so nothing would have
+  // repaired them.
+  //
+  // So the legacy shape is preserved for the legacy kind, and only a row that
+  // could not have existed before this change gets the longer tuple.
   const canonical = [...overrides]
-    .map((o) => [o.fieldId, o.selectedOptionOrdinal] as const)
+    .map((o) => {
+      const kind = o.overrideKind ?? 'option';
+      return kind === 'option'
+        ? ([o.fieldId, o.selectedOptionOrdinal] as const)
+        : ([o.fieldId, o.selectedOptionOrdinal ?? null, kind, o.insertedText ?? null] as const);
+    })
     .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   return createHash('sha256')
     .update(JSON.stringify(canonical), 'utf8')
@@ -135,7 +166,9 @@ export type DocumentFreshnessReason =
   | 'manifest_note_unknown'
   | 'visit_note_absent'
   | 'note_changed'
-  | 'overrides_changed';
+  | 'overrides_changed'
+  /** #247 — the patient record was written after this manifest was produced. */
+  | 'patient_record_changed';
 
 /**
  * May a stored manifest be served for this visit's current NOTE **and** current
@@ -151,12 +184,49 @@ export function manifestMatchesDocument(input: {
   manifestOverridesSha256: string | null | undefined;
   soapFinal: string | null | undefined;
   currentOverrides: readonly OverrideIdentityMember[];
+  /**
+   * #247 — WHEN THIS MANIFEST WAS PRODUCED, and when the PATIENT RECORD was
+   * last written. Both optional so every existing caller is unchanged.
+   */
+  manifestUpdatedAt?: Date | string | null;
+  patientUpdatedAt?: Date | string | null;
 }): { ok: boolean; reason: DocumentFreshnessReason } {
   const note = manifestMatchesNote(input.manifestNoteSha256, input.soapFinal);
   if (!note.ok) return note as { ok: false; reason: DocumentFreshnessReason };
   const stamped = input.manifestOverridesSha256 ?? EMPTY_OVERRIDES_SHA256;
   if (stamped !== overridesIdentity(input.currentOverrides)) {
     return { ok: false, reason: 'overrides_changed' };
+  }
+  // ⚠️ #247 — THE PATIENT RECORD IS A FILL INPUT NOW, AND IT WAS NOT IN THIS
+  // KEY. Found by a refutation lens on the finished diff, with the sequence
+  // spelled out: the worker fills at T1 carrying the chart's name; the front
+  // desk corrects a misspelling in the patient drawer; the doctor opens the
+  // pre-sign preview, which RECOMPUTES and shows the corrected name; the doctor
+  // signs; this predicate sees an unchanged note and unchanged overrides,
+  // returns `already_fresh` with zero fills, and the signature pins the
+  // manifest carrying the OLD name. **The document reviewed is not the document
+  // signed**, and the frozen manifest asserts under `speaker: 'Patient record'`
+  // a value the patient record does not contain.
+  //
+  // ⚠️ COMPARED BY TIMESTAMP RATHER THAN BY A STAMPED HASH, AND THE TRADE IS
+  // STATED. A `patientSha256` column beside `overridesSha256` is the exact
+  // parallel and is what this should become — it would trigger only on a change
+  // that MATTERS. It needs a migration, so it is not smuggled into a change
+  // that has none. The timestamp is CONSERVATIVE in the safe direction: any
+  // write to the patient row makes the manifest stale and costs one re-fill,
+  // which is the same work a note change already costs. It cannot miss the case
+  // it exists for.
+  //
+  // Absent inputs mean "not asked" — a caller that does not supply them gets
+  // exactly the previous behaviour.
+  if (input.manifestUpdatedAt != null && input.patientUpdatedAt != null) {
+    const made = new Date(input.manifestUpdatedAt).getTime();
+    const changed = new Date(input.patientUpdatedAt).getTime();
+    // A NaN on either side is a cannot-tell, and a cannot-tell about whose name
+    // is on a signed document is a re-fill.
+    if (!Number.isFinite(made) || !Number.isFinite(changed) || changed > made) {
+      return { ok: false, reason: 'patient_record_changed' };
+    }
   }
   return { ok: true, reason: 'match' };
 }

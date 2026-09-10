@@ -16,8 +16,8 @@ import { runTemplateTwinFillStep } from '../template-twin-fill-step';
 
 const INPUT = {
   visitId: 'visit-1',
-  practiceId: 'practice-1',
-  doctorId: 'doctor-1',
+  tenantPracticeId: 'tenant-practice-1',
+  authorUserId: 'author-1',
   noteTemplateId: 'tmpl-1',
   noteTemplateVersion: 1,
   inputMode: 'text_notes',

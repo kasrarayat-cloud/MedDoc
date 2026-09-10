@@ -24,7 +24,7 @@
 // ============================================================================
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { useEffect, useState } from 'react';
 
 import { VisitViewSwitch } from '../visit-view-switch';
@@ -293,12 +293,84 @@ describe('F8-S2 — the coding view', () => {
     expect((screen.getByTestId('icd-reject-E11.9') as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByTestId('icd-accept-K21.00') as HTMLButtonElement).disabled).toBe(true);
 
+
     release(
       new Response(JSON.stringify({ ok: true, changed: true, projection: projectIcdDecisions(BLOB, null) }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
     );
+  });
+
+  it('⚠️ the REASON buttons are disabled in flight — the third control family', () => {
+    // ⚠️ "ANY" IS NOT "EACH". The arm above says to mutate "any"
+    // `disabled={pending !== null}`, and it reaches only accept and reject.
+    // Reverting the REASON buttons to `pending === code` left this file green
+    // and produced TWO concurrent requests — the last-response-wins race the
+    // component's own comment describes, where the doctor watches a decision
+    // they just made disappear.
+    //
+    // Its own arm because opening a row's picker REPLACES that row's
+    // Accept/Reject, so the two assertions cannot share a render.
+    let release: (v: Response) => void = () => {};
+    vi.spyOn(globalThis, 'fetch').mockReturnValue(
+      new Promise<Response>((res) => {
+        release = res;
+      }),
+    );
+    view();
+    fireEvent.click(screen.getByTestId('icd-reject-E11.9')); // open E11.9's picker
+    fireEvent.click(screen.getByTestId('icd-accept-K21.00')); // start a decision on the OTHER code
+    expect(
+      (screen.getByTestId('icd-reason-E11.9-other') as HTMLButtonElement).disabled,
+      'a reason button stayed live while another decision was in flight',
+    ).toBe(true);
+    release(
+      new Response(JSON.stringify({ ok: true, changed: true, projection: projectIcdDecisions(BLOB, null) }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+  });
+
+  it('⚠️ UNDO is disabled in flight too — the fourth control family', () => {
+    // Separate arm because it needs a DECIDED row, which the arm above has not
+    // got. Reverting this one control to `pending === code` left the file green
+    // and produced two concurrent requests.
+    let release: (v: Response) => void = () => {};
+    vi.spyOn(globalThis, 'fetch').mockReturnValue(
+      new Promise<Response>((res) => {
+        release = res;
+      }),
+    );
+    view({ icdDecisions: { 'K21.00': { state: 'accepted', at: AT, byUserId: USER } } });
+    fireEvent.click(screen.getByTestId('icd-accept-E11.9'));
+    expect(
+      (screen.getByTestId('icd-undo-K21.00') as HTMLButtonElement).disabled,
+      'Undo stayed live while another decision was in flight',
+    ).toBe(true);
+    release(
+      new Response(JSON.stringify({ ok: true, changed: true, projection: projectIcdDecisions(BLOB, null) }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+  });
+
+  it('⚠️ the FROZEN notice and the SIGNED title are ABSENT on an unsigned visit', () => {
+    // The absence partner. Presence was asserted; absence was not, so forcing
+    // `readonly` true left the file green — and the surface then tells a doctor
+    // the visit is signed and frozen while the Accept button beside it works.
+    // An absent field is content they did not see; a WRONG field says the
+    // opposite of the record in front of them.
+    const v = within(view().container);
+    expect(v.queryByTestId('icd-frozen-notice')).toBeNull();
+    expect(v.getByTestId('icd-ledger-title').textContent).toContain('ready to sign');
+    expect(v.getByTestId('icd-ledger-title').textContent).not.toContain('signed');
+    // Non-vacuity: the same two flip on a signed visit.
+    const r = within(view({ readonly: true }).container);
+    expect(r.getByTestId('icd-frozen-notice')).toBeTruthy();
+    expect(r.getByTestId('icd-ledger-title').textContent).toContain('signed');
   });
 
   it('Accept sends no reason key at all', () => {
@@ -343,6 +415,235 @@ describe('F8-S2 — the coding view', () => {
     expect(readIcdDecisions({
       'K21.00': { state: 'rejected', at: AT, byUserId: USER, reason: 'wrong_specificity' },
     })['K21.00']?.reason).toBe('wrong_specificity');
+  });
+
+  // -------------------------------------------------------------------------
+  // 4 · THE LEDGER — three properties the T2 conversion left unguarded
+  // -------------------------------------------------------------------------
+  // ⚠️ FOUND BY MUTATION, NOT BY REVIEW. The conversion from decision-state
+  // SECTIONS to category sections with per-row states passed all sixteen arms
+  // above unchanged — and then three separate mutations passed them too:
+  //
+  //   deleting the Undo branch outright        → 16 passed
+  //   offering Accept/Reject on a DECIDED row  → 16 passed
+  //   rendering one flat list, ungrouped       → 16 passed
+  //
+  // The Undo one is the finding. Before this block, the ONLY reference to
+  // `icd-undo-*` in the entire repository asserted that it is ABSENT when the
+  // note is signed. A suite that names a control exactly once, to require its
+  // absence, is satisfied by deleting the feature — so a doctor losing the
+  // ability to take back a mis-click would have shipped green.
+
+  it('⚠️ UNDO IS OFFERED ON A DECIDED ROW — the only reference to it asserted its ABSENCE', () => {
+    // The biconditional, both directions, because presence alone is satisfied
+    // by a control rendered on every row and absence alone by no control at all.
+    // ⚠️ SCOPED TO EACH RENDER'S OWN CONTAINER. `screen` queries
+    // `document.body`, which holds BOTH renders — the second would satisfy an
+    // absence assertion written about the first.
+    const a = within(
+      view({ icdDecisions: { 'K21.00': { state: 'accepted', at: AT, byUserId: USER } } }).container,
+    );
+    expect(a.getByTestId('icd-undo-K21.00')).toBeTruthy();
+    expect(a.queryByTestId('icd-undo-E11.9'), 'a HELD row must not offer Undo').toBeNull();
+
+    // A REJECTED row is the other decided state and reaches the branch by a
+    // different arm of the same condition — deleting either half must red.
+    const b = within(
+      view({
+        icdDecisions: { 'E11.9': { state: 'rejected', at: AT, byUserId: USER, reason: 'not_supported_by_note' } },
+      }).container,
+    );
+    expect(b.getByTestId('icd-undo-E11.9')).toBeTruthy();
+  });
+
+  it('⚠️ Undo actually sends `cleared` — a button that renders is not a button that works', () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, changed: true, projection: projectIcdDecisions(BLOB, null) }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    view({ icdDecisions: { 'K21.00': { state: 'accepted', at: AT, byUserId: USER } } });
+    fireEvent.click(screen.getByTestId('icd-undo-K21.00'));
+    const body = JSON.parse(String((fetchSpy.mock.calls[0][1] as RequestInit).body));
+    // ⚠️ THE WIRE FIELD IS `decision`. This arm first asserted `body.state`
+    // and went red against working code — the row's five STATES and the
+    // request's three DECISIONS are different vocabularies, and only the
+    // component is authoritative about which one goes on the wire.
+    expect(body.decision).toBe('cleared');
+    expect(body.code).toBe('K21.00');
+  });
+
+  it('⚠️ a DECIDED row offers NO Accept and NO Reject — it is changed by Undo alone', () => {
+    // Re-deciding a decided code would write a second record over the first
+    // with no trace that the doctor had changed their mind; the surface offers
+    // exactly one way back, and it is the one that clears.
+    view({ icdDecisions: { 'K21.00': { state: 'accepted', at: AT, byUserId: USER } } });
+    expect(screen.queryByTestId('icd-accept-K21.00')).toBeNull();
+    expect(screen.queryByTestId('icd-reject-K21.00')).toBeNull();
+    // The HELD row beside it still offers both — otherwise this passes by the
+    // surface offering nothing to anyone.
+    expect(screen.getByTestId('icd-accept-E11.9')).toBeTruthy();
+    expect(screen.getByTestId('icd-reject-E11.9')).toBeTruthy();
+  });
+
+  it('⚠️ the rows are GROUPED BY CATEGORY in the DOM, not merely in the helper', () => {
+    // `gate-icd-ledger-sections` pins the pure function. Nothing pinned that
+    // the VIEW calls it: replacing the grouping with one flat "Diagnoses"
+    // section left all sixteen arms green.
+    view({
+      icdCodes: {
+        codes: [
+          { code: 'K21.00', description: 'GERD without esophagitis', confidence: 0.92 },
+          { code: 'Z13.220', description: 'Encounter for screening for lipoid disorders', confidence: 0.7 },
+        ],
+        dropped: [],
+      },
+    });
+    const dx = screen.getByTestId('icd-section-diagnoses');
+    const hx = screen.getByTestId('icd-section-history-screening');
+    expect(dx.textContent).toContain('K21.00');
+    expect(dx.textContent, 'a Z code is not a diagnosis').not.toContain('Z13.220');
+    expect(hx.textContent).toContain('Z13.220');
+    expect(hx.textContent, 'a diagnosis is not history or screening').not.toContain('K21.00');
+  });
+
+  it('⚠️ THE ROW STATE REACHES THE ACCESSIBILITY TREE AS TEXT, not colour alone', () => {
+    // Found by the adversarial pass. The three sections this row replaced
+    // carried the state in a HEADING; moving it onto the row moved it into
+    // `data-state` and a CSS tint, and `ICD_ROW_STATE_LABEL` was rendered
+    // nowhere. On a signed visit an accepted row and a held row were
+    // byte-identical in text. WCAG 1.4.1, on the surface a doctor attests from.
+    const v = within(
+      view({
+        readonly: true,
+        icdDecisions: { 'K21.00': { state: 'accepted', at: AT, byUserId: USER } },
+      }).container,
+    );
+    // K21.00 is decided, E11.9 is not — and the two must differ IN TEXT.
+    const decided = v.getByTestId('icd-card-K21.00').textContent ?? '';
+    const held = v.getByTestId('icd-card-E11.9').textContent ?? '';
+    expect(decided).toContain('Pre-accepted');
+    expect(held).toContain('Held for review');
+    expect(decided, 'the two states were byte-identical in text').not.toEqual(held);
+  });
+
+  it('⚠️ A MACHINE-WRITTEN ACCEPTANCE SAYS SO, where every auto-accept lands', () => {
+    // The orphaned sentence was made provenance-aware and the ROW was not — but
+    // `orphaned` is documented as unreachable today, while every auto-accept
+    // lands here as `pre-accepted`. So the surface distinguished machine from
+    // doctor only in the one bucket that cannot fire.
+    const machine = within(
+      view({
+        readonly: true,
+        icdDecisions: { 'K21.00': { state: 'accepted', at: AT, byUserId: USER, auto: true } },
+      }).container,
+    );
+    expect(machine.getByTestId('icd-card-K21.00').textContent).toContain(
+      'accepted automatically at signing',
+    );
+
+    // The doctor's OWN acceptance must NOT say it — otherwise this passes by
+    // labelling everything as machine-written, which is the mirror harm.
+    const human = within(
+      view({
+        readonly: true,
+        icdDecisions: { 'K21.00': { state: 'accepted', at: AT, byUserId: USER } },
+      }).container,
+    );
+    expect(human.getByTestId('icd-card-K21.00').textContent).not.toContain('automatically');
+  });
+
+  it('⚠️ THE PROVENANCE WORD IS VISIBLE TEXT — `auto` vs `you` — ruling #187(2)', () => {
+    // Ruled visible AS TEXT and never as colour, because a tint does not survive
+    // a greyscale print or a colour-vision-deficient reader. The hidden
+    // accessibility label answers assistive technology; this answers the doctor
+    // looking at the screen. They are not alternatives.
+    const machine = within(
+      view({
+        readonly: true,
+        icdDecisions: { 'K21.00': { state: 'accepted', at: AT, byUserId: USER, auto: true } },
+      }).container,
+    );
+    const mRow = machine.getByTestId('icd-card-K21.00');
+    expect(mRow.querySelector('.qm-icd-row-prov')?.textContent).toBe('auto');
+
+    const human = within(
+      view({
+        readonly: true,
+        icdDecisions: { 'K21.00': { state: 'accepted', at: AT, byUserId: USER } },
+      }).container,
+    );
+    const hRow = human.getByTestId('icd-card-K21.00');
+    expect(hRow.querySelector('.qm-icd-row-prov')?.textContent).toBe('you');
+  });
+
+  it('⚠️ the word does NOT replace the hidden label — the ruling keeps BOTH', () => {
+    // The obvious "simplification" is to drop the visually-hidden text now that
+    // a visible word exists. That re-opens half the defect: the hidden text
+    // carries the STATE, which the provenance word does not, and it is what
+    // restores the parity the pre-conversion section headings gave assistive
+    // technology.
+    const v = within(
+      view({
+        readonly: true,
+        icdDecisions: { 'K21.00': { state: 'accepted', at: AT, byUserId: USER, auto: true } },
+      }).container,
+    );
+    const row = v.getByTestId('icd-card-K21.00');
+    expect(row.querySelector('.qm-sr-only')?.textContent).toContain('Pre-accepted');
+    expect(row.querySelector('.qm-icd-row-prov')?.textContent).toBe('auto');
+  });
+
+  it('⚠️ a HELD row states NO provenance — there is no decision to attribute', () => {
+    // Printing `you` on a code nobody has decided would assert an attestation
+    // that did not happen. That is the wrong-field harm, and this arc has
+    // already paid for it once in the orphaned sentence.
+    const v = within(view().container);
+    expect(v.getByTestId('icd-card-E11.9').querySelector('.qm-icd-row-prov')).toBeNull();
+    // Non-vacuity: a decided row in the SAME render does carry one.
+    const w = within(
+      view({ icdDecisions: { 'K21.00': { state: 'accepted', at: AT, byUserId: USER } } }).container,
+    );
+    expect(w.getByTestId('icd-card-K21.00').querySelector('.qm-icd-row-prov')?.textContent).toBe('you');
+  });
+
+  it('a REJECTED row is the doctor’s too — `you`, not blank', () => {
+    const v = within(
+      view({
+        icdDecisions: {
+          'K21.00': { state: 'rejected', at: AT, byUserId: USER, reason: 'wrong_specificity' },
+        },
+      }).container,
+    );
+    expect(v.getByTestId('icd-card-K21.00').querySelector('.qm-icd-row-prov')?.textContent).toBe('you');
+  });
+
+  it('⚠️ an ORPHANED AUTO-ACCEPT is not described as the doctor’s decision', () => {
+    // An auto-accepted code becomes an orphan when `icdCodes` is rewritten on a
+    // visit that already has content. Saying "You decided this code" to a
+    // doctor who never saw it is the WRONG-field harm — worse than saying
+    // nothing, because it asserts an attestation that did not happen.
+    // ⚠️ `within(container)`, NOT the render's own queries — those are bound to
+    // `baseElement` (document.body), which holds BOTH renders. The first draft
+    // of this arm used them and died on "found multiple elements", which is the
+    // LOUD form of a trap whose quiet form is an absence assertion satisfied by
+    // the other render.
+    const auto = within(
+      view({
+        icdDecisions: { 'Z00.00': { state: 'accepted', at: AT, byUserId: USER, auto: true } },
+      }).container,
+    );
+    const sec = auto.getByTestId('icd-section-no-longer-suggested');
+    expect(sec.textContent).toContain('accepted automatically at signing');
+    expect(sec.textContent).not.toContain('You decided');
+
+    // The doctor's OWN orphaned decision still says so — otherwise this passes
+    // by the surface never using the human wording at all.
+    const human = within(
+      view({ icdDecisions: { 'Z00.00': { state: 'accepted', at: AT, byUserId: USER } } }).container,
+    );
+    expect(human.getByTestId('icd-section-no-longer-suggested').textContent).toContain('You decided');
   });
 
   it('an ORPHANED decision is surfaced and is nobody’s default', () => {

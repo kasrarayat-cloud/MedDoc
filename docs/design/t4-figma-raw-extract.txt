@@ -1,0 +1,153 @@
+====================================================================================================
+FRAME     'sign-deliver-pre' [1440x1024] fill=#111115 [VERTICAL gap0 pad 0 0 0 0]
+  FRAME     'ehr-container' [1440x1024] fill=#111115 [VERTICAL gap0 pad 0 0 0 0]
+    FRAME     'ehr-header' [1440x72] fill=#16161b stroke=1.0px #ffffff@0.04 [HORIZONTAL gap0 pad 0 24 0 24 main:SPACE_BETWEEN cross:CENTER]
+      FRAME     'Frame' [428x22] [HORIZONTAL gap16.0 pad 0 0 0 0 cross:CENTER]
+        TEXT      'Marcus Vance' [124x22] fill=#f7f8f8 type=Inter 600 18.0px/22 LEFT text='Marcus Vance'
+        TEXT      '58 M • DOB Oct 12, 1967 • MRN 883-91-22' [288x17] fill=#a1a1a6 type=Inter 400 14.0px/17 LEFT text='58 M • DOB Oct 12, 1967 • MRN 883-91-22'
+      FRAME     'Frame' [290x28] [HORIZONTAL gap8.0 pad 0 0 0 0 cross:CENTER]
+        FRAME     'Frame' [157x28] fill=#1c1c22 radius=6.0 [HORIZONTAL gap0 pad 6 12 6 12]
+          TEXT      'Encounter: Follow-up' [133x16] fill=#f7f8f8@0.75 type=Inter 500 13.0px/16 LEFT text='Encounter: Follow-up'
+        TEXT      'Signed by Dr. Mehta' [125x16] fill=#f7f8f8@0.3 type=Inter 400 13.0px/16 LEFT text='Signed by Dr. Mehta'
+    FRAME     'ehr-body' [1440x952] [HORIZONTAL gap24.0 pad 24 24 24 24]
+      FRAME     'Frame' [320x282] [VERTICAL gap16.0 pad 0 0 0 0]
+        FRAME     'Frame' [320x133] fill=#1c1c22 stroke=1.0px #ffffff@0.04 radius=8.0 [VERTICAL gap12.0 pad 16 16 16 16]
+          TEXT      'ACTIVE PROBLEMS' [132x17] fill=#f7f8f8@0.75 type=Inter 600 14.0px/17 LEFT text='ACTIVE PROBLEMS'
+          TEXT      '• Essential Hypertension (I10)' [183x16] fill=#f7f8f8 type=Inter 400 13.0px/16 LEFT text='• Essential Hypertension (I10)'
+          TEXT      '• Type 2 Diabetes Mellitus (E11.9)' [206x16] fill=#f7f8f8 type=Inter 400 13.0px/16 LEFT text='• Type 2 Diabetes Mellitus (E11.9)'
+          TEXT      '• Hyperlipidemia, unspecified (E78.5)' [229x16] fill=#f7f8f8 type=Inter 400 13.0px/16 LEFT text='• Hyperlipidemia, unspecified (E78.5)'
+        FRAME     'Frame' [320x133] fill=#1c1c22 stroke=1.0px #ffffff@0.04 radius=8.0 [VERTICAL gap12.0 pad 16 16 16 16]
+          TEXT      'VITALS' [50x17] fill=#f7f8f8@0.75 type=Inter 600 14.0px/17 LEFT text='VITALS'
+          FRAME     'Frame' [288x16] [HORIZONTAL gap0 pad 0 0 0 0 main:SPACE_BETWEEN]
+            TEXT      'BP' [17x16] fill=#a1a1a6 type=Inter 400 13.0px/16 LEFT text='BP'
+            TEXT      '128/82 mmHg' [89x16] fill=#f7f8f8 type=Inter 600 13.0px/16 LEFT text='128/82 mmHg'
+          FRAME     'Frame' [288x16] [HORIZONTAL gap0 pad 0 0 0 0 main:SPACE_BETWEEN]
+            TEXT      'HR' [18x16] fill=#a1a1a6 type=Inter 400 13.0px/16 LEFT text='HR'
+            TEXT      '72 bpm' [47x16] fill=#f7f8f8 type=Inter 600 13.0px/16 LEFT text='72 bpm'
+          FRAME     'Frame' [288x16] [HORIZONTAL gap0 pad 0 0 0 0 main:SPACE_BETWEEN]
+            TEXT      'Temp' [35x16] fill=#a1a1a6 type=Inter 400 13.0px/16 LEFT text='Temp'
+            TEXT      '98.6 °F' [46x16] fill=#f7f8f8 type=Inter 600 13.0px/16 LEFT text='98.6 °F'
+      FRAME     'Frame' [1048x904] fill=#1c1c22 stroke=1.0px #ffffff@0.04 radius=12.0 [VERTICAL gap24.0 pad 24 24 24 24]
+        FRAME     'Frame' [1000x24] [HORIZONTAL gap0 pad 0 0 0 0 main:SPACE_BETWEEN cross:CENTER]
+          TEXT      'Outpatient Progress Note' [247x24] fill=#f7f8f8 type=Inter 600 20.0px/24 LEFT text='Outpatient Progress Note'
+          TEXT      'Date of Service: Sep 4, 2026' [177x16] fill=#f7f8f8@0.3 type=Inter 400 13.0px/16 LEFT text='Date of Service: Sep 4, 2026'
+        FRAME     'Frame' [1000x173] [VERTICAL gap16.0 pad 0 0 0 0]
+          FRAME     'Frame' [1000x65] [VERTICAL gap6.0 pad 0 0 0 0]
+            TEXT      'HISTORY OF PRESENT ILLNESS' [212x17] fill=#f7f8f8@0.75 type=Inter 600 14.0px/17 LEFT text='HISTORY OF PRESENT ILLNESS'
+            TEXT      'Patient is a 58-year-old male returning for routine surveillance of hypertension and type 2 diabetes. He reports compliance with current therapeutic regimen. Has noted occasional fatigue post-prandial but denies chest pain, shortness of breath, or lower extremity edema.' [1000x42] fill=#f7f8f8 type=Inter 400 14.0px/21 LEFT text='Patient is a 58-year-old male returning for routine surveillance of hypertension and type 2 diabetes. He reports compliance with current therapeutic regimen. Has noted occasional fatigue post-prandial but denies chest pain, shortness of breath, or lower extremity edema.'
+          FRAME     'Frame' [1000x92] [VERTICAL gap6.0 pad 0 0 0 0]
+            TEXT      'ASSESSMENT & PLAN' [150x17] fill=#f7f8f8@0.75 type=Inter 600 14.0px/17 LEFT text='ASSESSMENT & PLAN'
+            TEXT      '1. Type 2 Diabetes: Suboptimally controlled based on most recent HbA1c of 7.4%. Will titrate Metformin and encourage strict dietary compliance. Scheduled for follow-up chemistry panel.' [1000x42] fill=#f7f8f8 type=Inter 400 14.0px/21 LEFT text='1. Type 2 Diabetes: Suboptimally controlled based on most recent HbA1c of 7.4%. Will titrate Metformin and encourage strict dietary compliance. Scheduled for follow-up chemistry panel.'
+            TEXT      '2. Hypertension: Well-controlled on Lisinopril 20mg daily. Continue current dosage.' [1000x21] fill=#f7f8f8 type=Inter 400 14.0px/21 LEFT text='2. Hypertension: Well-controlled on Lisinopril 20mg daily. Continue current dosage.'
+  RECTANGLE 'scrim-overlay' [1440x1024] fill=#09090c@0.8
+  FRAME     'modal-card-pre' [496x511] fill=#1e1e24 stroke=1.0px #ffffff@0.08 radius=12.0 [VERTICAL gap24.0 pad 24 24 24 24]
+    FRAME     'Frame' [448x52] [VERTICAL gap8.0 pad 0 0 0 0]
+      TEXT      'Sign & deliver' [448x26] fill=#f7f8f8 type=Inter 600 20.0px/26 LEFT text='Sign & deliver'
+      TEXT      'Confirm destination settings and sign off this progress note.' [448x18] fill=#f7f8f8@0.75 type=Inter 400 13.0px/18 LEFT text='Confirm destination settings and sign off this progress note.'
+    FRAME     'Frame' [448x207] [VERTICAL gap0 pad 0 0 0 0]
+      FRAME     'Frame' [448x31] [HORIZONTAL gap0 pad 8 0 8 0]
+        TEXT      'Deliver To' [70x15] fill=#f7f8f8@0.3 type=Inter 600 12.0px/15 LEFT UPPER text='Deliver To'
+      FRAME     'Frame' [448x44] stroke=1.0px #ffffff@0.08 [HORIZONTAL gap12.0 pad 12 0 12 0 cross:CENTER]
+        FRAME     'checkbox-unchecked' [20x20] stroke=1.5px #f7f8f8@0.3 radius=4.0 [HORIZONTAL gap0 pad 0 0 0 0]
+        TEXT      'Copy note to clipboard' [416x17] fill=#f7f8f8 type=Inter 400 14.0px/17 LEFT text='Copy note to clipboard'
+      FRAME     'Frame' [448x44] stroke=1.0px #ffffff@0.08 [HORIZONTAL gap12.0 pad 12 0 12 0 cross:CENTER]
+        FRAME     'checkbox-checked' [20x20] fill=#5b5bd6 radius=4.0 [HORIZONTAL gap0 pad 0 0 0 0 main:CENTER cross:CENTER]
+          FRAME     'check' [12x12]
+            VECTOR    'Vector' [8x5] stroke=2.0px #ffffff
+        TEXT      'Download PDF' [416x17] fill=#f7f8f8 type=Inter 400 14.0px/17 LEFT text='Download PDF'
+      FRAME     'Frame' [448x44] stroke=1.0px #ffffff@0.08 [HORIZONTAL gap12.0 pad 12 0 12 0 cross:CENTER]
+        FRAME     'checkbox-unchecked' [20x20] stroke=1.5px #f7f8f8@0.3 radius=4.0 [HORIZONTAL gap0 pad 0 0 0 0]
+        TEXT      'Download Word' [416x17] fill=#f7f8f8 type=Inter 400 14.0px/17 LEFT text='Download Word'
+      FRAME     'Frame' [448x44] [HORIZONTAL gap12.0 pad 12 0 12 0 cross:CENTER]
+        FRAME     'checkbox-checked' [20x20] fill=#5b5bd6 radius=4.0 [HORIZONTAL gap0 pad 0 0 0 0 main:CENTER cross:CENTER]
+          FRAME     'check' [12x12]
+            VECTOR    'Vector' [8x5] stroke=2.0px #ffffff
+        TEXT      'Email to referring physician' [416x17] fill=#f7f8f8 type=Inter 400 14.0px/17 LEFT text='Email to referring physician'
+    FRAME     'Frame' [448x56] [VERTICAL gap16.0 pad 0 0 0 0]
+      LINE      'Line' [448x0] stroke=1.0px #ffffff@0.08
+      FRAME     'Frame' [448x40] [HORIZONTAL gap12.0 pad 0 0 0 0]
+        FRAME     'checkbox-checked' [20x20] fill=#5b5bd6 radius=4.0 [HORIZONTAL gap0 pad 0 0 0 0 main:CENTER cross:CENTER]
+          FRAME     'check' [12x12]
+            VECTOR    'Vector' [8x5] stroke=2.0px #ffffff
+        TEXT      'I have reviewed this note and attest that it accurately reflects the clinical encounter.' [416x40] fill=#f7f8f8@0.75 type=Inter 400 14.0px/20 LEFT text='I have reviewed this note and attest that it accurately reflects the clinical encounter.'
+    FRAME     'Frame' [448x15] [VERTICAL gap4.0 pad 0 0 0 0]
+      TEXT      'Delivery summary: PDF • to Dr. Ananya Nair' [448x15] fill=#f7f8f8@0.3 type=Inter 400 12.0px/15 LEFT text='Delivery summary: PDF • to Dr. Ananya Nair'
+    FRAME     'Frame' [448x37] [HORIZONTAL gap12.0 pad 0 0 0 0 main:MAX]
+      FRAME     'Frame' [79x37] stroke=1.0px #f7f8f8@0.3 radius=6.0 [HORIZONTAL gap0 pad 10 16 10 16 main:CENTER cross:CENTER]
+        TEXT      'Cancel' [47x17] fill=#f7f8f8@0.75 type=Inter 500 14.0px/17 LEFT text='Cancel'
+      FRAME     'Frame' [129x37] fill=#5b5bd6 radius=6.0 [HORIZONTAL gap0 pad 10 18 10 18 main:CENTER cross:CENTER]
+        TEXT      'Sign & deliver' [93x17] fill=#ffffff type=Inter 600 14.0px/17 LEFT text='Sign & deliver'
+
+====================================================================================================
+FRAME     'sign-deliver-post' [1440x1024] fill=#111115 [VERTICAL gap0 pad 0 0 0 0]
+  FRAME     'ehr-container' [1440x1024] fill=#111115 [VERTICAL gap0 pad 0 0 0 0]
+    FRAME     'ehr-header' [1440x72] fill=#16161b stroke=1.0px #ffffff@0.04 [HORIZONTAL gap0 pad 0 24 0 24 main:SPACE_BETWEEN cross:CENTER]
+      FRAME     'Frame' [428x22] [HORIZONTAL gap16.0 pad 0 0 0 0 cross:CENTER]
+        TEXT      'Marcus Vance' [124x22] fill=#f7f8f8 type=Inter 600 18.0px/22 LEFT text='Marcus Vance'
+        TEXT      '58 M • DOB Oct 12, 1967 • MRN 883-91-22' [288x17] fill=#a1a1a6 type=Inter 400 14.0px/17 LEFT text='58 M • DOB Oct 12, 1967 • MRN 883-91-22'
+      FRAME     'Frame' [290x28] [HORIZONTAL gap8.0 pad 0 0 0 0 cross:CENTER]
+        FRAME     'Frame' [157x28] fill=#1c1c22 radius=6.0 [HORIZONTAL gap0 pad 6 12 6 12]
+          TEXT      'Encounter: Follow-up' [133x16] fill=#f7f8f8@0.75 type=Inter 500 13.0px/16 LEFT text='Encounter: Follow-up'
+        TEXT      'Signed by Dr. Mehta' [125x16] fill=#f7f8f8@0.3 type=Inter 400 13.0px/16 LEFT text='Signed by Dr. Mehta'
+    FRAME     'ehr-body' [1440x952] [HORIZONTAL gap24.0 pad 24 24 24 24]
+      FRAME     'Frame' [320x282] [VERTICAL gap16.0 pad 0 0 0 0]
+        FRAME     'Frame' [320x133] fill=#1c1c22 stroke=1.0px #ffffff@0.04 radius=8.0 [VERTICAL gap12.0 pad 16 16 16 16]
+          TEXT      'ACTIVE PROBLEMS' [132x17] fill=#f7f8f8@0.75 type=Inter 600 14.0px/17 LEFT text='ACTIVE PROBLEMS'
+          TEXT      '• Essential Hypertension (I10)' [183x16] fill=#f7f8f8 type=Inter 400 13.0px/16 LEFT text='• Essential Hypertension (I10)'
+          TEXT      '• Type 2 Diabetes Mellitus (E11.9)' [206x16] fill=#f7f8f8 type=Inter 400 13.0px/16 LEFT text='• Type 2 Diabetes Mellitus (E11.9)'
+          TEXT      '• Hyperlipidemia, unspecified (E78.5)' [229x16] fill=#f7f8f8 type=Inter 400 13.0px/16 LEFT text='• Hyperlipidemia, unspecified (E78.5)'
+        FRAME     'Frame' [320x133] fill=#1c1c22 stroke=1.0px #ffffff@0.04 radius=8.0 [VERTICAL gap12.0 pad 16 16 16 16]
+          TEXT      'VITALS' [50x17] fill=#f7f8f8@0.75 type=Inter 600 14.0px/17 LEFT text='VITALS'
+          FRAME     'Frame' [288x16] [HORIZONTAL gap0 pad 0 0 0 0 main:SPACE_BETWEEN]
+            TEXT      'BP' [17x16] fill=#a1a1a6 type=Inter 400 13.0px/16 LEFT text='BP'
+            TEXT      '128/82 mmHg' [89x16] fill=#f7f8f8 type=Inter 600 13.0px/16 LEFT text='128/82 mmHg'
+          FRAME     'Frame' [288x16] [HORIZONTAL gap0 pad 0 0 0 0 main:SPACE_BETWEEN]
+            TEXT      'HR' [18x16] fill=#a1a1a6 type=Inter 400 13.0px/16 LEFT text='HR'
+            TEXT      '72 bpm' [47x16] fill=#f7f8f8 type=Inter 600 13.0px/16 LEFT text='72 bpm'
+          FRAME     'Frame' [288x16] [HORIZONTAL gap0 pad 0 0 0 0 main:SPACE_BETWEEN]
+            TEXT      'Temp' [35x16] fill=#a1a1a6 type=Inter 400 13.0px/16 LEFT text='Temp'
+            TEXT      '98.6 °F' [46x16] fill=#f7f8f8 type=Inter 600 13.0px/16 LEFT text='98.6 °F'
+      FRAME     'Frame' [1048x904] fill=#1c1c22 stroke=1.0px #ffffff@0.04 radius=12.0 [VERTICAL gap24.0 pad 24 24 24 24]
+        FRAME     'Frame' [1000x24] [HORIZONTAL gap0 pad 0 0 0 0 main:SPACE_BETWEEN cross:CENTER]
+          TEXT      'Outpatient Progress Note' [247x24] fill=#f7f8f8 type=Inter 600 20.0px/24 LEFT text='Outpatient Progress Note'
+          TEXT      'Date of Service: Sep 4, 2026' [177x16] fill=#f7f8f8@0.3 type=Inter 400 13.0px/16 LEFT text='Date of Service: Sep 4, 2026'
+        FRAME     'Frame' [1000x173] [VERTICAL gap16.0 pad 0 0 0 0]
+          FRAME     'Frame' [1000x65] [VERTICAL gap6.0 pad 0 0 0 0]
+            TEXT      'HISTORY OF PRESENT ILLNESS' [212x17] fill=#f7f8f8@0.75 type=Inter 600 14.0px/17 LEFT text='HISTORY OF PRESENT ILLNESS'
+            TEXT      'Patient is a 58-year-old male returning for routine surveillance of hypertension and type 2 diabetes. He reports compliance with current therapeutic regimen. Has noted occasional fatigue post-prandial but denies chest pain, shortness of breath, or lower extremity edema.' [1000x42] fill=#f7f8f8 type=Inter 400 14.0px/21 LEFT text='Patient is a 58-year-old male returning for routine surveillance of hypertension and type 2 diabetes. He reports compliance with current therapeutic regimen. Has noted occasional fatigue post-prandial but denies chest pain, shortness of breath, or lower extremity edema.'
+          FRAME     'Frame' [1000x92] [VERTICAL gap6.0 pad 0 0 0 0]
+            TEXT      'ASSESSMENT & PLAN' [150x17] fill=#f7f8f8@0.75 type=Inter 600 14.0px/17 LEFT text='ASSESSMENT & PLAN'
+            TEXT      '1. Type 2 Diabetes: Suboptimally controlled based on most recent HbA1c of 7.4%. Will titrate Metformin and encourage strict dietary compliance. Scheduled for follow-up chemistry panel.' [1000x42] fill=#f7f8f8 type=Inter 400 14.0px/21 LEFT text='1. Type 2 Diabetes: Suboptimally controlled based on most recent HbA1c of 7.4%. Will titrate Metformin and encourage strict dietary compliance. Scheduled for follow-up chemistry panel.'
+            TEXT      '2. Hypertension: Well-controlled on Lisinopril 20mg daily. Continue current dosage.' [1000x21] fill=#f7f8f8 type=Inter 400 14.0px/21 LEFT text='2. Hypertension: Well-controlled on Lisinopril 20mg daily. Continue current dosage.'
+  RECTANGLE 'scrim-overlay-post' [1440x1024] fill=#09090c@0.8
+  FRAME     'modal-card-post' [496x406] fill=#1e1e24 stroke=1.0px #ffffff@0.08 radius=12.0 [VERTICAL gap24.0 pad 24 24 24 24]
+    FRAME     'Frame' [448x94] [VERTICAL gap8.0 pad 0 0 0 0]
+      FRAME     'Frame' [153x16] [HORIZONTAL gap8.0 pad 0 0 0 0 cross:CENTER]
+        FRAME     'shield-check' [16x16]
+          VECTOR    'Vector' [11x13] stroke=2.0px #5b5bd6
+        TEXT      'DOCUMENT SIGNED' [129x16] fill=#5b5bd6 type=Inter 600 13.0px/16 LEFT text='DOCUMENT SIGNED'
+      TEXT      'Export signed note' [448x26] fill=#f7f8f8 type=Inter 600 20.0px/26 LEFT text='Export signed note'
+      TEXT      'The progress note has been successfully locked. Deliver to required destinations.' [448x36] fill=#f7f8f8@0.75 type=Inter 400 13.0px/18 LEFT text='The progress note has been successfully locked. Deliver to required destinations.'
+    FRAME     'Frame' [448x168] [VERTICAL gap0 pad 0 0 0 0]
+      FRAME     'Frame' [448x42] stroke=1.0px #ffffff@0.08 [HORIZONTAL gap12.0 pad 12 0 12 0 cross:CENTER]
+        TEXT      'Copy note to clipboard' [418x17] fill=#f7f8f8 type=Inter 400 14.0px/17 LEFT text='Copy note to clipboard'
+        FRAME     'clipboard-copy' [18x18]
+          VECTOR    'Vector' [13x15] stroke=2.0px #f7f8f8@0.75
+      FRAME     'Frame' [448x42] stroke=1.0px #ffffff@0.08 [HORIZONTAL gap12.0 pad 12 0 12 0 cross:CENTER]
+        TEXT      'Download PDF' [418x17] fill=#f7f8f8 type=Inter 400 14.0px/17 LEFT text='Download PDF'
+        FRAME     'file-down' [18x18]
+          VECTOR    'Vector' [12x15] stroke=2.0px #f7f8f8@0.75
+      FRAME     'Frame' [448x42] stroke=1.0px #ffffff@0.08 [HORIZONTAL gap12.0 pad 12 0 12 0 cross:CENTER]
+        TEXT      'Download Word' [418x17] fill=#f7f8f8 type=Inter 400 14.0px/17 LEFT text='Download Word'
+        FRAME     'file-down' [18x18]
+          VECTOR    'Vector' [12x15] stroke=2.0px #f7f8f8@0.75
+      FRAME     'Frame' [448x42] [HORIZONTAL gap12.0 pad 12 0 12 0 cross:CENTER]
+        TEXT      'Send email to Dr. Nair' [418x17] fill=#f7f8f8 type=Inter 400 14.0px/17 LEFT text='Send email to Dr. Nair'
+        FRAME     'send-horizontal' [18x18]
+          VECTOR    'Vector' [14x14] stroke=2.0px #f7f8f8@0.75
+    LINE      'Line' [448x0] stroke=1.0px #ffffff@0.08
+    FRAME     'Frame' [448x24] [HORIZONTAL gap0 pad 0 0 0 0 main:SPACE_BETWEEN cross:CENTER]
+      TEXT      'Signed by Dr. Priya Mehta • Sep 4, 2026 09:15' [264x15] fill=#f7f8f8@0.3 type=Inter 400 12.0px/15 LEFT text='Signed by Dr. Priya Mehta • Sep 4, 2026 09:15'
+      FRAME     'Frame' [80x24] [HORIZONTAL gap0 pad 4 0 4 0 cross:CENTER]
+        TEXT      'Export again' [80x16] fill=#f7f8f8@0.75 type=Inter 600 13.0px/16 LEFT text='Export again'
+

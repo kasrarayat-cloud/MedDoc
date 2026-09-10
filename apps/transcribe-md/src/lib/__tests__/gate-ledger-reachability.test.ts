@@ -77,6 +77,9 @@ describe('rotate-ledger: every manifest anchor exists in the file it names', () 
 // `WRITE_HEAD` gates the head rewrite inside the splitter. Without it the
 // archives are written, the head is untouched, and the script reports success —
 // so the content exists twice and the head is still oversize.
+/** #265(c) — ONE budget for the subprocess AND its `it`. */
+const SWEEP_BUDGET_MS = 20_000;
+
 describe('rotate-ledger: --apply passes WRITE_HEAD, and refuses to claim a rotation it did not perform', () => {
   const src = R('scripts/rotate-ledger.sh');
 
@@ -226,6 +229,16 @@ describe('the standing instructions name the archive directories', () => {
     expect(s).not.toMatch(/grep -qE '\^#\+ \(✅\|🟢\) F\[0-9\]\+ —' "\$LEDGER"/);
   });
 
+  // ⚠️ ONE BUDGET, USED TWICE — #265(c). It was `timeout: 90_000` inside an
+  // `it` that stated `20_000`, so the subprocess clock could never be reached:
+  // vitest kills the test at 20s whatever the child is doing. The 90s described
+  // an intention nothing enforced, and the number that actually governed was in
+  // a different place. Same shape as `c4e778a2`, at a different ratio.
+  //
+  // 20s is the REAL clock and the measurement below is why it is the survivor:
+  // the arm runs in ~3.0s warm and 4.5s cold, so 20s is a ~4.4x margin under
+  // parallel load. Raising both to 90s would only make a hang take 90s to
+  // report.
   // The sweep shells out and walks head + archives: ~3.0s warm, and a COLD
   // worktree measured 4.5s — past vitest's 5s default, which turned a passing
   // gate red on a fresh checkout. A false red costs a citation; the arm is not
@@ -238,13 +251,13 @@ describe('the standing instructions name the archive directories', () => {
         cwd: REPO,
         encoding: 'utf8',
         stdio: 'pipe',
-        timeout: 90_000,
+        timeout: SWEEP_BUDGET_MS,
       });
     } catch (e) {
       out = String((e as { stdout?: string }).stdout ?? '');
     }
     expect(out).toContain('ledger closure-vocabulary present=1');
-  }, 20_000);
+  }, SWEEP_BUDGET_MS);
 });
 
 describe('RULINGS — one number, one ruling', () => {
@@ -291,6 +304,92 @@ describe('RULINGS — one number, one ruling', () => {
       dupes.map(([n, c]) => `${n}: ${c} base rows`),
       'two rulings claim the same number — an amendment carries a part marker, a collision does not',
     ).toEqual([]);
+  });
+
+  // ==========================================================================
+  // ⚠️ AN AMENDMENT IMPLIES A BASE ROW — and `#N(x)` is a STRUCTURAL
+  // discriminator, which is why this arm exists and a broader one does not.
+  // --------------------------------------------------------------------------
+  // THE HOLE THIS CLOSES, measured 2026-09-06: `#162` and `#162(b)` are cited on
+  // `main` and have NO base row anywhere — head or archive. Their record lives
+  // on a branch that was never pushed, so the receiving session obeyed
+  // "record the ruling in your FIRST commit" exactly and the commit never left
+  // the machine. A session doing the prescribed two-path grep gets zero and
+  // cannot tell "no such ruling" from "the ruling is on somebody's laptop".
+  //
+  // ⚠️ THE BROADER ARM WAS ATTEMPTED AND REJECTED, WHICH IS WHY THIS ONE IS
+  // NARROW. "Every cited ruling number has a base row" returns 45 violations —
+  // almost all PR numbers, because rulings and PRs SHARE THE `#` SIGIL. The
+  // tempting fix is a range (rulings 93..198, PRs in the three-hundreds and up, disjoint today);
+  // that gate becomes a FALSE ACCUSER the day rulings reach three hundred, and it would
+  // land looking correct. A discriminator that works on the current population
+  // encodes an accident as a rule.
+  //
+  // A PART LETTER IS DIFFERENT: it is structure, not range. Measured across all
+  // of `docs/`, the form `PR #N(x)` occurs **ZERO** times — a part marker never
+  // marks a pull request. So `#N(x)` identifies a ruling by construction, and
+  // stays correct at three hundred and three thousand.
+  //
+  // ⚠️ AND THE HONEST COST, SAID HERE RATHER THAN DISCOVERED LATER: THIS ARM
+  // FIRES NOTHING TODAY. 24 distinct amended numbers, 0 violations. Its value is
+  // PROSPECTIVE — it catches an amendment landing while its base does not, which
+  // is exactly the `#162(b)` shape. A reader must not take its green as evidence
+  // that the ledger has no missing rulings; it cannot see `#179`, which is cited
+  // four times on `main` today with no base row, because nothing cites it with a
+  // part letter. The non-vacuity arm below is what stops this being decorative.
+  // ==========================================================================
+  it('⚠️ every AMENDMENT cited has a base row — structure, not range', () => {
+    // Head + EVERY archive — an amendment may be cited in either, and reading
+    // only the head is the 2026-08-26 split's own failure mode.
+    const archiveDir = join(REPO, 'docs/foundation/rulings');
+    const corpus = [
+      R(RULINGS),
+      ...readdirSync(archiveDir)
+        .filter((f) => f.endsWith('.md'))
+        .map((f) => readFileSync(join(archiveDir, f), 'utf8')),
+    ].join('\n');
+    const amended = new Set([...corpus.matchAll(/#(\d+)\s*\([a-z]\)/g)].map((m) => m[1]!));
+    // ⚠️ BASE ROWS SPAN HEAD **AND** ARCHIVES, and the first draft of this arm
+    // read the head alone. `rulingRows()` is head-only — correct for the
+    // one-row-per-number arm, wrong here — so every ruling whose base row was
+    // ARCHIVED read as orphaned: 24 false accusations, including #100, #103,
+    // #106 and #109. Exactly the thing this arm's own comment says it refuses to
+    // ship, caught only by running it. The 2026-08-26 split moved those bodies;
+    // an instrument that reads one path answers about one path.
+    const base = new Set([
+      ...rulingRows().filter((r) => !PART.test(r.title)).map((r) => r.num),
+      ...[...corpus.matchAll(/^\|\s*[0-9]{4}-[0-9]{2}-[0-9]{2}\s*\|\s*\*?\*?#(\d+)/gm)].map(
+        (m) => m[1]!,
+      ),
+    ]);
+
+    // POSITIVE CONTROL — the extraction must actually find amendments, or the
+    // set difference below is empty for the wrong reason and the arm is green
+    // because it looked at nothing.
+    expect(
+      amended.size,
+      'no amendments extracted — the pattern found nothing, so this arm proves nothing',
+    ).toBeGreaterThanOrEqual(20);
+    expect(base.size, 'no base rows extracted').toBeGreaterThanOrEqual(50);
+
+    const orphaned = [...amended].filter((n) => !base.has(n)).sort();
+    expect(
+      orphaned,
+      'these amendments are cited with no base ruling row — an amendment landed ' +
+        'while its base did not, which is the #162(b) shape: the amendment is ' +
+        'readable and the thing it amends is not',
+    ).toEqual([]);
+  });
+
+  it('⚠️ NON-VACUITY — the arm above CAN fail, proved on a synthetic corpus', () => {
+    // Without this, "0 violations" is indistinguishable from "the check does
+    // nothing". A real amendment number, with its base row withheld.
+    const amended = new Set(['162']);
+    const base = new Set(['163', '164']);
+    const orphaned = [...amended].filter((n) => !base.has(n));
+    expect(orphaned).toEqual(['162']);
+    // ...and it passes when the base IS present, so it is not always-red either.
+    expect([...amended].filter((n) => new Set(['162', '163']).has(n) === false)).toEqual([]);
   });
 
   it('a part letter is never reused within one ruling number', () => {

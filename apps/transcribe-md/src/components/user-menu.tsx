@@ -14,6 +14,8 @@ import { useRouter } from 'next/navigation';
 import { Settings, LogOut } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 
+import { toast } from 'sonner';
+
 import { signOutAction } from '@/actions/session';
 
 interface UserMenuProps {
@@ -142,7 +144,14 @@ export function UserMenu({ name, email }: UserMenuProps) {
           <DropdownMenu.Item
             onSelect={async (e) => {
               e.preventDefault();
-              await signOutAction();
+              // ⚠️ #182(2)/(3) — the result is rendered. See command-palette.tsx
+              // for why both of these were missed: the door list was authored,
+              // not enumerated.
+              const result = await signOutAction();
+              if (!result.ok) {
+                toast.error('Sign-out failed', { description: result.reason });
+                return;
+              }
               router.push('/login');
               router.refresh();
             }}

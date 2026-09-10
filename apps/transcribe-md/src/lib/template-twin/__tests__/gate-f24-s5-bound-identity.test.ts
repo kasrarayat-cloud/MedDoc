@@ -145,12 +145,12 @@ describe('0 · the fixture is the form these claims are about', () => {
 // 1 · THE BOUND IDENTITY — the root fix. Behavioural, on the real functions.
 // ───────────────────────────────────────────────────────────────────────────
 describe('1 · the bound identity is (note, overrides)', () => {
-  const OV = [{ fieldId: 'ttf_a', selectedOptionOrdinal: 2 }];
+  const OV = [{ kind: 'option' as const, fieldId: 'ttf_a', selectedOptionOrdinal: 2 }];
 
   it('is CANONICAL — row order cannot move it', () => {
     const a = [
-      { fieldId: 'ttf_b', selectedOptionOrdinal: 1 },
-      { fieldId: 'ttf_a', selectedOptionOrdinal: 2 },
+      { kind: 'option' as const, fieldId: 'ttf_b', selectedOptionOrdinal: 1 },
+      { kind: 'option' as const, fieldId: 'ttf_a', selectedOptionOrdinal: 2 },
     ];
     expect(overridesIdentity(a)).toBe(overridesIdentity([...a].reverse()));
   });
@@ -225,6 +225,71 @@ describe('1 · the bound identity is (note, overrides)', () => {
       currentOverrides: OV,
     });
     expect(r.reason).toBe('overrides_changed');
+  });
+
+  it('⚠️ #247 — A PATIENT-RECORD EDIT AFTER THE FILL MAKES THE MANIFEST STALE', () => {
+    // Found by a refutation lens on #247's own diff. The patient record became
+    // a FILL INPUT with family 3 and was not in this key, so: the worker fills
+    // at T1 carrying the chart's name; the front desk corrects a misspelling;
+    // the doctor opens the pre-sign preview, which RECOMPUTES and shows the
+    // corrected name; the doctor signs; this predicate saw an unchanged note
+    // and unchanged overrides, answered `match`, and the signature pinned the
+    // manifest carrying the OLD name. The document reviewed is not the document
+    // signed.
+    const r = manifestMatchesDocument({
+      manifestNoteSha256: noteIdentity(NOTE),
+      manifestOverridesSha256: EMPTY_OVERRIDES_SHA256,
+      soapFinal: NOTE,
+      currentOverrides: [],
+      manifestUpdatedAt: '2026-09-07T10:00:00.000Z',
+      patientUpdatedAt: '2026-09-07T10:05:00.000Z',
+    });
+    expect(r).toEqual({ ok: false, reason: 'patient_record_changed' });
+  });
+
+  it('a record written BEFORE the fill is fresh — it is the one the fill read', () => {
+    const r = manifestMatchesDocument({
+      manifestNoteSha256: noteIdentity(NOTE),
+      manifestOverridesSha256: EMPTY_OVERRIDES_SHA256,
+      soapFinal: NOTE,
+      currentOverrides: [],
+      manifestUpdatedAt: '2026-09-07T10:05:00.000Z',
+      patientUpdatedAt: '2026-09-07T10:00:00.000Z',
+    });
+    expect(r).toEqual({ ok: true, reason: 'match' });
+  });
+
+  it('⚠️ ABSENT INPUTS MEAN "NOT ASKED" — every existing caller is unchanged', () => {
+    // Both members are optional so that adding them could not silently make
+    // every legacy manifest stale. A caller that does not supply them gets
+    // exactly the pre-#247 answer.
+    const r = manifestMatchesDocument({
+      manifestNoteSha256: noteIdentity(NOTE),
+      manifestOverridesSha256: EMPTY_OVERRIDES_SHA256,
+      soapFinal: NOTE,
+      currentOverrides: [],
+    });
+    expect(r).toEqual({ ok: true, reason: 'match' });
+  });
+
+  it('⚠️ AND A CANNOT-TELL IS A RE-FILL, not a pass', () => {
+    // An unparseable timestamp on either side is a question about whose name is
+    // on a signed document, and the honest answer to that is to fill again.
+    for (const [m, p] of [
+      ['not a date', '2026-09-07T10:00:00.000Z'],
+      ['2026-09-07T10:00:00.000Z', 'not a date'],
+    ] as const) {
+      expect(
+        manifestMatchesDocument({
+          manifestNoteSha256: noteIdentity(NOTE),
+          manifestOverridesSha256: EMPTY_OVERRIDES_SHA256,
+          soapFinal: NOTE,
+          currentOverrides: [],
+          manifestUpdatedAt: m,
+          patientUpdatedAt: p,
+        }).reason,
+      ).toBe('patient_record_changed');
+    }
   });
 
   it('the NOTE is still checked first, and its unprovable cases still decline', () => {
@@ -335,7 +400,7 @@ describe('2 · the clinician beats the resolver', () => {
         value: a.value,
         ordinal: a.ordinal,
       }),
-      overrides: [{ fieldId: field.fieldId, selectedOptionOrdinal: b!.ordinal }],
+      overrides: [{ kind: 'option' as const, fieldId: field.fieldId, selectedOptionOrdinal: b!.ordinal }],
       mappings: mappingsFor(ir.fields),
       noteSha256: noteIdentity(NOTE)!,
     });
@@ -358,7 +423,7 @@ describe('2 · the clinician beats the resolver', () => {
         value: a.value,
         ordinal: a.ordinal,
       }),
-      overrides: [{ fieldId: field.fieldId, selectedOptionOrdinal: 9999 }],
+      overrides: [{ kind: 'option' as const, fieldId: field.fieldId, selectedOptionOrdinal: 9999 }],
       mappings: mappingsFor(ir.fields),
       noteSha256: noteIdentity(NOTE)!,
     });
@@ -398,7 +463,7 @@ describe('2 · the clinician beats the resolver', () => {
     const out = applyClinicianOverrides({
       ir,
       resolutions: resolutionsWith(ir.fields, null),
-      overrides: [{ fieldId: field.fieldId, selectedOptionOrdinal: 0 }],
+      overrides: [{ kind: 'option' as const, fieldId: field.fieldId, selectedOptionOrdinal: 0 }],
       mappings: mappingsFor(ir.fields),
       noteSha256: noteIdentity(NOTE)!,
     });
@@ -412,7 +477,7 @@ describe('2 · the clinician beats the resolver', () => {
     const out = applyClinicianOverrides({
       ir,
       resolutions: resolutionsWith(ir.fields, null),
-      overrides: [{ fieldId: 'ttf_' + 'f'.repeat(24), selectedOptionOrdinal: 1 }],
+      overrides: [{ kind: 'option' as const, fieldId: 'ttf_' + 'f'.repeat(24), selectedOptionOrdinal: 1 }],
       mappings: mappingsFor(ir.fields),
       noteSha256: noteIdentity(NOTE)!,
     });
@@ -423,7 +488,7 @@ describe('2 · the clinician beats the resolver', () => {
     const out = applyClinicianOverrides({
       ir,
       resolutions: resolutionsWith(ir.fields, null),
-      overrides: [{ fieldId: selects[0].fieldId, selectedOptionOrdinal: selects[0].allowedOptions[0].ordinal }],
+      overrides: [{ kind: 'option' as const, fieldId: selects[0].fieldId, selectedOptionOrdinal: selects[0].allowedOptions[0].ordinal }],
       mappings: mappingsFor(ir.fields),
       noteSha256: noteIdentity(NOTE)!,
     });
@@ -439,7 +504,7 @@ describe('2 · the clinician beats the resolver', () => {
       const out = applyClinicianOverrides({
         ir,
         resolutions: resolutionsWith(ir.fields, null),
-        overrides: [{ fieldId: field.fieldId, selectedOptionOrdinal: opt.ordinal }],
+        overrides: [{ kind: 'option' as const, fieldId: field.fieldId, selectedOptionOrdinal: opt.ordinal }],
         mappings: mappingsFor(ir.fields),
         noteSha256: noteIdentity(NOTE)!,
       });
@@ -471,7 +536,7 @@ describe('3 · the fill actually applies the correction', () => {
       markerText: undefined,
       generatedNote: opts.withNote ? NOTE : undefined,
       clinicianOverrides: opts.withOverride
-        ? [{ fieldId: field.fieldId, selectedOptionOrdinal: opt.ordinal }]
+        ? [{ kind: 'option' as const, fieldId: field.fieldId, selectedOptionOrdinal: opt.ordinal }]
         : [],
     });
     return {
@@ -516,7 +581,7 @@ describe('3 · the fill actually applies the correction', () => {
       visitDate: new Date('2026-08-24T00:00:00.000Z'),
       markerText: undefined,
       generatedNote: NOTE,
-      clinicianOverrides: [{ fieldId: field.fieldId, selectedOptionOrdinal: 9999 }],
+      clinicianOverrides: [{ kind: 'option' as const, fieldId: field.fieldId, selectedOptionOrdinal: 9999 }],
     });
     const issues = prepared.manifest.validation.issues.filter(
       (i) => i.code === 'CLINICIAN_OVERRIDE_DECLINED',

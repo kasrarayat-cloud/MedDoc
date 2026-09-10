@@ -9,6 +9,9 @@
 
 import { createHash } from 'node:crypto';
 
+import { conceptSegment } from '../concept-segment';
+import { ROS_OTHER, readableRosToken, rosConcept } from '../ros-lexicon';
+
 import {
   EncounterFactSchema,
   type EncounterFact,
@@ -54,6 +57,11 @@ export interface EncounterEntitySnapshot {
   past_medical_history?: ReadonlyArray<
     EvidenceSnapshot & { condition: string }
   >;
+  /** #246 family 1. ⚠️ OPTIONAL, per canon 133 — every existing caller and
+   *  every fixture builds this snapshot without the key. */
+  past_surgical_history?: ReadonlyArray<
+    EvidenceSnapshot & { procedure: string }
+  >;
   medications?: ReadonlyArray<
     EvidenceSnapshot & {
       name: string;
@@ -78,7 +86,16 @@ export interface EncounterEntitySnapshot {
     alcohol?: (EvidenceSnapshot & { status: string }) | null;
     drugs?: (EvidenceSnapshot & { status: string }) | null;
     occupation?: (EvidenceSnapshot & { value: string }) | null;
+    /** #246 family 2 — keyed `status`, matching the three status-shaped
+     *  siblings rather than occupation's `value`. The projector reads this
+     *  key literally; there is no shared constant binding the two. */
+    marital_status?: (EvidenceSnapshot & { status: string }) | null;
   };
+  /** #246 family 4 — a NUMBER on the extraction axis (canon 134). */
+  total_time_minutes?: (EvidenceSnapshot & { minutes: number }) | null;
+  /** #247 family 3 — the DICTATED referrer. Keyed `name`, matching the L3
+   *  field; optional for canon 133's hand-mirrored-interface reason. */
+  referring_physician?: (EvidenceSnapshot & { name: string }) | null;
   ros?: ReadonlyArray<
     EvidenceSnapshot & {
       system: string;
@@ -88,6 +105,12 @@ export interface EncounterEntitySnapshot {
        *  still projects, falling back to the inference it always used. */
       polarity?: 'affirmed' | 'denied';
       laterality?: 'left' | 'right' | 'bilateral';
+      /** The doctor's own words, set by L3's resolver ONLY when an
+       *  off-lexicon symptom was coerced to `other`. Optional here (not in the
+       *  L3 schema) so a snapshot captured before the field existed still
+       *  projects, byte-identically. */
+      finding_verbatim?: string;
+      system_verbatim?: string;
     }
   >;
   exam_findings?: ReadonlyArray<
@@ -124,6 +147,16 @@ interface AddFactOptions {
   /** Structured overrides. Prose paths leave these unset and keep the inferred
    *  values, so every existing fact is byte-identical. */
   polarity?: EncounterFact['polarity'];
+  /**
+   * A STATED tense, the sibling of the stated polarity above.
+   *
+   * ⚠️ #247 — IT EXISTS BECAUSE `defaultTemporality` IS NOT A DEFAULT. It is
+   * the value `inferTemporality` falls back to when its regexes match nothing,
+   * so a concept whose own evidence quote contains a tense keyword can never
+   * reach it. That is canon 135's shape on the other axis: where the layer
+   * KNOWS the answer it states it, rather than passing a hint to a guesser.
+   */
+  temporality?: EncounterFact['temporality'];
   laterality?: EncounterFact['laterality'];
   number?: number;
   unit?: string;
@@ -247,15 +280,47 @@ function digest(value: string): string {
  * Stable concept segment used for source-exposed system/test names. This is
  * identifier normalization only; it does not change the clinical meaning.
  */
-export function conceptSegment(value: string): string {
-  const segment = value
-    .normalize('NFKC')
-    .trim()
-    .toLocaleLowerCase('en-US')
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 80);
-  return segment || 'unspecified';
+export { conceptSegment } from '../concept-segment';
+
+/**
+ * A lexicon token as ordinary words: `early_satiety` -> `early satiety`.
+ *
+ * ⚠️ DE-SLUGGING ONLY, AND THE LIMIT IS THE POINT. It restores the spaces the
+ * identifier form removed and changes nothing else — no synonym, no expansion,
+ * no clinical rewording. `dyspnea` stays `dyspnea`, because deciding it should
+ * read "shortness of breath" on a doctor's form is his call and not this
+ * function's.
+ */
+export function readableFinding(finding: string): string {
+  return readableRosToken(finding);
+}
+
+/**
+ * The value a ROS fact contributes to a document — ruling #218.
+ *
+ * ⚠️ THE DE-SLUG IS AT EMISSION, NOT ON ONE BRANCH OF A `??`. The previous form
+ * was `item.finding_verbatim ?? readableFinding(item.finding)`, which de-slugged
+ * ONLY the fallback. `03-extract-entities` fills `finding_verbatim` with the
+ * MODEL'S OWN TOKEN whenever the resolver changed the finding, so the raw
+ * identifier took the left branch and skipped the de-slugger entirely: a real
+ * token filed under a system the lexicon does not carry it under (`endocrine` /
+ * `weight_loss`) printed `weight_loss` into a signed document with
+ * `status=supported` and zero issues. De-slugging whichever branch wins closes
+ * that by construction rather than by remembering.
+ *
+ * ⚠️ AND THE BARE ESCAPE HATCH IS NOT A CLINICAL WORD. `other` exists so a
+ * symptom outside the lexicon can still be carried IN the doctor's words; with
+ * no words there is nothing to say, and the previous form said "other". The
+ * value is BLANKED rather than the fact DROPPED, deliberately: the checkbox arm
+ * reads `fact.polarity` and discards the finding, so dropping the fact would
+ * silently delete a denial a box depends on, while blanking leaves every
+ * select/narrative arm to refuse a value it cannot support.
+ */
+function rosDocumentValue(item: { finding: string; finding_verbatim?: string | null }): string {
+  const spoken = item.finding_verbatim?.trim();
+  const raw = spoken && spoken.length > 0 ? spoken : item.finding;
+  if (raw === ROS_OTHER) return '';
+  return readableRosToken(raw);
 }
 
 /**
@@ -544,11 +609,9 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
         concept: options.concept,
         value: options.value,
         polarity,
-        temporality: inferTemporality(
-          options.value,
-          quote,
-          options.defaultTemporality,
-        ),
+        temporality:
+          options.temporality ??
+          inferTemporality(options.value, quote, options.defaultTemporality),
         experiencer: options.experiencer ?? 'patient',
         laterality: options.laterality ?? inferLaterality(options.value, quote),
         number: options.number ?? numberAndUnit.number,
@@ -609,6 +672,26 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
       path: `past_medical_history.${index}.condition`,
       concept: 'past_medical_history',
       value: item.condition,
+      evidence: item,
+      defaultTemporality: 'historical',
+    });
+  }
+
+  // #246 family 1 — the same shape and the same temporality as the block
+  // above, and deliberately SEPARATE. A form asking for surgeries on their own
+  // must not be filled from the medical history, which is exactly what the
+  // proposer did on the owner's form before this existed.
+  //
+  // ⚠️ THE WORDING HERE IS DELIBERATE. An earlier version of this comment used
+  // the two words the (2a) census greps for, and reddened that arm from PROSE —
+  // canon 117's reddened-by-prose, the same defect as greened-by-prose and it
+  // travels with it. The arm was right: a form it cannot read would be silently
+  // unwatched.
+  for (const [index, item] of (entities.past_surgical_history ?? []).entries()) {
+    add({
+      path: `past_surgical_history.${index}.procedure`,
+      concept: 'past_surgical_history',
+      value: item.procedure,
       evidence: item,
       defaultTemporality: 'historical',
     });
@@ -691,12 +774,162 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
   if (social?.occupation) {
     add({ path: 'social_history.occupation', concept: 'social_history.occupation', value: social.occupation.value, evidence: social.occupation, defaultTemporality: 'current' });
   }
+  // #246 family 2 — reads `.status`, matching the L3 key chosen above.
+  if (social?.marital_status) {
+    add({ path: 'social_history.marital_status', concept: 'social_history.marital_status', value: social.marital_status.status, evidence: social.marital_status, defaultTemporality: 'current' });
+  }
+
+  // #247 family 3 — THE DICTATED REFERRING CLINICIAN.
+  //
+  // ⚠️ AN ORDINARY `encounter_evidence` FACT, AND ITS NEIGHBOURS IN THE
+  // `visit_metadata.*` REGISTRY FAMILY ARE NOT. `add()` stamps
+  // `sourceType: 'encounter_evidence'` on everything it emits, and that is
+  // CORRECT here and only here: the clinician said this. Patient name and age
+  // share the concept prefix and are injected somewhere else entirely
+  // (`withVisitMetadataFacts`, `sourceType: 'visit_record'`) precisely so the
+  // manifest never has to guess which of the three it is looking at.
+  //
+  // ⚠️ BOTH POLARITY AND TENSE ARE **STATED**, AND THE FIRST DRAFT STATED
+  // NEITHER. It argued that this value is the spoken name, therefore locatable,
+  // therefore safe for the ordinary inference. Two refutation lenses measured
+  // what the inference actually does to a referral sentence, and it is wrong on
+  // both axes for the same reason: the inference reads the words AROUND the
+  // value, and a referral sentence is made of exactly those words.
+  //
+  //   POLARITY. `UNCERTAINTY` is /possible|possibly|maybe|may|might|uncertain|
+  //   unclear|suspected|question of/ over value + quote. Measured:
+  //     "Referred by Dr. Lee for POSSIBLE inflammatory bowel disease."
+  //     "Dr. Osei referred her for SUSPECTED celiac disease."
+  //     "She was referred by Dr. Lee in MAY for evaluation."
+  //   -> polarity `uncertain` -> resolution `ambiguous` -> `FIELD_AMBIGUOUS`,
+  //   which is BLOCKING because `clinicallyMaterial: true` is hard-coded at all
+  //   twelve compiler emission sites -> `render: null` -> **the doctor loses
+  //   the whole native document**. The hedge is about the DIAGNOSIS; the
+  //   referral is not in doubt. And the prompt only permits this field when the
+  //   dictation names a referrer, so an unstated one is `null` rather than a
+  //   denial — there is no denial for the inference to protect.
+  //
+  //   TENSE. `PLANNED` is /plan|will|schedule|REFER(RED|RAL)?|start|follow-up/,
+  //   so **the very word that identifies a referral sentence** stamps the fact
+  //   `planned`. Measured: "She was referred by Dr. Ramirez for further
+  //   evaluation." -> `planned`, and so did this file's own certification
+  //   sentence. Against a mapping declaring `temporality: 'current'` — which
+  //   the proposer explicitly invites the model to propose — that is
+  //   `temporality_not_approved`: a permanently blank control with validation
+  //   green. And the frozen manifest records a referral that HAPPENED as
+  //   planned, which is the same "the manifest says something untrue" class
+  //   #247 exists to end.
+  //
+  // `defaultTemporality` cannot fix the second: it is the fallback used when
+  // the regexes match NOTHING, and here one of them always matches.
+  if (entities.referring_physician) {
+    add({
+      path: 'referring_physician.name',
+      concept: 'visit_metadata.referring_physician',
+      value: entities.referring_physician.name,
+      evidence: entities.referring_physician,
+      defaultTemporality: 'current',
+      polarity: 'affirmed',
+      temporality: 'current',
+      // The referrer is another clinician, not the patient. `experiencer`
+      // exists for exactly this: a fact ABOUT someone other than the subject.
+      experiencer: 'other',
+    });
+  }
+
+  // #246 family 4 — TOTAL ENCOUNTER TIME.
+  //
+  // ⚠️ THE VALUE IS A STRING AND THE NUMBER TRAVELS BESIDE IT. `add()` accepts
+  // string | number | boolean, but the controls this fills compile
+  // `narrative_text`, and the narrative deriver returns `fact.value` only when
+  // it is a string. `String(minutes)` is what reaches the document; `number`
+  // carries the machine-readable quantity for any numeric control.
+  //
+  // ⚠️ AND IT CARRIES NO UNIT, DELIBERATELY. The resolver's number arm refuses
+  // a value with an unapproved unit, so "45 minutes" would fail where "45"
+  // resolves — canon 134's trap, avoided at the source rather than patched at
+  // the reader.
+  if (entities.total_time_minutes) {
+    add({
+      path: 'total_time_minutes.minutes',
+      concept: 'total_time_minutes',
+      value: String(entities.total_time_minutes.minutes),
+      number: entities.total_time_minutes.minutes,
+      evidence: entities.total_time_minutes,
+      defaultTemporality: 'current',
+      // ⚠️ POLARITY IS STATED, NOT INFERRED, AND THE ADVERSARIAL PASS IS WHY.
+      //
+      // A TOTAL TIME IS A QUANTITY. There is no such thing as a denied total —
+      // the prompt only permits this field when the clinician states one aloud,
+      // so it is affirmed by construction.
+      //
+      // Left to `inferPolarity` it was DENIED on plainly affirmative dictation,
+      // by two measured routes, because this is the only concept whose value is
+      // a RENDERING of a number rather than the spoken text:
+      //
+      //   "No fever, total time 25 minutes."                    -> denied
+      //        the digits ARE locatable, but `CLAUSE_BREAK` is /[.;\n]/ and a
+      //        COMMA is not one, so an unrelated ROS denial governs the number
+      //
+      //   "Total time of forty minutes spent, no separate ..."  -> denied
+      //        the quote SPELLS the number, so `String(40)` is unlocatable and
+      //        polarity falls back to the UNSCOPED whole-quote denial test —
+      //        the very form the scoping arms exist to narrow
+      //
+      // A denied fact is then withheld by `denialOutcome` for every kind except
+      // checkbox, so the doctor's own billing figure renders BLANK; on a
+      // narrative control the reason is certification-exempt, so it blanks
+      // SILENTLY and the template still certifies green.
+      //
+      // ⚠️ AND THE SELF-TEST WOULD NOT HAVE CAUGHT IT. Its sentence spells
+      // "forty five minutes" against a projected "45", so it takes the
+      // unlocatable route too — and passed only because that one sentence
+      // happens to contain no denial token.
+      //
+      // Same doctrine as the ROS block above (Q1 §02.9): where the layer KNOWS
+      // the polarity, it states it and stops guessing it back out of the prose.
+      polarity: 'affirmed',
+    });
+  }
 
   for (const [index, item] of (entities.ros ?? []).entries()) {
     add({
       path: `ros.${index}.finding`,
-      concept: `ros.${conceptSegment(item.system)}`,
-      value: item.finding,
+      // ⚠️ #179(2) — SYMPTOM GRANULARITY. This emitted `ros.<system>` and every
+      // clause in a system shared one concept, so the checkbox arm (which reads
+      // polarity and discards the finding) ticked all of them from one fact,
+      // and a second affirmed symptom conflicted the export. The symptom now
+      // travels IN the concept, so a clause can address exactly what it covers.
+      // Both halves come from the CLOSED lexicon the L3 schema enforces, so
+      // this cannot produce a concept the registry will refuse.
+      concept: rosConcept(conceptSegment(item.system), conceptSegment(item.finding)),
+      // ⚠️ THE DOCTOR'S OWN WORDS FIRST, AND A READABLE TOKEN OTHERWISE —
+      // NEVER THE RAW IDENTIFIER.
+      //
+      // `finding` is a machine token from a CLOSED set, so it is what the
+      // CONCEPT is built from; it is not what a document should print. Two
+      // things can go wrong and both were measured:
+      //
+      //   · a symptom outside the lexicon becomes `other`, and a form rendered
+      //     the literal word "other" where the doctor said "belching";
+      //   · a symptom INSIDE the lexicon is a snake_case identifier — 25 of the
+      //     72 tokens carry an underscore — so `early_satiety`,
+      //     `night_sweats` and `suicidal_ideation` printed verbatim into a
+      //     signed document, with `status=supported`, `valid=true` and zero
+      //     issues.
+      //
+      // The second is the one the L3 prompt made MORE likely, not less: it now
+      // instructs the model to emit the identifier exactly, so a compliant
+      // model leaves nothing in `finding_verbatim` at all.
+      //
+      // ⚠️ AND THE FIX IS DELIBERATELY NOT A DISPLAY MAP. A token-to-prose
+      // table is a second vocabulary to maintain, and choosing that a doctor's
+      // form should say "shortness of breath" where the lexicon says `dyspnea`
+      // is a clinical wording judgement that belongs to the owner — it is filed
+      // for him and NOT decided here. Replacing underscores with spaces is not
+      // that judgement; it is identifier de-slugging, and it leaves every
+      // clinical word exactly as the lexicon chose it.
+      value: rosDocumentValue(item),
       evidence: item,
       defaultTemporality: 'current',
       // Q1 audit §02.9 — L3 states these now, so stop guessing them back out of

@@ -1,0 +1,1493 @@
+<title>Admin Control Room</title>
+
+<style>
+/* ============================================================
+   DIRECTION: CONTROL ROOM
+   ============================================================ */
+:root{
+  /* ---- shipped Rounds tokens, exact values ---- */
+  --stage-1:#232b3a; --stage-2:#171d27; --stage-3:#12161e;
+  --s1:#161b24; --s2:#1e2530; --s3:#252d3a;
+  --l1:#2c3442; --l2:#3a4353;
+  --t1:#e7ebf1; --t2:#98a2b1; --t3:#7c8694;
+  --acc:#5b5bd6; --acc-t:#a5a5f0;
+  --acc-10:rgba(91,91,214,.10); --acc-16:rgba(91,91,214,.16);
+  --crit:#c93a2e; --crit-t:#ff8d7e;
+  --ready:#187a4e; --ready-t:#6ee7a8;
+  --warn:#c4841c; --warn-t:#e8b168;
+  --sig:#6b7480; --sig-t:#9aa4b2;
+  --proc:#3b6fd4; --proc-t:#7ab0f5;
+
+  /* ---- derived, not new hues ---- */
+  --hair:rgba(44,52,66,.62);      /* --l1 at 62% — interior row rules */
+  --warn-10:rgba(196,132,28,.10);
+  --warn-18:rgba(196,132,28,.18);
+  --crit-10:rgba(201,58,46,.10);
+  --ready-10:rgba(24,122,78,.12);
+
+  --mono: ui-monospace,"SF Mono",SFMono-Regular,"JetBrains Mono","IBM Plex Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --ui: "Helvetica Neue","Archivo","Roboto Condensed","Liberation Sans Narrow",-apple-system,system-ui,sans-serif;
+  --r:3px;
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0}
+
+.page{
+  min-height:100vh;
+  margin:0;
+  padding:0 0 96px;
+  background-color:var(--stage-3);
+  background-image:
+    linear-gradient(rgba(231,235,241,.014) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(231,235,241,.014) 1px, transparent 1px),
+    linear-gradient(180deg, #171d27 0%, #12161e 340px);
+  background-size:26px 26px, 26px 26px, 100% 100%;
+  color:var(--t1);
+  font:12px/1.5 var(--mono);
+  font-variant-numeric:tabular-nums;
+}
+.wrap{max-width:1580px;margin:0 auto;padding:0 22px}
+
+/* ---------- typographic atoms ---------- */
+.lbl{font:600 9.5px/1 var(--ui);letter-spacing:.17em;text-transform:uppercase;color:var(--t2)}
+.lbl-dim{color:var(--t3)}
+.mi{font:9.5px/1.35 var(--mono);letter-spacing:.06em;color:var(--t2)}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.usd{color:var(--t3);font-size:9.5px}
+.u{color:var(--t3);font-size:9px;letter-spacing:.05em}
+.em{color:var(--t1)}
+.dim{color:var(--t2)}
+.dimmer{color:var(--t3)}
+.warn{color:var(--warn-t)}
+.crit{color:var(--crit-t)}
+.ok{color:var(--ready-t)}
+.acct{color:var(--acc-t)}
+.null{color:var(--t3);letter-spacing:.1em}
+
+/* ---------- masthead / designer note ---------- */
+.mast{border-bottom:1px solid var(--l1);background:linear-gradient(180deg,var(--stage-2),transparent);margin-bottom:26px}
+.mast-in{display:grid;grid-template-columns:1.35fr 1fr 1fr;gap:1px;background:var(--l1);border-left:1px solid var(--l1);border-right:1px solid var(--l1)}
+.mast-cell{background:var(--stage-3);padding:16px 18px 18px}
+.mast h1{font:600 13px/1.2 var(--ui);letter-spacing:.22em;text-transform:uppercase;margin:0 0 3px;color:var(--t1)}
+.mast .sub{font:9.5px/1 var(--mono);letter-spacing:.14em;color:var(--acc-t);margin-bottom:11px}
+.mast p{margin:0;font:11.5px/1.62 var(--mono);color:var(--t2);max-width:52ch}
+.mast p b{color:var(--t1);font-weight:400}
+.brk{list-style:none;margin:9px 0 0;padding:0}
+.brk li{display:flex;gap:9px;padding:5px 0;border-top:1px solid var(--hair);font:10.5px/1.45 var(--mono);color:var(--t2)}
+.brk li:first-child{border-top:0}
+.brk b{color:var(--warn-t);font-weight:400;white-space:nowrap}
+
+/* ---------- section headers ---------- */
+.sect{display:flex;align-items:baseline;gap:14px;margin:44px 0 12px}
+.sect .ix{font:600 10px/1 var(--mono);letter-spacing:.14em;color:var(--acc-t);padding:5px 7px;border:1px solid var(--l2);border-radius:var(--r);background:var(--acc-10)}
+.sect h2{font:600 11px/1 var(--ui);letter-spacing:.2em;text-transform:uppercase;margin:0;color:var(--t1)}
+.sect .rule{flex:1;height:1px;background:linear-gradient(90deg,var(--l1),transparent)}
+.sect .st{font:9.5px/1 var(--mono);letter-spacing:.1em;color:var(--t2)}
+.caption{font:10.5px/1.6 var(--mono);color:var(--t2);margin:0 0 12px;max-width:96ch}
+
+/* ============================================================
+   THE CONSOLE FRAME
+   ============================================================ */
+.console{border:1px solid var(--l1);border-radius:var(--r);overflow:hidden;background:var(--l1);box-shadow:0 22px 50px -30px rgba(0,0,0,.9)}
+
+/* ---- state ribbon ---- */
+.ribbon{display:flex;flex-wrap:wrap;gap:1px;background:var(--l1)}
+.rc{background:var(--s2);padding:7px 13px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.rc .k{font:600 8.5px/1 var(--ui);letter-spacing:.18em;text-transform:uppercase;color:var(--t3)}
+.rc .v{font:11px/1.2 var(--mono);color:var(--t1);letter-spacing:.02em;white-space:nowrap}
+.rc.brand{background:var(--s3);justify-content:center}
+.rc.brand .v{font:600 11px/1.2 var(--ui);letter-spacing:.24em;text-transform:uppercase}
+.rc.grow{flex:1}
+.rc.armed .v{color:var(--warn-t)}
+.rc.live .v{color:var(--ready-t)}
+
+.dotp{display:inline-block;width:6px;height:6px;margin-right:6px;vertical-align:1px}
+.dotp.w{background:var(--warn-t);animation:pulse 2.1s ease-in-out infinite}
+.dotp.g{background:var(--ready-t);animation:pulse 3.4s ease-in-out infinite}
+.dotp.r{background:var(--crit-t);animation:pulse 1.3s ease-in-out infinite}
+.dotp.n{background:var(--sig)}
+@keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 currentColor}50%{opacity:.45;box-shadow:0 0 6px 0 currentColor}}
+
+/* ---- body: rail + matrix ---- */
+.body{display:grid;grid-template-columns:184px 1fr;gap:1px;background:var(--l1)}
+
+/* ---- the rail: navigation that reports ---- */
+.rail{background:var(--s1);display:flex;flex-direction:column}
+.rail-h{padding:9px 13px 8px;border-bottom:1px solid var(--l1);display:flex;justify-content:space-between;align-items:center}
+.dest{display:block;text-decoration:none;color:inherit;padding:11px 13px 12px;border-bottom:1px solid var(--hair);position:relative;transition:background .14s}
+.dest:hover{background:var(--s2)}
+.dest .top{display:flex;align-items:center;gap:8px}
+.dest .ix{font:9.5px/1 var(--mono);color:var(--t3);width:14px}
+.dest .nm{font:600 10.5px/1 var(--ui);letter-spacing:.15em;text-transform:uppercase;color:var(--t2)}
+.dest svg{width:12px;height:12px;stroke:var(--t3);fill:none;stroke-width:1.1;stroke-linecap:square}
+.dest .tick{display:flex;align-items:center;gap:6px;margin-top:8px;padding-left:22px}
+.dest .sq{width:7px;height:7px;flex:none}
+.dest .tk{font:9.5px/1.3 var(--mono);color:var(--t3);letter-spacing:.03em}
+.dest.on{background:var(--s3)}
+.dest.on::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--acc)}
+.dest.on .nm{color:var(--t1)}
+.dest.on svg{stroke:var(--acc-t)}
+.dest.on .tk{color:var(--t2)}
+.rail-f{margin-top:auto;padding:11px 13px;border-top:1px solid var(--l1);background:var(--s1)}
+.rail-f .fold{font:9.5px/1.6 var(--mono);color:var(--t2)}
+.rail-f .fold b{color:var(--t2);font-weight:400}
+
+/* ---- panel matrix ---- */
+.matrix{display:grid;grid-template-columns:repeat(12,1fr);gap:1px;background:var(--l1);align-content:start}
+.p{background:var(--s1);min-width:0;display:flex;flex-direction:column}
+.ph{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 13px;background:var(--s2);border-bottom:1px solid var(--l1)}
+.ph .t{font:600 9.5px/1 var(--ui);letter-spacing:.18em;text-transform:uppercase;color:var(--t2);white-space:nowrap}
+.ph .m{font:9.5px/1 var(--mono);color:var(--t3);letter-spacing:.05em;text-align:right}
+.pb{padding:13px;flex:1;min-width:0}
+.pb.tight{padding:0}
+.pb.flush{padding:11px 13px}
+
+/* spans */
+.c2{grid-column:span 2}.c3{grid-column:span 3}.c4{grid-column:span 4}.c5{grid-column:span 5}
+.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c9{grid-column:span 9}
+.c12{grid-column:span 12}
+
+/* ---- console footer ---- */
+.cfoot{display:flex;flex-wrap:wrap;gap:1px;background:var(--l1)}
+.cfoot div{background:var(--s2);padding:6px 13px;font:9.5px/1.4 var(--mono);color:var(--t3);letter-spacing:.05em}
+.cfoot div b{color:var(--t2);font-weight:400}
+.cfoot .grow{flex:1}
+
+/* ============================================================
+   THE UNARMED INSTRUMENT
+   ============================================================ */
+.unarmed{display:grid;grid-template-columns:auto 1fr;gap:0}
+.unarmed-bar{width:3px;background:var(--warn);border-radius:2px;animation:barpulse 2.4s ease-in-out infinite}
+@keyframes barpulse{0%,100%{opacity:1}50%{opacity:.35}}
+.unarmed-in{padding-left:15px}
+.unarmed .state{display:flex;align-items:center;gap:11px;margin-bottom:4px}
+.unarmed .state svg{width:19px;height:19px;stroke:var(--warn-t);fill:none;stroke-width:1.3;flex:none}
+.unarmed .word{font:600 21px/1 var(--ui);letter-spacing:.16em;text-transform:uppercase;color:var(--warn-t)}
+.unarmed .sub{font:10.5px/1.5 var(--mono);color:var(--t2);margin-bottom:15px}
+.ratio-empty{display:inline-flex;flex-direction:column;align-items:center;gap:4px;padding:8px 16px;border:1px dashed var(--l2);border-radius:var(--r);background:var(--warn-10)}
+.ratio-empty .sl{font:17px/1 var(--mono);color:var(--t3);letter-spacing:.12em}
+.ratio-empty .cap{font:8.5px/1 var(--ui);letter-spacing:.16em;text-transform:uppercase;color:var(--t3)}
+
+.ccc{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--hair);border:1px solid var(--hair);border-radius:var(--r);margin-top:15px}
+.ccc > div{background:var(--s1);padding:11px 13px}
+.ccc .h{font:600 8.5px/1 var(--ui);letter-spacing:.2em;text-transform:uppercase;margin-bottom:8px}
+.ccc .cause .h{color:var(--t3)}
+.ccc .cons .h{color:var(--warn-t)}
+.ccc .clr .h{color:var(--acc-t)}
+.ccc p{margin:0 0 7px;font:10.5px/1.6 var(--mono);color:var(--t2)}
+.ccc p:last-child{margin-bottom:0}
+.ccc code{color:var(--t1);background:var(--s3);padding:1px 4px;border-radius:2px;font-size:10px}
+
+.isnot{display:flex;flex-wrap:wrap;gap:1px;background:var(--hair);border:1px solid var(--hair);border-radius:var(--r);margin-top:1px}
+.isnot > div{background:var(--s1);padding:8px 12px;flex:1;min-width:150px}
+.isnot .n{font:600 9px/1 var(--ui);letter-spacing:.15em;text-transform:uppercase;color:var(--t3);display:flex;align-items:center;gap:6px;margin-bottom:5px}
+.isnot .n s{display:inline-block;width:7px;height:7px;background:var(--sig);flex:none;text-decoration:none}
+.isnot .why{font:10px/1.45 var(--mono);color:var(--t2)}
+
+/* ---- action buttons ---- */
+.btn{display:inline-flex;align-items:center;gap:9px;padding:9px 15px;border:1px solid var(--acc);background:var(--acc-16);color:var(--acc-t);border-radius:var(--r);font:600 10px/1 var(--ui);letter-spacing:.15em;text-transform:uppercase;cursor:pointer;transition:background .14s,border-color .14s}
+.btn:hover{background:var(--acc);color:#fff;border-color:var(--acc)}
+.btn svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:1.4}
+.btn.ghost{background:transparent;border-color:var(--l2);color:var(--t2)}
+.btn.ghost:hover{background:var(--s3);color:var(--t1);border-color:var(--l2)}
+.btn[disabled]{opacity:.4;cursor:not-allowed;background:transparent;border-color:var(--l1);color:var(--t3)}
+.btn[disabled]:hover{background:transparent;color:var(--t3)}
+.act-row{display:flex;align-items:center;gap:11px;flex-wrap:wrap;margin-top:15px}
+.act-note{font:10px/1.5 var(--mono);color:var(--t2);max-width:44ch}
+
+/* ============================================================
+   HEALTH STRIP — shipped 3-word vocabulary
+   ============================================================ */
+.hs{display:flex;flex-direction:column}
+.hrow{display:grid;grid-template-columns:12px 1fr auto;gap:10px;align-items:center;padding:8px 13px;border-bottom:1px solid var(--hair)}
+.hrow:last-of-type{border-bottom:0}
+.hrow .sq{width:8px;height:8px}
+.hrow .svc{font:11px/1.3 var(--mono);color:var(--t1)}
+.hrow .det{font:9.5px/1.3 var(--mono);color:var(--t3);margin-top:2px}
+.hrow .w{font:600 9.5px/1 var(--ui);letter-spacing:.15em;text-transform:uppercase}
+.sq.ok{background:var(--ready-t)}.sq.wn{background:var(--warn-t)}.sq.dn{background:var(--crit-t)}.sq.nl{background:var(--sig)}
+.w.ok{color:var(--ready-t)}.w.wn{color:var(--warn-t)}.w.dn{color:var(--crit-t)}
+.vocab{padding:8px 13px;border-top:1px solid var(--l1);background:var(--s2);font:9.5px/1.5 var(--mono);color:var(--t2);letter-spacing:.04em}
+
+/* ============================================================
+   WALLET — two buckets, never summed
+   ============================================================ */
+.buckets{display:grid;grid-template-columns:1fr 1px 1fr;align-items:stretch}
+.bk{padding:2px 0}
+.bk .k{display:flex;align-items:center;gap:7px;font:600 9px/1 var(--ui);letter-spacing:.18em;text-transform:uppercase;color:var(--t3);margin-bottom:9px}
+.bk .k s{width:7px;height:7px;text-decoration:none;display:inline-block}
+.bk .v{font:18px/1 var(--mono);letter-spacing:-.01em}
+.bk.promo .v{color:var(--acc-t)}
+.bk.paid .v{color:var(--t1)}
+.bk.promo .k s{background:var(--acc)}
+.bk.paid .k s{background:var(--sig-t)}
+.bk .u2{font:9px/1 var(--mono);color:var(--t3);margin-top:6px;letter-spacing:.06em}
+.bk .hold{font:9.5px/1.4 var(--mono);color:var(--t2);margin-top:8px}
+.bsplit{background:var(--l1);width:1px}
+.bk.pl{padding-left:16px}
+.bk.pr{padding-right:16px}
+.nosum{margin-top:12px;padding-top:9px;border-top:1px solid var(--hair);font:10px/1.55 var(--mono);color:var(--t2)}
+.nosum b{color:var(--warn-t);font-weight:400}
+
+/* ============================================================
+   TABLES — dense ledger
+   ============================================================ */
+.tw{overflow-x:auto}
+table.t{width:100%;border-collapse:collapse;font:11.5px/1.35 var(--mono);white-space:nowrap}
+table.t th{font:600 8.5px/1 var(--ui);letter-spacing:.15em;text-transform:uppercase;color:var(--t3);text-align:left;padding:8px 11px;background:var(--s2);border-bottom:1px solid var(--l1);position:sticky;top:0}
+table.t th.r{text-align:right}
+table.t th .qual{display:block;font:8.5px/1.2 var(--mono);letter-spacing:.04em;text-transform:none;color:var(--t3);opacity:.8;margin-top:3px}
+table.t td{padding:8px 11px;border-bottom:1px solid var(--hair);color:var(--t2);vertical-align:middle}
+table.t tbody tr:hover td{background:var(--s2)}
+table.t td.nm{color:var(--t1)}
+table.t td.r{text-align:right}
+table.t tr.tot td{background:var(--s2);border-top:1px solid var(--l2);border-bottom:0;color:var(--t1);font-weight:400}
+table.t tr.tot td.lbl-td{font:600 8.5px/1 var(--ui);letter-spacing:.16em;text-transform:uppercase;color:var(--t3)}
+.pill{display:inline-block;padding:2px 6px;border-radius:2px;font:9.5px/1.35 var(--mono);letter-spacing:.03em}
+.pill.stamp{background:var(--acc-10);border:1px solid rgba(91,91,214,.34);color:var(--acc-t)}
+.pill.nostamp{background:transparent;border:1px dashed var(--l2);color:var(--t3)}
+.pill.dr{background:var(--warn-10);border:1px solid rgba(196,132,28,.34);color:var(--warn-t)}
+.st-w{font:600 9px/1 var(--ui);letter-spacing:.14em;text-transform:uppercase}
+.stamp-mark{display:inline-block;width:5px;height:5px;background:var(--acc);margin-right:5px;vertical-align:1px}
+
+/* magnitude bars — cost vs measured delta, scaled to the largest row */
+.bar{height:7px;background:var(--s3);width:170px;display:flex;border-radius:1px;overflow:hidden}
+.bar i{display:block;background:var(--acc);height:100%}
+.bar u{display:block;background:var(--acc-t);height:100%;text-decoration:none}
+.bar.unpriced i{background:linear-gradient(135deg,var(--acc) 0 3px,rgba(91,91,214,.22) 3px 7px)}
+.barwrap{display:flex;align-items:center;gap:9px}
+.barwrap .pct{font:9.5px/1 var(--mono);color:var(--t3);width:44px;text-align:right}
+.legend{display:flex;gap:16px;flex-wrap:wrap;padding:8px 13px;border-top:1px solid var(--l1);background:var(--s2)}
+.legend span{display:flex;align-items:center;gap:7px;font:9.5px/1 var(--mono);color:var(--t3)}
+.legend s{width:9px;height:7px;display:inline-block;text-decoration:none}
+
+.foot-note{padding:9px 13px;border-top:1px solid var(--l1);background:var(--s2);font:10px/1.6 var(--mono);color:var(--t2)}
+.foot-note b{color:var(--t1);font-weight:400}
+.foot-note em{font-style:normal;color:var(--warn-t)}
+
+/* ============================================================
+   RATE EDITOR
+   ============================================================ */
+.ed{display:grid;grid-template-columns:auto 1fr;gap:22px;align-items:start}
+.fraction{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 18px;border:1px solid var(--l2);border-radius:var(--r);background:var(--s2)}
+.fld{display:flex;align-items:center;gap:9px}
+.fld input{width:76px;background:var(--stage-3);border:1px solid var(--l2);border-radius:2px;color:var(--t1);font:28px/1 var(--mono);text-align:center;padding:7px 4px;font-variant-numeric:tabular-nums}
+.fld input:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 2px var(--acc-16)}
+.spin{display:flex;flex-direction:column;gap:3px}
+.spin button{width:22px;height:19px;background:var(--s3);border:1px solid var(--l2);border-radius:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.spin button:hover{background:var(--acc-16);border-color:var(--acc)}
+.spin svg{width:9px;height:9px;stroke:var(--t2);fill:none;stroke-width:1.6}
+.spin button:hover svg{stroke:var(--acc-t)}
+.frule{width:118px;height:1px;background:var(--l2)}
+.fcap{font:8.5px/1 var(--ui);letter-spacing:.18em;text-transform:uppercase;color:var(--t3)}
+.derived{margin-top:9px;padding-top:11px;border-top:1px dashed var(--l2);text-align:center;width:100%}
+.derived .v{font:20px/1 var(--mono);color:var(--t1)}
+.derived .v.bad{color:var(--crit-t)}
+.derived .c{font:8.5px/1 var(--ui);letter-spacing:.17em;text-transform:uppercase;color:var(--t3);margin-top:7px}
+.nodec{margin-top:12px;padding:7px 9px;border:1px solid rgba(196,132,28,.3);background:var(--warn-10);border-radius:2px;font:9.5px/1.45 var(--mono);color:var(--warn-t);max-width:184px}
+
+.presets{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
+.chip{padding:5px 8px;border:1px solid var(--l1);background:var(--s2);border-radius:2px;font:10px/1 var(--mono);color:var(--t2);cursor:pointer}
+.chip:hover{border-color:var(--acc);color:var(--acc-t);background:var(--acc-10)}
+.chip.on{border-color:var(--acc);background:var(--acc-16);color:var(--acc-t)}
+.chip small{color:var(--t3);margin-left:5px;font-size:9px}
+.chip.on small{color:var(--acc-t);opacity:.75}
+
+.grp{margin-bottom:16px}
+.grp:last-child{margin-bottom:0}
+.grp > .lbl{display:block;margin-bottom:8px}
+
+.cycles{display:flex;gap:1px;background:var(--l1);border:1px solid var(--l1);border-radius:var(--r);overflow:hidden}
+.cyc{flex:1;background:var(--s2);padding:9px 11px;cursor:pointer}
+.cyc .cn{font:12px/1 var(--mono);color:var(--t1)}
+.cyc .cs{font:9px/1.3 var(--mono);color:var(--t3);margin-top:5px}
+.cyc.on{background:var(--acc-16);box-shadow:inset 0 -2px 0 var(--acc)}
+.cyc.on .cn{color:var(--acc-t)}
+.cyc.locked{cursor:not-allowed;background:var(--s1)}
+.cyc.locked .cn{color:var(--t3);text-decoration:line-through;text-decoration-color:var(--crit)}
+.cyc.locked .cs{color:var(--crit-t);opacity:.75}
+
+.checks{border:1px solid var(--hair);border-radius:var(--r);overflow:hidden}
+.chk{display:grid;grid-template-columns:14px 1fr auto;gap:10px;align-items:center;padding:7px 11px;border-bottom:1px solid var(--hair);background:var(--s1)}
+.chk:last-child{border-bottom:0}
+.chk svg{width:11px;height:11px;fill:none;stroke-width:1.6}
+.chk.pass svg{stroke:var(--ready-t)}
+.chk.fail svg{stroke:var(--crit-t)}
+.chk .cx{font:10.5px/1.35 var(--mono);color:var(--t2)}
+.chk .cv{font:10px/1 var(--mono);color:var(--t3)}
+.chk.fail{background:var(--crit-10)}
+.chk.fail .cx{color:var(--crit-t)}
+
+textarea.note{width:100%;min-height:64px;resize:vertical;background:var(--stage-3);border:1px solid var(--l2);border-radius:2px;color:var(--t1);font:11.5px/1.6 var(--mono);padding:9px 11px}
+textarea.note:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 2px var(--acc-16)}
+textarea.note::placeholder{color:var(--t3)}
+.charc{display:flex;justify-content:space-between;margin-top:6px;font:9px/1 var(--mono);color:var(--t3)}
+
+/* ============================================================
+   HISTORY — insert-never-update
+   ============================================================ */
+.hist{display:flex;flex-direction:column}
+.hrec{display:grid;grid-template-columns:132px 1fr;gap:0;border-bottom:1px solid var(--hair)}
+.hrec:last-child{border-bottom:0}
+.hgut{padding:12px 13px;background:var(--s2);border-right:1px solid var(--hair);position:relative}
+.hgut .rid{font:10.5px/1 var(--mono);color:var(--acc-t)}
+.hgut .seq{font:8.5px/1 var(--ui);letter-spacing:.16em;text-transform:uppercase;color:var(--t3);margin-top:7px}
+.hgut::after{content:"";position:absolute;left:0;top:0;width:2px;height:100%;background:var(--l2)}
+.hbody{padding:12px 15px}
+.hline{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:9px}
+.fromto{display:inline-flex;align-items:center;gap:11px;padding:5px 11px;background:var(--s2);border:1px solid var(--hair);border-radius:2px}
+.fromto .a{color:var(--t3);font:11.5px/1 var(--mono)}
+.fromto .b{color:var(--t1);font:12.5px/1 var(--mono)}
+.fromto .x{font:9px/1 var(--ui);letter-spacing:.12em;text-transform:uppercase;color:var(--t3)}
+.fromto svg{width:15px;height:9px;stroke:var(--acc-t);fill:none;stroke-width:1.2}
+.hmeta{display:flex;gap:18px;flex-wrap:wrap;font:10px/1.4 var(--mono);color:var(--t3);margin-bottom:8px}
+.hmeta b{color:var(--t2);font-weight:400}
+.hnote{font:11px/1.6 var(--mono);color:var(--t2);border-left:2px solid var(--l2);padding-left:11px;max-width:88ch}
+.append{display:flex;align-items:center;gap:9px;padding:8px 13px;background:var(--s2);border-top:1px solid var(--l1);font:9.5px/1.4 var(--mono);color:var(--t3)}
+.append s{width:7px;height:7px;background:var(--ready);display:inline-block;text-decoration:none;flex:none}
+
+/* ============================================================
+   STATE RACK
+   ============================================================ */
+.rack{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--l1);border:1px solid var(--l1);border-radius:var(--r);overflow:hidden}
+.rk{background:var(--s1);display:flex;flex-direction:column;min-height:212px}
+.rk-h{padding:7px 11px;background:var(--s2);border-bottom:1px solid var(--l1);display:flex;align-items:center;gap:7px}
+.rk-h s{width:7px;height:7px;display:inline-block;text-decoration:none;flex:none}
+.rk-h .t{font:600 8.5px/1 var(--ui);letter-spacing:.15em;text-transform:uppercase;color:var(--t2)}
+.rk-b{padding:12px 11px;flex:1;display:flex;flex-direction:column;gap:9px}
+.rk-b .big{font:600 12px/1.25 var(--ui);letter-spacing:.1em;text-transform:uppercase}
+.rk-b .txt{font:9.5px/1.55 var(--mono);color:var(--t2)}
+.rk-b .txt b{color:var(--t1);font-weight:400}
+.rk-f{padding:7px 11px;border-top:1px solid var(--hair);font:9px/1.3 var(--mono);color:var(--t3)}
+.rk.focus{background:var(--warn-10)}
+.rk.focus .rk-h{background:rgba(196,132,28,.16)}
+.skel{height:8px;background:linear-gradient(90deg,var(--s2) 0%,var(--s3) 40%,var(--s2) 80%);background-size:220% 100%;animation:sh 1.5s linear infinite;border-radius:1px}
+@keyframes sh{0%{background-position:120% 0}100%{background-position:-120% 0}}
+.emptyrule{height:1px;background:var(--hair);margin:2px 0}
+
+/* ---------- misc ---------- */
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font:10.5px/1.5 var(--mono)}
+.kv dt{color:var(--t3);white-space:nowrap}
+.kv dd{margin:0;color:var(--t2)}
+.blocked{list-style:none;margin:0;padding:0}
+.blocked li{display:grid;grid-template-columns:9px 1fr;gap:10px;align-items:start;padding:7px 0;border-bottom:1px solid var(--hair);font:10.5px/1.5 var(--mono);color:var(--t2)}
+.blocked li:last-child{border-bottom:0}
+.blocked s{width:7px;height:7px;margin-top:5px;text-decoration:none;display:block}
+.blocked b{color:var(--t1);font-weight:400}
+.metering{display:flex;flex-direction:column;gap:11px}
+.mrow{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding-bottom:9px;border-bottom:1px solid var(--hair)}
+.mrow:last-child{border-bottom:0;padding-bottom:0}
+.mrow .k{font:9.5px/1.3 var(--ui);letter-spacing:.14em;text-transform:uppercase;color:var(--t3)}
+.mrow .v{font:12px/1.2 var(--mono);color:var(--t1);text-align:right}
+.mrow .v small{display:block;font:9px/1.3 var(--mono);color:var(--t3);margin-top:3px}
+
+@media (max-width:1180px){
+  .matrix{grid-template-columns:repeat(6,1fr)}
+  .c7,.c8,.c9,.c5{grid-column:span 6}.c4,.c3{grid-column:span 3}.c12{grid-column:span 6}
+  .rack{grid-template-columns:repeat(3,1fr)}
+  .mast-in{grid-template-columns:1fr}
+}
+@media (max-width:820px){
+  .body{grid-template-columns:1fr}
+  .matrix{grid-template-columns:1fr}
+  .c2,.c3,.c4,.c5,.c6,.c7,.c8,.c9,.c12{grid-column:span 1}
+  .rack{grid-template-columns:1fr}
+  .ccc{grid-template-columns:1fr}
+  .ed{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none !important;transition:none !important}
+}
+</style>
+
+<div class="page">
+
+<!-- ═══════════════════════════ MASTHEAD / DESIGNER'S NOTE ═══════════════════════════ -->
+<div class="mast">
+  <div class="wrap">
+    <div class="mast-in">
+      <div class="mast-cell">
+        <h1>Direction — Control Room</h1>
+        <div class="sub">ADMIN SHELL + ADMIN-4 MONEY VIEW · 2026-09-09</div>
+        <p><b>The idea:</b> the console is an instrument panel that is read continuously rather than
+        visited — four destinations that each report their own condition, and a money view that states
+        the platform's vital signs at a glance, with <b>NO RATE CONFIGURED</b> rendered as a system
+        that is deliberately <b>not armed</b> rather than as an absence. Panels butt together on
+        hairlines so the whole posture is in one screenful; nothing worth knowing is below the fold.</p>
+      </div>
+      <div class="mast-cell">
+        <div class="lbl" style="margin-bottom:9px">Banned myself from</div>
+        <ul class="brk">
+          <li><b>no hero number</b><span>the rate never dominates; it sits in a matrix with everything else that is true</span></li>
+          <li><b>no gauge / dial / arc</b><span>bounds are a pre-arm checklist, not a meter — a check either passes or it does not</span></li>
+          <li><b>no chronology spine</b><span>history is section 05, inside one panel; the spine is the matrix</span></li>
+          <li><b>no serif, no paper</b><span>the paper/ink half of the token set is untouched — this surface is never a document</span></li>
+        </ul>
+      </div>
+      <div class="mast-cell">
+        <div class="lbl" style="margin-bottom:9px">Tokens broken — for the owner to judge</div>
+        <ul class="brk">
+          <li><b>mono everywhere</b><span>tokens reserve mono for IDs and timestamps. Here it carries the whole console: a control room is read down columns, and column alignment is the instrument. <em style="font-style:normal;color:var(--t3)">Cost: less type contrast than Rounds.</em></span></li>
+          <li><b>radius 3px</b><span>tokens ship 9 / 12 / 18px. Rounded panels cannot butt into a seamless matrix, and the seam is the layout. <em style="font-style:normal;color:var(--t3)">Cost: visibly not the clinician skin.</em></span></li>
+          <li><b>amber = unarmed</b><span>warning amber is re-cast as a <i>deliberate</i> condition, not a problem; red stays for genuine failure and refusal. Two words, two colours, no overlap.</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+<!-- ═══════════════════════════ 01 · THE SHELL ═══════════════════════════ -->
+<div class="sect">
+  <span class="ix">01</span>
+  <h2>The shell — Money selected</h2>
+  <span class="rule"></span>
+  <span class="st">STATE: LIVE · this is what an operator sees today</span>
+</div>
+<p class="caption">Six flat pages fold into four destinations. The rail is not a menu — every destination
+carries its own condition tick, so the operator knows whether to go there before going there. The ribbon
+above it is the standing telemetry line: who you are, how fresh, what cycle, and whether billing is armed.</p>
+
+<div class="console">
+
+  <!-- state ribbon -->
+  <div class="ribbon">
+    <div class="rc brand"><div class="v">QuillMD · Admin</div></div>
+    <div class="rc"><div class="k">UTC</div><div class="v">2026-09-09 14:20:07Z</div></div>
+    <div class="rc"><div class="k">Operator</div><div class="v">kasra.rayat · SUPER_ADMIN</div></div>
+    <div class="rc live"><div class="k">Session freshness</div><div class="v"><span class="dotp g"></span>04:11 / 12:00</div></div>
+    <div class="rc"><div class="k">Metering cycle</div><div class="v">2026-09 · closes 2026-10-01T00:00Z</div></div>
+    <div class="rc armed"><div class="k">Billing</div><div class="v"><span class="dotp w"></span>DISARMED</div></div>
+    <div class="rc armed grow"><div class="k">Rate in effect</div><div class="v"><span class="dotp w"></span>NONE · platform_rates 0 rows</div></div>
+  </div>
+
+  <div class="body">
+
+    <!-- the rail: navigation that reports -->
+    <nav class="rail">
+      <div class="rail-h">
+        <span class="lbl lbl-dim">Destinations</span>
+        <span class="mi">4</span>
+      </div>
+
+      <a class="dest" href="#">
+        <span class="top">
+          <span class="ix">01</span>
+          <svg viewBox="0 0 12 12"><rect x="1.5" y="3" width="9" height="7.5"/><path d="M3.6 5.4h1.2M7.2 5.4h1.2M3.6 7.6h1.2M7.2 7.6h1.2M1.5 3l4.5-2 4.5 2"/></svg>
+          <span class="nm">Practices</span>
+        </span>
+        <span class="tick"><s class="sq" style="background:var(--warn-t)"></s><span class="tk">6 rows · write path ABSENT</span></span>
+      </a>
+
+      <a class="dest on" href="#">
+        <span class="top">
+          <span class="ix">02</span>
+          <svg viewBox="0 0 12 12"><path d="M2 6h8"/><circle cx="6" cy="3.1" r="1.15"/><circle cx="6" cy="8.9" r="1.15"/></svg>
+          <span class="nm">Money</span>
+        </span>
+        <span class="tick"><s class="sq" style="background:var(--warn-t)"></s><span class="tk">NO RATE CONFIGURED</span></span>
+      </a>
+
+      <a class="dest" href="#">
+        <span class="top">
+          <span class="ix">03</span>
+          <svg viewBox="0 0 12 12"><circle cx="6" cy="4.2" r="2.1"/><path d="M2 10.4c.6-2.1 2.1-3.2 4-3.2s3.4 1.1 4 3.2"/></svg>
+          <span class="nm">Users</span>
+        </span>
+        <span class="tick"><s class="sq" style="background:var(--ready-t)"></s><span class="tk">14 users · 12 sessions</span></span>
+      </a>
+
+      <a class="dest" href="#">
+        <span class="top">
+          <span class="ix">04</span>
+          <svg viewBox="0 0 12 12"><path d="M1.6 2.8h8.8M1.6 5.4h8.8M1.6 8h5.6"/><path d="M7.4 10.2l1.3 1.3 2.4-2.6"/></svg>
+          <span class="nm">Audit</span>
+        </span>
+        <span class="tick"><s class="sq" style="background:var(--ready-t)"></s><span class="tk">+248 access rows / 24h</span></span>
+      </a>
+
+      <div class="rail-f">
+        <div class="fold">
+          <b>FOLDED IN — 6 → 4</b><br>
+          /admin, /usage &rarr; <b>Money</b><br>
+          /queues &rarr; <b>Practices</b><br>
+          /users &rarr; <b>Users</b><br>
+          /hipaa, /threats &rarr; <b>Audit</b>
+        </div>
+      </div>
+    </nav>
+
+    <!-- panel matrix -->
+    <div class="matrix">
+
+      <!-- RATE — the unarmed instrument -->
+      <section class="p c7">
+        <header class="ph">
+          <span class="t">Rate in effect</span>
+          <span class="m">platform_rates · 0 rows · read 14:20:07Z</span>
+        </header>
+        <div class="pb">
+          <div class="unarmed">
+            <div class="unarmed-bar"></div>
+            <div class="unarmed-in">
+              <div class="state">
+                <svg viewBox="0 0 20 20"><rect x="2.5" y="2.5" width="15" height="15"/><path d="M2.5 17.5l15-15"/></svg>
+                <span class="word">No rate configured</span>
+              </div>
+              <div class="sub">Not an error. Not an empty list. The system is <span class="warn">unarmed</span>, and it is unarmed on purpose.</div>
+              <div style="display:flex;gap:15px;align-items:center;flex-wrap:wrap">
+                <div class="ratio-empty">
+                  <div class="sl">— / —</div>
+                  <div class="cap">margin · numerator / denominator</div>
+                </div>
+                <dl class="kv">
+                  <dt>effective from</dt><dd class="null">— no row —</dd>
+                  <dt>set by</dt><dd class="null">— no row —</dd>
+                  <dt>bounds</dt><dd>1.0 &le; n/d &le; 5.0 · DB CHECK armed and waiting</dd>
+                  <dt>last write</dt><dd class="null">never</dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- HEALTH -->
+      <section class="p c5">
+        <header class="ph">
+          <span class="t">Health</span>
+          <span class="m">5 components · vocabulary ported</span>
+        </header>
+        <div class="pb tight hs">
+          <div class="hrow"><s class="sq ok"></s><div><div class="svc">metering</div><div class="det">writing cost rows · 6 of 6 practices</div></div><span class="w ok">Healthy</span></div>
+          <div class="hrow"><s class="sq ok"></s><div><div class="svc">ledger</div><div class="det">last write 41s ago</div></div><span class="w ok">Healthy</span></div>
+          <div class="hrow"><s class="sq wn"></s><div><div class="svc">platform_rates</div><div class="det">0 rows · nothing can be stamped</div></div><span class="w wn">Degraded</span></div>
+          <div class="hrow"><s class="sq ok"></s><div><div class="svc">wallet</div><div class="det">6 wallets · 2 buckets each · 0 drawn</div></div><span class="w ok">Healthy</span></div>
+          <div class="hrow"><s class="sq dn"></s><div><div class="svc">billing enforcement</div><div class="det">BILLING_ENFORCED absent from production</div></div><span class="w dn">Down</span></div>
+          <div class="vocab">THREE WORDS, NO FOURTH — HEALTHY · DEGRADED · DOWN, as shipped by the system-admin StatCard. <span class="warn">DOWN here is a decision, not an incident.</span></div>
+        </div>
+      </section>
+
+      <!-- WALLET -->
+      <section class="p c4">
+        <header class="ph">
+          <span class="t">Wallet — two buckets</span>
+          <span class="m">6 practices</span>
+        </header>
+        <div class="pb">
+          <div class="buckets">
+            <div class="bk promo pr">
+              <div class="k"><s></s>Promo</div>
+              <div class="v">30,000,000</div>
+              <div class="u2">µ$ &nbsp;·&nbsp; &asymp; $30.0000</div>
+              <div class="hold">held by 3 practices</div>
+            </div>
+            <div class="bsplit"></div>
+            <div class="bk paid pl">
+              <div class="k"><s></s>Paid</div>
+              <div class="v">57,500,000</div>
+              <div class="u2">µ$ &nbsp;·&nbsp; &asymp; $57.5000</div>
+              <div class="hold">held by 3 practices</div>
+            </div>
+          </div>
+          <div class="nosum"><b>These are never added.</b> No screen in this console shows a combined balance — the doctor's wallet and the platform's read the same two numbers, separately. 0 µ$ has been drawn from either bucket: nothing has ever been charged.</div>
+        </div>
+      </section>
+
+      <!-- METERING -->
+      <section class="p c3">
+        <header class="ph">
+          <span class="t">Metering</span>
+          <span class="m">forward-only</span>
+        </header>
+        <div class="pb">
+          <div class="metering">
+            <div class="mrow"><span class="k">Current cycle</span><span class="v">2026-09<small>open · 8d 09:39 remaining</small></span></div>
+            <div class="mrow"><span class="k">Next boundary</span><span class="v acct">2026-10-01T00:00Z<small>earliest any rate can take effect</small></span></div>
+            <div class="mrow"><span class="k">Cost accruing</span><span class="v ok">yes<small>17,374,000 µ$ this cycle</small></span></div>
+            <div class="mrow"><span class="k">Chargeable</span><span class="v warn">no<small>no stamp exists to charge against</small></span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- WHAT IS BLOCKED -->
+      <section class="p c5">
+        <header class="ph">
+          <span class="t">Blocked by the unarmed state</span>
+          <span class="m">4 consequences · live now</span>
+        </header>
+        <div class="pb">
+          <ul class="blocked">
+            <li><s style="background:var(--warn-t)"></s><span><b>2026-09 will never be priced.</b> Rates are forward-only; a cycle metered while unarmed cannot be charged later, by any action available on this console.</span></li>
+            <li><s style="background:var(--warn-t)"></s><span><b>No ledger row carries a rate stamp.</b> The charge column below is not zero — it is absent.</span></li>
+            <li><s style="background:var(--crit-t)"></s><span><b>BILLING_ENFORCED stays absent</b> from production until a rate exists. Arming it without a rate would enforce nothing.</span></li>
+            <li><s style="background:var(--sig-t)"></s><span><b>The doctor's balance stays unshown.</b> Settings promises a balance the product cannot yet render; both buckets are grants, undrawn.</span></li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- LEDGER -->
+      <section class="p c12">
+        <header class="ph">
+          <span class="t">Ledger — per practice · cycle 2026-09</span>
+          <span class="m">6 rows · sorted by cost · 0 stamps</span>
+        </header>
+        <div class="pb tight">
+          <div class="tw">
+            <table class="t">
+              <thead>
+                <tr>
+                  <th style="width:24%">Practice</th>
+                  <th class="r">Cost <span class="qual">µ$ · metered</span></th>
+                  <th style="width:210px">Magnitude <span class="qual">scaled to largest row</span></th>
+                  <th class="r">Charge <span class="qual">µ$ · read from ledger</span></th>
+                  <th>Rate that applied <span class="qual">stamped row id</span></th>
+                  <th class="r">Promo <span class="qual">µ$</span></th>
+                  <th class="r">Paid <span class="qual">µ$</span></th>
+                  <th>Meter</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="nm">Northgate Imaging Partners</td>
+                  <td class="r em">7,640,800 <span class="usd">$7.6408</span></td>
+                  <td><div class="barwrap"><div class="bar unpriced"><i style="width:100%"></i></div><span class="pct">100%</span></div></td>
+                  <td class="r"><span class="null">—</span></td>
+                  <td><span class="pill nostamp">&empty; no stamp</span></td>
+                  <td class="r dimmer">0</td>
+                  <td class="r em">40,000,000</td>
+                  <td><span class="st-w ok">Healthy</span></td>
+                </tr>
+                <tr>
+                  <td class="nm">Willowmere Internal Medicine</td>
+                  <td class="r em">4,182,600 <span class="usd">$4.1826</span></td>
+                  <td><div class="barwrap"><div class="bar unpriced"><i style="width:54.7%"></i></div><span class="pct">54.7%</span></div></td>
+                  <td class="r"><span class="null">—</span></td>
+                  <td><span class="pill nostamp">&empty; no stamp</span></td>
+                  <td class="r acct">20,000,000</td>
+                  <td class="r dimmer">0</td>
+                  <td><span class="st-w ok">Healthy</span></td>
+                </tr>
+                <tr>
+                  <td class="nm">Cape Ann Vascular Institute</td>
+                  <td class="r em">2,915,400 <span class="usd">$2.9154</span></td>
+                  <td><div class="barwrap"><div class="bar unpriced"><i style="width:38.2%"></i></div><span class="pct">38.2%</span></div></td>
+                  <td class="r"><span class="null">—</span></td>
+                  <td><span class="pill nostamp">&empty; no stamp</span></td>
+                  <td class="r dimmer">0</td>
+                  <td class="r em">12,500,000</td>
+                  <td><span class="st-w ok">Healthy</span></td>
+                </tr>
+                <tr>
+                  <td class="nm">Tullamore ENT Associates</td>
+                  <td class="r em">1,506,000 <span class="usd">$1.5060</span></td>
+                  <td><div class="barwrap"><div class="bar unpriced"><i style="width:19.7%"></i></div><span class="pct">19.7%</span></div></td>
+                  <td class="r"><span class="null">—</span></td>
+                  <td><span class="pill nostamp">&empty; no stamp</span></td>
+                  <td class="r dimmer">0</td>
+                  <td class="r em">5,000,000</td>
+                  <td><span class="st-w ok">Healthy</span></td>
+                </tr>
+                <tr>
+                  <td class="nm">Sableridge Family Practice</td>
+                  <td class="r em">883,200 <span class="usd">$0.8832</span></td>
+                  <td><div class="barwrap"><div class="bar unpriced"><i style="width:11.6%"></i></div><span class="pct">11.6%</span></div></td>
+                  <td class="r"><span class="null">—</span></td>
+                  <td><span class="pill nostamp">&empty; no stamp</span></td>
+                  <td class="r acct">5,000,000</td>
+                  <td class="r dimmer">0</td>
+                  <td><span class="st-w ok">Healthy</span></td>
+                </tr>
+                <tr>
+                  <td class="nm">Bridgewater Sleep Medicine</td>
+                  <td class="r em">246,000 <span class="usd">$0.2460</span></td>
+                  <td><div class="barwrap"><div class="bar unpriced"><i style="width:3.2%"></i></div><span class="pct">3.2%</span></div></td>
+                  <td class="r"><span class="null">—</span></td>
+                  <td><span class="pill nostamp">&empty; no stamp</span></td>
+                  <td class="r acct">5,000,000</td>
+                  <td class="r dimmer">0</td>
+                  <td><span class="st-w wn">Degraded</span></td>
+                </tr>
+                <tr class="tot">
+                  <td class="lbl-td">Total · 6 practices</td>
+                  <td class="r">17,374,000 <span class="usd">$17.3740</span></td>
+                  <td class="dimmer" style="font-size:9.5px">unpriced — hatched fill</td>
+                  <td class="r"><span class="null">—</span></td>
+                  <td><span class="pill nostamp">0 distinct stamps</span></td>
+                  <td class="r acct">30,000,000</td>
+                  <td class="r">57,500,000</td>
+                  <td></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="legend">
+            <span><s style="background:linear-gradient(135deg,var(--acc) 0 3px,rgba(91,91,214,.22) 3px 7px)"></s>cost — metered, and unpriceable for good</span>
+            <span><s style="background:var(--sig)"></s>&mdash; no value exists, which is not zero</span>
+            <span style="color:var(--t2)">no charge bar is drawn on this cycle, because no charge was computed by anything</span>
+          </div>
+          <div class="foot-note"><b>This screen performs no multiplication.</b> Cost and charge are both read from the ledger; the <em>rate that applied</em> is the stamped <code style="color:var(--acc-t)">platform_rates</code> row id, never a recomputation. A money view that re-multiplies is a second implementation of the rate, and it will disagree with the ledger the day somebody changes it.</div>
+        </div>
+      </section>
+
+    </div><!-- /matrix -->
+  </div><!-- /body -->
+
+  <div class="cfoot">
+    <div><b>READ-ONLY UNTIL ARMED</b> · this console writes exactly one thing: a rate row</div>
+    <div>AUTO-REFRESH <b>30s</b></div>
+    <div>LAST READ <b>14:20:07Z</b></div>
+    <div class="grow">ENTITLEMENT re-read per request · route 404-gated · access audit row written</div>
+    <div>1&ndash;4 destination · R refresh</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ 02 · NO RATE CONFIGURED ═══════════════════════════ -->
+<div class="sect">
+  <span class="ix">02</span>
+  <h2>NO RATE CONFIGURED — the state the platform is in right now</h2>
+  <span class="rule"></span>
+  <span class="st">a refusal with a cause</span>
+</div>
+<p class="caption">This is the first screen a real operator sees, so it is designed rather than defaulted. It says three
+things in the operator's order: <b>why</b> there is no rate, <b>what that is costing while it lasts</b>, and <b>the one
+action that clears it</b> — plus an explicit strip separating it from the four states it is routinely mistaken for.</p>
+
+<div class="console">
+  <div class="ribbon">
+    <div class="rc brand"><div class="v">QuillMD · Admin</div></div>
+    <div class="rc"><div class="k">Destination</div><div class="v">Money / Rate</div></div>
+    <div class="rc armed"><div class="k">Condition</div><div class="v"><span class="dotp w"></span>UNARMED</div></div>
+    <div class="rc"><div class="k">Query</div><div class="v ok">succeeded · 12ms · 0 rows</div></div>
+    <div class="rc grow"><div class="k">Since</div><div class="v">always — no rate has ever been written</div></div>
+  </div>
+
+  <div class="matrix" style="border-top:1px solid var(--l1)">
+    <section class="p c12">
+      <header class="ph"><span class="t">Rate in effect</span><span class="m">platform_rates · SELECT returned 0 rows · not an error</span></header>
+      <div class="pb">
+        <div class="unarmed">
+          <div class="unarmed-bar"></div>
+          <div class="unarmed-in">
+            <div class="state">
+              <svg viewBox="0 0 20 20"><rect x="2.5" y="2.5" width="15" height="15"/><path d="M2.5 17.5l15-15"/></svg>
+              <span class="word">No rate configured</span>
+            </div>
+            <div class="sub">The rate table is empty <span class="em">by design</span>. Metering continues underneath it.</div>
+
+            <div class="ccc">
+              <div class="cause">
+                <div class="h">Cause</div>
+                <p><code>platform_rates</code> contains <span class="em">0 rows</span>. The table ships empty on purpose — seeding it in a migration would make the migration the thing that set the price.</p>
+                <p>No row means no bounds violation, no failed write, and nothing to roll back. There is simply no rate, and there never has been.</p>
+              </div>
+              <div class="cons">
+                <div class="h">Consequence — live</div>
+                <p>Cost accrues: <span class="em">17,374,000 µ$</span> across 6 practices this cycle. None of it can be charged.</p>
+                <p>Rates are <span class="em">forward-only</span>. Cycle <span class="em">2026-09</span> is metered and will stay unpriced permanently — arming a rate today does not reach backwards to it.</p>
+                <p><code>BILLING_ENFORCED</code> remains absent from production, and stays absent until this clears.</p>
+              </div>
+              <div class="clr">
+                <div class="h">Cleared by — one action</div>
+                <p>Write the first rate: an exact ratio, a note saying why, effective from the next cycle boundary.</p>
+                <p>It takes effect <span class="em">2026-10-01T00:00Z</span> — not on save. Between now and then this panel keeps reading <span class="warn">NO RATE CONFIGURED</span>, and it will be correct.</p>
+                <div class="act-row" style="margin-top:12px">
+                  <button class="btn"><svg viewBox="0 0 12 12"><path d="M2 6h8"/><circle cx="6" cy="3.1" r="1.15"/><circle cx="6" cy="8.9" r="1.15"/></svg>Set the first rate</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="isnot">
+              <div><div class="n"><s></s>Not an error</div><div class="why">Nothing failed. The read succeeded in 12ms and returned an honest zero.</div></div>
+              <div><div class="n"><s></s>Not empty</div><div class="why">An empty <i>list</i> is a surface with nothing to show. Six practices are metering right now.</div></div>
+              <div><div class="n"><s></s>Not refused</div><div class="why">Your entitlement is intact and was re-read for this request. A refusal renders as 404, not as this.</div></div>
+              <div><div class="n"><s></s>Not stale</div><div class="why">Session is 04:11 of 12:00. This reading is 3 seconds old.</div></div>
+              <div><div class="n"><s style="background:var(--warn-t)"></s>It <span class="warn" style="letter-spacing:.15em">is</span> unarmed</div><div class="why">A stated, deliberate, standing condition — the instrument reporting a system that has not been switched on.</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ 03 · RATE EDITOR ═══════════════════════════ -->
+<div class="sect">
+  <span class="ix">03</span>
+  <h2>Rate editor — the ratio is the thing being edited</h2>
+  <span class="rule"></span>
+  <span class="st">live: the steppers and presets work</span>
+</div>
+<p class="caption">There is no decimal field anywhere on this panel. The operator edits a <b>numerator</b> and a
+<b>denominator</b>; the &times; figure underneath is derived, marked as display-only, and shows an ellipsis when the
+ratio has no exact decimal — which is the entire argument for storing <code style="color:var(--acc-t)">3 / 2</code> rather than
+<code style="color:var(--acc-t)">1.5</code>. Bounds are a pre-arm checklist, not a slider: each line is a claim the DB CHECK will
+independently make.</p>
+
+<div class="console">
+  <div class="ribbon">
+    <div class="rc brand"><div class="v">QuillMD · Admin</div></div>
+    <div class="rc"><div class="k">Destination</div><div class="v">Money / Rate / New</div></div>
+    <div class="rc"><div class="k">Writes</div><div class="v">1 row · INSERT only</div></div>
+    <div class="rc armed grow"><div class="k">Current rate</div><div class="v"><span class="dotp w"></span>NONE — this will be the first</div></div>
+  </div>
+
+  <div class="matrix" style="border-top:1px solid var(--l1)">
+
+    <section class="p c7">
+      <header class="ph"><span class="t">Margin — exact ratio</span><span class="m">stored as two integers</span></header>
+      <div class="pb">
+        <div class="ed">
+          <div class="fraction">
+            <div class="fld">
+              <input id="numIn" type="text" inputmode="numeric" value="3" aria-label="numerator">
+              <span class="spin">
+                <button type="button" data-t="n" data-d="1" aria-label="numerator up"><svg viewBox="0 0 10 10"><path d="M2 6.5L5 3.5l3 3"/></svg></button>
+                <button type="button" data-t="n" data-d="-1" aria-label="numerator down"><svg viewBox="0 0 10 10"><path d="M2 3.5L5 6.5l3-3"/></svg></button>
+              </span>
+            </div>
+            <div class="fcap">numerator</div>
+            <div class="frule"></div>
+            <div class="fcap">denominator</div>
+            <div class="fld">
+              <input id="denIn" type="text" inputmode="numeric" value="2" aria-label="denominator">
+              <span class="spin">
+                <button type="button" data-t="d" data-d="1" aria-label="denominator up"><svg viewBox="0 0 10 10"><path d="M2 6.5L5 3.5l3 3"/></svg></button>
+                <button type="button" data-t="d" data-d="-1" aria-label="denominator down"><svg viewBox="0 0 10 10"><path d="M2 3.5L5 6.5l3-3"/></svg></button>
+              </span>
+            </div>
+            <div class="derived">
+              <div class="v" id="derivedV">1.50&times;</div>
+              <div class="c">derived · display only · never stored</div>
+            </div>
+            <div class="nodec" id="noDec">No decimal input exists on this panel. <span id="exactMsg">3 / 2 is exact in both forms.</span></div>
+          </div>
+
+          <div>
+            <div class="grp">
+              <span class="lbl">Exact ratios · one click</span>
+              <div class="presets" id="presets">
+                <button class="chip" data-n="1" data-d="1">1/1<small>1.00&times;</small></button>
+                <button class="chip" data-n="5" data-d="4">5/4<small>1.25&times;</small></button>
+                <button class="chip" data-n="4" data-d="3">4/3<small>1.33&hellip;&times;</small></button>
+                <button class="chip on" data-n="3" data-d="2">3/2<small>1.50&times;</small></button>
+                <button class="chip" data-n="7" data-d="4">7/4<small>1.75&times;</small></button>
+                <button class="chip" data-n="2" data-d="1">2/1<small>2.00&times;</small></button>
+                <button class="chip" data-n="5" data-d="2">5/2<small>2.50&times;</small></button>
+                <button class="chip" data-n="3" data-d="1">3/1<small>3.00&times;</small></button>
+                <button class="chip" data-n="11" data-d="2">11/2<small>5.50&times;</small></button>
+              </div>
+            </div>
+
+            <div class="grp">
+              <span class="lbl">Effective from — forward only</span>
+              <div class="cycles">
+                <div class="cyc locked"><div class="cn">2026-08</div><div class="cs">closed · never re-priced</div></div>
+                <div class="cyc locked"><div class="cn">2026-09</div><div class="cs">open, metering · too late to price</div></div>
+                <div class="cyc on"><div class="cn">2026-10</div><div class="cs">next boundary · 2026-10-01T00:00Z</div></div>
+                <div class="cyc"><div class="cn">2026-11</div><div class="cs">later boundary</div></div>
+                <div class="cyc"><div class="cn">2026-12</div><div class="cs">later boundary</div></div>
+              </div>
+            </div>
+
+            <div class="grp">
+              <span class="lbl">Note — why <span class="dimmer" style="letter-spacing:0;text-transform:none;font-weight:400">(required)</span></span>
+              <textarea class="note" id="noteIn" placeholder="why this rate, in the words the next operator will read">First rate. Pilot cohort; covers inference cost plus support at the pilot price agreed 09-04. Reviewed with owner before write.</textarea>
+              <div class="charc"><span>free text · stored verbatim on the row</span><span id="charc">142 / 500</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="p c5">
+      <header class="ph"><span class="t">Pre-arm checks</span><span class="m" id="checkSummary">5 of 5 pass</span></header>
+      <div class="pb">
+        <div class="checks" id="checks">
+          <div class="chk pass" data-c="int"><svg viewBox="0 0 12 12"><path d="M2 6.3l2.6 2.6L10 3.4"/></svg><span class="cx">numerator and denominator are integers &ge; 1</span><span class="cv" id="cvInt">3, 2</span></div>
+          <div class="chk pass" data-c="lo"><svg viewBox="0 0 12 12"><path d="M2 6.3l2.6 2.6L10 3.4"/></svg><span class="cx">n / d &ge; 1.0 &nbsp;<span class="dimmer">— never charge below cost</span></span><span class="cv" id="cvLo">1.50 &ge; 1.0</span></div>
+          <div class="chk pass" data-c="hi"><svg viewBox="0 0 12 12"><path d="M2 6.3l2.6 2.6L10 3.4"/></svg><span class="cx">n / d &le; 5.0 &nbsp;<span class="dimmer">— ceiling</span></span><span class="cv" id="cvHi">1.50 &le; 5.0</span></div>
+          <div class="chk pass" data-c="db"><svg viewBox="0 0 12 12"><path d="M2 6.3l2.6 2.6L10 3.4"/></svg><span class="cx">DB CHECK <code style="color:var(--t2)">platform_rates_margin_bounds</code></span><span class="cv" id="cvDb">will accept</span></div>
+          <div class="chk pass" data-c="fwd"><svg viewBox="0 0 12 12"><path d="M2 6.3l2.6 2.6L10 3.4"/></svg><span class="cx">effective_from is a future cycle boundary</span><span class="cv">2026-10-01T00:00Z</span></div>
+        </div>
+
+        <div class="act-row">
+          <button class="btn" id="armBtn"><svg viewBox="0 0 12 12"><path d="M1.5 6h9M7.5 3l3 3-3 3"/></svg><span id="armLbl">Write rate &mdash; effective 2026-10-01</span></button>
+          <button class="btn ghost">Cancel</button>
+        </div>
+        <p class="act-note" style="margin-top:11px">This <b class="em">inserts one row</b>. It modifies nothing. No cycle before 2026-10 is re-priced, and the row you are about to write becomes the stamp every 2026-10 ledger row carries.</p>
+
+        <div style="margin-top:16px;padding-top:13px;border-top:1px solid var(--hair)">
+          <span class="lbl" style="display:block;margin-bottom:8px">Refusal — try 11/2</span>
+          <p class="act-note" style="max-width:none">Pick the <code style="color:var(--acc-t)">11/2</code> chip above and this panel becomes its own error state: the ceiling check fails, the CHECK constraint is named as the thing that will refuse, and the write button will not arm. The bound is enforced in the database; this panel only tells you so first.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ 04 · PER PRACTICE, ARMED ═══════════════════════════ -->
+<div class="sect">
+  <span class="ix">04</span>
+  <h2>Per practice — cycle 2026-10, armed</h2>
+  <span class="rule"></span>
+  <span class="st">PROJECTED · one cycle after the first rate takes effect</span>
+</div>
+<p class="caption">The same ledger surface once a stamp exists. Charge is read, not computed; the &Delta; column is a
+<b>measured difference</b> between two ledger quantities; drift is the only number this screen calculates and it is
+labelled as such. Note what the wallet proves: every balance is its grant minus <b>2026-10 only</b> — 2026-09 was
+metered and never charged, and the two buckets still show it.</p>
+
+<div class="console">
+  <div class="ribbon">
+    <div class="rc brand"><div class="v">QuillMD · Admin</div></div>
+    <div class="rc live"><div class="k">Billing</div><div class="v"><span class="dotp g"></span>ARMED</div></div>
+    <div class="rc"><div class="k">Rate in effect</div><div class="v">3 / 2 &nbsp;<span class="dimmer">= 1.50&times;</span> &nbsp;since 2026-10-01T00:00Z</div></div>
+    <div class="rc"><div class="k">Stamp</div><div class="v acct"><span class="stamp-mark"></span>pr_7c41e0</div></div>
+    <div class="rc"><div class="k">Cycle</div><div class="v">2026-10 · closed</div></div>
+    <div class="rc armed grow"><div class="k">Drift &ge; &plusmn;25%</div><div class="v"><span class="dotp w"></span>3 practices</div></div>
+  </div>
+
+  <div class="body">
+    <nav class="rail">
+      <div class="rail-h"><span class="lbl lbl-dim">Destinations</span><span class="mi">4</span></div>
+      <a class="dest" href="#"><span class="top"><span class="ix">01</span><svg viewBox="0 0 12 12"><rect x="1.5" y="3" width="9" height="7.5"/><path d="M3.6 5.4h1.2M7.2 5.4h1.2M3.6 7.6h1.2M7.2 7.6h1.2M1.5 3l4.5-2 4.5 2"/></svg><span class="nm">Practices</span></span><span class="tick"><s class="sq" style="background:var(--warn-t)"></s><span class="tk">6 rows · write path ABSENT</span></span></a>
+      <a class="dest on" href="#"><span class="top"><span class="ix">02</span><svg viewBox="0 0 12 12"><path d="M2 6h8"/><circle cx="6" cy="3.1" r="1.15"/><circle cx="6" cy="8.9" r="1.15"/></svg><span class="nm">Money</span></span><span class="tick"><s class="sq" style="background:var(--ready-t)"></s><span class="tk">1.50&times; · 3 drifting</span></span></a>
+      <a class="dest" href="#"><span class="top"><span class="ix">03</span><svg viewBox="0 0 12 12"><circle cx="6" cy="4.2" r="2.1"/><path d="M2 10.4c.6-2.1 2.1-3.2 4-3.2s3.4 1.1 4 3.2"/></svg><span class="nm">Users</span></span><span class="tick"><s class="sq" style="background:var(--ready-t)"></s><span class="tk">14 users · 12 sessions</span></span></a>
+      <a class="dest" href="#"><span class="top"><span class="ix">04</span><svg viewBox="0 0 12 12"><path d="M1.6 2.8h8.8M1.6 5.4h8.8M1.6 8h5.6"/><path d="M7.4 10.2l1.3 1.3 2.4-2.6"/></svg><span class="nm">Audit</span></span><span class="tick"><s class="sq" style="background:var(--ready-t)"></s><span class="tk">+248 access rows / 24h</span></span></a>
+      <div class="rail-f"><div class="fold"><b>SELECTED</b><br>Money &rsaquo; Per practice<br>cycle 2026-10</div></div>
+    </nav>
+
+    <div class="matrix">
+      <section class="p c12">
+        <header class="ph"><span class="t">Ledger — per practice · cycle 2026-10</span><span class="m">6 rows · 1 distinct stamp · charge read, never recomputed</span></header>
+        <div class="pb tight">
+          <div class="tw">
+            <table class="t">
+              <thead>
+                <tr>
+                  <th style="width:22%">Practice</th>
+                  <th class="r">Cost <span class="qual">µ$ · read</span></th>
+                  <th class="r">Charge <span class="qual">µ$ · read</span></th>
+                  <th style="width:200px">Magnitude <span class="qual">cost + &Delta;, scaled</span></th>
+                  <th class="r">&Delta; <span class="qual">charge &minus; cost, measured</span></th>
+                  <th class="r">Cost drift <span class="qual">vs 2026-09 · computed here</span></th>
+                  <th>Rate that applied <span class="qual">stamped row id</span></th>
+                  <th class="r">Promo <span class="qual">µ$</span></th>
+                  <th class="r">Paid <span class="qual">µ$</span></th>
+                  <th>Meter</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="nm">Northgate Imaging Partners</td>
+                  <td class="r em">7,182,352</td>
+                  <td class="r em">10,773,528 <span class="usd">$10.7735</span></td>
+                  <td><div class="barwrap"><div class="bar"><i style="width:66.67%"></i><u style="width:33.33%"></u></div><span class="pct">100%</span></div></td>
+                  <td class="r acct">3,591,176</td>
+                  <td class="r dim">&minus;6.00%</td>
+                  <td><span class="pill stamp"><span class="stamp-mark"></span>pr_7c41e0</span></td>
+                  <td class="r dimmer">0</td>
+                  <td class="r em">29,226,472</td>
+                  <td><span class="st-w ok">Healthy</span></td>
+                </tr>
+                <tr>
+                  <td class="nm">Willowmere Internal Medicine</td>
+                  <td class="r em">4,391,730</td>
+                  <td class="r em">6,587,595 <span class="usd">$6.5876</span></td>
+                  <td><div class="barwrap"><div class="bar"><i style="width:40.76%"></i><u style="width:20.38%"></u></div><span class="pct">61.1%</span></div></td>
+                  <td class="r acct">2,195,865</td>
+                  <td class="r dim">+5.00%</td>
+                  <td><span class="pill stamp"><span class="stamp-mark"></span>pr_7c41e0</span></td>
+                  <td class="r acct">13,412,405</td>
+                  <td class="r dimmer">0</td>
+                  <td><span class="st-w ok">Healthy</span></td>
+                </tr>
+                <tr>
+                  <td class="nm">Cape Ann Vascular Institute</td>
+                  <td class="r em">4,081,560</td>
+                  <td class="r em">6,122,340 <span class="usd">$6.1223</span></td>
+                  <td><div class="barwrap"><div class="bar"><i style="width:37.89%"></i><u style="width:18.94%"></u></div><span class="pct">56.8%</span></div></td>
+                  <td class="r acct">2,040,780</td>
+                  <td class="r"><span class="pill dr">+40.00%</span></td>
+                  <td><span class="pill stamp"><span class="stamp-mark"></span>pr_7c41e0</span></td>
+                  <td class="r dimmer">0</td>
+                  <td class="r em">6,377,660</td>
+                  <td><span class="st-w ok">Healthy</span></td>
+                </tr>
+                <tr>
+                  <td class="nm">Sableridge Family Practice</td>
+                  <td class="r em">1,766,400</td>
+                  <td class="r em">2,649,600 <span class="usd">$2.6496</span></td>
+                  <td><div class="barwrap"><div class="bar"><i style="width:16.40%"></i><u style="width:8.20%"></u></div><span class="pct">24.6%</span></div></td>
+                  <td class="r acct">883,200</td>
+                  <td class="r"><span class="pill dr">+100.00%</span></td>
+                  <td><span class="pill stamp"><span class="stamp-mark"></span>pr_7c41e0</span></td>
+                  <td class="r acct">2,350,400</td>
+                  <td class="r dimmer">0</td>
+                  <td><span class="st-w ok">Healthy</span></td>
+                </tr>
+                <tr>
+                  <td class="nm">Tullamore ENT Associates</td>
+                  <td class="r em">1,536,120</td>
+                  <td class="r em">2,304,180 <span class="usd">$2.3042</span></td>
+                  <td><div class="barwrap"><div class="bar"><i style="width:14.26%"></i><u style="width:7.13%"></u></div><span class="pct">21.4%</span></div></td>
+                  <td class="r acct">768,060</td>
+                  <td class="r dim">+2.00%</td>
+                  <td><span class="pill stamp"><span class="stamp-mark"></span>pr_7c41e0</span></td>
+                  <td class="r dimmer">0</td>
+                  <td class="r em">2,695,820</td>
+                  <td><span class="st-w ok">Healthy</span></td>
+                </tr>
+                <tr>
+                  <td class="nm">Bridgewater Sleep Medicine</td>
+                  <td class="r em">24,600</td>
+                  <td class="r em">36,900 <span class="usd">$0.0369</span></td>
+                  <td><div class="barwrap"><div class="bar"><i style="width:0.23%"></i><u style="width:0.11%"></u></div><span class="pct">0.3%</span></div></td>
+                  <td class="r acct">12,300</td>
+                  <td class="r"><span class="pill dr">&minus;90.00%</span></td>
+                  <td><span class="pill stamp"><span class="stamp-mark"></span>pr_7c41e0</span></td>
+                  <td class="r acct">4,963,100</td>
+                  <td class="r dimmer">0</td>
+                  <td><span class="st-w wn">Degraded</span></td>
+                </tr>
+                <tr class="tot">
+                  <td class="lbl-td">Total · 6 practices</td>
+                  <td class="r">18,982,762 <span class="usd">$18.9828</span></td>
+                  <td class="r">28,474,143 <span class="usd">$28.4741</span></td>
+                  <td class="dimmer" style="font-size:9.5px">scaled to Northgate</td>
+                  <td class="r acct">9,491,381</td>
+                  <td class="r dim">+9.26%</td>
+                  <td><span class="pill stamp">1 distinct stamp</span></td>
+                  <td class="r acct">20,725,905</td>
+                  <td class="r">38,299,952</td>
+                  <td></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="legend">
+            <span><s style="background:var(--acc)"></s>cost</span>
+            <span><s style="background:var(--acc-t)"></s>&Delta; = charge &minus; cost, measured</span>
+            <span><s style="background:var(--warn-t)"></s>cost drift &ge; &plusmn;25% vs prior cycle</span>
+            <span><s style="background:var(--acc)"></s>promo bucket</span>
+            <span><s style="background:var(--sig-t)"></s>paid bucket</span>
+          </div>
+          <div class="foot-note">
+            <b>Read vs computed, stated:</b> cost, charge, promo and paid are <em>read</em> from the ledger and the wallet.
+            &Delta; is a <em>subtraction</em> of two read values. Cost drift is the only <em>computed</em> column and it multiplies
+            nothing by a rate. The rate column is a <em>stamp</em> — the <code style="color:var(--acc-t)">platform_rates</code> row each
+            ledger row was written against, shown so you can go and read it, never re-derived here.
+          </div>
+        </div>
+      </section>
+
+      <section class="p c4">
+        <header class="ph"><span class="t">Wallet — two buckets</span><span class="m">after cycle 2026-10</span></header>
+        <div class="pb">
+          <div class="buckets">
+            <div class="bk promo pr">
+              <div class="k"><s></s>Promo</div>
+              <div class="v">20,725,905</div>
+              <div class="u2">µ$ &nbsp;·&nbsp; &asymp; $20.7259</div>
+              <div class="hold">3 practices · granted 30,000,000</div>
+            </div>
+            <div class="bsplit"></div>
+            <div class="bk paid pl">
+              <div class="k"><s></s>Paid</div>
+              <div class="v">38,299,952</div>
+              <div class="u2">µ$ &nbsp;·&nbsp; &asymp; $38.2999</div>
+              <div class="hold">3 practices · topped up 57,500,000</div>
+            </div>
+          </div>
+          <div class="nosum"><b>Still never added.</b> Each balance is its grant minus the 2026-10 charge alone. 2026-09 metered 17,374,000 µ$ and drew nothing from either bucket — there was no stamp to charge against, and there never will be.</div>
+        </div>
+      </section>
+
+      <section class="p c4">
+        <header class="ph"><span class="t">Drift — flagged</span><span class="m">3 of 6 · &ge; &plusmn;25% cost, cycle over cycle</span></header>
+        <div class="pb">
+          <ul class="blocked">
+            <li><s style="background:var(--warn-t)"></s><span><b>Sableridge Family Practice &nbsp;+100.00%</b><br>883,200 &rarr; 1,766,400 µ$. Cost doubled inside one cycle; promo grant covers 2026-11 at this rate, then it does not.</span></li>
+            <li><s style="background:var(--warn-t)"></s><span><b>Cape Ann Vascular Institute &nbsp;+40.00%</b><br>2,915,400 &rarr; 4,081,560 µ$. Paid balance 6,377,660 µ$ — roughly one further cycle at this level.</span></li>
+            <li><s style="background:var(--warn-t)"></s><span><b>Bridgewater Sleep Medicine &nbsp;&minus;90.00%</b><br>246,000 &rarr; 24,600 µ$. Meter is DEGRADED. A practice that stopped is a support question, not a billing one.</span></li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="p c4">
+        <header class="ph"><span class="t">Stamp reconciliation</span><span class="m">1 rate · 6 practices · 6 rows</span></header>
+        <div class="pb">
+          <dl class="kv">
+            <dt>distinct stamps</dt><dd class="em">1 &nbsp;<span class="dimmer">— expected for a cycle with no boundary crossing</span></dd>
+            <dt>stamp</dt><dd><span class="pill stamp"><span class="stamp-mark"></span>pr_7c41e0</span></dd>
+            <dt>ratio on that row</dt><dd class="em">3 / 2 &nbsp;<span class="dimmer">display 1.50&times;</span></dd>
+            <dt>written</dt><dd>2026-09-09 14:31:02Z by kasra.rayat</dd>
+            <dt>effective</dt><dd>2026-10-01T00:00Z</dd>
+            <dt>unstamped rows</dt><dd class="ok">0 &nbsp;<span class="dimmer">— every 2026-10 row carries a rate</span></dd>
+          </dl>
+          <div class="nosum" style="border-top-color:var(--hair)">If this panel ever reads <b>more than one distinct stamp inside a single cycle</b>, that is a finding, not a display quirk: a rate moved mid-cycle, and the ledger — not this screen — is the record of which rows got which.</div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ 05 · HISTORY ═══════════════════════════ -->
+<div class="sect">
+  <span class="ix">05</span>
+  <h2>History — insert, never update</h2>
+  <span class="rule"></span>
+  <span class="st">PROJECTED · three rates over five cycles</span>
+</div>
+<p class="caption">A list of writes, not a diff of a value. Every entry is a whole row with its own id, and the row above it
+was never touched — the gutter carries the id and the sequence so the append-only shape is visible before you read a word.
+Rejected writes are absent by construction: the CHECK refuses them, so they never become rows here. They land in Audit.</p>
+
+<div class="console">
+  <div class="ribbon">
+    <div class="rc brand"><div class="v">QuillMD · Admin</div></div>
+    <div class="rc"><div class="k">Destination</div><div class="v">Money / Rate / History</div></div>
+    <div class="rc"><div class="k">Table</div><div class="v">platform_rates · 3 rows</div></div>
+    <div class="rc"><div class="k">Updates ever issued</div><div class="v ok">0</div></div>
+    <div class="rc grow"><div class="k">Deletes ever issued</div><div class="v ok">0</div></div>
+  </div>
+
+  <div class="matrix" style="border-top:1px solid var(--l1)">
+    <section class="p c8">
+      <header class="ph"><span class="t">Rate writes</span><span class="m">newest last · nothing here has ever been edited</span></header>
+      <div class="pb tight hist">
+
+        <article class="hrec">
+          <div class="hgut"><div class="rid">pr_7c41e0</div><div class="seq">row 1 of 3</div></div>
+          <div class="hbody">
+            <div class="hline">
+              <div class="fromto">
+                <span class="x">from</span><span class="a">&empty; no rate</span>
+                <svg viewBox="0 0 16 10"><path d="M0 5h14M10.5 1.6L14 5l-3.5 3.4"/></svg>
+                <span class="x">to</span><span class="b">3 / 2</span><span class="a">= 1.50&times;</span>
+              </div>
+            </div>
+            <div class="hmeta">
+              <span>written <b>2026-09-09 14:31:02Z</b></span>
+              <span>by <b>kasra.rayat</b> · SUPER_ADMIN</span>
+              <span>effective <b>2026-10-01T00:00Z</b></span>
+            </div>
+            <p class="hnote">First rate. Pilot cohort; covers inference cost plus support at the pilot price agreed 09-04. Reviewed with owner before write.</p>
+          </div>
+        </article>
+
+        <article class="hrec">
+          <div class="hgut"><div class="rid">pr_9d02b7</div><div class="seq">row 2 of 3</div></div>
+          <div class="hbody">
+            <div class="hline">
+              <div class="fromto">
+                <span class="x">from</span><span class="a">3 / 2 &nbsp;= 1.50&times;</span>
+                <svg viewBox="0 0 16 10"><path d="M0 5h14M10.5 1.6L14 5l-3.5 3.4"/></svg>
+                <span class="x">to</span><span class="b">7 / 5</span><span class="a">= 1.40&times;</span>
+              </div>
+            </div>
+            <div class="hmeta">
+              <span>written <b>2026-11-02 09:12:44Z</b></span>
+              <span>by <b>kasra.rayat</b> · SUPER_ADMIN</span>
+              <span>effective <b>2026-12-01T00:00Z</b></span>
+            </div>
+            <p class="hnote">Model mix shifted and unit cost fell. Passing part of it back to the pilot cohort rather than widening margin quietly. 2026-11 keeps 3/2 — the change does not reach backwards.</p>
+          </div>
+        </article>
+
+        <article class="hrec">
+          <div class="hgut"><div class="rid">pr_b6e11a</div><div class="seq">row 3 of 3 · in effect</div></div>
+          <div class="hbody">
+            <div class="hline">
+              <div class="fromto">
+                <span class="x">from</span><span class="a">7 / 5 &nbsp;= 1.40&times;</span>
+                <svg viewBox="0 0 16 10"><path d="M0 5h14M10.5 1.6L14 5l-3.5 3.4"/></svg>
+                <span class="x">to</span><span class="b">9 / 5</span><span class="a">= 1.80&times;</span>
+              </div>
+            </div>
+            <div class="hmeta">
+              <span>written <b>2027-01-14 17:48:20Z</b></span>
+              <span>by <b>d.okonkwo</b> · SUPER_ADMIN</span>
+              <span>effective <b>2027-02-01T00:00Z</b></span>
+            </div>
+            <p class="hnote">Adds 24/7 on-call to the plan; the ratio carries the support cost. Agreed with owner 01-13. Practices on promo grants were notified 01-14.</p>
+          </div>
+        </article>
+
+        <div class="append"><s></s>APPEND-ONLY — 3 inserts, 0 updates, 0 deletes. Reading this list top to bottom is the whole audit; there is no prior version of any row to compare against.</div>
+      </div>
+    </section>
+
+    <section class="p c4">
+      <header class="ph"><span class="t">History — as it reads today</span><span class="m">the real state · 0 rows</span></header>
+      <div class="pb">
+        <div style="border:1px dashed var(--l2);border-radius:var(--r);padding:22px 16px;text-align:center;background:var(--warn-10)">
+          <div class="lbl" style="color:var(--warn-t);margin-bottom:8px">Empty — and correctly so</div>
+          <div style="font:11px/1.6 var(--mono);color:var(--t2);max-width:36ch;margin:0 auto">
+            No rate has ever been written, so this list has nothing in it. That is the <span class="warn">empty</span> state —
+            a list with no members — and it is <span class="em">not</span> the same condition as
+            <span class="warn">NO RATE CONFIGURED</span>, which is a statement about the platform rather than about a list.
+          </div>
+        </div>
+        <div class="nosum" style="border-top:1px solid var(--hair);margin-top:15px">
+          <b>Where a refused write goes.</b> <code style="color:var(--acc-t)">11/2</code> violates the CHECK, so no row is
+          inserted and this list does not change. The attempt is still recorded — in <span class="em">Audit</span>, with the
+          operator, the ratio attempted and the constraint that refused it. A rate history that showed failures would stop
+          being a list of what the price has been.
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ 06 · STATE RACK ═══════════════════════════ -->
+<div class="sect">
+  <span class="ix">06</span>
+  <h2>State rack — every surface, side by side</h2>
+  <span class="rule"></span>
+  <span class="st">six conditions, read in one glance</span>
+</div>
+<p class="caption">Racked rather than stacked, so an operator can see that these are six <b>different</b> conditions and not
+six flavours of "nothing here". The rightmost is the one that is live right now, and the rack is how it earns its own word.</p>
+
+<div class="rack">
+  <div class="rk">
+    <div class="rk-h"><s style="background:var(--proc-t)"></s><span class="t">Loading</span></div>
+    <div class="rk-b">
+      <div class="skel" style="width:82%"></div>
+      <div class="skel" style="width:60%"></div>
+      <div class="skel" style="width:71%"></div>
+      <div class="skel" style="width:44%"></div>
+      <div class="txt" style="margin-top:auto">awaiting <b>platform_rates</b> and 6 wallet reads. Shapes only — no number is drawn until it is real.</div>
+    </div>
+    <div class="rk-f">t+0.4s · no timeout yet</div>
+  </div>
+
+  <div class="rk">
+    <div class="rk-h"><s style="background:var(--sig)"></s><span class="t">Empty</span></div>
+    <div class="rk-b">
+      <div class="big" style="color:var(--sig-t)">0 practices</div>
+      <div class="emptyrule"></div><div class="emptyrule"></div><div class="emptyrule"></div>
+      <div class="txt">metered this cycle. The query succeeded and the set has no members. <b>Nothing is wrong and nothing is pending.</b></div>
+    </div>
+    <div class="rk-f">read 14:20:07Z · 6ms</div>
+  </div>
+
+  <div class="rk">
+    <div class="rk-h"><s style="background:var(--crit-t)"></s><span class="t">Error</span></div>
+    <div class="rk-b">
+      <div class="big" style="color:var(--crit-t)">Ledger read failed</div>
+      <div class="txt"><b>500</b> · timeout after 8,000ms on the per-practice aggregate. Rate and wallet panels still hold — this console fails one panel at a time, never the screen.</div>
+      <button class="btn ghost" style="margin-top:auto;align-self:flex-start;padding:6px 10px">Retry panel</button>
+    </div>
+    <div class="rk-f">req a41f0c · retried 0/3</div>
+  </div>
+
+  <div class="rk">
+    <div class="rk-h"><s style="background:var(--crit-t)"></s><span class="t">Refused</span></div>
+    <div class="rk-b">
+      <div class="big" style="color:var(--crit-t)">404 — not found</div>
+      <div class="txt">Entitlement re-read for this request and it is not SUPER_ADMIN. The route answers <b>not found</b> rather than <b>forbidden</b>, so its existence is not disclosed.</div>
+      <div class="txt" style="color:var(--t2)">You are seeing an operator's rendering of a refusal; the refused user sees a plain 404 and nothing else.</div>
+    </div>
+    <div class="rk-f">access audit row written</div>
+  </div>
+
+  <div class="rk">
+    <div class="rk-h"><s style="background:var(--warn-t)"></s><span class="t">Stale</span></div>
+    <div class="rk-b">
+      <div class="big" style="color:var(--warn-t)">Session 12:41 old</div>
+      <div class="txt">Admin freshness is <b>12:00</b>. Figures below are frozen at the last fresh read — <b>02:11:44Z</b> — and are not refreshing.</div>
+      <div class="txt">No write is offered while stale. Re-authenticate and the panel resumes; the numbers do not silently update underneath you.</div>
+      <button class="btn" style="margin-top:auto;align-self:flex-start;padding:6px 10px">Re-authenticate</button>
+    </div>
+    <div class="rk-f">frozen · 41m behind</div>
+  </div>
+
+  <div class="rk focus">
+    <div class="rk-h"><s style="background:var(--warn-t)"></s><span class="t">No rate configured</span></div>
+    <div class="rk-b">
+      <div style="display:flex;align-items:center;gap:8px">
+        <svg viewBox="0 0 20 20" style="width:15px;height:15px;stroke:var(--warn-t);fill:none;stroke-width:1.4;flex:none"><rect x="2.5" y="2.5" width="15" height="15"/><path d="M2.5 17.5l15-15"/></svg>
+        <span class="big" style="color:var(--warn-t)">Unarmed</span>
+      </div>
+      <div class="txt"><b>The live condition.</b> Read succeeded, 0 rows, entitlement intact, session fresh — so it is none of the five to its left.</div>
+      <div class="txt" style="color:var(--t2)">Metering continues. Nothing can be charged. Clearing it is one deliberate write, effective next cycle.</div>
+      <button class="btn" style="margin-top:auto;align-self:flex-start;padding:6px 10px">Set the first rate</button>
+    </div>
+    <div class="rk-f" style="color:var(--warn-t)">standing since inception</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ 07 · THE SHELL HOLDS THE REST ═══════════════════════════ -->
+<div class="sect">
+  <span class="ix">07</span>
+  <h2>The shell holds the other three — Audit selected</h2>
+  <span class="rule"></span>
+  <span class="st">same ribbon, same rail, same matrix</span>
+</div>
+<p class="caption">Proof that the shell was designed first and the money view was put into it: nothing about the frame
+changes when the destination does. The rail selection moves, the ribbon's third cell re-scopes, the matrix re-fills.</p>
+
+<div class="console">
+  <div class="ribbon">
+    <div class="rc brand"><div class="v">QuillMD · Admin</div></div>
+    <div class="rc"><div class="k">UTC</div><div class="v">2026-09-09 14:22:38Z</div></div>
+    <div class="rc"><div class="k">Operator</div><div class="v">kasra.rayat · SUPER_ADMIN</div></div>
+    <div class="rc live"><div class="k">Session freshness</div><div class="v"><span class="dotp g"></span>04:14 / 12:00</div></div>
+    <div class="rc"><div class="k">Scope</div><div class="v">Audit · last 24h</div></div>
+    <div class="rc armed grow"><div class="k">Rate in effect</div><div class="v"><span class="dotp w"></span>NONE · platform_rates 0 rows</div></div>
+  </div>
+  <div class="body">
+    <nav class="rail">
+      <div class="rail-h"><span class="lbl lbl-dim">Destinations</span><span class="mi">4</span></div>
+      <a class="dest" href="#"><span class="top"><span class="ix">01</span><svg viewBox="0 0 12 12"><rect x="1.5" y="3" width="9" height="7.5"/><path d="M3.6 5.4h1.2M7.2 5.4h1.2M3.6 7.6h1.2M7.2 7.6h1.2M1.5 3l4.5-2 4.5 2"/></svg><span class="nm">Practices</span></span><span class="tick"><s class="sq" style="background:var(--warn-t)"></s><span class="tk">6 rows · write path ABSENT</span></span></a>
+      <a class="dest" href="#"><span class="top"><span class="ix">02</span><svg viewBox="0 0 12 12"><path d="M2 6h8"/><circle cx="6" cy="3.1" r="1.15"/><circle cx="6" cy="8.9" r="1.15"/></svg><span class="nm">Money</span></span><span class="tick"><s class="sq" style="background:var(--warn-t)"></s><span class="tk">NO RATE CONFIGURED</span></span></a>
+      <a class="dest" href="#"><span class="top"><span class="ix">03</span><svg viewBox="0 0 12 12"><circle cx="6" cy="4.2" r="2.1"/><path d="M2 10.4c.6-2.1 2.1-3.2 4-3.2s3.4 1.1 4 3.2"/></svg><span class="nm">Users</span></span><span class="tick"><s class="sq" style="background:var(--ready-t)"></s><span class="tk">14 users · 12 sessions</span></span></a>
+      <a class="dest on" href="#"><span class="top"><span class="ix">04</span><svg viewBox="0 0 12 12"><path d="M1.6 2.8h8.8M1.6 5.4h8.8M1.6 8h5.6"/><path d="M7.4 10.2l1.3 1.3 2.4-2.6"/></svg><span class="nm">Audit</span></span><span class="tick"><s class="sq" style="background:var(--ready-t)"></s><span class="tk">+248 access rows / 24h</span></span></a>
+      <div class="rail-f"><div class="fold"><b>FOLDED IN</b><br>/hipaa &rarr; Audit<br>/threats &rarr; Audit</div></div>
+    </nav>
+    <div class="matrix">
+      <section class="p c5">
+        <header class="ph"><span class="t">Admin access</span><span class="m">last 24h</span></header>
+        <div class="pb">
+          <dl class="kv">
+            <dt>access rows written</dt><dd class="em">248 &nbsp;<span class="dimmer">one per admin request, by construction</span></dd>
+            <dt>distinct operators</dt><dd class="em">2</dd>
+            <dt>entitlement re-reads</dt><dd class="em">248 &nbsp;<span class="dimmer">never cached across requests</span></dd>
+            <dt>404-gated refusals</dt><dd class="ok">0</dd>
+            <dt>stale-session rejections</dt><dd class="em">3 &nbsp;<span class="dimmer">&gt;12h · re-auth required</span></dd>
+          </dl>
+        </div>
+      </section>
+      <section class="p c4">
+        <header class="ph"><span class="t">Rate writes</span><span class="m">all time</span></header>
+        <div class="pb">
+          <dl class="kv">
+            <dt>inserts</dt><dd class="em">0</dd>
+            <dt>refused by CHECK</dt><dd class="em">0</dd>
+            <dt>updates attempted</dt><dd class="ok">0 &nbsp;<span class="dimmer">the table takes none</span></dd>
+          </dl>
+          <div class="nosum" style="border-top:1px solid var(--hair)">Audit is where a <b>refused</b> rate write is recorded. History only ever holds prices that actually applied.</div>
+        </div>
+      </section>
+      <section class="p c3">
+        <header class="ph"><span class="t">Session actions</span><span class="m">ported vocabulary</span></header>
+        <div class="pb">
+          <div class="mi" style="line-height:1.9;color:var(--t2)">
+            create · update · deactivate<br>activate · delete · resetPassword<br>killAllSessions · getUserSessions<br>deleteSessionLog
+          </div>
+          <div class="nosum" style="border-top:1px solid var(--hair)">Nine audited actions carried over from the dark provisioning console. The design moves; the console does not come back.</div>
+        </div>
+      </section>
+    </div>
+  </div>
+  <div class="cfoot">
+    <div><b>SHELL UNCHANGED</b> · ribbon, rail and matrix are the same components as section 01</div>
+    <div class="grow">only the matrix contents differ per destination</div>
+    <div>AUTO-REFRESH <b>30s</b></div>
+  </div>
+</div>
+
+</div><!-- /wrap -->
+</div><!-- /page -->
+
+<script>
+(function(){
+  var numIn=document.getElementById('numIn'), denIn=document.getElementById('denIn');
+  if(!numIn||!denIn) return;
+  var derivedV=document.getElementById('derivedV'), exactMsg=document.getElementById('exactMsg'),
+      noDec=document.getElementById('noDec'), armBtn=document.getElementById('armBtn'),
+      armLbl=document.getElementById('armLbl'), summary=document.getElementById('checkSummary'),
+      cvInt=document.getElementById('cvInt'), cvLo=document.getElementById('cvLo'),
+      cvHi=document.getElementById('cvHi'), cvDb=document.getElementById('cvDb'),
+      noteIn=document.getElementById('noteIn'), charc=document.getElementById('charc');
+
+  var TICK='<svg viewBox="0 0 12 12"><path d="M2 6.3l2.6 2.6L10 3.4"/></svg>';
+  var CROSS='<svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6"/></svg>';
+
+  function readInt(el){ var v=parseInt(String(el.value).replace(/[^0-9-]/g,''),10); return isNaN(v)?0:v; }
+
+  /* exact-decimal formatter: two places when the ratio terminates there, else four with an ellipsis */
+  function fmt(n,d){
+    if(d===0) return '—';
+    if((n*100)%d===0) return (n/d).toFixed(2)+'×';
+    if((n*10000)%d===0) return (n/d).toFixed(4)+'×';
+    return (n/d).toFixed(4)+'…×';
+  }
+
+  function setChk(sel,pass,val){
+    var el=document.querySelector('.chk[data-c="'+sel+'"]'); if(!el) return;
+    el.className='chk '+(pass?'pass':'fail');
+    el.querySelector('svg').outerHTML = pass?TICK:CROSS;
+    if(val!=null){ var v=el.querySelector('.cv'); if(v) v.textContent=val; }
+  }
+
+  function render(){
+    var n=readInt(numIn), d=readInt(denIn);
+    var intsOk = Number.isInteger(n)&&Number.isInteger(d)&&n>=1&&d>=1;
+    var v = d>0 ? n/d : NaN;
+    var loOk = intsOk && v>=1;
+    var hiOk = intsOk && v<=5;
+    var dbOk = loOk && hiOk;
+
+    derivedV.textContent = intsOk? fmt(n,d) : '—';
+    derivedV.className = 'v'+(dbOk?'':' bad');
+
+    var terminates = intsOk && ((n*100)%d===0);
+    exactMsg.innerHTML = !intsOk ? 'Both fields take whole numbers only.'
+      : terminates ? (n+' / '+d+' is exact in both forms.')
+      : ('<b style="font-weight:400;color:var(--t1)">'+n+' / '+d+' has no exact decimal.</b> This is precisely why the ratio is what gets stored — the '+fmt(n,d)+' above is a rounded label, and the ledger never multiplies by it.');
+    noDec.style.borderColor = terminates||!intsOk ? 'rgba(196,132,28,.3)' : 'rgba(91,91,214,.42)';
+    noDec.style.background  = terminates||!intsOk ? 'var(--warn-10)' : 'var(--acc-10)';
+    noDec.style.color       = terminates||!intsOk ? 'var(--warn-t)'  : 'var(--acc-t)';
+
+    setChk('int', intsOk, n+', '+d);
+    setChk('lo',  loOk,  intsOk? (fmt(n,d).replace('×','')+' ≥ 1.0') : 'n/a');
+    setChk('hi',  hiOk,  intsOk? (fmt(n,d).replace('×','')+' ≤ 5.0') : 'n/a');
+    setChk('db',  dbOk,  dbOk? 'will accept' : 'WILL REFUSE — 23514');
+
+    /* the forward-only check is fixed-pass: effective_from is always the next boundary */
+    var passes = (intsOk?1:0)+(loOk?1:0)+(hiOk?1:0)+(dbOk?1:0)+1;
+    summary.textContent = passes+' of 5 pass';
+    summary.style.color = passes===5 ? 'var(--ready-t)' : 'var(--crit-t)';
+
+    armBtn.disabled = !dbOk;
+    armLbl.textContent = dbOk ? 'Write rate — effective 2026-10-01'
+                              : 'Refused by platform_rates_margin_bounds';
+
+    Array.prototype.forEach.call(document.querySelectorAll('#presets .chip'), function(c){
+      c.classList.toggle('on', parseInt(c.dataset.n,10)===n && parseInt(c.dataset.d,10)===d);
+    });
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('.spin button'), function(b){
+    b.addEventListener('click', function(){
+      var t=b.dataset.t, dir=parseInt(b.dataset.d,10);
+      var el = t==='n'?numIn:denIn;
+      el.value = Math.max(1, readInt(el)+dir);
+      render();
+    });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#presets .chip'), function(c){
+    c.addEventListener('click', function(){ numIn.value=c.dataset.n; denIn.value=c.dataset.d; render(); });
+  });
+  numIn.addEventListener('input', render);
+  denIn.addEventListener('input', render);
+
+  /* inert nav in a static mockup: don't let the rail jump the page to the top */
+  Array.prototype.forEach.call(document.querySelectorAll('a.dest[href="#"]'), function(a){
+    a.addEventListener('click', function(e){ e.preventDefault(); });
+  });
+
+  if(noteIn&&charc){
+    var upd=function(){ charc.textContent = noteIn.value.length+' / 500'; };
+    noteIn.addEventListener('input', upd); upd();
+  }
+  render();
+})();
+</script>

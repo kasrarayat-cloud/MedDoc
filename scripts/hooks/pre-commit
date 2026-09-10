@@ -32,6 +32,77 @@
 
 set -euo pipefail
 
+# ============================================================================
+# A CONFLICT MARKER MUST NOT REACH A COMMIT.
+# ----------------------------------------------------------------------------
+# ⚠️ THIS EXISTS BECAUSE IT HAPPENED, AND NOTHING IN THE REPOSITORY OBJECTED.
+#
+# On 2026-09-07 a merge printed its conflict list and the resolver piped that
+# output through `tail -3`, which showed ONE conflicted file and hid two more.
+# `git add -A` then staged the markers, this hook passed (it guarded clinical
+# documents only), the pre-push hook passed (it guards in-flight runs only),
+# and the commit reached `origin`. The FIRST thing to object was a 27-minute
+# CI run — and by then the branch tip carried unparseable markers inside the
+# clinical field resolver and inside a `'use client'` component.
+#
+# ⚠️ THE COST IS NOT THE PARSE ERROR. It is that a broken tree cannot be
+# measured: an adversarial pass ran four lenses against that tip and two of
+# them spent their budget discovering the branch does not compile. A tree that
+# will not build makes every proof standing on it VACUOUS, and a vacuous green
+# is the failure mode this programme spends most of its effort on.
+#
+# ⚠️ AND THE REAL DEFECT WAS ONE LAYER UP: `git merge | tail -3`. A command
+# whose output is a LIST must never be truncated by the reader — the authority
+# is `git diff --name-only --diff-filter=U`, which answers the question rather
+# than narrating it. This hook is the backstop for the day somebody truncates
+# it anyway.
+#
+# Staged content only, so an untracked scratch file with markers is not this
+# hook's business.
+# ============================================================================
+conflicted=""
+for f in $(git diff --cached --name-only --diff-filter=ACM); do
+    [ -f "$f" ] || continue
+    # ^<<<<<<< / ^>>>>>>> / a bare ^======= line — the three git writes.
+    if git show ":$f" 2>/dev/null | grep -qE '^(<<<<<<< |>>>>>>> |=======$)'; then
+        conflicted="$conflicted  $f
+"
+    fi
+done
+if [ -n "$conflicted" ]; then
+    cat >&2 <<MSG
+
+  BLOCKED: a conflict marker is staged.
+
+$conflicted
+  These files carry '<<<<<<<', '=======' or '>>>>>>>' at the start of a line.
+  A merge was left unresolved, or its conflict list was truncated by the
+  reader. Resolve them — and remember that in this repository a ledger or
+  schema conflict is a UNION, not a choice:
+
+      git diff --name-only --diff-filter=U     # the authority, never `| tail`
+
+  ⚠️ A UNION IS VERIFIED BY 'git diff --numstat' SHOWING 0 REMOVED, not by
+  reading the merged file. A section that survived and a section that was
+  re-added look identical.
+
+  If a file legitimately contains such a line (a test fixture ABOUT conflict
+  markers, documentation quoting one):
+      ALLOW_CONFLICT_MARKER=1 git commit …
+MSG
+    [ -n "${ALLOW_CONFLICT_MARKER:-}" ] || exit 1
+    echo "  ⚠️ ALLOW_CONFLICT_MARKER set — proceeding." >&2
+fi
+
+# ── THE RECORD-FIRST CURE — a ruling cited in source must already be recorded ──
+#
+# ⚠️ IT RUNS FIRST, AND DELIBERATELY ABOVE THE `ALLOW_CLINICAL_DOC` EXIT. The two
+# guards answer different questions and must not share an escape hatch: if this
+# sat below that line, `ALLOW_CLINICAL_DOC=1` — whose name promises one thing —
+# would silently disable BOTH. That is how a guard stops guarding without anyone
+# deciding to switch it off. This check has its own door, named for its own job.
+"$(dirname "${BASH_SOURCE[0]}")/../check-ruling-recorded.sh" || exit 1
+
 [ "${ALLOW_CLINICAL_DOC:-}" = "1" ] && exit 0
 
 # Only ADDED files — renames and edits of existing fixtures are not the risk.

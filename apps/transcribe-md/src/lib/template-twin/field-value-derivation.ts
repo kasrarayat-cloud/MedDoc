@@ -140,6 +140,35 @@ export function exactOption(
  * lives on the CALLER today, which is the weaker place for it — recorded as a
  * known limit rather than claimed as a design.
  */
+/**
+ * Is this text nothing at all? — ruling #218's second half.
+ *
+ * ⚠️ AN EMPTY STRING IS NOT A VALUE, AND TREATING IT AS ONE IS WORSE THAN THE
+ * DEFECT IT CAME FROM. #218 blanks the bare `other` escape hatch so a machine
+ * token cannot print. But `''` then flowed through as an ordinary string: the
+ * resolver minted `supported` / `direct_evidence_supported`, the validator
+ * computed `populated = value !== null` and returned VALID with zero issues,
+ * and the renderer emitted a **`filled`** proof over a control it had just
+ * emptied — destroying the template's own placeholder prose and putting nothing
+ * in its place.
+ *
+ * That is strictly worse than what it replaced. Printing `other` was wrong and
+ * VISIBLE; a silent blank attested as filled is wrong and invisible, and it
+ * also satisfies `fill-engine`'s `counts.filled > 0` — the only check standing
+ * between a doctor and an empty document.
+ *
+ * ⚠️ ONE PREDICATE, IMPORTED BY BOTH DERIVERS. The resolver is a SECOND
+ * implementation of this decision by design, and this house has already paid
+ * for the two disagreeing about what a null means. They must not now disagree
+ * about what an empty string means.
+ *
+ * The refusal is a `null`, which is the bounded clear: the field is COUNTED as
+ * blank and the doctor is told, rather than being told it was filled.
+ */
+export function isEmptyText(value: string): boolean {
+  return value.trim().length === 0;
+}
+
 export function deriveFieldValueFromFact(
   field: TemplateField,
   mapping: SemanticMapping | undefined,
@@ -147,7 +176,9 @@ export function deriveFieldValueFromFact(
 ): string | number | boolean | null {
   switch (field.kind) {
     case 'narrative_text':
-      return typeof fact.value === 'string' ? fact.value : null;
+      return typeof fact.value === 'string' && !isEmptyText(fact.value)
+        ? fact.value
+        : null;
     case 'single_select': {
       if (typeof fact.value !== 'string') return null;
       return exactOption(field, fact.value)?.value ?? null;
@@ -156,12 +187,30 @@ export function deriveFieldValueFromFact(
       return typeof fact.value === 'string'
         ? exactOption(field, fact.value)?.value ?? null
         : null;
-    case 'checkbox':
+    case 'checkbox': {
+      // ⚠️ #179(5) — A CHECKBOX ANSWERS FOR EXACTLY ONE SYMPTOM.
+      //
+      // This arm reads only `fact.polarity`; the finding is discarded, and
+      // that is correct ONLY when the fact could not have been about a
+      // different symptom. Before #179(2) it could: every clause in a system
+      // shared `ros.<system>`, so one affirmed heartburn ticked nausea,
+      // dysphagia and every other box — measured, and the exact class of false
+      // assertion the owner reported.
+      //
+      // Symptom-granular concepts fix that BY CONSTRUCTION: a box mapped to
+      // `ros.gastrointestinal.heartburn` is only ever reached by a heartburn
+      // fact. What construction cannot rule out is a MIS-CONFIGURED box — one
+      // whose declared scope covers several symptoms, where "affirmed" is
+      // ambiguous between them. That is refused rather than guessed: a null
+      // leaves the doctor's own default standing, and an unticked box a
+      // clinician can tick is recoverable where a wrongly-ticked one is not.
+      if (mapping?.conceptScope && mapping.conceptScope.length > 1) return null;
       return fact.polarity === 'affirmed'
         ? true
         : fact.polarity === 'denied'
           ? false
           : null;
+    }
     case 'date':
       return typeof fact.value === 'string' && isStrictIsoDate(fact.value.trim())
         ? fact.value.trim()
@@ -240,6 +289,10 @@ export const ACCUMULATING_NARRATIVE_CONCEPTS: ReadonlySet<string> = new Set([
   'assessment',
   'chief_complaint',
   'past_medical_history',
+  // #246 family 1 — a surgical history is a LIST, exactly as the medical one
+  // is. Without this a form with three "Past Surgical History" bullets takes
+  // one procedure and drops the rest.
+  'past_surgical_history',
   'family_history',
   'social_history',
   'plan',

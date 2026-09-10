@@ -23,8 +23,11 @@ import {
   type TemplateTable,
   type UnsupportedElement,
   type TemplateTwinValidationResult,
+  fieldDemandsInput,
+  isRecordDerivedRefusal,
 } from '../ir';
 import { parseExplicitNumberAndUnit } from '../encounter-facts';
+import { factMatchesMapping, normalizeConcept } from '../fact-mapping-match';
 import {
   deriveFieldValueFromFact,
   exactOption,
@@ -42,6 +45,34 @@ import {
   approvedPracticeDefaultAnchorId,
   approvedPracticeDefaultFactId,
 } from '../practice-default';
+// ⚠️ #288 — THE SHARED PREDICATE. This module used to carry three of its five
+// clauses inline; see the call site for what that cost.
+import { OMIT_LADDER_PRE_CONCEPT } from '../unmentioned-policy';
+
+/**
+ * The reason codes for blanks the ladder produces BY DESIGN — DERIVED from the
+ * table, never listed.
+ *
+ * ⚠️ CALLING THE SHARED PREDICATE WAS NOT ENOUGH, AND THE GATE SAID SO. For a
+ * MANUAL field carrying `required: true`, `requiresClinicianInput` is TRUE — the
+ * resolver never consults it there because `manual_source_not_filled` fires
+ * first, but the predicate itself still answers yes. So a validator that merely
+ * swapped its partial copy for the real function would have blocked the very
+ * fields the swap was meant to stop blocking.
+ *
+ * The rule is not "ask the predicate"; it is **do not re-decide what the ladder
+ * has already decided**. A row whose status is `not_mentioned` is a blank the
+ * certificate attests to — a MANUAL field carries no concept by construction, a
+ * `verified_note_selection` is answered by the picks bridge — and re-deciding it
+ * here is how the harm arrived one module later.
+ *
+ * ⚠️ DERIVED SO A SIXTH ROW CANNOT BE FORGOTTEN. Adding a `not_mentioned` row to
+ * the ladder extends this set automatically; a hand-written list would be the
+ * tenth mirror.
+ */
+const DESIGNED_BLANK_REASONS = new Set(
+  OMIT_LADDER_PRE_CONCEPT.filter((g) => g.status === 'not_mentioned').map((g) => g.reasonCode),
+);
 
 export const TEMPLATE_TWIN_VALIDATOR_VERSION =
   'template-field-validator/1.0.0';
@@ -73,10 +104,6 @@ interface RowValue {
   sourceFactId: string;
   evidenceAnchorId: string | null;
   optionOrdinal: string | null;
-}
-
-function normalizeConcept(value: string): string {
-  return value.normalize('NFKC').trim().toLocaleLowerCase('en-US');
 }
 
 function isRowValueArray(value: FieldResolution['value']): value is Array<Record<string, string | null>> {
@@ -181,24 +208,13 @@ function practiceDefaultMatches(
   }
 }
 
-function factMatchesMapping(
-  fact: EncounterFact,
-  mapping: SemanticMapping,
-): boolean {
-  if (!mapping.clinicalConcept) return false;
-  const concepts = new Set(
-    [mapping.clinicalConcept, ...mapping.approvedSynonyms].map(normalizeConcept),
-  );
-  if (!concepts.has(normalizeConcept(fact.concept))) return false;
-  if (
-    mapping.temporality !== null &&
-    mapping.temporality !== 'any' &&
-    fact.temporality !== mapping.temporality
-  ) {
-    return false;
-  }
-  return true;
-}
+/**
+ * ⚠️ EXPORTED SO AN ARM CAN DRIVE IT RATHER THAN RE-IMPLEMENT IT. It is a pure
+ * predicate over a fact and a mapping; exporting changes no behaviour. The
+ * alternative was an arm that reproduced this rule inline, which is a control
+ * that reimplements its subject — it passes whatever the shipped matcher does.
+ */
+export { factMatchesMapping };
 
 /** Returns true only when the output can be re-derived from cited facts. */
 function assertionSupported(
@@ -502,6 +518,10 @@ export function validateTemplateTwin(
     ) {
       add('NOT_MENTIONED_HAS_EVIDENCE', 'blocking', 'A not-mentioned field unexpectedly retains clinical evidence.', field.fieldId);
     }
+    // ⚠️ #194 — THE `default_kept` EXEMPTION IS GONE WITH THE STATUS. It
+    // existed because that one status cited the facts it EXAMINED rather than
+    // the facts that SUPPORTED a value. No status does that any more, so the
+    // check is unconditional again.
     if (citedFacts.some((fact) => !factMatchesMapping(fact, mapping))) {
       add('SOURCE_FACT_CONCEPT_MISMATCH', 'blocking', 'A cited fact does not match the approved semantic mapping.', field.fieldId);
     }
@@ -533,6 +553,36 @@ export function validateTemplateTwin(
       }
     } else if (populated && !assertionSupported(field, mapping, resolution, citedFacts)) {
       add('ASSERTION_NOT_SUPPORTED', 'blocking', 'The populated value cannot be re-derived from its cited facts.', field.fieldId);
+    }
+
+    // ══ #247 — PROVENANCE IS CHECKED IN BOTH DIRECTIONS, INDEPENDENTLY OF THE
+    // RESOLVER THAT SET THE STATUS. ═══════════════════════════════════════════
+    //
+    // `record_derived` is derived in `resolver/index.ts` from the cited facts.
+    // Re-deriving it here is not redundancy: this validator runs again over a
+    // STORED manifest at the sign gate and at certification re-verification,
+    // against facts the resolver is no longer present to vouch for. A status
+    // nothing re-checks is a label, and the label is the entire product of the
+    // `visit_record` class.
+    //
+    // ⚠️ THE SECOND ARM IS THE CLINICALLY IMPORTANT ONE. A `record_derived`
+    // resolution that cites dictation overstates the record and understates the
+    // clinician — bad, and visible. A `supported` resolution that cites the
+    // RECORD is the failure #247 exists to prevent: the manifest asserting, in
+    // the doctor's voice, something he never said. That is the exact shape
+    // `withProcedureDateFact` shipped with for months, and it was invisible
+    // because every count, every render and every gate was green.
+    const recordFacts = citedFacts.filter(
+      (fact) => fact.sourceType === 'visit_record',
+    );
+    if (
+      resolution.status === 'record_derived' &&
+      (citedFacts.length === 0 || recordFacts.length !== citedFacts.length)
+    ) {
+      add('RECORD_DERIVED_WITHOUT_RECORD_EVIDENCE', 'blocking', 'A record-derived field does not cite patient-record evidence.', field.fieldId);
+    }
+    if (resolution.status === 'supported' && recordFacts.length > 0) {
+      add('SUPPORTED_STATUS_CITES_RECORD_EVIDENCE', 'blocking', 'A field reported as dictated is supported by a patient-record value.', field.fieldId);
     }
 
     if (
@@ -607,9 +657,69 @@ export function validateTemplateTwin(
         // saying something the evidence does not.
         add('DENIAL_WITHHELD_WITHOUT_DENIAL', 'blocking', 'A withheld denial does not cite denied evidence.', field.fieldId);
       }
+    } else if (isRecordDerivedRefusal(resolution.reasonCode)) {
+      // ══ #272 — A RECORD-DERIVED REFUSAL NEVER WITHHOLDS A DOCUMENT ════════
+      //
+      // ⚠️ THIS IS THE **SECOND** BLOCKING ROUTE, AND CLOSING ONLY THE FIRST
+      // CHANGED NOTHING. The resolver stops escalating a record-derived refusal
+      // to `needs_clinician_input` — and a required field left `not_mentioned`
+      // then lands HERE instead, blocks unconditionally, and
+      // `fill-engine.ts:198` still returns `render: null`. The status moved; the
+      // outcome did not.
+      //
+      //   TWO READERS OF "A REQUIRED FIELD IS BLANK", AND FIXING ONE IS A FIX
+      //   THAT MEASURES ITSELF.
+      //
+      // Same shape and same reason as `denial_withheld` directly above, which
+      // #157(b) makes a warning UNCONDITIONALLY: *"refusing the OTHER hundred
+      // and forty-nine fields does not fill it."* A record that cannot answer
+      // is not a reason to withhold the doctor's whole form: the blank is
+      // NAMED, it is counted, and the doctor fills it by hand.
+      //
+      // ⚠️ THE PREDICATE IS SHARED WITH THE INJECTOR'S VOCABULARY (`ir.ts`) and
+      // NOT re-listed here — severity is decided from a reasonCode alone at this
+      // seam, so a fifth refusal token added to the injector and missed here
+      // would block the document again with nothing saying so. An arm asserts
+      // every emittable reason is a member.
+      add(
+        'RECORD_DERIVED_REFUSAL',
+        'warning',
+        'The patient record could not supply this value; it is blank for a named reason.',
+        field.fieldId,
+      );
+      // ⚠️ THE SAME PREDICATE THE RESOLVER ASKS, IMPORTED RATHER THAN RETYPED.
+      // #275's re-pass measured this list at THREE disjuncts against the
+      // resolver's FIVE — `field.unknownPolicy` and `mapping.blankPolicy` were
+      // missing — so a blank the resolver would have escalated could reach here
+      // and produce `valid: true` with ZERO issues. Reachable only because
+      // `semantic-mapping` happens to couple the policies today; that coupling
+      // is incidental, and this seam is where the two readers must not differ.
+    // ⚠️ AND THE LADDER IS NOT RE-DECIDED — RULING #288. #275 closed the MIRROR
+    // here (three disjuncts against the resolver's five, now one shared
+    // predicate) and did not close the HARM, which round nine found as `NM-1`:
+    // a MANUAL field carrying `required: true` still satisfies
+    // `fieldDemandsInput`, so this branch still blocked it.
+    //
+    // ⚠️ AND WIDENING THE PREDICATE MADE THAT WORSE, NOT BETTER. Two more clause
+    // combinations now qualify, so more designed blanks reach this test than
+    // before #275 — a correct fix to one half enlarging the other half's blast
+    // radius.
+    //
+    // The two ladder rows that return `not_mentioned` WITHOUT consulting the
+    // predicate — `manual_source_not_filled`, `awaiting_note_selection` — exist
+    // because blocking on them "refused the native document on every visit,
+    // forever, and the export fell back to the styled path". A MANUAL field
+    // carries no concept by construction; a `verified_note_selection` is
+    // answered by the picks bridge. Neither is a field the clinician can fill,
+    // so `valid: false` here withholds the doctor's own form for a blank the
+    // certificate attests to.
+    //
+    // ⚠️ THE RULE IS NOT "ASK THE PREDICATE", IT IS "DO NOT RE-DECIDE WHAT THE
+    // LADDER DECIDED". Asking the predicate is what #275 already did.
     } else if (
       resolution.status === 'not_mentioned' &&
-      (field.required || mapping.required || mapping.unknownPolicy === 'requires_input')
+      !DESIGNED_BLANK_REASONS.has(resolution.reasonCode ?? '') &&
+      fieldDemandsInput(field, mapping)
     ) {
       add('REQUIRED_FIELD_NOT_MENTIONED', 'blocking', 'A required field was not mentioned.', field.fieldId);
     }

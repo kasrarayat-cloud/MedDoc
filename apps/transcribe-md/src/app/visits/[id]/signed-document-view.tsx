@@ -29,8 +29,12 @@
 // nothing, and touches neither the sign route nor the audit trail.
 // ============================================================================
 
-import { useId, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { ChevronRight, Lock, Send } from 'lucide-react';
+
+import { parseNoteSections } from '@/lib/parse-note-sections';
+import { spokenBody } from '@/lib/spoken-body';
+
 import { SignAndSendModal } from './sign-and-send-modal';
 
 export interface SignedSummary {
@@ -56,6 +60,14 @@ export interface SignedDocumentViewProps {
    *  visit has no native document or it could not be produced, in which case
    *  the note renders exactly as before. */
   documentNode?: React.ReactNode;
+  /** THE SIGNED NOTE AS TEXT, for the accessibility tree — see the block that
+   *  renders it below. This is `soapText`, which `page.tsx:588-591` computes as
+   *  `signedSoap ?? soapFinal` for a SIGNED visit: the frozen record, never a
+   *  draft. Deliberately NOT `adoption?.text ?? soapText` the way the unsigned
+   *  path passes it — an adopted draft must never be what a screen reader hears
+   *  from a signed document. Absent → the block does not render, rather than
+   *  rendering empty. */
+  signedNoteText?: string;
   /** Transcript / dictation / raw-text view — the old "Input" tab, collapsed. */
   dictationNode: React.ReactNode;
   dictationLabel: string;
@@ -66,6 +78,23 @@ export function SignedDocumentView(props: SignedDocumentViewProps) {
   const [openDictation, setOpenDictation] = useState(false);
   const dictationPanelId = useId();
   const { summary } = props;
+
+  // The document is what renders whenever we HAVE one; `??` falls through only
+  // on null/undefined. So this is exactly the condition under which the note
+  // exists solely as canvas bitmaps.
+  const usingDocument = props.documentNode != null;
+  // ⚠️ GUARD ON THE TEXT, NOT ON THE SECTION COUNT. `parseNoteSections('')`
+  // returns FOUR sections — the empty SOAP skeleton, S/O/A/P with blank bodies —
+  // measured, not assumed. So `sections.length > 0` is vacuously true and would
+  // have announced four empty headings to a screen reader on a note with no
+  // text: structure that is not there. The condition is whether there is a note
+  // at all, which is a fact about the string.
+  const hasNoteText = (props.signedNoteText ?? '').trim().length > 0;
+  const spokenSections = useMemo(
+    () =>
+      usingDocument && hasNoteText ? parseNoteSections(props.signedNoteText ?? '') : [],
+    [usingDocument, hasNoteText, props.signedNoteText]
+  );
 
   const hasIcd = summary.icd.length > 0;
   const hasEm = summary.emCode !== null || summary.emNotApplicable;
@@ -80,6 +109,77 @@ export function SignedDocumentView(props: SignedDocumentViewProps) {
           when it was signed is the thing worth showing. Falls back to the note
           whenever the file cannot be produced. */}
       <article className="qm-ux-doc-note">{props.documentNode ?? props.noteNode}</article>
+
+      {/* ── THE SIGNED NOTE, STILL READABLE ────────────────────────────────
+          The document above renders as <canvas> bitmaps (document-pages.tsx
+          paints each page and sets role="img"), so to a screen reader it is one
+          unlabelled raster per page and nothing else.
+
+          ⚠️ WHAT THIS BLOCK CARRIES IS THE NOTE'S SOAP-HEADING SECTIONS, NOT THE
+          NOTE. An earlier version of this comment said "the signed note's text",
+          and the adversarial pass proved that false in three ways — all three
+          INHERITED from the shared parse/spoken pipeline this reuses, all three
+          reproduced against the real shipped functions, and all three now pinned
+          as executable facts in gate-signed-note-accessible-text.test.tsx so
+          they cannot be forgotten:
+
+            · CONTENT ABOVE THE FIRST SOAP HEADING IS DROPPED.
+              `parse-soap-sections.ts` says so in its own docstring — "anything
+              before the first SOAP heading is dropped". Measured: an
+              "ADDENDUM … ALLERGIC TO PENICILLIN" line above `## Subjective`
+              is absent from this block while the drawn document renders it.
+            · ABSENT SOAP HEADINGS ARE ANNOUNCED AS "Not documented."
+              The parser returns all four of S/O/A/P unconditionally, so a note
+              carrying only `## Subjective` tells a listener the physician
+              documented no assessment and no plan. The export prints those words
+              only under a heading that EXISTS, so the two disagree.
+            · TABLE HEADERS ARE DELETED and only conditionally restored, so a
+              measurement table whose rows collide can reach a listener as
+              unlabelled, unitless numbers in raw pipe markup.
+
+          None of that is introduced here — before this block the signed note had
+          NO accessible copy at all, so this is strictly more of the record than
+          zero. It is written down because the next session will read this
+          comment as the specification, and a false record about clinical text is
+          how the next incident starts.
+
+          ⚠️ AND IT CAN DUPLICATE ON THE WORD PATH. `usingDocument` tests whether
+          a documentNode ELEMENT was passed, never how it draws; `format` is
+          state held inside VisitDocumentSurface. On `docx_fallback` — one click
+          of the Word toggle, or any signed visit whose signature froze no native
+          document, or Gotenberg being down — the document renders as REAL DOM
+          TEXT and a screen reader meets the note twice. Threading the render
+          mode out of that component is the fix and it is a follow-up: it reaches
+          the renderer seam, which does not belong in an accessibility change.
+
+          ⚠️ THE UNSIGNED PATH ALREADY DOES THIS, AND SAYS WHY IN ITS OWN WORDS
+          (review-document-view.tsx:243-249): "Without this the entire clinical
+          note a doctor is about to sign would exist nowhere in the DOM, which is
+          not a degraded experience but an absent one." That reasoning does not
+          weaken once the note is signed — the signed note is the PERMANENT
+          record, and it was the only one of the two surfaces without the block.
+          Measured: `qm-sr-only` occurred in exactly ONE source file in the whole
+          app, and it was not this one.
+
+          ⚠️ RENDERED ONLY WHEN THE DOCUMENT IS. On the fallback path
+          `props.noteNode` mounts a real SoapEditor whose text is already in the
+          DOM, and a second copy would make a screen reader read the note twice.
+
+          Presentation only: `spokenBody` is the same pure function the unsigned
+          path uses, it touches no stored text, and nothing here is interactive —
+          so this adds reading matter to the accessibility tree and no controls
+          to it. */}
+      {usingDocument && hasNoteText && (
+        <div className="qm-sr-only" data-testid="signed-document-text">
+          <h2>The signed note, as text</h2>
+          {spokenSections.map((sec) => (
+            <section key={sec.id}>
+              <h3>{sec.label}</h3>
+              <p>{spokenBody(sec.body, props.signedNoteText ?? '')}</p>
+            </section>
+          ))}
+        </div>
+      )}
 
       {/* One slim summary row. Everything the Codes / Billing tabs carried
           for a SIGNED note, in a single glance-able strip. */}

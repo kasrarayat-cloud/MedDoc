@@ -41,6 +41,19 @@ command -v shred >/dev/null 2>&1 || {
 
 [ "$#" -gt 0 ] || { echo "usage: reap-session-scratch.sh <file>..."; exit 1; }
 
+# Walk up from a path to the sandbox root looking for a repository marker. A
+# `.git` FILE (a worktree) counts as much as a `.git` DIRECTORY: the whole point
+# is that the marker survives the worktree registration it points at.
+git_marker_above() {
+  local d="$1"
+  while [ -n "$d" ] && [ "$d" != "/" ]; do
+    case "$d" in "$SANDBOX"*) : ;; *) return 1 ;; esac
+    [ -e "$d/.git" ] && return 0
+    d="$(dirname -- "$d")"
+  done
+  return 1
+}
+
 rc=0
 for target in "$@"; do
   # Resolve symlinks and `..` BEFORE deciding. `realpath -m` resolves a path
@@ -75,12 +88,37 @@ for target in "$@"; do
   #
   # A path check cannot express this — the sandbox legitimately CONTAINS git
   # worktrees. Only git knows. So ask git, and fail closed when it cannot say.
+  # ⚠️ AND THE THIRD STATE IS THE ONE THAT BIT: GIT CANNOT ANSWER.
+  #
+  # This guard used to be TWO states — git says tracked (refuse), git says
+  # untracked (shred) — and treated "git could not answer at all" as the second.
+  # That is FAIL-OPEN on cannot-tell, in the one file whose header promises the
+  # opposite, and it fired: reaping a scratch directory whose worktree had been
+  # PRUNED shredded `colon_blank_answers.pdf`, a tracked blank fixture.
+  #
+  #     $ git -C <orphaned worktree> rev-parse --git-dir
+  #     fatal: not a git repository: /opt/meddoc-pro/.git/worktrees/al4
+  #
+  # An orphaned worktree still carries its `.git` FILE; the entry it points to is
+  # gone. So `rev-parse` fails, the `if` is skipped, and the tracked check never
+  # runs — on a directory that is FULL of tracked files.
+  #
+  # ⚠️ AND THAT STATE IS NOT EXOTIC, IT IS THE NORMAL END OF A SESSION. Scratch
+  # worktrees get `git worktree remove`d or pruned and their directories linger;
+  # that is precisely when someone reaches for this script. The guard was absent
+  # exactly when it was needed — canon 89's incident in a new costume, in the
+  # tool written to prevent canon 89's incident.
   target_dir="$(dirname -- "$resolved")"
   if git -C "$target_dir" rev-parse --git-dir >/dev/null 2>&1; then
     if git -C "$target_dir" ls-files --error-unmatch -- "$resolved" >/dev/null 2>&1; then
       echo "🔴 REFUSED (TRACKED by git — a committed fixture, not scratch): $resolved"
       rc=1; continue
     fi
+  elif git_marker_above "$target_dir"; then
+    echo "🔴 REFUSED (CANNOT TELL — a repository marker sits above this path but"
+    echo "   git will not answer for it, so whether it is a tracked fixture is"
+    echo "   UNKNOWN. Re-register or remove the worktree, then reap): $resolved"
+    rc=1; continue
   fi
   if shred -u -n 3 -z -- "$resolved"; then
     echo "   shredded: $resolved"

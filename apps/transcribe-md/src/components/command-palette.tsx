@@ -28,6 +28,8 @@ import {
 
 import { cn } from '@/lib/cn';
 import { useShortcut, formatCommandKey } from '@/lib/shortcuts';
+import { toast } from 'sonner';
+
 import { signOutAction } from '@/actions/session';
 import {
   getRecentVisits,
@@ -87,7 +89,22 @@ export function CommandPalette({ authed }: CommandPaletteProps) {
   const signOut = useCallback(
     () =>
       run(async () => {
-        await signOutAction();
+        // ⚠️ #182(2)/(3) — THE RESULT IS RENDERED, AND THIS DOOR IS WHY THE
+        // GATE NOW ENUMERATES FROM THE TREE. This component is mounted in the
+        // ROOT LAYOUT, so Cmd+K → Sign out is available on every page — and it
+        // discarded the SignOutResult. When #181 changed the action to return
+        // early on a failed revoke, this caller silently became WORSE than
+        // before the fix: the cookie was never cleared, no error was shown, and
+        // /login bounced the still-authenticated doctor back to the board.
+        //
+        // The adversarial pass found it; the gate did not, because its door
+        // list was written from the files the diff had touched rather than
+        // grepped for callers.
+        const result = await signOutAction();
+        if (!result.ok) {
+          toast.error('Sign-out failed', { description: result.reason });
+          return;
+        }
         router.push('/login');
         router.refresh();
       }),

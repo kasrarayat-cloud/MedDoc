@@ -318,7 +318,37 @@ export type AuditAction =
   /// ⚠️ A PROVENANCE LOSS IS NOT A DELETION EVENT. Written ONLY by ruled mutation
   /// acts — no runtime writer, by design — so the append-only trail never claims
   /// 29 deletions happened on the day they were merely annotated.
-  | 'TEMPLATE_PROVENANCE_LOST';
+  | 'TEMPLATE_PROVENANCE_LOST'
+  // ⚠️ MIRRORED BY HAND FROM THE PRISMA ENUM, AND THE MIRROR IS THE HAZARD.
+  // A label present ONLY here makes Postgres reject the row; logAudit catches
+  // that into one console.error and returns void, so tsc is green, the unit
+  // suite is green (logAudit is mocked), and the audit row simply never
+  // exists. The migration is what makes this line true.
+  | 'DEFAULT_INSERTED_BY_DOCTOR'
+  | 'DEFAULT_INSERT_UNDONE'
+  /// ADMIN-1 — an OWNER minted a seat invite. Carries the practice and the role
+  /// the redeemer will join with; NEVER the raw code, which exists only in
+  /// memory and in the operator's hands.
+  | 'PRACTICE_SEAT_INVITED'
+  /// ADMIN-1 — a member's practiceRole moved, old -> new.
+  /// ⚠️ NOT `USER_ROLE_CHANGED`, which is the system-admin app's label for the
+  /// SUPER_ADMIN axis. One label for both would make a practice demotion and a
+  /// super-admin grant indistinguishable in an append-only trail.
+  | 'PRACTICE_ROLE_CHANGED'
+  /// ADMIN-1 — the administration guard refused a caller. The sign route's own
+  /// reasoning: a gate nothing records is one path away from not existing.
+  | 'PRACTICE_ADMIN_REFUSED'
+  // ADMIN-3a — the `Practice` WRITE path, the verb four rows and ruling #226
+  // waited on. `PRACTICE_ARCHIVED` is the value #226 named as missing, and its
+  // absence was one of the two reasons that ruling could not execute.
+  //
+  // ⚠️ AN ARCHIVE GETS ITS OWN ACTION RATHER THAN RIDING `PRACTICE_UPDATED`.
+  // It is the act #226 orders, and an act somebody has to find later must be
+  // greppable as itself, not hidden inside a generic edit with a diff in the
+  // metadata.
+  | 'PRACTICE_UPDATED'
+  | 'PRACTICE_ARCHIVED'
+  | 'PRACTICE_RESTORED';
 
 export interface AuditLogInput {
   action: AuditAction;

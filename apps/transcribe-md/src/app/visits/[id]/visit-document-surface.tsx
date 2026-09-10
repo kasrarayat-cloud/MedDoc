@@ -23,16 +23,36 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
+import { YourBlanksPanel } from './your-blanks-panel';
+
 import {
   previewVisitDocumentAction,
   type PreviewFormat,
+  type VisitPreviewMiss,
   type VisitPreviewResult,
 } from '@/actions/preview-visit-document';
+import type { NativePreviewError } from '@/actions/preview-native-document';
 import { DocumentPages, type DocumentAnchor } from '@/components/native-preview/document-pages';
 import { NativeDocumentPreview } from '@/components/native-preview/native-document-preview';
 
-/** Doctor-facing, PHI-free. Every miss is SAID, never swallowed. */
-const MISS_TEXT: Record<string, string> = {
+/**
+ * Doctor-facing, PHI-free. Every miss is SAID, never swallowed.
+ *
+ * ⚠️ KEYED ON THE REASON UNION, NOT ON `string`, AND THAT IS THE FIX FOR A
+ * DEFECT THIS FILE ALREADY SUFFERED ONCE. It was `Record<string, string>`, so
+ * adding a sixth member to `VisitPreviewResult['reason']` was NOT a type error
+ * and the new reason rendered NOTHING — the banner is gated on truthiness. It
+ * happened again on 2026-09-08 with `no_tenant_template` (#287): the locum case
+ * the ruling exists for produced a silent fallback, where `main` had said "We
+ * could not fill your form for this visit". The change DELETED an explanation.
+ *
+ * EVERY MISS IS `Required`, so the next omission is a COMPILE ERROR rather than
+ * a silence a doctor has to interpret. The `NativePreviewError` half stays
+ * `Partial` on purpose: those are not misses, this surface speaks only some of
+ * them, and demanding text for all would be a different claim.
+ */
+const MISS_TEXT: Required<Record<VisitPreviewMiss, string>> &
+  Partial<Record<NativePreviewError, string>> = {
   not_template_visit: '',
   // ⚠️ THIS WAS THE EMPTY STRING, AND THE BANNER IS GATED ON TRUTHINESS.
   // The one miss a doctor can actually ACT on rendered NOTHING. The comment at
@@ -51,6 +71,14 @@ const MISS_TEXT: Record<string, string> = {
   no_render: 'We could not draw your form for this visit, so the note is shown instead.',
   fill_failed: 'We could not fill your form for this visit, so the note is shown instead.',
   sample_unavailable: 'We could not open your form this time, so the note is shown instead.',
+  // ⚠️ #287 — THE TENANT HAS NO CERTIFIED FORM, WHICH IS AN ORDINARY STATE.
+  // A locum documenting another practice's patient fills THAT practice's form;
+  // if the practice has none certified, there is nothing to fill and the note
+  // is the document. It names the cure like `not_certified` does, because the
+  // person who can act is the practice that owns the chart.
+  no_tenant_template:
+    'This visit belongs to a practice with no confirmed form, so QuillMD’s ' +
+    'layout is shown. That practice can confirm one in Settings › My Note Format.',
 };
 
 export interface VisitDocumentSurfaceProps {
@@ -67,7 +95,13 @@ export interface VisitDocumentSurfaceProps {
   onOutcome?: (o: { ok: boolean; reason: string | null; counts: VisitPreviewResult['counts'] }) => void;
   /** Fired when there is no document to show at all, so the caller can fall
    *  back to the styled note rather than leave a hole in the page. */
-  onUnavailable: (reason: string | null) => void;
+  /**
+   * ⚠️ THE UNION, NOT `string`. This was `(reason: string | null)`, which threw
+   * away a type `r.reason` already carries — and the widening is what let a new
+   * miss reach the banner with no text and render nothing. Typed end to end, an
+   * unspoken reason is a compile error at `MISS_TEXT`.
+   */
+  onUnavailable: (reason: VisitDocumentMissReason | null) => void;
 }
 
 export function VisitDocumentSurface(props: VisitDocumentSurfaceProps) {
@@ -77,6 +111,11 @@ export function VisitDocumentSurface(props: VisitDocumentSurfaceProps) {
   /** PDF is the faithful page; Word shows the file as Word will open it. Same
    *  bytes underneath — only the engine that draws them differs. */
   const [format, setFormat] = useState<PreviewFormat>('pdf');
+  /** Bumped when the doctor inserts or undoes one of their own defaults. The
+   *  fetch effect already keys on `revision`; this is the same mechanism for a
+   *  change this surface made itself, so the document is redrawn from the new
+   *  fill rather than showing the page they just changed. */
+  const [localRevision, setLocalRevision] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,7 +137,7 @@ export function VisitDocumentSurface(props: VisitDocumentSurfaceProps) {
     return () => {
       cancelled = true;
     };
-  }, [visitId, revision, format, onOutcome, onUnavailable]);
+  }, [visitId, revision, localRevision, format, onOutcome, onUnavailable]);
 
   const handleDrawFailed = useCallback(() => {
     setDrawFailed(true);
@@ -205,6 +244,13 @@ export function VisitDocumentSurface(props: VisitDocumentSurfaceProps) {
           {result.counts.needsReview > 0 ? ` · ${result.counts.needsReview} to check` : ''}
         </p>
       )}
+      {result.insertableDefaults && result.insertableDefaults.length > 0 && (
+        <YourBlanksPanel
+          visitId={visitId}
+          defaults={result.insertableDefaults}
+          onChanged={() => setLocalRevision((n) => n + 1)}
+        />
+      )}
       <DocumentPages
         data={result.data}
         label={styledLayout ? 'this visit' : 'this visit, on your form'}
@@ -218,3 +264,18 @@ export function VisitDocumentSurface(props: VisitDocumentSurfaceProps) {
 }
 
 export { MISS_TEXT as VISIT_DOCUMENT_MISS_TEXT };
+
+/**
+ * ⚠️ THE ONLY SUPPORTED WAY TO READ THE MAP. Indexing it with a bare `string`
+ * silently yields `undefined` for a reason nobody added text for — which is the
+ * silence this file has now been bitten by twice. Callers pass the reason they
+ * actually hold and get `undefined` only when the map genuinely has no entry.
+ */
+export type VisitDocumentMissReason = VisitPreviewMiss | NativePreviewError;
+
+export function visitDocumentMissText(
+  reason: VisitDocumentMissReason | null | undefined,
+): string | undefined {
+  if (!reason) return undefined;
+  return (MISS_TEXT as Partial<Record<string, string>>)[reason];
+}

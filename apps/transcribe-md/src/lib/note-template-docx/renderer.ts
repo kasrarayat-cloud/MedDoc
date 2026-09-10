@@ -14,7 +14,7 @@ import {
   type TemplateTwinValidationResult,
 } from '../template-twin/ir';
 import { isPrintableDenial } from '../template-twin/denial-contract';
-import { compileTemplateDocx } from './compiler';
+import { compileTemplateDocx, fieldForStructuralIdentity } from './compiler';
 import { STRUCTURE_KEEP_WHOLE } from './structure-keep';
 import type { TemplateDocxLimits } from './limits';
 import { inspectDocxPackage } from './package-security';
@@ -168,6 +168,12 @@ export async function renderTemplateDocx(
       // arm carries `blankEligible`, so spreading loses the narrowing and the
       // eligibility silently has nowhere to land.
       const base = fieldProof(field, resolution.value, 1, 'blank');
+
+      // ⚠️ #194 — THERE IS NO `kept_default` BRANCH ANY MORE. A field the
+      // renderer did not patch is `blank`, full stop. The stronger label was
+      // deleted with the keep half: it asserted the template's clause had been
+      // "found not to contradict" the encounter, and that check never existed —
+      // the status fired precisely when NO fact carried the field's concept.
       fieldProofs.push({
         kind: 'blank',
         fieldId: base.fieldId,
@@ -201,7 +207,21 @@ export async function renderTemplateDocx(
             expectedEmptiedSpanSha256(part.scan, field, patches),
             blankEligible,
           )
-        : fieldProof(field, resolution.value, 1),
+        : fieldProof(
+            field,
+            resolution.value,
+            1,
+            // ⚠️ THE EMITTER FOR `clinician_default`, AND IT LIVES HERE RATHER
+            // THAN IN A NEW BRANCH ON PURPOSE. This field was patched exactly
+            // like any other filled field — same bytes, same occurrence count,
+            // same byte-equality obligations. The ONLY thing that differs is
+            // provenance, so the only thing that changes is the word. Reading
+            // the reason code off the resolution keeps the writer, the overlay
+            // and the proof naming one event with one string.
+            resolution.reasonCode === 'clinician_scaffold_default'
+              ? 'clinician_default'
+              : 'filled',
+          ),
     );
   }
 
@@ -318,7 +338,13 @@ function assertSourceMatchesIr(
     compiled.structureSha256 !== ir.structureSha256 ||
     compiled.staticContentSha256 !== ir.staticContentSha256 ||
     canonicalSha256(compiled.parts) !== canonicalSha256(ir.parts) ||
-    canonicalSha256(compiled.fields) !== canonicalSha256(ir.fields) ||
+    // ⚠️ NORMALISED BY THE SAME FUNCTION `structureSha256` USES. Comparing the
+    // RAW field arrays orphaned every IR compiled before `scaffolded` /
+    // `scaffoldText` existed -- measured: structure hash EQUAL, this comparison
+    // NOT equal, `SOURCE_IR_MISMATCH`, and `native-export` then hands the doctor
+    // the generic styled export with only a `console.warn` to say so.
+    canonicalSha256(compiled.fields.map(fieldForStructuralIdentity)) !==
+      canonicalSha256(ir.fields.map(fieldForStructuralIdentity)) ||
     canonicalSha256(compiled.tables) !== canonicalSha256(ir.tables)
   ) {
     failTemplateDocxRender('SOURCE_IR_MISMATCH');
@@ -361,6 +387,12 @@ function assertResolutionStatus(
     'supported',
     'explicitly_denied',
     'approved_practice_default',
+    // #247 — a record-derived value IS a value and must be renderable. Without
+    // this entry the wall refuses every fill carrying a patient name or age
+    // (`FIELD_RESOLUTION_INVALID`), which reads as a corrupt manifest rather
+    // than as a missing allow-list row — the whole document is refused and
+    // nothing says why.
+    'record_derived',
   ]);
   if (resolution.value === null) {
     if (
@@ -659,6 +691,7 @@ function createFieldPatches(
   const binding = field.rendererBinding;
   const bound = part.byPath.get(binding.path);
   if (!bound) failTemplateDocxRender('BINDING_NOT_FOUND');
+
   switch (binding.bindingType) {
     case 'content_control':
       if (xmlLocalName(bound.name) !== 'sdt') {
@@ -1066,13 +1099,48 @@ function blankEligibilityFor(field: TemplateField): BlankEligibility {
 
 interface BoundedClear {
   readonly patches: ApprovedXmlPatch[];
-  /**
+  
+/**
    * May this clear earn an `emptied` proof that COUNTS toward the certification
    * blank requirement? Separate from whether the clear happened — a selection
    * clears correctly and still earns nothing, because the PDF engine falls back
    * to `w:listItem[0]` and prints a value nobody chose.
    */
   readonly blankEligible: BlankEligibility;
+}
+
+/**
+ * ⚠️ `w:showingPlcHdr` IS REMOVED WHENEVER THE CONTENT STOPS BEING THE
+ * PLACEHOLDER — WHICH IS ON THE FILLED PATH TOO, NOT ONLY THE CLEAR.
+ *
+ * The flag asserts "what you are looking at IS the placeholder", and Word acts
+ * on it by re-displaying the template's own prompt from
+ * `w:placeholder`/`w:docPart`. Writing a value makes that assertion false in
+ * exactly the way deleting the content does.
+ *
+ * ⚠️ IT LIVED INSIDE `sdtBoundedClearPatches`, SO ONLY NULLS EVER GOT IT, AND
+ * THE FAILURE DIRECTION WAS THE DOCTOR'S OWN WORDS. Measured on
+ * `WM IOV Template.docx`, the real customer form: 28 source flags, 28 fields
+ * filled, **28 flags surviving** — so a dictated `Bilateral Detailed` displays
+ * as `Choose an item.`, and `Maged S. Mikhail, MD, RPVI, RVT` as a prompt. The
+ * verification passed and no warning was emitted, because every check compares
+ * the CONTENT and this is a property beside it.
+ *
+ * ⚠️ AND THE GATE THAT NAMES THIS INVARIANT WATCHED HALF OF IT.
+ * `gate-165-bounded-clearing` is titled "`w:showingPlcHdr` is removed with the
+ * content, so Word cannot re-show the prompt" and asserts it only on the blank
+ * narrative path. The title states the invariant; the arm states one branch.
+ *
+ * ⚠️ EVERY `sdtPr` IN THE CONTROL, NOT JUST THE OUTER ONE — a nested control
+ * kept its own flag inside a span proofed `emptied`.
+ */
+function placeholderFlagPatches(
+  control: XmlElementSpan,
+  fieldId: string,
+): ApprovedXmlPatch[] {
+  return descendantXmlElements(control, 'showingPlcHdr').map((flag) =>
+    removeXmlElementPatch(flag, fieldId),
+  );
 }
 
 function sdtBoundedClearPatches(
@@ -1128,10 +1196,6 @@ function sdtBoundedClearPatches(
   // on `out.length > 0` meant a control whose content was already pure skeleton
   // kept the flag — measured as a regression against the previous commit, which
   // removed it there.
-  for (const flag of descendantXmlElements(control, 'showingPlcHdr')) {
-    out.push(removeXmlElementPatch(flag, fieldId));
-  }
-
   return { patches: out, blankEligible: eligibility };
 }
 
@@ -1178,6 +1242,14 @@ function contentControlPatches(
   const content = directXmlChild(control, 'sdtContent');
   if (!properties || !content) failTemplateDocxRender('BINDING_NOT_FOUND');
 
+  // ⚠️ ONCE, FOR EVERY PATH — filled, cleared and kind-specific alike. It used
+  // to live inside `sdtBoundedClearPatches`, which only the `value === null`
+  // branches call, so every FILLED control kept the flag and Word re-displayed
+  // the prompt over the doctor's own words. Emitted here rather than in each
+  // branch because "the content is no longer the placeholder" is true of all of
+  // them, and putting it in a branch is what made it branch-specific before.
+  const placeholderPatches = placeholderFlagPatches(control, field.fieldId);
+
   if (field.kind === 'checkbox') {
     const checkbox = descendantXmlElements(properties, 'checkbox')[0];
     const checked = checkbox
@@ -1207,6 +1279,7 @@ function contentControlPatches(
     // rather than from a list of kinds somebody has to keep correct.
     return {
       patches: [
+        ...placeholderPatches,
         setXmlAttributePatch(xml, checked, 'val', selected ? '1' : '0', field.fieldId),
         ...textContainerPatches(xml, content, glyph, field.fieldId),
       ],
@@ -1245,6 +1318,7 @@ function contentControlPatches(
     }
     return {
       patches: [
+        ...placeholderPatches,
         ...(statePatch ? [statePatch] : []),
         ...textContainerPatches(xml, content, display, field.fieldId),
       ],
@@ -1269,6 +1343,7 @@ function contentControlPatches(
       if (cleared) {
         return {
           patches: [
+        ...placeholderPatches,
             ...(lastValue ? [removeXmlElementPatch(lastValue, field.fieldId)] : []),
             ...cleared.patches,
           ],
@@ -1282,6 +1357,7 @@ function contentControlPatches(
       }
       return {
         patches: [
+        ...placeholderPatches,
           ...(lastValue ? [removeXmlElementPatch(lastValue, field.fieldId)] : []),
           ...textContainerPatches(xml, content, '', field.fieldId),
         ],
@@ -1294,6 +1370,7 @@ function contentControlPatches(
     const option = exactSelectedOption(field, resolution);
     return {
       patches: [
+        ...placeholderPatches,
         ...(lastValue
           ? [
               setXmlAttributePatch(
@@ -1323,7 +1400,7 @@ function contentControlPatches(
     const cleared = sdtBoundedClearPatches(xml, control, field, field.fieldId);
     if (cleared) {
       return {
-        patches: cleared.patches,
+        patches: [...placeholderPatches, ...cleared.patches],
         boundedClear: cleared.patches.length > 0 && cleared.blankEligible === 'eligible',
           blankEligible: cleared.blankEligible,
       };
@@ -1331,7 +1408,7 @@ function contentControlPatches(
   }
   const display = displayValue(field, resolution);
   return {
-    patches: textContainerPatches(xml, content, display, field.fieldId),
+    patches: [...placeholderPatches, ...textContainerPatches(xml, content, display, field.fieldId)],
     boundedClear: false,
       // #170 — the guard never ran on this path; `unevaluated` is the
       // honest value and it does not count. Absence means no.
@@ -1915,7 +1992,7 @@ function fieldProof(
   field: TemplateField,
   value: FieldResolution['value'],
   occurrences: number,
-  kind: 'filled' | 'blank' = 'filled',
+  kind: 'filled' | 'blank' | 'clinician_default' = 'filled',
 ): RenderedFieldProof {
   return {
     kind,

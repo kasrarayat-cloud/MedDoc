@@ -14,7 +14,10 @@ import {
   isRegisteredConcept,
   synonymsFor,
   REGISTRY_CONCEPTS,
+  type MappingSourceType,
 } from '../concept-registry';
+import { RECORD_DERIVED_CONCEPTS } from '../visit-metadata';
+import { isUnnamedRosConcept, ROS_SYSTEMS, symptomsFor } from '../ros-lexicon';
 import { withoutPlaceholderOptions } from '../../note-template-docx/placeholder-option';
 import { z } from 'zod';
 
@@ -32,6 +35,7 @@ import {
   type TemplateDocIR,
   type TemplateField,
   type TemplateTwinFieldKind,
+  expectedDataTypeForFieldKind,
 } from '../ir';
 
 const DEFAULT_MODEL =
@@ -42,7 +46,95 @@ const ModelSemanticMappingSchema = SemanticMappingSchema.extend({
   practiceDefault: z.null(),
   // Certification is a separate authenticated physician action.
   status: z.enum(['recognized', 'needs_confirmation']),
-}).strict();
+  // ⚠️ #192 — THE MODEL MAY NOT AUTHOR A RENDER POLICY, FOR THE SAME REASON IT
+  // MAY NOT AUTHOR A `practiceDefault` TWO LINES ABOVE.
+  //
+  // This schema EXTENDS `SemanticMappingSchema`, and `anthropic.ts` turns it
+  // into the tool's `input_schema`, so ANY field added there is silently handed
+  // to the model as settable. `unmentionedPolicy` arrived that way: an enum the
+  // model could set, with no mention in the system prompt, deciding whether a
+  // template's own sentence prints on a signed note. Measured end to end with
+  // no human anywhere and validation GREEN: 11 of 11 proposals came back
+  // `keep`, and a control containing `Enter assessment` rendered that string
+  // into the note -- the exact harm #192 exists to prevent, arriving through
+  // the one channel the ruling never considered, because "never inferred from
+  // content" was aimed at the RENDERER and the model infers from content too.
+  //
+  // ⚠️ AND NOTHING DOWNSTREAM WOULD HAVE CAUGHT IT: `planAutoConfirm` spreads
+  // the whole mapping into `status: 'certified'`, so the default path
+  // certifies a model-authored policy with no physician present.
+  //
+  // ⚠️ OMITTED RATHER THAN FORCED TO NULL, which is stronger than the
+  // `practiceDefault` treatment beside it: the field never appears in the tool
+  // schema at all, so there is no value for the model to choose and nothing to
+  // re-assert after parsing. Forcing `z.null()` would still SHOW it, and would
+  // make the model's omission a parse error rather than a non-event.
+})
+  .omit({ unmentionedPolicy: true })
+  .strict()
+  /**
+   * ⚠️ #208 — `conceptScope` IS A MAPPING, NOT A RENDER POLICY, SO THE MODEL MAY
+   * PROPOSE IT — AND IT IS VALIDATED HERE RATHER THAN OMITTED ABOVE.
+   *
+   * The distinction is the whole ruling, and this file already embodies both
+   * halves of it: `unmentionedPolicy` is a RENDER POLICY — what the machine does
+   * when nothing was dictated — and is `omit`ted two lines up, because the model
+   * may never author one. `clinicalConcept` and `conceptScope` are MAPPINGS —
+   * which concept a field MEANS, which concepts a clause COVERS — and the model
+   * proposes those, under validation and a human confirmation.
+   *
+   * A session read the two as colliding (#192/#193 forbid the model a policy;
+   * #179(3) hands it a scope to propose) and escalated it as undecidable. There
+   * is no collision; there is a category it had not separated.
+   *
+   * ⚠️ REFUSED AT PARSE, NOT DROPPED TO NULL — and that is deliberately UNLIKE
+   * the `clinicalConcept` treatment in the reconciler below, which silently
+   * nulls an off-registry proposal and leaves the field `needs_confirmation`.
+   * A scope is a CLAIM ABOUT COVERAGE: silently shrinking it would leave a
+   * clause asserting it covers fewer symptoms than the doctor will read on the
+   * confirm list, and silently keeping it would let an unmatchable token sit in
+   * a certified mapping. Neither is honest, so the proposal is rejected and the
+   * model retries with the error — which is a MAPPING proposal, regenerable and
+   * carrying no clinical content.
+   *
+   * ⚠️ AND THAT IS WHY THIS IS NOT THE L3 MISTAKE, WHICH LOOKS IDENTICAL. An
+   * array-level refusal at L3 discarded a whole VISIT — chief complaint,
+   * medications, allergies — because the payload was the patient's encounter and
+   * the loss was clinical. Here the payload is a template's proposed mappings:
+   * a refusal costs a retry, and the terminal fallback is
+   * `fallbackSemanticMappings`, every row `needs_confirmation`. Refusing is
+   * fail-closed on this seam and was fail-OPEN on that one.
+   */
+  .superRefine((mapping, ctx) => {
+    const scope = mapping.conceptScope;
+    if (!scope || scope.length === 0) return;
+    scope.forEach((concept, index) => {
+      if (!isRegisteredConcept(concept)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['conceptScope', index],
+          message:
+            `conceptScope entry "${concept}" is not a registered concept; ` +
+            `a clause cannot declare coverage of something no fact can carry`,
+        });
+        return;
+      }
+      // ⚠️ AND AN UNNAMED ROS CONCEPT CANNOT BE IN A SCOPE, WHICH #179's OWN
+      // BODY RULES: `ros.<system>.other` is "excluded from every declared scope
+      // by construction". `conceptMatches` already refuses it at MATCH time, so
+      // refusing it here makes the two readers agree instead of leaving a token
+      // that parses, certifies, and can never match anything.
+      if (isUnnamedRosConcept(concept)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['conceptScope', index],
+          message:
+            `conceptScope entry "${concept}" names no specific symptom; ` +
+            `a scope is a list of named symptoms and the matcher refuses this`,
+        });
+      }
+    });
+  });
 
 const ModelSemanticMappingProposalSchema = z
   .object({ mappings: z.array(ModelSemanticMappingSchema) })
@@ -60,6 +152,7 @@ export const TEMPLATE_TWIN_CANONICAL_CONCEPT_GUIDANCE = [
   'hpi.modifying_factors',
   'hpi.associated_symptoms',
   'past_medical_history',
+  'past_surgical_history',
   'medication.name',
   'medication.dose',
   'medication.route',
@@ -71,14 +164,96 @@ export const TEMPLATE_TWIN_CANONICAL_CONCEPT_GUIDANCE = [
   'social_history.smoking',
   'social_history.alcohol',
   'social_history.drugs',
+  'social_history.marital_status',
+  // #246 family 4 — registered AND offered. The pass found it in
+  // REGISTRY_CONCEPTS but not here, so the proposer would never have suggested
+  // it and a "Total minutes" control could only ever be mapped by hand.
+  'total_time_minutes',
   'social_history.occupation',
-  'ros.<system>',
+  // #247 family 3 — THE DICTATED MEMBER, AND ONLY THE DICTATED MEMBER.
+  //
+  // ⚠️ `visit_metadata.patient_name` AND `.patient_age` ARE DELIBERATELY ABSENT
+  // FROM THIS LIST. Their concept is decided by the COMPILER from the label
+  // (`CONCEPT_LABEL_OVERRIDES`), which also decides
+  // `sourceType: 'visit_metadata'`, so the proposer is not the route by which
+  // they are mapped. Canon 136 says an unoffered registered concept is
+  // unmappable; these two are mapped without the proposer, so it does not bite.
+  //
+  // ⚠️ AND THE FIRST VERSION OF THIS COMMENT CALLED THE OMISSION "THE SAFETY
+  // PROPERTY", WHICH WAS FALSE — a refutation lens demonstrated it. It argued
+  // that a model proposing a record concept on some other field would produce
+  // "a mapping whose concept is record-derived and whose sourceType is
+  // `extraction`, which no fact can ever satisfy: a permanently blank control".
+  // The resolver never compares a MAPPING's sourceType to a FACT's. Measured,
+  // with one legitimate `Patient` control present to mint the fact and one
+  // mis-proposed `extraction` mapping on an HPI control: BOTH resolved
+  // `record_derived` with value "Jane Alvarez", valid, zero issues — **the
+  // patient's name printed into a clinical narrative control on the signed
+  // form.** Prompt omission is a nudge, not a gate; the gate is
+  // `isRegisteredConcept`, and this arc made it return true for both.
+  //
+  // The real gate is now `refuseRecordDerivedOnNonMetadata` below, which nulls
+  // a record-derived concept on any mapping the compiler did not classify
+  // `visit_metadata`. The omission stays because offering them is still
+  // pointless, but it is no longer load-bearing.
+  //
+  // The referrer is different in kind: it is an ordinary L3 extraction, and a
+  // form that says "Referred by" rather than "Referring MD" should still be
+  // mappable. So it IS offered.
+  'visit_metadata.referring_physician',
+  // ⚠️ THREE PARTS, NOT TWO — AND THE TWO-PART FORM WAS THE ONLY THING THIS
+  // COMPONENT EVER TAUGHT. #179(2) moved the projector to
+  // `ros.<system>.<symptom>` and narrowed the registry pattern to match, so
+  // the string below used to instantiate to a concept the registry REFUSES:
+  // measured, `isRegisteredConcept('ros.gastrointestinal')` is FALSE while
+  // `isRegisteredConcept('ros.gastrointestinal.heartburn')` is true. Every ROS
+  // form field therefore landed `clinicalConcept: null`, which is why a
+  // per-clause ROS control could never be certified at all.
+  // ⚠️ `exam.<system>` is CORRECT and is deliberately left alone —
+  // `isRegisteredConcept('exam.abdomen')` is true. Only ros went three-part,
+  // so this is a one-line asymmetry and not a family-wide break.
+  'ros.<system>.<symptom>',
   'exam.<system>',
   'test.name',
   'test.<test_name>.result',
   'assessment',
   'plan',
 ] as const;
+
+/**
+ * #247 — A RECORD-DERIVED CONCEPT ON A MAPPING THE COMPILER DID NOT CLASSIFY
+ * `visit_metadata` IS REFUSED, AND THIS IS THE GATE THE PROMPT WAS PRETENDING
+ * TO BE.
+ *
+ * ⚠️ FOUND BY A REFUTATION LENS, WHICH MEASURED THE HARM. `visit_metadata.
+ * patient_name` and `.patient_age` are registered, so `isRegisteredConcept`
+ * admits them; the resolver never compares a MAPPING's `sourceType` to a
+ * FACT's; and `decideAutoConfirm` only refuses `sourceType === 'visit_metadata'`.
+ * So a model proposing `visit_metadata.patient_name` for, say, an HPI control
+ * produced a mapping that auto-confirmed as `{provenance: 'model'}` and then
+ * **printed the patient's name into a clinical narrative box** — measured,
+ * `record_derived`, valid, zero issues. Leaving those two concepts off the
+ * proposer's guidance list was a nudge, not a gate.
+ *
+ * The compiler decides `visit_metadata` from the LABEL and from the field's
+ * KIND, so a field it did not so classify has no business carrying an identity
+ * concept, whoever proposed it. Nulling here leaves the mapping visibly
+ * `needs_confirmation` — the same treatment an off-registry proposal gets —
+ * rather than certifying a control that prints a name nobody asked it to.
+ *
+ * EXPORTED for its own arm: this is the kind of guard whose absence is
+ * invisible, because a model rarely proposes it and the suite never does.
+ */
+export function refuseRecordDerivedOnNonMetadata(
+  concept: string | null,
+  sourceType: MappingSourceType,
+): string | null {
+  if (concept === null || sourceType === 'visit_metadata') return concept;
+  const c = concept.trim().toLowerCase();
+  return c === RECORD_DERIVED_CONCEPTS.name || c === RECORD_DERIVED_CONCEPTS.age
+    ? null
+    : concept;
+}
 
 export interface ProposeSemanticMappingsContext {
   practiceId: string;
@@ -104,33 +279,10 @@ export class SemanticMappingInvariantError extends Error {
   }
 }
 
-export function expectedDataTypeForFieldKind(
-  kind: TemplateTwinFieldKind,
-): SemanticMapping['expectedDataType'] | null {
-  switch (kind) {
-    case 'narrative_text':
-      return 'text';
-    case 'single_select':
-      return 'single_select';
-    case 'multi_select':
-      return 'multi_select';
-    case 'checkbox':
-      return 'boolean';
-    case 'date':
-      return 'date';
-    case 'number':
-      return 'number';
-    case 'measurement':
-      return 'measurement';
-    case 'fixed_table':
-    case 'repeating_table':
-      return 'table';
-    case 'static':
-    case 'conditional_block':
-    case 'unsupported':
-      return null;
-  }
-}
+// ⚠️ RE-EXPORTED, NOT REDEFINED. The body moved to `ir.ts` so the client-safe
+// `unmentioned-policy.ts` can reach it without importing this module (which
+// pulls `@meddoc/ai`). Everything that imported it from here still resolves.
+export { expectedDataTypeForFieldKind };
 
 export function isMappingTypeCompatible(
   field: TemplateField,
@@ -346,6 +498,14 @@ const SYSTEM_PROMPT = [
   'outside it is rejected and the field becomes permanently unfillable.',
   `  exact: ${REGISTRY_CONCEPTS.join(', ')}`,
   '  patterns: test.<snake_case_study>.result | exam.<snake_case_thing> | hpi.<snake_case_thing>',
+  '            | ros.<system>.<symptom>',
+  // ⚠️ GENERATED FROM THE SHIPPED LEXICON, NEVER HAND-COPIED. The model is
+  // asked for a concept whose legal set is defined in `ros-lexicon.ts`; a
+  // second hand-written list here is how the proposer and the registry drifted
+  // apart in the first place. `symptomsFor` appends `other`, so the escape
+  // hatch is taught by construction.
+  `  ros systems: ${ROS_SYSTEMS.join(', ')}`,
+  ...ROS_SYSTEMS.map((system) => `    ${system}: ${symptomsFor(system).join(', ')}`),
   'NEVER put anatomy, laterality, a segment name or a unit in the concept: a',
   'measurement concept is its KIND (measurement.diameter, measurement.reflux_time)',
   'and the vein, side and segment travel as structured data. One concept must be',
@@ -492,7 +652,9 @@ export async function proposeSemanticMappings(
     const rowCells = cellsByRow.get(rowKey) ?? [];
     const candidate =
       compilerDecidedConcept(field, rowCells) ?? mapping.clinicalConcept;
-    const proposedConcept = candidate && isRegisteredConcept(candidate) ? candidate : null;
+    const registered = candidate && isRegisteredConcept(candidate) ? candidate : null;
+    const sourceType = classifyFieldSource(field.originalLabel, field);
+    const proposedConcept = refuseRecordDerivedOnNonMetadata(registered, sourceType);
 
     // Compiler uncertainty always wins over a model's optimistic recognition.
     // Nothing from this helper can become certified or carry a default.
@@ -500,8 +662,10 @@ export async function proposeSemanticMappings(
       ...mapping,
       expectedDataType: compilerDataType,
       // Classification is the COMPILER's label talking, not the model's guess —
-      // the same doctrine as expectedDataType above.
-      sourceType: classifyFieldSource(field.originalLabel, field),
+      // the same doctrine as expectedDataType above. Read ONCE above, because
+      // `refuseRecordDerivedOnNonMetadata` needs the same answer and two calls
+      // are two readers of one rule.
+      sourceType,
       // REGISTRY CONSTRAINT. A concept the extractor never emits can never be
       // matched by any fact, so the field would be permanently unfillable —
       // this is exactly how `filledCount=0` survived four sessions of fixes

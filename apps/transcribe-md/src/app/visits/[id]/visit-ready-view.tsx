@@ -74,7 +74,8 @@ import { rescoreEmAction } from '@/actions/rescore-em';
 import { parseNoteSections } from '@/lib/parse-note-sections';
 import {
   VisitDocumentSurface,
-  VISIT_DOCUMENT_MISS_TEXT,
+  visitDocumentMissText,
+  type VisitDocumentMissReason,
 } from './visit-document-surface';
 
 type VisitReadyViewTheme = 'legacy' | 'clinician';
@@ -290,7 +291,10 @@ export function VisitReadyView(props: VisitReadyViewProps) {
    *  it server-side; the re-score clears it. Held locally so the badge and the
    *  sign bar react without a round trip. */
   const [emStale, setEmStale] = useState(props.emStale ?? false);
-  const [docPageMiss, setDocPageMiss] = useState<string | null>(null);
+  // ⚠️ THE UNION, NOT `string`. As `string | null` this fed a map lookup that
+  // returns `undefined` for any reason nobody wrote text for — the silence that
+  // shipped twice. Typed, an unspoken reason is a compile error at the map.
+  const [docPageMiss, setDocPageMiss] = useState<VisitDocumentMissReason | null>(null);
   const [firstFillOnTemplate, setFirstFillOnTemplate] = useState(false);
   const docPageUnavailable = docPageMiss !== null;
   // ⚠️ ASKED ONCE, ON THE DOC PAGE ONLY, AND FAIL-SAFE TO SILENT. The read is a
@@ -309,7 +313,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
       alive = false;
     };
   }, [docPage, props.visitId]);
-  const handleDocPageUnavailable = useCallback((reason: string | null) => {
+  const handleDocPageUnavailable = useCallback((reason: VisitDocumentMissReason | null) => {
     setDocPageMiss(reason ?? 'no_render');
   }, []);
   /** The anchors cards are placed against. The KEY IS THE SECTION LABEL, which
@@ -850,13 +854,13 @@ export function VisitReadyView(props: VisitReadyViewProps) {
       // certified watched "Opening your document…" turn into a styled note with
       // no explanation. Silence is illegal.
       const missLine =
-        docPage && docPageMiss && VISIT_DOCUMENT_MISS_TEXT[docPageMiss] ? (
+        docPage && docPageMiss && visitDocumentMissText(docPageMiss) ? (
           <p
             className="qm-vdoc-counts"
             role="status"
             data-testid="visit-document-miss"
           >
-            {VISIT_DOCUMENT_MISS_TEXT[docPageMiss]}
+            {visitDocumentMissText(docPageMiss)}
           </p>
         ) : null;
 
@@ -1211,6 +1215,12 @@ export function VisitReadyView(props: VisitReadyViewProps) {
             visitId={props.visitId}
             doctorEmail={props.doctorEmail}
             emailEnabled={props.emailEnabled}
+            // THE FROZEN NOTE, for the accessibility tree. `props.soapText` is
+            // `signedSoap ?? soapFinal` on a signed visit (page.tsx:588-591) —
+            // the record itself. NOT `adoption?.text ?? props.soapText`, which
+            // every other call site in this branch uses: an adopted draft must
+            // never be what a screen reader hears from a signed document.
+            signedNoteText={props.soapText}
             // The signed-lock banner already rides inside the note node
             // (SignedStateCard), so it is not duplicated here.
             lockBanner={null}
