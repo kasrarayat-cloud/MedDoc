@@ -257,6 +257,40 @@ describe('#289 — the door universe is derived from the filesystem', () => {
     const locked = new Set(WRITERS.filter((w) => w.locked).map((w) => w.file));
     expect(named.filter((f) => !locked.has(f))).toEqual([]);
   });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ADMIN-5 — THE NEW OWNER-REMOVING WRITERS ARE CLASSIFIED, BY NAME.
+  //
+  // The derivation above already finds them (they write `users` rows and import
+  // the lock), so "unclassified" cannot happen silently. This arm pins the
+  // CLASSIFICATION itself, because these are the writers that remove an owner
+  // seat on purpose — and because the arm above it checks only a file's FIRST
+  // write against its first lock call. `practice-members.ts` now carries FOUR
+  // user writes (role change, removal, and the transfer's two statements); every
+  // one of them must sit after a `withPracticeLock(` call, not merely the first.
+  // ══════════════════════════════════════════════════════════════════════════
+  it('⚠️ ADMIN-5 — the practice-owner doors and delete-account are LOCKED, every write after a lock call', () => {
+    const doors = ['src/actions/practice-members.ts', 'src/app/api/settings/delete-account/route.ts'];
+    const byFile = new Map(WRITERS.map((w) => [w.file, w]));
+    for (const f of doors) {
+      const w = byFile.get(f);
+      expect(w, `${f} no longer writes a users row — the arm is stale`).toBeTruthy();
+      expect(w!.locked, `${f} writes users rows and never takes the lock`).toBe(true);
+      expect(f in EXEMPT, `${f} is exempted while it removes owner seats`).toBe(false);
+
+      // every user write, not only the first
+      const writeRe = new RegExp(USER_WRITE.source, 'g');
+      const writes = [...w!.src.matchAll(writeRe)].map((m) => m.index!);
+      const firstLock = w!.src.indexOf('withPracticeLock(');
+      expect(writes.length, `${f}: the scan found no writes — vacuous`).toBeGreaterThan(0);
+      for (const at of writes) {
+        expect(at, `${f}: a users write at ${at} precedes every lock call (${firstLock})`).toBeGreaterThan(firstLock);
+      }
+    }
+    // NON-VACUITY: the owner-door file really does carry the four writes.
+    const pm = byFile.get('src/actions/practice-members.ts')!;
+    expect([...pm.src.matchAll(new RegExp(USER_WRITE.source, 'g'))].length).toBeGreaterThanOrEqual(4);
+  });
 });
 
 // ════════════════════════════════════════════════════════════════════════════
