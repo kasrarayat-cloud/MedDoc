@@ -364,7 +364,11 @@ describe('#194 — the column, the hash, and the projections still hold', () => 
   });
 
   it('(13) the resolver VERSION moved — its output changed for identical input', () => {
-    expect(TEMPLATE_TWIN_RESOLVER_VERSION).toBe('template-field-resolver/2.0.0');
+    // ⚠️ #313 moved it again (2.0.0 -> 3.0.0): the fill's resolutions changed
+    // for identical input once a bullet group distributes one item per bullet.
+    // The pin stays a pin — a version nobody moves is how a stale manifest is
+    // accepted as current.
+    expect(TEMPLATE_TWIN_RESOLVER_VERSION).toBe('template-field-resolver/3.0.0');
   });
 });
 
