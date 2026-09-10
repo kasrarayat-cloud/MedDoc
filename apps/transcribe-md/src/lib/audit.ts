@@ -423,9 +423,27 @@ async function getRequestContext(): Promise<{
   }
 }
 
-/** Write a single audit row. Never throws. */
-export async function logAudit(input: AuditLogInput): Promise<void> {
-  try {
+/**
+ * ADMIN-5 — THE ROW `logAudit` WRITES, BUILT BUT NOT WRITTEN.
+ *
+ * ⚠️ THIS EXISTS FOR ONE CALLER WHOSE AUDIT ROW MUST SHARE A TRANSACTION'S
+ * FATE: self-service account deletion. It used to write ACCOUNT_DELETED with
+ * `logAudit` BEFORE and OUTSIDE its transaction, so a deletion the database
+ * refused (the last-owner trigger, the users->practices FK) left a row in an
+ * append-only trail saying an account was deleted when nothing was. Writing it
+ * AFTER commit is no cure either: the user and practice rows are gone by then,
+ * the insert fails their foreign keys, and `logAudit` swallows the failure —
+ * an unaudited destruction, which is the one outcome that route refuses.
+ *
+ * So the row is BUILT here (session, request context, the tenant rules below)
+ * and WRITTEN by the caller with `tx.auditLog.create` as the transaction's
+ * first write: it commits with the deletion or rolls back with it.
+ *
+ * One builder, so the transactional row and every `logAudit` row cannot drift
+ * apart in shape — `logAudit` below is this plus a write and a publish.
+ */
+export async function buildAuditRow(input: AuditLogInput) {
+  {
     // 2026-05-13 — when callers pass both userId AND practiceId we
     // skip session resolution entirely. Two wins: (1) saves the
     // round-trip in request scope; (2) avoids the worker-context
@@ -494,34 +512,53 @@ export async function logAudit(input: AuditLogInput): Promise<void> {
       practiceIdSnapshot: practiceId ?? UNATTRIBUTED_PRACTICE,
     };
 
+    return entry;
+  }
+}
+
+/** The shape `buildAuditRow` produces — exactly what `logAudit` writes. */
+export type AuditRowData = Awaited<ReturnType<typeof buildAuditRow>>;
+
+/**
+ * Symmetric SSE fan-out — mirrors meddoc-pro/audit.ts. Uses the dedicated
+ * pub/sub singleton from `./redis` (kept separate from the BullMQ-shared
+ * connection in `./queue`, which uses `maxRetriesPerRequest: null` and would
+ * risk blocking the calling request if a publish queued indefinitely on a
+ * degraded broker). Three layers keep this fire-and-forget:
+ *   1. setImmediate — defer past the current request response
+ *   2. isRedisReady() — skip silently if the singleton isn't live
+ *   3. 100ms race — bound the publish wallclock either way
+ *
+ * ⚠️ ADMIN-5 — EXPORTED so a caller that writes its row inside a transaction
+ * publishes only AFTER commit. A row published and then rolled back would put
+ * a deletion on the live admin stream that never happened.
+ */
+export function publishAuditRow(entry: AuditRowData): void {
+  setImmediate(() => {
+    if (!isRedisReady()) return;
+    const publishPromise = getRedis().publish(
+      ADMIN_AUDIT_STREAM_CHANNEL,
+      JSON.stringify(entry)
+    );
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('publish timeout')), 100)
+    );
+    Promise.race([publishPromise, timeout]).catch(() => {
+      // Silent — best-effort, row is durable.
+    });
+  });
+}
+
+/** Write a single audit row. Never throws. */
+export async function logAudit(input: AuditLogInput): Promise<void> {
+  try {
+    const entry = await buildAuditRow(input);
     // Prisma's shared barrel exports `any` (see memory note on typing).
     // The cast keeps the call site strict without dragging the global
     // any through the rest of the file.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await prisma.auditLog.create({ data: entry as any });
-
-    // Symmetric SSE fan-out — mirrors meddoc-pro/audit.ts. Uses the
-    // dedicated pub/sub singleton from `./redis` (kept separate from
-    // the BullMQ-shared connection in `./queue`, which uses
-    // `maxRetriesPerRequest: null` and would risk blocking the
-    // calling request if a publish queued indefinitely on a degraded
-    // broker). Three layers keep this fire-and-forget:
-    //   1. setImmediate — defer past the current request response
-    //   2. isRedisReady() — skip silently if the singleton isn't live
-    //   3. 100ms race — bound the publish wallclock either way
-    setImmediate(() => {
-      if (!isRedisReady()) return;
-      const publishPromise = getRedis().publish(
-        ADMIN_AUDIT_STREAM_CHANNEL,
-        JSON.stringify(entry)
-      );
-      const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('publish timeout')), 100)
-      );
-      Promise.race([publishPromise, timeout]).catch(() => {
-        // Silent — best-effort, row is durable.
-      });
-    });
+    publishAuditRow(entry);
   } catch (err) {
     // Audit logging must never break the calling request. A Prisma
     // failure here likely means the audit_logs table is unreachable —

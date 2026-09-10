@@ -61,6 +61,15 @@ rather than a shrug:**
   names only the admin suspend/soft-delete routes for the app-layer message.
   Its behaviour is unchanged for the case that matters — a solo owner deleting
   their own account tears the practice down, which exemption 2 permits.
+  **Amended 2026-09-10 (ADMIN-5):** two defects in it were DRIVEN, not argued —
+  for a member of a multi-member practice it reached a PRACTICE-WIDE purge
+  (`patient.deleteMany({ where: { practiceId } })`) and was saved only by the
+  users->practices FK rolling it back; and its `ACCOUNT_DELETED` row, written
+  outside the transaction, survived every refused deletion (real DB: 500, one
+  row, user intact). It now refuses BY NAME (409 `PRACTICE_HAS_MEMBERS` /
+  `PRACTICE_HAS_FORMER_MEMBERS`) before any write when any other user row is in
+  the practice, and writes the audit row as the transaction's first statement.
+  A solo practice is deleted exactly as before.
 
 ### ⚠️ THE PREMISE, CORRECTED — "the app is deleted" is TRUE AT THE EDGE AND FALSE IN THE TREE
 

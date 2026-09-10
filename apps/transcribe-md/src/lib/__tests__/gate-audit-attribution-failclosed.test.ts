@@ -40,10 +40,22 @@ const SRC = readFileSync('src/lib/audit.ts', 'utf8');
  *  explaining. (The same trap cost a round on the R2 sign-bar guard.) */
 const CODE = SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
-/** The body of `logAudit`, comments stripped — the only region that matters. */
+/**
+ * The region that RESOLVES THE TENANT, comments stripped.
+ *
+ * ⚠️ ADMIN-5 (2026-09-10) MOVED THE RESOLUTION, AND THIS SLICE FOLLOWED IT.
+ * `logAudit` was split into `buildAuditRow` (session, request context, tenant)
+ * + `publishAuditRow` + `logAudit` (build, write, publish), so that
+ * delete-account can write its ACCOUNT_DELETED row INSIDE its transaction with
+ * the same builder. The slice now starts at `buildAuditRow` and runs to the end
+ * of the file, so it still contains `logAudit` — every assertion below keeps
+ * its force, over a region that is strictly larger than before, and the arm
+ * after the non-vacuity one pins that `logAudit` writes what the builder built
+ * rather than a second hand-rolled row.
+ */
 function logAuditBody(): string {
-  const start = CODE.indexOf('export async function logAudit');
-  expect(start, 'logAudit not found — has it been renamed?').toBeGreaterThan(-1);
+  const start = CODE.indexOf('export async function buildAuditRow');
+  expect(start, 'buildAuditRow not found — has the tenant resolution moved again?').toBeGreaterThan(-1);
   return CODE.slice(start);
 }
 
@@ -55,6 +67,14 @@ describe('audit attribution fails CLOSED', () => {
     expect(CODE.length, 'audit.ts stripped to (almost) nothing').toBeGreaterThan(2000);
     expect(CODE).toContain('export async function logAudit');
     expect(logAuditBody().length).toBeGreaterThan(500);
+  });
+
+  it('⚠️ ONE resolution — logAudit writes the row buildAuditRow built, never its own', () => {
+    // A second construction of the row would be a second reader of the tenant
+    // rule, and the copy that drifts is the one nobody is looking at.
+    const logAuditFn = CODE.slice(CODE.indexOf('export async function logAudit'));
+    expect(logAuditFn).toMatch(/const entry = await buildAuditRow\(input\);/);
+    expect(logAuditFn, 'logAudit resolves a practice of its own').not.toMatch(/sessionPracticeId/);
   });
 
   it('there is NO literal practice fallback anywhere in logAudit', () => {
