@@ -42,12 +42,9 @@ import { extractSlotFills, SLOT_VALUES_OPEN } from '../note-templates/slot-fill-
 import { buildTemplateScaffold } from '../note-templates/template-scaffold';
 import { applyContextDefaults } from '@/lib/note-template-context';
 import { SYSTEM_DEFAULT_NOTE_TEMPLATE } from '../note-templates/system-default-template';
-import { ULTRASOUND_REPORT_TEMPLATE } from '../note-templates/ultrasound-report-template';
-import { buildUltrasoundSystemPrompt } from '../note-templates/build-ultrasound-prompt';
+import { imagingReportBuilderFor } from '../note-templates/imaging-report-builders';
 import {
   emAppliesToSpecialty,
-  isImagingReportSpecialty,
-  ultrasoundSpecialtyEnabled,
 } from '@meddoc/shared/specialties';
 
 // TRANSCRIBE_MD_CLINICAL_MODEL overrides the clinical model for evals on the
@@ -96,6 +93,14 @@ export async function runLayer4GenerateSoap(
   // (prod default) → this is false and the SOAP path below is byte-identical.
   const isUltrasoundReport =
     !emAppliesToSpecialty(input.specialty);
+  // ADMIN-3 PR-1 (ruling #197): WHICH imaging template and prompt builder is
+  // keyed by the catalog row's own `reportBuilder` name — never a hard-coded
+  // ultrasound binding. Non-null exactly when `isUltrasoundReport` (both read
+  // the same exact-id catalog predicate); an imaging row with no registered
+  // builder THROWS here instead of inheriting the ultrasound prompt/template.
+  const imagingBuilder = isUltrasoundReport
+    ? imagingReportBuilderFor(input.specialty)
+    : null;
 
   // SOAP specialty guidance does not apply to an imaging report — the
   // ultrasound study-type routing lives in the report template's Findings
@@ -112,10 +117,10 @@ export async function runLayer4GenerateSoap(
   // than the SOAP default. SOAP visits are unchanged.
   const hasCustomTemplate =
     input.noteTemplate != null && !input.noteTemplate.isSystemDefault;
-  const resolvedTemplate: ResolvedNoteTemplate = isUltrasoundReport
+  const resolvedTemplate: ResolvedNoteTemplate = imagingBuilder
     ? hasCustomTemplate
       ? (input.noteTemplate as ResolvedNoteTemplate)
-      : (ULTRASOUND_REPORT_TEMPLATE as ResolvedNoteTemplate)
+      : imagingBuilder.defaultTemplate
     : input.noteTemplate ?? SYSTEM_DEFAULT_NOTE_TEMPLATE;
 
   // Context-field defaults (feat/template-context-defaults): the doctor's
@@ -265,8 +270,8 @@ export async function runLayer4GenerateSoap(
   // laterality exactly as it guards SOAP vitals (it anchors claims to
   // transcript quotes; it is section-agnostic).
   const system =
-    (isUltrasoundReport
-      ? buildUltrasoundSystemPrompt(template, systemOpts)
+    (imagingBuilder
+      ? imagingBuilder.buildSystemPrompt(template, systemOpts)
       : buildSoapSystemPrompt(template, systemOpts)) +
     (anchorsOn ? ANCHOR_GENERATION_ADDENDUM : '');
 

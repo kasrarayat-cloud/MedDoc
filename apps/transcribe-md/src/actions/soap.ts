@@ -1,10 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import {
-  isImagingReportSpecialty,
-  ultrasoundSpecialtyEnabled,
-} from "@meddoc/shared/specialties";
 import { emAppliesToVisit } from "@/lib/note-shape";
 import { seedEmBaselineIfUnset } from "@/lib/em-coding/seed-baseline";
 import { z } from "zod";

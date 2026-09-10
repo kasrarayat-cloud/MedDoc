@@ -29,10 +29,6 @@
 import prisma from '@meddoc/db';
 import { Prisma, TranscribeVisitStatus } from '@prisma/client';
 
-import {
-  isImagingReportSpecialty,
-  ultrasoundSpecialtyEnabled,
-} from '@meddoc/shared/specialties';
 import { emAppliesToVisit } from '@/lib/note-shape';
 
 import { requireSession } from '@/lib/auth';

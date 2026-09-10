@@ -109,7 +109,7 @@ import { runLayer5SelfCritique } from '@/worker/layers/05-self-critique';
 import type { AudioConfidenceStats } from '@/worker/layers/audio-confidence';
 import { runLayer6Polish } from '@/worker/layers/06-polish';
 import { resolveActiveTemplate } from '@/worker/note-templates/resolve-active-template';
-import { reconcileMeasurementTables } from '@/worker/note-templates/reconcile-measurement-tables';
+import { imagingReportBuilderFor } from '@/worker/note-templates/imaging-report-builders';
 import { runTemplateTwinFillStep } from '@/worker/template-twin-fill-step';
 import {
   normalizeTemplate,
@@ -989,10 +989,17 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // column is never rebuilt against vein anatomy. The reconciled note is what
     // gets persisted below (soapFinalForFanout), so the review UI + styled export
     // + signed note all render it consistently.
-    if (isImagingReportSpecialty(visit.specialty)) {
+    //
+    // ADMIN-3 PR-1 (ruling #197): the pass is KEYED BY the catalog row's own
+    // `reportBuilder` name (ultrasound → reconcileMeasurementTables), so a
+    // second imaging type can never inherit the venous-duplex rebuild. Same
+    // flag-agnostic exact-id predicate as before (null for every non-imaging
+    // specialty); an imaging row with no registered builder THROWS.
+    const imagingReportBuilder = imagingReportBuilderFor(visit.specialty);
+    if (imagingReportBuilder) {
       polished = {
         ...polished,
-        soapFinal: reconcileMeasurementTables(polished.soapFinal),
+        soapFinal: imagingReportBuilder.reconcileFinalNote(polished.soapFinal),
       };
     }
 

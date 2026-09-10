@@ -33,10 +33,6 @@
 
 import { NextResponse } from 'next/server';
 import { rescoreEmAction } from '@/actions/rescore-em';
-import {
-  isImagingReportSpecialty,
-  ultrasoundSpecialtyEnabled,
-} from '@meddoc/shared/specialties';
 import { emAppliesToVisit } from '@/lib/note-shape';
 import { templateNativeDocxEnabled } from '@/config/template-native-docx';
 import { invalidateVisitFills } from '@/lib/docx-preview/fill-cache';

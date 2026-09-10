@@ -16,10 +16,6 @@
 // ============================================================================
 
 import { NextResponse } from 'next/server';
-import {
-  isImagingReportSpecialty,
-  ultrasoundSpecialtyEnabled,
-} from '@meddoc/shared/specialties';
 import { emAppliesToVisit } from '@/lib/note-shape';
 import { seedEmBaselineIfUnset } from '@/lib/em-coding/seed-baseline';
 import { invalidateVisitFills } from '@/lib/docx-preview/fill-cache';

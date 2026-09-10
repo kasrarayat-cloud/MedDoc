@@ -6,8 +6,6 @@ import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 import {
   findSpecialty,
-  isImagingReportSpecialty,
-  ultrasoundSpecialtyEnabled,
 } from '@meddoc/shared/specialties';
 import { emAppliesToVisit } from '@/lib/note-shape';
 import { getSession } from '@/lib/auth';
