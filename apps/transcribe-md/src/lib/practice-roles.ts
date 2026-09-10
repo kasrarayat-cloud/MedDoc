@@ -33,11 +33,15 @@ export const PRACTICE_ADMIN_ROLE = 'OWNER' as const satisfies PracticeRole;
  * an OWNER seat or by promoting a member. Administration can be handed on,
  * which is the thing a real practice needs and the previous build could not do.
  *
- * ⚠️ **THIS LIST IS THE PROMOTION SIDE ONLY, AND THE TWO SIDES ARE
- * INDEPENDENT.** Widening it does NOT make an OWNER demotable: that is refused
- * in `changeMemberRoleAction` by `CANNOT_CHANGE_AN_OWNER`, whatever role is
- * asked for. So "every practice has at least one OWNER" still holds
- * STRUCTURALLY — **no owner COUNT is ever read** — exactly as it did before.
+ * ⚠️ **THIS LIST WAS THE PROMOTION SIDE ONLY UNTIL ADMIN-5 (2026-09-10).**
+ * Until then an OWNER was not demotable at all — `CANNOT_CHANGE_AN_OWNER`
+ * refused it unconditionally, and "every practice has at least one OWNER" held
+ * STRUCTURALLY. ADMIN-5 deleted that refusal. The invariant now holds because
+ * the DATABASE refuses the write that would break it — the
+ * `users_last_owner_guard` trigger, ruling #210, the only enforcer — and
+ * `changeMemberRoleAction` re-reads the ACTOR under the practice lock, so an
+ * owner who was demoted a moment ago cannot act on a stale page. **Still no
+ * owner COUNT is read and then acted on in application code.**
  *
  * ⚠️ **BUT WIDENING THIS LIST DID OPEN A RACE, AND AN EARLIER VERSION OF THIS
  * COMMENT DENIED IT.** It claimed "no read-then-write race". That was false and
@@ -53,16 +57,35 @@ export const PRACTICE_ADMIN_ROLE = 'OWNER' as const satisfies PracticeRole;
  * clause, not by the guard. If you widen this list again, that is the line to
  * re-read.
  *
- * ⚠️ **DEMOTION AND REMOVAL ARE FILED, NOT FORGOTTEN.** Partners do leave
- * practices, so the capability is needed; it is a separate ADMIN row because it
- * is the half that requires a **last-owner guard**, and that guard must be
- * correct under concurrency — a partial unique index or a SERIALIZABLE
- * transaction, **never a count read and then acted on**. Two owners demoting
- * each other simultaneously is precisely the interleaving a read-then-write
- * check cannot see.
+ * ⚠️ **DEMOTION AND REMOVAL SHIPPED AS ADMIN-5, AND THE GUARD IS THE DATABASE.**
+ * This paragraph used to file them as future work needing "a partial unique
+ * index or a SERIALIZABLE transaction". Ruling #200 bound the INVARIANT and its
+ * proof, never the mechanism; ruling #210 put the enforcement in a trigger on
+ * the user row, which serializes on a per-practice advisory lock and counts
+ * under row locks — measured by `packages/db/prisma/proofs/`. Two owners
+ * demoting each other simultaneously is the interleaving that harness races.
  */
 export const ASSIGNABLE_ROLES = ['OWNER', 'CLINICIAN', 'TECH'] as const;
 export type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
+
+/**
+ * ADMIN-5a — what a departing OWNER becomes at the end of an ownership
+ * transfer: one of the non-administering roles, or `LEAVE` (removed from the
+ * practice). DERIVED from `ASSIGNABLE_ROLES` so a new non-owner role appears
+ * here and in the transfer control without anybody retyping a list.
+ */
+export const LEAVE_PRACTICE = 'LEAVE' as const;
+export const STEP_DOWN_OPTIONS = [
+  ...ASSIGNABLE_ROLES.filter(
+    (r): r is Exclude<AssignableRole, typeof PRACTICE_ADMIN_ROLE> => r !== PRACTICE_ADMIN_ROLE,
+  ),
+  LEAVE_PRACTICE,
+] as const;
+export type StepDownOption = Exclude<AssignableRole, typeof PRACTICE_ADMIN_ROLE> | typeof LEAVE_PRACTICE;
+
+export function isStepDownOption(v: unknown): v is StepDownOption {
+  return typeof v === 'string' && (STEP_DOWN_OPTIONS as readonly string[]).includes(v);
+}
 
 export function isAssignableRole(v: unknown): v is AssignableRole {
   return typeof v === 'string' && (ASSIGNABLE_ROLES as readonly string[]).includes(v);

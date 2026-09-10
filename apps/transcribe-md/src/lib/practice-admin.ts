@@ -28,6 +28,7 @@ import type { PracticeRole } from '@prisma/client';
 import prisma from '@meddoc/db';
 
 import { logAudit } from '@/lib/audit';
+import { LAST_OWNER_REFUSAL } from '@/lib/last-owner-invariant';
 
 /**
  * The role that administers a practice.
@@ -67,7 +68,9 @@ export type AdminRefusal =
   | 'ROLE_MAY_NOT_ADMINISTER'
   | 'TARGET_NOT_IN_PRACTICE'
   | 'CANNOT_CHANGE_OWN_ROLE'
-  | 'CANNOT_CHANGE_AN_OWNER'
+  | 'CANNOT_REMOVE_YOURSELF'
+  | 'LAST_OWNER'
+  | 'TRANSFER_TARGET_INVALID'
   | 'ROLE_CHANGED_UNDER_YOU'
   | 'ROLE_NOT_ASSIGNABLE';
 
@@ -83,12 +86,22 @@ export const ADMIN_REFUSAL_MESSAGE: Record<AdminRefusal, string> = {
     'Only a practice owner can manage members and invite new ones.',
   TARGET_NOT_IN_PRACTICE: 'That member is not in your practice.',
   CANNOT_CHANGE_OWN_ROLE:
-    'You cannot change your own role. Ask another owner in your practice.',
-  // ⚠️ THE REASON CHANGED WITH THE RULING, SO THE WORDS DID TOO. Promotion IS
-  // settled now — you can make someone an owner. What is not built is taking it
-  // away, and saying "not settled" here would be false in the doctor's face.
-  CANNOT_CHANGE_AN_OWNER:
-    "An owner's role cannot be changed. Removing or demoting an owner isn't available yet — ask support if a partner is leaving the practice.",
+    'You cannot change your own role. Ask another owner, or use Transfer ownership to hand the practice on.',
+  // ⚠️ `CANNOT_CHANGE_AN_OWNER` WAS DELETED WITH THE CAPABILITY IT DESCRIBED.
+  // It said an owner's role could never be changed here and told the doctor to
+  // ask support; ADMIN-5 makes that false, and a refusal string that outlives
+  // its refusal is how a page starts lying. The one owner case that is still
+  // refused is LAST_OWNER, below — and that refusal belongs to the DATABASE.
+  CANNOT_REMOVE_YOURSELF:
+    'You cannot remove yourself from the practice. To leave, use Transfer ownership and choose to leave.',
+  // ⚠️ NOT A NEW SENTENCE. The trigger (`users_last_owner_guard`) refused the
+  // write; the words are the friendly-refusal file's own, so a doctor meets one
+  // sentence for one refusal wherever it surfaces. Callers that have the
+  // trigger's classification pass ITS reason (which distinguishes the stranded
+  // and sole-member cases); this entry is the default.
+  LAST_OWNER: LAST_OWNER_REFUSAL,
+  TRANSFER_TARGET_INVALID:
+    'Ownership can only be handed to another active member of your practice.',
   // The compare-and-set found the row had moved since it was read. Refusing is
   // fail-closed: we cannot know the demotion is still safe, so the doctor is
   // told to look again rather than shown a success that did not happen.

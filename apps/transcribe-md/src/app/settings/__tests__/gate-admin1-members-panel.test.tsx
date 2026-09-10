@@ -12,15 +12,17 @@
 // ⚠️ WHAT WOULD MAKE THIS FILE FAIL:
 //   · a non-owner is shown role controls        -> the visibility block
 //   · the member LIST is hidden from non-owners -> the visibility block
-//   · an OWNER row becomes editable             -> the owner block
+//   · another OWNER's row stops being editable  -> the owner block (ADMIN-5)
 //   · your own row becomes editable             -> the owner block
 //   · a select stops deriving from ASSIGNABLE_ROLES -> the owner block
-//   · the not-built half stops being stated     -> the owner block
+//   · the stale "cannot be demoted" note returns -> the owner block (ADMIN-5)
+//   · Remove appears on your own row, or unconfirmed -> the ADMIN-5 block
+//   · Transfer offers yourself, or a non-derived step-down -> the ADMIN-5 block
 //   · the panel implies a tech is broadly gated -> the vocabulary block
 // ============================================================================
 
 import { describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 vi.mock('sonner', () => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), warning: vi.fn() }),
@@ -29,10 +31,13 @@ vi.mock('@/actions/practice-members', () => ({
   mintSeatInviteAction: vi.fn(),
   changeMemberRoleAction: vi.fn(),
   revokeSeatInviteAction: vi.fn(),
+  removeMemberAction: vi.fn(async () => ({ ok: true, changedAt: 1 })),
+  transferOwnershipAction: vi.fn(async () => ({ ok: true, changedAt: 1 })),
 }));
 
 import { PracticeMembersPanel } from '../practice-members-panel';
-import { ASSIGNABLE_ROLES } from '@/lib/practice-roles';
+import { removeMemberAction, transferOwnershipAction } from '@/actions/practice-members';
+import { ASSIGNABLE_ROLES, STEP_DOWN_OPTIONS } from '@/lib/practice-roles';
 
 const MEMBERS = [
   { id: 'u-owner', name: 'Dr Owner', email: 'o@x.test', practiceRole: 'OWNER', isSelf: true },
@@ -64,27 +69,26 @@ describe('⚠️ the list is practice-uniform; the CONTROLS are not', () => {
   });
 });
 
-describe('⚠️ the two rows an owner may NOT change are not drawn as changeable', () => {
-  it('an OWNER row is text, never a control — even one that is NOT you', () => {
-    // ⚠️ THE FIRST VERSION OF THIS ARM WAS VACUOUS, AND THE MUTATION SAID SO.
-    // It asserted only against `u-owner`, whose fixture is ALSO `isSelf`, so
-    // the `isSelf` term satisfied it and deleting the OWNER term from
-    // `editable` redded NOTHING. A guard tested only where another guard
-    // already answers is not tested.
+describe('⚠️ the row an owner may NOT change is not drawn as changeable — and ADMIN-5 opened the other', () => {
+  it('⚠️ ADMIN-5 — ANOTHER owner\'s row IS a control now; your OWN owner row is still text', () => {
+    // This arm used to assert the opposite ("an OWNER row is text, never a
+    // control — even one that is NOT you"), mirroring `CANNOT_CHANGE_AN_OWNER`.
+    // ADMIN-5 deleted that refusal, so the page must stop hiding the control:
+    // a capability the server grants and the page withholds is a page that
+    // lies in the other direction.
     //
-    // The second owner is not self, so this row can ONLY be text because of
-    // the OWNER term.
+    // The second owner is not self, so this row is a control ONLY because the
+    // OWNER term is gone — re-adding it reds here.
     const withSecondOwner = [
       ...MEMBERS,
       { id: 'u-owner2', name: 'Dr Two', email: 'o2@x.test', practiceRole: 'OWNER', isSelf: false },
     ];
     render(<PracticeMembersPanel members={withSecondOwner} invites={[]} canAdminister />);
-    expect(screen.queryByTestId('member-role-select-u-owner2')).toBeNull();
-    expect(screen.getByTestId('member-role-u-owner2').textContent).toContain('Owner');
-    // And your own owner row too, for the same reason by a different term.
+    const select = screen.getByTestId('member-role-select-u-owner2') as HTMLSelectElement;
+    expect(select.value, 'the other owner\'s control does not start at OWNER').toBe('OWNER');
+    // Your own owner row stays text — by the isSelf term, which still stands.
     expect(screen.queryByTestId('member-role-select-u-owner')).toBeNull();
-    // Non-vacuity: a row that SHOULD be editable in this same render is.
-    expect(screen.getByTestId('member-role-select-u-tech')).toBeTruthy();
+    expect(screen.getByTestId('member-role-u-owner').textContent).toContain('Owner');
   });
 
   it('and neither is your own row', () => {
@@ -117,33 +121,35 @@ describe('⚠️ the two rows an owner may NOT change are not drawn as changeabl
     expect(mintValues).toEqual([...ASSIGNABLE_ROLES]);
   });
 
-  it('⚠️ and the half that is NOT built is stated on the surface, with the right POLARITY', () => {
-    // A missing control reads as an oversight. The note is what tells the
-    // doctor the refusal is deliberate and that there is a route today.
+  it('⚠️ ADMIN-5 — the stale "cannot be demoted or removed" note is GONE, and the help says what is still refused', () => {
+    // `members-owner-note` told the doctor owners "cannot be demoted or removed
+    // here yet — ask support". ADMIN-5 ships both, and the row requires the note
+    // removed in the SAME commit that makes it false: a disclosure that outlives
+    // its refusal sends a doctor to support for something the page now does.
     //
-    // ⚠️ THIS ARM USED TO ASSERT VOCABULARY, NOT POLARITY, AND AN ADVERSARIAL
-    // PASS SHOWED IT PASSING ON A NOTE THAT SAID THE EXACT OPPOSITE. `/owner/i`
-    // plus `/demoted or removed/i` is satisfied by "Owners can be demoted or
-    // removed at any time" — the inverse of what the server does. Matching a
-    // NEGATION is what makes it a test of meaning rather than of keywords.
+    // ⚠️ POLARITY, NOT VOCABULARY — the lesson this arm's predecessor recorded.
+    // "Owners cannot be demoted" and "owners can be demoted" share every
+    // keyword; the NEGATION is what is tested.
     render(<PracticeMembersPanel members={MEMBERS} invites={[]} canAdminister />);
-    const note = (screen.getByTestId('members-owner-note').textContent ?? '').replace(/\s+/g, ' ');
-    expect(note).toMatch(/cannot be demoted or removed/i);
-    expect(note).not.toMatch(/can be demoted or removed/i);
-    // and it must still say the thing that IS possible, or it reads as a wall
-    expect(note).toMatch(/make another member an owner/i);
+    expect(screen.queryByTestId('members-owner-note'), 'the stale note survived').toBeNull();
+    const help = (screen.getByTestId('members-owner-help').textContent ?? '').replace(/\s+/g, ' ');
+    expect(help).not.toMatch(/cannot be demoted|cannot be removed|ask support/i);
+    expect(help).toMatch(/remove/i);
+    // the one owner case still refused is stated, with the door that handles it
+    expect(help).toMatch(/at least one owner/i);
+    expect(help).toMatch(/transfer ownership/i);
 
-    // Non-vacuity: a non-administering view does not get it, so this is not a
-    // string that is simply always on the page.
+    // Non-vacuity: a non-administering view does not get it.
     cleanup();
     render(<PracticeMembersPanel members={MEMBERS} invites={[]} canAdminister={false} />);
-    expect(screen.queryByTestId('members-owner-note')).toBeNull();
+    expect(screen.queryByTestId('members-owner-help')).toBeNull();
   });
 
   it('⚠️ promoting to OWNER asks for confirmation, and a refusal does NOT submit', () => {
-    // Promotion is irreversible until ADMIN-5 ships and OWNER is the option
-    // directly above the current selection. An adversarial pass reached it in
-    // one keystroke with nothing in the way.
+    // OWNER hands over administration and is the option directly above the
+    // current selection. An adversarial pass reached it in one keystroke with
+    // nothing in the way. (Since ADMIN-5 the words say what an owner can do —
+    // including to you — rather than "cannot be undone", which became false.)
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const submitSpy = vi.fn((e: React.FormEvent) => e.preventDefault());
     render(<PracticeMembersPanel members={MEMBERS} invites={[]} canAdminister />);
@@ -155,7 +161,8 @@ describe('⚠️ the two rows an owner may NOT change are not drawn as changeabl
     fireEvent.change(select, { target: { value: 'OWNER' } });
     fireEvent.submit(formEl);
     expect(confirmSpy).toHaveBeenCalledOnce();
-    expect(confirmSpy.mock.calls[0][0]).toMatch(/cannot be undone/i);
+    expect(confirmSpy.mock.calls[0][0]).toMatch(/remove other owners/i);
+    expect(confirmSpy.mock.calls[0][0]).not.toMatch(/cannot be undone|cannot be demoted/i);
 
     // ⚠️ THE NON-VACUITY THAT MATTERS: a NON-owner role must not be confirmed at
     // all. An arm that only proves "confirm was called" would also pass on a
@@ -165,6 +172,102 @@ describe('⚠️ the two rows an owner may NOT change are not drawn as changeabl
     fireEvent.submit(formEl);
     expect(confirmSpy).not.toHaveBeenCalled();
 
+    confirmSpy.mockRestore();
+  });
+});
+
+// ============================================================================
+// ADMIN-5 / ADMIN-5a — REMOVE AND TRANSFER, drawn only where the server allows.
+// ============================================================================
+describe('⚠️ ADMIN-5 — Remove is drawn for every OTHER member, and always confirmed', () => {
+  it('a Remove control on every row but your own — including another OWNER', () => {
+    const withSecondOwner = [
+      ...MEMBERS,
+      { id: 'u-owner2', name: 'Dr Two', email: 'o2@x.test', practiceRole: 'OWNER', isSelf: false },
+    ];
+    render(<PracticeMembersPanel members={withSecondOwner} invites={[]} canAdminister />);
+    for (const id of ['u-clin', 'u-tech', 'u-owner2']) {
+      expect(screen.getByTestId(`member-remove-${id}`), `no Remove on ${id}`).toBeTruthy();
+    }
+    expect(screen.queryByTestId('member-remove-u-owner'), 'Remove drawn on your own row').toBeNull();
+  });
+
+  it('and NONE for a non-owner viewer', () => {
+    render(<PracticeMembersPanel members={MEMBERS} invites={[]} canAdminister={false} />);
+    for (const m of MEMBERS) expect(screen.queryByTestId(`member-remove-${m.id}`)).toBeNull();
+  });
+
+  it('⚠️ a DECLINED confirm dispatches nothing; an accepted one does (non-vacuity)', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    vi.mocked(removeMemberAction).mockClear();
+    render(<PracticeMembersPanel members={MEMBERS} invites={[]} canAdminister />);
+    const button = screen.getByTestId('member-remove-u-tech');
+    fireEvent.submit(button.closest('form') as HTMLFormElement);
+    expect(confirmSpy).toHaveBeenCalledOnce();
+    expect(confirmSpy.mock.calls[0][0]).toMatch(/Remove Tay Tech from this practice/);
+    expect(confirmSpy.mock.calls[0][0]).toMatch(/stay with the practice/i);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(removeMemberAction, 'a declined removal was dispatched anyway').not.toHaveBeenCalled();
+
+    // POSITIVE CONTROL — without it, "not dispatched" also holds for a form
+    // that can never dispatch in this environment.
+    confirmSpy.mockReturnValue(true);
+    fireEvent.submit(button.closest('form') as HTMLFormElement);
+    await waitFor(() => expect(removeMemberAction).toHaveBeenCalledOnce());
+    const fd = vi.mocked(removeMemberAction).mock.calls[0][1] as FormData;
+    expect(fd.get('userId')).toBe('u-tech');
+    confirmSpy.mockRestore();
+  });
+});
+
+describe('⚠️ ADMIN-5a — Transfer ownership offers only OTHER members and a DERIVED step-down', () => {
+  it('is drawn for an owner, never for a non-owner', () => {
+    render(<PracticeMembersPanel members={MEMBERS} invites={[]} canAdminister />);
+    expect(screen.getByTestId('transfer-ownership')).toBeTruthy();
+    cleanup();
+    render(<PracticeMembersPanel members={MEMBERS} invites={[]} canAdminister={false} />);
+    expect(screen.queryByTestId('transfer-ownership')).toBeNull();
+  });
+
+  it('the target list is every member but you; the step-down list IS `STEP_DOWN_OPTIONS`', () => {
+    render(<PracticeMembersPanel members={MEMBERS} invites={[]} canAdminister />);
+    const targets = within(screen.getByTestId('transfer-target'))
+      .getAllByRole('option')
+      .map((o) => (o as HTMLOptionElement).value);
+    expect(targets).toEqual(['u-clin', 'u-tech']);
+    const thens = within(screen.getByTestId('transfer-then'))
+      .getAllByRole('option')
+      .map((o) => (o as HTMLOptionElement).value);
+    expect(thens).toEqual([...STEP_DOWN_OPTIONS]);
+    expect(thens).not.toContain('OWNER');
+    expect(thens).toContain('LEAVE');
+  });
+
+  it('a practice with nobody else says so rather than offering an empty select', () => {
+    render(<PracticeMembersPanel members={[MEMBERS[0]!]} invites={[]} canAdminister />);
+    expect(screen.getByTestId('transfer-no-candidates')).toBeTruthy();
+    expect(screen.queryByTestId('transfer-target')).toBeNull();
+  });
+
+  it('⚠️ LEAVE is confirmed in words that say you lose access; a declined confirm dispatches nothing', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    vi.mocked(transferOwnershipAction).mockClear();
+    render(<PracticeMembersPanel members={MEMBERS} invites={[]} canAdminister />);
+    fireEvent.change(screen.getByTestId('transfer-then'), { target: { value: 'LEAVE' } });
+    const formEl = screen.getByTestId('transfer-submit').closest('form') as HTMLFormElement;
+    fireEvent.submit(formEl);
+    expect(confirmSpy).toHaveBeenCalledOnce();
+    expect(confirmSpy.mock.calls[0][0]).toMatch(/leave the practice/i);
+    expect(confirmSpy.mock.calls[0][0]).toMatch(/lose access/i);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(transferOwnershipAction).not.toHaveBeenCalled();
+
+    confirmSpy.mockReturnValue(true);
+    fireEvent.submit(formEl);
+    await waitFor(() => expect(transferOwnershipAction).toHaveBeenCalledOnce());
+    const fd = vi.mocked(transferOwnershipAction).mock.calls[0][1] as FormData;
+    expect(fd.get('then')).toBe('LEAVE');
+    expect(fd.get('userId')).toBe('u-clin');
     confirmSpy.mockRestore();
   });
 });

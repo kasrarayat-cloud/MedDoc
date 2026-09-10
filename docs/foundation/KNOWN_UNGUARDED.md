@@ -42,8 +42,20 @@ rather than a shrug:**
   activity column. **It cannot reduce the count**, so it is not a door.
 - `actions.ts:109` (reactivate) and `:387` (password reset) *increase* or do not
   touch the count.
-- `transcribe-md`'s `changeMemberRoleAction` is guarded in the application
-  already (ADMIN-5) and is not on this list.
+- ~~`transcribe-md`'s `changeMemberRoleAction` is guarded in the application
+  already (ADMIN-5) and is not on this list.~~ **Superseded 2026-09-10 (ADMIN-5
+  branch `feat/admin5-demotion-on-trigger`).** That sentence was written while
+  `CANNOT_CHANGE_AN_OWNER` refused every owner change. It is deleted, and the
+  three practice-owner doors — `changeMemberRoleAction`, `removeMemberAction`,
+  `transferOwnershipAction` (`apps/transcribe-md/src/actions/practice-members.ts`)
+  — can now reduce the owner count. They are **not** on this list because they
+  are not unguarded: each takes `withPracticeLock` on the actor's practice,
+  re-reads the ACTOR under it with `ACTIVE_OWNER_WHERE`, and maps a trigger
+  refusal to `LAST_OWNER` via `classifyGuardError`. They carry no
+  `wouldStrandPractice` pre-check on purpose: a re-checked active-owner actor is
+  itself the owner who remains, so the trigger's refusal is reachable from them
+  only if that re-check is removed. **What would change this:** a door that lets
+  an actor act on THEMSELVES without the transfer's promote-first order.
 - `POST /api/settings/delete-account` **is** a reducing door and is **not**
   listed here, because it is not unguarded: the trigger covers it, and #210
   names only the admin suspend/soft-delete routes for the app-layer message.

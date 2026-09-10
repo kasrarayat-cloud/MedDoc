@@ -7,7 +7,11 @@
 //   · the guard reads the SESSION's role       -> the staleness block
 //   · a refusal stops being audited            -> the audit block
 //   · the self-demotion guard is removed       -> the role-change block
-//   · an OWNER becomes demotable               -> the role-change block
+//   · an OWNER becomes UN-demotable again      -> the ADMIN-5 role-change arms
+//   · the actor is not re-read under the lock  -> the ADMIN-5 arms (all three doors)
+//   · a trigger refusal escapes as a throw     -> the ADMIN-5 arms (all three doors)
+//   · removal stops being a CAS / writes the wrong columns -> the removal block
+//   · a transfer steps down BEFORE it promotes -> the transfer block
 //   · a mint sets practiceId without the role  -> the mint block
 //   · the raw code or its hash reaches an audit row -> the mint block
 //   · a cross-practice target becomes reachable -> the scope block
@@ -94,7 +98,34 @@ import {
 import {
   changeMemberRoleAction,
   mintSeatInviteAction,
+  removeMemberAction,
+  transferOwnershipAction,
 } from '../../actions/practice-members';
+import {
+  ACTIVE_OWNER_WHERE,
+  LAST_OWNER_REFUSAL,
+  LIVE_MEMBER_WHERE,
+} from '../last-owner-invariant';
+
+/**
+ * The trigger's refusal in the MEASURED shape: Prisma 7 + adapter-pg against a
+ * scratch pg16 surfaced it as a `DriverAdapterError` with no Prisma code, the
+ * SQLSTATE on `cause.originalCode`. Thrown BY THE WRITE, so the arm measures
+ * the door's catch, not a friendlier double handed to `$transaction`.
+ */
+const adapterError = (code: string, message: string) => ({
+  name: 'DriverAdapterError',
+  message,
+  cause: { originalCode: code, originalMessage: message, kind: 'postgres', code, message },
+});
+const TRIGGER_REFUSAL = adapterError(
+  '23514',
+  'users_last_owner_guard: refusing to leave practice p-1 with zero active OWNERs while 2 other member(s) remain. Transfer ownership first.',
+);
+const CHECK_VIOLATION = adapterError(
+  '23514',
+  'new row for relation "users" violates check constraint "users_active_member_has_practice_role"',
+);
 
 const OWNER_SESSION = { user: { id: 'u-owner', practiceId: 'p-1' } };
 
@@ -203,9 +234,9 @@ describe('⚠️ OWNER IS NOT EXCLUSIVE — the promotion side is now open', () 
     // Deactivation writes {isActive:false, deactivatedAt} and leaves practiceId
     // and practiceRole intact, so a deactivated member stays findable by
     // id+practice. Writing OWNER onto such a row produces an owner the members
-    // page does not render — and CANNOT_CHANGE_AN_OWNER then refuses to ever
-    // move it, because this action is the only practiceRole write in the app.
-    // The listing already filters; the target lookup did not.
+    // page does not render. (Until ADMIN-5 `CANNOT_CHANGE_AN_OWNER` then made it
+    // permanent; it is gone, and the invisible owner is still wrong.) The
+    // listing already filters; the target lookup did not.
     asOwner();
     prisma.user.findFirst.mockResolvedValue(null); // the filter excludes them
     const res = await changeMemberRoleAction(null, form({ userId: 'u-gone', role: 'OWNER' }));
@@ -296,35 +327,84 @@ describe('⚠️ role changes — the guards that keep a practice administrable'
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
-  it("an OWNER's role cannot be changed — which is what keeps 'every practice has an owner' structural", async () => {
+  // ══════════════════════════════════════════════════════════════════════════
+  // ADMIN-5 — OWNER DEMOTION IS OPEN, AND THE INVARIANT IS THE DATABASE'S.
+  //
+  // These three arms REPLACE the ADMIN-1 arms that pinned `CANNOT_CHANGE_AN_OWNER`
+  // (an owner's role could never change here). That refusal is deleted, not
+  // weakened: `users_last_owner_guard` is the only enforcer (#210, #310(a)), and
+  // what this door owes is (1) to re-read its ACTOR under the lock and (2) to
+  // SPEAK the trigger's refusal instead of throwing it.
+  // ══════════════════════════════════════════════════════════════════════════
+  it('⚠️ ADMIN-5 — an OWNER can be demoted by another owner, as a CAS on OWNER, audited OWNER -> TECH', async () => {
     asOwner();
     prisma.user.findFirst.mockResolvedValue({ id: 'u-2', practiceRole: 'OWNER' });
     const res = await changeMemberRoleAction(null, form({ userId: 'u-2', role: 'TECH' }));
-    expect(res && !res.ok && res.reason).toBe('CANNOT_CHANGE_AN_OWNER');
-    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(res?.ok).toBe(true);
+    expect(prisma.user.updateMany).toHaveBeenCalledOnce();
+    expect(prisma.user.updateMany.mock.calls[0][0].where).toMatchObject({ id: 'u-2', practiceRole: 'OWNER' });
+    expect(logAudit.mock.calls.at(-1)?.[0]).toMatchObject({
+      action: 'PRACTICE_ROLE_CHANGED',
+      metadata: { from: 'OWNER', to: 'TECH' },
+    });
   });
 
-  it('⚠️ the OWNER refusal is UNCONDITIONAL — it does not depend on the target role being outside the set', async () => {
-    // ⚠️ THIS IS THE ARM THE WIDENING MADE NECESSARY, AND IT IS THE ONE A
-    // CARELESS REFACTOR DELETES. Before the ruling, "you cannot demote an
-    // owner" was ALSO enforced incidentally by `RoleSchema`, because every
-    // reachable target role was CLINICIAN or TECH. Now OWNER is a legal target,
-    // so the only thing standing between an owner and a role write is the
-    // explicit `CANNOT_CHANGE_AN_OWNER` branch. Asking for OWNER -> OWNER is
-    // the case that isolates it: the schema accepts it, and the guard must
-    // still refuse BEFORE any update.
+  it('⚠️ ADMIN-5 — the ACTOR is re-read UNDER the lock with ACTIVE_OWNER_WHERE; a stale actor writes nothing', async () => {
+    // `requirePracticeAdmin` ran before the lock and reads the role column only.
+    // Two owners demoting each other both pass it; without a re-read under the
+    // lock the second acts on authority the first has just removed.
+    asOwner();
+    prisma.user.findFirst
+      .mockResolvedValueOnce({ id: 'u-2', practiceRole: 'OWNER' }) // target, before the lock
+      .mockResolvedValueOnce(null); // the actor, re-read under it — demoted a moment ago
+    const res = await changeMemberRoleAction(null, form({ userId: 'u-2', role: 'TECH' }));
+    expect(res && !res.ok && res.reason).toBe('ROLE_MAY_NOT_ADMINISTER');
+    expect(prisma.user.updateMany, 'a demoted actor still wrote').not.toHaveBeenCalled();
+
+    const recheck = prisma.user.findFirst.mock.calls[1][0].where;
+    expect(recheck, 'the re-read is not the ONE active-owner predicate').toMatchObject({
+      id: 'u-owner',
+      practiceId: 'p-1',
+      ...ACTIVE_OWNER_WHERE,
+    });
+    const lockAt = Math.min(...executeRaw.mock.invocationCallOrder);
+    expect(prisma.user.findFirst.mock.invocationCallOrder[1], 'the actor was re-read OUTSIDE the lock').toBeGreaterThan(lockAt);
+    expect(logAudit.mock.calls.at(-1)?.[0]).toMatchObject({
+      action: 'PRACTICE_ADMIN_REFUSED',
+      metadata: { refusal: 'ROLE_MAY_NOT_ADMINISTER', attempted: 'ROLE_CHANGE', recheckedUnderLock: true },
+    });
+  });
+
+  it('⚠️ ADMIN-5 — the TRIGGER refusing is spoken as LAST_OWNER and audited, never thrown', async () => {
     asOwner();
     prisma.user.findFirst.mockResolvedValue({ id: 'u-2', practiceRole: 'OWNER' });
-    const res = await changeMemberRoleAction(null, form({ userId: 'u-2', role: 'OWNER' }));
-    expect(res && !res.ok && res.reason).toBe('CANNOT_CHANGE_AN_OWNER');
-    expect(prisma.user.update).not.toHaveBeenCalled();
+    prisma.user.updateMany.mockRejectedValueOnce(TRIGGER_REFUSAL);
+    const res = await changeMemberRoleAction(null, form({ userId: 'u-2', role: 'TECH' }));
+    expect(res).toMatchObject({ ok: false, reason: 'LAST_OWNER', message: LAST_OWNER_REFUSAL });
+    const actions = logAudit.mock.calls.map((c) => c[0].action);
+    expect(actions).toEqual(['PRACTICE_ADMIN_REFUSED']);
+    expect(logAudit.mock.calls[0][0].metadata).toMatchObject({
+      refusal: 'LAST_OWNER',
+      attempted: 'ROLE_CHANGE',
+      source: 'trigger',
+      to: 'TECH',
+    });
   });
 
-  it('⚠️ the refusal message no longer says the question is unsettled — promotion IS settled', () => {
-    // A message that still read "who may promote and demote an owner is not
-    // settled" would be false in the doctor's face the day promotion shipped.
-    expect(ADMIN_REFUSAL_MESSAGE.CANNOT_CHANGE_AN_OWNER).not.toMatch(/not settled/i);
-    expect(ADMIN_REFUSAL_MESSAGE.CANNOT_CHANGE_AN_OWNER).toMatch(/demot|remov/i);
+  it('⚠️ ADMIN-5 — an error that is NOT a last-owner refusal is rethrown, not dressed up', async () => {
+    asOwner();
+    prisma.user.findFirst.mockResolvedValue({ id: 'u-2', practiceRole: 'CLINICIAN' });
+    prisma.user.updateMany.mockRejectedValueOnce(CHECK_VIOLATION);
+    await expect(changeMemberRoleAction(null, form({ userId: 'u-2', role: 'TECH' }))).rejects.toBe(CHECK_VIOLATION);
+    expect(logAudit).not.toHaveBeenCalled();
+  });
+
+  it('⚠️ the retired refusal is GONE, and LAST_OWNER speaks the friendly-refusal file\'s own sentence', () => {
+    // A refusal string that outlives its refusal is how a page starts lying —
+    // "ask support if a partner is leaving" would send a doctor away from a page
+    // that now does it.
+    expect('CANNOT_CHANGE_AN_OWNER' in ADMIN_REFUSAL_MESSAGE).toBe(false);
+    expect(ADMIN_REFUSAL_MESSAGE.LAST_OWNER).toBe(LAST_OWNER_REFUSAL);
   });
 
   it('a target in ANOTHER practice is not found — scoped in the WHERE, not after it', async () => {
@@ -354,13 +434,11 @@ describe('⚠️ role changes — the guards that keep a practice administrable'
     // a comment, and it survives any refactor that moves the call into a helper
     // it does not know to read. This arm asserts what actually RAN, by
     // invocation order, on the same spies every other arm here inspects.
-    // ⚠️ A NON-OWNER TARGET, AND THE REASON IS A REAL PROPERTY OF THIS DOOR.
-    // `CANNOT_CHANGE_AN_OWNER` (practice-members.ts) refuses to move an OWNER
-    // row AT ALL, so an owner DEMOTION is unreachable from here — it lives on
-    // ADMIN-5's door (PR #1026). Writing this arm against an OWNER target
-    // measures the refusal, not the lock, and it did on its first run.
-    // The lock wraps EVERY role change regardless, which is the conservative
-    // choice: the next door added to this file inherits it.
+    // A NON-OWNER target. (This arm was written when `CANNOT_CHANGE_AN_OWNER`
+    // made an owner target unreachable; ADMIN-5 deleted that refusal, and the
+    // owner-demotion arms above run the same lock for an OWNER target.) The
+    // lock wraps EVERY role change, which is the conservative choice: the next
+    // door added to this file inherits it.
     asOwner();
     prisma.user.findFirst.mockResolvedValue({ id: 'u-2', practiceRole: 'CLINICIAN' });
     const res = await changeMemberRoleAction(null, form({ userId: 'u-2', role: 'TECH' }));
@@ -400,6 +478,295 @@ describe('⚠️ role changes — the guards that keep a practice administrable'
     const res = await changeMemberRoleAction(null, form({ userId: 'u-2', role: 'TECH' }));
     expect(res?.ok).toBe(false);
     expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================================
+// ADMIN-5 — REMOVING A MEMBER.
+// ============================================================================
+describe('⚠️ ADMIN-5 — removeMemberAction', () => {
+  // ⚠️ `clearAllMocks` DOES NOT DRAIN A `mockResolvedValueOnce` QUEUE. A refusal
+  // arm that returns before its second read leaves the queued target behind,
+  // and the NEXT arm then reads it — measured: four arms here passed or failed
+  // on their neighbour's fixture on the first run. Reset the two spies whose
+  // queues these arms fill.
+  beforeEach(() => {
+    prisma.user.findFirst.mockReset();
+    prisma.user.updateMany.mockReset();
+    prisma.user.updateMany.mockResolvedValue({ count: 1 });
+  });
+
+  /** actor re-check (under the lock) then the target read (under the lock). */
+  const underLock = (target: { id: string; practiceRole: string | null } | null, actor: object | null = { id: 'u-owner' }) =>
+    prisma.user.findFirst.mockResolvedValueOnce(actor).mockResolvedValueOnce(target);
+
+  it('you cannot remove YOURSELF — refused by its own name, before any read or lock', async () => {
+    asOwner();
+    const res = await removeMemberAction(null, form({ userId: 'u-owner' }));
+    expect(res && !res.ok && res.reason).toBe('CANNOT_REMOVE_YOURSELF');
+    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('⚠️ removal is a COMPARE-AND-SET writing exactly the deactivation columns, and the role goes NULL', async () => {
+    asOwner();
+    underLock({ id: 'u-2', practiceRole: 'CLINICIAN' });
+    const res = await removeMemberAction(null, form({ userId: 'u-2' }));
+    expect(res?.ok).toBe(true);
+    expect(prisma.user.updateMany).toHaveBeenCalledOnce();
+    const { where, data } = prisma.user.updateMany.mock.calls[0][0];
+    // the CAS: the role read UNDER the lock, and the practice, in the WHERE
+    expect(where).toEqual({ id: 'u-2', practiceId: 'p-1', deactivatedAt: null, practiceRole: 'CLINICIAN' });
+    // ⚠️ NULL, because the column's own doc requires it of a deactivated row —
+    // and because a removed ex-OWNER that kept `OWNER` would count as a
+    // "rescuer" in the trigger's exemption 2 while no door can restore them.
+    expect(data.practiceRole).toBeNull();
+    expect(data.isActive).toBe(false);
+    expect(data.deactivatedBy).toBe('u-owner');
+    expect(data.deactivatedAt).toBeInstanceOf(Date);
+    // a live session dies on its next request
+    expect(data.forceLogoutAt).toBeInstanceOf(Date);
+    expect(Object.keys(data).sort()).toEqual(
+      ['deactivatedAt', 'deactivatedBy', 'forceLogoutAt', 'isActive', 'practiceRole'],
+    );
+  });
+
+  it('audits PRACTICE_MEMBER_REMOVED with the role they HELD — the row no longer carries it', async () => {
+    asOwner();
+    underLock({ id: 'u-2', practiceRole: 'OWNER' });
+    await removeMemberAction(null, form({ userId: 'u-2' }));
+    expect(logAudit.mock.calls.at(-1)?.[0]).toMatchObject({
+      action: 'PRACTICE_MEMBER_REMOVED',
+      targetId: 'u-2',
+      metadata: { removedRole: 'OWNER', practiceId: 'p-1' },
+    });
+    expect(JSON.stringify(logAudit.mock.calls.at(-1)?.[0])).not.toMatch(/email|name/i);
+  });
+
+  it('⚠️ the lock is taken on THIS practice, BEFORE the actor re-read, the target read and the write', async () => {
+    asOwner();
+    underLock({ id: 'u-2', practiceRole: 'TECH' });
+    await removeMemberAction(null, form({ userId: 'u-2' }));
+    const lockCalls = (executeRaw.mock.calls as unknown as unknown[][]).filter((c) =>
+      String(c[0]).includes('pg_advisory_xact_lock'),
+    );
+    expect(lockCalls.length).toBe(1);
+    expect(lockCalls[0]).toContain('p-1');
+    const lockAt = Math.min(...executeRaw.mock.invocationCallOrder);
+    for (const at of prisma.user.findFirst.mock.invocationCallOrder) expect(at).toBeGreaterThan(lockAt);
+    expect(prisma.user.updateMany.mock.invocationCallOrder[0]).toBeGreaterThan(lockAt);
+    // and the actor re-read is the ONE predicate
+    expect(prisma.user.findFirst.mock.calls[0][0].where).toMatchObject({ id: 'u-owner', ...ACTIVE_OWNER_WHERE });
+  });
+
+  it('⚠️ a STALE actor (removed a moment ago by the other owner) removes nobody — the #306 class', async () => {
+    // Two owners of a practice with no other live member remove each other. The
+    // second removal is ALLOWED by the trigger (exemption 2: the first victim's
+    // row is inactive with a NULL role, neither member nor rescuer) and leaves a
+    // practice with no live user. The re-read under the lock is what refuses it.
+    asOwner();
+    underLock({ id: 'u-2', practiceRole: 'OWNER' }, null);
+    const res = await removeMemberAction(null, form({ userId: 'u-2' }));
+    expect(res && !res.ok && res.reason).toBe('ROLE_MAY_NOT_ADMINISTER');
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+    expect(logAudit.mock.calls.at(-1)?.[0]).toMatchObject({
+      action: 'PRACTICE_ADMIN_REFUSED',
+      metadata: { refusal: 'ROLE_MAY_NOT_ADMINISTER', attempted: 'REMOVE', recheckedUnderLock: true },
+    });
+  });
+
+  it('a target not in this practice (or already removed) is not found, and nothing is written', async () => {
+    asOwner();
+    underLock(null);
+    const res = await removeMemberAction(null, form({ userId: 'u-elsewhere' }));
+    expect(res && !res.ok && res.reason).toBe('TARGET_NOT_IN_PRACTICE');
+    expect(prisma.user.findFirst.mock.calls[1][0].where).toMatchObject({ practiceId: 'p-1', deactivatedAt: null });
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('⚠️ a CAS that matches nothing refuses, and writes NO removal row', async () => {
+    asOwner();
+    underLock({ id: 'u-2', practiceRole: 'CLINICIAN' });
+    prisma.user.updateMany.mockResolvedValueOnce({ count: 0 });
+    const res = await removeMemberAction(null, form({ userId: 'u-2' }));
+    expect(res && !res.ok && res.reason).toBe('ROLE_CHANGED_UNDER_YOU');
+    expect(logAudit.mock.calls.map((c) => c[0].action)).not.toContain('PRACTICE_MEMBER_REMOVED');
+  });
+
+  it('⚠️ the TRIGGER refusing is spoken as LAST_OWNER and audited', async () => {
+    asOwner();
+    underLock({ id: 'u-2', practiceRole: 'OWNER' });
+    prisma.user.updateMany.mockRejectedValueOnce(TRIGGER_REFUSAL);
+    const res = await removeMemberAction(null, form({ userId: 'u-2' }));
+    expect(res).toMatchObject({ ok: false, reason: 'LAST_OWNER', message: LAST_OWNER_REFUSAL });
+    expect(logAudit.mock.calls.map((c) => c[0].action)).toEqual(['PRACTICE_ADMIN_REFUSED']);
+    expect(logAudit.mock.calls[0][0].metadata).toMatchObject({ refusal: 'LAST_OWNER', attempted: 'REMOVE', source: 'trigger' });
+  });
+
+  it('a NON-OWNER caller removes nobody', async () => {
+    prisma.user.findUnique.mockResolvedValue({ practiceRole: 'CLINICIAN', practiceId: 'p-1' });
+    getSession.mockResolvedValue({ user: { id: 'u-c', practiceId: 'p-1' } });
+    const res = await removeMemberAction(null, form({ userId: 'u-2' }));
+    expect(res && !res.ok && res.reason).toBe('ROLE_MAY_NOT_ADMINISTER');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================================
+// ADMIN-5a — HANDING THE PRACTICE ON.
+// ============================================================================
+describe('⚠️ ADMIN-5a — transferOwnershipAction', () => {
+  // Same reason as the removal block: undrained `…Once` queues leak between arms.
+  beforeEach(() => {
+    prisma.user.findFirst.mockReset();
+    prisma.user.updateMany.mockReset();
+    prisma.user.updateMany.mockResolvedValue({ count: 1 });
+  });
+
+  /** actor re-check, then the incoming owner — both under the lock. */
+  const underLock = (target: { id: string; practiceRole: string | null } | null, actor: object | null = { id: 'u-owner' }) =>
+    prisma.user.findFirst.mockResolvedValueOnce(actor).mockResolvedValueOnce(target);
+
+  it('the step-down role must be a NON-owner role or LEAVE — OWNER is not a way to step down', async () => {
+    asOwner();
+    for (const then of ['OWNER', 'SUPER_ADMIN', '']) {
+      const res = await transferOwnershipAction(null, form({ userId: 'u-2', then }));
+      expect(res && !res.ok && res.reason).toBe('ROLE_NOT_ASSIGNABLE');
+    }
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('you cannot transfer to YOURSELF — refused before any read', async () => {
+    asOwner();
+    const res = await transferOwnershipAction(null, form({ userId: 'u-owner', then: 'CLINICIAN' }));
+    expect(res && !res.ok && res.reason).toBe('TRANSFER_TARGET_INVALID');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('⚠️ the incoming owner must be a LIVE member — a suspended one is refused, nothing written', async () => {
+    asOwner();
+    underLock(null);
+    const res = await transferOwnershipAction(null, form({ userId: 'u-susp', then: 'CLINICIAN' }));
+    expect(res && !res.ok && res.reason).toBe('TRANSFER_TARGET_INVALID');
+    expect(prisma.user.findFirst.mock.calls[1][0].where).toMatchObject({
+      id: 'u-susp',
+      practiceId: 'p-1',
+      ...LIVE_MEMBER_WHERE,
+    });
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('⚠️ THE ORDER IS LOAD-BEARING — promote the target FIRST, then step the actor down', async () => {
+    // Step-down-first by a sole owner is refused by the trigger (it judges each
+    // statement on the state that statement produced). Promote-first means the
+    // step-down already sees the new owner.
+    asOwner();
+    underLock({ id: 'u-2', practiceRole: 'CLINICIAN' });
+    const res = await transferOwnershipAction(null, form({ userId: 'u-2', then: 'CLINICIAN' }));
+    expect(res?.ok).toBe(true);
+    expect(prisma.user.updateMany).toHaveBeenCalledTimes(2);
+    const [first, second] = prisma.user.updateMany.mock.calls.map((c) => c[0]);
+    expect(first.where, 'the FIRST write is not the promotion').toMatchObject({ id: 'u-2', practiceRole: 'CLINICIAN' });
+    expect(first.data).toEqual({ practiceRole: 'OWNER' });
+    expect(second.where, 'the SECOND write is not the actor stepping down').toMatchObject({
+      id: 'u-owner',
+      practiceId: 'p-1',
+      ...ACTIVE_OWNER_WHERE,
+    });
+    expect(second.data).toEqual({ practiceRole: 'CLINICIAN' });
+    const lockAt = Math.min(...executeRaw.mock.invocationCallOrder);
+    expect(Math.min(...prisma.user.updateMany.mock.invocationCallOrder)).toBeGreaterThan(lockAt);
+  });
+
+  it('two PRACTICE_ROLE_CHANGED rows, one per person, sharing ONE transferId', async () => {
+    asOwner();
+    underLock({ id: 'u-2', practiceRole: 'TECH' });
+    await transferOwnershipAction(null, form({ userId: 'u-2', then: 'TECH' }));
+    const rows = logAudit.mock.calls.map((c) => c[0]);
+    expect(rows.map((r) => [r.action, r.targetId])).toEqual([
+      ['PRACTICE_ROLE_CHANGED', 'u-2'],
+      ['PRACTICE_ROLE_CHANGED', 'u-owner'],
+    ]);
+    expect(rows[0].metadata).toMatchObject({ from: 'TECH', to: 'OWNER', practiceId: 'p-1' });
+    expect(rows[1].metadata).toMatchObject({ from: 'OWNER', to: 'TECH', practiceId: 'p-1' });
+    expect(rows[0].metadata.transferId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(rows[1].metadata.transferId).toBe(rows[0].metadata.transferId);
+  });
+
+  it('⚠️ LEAVE deactivates the actor (role NULL, session killed) and records PRACTICE_MEMBER_REMOVED', async () => {
+    asOwner();
+    underLock({ id: 'u-2', practiceRole: 'CLINICIAN' });
+    const res = await transferOwnershipAction(null, form({ userId: 'u-2', then: 'LEAVE' }));
+    expect(res?.ok).toBe(true);
+    const leave = prisma.user.updateMany.mock.calls[1][0].data;
+    expect(leave).toMatchObject({ isActive: false, deactivatedBy: 'u-owner', practiceRole: null });
+    expect(leave.deactivatedAt).toBeInstanceOf(Date);
+    expect(leave.forceLogoutAt).toBeInstanceOf(Date);
+    const rows = logAudit.mock.calls.map((c) => c[0]);
+    expect(rows.map((r) => r.action)).toEqual(['PRACTICE_ROLE_CHANGED', 'PRACTICE_MEMBER_REMOVED']);
+    expect(rows[1]).toMatchObject({ targetId: 'u-owner', metadata: { removedRole: 'OWNER', practiceId: 'p-1' } });
+    expect(rows[1].metadata.transferId).toBe(rows[0].metadata.transferId);
+  });
+
+  it('handing over to an EXISTING co-owner writes no promotion and no promotion row', async () => {
+    asOwner();
+    underLock({ id: 'u-2', practiceRole: 'OWNER' });
+    const res = await transferOwnershipAction(null, form({ userId: 'u-2', then: 'CLINICIAN' }));
+    expect(res?.ok).toBe(true);
+    expect(prisma.user.updateMany).toHaveBeenCalledOnce();
+    expect(prisma.user.updateMany.mock.calls[0][0].where).toMatchObject({ id: 'u-owner' });
+    expect(logAudit.mock.calls.map((c) => [c[0].action, c[0].targetId])).toEqual([['PRACTICE_ROLE_CHANGED', 'u-owner']]);
+  });
+
+  it('⚠️ a step-down that matches nothing ROLLS BACK the promotion — it throws inside the transaction, never returns', async () => {
+    // Returning from the callback would COMMIT the promotion without its paired
+    // step-down. The throw is what makes $transaction roll both back.
+    asOwner();
+    underLock({ id: 'u-2', practiceRole: 'CLINICIAN' });
+    prisma.user.updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
+    const txResult = vi.fn();
+    prisma.$transaction.mockImplementationOnce(async (fn: (tx: unknown) => unknown) => {
+      try {
+        const v = await fn({ user: prisma.user, $queryRaw: queryRaw, $executeRaw: executeRaw });
+        txResult('committed', v);
+        return v;
+      } catch (e) {
+        txResult('rolled-back');
+        throw e;
+      }
+    });
+    const res = await transferOwnershipAction(null, form({ userId: 'u-2', then: 'CLINICIAN' }));
+    expect(txResult).toHaveBeenCalledWith('rolled-back');
+    expect(res && !res.ok && res.reason).toBe('ROLE_CHANGED_UNDER_YOU');
+    expect(logAudit).not.toHaveBeenCalled();
+  });
+
+  it('a promotion CAS that matches nothing refuses before the actor steps down', async () => {
+    asOwner();
+    underLock({ id: 'u-2', practiceRole: 'CLINICIAN' });
+    prisma.user.updateMany.mockResolvedValueOnce({ count: 0 });
+    const res = await transferOwnershipAction(null, form({ userId: 'u-2', then: 'LEAVE' }));
+    expect(res && !res.ok && res.reason).toBe('ROLE_CHANGED_UNDER_YOU');
+    expect(prisma.user.updateMany).toHaveBeenCalledOnce();
+  });
+
+  it('⚠️ a STALE actor hands nothing on', async () => {
+    asOwner();
+    underLock({ id: 'u-2', practiceRole: 'CLINICIAN' }, null);
+    const res = await transferOwnershipAction(null, form({ userId: 'u-2', then: 'LEAVE' }));
+    expect(res && !res.ok && res.reason).toBe('ROLE_MAY_NOT_ADMINISTER');
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('⚠️ the TRIGGER refusing is spoken as LAST_OWNER, audited with the transferId', async () => {
+    asOwner();
+    underLock({ id: 'u-2', practiceRole: 'CLINICIAN' });
+    prisma.user.updateMany.mockResolvedValueOnce({ count: 1 }).mockRejectedValueOnce(TRIGGER_REFUSAL);
+    const res = await transferOwnershipAction(null, form({ userId: 'u-2', then: 'LEAVE' }));
+    expect(res).toMatchObject({ ok: false, reason: 'LAST_OWNER', message: LAST_OWNER_REFUSAL });
+    expect(logAudit.mock.calls.map((c) => c[0].action)).toEqual(['PRACTICE_ADMIN_REFUSED']);
+    expect(logAudit.mock.calls[0][0].metadata).toMatchObject({ refusal: 'LAST_OWNER', attempted: 'TRANSFER', then: 'LEAVE' });
+    expect(logAudit.mock.calls[0][0].metadata.transferId).toMatch(/^[0-9a-f-]{36}$/);
   });
 });
 

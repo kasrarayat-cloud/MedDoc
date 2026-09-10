@@ -25,16 +25,22 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { prisma, wouldStrandPractice, logAudit, withPracticeLock } = vi.hoisted(() => ({
+const { prisma, wouldStrandPractice, logAudit, withPracticeLock, getSession } = vi.hoisted(() => ({
   prisma: {
-    user: { findUnique: vi.fn(), update: vi.fn() },
+    // `findFirst`/`updateMany` are the practice-owner doors' (ADMIN-5) reads and
+    // writes; the admin doors above use `findUnique`/`update`.
+    user: { findUnique: vi.fn(), update: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn() },
     $transaction: vi.fn(),
     $queryRaw: vi.fn(async () => [{ level: 'read committed' }]),
   },
   wouldStrandPractice: vi.fn(),
   logAudit: vi.fn(),
   withPracticeLock: vi.fn(),
+  getSession: vi.fn(),
 }));
+
+vi.mock('@/lib/auth', () => ({ getSession }));
+vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 // ⚠️ THE GATE IS BYPASSED, THE DOOR IS NOT. `adminApi` becomes a pass-through
 // supplying a session, so these arms measure the handler's OWN logic. Its authz
@@ -65,6 +71,11 @@ import { POST as UNSUSPEND } from '../[id]/unsuspend/route';
 import { POST as FORCE_LOGOUT } from '../[id]/force-logout/route';
 import { POST as GRANT_ADMIN } from '../[id]/grant-admin/route';
 import { POST as REVOKE_ADMIN } from '../[id]/revoke-admin/route';
+import {
+  changeMemberRoleAction,
+  removeMemberAction,
+  transferOwnershipAction,
+} from '@/actions/practice-members';
 
 const TARGET = 'target-9';
 const TARGET_EMAIL = 't@x.com';
@@ -327,4 +338,72 @@ describe('#289 — every writer is DRIVEN, not read', () => {
       ).not.toHaveBeenCalled();
     },
   );
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// ADMIN-5 — THE THREE PRACTICE-OWNER DOORS, DRIVEN FOR THE SAME PROPERTIES.
+//
+// `changeMemberRoleAction`, `removeMemberAction` and `transferOwnershipAction`
+// can now remove an owner seat, so they owe what the two admin doors above owe:
+// the lock on the right practice, the write inside it, and the trigger's
+// refusal SPOKEN and RECORDED rather than thrown. Their target is scoped to the
+// ACTOR's practice in the query, so "the target's practice" and the guard's
+// practice are the same value — and the actor's own id is the wrong one.
+// ════════════════════════════════════════════════════════════════════════════
+describe('ADMIN-5 — the practice-owner doors are driven, not read', () => {
+  const form = (entries: Record<string, string>) => {
+    const fd = new FormData();
+    for (const [k, v] of Object.entries(entries)) fd.set(k, v);
+    return fd;
+  };
+  const PANEL_DOORS = [
+    ['changeMemberRoleAction', () => changeMemberRoleAction(null, form({ userId: TARGET, role: 'TECH' }))],
+    ['removeMemberAction', () => removeMemberAction(null, form({ userId: TARGET }))],
+    ['transferOwnershipAction', () => transferOwnershipAction(null, form({ userId: TARGET, then: 'CLINICIAN' }))],
+  ] as const;
+  const message =
+    'users_last_owner_guard: refusing to leave practice prac-7 with zero active OWNERs while 1 other member(s) remain. Transfer ownership first.';
+  const PANEL_TRIGGER_REFUSAL = {
+    name: 'DriverAdapterError',
+    message,
+    cause: { originalCode: '23514', originalMessage: message, kind: 'postgres', code: '23514', message },
+  };
+
+  beforeEach(() => {
+    getSession.mockResolvedValue({ user: { id: 'actor-1', practiceId: 'prac-7' } });
+    prisma.user.findUnique.mockResolvedValue({ practiceRole: 'OWNER', practiceId: 'prac-7' });
+    prisma.user.findFirst.mockReset();
+    prisma.user.findFirst.mockResolvedValue({ id: TARGET, practiceRole: 'CLINICIAN' });
+    prisma.user.updateMany.mockReset();
+    prisma.user.updateMany.mockResolvedValue({ count: 1 });
+  });
+
+  it.each(PANEL_DOORS)('⚠️ %s takes the practice lock, on the practice its target was scoped to', async (_n, door) => {
+    const res = await door();
+    // POSITIVE CONTROL FIRST — a door that refused before writing satisfies the
+    // lock assertions below without ever reaching a write.
+    expect(res?.ok, 'the door did not complete, so nothing below is about the write').toBe(true);
+    expect(withPracticeLock).toHaveBeenCalledTimes(1);
+    expect(withPracticeLock.mock.calls[0][1], 'the lock was taken on the wrong key').toBe('prac-7');
+  });
+
+  it.each(PANEL_DOORS)('⚠️ %s writes INSIDE the lock, never beside it', async (_n, door) => {
+    withPracticeLock.mockImplementation(async () => undefined);
+    await Promise.resolve().then(door).catch(() => undefined);
+    expect(
+      prisma.user.updateMany,
+      'the row was written though the lock never ran its callback — the write is beside it',
+    ).not.toHaveBeenCalled();
+  });
+
+  it.each(PANEL_DOORS)('⚠️ %s maps the TRIGGER\'s refusal to LAST_OWNER and records it', async (_n, door) => {
+    prisma.user.updateMany.mockRejectedValueOnce(PANEL_TRIGGER_REFUSAL);
+    const res = await door();
+    expect(res).toMatchObject({ ok: false, reason: 'LAST_OWNER', message: LAST_OWNER_REFUSAL });
+    expect(logAudit).toHaveBeenCalledTimes(1);
+    expect(logAudit.mock.calls[0][0]).toMatchObject({
+      action: 'PRACTICE_ADMIN_REFUSED',
+      metadata: { refusal: 'LAST_OWNER', source: 'trigger', practiceId: 'prac-7' },
+    });
+  });
 });
