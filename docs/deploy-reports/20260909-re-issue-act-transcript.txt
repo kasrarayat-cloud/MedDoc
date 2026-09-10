@@ -1,0 +1,151 @@
+=== RULED MUTATION GATE (§2.5, enforced) ===
+declaration : docs/foundation/mutations/20260908-re-issue-53-control-form.md
+sha256      : 031c2d8c24cd22c3…
+tracked     : yes   modified-vs-HEAD: no
+committed   : 50d00ca2  at 2026-09-09T06:13:39+00:00
+─────────────────────────────────────────────────────────────────────
+# DECLARATION — THE RE-ISSUE OF THE 53-CONTROL CONSULT FORM
+
+**Written and committed BEFORE the act, under ruling #263 and the standing rule
+that `run-ruled-mutation.sh` is the only door to an irreversible production act.
+The declaration must be TRACKED, UNMODIFIED and COMMITTED, so its commit
+timestamp provably precedes the rows it describes.**
+
+## THE ACT
+
+Re-ingest the owner's pinned 53-control consult form from its **stored
+artifact**, carry the 43 certified dispositions across, re-propose the ten, and
+leave a **draft** for the owner to confirm.
+
+Run through the in-container door:
+
+```
+bash scripts/run-ruled-mutation.sh \
+  --declaration docs/foundation/mutations/20260908-re-issue-53-control-form.md \
+  --in transcribe-md-worker \
+  -- <the ingest entry point>
+```
+
+⚠️ **The worker, not the app.** The app container's `node_modules/.bin` is empty
+and cannot run a `.ts` file; the worker can. That was measured, not assumed.
+
+## PRE-GUARDS — checked BEFORE any row is written
+
+The compile is pure (`compiler.ts` holds no `prisma` and no `await`), which is
+what makes all of these precede the write. It matters because the artifact store
+is **put-once and deletion is intentionally unavailable**, so a post-write guard
+leaves an orphan nothing can remove.
+
+| # | guard | expected |
+|---|---|---|
+| 1 | artifact bytes sha256 | `5367fd075472cc2c6a1de768c5224e7522691ccad3d2c7aafc47071752920642` |
+| 2 | compiled `fieldId`s **set-equal** to the certified version's | **53**, exactly, no missing and no unexpected |
+| 3 | transfer count | **43** |
+| 4 | `--transfer-source-types` | **`extraction`** |
+
+⚠️ **GUARD 4 WAS ADDED AFTER THE OTHERS, AND GUARD 3 IS WHY.** All fifty-three
+certified rows on `18a7ae19` carry `mappingStatus = CERTIFIED`; the 43/10 split
+is by **`sourceType`** — 43 `extraction`, 10 `manual`. `planTransfer` filtered on
+status alone and would have transferred 53, so the declared **43** and the code
+disagreed. **A declaration whose numbers come from the RULING rather than from
+the CODE is the only thing that can disagree with the code.** Closed by #1079
+before any row moved; the selection is REQUIRED and never defaulted.
+
+Any mismatch **aborts and writes nothing.**
+
+## DECLARED DELTA — what MUST change, and what must NOT
+
+**MUST change:**
+
+| row | before | after |
+|---|---|---|
+| note templates for this practice | N | **N + 1** (one new DRAFT) |
+| compiled versions | M | **M + 1** |
+| the new version's field definitions | — | **53** |
+| its mappings with `mappingStatus = CERTIFIED` | — | **43** |
+| its mappings NOT certified (the re-proposed) | — | **10** |
+| the new template's `status` | — | **`draft`** |
+
+**MUST NOT change:**
+
+- the existing certified version's rows — **not one**. The transfer READS it.
+- `template_twin_fill_manifests` — **0 rows touched**. Frozen per-visit manifests
+  keep pointing at whatever they were filled against; that is why the old
+  template is demoted later and never deleted.
+- ⚠️ **the clinical counts: visits, patients, signatures — ALL UNCHANGED.** A
+  deploy or mutation that moves one of these has done something nobody asked
+  for, and the only way to know is to have written the numbers down while they
+  were still true.
+- nothing is **activated** and nothing is **certified** by this act. The owner
+  confirms first; activation is a separate atomic swap.
+
+## ⚠️ A RECORDED MEASUREMENT, NOT A GATE
+
+Owner-ruled: in the same act, **count the `w:tag` attributes on the pinned
+artifact.**
+
+This does not gate anything and must not abort the act. It settles a premise
+that is currently **unverified and load-bearing for TAG-ON-INGEST**: the ruling
+states the form is 53/53 tagged; what is verifiable from the repository is
+**18 of 53** — the controls `regenerate-consult-form.ts` adds. The other 35 come
+from the owner's blank source, whose bytes are not in the repository.
+
+⚠️ The provenance record's P3 proof says *"`w:sdt` tags balanced"*, which is
+**XML nesting, not `w:tag` attributes** — a near-homograph that reads like
+confirmation and is not.
+
+**Declared expectation, fixed before the evidence exists:** `tagged >= 18`. Any
+value is recorded as the finding; **53 makes TAG-ON-INGEST narrower, 18 makes it
+wider**, and either way the number becomes a fact rather than a claim.
+
+## WHY THE ANSWER CANNOT BE TUNED AFTERWARDS
+
+Every quantity above is fixed here, in a committed file, before the act runs.
+The runner prints the declaration's commit time and the act's start time into
+the transcript, so the two bracket the rows in the units the rows carry.
+
+**A difference that is not in this declaration is THE FINDING**, whatever its
+explanation sounds like afterwards.
+─────────────────────────────────────────────────────────────────────
+
+═══════════════════════════════════════════════════════════════════
+RULED MUTATION — ABOUT TO EXECUTE
+  declaration : docs/foundation/mutations/20260908-re-issue-53-control-form.md
+  committed   : 50d00ca29327 at 2026-09-09T06:13:39+00:00
+  command     : npx tsx scripts/re-issue-form.ts --artifact-id 0a79517d-beca-4c6e-a57c-3d7675421e72 --transfer-from 18a7ae19-0d23-44a5-8e98-5459081782be --practice-id cmo5ye2nf000b01s3q0xlkaxb --user-id cmo5ye2nm000c01s3ofudqzi6 --user-email kasra.rayat@gmail.com --expect-sha256 5367fd075472cc2c6a1de768c5224e7522691ccad3d2c7aafc47071752920642 --expect-fields 53 --expect-transfer 43 --transfer-source-types extraction
+  running in  : transcribe-md-worker
+  starting at : 2026-09-09T15:41:16Z   ← must be AFTER the commit above
+═══════════════════════════════════════════════════════════════════
+═══════════════════════════════════════════════════════════════════
+IN-CONTAINER MODE — resolving 'transcribe-md-worker' (ruling #262)
+  container   : e20cb1677f8d
+  its revision: 4e4d8e7c4cd566cae06e12b61f220aa02c34c1bf
+  this tree   : 4e4d8e7c4cd566cae06e12b61f220aa02c34c1bf
+  verdict     : ok — the running container's revision 4e4d8e7c4cd5 equals this tree's HEAD
+═══════════════════════════════════════════════════════════════════
+=== RE-ISSUE — ruling #263 ===
+   artifact      0a79517d-beca-4c6e-a57c-3d7675421e72
+   transfer from 18a7ae19-0d23-44a5-8e98-5459081782be
+   expect        53 fields, 43 transferred
+   source types  extraction
+   expect sha    5367fd075472cc2c6a1de768c5224e7522691ccad3d2c7aafc47071752920642
+   ✓ PRE-GUARD 1 — artifact bytes sha256 matches the declaration
+   ✓ source carries 53 field ids
+=== RECORDED MEASUREMENT — not a gate ===
+   w:tag attributes on the artifact : 53
+   w:sdt controls on the artifact   : 53
+   xml parts inflated and scanned   : 13
+   declared expectation was: tagged >= 18
+   ⚠️ this settles the 18-vs-53 premise for TAG-ON-INGEST and
+      MUST NOT abort the act whatever it says.
+[template-twin:mappings] 1/53 proposals were off-registry or unconcepted and are left unconfirmed: ttf_86cf11d77e63d9e64a6b045b
+=== RESULT ===
+   new note template  3877d5cf-ad03-4412-a322-6be0c7dcb3ff
+   source sha256      5367fd075472cc2c6a1de768c5224e7522691ccad3d2c7aafc47071752920642
+   fields             53
+   transferred        43
+   re-proposed        10
+
+   ⚠️ NOTHING WAS CERTIFIED AND NOTHING WAS ACTIVATED.
+      The new template is a DRAFT. The owner confirms the rows,
+      then certification and activation run as their own acts.

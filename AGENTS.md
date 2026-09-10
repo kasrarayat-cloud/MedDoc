@@ -597,8 +597,37 @@ programme to fix the weaker case. The deploy records provenance **loudly** and
 does not refuse on it. **Both call the same `scripts/lib/declaration.sh`** — one
 implementation, two strictnesses, because a second copy drifts from the first.
 
-⚠️ **AND FILE THE EVIDENCE WHERE GIT WILL TAKE IT: `docs/deploy-reports/` IS
-TRACKED, `docs/deploy-logs/` IS GITIGNORED.** The two names are one word apart
+⚠️ **AND THERE ARE THREE DIRECTORIES, NOT TWO — THE THIRD IS WHERE THE GATE
+LOOKS.** Learn all three before writing a declaration, because only one of them
+is read by the thing that refuses:
+
+| directory | what lives there | who reads it |
+|---|---|---|
+| **`docs/foundation/deploys/`** | **THE DEPLOY DECLARATION** — `<date>-<sha>.md` | ⚠️ **`deploy-prod.sh`'s gate. Nothing else.** |
+| **`docs/foundation/mutations/`** | **THE RULED-ACT DECLARATION** | `run-ruled-mutation.sh`'s gate |
+| `docs/deploy-reports/` | deploy EVIDENCE, written afterwards | humans |
+| `docs/deploy-logs/` | ⚠️ GITIGNORED | nobody; it vanishes |
+
+⚠️ **REFERENCE CASE, 2026-09-09.** A session wrote its §2.5 declaration into
+`docs/deploy-reports/` and **amended it four times over five hours** — baseline,
+passengers, a peer's security fix, a source-type guard — before the deploy
+refused with *"no delta declaration covers the tree you are shipping"* and named
+the path it had been looking at all along. **The same session had the identical
+file misplaced for the ACT**, on a feature branch the mutation gate could not
+see.
+
+> **NOTHING READS A DECLARATION UNTIL THE ACT DOES.** A declaration in the wrong
+> directory is not a warning and not a lint — it is a file that looks completely
+> correct, reviews clean, and is discovered only by the gate it was written for,
+> at the moment you are trying to use it.
+
+The recovery is cheap and must stay honest: `git mv` it to the expected name,
+keep the body **byte-identical**, and say so — a declaration re-pathed after the
+fact is trustworthy only if its ORIGINAL commit timestamp still provably
+precedes the act. Verify with a sha of the body before and after, not by eye.
+
+⚠️ **AND THE EVIDENCE HALF IS STILL TRUE: `docs/deploy-reports/` IS TRACKED,
+`docs/deploy-logs/` IS GITIGNORED.** The two names are one word apart
 in meaning and opposite in behaviour. Both sessions hit this on 2026-08-14 from
 different directions — one had `git add` refuse (loudly, and caught), the other
 had a `cp` into a citation PR silently contribute nothing (caught only by

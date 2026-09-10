@@ -95,3 +95,40 @@ describe('a ruled-act script is guarded against running on import', () => {
     expect(src, 'the census no longer inflates the package').toContain('readVerifiedZipPackage');
   });
 });
+
+// ============================================================================
+// A RULED-ACT SCRIPT NAMES ITS TARGET — it never carries one hard-coded.
+// ----------------------------------------------------------------------------
+// ⚠️ `certify-active.ts` carried `COMPILED_VERSION_ID = '9e758c45-…'`, a PAST
+// act's target, and `confirm-live-template-mappings.ts` had to be marked SPENT
+// because re-running it against a fresh version would have silently reverted
+// four rulings. Both are the same shape: a one-shot script pinned to the
+// version it was written for.
+//
+// The failure is quiet in the worst way — point it at today's problem and it
+// certifies YESTERDAY'S template, reporting success.
+// ============================================================================
+import { readFileSync as readActFile } from 'node:fs';
+
+describe('a ruled-act script takes its target as an argument', () => {
+  it('certify-active.ts has no hard-coded compiled-version id in its CODE', () => {
+    const src = readActFile(join(SCRIPTS, 'certify-active.ts'), 'utf8');
+    // strip comments: the removed constant is quoted in the note explaining WHY
+    // it was removed, and that mention must not fail the arm it documents.
+    const code = src
+      .split('\n')
+      .filter((l) => {
+        const t = l.trimStart();
+        return !t.startsWith('//') && !t.startsWith('*') && !t.startsWith('/*');
+      })
+      .join('\n');
+    const uuids = code.match(/'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'/g) ?? [];
+    expect(uuids, 'a clinical target is pinned in code rather than declared').toEqual([]);
+  });
+
+  it('and it REQUIRES both the target and its declared field count', () => {
+    const src = readActFile(join(SCRIPTS, 'certify-active.ts'), 'utf8');
+    expect(src).toContain("requiredArg('compiled-version')");
+    expect(src).toContain("requiredInt('expect-fields')");
+  });
+});
