@@ -495,6 +495,69 @@ jobs:
       - name: Typecheck transcribe-md
         run: npx tsc --noEmit -p apps/transcribe-md/tsconfig.json
 
+  platform-rates-db:
+    name: platform_rates DB invariants (non-required)
+    # ⚠️ ADMIN-4 ROUND 6 — "NOTHING IN CI EXERCISES THE DB HALF". The branch's
+    # own gates say "CI has no Postgres" and read the migration as TEXT; the
+    # behavioural half, `scripts/check-platform-rates-invariants.sh --attempt`,
+    # ran in no workflow. Measured: a TRUNCATE trigger neutered to `RETURN NULL`
+    # passed the source gate AND the migration's own `$verify$` (it counts
+    # triggers, not what they do) and emptied the table, 1 row to 0 — only the
+    # manual script went red.
+    #
+    # ⚠️ NON-REQUIRED BY CONSTRUCTION, AND SAID SO IN ITS NAME. Its check name is
+    # new, so it is in no branch-protection list until somebody deliberately
+    # adds it; promoting it is a decision, not a side effect of this file. It
+    # needs no npm install and no app build: a Postgres of the PRODUCTION image
+    # (`pgvector/pgvector:pg16`, as the compose files and the `test` job use),
+    # every migration applied in lexical order with ON_ERROR_STOP — so each
+    # migration's own `$verify$` block runs too — and then the script, whose
+    # every write is inside BEGIN … ROLLBACK.
+    #
+    # GITHUB-HOSTED for the same reason `test` is: a service container with a
+    # fixed host port collides on the shared self-hosted box, and the light lane
+    # is reserved for jobs with no `services:`.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: rates
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d rates"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply every migration, in order, as the database would receive them
+        run: |
+          set -euo pipefail
+          # 20260505010210 grants to the application role by name.
+          psql -h localhost -U postgres -d rates -v ON_ERROR_STOP=1 -qc "CREATE ROLE meddoc"
+          n=0
+          for d in $(ls -d packages/db/prisma/migrations/*/ | LC_ALL=C sort); do
+            psql -h localhost -U postgres -d rates -q -v ON_ERROR_STOP=1 -f "${d}migration.sql"
+            n=$((n + 1))
+          done
+          # POSITIVE CONTROL: an empty glob would apply nothing and the script
+          # would then report CANNOT TELL — say how many were applied.
+          echo "applied ${n} migrations"
+          [ "$n" -gt 100 ]
+      - name: Prove platform_rates behaves (check-platform-rates-invariants.sh --attempt)
+        # Exit 0 = every arm passed; 1 = a property is broken; 2 = CANNOT TELL.
+        # Only 0 is green — a can't-tell is not a pass.
+        run: >
+          PSQL="psql -h localhost -U postgres -d rates -v ON_ERROR_STOP=0 -q"
+          bash scripts/check-platform-rates-invariants.sh --attempt
+
   unit:
     name: unit tests (transcribe-md + packages)
     # ⚠️ SELF-HOSTED. MEASURED 2026-08-28 on white-gorilla-87822 (Ubuntu 24.04.4):
