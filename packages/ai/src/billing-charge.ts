@@ -553,7 +553,10 @@ export async function priceUsageRows(
   // ═════════════════════════════════════════════════════════════════════════
   //
   // THE FINDING, and it is correct on every measurement: usage that predates
-  // the FIRST `platform_rates` row can never be charged. Verified on a real
+  // the FIRST `platform_rates` row can never be charged. (⚠️ ROUND 6: that
+  // sentence was true only for a visit ALL of whose usage predated the first
+  // rate — one post-rate row carried the whole visit over. It is true as
+  // written only since the coverage check below the refusal.) Verified on a real
   // PG 16.15 with the migration applied byte-for-byte — every route to make a
   // rate cover an earlier instant is refused BY NAME:
   //
@@ -591,6 +594,49 @@ export async function priceUsageRows(
       unpriced: [],
       pricedSoFarMicroUsd: pricedSoFar,
     };
+  }
+  // ═════════════════════════════════════════════════════════════════════════
+  // ⚠️ ROUND 6 — THE REFUSAL ABOVE FIRED ONLY WHEN **EVERY** PRICED ROW
+  // PREDATED THE FIRST RATE, AND THE ADJUDICATION ABOVE SAID IT WAS WIDER.
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // The margin is read at max(priced instants) and applied to the whole sum,
+  // so a visit whose usage STRADDLES the first `platform_rates` row priced all
+  // of it at that row. Measured: 1000 µ$ at 2026-07-31T23:59:59Z (no rate
+  // existed) plus 1 µ$ at 2026-08-01T00:00:01Z (pr_first 3/2 from 08-01)
+  // returned charge:true, 1502 µ$ — one micro-dollar of new usage moved the
+  // charge from 0 to 1502. The retry route reaches it: a visit that failed, or
+  // went READY uncharged as `no_margin_rate`, before the first rate and is
+  // retried after it loads its old rows together with the new.
+  //
+  // ⚠️ SO EVERY PRICED INSTANT MUST HAVE **SOME** USABLE MARGIN IN EFFECT, or
+  // the whole visit refuses — #310(b), fail closed, reporting what it declined.
+  // This is NOT per-component anchoring and does not reopen the adjudicated
+  // anchor: the rate that APPLIES is still the one at max(instants), exactly as
+  // the gate pins for old -> new. What is refused is applying ANY rate to usage
+  // metered while the platform had NONE — the case round 5's adjudication and
+  // the §2.5 declaration both state "can never be charged", which was true as
+  // written only for a visit ALL of whose usage predated the first rate.
+  //
+  // ⚠️ ASKED AT **EVERY** DISTINCT PRICED INSTANT, NOT ONLY THE EARLIEST.
+  // "The earliest suffices" is true of `marginAt` against a table that is
+  // append-only, forward-only and CHECK-bounded — three database properties
+  // this function cannot see. `marginLookup` is injectable; the invariant asked
+  // per instant needs no argument about what the lookup is.
+  const coveredAt = new Set<number>([chargeInstant.getTime()]);
+  for (const p of priced) {
+    const t = p.at.getTime();
+    if (coveredAt.has(t)) continue;
+    coveredAt.add(t);
+    const inEffect = await marginLookup(p.at);
+    if (!inEffect || !isUsableMargin(inEffect)) {
+      return {
+        charge: false,
+        reason: 'no_margin_rate',
+        unpriced: [],
+        pricedSoFarMicroUsd: pricedSoFar,
+      };
+    }
   }
   // ONE rounding step, on the TOTAL. See the warning above.
   return {

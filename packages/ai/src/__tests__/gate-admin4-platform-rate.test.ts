@@ -200,7 +200,7 @@ describe('ADMIN-4 — the rate is read at the USAGE instant, never at wall clock
     // `c` is a MOCK row, later than both vendor rows and never priced. If the
     // anchor moves above the filters, the margin is read at ITS instant.
     const seen: Date[] = [];
-    await priceUsageRows(
+    const decision = await priceUsageRows(
       [
         usageRow({ id: 'a', createdAt: new Date('2026-08-10T00:00:00Z'), inputTokens: 1 }),
         usageRow({ id: 'b', createdAt: new Date('2026-08-12T00:00:00Z'), inputTokens: 1 }),
@@ -214,14 +214,28 @@ describe('ADMIN-4 — the rate is read at the USAGE instant, never at wall clock
       priceEverything,
       async (at) => {
         seen.push(at);
-        return RATE(3, 2);
+        // Each instant answers with its OWN id, so the stamp names the instant
+        // whose margin was APPLIED — not merely one that was asked.
+        return RATE(3, 2, `pr@${at.toISOString()}`);
       },
     );
-    expect(seen).toHaveLength(1);
+    // ⚠️ ROUND 6 — "CALLED ONCE" IS NO LONGER THE PROPERTY. The lookup is now
+    // also asked at every other PRICED instant (the coverage check: no rate may
+    // reach usage metered while none existed). The property is that the
+    // APPLIED margin is the one at the LATEST PRICED instant, and that a row
+    // which never priced is never asked about at all.
+    expect(decision.charge).toBe(true);
+    if (!decision.charge) return;
     expect(
-      seen[0]!.toISOString(),
+      decision.stamp.platformRateId,
       'the margin was read at the wrong instant — a NON-PRICED row moved the anchor',
-    ).toBe('2026-08-12T00:00:00.000Z');
+    ).toBe('pr@2026-08-12T00:00:00.000Z');
+    expect(seen.map((d) => d.toISOString()), 'a NON-PRICED row was looked up').not.toContain(
+      '2026-08-20T00:00:00.000Z',
+    );
+    expect(new Set(seen.map((d) => d.toISOString()))).toEqual(
+      new Set(['2026-08-12T00:00:00.000Z', '2026-08-10T00:00:00.000Z']),
+    );
   });
 
   it('⚠️ NEGATIVE CONTROL — it is not simply passing "now"', () => {
@@ -571,7 +585,7 @@ describe('ADMIN-4 round 2 — the repairs closed INSTANCES; these close the CLAS
     // Now the instant rides the PRICED component, so a row that never priced
     // has no instant to contribute, whatever the loop order becomes.
     const seen: Date[] = [];
-    await priceUsageRows(
+    const decision = await priceUsageRows(
       [
         usageRow({ id: 'a', createdAt: new Date('2026-08-10T00:00:00Z'), inputTokens: 1 }),
         usageRow({ id: 'b', createdAt: new Date('2026-08-12T00:00:00Z'), inputTokens: 1 }),
@@ -583,14 +597,20 @@ describe('ADMIN-4 round 2 — the repairs closed INSTANCES; these close the CLAS
       priceEverything,
       async (at) => {
         seen.push(at);
-        return RATE(3, 2);
+        return RATE(3, 2, `pr@${at.toISOString()}`);
       },
     );
-    expect(seen).toHaveLength(1);
+    // ROUND 6: see the arm above — the APPLIED instant is asserted through the
+    // stamp, and the two skipped rows' instants must never have been asked.
+    expect(decision.charge).toBe(true);
+    if (!decision.charge) return;
     expect(
-      seen[0]!.toISOString(),
+      decision.stamp.platformRateId,
       'a row that never priced moved the margin anchor',
-    ).toBe('2026-08-12T00:00:00.000Z');
+    ).toBe('pr@2026-08-12T00:00:00.000Z');
+    const asked = seen.map((d) => d.toISOString());
+    expect(asked, 'the MOCK row was looked up').not.toContain('2026-08-20T00:00:00.000Z');
+    expect(asked, 'the non-billable-provider row was looked up').not.toContain('2026-08-25T00:00:00.000Z');
   });
 
   it('⚠️ THE GUARD SHIPS WITH THE ARITHMETIC — the barrel withheld it', async () => {
@@ -673,8 +693,15 @@ describe('ADMIN-4 round 5 — TWO ADJUDICATED BEHAVIOURS, PINNED so round 6 meet
       },
     );
 
-    // ONE read, at the latest priced instant. Both halves are the pinned choice.
-    expect(seen.map((d) => d.toISOString())).toEqual(['2026-08-12T00:00:00.000Z']);
+    // The APPLIED read is at the latest priced instant — the pinned choice, and
+    // the stamp below proves it applied. ⚠️ ROUND 6 added a COVERAGE ask at
+    // every other priced instant ("was ANY margin in effect?"); pr_old answers
+    // it here, so the adjudicated charge is unchanged.
+    expect(seen[0]!.toISOString()).toBe('2026-08-12T00:00:00.000Z');
+    expect(seen.map((d) => d.toISOString()).sort()).toEqual([
+      '2026-08-10T00:00:00.000Z',
+      '2026-08-12T00:00:00.000Z',
+    ]);
     expect(decision.charge).toBe(true);
     if (!decision.charge) return;
     expect(decision.costMicroUsd).toBe(1000n);
@@ -689,7 +716,7 @@ describe('ADMIN-4 round 5 — TWO ADJUDICATED BEHAVIOURS, PINNED so round 6 meet
     expect(decision.costMicroUsd * 5n / 1n).toBe(decision.chargeMicroUsd);
   });
 
-  it('⚠️ ADJUDICATED — a rate set AFTER the usage does not reach it: the refusal is #178, not a gap', async () => {
+  it('⚠️ ADJUDICATED — a rate set AFTER the usage does not reach it, EVEN BESIDE later usage (round 6: the straddle)', async () => {
     // RAISED AS: "the pre-rate usage backlog is PERMANENTLY unbillable."
     // True, and it is the specification. #178: "forward only, past bills are
     // never rewritten" and "a missing multiplier REFUSES, never bills 0".
@@ -723,6 +750,43 @@ describe('ADMIN-4 round 5 — TWO ADJUDICATED BEHAVIOURS, PINNED so round 6 meet
     expect(after.charge).toBe(true);
     if (!after.charge) return;
     expect(after.chargeMicroUsd).toBe(1500n);
+
+    // ⚠️ ROUND 6 — THE STRADDLE, AND THE TITLE ABOVE WAS FALSE WITHOUT IT. As
+    // round 5 shipped, the refusal fired only when EVERY priced row predated the
+    // first rate: add 1 µ$ metered after it and the whole visit charged 1502 µ$
+    // at pr_first — 1 µ$ of new usage moved the charge from 0 to 1502.
+    const firstRate = async (at: Date) => (at >= RATE_FROM ? RATE(3, 2, 'pr_first') : null);
+    const pre = usageRow({ id: 'pre', createdAt: new Date('2026-07-31T23:59:59Z'), inputTokens: 1000 });
+    const post = usageRow({ id: 'post', createdAt: new Date('2026-08-01T00:00:01Z'), inputTokens: 1 });
+    for (const rows of [[pre, post], [post, pre]]) {
+      // Both input orders — the refusal must not depend on which row is read first.
+      const straddle = await priceUsageRows(rows, priceEverything, firstRate);
+      expect(straddle, 'one post-rate row carried pre-rate usage over at the first rate').toEqual({
+        charge: false,
+        reason: 'no_margin_rate',
+        unpriced: [],
+        pricedSoFarMicroUsd: 1001n,
+      });
+    }
+
+    // The RETRY-BACKLOG shape the round-6 pass gave: 90,000 µ$ metered
+    // 2026-08-10 with no rate, the first rate (5/1) written 2026-09-15, and
+    // 10,000 µ$ from a 2026-09-16 retry. It charged 500,000 µ$ at 5x.
+    const FIVE_FROM = new Date('2026-09-15T00:00:00Z');
+    const backlog = await priceUsageRows(
+      [
+        usageRow({ id: 'old', createdAt: new Date('2026-08-10T00:00:00Z'), inputTokens: 90_000 }),
+        usageRow({ id: 'retry', createdAt: new Date('2026-09-16T00:00:00Z'), inputTokens: 10_000 }),
+      ],
+      priceEverything,
+      async (at) => (at >= FIVE_FROM ? RATE(5, 1, 'pr_first5') : null),
+    );
+    expect(backlog, 'five weeks of pre-rate usage was billed at the first rate').toEqual({
+      charge: false,
+      reason: 'no_margin_rate',
+      unpriced: [],
+      pricedSoFarMicroUsd: 100_000n,
+    });
   });
 });
 

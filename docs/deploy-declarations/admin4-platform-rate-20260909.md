@@ -200,6 +200,18 @@ never rewritten"*, and *"a missing multiplier REFUSES, never bills 0"*), not a
 gap — **and the window is empty under correct sequencing**, because nothing gates
 a `platform_rates` write on the flag.
 
+⚠️ **ROUND 6 — AS FIRST WRITTEN, THE TWO SENTENCES ABOVE WERE FALSE FOR A
+STRADDLING VISIT.** The margin is read once, at the visit's latest priced
+instant, and applied to the whole sum, so one usage row metered after the first
+rate carried every earlier row of the same visit over with it. Measured:
+1000 µ$ metered before the first rate plus 1 µ$ after it charged **1502 µ$** at
+the first rate, where the 1000 µ$ alone refused. A retry after the first rate is
+written reaches exactly that shape. `priceUsageRows` now asks the margin lookup
+at **every** distinct priced instant and refuses `no_margin_rate` (reporting
+`pricedSoFarMicroUsd`) if **any** of them had no usable margin — so both
+sentences now hold as written. The adjudicated anchor below is unchanged: which
+rate APPLIES is still the one at the latest instant.
+
 ⚠️ **What is NOT lost, so the trade is judged on what it actually costs:**
 `api_usage_events` rows are never updated or deleted by anything in the tree, so
 any uncharged visit stays permanently enumerable as *"a usage event with no
