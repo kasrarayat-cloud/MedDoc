@@ -98,11 +98,61 @@ function consumersUnder(roots: string): string[] {
     .sort();
 }
 
+/**
+ * ⚠️ ROUND SIX — THE SAME POPULATION, DERIVED WITH NOTHING IN COMMON WITH THE
+ * SHELL PIPELINE. The POPULATION arm used to compare `consumersUnder(ROOTS)`
+ * with `appSourceDirs().flatMap(consumersUnder)` — the SAME helper on both
+ * sides — so a filter planted inside it (`| grep -v 'page\.tsx'`) removed the
+ * same files from both and they stayed equal: 7 of 20 consumers dropped
+ * (login, signup, reset-password, forgot-password, settings, settings/security/
+ * mfa, the root page), and the file went 13/13 GREEN, NON-VACUITY included,
+ * because 13 > 12. `| grep '^apps/transcribe-md/'` in the helper re-created
+ * round two's cross-app blindness the same way. A comparison whose two sides
+ * share a derivation cannot see a defect in that derivation.
+ *
+ * So this side shares nothing: no grep, no shell, no glob, no `appSourceDirs`.
+ * Node walks `apps/` itself and reads each file's CONTENT. It mirrors grep's
+ * semantics deliberately — `*.ts`/`*.tsx` by basename, `__tests__` and
+ * `.test.` excluded by path, symlinks not followed (as `grep -r` does not),
+ * dot-directories skipped (as the shell glob does) — so on an honest tree the
+ * two agree exactly, and a narrowing on EITHER side is a disagreement.
+ */
+function consumersIndependently(): string[] {
+  const out: string[] = [];
+  const walk = (rel: string) => {
+    for (const d of readdirSync(join(REPO, rel), { withFileTypes: true })) {
+      const p = `${rel}/${d.name}`;
+      if (d.isDirectory()) walk(p);
+      else if (
+        d.isFile() &&
+        (d.name.endsWith('.ts') || d.name.endsWith('.tsx')) &&
+        !p.includes('__tests__') &&
+        !/\.test\./.test(p) &&
+        readFileSync(join(REPO, p), 'utf8').includes('await auth()')
+      ) {
+        out.push(p);
+      }
+    }
+  };
+  for (const app of readdirSync(join(REPO, 'apps'), { withFileTypes: true })) {
+    if (!app.isDirectory() || app.name.startsWith('.')) continue;
+    if (existsSync(join(REPO, 'apps', app.name, 'src'))) walk(`apps/${app.name}/src`);
+  }
+  return out.sort();
+}
+
 describe('#182 round 3 — every session consumer refuses an unverified token', () => {
   const consumers = consumersUnder(CONSUMER_SCAN_ROOTS);
+  const independent = consumersIndependently();
 
-  it('NON-VACUITY: the enumeration finds the real population', () => {
-    expect(consumers.length, 'the consumer grep found nothing — every arm below is vacuous').toBeGreaterThan(12);
+  it('NON-VACUITY: the enumeration finds the real population — COUNTED by a derivation that shares nothing with it', () => {
+    // ⚠️ ROUND SIX: `> 12` alone was satisfied by 13 of 20. The floor stays as
+    // a guard on the independent side; the count is PINNED to it.
+    expect(independent.length, 'the independent walk found nothing — every arm below is vacuous').toBeGreaterThan(12);
+    expect(
+      consumers.length,
+      'the grep pipeline and an independent content walk disagree on HOW MANY consumers exist — the scan was narrowed',
+    ).toBe(independent.length);
   });
 
   it('⚠️ POSITIVE CONTROL: the tree can still EXPRESS a cross-app claim', () => {
@@ -186,10 +236,17 @@ describe('#182 round 3 — every session consumer refuses an unverified token', 
     // A scan narrowed to the apps that happen to have consumers today passes
     // THIS and fails THAT, and it is exactly round two's blindness pointed at
     // whichever app gains its first consumer tomorrow. Two arms, two defects.
+    //
+    // ⚠️ CORRECTED 2026-09-10 (round six) — "Narrow the scan ANYWHERE … a
+    // bypassed helper" WAS FALSE AS WRITTEN. RIGHT was
+    // `appSourceDirs().flatMap((d) => consumersUnder(d))`: the same helper, so a
+    // narrowing INSIDE it moved both sides together and this arm stayed green
+    // (7 of 20 dropped, 13/13). RIGHT is now `consumersIndependently()`, which
+    // shares no code, no shell and no glob with `consumersUnder`.
     expect(
       consumers,
-      'the enumeration missed a consumer that a per-app scan finds — it is not reaching every app',
-    ).toEqual(appSourceDirs().flatMap((d) => consumersUnder(d)).sort());
+      'the grep enumeration and an independent content walk disagree — the scan is not reaching every consumer in every app',
+    ).toEqual(independent);
   });
 
   it('each consumer gates on the IDENTITY, or is a named exemption with a reason', () => {
