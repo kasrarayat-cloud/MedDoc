@@ -1,5 +1,15 @@
 // ============================================================================
-// DMP-a — NOTHING CI RUNS MAY REQUIRE THE RETIRED `meddoc-pro` WORKSPACE
+// DMP-a — NOTHING CI OR DEPLOY BUILDS MAY REQUIRE THE RETIRED `meddoc-pro`
+//         WORKSPACE UNLESS IT IS ENUMERATED HERE WITH ITS RETIREMENT POINT
+// ----------------------------------------------------------------------------
+// ⚠️ CORRECTED 2026-09-10. This title read "NOTHING CI RUNS MAY REQUIRE THE
+// RETIRED `meddoc-pro` WORKSPACE" — and was false while it said it: six
+// Dockerfile lines the REQUIRED e2e job builds still COPY that app's manifest
+// (round six; see THE DOCKER-BUILD HOP below). Those lines are deletion-time
+// changes, not removable today, so the honest claim is the narrower one: every
+// remaining coupling is ENUMERATED, an unlisted one reds, and the LIVENESS arm
+// reds the moment the app leaves the tracked tree while any enumerated one
+// remains. The superseded wording is kept here so the correction is visible.
 // ----------------------------------------------------------------------------
 // DELETE-MEDDOC-PRO is a scheduled act. Every CI step that needs that workspace
 // to EXIST is a landmine under it, and the ones that hurt are the ones nobody
@@ -37,10 +47,11 @@
 // scripts resolve to a fixed point, and — because no small shell reader is
 // complete — a CENSUS reds on any line naming the token that nobody judged.
 // ============================================================================
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { join, resolve } from 'node:path';
+import { join, posix, resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -411,6 +422,244 @@ const ROOT_SCRIPT_MENTIONS_ADJUDICATED: Record<string, { sha: string; reason: st
 
 const sha16 = (s: string) => createHash('sha256').update(s).digest('hex').slice(0, 16);
 
+// ════════════════════════════════════════════════════════════════════════════
+// ⚠️ ROUND SIX — THE DOCKER-BUILD HOP. THE COUPLING THAT HARD-FAILS A REQUIRED
+// CONTEXT WAS TWO HOPS OUT, IN A FILE TYPE THIS GATE NEVER OPENED.
+// ════════════════════════════════════════════════════════════════════════════
+// `e2e.yml` runs `docker compose -f docker-compose.qa.yml build transcribe-md
+// transcribe-md-worker` and `docker build -f apps/transcribe-md/Dockerfile`.
+// Neither spells the app. The Dockerfiles they build each carry
+// `COPY apps/meddoc-pro/package.json ./apps/meddoc-pro/package.json` — twice —
+// and with the app gone that COPY fails the build (`"/apps/meddoc-pro/
+// package.json": not found`, two independent verifiers' BuildKit logs), in the
+// job named `Playwright E2E (transcribe-md)`, a REQUIRED context. This gate was
+// 8/8 green in that state. Same shape as round two's miss — a coupling spelled
+// nowhere in the workflow — one layer further out.
+//
+// So the population now follows the hop: every Dockerfile any tracked compose
+// file builds, every Dockerfile a workflow step hands to `docker build`, and
+// every tracked Dockerfile besides (over-flag: one nobody builds today is one
+// somebody builds tomorrow). Each instruction naming the retired app, or
+// hopping to it through a root script, is a coupling — and each must be FILED
+// with its retirement point.
+
+/** Tracked files for git pathspecs — the TRACKED set, never `existsSync`: on the
+ *  shared tree a `git rm`'d app survives as IGNORED leftovers (`.next`,
+ *  `node_modules`, `.env`), so the directory still exists after a real deletion. */
+function tracked(...specs: string[]): string[] {
+  return execFileSync('git', ['ls-files', '-z', '--', ...specs], { cwd: REPO, encoding: 'utf8' })
+    .split('\0')
+    .filter(Boolean);
+}
+
+const isComposeFile = (p: string) => /(^|\/)(docker-)?compose[^/]*\.ya?ml$/.test(p);
+const isDockerfile = (p: string) => /(^|\/)(Dockerfile(\.[\w-]+)?|[\w.-]+\.Dockerfile)$/.test(p) && !p.endsWith('.md');
+const insideRetired = (p: string) => p === `apps/${RETIRED}` || p.startsWith(`apps/${RETIRED}/`);
+
+/** Every string VALUE and every object KEY — `depends_on: { meddoc-pro: … }` names it as a KEY. */
+export function stringsAndKeys(node: unknown, out: string[] = []): string[] {
+  if (typeof node === 'string') out.push(node);
+  else if (Array.isArray(node)) for (const v of node) stringsAndKeys(v, out);
+  else if (node && typeof node === 'object') {
+    for (const [k, v] of Object.entries(node)) {
+      out.push(k);
+      stringsAndKeys(v, out);
+    }
+  }
+  return out;
+}
+
+export type ComposeBuild = { file: string; service: string; context: string; dockerfile: string };
+
+/** A compose file's image builds. `dockerfile` resolves against `context`, as compose resolves it. */
+export function composeBuilds(file: string, doc: unknown): ComposeBuild[] {
+  const services = (doc as { services?: Record<string, { build?: unknown }> })?.services ?? {};
+  const out: ComposeBuild[] = [];
+  for (const [service, def] of Object.entries(services)) {
+    const b = def?.build;
+    if (!b) continue;
+    const ctx = typeof b === 'string' ? b : ((b as { context?: string }).context ?? '.');
+    const df = typeof b === 'string' ? 'Dockerfile' : ((b as { dockerfile?: string }).dockerfile ?? 'Dockerfile');
+    const context = posix.normalize(posix.join(posix.dirname(file), ctx));
+    out.push({ file, service, context, dockerfile: posix.normalize(posix.join(context, df)) });
+  }
+  return out;
+}
+
+/** The Dockerfiles and compose files a workflow's steps hand to docker. */
+export function workflowDockerRefs(doc: unknown): { dockerfiles: string[]; composeFiles: string[] } {
+  const dockerfiles = new Set<string>();
+  const composeFiles = new Set<string>();
+  for (const step of runSteps(doc)) {
+    for (const seg of shellSegments(step.run)) {
+      const t = seg.split(/\s+/).map((x) => x.replace(/['"]/g, '')).filter(Boolean);
+      const d = t.findIndex((x) => x === 'docker' || x === 'docker-compose');
+      if (d < 0) continue;
+      const args = t.slice(d + 1);
+      const isCompose = t[d] === 'docker-compose' || args[0] === 'compose';
+      // ⚠️ ONLY THE TOOL'S OWN `-f` NAMES ITS FILE. For compose that means the
+      // GLOBAL flags before the subcommand: `docker compose -f qa.yml exec -T
+      // postgres psql -f - < x.sql` hands psql `-f -`, not compose. The first
+      // form of this reader collected both, and the fail-closed arm below red
+      // on e2e.yml's trigger-proof step — a false CANNOT-TELL, caught because
+      // the arm refuses rather than skips.
+      const COMPOSE_VALUE_FLAGS = new Set(['-f', '--file', '-p', '--project-name', '--env-file', '--profile', '--project-directory', '--ansi', '--parallel', '--progress']);
+      const files: string[] = [];
+      for (let i = isCompose && args[0] === 'compose' ? 1 : 0; i < args.length; i += 1) {
+        const a = args[i]!;
+        const eq = a.match(/^(?:-f|--file)=(.+)$/);
+        if (eq) files.push(eq[1]!);
+        else if (a === '-f' || a === '--file') {
+          files.push(args[i + 1] ?? '');
+          i += 1;
+        } else if (isCompose && COMPOSE_VALUE_FLAGS.has(a)) i += 1;
+        else if (isCompose && !a.startsWith('-')) break; // the compose subcommand — everything after is its own
+      }
+      if (isCompose) {
+        for (const f of files.length ? files : ['docker-compose.yml']) composeFiles.add(posix.normalize(f));
+      } else if (args[0] === 'build' || (['buildx', 'image'].includes(args[0] ?? '') && args[1] === 'build')) {
+        // `docker build [-f X] <context>` — with no -f, the Dockerfile is <context>/Dockerfile
+        if (files.length) for (const f of files) dockerfiles.add(posix.normalize(f));
+        else dockerfiles.add(posix.normalize(posix.join(args[args.length - 1] ?? '.', 'Dockerfile')));
+      }
+    }
+  }
+  return { dockerfiles: [...dockerfiles].sort(), composeFiles: [...composeFiles].sort() };
+}
+
+/** A Dockerfile's instructions, continuations joined and comments dropped, each tagged with its stage. */
+export function dockerInstructions(text: string): { stage: string; instr: string }[] {
+  const out: { stage: string; instr: string }[] = [];
+  let stage = '<stage 0>';
+  let n = 0;
+  for (const raw of text.replace(/\\\r?\n/g, ' ').split(/\r?\n/)) {
+    const instr = raw.trim().replace(/\s+/g, ' ');
+    if (!instr || instr.startsWith('#')) continue;
+    const from = instr.match(/^FROM\s+\S+(?:\s+AS\s+(\S+))?/i);
+    if (from) {
+      stage = from[1] ?? `<stage ${n}>`;
+      n += 1;
+    }
+    out.push({ stage, instr });
+  }
+  return out;
+}
+
+/** Instructions that need the retired app: they NAME it, or RUN/CMD hops there through a root script. */
+export function dockerfileCouplings(path: string, text: string, coupledRoot: Set<string>): string[] {
+  const out: string[] = [];
+  for (const { stage, instr } of dockerInstructions(text)) {
+    const key = `${path} :: ${stage} :: ${instr}`;
+    if (mentionsRetired(instr) || readsRetiredPath(instr)) {
+      out.push(key);
+      continue;
+    }
+    const m = instr.match(/^(?:RUN|CMD|ENTRYPOINT)\s+(.*)$/i);
+    if (!m) continue;
+    let cmd = m[1]!;
+    if (cmd.startsWith('[')) {
+      try {
+        cmd = (JSON.parse(cmd) as string[]).join(' ');
+      } catch {
+        /* shell form after all */
+      }
+    }
+    for (const seg of shellSegments(cmd)) {
+      const call = npmCall(seg);
+      if (call?.retiredFlag || (call?.rootResolved && call.scripts.some((s) => coupledRoot.has(s)))) {
+        out.push(`${key} :: hops to the retired workspace`);
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Compose references to the retired app: services that BUILD it, and anything
+ * else — a `depends_on`, a volume, a key — that names it or names such a service.
+ */
+export function composeRetiredRefs(file: string, doc: unknown): string[] {
+  const top = (doc ?? {}) as Record<string, unknown>;
+  const services = (top.services ?? {}) as Record<string, unknown>;
+  const retiredSvcs = new Set(
+    composeBuilds(file, doc)
+      .filter((b) => insideRetired(b.context) || insideRetired(b.dockerfile))
+      .map((b) => b.service),
+  );
+  const out = new Set([...retiredSvcs].map((s) => `${file} :: service \`${s}\` builds the retired app`));
+  for (const [svc, def] of Object.entries(services)) {
+    if (retiredSvcs.has(svc)) continue;
+    for (const v of stringsAndKeys(def)) {
+      if (mentionsRetired(v) || retiredSvcs.has(v)) out.add(`${file} :: ${svc} :: ${v.trim().slice(0, 140)}`);
+    }
+  }
+  for (const [k, v] of Object.entries(top)) {
+    if (k === 'services') continue;
+    for (const s of stringsAndKeys(v)) if (mentionsRetired(s)) out.add(`${file} :: <${k}> :: ${s.trim().slice(0, 140)}`);
+  }
+  return [...out].sort();
+}
+
+/** Couplings a deletion would strand: each is survivable while its target is TRACKED, fatal after. */
+export function stranded(keys: string[], isTracked: (path: string) => boolean): string[] {
+  const manifest = `apps/${RETIRED}/package.json`;
+  return keys.filter((k) => {
+    const target = k.match(new RegExp(`apps/${RETIRED}/[^\\s:'"\`]+`))?.[0] ?? manifest;
+    return !isTracked(target);
+  });
+}
+
+const COPY_CRM_MANIFEST = `COPY apps/${RETIRED}/package.json ./apps/${RETIRED}/package.json`;
+const APP_WORKER_ROW =
+  'RETIRES IN THE DELETION PR, SAME CHANGE. Built by the REQUIRED `Playwright E2E (transcribe-md)` job ' +
+  '(docker-compose.qa.yml db-migrate/transcribe-md/transcribe-md-worker, and e2e.yml `docker build -f ' +
+  'apps/transcribe-md/Dockerfile`) and by scripts/deploy-prod.sh. With the app gone this COPY fails the build. ' +
+  'MEASURED 2026-09-10 through npm 11.10.0\'s own Arborist, emulating npm ci (loadVirtual -> buildIdealTree -> ' +
+  'validateLockfile; `npm ci` itself was not run): without this manifest the lockfile check still passes, 0 errors, and ' +
+  'only CRM-exclusive packages drop — 15 prod / 16 full install nodes, none imported outside the CRM. So it is ' +
+  'removable at deletion. NOT removed now: it would change the shipped app/worker images AND open a window where a ' +
+  'phantom import resolves locally (the CRM workspace is still installed and hoisted) but not in the image — the ' +
+  'ioredis class this Dockerfile\'s own header names.';
+const MARKETING_ROW =
+  'RETIRES IN THE DELETION PR — ⚠️ AND IT IS NOT A LINE-DELETE. Built by the `marketing` service of ' +
+  'docker-compose.yml and docker-compose.qa.yml. MEASURED the same way: dropping this manifest drops 61 prod / ' +
+  '109 build install nodes from the marketing stages, including ioredis, next-auth, @auth/core, bcryptjs, docx and ' +
+  'mammoth, which reach this image ONLY through the CRM manifest. The deletion must prove the marketing image ' +
+  'still builds without them (a real `next build`), not assume it.';
+
+/**
+ * ⚠️ EVERY DOCKERFILE INSTRUCTION THAT STILL NEEDS THE RETIRED APP — EXACT, BOTH
+ * DIRECTIONS. A new one is a new coupling nobody looked at; a stale one hides a
+ * line somebody removed. This map is the Dockerfile half of the DELETE-MEDDOC-PRO
+ * checklist, and the LIVENESS arm below turns it RED the moment the app leaves
+ * the tracked tree while any row here is still true.
+ */
+const DOCKERFILE_COUPLINGS_AT_DELETION: Record<string, string> = {
+  [`apps/transcribe-md/Dockerfile :: deps :: ${COPY_CRM_MANIFEST}`]: APP_WORKER_ROW,
+  [`apps/transcribe-md/Dockerfile :: builder :: ${COPY_CRM_MANIFEST}`]: APP_WORKER_ROW,
+  [`apps/transcribe-md/Dockerfile.worker :: full-deps :: ${COPY_CRM_MANIFEST}`]: APP_WORKER_ROW,
+  [`apps/transcribe-md/Dockerfile.worker :: prod-deps :: ${COPY_CRM_MANIFEST}`]: APP_WORKER_ROW,
+  [`apps/marketing/Dockerfile :: deps :: ${COPY_CRM_MANIFEST}`]: MARKETING_ROW,
+  [`apps/marketing/Dockerfile :: builder :: ${COPY_CRM_MANIFEST}`]: MARKETING_ROW,
+};
+
+/**
+ * ⚠️ COMPOSE REFERENCES TO THE RETIRED APP — the #307 surface, filed here so the
+ * deletion can see it. ONE DIRECTION, and the reason is an ordering hazard, not
+ * leniency: PR #1089 (#307) deletes these, and `main` is `strict: false`, so an
+ * exact both-ways match would turn `main` RED the moment #1089 merges without
+ * re-running this file — in either merge order. A stale row here can only
+ * excuse the byte-identical reference already judged, and #1089 carries its
+ * own derived compose gate (`gate-307-retired-service-references`).
+ * DELETE-MEDDOC-PRO deletes whatever rows remain.
+ */
+const COMPOSE_RETIRED_REFS_FILED: Record<string, string> = {
+  'docker-compose.yml :: service `meddoc-pro` builds the retired app':
+    'the CRM\'s own service. #307 — PR #1089 deletes it. Until then a bare `docker compose build`/`up` builds from a context the deletion removes.',
+  'docker-compose.yml :: caddy :: meddoc-pro':
+    'caddy `depends_on` the CRM service, so `up caddy` would try to create it. #307 — PR #1089 removes it with the service.',
+};
+
 describe('DMP-a — the retired workspace is not a CI dependency', () => {
   it('⚠️ POSITIVE CONTROL: the reader actually found and parsed the workflows', () => {
     // Without this, every empty set below could be an empty INPUT — the
@@ -603,5 +852,131 @@ describe('DMP-a — the retired workspace is not a CI dependency', () => {
       else if (adj.sha !== sha16(cmd)) offenders.push(`${name}: command changed since it was adjudicated (now ${sha16(cmd)}) — re-judge it`);
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('DMP-a round six — the docker-build hop: every image CI or deploy builds', () => {
+  const composeFiles = tracked('*.yml', '*.yaml').filter(isComposeFile).sort();
+  const composeDocs = composeFiles.map((f) => ({ f, doc: loadYaml()(readFileSync(join(REPO, f), 'utf8')) }));
+  const builds = composeDocs.flatMap(({ f, doc }) => composeBuilds(f, doc));
+  const wfRefs = WORKFLOWS.map((f) => ({ f, ...workflowDockerRefs(loadYaml()(readFileSync(join(WF_DIR, f), 'utf8'))) }));
+  const referencedDockerfiles = [...new Set([...builds.map((b) => b.dockerfile), ...wfRefs.flatMap((r) => r.dockerfiles)])].sort();
+  const dockerfiles = [...new Set([...tracked('*Dockerfile*').filter(isDockerfile), ...referencedDockerfiles])]
+    .filter((p) => !insideRetired(p))
+    .sort();
+  const coupledRoot = new Set(rootScriptsNeedingRetired(ROOT_SCRIPTS));
+  const dockerCouplings = dockerfiles
+    .filter((p) => existsSync(join(REPO, p)))
+    .flatMap((p) => dockerfileCouplings(p, readFileSync(join(REPO, p), 'utf8'), coupledRoot))
+    .sort();
+  const composeRefs = composeDocs.flatMap(({ f, doc }) => composeRetiredRefs(f, doc));
+  const isTracked = (p: string) => tracked(p).length > 0;
+
+  it('⚠️ POSITIVE CONTROL: the parsers follow the hop on planted inputs', () => {
+    // compose: dockerfile resolves against context, exactly as the gotenberg service needs
+    const planted = loadYaml()(
+      'services:\n  a:\n    build:\n      context: apps/x/fonts\n      dockerfile: ../../../docker/f.Dockerfile\n' +
+        '  b:\n    build: .\n  c:\n    image: postgres\n' +
+        `  crm:\n    build:\n      context: .\n      dockerfile: apps/${RETIRED}/Dockerfile\n` +
+        '  proxy:\n    image: caddy\n    depends_on:\n      crm:\n        condition: service_started\n',
+    );
+    expect(composeBuilds('docker-compose.x.yml', planted).map((b) => `${b.service}=${b.dockerfile}`)).toEqual([
+      'a=docker/f.Dockerfile',
+      'b=Dockerfile',
+      `crm=apps/${RETIRED}/Dockerfile`,
+    ]);
+    // a service that builds the app, and a depends_on naming it as a map KEY
+    expect(composeRetiredRefs('docker-compose.x.yml', planted)).toEqual([
+      'docker-compose.x.yml :: proxy :: crm',
+      'docker-compose.x.yml :: service `crm` builds the retired app',
+    ]);
+    // workflows: every spelling e2e.yml uses, and the defaults
+    const wf = loadYaml()(
+      'jobs:\n  j:\n    steps:\n' +
+        '      - run: docker compose -p meddoc-qa -f docker-compose.qa.yml build transcribe-md\n' +
+        '      - run: >\n          docker build -f apps/x/Dockerfile\n          --build-arg A=1\n          -t meddoc-pro-x:tag .\n' +
+        '      - run: docker buildx build --file=apps/y/Dockerfile.worker .\n' +
+        '      - run: docker compose up -d\n' +
+        '      - run: docker builder prune -af || true\n' +
+        // the shape that fooled the first reader: `-f -` belongs to psql, not compose
+        '      - run: docker compose -f docker-compose.qa.yml exec -T postgres psql -X -f - < proofs/x.sql\n',
+    );
+    expect(workflowDockerRefs(wf)).toEqual({
+      dockerfiles: ['apps/x/Dockerfile', 'apps/y/Dockerfile.worker'],
+      composeFiles: ['docker-compose.qa.yml', 'docker-compose.yml'],
+    });
+    // Dockerfile: stage-tagged, comments ignored, look-alikes ignored, root hops resolved
+    const df =
+      'FROM node AS deps\n# COPY apps/' + RETIRED + '/x in a comment\n' +
+      `COPY apps/${RETIRED}/package.json \\\n  ./apps/${RETIRED}/package.json\n` +
+      'FROM deps AS builder\nRUN npm run build\nRUN npm run build -w transcribe-md\n' +
+      `FROM ${RETIRED}-transcribe-md:rounds AS runner\nCMD ["npm", "run", "build"]\n`;
+    expect(dockerfileCouplings('D', df, new Set(['build']))).toEqual([
+      `D :: deps :: COPY apps/${RETIRED}/package.json ./apps/${RETIRED}/package.json`,
+      'D :: builder :: RUN npm run build :: hops to the retired workspace',
+      'D :: runner :: CMD ["npm", "run", "build"] :: hops to the retired workspace',
+    ]);
+  });
+
+  it('⚠️ POSITIVE CONTROL: the liveness check strands a coupling whose target is gone — and only then', () => {
+    const keys = [`X :: s :: ${COPY_CRM_MANIFEST}`, 'root script `dev` hops to the retired workspace'];
+    expect(stranded(keys, () => true), 'a tracked target was reported stranded').toEqual([]);
+    expect(stranded(keys, () => false), 'an untracked target was not reported').toEqual(keys);
+    // the target is the path the instruction reads, not a guess
+    const seen: string[] = [];
+    stranded([`X :: s :: ${COPY_CRM_MANIFEST}`], (p) => (seen.push(p), true));
+    expect(seen).toEqual([`apps/${RETIRED}/package.json`]);
+  });
+
+  it('⚠️ NOTHING DOCKER IS HANDED IS UNRESOLVABLE — a reference that names no tracked file is CANNOT-TELL, and fails closed', () => {
+    const missingDockerfiles = referencedDockerfiles.filter((p) => !insideRetired(p) && !isTracked(p));
+    const missingCompose = [...new Set(wfRefs.flatMap((r) => r.composeFiles))].filter((p) => !composeFiles.includes(p));
+    expect(missingDockerfiles, 'a compose service or workflow step builds a Dockerfile this gate cannot read').toEqual([]);
+    expect(missingCompose, 'a workflow step hands docker a compose file that is not tracked').toEqual([]);
+  });
+
+  it('⚠️ NON-VACUITY: the population reaches the images the REQUIRED e2e job builds', () => {
+    // Derived, not named: whatever e2e.yml hands docker, directly or via its compose files.
+    const e2e = wfRefs.find((r) => r.f === 'e2e.yml');
+    expect(e2e, 'e2e.yml is gone — this arm is measuring nothing').toBeDefined();
+    const viaCompose = builds.filter((b) => e2e!.composeFiles.includes(b.file)).map((b) => b.dockerfile);
+    const reached = new Set([...e2e!.dockerfiles, ...viaCompose]);
+    expect(reached.size, 'e2e.yml reaches no Dockerfile at all — the hop parser reads nothing').toBeGreaterThan(1);
+    for (const p of reached) if (!insideRetired(p)) expect(dockerfiles, `${p} is built by e2e and not scanned`).toContain(p);
+    expect(composeFiles.length, 'no compose file was read').toBeGreaterThan(1);
+  });
+
+  it('EVERY Dockerfile instruction that needs the retired app is FILED with its retirement point — exactly, both directions', () => {
+    expect(
+      dockerCouplings,
+      'a Dockerfile CI or deploy builds needs `apps/meddoc-pro` and is not filed — or a filed line is gone. ' +
+        'A new one fails the image build the day the app is deleted, in a REQUIRED context. File it in ' +
+        'DOCKERFILE_COUPLINGS_AT_DELETION with its retirement point, or remove it; a gone one, delete its row.',
+    ).toEqual(Object.keys(DOCKERFILE_COUPLINGS_AT_DELETION).sort());
+  });
+
+  it('EVERY compose reference to the retired app is FILED (one direction — see COMPOSE_RETIRED_REFS_FILED)', () => {
+    expect(
+      composeRefs.filter((r) => !(r in COMPOSE_RETIRED_REFS_FILED)),
+      'a compose file references the retired app and nobody filed it. If it is a service that builds it or ' +
+        'depends on it, that is #307\'s surface — file it with its retirement point.',
+    ).toEqual([]);
+  });
+
+  it('⚠️ LIVENESS: a filed coupling is survivable ONLY while its target is TRACKED — the deletion must retire it in the same change', () => {
+    // The arm that turns DMP-a's enumeration into a gate on the deletion itself.
+    // Keyed on the TRACKED set: a `git rm` on the shared tree leaves ignored
+    // leftovers, so `existsSync` would read a real deletion as none.
+    const live = [
+      ...dockerCouplings,
+      ...composeRefs.filter((r) => r in COMPOSE_RETIRED_REFS_FILED),
+      ...[...coupledRoot].map((s) => `root script \`${s}\` hops to the retired workspace`),
+    ];
+    expect(live.length, 'nothing is filed as live — the liveness arm is vacuous').toBeGreaterThan(0);
+    expect(
+      stranded(live, isTracked),
+      'the retired app is no longer TRACKED, but these still need it. Each fails its build or command the moment ' +
+        'it runs — the Dockerfile rows in the REQUIRED e2e job. Retire every one in the deletion PR itself.',
+    ).toEqual([]);
   });
 });
