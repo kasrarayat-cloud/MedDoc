@@ -22,6 +22,7 @@ import * as Sentry from '@sentry/nextjs';
 
 import authConfig from '@/lib/auth.config';
 import prisma from '@meddoc/db';
+import { PRACTICE_ADMITS_SELECT, practiceAdmits } from '@meddoc/db/practice-admits';
 import { revokeSession, revokeAllUserSessions, type UserRole } from '@meddoc/auth';
 import { Product } from '@prisma/client';
 import { redactPhi } from '@meddoc/ai';
@@ -94,7 +95,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         let user;
         try {
-          user = await prisma.user.findUnique({ where: { email } });
+          // ADMIN-6a D1 — the member's practice rides the same lookup, through
+          // the one predicate's own select.
+          user = await prisma.user.findUnique({
+            where: { email },
+            include: { practice: { select: PRACTICE_ADMITS_SELECT } },
+          });
         } catch (err) {
           // T-M18.3 A17: Prisma errors can echo column values.
           console.error(
@@ -105,6 +111,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
         if (!user) return null;
         if (!user.isActive) return null;
+        // ⚠️ ADMIN-6a D1 — A MEMBER OF AN ARCHIVED PRACTICE IS REFUSED AT LOGIN.
+        // D2 (`validateSession`) would end the session on its first request
+        // anyway; refusing here means no session row is minted at all and the
+        // refusal is RECORDED, the way a suspension is. Restoring the practice
+        // admits them again with nothing else changed — their own row was never
+        // written by the archive.
+        if (!practiceAdmits(user.practice)) {
+          void logAudit({
+            action: 'LOGIN_FAILED',
+            userId: user.id,
+            userEmail: user.email,
+            practiceId: user.practiceId,
+            success: false,
+            errorCode: 'ACCOUNT_PRACTICE_ARCHIVED',
+          });
+          return null;
+        }
         // Phase 6Z (PHASE-6Z-08): reject suspended/soft-deleted users at the
         // login form rather than letting them complete authorize() and then
         // having validateSession reject their first authenticated request.
