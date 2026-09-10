@@ -86,8 +86,14 @@ for a in "$@"; do [ "$a" = "--attempt" ] && ATTEMPT=1; done
 PSQL="${PSQL:-psql -v ON_ERROR_STOP=0 -q}"
 
 fails=0
+cannot=0
 pass() { printf '  \033[32mPASS\033[0m  %s\n' "$1"; }
 fail() { printf '  \033[31mFAIL\033[0m  %s\n' "$1"; fails=$((fails + 1)); }
+# ⚠️ ROUND 6 — A THIRD OUTCOME. An arm whose FIXTURE could not be built has not
+# measured the property, and reporting it as FAIL blames the trigger for the
+# instrument's defect — the exact false diagnosis round 6 found ("this trigger
+# holds account deletion hostage" on a trigger that detaches correctly).
+unknown() { printf '  \033[33m????\033[0m  %s\n' "$1"; cannot=$((cannot + 1)); }
 
 q() { $PSQL -tAc "$1" 2>&1; }
 
@@ -109,10 +115,21 @@ echo '── STRUCTURAL (read-only) ──────────────�
 for t in platform_rates_stamp_created_before_insert platform_rates_no_update \
          platform_rates_no_delete platform_rates_no_truncate; do
   en="$(q "SELECT tgenabled FROM pg_trigger WHERE tgrelid='\"platform_rates\"'::regclass AND tgname='${t}'")"
+  # ⚠️ ROUND 6 — 'A' (ENABLE ALWAYS) IS ENABLED, AND STRONGER THAN 'O'. It fires
+  # even under `session_replication_role = replica`, where an 'O' trigger does
+  # not — measured: at 'A' an UPDATE under replica was refused by this table's
+  # own message; at 'O' the same UPDATE went through. Failing 'A' rejected a
+  # configuration strictly stronger than the one this accepts, and "a check that
+  # fails when the thing it guards starts working is a check nobody keeps".
+  # 'D' (disabled) and 'R' (fires ONLY in replica mode — never in an ordinary
+  # session) enforce nothing an ordinary writer meets, and still fail.
   case "$en" in
     O) pass "trigger ${t} exists and is ENABLED" ;;
+    A) pass "trigger ${t} exists and is ENABLED ALWAYS (fires even under replica)" ;;
     '') fail "trigger ${t} is MISSING" ;;
-    *)  fail "trigger ${t} exists but tgenabled='${en}' — a disabled trigger enforces nothing" ;;
+    D) fail "trigger ${t} exists but is DISABLED (tgenabled='D') — it enforces nothing" ;;
+    R) fail "trigger ${t} is ENABLE REPLICA only (tgenabled='R') — an ordinary session never fires it" ;;
+    *) unknown "trigger ${t} has an unrecognised tgenabled='${en}' — not a pass" ;;
   esac
 done
 
@@ -137,7 +154,13 @@ done
 if [ "$ATTEMPT" = "0" ]; then
   echo
   echo "structural only. Re-run with --attempt on a QA/test database for the behavioural arms."
-  [ "$fails" = "0" ] && exit 0 || exit 1
+  # ⚠️ ROUND 6 — THIS EXIT IGNORED THE CANNOT-TELL COUNT, AND ITS OWN MUTATION
+  # PROOF FOUND IT: with the 'A' acceptance removed, an 'A' trigger fell to
+  # `unknown` and the structural run still exited 0 — an arm that could not tell
+  # reported as a pass. Same three outcomes as the full run, in the same order.
+  [ "$fails" != "0" ] && exit 1
+  [ "$cannot" != "0" ] && { echo "CANNOT TELL — ${cannot} arm(s) could not decide. Not a pass."; exit 2; }
+  exit 0
 fi
 
 # --------------------------------------------------------------------------
@@ -264,28 +287,85 @@ refusal "backdated INSERT" "INSERT INTO platform_rates (id,\"marginNumerator\",\
 # ⚠️ THE POSITIVE CONTROL FOR THE APPEND-ONLY ARM. The ONE permitted update is
 # the `ON DELETE SET NULL` detach; without it this trigger holds user deletion
 # hostage, which is the bug the carve-out exists to prevent.
-det="$(q "
-BEGIN;
-INSERT INTO users (id) VALUES ('r5u') ON CONFLICT DO NOTHING;
-INSERT INTO platform_rates (id,\"marginNumerator\",\"marginDenominator\",\"changedByLabel\",\"changedByUserId\") VALUES ('r5d',3,2,'op@x','r5u');
-UPDATE platform_rates SET \"changedByUserId\"=NULL WHERE id='r5d';
-SELECT 'DETACH_OK';
+#
+# ⚠️ ROUND 6 — THE OLD FIXTURE WAS NOT A USER, SO THIS ARM COULD NEVER PASS.
+# It was `INSERT INTO users (id) VALUES ('r5u') ON CONFLICT DO NOTHING`, and
+# `users` has five NOT NULL columns with no default (id, email, passwordHash,
+# practiceId, updatedAt). NOT NULL is checked before ON CONFLICT, so it errored
+# on EVERY database built from this repo's migrations — and the arm then blamed
+# the TRIGGER ("holds account deletion hostage") for a defect that does not
+# exist. The round-5 "ALL ARMS PASSED … the detach control" could not have come
+# from such a database.
+#
+# So the fixture is a REAL one — a practice, an active OWNER (the last-owner
+# guard needs one), and a CLINICIAN who changed a rate — its construction is
+# asserted SEPARATELY, and the detach is the real act: `DELETE FROM users`, which
+# fires the FK's ON DELETE SET NULL, not a hand-written UPDATE standing in for it.
+USER_FIXTURE="
+INSERT INTO practices (id,name,slug,\"updatedAt\") VALUES ('r6det_p','r6 detach fixture','r6det-p',now());
+INSERT INTO users (id,email,\"passwordHash\",\"updatedAt\",\"practiceId\",\"practiceRole\") VALUES
+  ('r6det_owner','r6det-owner@example.test','x',now(),'r6det_p','OWNER'),
+  ('r6det_u','r6det-u@example.test','x',now(),'r6det_p','CLINICIAN');
+INSERT INTO platform_rates (id,\"marginNumerator\",\"marginDenominator\",\"changedByLabel\",\"changedByUserId\") VALUES ('r5d',3,2,'r6det-u@example.test','r6det_u');
+SELECT 'FIXTURE_OK';"
+
+fx="$(q "BEGIN; ${USER_FIXTURE} ROLLBACK;")"
+case "$fx" in
+  *FIXTURE_OK*) pass "the user fixture builds on this schema (practice, OWNER, CLINICIAN, a rate the CLINICIAN changed)" ;;
+  *) unknown "CANNOT BUILD the user fixture, so the detach and smuggle arms below measure nothing — NOT a verdict on the trigger: ${fx}" ;;
+esac
+
+det="$(q "BEGIN; ${USER_FIXTURE}
+DELETE FROM users WHERE id='r6det_u';
+SELECT 'DETACH:' || coalesce(\"changedByUserId\",'NULL') || ':' || \"changedByLabel\" FROM platform_rates WHERE id='r5d';
 ROLLBACK;")"
 case "$det" in
-  *DETACH_OK*) pass "the ON DELETE SET NULL detach still succeeds" ;;
-  *) fail "the permitted detach is refused — this trigger holds account deletion hostage: ${det}" ;;
+  *"DETACH:NULL:r6det-u@example.test"*) pass "a REAL user deletion detaches the rate (changedByUserId NULL, label kept)" ;;
+  *FIXTURE_OK*) fail "the permitted detach is refused — this trigger holds account deletion hostage: ${det}" ;;
+  *) unknown "the detach arm could not run (the fixture did not build — see above)" ;;
 esac
+
+# ⚠️ ROUND 6 — THE SMUGGLE ARMS, which the prior art has and this port dropped.
+# `check-ledger-append-only.sh` asserts "a detach carrying another change is
+# still refused". Without it the carve-out's whole-row jsonb equality was
+# untested from BOTH directions: the refusal arm above updates a row whose actor
+# is already NULL (so the carve-out is never entered), and the detach control
+# changes only the actor. Measured: deleting the jsonb line let
+# `SET "changedByUserId"=NULL, "marginNumerator"=5, "marginDenominator"=1,
+# "effectiveFrom"='2020-01-01Z', "createdAt"='2020-01-01Z'` through — a
+# retroactive re-price wearing the detach's clothes — with every arm green.
+smuggle() { # $1 = what, $2 = the extra SET that rides along with the detach
+  out="$(q "BEGIN; ${USER_FIXTURE} UPDATE platform_rates SET \"changedByUserId\"=NULL, ${2} WHERE id='r5d'; ROLLBACK;")"
+  case "$out" in
+    *"append-only"*) pass "a detach smuggling ${1} is refused by platform_rates' own message" ;;
+    *FIXTURE_OK*ERROR*) fail "a detach smuggling ${1} was refused by something ELSE: ${out}" ;;
+    *FIXTURE_OK*) fail "a detach smuggling ${1} was ACCEPTED — the carve-out rewrites history" ;;
+    *) unknown "the smuggle arm (${1}) could not run (the fixture did not build)" ;;
+  esac
+}
+smuggle "a new margin"                        "\"marginNumerator\"=5, \"marginDenominator\"=1"
+smuggle "a back-dated effectiveFrom+createdAt" "\"effectiveFrom\"='2020-01-01Z', \"createdAt\"='2020-01-01Z'"
+smuggle "a rewritten actor label"             "\"changedByLabel\"='someone-else@example.test'"
+smuggle "a rewritten previous pair"           "\"previousNumerator\"=5, \"previousDenominator\"=1"
+smuggle "an edited note"                      "\"note\"='edited'"
 
 # --------------------------------------------------------------------------
 echo '── RESIDUE — every write above was inside BEGIN … ROLLBACK ────────────'
-res="$(q "SELECT count(*) FROM platform_rates WHERE id LIKE 'r5%'")"
-[ "$res" = "0" ] && pass "no residue (0 rows matching r5%)" \
+res="$(q "SELECT count(*) FROM platform_rates WHERE id LIKE 'r5%' OR id LIKE 'r6%'")"
+[ "$res" = "0" ] && pass "no residue (0 rate rows matching r5%/r6%)" \
   || fail "${res} row(s) survived — a write escaped its transaction"
+ures="$(q "SELECT (SELECT count(*) FROM users WHERE id LIKE 'r6det_%') + (SELECT count(*) FROM practices WHERE id LIKE 'r6det_%')")"
+[ "$ures" = "0" ] && pass "no residue (0 fixture users/practices)" \
+  || fail "${ures} fixture user/practice row(s) survived — a write escaped its transaction"
 
 echo
-if [ "$fails" = "0" ]; then
-  echo "ALL ARMS PASSED."
-  exit 0
+if [ "$fails" != "0" ]; then
+  echo "${fails} ARM(S) FAILED."
+  exit 1
 fi
-echo "${fails} ARM(S) FAILED."
-exit 1
+if [ "$cannot" != "0" ]; then
+  echo "CANNOT TELL — ${cannot} arm(s) could not run. Not a pass."
+  exit 2
+fi
+echo "ALL ARMS PASSED."
+exit 0
