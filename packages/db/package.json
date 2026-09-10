@@ -6,7 +6,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./guard": "./src/db-guard.ts"
+    "./guard": "./src/db-guard.ts",
+    "./practice-admits": "./src/practice-admits.ts"
   },
   "scripts": {
     "generate": "prisma generate",
