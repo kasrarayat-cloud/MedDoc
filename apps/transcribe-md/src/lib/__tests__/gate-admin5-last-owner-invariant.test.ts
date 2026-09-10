@@ -51,6 +51,9 @@ import {
   restorableMemberSql,
   withPracticeLock,
   wouldStrandPractice,
+  wouldOrphanMember,
+  ORPHAN_ADD_OWNER_REFUSAL,
+  ORPHAN_RESTORE_OWNER_REFUSAL,
 } from '../last-owner-invariant';
 
 const REPO = join(__dirname, '..', '..', '..', '..', '..');
@@ -741,5 +744,147 @@ describe('#269 — the guard refuses above READ COMMITTED', () => {
         `${f} runs Serializable AND writes a user row — #269's refusal would make it a 500`,
       ).toBe(false);
     }
+  });
+});
+
+// ============================================================================
+// THE CONSOLE PORT — `wouldOrphanMember`, THE ORPHAN ARM'S FRIENDLY REFUSAL.
+// ----------------------------------------------------------------------------
+// Same two-reader problem as `wouldStrandPractice`: the rule exists in plpgsql
+// (`users_no_orphan_member`) and in TypeScript. So the arms below do both jobs
+// the rest of this file does — READ the migration to pin the arms the helper
+// claims to mirror, and DRIVE the helper through each of them.
+// ============================================================================
+describe('console port — wouldOrphanMember mirrors users_no_orphan_member', () => {
+  const orphanBody = () => fnBody('users_no_orphan_member', '$fn$ LANGUAGE plpgsql;');
+  const squash = (t: string) => t.replace(/\s+/g, ' ');
+
+  it('the migration still has the three arms the helper mirrors (read, comments stripped)', () => {
+    const body = squash(orphanBody());
+    expect(body, 'arm 1 moved').toContain('IF users_is_active_owner(NEW) OR NOT users_is_live_member(NEW) THEN RETURN NEW;');
+    expect(body, 'arm 2 moved').toMatch(
+      /IF TG_OP = 'UPDATE' AND NEW\."practiceId" = OLD\."practiceId" AND users_is_live_member\(OLD\) THEN RETURN NEW;/,
+    );
+    expect(body, 'arm 3 counts something else').toMatch(
+      /u\."practiceId" = NEW\."practiceId" AND u\."id" <> NEW\."id" AND users_is_active_owner\(u\)/,
+    );
+    expect(body).toMatch(/IF owners_now = 0 THEN RAISE EXCEPTION/);
+  });
+
+  it('⚠️ the helper DERIVES its columns from the two predicates — never restates them', () => {
+    const src = readFileSync(join(__dirname, '..', 'last-owner-invariant.ts'), 'utf8');
+    const fn = src.slice(src.indexOf('const PREDICATE_COLUMNS'), src.length);
+    expect(fn).toContain('Object.keys(ACTIVE_OWNER_WHERE)');
+    expect(fn).toContain('Object.keys(LIVE_MEMBER_WHERE)');
+    expect(fn).toContain('matches(after, ACTIVE_OWNER_WHERE)');
+    expect(fn).toContain('matches(after, LIVE_MEMBER_WHERE)');
+    expect(fn).toContain('matches(before, LIVE_MEMBER_WHERE)');
+    for (const col of new Set([...Object.keys(ACTIVE_OWNER_WHERE), ...Object.keys(LIVE_MEMBER_WHERE)])) {
+      expect(fn, `${col} is restated by hand in the orphan helper`).not.toMatch(new RegExp(`\\b${col}\\s*:\\s*(true|null)`));
+    }
+  });
+
+  const CLINICIAN_DEACTIVATED = {
+    id: 'u9',
+    practiceId: 'p1',
+    practiceRole: 'CLINICIAN',
+    isActive: false,
+    deactivatedAt: new Date(),
+    suspendedAt: null,
+    softDeletedAt: null,
+  };
+  const REACTIVATE = { isActive: true, deactivatedAt: null };
+
+  beforeEach(() => {
+    userFindUnique.mockReset();
+    userCount.mockReset();
+  });
+
+  it('⚠️ NON-VACUITY — a non-owner returning to an ownerless practice IS refused', async () => {
+    userFindUnique.mockResolvedValue({ ...CLINICIAN_DEACTIVATED });
+    userCount.mockResolvedValueOnce(0).mockResolvedValueOnce(0);
+    const v = await wouldOrphanMember({ kind: 'update', userId: 'u9', patch: REACTIVATE });
+    expect(v.wouldOrphan, 'the helper refuses nothing — every arm below is vacuous').toBe(true);
+    expect(v.wouldOrphan && v.reason).toBe(ORPHAN_ADD_OWNER_REFUSAL);
+  });
+
+  it('⚠️ the sentence names a remedy that EXISTS — reinstate, when an owner is restorable', async () => {
+    userFindUnique.mockResolvedValue({ ...CLINICIAN_DEACTIVATED });
+    userCount.mockResolvedValueOnce(0).mockResolvedValueOnce(2);
+    const v = await wouldOrphanMember({ kind: 'update', userId: 'u9', patch: REACTIVATE });
+    expect(v).toEqual({ wouldOrphan: true, reason: ORPHAN_RESTORE_OWNER_REFUSAL, restorableOwners: 2 });
+    const restorable = userCount.mock.calls[1][0] as { where: Record<string, unknown> };
+    expect(restorable.where).toMatchObject({ practiceId: 'p1', practiceRole: 'OWNER', ...RESTORABLE_MEMBER_WHERE });
+    expect(restorable.where.id).toEqual({ not: 'u9' });
+  });
+
+  it('another active owner exists — allowed', async () => {
+    userFindUnique.mockResolvedValue({ ...CLINICIAN_DEACTIVATED });
+    userCount.mockResolvedValueOnce(1);
+    expect((await wouldOrphanMember({ kind: 'update', userId: 'u9', patch: REACTIVATE })).wouldOrphan).toBe(false);
+  });
+
+  it('arm 1 — the row becomes an ACTIVE OWNER: exempt, and nothing is counted', async () => {
+    userFindUnique.mockResolvedValue({ ...CLINICIAN_DEACTIVATED, practiceRole: 'OWNER' });
+    const v = await wouldOrphanMember({ kind: 'update', userId: 'u9', patch: REACTIVATE });
+    expect(v.wouldOrphan).toBe(false);
+    expect(userCount).not.toHaveBeenCalled();
+  });
+
+  it('arm 1 — the row stays NOT LIVE (still suspended): exempt', async () => {
+    userFindUnique.mockResolvedValue({ ...CLINICIAN_DEACTIVATED, suspendedAt: new Date() });
+    const v = await wouldOrphanMember({ kind: 'update', userId: 'u9', patch: REACTIVATE });
+    expect(v.wouldOrphan).toBe(false);
+    expect(userCount).not.toHaveBeenCalled();
+  });
+
+  it('⚠️ arm 2 — ALREADY a live member of the same practice: the removal guard owns it', async () => {
+    // e.g. a profile edit of a live CLINICIAN in an ownerless practice. The
+    // trigger returns early; refusing here would block a write the DB allows.
+    userFindUnique.mockResolvedValue({ ...CLINICIAN_DEACTIVATED, isActive: true, deactivatedAt: null });
+    const v = await wouldOrphanMember({ kind: 'update', userId: 'u9', patch: { suspendedAt: null } });
+    expect(v.wouldOrphan, 'the helper double-refuses a write the trigger exempts').toBe(false);
+    expect(userCount).not.toHaveBeenCalled();
+  });
+
+  it('⚠️ the owner count is ACTIVE_OWNER_WHERE on NEW\'s practice, excluding the row', async () => {
+    userFindUnique.mockResolvedValue({ ...CLINICIAN_DEACTIVATED });
+    userCount.mockResolvedValueOnce(1);
+    await wouldOrphanMember({ kind: 'update', userId: 'u9', patch: REACTIVATE });
+    const q = userCount.mock.calls[0][0] as { where: Record<string, unknown> };
+    for (const [c, v] of Object.entries(ACTIVE_OWNER_WHERE)) expect(q.where[c]).toBe(v);
+    expect(q.where.practiceId).toBe('p1');
+    expect(q.where.id).toEqual({ not: 'u9' });
+  });
+
+  it('⚠️ the UPDATE read selects every predicate column — derived, so none arrives undefined', async () => {
+    userFindUnique.mockResolvedValue({ ...CLINICIAN_DEACTIVATED });
+    userCount.mockResolvedValueOnce(1);
+    await wouldOrphanMember({ kind: 'update', userId: 'u9', patch: REACTIVATE });
+    const sel = (userFindUnique.mock.calls[0][0] as { select: Record<string, boolean> }).select;
+    for (const c of new Set([...Object.keys(ACTIVE_OWNER_WHERE), ...Object.keys(LIVE_MEMBER_WHERE), 'practiceId'])) {
+      expect(sel[c], `${c} is not selected`).toBe(true);
+    }
+  });
+
+  it('INSERT — counts the practice with no id exclusion, and refuses when ownerless', async () => {
+    userCount.mockResolvedValueOnce(0).mockResolvedValueOnce(0);
+    const row = { practiceRole: 'TECH', isActive: true, deactivatedAt: null, suspendedAt: null, softDeletedAt: null };
+    const v = await wouldOrphanMember({ kind: 'insert', practiceId: 'p1', row });
+    expect(v.wouldOrphan).toBe(true);
+    expect((userCount.mock.calls[0][0] as { where: Record<string, unknown> }).where).not.toHaveProperty('id');
+    expect(userFindUnique).not.toHaveBeenCalled();
+  });
+
+  it('INSERT of an OWNER is exempt — creating an owner is the remedy, not the offence', async () => {
+    const row = { practiceRole: 'OWNER', isActive: true, deactivatedAt: null, suspendedAt: null, softDeletedAt: null };
+    expect((await wouldOrphanMember({ kind: 'insert', practiceId: 'p1', row })).wouldOrphan).toBe(false);
+    expect(userCount).not.toHaveBeenCalled();
+  });
+
+  it('⚠️ INSERT with a predicate column OMITTED throws — it would read as "not live" and be exempted', async () => {
+    await expect(
+      wouldOrphanMember({ kind: 'insert', practiceId: 'p1', row: { practiceRole: 'TECH', isActive: true } }),
+    ).rejects.toThrow(/deactivatedAt/);
   });
 });

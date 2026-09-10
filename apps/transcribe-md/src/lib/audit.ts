@@ -64,6 +64,19 @@ export type AuditAction =
   | 'USER_PASSWORD_RESET_TRIGGERED'
   | 'USER_GRANTED_SUPER_ADMIN'
   | 'USER_REVOKED_SUPER_ADMIN'
+  // Console port (#310 step 3) — the retired meddoc-pro system-admin console's
+  // labels, carried over so its audited action shapes survive the port. All
+  // four already exist in `enum AuditAction` (schema.prisma) and in the initial
+  // CREATE TYPE, so widening the mirror needs no migration.
+  //
+  // ⚠️ THERE IS NO `USER_REACTIVATED`. Reactivation is audited as
+  // `USER_CREATED` with `metadata.action = 'reactivated'` — meddoc-pro's label,
+  // kept for continuity, which means a "users created" count that does not
+  // filter on that metadata key also counts reactivations.
+  | 'USER_CREATED'
+  | 'USER_UPDATED'
+  | 'USER_ROLE_CHANGED'
+  | 'USER_DEACTIVATED'
   // Phase 6H — threat-management actions on /admin/threats
   | 'THREAT_INVESTIGATED'
   | 'THREAT_RESOLVED'

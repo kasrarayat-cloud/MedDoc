@@ -350,3 +350,124 @@ export async function wouldStrandPractice(userId: string): Promise<LastOwnerVerd
 
   return { wouldStrand: true, reason: LAST_OWNER_REFUSAL, membersLeft };
 }
+
+// ============================================================================
+// THE OTHER HALF — `users_no_orphan_member`'s FRIENDLY REFUSAL.
+// ----------------------------------------------------------------------------
+// ⚠️ SAME CONTRACT AS `wouldStrandPractice`: A UX DEFECT, NEVER A SAFETY ONE.
+// The trigger refuses a live non-owner arriving in a practice that has no
+// active owner (23514), whether the member arrives by INSERT (an admin-created
+// account), by clearing a suspension, or by clearing a deactivation. Until the
+// console port nothing asked that question before the write, so `unsuspend`
+// answered it with a raw 500 carrying a Postgres message — the exact shape
+// ruling #210 exists to replace with a sentence.
+//
+// ⚠️ THE SENTENCE NAMES A REMEDY THAT EXISTS, OR IT IS NOT SAID. The trigger's
+// own text says "Restore or appoint an owner first". Whether "restore" is
+// performable depends on whether the practice HAS a restorable owner row, so
+// the refusal counts them and picks the sentence that can actually be acted
+// on — the rule this file's #239 note calls "worse than no refusal" otherwise.
+// ============================================================================
+
+export const ORPHAN_RESTORE_OWNER_REFUSAL =
+  'This practice has no active owner, so this account cannot be made an active member of it. ' +
+  'Reinstate one of the practice’s suspended or deactivated owners first.';
+
+export const ORPHAN_ADD_OWNER_REFUSAL =
+  'This practice has no active owner and none that can be reinstated, so this account cannot be ' +
+  'made an active member of it. Add a new owner to the practice first (Add user, role Owner).';
+
+export type OrphanVerdict =
+  | { wouldOrphan: false }
+  | { wouldOrphan: true; reason: string; restorableOwners: number };
+
+/** Every column EITHER predicate reads — derived from the two, never listed. */
+const PREDICATE_COLUMNS = [
+  ...new Set([...Object.keys(ACTIVE_OWNER_WHERE), ...Object.keys(LIVE_MEMBER_WHERE)]),
+] as (keyof typeof ACTIVE_OWNER_WHERE | keyof typeof LIVE_MEMBER_WHERE)[];
+
+function matches(row: Readonly<Record<string, unknown>>, where: Readonly<Record<string, unknown>>): boolean {
+  return (Object.entries(where) as [string, unknown][]).every(([column, expected]) => row[column] === expected);
+}
+
+/**
+ * Would this write place a LIVE NON-OWNER into a practice with no active owner?
+ *
+ * ⚠️ MIRRORS `users_no_orphan_member()` ARM FOR ARM, IN ITS ORDER:
+ *   1. NEW is an active owner, or NEW is not a live member -> nothing to orphan
+ *   2. UPDATE, same practice, and OLD was ALREADY a live member -> the removal
+ *      guard owns that question; this one must not double-refuse
+ *   3. otherwise count the OTHER active owners of NEW's practice; zero refuses
+ *
+ * `update` READS the row itself and applies the patch, so a caller cannot
+ * forget a predicate column: the select is derived from the two predicates.
+ * `insert` must pass every predicate column explicitly — an omitted column
+ * would arrive `undefined`, `undefined === null` is false, and the new row
+ * would silently read as "not live" and be exempted. That is a programming
+ * error, so it THROWS rather than guessing a schema default.
+ */
+export async function wouldOrphanMember(
+  args:
+    | { kind: 'update'; userId: string; patch: Readonly<Record<string, unknown>> }
+    | { kind: 'insert'; practiceId: string; row: Readonly<Record<string, unknown>> },
+): Promise<OrphanVerdict> {
+  let before: Record<string, unknown> | null = null;
+  let after: Record<string, unknown>;
+  let practiceId: string;
+  let excludeId: string | undefined;
+
+  if (args.kind === 'update') {
+    const current = await prisma.user.findUnique({
+      where: { id: args.userId },
+      select: {
+        id: true,
+        practiceId: true,
+        ...(Object.fromEntries(PREDICATE_COLUMNS.map((c) => [c, true])) as Record<
+          (typeof PREDICATE_COLUMNS)[number],
+          true
+        >),
+      },
+    });
+    if (!current) return { wouldOrphan: false };
+    before = current as Record<string, unknown>;
+    after = { ...before, ...args.patch };
+    practiceId = String(after.practiceId);
+    excludeId = args.userId;
+  } else {
+    const missing = PREDICATE_COLUMNS.filter((c) => !(c in args.row));
+    if (missing.length > 0) {
+      throw new Error(
+        `wouldOrphanMember(insert) was not given ${missing.join(', ')} — an omitted column reads as ` +
+          'undefined and would exempt the row from the orphan check.',
+      );
+    }
+    after = { ...args.row };
+    practiceId = args.practiceId;
+  }
+
+  // Arm 1 — derived from the two predicates, never restated.
+  if (matches(after, ACTIVE_OWNER_WHERE) || !matches(after, LIVE_MEMBER_WHERE)) {
+    return { wouldOrphan: false };
+  }
+
+  // Arm 2 — `TG_OP = 'UPDATE' AND NEW."practiceId" = OLD."practiceId" AND users_is_live_member(OLD)`.
+  if (before && before.practiceId === practiceId && matches(before, LIVE_MEMBER_WHERE)) {
+    return { wouldOrphan: false };
+  }
+
+  // Arm 3 — the trigger's count: other rows of NEW's practice that are active owners.
+  const others = excludeId ? { id: { not: excludeId } } : {};
+  const ownersNow = await prisma.user.count({
+    where: { practiceId, ...others, ...ACTIVE_OWNER_WHERE },
+  });
+  if (ownersNow > 0) return { wouldOrphan: false };
+
+  const restorableOwners = await prisma.user.count({
+    where: { practiceId, ...others, practiceRole: PRACTICE_ADMIN_ROLE, ...RESTORABLE_MEMBER_WHERE },
+  });
+  return {
+    wouldOrphan: true,
+    reason: restorableOwners > 0 ? ORPHAN_RESTORE_OWNER_REFUSAL : ORPHAN_ADD_OWNER_REFUSAL,
+    restorableOwners,
+  };
+}
