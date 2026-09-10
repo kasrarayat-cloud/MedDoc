@@ -154,7 +154,7 @@ import {
   BILLING_ENFORCED_ENV,
   classifyFailureAccountability,
 } from '@meddoc/ai';
-import { chargeMicroUsd, marginAt } from '@meddoc/ai';
+import { priceUsageRows } from '@meddoc/ai';
 import { prisma } from '@meddoc/db';
 import { assertNonProdDatabase } from '@meddoc/db/guard';
 
@@ -356,17 +356,42 @@ async function expectedChargeForSeededRow(at: Date): Promise<bigint | null> {
   if (!input || !output) return null;
   if (rates.length !== 2) return null;
 
-  // cost = Σ units × rate / unitQuantity, then the CONFIGURED platform margin.
-  const cost =
-    (BigInt(SEEDED_INPUT_TOKENS) * input.rateMicroUsd) / input.unitQuantity +
-    (BigInt(SEEDED_OUTPUT_TOKENS) * output.rateMicroUsd) / output.unitQuantity;
+  // ⚠️ ADMIN-4 ROUND 6 — THE COST HALF WAS STILL A SECOND, TRUNCATING RULE.
+  // The comment at the top of this file said "Both are now taken from the real
+  // pricer. One rule, one reader." — true of the MARGIN only. The cost was
+  // `(units * rateMicroUsd) / unitQuantity` per component, TRUNCATING, where the
+  // pricer rounds HALF-UP per component (`costMicroUsd`) and then applies the
+  // margin once to the sum. Measured at a tokens_input rate of 2,000,500 per
+  // 1,000,000 (output 10,000,000): this harness expected 10500, the observer
+  // correctly logs 10502, and the asserter's exact-string compare reports a
+  // FINDING against correct code. Latent only because today's seeded rates
+  // leave no remainder at 1000/500 tokens — and this function reads rates
+  // "rather than pinned" precisely so it survives a re-versioning.
+  //
+  // So the expectation is the REAL pricer over the seeded row's own shape, with
+  // the REAL rate and margin readers. What the harness then proves is what it
+  // is for: that the worker priced EXACTLY the seeded row, by the one rule.
+  // It cannot detect a defect inside `priceUsageRows` itself — the unit gates
+  // own that, and a harness with its own copy of the rule was the defect.
+  const decision = await priceUsageRows([
+    {
+      id: 'qa-expected-seeded-row',
+      provider: 'anthropic',
+      modelName: SEEDED_MODEL,
+      unitsSource: 'vendor',
+      createdAt: at,
+      audioSeconds: null,
+      inputTokens: SEEDED_INPUT_TOKENS,
+      outputTokens: SEEDED_OUTPUT_TOKENS,
+      cacheReadInputTokens: null,
+      cacheCreationInputTokens: null,
+    },
+  ]);
   // ⚠️ `null` HERE MEANS CANNOT-TELL, NOT ZERO — the same contract the rate
-  // lookup above already uses. With no platform rate configured this harness
-  // must decline to judge rather than compute an expectation of its own, which
-  // is precisely what the hard-coded 3/2 did.
-  const margin = await marginAt(at);
-  if (!margin) return null;
-  return chargeMicroUsd(cost, margin);
+  // lookup above already uses. No platform rate configured (or any other
+  // decline) is a fact about the TABLES, and this harness must not compute an
+  // expectation of its own in its place, which is what the hard-coded 3/2 did.
+  return decision.charge ? decision.chargeMicroUsd : null;
 }
 
 async function main(): Promise<Verdict> {
