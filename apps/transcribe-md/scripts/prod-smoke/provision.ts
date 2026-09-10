@@ -33,12 +33,27 @@ async function main() {
   const password =
     process.env.SMOKE_ACCOUNT_PASSWORD?.trim() || randomBytes(24).toString('base64url');
 
+  // ⚠️ ADMIN-6a — THIS UPSERT NO LONGER WRITES `isActive`, AND THAT IS THE FIX.
+  // It used to set `isActive: true` on every run, which was harmless while the
+  // flag was a marker nobody read. Now three doors read it, so that line would
+  // be a SILENT UN-ARCHIVE — a restore with no audit row, performed by a script
+  // outside the one audited verb (`updatePractice`). The create branch takes
+  // the column default (true); an archived smoke practice stays archived and
+  // this script REFUSES below, naming the audited door to restore it through.
   const practice = await prisma.practice.upsert({
     where: { slug: SMOKE_PRACTICE_SLUG },
-    update: { name: SMOKE_PRACTICE_NAME, isActive: true },
-    create: { name: SMOKE_PRACTICE_NAME, slug: SMOKE_PRACTICE_SLUG, isActive: true },
+    update: { name: SMOKE_PRACTICE_NAME },
+    create: { name: SMOKE_PRACTICE_NAME, slug: SMOKE_PRACTICE_SLUG },
   });
   assertIsSmokeFixture(practice);
+  if (!practice.isActive) {
+    throw new Error(
+      'prod-smoke: the smoke practice is ARCHIVED (practices.isActive = false), so its ' +
+        'member cannot sign in. Restore it through the audited verb — ' +
+        'PATCH /api/admin/practices/<id> {"isActive": true} as a platform administrator — ' +
+        'not by writing the flag from a script.',
+    );
+  }
 
   const passwordHash = await bcrypt.hash(password, 12);
 
