@@ -111,6 +111,7 @@ import { runLayer6Polish } from '@/worker/layers/06-polish';
 import { resolveActiveTemplate } from '@/worker/note-templates/resolve-active-template';
 import { reconcileMeasurementTables } from '@/worker/note-templates/reconcile-measurement-tables';
 import { runTemplateTwinFillStep } from '@/worker/template-twin-fill-step';
+import { groundingContextFor } from '@/lib/template-twin/grounding-context';
 import {
   normalizeTemplate,
   type ResolvedNoteTemplate,
@@ -503,6 +504,10 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // L1b; null for text_notes (no audio) and for dictation runs
     // that disable utterance segmentation.
     let audioConfidenceStats: AudioConfidenceStats | null = null;
+    // #314 v2 — the dictation transcript L1b persisted as `transcriptText`, so
+    // the fill below derives its context through the SAME rule every re-fill
+    // door uses (`groundingContextFor`).
+    let dictationTranscript: string | null = null;
 
     if (visit.inputMode === 'audio_upload') {
       // ── L1 — Deepgram with diarize on ───────────────────────────
@@ -647,6 +652,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         });
         dictationText = r.transcript;
       }
+      dictationTranscript = dictationText;
 
       // Round 3 PR-D — A06-P0-001 empty-transcript guard (dictation
       // path). Read the duration L1b just wrote and run the same
@@ -1372,6 +1378,24 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // provenance-pinned native fill manifest BEFORE the visit goes READY, so
     // export serves a cached native document. A failure here NEVER blocks the
     // visit or signing — the result is advisory; native export falls back to styled.
+    // ⚠️ #314 v2 — ONE RULE, FIVE READERS. The fill's context comes from the
+    // rule the four re-fill doors use, not from this function's own per-mode
+    // derivation, so the first fill and every re-fill ground a total against the
+    // same text. For text and dictation the two are equal by construction; a
+    // divergence is logged (ids and mode only, never text) rather than trusted.
+    const fillContextText = groundingContextFor(
+      {
+        inputMode: visit.inputMode,
+        rawTextInput: visit.rawTextInput,
+        transcriptText: dictationTranscript,
+      },
+      { conversationTranscript: contextText },
+    );
+    if (fillContextText !== contextText) {
+      console.warn(
+        `[transcribe-md-worker] template-twin grounding context diverges from the L3 context visit=${visitId} mode=${visit.inputMode}`
+      );
+    }
     const twinFill = await runTemplateTwinFillStep({
       visitId,
       tenantPracticeId: visit.practiceId,
@@ -1379,7 +1403,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       noteTemplateId: noteTemplate.id,
       noteTemplateVersion: noteTemplate.version,
       inputMode: visit.inputMode,
-      contextText,
+      contextText: fillContextText,
       entities,
       generatedNote: soapFinalForFanout,
       visitDate: visit.createdAt,

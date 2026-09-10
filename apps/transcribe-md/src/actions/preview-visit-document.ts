@@ -37,6 +37,7 @@ import { TemplateDocIRSchema } from '@/lib/template-twin/ir';
 import { scaffoldDefaultOfferable } from '@/lib/template-twin/clinician-override';
 import { loadVisitExportData } from '@/lib/visit-export-server';
 import { loadNativeTemplateDocxForVisit } from '@/lib/template-twin/native-export';
+import { groundingContextFor } from '@/lib/template-twin/grounding-context';
 import type { NativePreviewResult } from './preview-native-document';
 
 /** Why there is no document to show. Every one is surfaced, and none is fatal. */
@@ -220,6 +221,8 @@ export async function previewVisitDocumentAction(
       signedAt: true,
       inputMode: true,
       transcriptText: true,
+      // #314 v2 — a text_notes visit's source; see grounding-context.ts.
+      rawTextInput: true,
       entities: true,
       soapFinal: true,
       soapVersion: true,
@@ -377,7 +380,9 @@ export async function previewVisitDocumentAction(
           : visit.inputMode === 'text_notes'
             ? 'text'
             : 'conversation',
-      contextText: visit.transcriptText ?? '',
+      // ⚠️ #314 v2 — the text L3 read. `transcriptText ?? ''` is '' for every
+      // typed visit, so the preview showed a blank total the export would not.
+      contextText: groundingContextFor(visit),
       entities: visit.entities,
       generatedNote: visit.soapFinal,
       validationNow: new Date(),

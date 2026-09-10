@@ -23,6 +23,9 @@ import {
   noteIdentity,
   overridesIdentity,
 } from './note-identity';
+// #314 v2 — the text L3 read, decided once for every caller. Pure, so the
+// lazy-loading of the fill engine below is unaffected.
+import { groundingContextFor } from './grounding-context';
 
 /** Bounded FILL-sized, not sweep-sized. A doctor is waiting on this request. */
 export const SIGN_FREEZE_BUDGET_MS = 20_000;
@@ -81,6 +84,9 @@ export async function freezeNativeManifestForSigning(input: {
           noteTemplateVersion: true,
           inputMode: true,
           transcriptText: true,
+          // #314 v2 — a text_notes visit's source. `transcriptText` is NULL for
+          // every one of them; see grounding-context.ts.
+          rawTextInput: true,
           entities: true,
           patient: { select: { updatedAt: true } },
         },
@@ -155,7 +161,9 @@ export async function freezeNativeManifestForSigning(input: {
         noteTemplateId: v.noteTemplateId,
         noteTemplateVersion: v.noteTemplateVersion,
         inputMode: mapInputMode(v.inputMode),
-        contextText: v.transcriptText ?? '',
+        // ⚠️ #314 v2 — was `v.transcriptText ?? ''`, which is '' for a typed
+        // visit, so the sign-time re-fill blanked a total the worker filled.
+        contextText: groundingContextFor(v),
         entities: v.entities,
         generatedNote: v.soapFinal,
         // ⚠️ visitDate IS LOAD-BEARING AND THE FIRST DRAFT DROPPED IT.

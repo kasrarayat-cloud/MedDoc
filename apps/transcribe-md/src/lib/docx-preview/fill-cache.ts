@@ -124,7 +124,14 @@ export type FillVariant = 'twin' | 'styled';
 // v6's own comment says "the shape changed and the key did not". This is
 // **the CONTENTS changed and the key did not**, which no schema check can see.
 // FOURTH instance of this class in this file; the three above are its record.
-const KEY_VERSION = 'v7';
+//
+// ⚠️ v8 — RULING #314, AND IT IS v7's SHAPE A FIFTH TIME. #314 withholds a
+// total time that is not grounded, and v2 makes the preview ground a typed
+// visit against `rawTextInput` instead of '' — so the same note at the same
+// `soapVersion` now renders a DIFFERENT billing line. A warm v7 entry would
+// show the doctor a total that the export and the signature blank (or the
+// reverse) for up to the TTL, on the line that is billed.
+const KEY_VERSION = 'v8';
 
 function key(visitId: string, soapVersion: number, variant: FillVariant): string {
   return `visitdoc:${KEY_VERSION}:${variant}:${visitId}:${soapVersion}`;

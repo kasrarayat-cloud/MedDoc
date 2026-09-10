@@ -17,6 +17,7 @@ import { manifestMatchesDocument } from './note-identity';
 import prisma from '@meddoc/db';
 
 import { processTemplateTwinVisit } from './fill-engine';
+import { groundingContextFor } from './grounding-context';
 import type { EncounterInputMode } from './encounter-facts';
 import {
   createTemplateTwinArtifactStore,
@@ -244,6 +245,8 @@ export async function loadOrComputeNativeTemplateDocxForVisit(
         status: true,
         inputMode: true,
         transcriptText: true,
+        // #314 v2 — a text_notes visit's source; see grounding-context.ts.
+        rawTextInput: true,
         entities: true,
         soapFinal: true,
         noteTemplateId: true,
@@ -294,7 +297,9 @@ export async function loadOrComputeNativeTemplateDocxForVisit(
       noteTemplateId: visit.noteTemplateId,
       noteTemplateVersion: visit.noteTemplateVersion,
       inputMode: mapInputMode(visit.inputMode),
-      contextText: visit.transcriptText ?? '',
+      // ⚠️ #314 v2 — the text L3 read, not `transcriptText ?? ''` (NULL for
+      // every typed visit). One rule for the worker and every re-fill door.
+      contextText: groundingContextFor(visit),
       entities: visit.entities,
       generatedNote: visit.soapFinal,
       validationNow: new Date(),

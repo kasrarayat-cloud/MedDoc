@@ -16,6 +16,7 @@ import {
   EncounterFactSchema,
   type EncounterFact,
 } from '../ir';
+import { groundTotalTime } from '../total-time-grounding';
 
 export type EncounterInputMode = 'conversation' | 'dictation' | 'text';
 
@@ -849,7 +850,31 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
   // a value with an unapproved unit, so "45 minutes" would fail where "45"
   // resolves — canon 134's trap, avoided at the source rather than patched at
   // the reader.
-  if (entities.total_time_minutes) {
+  // ⚠️ #314 — GROUNDED BEFORE IT IS EMITTED. A total time fills two BILLING
+  // lines, and `add()` keeps a fact whose quote is not in the transcript (the
+  // offsets fall back to null). The refutation pass drove an L3 that summed two
+  // durations, and a quote absent from the transcript, straight onto both lines
+  // with zero blocking. So the entity becomes a fact only when its quote is in
+  // the transcript, states exactly this number of minutes, and says it is a
+  // total. Otherwise NO fact: both controls take the bounded clear, counted as
+  // still blank, and the doctor types the figure. The reason logged is a fixed
+  // token — no quote, no number — so the log is not a PHI surface.
+  // ⚠️ #314 v2 — the SENTENCE(S) of `input.contextText` the quote sits in are
+  // judged, never the quote alone (total-time-grounding.ts). So `contextText`
+  // must be the text L3 read — `groundingContextFor` decides that for the
+  // worker and every re-fill door, and a door that passed '' would blank this.
+  const totalTime = entities.total_time_minutes;
+  const totalTimeGrounding = totalTime
+    ? groundTotalTime({
+        contextText: input.contextText,
+        quote: totalTime.evidence_quote,
+        minutes: totalTime.minutes,
+      })
+    : null;
+  if (totalTimeGrounding && !totalTimeGrounding.ok) {
+    console.warn(`[template-twin:facts] total_time_minutes withheld: ${totalTimeGrounding.reason}`);
+  }
+  if (entities.total_time_minutes && totalTimeGrounding?.ok) {
     add({
       path: 'total_time_minutes.minutes',
       concept: 'total_time_minutes',

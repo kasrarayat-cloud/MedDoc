@@ -32,10 +32,26 @@ import { isListValuedNarrative } from '../field-value-derivation';
 import { EncounterFactSchema } from '../ir';
 
 const QUOTE = 'the doctor said so';
+
+/** Every `evidence_quote` in a fixture, at any depth. */
+function quotesIn(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap(quotesIn);
+  if (value && typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>).flatMap(([k, v]) =>
+      k === 'evidence_quote' && typeof v === 'string' ? [v] : quotesIn(v),
+    );
+  }
+  return [];
+}
+
 function project(entities: Record<string, unknown>) {
   return projectEncounterFacts({
     mode: 'dictation',
-    contextText: QUOTE,
+    // ⚠️ #314 — the transcript CARRIES every quote the fixture cites, as a real
+    // one does. A total time whose quote is not in the transcript is now
+    // withheld, and these arms are about the projector's concepts and polarity,
+    // not about grounding — `gate-314` owns that.
+    contextText: [QUOTE, ...quotesIn(entities)].join('\n'),
     entities: entities as unknown as Parameters<typeof projectEncounterFacts>[0]['entities'],
   });
 }
@@ -113,8 +129,10 @@ describe('#246 — the projector emits them, and DISCRIMINATES', () => {
   it('⚠️ total_time_minutes carries NO UNIT in its value, and the number beside it', () => {
     // canon 134's trap: the resolver's number arm refuses a value carrying a
     // unit, so "45 minutes" would fail where "45" resolves.
+    // ⚠️ #314 — a GROUNDED total: the quote states this number and says it is a
+    // total. `QUOTE` states neither, so it is now (correctly) withheld.
     const facts = project({
-      total_time_minutes: { minutes: 45, evidence_quote: QUOTE },
+      total_time_minutes: { minutes: 45, evidence_quote: 'Total time spent today was 45 minutes.' },
     });
     const [fact] = conceptOf(facts, 'total_time_minutes');
     expect(fact).toBeTruthy();
@@ -134,15 +152,38 @@ describe('#246 — the projector emits them, and DISCRIMINATES', () => {
       return conceptOf(f, 'total_time_minutes')[0]?.polarity;
     };
 
+    // ⚠️ #314 v2 RE-FIXTURED BOTH ROUTES, AND DID NOT WEAKEN EITHER. The two
+    // quotes that first proved them ("No fever, ..." / "..., no separate
+    // procedure performed.") carry "no", and #314 v2 refuses a total whose
+    // sentence carries a negation — so they no longer produce a fact at all
+    // (pinned in the arm below). Each route is now driven by a denial cue that
+    // `inferPolarity` reads and #314 does not treat as negating the total:
+    // "denies" (a predicate) and "negative for". Removing the stated
+    // `polarity: 'affirmed'` reds BOTH lines — measured, see the #314 v2
+    // amendment's mutation table.
+    //
     // Route 1 — the digits ARE locatable, but CLAUSE_BREAK is /[.;\n]/ and a
     // COMMA is not one, so an unrelated ROS denial used to govern the number.
-    expect(polarityOf('No fever, total time 25 minutes.', 25)).toBe('affirmed');
+    expect(polarityOf('Denies fever, total time 25 minutes.', 25)).toBe('affirmed');
     // Route 2 — the quote SPELLS the number, so String(40) is unlocatable and
     // polarity fell back to the UNSCOPED whole-quote denial test.
-    expect(polarityOf('Total time of forty minutes spent, no separate procedure performed.', 40)).toBe('affirmed');
+    expect(polarityOf('Total time of forty minutes spent, negative for any separate procedure.', 40)).toBe('affirmed');
     // And a clean quote was always fine — this is the control that says the
     // arms above are about the denial routes, not about polarity in general.
     expect(polarityOf('Total time 25 minutes.', 25)).toBe('affirmed');
+  });
+
+  it('⚠️ #314 v2 — the ORIGINAL route fixtures now produce NO total at all', () => {
+    // Recorded, not hidden: the sentence carries "no", so the total is refused
+    // (`negation_in_sentence`) and the billing line is left blank for the doctor.
+    // The polarity arm above therefore had to move to cues #314 does not refuse.
+    for (const [quote, minutes] of [
+      ['No fever, total time 25 minutes.', 25],
+      ['Total time of forty minutes spent, no separate procedure performed.', 40],
+    ] as const) {
+      const f = project({ total_time_minutes: { minutes, evidence_quote: quote } });
+      expect(conceptOf(f, 'total_time_minutes'), quote).toHaveLength(0);
+    }
   });
 
   it('⚠️ DISCRIMINATION: polarity inference still WORKS everywhere else', () => {
