@@ -368,6 +368,74 @@ describe('#274 · nothing certified means nothing transfers', () => {
   });
 });
 
+describe("#274 · ⚠️ AMBIGUITY IS PER-KEY — the owner's form proved it", () => {
+  // ══════════════════════════════════════════════════════════════════════════
+  // THE RULED ACT'S OWN GUARD CAUGHT THIS, BEFORE A ROW MOVED.
+  //
+  // The owner's 53-control form carries 53 tags but only 35 DISTINCT ones —
+  // `plan` five times, `impression` four, `past_medical_history` three. The
+  // first bijection asked whether EVERY key a field answers to is unique and
+  // disqualified the field entirely if any one was shared. So eighteen controls
+  // whose `fieldId` is unique and EXACT — the re-issue re-ingests the very
+  // artifact the certified version was compiled from — were refused because a
+  // DIFFERENT key of theirs was ambiguous.
+  //
+  // Measured: 20 planned where 43 was declared. TRANSFER_COUNT_MISMATCH.
+  //
+  //     AMBIGUITY IS A PROPERTY OF A KEY, NOT OF A CONTROL.
+  // ══════════════════════════════════════════════════════════════════════════
+  const withTag = (fieldId: string, tag: string, label: string) => field({ fieldId, tag, label });
+
+  it('⚠️ IDENTICAL bytes: a shared TAG must not block an exact fieldId match', () => {
+    // three controls sharing the tag `plan`, as the real form does
+    const ids = ['ttf_' + 'p'.repeat(24), 'ttf_' + 'q'.repeat(24), 'ttf_' + 'r'.repeat(24)];
+    const doc = ir(ids.map((id, i) => withTag(id, 'plan', `Plan ${i}`)));
+    const certs = new Map(ids.map((id, i) => [id, certified(id, `concept_${i}`)]));
+    // identical bytes => the SAME fieldIds on both sides
+    const plan = planTransfer({ target: doc, sourceIr: doc, certifiedByFieldId: certs });
+    expect(plan.transferred, 'a shared tag blocked an exact fieldId match').toHaveLength(3);
+    for (const [i, id] of ids.entries()) {
+      expect(plan.transferred.find((t) => t.fieldId === id)!.mapping.clinicalConcept).toBe(`concept_${i}`);
+    }
+  });
+
+  it('and the shared TAG still carries nothing when the fieldIds differ', () => {
+    // changed bytes: ids rotate, so only the tag could match — and it is shared,
+    // so nothing may transfer. The safety property is untouched.
+    const src = ir([withTag('ttf_' + 'a'.repeat(24), 'plan', 'Plan A'), withTag('ttf_' + 'b'.repeat(24), 'plan', 'Plan B')]);
+    const certs = new Map([
+      ['ttf_' + 'a'.repeat(24), certified('ttf_' + 'a'.repeat(24), 'concept_a')],
+      ['ttf_' + 'b'.repeat(24), certified('ttf_' + 'b'.repeat(24), 'concept_b')],
+    ]);
+    const tgt = ir([withTag('ttf_' + 'c'.repeat(24), 'plan', 'Plan A'), withTag('ttf_' + 'd'.repeat(24), 'plan', 'Plan B')]);
+    const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
+    expect(plan.transferred, 'an ambiguous tag carried a disposition').toEqual([]);
+  });
+
+  it('a UNIQUE tag still carries across rotated ids, beside ambiguous siblings', () => {
+    // ⚠️ THE MIXED CASE, which is what the real form is: one unique tag among
+    // duplicates. It must still work.
+    const src = ir([
+      withTag('ttf_' + 'e'.repeat(24), 'plan', 'Plan A'),
+      withTag('ttf_' + 'f'.repeat(24), 'plan', 'Plan B'),
+      withTag('ttf_' + 'g'.repeat(24), 'exam_lungs', 'Lungs'),
+    ]);
+    const certs = new Map([
+      ['ttf_' + 'e'.repeat(24), certified('ttf_' + 'e'.repeat(24), 'c_a')],
+      ['ttf_' + 'f'.repeat(24), certified('ttf_' + 'f'.repeat(24), 'c_b')],
+      ['ttf_' + 'g'.repeat(24), certified('ttf_' + 'g'.repeat(24), 'c_lungs')],
+    ]);
+    const tgt = ir([
+      withTag('ttf_' + 'h'.repeat(24), 'plan', 'Plan A'),
+      withTag('ttf_' + 'i'.repeat(24), 'plan', 'Plan B'),
+      withTag('ttf_' + 'j'.repeat(24), 'exam_lungs', 'Lungs'),
+    ]);
+    const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
+    expect(plan.transferred).toHaveLength(1);
+    expect(plan.transferred[0]!.mapping.clinicalConcept).toBe('c_lungs');
+  });
+});
+
 describe('#274 · the identity keys themselves', () => {
   it('every field offers its fieldId — universal, and exact for identical bytes', () => {
     for (const f of SOURCE.fields) {
