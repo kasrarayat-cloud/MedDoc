@@ -43,10 +43,14 @@ vi.mock('@meddoc/db', () => ({
 import {
   ACTIVE_OWNER_WHERE,
   IsolationLevelUnsupportedError,
+  LAST_OWNER_REFUSAL,
   LIVE_MEMBER_WHERE,
   RESTORABLE_MEMBER_WHERE,
   PRACTICE_LOCK_KEY,
+  SOLE_MEMBER_REFUSAL,
+  STRANDS_RESTORABLE_REFUSAL,
   activeOwnerSql,
+  classifyGuardError,
   liveMemberSql,
   restorableMemberSql,
   withPracticeLock,
@@ -740,6 +744,148 @@ describe('#269 — the guard refuses above READ COMMITTED', () => {
         WRITE.test(src),
         `${f} runs Serializable AND writes a user row — #269's refusal would make it a 500`,
       ).toBe(false);
+    }
+  });
+});
+
+// ============================================================================
+// ADMIN-5 — `classifyGuardError` IS DRIVEN WITH THE MIGRATION'S OWN SENTENCES.
+// ----------------------------------------------------------------------------
+// ⚠️ THE FIXTURE TEXTS ARE PARSED FROM `migration.sql`, NEVER RETYPED HERE. A
+// classifier tested against a copy of the sentence it matches proves the author
+// can type the same thing twice — and stays green the day the trigger's wording
+// changes and every real refusal falls back to a raw 500.
+//
+// ⚠️ AND THE ERROR'S SHAPE IS THE MEASURED ONE. Prisma 7 + @prisma/adapter-pg,
+// driven against a scratch pg16 carrying every migration, surfaced each RAISE
+// as a `DriverAdapterError` with no Prisma code, the SQLSTATE on
+// `cause.originalCode` and the sentence on `cause.originalMessage`. `adapterError`
+// below builds exactly that, and the literal `MEASURED_*` fixture is one of the
+// captured objects, pasted — so a double that invents a friendlier shape cannot
+// make these arms pass.
+// ============================================================================
+describe('ADMIN-5 — classifyGuardError reads the trigger by SENTENCE and SQLSTATE together', () => {
+  const adapterError = (code: string, message: string) => ({
+    name: 'DriverAdapterError',
+    message,
+    clientVersion: '7.9.0',
+    cause: { originalCode: code, originalMessage: message, kind: 'postgres', code, severity: 'ERROR', message },
+  });
+
+  /** One captured object, verbatim apart from the practice id (scratch DB, 2026-09-10). */
+  const MEASURED_MEMBERS_REMAIN = {
+    name: 'DriverAdapterError',
+    message:
+      'users_last_owner_guard: refusing to leave practice a5probe_p with zero active OWNERs while 1 other member(s) remain. Transfer ownership first.',
+    clientVersion: '7.9.0',
+    cause: {
+      originalCode: '23514',
+      originalMessage:
+        'users_last_owner_guard: refusing to leave practice a5probe_p with zero active OWNERs while 1 other member(s) remain. Transfer ownership first.',
+      kind: 'postgres',
+      code: '23514',
+      severity: 'ERROR',
+      message:
+        'users_last_owner_guard: refusing to leave practice a5probe_p with zero active OWNERs while 1 other member(s) remain. Transfer ownership first.',
+    },
+  };
+  /** The CHECK constraint that SHARES 23514 — captured the same way. */
+  const MEASURED_CHECK_VIOLATION = adapterError(
+    '23514',
+    'new row for relation "users" violates check constraint "users_active_member_has_practice_role"',
+  );
+
+  /**
+   * Every `RAISE EXCEPTION '<fmt>' … USING ERRCODE = '<code>'` inside the two
+   * guard functions, COMMENTS STRIPPED, with each `%` filled. Parsed per
+   * function so the `DO $verify$` block's own RAISEs (install-time assertions,
+   * no ERRCODE) cannot be mistaken for refusals.
+   */
+  function raises(): { fn: string; code: string; fmt: string }[] {
+    const out: { fn: string; code: string; fmt: string }[] = [];
+    for (const fn of ['users_last_owner_guard()', 'users_no_orphan_member()']) {
+      const body = fnBody(fn, '$fn$ LANGUAGE plpgsql;');
+      for (const m of body.matchAll(/RAISE EXCEPTION\s*'((?:[^']|'')*)'[\s\S]*?USING ERRCODE\s*=\s*'(\w+)'/g)) {
+        out.push({ fn, fmt: m[1]!.replace(/''/g, "'"), code: m[2]! });
+      }
+    }
+    return out;
+  }
+  const fill = (fmt: string, values: string[]) => {
+    let i = 0;
+    return fmt.replace(/%/g, () => values[Math.min(i++, values.length - 1)]!);
+  };
+
+  it('POSITIVE CONTROL — the parser finds all five refusals the two functions raise', () => {
+    // 2 isolation (one per function) + sole-member + members-remain + orphan.
+    // If this reds, every arm below is judging a sentence list the database
+    // does not have.
+    const r = raises();
+    expect(r.map((x) => x.code).sort()).toEqual(['0A000', '0A000', '23514', '23514', '23514']);
+    expect(r.every((x) => x.fmt.startsWith('users_last_owner_guard: '))).toBe(true);
+  });
+
+  it('⚠️ EVERY RAISE IN THE MIGRATION IS CLASSIFIED — a reworded sentence reds here, not in production', () => {
+    for (const { fmt, code } of raises()) {
+      const msg = fill(fmt, ['prac_ck1', '3']);
+      expect(classifyGuardError(adapterError(code, msg)), `unclassified RAISE: ${fmt}`).not.toBeNull();
+    }
+  });
+
+  it('the members-remain sentence maps to LAST_OWNER with the count the trigger reported', () => {
+    const fmt = raises().find((r) => r.fmt.includes('other member(s) remain'))!.fmt;
+    const c = classifyGuardError(adapterError('23514', fill(fmt, ['prac_ck1', '3'])));
+    expect(c).toEqual({ kind: 'LAST_OWNER', variant: 'MEMBERS_REMAIN', reason: LAST_OWNER_REFUSAL, membersLeft: 3 });
+  });
+
+  it('⚠️ ZERO remaining is the TRAPPED branch — it must NOT say "transfer ownership to another member"', () => {
+    const fmt = raises().find((r) => r.fmt.includes('other member(s) remain'))!.fmt;
+    const c = classifyGuardError(adapterError('23514', fill(fmt, ['prac_ck1', '0'])));
+    expect(c).toMatchObject({ kind: 'LAST_OWNER', variant: 'STRANDS_RESTORABLE', reason: STRANDS_RESTORABLE_REFUSAL });
+  });
+
+  it('⚠️ the SOLE-member sentence gets its own words — there is nobody to transfer to', () => {
+    const fmt = raises().find((r) => r.fmt.includes('unadministered'))!.fmt;
+    const c = classifyGuardError(adapterError('23514', fill(fmt, ['prac_ck1'])));
+    expect(c).toMatchObject({ kind: 'LAST_OWNER', variant: 'SOLE_MEMBER', reason: SOLE_MEMBER_REFUSAL });
+    expect(SOLE_MEMBER_REFUSAL).not.toMatch(/transfer ownership to another member/i);
+  });
+
+  it('⚠️ ISOLATION and ORPHAN share the prefix and are NEVER a last-owner refusal', () => {
+    for (const { fmt, code } of raises()) {
+      if (!/isolation level|place a live member/.test(fmt)) continue;
+      const c = classifyGuardError(adapterError(code, fill(fmt, ['prac_ck1', 'repeatable read'])));
+      expect(c?.kind, `${fmt.slice(0, 60)}… was read as a last-owner refusal`).not.toBe('LAST_OWNER');
+      expect(['ISOLATION', 'ORPHAN']).toContain(c?.kind);
+    }
+  });
+
+  it('⚠️ A BARE 23514 IS NOT A LAST-OWNER REFUSAL — the CHECK constraint shares the code (measured)', () => {
+    expect(classifyGuardError(MEASURED_CHECK_VIOLATION)).toBeNull();
+    // and a prefix alone is not enough either
+    expect(classifyGuardError(adapterError('23514', 'users_last_owner_guard: something else entirely'))).toBeNull();
+  });
+
+  it('⚠️ THE SENTENCE WITH THE WRONG SQLSTATE IS NOT CLASSIFIED — both halves are required', () => {
+    const fmt = raises().find((r) => r.fmt.includes('other member(s) remain'))!.fmt;
+    expect(classifyGuardError(adapterError('0A000', fill(fmt, ['prac_ck1', '2'])))).toBeNull();
+    expect(classifyGuardError(adapterError('P2034', fill(fmt, ['prac_ck1', '2'])))).toBeNull();
+    // no code anywhere -> cannot tell -> null (the caller rethrows; a 500 is the honest answer)
+    expect(classifyGuardError(new Error(fill(fmt, ['prac_ck1', '2'])))).toBeNull();
+  });
+
+  it('the MEASURED object classifies — the double above is not a friendlier shape than production', () => {
+    expect(classifyGuardError(MEASURED_MEMBERS_REMAIN)).toEqual({
+      kind: 'LAST_OWNER',
+      variant: 'MEMBERS_REMAIN',
+      reason: LAST_OWNER_REFUSAL,
+      membersLeft: 1,
+    });
+  });
+
+  it('non-errors are not classified', () => {
+    for (const v of [null, undefined, 'users_last_owner_guard: refusing', 42, {}]) {
+      expect(classifyGuardError(v)).toBeNull();
     }
   });
 });

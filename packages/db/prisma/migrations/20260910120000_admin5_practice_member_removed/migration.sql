@@ -1,0 +1,26 @@
+-- ADMIN-5 — A PRACTICE OWNER REMOVES A MEMBER FROM THEIR PRACTICE.
+--
+-- ⚠️ ITS OWN LABEL, NOT `USER_DEACTIVATED`. The mechanism is shared with the
+-- platform's account deactivation (`isActive=false`, `deactivatedAt`,
+-- `deactivatedBy`); the ACT is not. A practice owner removing a colleague and
+-- a super-admin disabling an account are different events with different
+-- actors, and an action-level rollup that cannot tell them apart is the reason
+-- ADMIN-1 declined to reuse `USER_ROLE_CHANGED` for practice roles. Same axis
+-- argument, one migration later.
+--
+-- ⚠️ SALVAGED FROM PR #1026, RE-TIMESTAMPED. That branch's migration was dated
+-- 20260906120000, which sorts BEFORE migrations already applied in production
+-- (20260907040000, 20260909080000). This one sorts after the newest.
+--
+-- ⚠️ PERMANENTLY IRREVERSIBLE. Postgres has no `ALTER TYPE … DROP VALUE`. Once
+-- applied this value exists for the life of the database, which is why it is
+-- declared in §2.5 BEFORE the act and why the list is exactly one.
+--
+-- MEASURED, not carried forward from the previous migration's header: on a
+-- scratch database with every repo migration applied, `pg_enum` for
+-- "AuditAction" read 162 labels after this statement, exactly one of them
+-- 'PRACTICE_MEMBER_REMOVED'. (The admin3a header's "156 -> 159" counts the
+-- schema file, not the database; the two differ by labels the database carries
+-- from migrations the schema no longer lists.)
+
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'PRACTICE_MEMBER_REMOVED';

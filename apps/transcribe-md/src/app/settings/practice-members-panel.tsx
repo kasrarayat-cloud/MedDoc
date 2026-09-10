@@ -28,11 +28,13 @@ import { toast } from 'sonner';
 
 import { LocalTime } from '@/components/ui/local-time';
 import { SpecularButton } from '@/components/specular-button';
-import { ASSIGNABLE_ROLES } from '@/lib/practice-roles';
+import { ASSIGNABLE_ROLES, LEAVE_PRACTICE, STEP_DOWN_OPTIONS } from '@/lib/practice-roles';
 import {
   changeMemberRoleAction,
   mintSeatInviteAction,
+  removeMemberAction,
   revokeSeatInviteAction,
+  transferOwnershipAction,
   type RoleState,
   type SeatState,
 } from '@/actions/practice-members';
@@ -107,19 +109,23 @@ export function PracticeMembersPanel({
       <MemberList members={members} canAdminister={canAdminister} />
       {canAdminister ? (
         <>
-          {/* ⚠️ THE HALF THAT IS NOT BUILT IS SAID OUT LOUD, NOT HIDDEN. An owner
-              can now be created — that is the ruling. Taking it away is filed as
-              its own item because it needs a last-owner guard that is correct
-              under concurrency. A page that silently omits the control teaches
-              the doctor the capability is missing by accident; saying so tells
-              them it is deliberate and that support can act today. */}
+          {/* ⚠️ `members-owner-note` WAS DELETED HERE, IN THE COMMIT THAT MADE IT
+              FALSE (the ADMIN-5 row requires exactly that). It told the doctor
+              owners "cannot be demoted or removed here yet — ask support".
+              ADMIN-5 ships both, so leaving the sentence would send a practice
+              owner to support for something the page in front of them now does;
+              a disclosure that outlives its refusal is worse than none, because
+              the doctor cannot tell it is stale. What IS still refused is said
+              instead: the last owner cannot leave without handing over. */}
           <p
-            data-testid="members-owner-note"
+            data-testid="members-owner-help"
             style={{ marginTop: 12, fontSize: 13, color: 'var(--color-linear-text-3)' }}
           >
-            You can make another member an owner. Owners cannot be demoted or removed here
-            yet — ask support if a partner is leaving the practice.
+            You can make another member an owner, change any other member&rsquo;s role, or
+            remove them from the practice. A practice must always keep at least one owner
+            &mdash; to step down yourself, transfer ownership below.
           </p>
+          <TransferOwnership members={members} />
           <InviteList invites={invites} />
           <MintSeat />
         </>
@@ -169,6 +175,7 @@ function MemberList({
             </div>
           </div>
           <RoleCell member={m} canAdminister={canAdminister} />
+          <RemoveCell member={m} canAdminister={canAdminister} />
         </div>
       ))}
     </div>
@@ -200,9 +207,13 @@ function RoleCell({
   const role = member.practiceRole ?? '—';
   const label = ROLE_LABEL[role] ?? role;
 
-  // An OWNER, and yourself, are shown as text — the server refuses both, and a
+  // Your own row is shown as text — the server refuses a self role change, and a
   // control that is drawn and then refused teaches the doctor the page lies.
-  const editable = canAdminister && !member.isSelf && member.practiceRole !== 'OWNER';
+  // ⚠️ ADMIN-5 — ANOTHER OWNER'S ROW IS A CONTROL NOW. The `!== 'OWNER'` term
+  // that stood here mirrored `CANNOT_CHANGE_AN_OWNER`, which is deleted; the
+  // one owner case still refused (the last owner) is the database's, and a
+  // re-checked active-owner actor is never the last owner of what they demote.
+  const editable = canAdminister && !member.isSelf;
 
   if (!editable) {
     return (
@@ -220,24 +231,25 @@ function RoleCell({
     <form
       action={action}
       style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-      // ⚠️ PROMOTION TO OWNER IS IRREVERSIBLE UNTIL ADMIN-5 SHIPS, AND IT SITS
-      // ONE ARROW-KEY FROM THE CURRENT SELECTION. The options derive from
+      // ⚠️ PROMOTION TO OWNER HANDS OVER ADMINISTRATION, AND IT SITS ONE
+      // ARROW-KEY FROM THE CURRENT SELECTION. The options derive from
       // ASSIGNABLE_ROLES, where OWNER is first, so a CLINICIAN row opens with
-      // OWNER directly above the selected item. There is no undo: the server
-      // refuses every subsequent change to an owner, by design. An adversarial
-      // pass reached it by one keystroke with nothing in the way.
+      // OWNER directly above the selected item. An adversarial pass reached it
+      // by one keystroke with nothing in the way. (Until ADMIN-5 this confirm
+      // also said "this cannot be undone"; an owner can be demoted now, so the
+      // sentence that is still true is WHAT an owner can do — including to you.)
       //
-      // ⚠️ THE CONFIRM IS ON THE IRREVERSIBLE VALUE ONLY. Confirming every role
-      // change would train the doctor to dismiss it, which is how a confirm
-      // stops being a control.
+      // ⚠️ THE CONFIRM IS ON THE OWNER VALUE ONLY. Confirming every role change
+      // would train the doctor to dismiss it, which is how a confirm stops
+      // being a control.
       onSubmit={(e) => {
         const chosen = new FormData(e.currentTarget).get('role');
         if (chosen !== 'OWNER') return;
         const who = member.name?.trim() || member.email;
         const ok = window.confirm(
           `Make ${who} an owner of this practice?\n\n` +
-            'Owners can manage members and invite people. This cannot be undone here — ' +
-            'owners cannot be demoted or removed yet.',
+            'Owners can manage members, invite people, and change or remove other owners — ' +
+            'including you.',
         );
         if (!ok) e.preventDefault();
       }}
@@ -265,6 +277,175 @@ function RoleCell({
         {pending ? 'Saving…' : 'Save'}
       </SpecularButton>
     </form>
+  );
+}
+
+// ============================================================================
+// ADMIN-5 — REMOVE. Salvaged from PR #1026's panel; the server door is new.
+// ============================================================================
+function RemoveCell({
+  member,
+  canAdminister,
+}: {
+  member: MemberRow;
+  canAdminister: boolean;
+}) {
+  const [state, action, pending] = useActionState<RoleState, FormData>(
+    removeMemberAction,
+    null,
+  );
+  const seen = useRef<RoleState>(null);
+
+  useEffect(() => {
+    if (state === seen.current) return;
+    seen.current = state;
+    if (state?.ok === true) toast.success('Member removed');
+    // ⚠️ THE REFUSAL IS SPOKEN — the server's message is the doctor-facing one.
+    else if (state?.ok === false) toast.error(state.message);
+  }, [state]);
+
+  // ⚠️ NO CONTROL AT ALL FOR YOURSELF. The server refuses self-removal, and
+  // drawing a button that is always refused teaches the doctor the page lies.
+  // Leaving is the transfer control's job.
+  if (!canAdminister || member.isSelf) return null;
+
+  const who = member.name?.trim() || member.email;
+
+  return (
+    <form
+      action={action}
+      style={{ display: 'flex', alignItems: 'center' }}
+      // ⚠️ CONFIRMED ALWAYS — unlike the role control. Removal ends somebody's
+      // access to a clinical system in one click and cannot be undone from this
+      // page, so every removal is "the irreversible value".
+      onSubmit={(e) => {
+        const ok = window.confirm(
+          `Remove ${who} from this practice?\n\n` +
+            'They will be signed out and lose access immediately. Their visits, patients and ' +
+            'audit history stay with the practice. This cannot be undone from this page.',
+        );
+        if (!ok) e.preventDefault();
+      }}
+    >
+      <input type="hidden" name="userId" value={member.id} />
+      {/* ⚠️ A PLAIN <button>, NOT `SpecularButton`: that component enumerates
+          its props and never spreads, so `data-testid` would be silently
+          dropped and the gate that claims to drive this control could not. */}
+      <button
+        type="submit"
+        disabled={pending}
+        data-testid={`member-remove-${member.id}`}
+        className="qm-lin-btn qm-tap-44"
+        style={{ fontSize: 13, padding: '6px 10px', color: 'var(--color-linear-text-2)' }}
+      >
+        {pending ? 'Removing…' : 'Remove'}
+      </button>
+    </form>
+  );
+}
+
+// ============================================================================
+// ADMIN-5a — TRANSFER OWNERSHIP. The one door by which an owner steps down:
+// the incoming owner is promoted FIRST, then you step down or leave, in ONE
+// transaction on the server.
+// ============================================================================
+const stepDownLabel = (v: string) =>
+  v === LEAVE_PRACTICE ? 'Leave the practice' : `Stay as ${(ROLE_LABEL[v] ?? v).toLowerCase()}`;
+
+function TransferOwnership({ members }: { members: MemberRow[] }) {
+  const [state, action, pending] = useActionState<RoleState, FormData>(
+    transferOwnershipAction,
+    null,
+  );
+  const seen = useRef<RoleState>(null);
+  useEffect(() => {
+    if (state === seen.current) return;
+    seen.current = state;
+    if (state?.ok === true) toast.success('Ownership transferred');
+    else if (state?.ok === false) toast.error(state.message);
+  }, [state]);
+
+  const candidates = members.filter((m) => !m.isSelf);
+
+  return (
+    <section style={{ marginTop: 24 }} data-testid="transfer-ownership">
+      <h3 style={{ fontSize: 13, color: 'var(--color-linear-text-2)', margin: '0 0 8px' }}>
+        Transfer ownership
+      </h3>
+      <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--color-linear-text-3)' }}>
+        Hand the practice to another member. They become an owner first, then you step down or
+        leave &mdash; in one step, so the practice is never left without an owner.
+      </p>
+      {candidates.length === 0 ? (
+        <p
+          data-testid="transfer-no-candidates"
+          style={{ fontSize: 13, color: 'var(--color-linear-text-3)', margin: 0 }}
+        >
+          There is nobody to hand the practice to yet. Invite a member first.
+        </p>
+      ) : (
+        <form
+          action={action}
+          style={{ display: 'grid', gap: 10, maxWidth: 460 }}
+          onSubmit={(e) => {
+            const fd = new FormData(e.currentTarget);
+            const to = candidates.find((m) => m.id === fd.get('userId'));
+            const then = String(fd.get('then') ?? '');
+            const who = to?.name?.trim() || to?.email || 'this member';
+            const leaving = then === LEAVE_PRACTICE;
+            const ok = window.confirm(
+              `Make ${who} an owner, then ${leaving ? 'leave the practice' : stepDownLabel(then).toLowerCase()}?\n\n` +
+                (leaving
+                  ? 'You will be signed out and lose access to this practice. This cannot be undone from this page.'
+                  : 'You will no longer be able to manage members or invite people.'),
+            );
+            if (!ok) e.preventDefault();
+          }}
+        >
+          <label style={{ fontSize: 12, color: 'var(--color-linear-text-3)' }}>
+            Hand the practice to
+            <select
+              name="userId"
+              data-testid="transfer-target"
+              className="qm-lin-btn qm-tap-44"
+              style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 10px' }}
+            >
+              {candidates.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name?.trim() || m.email}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ fontSize: 12, color: 'var(--color-linear-text-3)' }}>
+            Then
+            <select
+              name="then"
+              defaultValue={STEP_DOWN_OPTIONS[0]}
+              data-testid="transfer-then"
+              className="qm-lin-btn qm-tap-44"
+              style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 10px' }}
+            >
+              {STEP_DOWN_OPTIONS.map((v) => (
+                <option key={v} value={v}>
+                  {stepDownLabel(v)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div>
+            <button
+              type="submit"
+              disabled={pending}
+              data-testid="transfer-submit"
+              className="qm-lin-btn qm-tap-44"
+            >
+              {pending ? 'Transferring…' : 'Transfer ownership'}
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
   );
 }
 
