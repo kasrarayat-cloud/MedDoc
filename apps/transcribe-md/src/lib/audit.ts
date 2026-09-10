@@ -348,7 +348,13 @@ export type AuditAction =
   // metadata.
   | 'PRACTICE_UPDATED'
   | 'PRACTICE_ARCHIVED'
-  | 'PRACTICE_RESTORED';
+  | 'PRACTICE_RESTORED'
+  /// ADMIN-5 — a practice OWNER removed a member. Metadata:
+  /// `{ removedRole, practiceId }` (plus `transferId` when it is the actor
+  /// leaving at the end of an ownership transfer). ⚠️ NOT `USER_DEACTIVATED`:
+  /// the mechanism is shared, the act and the actor are not. Present in the
+  /// Prisma enum AND in `20260910120000_admin5_practice_member_removed`.
+  | 'PRACTICE_MEMBER_REMOVED';
 
 export interface AuditLogInput {
   action: AuditAction;
