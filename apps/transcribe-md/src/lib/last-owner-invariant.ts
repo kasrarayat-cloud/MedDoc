@@ -160,6 +160,127 @@ export const STRANDS_RESTORABLE_REFUSAL =
 export const LAST_OWNER_REFUSAL =
   'This is the practice’s last active owner. Transfer ownership to another member first.';
 
+/**
+ * ⚠️ A THIRD SENTENCE, FOR THE THIRD SITUATION THE TRIGGER NAMES — #256's rule.
+ * The trigger distinguishes a SOLE owner who is also the practice's only member
+ * ("there is no one to transfer ownership to"). `LAST_OWNER_REFUSAL` would tell
+ * that person to transfer ownership to somebody who does not exist, which is
+ * the defect class this file calls worse than no refusal.
+ */
+export const SOLE_MEMBER_REFUSAL =
+  'You are this practice’s only owner and its only member, so there is nobody to hand ' +
+  'ownership to. Invite another member and make them an owner first.';
+
+// ============================================================================
+// ADMIN-5 — READING THE TRIGGER'S REFUSAL BACK AS A SENTENCE.
+// ----------------------------------------------------------------------------
+// ⚠️ THIS ENFORCES NOTHING EITHER. It runs AFTER the database has refused, and
+// its only job is to turn that refusal into the same words the pre-check would
+// have used — so a caller who lost a race is told the truth instead of "500".
+//
+// ⚠️ THE SHAPE IS MEASURED, NOT ASSUMED. Against a scratch pg16 with every
+// migration applied, Prisma 7 + @prisma/adapter-pg surfaced EVERY one of the
+// trigger's RAISEs — and a plain CHECK violation — as a `DriverAdapterError`
+// with NO Prisma `P` code:
+//
+//   err.name                 'DriverAdapterError'
+//   err.cause.originalCode   '23514'  (or '0A000' for the isolation refusal)
+//   err.cause.originalMessage  the RAISE text, verbatim
+//
+// ⚠️ SO NEITHER THE CODE NOR THE PREFIX IS ENOUGH, AND BOTH ARE REQUIRED.
+//   · `23514` is SHARED with every CHECK constraint on `users` — measured:
+//     `users_active_member_has_practice_role` arrives with the identical code.
+//   · `users_last_owner_guard:` prefixes FOUR different sentences, and two of
+//     them (the isolation refusal and the orphan refusal) are NOT a last-owner
+//     situation: telling an admin "transfer ownership" because a transaction
+//     ran at the wrong isolation level names a remedy that fixes nothing.
+// Each sentence is therefore matched on its DISTINCTIVE CLAUSE, together with
+// the SQLSTATE the migration pairs it with. Anything else is `null`, and the
+// caller rethrows — an unrecognised database error stays a 500, which is the
+// honest answer to a question this file cannot read.
+//
+// `gate-admin5-last-owner-invariant.test.ts` feeds every RAISE format string
+// in the migration through this function, so a reworded sentence reds here
+// rather than silently degrading back to a 500.
+// ============================================================================
+
+export type GuardErrorClass =
+  | {
+      kind: 'LAST_OWNER';
+      /** Which of the trigger's refusal situations this was. */
+      variant: 'MEMBERS_REMAIN' | 'STRANDS_RESTORABLE' | 'SOLE_MEMBER';
+      /** The doctor-facing sentence — one of this file's constants, never a new one. */
+      reason: string;
+      /** Other members the trigger counted as left behind (0 for the sole/stranded cases). */
+      membersLeft: number;
+    }
+  | { kind: 'ISOLATION' }
+  | { kind: 'ORPHAN' };
+
+const RAISE_MEMBERS_REMAIN =
+  /^users_last_owner_guard: refusing to leave practice .+ with zero active OWNERs while (\d+) other member\(s\) remain\. Transfer ownership first\.$/;
+const RAISE_SOLE_MEMBER =
+  /^users_last_owner_guard: refusing to leave practice .+ unadministered\. You are its only active OWNER and its only member, /;
+const RAISE_ISOLATION =
+  /^users_last_owner_guard: cannot enforce the last-owner invariant at isolation level /;
+const RAISE_ORPHAN =
+  /^users_last_owner_guard: refusing to place a live member in practice .+, which has no active OWNER\. /;
+
+/** The SQLSTATE and the server's message, read STRUCTURALLY (not by `instanceof`
+ *  — a driver error crossing a bundling boundary has the right shape and the
+ *  wrong prototype; the sign route makes the same argument). */
+function sqlStateAndMessage(err: unknown): { code: string | null; message: string | null } {
+  if (err == null || typeof err !== 'object') return { code: null, message: null };
+  const e = err as { message?: unknown; cause?: unknown };
+  const cause = (e.cause && typeof e.cause === 'object' ? e.cause : {}) as {
+    originalCode?: unknown;
+    code?: unknown;
+    originalMessage?: unknown;
+    message?: unknown;
+  };
+  const code =
+    typeof cause.originalCode === 'string'
+      ? cause.originalCode
+      : typeof cause.code === 'string'
+        ? cause.code
+        : null;
+  const message =
+    typeof cause.originalMessage === 'string'
+      ? cause.originalMessage
+      : typeof cause.message === 'string'
+        ? cause.message
+        : typeof e.message === 'string'
+          ? e.message
+          : null;
+  return { code, message };
+}
+
+export function classifyGuardError(err: unknown): GuardErrorClass | null {
+  const { code, message } = sqlStateAndMessage(err);
+  if (code === null || message === null) return null;
+
+  if (code === '0A000' && RAISE_ISOLATION.test(message)) return { kind: 'ISOLATION' };
+  if (code !== '23514') return null;
+
+  if (RAISE_ORPHAN.test(message)) return { kind: 'ORPHAN' };
+  if (RAISE_SOLE_MEMBER.test(message)) {
+    return { kind: 'LAST_OWNER', variant: 'SOLE_MEMBER', reason: SOLE_MEMBER_REFUSAL, membersLeft: 0 };
+  }
+  const m = RAISE_MEMBERS_REMAIN.exec(message);
+  if (m) {
+    const membersLeft = Number(m[1]);
+    // ⚠️ ZERO IS THE TRIGGER'S "TRAPPED" BRANCH, NOT A TYPO. The RAISE is
+    // reached with no live member left only when a RESTORABLE non-owner would
+    // be stranded with no rescuer — the `STRANDS_RESTORABLE_REFUSAL` situation.
+    // Telling that admin to "transfer ownership to another member" names a
+    // member who cannot receive it.
+    return membersLeft > 0
+      ? { kind: 'LAST_OWNER', variant: 'MEMBERS_REMAIN', reason: LAST_OWNER_REFUSAL, membersLeft }
+      : { kind: 'LAST_OWNER', variant: 'STRANDS_RESTORABLE', reason: STRANDS_RESTORABLE_REFUSAL, membersLeft: 0 };
+  }
+  return null;
+}
+
 export type LastOwnerVerdict =
   | { wouldStrand: false }
   | { wouldStrand: true; reason: string; membersLeft: number };
