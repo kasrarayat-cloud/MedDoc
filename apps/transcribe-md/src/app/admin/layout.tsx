@@ -21,7 +21,7 @@
 import { headers } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 
-import { Product } from '@prisma/client';
+import { hasSuperAdminProduct } from '@/lib/super-admin';
 import { auth } from '@/lib/nextauth';
 import { logAudit } from '@/lib/audit';
 import { isAdminSessionStale } from '@/lib/admin-session-freshness';
@@ -49,17 +49,17 @@ export default async function AdminLayout({
   // a DB read when the JWT doesn't carry it. Same strategy as Phase 1B
   // admin APIs will use; kept local to the layout so we don't leak the
   // Prisma dependency into every admin page.
-  let hasSuperAdmin = products?.includes(Product.SUPER_ADMIN) ?? false;
+  // ONE predicate, shared with the API gate and the MFA-disable lock
+  // (lib/super-admin.ts). It is array-only: a bare string no longer passes
+  // by substring the way `'SUPER_ADMIN'.includes('SUPER_ADMIN')` did.
+  let hasSuperAdmin = hasSuperAdminProduct(products);
   if (!hasSuperAdmin && session?.user?.id) {
     const prisma = (await import('@meddoc/db')).default;
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: { products: true },
     });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    hasSuperAdmin = (user?.products as any[] | undefined)?.includes(
-      Product.SUPER_ADMIN
-    ) ?? false;
+    hasSuperAdmin = hasSuperAdminProduct(user?.products);
   }
 
   if (!hasSuperAdmin) {

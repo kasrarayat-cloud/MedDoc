@@ -13,10 +13,17 @@
 // §164.312(a)(2)(ii) "Emergency access procedure" — the user can also
 // use a recovery code in lieu of the TOTP token via this same endpoint.
 //
-// SUPER_ADMIN role: this route refuses to disable MFA for SUPER_ADMIN
-// accounts. Per the SUPER_ADMIN gate, those accounts MUST keep MFA
-// enabled. To remove MFA from a SUPER_ADMIN, demote the role first
-// (separate admin flow).
+// SUPER_ADMIN: this route refuses to disable MFA for a platform SUPER_ADMIN
+// (`Product.SUPER_ADMIN` in products, read from the DB row: the SAME
+// predicate both admin gates admit on, imported from lib/super-admin.ts)
+// and, as before, for the practice role SUPER_ADMIN. Those accounts MUST
+// keep MFA. To remove the factor, remove SUPER_ADMIN from the account
+// first (revoke-admin, or a role change).
+//
+// ⚠️ This lock used to compare `role === 'SUPER_ADMIN'` alone. grant-admin
+// writes only `products`, and in production both platform SUPER_ADMINs are
+// role DOCTOR, so the one enrolled admin could self-disable and then be
+// refused by the gates (PR #952 refutation round, lockout[1]).
 // ============================================================================
 
 import { NextResponse } from 'next/server';
@@ -31,6 +38,7 @@ import {
   findMatchingRecoveryHash,
 } from '@/lib/mfa';
 import { logAudit } from '@/lib/audit';
+import { isMfaDisableLocked } from '@/lib/super-admin';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -70,6 +78,7 @@ export const POST = withApiHandler(
         id: true,
         email: true,
         role: true,
+        products: true,
         practiceId: true,
         passwordHash: true,
         mfaEnabled: true,
@@ -85,8 +94,9 @@ export const POST = withApiHandler(
       });
     }
 
-    // SUPER_ADMIN accounts cannot self-disable MFA.
-    if (user.role === 'SUPER_ADMIN') {
+    // A SUPER_ADMIN cannot self-disable MFA. ONE predicate, shared with both
+    // admin gates: lib/super-admin.ts.
+    if (isMfaDisableLocked(user)) {
       void logAudit({
         action: 'MFA_DISABLED',
         userId: user.id,
@@ -96,7 +106,7 @@ export const POST = withApiHandler(
         errorCode: 'SUPER_ADMIN_LOCKED',
       });
       return apiError(
-        'SUPER_ADMIN accounts cannot disable MFA. Demote the role first.',
+        'SUPER_ADMIN accounts cannot disable MFA. Remove SUPER_ADMIN from the account first.',
         403,
         { code: 'SUPER_ADMIN_LOCKED' },
       );

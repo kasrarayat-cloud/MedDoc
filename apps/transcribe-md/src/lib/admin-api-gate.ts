@@ -25,7 +25,7 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 import prisma from '@meddoc/db';
-import { Product } from '@prisma/client';
+import { hasSuperAdminProduct } from '@/lib/super-admin';
 
 import { auth } from '@/lib/nextauth';
 import { logAudit } from '@/lib/audit';
@@ -78,9 +78,9 @@ export function adminApi(
       select: { products: true, isActive: true, mfaEnabled: true },
     });
     if (!userRow || !userRow.isActive) return notFoundResponse();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const products = (userRow.products as any[] | undefined) ?? [];
-    if (!products.includes(Product.SUPER_ADMIN)) return notFoundResponse();
+    // ONE predicate for "is a platform SUPER_ADMIN", shared with the page
+    // gate and the MFA-disable lock: lib/super-admin.ts.
+    if (!hasSuperAdminProduct(userRow.products)) return notFoundResponse();
 
     // ── MFA PARITY WITH THE PAGE GATE ────────────────────────────────────
     // `app/admin/layout.tsx` requires MFA before any /admin/* PAGE renders,
