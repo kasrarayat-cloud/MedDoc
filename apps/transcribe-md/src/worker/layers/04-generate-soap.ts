@@ -45,8 +45,6 @@ import { SYSTEM_DEFAULT_NOTE_TEMPLATE } from '../note-templates/system-default-t
 import { imagingReportBuilderFor } from '../note-templates/imaging-report-builders';
 import {
   emAppliesToSpecialty,
-  isImagingReportSpecialty,
-  ultrasoundSpecialtyEnabled,
 } from '@meddoc/shared/specialties';
 
 // TRANSCRIBE_MD_CLINICAL_MODEL overrides the clinical model for evals on the

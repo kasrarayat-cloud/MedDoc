@@ -28,8 +28,6 @@ import { Prisma, TranscribeVisitStatus } from '@prisma/client';
 
 import {
   emAppliesToSpecialty,
-  isImagingReportSpecialty,
-  ultrasoundSpecialtyEnabled,
 } from '@meddoc/shared/specialties';
 import { emAppliesToVisit } from '@/lib/note-shape';
 
