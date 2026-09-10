@@ -1,0 +1,1465 @@
+<title>Admin Ledger</title>
+
+<style>
+/* ═══════════════════════════════════════════════════════════════════════
+   DIRECTION: LEDGER
+   The admin shell is a bound volume. Money is folio IV. platform_rates is
+   insert-never-update, so the interface is the book: you read down, and
+   the present is simply the last line that has begun.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+:root{
+  /* ── stage: shipped Rounds tokens, unchanged ── */
+  --stage-1:#232b3a; --stage-2:#171d27; --stage-3:#12161e;
+  --line-1:#2c3442;  --line-2:#3a4353;
+  --text-1:#e7ebf1;  --text-2:#98a2b1;  --text-3:#7c8694;
+
+  /* ── the leaf: shipped Rounds PAPER tokens (today used for the clinical
+        document surface). Reused here because the money record is a
+        document too. See NOTES, §G. ── */
+  --paper-1:#fcfcfa; --paper-2:#f3f4ef; --paper-3:#ecede7;
+  --ink:#191e26;     --ink-muted:#525a66;
+  --rule-1:#e7e8e3;  --rule-2:#d8dad3;
+
+  /* ── accent + status, shipped ── */
+  --accent:#5b5bd6;      --accent-text:#a5a5f0;
+  --ready:#187a4e;       --ready-text:#6ee7a8;
+  --critical:#c93a2e;    --critical-text:#ff8d7e;
+  --warn:#c4841c;        --warn-text:#e8b168;
+
+  /* ── type ── */
+  --serif:'Iowan Old Style','Palatino Linotype',Palatino,'Book Antiqua','Hoefler Text','URW Palladio L',Georgia,'Times New Roman',serif;
+  --mono:ui-monospace,'SF Mono',SFMono-Regular,'DejaVu Sans Mono',Menlo,Consolas,'Liberation Mono',monospace;
+
+  --leaf-pad: 46px;
+}
+
+*{box-sizing:border-box}
+
+html{background:#12161e;}
+body{
+  margin:0;
+  background:
+    linear-gradient(180deg, #232b3a 0%, #171d27 42%, #12161e 100%),
+    #12161e;
+  background-attachment:fixed;
+  color:var(--text-2);
+  font-family:var(--serif);
+  font-size:16px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+  padding:0 0 140px;
+}
+
+/* faint desk texture behind everything */
+.grain{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.055;mix-blend-mode:overlay}
+
+.wrap{position:relative;z-index:1;max-width:1120px;margin:0 auto;padding:0 28px}
+
+/* ─────────────────────────  page head  ───────────────────────── */
+.masthead{padding:96px 0 24px;border-bottom:1px solid var(--line-1)}
+.masthead .kicker{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.28em;
+  text-transform:uppercase;color:var(--text-3);margin:0 0 22px
+}
+.masthead h1{
+  font-family:var(--serif);font-weight:400;color:var(--text-1);
+  font-size:clamp(38px,6vw,66px);line-height:1.02;letter-spacing:-.015em;margin:0;
+}
+.masthead h1 em{font-style:italic;color:var(--accent-text)}
+.masthead .sub{
+  max-width:62ch;margin:22px 0 0;color:var(--text-2);font-size:16.5px;line-height:1.66;
+}
+.masthead .sub b{color:var(--text-1);font-weight:400;font-style:italic}
+.dnote{
+  margin:30px 0 0;padding:18px 20px 18px 22px;
+  border-left:2px solid var(--line-2);
+  max-width:74ch;font-size:14.5px;line-height:1.68;color:var(--text-2);
+}
+.dnote strong{color:var(--text-1);font-weight:400;
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
+  display:block;margin-bottom:9px;color:var(--text-3)}
+
+/* ─────────────────────────  section captions  ───────────────────────── */
+.cap{display:flex;align-items:baseline;gap:16px;margin:86px 0 20px}
+.cap .letter{
+  font-family:var(--mono);font-size:11px;letter-spacing:.24em;color:var(--accent-text);
+  border:1px solid var(--line-2);padding:5px 9px 4px;line-height:1;flex:none
+}
+.cap h2{
+  margin:0;font-weight:400;color:var(--text-1);font-size:20px;letter-spacing:.02em;
+}
+.cap .said{color:var(--text-3);font-size:14px;font-style:italic}
+.capnote{margin:0 0 22px;color:var(--text-3);font-size:14px;max-width:82ch;line-height:1.6}
+.capnote code{font-family:var(--mono);font-size:12.5px;color:var(--text-2)}
+
+/* ═════════════════════  THE VOLUME (shell)  ═════════════════════ */
+.volume{display:flex;align-items:stretch;filter:drop-shadow(0 26px 54px rgba(0,0,0,.5)) drop-shadow(0 2px 4px rgba(0,0,0,.4))}
+
+/* left: the binding */
+.binding{
+  flex:none;width:26px;background:linear-gradient(90deg,#c9cbc2 0%,#e2e3dc 34%,var(--paper-2) 100%);
+  border-right:1px solid var(--rule-2);position:relative;
+}
+.binding::after{
+  content:"";position:absolute;top:0;bottom:0;right:3px;width:1px;background:var(--rule-2);opacity:.8
+}
+.stitch{position:absolute;left:9px;width:7px;height:1px;background:#a9aca2}
+
+/* middle: the leaf */
+.leaf{
+  flex:1 1 auto;min-width:0;background:var(--paper-1);color:var(--ink);
+  padding:34px var(--leaf-pad) 0;position:relative;
+}
+.leaf.short{padding-bottom:0}
+
+/* right: fore-edge thumb index */
+.foreedge{flex:none;width:46px;display:flex;flex-direction:column;background:#c9cbc2}
+.tab{
+  flex:1 1 auto;display:flex;align-items:center;justify-content:center;
+  writing-mode:vertical-rl;text-orientation:mixed;
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.26em;text-transform:uppercase;
+  background:var(--paper-3);color:var(--ink-muted);
+  border-bottom:1px solid var(--rule-2);border-left:1px solid var(--rule-2);
+  padding:16px 0;cursor:default;position:relative;transform:translateX(5px);
+  transition:transform .18s ease, background .18s ease, color .18s ease;
+}
+.tab:last-child{border-bottom:none}
+.tab:hover{transform:translateX(2px);background:var(--paper-2);color:var(--ink)}
+.tab .fol{font-size:9px;letter-spacing:.16em;opacity:.55;margin-bottom:10px}
+.tab[data-on="1"]{
+  background:var(--paper-1);color:var(--ink);border-left-color:var(--paper-1);
+  transform:translateX(0);font-weight:600;
+}
+.tab[data-on="1"] .fol{color:var(--accent);opacity:1}
+
+/* ── running head inside the leaf ── */
+.runhead{display:flex;justify-content:space-between;align-items:baseline;gap:20px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-muted)}
+.dblrule{border-top:2px solid var(--ink);border-bottom:1px solid var(--rule-2);height:4px;margin:11px 0 0}
+.dblrule.thin{border-top-width:1px;border-top-color:var(--rule-2)}
+
+.folio{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin:24px 0 0}
+.folio h3{
+  margin:0;font-weight:400;font-size:40px;letter-spacing:-.01em;line-height:1;color:var(--ink);
+}
+.folio h3 .art{font-family:var(--mono);font-size:14px;letter-spacing:.22em;color:var(--ink-muted);
+  display:block;margin-bottom:12px;text-transform:uppercase}
+.folio .stamped{text-align:right;font-family:var(--mono);font-size:10.5px;line-height:1.9;
+  letter-spacing:.08em;color:var(--ink-muted)}
+.folio .stamped b{color:var(--ink);font-weight:600}
+
+/* leaf foot */
+.leaffoot{
+  margin-top:38px;border-top:1px solid var(--rule-2);padding:12px 0 26px;
+  display:flex;flex-wrap:wrap;gap:6px 26px;align-items:baseline;
+  font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-muted)
+}
+.leaffoot .sep{color:var(--rule-2)}
+.leaffoot b{color:var(--ink);font-weight:600}
+.leaffoot .fresh{color:var(--ready)}
+.leaffoot .stalewarn{color:var(--warn)}
+
+/* ─────────────────────────  leaf typography  ───────────────────────── */
+.lbl{font-family:var(--mono);font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:var(--ink-muted)}
+.leaf p{font-size:15.5px;line-height:1.72;color:var(--ink);max-width:70ch}
+.leaf p.q{color:var(--ink-muted)}
+.leaf code,.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.leaf code{font-size:13px;background:var(--paper-3);padding:1px 5px;border-radius:0;color:var(--ink)}
+.marg{
+  font-family:var(--mono);font-size:11px;line-height:1.62;color:var(--ink-muted);
+  border-left:1px solid var(--rule-2);padding-left:14px;max-width:34ch
+}
+.marg b{color:var(--ink);font-weight:600;display:block;letter-spacing:.14em;text-transform:uppercase;font-size:9.5px;margin-bottom:5px}
+
+/* articles list (folio contents) */
+.articles{margin:30px 0 0;border-top:1px solid var(--rule-2)}
+.article{display:grid;grid-template-columns:78px 1fr 210px;gap:0 22px;align-items:baseline;
+  padding:17px 0 16px;border-bottom:1px solid var(--rule-1)}
+.article .rn{font-family:var(--mono);font-size:11px;letter-spacing:.16em;color:var(--ink-muted);padding-top:3px}
+.article .nm{font-size:19px;color:var(--ink);line-height:1.25}
+.article .nm small{display:block;font-family:var(--serif);font-style:italic;font-size:14px;color:var(--ink-muted);margin-top:5px;letter-spacing:0}
+.article .rd{font-family:var(--mono);font-size:12px;text-align:right;color:var(--ink);letter-spacing:.04em;line-height:1.7}
+.article .rd .none{color:var(--critical)}
+.article .rd .dim{color:var(--ink-muted)}
+.article:hover{background:var(--paper-2)}
+
+/* the standing register (health) — a vertical list, never a card row */
+.register{margin:34px 0 0}
+.register .row{display:grid;grid-template-columns:1fr 118px;gap:20px;align-items:baseline;
+  padding:11px 0;border-bottom:1px solid var(--rule-1)}
+.register .row:first-of-type{border-top:1px solid var(--rule-2)}
+.register .subj{font-size:15px;color:var(--ink)}
+.register .subj em{font-style:italic;color:var(--ink-muted);font-size:13.5px}
+.register .st{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-align:right}
+.st-healthy{color:var(--ready)}
+.st-degraded{color:var(--warn)}
+.st-down{color:var(--critical)}
+.by-design{font-family:var(--mono);font-size:9.5px;letter-spacing:.13em;color:var(--ink-muted);display:block;margin-top:2px}
+
+/* ═════════════════════  NO RATE CONFIGURED  ═════════════════════ */
+.refusal{margin:34px 0 0;position:relative;padding:0 0 0 0}
+.refusal .stamp{
+  display:inline-block;border:1.5px solid var(--critical);color:var(--critical);
+  font-family:var(--mono);font-size:12px;letter-spacing:.3em;text-transform:uppercase;
+  padding:9px 15px 8px;margin-bottom:26px;
+}
+.refusal h4{
+  margin:0;font-weight:400;font-size:clamp(28px,3.6vw,42px);line-height:1.14;color:var(--ink);
+  letter-spacing:-.01em;max-width:22ch
+}
+.refusal h4 em{font-style:italic}
+.because{margin:28px 0 0;display:grid;grid-template-columns:150px 1fr;gap:0}
+.because .side{font-family:var(--mono);font-size:9.5px;letter-spacing:.24em;text-transform:uppercase;
+  color:var(--ink-muted);padding-top:4px}
+.because ol{margin:0;padding:0;list-style:none;counter-reset:cz}
+.because li{
+  counter-increment:cz;position:relative;padding:0 0 14px 30px;font-size:15.5px;line-height:1.66;color:var(--ink);
+  max-width:66ch
+}
+.because li::before{
+  content:counter(cz)"."; position:absolute;left:0;top:1px;
+  font-family:var(--mono);font-size:11px;color:var(--ink-muted)
+}
+.because li b{font-weight:600}
+
+/* the empty book — ruled lines with nothing on them */
+.emptybook{margin:34px 0 0;border-top:1px solid var(--rule-2);padding-top:18px}
+.emptybook .hdr{display:flex;justify-content:space-between;align-items:baseline}
+.rules{margin:16px 0 0}
+.rules .r{height:30px;border-bottom:1px solid var(--rule-1);display:flex;align-items:center;gap:16px}
+.rules .r .n{font-family:var(--mono);font-size:10.5px;color:#767c73;width:44px;flex:none}
+.rules .r:first-child .n{color:var(--ink-muted)}
+.rules .r:first-child{border-bottom-color:var(--rule-2)}
+.rules .r .ghost{font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:var(--ink-muted);text-transform:uppercase}
+.caret{display:inline-block;width:1px;height:15px;background:var(--accent);vertical-align:-3px;
+  animation:blink 1.15s step-end infinite}
+@keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+
+/* consequence register */
+.conseq{margin:32px 0 0;width:100%;border-collapse:collapse}
+.conseq caption{text-align:left;font-family:var(--mono);font-size:9.5px;letter-spacing:.24em;
+  text-transform:uppercase;color:var(--ink-muted);padding-bottom:12px}
+.conseq th,.conseq td{text-align:left;padding:10px 14px 10px 0;border-bottom:1px solid var(--rule-1);
+  font-size:14.5px;color:var(--ink);vertical-align:top}
+.conseq th{font-weight:400;width:38%;color:var(--ink)}
+.conseq thead th{font-family:var(--mono);font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--ink-muted);border-bottom:1px solid var(--rule-2);padding-bottom:8px}
+.conseq td{font-family:var(--mono);font-size:12.5px;color:var(--ink-muted);letter-spacing:.02em}
+.conseq td b{color:var(--ink);font-weight:600}
+.conseq td .dash{color:var(--critical);font-size:15px}
+
+/* THE ACT */
+.act{margin:40px 0 0;border:1px solid var(--ink);padding:0}
+.act .top{border-bottom:1px solid var(--rule-2);padding:14px 22px;display:flex;
+  justify-content:space-between;align-items:baseline;background:var(--paper-2)}
+.act .body{padding:26px 22px 24px}
+.act h5{margin:0;font-weight:400;font-size:23px;color:var(--ink);letter-spacing:.01em}
+.act .warnline{margin:12px 0 0;font-size:14.5px;color:var(--ink-muted);max-width:64ch;line-height:1.62}
+.penrow{display:flex;align-items:center;gap:16px;margin:24px 0 0}
+.penbtn{
+  display:inline-flex;align-items:center;gap:12px;border:1px solid var(--ink);background:var(--ink);
+  color:var(--paper-1);font-family:var(--mono);font-size:11px;letter-spacing:.24em;text-transform:uppercase;
+  padding:14px 22px;cursor:pointer;transition:background .16s ease,color .16s ease
+}
+.penbtn:hover{background:var(--accent);border-color:var(--accent)}
+.penbtn svg{display:block}
+.act .aside{font-family:var(--mono);font-size:10.5px;color:var(--ink-muted);letter-spacing:.06em;line-height:1.7}
+
+/* ═════════════════════  THE RATE EDITOR  ═════════════════════ */
+.entryform{margin:30px 0 0}
+.fieldset{border-top:1px solid var(--rule-2);padding:22px 0 24px;display:grid;
+  grid-template-columns:150px 1fr;gap:0 22px;align-items:start}
+.fieldset:last-of-type{border-bottom:1px solid var(--rule-2)}
+.fieldset > .side{font-family:var(--mono);font-size:9.5px;letter-spacing:.24em;text-transform:uppercase;
+  color:var(--ink-muted);padding-top:5px}
+.fieldset > .side em{display:block;font-family:var(--serif);font-style:italic;text-transform:none;
+  letter-spacing:0;font-size:12.5px;margin-top:7px;line-height:1.5;color:#8a9089}
+
+/* the fraction */
+.fracrow{display:flex;align-items:center;gap:30px;flex-wrap:wrap}
+.fraction{display:inline-flex;flex-direction:column;align-items:center;gap:5px}
+.fnum{
+  width:104px;text-align:center;font-family:var(--mono);font-size:34px;font-variant-numeric:tabular-nums;
+  color:var(--ink);background:transparent;border:1px solid var(--rule-2);padding:6px 4px;
+  outline:none;transition:border-color .15s ease,background .15s ease
+}
+.fnum:focus{border-color:var(--accent);background:#f6f6fd}
+.fracbar{width:132px;height:2px;background:var(--ink);transform-origin:center;
+  animation:draw .55s cubic-bezier(.22,.75,.3,1) both .18s}
+@keyframes draw{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.fraclabels{display:flex;flex-direction:column;gap:26px;font-family:var(--mono);font-size:9.5px;
+  letter-spacing:.2em;text-transform:uppercase;color:var(--ink-muted);padding-top:8px}
+.eq{font-family:var(--mono);font-size:26px;color:var(--ink-muted)}
+.derived{display:flex;flex-direction:column;gap:7px}
+.derived .big{font-family:var(--mono);font-size:40px;color:var(--ink);font-variant-numeric:tabular-nums;line-height:1}
+.derived .big span{color:var(--ink-muted)}
+.derived .cap2{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-muted)}
+.derived .cap2 em{font-family:var(--serif);text-transform:none;letter-spacing:0;font-style:italic;font-size:12.5px}
+
+.quick{margin:22px 0 0;font-family:var(--mono);font-size:12px;color:var(--ink-muted);letter-spacing:.04em}
+.quick a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(91,91,214,.35);padding-bottom:1px;margin:0 3px}
+.quick a:hover{border-bottom-color:var(--accent)}
+.quick .now{color:var(--ink);font-weight:600;border-bottom:1px solid var(--ink)}
+
+.checkline{margin:20px 0 0;border-top:1px solid var(--rule-1);padding-top:14px;
+  font-family:var(--mono);font-size:12px;line-height:1.8;color:var(--ink-muted)}
+.checkline .ok{color:var(--ready)}
+.checkline .bad{color:var(--critical)}
+.checkline b{color:var(--ink);font-weight:600}
+
+.refusedbox{margin:20px 0 0;border:1px solid var(--critical);padding:16px 18px;background:#fdf4f3}
+.refusedbox .h{font-family:var(--mono);font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:var(--critical)}
+.refusedbox p{margin:9px 0 0;font-size:14.5px;color:var(--ink);max-width:60ch}
+.refusedbox .frac-inline{font-family:var(--mono);font-size:13px;color:var(--critical)}
+
+/* cycles */
+.cycles{list-style:none;margin:0;padding:0;max-width:520px}
+.cycles li{display:flex;align-items:baseline;gap:14px;padding:9px 0;border-bottom:1px solid var(--rule-1);
+  font-family:var(--mono);font-size:13px;color:var(--ink);letter-spacing:.04em}
+.cycles li .tag{margin-left:auto;font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-muted)}
+.cycles li.closed{color:#b6b8b0;text-decoration:line-through;text-decoration-color:#cdcfc7}
+.cycles li.closed .tag{text-decoration:none;display:inline-block;color:#b6b8b0}
+.cycles li.pick{color:var(--ink);font-weight:600}
+.cycles li.pick .tag{color:var(--accent)}
+.cycles li .bullet{width:9px;height:9px;border:1px solid var(--rule-2);flex:none;display:inline-block}
+.cycles li.pick .bullet{background:var(--accent);border-color:var(--accent)}
+.forwardonly{margin:14px 0 0;font-size:14px;color:var(--ink-muted);font-style:italic;max-width:58ch}
+
+/* note field */
+.notefield{border:1px solid var(--rule-2);background:repeating-linear-gradient(
+    to bottom, var(--paper-1) 0 27px, var(--rule-1) 27px 28px);
+  padding:5px 16px 12px;min-height:118px}
+.notefield .txt{font-size:15.5px;line-height:28px;color:var(--ink);margin:0;max-width:62ch}
+.notecount{margin:8px 0 0;font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink-muted);text-transform:uppercase}
+
+/* signature */
+.signblock{margin:30px 0 0;display:grid;grid-template-columns:1fr 1fr;gap:0 42px;align-items:end}
+.sigline{border-bottom:1px solid var(--ink);padding-bottom:7px;font-size:17px;color:var(--ink);font-style:italic}
+.sigcap{font-family:var(--mono);font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--ink-muted);margin-top:8px}
+
+/* ═════════════════════  THE BOOK (history)  ═════════════════════ */
+.book{margin:30px 0 0;border-top:2px solid var(--ink)}
+.entry{display:grid;grid-template-columns:132px 1fr;gap:0 24px;padding:24px 0 22px;
+  border-bottom:1px solid var(--rule-1);
+  animation:rise .5s cubic-bezier(.22,.75,.3,1) both}
+.entry:nth-child(1){animation-delay:.05s}
+.entry:nth-child(2){animation-delay:.11s}
+.entry:nth-child(3){animation-delay:.17s}
+.entry:nth-child(4){animation-delay:.23s}
+@keyframes rise{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
+.entry .emarg{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--ink-muted);line-height:1.8}
+.entry .emarg .no{font-size:22px;color:var(--ink);letter-spacing:0;display:block;line-height:1.1}
+.entry .mark{display:inline-flex;align-items:center;gap:6px;margin-top:9px;font-size:9.5px;
+  letter-spacing:.2em;text-transform:uppercase}
+.mark.eff{color:var(--accent)}
+.mark.pend{color:var(--warn)}
+.mark .sq{width:7px;height:7px;background:currentColor;display:inline-block;flex:none}
+.entry .ehead{font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--ink-muted);
+  display:flex;flex-wrap:wrap;gap:4px 18px}
+.entry .ehead b{color:var(--ink);font-weight:600}
+.entry .change{margin:12px 0 0;font-family:var(--mono);font-size:24px;color:var(--ink);
+  font-variant-numeric:tabular-nums;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.entry .change .arrow{color:var(--ink-muted);font-size:19px}
+.entry .change .none{color:var(--ink-muted)}
+.entry .change .stored{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-muted)}
+.entry .who{margin:11px 0 0;font-family:var(--mono);font-size:11.5px;color:var(--ink);letter-spacing:.03em}
+.entry .who span{color:var(--ink-muted)}
+.entry .enote{margin:11px 0 0;font-size:15.5px;line-height:1.66;color:var(--ink);max-width:66ch;font-style:italic}
+.entry .eid{margin:12px 0 0;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;color:var(--ink-muted)}
+.entry .eid b{color:var(--ink);font-weight:600}
+.booktail{padding:18px 0 0;font-size:14.5px;color:var(--ink-muted);font-style:italic;max-width:70ch}
+
+/* ═════════════════════  PRACTICE ACCOUNTS  ═════════════════════ */
+.acct{width:100%;border-collapse:collapse;margin:26px 0 0;font-variant-numeric:tabular-nums}
+.acct thead th{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--ink-muted);font-weight:400;text-align:right;padding:0 0 9px 16px;vertical-align:bottom
+}
+.acct thead th.l{text-align:left;padding-left:0}
+.acct thead tr.grp th{padding-bottom:6px;color:var(--ink);border-bottom:1px solid var(--rule-2)}
+.acct thead tr.grp th.blank{border-bottom:none}
+.acct thead tr.cols th{border-bottom:2px solid var(--ink)}
+.acct tbody td{padding:11px 0 10px 16px;text-align:right;font-family:var(--mono);font-size:13px;
+  color:var(--ink);border-bottom:1px solid var(--rule-1)}
+.acct tbody td.l{text-align:left;padding-left:0;font-family:var(--serif);font-size:15.5px}
+.acct tbody td.l small{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.06em;
+  color:var(--ink-muted);margin-top:3px}
+.acct tbody tr:nth-child(even){background:var(--paper-2)}
+.acct tbody tr.cyc td{background:var(--paper-3);font-family:var(--mono);font-size:10px;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--ink);text-align:left;padding:9px 0 8px;border-bottom:1px solid var(--rule-2)}
+.acct tbody tr.cyc td .rt{color:var(--accent)}
+.acct td .stampid{color:var(--ink);letter-spacing:.02em}
+.acct td .stampid b{color:var(--accent);font-weight:600}
+.acct td .em{color:var(--critical)}
+.acct tbody tr.sub td{border-top:1px solid var(--ink);border-bottom:none;padding-top:11px;
+  font-weight:600;background:transparent}
+.acct tbody tr.sub td.l{font-family:var(--mono);font-size:10px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--ink-muted);font-weight:400}
+.acct tbody tr.sub td .nototal{color:var(--ink-muted);font-size:10px;letter-spacing:.14em;
+  text-transform:uppercase;font-weight:400;display:block;line-height:1.5}
+.wallets{border-left:1px solid var(--rule-2)!important;padding-left:16px!important}
+.tblnote{margin:16px 0 0;display:grid;grid-template-columns:16px 1fr;gap:10px;font-size:14.5px;
+  line-height:1.62;color:var(--ink-muted);max-width:78ch}
+.tblnote .pil{font-family:var(--mono);color:var(--accent)}
+.tblnote b{color:var(--ink);font-weight:600}
+.legend{margin:14px 0 0;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;color:var(--ink-muted)}
+
+/* ═════════════════════  THE OTHER STATES  ═════════════════════ */
+.statestack{display:flex;flex-direction:column;gap:26px;margin-top:8px}
+.stateleaf{background:var(--paper-1);color:var(--ink);padding:22px 30px 24px;position:relative;
+  box-shadow:0 14px 30px rgba(0,0,0,.4)}
+.stateleaf .sh{display:flex;justify-content:space-between;align-items:baseline;gap:18px;
+  border-bottom:1px solid var(--rule-2);padding-bottom:10px;margin-bottom:16px}
+.stateleaf .sh .nm{font-family:var(--mono);font-size:10px;letter-spacing:.26em;text-transform:uppercase;color:var(--ink-muted)}
+.stateleaf .sh .rt{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink-muted)}
+.stateleaf h6{margin:0;font-weight:400;font-size:21px;color:var(--ink);letter-spacing:.01em}
+.stateleaf p{margin:10px 0 0;font-size:15px;color:var(--ink-muted);max-width:72ch;line-height:1.64}
+.stateleaf p b{color:var(--ink);font-weight:600}
+.loadrules .r{height:26px;border-bottom:1px solid var(--rule-1);position:relative;overflow:hidden}
+.loadrules .r::after{content:"";position:absolute;left:0;top:9px;height:9px;width:38%;
+  background:linear-gradient(90deg,transparent,var(--paper-3) 22%,var(--paper-3) 78%,transparent);
+  animation:sweep 1.9s ease-in-out infinite}
+.loadrules .r:nth-child(2)::after{width:56%;animation-delay:.16s}
+.loadrules .r:nth-child(3)::after{width:44%;animation-delay:.32s}
+.loadrules .r:nth-child(4)::after{width:30%;animation-delay:.48s}
+@keyframes sweep{0%{transform:translateX(-8%);opacity:.35}50%{transform:translateX(96%);opacity:1}100%{transform:translateX(-8%);opacity:.35}}
+.err404{text-align:center;padding:26px 0 20px}
+.err404 .code{font-family:var(--mono);font-size:52px;color:var(--ink);letter-spacing:.06em;line-height:1}
+.err404 .txt{font-family:var(--mono);font-size:11px;letter-spacing:.26em;text-transform:uppercase;color:var(--ink-muted);margin-top:14px}
+.struck{text-decoration:line-through;text-decoration-color:var(--warn);color:#a8ada4}
+.readonly{border:1px solid var(--warn);background:#fdf8ee;padding:13px 16px;margin:16px 0 0;
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;color:#7a5310;line-height:1.7}
+.errbar{border-left:2px solid var(--critical);padding-left:16px;margin-top:16px}
+.errbar .why{font-family:var(--mono);font-size:11.5px;color:var(--ink-muted);line-height:1.8;margin-top:8px}
+.retry{display:inline-block;margin-top:14px;border:1px solid var(--ink);padding:9px 16px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink);cursor:pointer}
+.retry:hover{background:var(--ink);color:var(--paper-1)}
+
+/* ═════════════════════  NOTES  ═════════════════════ */
+.notes{border-top:1px solid var(--line-1);margin-top:96px;padding-top:34px}
+.notes h2{font-weight:400;color:var(--text-1);font-size:22px;margin:0 0 8px}
+.notes .grid{display:grid;grid-template-columns:1fr;gap:0;margin-top:22px}
+.notes .n{display:grid;grid-template-columns:190px 1fr;gap:0 26px;padding:19px 0;border-top:1px solid var(--line-1)}
+.notes .n .k{font-family:var(--mono);font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent-text)}
+.notes .n .v{color:var(--text-2);font-size:15px;line-height:1.68;max-width:82ch}
+.notes .n .v b{color:var(--text-1);font-weight:400;font-style:italic}
+.notes .n .v code{font-family:var(--mono);font-size:12.5px;color:var(--text-1)}
+.notes .n.broke .k{color:var(--warn-text)}
+
+@media (max-width:900px){
+  .article{grid-template-columns:56px 1fr;}
+  .article .rd{grid-column:2;text-align:left;margin-top:8px}
+  .because,.fieldset,.entry,.notes .n{grid-template-columns:1fr;gap:14px}
+  .fieldset > .side,.because .side{padding-top:0}
+  .signblock{grid-template-columns:1fr;gap:26px}
+  .foreedge{width:34px}
+  :root{--leaf-pad:22px}
+  .acct{font-size:12px}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+}
+</style>
+
+<svg class="grain" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+  <filter id="gr"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/>
+  <feColorMatrix type="saturate" values="0"/></filter>
+  <rect width="100%" height="100%" filter="url(#gr)"/>
+</svg>
+
+<div class="wrap">
+
+<!-- ════════════════════════════ PAGE HEAD ════════════════════════════ -->
+<header class="masthead">
+  <div class="kicker">Direction 3 of 3 &nbsp;·&nbsp; Admin shell + ADMIN-4 &nbsp;·&nbsp; 2026-09-09</div>
+  <h1>LEDGER<br><em>the book is the interface</em></h1>
+  <p class="sub">
+    <b>platform_rates is insert-never-update</b>, so this direction takes the storage
+    shape literally: the admin shell is a bound volume, Money is a folio inside it,
+    and every rate is an <b>entry</b> you write — never a field you edit. You read down.
+    The present is simply the last line that has begun.
+  </p>
+
+  <div class="dnote">
+    <strong>Designer&rsquo;s note</strong>
+    The idea in one line: <em>money is a record before it is a dashboard, so the screen is a
+    ruled book you read in one sequence and the act of setting a rate has the weight of
+    signing a page.</em> I banned myself from cards, tiles, gauges, charts, sparklines,
+    neon-glow status panels and any side-by-side before/after — the history is a list of
+    entries, never a diff. <b>Token broken, deliberately:</b> the leaf uses the shipped
+    <code>--rounds-paper-*</code> / <code>--rounds-ink*</code> palette, which today dresses only the
+    clinical document, and it drops <code>--rounds-radius-*</code> to zero, because a page has square
+    corners and a bound book has no rounded rectangles in it. The full list of breaks, and
+    who has to decide about each, is in <b>§G</b> at the foot.
+  </div>
+</header>
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     A · THE VOLUME — the shell, Money selected
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="cap">
+  <span class="letter">A</span>
+  <h2>The volume &mdash; the shell, <span style="color:var(--accent-text)">Money</span> selected</h2>
+  <span class="said">binding, leaf, thumb index</span>
+</div>
+<p class="capnote">
+  Four destinations live on the fore-edge as thumb tabs, the way they do on a bound
+  ledger: <code>Practices</code> is folio I, <code>Money</code> is folio IV. The selected tab is flush with
+  the leaf; the rest sit proud of it. There is no sidebar and no topbar &mdash; the masthead,
+  running head and foot rule are the chrome, and they are printed <em>on</em> the page rather
+  than framed around it. This is today&rsquo;s truth: every reading in the contents says the
+  same thing.
+</p>
+
+<div class="volume">
+  <div class="binding" aria-hidden="true">
+    <span class="stitch" style="top:12%"></span><span class="stitch" style="top:26%"></span>
+    <span class="stitch" style="top:40%"></span><span class="stitch" style="top:54%"></span>
+    <span class="stitch" style="top:68%"></span><span class="stitch" style="top:82%"></span>
+  </div>
+
+  <div class="leaf">
+    <div class="runhead">
+      <span>QuillMD &nbsp;·&nbsp; Platform Record &nbsp;·&nbsp; Vol.&nbsp;I</span>
+      <span>SUPER_ADMIN &nbsp;·&nbsp; kasra.rayat@gmail.com</span>
+    </div>
+    <div class="dblrule"></div>
+
+    <div class="folio">
+      <h3><span class="art">Folio IV</span>Money</h3>
+      <div class="stamped">
+        read <b>2026-09-09 08:14:06 UTC</b><br>
+        cycle in progress <b>2026-09</b><br>
+        entries in the book <b style="color:var(--critical)">0</b>
+      </div>
+    </div>
+
+    <div class="articles">
+      <div class="article">
+        <div class="rn">Art. I</div>
+        <div class="nm">The rate in effect
+          <small>the number, and since when</small></div>
+        <div class="rd"><span class="none">NO RATE CONFIGURED</span><br><span class="dim">since &mdash; · by &mdash;</span></div>
+      </div>
+      <div class="article">
+        <div class="rn">Art. II</div>
+        <div class="nm">The book
+          <small>every entry ever posted, read down</small></div>
+        <div class="rd"><span class="dim">0 entries</span><br><span class="dim">opened, never written</span></div>
+      </div>
+      <div class="article">
+        <div class="rn">Art. III</div>
+        <div class="nm">Practice accounts
+          <small>cost · charge · the rate that applied · wallet</small></div>
+        <div class="rd">5 practices<br><span class="dim">cost only &mdash; no charge column</span></div>
+      </div>
+      <div class="article">
+        <div class="rn">Art. IV</div>
+        <div class="nm">Standing of the accounts
+          <small>the shipped vocabulary, unchanged</small></div>
+        <div class="rd"><span class="dim">2 healthy · 1 degraded · 1 down</span></div>
+      </div>
+    </div>
+
+    <div class="register">
+      <div class="lbl" style="margin-bottom:14px">Art. IV &nbsp;&mdash;&nbsp; Standing of the accounts</div>
+      <div class="row">
+        <div class="subj">Cost capture <em>&mdash; every metered call writes its own cost row</em></div>
+        <div class="st st-healthy">HEALTHY</div>
+      </div>
+      <div class="row">
+        <div class="subj">Wallet store <em>&mdash; promo and paid buckets, both readable</em></div>
+        <div class="st st-healthy">HEALTHY</div>
+      </div>
+      <div class="row">
+        <div class="subj">Charge metering <em>&mdash; nothing to meter against</em>
+          <span class="by-design">DOWN BY DESIGN, NOT BY FAULT &mdash; see Art. I</span></div>
+        <div class="st st-down">DOWN</div>
+      </div>
+      <div class="row">
+        <div class="subj">Doctor-facing balance <em>&mdash; the settings page promises a figure the product cannot show</em></div>
+        <div class="st st-degraded">DEGRADED</div>
+      </div>
+    </div>
+
+    <div class="leaffoot">
+      <span>Entered by <b>kasra.rayat@gmail.com</b></span>
+      <span class="sep">|</span>
+      <span class="fresh">session 4&thinsp;h&thinsp;02&thinsp;m of 12&thinsp;h &mdash; fresh</span>
+      <span class="sep">|</span>
+      <span>amounts in &micro;$</span>
+      <span class="sep">|</span>
+      <span>this book <b>appends only</b></span>
+    </div>
+  </div>
+
+  <div class="foreedge">
+    <div class="tab"><span class="fol">I</span>Practices</div>
+    <div class="tab" data-on="1"><span class="fol">IV</span>Money</div>
+    <div class="tab"><span class="fol">II</span>Users</div>
+    <div class="tab"><span class="fol">III</span>Audit</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     B · NO RATE CONFIGURED
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="cap">
+  <span class="letter">B</span>
+  <h2><span style="color:var(--critical-text)">NO RATE CONFIGURED</span> &mdash; a book with no entries yet</h2>
+  <span class="said">the state the platform is in right now</span>
+</div>
+<p class="capnote">
+  Not an error, not an empty list &mdash; <em>a refusal with a cause</em>, and the cause is
+  written out in full rather than implied by a grey box. The page states what is refused,
+  why, what every dependent surface reads while the refusal stands, and what the single
+  act that ends it costs. The ruled lines below the fold are the book itself, open and
+  blank, with the caret sitting on entry &numero;1.
+</p>
+
+<div class="volume">
+  <div class="binding" aria-hidden="true">
+    <span class="stitch" style="top:12%"></span><span class="stitch" style="top:26%"></span>
+    <span class="stitch" style="top:40%"></span><span class="stitch" style="top:54%"></span>
+    <span class="stitch" style="top:68%"></span><span class="stitch" style="top:82%"></span>
+  </div>
+
+  <div class="leaf">
+    <div class="runhead">
+      <span>Folio IV &nbsp;·&nbsp; Money &nbsp;·&nbsp; Art.&nbsp;I &mdash; the rate in effect</span>
+      <span>2026-09-09 08:14:06 UTC</span>
+    </div>
+    <div class="dblrule"></div>
+
+    <div class="refusal">
+      <div class="stamp">No rate configured</div>
+      <h4>The book is open.<br><em>Nothing has been written in it.</em></h4>
+
+      <div class="because">
+        <div class="side">Because</div>
+        <ol>
+          <li><b>platform_rates holds 0 rows.</b> The table ships empty on purpose &mdash; seeding
+            it would have made a migration the thing that set the price.</li>
+          <li><b>Nothing is metering.</b> Cost rows are still written for every call; no
+            charge is computed against them, because there is no rate to compute with.</li>
+          <li><b>BILLING_ENFORCED is absent from production</b>, and stays absent until this
+            folio exists. Turning it on is meant to be a decision somebody takes here, in
+            writing, not a flag somebody flips.</li>
+          <li><b>This is not a failure and there is nothing to retry.</b> Retrying reads the
+            same empty table. The only thing that changes it is an entry.</li>
+        </ol>
+      </div>
+    </div>
+
+    <table class="conseq">
+      <caption>While the refusal stands, these are the readings</caption>
+      <thead><tr><th>Surface</th><th>Reads</th></tr></thead>
+      <tbody>
+        <tr><th>Rate in effect</th><td><span class="dash">&mdash;</span></td></tr>
+        <tr><th>Charge, on every metered visit</th><td>not computed &mdash; <b>the row is written with cost only</b></td></tr>
+        <tr><th>Practice accounts, charge column</th><td><span class="dash">&mdash;</span> for all 5 practices</td></tr>
+        <tr><th>Practice accounts, rate&nbsp;applied</th><td>no stamp &mdash; <b>there is no row id to stamp</b></td></tr>
+        <tr><th>Wallet &mdash; promo balance</th><td>unchanged. <b>Funds, not a rate.</b> Still readable, still spendable.</td></tr>
+        <tr><th>Wallet &mdash; paid balance</th><td>unchanged. <b>Funds, not a rate.</b> Still readable, still spendable.</td></tr>
+        <tr><th>Doctor&rsquo;s settings &rarr; balance</th><td>still promises a figure the product cannot show</td></tr>
+      </tbody>
+    </table>
+
+    <div class="emptybook">
+      <div class="hdr">
+        <span class="lbl">Art. II &nbsp;&mdash;&nbsp; the book</span>
+        <span class="lbl">0 entries &nbsp;·&nbsp; opened, never written</span>
+      </div>
+      <div class="rules">
+        <div class="r"><span class="n">&numero;1</span><span class="ghost">first entry</span><span class="caret"></span></div>
+        <div class="r"><span class="n">&numero;2</span></div>
+        <div class="r"><span class="n">&numero;3</span></div>
+        <div class="r"><span class="n">&numero;4</span></div>
+        <div class="r"><span class="n">&numero;5</span></div>
+      </div>
+    </div>
+
+    <div class="act">
+      <div class="top">
+        <span class="lbl">The act that ends the refusal</span>
+        <span class="lbl">one entry &nbsp;·&nbsp; irreversible</span>
+      </div>
+      <div class="body">
+        <h5>Write entry &numero;1</h5>
+        <p class="warnline">
+          An entry appends. It cannot be edited, and it cannot be removed &mdash; to change the
+          margin afterwards you write another entry beneath it. It takes effect at the next
+          metering cycle and reaches nothing already metered.
+        </p>
+        <div class="penrow">
+          <button class="penbtn" type="button">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true">
+              <path d="M2 14l1.2-3.4L10.9 2.9a1.4 1.4 0 0 1 2 2L5.2 12.6 2 14z"/>
+              <path d="M9.6 4.2l2.2 2.2"/>
+            </svg>
+            Open the entry form
+          </button>
+          <span class="aside">SUPER_ADMIN &nbsp;·&nbsp; session fresh &nbsp;·&nbsp; audit row written on open</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="leaffoot">
+      <span>Entered by <b>kasra.rayat@gmail.com</b></span>
+      <span class="sep">|</span>
+      <span class="fresh">session 4&thinsp;h&thinsp;02&thinsp;m of 12&thinsp;h &mdash; fresh</span>
+      <span class="sep">|</span>
+      <span>this book <b>appends only</b></span>
+    </div>
+  </div>
+
+  <div class="foreedge">
+    <div class="tab"><span class="fol">I</span>Practices</div>
+    <div class="tab" data-on="1"><span class="fol">IV</span>Money</div>
+    <div class="tab"><span class="fol">II</span>Users</div>
+    <div class="tab"><span class="fol">III</span>Audit</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     C · THE RATE EDITOR
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="cap">
+  <span class="letter">C</span>
+  <h2>The rate editor &mdash; <em style="font-style:italic;color:var(--accent-text)">writing entry &numero;1</em></h2>
+  <span class="said">a ratio, set as a fraction</span>
+</div>
+<p class="capnote">
+  There is no decimal input anywhere on this page. The thing being edited is
+  <em>numerator over denominator</em>, set as a real fraction with a ruled bar, and
+  <code>1.50&times;</code> is printed beside it in a smaller, quieter face because it is
+  <em>derived for display</em> &mdash; the ratio is what gets stored. The DB CHECK is quoted on the
+  page and shown evaluating, so the bound is legible before it is hit, and the refused
+  case is shown underneath it.
+</p>
+
+<div class="volume">
+  <div class="binding" aria-hidden="true">
+    <span class="stitch" style="top:12%"></span><span class="stitch" style="top:26%"></span>
+    <span class="stitch" style="top:40%"></span><span class="stitch" style="top:54%"></span>
+    <span class="stitch" style="top:68%"></span><span class="stitch" style="top:82%"></span>
+  </div>
+
+  <div class="leaf">
+    <div class="runhead">
+      <span>Folio IV &nbsp;·&nbsp; Money &nbsp;·&nbsp; composing entry &numero;1</span>
+      <span>draft &mdash; nothing written</span>
+    </div>
+    <div class="dblrule"></div>
+
+    <div class="folio">
+      <h3><span class="art">Entry &numero;1</span>The first entry</h3>
+      <div class="stamped">
+        posts to <b>platform_rates</b><br>
+        insert &mdash; <b>never update</b><br>
+        row id assigned <b>on post</b>
+      </div>
+    </div>
+
+    <div class="entryform">
+
+      <div class="fieldset">
+        <div class="side">Margin
+          <em>An exact ratio. Stored as two integers; never as a decimal, because
+          cost &times; 1.5 is a Number and loses precision above 2<sup>53</sup>&nbsp;&micro;$.</em>
+        </div>
+        <div>
+          <div class="fracrow">
+            <div class="fraclabels">
+              <span>Num</span>
+              <span>Den</span>
+            </div>
+            <div class="fraction">
+              <input class="fnum" type="text" value="3" aria-label="numerator" inputmode="numeric">
+              <div class="fracbar"></div>
+              <input class="fnum" type="text" value="2" aria-label="denominator" inputmode="numeric">
+            </div>
+            <div class="eq">=</div>
+            <div class="derived">
+              <div class="big">1.50<span>&times;</span></div>
+              <div class="cap2">Derived for display<br><em>the ratio is what is stored</em></div>
+            </div>
+          </div>
+
+          <div class="quick">
+            Common ratios &nbsp;
+            <a href="#c">1/1</a><a href="#c">5/4</a><a href="#c">4/3</a>
+            <a href="#c" class="now">3/2</a><a href="#c">7/5</a><a href="#c">8/5</a>
+            <a href="#c">2/1</a><a href="#c">5/2</a>
+          </div>
+
+          <div class="checkline">
+            <b>CHECK</b> platform_rates_margin_bounds &nbsp;
+            <span style="color:var(--ink)">margin_num::numeric / margin_den::numeric BETWEEN 1.0 AND 5.0</span><br>
+            3 / 2 = 1.50&times; &nbsp;&rarr;&nbsp; <span class="ok">WITHIN BOUNDS &mdash; the database will accept this</span>
+          </div>
+
+          <div class="refusedbox">
+            <div class="h">Refused &mdash; the same field, out of bounds</div>
+            <p>
+              <span class="frac-inline">11 / 2 = 5.50&times;</span> exceeds the ceiling of 5.00&times;.
+              The database CHECK rejects the insert; <b>nothing is written</b>, no row id is
+              assigned, and the book still holds 0 entries. The form does not round it down
+              to 5.00&times; on your behalf &mdash; a price you did not type is not a price you set.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="fieldset">
+        <div class="side">Effective from
+          <em>Forward only. An entry cannot reach a cycle that has already begun.</em>
+        </div>
+        <div>
+          <ul class="cycles">
+            <li class="closed"><span class="bullet"></span>2026-08 &nbsp;·&nbsp; 01 Aug &ndash; 31 Aug<span class="tag">closed</span></li>
+            <li class="closed"><span class="bullet"></span>2026-09 &nbsp;·&nbsp; 01 Sep &ndash; 30 Sep<span class="tag">cycle open &mdash; cannot be reached</span></li>
+            <li class="pick"><span class="bullet"></span>2026-10 &nbsp;·&nbsp; 01 Oct &ndash; 31 Oct<span class="tag">next cycle &mdash; selected</span></li>
+            <li><span class="bullet"></span>2026-11 &nbsp;·&nbsp; 01 Nov &ndash; 30 Nov<span class="tag">available</span></li>
+            <li><span class="bullet"></span>2026-12 &nbsp;·&nbsp; 01 Dec &ndash; 31 Dec<span class="tag">available</span></li>
+          </ul>
+          <p class="forwardonly">
+            Takes effect <span style="color:var(--ink);font-style:normal;font-family:var(--mono);font-size:13px">2026-10-01 00:00 UTC</span>.
+            Everything metered before that instant keeps the stamp it already carries, which
+            for the whole of 2026-09 is no stamp at all.
+          </p>
+        </div>
+      </div>
+
+      <div class="fieldset">
+        <div class="side">Note
+          <em>Free text &mdash; <b style="font-weight:600">why</b>. Recorded verbatim and never edited afterwards.</em>
+        </div>
+        <div>
+          <div class="notefield">
+            <p class="txt">Opening entry. 3/2 is the pilot rate agreed with the four pilot
+            practices on 2026-09-04: it covers model spend plus document-render egress with
+            room for the imaging-heavy accounts. Revisit when the pilot roster confirms the
+            specialty mix.</p>
+          </div>
+          <div class="notecount">248 characters &nbsp;·&nbsp; verbatim &nbsp;·&nbsp; appears in the book beside &numero;1 forever</div>
+        </div>
+      </div>
+
+      <div class="fieldset">
+        <div class="side">Entered by
+          <em>Read from the session, not typed. The book records who, not just what.</em>
+        </div>
+        <div>
+          <div class="signblock">
+            <div>
+              <div class="sigline">kasra.rayat@gmail.com</div>
+              <div class="sigcap">SUPER_ADMIN &nbsp;·&nbsp; session opened 04:12 UTC &nbsp;·&nbsp; 4&thinsp;h&thinsp;02&thinsp;m of 12&thinsp;h &mdash; fresh</div>
+            </div>
+            <div>
+              <div class="sigline">2026-09-09&nbsp; 08:31:07 UTC</div>
+              <div class="sigcap">posted at &mdash; assigned by the server on insert</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="act" style="margin-top:34px">
+      <div class="body">
+        <div class="penrow" style="margin-top:0">
+          <button class="penbtn" type="button">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true">
+              <path d="M2 14l1.2-3.4L10.9 2.9a1.4 1.4 0 0 1 2 2L5.2 12.6 2 14z"/>
+              <path d="M9.6 4.2l2.2 2.2"/>
+            </svg>
+            Sign and post entry &numero;1
+          </button>
+          <span class="aside">
+            3 / 2 &nbsp;·&nbsp; effective 2026-10-01 &nbsp;·&nbsp; appends &mdash; cannot be edited or removed
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="leaffoot">
+      <span>Draft &mdash; <b>not yet written</b></span>
+      <span class="sep">|</span>
+      <span>entries in the book <b>0</b></span>
+      <span class="sep">|</span>
+      <span>to change a posted rate, <b>post another entry</b></span>
+    </div>
+  </div>
+
+  <div class="foreedge">
+    <div class="tab"><span class="fol">I</span>Practices</div>
+    <div class="tab" data-on="1"><span class="fol">IV</span>Money</div>
+    <div class="tab"><span class="fol">II</span>Users</div>
+    <div class="tab"><span class="fol">III</span>Audit</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     D · THE BOOK — history
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="cap">
+  <span class="letter">D</span>
+  <h2>The book &mdash; read down</h2>
+  <span class="said">insert-never-update, so it is a list and never a diff</span>
+</div>
+<p class="capnote">
+  <b style="color:var(--text-2);font-weight:400">This is the same book, later.</b> The
+  platform holds zero entries today; this is what folio IV looks like once four have been
+  posted. Entries run oldest at the top, and each one is a paragraph of record rather than
+  a table row: when, who, from&nbsp;&rarr;&nbsp;to, why, and the row id every charge will
+  carry. <em>No side-by-side, no red/green gutter</em> &mdash; the arrow is set in the same
+  ink as the numbers on either side of it, because nothing here was changed; something was
+  written.
+</p>
+
+<div class="volume">
+  <div class="binding" aria-hidden="true">
+    <span class="stitch" style="top:10%"></span><span class="stitch" style="top:24%"></span>
+    <span class="stitch" style="top:38%"></span><span class="stitch" style="top:52%"></span>
+    <span class="stitch" style="top:66%"></span><span class="stitch" style="top:80%"></span>
+  </div>
+
+  <div class="leaf">
+    <div class="runhead">
+      <span>Folio IV &nbsp;·&nbsp; Money &nbsp;·&nbsp; Art.&nbsp;II &mdash; the book</span>
+      <span>4 entries &nbsp;·&nbsp; read 2027-01-18 09:40 UTC</span>
+    </div>
+    <div class="dblrule"></div>
+
+    <div class="folio">
+      <h3><span class="art">Art. II</span>The book</h3>
+      <div class="stamped">
+        in effect now <b style="color:var(--accent)">&numero;3 &mdash; 1.60&times;</b><br>
+        pending <b style="color:var(--warn)">&numero;4 &mdash; from 2027-02-01</b><br>
+        entries <b>4</b> &nbsp;·&nbsp; edits <b>0</b>
+      </div>
+    </div>
+
+    <div class="book">
+
+      <article class="entry">
+        <div class="emarg">
+          <span class="no">&numero;1</span>
+          opening entry
+        </div>
+        <div>
+          <div class="ehead">
+            <span>effective <b>2026-10-01 00:00 UTC</b></span>
+            <span>posted <b>2026-09-09 08:31:07 UTC</b></span>
+          </div>
+          <div class="change">
+            <span class="none">&mdash;</span>
+            <span class="arrow">&rarr;</span>
+            <span>1.50&times;</span>
+            <span class="stored">stored 3 / 2</span>
+          </div>
+          <div class="who">kasra.rayat@gmail.com <span>&nbsp;·&nbsp; SUPER_ADMIN</span></div>
+          <div class="enote">&ldquo;Opening entry. 3/2 is the pilot rate agreed with the four pilot
+            practices on 2026-09-04: it covers model spend plus document-render egress with room
+            for the imaging-heavy accounts. Revisit when the pilot roster confirms the specialty
+            mix.&rdquo;</div>
+          <div class="eid">row id <b>rate_01K9RB3M4TQ7XE</b> &nbsp;&mdash;&nbsp; stamped onto every charge metered under it</div>
+        </div>
+      </article>
+
+      <article class="entry">
+        <div class="emarg">
+          <span class="no">&numero;2</span>
+          amends &numero;1
+        </div>
+        <div>
+          <div class="ehead">
+            <span>effective <b>2026-11-01 00:00 UTC</b></span>
+            <span>posted <b>2026-10-21 19:42:55 UTC</b></span>
+          </div>
+          <div class="change">
+            <span>1.50&times;</span>
+            <span class="arrow">&rarr;</span>
+            <span>1.40&times;</span>
+            <span class="stored">stored 7 / 5</span>
+          </div>
+          <div class="who">kasra.rayat@gmail.com <span>&nbsp;·&nbsp; SUPER_ADMIN</span></div>
+          <div class="enote">&ldquo;Delacroix&rsquo;s imaging volume made 3/2 punitive on high-cost
+            visits &mdash; a single vascular study was charging more than the practice&rsquo;s whole
+            office-visit day. 7/5 across the board rather than a per-practice exception; one rate
+            is the point.&rdquo;</div>
+          <div class="eid">row id <b>rate_01KAB7N2FD8WQ1</b></div>
+        </div>
+      </article>
+
+      <article class="entry">
+        <div class="emarg">
+          <span class="no">&numero;3</span>
+          <span class="mark eff"><i class="sq"></i>In effect</span>
+        </div>
+        <div>
+          <div class="ehead">
+            <span>effective <b>2027-01-01 00:00 UTC</b></span>
+            <span>posted <b>2026-12-14 11:08:33 UTC</b></span>
+          </div>
+          <div class="change">
+            <span>1.40&times;</span>
+            <span class="arrow">&rarr;</span>
+            <span>1.60&times;</span>
+            <span class="stored">stored 8 / 5</span>
+          </div>
+          <div class="who">d.okonjo@quillmd.com <span>&nbsp;·&nbsp; SUPER_ADMIN</span></div>
+          <div class="enote">&ldquo;Pilot ends 31 Dec. 8/5 is the general-availability rate: it
+            carries the support cost the pilot absorbed and the second region&rsquo;s egress. Agreed
+            with the four pilot practices in writing on 2026-12-11; none of them is on promo
+            after 31 Jan.&rdquo;</div>
+          <div class="eid">row id <b>rate_01KC1TQ9YH4R7M</b> &nbsp;&mdash;&nbsp; the stamp on every row in Art.&nbsp;III for cycle 2027-01</div>
+        </div>
+      </article>
+
+      <article class="entry">
+        <div class="emarg">
+          <span class="no">&numero;4</span>
+          <span class="mark pend"><i class="sq"></i>Pending</span>
+        </div>
+        <div>
+          <div class="ehead">
+            <span>effective <b>2027-02-01 00:00 UTC</b></span>
+            <span>posted <b>2027-01-22 07:19:48 UTC</b></span>
+          </div>
+          <div class="change">
+            <span>1.60&times;</span>
+            <span class="arrow">&rarr;</span>
+            <span>1.50&times;</span>
+            <span class="stored">stored 3 / 2</span>
+          </div>
+          <div class="who">d.okonjo@quillmd.com <span>&nbsp;·&nbsp; SUPER_ADMIN</span></div>
+          <div class="enote">&ldquo;Model spend fell sharply after the prompt-cache work, so 8/5 is
+            now over-recovering. Back to 3/2, which is where the pilot practices were
+            quoted. This is written before the cycle opens so nobody is surprised by a change
+            they can only see afterwards.&rdquo;</div>
+          <div class="eid">row id <b>rate_01KD4M8XPA2V6K</b> &nbsp;&mdash;&nbsp; nothing is stamped with it yet</div>
+        </div>
+      </article>
+
+    </div>
+
+    <p class="booktail">
+      The book is read down, and the present is the last line <em>that has begun</em>. &numero;4
+      is posted, permanent, and not yet in effect &mdash; which is what forward-only means when
+      you can see it. Nothing above has been altered by anything below it; four entries, zero
+      edits, and the earlier readings are still exactly as they were read at the time.
+    </p>
+
+    <div class="leaffoot">
+      <span>Entries <b>4</b></span>
+      <span class="sep">|</span>
+      <span>Edits <b>0</b></span>
+      <span class="sep">|</span>
+      <span>Deletions <b>0</b></span>
+      <span class="sep">|</span>
+      <span>this book <b>appends only</b></span>
+    </div>
+  </div>
+
+  <div class="foreedge">
+    <div class="tab"><span class="fol">I</span>Practices</div>
+    <div class="tab" data-on="1"><span class="fol">IV</span>Money</div>
+    <div class="tab"><span class="fol">II</span>Users</div>
+    <div class="tab"><span class="fol">III</span>Audit</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     E · PRACTICE ACCOUNTS
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="cap">
+  <span class="letter">E</span>
+  <h2>Practice accounts &mdash; per practice</h2>
+  <span class="said">the stamp, and two wallets that never add up</span>
+</div>
+<p class="capnote">
+  The <em>rate that applied</em> column prints the stamped row id the charge actually carried
+  &mdash; a reference mark, not arithmetic. This page never multiplies, and the subtotal row
+  proves it: for cycle 2027-01 the charge subtotal is <b style="color:var(--text-2);font-weight:400">not</b>
+  the cost subtotal times 8/5, because one practice joined mid-cycle and has not been
+  metered. A screen that recomputed would have printed a confident wrong number there.
+  The wallet is two columns, ruled apart, and the subtotal row <em>refuses</em> to add them.
+</p>
+
+<div class="volume">
+  <div class="binding" aria-hidden="true">
+    <span class="stitch" style="top:12%"></span><span class="stitch" style="top:26%"></span>
+    <span class="stitch" style="top:40%"></span><span class="stitch" style="top:54%"></span>
+    <span class="stitch" style="top:68%"></span><span class="stitch" style="top:82%"></span>
+  </div>
+
+  <div class="leaf">
+    <div class="runhead">
+      <span>Folio IV &nbsp;·&nbsp; Money &nbsp;·&nbsp; Art.&nbsp;III &mdash; practice accounts</span>
+      <span>5 practices &nbsp;·&nbsp; 2 cycles shown</span>
+    </div>
+    <div class="dblrule"></div>
+
+    <div class="folio">
+      <h3><span class="art">Art. III</span>Practice accounts</h3>
+      <div class="stamped">
+        cycle in progress <b>2027-01</b><br>
+        rate in effect <b style="color:var(--accent)">&numero;3 &mdash; 8 / 5 &mdash; 1.60&times;</b><br>
+        amounts <b>&micro;$</b>
+      </div>
+    </div>
+
+    <table class="acct">
+      <thead>
+        <tr class="grp">
+          <th class="l blank" colspan="4"></th>
+          <th colspan="2" class="wallets" style="text-align:left">Wallet &mdash; two buckets, never summed</th>
+        </tr>
+        <tr class="cols">
+          <th class="l">Practice</th>
+          <th>Cost &micro;$</th>
+          <th>Charge &micro;$</th>
+          <th>Rate that applied</th>
+          <th class="wallets">Promo &micro;$</th>
+          <th>Paid &micro;$</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="cyc"><td colspan="6">Cycle 2027-01 &nbsp;·&nbsp; in progress &nbsp;·&nbsp; rate in effect <span class="rt">&numero;3 &mdash; 8/5</span> &nbsp;·&nbsp; wallet read now</td></tr>
+
+        <tr>
+          <td class="l">Willow Creek Vein &amp; Vascular<small>willow-creek</small></td>
+          <td>4&#8239;182&#8239;600</td>
+          <td>6&#8239;692&#8239;160</td>
+          <td><span class="stampid"><b>&numero;3</b> rate_01KC1TQ9YH4R7M</span></td>
+          <td class="wallets">18&#8239;307&#8239;840</td>
+          <td>0</td>
+        </tr>
+        <tr>
+          <td class="l">Harbour Point Internal Medicine<small>harbour-point</small></td>
+          <td>2&#8239;915&#8239;400</td>
+          <td>4&#8239;664&#8239;640</td>
+          <td><span class="stampid"><b>&numero;3</b> rate_01KC1TQ9YH4R7M</span></td>
+          <td class="wallets">6&#8239;227&#8239;960</td>
+          <td>50&#8239;000&#8239;000</td>
+        </tr>
+        <tr>
+          <td class="l">Delacroix Imaging Associates<small>delacroix-imaging</small></td>
+          <td>7&#8239;640&#8239;200</td>
+          <td>12&#8239;224&#8239;320</td>
+          <td><span class="stampid"><b>&numero;3</b> rate_01KC1TQ9YH4R7M</span></td>
+          <td class="wallets">0</td>
+          <td>115&#8239;975&#8239;680</td>
+        </tr>
+        <tr>
+          <td class="l">Saltmarsh Endoscopy<small>saltmarsh</small></td>
+          <td>986&#8239;450</td>
+          <td>1&#8239;578&#8239;320</td>
+          <td><span class="stampid"><b>&numero;3</b> rate_01KC1TQ9YH4R7M</span></td>
+          <td class="wallets">23&#8239;421&#8239;680</td>
+          <td>0</td>
+        </tr>
+        <tr>
+          <td class="l">North Ridge Family Practice<small>north-ridge &nbsp;·&nbsp; joined 2027-01-06</small></td>
+          <td>214&#8239;800</td>
+          <td><span class="em">&mdash;</span></td>
+          <td><span class="em">&mdash;</span> <span style="color:var(--ink-muted)">not yet metered</span></td>
+          <td class="wallets">25&#8239;000&#8239;000</td>
+          <td>0</td>
+        </tr>
+
+        <tr class="sub">
+          <td class="l">Cycle 2027-01</td>
+          <td>15&#8239;939&#8239;450</td>
+          <td>25&#8239;159&#8239;440</td>
+          <td style="font-weight:400;color:var(--ink-muted);font-size:11px;letter-spacing:.08em">4 of 5 rows stamped</td>
+          <td class="wallets"><span class="nototal">no total &mdash;</span></td>
+          <td><span class="nototal">the buckets are not fungible</span></td>
+        </tr>
+
+        <tr class="cyc" style="border-top:14px solid var(--paper-1)"><td colspan="6">Cycle 2026-12 &nbsp;·&nbsp; closed &nbsp;·&nbsp; rate applied <span class="rt">&numero;2 &mdash; 7/5</span> &nbsp;·&nbsp; wallet at cycle close</td></tr>
+
+        <tr>
+          <td class="l">Willow Creek Vein &amp; Vascular</td>
+          <td>3&#8239;704&#8239;800</td>
+          <td>5&#8239;186&#8239;720</td>
+          <td><span class="stampid"><b>&numero;2</b> rate_01KAB7N2FD8WQ1</span></td>
+          <td class="wallets">25&#8239;000&#8239;000</td>
+          <td>0</td>
+        </tr>
+        <tr>
+          <td class="l">Harbour Point Internal Medicine</td>
+          <td>2&#8239;118&#8239;400</td>
+          <td>2&#8239;965&#8239;760</td>
+          <td><span class="stampid"><b>&numero;2</b> rate_01KAB7N2FD8WQ1</span></td>
+          <td class="wallets">10&#8239;892&#8239;600</td>
+          <td>50&#8239;000&#8239;000</td>
+        </tr>
+        <tr>
+          <td class="l">Delacroix Imaging Associates</td>
+          <td>6&#8239;902&#8239;000</td>
+          <td>9&#8239;662&#8239;800</td>
+          <td><span class="stampid"><b>&numero;2</b> rate_01KAB7N2FD8WQ1</span></td>
+          <td class="wallets">0</td>
+          <td>128&#8239;200&#8239;000</td>
+        </tr>
+        <tr>
+          <td class="l">Saltmarsh Endoscopy</td>
+          <td>741&#8239;600</td>
+          <td>1&#8239;038&#8239;240</td>
+          <td><span class="stampid"><b>&numero;2</b> rate_01KAB7N2FD8WQ1</span></td>
+          <td class="wallets">25&#8239;000&#8239;000</td>
+          <td>0</td>
+        </tr>
+
+        <tr class="sub">
+          <td class="l">Cycle 2026-12</td>
+          <td>13&#8239;466&#8239;800</td>
+          <td>18&#8239;853&#8239;520</td>
+          <td style="font-weight:400;color:var(--ink-muted);font-size:11px;letter-spacing:.08em">4 of 4 rows stamped</td>
+          <td class="wallets"><span class="nototal">no total &mdash;</span></td>
+          <td><span class="nototal">the buckets are not fungible</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="tblnote">
+      <span class="pil">&sect;</span>
+      <div>
+        <b>The rate column is a stamp, not a sum.</b> Each charge carries the
+        <code>platform_rates</code> row id it was metered with. Read down cycle 2027-01 and the
+        charge subtotal is 25&#8239;159&#8239;440 &mdash; but 15&#8239;939&#8239;450 &times; 8/5 is
+        25&#8239;503&#8239;120. The 343&#8239;680 &micro;$ difference is North Ridge&rsquo;s unmetered
+        cost, and the moment this page recomputed instead of reading the stamp, it would have
+        printed the second number and disagreed with the ledger.
+      </div>
+    </div>
+    <div class="tblnote">
+      <span class="pil">&sect;</span>
+      <div>
+        <b>Promo and paid are two buckets and there is no total row for them.</b> They are
+        not fungible: promo expires, paid does not, and refunds only ever touch one of them.
+        The same two numbers are what a doctor sees on their own settings page &mdash; the first
+        balance the product has ever shown anyone.
+      </div>
+    </div>
+    <div class="legend">Charges draw from <b style="color:var(--ink)">promo first, then paid</b>; a cycle&rsquo;s
+      closing balance is the next cycle&rsquo;s opening balance &mdash; Willow Creek, 25&#8239;000&#8239;000 &minus; 6&#8239;692&#8239;160 = 18&#8239;307&#8239;840.</div>
+    <div class="legend" style="margin-top:6px">&micro;$ &mdash; micro-dollars. 1&#8239;000&#8239;000 &micro;$ = $1.00. Figures are exact integers; no rounding is applied anywhere on this folio.</div>
+
+    <div class="leaffoot">
+      <span>5 practices</span>
+      <span class="sep">|</span>
+      <span>9 charge rows &nbsp;·&nbsp; <b>8 stamped</b> &nbsp;·&nbsp; 1 unmetered</span>
+      <span class="sep">|</span>
+      <span>this page <b>does not multiply</b></span>
+    </div>
+  </div>
+
+  <div class="foreedge">
+    <div class="tab"><span class="fol">I</span>Practices</div>
+    <div class="tab" data-on="1"><span class="fol">IV</span>Money</div>
+    <div class="tab"><span class="fol">II</span>Users</div>
+    <div class="tab"><span class="fol">III</span>Audit</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     F · THE OTHER STATES
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="cap">
+  <span class="letter">F</span>
+  <h2>The other states</h2>
+  <span class="said">loading · empty · error · refused · stale</span>
+</div>
+<p class="capnote">
+  Read in sequence, same as everything else. Each one is the same leaf with a different
+  thing printed on it &mdash; none of them is a modal, a toast, or a grey box. Note that
+  <em>empty</em> and <em>no rate configured</em> are deliberately different states with different
+  words: one means the book has nothing for this cycle, the other means there is no book.
+</p>
+
+<div class="statestack">
+
+  <div class="stateleaf">
+    <div class="sh"><span class="nm">Loading</span><span class="rt">Folio IV &nbsp;·&nbsp; reading the book</span></div>
+    <h6>Reading the book&hellip;</h6>
+    <p>Ruled lines, waiting to be read. No spinner and no skeleton blocks &mdash; the page that
+      is arriving is a ruled page, so the thing that waits is a ruled page.</p>
+    <div class="loadrules" style="margin-top:16px">
+      <div class="r"></div><div class="r"></div><div class="r"></div><div class="r"></div>
+    </div>
+  </div>
+
+  <div class="stateleaf">
+    <div class="sh"><span class="nm">Empty</span><span class="rt">Art. III &nbsp;·&nbsp; Saltmarsh Endoscopy &nbsp;·&nbsp; cycle 2026-11</span></div>
+    <h6>No rows for this practice in this cycle.</h6>
+    <p>The book is written and the rate was in effect &mdash; <b>this practice was not metered
+      once in November</b>. Its wallet is unaffected: promo 26&#8239;038&#8239;240&nbsp;&micro;$,
+      paid 0&nbsp;&micro;$, both still readable. <em>This is not the no-rate state.</em></p>
+  </div>
+
+  <div class="stateleaf">
+    <div class="sh"><span class="nm">Error</span><span class="rt">Folio IV &nbsp;·&nbsp; 2027-01-18 09:41:02 UTC</span></div>
+    <h6 style="color:var(--critical)">The book could not be read.</h6>
+    <div class="errbar">
+      <p style="margin-top:0"><b>The rate table answered; the ledger did not.</b> Art. I is
+        showing you a rate that is real. Art. III is showing you nothing, and the difference
+        between &ldquo;no charges&rdquo; and &ldquo;charges we could not read&rdquo; is the whole
+        point of not guessing here.</p>
+      <div class="why">
+        request &nbsp;req_01KE7Q2M9B &nbsp;·&nbsp; upstream &nbsp;ledger.read &nbsp;·&nbsp; 504 after 30.0&thinsp;s<br>
+        nothing was written &nbsp;·&nbsp; no partial figures are shown
+      </div>
+      <span class="retry">Read again</span>
+    </div>
+  </div>
+
+  <div class="stateleaf">
+    <div class="sh"><span class="nm">Refused &mdash; 403/404-gated</span><span class="rt">/admin/money</span></div>
+    <div class="err404">
+      <div class="code">404</div>
+      <div class="txt">This page does not exist</div>
+    </div>
+    <p style="margin:20px auto 0;text-align:center;max-width:64ch">
+      There is deliberately nothing to design here. A caller without <code>SUPER_ADMIN</code>
+      gets <code>notFound()</code>, not a redirect and not a &ldquo;you lack permission&rdquo; page &mdash;
+      the refusal must be <b>indistinguishable from absence</b>, or the route&rsquo;s existence is
+      disclosed to whoever probes for it. The access audit row is written all the same.
+    </p>
+  </div>
+
+  <div class="stateleaf">
+    <div class="sh"><span class="nm">Stale &mdash; session over 12&thinsp;h</span><span class="rt">Folio IV &nbsp;·&nbsp; read-only</span></div>
+    <h6>The book is readable. It is not writable.</h6>
+    <p>Session opened <b>14&thinsp;h&thinsp;02&thinsp;m</b> ago, past the 12&thinsp;h admin freshness limit.
+      Everything already written stays legible &mdash; a record you cannot read is worse than one
+      you cannot add to.</p>
+    <div class="readonly">
+      <span class="struck">SIGN AND POST ENTRY &numero;5</span> &nbsp;&nbsp;&mdash;&nbsp;&nbsp;
+      WITHHELD. RE-AUTHENTICATE TO WRITE.
+    </div>
+    <div class="leaffoot" style="margin-top:20px;border-top-color:var(--rule-1)">
+      <span>Entered by <b>kasra.rayat@gmail.com</b></span>
+      <span class="sep">|</span>
+      <span class="stalewarn">session 14&thinsp;h&thinsp;02&thinsp;m of 12&thinsp;h &mdash; stale, read-only</span>
+      <span class="sep">|</span>
+      <span>this book <b>appends only</b></span>
+    </div>
+  </div>
+
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     G · NOTES
+     ══════════════════════════════════════════════════════════════════ -->
+<section class="notes">
+  <div class="cap" style="margin-top:0">
+    <span class="letter">G</span>
+    <h2>Notes on the tokens &mdash; what I broke, and who has to decide</h2>
+  </div>
+
+  <div class="grid">
+    <div class="n broke">
+      <div class="k">Broken &mdash; the leaf is paper</div>
+      <div class="v">
+        The whole record surface uses <code>--rounds-paper-1/2/3</code>, <code>--rounds-ink</code>,
+        <code>--rounds-ink-muted</code> and <code>--rounds-paper-line-1/2</code>. Those are shipped
+        tokens, but today they dress <b>only the clinical document</b>; this would be the first
+        admin surface to use them. The argument is that the money record is a document too, and
+        it inherits the same reading posture as a note. <b>The decision to carry:</b> does
+        &ldquo;paper&rdquo; mean <em>clinical</em> in this product, or does it mean <em>record</em>?
+        If it means clinical, this direction needs a fifth surface token and the paper palette
+        stays where it is.
+      </div>
+    </div>
+
+    <div class="n broke">
+      <div class="k">Broken &mdash; radii to zero</div>
+      <div class="v">
+        <code>--rounds-radius-sm/md/lg</code> (9&thinsp;/&thinsp;12&thinsp;/&thinsp;18&nbsp;px) are used
+        nowhere on the leaf. A page has square corners; a bound book has no rounded rectangles in
+        it, and the moment a rounded container appears the whole thing reads as a card again.
+        Cheap to reverse, and reversing it costs the direction most of its identity.
+      </div>
+    </div>
+
+    <div class="n broke">
+      <div class="k">Broken &mdash; serif as UI type</div>
+      <div class="v">
+        <code>--rounds-font-clinical</code> is the document serif; the shell&rsquo;s UI font is a
+        sans. Here the serif is the <em>interface</em> face too, with
+        <code>--rounds-font-mono</code> carrying every figure, id, timestamp and label. No webfont
+        is loaded &mdash; this file is standalone, so it falls back through Iowan Old Style /
+        Palatino / Georgia. <b>Real cost:</b> the rendering will differ between machines until a
+        face is chosen and self-hosted.
+      </div>
+    </div>
+
+    <div class="n">
+      <div class="k">Kept &mdash; accent as text</div>
+      <div class="v">
+        The token note says <code>#5b5bd6</code> fails AA as small text <em>on the stage</em>, which is
+        why <code>--rounds-accent-text</code> <code>#a5a5f0</code> exists. On paper the base accent
+        measures about <b>5.3:1</b>, so it is used directly for the IN EFFECT mark, the stamped row
+        ids and the links &mdash; and <code>#a5a5f0</code> is used only on the dark stage captions.
+        Same two tokens, each in the ground it was made for.
+      </div>
+    </div>
+
+    <div class="n">
+      <div class="k">Kept &mdash; status vocabulary</div>
+      <div class="v">
+        <code>HEALTHY &middot; DEGRADED &middot; DOWN</code>, unchanged, no fourth word. On paper they take the
+        on-light variants <code>#187a4e</code>, <code>#c4841c</code>, <code>#c93a2e</code>; the
+        <code>-text</code> variants stay for the dark stage. The only addition is a clause of cause
+        under the word, because &ldquo;charge metering &mdash; DOWN&rdquo; is alarming and correct, and
+        <em>DOWN by design, not by fault</em> is the sentence that stops somebody paging themselves at
+        02:00.
+      </div>
+    </div>
+
+    <div class="n broke">
+      <div class="k">Invented &mdash; six light neutrals</div>
+      <div class="v">
+        No token covers the <em>edge of a block of paper</em>, so the fore-edge and binding use
+        <code>#c9cbc2</code> / <code>#a9aca2</code>, and four tints carry field and notice states:
+        <code>#f6f6fd</code> (focus), <code>#fdf4f3</code> (refused), <code>#fdf8ee</code> and
+        <code>#7a5310</code> (read-only). All six want either real tokens or deletion before this
+        ships &mdash; they are the least defensible thing on the page.
+      </div>
+    </div>
+
+    <div class="n">
+      <div class="k">Unresolved</div>
+      <div class="v">
+        <code>--rounds-paper-shadow</code> arrived truncated in the token extract, so the leaf&rsquo;s
+        drop shadow here is invented (<code>0 26px 54px rgba(0,0,0,.5)</code>). Swap it for the real
+        value before anyone judges the depth.
+      </div>
+    </div>
+
+    <div class="n">
+      <div class="k">Not designed &mdash; on purpose</div>
+      <div class="v">
+        The lock. Everything under <code>/admin</code> already inherits the <code>SUPER_ADMIN</code>
+        re-read, <code>notFound()</code>, the 12&thinsp;h freshness check and the access audit row, so the
+        only place the gate appears in this direction is where it is <em>visible to the operator</em>:
+        the 404 leaf, and the freshness clause in every foot rule.
+      </div>
+    </div>
+  </div>
+</section>
+
+</div>

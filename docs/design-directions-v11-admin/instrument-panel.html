@@ -1,0 +1,1226 @@
+<title>Admin Instrument Panel</title>
+
+<style>
+/* ─────────────────────────────────────────────────────────────────────────
+   DIRECTION: INSTRUMENT PANEL
+   Machined faceplate. Monospace is the primary voice; Georgia carries the
+   only human writing on the panel (operator notes, consequence sentences).
+   ───────────────────────────────────────────────────────────────────────── */
+
+:root{
+  /* shipped Rounds tokens, exact */
+  --stage-1:#232b3a; --stage-2:#171d27; --stage-3:#12161e;
+  --s1:#161b24;  --s2:#1e2530;  --s3:#252d3a;
+  --line-1:#2c3442; --line-2:#3a4353;
+  --t1:#e7ebf1; --t2:#98a2b1; --t3:#7c8694;
+  --accent:#5b5bd6; --accent-text:#a5a5f0;
+  --accent-10:rgba(91,91,214,.10); --accent-16:rgba(91,91,214,.16);
+  --ready:#187a4e; --ready-text:#6ee7a8;
+  --crit:#c93a2e;  --crit-text:#ff8d7e;
+  --em:#c4841c;    --em-text:#e8b168;
+  --signed-text:#9aa4b2;
+
+  --mono: ui-monospace,"SF Mono","JetBrains Mono","IBM Plex Mono",Menlo,Consolas,monospace;
+  --hand: Georgia,"Iowan Old Style","Times New Roman",serif;
+
+  /* BROKEN TOKEN -- see designer's note */
+  --r:5px;
+  --r-lg:7px;
+
+  --bezel: inset 0 1px 0 rgba(255,255,255,.055), inset 0 -1px 0 rgba(0,0,0,.45);
+  --etch: 0 1px 0 rgba(0,0,0,.6);
+}
+
+*{box-sizing:border-box}
+
+.doc{
+  margin:0; min-height:100vh;
+  font-family:var(--mono);
+  color:var(--t1);
+  background:
+    radial-gradient(900px 520px at 18% -8%, rgba(91,91,214,.075), transparent 62%),
+    radial-gradient(700px 460px at 96% 4%, rgba(24,122,78,.05), transparent 60%),
+    linear-gradient(180deg,#12161e 0%,#171d27 46%,#12161e 100%);
+  background-color:#12161e;
+  padding:0 0 120px;
+  -webkit-font-smoothing:antialiased;
+}
+.doc::before{
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.55;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");
+  mix-blend-mode:overlay;
+}
+.wrap{position:relative; z-index:1; max-width:1120px; margin:0 auto; padding:0 32px}
+
+/* ── document head ─────────────────────────────────────────────── */
+.masthead{padding:84px 0 52px; border-bottom:1px solid var(--line-1)}
+.eyebrow{
+  font-size:10px; letter-spacing:.34em; text-transform:uppercase;
+  color:var(--t3); display:flex; gap:14px; align-items:center;
+}
+.eyebrow::after{content:""; flex:1; height:1px; background:linear-gradient(90deg,var(--line-2),transparent)}
+h1{
+  font-family:var(--mono); font-weight:600; font-size:44px; line-height:1.06;
+  letter-spacing:-.02em; margin:22px 0 0;
+}
+h1 .dim{color:var(--t3); font-weight:400}
+.note{
+  font-family:var(--hand); font-size:15.5px; line-height:1.72; color:var(--t2);
+  max-width:62ch; margin:22px 0 0;
+}
+.note b{color:var(--t1); font-weight:600}
+.note .warn{color:var(--em-text)}
+.note code{font-family:var(--mono); font-size:13px; color:var(--accent-text)}
+
+/* ── plate scaffolding ─────────────────────────────────────────── */
+.plate{padding:74px 0 0}
+.plate-hd{display:flex; align-items:baseline; gap:16px; margin-bottom:8px}
+.plate-no{
+  font-size:10px; letter-spacing:.28em; color:var(--accent-text);
+  border:1px solid var(--accent-16); background:var(--accent-10);
+  padding:4px 8px; border-radius:3px;
+}
+.plate-ti{font-size:14px; letter-spacing:.16em; text-transform:uppercase; color:var(--t1)}
+.plate-cap{
+  font-family:var(--hand); font-size:14.5px; line-height:1.7; color:var(--t3);
+  max-width:74ch; margin:0 0 22px;
+}
+.plate-cap em{color:var(--t2)}
+
+/* ── THE SHELL ─────────────────────────────────────────────────── */
+.shell{
+  display:grid; grid-template-columns:214px 1fr;
+  border:1px solid var(--line-1); border-radius:var(--r-lg);
+  background:linear-gradient(180deg,#1a202b,#13181f);
+  box-shadow:var(--bezel), 0 40px 90px -50px #000;
+  overflow:hidden;
+}
+.panel-only{grid-template-columns:1fr}
+
+/* rotary selector rail */
+.rail{
+  border-right:1px solid var(--line-1);
+  background:linear-gradient(180deg,#161b24,#12161e);
+  display:flex; flex-direction:column; min-height:520px;
+}
+.rail-brand{padding:18px 18px 16px; border-bottom:1px solid var(--line-1)}
+.rail-brand .mk{font-size:12px; letter-spacing:.2em; color:var(--t1)}
+.rail-brand .sub{font-size:9.5px; letter-spacing:.22em; color:var(--t3); margin-top:5px}
+
+.switch{position:relative; padding:22px 0 22px 0}
+.switch-track{
+  position:absolute; left:26px; top:34px; bottom:34px; width:1px;
+  background:linear-gradient(180deg,transparent,var(--line-2) 12%,var(--line-2) 88%,transparent);
+}
+.pos{
+  position:relative; display:flex; align-items:center; gap:14px;
+  padding:11px 18px 11px 18px; text-decoration:none;
+  font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:var(--t3);
+}
+.pos .lamp{
+  width:9px; height:9px; border-radius:50%; flex:0 0 9px; margin-left:4px;
+  background:#10141b; border:1px solid var(--line-2); box-shadow:inset 0 1px 1px #000;
+}
+.pos.on{color:var(--t1)}
+.pos.on .lamp{
+  background:var(--accent-text); border-color:var(--accent-text);
+  box-shadow:0 0 0 3px rgba(165,165,240,.12), 0 0 12px rgba(165,165,240,.55);
+}
+.pos.on::before{
+  content:""; position:absolute; left:0; top:6px; bottom:6px; width:2px;
+  background:var(--accent-text); box-shadow:0 0 10px rgba(165,165,240,.6);
+}
+
+.lampbank{margin-top:auto; padding:16px 18px 18px; border-top:1px solid var(--line-1)}
+.lampbank .hd{font-size:9px; letter-spacing:.26em; color:var(--t3); margin-bottom:11px}
+.lrow{display:flex; align-items:center; gap:9px; padding:5px 0; font-size:10px; letter-spacing:.11em}
+.lrow .dot{width:7px;height:7px;border-radius:50%;flex:0 0 7px}
+.lrow .nm{color:var(--t3); text-transform:uppercase}
+.lrow .st{margin-left:auto; letter-spacing:.14em}
+.hl .dot{background:var(--ready-text); box-shadow:0 0 8px rgba(110,231,168,.5)} .hl .st{color:var(--ready-text)}
+.dg .dot{background:var(--em-text);    box-shadow:0 0 8px rgba(232,177,104,.5)} .dg .st{color:var(--em-text)}
+.dn .dot{background:var(--crit-text);  box-shadow:0 0 8px rgba(255,141,126,.5)} .dn .st{color:var(--crit-text)}
+
+/* panel */
+.panel{position:relative; background:linear-gradient(180deg,#1b212c 0%,#151a23 70%)}
+.panel::before{
+  content:""; position:absolute; inset:0; pointer-events:none; opacity:.5;
+  background-image:repeating-linear-gradient(0deg,rgba(255,255,255,.014) 0 1px,transparent 1px 5px);
+}
+.panel-hd{
+  position:relative; display:flex; align-items:center; gap:18px;
+  padding:15px 26px; border-bottom:1px solid var(--line-1);
+  background:linear-gradient(180deg,rgba(255,255,255,.022),transparent);
+}
+.crumb{font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:var(--t2)}
+.crumb b{color:var(--t1); font-weight:600}
+.chip{
+  font-size:9px; letter-spacing:.2em; padding:4px 8px; border-radius:3px;
+  border:1px solid var(--line-2); color:var(--t3);
+}
+.chip.env{border-color:rgba(255,141,126,.3); color:var(--crit-text); background:rgba(201,58,46,.09)}
+.spacer{margin-left:auto}
+.sess{display:flex; align-items:center; gap:10px; font-size:9.5px; letter-spacing:.14em; color:var(--t3)}
+.sessbar{width:72px; height:4px; border-radius:2px; background:#0e121a; border:1px solid var(--line-1); overflow:hidden}
+.sessbar i{display:block; height:100%; background:var(--ready-text); opacity:.75}
+.sessbar.warn i{background:var(--em-text)}
+.sessbar.bad  i{background:var(--crit-text)}
+
+.stage{position:relative; padding:56px 56px 52px}
+.stage.tall{padding:70px 56px 64px}
+
+/* ── the instrument ───────────────────────────────────────────── */
+.inst-hd{
+  display:flex; align-items:baseline; gap:16px;
+  font-size:10px; letter-spacing:.3em; text-transform:uppercase; color:var(--t3);
+}
+.inst-hd .rule{flex:1; height:1px; background:var(--line-1)}
+.inst-hd .armed{color:var(--ready-text); letter-spacing:.2em}
+.inst-hd .unarmed{color:var(--em-text); letter-spacing:.2em}
+
+/* the big readout */
+.readout{display:flex; align-items:flex-end; gap:34px; margin:36px 0 4px}
+.ratio{
+  display:flex; align-items:center; gap:16px;
+  font-size:88px; line-height:.86; font-weight:300; letter-spacing:-.04em;
+  font-variant-numeric:tabular-nums; color:var(--t1);
+  text-shadow:0 2px 0 rgba(0,0,0,.55);
+}
+.ratio .slash{
+  font-size:64px; color:var(--t3); font-weight:200; transform:translateY(-2px);
+}
+.ratio.off{color:var(--t3); opacity:.45}
+.ratio .n,.ratio .d{min-width:.62em; text-align:center; transition:color .18s}
+.ratio.refused{color:var(--crit-text)}
+.ratio-lab{
+  font-size:9px; letter-spacing:.3em; color:var(--t3); text-transform:uppercase;
+  margin-bottom:14px;
+}
+.derived{padding-bottom:16px; border-left:1px solid var(--line-1); padding-left:26px}
+.derived .val{
+  font-size:30px; font-weight:400; letter-spacing:-.01em; color:var(--t2);
+  font-variant-numeric:tabular-nums;
+}
+.derived .val.refused{color:var(--crit-text)}
+.derived .tag{font-size:8.5px; letter-spacing:.26em; color:var(--t3); margin-top:9px; text-transform:uppercase}
+.derived .tag b{color:var(--em-text); font-weight:400}
+
+/* ── the calibrated rail ──────────────────────────────────────── */
+.gauge{margin:44px 0 0; position:relative}
+.gauge-lab{
+  display:flex; justify-content:space-between; align-items:baseline;
+  font-size:9px; letter-spacing:.26em; color:var(--t3); text-transform:uppercase;
+  margin-bottom:26px;
+}
+.track{
+  position:relative; height:2px; margin:0 12px;
+  background:linear-gradient(90deg,var(--line-2),#46516a,var(--line-2));
+  border-radius:1px;
+}
+.track::before,.track::after{
+  content:""; position:absolute; top:-13px; width:3px; height:28px; border-radius:1px;
+  background:linear-gradient(180deg,#5d6880,#39424f);
+  box-shadow:0 0 0 1px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.2);
+}
+.track::before{left:-12px} .track::after{right:-12px}
+
+.tick{position:absolute; top:0; transform:translateX(-50%); cursor:pointer}
+.tick .mk{
+  display:block; width:1px; height:9px; margin:0 auto;
+  background:var(--line-2); transition:background .16s,height .16s;
+}
+.tick .lab{
+  display:block; margin-top:9px; font-size:10px; letter-spacing:.06em;
+  color:var(--t3); white-space:nowrap; opacity:0; transition:opacity .16s,color .16s;
+  font-variant-numeric:tabular-nums;
+}
+.tick:hover .mk{background:var(--accent-text); height:13px}
+.tick:hover .lab{opacity:1; color:var(--accent-text)}
+.tick.stop .mk{height:16px; width:2px; background:#5d6880}
+.tick.stop .lab{opacity:1; color:var(--t2)}
+.tick.cur .mk{background:var(--ready-text); height:14px}
+.tick.cur .lab{opacity:1; color:var(--ready-text)}
+
+.stopcap{
+  position:absolute; top:26px; font-size:8.5px; letter-spacing:.22em;
+  color:var(--t3); text-transform:uppercase; white-space:nowrap;
+}
+.stopcap.l{left:-12px} .stopcap.r{right:-12px; text-align:right}
+
+/* the needle carrier */
+.carrier{
+  position:absolute; top:-42px; transform:translateX(-50%);
+  transition:left .42s cubic-bezier(.34,1.42,.5,1);
+  pointer-events:none;
+}
+.carrier .blk{
+  width:26px; height:22px; margin:0 auto; border-radius:3px;
+  background:linear-gradient(180deg,#39424f,#232b3a);
+  border:1px solid #5d6880;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22), 0 6px 14px -6px #000;
+}
+.carrier .ndl{
+  width:1px; height:30px; margin:0 auto;
+  background:linear-gradient(180deg,var(--ready-text),rgba(110,231,168,.15));
+  box-shadow:0 0 9px rgba(110,231,168,.75);
+}
+.carrier.refused .ndl{background:linear-gradient(180deg,var(--crit-text),rgba(255,141,126,.12)); box-shadow:0 0 9px rgba(255,141,126,.8)}
+.carrier.refused .blk{border-color:var(--crit-text)}
+.carrier.docked{opacity:.4}
+.carrier.docked .ndl{background:linear-gradient(180deg,var(--t3),transparent); box-shadow:none}
+.carrier.docked .blk{border-style:dashed; border-color:var(--line-2); background:transparent}
+
+/* out-of-range shaded zone */
+.zone{
+  position:absolute; top:-1px; height:4px; border-radius:2px;
+  background:repeating-linear-gradient(45deg,rgba(201,58,46,.55) 0 3px,transparent 3px 6px);
+}
+
+/* ── steppers ─────────────────────────────────────────────────── */
+.fine{display:flex; align-items:flex-end; gap:40px; margin:74px 0 0; flex-wrap:wrap}
+.stepper{}
+.stepper .lab{font-size:9px; letter-spacing:.26em; color:var(--t3); text-transform:uppercase; margin-bottom:11px}
+.stepper .body{display:flex; align-items:stretch; border:1px solid var(--line-2); border-radius:var(--r); overflow:hidden; background:#10141b}
+.stepper button{
+  width:38px; border:0; background:linear-gradient(180deg,#2b3341,#1e2530); color:var(--t2);
+  font-family:var(--mono); font-size:16px; cursor:pointer; transition:background .14s,color .14s;
+  box-shadow:var(--bezel);
+}
+.stepper button:hover{background:linear-gradient(180deg,#39424f,#252d3a); color:var(--t1)}
+.stepper button:active{background:#1a2029}
+.stepper .n{
+  width:74px; display:flex; align-items:center; justify-content:center;
+  font-size:26px; font-variant-numeric:tabular-nums; color:var(--t1);
+  border-left:1px solid var(--line-1); border-right:1px solid var(--line-1);
+  background:#0e121a; text-shadow:0 0 14px rgba(231,235,241,.14);
+}
+.stepper .hint{font-size:8.5px; letter-spacing:.18em; color:var(--t3); margin-top:9px; text-transform:uppercase}
+
+.verdict{
+  flex:1; min-width:270px; padding:14px 16px; border-radius:var(--r);
+  border:1px solid var(--line-1); background:rgba(24,122,78,.07);
+  font-size:11px; letter-spacing:.05em; line-height:1.65; color:var(--ready-text);
+}
+.verdict.bad{border-color:rgba(201,58,46,.4); background:rgba(201,58,46,.1); color:var(--crit-text)}
+.verdict .hd{font-size:9px; letter-spacing:.26em; text-transform:uppercase; opacity:.75; display:block; margin-bottom:6px}
+.verdict .src{color:var(--t3); display:block; margin-top:6px; font-size:10px}
+
+/* ── unset / refusal-with-a-cause ─────────────────────────────── */
+.unset{margin-top:52px; display:grid; grid-template-columns:1fr 268px; gap:44px; align-items:start}
+.cause{
+  border-left:2px solid var(--em-text); padding:2px 0 2px 22px;
+}
+.cause .hd{
+  font-size:11px; letter-spacing:.24em; text-transform:uppercase; color:var(--em-text);
+  margin-bottom:14px;
+}
+.cause p{font-family:var(--hand); font-size:15.5px; line-height:1.74; color:var(--t2); margin:0 0 13px; max-width:56ch}
+.cause p b{color:var(--t1); font-weight:600}
+.cause .facts{display:flex; gap:30px; margin-top:20px; flex-wrap:wrap}
+.fact .v{font-size:24px; font-variant-numeric:tabular-nums; color:var(--t1); letter-spacing:-.01em}
+.fact .v.zero{color:var(--em-text)}
+.fact .k{font-size:8.5px; letter-spacing:.22em; color:var(--t3); text-transform:uppercase; margin-top:7px}
+
+.armbox{
+  border:1px solid var(--line-2); border-radius:var(--r); padding:20px;
+  background:linear-gradient(180deg,#1e2530,#161b24); box-shadow:var(--bezel);
+}
+.armbox .t{font-size:9px; letter-spacing:.24em; color:var(--t3); text-transform:uppercase}
+.armbox p{font-family:var(--hand); font-size:13.5px; line-height:1.62; color:var(--t3); margin:12px 0 18px}
+.btn{
+  display:block; width:100%; text-align:center; padding:12px; border-radius:var(--r);
+  border:1px solid var(--accent); background:linear-gradient(180deg,#6a6ade,#4a49c4);
+  color:#fff; font-family:var(--mono); font-size:11px; letter-spacing:.22em;
+  text-transform:uppercase; cursor:pointer; box-shadow:0 8px 20px -12px var(--accent);
+  transition:filter .15s;
+}
+.btn:hover{filter:brightness(1.12)}
+.btn.ghost{background:transparent; border-color:var(--line-2); color:var(--t2); box-shadow:none}
+.btn:disabled{opacity:.4; cursor:not-allowed; filter:none}
+
+/* ── time rail (forward-only) ─────────────────────────────────── */
+.timerail{margin:64px 0 0; border-top:1px solid var(--line-1); padding-top:34px}
+.trhd{font-size:9px; letter-spacing:.28em; color:var(--t3); text-transform:uppercase; margin-bottom:24px}
+.tstop{
+  display:flex; align-items:center; gap:14px; padding:11px 0;
+  border-top:2px solid var(--crit); position:relative;
+}
+.tstop .bar{
+  position:absolute; left:0; right:0; top:-2px; height:2px;
+  background:repeating-linear-gradient(90deg,var(--crit) 0 6px,transparent 6px 12px);
+}
+.tstop .txt{font-size:10px; letter-spacing:.16em; color:var(--crit-text); text-transform:uppercase}
+.tstop .sub{font-family:var(--hand); font-size:13px; color:var(--t3); margin-left:auto; text-transform:none; letter-spacing:0}
+.tslot{
+  display:flex; align-items:center; gap:16px; padding:13px 0;
+  border-bottom:1px solid var(--line-1); cursor:pointer;
+}
+.tslot .rd{width:11px;height:11px;border-radius:50%;border:1px solid var(--line-2);flex:0 0 11px;background:#10141b}
+.tslot.on .rd{border-color:var(--ready-text); box-shadow:inset 0 0 0 3px #10141b, 0 0 0 1px var(--ready-text), 0 0 10px rgba(110,231,168,.4); background:var(--ready-text)}
+.tslot .ts{font-size:12.5px; color:var(--t2); font-variant-numeric:tabular-nums; letter-spacing:.02em}
+.tslot.on .ts{color:var(--t1)}
+.tslot .why{margin-left:auto; font-size:9.5px; letter-spacing:.18em; color:var(--t3); text-transform:uppercase}
+.tslot.on .why{color:var(--ready-text)}
+
+/* ── the note field (human writing) ───────────────────────────── */
+.notefield{margin-top:34px}
+.notefield .lab{font-size:9px; letter-spacing:.26em; color:var(--t3); text-transform:uppercase; margin-bottom:12px}
+.notefield .box{
+  border:1px solid var(--line-1); border-left:2px solid var(--line-2);
+  border-radius:var(--r); background:#10141b; padding:16px 18px;
+  font-family:var(--hand); font-size:15px; line-height:1.7; color:var(--t1);
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.4);
+}
+.notefield .box .cur{display:inline-block;width:7px;height:17px;background:var(--accent-text);vertical-align:-3px;margin-left:2px;animation:blink 1.1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+
+.commitbar{display:flex; align-items:center; gap:18px; margin-top:36px; padding-top:26px; border-top:1px solid var(--line-1)}
+.commitbar .say{font-family:var(--hand); font-size:13.5px; color:var(--t3); max-width:46ch; line-height:1.6}
+.commitbar .btn{width:auto; padding:12px 26px; margin-left:auto}
+
+/* ── history (the ONE table, subordinate) ─────────────────────── */
+.histwrap{max-width:900px}
+.append{
+  display:flex; align-items:center; gap:12px; margin-bottom:16px;
+  font-size:9.5px; letter-spacing:.2em; color:var(--t3); text-transform:uppercase;
+}
+.append .pill{border:1px solid var(--line-2); border-radius:3px; padding:4px 8px; color:var(--em-text); border-color:rgba(196,132,28,.35); background:rgba(196,132,28,.08)}
+table{width:100%; border-collapse:collapse; font-size:12px}
+thead th{
+  text-align:left; font-weight:400; font-size:8.5px; letter-spacing:.24em;
+  color:var(--t3); text-transform:uppercase; padding:0 16px 12px 0;
+  border-bottom:1px solid var(--line-2);
+}
+tbody td{padding:17px 16px 17px 0; border-bottom:1px solid var(--line-1); vertical-align:top; color:var(--t2)}
+tbody tr:last-child td{border-bottom:0}
+td.when{font-variant-numeric:tabular-nums; color:var(--t3); white-space:nowrap}
+td.who{color:var(--t2); white-space:nowrap}
+td.mv{white-space:nowrap; color:var(--t1); font-variant-numeric:tabular-nums}
+td.mv .from{color:var(--t3)}
+td.mv .arw{color:var(--accent-text); padding:0 8px}
+td.mv .none{color:var(--em-text)}
+td.why{font-family:var(--hand); font-size:14px; line-height:1.6; color:var(--t2)}
+td.id{font-size:10px; color:var(--t3); letter-spacing:.06em; white-space:nowrap; text-align:right; padding-right:0}
+tbody tr:first-child td{background:linear-gradient(90deg,rgba(91,91,214,.05),transparent)}
+
+/* ── per-practice channel ─────────────────────────────────────── */
+.chan{display:flex; gap:0; border:1px solid var(--line-2); border-radius:var(--r); overflow:hidden; width:fit-content; box-shadow:var(--bezel)}
+.chan a{
+  padding:11px 20px; font-size:10.5px; letter-spacing:.14em; color:var(--t3);
+  text-decoration:none; border-right:1px solid var(--line-1); background:#151a23;
+  display:flex; align-items:center; gap:10px; transition:color .15s,background .15s;
+}
+.chan a:last-child{border-right:0}
+.chan a:hover{color:var(--t2); background:#1a202b}
+.chan a .d{width:6px;height:6px;border-radius:50%;background:#10141b;border:1px solid var(--line-2)}
+.chan a.on{color:var(--t1); background:linear-gradient(180deg,#252d3a,#1a202b)}
+.chan a.on .d{background:var(--ready-text); border-color:var(--ready-text); box-shadow:0 0 8px rgba(110,231,168,.6)}
+
+.meter{display:grid; grid-template-columns:1fr 1fr; gap:0; margin:46px 0 0; max-width:620px}
+.mcell{padding:0 34px 0 0}
+.mcell + .mcell{border-left:1px solid var(--line-1); padding:0 0 0 34px}
+.mcell .k{font-size:8.5px; letter-spacing:.24em; color:var(--t3); text-transform:uppercase}
+.mcell .v{font-size:34px; font-variant-numeric:tabular-nums; letter-spacing:-.015em; color:var(--t1); margin-top:12px}
+.mcell .u{font-size:14px; color:var(--t3); margin-left:7px; letter-spacing:0}
+.mcell .s{font-size:10px; color:var(--t3); margin-top:10px; letter-spacing:.08em}
+
+.stamp{
+  margin:42px 0 0; display:inline-flex; align-items:center; gap:14px;
+  border:1px solid var(--line-2); border-radius:var(--r); padding:12px 16px;
+  background:#10141b; box-shadow:inset 0 1px 3px rgba(0,0,0,.4);
+}
+.stamp .k{font-size:8.5px; letter-spacing:.24em; color:var(--t3); text-transform:uppercase}
+.stamp .id{font-size:14px; color:var(--accent-text); letter-spacing:.06em}
+.stamp .r{font-size:14px; color:var(--t1); font-variant-numeric:tabular-nums; padding-left:14px; border-left:1px solid var(--line-1)}
+.stamp .no{font-family:var(--hand); font-size:12.5px; color:var(--t3); border-left:1px solid var(--line-1); padding-left:14px; max-width:30ch; line-height:1.5}
+
+/* two tanks */
+.tanks{display:flex; gap:34px; margin:54px 0 0; align-items:flex-end}
+.tank{width:150px}
+.tank .k{font-size:8.5px; letter-spacing:.24em; color:var(--t3); text-transform:uppercase; margin-bottom:14px}
+.tank .vessel{
+  height:104px; border:1px solid var(--line-2); border-radius:3px; background:#0e121a;
+  position:relative; overflow:hidden; box-shadow:inset 0 2px 6px rgba(0,0,0,.6);
+}
+.tank .vessel::after{
+  content:""; position:absolute; inset:0;
+  background-image:repeating-linear-gradient(0deg,rgba(255,255,255,.05) 0 1px,transparent 1px 13px);
+}
+.tank .fill{position:absolute; left:0; right:0; bottom:0; background:linear-gradient(180deg,rgba(110,231,168,.5),rgba(24,122,78,.32)); border-top:1px solid var(--ready-text); box-shadow:0 -6px 16px rgba(110,231,168,.2)}
+.tank.paid .fill{background:linear-gradient(180deg,rgba(165,165,240,.42),rgba(91,91,214,.22)); border-top-color:var(--accent-text); box-shadow:0 -6px 16px rgba(91,91,214,.22)}
+.tank .v{font-size:20px; font-variant-numeric:tabular-nums; color:var(--t1); margin-top:14px}
+.tank .v.nil{color:var(--t3)}
+.tank .u{font-size:11px; color:var(--t3); margin-left:5px}
+.tank .s{font-family:var(--hand); font-size:12.5px; color:var(--t3); margin-top:8px; line-height:1.5}
+.tankgap{width:1px; align-self:stretch; background:repeating-linear-gradient(180deg,var(--line-1) 0 4px,transparent 4px 9px); margin:0 4px}
+.tankscale{font-size:8.5px; letter-spacing:.2em; color:var(--t3); text-transform:uppercase; margin-top:24px}
+
+/* ── state strip ──────────────────────────────────────────────── */
+.states{display:grid; grid-template-columns:repeat(2,1fr); gap:18px}
+.st{
+  border:1px solid var(--line-1); border-radius:var(--r-lg); padding:24px 26px;
+  background:linear-gradient(180deg,#1a202b,#141922); box-shadow:var(--bezel);
+  min-height:168px; display:flex; flex-direction:column;
+}
+.st .nm{font-size:9px; letter-spacing:.28em; color:var(--t3); text-transform:uppercase; margin-bottom:20px}
+.st .body{flex:1; display:flex; flex-direction:column; justify-content:center}
+.st .msg{font-family:var(--hand); font-size:14.5px; line-height:1.66; color:var(--t2); max-width:44ch}
+.st .msg b{color:var(--t1); font-weight:600}
+.st .big{font-size:13px; letter-spacing:.2em; text-transform:uppercase; margin-bottom:12px}
+
+/* skeleton needle for loading */
+.ghostgauge{position:relative; height:38px; margin-bottom:18px}
+.ghosttrack{position:absolute; left:0; right:0; top:18px; height:2px; background:var(--line-1); border-radius:1px; overflow:hidden}
+.ghosttrack i{position:absolute; top:0; left:-38%; width:38%; height:100%; background:linear-gradient(90deg,transparent,var(--accent-text),transparent); animation:sweep 1.5s linear infinite; opacity:.65}
+@keyframes sweep{to{left:100%}}
+.ghostblk{position:absolute; top:6px; width:26px; height:22px; border:1px dashed var(--line-2); border-radius:3px; animation:hunt 2.6s ease-in-out infinite}
+@keyframes hunt{0%,100%{left:14%}50%{left:62%}}
+
+.st.err{border-color:rgba(201,58,46,.35)} .st.err .big{color:var(--crit-text)}
+.st.ref{border-color:rgba(255,255,255,.06)} .st.ref .big{color:var(--t3)}
+.st.stale{border-color:rgba(196,132,28,.35)} .st.stale .big{color:var(--em-text)}
+.st.empty .big{color:var(--t3)}
+.st .code{font-size:11px; color:var(--t3); letter-spacing:.08em; margin-top:16px}
+
+/* footer */
+.foot{margin-top:96px; padding-top:34px; border-top:1px solid var(--line-1)}
+.foot .h{font-size:10px; letter-spacing:.28em; color:var(--t3); text-transform:uppercase; margin-bottom:18px}
+.foot ul{margin:0; padding:0 0 0 20px; font-family:var(--hand); font-size:14.5px; line-height:1.78; color:var(--t2); max-width:76ch}
+.foot li{margin-bottom:9px}
+.foot code{font-family:var(--mono); font-size:12.5px; color:var(--accent-text)}
+.foot b{color:var(--t1); font-weight:600}
+
+@media (max-width:900px){
+  .shell{grid-template-columns:1fr}
+  .rail{border-right:0; border-bottom:1px solid var(--line-1); min-height:0}
+  .unset{grid-template-columns:1fr}
+  .states{grid-template-columns:1fr}
+  .stage{padding:38px 24px}
+  .ratio{font-size:62px}
+  .meter{grid-template-columns:1fr}
+  .mcell + .mcell{border-left:0; padding:26px 0 0; margin-top:26px; border-top:1px solid var(--line-1)}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none !important; transition:none !important}
+}
+</style>
+
+<div class="doc">
+<div class="wrap">
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="masthead">
+    <div class="eyebrow">Direction 3 &nbsp;·&nbsp; QuillMD Admin &nbsp;·&nbsp; 2026-09-09</div>
+    <h1>Instrument&nbsp;Panel<br><span class="dim">the shell, and the margin inside it</span></h1>
+    <p class="note">
+      <b>The idea:</b> the admin surface is a calibrated instrument, not a dashboard — a
+      handful of authoritative readouts, hard stops you can see, and a margin control whose
+      positions <b>are integer pairs</b>, so a decimal is never entered and never stored.
+      <b>Banned myself from</b> KPI card rows, grids, gradient heroes, donuts, sparklines,
+      emoji, any multi-panel &ldquo;everything at once&rdquo; layout, a chronological list as
+      the spine, and a practice data-grid; one subordinate table exists in the whole document
+      (the append-only history) and no screen state shows more than seven numeric readouts.
+      <span class="warn"><b>Token broken:</b></span> the radius scale. Shipped Rounds radii are
+      <code>9 / 12 / 18px</code>, which read as soft app cards; a machined faceplate needs
+      <code>5 / 7px</code>, so every corner here is tighter than the product's. It is one
+      variable — <code>--r</code> — and somebody should decide whether &ldquo;instrument&rdquo;
+      is worth a second radius scale before this ships. Colour, type and status vocabulary are
+      unbroken; <code>#5b5bd6</code> is used only as fill and edge, never as small text.
+    </p>
+  </div>
+
+  <!-- ══ PLATE 01 ═══════════════════════════════════════════════ -->
+  <section class="plate">
+    <div class="plate-hd"><span class="plate-no">PLATE 01</span>
+      <span class="plate-ti">The shell &nbsp;·&nbsp; Money selected &nbsp;·&nbsp; NO RATE CONFIGURED</span></div>
+    <p class="plate-cap">The state the platform is in right now, and the first screen a real operator sees.
+      The instrument is <em>unset</em>: the carrier is parked off-scale in its dock, the needle is a dashed
+      ghost, and the readout is two blanks rather than a zero — because zero is a position and this control
+      has none. The cause is stated in sentences, not in a grey box, and the consequence is the sentence
+      that matters: metering runs, nothing is charged.</p>
+
+    <div class="shell">
+      <nav class="rail">
+        <div class="rail-brand">
+          <div class="mk">QUILLMD&nbsp;/&nbsp;ADMIN</div>
+          <div class="sub">SUPER_ADMIN · K.RAYAT</div>
+        </div>
+        <div class="switch">
+          <span class="switch-track"></span>
+          <a class="pos" href="#"><i class="lamp"></i>Practices</a>
+          <a class="pos on" href="#"><i class="lamp"></i>Money</a>
+          <a class="pos" href="#"><i class="lamp"></i>Users</a>
+          <a class="pos" href="#"><i class="lamp"></i>Audit</a>
+        </div>
+        <div class="lampbank">
+          <div class="hd">SUBSYSTEMS</div>
+          <div class="lrow hl"><span class="dot"></span><span class="nm">Metering</span><span class="st">HEALTHY</span></div>
+          <div class="lrow dg"><span class="dot"></span><span class="nm">Ledger</span><span class="st">DEGRADED</span></div>
+          <div class="lrow dn"><span class="dot"></span><span class="nm">Wallet</span><span class="st">DOWN</span></div>
+        </div>
+      </nav>
+
+      <div class="panel">
+        <div class="panel-hd">
+          <span class="crumb">Money / <b>Margin</b></span>
+          <span class="chip env">PRODUCTION</span>
+          <span class="spacer"></span>
+          <span class="sess">ADMIN SESSION<span class="sessbar"><i style="width:31%"></i></span>FRESH</span>
+        </div>
+
+        <div class="stage tall">
+          <div class="inst-hd"><span>Platform margin</span><span class="rule"></span><span class="unarmed">NOT ARMED</span></div>
+
+          <div class="readout">
+            <div>
+              <div class="ratio-lab">stored value &nbsp;·&nbsp; numerator / denominator</div>
+              <div class="ratio off"><span class="n">&mdash;</span><span class="slash">&frasl;</span><span class="d">&mdash;</span></div>
+            </div>
+            <div class="derived">
+              <div class="val" style="color:var(--t3);opacity:.5">&mdash;.&mdash;&mdash;&times;</div>
+              <div class="tag">derived &nbsp;·&nbsp; display only</div>
+            </div>
+          </div>
+
+          <div class="gauge">
+            <div class="gauge-lab"><span>Calibrated scale &nbsp;·&nbsp; logarithmic in the quotient</span><span>DB CHECK &nbsp;1.0 &le; r &le; 5.0</span></div>
+            <div class="track">
+              <span class="zone" style="left:-40px;width:24px"></span>
+              <span class="zone" style="right:-40px;width:24px"></span>
+              <span class="tick stop" style="left:0%"><span class="mk"></span><span class="lab">1 &frasl; 1</span></span>
+              <span class="tick" style="left:11.33%"><span class="mk"></span><span class="lab">6 &frasl; 5</span></span>
+              <span class="tick" style="left:13.86%"><span class="mk"></span><span class="lab">5 &frasl; 4</span></span>
+              <span class="tick" style="left:17.87%"><span class="mk"></span><span class="lab">4 &frasl; 3</span></span>
+              <span class="tick" style="left:25.19%"><span class="mk"></span><span class="lab">3 &frasl; 2</span></span>
+              <span class="tick" style="left:31.74%"><span class="mk"></span><span class="lab">5 &frasl; 3</span></span>
+              <span class="tick" style="left:43.07%"><span class="mk"></span><span class="lab">2 &frasl; 1</span></span>
+              <span class="tick" style="left:56.93%"><span class="mk"></span><span class="lab">5 &frasl; 2</span></span>
+              <span class="tick" style="left:68.26%"><span class="mk"></span><span class="lab">3 &frasl; 1</span></span>
+              <span class="tick" style="left:77.84%"><span class="mk"></span><span class="lab">7 &frasl; 2</span></span>
+              <span class="tick" style="left:86.14%"><span class="mk"></span><span class="lab">4 &frasl; 1</span></span>
+              <span class="tick" style="left:93.45%"><span class="mk"></span><span class="lab">9 &frasl; 2</span></span>
+              <span class="tick stop" style="left:100%"><span class="mk"></span><span class="lab">5 &frasl; 1</span></span>
+              <span class="carrier docked" style="left:-34px"><span class="blk"></span><span class="ndl"></span></span>
+              <span class="stopcap l">hard stop</span>
+              <span class="stopcap r">hard stop</span>
+            </div>
+          </div>
+
+          <div class="unset">
+            <div class="cause">
+              <div class="hd">No rate configured</div>
+              <p><b>This is a refusal, and the cause is that nobody has set the margin yet.</b>
+                 <code style="font-family:var(--mono);font-size:13px;color:var(--accent-text)">platform_rates</code>
+                 is empty on purpose — seeding it would have made a migration the thing that set the price.</p>
+              <p>So the instrument has no position to read. Cost is being metered and recorded against every
+                 practice; no ledger row can stamp a rate, therefore no row can carry a charge, therefore no
+                 wallet has a balance to show. <b>Nothing is billing, and nothing will, until this control is
+                 moved to a position on purpose.</b></p>
+              <div class="facts">
+                <div class="fact"><div class="v zero">0</div><div class="k">rows in platform_rates</div></div>
+                <div class="fact"><div class="v">3</div><div class="k">practices metering cost</div></div>
+              </div>
+            </div>
+            <div class="armbox">
+              <div class="t">Arming the instrument</div>
+              <p>Writes the first row of <span style="font-family:var(--mono);color:var(--accent-text)">platform_rates</span>,
+                 effective at a future metering cycle. It does not charge anybody; it makes charging
+                 possible, and it is the decision this screen exists to make somebody take.</p>
+              <button class="btn">Set the margin</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ PLATE 02 ═══════════════════════════════════════════════ -->
+  <section class="plate">
+    <div class="plate-hd"><span class="plate-no">PLATE 02</span>
+      <span class="plate-ti">The shell &nbsp;·&nbsp; Money &nbsp;·&nbsp; armed, rate in effect</span></div>
+    <p class="plate-cap">The same instrument with a position. Six readouts on the whole screen. The needle sits
+      <em>on a detent</em> — never between two — because every position on this scale is a pair of integers.
+      The lamps in the rail now agree with the instrument: a ledger that can stamp a rate is a ledger that works.</p>
+
+    <div class="shell">
+      <nav class="rail">
+        <div class="rail-brand">
+          <div class="mk">QUILLMD&nbsp;/&nbsp;ADMIN</div>
+          <div class="sub">SUPER_ADMIN · K.RAYAT</div>
+        </div>
+        <div class="switch">
+          <span class="switch-track"></span>
+          <a class="pos" href="#"><i class="lamp"></i>Practices</a>
+          <a class="pos on" href="#"><i class="lamp"></i>Money</a>
+          <a class="pos" href="#"><i class="lamp"></i>Users</a>
+          <a class="pos" href="#"><i class="lamp"></i>Audit</a>
+        </div>
+        <div class="lampbank">
+          <div class="hd">SUBSYSTEMS</div>
+          <div class="lrow hl"><span class="dot"></span><span class="nm">Metering</span><span class="st">HEALTHY</span></div>
+          <div class="lrow hl"><span class="dot"></span><span class="nm">Ledger</span><span class="st">HEALTHY</span></div>
+          <div class="lrow hl"><span class="dot"></span><span class="nm">Wallet</span><span class="st">HEALTHY</span></div>
+        </div>
+      </nav>
+
+      <div class="panel">
+        <div class="panel-hd">
+          <span class="crumb">Money / <b>Margin</b></span>
+          <span class="chip env">PRODUCTION</span>
+          <span class="spacer"></span>
+          <span class="sess">ADMIN SESSION<span class="sessbar"><i style="width:31%"></i></span>FRESH</span>
+        </div>
+
+        <div class="stage tall">
+          <div class="inst-hd"><span>Platform margin</span><span class="rule"></span><span class="armed">IN EFFECT SINCE 2026-10-01T00:00Z</span></div>
+
+          <div class="readout">
+            <div>
+              <div class="ratio-lab">stored value &nbsp;·&nbsp; numerator / denominator</div>
+              <div class="ratio"><span class="n">3</span><span class="slash">&frasl;</span><span class="d">2</span></div>
+            </div>
+            <div class="derived">
+              <div class="val">1.50&times;</div>
+              <div class="tag">derived &nbsp;·&nbsp; <b>display only</b>, never stored</div>
+            </div>
+          </div>
+
+          <div class="gauge">
+            <div class="gauge-lab"><span>Calibrated scale &nbsp;·&nbsp; logarithmic in the quotient</span><span>DB CHECK &nbsp;1.0 &le; r &le; 5.0</span></div>
+            <div class="track">
+              <span class="zone" style="left:-40px;width:24px"></span>
+              <span class="zone" style="right:-40px;width:24px"></span>
+              <span class="tick stop" style="left:0%"><span class="mk"></span><span class="lab">1 &frasl; 1</span></span>
+              <span class="tick" style="left:11.33%"><span class="mk"></span><span class="lab">6 &frasl; 5</span></span>
+              <span class="tick" style="left:13.86%"><span class="mk"></span><span class="lab">5 &frasl; 4</span></span>
+              <span class="tick" style="left:17.87%"><span class="mk"></span><span class="lab">4 &frasl; 3</span></span>
+              <span class="tick cur" style="left:25.19%"><span class="mk"></span><span class="lab">3 &frasl; 2</span></span>
+              <span class="tick" style="left:31.74%"><span class="mk"></span><span class="lab">5 &frasl; 3</span></span>
+              <span class="tick" style="left:43.07%"><span class="mk"></span><span class="lab">2 &frasl; 1</span></span>
+              <span class="tick" style="left:56.93%"><span class="mk"></span><span class="lab">5 &frasl; 2</span></span>
+              <span class="tick" style="left:68.26%"><span class="mk"></span><span class="lab">3 &frasl; 1</span></span>
+              <span class="tick" style="left:77.84%"><span class="mk"></span><span class="lab">7 &frasl; 2</span></span>
+              <span class="tick" style="left:86.14%"><span class="mk"></span><span class="lab">4 &frasl; 1</span></span>
+              <span class="tick" style="left:93.45%"><span class="mk"></span><span class="lab">9 &frasl; 2</span></span>
+              <span class="tick stop" style="left:100%"><span class="mk"></span><span class="lab">5 &frasl; 1</span></span>
+              <span class="carrier" style="left:25.19%"><span class="blk"></span><span class="ndl"></span></span>
+              <span class="stopcap l">hard stop</span>
+              <span class="stopcap r">hard stop</span>
+            </div>
+          </div>
+
+          <div class="notefield" style="margin-top:74px">
+            <div class="lab">Operator note on the row in effect</div>
+            <div class="box">Opening margin for the pilot roster of three. Chosen as a ratio a person can
+              hold in their head &mdash; three charged for every two spent &mdash; rather than a number that
+              happens to round well.</div>
+          </div>
+
+          <div class="commitbar">
+            <span class="say">Read-only. Changing the margin never edits this row; it appends a new one.</span>
+            <button class="btn ghost">Change the margin</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ PLATE 03 ═══════════════════════════════════════════════ -->
+  <section class="plate">
+    <div class="plate-hd"><span class="plate-no">PLATE 03</span>
+      <span class="plate-ti">The rate editor &nbsp;·&nbsp; live &mdash; click a detent, or step the integers</span></div>
+    <p class="plate-cap"><em>This one works.</em> The hard part of this direction was that a ratio is two
+      integers while the bound is on the quotient. It is solved by never accepting a decimal anywhere:
+      the coarse control is a ladder of detents, each of which <em>is</em> a pair; the fine control is two
+      integer steppers. The quotient is computed for the eye and for the CHECK, and it is labelled as derived.
+      Step the numerator past <em>5&thinsp;/&thinsp;1</em> and the carrier pins against the stop and the panel
+      refuses &mdash; you can feel where the range ends.</p>
+
+    <div class="shell panel-only">
+      <div class="panel">
+        <div class="panel-hd">
+          <span class="crumb">Money / Margin / <b>Change</b></span>
+          <span class="chip env">PRODUCTION</span>
+          <span class="chip">APPEND ONLY</span>
+          <span class="spacer"></span>
+          <span class="sess">ADMIN SESSION<span class="sessbar"><i style="width:31%"></i></span>FRESH</span>
+        </div>
+
+        <div class="stage tall">
+          <div class="inst-hd"><span>Set platform margin</span><span class="rule"></span><span id="hdState" class="armed">WITHIN RANGE</span></div>
+
+          <div class="readout">
+            <div>
+              <div class="ratio-lab">stored value &nbsp;·&nbsp; numerator / denominator</div>
+              <div class="ratio" id="ratio"><span class="n" id="rn">3</span><span class="slash">&frasl;</span><span class="d" id="rd">2</span></div>
+              <div class="ratio-lab" id="lowest" style="margin-top:16px;opacity:0">&nbsp;</div>
+            </div>
+            <div class="derived">
+              <div class="val" id="dec">1.50&times;</div>
+              <div class="tag">derived &nbsp;·&nbsp; <b>display only</b>, never stored</div>
+            </div>
+          </div>
+
+          <div class="gauge">
+            <div class="gauge-lab"><span>Calibrated scale &nbsp;·&nbsp; logarithmic in the quotient</span><span>DB CHECK &nbsp;1.0 &le; r &le; 5.0</span></div>
+            <div class="track" id="track">
+              <span class="zone" style="left:-40px;width:24px"></span>
+              <span class="zone" style="right:-40px;width:24px"></span>
+              <span class="tick stop" data-n="1" data-d="1" style="left:0%"><span class="mk"></span><span class="lab">1 &frasl; 1</span></span>
+              <span class="tick" data-n="6" data-d="5" style="left:11.33%"><span class="mk"></span><span class="lab">6 &frasl; 5</span></span>
+              <span class="tick" data-n="5" data-d="4" style="left:13.86%"><span class="mk"></span><span class="lab">5 &frasl; 4</span></span>
+              <span class="tick" data-n="4" data-d="3" style="left:17.87%"><span class="mk"></span><span class="lab">4 &frasl; 3</span></span>
+              <span class="tick" data-n="3" data-d="2" style="left:25.19%"><span class="mk"></span><span class="lab">3 &frasl; 2</span></span>
+              <span class="tick" data-n="5" data-d="3" style="left:31.74%"><span class="mk"></span><span class="lab">5 &frasl; 3</span></span>
+              <span class="tick" data-n="2" data-d="1" style="left:43.07%"><span class="mk"></span><span class="lab">2 &frasl; 1</span></span>
+              <span class="tick" data-n="5" data-d="2" style="left:56.93%"><span class="mk"></span><span class="lab">5 &frasl; 2</span></span>
+              <span class="tick" data-n="3" data-d="1" style="left:68.26%"><span class="mk"></span><span class="lab">3 &frasl; 1</span></span>
+              <span class="tick" data-n="7" data-d="2" style="left:77.84%"><span class="mk"></span><span class="lab">7 &frasl; 2</span></span>
+              <span class="tick" data-n="4" data-d="1" style="left:86.14%"><span class="mk"></span><span class="lab">4 &frasl; 1</span></span>
+              <span class="tick" data-n="9" data-d="2" style="left:93.45%"><span class="mk"></span><span class="lab">9 &frasl; 2</span></span>
+              <span class="tick stop" data-n="5" data-d="1" style="left:100%"><span class="mk"></span><span class="lab">5 &frasl; 1</span></span>
+              <span class="carrier" id="carrier" style="left:25.19%"><span class="blk"></span><span class="ndl"></span></span>
+              <span class="stopcap l">hard stop</span>
+              <span class="stopcap r">hard stop</span>
+            </div>
+          </div>
+
+          <div class="fine">
+            <div class="stepper">
+              <div class="lab">Numerator</div>
+              <div class="body">
+                <button type="button" data-act="n-" aria-label="numerator down">&minus;</button>
+                <span class="n" id="sn">3</span>
+                <button type="button" data-act="n+" aria-label="numerator up">+</button>
+              </div>
+              <div class="hint">whole number &nbsp;·&nbsp; the <b style="color:var(--t2);font-weight:400">quotient</b> is what is bounded</div>
+            </div>
+            <div class="stepper">
+              <div class="lab">Denominator</div>
+              <div class="body">
+                <button type="button" data-act="d-" aria-label="denominator down">&minus;</button>
+                <span class="n" id="sd">2</span>
+                <button type="button" data-act="d+" aria-label="denominator up">+</button>
+              </div>
+              <div class="hint">whole number &nbsp;·&nbsp; the <b style="color:var(--t2);font-weight:400">quotient</b> is what is bounded</div>
+            </div>
+            <div class="verdict" id="verdict" role="status" aria-live="polite">
+              <span class="hd">Bound check</span>
+              <span id="verdictText">3 &divide; 2 = 1.50 &nbsp;&mdash;&nbsp; WITHIN 1.0 &le; r &le; 5.0</span>
+              <span class="src">CHECK (margin_num::numeric / margin_den BETWEEN 1.0 AND 5.0)</span>
+            </div>
+          </div>
+
+          <div class="timerail">
+            <div class="trhd">Effective from &nbsp;·&nbsp; forward only</div>
+            <div class="tstop">
+              <span class="bar"></span>
+              <span class="txt">&larr; retroactive &mdash; mechanically unreachable</span>
+              <span class="sub">A rate applies to a metering cycle, and cycles that have closed are stamped.</span>
+            </div>
+            <div class="tslot on"><span class="rd"></span><span class="ts">2026-10-01T00:00Z</span><span class="why">next metering cycle</span></div>
+            <div class="tslot"><span class="rd"></span><span class="ts">2026-11-01T00:00Z</span><span class="why">cycle after next</span></div>
+            <div class="tslot"><span class="rd"></span><span class="ts">2026-12-01T00:00Z</span><span class="why">later</span></div>
+          </div>
+
+          <div class="notefield">
+            <div class="lab">Note &nbsp;·&nbsp; why &nbsp;·&nbsp; free text, stored with the row</div>
+            <div class="box">Model cost rose after the FY26 price change, and the pilot roster is still three
+              practices.<span class="cur"></span></div>
+          </div>
+
+          <div class="commitbar">
+            <span class="say">Appends a row. Nothing is updated, nothing is recomputed, and no existing
+              ledger row changes &mdash; each already carries the rate id it used.</span>
+            <button class="btn" id="commit">Append row</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ PLATE 04 ═══════════════════════════════════════════════ -->
+  <section class="plate">
+    <div class="plate-hd"><span class="plate-no">PLATE 04</span>
+      <span class="plate-ti">Refused at the stop &nbsp;·&nbsp; 6 &frasl; 1</span></div>
+    <p class="plate-cap">The same panel, drawn statically at the moment the quotient leaves the range. The
+      integers are still legal integers; it is their <em>quotient</em> that the CHECK rejects, and the design
+      says exactly that. The carrier is pinned against the physical stop rather than travelling off-scale,
+      so the refusal is visible in the instrument before it is read in words.</p>
+
+    <div class="shell panel-only">
+      <div class="panel">
+        <div class="panel-hd">
+          <span class="crumb">Money / Margin / <b>Change</b></span>
+          <span class="chip env">PRODUCTION</span>
+          <span class="spacer"></span>
+          <span class="sess">ADMIN SESSION<span class="sessbar"><i style="width:31%"></i></span>FRESH</span>
+        </div>
+        <div class="stage">
+          <div class="inst-hd"><span>Set platform margin</span><span class="rule"></span><span style="color:var(--crit-text);letter-spacing:.2em">OUT OF RANGE</span></div>
+
+          <div class="readout">
+            <div>
+              <div class="ratio-lab">stored value &nbsp;·&nbsp; numerator / denominator</div>
+              <div class="ratio refused"><span class="n">6</span><span class="slash" style="color:var(--crit-text);opacity:.5">&frasl;</span><span class="d">1</span></div>
+            </div>
+            <div class="derived">
+              <div class="val refused">6.00&times;</div>
+              <div class="tag">derived &nbsp;·&nbsp; the quotient, not the integers, is out of bounds</div>
+            </div>
+          </div>
+
+          <div class="gauge">
+            <div class="gauge-lab"><span>Calibrated scale</span><span>DB CHECK &nbsp;1.0 &le; r &le; 5.0</span></div>
+            <div class="track">
+              <span class="zone" style="left:-40px;width:24px"></span>
+              <span class="zone" style="right:-40px;width:24px"></span>
+              <span class="tick stop" style="left:0%"><span class="mk"></span><span class="lab">1 &frasl; 1</span></span>
+              <span class="tick" style="left:25.19%"><span class="mk"></span><span class="lab">3 &frasl; 2</span></span>
+              <span class="tick" style="left:43.07%"><span class="mk"></span><span class="lab">2 &frasl; 1</span></span>
+              <span class="tick" style="left:68.26%"><span class="mk"></span><span class="lab">3 &frasl; 1</span></span>
+              <span class="tick" style="left:86.14%"><span class="mk"></span><span class="lab">4 &frasl; 1</span></span>
+              <span class="tick stop" style="left:100%"><span class="mk"></span><span class="lab">5 &frasl; 1</span></span>
+              <span class="carrier refused" style="left:100%"><span class="blk"></span><span class="ndl"></span></span>
+              <span class="stopcap l">hard stop</span>
+              <span class="stopcap r" style="color:var(--crit-text)">pinned</span>
+            </div>
+          </div>
+
+          <div class="fine">
+            <div class="verdict bad" style="max-width:640px">
+              <span class="hd">Refused</span>
+              6 &divide; 1 = 6.00 &nbsp;&mdash;&nbsp; ABOVE THE UPPER BOUND 5.0
+              <span class="src">CHECK (margin_num::numeric / margin_den BETWEEN 1.0 AND 5.0) &nbsp;·&nbsp; the row is not written</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ PLATE 05 ═══════════════════════════════════════════════ -->
+  <section class="plate">
+    <div class="plate-hd"><span class="plate-no">PLATE 05</span>
+      <span class="plate-ti">History &nbsp;·&nbsp; append-only &nbsp;·&nbsp; a later state</span></div>
+    <p class="plate-cap">The one table in this direction, and it is deliberately subordinate &mdash; it lives
+      under the instrument, not beside it. <em>Insert-never-update,</em> so it reads as a list of things that
+      happened and never as a diff of a thing that changed: every row carries its own id and its own note, and
+      the first row records the arming, from nothing. Shown here as it would look after three changes; today
+      this table has no rows at all.</p>
+
+    <div class="shell panel-only">
+      <div class="panel">
+        <div class="panel-hd">
+          <span class="crumb">Money / Margin / <b>History</b></span>
+          <span class="spacer"></span>
+          <span class="chip">platform_rates</span>
+        </div>
+        <div class="stage">
+          <div class="histwrap">
+            <div class="append"><span class="pill">INSERT ONLY</span><span>no row here has ever been edited or deleted</span></div>
+            <table>
+              <thead><tr><th>When</th><th>Who changed it</th><th>From &rarr; to</th><th>Note</th><th></th></tr></thead>
+              <tbody>
+                <tr>
+                  <td class="when">2027-01-04T08:00:02Z</td>
+                  <td class="who">a.okafor</td>
+                  <td class="mv"><span class="from">5 &frasl; 3</span><span class="arw">&rarr;</span>3 &frasl; 2</td>
+                  <td class="why">Reverted. The cost increase was absorbed by cache hits within two cycles, so the higher margin was no longer earning anything.</td>
+                  <td class="id">RATE-0003</td>
+                </tr>
+                <tr>
+                  <td class="when">2026-11-01T09:17:40Z</td>
+                  <td class="who">k.rayat</td>
+                  <td class="mv"><span class="from">3 &frasl; 2</span><span class="arw">&rarr;</span>5 &frasl; 3</td>
+                  <td class="why">Model cost rose after the FY26 price change. Chosen as five for every three rather than a rounder decimal, because the ratio is what is stored.</td>
+                  <td class="id">RATE-0002</td>
+                </tr>
+                <tr>
+                  <td class="when">2026-09-09T14:02:11Z</td>
+                  <td class="who">k.rayat</td>
+                  <td class="mv"><span class="none">not set</span><span class="arw">&rarr;</span>3 &frasl; 2</td>
+                  <td class="why">Opening margin; pilot roster of three. Arming the instrument &mdash; before this row nothing could be charged.</td>
+                  <td class="id">RATE-0001</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ PLATE 06 ═══════════════════════════════════════════════ -->
+  <section class="plate">
+    <div class="plate-hd"><span class="plate-no">PLATE 06</span>
+      <span class="plate-ti">Per practice &nbsp;·&nbsp; one channel at a time</span></div>
+    <p class="plate-cap">Not a grid of practices &mdash; a channel selector and one set of readings, read
+      precisely. Five numbers on the screen. <em>The rate that applied is a stamp, not arithmetic:</em> the
+      panel prints the <code style="font-family:var(--mono);color:var(--accent-text)">platform_rates</code>
+      id the ledger row carried and the pair that row held, and it never multiplies anything, because a screen
+      that re-multiplies is a second implementation of the rate. And the wallet is two vessels with a gap
+      between them &mdash; promo and paid never become one number.</p>
+
+    <div class="shell panel-only">
+      <div class="panel">
+        <div class="panel-hd">
+          <span class="crumb">Money / <b>Per practice</b></span>
+          <span class="spacer"></span>
+          <span class="chip">CYCLE 2026-10</span>
+        </div>
+        <div class="stage tall">
+          <div class="chan">
+            <a class="on" href="#"><span class="d"></span>Northlake Vein &amp; Vascular</a>
+            <a href="#"><span class="d"></span>Cedar Mesa Imaging</a>
+            <a href="#"><span class="d"></span>Harborview Internal Medicine</a>
+          </div>
+
+          <div class="meter">
+            <div class="mcell">
+              <div class="k">Cost &nbsp;·&nbsp; metered</div>
+              <div class="v">2,412,000<span class="u">&micro;$</span></div>
+              <div class="s">what the models cost us this cycle</div>
+            </div>
+            <div class="mcell">
+              <div class="k">Charge &nbsp;·&nbsp; ledger</div>
+              <div class="v">3,618,000<span class="u">&micro;$</span></div>
+              <div class="s">as written by the ledger, not recomputed here</div>
+            </div>
+          </div>
+
+          <div class="stamp">
+            <span class="k">Rate that applied</span>
+            <span class="id">RATE-0001</span>
+            <span class="r">3 &frasl; 2</span>
+            <span class="no">Stamped on every ledger row at the moment it was written.</span>
+          </div>
+
+          <div class="tanks">
+            <div class="tank">
+              <div class="k">Promo balance</div>
+              <div class="vessel"><span class="fill" style="height:27.64%"></span></div>
+              <div class="v">1,382,000<span class="u">&micro;$</span></div>
+              <div class="s">granted credit, drawn first</div>
+            </div>
+            <div class="tankgap"></div>
+            <div class="tank paid">
+              <div class="k">Paid balance</div>
+              <div class="vessel"><span class="fill" style="height:0%"></span></div>
+              <div class="v nil">0<span class="u">&micro;$</span></div>
+              <div class="s">no top-up on this account</div>
+            </div>
+          </div>
+          <div class="tankscale">both vessels &nbsp;·&nbsp; scale 0 &ndash; 5,000,000 &micro;$ &nbsp;·&nbsp; &micro;$ = 10&#8315;&#8310; USD</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ PLATE 07 ═══════════════════════════════════════════════ -->
+  <section class="plate">
+    <div class="plate-hd"><span class="plate-no">PLATE 07</span>
+      <span class="plate-ti">The remaining states</span></div>
+    <p class="plate-cap">Every one of them is the instrument saying something specific about itself. Loading is
+      a needle hunting for a position; empty is a scale with no channels on it; refused is the panel declining
+      to admit the route exists at all, which is what a 404-gate means.</p>
+
+    <div class="states">
+      <div class="st">
+        <div class="nm">Loading</div>
+        <div class="body">
+          <div class="ghostgauge"><span class="ghostblk"></span><span class="ghosttrack"><i></i></span></div>
+          <div class="msg">The needle is hunting. No number is shown while it is moving &mdash; a
+            half-settled instrument is worse than a blank one.</div>
+        </div>
+      </div>
+
+      <div class="st empty">
+        <div class="nm">Empty</div>
+        <div class="body">
+          <div class="big">No practices metering</div>
+          <div class="msg">The scale is calibrated and armed; there is nothing on it yet. Distinct from
+            <b>no rate configured</b>, which is the control having no position.</div>
+        </div>
+      </div>
+
+      <div class="st err">
+        <div class="nm">Error</div>
+        <div class="body">
+          <div class="big">Reading unavailable</div>
+          <div class="msg">The metering store did not answer. <b>No value is shown, and no stale value is
+            shown either</b> &mdash; an instrument that keeps displaying its last reading is the failure this
+            panel exists to avoid.</div>
+          <div class="code">RETRY &nbsp;·&nbsp; trace 7f2a1c9e</div>
+        </div>
+      </div>
+
+      <div class="st ref">
+        <div class="nm">Refused &nbsp;·&nbsp; 403 / 404-gated</div>
+        <div class="body">
+          <div class="big">Not found</div>
+          <div class="msg">Entitlement is re-read per request and the route answers <b>404, not 403</b>, so
+            its existence is never disclosed. There is no panel to draw here, and drawing one that says
+            &ldquo;forbidden&rdquo; would leak the thing the gate is hiding.</div>
+        </div>
+      </div>
+
+      <div class="st stale" style="grid-column:1 / -1">
+        <div class="nm">Stale &nbsp;·&nbsp; admin session older than 12h</div>
+        <div class="body">
+          <div class="big">Session past 12h &mdash; controls locked, readings still shown</div>
+          <div class="msg">Readouts stay legible because reading is not the risk. Every control is dead until
+            re-authentication: the carrier will not move, the steppers do not respond, and
+            <b>Append row</b> is inert.</div>
+          <div style="display:flex;align-items:center;gap:18px;margin-top:22px;flex-wrap:wrap">
+            <span class="sess" style="font-size:10px">ADMIN SESSION<span class="sessbar bad"><i style="width:100%"></i></span>12h 41m &mdash; EXPIRED</span>
+            <button class="btn" style="width:auto;padding:11px 22px">Re-authenticate</button>
+            <button class="btn ghost" style="width:auto;padding:11px 22px" disabled>Append row</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ closing ════════════════════════════════════════════════ -->
+  <div class="foot">
+    <div class="h">Designer's notes carried forward</div>
+    <ul>
+      <li><b>The ratio problem, solved without a decimal anywhere.</b> The input space is
+        <code>&#8484; &times; &#8484;&#8314;</code>; the constraint is on <code>&#8474;</code>. So the coarse
+        control is a <b>ladder of detents that are themselves integer pairs</b>, the fine control is two
+        integer steppers, and the quotient exists only as a derived readout and as the CHECK's argument.
+        There is no continuous slider and no numeric field that would accept <code>1.5</code>.</li>
+      <li><b>The scale is logarithmic in the quotient</b> and says so. On a linear scale everything useful
+        would crowd into the first eighth of the rail; on a log scale <code>3/2</code> lands at 25% and
+        <code>2/1</code> at 43%, which is where the operator actually works.</li>
+      <li><b>Two hard stops, one visual language.</b> The bounds are physical end caps with hatched
+        out-of-range stubs beyond them; &ldquo;retroactive&rdquo; on the effective-from rail is drawn as the
+        same kind of stop. Both are things the mechanism will not do, and they look alike on purpose.</li>
+      <li><b>Health uses the shipped words only</b> &mdash; <code>HEALTHY&nbsp;·&nbsp;DEGRADED&nbsp;·&nbsp;DOWN</code>,
+        as three lamps on the faceplate edge. In the unset state they tell the same story the instrument does:
+        metering HEALTHY, ledger DEGRADED, wallet DOWN.</li>
+      <li><b>One token broken:</b> radius. <code>--r: 5px</code> and <code>--r-lg: 7px</code> against the
+        shipped <code>9 / 12 / 18px</code>. The softer scale reads as an app card and undoes the machined
+        feeling that carries this whole direction. It is one variable to revert if the answer is no.</li>
+      <li><b>Not decided here, and it is a real question:</b> whether <code>&micro;$</code> is the unit an
+        operator should read, or whether the panel should also print dollars. This direction shows
+        <code>&micro;$</code> only, with the conversion engraved once, because every additional derived number
+        is a place the screen and the ledger can disagree.</li>
+    </ul>
+  </div>
+
+</div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var LN5 = Math.log(5);
+  var track = document.getElementById('track');
+  if (!track) { return; }
+
+  var num = 3, den = 2;
+
+  var elCarrier = document.getElementById('carrier');
+  var elRn = document.getElementById('rn'), elRd = document.getElementById('rd');
+  var elSn = document.getElementById('sn'), elSd = document.getElementById('sd');
+  var elRatio = document.getElementById('ratio');
+  var elDec = document.getElementById('dec');
+  var elLowest = document.getElementById('lowest');
+  var elVerdict = document.getElementById('verdict');
+  var elVerdictText = document.getElementById('verdictText');
+  var elHdState = document.getElementById('hdState');
+  var elCommit = document.getElementById('commit');
+  var ticks = track.querySelectorAll('.tick');
+
+  function gcd(a, b) { while (b) { var t = a % b; a = b; b = t; } return a; }
+
+  function posOf(r) {
+    var p = Math.log(r) / LN5;
+    if (p < 0) { p = 0; }
+    if (p > 1) { p = 1; }
+    return p * 100;
+  }
+
+  function fmt2(x) { return (Math.round(x * 100) / 100).toFixed(2); }
+
+  function render() {
+    var r = num / den;
+    var inRange = (r >= 1 && r <= 5);
+
+    elRn.textContent = String(num);
+    elRd.textContent = String(den);
+    elSn.textContent = String(num);
+    elSd.textContent = String(den);
+
+    elCarrier.style.left = posOf(r) + '%';
+    elCarrier.className = inRange ? 'carrier' : 'carrier refused';
+    elRatio.className = inRange ? 'ratio' : 'ratio refused';
+    elDec.className = inRange ? 'val' : 'val refused';
+    elDec.innerHTML = fmt2(r) + '&times;';
+
+    var g = gcd(num, den);
+    if (g > 1) {
+      elLowest.innerHTML = 'lowest terms &nbsp;' + (num / g) + ' &frasl; ' + (den / g) +
+        ' &nbsp;·&nbsp; stored exactly as entered';
+      elLowest.style.opacity = '1';
+    } else {
+      elLowest.innerHTML = '&nbsp;';
+      elLowest.style.opacity = '0';
+    }
+
+    for (var i = 0; i < ticks.length; i++) {
+      var t = ticks[i];
+      var tn = parseInt(t.getAttribute('data-n'), 10);
+      var td = parseInt(t.getAttribute('data-d'), 10);
+      var on = inRange && (tn * den === num * td);
+      if (on) { t.classList.add('cur'); } else { t.classList.remove('cur'); }
+    }
+
+    if (inRange) {
+      elVerdict.className = 'verdict';
+      elVerdictText.innerHTML = num + ' &divide; ' + den + ' = ' + fmt2(r) +
+        ' &nbsp;&mdash;&nbsp; WITHIN 1.0 &le; r &le; 5.0';
+      elHdState.removeAttribute('style');
+      elHdState.className = 'armed';
+      elHdState.textContent = 'WITHIN RANGE';
+      elCommit.disabled = false;
+      elCommit.textContent = 'Append row';
+    } else {
+      elVerdict.className = 'verdict bad';
+      elVerdictText.innerHTML = num + ' &divide; ' + den + ' = ' + fmt2(r) +
+        ' &nbsp;&mdash;&nbsp; ' + (r > 5 ? 'ABOVE THE UPPER BOUND 5.0' : 'BELOW THE LOWER BOUND 1.0');
+      elHdState.className = '';
+      elHdState.setAttribute('style', 'color:var(--crit-text);letter-spacing:.2em');
+      elHdState.textContent = 'OUT OF RANGE';
+      elCommit.disabled = true;
+      elCommit.textContent = 'Refused by CHECK';
+    }
+  }
+
+  function clamp99(v) { return v < 1 ? 1 : (v > 99 ? 99 : v); }
+
+  document.addEventListener('click', function (ev) {
+    var btn = ev.target.closest ? ev.target.closest('button[data-act]') : null;
+    if (btn) {
+      var a = btn.getAttribute('data-act');
+      if (a === 'n+') { num = clamp99(num + 1); }
+      if (a === 'n-') { num = clamp99(num - 1); }
+      if (a === 'd+') { den = clamp99(den + 1); }
+      if (a === 'd-') { den = clamp99(den - 1); }
+      render();
+      return;
+    }
+    var tk = ev.target.closest ? ev.target.closest('#track .tick') : null;
+    if (tk && tk.getAttribute('data-n')) {
+      ev.preventDefault();
+      num = parseInt(tk.getAttribute('data-n'), 10);
+      den = parseInt(tk.getAttribute('data-d'), 10);
+      render();
+    }
+  });
+
+  render();
+})();
+</script>
