@@ -18,6 +18,11 @@ import {
 } from '@meddoc/auth';
 
 import { asPracticeId, asUserId, type PracticeId, type UserId } from '@/lib/practice-scope';
+import {
+  PracticeHostRefusedError,
+  assertHostAdmitsPractice,
+  practiceHostRoutingEnabled,
+} from '@/lib/practice-host';
 
 export { AuthError };
 export type { UserRole };
@@ -108,6 +113,16 @@ export async function getSession(): Promise<ScopedSession | null> {
 
     if (!role || !practiceId) return null;
 
+    // ⚠️ ADMIN-2 (#196) — ON A PRACTICE HOST, THE HOST'S PRACTICE MUST BE THE
+    // USER'S. Checked AFTER the database re-read above, so it compares against
+    // the practice the user is in NOW, not the one the token was minted with.
+    // A mismatch throws `PracticeHostRefusedError` — by name, never `null`,
+    // which every caller would read as "signed out". The flag is checked FIRST:
+    // with it off, no header is read and no practice is queried.
+    if (practiceHostRoutingEnabled()) {
+      await assertHostAdmitsPractice(practiceId, nextAuthSession.user.id);
+    }
+
     // ⚠️ THE ONE PLACE THE BRANDS ARE MINTED. `asPracticeId` refuses an empty
     // value, so a `PracticeId` anywhere downstream is a real, non-empty practice
     // — the accessor's runtime guard becomes a boundary check rather than a
@@ -135,6 +150,9 @@ export async function getSession(): Promise<ScopedSession | null> {
     // the arm in `auth-failopen-observability`, which asserted a rejection and
     // got `null`.
     if (err instanceof SessionUnverifiableError) throw err;
+    // ADMIN-2 — the same trap, the same cure: a host refusal eaten here would
+    // read as "signed out" and bounce to a /login the same host refuses again.
+    if (err instanceof PracticeHostRefusedError) throw err;
     return null;
   }
 }
