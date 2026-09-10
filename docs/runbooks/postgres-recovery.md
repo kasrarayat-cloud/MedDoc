@@ -108,13 +108,26 @@ docker compose stop postgres
 sleep 5
 docker compose ps postgres   # confirm "Exited"
 
-# 2. Run a one-shot postgres in single-user mode against the same data volume.
-#    The volume name is meddoc-pro_pgdata (check with `docker volume ls`).
+# 2. Run a one-shot postgres in single-user mode against the SAME data volume the
+#    live container mounts. RESOLVE it from the container; never type it from memory
+#    (inspect works on a stopped container):
+PGVOL=$(docker inspect meddoc-pro-postgres-1 \
+  --format '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/data"}}{{.Name}}{{end}}{{end}}')
+echo "$PGVOL"   # measured 2026-09-10: meddoc-pro_pgdata_encrypted
+#
+#    ⚠️ NOT `meddoc-pro_pgdata`. This runbook named that volume until 2026-09-10,
+#    and it is an ORPHANED, PRE-ENCRYPTION, PLAINTEXT Postgres 16 cluster from
+#    April 2026. Nothing mounts it (docs/qa-reports/vps-deep-clean-20260515.md,
+#    headline #2; still undecided). Pointed at it, this step "repairs" a database
+#    that is not production, and production stays broken.
+#
+#    PGDATA is the volume ROOT (/var/lib/postgresql/data, read from the
+#    container's env on 2026-09-10), not a pgdata/ subdirectory.
 docker run --rm -it \
   --user 999:999 \
-  -v meddoc-pro_pgdata:/var/lib/postgresql/data \
+  -v "$PGVOL":/var/lib/postgresql/data \
   pgvector/pgvector:pg16 \
-  postgres --single -D /var/lib/postgresql/data/pgdata meddoc
+  postgres --single -D /var/lib/postgresql/data meddoc
 
 # Inside the single-user backend prompt (looks like "PostgreSQL stand-alone backend 16.13" then "backend>"):
 backend> ALTER ROLE meddoc LOGIN;
