@@ -248,6 +248,20 @@ export function costMicroUsd(quantity: Quantity, rate: PriceRateRow): bigint {
  * rounding is a DISPLAY concern and appears nowhere in this path.
  */
 export function chargeMicroUsd(costMicro: bigint, margin: MarginRate): bigint {
+  // ⚠️ ROUND 6 — A MISSING MARGIN REFUSES **BY NAME**, NOT BY ACCIDENT. It used
+  // to throw only because `isUsableMargin` dereferenced `null` — a TypeError
+  // nobody designed. And round 5's arity arm (`fn.length === 2`) is defeated by
+  // a one-line body fallback: `margin = margin ?? {3/2}` keeps the signature,
+  // the length and every source grep, and `chargeMicroUsd(1000n, null)` then
+  // returns 1500n — a rate nobody configured, from the public barrel. A caller
+  // spelling `chargeMicroUsd(cost, (await marginAt(at))!)` is tsc-clean and
+  // passes exactly that null. The refusal is DRIVEN by a behavioural arm
+  // (`gate-admin4-margin-readers.test.ts`), because only a call can see a body.
+  if (margin === null || margin === undefined) {
+    throw new Error(
+      'chargeMicroUsd: no margin supplied — #178: a missing multiplier REFUSES, it never bills at a default',
+    );
+  }
   // ⚠️ THE OPERATION ENFORCES ITS OWN PRECONDITION — ROUND 3, AND ROUND 2's FIX
   // WAS NOT ENOUGH. Round 2 EXPORTED `isUsableMargin` beside this function,
   // which made the guard DISCOVERABLE and left the domain unchanged:
