@@ -545,5 +545,12 @@ jobs:
         # @meddoc/db imports resolve to the generated @prisma/client; generate
         # reads the schema only (no DATABASE_URL / DB connection required).
         run: npm run db:generate
+      # ⚠️ HOSTED-RUNNER RE-AUDIT (the migration off self-hosted). Some gate
+      # tests resolve `origin/main` in the real repo (the lens-sandbox builder,
+      # the branch-retire guard). A persistent self-hosted clone had it; a hosted
+      # shallow checkout does not. Fetch it as a tracking ref so those tests can
+      # resolve it, exactly as they did on the old runner.
+      - name: Fetch origin/main (gate tests resolve it)
+        run: git fetch --no-tags origin main:refs/remotes/origin/main
       - name: Run in-scope unit suite (transcribe-md + packages/*)
         run: npm run test:unit -w transcribe-md
