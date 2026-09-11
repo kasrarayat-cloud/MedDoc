@@ -57,6 +57,7 @@ import { decideAutoConfirm } from '../auto-certify-eligibility';
 import { refuseRecordDerivedOnNonMetadata } from '../semantic-mapping';
 import { projectEncounterFacts } from '../encounter-facts';
 import { assertNoRecordDerivedFacts } from '../synthetic-test';
+import { narrativeSentence } from '../verification-encounter';
 
 // ---------------------------------------------------------------------------
 // FIXTURES — a two-control header, exactly the shape the owner's letter has.
@@ -129,6 +130,15 @@ function mapping(fieldId: string, concept: string | null, over: Record<string, u
 
 const PATIENT = { name: 'Jane Alvarez', dateOfBirth: '1958-06-14' };
 const VISIT = '2026-09-07T14:00:00.000Z';
+
+/** #312 — the referral sentence certification actually dictates, READ FROM THE
+ *  GENERATOR rather than copied, so these arms cannot keep passing on a
+ *  sentence the generator no longer emits. */
+const CERTIFICATION_REFERRAL: string = (() => {
+  const s = narrativeSentence('visit_metadata.referring_physician');
+  if (!s) throw new Error('the generator dictates no referrer sentence — the #312 fill proof has nothing to drive');
+  return s;
+})();
 
 function fact(over: Record<string, unknown> = {}): EncounterFact {
   return EncounterFactSchema.parse({
@@ -207,8 +217,8 @@ describe('#247 Stage B — the label decides, and the labels are HIS', () => {
 
   it('⚠️ THE REFERRING PATTERN IS ANCHORED AT BOTH ENDS — a qualifier makes it a different field', () => {
     // The first draft was a prefix match, and two lenses independently measured
-    // the referrer's NAME rendering into the fax box: `supported`,
-    // "Dr. Alan Whitfield", valid, auto-confirmed. A REGRESSION — those labels
+    // the referrer's NAME rendering into the fax box: `supported`, the name as
+    // the value, valid, auto-confirmed. A REGRESSION — those labels
     // matched the old unanchored manual pattern and rendered an honest blank.
     for (const label of [
       'Referring Physician Fax',
@@ -725,7 +735,7 @@ describe('#247 Stage B — the injected facts survive the INDEPENDENT validator'
       resolveTemplateFields({
         fields: [field(REFERRER_ID, 'Referring MD')],
         mappings: [mapping(REFERRER_ID, 'visit_metadata.referring_physician', { sourceType: 'extraction' })],
-        facts: [fact({ concept: 'visit_metadata.referring_physician', value: 'Dr. Alan Whitfield', experiencer: 'other' })],
+        facts: [fact({ concept: 'visit_metadata.referring_physician', value: 'their primary care physician', experiencer: 'other' })],
         certifiedFieldIds: [REFERRER_ID],
       }),
       [field(REFERRER_ID, 'Referring MD')],
@@ -770,22 +780,35 @@ describe('#247 Stage B — the injected facts survive the INDEPENDENT validator'
 // 5 · THE DICTATED MEMBER — L3 -> projector -> resolver.
 // ---------------------------------------------------------------------------
 describe('#247 Stage B — the referring physician is DICTATED, all the way through', () => {
-  const CONTEXT = 'She was referred by Dr. Alan Whitfield for further evaluation.';
+  // ⚠️ #312 — THE CERTIFICATION SENTENCE ITSELF, AND ITS VALUE IS A ROLE. It
+  // used to name a fictional physician, and the synthetic-evidence privacy gate
+  // refused the whole certification encounter on it ("referring provider
+  // name"). This block is where "the Referring MD control still FILLS" is
+  // proved, so it drives the text certification actually dictates.
+  const CONTEXT = CERTIFICATION_REFERRAL;
+  const REFERRER = 'their primary care physician';
   const project = () =>
     projectEncounterFacts({
       mode: 'dictation',
       contextText: CONTEXT,
       asrQuality: 'high',
       entities: {
-        referring_physician: { name: 'Dr. Alan Whitfield', evidence_quote: CONTEXT },
+        referring_physician: { name: REFERRER, evidence_quote: CONTEXT },
       } as never,
     });
+
+  it('⚠️ the ideal extraction is a literal SPAN of the certification sentence', () => {
+    // An ideal L3 extraction lifts the referrer out of the sentence it cites.
+    // If the generator's sentence stopped containing this role, every arm below
+    // would be driving an extraction the certification text could never yield.
+    expect(CONTEXT).toContain(REFERRER);
+  });
 
   it('the projector emits it as ORDINARY evidence, never as a record value', () => {
     const facts = project().filter((f) => f.concept === 'visit_metadata.referring_physician');
     expect(facts).toHaveLength(1);
     expect(facts[0]!.sourceType).toBe('encounter_evidence');
-    expect(facts[0]!.value).toBe('Dr. Alan Whitfield');
+    expect(facts[0]!.value).toBe(REFERRER);
     // ⚠️ AND THE SUBJECT IS NOT THE PATIENT. Stamping `patient` here would have
     // made the resolver's experiencer gate pass with no other change — and
     // written into the manifest that a named outside physician is the patient.
@@ -801,7 +824,7 @@ describe('#247 Stage B — the referring physician is DICTATED, all the way thro
     const resolutions = resolveTemplateFields({
       fields: [f], mappings: [m], facts: project(), certifiedFieldIds: [REFERRER_ID],
     });
-    expect([resolutions[0]!.status, resolutions[0]!.value]).toEqual(['supported', 'Dr. Alan Whitfield']);
+    expect([resolutions[0]!.status, resolutions[0]!.value]).toEqual(['supported', REFERRER]);
   });
 
   it('⚠️ NON-VACUITY: the gate still REFUSES an `other` experiencer on any other concept', () => {
@@ -983,7 +1006,8 @@ describe('#247 Stage B — the referrer states its polarity and its tense', () =
     // `temporality_not_approved`: a permanently blank control, validation green.
     for (const text of [
       'She was referred by Dr. Ramirez for further evaluation.',
-      'The patient was referred by Dr. Alan Whitfield for further evaluation.',
+      // #312 — the sentence certification actually dictates, from the generator.
+      CERTIFICATION_REFERRAL,
       'Referral from Dr. Lee for evaluation of dysphagia.',
     ]) {
       expect([text, project(text).temporality]).toEqual([text, 'current']);
