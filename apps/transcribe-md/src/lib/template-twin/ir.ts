@@ -800,6 +800,29 @@ export const TemplateTwinFillManifestSchema = z
         criticalUnresolved: z.number().int().nonnegative(),
       })
       .strict(),
+    /**
+     * ⚠️ TOKEN-1 — EACH SCAFFOLD TOKEN SUBSTITUTED FROM THE VISIT RECORD THIS
+     * FILL ({patient}/{age}). The owner ruling requires the manifest to record
+     * each substitution.
+     *
+     * ⚠️ `.optional()` AND EMITTED ONLY WHEN NON-EMPTY — the `recordDerived` /
+     * `slotsUnused` precedent, for the same reason: certification recomputes
+     * and sha-compares a STORED manifest, so a key that appeared
+     * unconditionally would change the sha of every manifest already on disk.
+     * A fill with no substitution omits the key and stays byte-identical.
+     */
+    tokenSubstitutions: z
+      .array(
+        z
+          .object({
+            fieldId: z.string().min(1),
+            token: z.string().min(1),
+            value: z.string().min(1),
+          })
+          .strict(),
+      )
+      .nonempty()
+      .optional(),
   })
   .strict();
 export type TemplateTwinFillManifest = z.infer<typeof TemplateTwinFillManifestSchema>;

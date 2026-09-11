@@ -144,6 +144,14 @@ export interface FinalizeTemplateTwinFillInput
     fieldId: string;
     reason: ClinicianOverrideDeclineReason;
   }[];
+  /** TOKEN-1 — the scaffold tokens substituted from the visit record this fill,
+   *  recorded on the manifest for audit (owner ruling). Emitted only when
+   *  non-empty, so a fill with no substitution leaves the manifest sha unchanged. */
+  tokenSubstitutions?: readonly {
+    fieldId: string;
+    token: string;
+    value: string;
+  }[];
 }
 
 export async function finalizeTemplateTwinFill(
@@ -181,6 +189,10 @@ export async function finalizeTemplateTwinFill(
       ? validated
       : { ...validated, issues: [...validated.issues, ...declinedIssues] };
   const counts = templateTwinCounts(fields, ir.fields);
+  // TOKEN-1: attach the substitution record ONLY when non-empty. An optional
+  // key omitted on the common (no-substitution) path keeps the recomputed
+  // manifest sha byte-identical to every manifest certification re-verifies.
+  const tokenSubstitutions = input.tokenSubstitutions ?? [];
   const manifest = TemplateTwinFillManifestSchema.parse({
     manifestVersion: 1,
     compiledVersionId: input.compiledVersionId,
@@ -194,6 +206,9 @@ export async function finalizeTemplateTwinFill(
     fields,
     validation,
     counts,
+    ...(tokenSubstitutions.length > 0
+      ? { tokenSubstitutions: tokenSubstitutions.map((s) => ({ ...s })) }
+      : {}),
   });
   const manifestSha256 = canonicalSha256(manifest);
   const factSetSha256 = canonicalSha256(input.facts);
@@ -315,6 +330,10 @@ export async function prepareTemplateTwinFill(
     // part of the fact's identity. Empty when this run has no generated note —
     // the fact is still uniquely keyed by field + option within its own set.
     noteSha256: noteIdentity(input.generatedNote) ?? '',
+    // TOKEN-1: the record that resolves {patient}/{age} in a scaffold-default
+    // insert. Absent on the synthetic cert path, where a token insert declines.
+    patient: input.patient,
+    visitDate: input.visitDate,
   });
   return finalizeTemplateTwinFill({
     ...input,
@@ -323,6 +342,7 @@ export async function prepareTemplateTwinFill(
     facts: [...facts, ...bridged.facts, ...overridden.facts],
     resolutions: overridden.resolutions,
     declinedOverrides: overridden.declined,
+    tokenSubstitutions: overridden.substitutions,
   });
 }
 

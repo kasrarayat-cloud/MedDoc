@@ -81,20 +81,28 @@ export interface VisitPreviewResult extends Omit<NativePreviewResult, 'reason'> 
    * nowhere to attach. The list travels beside the page instead.
    *
    * ⚠️ PHI-FREE BY CONSTRUCTION, AND IT IS WORTH SAYING WHY IT IS SAFE. Both
-   * strings come from the doctor's OWN UPLOADED FORM — `originalLabel` is the
-   * control's caption and `scaffoldText` is the wording their template shipped
+   * strings come from the doctor's OWN UPLOADED FORM — the labels are the
+   * controls' captions and `scaffoldText` is the wording their template shipped
    * with. Neither is derived from the transcript, the note or the patient. The
    * resolved VALUE of a field is never included here.
+   *
+   * ⚠️ PANEL-1 (b) — MERGED. One entry per DISTINCT `scaffoldText`, not per
+   * field: a form that ships the same wording ("No acute findings.") on several
+   * controls shows that sentence ONCE, with a count, rather than N identical
+   * rows. `fieldIds` is every control sharing the wording, in displayOrder;
+   * `insertedFieldIds` is the subset already inserted. The per-field click is
+   * preserved by looping over these ids on the client — one call, one audit row,
+   * per field — the panel never becomes a bulk writer.
    */
   insertableDefaults: {
-    fieldId: string;
-    /** The control's caption on the doctor's own form. */
-    label: string;
-    /** The wording their template ships with, compiled. */
+    /** The wording their template ships with, compiled. Shared by the group. */
     scaffoldText: string;
-    /** True when this default is already inserted, so the surface offers UNDO
-     *  rather than a second insert. */
-    inserted: boolean;
+    /** The distinct control captions sharing this wording, in displayOrder. */
+    labels: string[];
+    /** Every field id sharing this wording, in displayOrder. */
+    fieldIds: string[];
+    /** The subset of `fieldIds` already inserted, so the surface offers UNDO. */
+    insertedFieldIds: string[];
   }[] | null;
 }
 
@@ -430,7 +438,10 @@ export async function previewVisitDocumentAction(
     const mappingByFieldId = new Map(
       defs.map((d) => [d.fieldId, d.mapping ?? null] as const),
     );
-    insertableDefaults = irForDefaults.fields.flatMap((f) => {
+    // Per-field offerability FIRST, exactly as before — the offer⇔write
+    // biconditional is untouched: `scaffoldDefaultOfferable` still reads
+    // `field.scaffoldText` off the real IR field object handed to it.
+    const offerableRows = irForDefaults.fields.flatMap((f) => {
       const text = (f.scaffoldText ?? '').trim();
       const r = byFieldId.get(f.fieldId);
       const inserted = r?.reasonCode === 'clinician_scaffold_default';
@@ -446,6 +457,27 @@ export async function previewVisitDocumentAction(
       if (!offerable || !text) return [];
       return [{ fieldId: f.fieldId, label: f.originalLabel, scaffoldText: text, inserted }];
     });
+
+    // PANEL-1 (b) — MERGE identical scaffold texts into ONE row. The grouping
+    // runs AFTER the offerability filter so the cache stores the grouped shape.
+    // A Map preserves insertion order, so first-sighting order IS displayOrder,
+    // and every field id is appended in the order the IR lists it. Still
+    // PHI-free: `scaffoldText` and the labels are both the doctor's own form.
+    const grouped = new Map<
+      string,
+      { scaffoldText: string; labels: string[]; fieldIds: string[]; insertedFieldIds: string[] }
+    >();
+    for (const row of offerableRows) {
+      let g = grouped.get(row.scaffoldText);
+      if (!g) {
+        g = { scaffoldText: row.scaffoldText, labels: [], fieldIds: [], insertedFieldIds: [] };
+        grouped.set(row.scaffoldText, g);
+      }
+      g.fieldIds.push(row.fieldId);
+      if (!g.labels.includes(row.label)) g.labels.push(row.label);
+      if (row.inserted) g.insertedFieldIds.push(row.fieldId);
+    }
+    insertableDefaults = [...grouped.values()];
   } catch (err) {
     // ⚠️ #287 — "THE TENANT HAS NO FORM" IS AN OUTCOME, NOT A FAILURE. It is the
     // ordinary state for a practice that has not uploaded one, and for every

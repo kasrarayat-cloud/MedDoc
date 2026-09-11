@@ -247,7 +247,7 @@ export function VisitDocumentSurface(props: VisitDocumentSurfaceProps) {
       {result.insertableDefaults && result.insertableDefaults.length > 0 && (
         <YourBlanksPanel
           visitId={visitId}
-          defaults={result.insertableDefaults}
+          groups={result.insertableDefaults}
           onChanged={() => setLocalRevision((n) => n + 1)}
         />
       )}

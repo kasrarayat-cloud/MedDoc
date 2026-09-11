@@ -40,6 +40,12 @@
 import { isWordPlaceholderOption } from '../note-template-docx/placeholder-option';
 import { canonicalSha256 } from './canonical';
 import { requiredFactTemporality } from './fact-mapping-match';
+import { isFurnitureScaffold, type SubstitutableToken } from './scaffold-text';
+import {
+  substituteScaffoldTokens,
+  type ScaffoldTokenRefusal,
+} from './token-substitution';
+import type { VisitPatientRecord } from './visit-metadata';
 import {
   EncounterFactSchema,
   FieldResolutionSchema,
@@ -85,6 +91,12 @@ export interface ApplyClinicianOverridesInput {
    *  identity so a corrected value on a re-generated note is a different fact,
    *  exactly as `verifiedNoteSelectionFactId` does it. */
   noteSha256: string;
+  /** The visit's patient record and date, for TOKEN-1 scaffold-token
+   *  substitution ({patient}/{age}). Absent on the synthetic certification path
+   *  (no record); a scaffold-default insert carrying a token then declines with
+   *  a named reason rather than printing braces. */
+  patient?: VisitPatientRecord | null;
+  visitDate?: Date | string | null;
 }
 
 export interface ApplyClinicianOverridesResult {
@@ -106,6 +118,14 @@ export interface ApplyClinicianOverridesResult {
    * document.
    */
   declined: { fieldId: string; reason: ClinicianOverrideDeclineReason }[];
+  /**
+   * TOKEN-1: every scaffold token substituted from the visit record during this
+   * fill, per field. The owner ruling requires the manifest to record each
+   * substitution; `finalizeTemplateTwinFill` attaches this to the manifest
+   * (emitted only when non-empty, so a fill with no substitution leaves the
+   * recomputed manifest sha unchanged).
+   */
+  substitutions: { fieldId: string; token: SubstitutableToken; value: string }[];
 }
 
 export type ClinicianOverrideDeclineReason =
@@ -146,7 +166,15 @@ export type ClinicianOverrideDeclineReason =
   /** A scaffold default addressed a control that cannot hold free text — a
    *  dropdown, date, checkbox, table. Writing one BLOCKS THE WHOLE DOCUMENT at
    *  validation, so this refuses rather than letting the fill fail. */
-  | 'field_kind_not_insertable';
+  | 'field_kind_not_insertable'
+  /**
+   * TOKEN-1. The scaffold carries a registered token ({patient}/{age}) that the
+   * visit record cannot resolve (no name, no/implausible DOB, ambiguous age).
+   * Declining leaves the field blank — the honest "renders blank with a named
+   * reason" — instead of emitting a half-substituted sentence like
+   * "…is a pleasant -year-old…". The suffix is the ScaffoldTokenRefusal.
+   */
+  | `token_unresolvable:${ScaffoldTokenRefusal}`;
 
 /** Stable provenance identity for one clinician correction.
  *
@@ -251,6 +279,19 @@ export function scaffoldDefaultOfferable(input: {
   const { field, mapping, current } = input;
   if (field.scaffolded !== true) return false;
   if (!(field.scaffoldText ?? '').trim()) return false;
+  // ⚠️ PANEL-1(a) — never offer a control whose scaffold is FURNITURE
+  // (underscores, dashes, whitespace, rules): its "default" is a fill-in line,
+  // not wording. ⚠️ Read `field.scaffoldText` off the SAME object handed in, so
+  // the omit-door read-tracer follows it (gate-review-defaults-omit-door).
+  if (isFurnitureScaffold(field.scaffoldText ?? '')) return false;
+  // ⚠️ PANEL-1(d) — "drop controls TOKEN-1 fills" is served by the EXISTING
+  // exclusion, not by a scaffold-shape drop. A control TOKEN-1 fills WITHOUT the
+  // doctor is a record-derived (visit_metadata) concept; those fill from the
+  // record and are never blank, so `scaffoldTargetIsBlank` already keeps them out
+  // of the offer. We deliberately do NOT drop a token-BEARING dictation scaffold
+  // here: it inserts SAFELY now (TOKEN-1 substitutes on insert), and dropping it
+  // would leave a fillable control permanently blank (adversarial Finding 2 —
+  // "never withhold"). The token-only case therefore stays offered and safe.
   if (!SCAFFOLD_INSERTABLE_KINDS.has(field.kind ?? '')) return false;
   // The fill declines forever without a concept — see the overlay's own note.
   if (!mapping?.clinicalConcept) return false;
@@ -523,6 +564,7 @@ export function applyClinicianOverrides(
 
   const facts: EncounterFact[] = [];
   const declined: { fieldId: string; reason: ClinicianOverrideDeclineReason }[] = [];
+  const substitutions: { fieldId: string; token: SubstitutableToken; value: string }[] = [];
   // A duplicate fieldId cannot arrive from the database (@@unique on
   // (visitId, fieldId)) but this function is also called directly. Last write
   // would otherwise win silently; refuse to be order-dependent instead.
@@ -580,10 +622,32 @@ export function applyClinicianOverrides(
         decline(override.fieldId, 'no_approved_concept');
         continue;
       }
+
+      // ── TOKEN-1: substitute {patient}/{age} deterministically from the visit
+      // record, at FILL time, before the inserted text becomes a fact/resolution
+      // value. The renderer then writes the substituted string unchanged, so the
+      // manifest and the round-trip verifier see exactly what printed. An
+      // unresolvable token declines the whole insert (the field renders blank)
+      // rather than emit a half-substituted sentence. Text with no token is
+      // returned unchanged — pre-TOKEN-1 behaviour for every other scaffold.
+      const substituted = substituteScaffoldTokens(
+        override.insertedText,
+        input.patient ?? null,
+        input.visitDate ?? null,
+      );
+      if (!substituted.ok) {
+        decline(override.fieldId, `token_unresolvable:${substituted.reason}`);
+        continue;
+      }
+      const insertedText = substituted.text;
+      for (const s of substituted.substitutions) {
+        substitutions.push({ fieldId: field.fieldId, token: s.token, value: s.value });
+      }
+
       const fact = buildScaffoldDefaultFact({
         field,
         mapping: scaffoldMapping,
-        insertedText: override.insertedText,
+        insertedText,
         noteSha256,
       });
       facts.push(fact);
@@ -592,7 +656,7 @@ export function applyClinicianOverrides(
         FieldResolutionSchema.parse({
           fieldId: field.fieldId,
           status: 'supported',
-          value: override.insertedText,
+          value: insertedText,
           sourceFactIds: [fact.factId],
           evidenceAnchorIds: [...fact.evidenceAnchorIds],
           // ⚠️ NULLABLE BUT NOT OPTIONAL — the schema is `.strict()` and
@@ -677,6 +741,7 @@ export function applyClinicianOverrides(
     resolutions: ir.fields.map((f) => byId.get(f.fieldId)!),
     facts,
     declined,
+    substitutions,
   };
 }
 
