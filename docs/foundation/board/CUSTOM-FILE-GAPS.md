@@ -207,3 +207,64 @@ The gate that claims "exactly four doors / no sixth copy"
 `src/` only, so it cannot see a caller under `scripts/`. **Needs:** the gate's
 source scan widened to `scripts/`, and the smoke routed through
 `groundingContextFor`. Both belong to #314's deferred PR (#1101).
+
+## 13 · RULED-ACT-SCRIPTS-DO-NOT-EXIT — the act finishes, and its process never ends
+
+`scripts/backfill-sole-paragraph-control.ts` and
+`scripts/confirm-reissued-form.ts` each printed their own final line (`🟢
+backfill complete`, `🟢 confirm complete:`) on 2026-09-11 and then never
+exited. The cause is an open handle, not prisma. `run-ruled-mutation.sh`
+waited indefinitely. The lead confirmed the final line, allowed a grace
+period, verified the in-container pid's cmdline named the script, and sent
+SIGTERM to that pid only. The door then printed **exit 143**, and each act was
+judged by its before/after snapshots (both 🟢). `certify-active.ts` exited on
+its own, both in report mode and on refusal.
+
+**The hazard.** An exit code of 143 on a SUCCESSFUL act looks the same as an
+act killed mid-write. Only the snapshots tell them apart. The completion
+watcher this forces is itself a trap. One keyed on "DRY RUN" killed the
+confirm dry run, because that word is in the script's HEADER. That dry run
+wrote nothing and was re-run. **Needs:** each act script ends with an explicit
+exit, or closes the handle once it has been identified. The door also needs a
+timeout that reports "finished its output but did not exit", rather than a
+silent wait.
+
+## 14 · SYNTHETIC-TEST-BARE-CATCH — a scan that is UNAVAILABLE reads as "your evidence has PHI"
+
+`src/lib/template-twin/synthetic-test.ts:393` catches every error from the
+synthetic-evidence gate with a bare `catch {`. It answers all of them with
+*"Use clearly labeled synthetic test evidence without patient identifiers."*
+(:396). So an outage, exhausted credits or a timeout in the model scan is
+reported to the physician as an accusation about their evidence.
+
+The certify refusal of 2026-09-11 was a real rejection (`referring provider
+name`). Only a separate diagnostic could tell that apart. The product cannot.
+**Needs:** `TemplateTwinSyntheticEvidenceRejectedError` maps to the rejection.
+Anything else is reported as the scan being unavailable, and retryable.
+
+## 15 · SHARED-INSTALL-STALE — the shared tree's `node_modules` is not the locked install
+
+Measured 2026-09-11: `/opt/meddoc-pro/node_modules/next` is **16.2.11**, but
+`package-lock.json` on `main` (`b069ddbb`) pins **16.3.4**. The install marker
+(`node_modules/.package-lock.json`) is dated 2026-09-08 23:47.
+`setup-worktree.sh` links each worktree's `node_modules` into this shared
+install; it re-points only `@meddoc/*` at the worktree. **So every worktree's
+local vitest and `tsc` runs against 16.2.11, not the locked version.**
+Production images are unaffected, because the Dockerfile runs `npm ci`.
+
+This was found when a QA build that borrowed the shared install reported
+"Next.js 16.2.11". That build was thrown away as evidence, because a proof of
+framework behaviour built on the wrong framework version proves nothing.
+
+The same install also has `node_modules/node_modules`, a **dangling absolute
+symlink** into another session's scratchpad (`ceac94df…/scratchpad/auto/`).
+
+**Needs:**
+- Reinstall the shared tree. That is a deploy-surface act, so schedule it with
+  no deploy in flight.
+- `setup-worktree.sh` asserts installed == locked for a few sentinel packages
+  (next, prisma, react), and refuses loudly rather than linking a stale
+  install.
+
+**Not fixed here:** reinstalling mid-sequence would be a second, concurrent
+change to the surface that deploys.
