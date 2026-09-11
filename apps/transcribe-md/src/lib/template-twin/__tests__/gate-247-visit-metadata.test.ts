@@ -1205,6 +1205,14 @@ describe('#264 — a refused age reaches the resolver as a NAMED reason', () => 
     expect((cWith.omitted ?? 0) + cWith.notMentioned).toBe(
       (cWithout.omitted ?? 0) + cWithout.notMentioned,
     );
+    // ⚠️ #313 — `slotsUnused` is a bucket too, emitted only when non-zero. No
+    // bullet group here, so it is ABSENT in both runs and the total is conserved
+    // with it counted.
+    expect('slotsUnused' in cWith).toBe(false);
+    expect('slotsUnused' in cWithout).toBe(false);
+    expect((cWith.omitted ?? 0) + cWith.notMentioned + (cWith.slotsUnused ?? 0)).toBe(
+      (cWithout.omitted ?? 0) + cWithout.notMentioned + (cWithout.slotsUnused ?? 0),
+    );
   });
 
   it('a refusal for a field nobody asked about is inert', () => {

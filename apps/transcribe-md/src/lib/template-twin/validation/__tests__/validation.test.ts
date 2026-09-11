@@ -161,7 +161,8 @@ describe('validateTemplateTwin', () => {
       valid: true,
       issues: [],
       checkedAt: NOW,
-      validatorVersion: 'template-field-validator/1.0.0',
+      // #313 — bumped with the three bullet-group checks.
+      validatorVersion: 'template-field-validator/2.0.0',
     });
   });
 

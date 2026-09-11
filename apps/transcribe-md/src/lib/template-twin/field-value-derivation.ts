@@ -279,6 +279,17 @@ export function deriveFieldValueFromFact(
 export const NARRATIVE_LIST_SEPARATOR = '; ';
 
 /**
+ * ⚠️ #313 — THE TWO REASON TOKENS A SUPPORTED NARRATIVE CAN CARRY FROM ITS OWN
+ * EVIDENCE, DECLARED ONCE. The resolver mints them; the bullet distribution
+ * pass both READS them (a group is distributed only from one of these, or the
+ * mixed-polarity token) and WRITES them (each rewritten bullet carries the one
+ * its own citation earns). Two string literals in two files is how a pass
+ * silently stops matching the thing it was written to find.
+ */
+export const DIRECT_EVIDENCE_SUPPORTED_REASON = 'direct_evidence_supported' as const;
+export const LIST_VALUED_NARRATIVE_JOINED_REASON = 'list_valued_narrative_joined' as const;
+
+/**
  * Canonical concepts whose clinical shape is a SECTION that accumulates several
  * facts, rather than a slot holding one answer.
  *

@@ -31,7 +31,7 @@ import { readTemplateTwinWorkspace } from './workspace-read';
 import type { TemplateTwinWorkspace } from './client-types';
 import { parseTemplateTwinArtifactKey } from './storage';
 import { canonicalSha256 } from './canonical';
-import { validateTemplateTwin } from './validation';
+import { validateTemplateTwin, LIST_ITEM_REPEATED } from './validation';
 
 /** Minimum filled fields a synthetic proof must produce before a template may
  *  certify. Set from what the WM_IOV encounter legitimately supports; raise it
@@ -334,7 +334,13 @@ function isVerifiedSyntheticProof(input: {
   );
 }
 
-function isVerifiedSyntheticManifest(input: {
+/**
+ * ⚠️ EXPORTED FOR #313's ARM A13, UNCHANGED. The re-verification replays only
+ * the validator and the counts over a STORED manifest, so a distributed
+ * synthetic manifest must survive it on its own — and an arm that re-built
+ * this function's steps would be proving a copy.
+ */
+export function isVerifiedSyntheticManifest(input: {
   manifest: unknown;
   outputObjectKey: string;
   compiledVersionId: string;
@@ -912,6 +918,25 @@ export async function certifyAndActivateTemplateTwin(input: {
             `${withheldMaterialFieldIds.slice(0, 10).join(',')}` +
             `${withheldMaterialFieldIds.length > 10 ? ',…' : ''} — a certificate must not ` +
             'attest a template whose material section empties on a denial)',
+        );
+      }
+
+      // ── #313 — A LIST ITEM PRINTED TWICE COSTS THE CERTIFICATE ──────────
+      // `LIST_ITEM_REPEATED` is a WARNING at visit time on purpose: the shape it
+      // names (every bullet printing the whole list) is today's live output, and
+      // it must never withhold a document. It must also never be CERTIFIED —
+      // "nothing is printed twice" is the ruling's second promise. Read off the
+      // stored validation, which re-verification has just proved byte-identical
+      // to a fresh re-run.
+      const repeatedListItems = syntheticManifest.success
+        ? syntheticManifest.data.validation.issues.filter(
+            (issue) => issue.code === LIST_ITEM_REPEATED,
+          ).length
+        : 0;
+      if (testReady && repeatedListItems > 0) {
+        blockers.push(
+          `listItemRepeated=false (${repeatedListItems} bullet list${repeatedListItems === 1 ? '' : 's'} ` +
+            'print a dictated item on more than one bullet — ruling #313 forbids certifying that)',
         );
       }
 

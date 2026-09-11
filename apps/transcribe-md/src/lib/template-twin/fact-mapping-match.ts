@@ -230,3 +230,46 @@ export function conceptMatches(fact: EncounterFact, mapping: SemanticMapping): b
 export function factMatchesMapping(fact: EncounterFact, mapping: SemanticMapping): boolean {
   return conceptMatches(fact, mapping) && temporalityMatches(fact, mapping);
 }
+
+/**
+ * The resolver's CONCEPT stage, as one function: every fact whose concept this
+ * mapping admits, EXCEPT an approved practice default (which the resolver
+ * considers only after encounter evidence is absent).
+ *
+ * ⚠️ #313 — LIFTED OUT OF `resolver/index.ts` SO THERE IS ONE COPY. The
+ * resolver calls this for its first stage, and `listItemCandidates` below
+ * composes it with the tense stage. The two stages stay SEPARATE CALLS in the
+ * resolver for the reason `factMatchesMapping`'s note gives (#191's kept
+ * default is earned only at the concept stage); lifting the filter changes no
+ * behaviour, it only stops a second hand-written copy from existing.
+ */
+export function conceptCandidateFacts(
+  mapping: SemanticMapping,
+  facts: ReadonlyArray<EncounterFact>,
+): EncounterFact[] {
+  return facts.filter(
+    (fact) =>
+      fact.sourceType !== 'approved_practice_default' && conceptMatches(fact, mapping),
+  );
+}
+
+/**
+ * THE facts a list-valued narrative's resolution cites — the resolver's two
+ * candidate stages composed: concept (`conceptCandidateFacts`), then tense.
+ *
+ * ⚠️ #313 — THE ONE RULE THE VALIDATOR'S GROUP CHECKS AND THE RESOLVER SHARE.
+ * For every reason code a bullet group can be distributed from
+ * (`direct_evidence_supported`, `list_valued_narrative_joined`,
+ * `mixed_polarity_per_fact`) the resolver cites exactly this set, and the
+ * validator's LIST_ITEM_DROPPED check asks whether each of these facts landed
+ * on some bullet. A third copy of the filter would let the two disagree about
+ * what "an item" is. Arm A10 pins the equality against the REAL resolver.
+ */
+export function listItemCandidates(
+  mapping: SemanticMapping,
+  facts: ReadonlyArray<EncounterFact>,
+): EncounterFact[] {
+  return conceptCandidateFacts(mapping, facts).filter((fact) =>
+    temporalityMatches(fact, mapping),
+  );
+}

@@ -60,6 +60,7 @@ import {
   type TemplateTwinArtifactStore,
 } from './storage';
 import { validateTemplateTwin } from './validation';
+import { distributeListItems } from './list-distribution';
 
 /** The worker-owned review marker for an unresolved Template Twin fill.
  * Correction code may clear it only by exact equality after a fully verified
@@ -287,9 +288,27 @@ export async function prepareTemplateTwinFill(
   // Precedence is ORDER, not a flag — `mergeFieldResolutions` keeps its
   // unfilled-only rule untouched, so the evidence resolver still beats every AI
   // bridge, and only the doctor beats the resolver.
+  // ══ #313 — ONE ITEM PER BULLET, AFTER THE BRIDGE AND BEFORE THE DOCTOR. ══
+  //
+  // ⚠️ THE POSITION IS THE RULING. After the bridge, so surplus bullets are
+  // never `UNFILLED` overlay targets for a bridge (and the pass sees any member
+  // a bridge filled). OUTSIDE the ternary above, so distribution never depends
+  // on whether a generated note exists. BEFORE the overrides, so a doctor's
+  // inserted default is never overwritten, and #194's blank-only rule judges
+  // the post-distribution state — the same state the preview offer and the
+  // insert-default door see, because both re-run this function.
+  //
+  // The pass mints no facts (the fact-set sha is unchanged); the bridge's facts
+  // are passed for LOOKUP only.
+  const distributed = distributeListItems({
+    ir,
+    mappings,
+    facts: [...facts, ...bridged.facts],
+    resolutions: bridged.resolutions,
+  });
   const overridden = applyClinicianOverrides({
     ir,
-    resolutions: bridged.resolutions,
+    resolutions: distributed,
     overrides: input.clinicianOverrides ?? [],
     mappings,
     // Parity with the picks bridge: the note the correction was made against is
