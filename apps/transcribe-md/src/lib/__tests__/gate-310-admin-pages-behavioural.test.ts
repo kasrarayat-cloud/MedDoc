@@ -146,6 +146,10 @@ type Caller =
   | 'inactive-admin'
   | 'unenrolled-admin'
   | 'stale-admin'
+  // Un-enrolled AND stale: pins the ORDER of the two checks. On main the
+  // layout sent the MFA redirect before it ever read session freshness, so
+  // this caller must get the redirect, not the 404 a swapped order gives.
+  | 'unenrolled-stale-admin'
   | 'no-session-id-admin'
   | 'admin';
 
@@ -173,11 +177,11 @@ function beginRequest(caller: Caller) {
       ? { ...ADMIN_ROW, products: ['TRANSCRIBE_MD'] }
       : caller === 'inactive-admin'
         ? { ...ADMIN_ROW, isActive: false }
-        : caller === 'unenrolled-admin'
+        : caller === 'unenrolled-admin' || caller === 'unenrolled-stale-admin'
           ? { ...ADMIN_ROW, mfaEnabled: false }
           : ADMIN_ROW;
   h.userFindUnique.mockResolvedValue(row);
-  if (caller === 'stale-admin') {
+  if (caller === 'stale-admin' || caller === 'unenrolled-stale-admin') {
     h.sessionFindUnique.mockResolvedValue({ createdAt: new Date(Date.now() - 13 * HOUR) });
   }
 }
@@ -256,6 +260,8 @@ describe.each(PAGES)('ruling #310 — /admin/$file refuses on its own (RSC refet
     ['stale-admin', NOT_FOUND],
     ['no-session-id-admin', NOT_FOUND],
     ['unenrolled-admin', MFA_REDIRECT],
+    // MFA before freshness, byte-identical to main's layout order.
+    ['unenrolled-stale-admin', MFA_REDIRECT],
   ];
 
   it.each(refusals)('%s → %s, and NO data function ran', async (caller, digest) => {
@@ -296,6 +302,13 @@ describe('ruling #310 — the layout calls the SAME verdict, and a full render a
     beginRequest('stale-admin');
     expect(await outcome(() => Layout({ children: null }))).toMatchObject({ threw: true, digest: NOT_FOUND });
     beginRequest('unenrolled-admin');
+    expect(await outcome(() => Layout({ children: null }))).toMatchObject({ threw: true, digest: MFA_REDIRECT });
+    expect(h.logAudit).not.toHaveBeenCalled();
+  });
+
+  it('layout alone: un-enrolled AND stale SUPER_ADMIN → the MFA redirect (MFA is checked before freshness, as on main)', async () => {
+    const { default: Layout } = await import('@/app/admin/layout');
+    beginRequest('unenrolled-stale-admin');
     expect(await outcome(() => Layout({ children: null }))).toMatchObject({ threw: true, digest: MFA_REDIRECT });
     expect(h.logAudit).not.toHaveBeenCalled();
   });
