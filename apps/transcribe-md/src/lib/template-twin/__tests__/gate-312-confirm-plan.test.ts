@@ -7,7 +7,8 @@
 //     were made against — the drift matrix is DERIVED from the schema's keys,
 //     so an attribute added later is covered or this file goes red
 //   · a second run, a wrong version, a wrong count refuse
-//   · the table itself is sound: ten distinct ids, one kind change, two
+//   · the table itself is sound: ten distinct ids, three kind changes (all to
+//     manual: telehealth, and total time ×2 by #312 amendment 3), two
 //     visit_metadata, every confirmed concept registered
 //   · the audit accounting and the arguments refuse vacuous input
 // ============================================================================
@@ -55,8 +56,8 @@ function certifiedMapping(fieldId: string): SemanticMapping {
 const hex24 = (n: number) => n.toString(16).padStart(24, '0');
 
 /** The 53-field shape as the re-issue left it: 43 certified, the ten exactly as judged. */
-function reissued(): ConfirmField[] {
-  const decided: ConfirmField[] = RULING_312.decisions.map((d) => ({
+function reissued(table: ConfirmTable = RULING_312): ConfirmField[] {
+  const decided: ConfirmField[] = table.decisions.map((d) => ({
     fieldId: d.fieldId,
     displayOrder: d.displayOrder,
     originalLabel: d.label,
@@ -82,6 +83,40 @@ function refusedOn(p: ReturnType<typeof plan>): string[] {
 }
 
 const PATIENT = 'ttf_e59e5a33c5975f8b3744dc2f';
+
+/** #312 amendment 3's two rows: [fieldId, displayOrder]. */
+const TOTAL_TIME_ROWS = [
+  ['ttf_e2bdb95b03283f39388ca07b', 70],
+  ['ttf_ef6e199276f1691e18cf84d8', 71],
+] as const;
+
+// The STORED proposals of rows 70 and 71 as the re-issue left them on d2120cdd,
+// written out here rather than imported, so a change to the table's `judged`
+// cannot also change what it is checked against.
+const STORED_TOTAL_TIME_BASE = {
+  sourceType: 'extraction',
+  clinicalConcept: 'total_time_minutes',
+  expectedDataType: 'text',
+  polarityBehavior: 'value_only',
+  temporality: 'current',
+  laterality: 'not_applicable',
+  unitPolicy: 'optional',
+  required: false,
+  blankPolicy: 'blank',
+  unknownPolicy: 'blank',
+  practiceDefault: null,
+  status: 'recognized',
+};
+const STORED_TOTAL_TIME: Record<string, unknown> = {
+  ttf_e2bdb95b03283f39388ca07b: {
+    ...STORED_TOTAL_TIME_BASE,
+    approvedSynonyms: ['Total minutes with patient', 'Time spent with patient', 'Visit duration', 'Total visit time'],
+  },
+  ttf_ef6e199276f1691e18cf84d8: {
+    ...STORED_TOTAL_TIME_BASE,
+    approvedSynonyms: ['Total time in minutes', 'Visit duration minutes', 'Total encounter time', 'Minutes spent'],
+  },
+};
 
 function withPatient(over: Partial<SemanticMapping>): ConfirmField[] {
   const fields = reissued();
@@ -143,6 +178,39 @@ describe('#312 · the planner confirms exactly the ten', () => {
     expect(tele.sourceType).toBe('manual');
     expect(tele.clinicalConcept).toBeNull();
     expect(tele.unmentionedPolicy ?? null).toBeNull();
+  });
+
+  it('⚠️ #312 amendment 3: BOTH total-time rows plan as manual, NO concept, NO policy — judged still the STORED proposal', () => {
+    const p = plan();
+    if (!p.ok) throw new Error('expected ok');
+    for (const [fieldId, displayOrder] of TOTAL_TIME_ROWS) {
+      const d = RULING_312.decisions.filter((x) => x.fieldId === fieldId);
+      expect(d).toHaveLength(1);
+      // `judged` is what the act compares against the STORED row, and the
+      // whole-set sha dd4dc378… was measured with it: it must not have moved.
+      expect(canonicalJson(d[0]!.judged)).toBe(canonicalJson(STORED_TOTAL_TIME[fieldId]));
+      const after = p.payload.filter((m) => m.fieldId === fieldId);
+      expect(after).toHaveLength(1);
+      expect(after[0]!.sourceType).toBe('manual');
+      expect(after[0]!.clinicalConcept).toBeNull();
+      expect(after[0]!.unmentionedPolicy ?? null).toBeNull();
+      expect(after[0]!.status).toBe('certified');
+      const move = p.moves.filter((m) => m.fieldId === fieldId);
+      expect(move).toHaveLength(1);
+      expect(move[0]!.displayOrder).toBe(displayOrder);
+      expect(move[0]!.from).toEqual({ sourceType: 'extraction', clinicalConcept: 'total_time_minutes', status: 'recognized' });
+      expect(move[0]!.to).toEqual({ sourceType: 'manual', clinicalConcept: null, status: 'certified' });
+    }
+  });
+
+  it('⚠️ a total-time row ALREADY moved to manual in the panel is drift — the act never overwrites an edit', () => {
+    const fields = reissued();
+    const i = fields.findIndex((f) => f.fieldId === TOTAL_TIME_ROWS[0]![0]);
+    fields[i] = {
+      ...fields[i]!,
+      mapping: SemanticMappingSchema.parse({ ...fields[i]!.mapping, sourceType: 'manual', clinicalConcept: null }),
+    };
+    expect(refusedOn(plan(fields))).toContain(DRIFT);
   });
 
   it('every payload row survives the STRICT schema the writer parses with', () => {
@@ -285,6 +353,18 @@ describe('#312 · it refuses anything else that is not the judged state', () => 
     expect(refusedOn(plan(reissued(), bad))).toContain('manual confirmations carrying a concept');
   });
 
+  it('⚠️ a MANUAL confirmation judged against a proposal carrying an unmentionedPolicy refuses — manual takes NULL', () => {
+    const bad: ConfirmTable = {
+      ...RULING_312,
+      decisions: RULING_312.decisions.map((d) =>
+        d.fieldId === TOTAL_TIME_ROWS[0]![0] ? { ...d, judged: { ...d.judged, unmentionedPolicy: 'omit' } } : d,
+      ),
+    };
+    // The rows are built from `bad`, so the stored row carries the policy too:
+    // no drift, and this guard is the ONLY one that fires.
+    expect(refusedOn(plan(reissued(bad), bad))).toEqual(['manual confirmations carrying an unmentionedPolicy']);
+  });
+
   it('⚠️ a table confirming a MODEL-FILLED row with NO concept refuses — the writer would certify an empty slot', () => {
     const bad: ConfirmTable = {
       ...RULING_312,
@@ -327,13 +407,23 @@ describe('#312 · the table itself', () => {
     for (const d of ds) expect(() => SemanticMappingSchema.parse({ fieldId: d.fieldId, ...d.judged })).not.toThrow();
   });
 
-  it('⚠️ exactly ONE row is not confirmed as proposed, and it is telehealth', () => {
+  it('⚠️ exactly THREE rows are not confirmed as proposed: telehealth, and total time ×2 (#312 amendment 3)', () => {
     const changed = ds.filter(
       (d) =>
         d.confirmAs.sourceType !== d.judged.sourceType ||
         d.confirmAs.clinicalConcept !== d.judged.clinicalConcept,
     );
-    expect(changed.map((d) => d.label)).toEqual(['Telehealth consent']);
+    expect(changed.map((d) => d.label)).toEqual([
+      'Telehealth consent',
+      'Total minutes spent with patient',
+      'Total time minutes',
+    ]);
+  });
+
+  it('⚠️ exactly THREE decisions confirm as manual — 56, 70, 71 — each with NO concept', () => {
+    const manual = ds.filter((d) => d.confirmAs.sourceType === 'manual');
+    expect(manual.map((d) => d.displayOrder)).toEqual([56, 70, 71]);
+    for (const d of manual) expect(d.confirmAs.clinicalConcept).toBeNull();
   });
 
   it('two rows are visit_metadata — Patient and Age — each named on its own (#261)', () => {
@@ -345,7 +435,8 @@ describe('#312 · the table itself', () => {
 
   it('every confirmed concept is REGISTERED — an off-registry concept is nulled by the next compile', () => {
     const concepts = ds.map((d) => d.confirmAs.clinicalConcept).filter((c): c is string => c !== null);
-    expect(concepts).toHaveLength(9);
+    expect(concepts).toHaveLength(7);
+    expect(concepts).not.toContain('total_time_minutes');
     for (const c of concepts) expect(isRegisteredConcept(c), c).toBe(true);
   });
 

@@ -108,7 +108,8 @@ const TOTAL_TIME = (approvedSynonyms: string[]): JudgedMapping => ({
 });
 
 /**
- * #312 — the ten, by name. Nine as proposed; Telehealth consent to `manual`.
+ * #312 — the ten, by name. Seven as proposed; Telehealth consent, and the two
+ * Total-time rows by #312 amendment 3, to `manual` with no concept and no policy.
  *
  * ⚠️ #261: a row that prints a patient's name is never certified below the
  * fold. Patient and Age are here INDIVIDUALLY, each with its own reason, and
@@ -250,20 +251,35 @@ export const RULING_312: ConfirmTable = {
         '#312: no registered concept exists and manual+omit is unwritable (manual_source_not_filled), ' +
         'so manual: the machine never prints it (the gap that nobody can yet insert it is filed)',
     },
-    asProposed({
+    // ⚠️ #312 AMENDMENT 3 — TOTAL TIME GOES TO HUMAN FILL. `judged` is the
+    // STORED proposal, unchanged (extraction / total_time_minutes): the act
+    // still refuses unless the row says exactly this, and the whole-set sha is
+    // unmoved. Only `confirmAs` changes. Three refutation rounds broke #314's
+    // grounding guard, the last at the class level (a sentence-level rule cannot
+    // see a qualifier in the PRECEDING sentence), so a billing quantity is not
+    // confirmed model-filled on a guard that cannot ground it.
+    {
       fieldId: 'ttf_e2bdb95b03283f39388ca07b',
       displayOrder: 70,
       label: 'Total minutes spent with patient',
       judged: TOTAL_TIME(['Total minutes with patient', 'Time spent with patient', 'Visit duration', 'Total visit time']),
-      why: '#246 family 4: the total is SAID, never computed; acceptance row 8; grounded by the total-time guard',
-    }),
-    asProposed({
+      confirmAs: { sourceType: 'manual', clinicalConcept: null },
+      why:
+        '#312 amendment 3: #314 could not ground a dictated total (three refutation rounds), so under #311(b) ' +
+        'a human-fill row: manual, no concept, NULL policy; the machine never prints the figure. The active ' +
+        'form has this row manual today, so nothing that works is lost; acceptance row 8 moves to what remains',
+    },
+    {
       fieldId: 'ttf_ef6e199276f1691e18cf84d8',
       displayOrder: 71,
       label: 'Total time minutes',
       judged: TOTAL_TIME(['Total time in minutes', 'Visit duration minutes', 'Total encounter time', 'Minutes spent']),
-      why: "#246 family 4 and #191's one datum, two renders; acceptance row 8; grounded by the total-time guard",
-    }),
+      confirmAs: { sourceType: 'manual', clinicalConcept: null },
+      why:
+        "#312 amendment 3, with row 70 (#191's one datum, two renders: both manual together): #314 could not " +
+        'ground a dictated total, so under #311(b) a human-fill row: manual, no concept, NULL policy; the machine ' +
+        'never prints the figure; acceptance row 8 moves to what remains',
+    },
   ],
 };
 
@@ -371,6 +387,15 @@ export function planConfirmation(input: {
   const conceptlessNonManual = table.decisions.filter(
     (d) => d.confirmAs.sourceType !== 'manual' && !d.confirmAs.clinicalConcept,
   ).length;
+  // ⚠️ A MANUAL CONFIRMATION TAKES A NULL POLICY, BY CLASS, NEVER BY fieldId.
+  // The writer persists `unmentionedPolicy ?? null`, so a manual row's NULL
+  // comes from its judged proposal carrying none, and the drift guard pins the
+  // stored row to that. Asserted here for EVERY manual decision, so one judged
+  // WITH a policy refuses in the dry run rather than at the writer, which
+  // refuses manual+omit (`manual_source_not_filled`) in the middle of the act.
+  const manualWithPolicy = table.decisions.filter(
+    (d) => d.confirmAs.sourceType === 'manual' && d.judged.unmentionedPolicy != null,
+  ).length;
 
   const guards: Guard[] = [
     ['the table is for THIS compiled version', compiledVersionId, table.compiledVersionId],
@@ -389,6 +414,7 @@ export function planConfirmation(input: {
     ['decided fields whose proposal DRIFTED from the judged one', drifted, 0],
     ['manual confirmations carrying a concept', manualWithConcept, 0],
     ['non-manual confirmations carrying NO concept', conceptlessNonManual, 0],
+    ['manual confirmations carrying an unmentionedPolicy', manualWithPolicy, 0],
   ];
 
   if (countFailedGuards(guards) > 0) {
