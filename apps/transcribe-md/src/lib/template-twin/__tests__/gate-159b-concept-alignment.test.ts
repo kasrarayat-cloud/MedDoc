@@ -139,9 +139,9 @@ const FULL_ENTITIES = {
   ],
 };
 
-const emittedFacts = (): EncounterFact[] =>
+const emittedFacts = (mode: 'conversation' | 'dictation' = 'conversation'): EncounterFact[] =>
   projectEncounterFacts({
-    mode: 'conversation',
+    mode,
     contextText: CONTEXT_TEXT,
     asrQuality: 'high',
     entities: FULL_ENTITIES as never,
@@ -283,7 +283,22 @@ describe('#159(b) — concept alignment: the emitter and the registry agree', ()
     // matching, `unreadable` would be empty for the wrong reason.
     expect([...src.matchAll(/\bconcept:/g)].length).toBeGreaterThan(sites.length);
 
-    const emitted = [...new Set(emittedFacts().map((f) => f.concept))];
+    // ⚠️ #314 v3 — ONE SITE IS MODE-GATED, AND IT IS NAMED, NOT EXCUSED.
+    // encounter-facts never emits `total_time_minutes` for a CONVERSATION (the
+    // worker and the doors read different texts, so it is refused outright), and
+    // this census projects as a conversation. The named site must instead be
+    // reached by the SAME fixture projected as a dictation — and it is pinned
+    // both ways, so the gate cannot pass by the conversation refusal silently
+    // lapsing or by the fixture no longer reaching the site at all. Every other
+    // site is still held to the conversation census, exactly as before.
+    const MODE_GATED = ['total_time_minutes'] as const;
+    const inConversation = new Set(emittedFacts().map((f) => f.concept));
+    const inDictation = new Set(emittedFacts('dictation').map((f) => f.concept));
+    for (const site of MODE_GATED) {
+      expect([site, inConversation.has(site)], 'a conversation total was emitted — #314 v3 refuses it').toEqual([site, false]);
+      expect([site, inDictation.has(site)], 'the fixture no longer reaches this site in ANY mode').toEqual([site, true]);
+    }
+    const emitted = [...inConversation, ...MODE_GATED.filter((s) => inDictation.has(s))];
     const covered = (site: string): boolean => {
       if (!site.includes('${')) return emitted.includes(site);
       const parts: string[] = site.split(/\$\{[^}]*\}/);

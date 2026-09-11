@@ -126,14 +126,26 @@ describe('#246 — the projector emits them, and DISCRIMINATES', () => {
     expect(conceptOf(facts, 'social_history.occupation')).toHaveLength(0);
   });
 
+  // ⚠️ #314 v3 — A TOTAL GROUNDS ONLY AS ITS OWN CANONICAL SENTENCE. `project`
+  // joins every quote under `QUOTE` ('the doctor said so', no full stop), and a
+  // line break does not end a sentence, so a total there would be judged as
+  // part of that line and refused. The total arms therefore project against a
+  // transcript that IS the sentence. These arms are about the projector's value
+  // and polarity; `gate-314` owns grounding.
+  const projectTotal = (quote: string, minutes: number) =>
+    projectEncounterFacts({
+      mode: 'dictation',
+      contextText: quote,
+      entities: { total_time_minutes: { minutes, evidence_quote: quote } } as unknown as Parameters<
+        typeof projectEncounterFacts
+      >[0]['entities'],
+    });
+
   it('⚠️ total_time_minutes carries NO UNIT in its value, and the number beside it', () => {
     // canon 134's trap: the resolver's number arm refuses a value carrying a
     // unit, so "45 minutes" would fail where "45" resolves.
-    // ⚠️ #314 — a GROUNDED total: the quote states this number and says it is a
-    // total. `QUOTE` states neither, so it is now (correctly) withheld.
-    const facts = project({
-      total_time_minutes: { minutes: 45, evidence_quote: 'Total time spent today was 45 minutes.' },
-    });
+    // ⚠️ #314 — a GROUNDED total: a canonical sentence stating this number.
+    const facts = projectTotal('Total time spent today was 45 minutes.', 45);
     const [fact] = conceptOf(facts, 'total_time_minutes');
     expect(fact).toBeTruthy();
     expect(fact!.value).toBe('45');
@@ -147,42 +159,43 @@ describe('#246 — the projector emits them, and DISCRIMINATES', () => {
     // every kind except checkbox, so the doctor's own billing figure renders
     // blank — and on a narrative control the reason is certification-exempt,
     // so it blanks SILENTLY and still certifies green.
-    const polarityOf = (quote: string, minutes: number) => {
-      const f = project({ total_time_minutes: { minutes, evidence_quote: quote } });
-      return conceptOf(f, 'total_time_minutes')[0]?.polarity;
-    };
+    const polarityOf = (quote: string, minutes: number) =>
+      conceptOf(projectTotal(quote, minutes), 'total_time_minutes')[0]?.polarity;
 
-    // ⚠️ #314 v2 RE-FIXTURED BOTH ROUTES, AND DID NOT WEAKEN EITHER. The two
-    // quotes that first proved them ("No fever, ..." / "..., no separate
-    // procedure performed.") carry "no", and #314 v2 refuses a total whose
-    // sentence carries a negation — so they no longer produce a fact at all
-    // (pinned in the arm below). Each route is now driven by a denial cue that
-    // `inferPolarity` reads and #314 does not treat as negating the total:
-    // "denies" (a predicate) and "negative for". Removing the stated
-    // `polarity: 'affirmed'` reds BOTH lines — measured, see the #314 v2
-    // amendment's mutation table.
+    // ⚠️ #314 v3 RE-FIXTURED ROUTE 2 AND RETIRED ROUTE 1 BY CONSTRUCTION — said
+    // here so it is not read as a weakening. v3 grounds a total only when the
+    // WHOLE sentence is a canonical form, and no form admits a word before its
+    // number. So route 1 (a denial cue BEFORE a locatable number, in the same
+    // clause) can no longer carry a grounded total at all; its fixtures produce
+    // no fact, pinned in the arm below.
     //
-    // Route 1 — the digits ARE locatable, but CLAUSE_BREAK is /[.;\n]/ and a
-    // COMMA is not one, so an unrelated ROS denial used to govern the number.
-    expect(polarityOf('Denies fever, total time 25 minutes.', 25)).toBe('affirmed');
     // Route 2 — the quote SPELLS the number, so String(40) is unlocatable and
-    // polarity fell back to the UNSCOPED whole-quote denial test.
-    expect(polarityOf('Total time of forty minutes spent, negative for any separate procedure.', 40)).toBe('affirmed');
+    // polarity falls back to the UNSCOPED whole-quote denial test. Driven now by
+    // the one form with a free tail (F7), carrying "negative for". Removing the
+    // stated `polarity: 'affirmed'` reds this line — measured in the #314 v3
+    // mutation table.
+    expect(
+      polarityOf(
+        'A total time of forty minutes was spent on this encounter, including counselling, negative for any separate procedure.',
+        40,
+      ),
+    ).toBe('affirmed');
     // And a clean quote was always fine — this is the control that says the
-    // arms above are about the denial routes, not about polarity in general.
+    // arm above is about the denial route, not about polarity in general.
     expect(polarityOf('Total time 25 minutes.', 25)).toBe('affirmed');
   });
 
-  it('⚠️ #314 v2 — the ORIGINAL route fixtures now produce NO total at all', () => {
-    // Recorded, not hidden: the sentence carries "no", so the total is refused
-    // (`negation_in_sentence`) and the billing line is left blank for the doctor.
-    // The polarity arm above therefore had to move to cues #314 does not refuse.
+  it('⚠️ #314 v2/v3 — the earlier route fixtures now produce NO total at all', () => {
+    // Recorded, not hidden: none of these sentences is a canonical total form
+    // (`not_stated_as_a_total`), so the total is refused and the billing line is
+    // left blank for the doctor. That is why the polarity arm above moved.
     for (const [quote, minutes] of [
       ['No fever, total time 25 minutes.', 25],
       ['Total time of forty minutes spent, no separate procedure performed.', 40],
+      ['Denies fever, total time 25 minutes.', 25],
+      ['Total time of forty minutes spent, negative for any separate procedure.', 40],
     ] as const) {
-      const f = project({ total_time_minutes: { minutes, evidence_quote: quote } });
-      expect(conceptOf(f, 'total_time_minutes'), quote).toHaveLength(0);
+      expect(conceptOf(projectTotal(quote, minutes), 'total_time_minutes'), quote).toHaveLength(0);
     }
   });
 

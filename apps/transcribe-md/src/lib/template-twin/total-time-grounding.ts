@@ -6,48 +6,51 @@
 // offsets fall back to null), so before #314 nothing but a sentence in the L3
 // prompt stood between a model's arithmetic and those lines.
 //
-// ⚠️ VERSION 2. Version 1 tested the QUOTE the model chose: "total"/"spent"
-// anywhere in it, `includes()` with no word boundary, the quantity read from the
-// quote, a `Set` for the count, and hours ignored. A refutation pass drove all
-// of these onto both billing lines:
+// ⚠️ VERSION 3 — AN ANCHORED ALLOWLIST, NOT A REFUSAL LEXICON. Versions 1 and 2
+// accepted any sentence that contained a total construction and then tried to
+// REFUSE the bad ones with word lists (hours, seconds, ranges, negations, past
+// visits). Round two of the refutation pass broke v2 in both directions, 12 of
+// 13 verified findings confirmed. Every list had a missing member, and every
+// construction accepted words before or after it:
 //
-//   "I spent 45 minutes in traffic getting here."                -> 45
-//   "Total cholesterol was 240 and she waited 45 minutes ..."    -> 45
-//   "This was not a total of 45 minutes; I did not track time."  -> 45
-//   "Last visit the total time was 45 minutes."                  -> 45
-//   "Total time spent today was one hour and fifteen minutes."   -> 15
-//   quote "5 minutes total" inside "We spent 145 minutes total." -> 5
-//   "Total time spent 30-45 minutes." -> 45    "Total 4.5 minutes" -> 5
-//   "20 minutes reviewing records and 20 minutes with the patient" -> 20
+//   "Less than 45 minutes total."                         -> 45
+//   "The chest pain lasted 20 minutes total."             -> 20
+//   "Last week, total time was 45 minutes."               -> 45
+//   quote "15 minutes in total." in "Seen for 1 hr. 15 minutes in total." -> 15
+//   "Total time 45 minutes. Correction, total time 30 minutes."  -> 45
+//   "30 and 15 minutes in total."                          -> 15
 //
-// THE RULE, VERSION 2 — every step must hold, or NO fact:
-//   1 · LOCATE. Both sides are normalised (whitespace runs -> one space,
-//       lowercase, curly apostrophes -> '). The quote must occur in the context
-//       at a WORD BOUNDARY at both ends. Every such occurrence is judged.
-//   2 · READ THE TRANSCRIPT, NOT THE QUOTE. For each occurrence, take the
-//       SENTENCE(S) of the context it spans — split on . ; ! ? ONLY (a line
-//       break does NOT end one; see sentenceSpans), a '.' followed by a digit
-//       being a decimal point, not an end — and judge
-//       that text. The model chooses the quote; it does not choose the sentence.
-//   3 · QUANTITIES, counted as OCCURRENCES, never a Set:
-//       any hour or seconds quantity refuses (no conversion); any decimal or clock time
-//       refuses; any range (N-M, N to/or/through M, between N and M) refuses;
-//       exactly ONE minute quantity, a number directly followed by its unit,
-//       and it must EQUAL the value.
-//   4 · NO negation and NO past-visit marker in the sentence.
-//   5 · AN EXPLICIT TOTAL CONSTRUCTION TIED TO THAT ONE QUANTITY:
-//         total [visit|encounter|face-to-face] time [spent] [today] [was|of|is|:] N minutes
-//         a total of N minutes · total [of] N minutes · N minutes [in] total
-//         time spent [was|is|:] N minutes
-//       Bare "spent" is not a marker, and "total" modifying another noun
-//       ("total cholesterol") is not one either.
+// THE ERRORS ARE ASYMMETRIC. A wrong billing quantity on a signed note cannot
+// be recovered; a blank with a named reason can, because the doctor sets the
+// control at review. So a sentence now grounds only when the WHOLE of it is
+// one of a short list of canonical forms, and everything else is a blank.
+//
+// THE RULE, VERSION 3 — every step must hold, or NO fact:
+//   1 · LOCATE. The quote occurs in the context at a word boundary at both
+//       ends (normalised: whitespace runs -> one space, lowercase, curly
+//       apostrophes -> '). Every occurrence is judged.
+//   2 · ONE SENTENCE. Each occurrence lies inside exactly one sentence.
+//       ; ! ? end a sentence. A '.' ends one ONLY when the next non-whitespace
+//       character is an uppercase letter, or there is none. A line break alone
+//       does not. So "1 hr. 15", "approx. 45" and "4.5" never split.
+//   3 · THE WHOLE SENTENCE IS CANONICAL. Normalised, a hyphen between number
+//       words made a space, one trailing '.' stripped: a sentence ending in ?
+//       or ! is not a statement; otherwise the ENTIRE sentence must match one
+//       of CANONICAL_TOTAL_FORMS, whose one quantity must read as a positive
+//       integer equal to the value.
+//   4 · NOT RETRACTED. The sentence after each occurrence must not begin with
+//       a retraction ("correction", "strike that", "actually", "no, ...").
+//   5 · ONE TOTAL. Every sentence of the whole context that matches a
+//       canonical form states the same minutes as the value.
+//
+// Conversation mode is refused outright, in ONE place: the call site in
+// `encounter-facts/index.ts`. The doors cannot read the role-labelled text the
+// worker read, so no grounding answer would be the same everywhere.
 //
 // ⚠️ EVERY REFUSAL IS A BLANK, NEVER A GUESS. A withheld fact leaves both
 // controls to the bounded clear, COUNTED as still blank, so the doctor is told
-// and types the figure. The strictness is deliberate and one-sided: a blank a
-// doctor fills is recoverable; a wrong billing figure on a signed note is not.
-// The refusal reason is a fixed token — no quote, no number — so the log is not
-// a PHI surface.
+// and types the figure. The refusal reason is a fixed token — no quote, no
+// number — so the log is not a PHI surface.
 //
 // ⚠️ WHICH CONTEXT IS "THE TRANSCRIPT" IS NOT DECIDED HERE. It is decided once,
 // for the worker and every re-fill door, by `groundingContextFor`
@@ -136,7 +139,7 @@ export interface NormalisedText {
 }
 
 const WHITESPACE = /^\s$/u;
-const CURLY_APOSTROPHE = /^[\u2018\u2019\u02bc]$/u;
+const CURLY_APOSTROPHE = /^[‘’ʼ]$/u;
 
 /**
  * Lowercase, collapse every whitespace run (newlines included) to one space,
@@ -198,39 +201,45 @@ function locateQuote(context: NormalisedText, quote: string): { spans: SourceSpa
   return { spans, midWord };
 }
 
-// ── 2 · THE SENTENCE, NOT THE QUOTE ─────────────────────────────────────────
+// ── 2 · SENTENCES ───────────────────────────────────────────────────────────
 
-const DIGIT = /^[0-9]$/;
+const UPPERCASE_LETTER = /^\p{Lu}$/u;
+
+/** The first non-whitespace character at or after `from`, or undefined. */
+function nextVisibleCharacter(source: string, from: number): string | undefined {
+  for (let j = from; j < source.length; ) {
+    const ch = String.fromCodePoint(source.codePointAt(j)!);
+    if (!WHITESPACE.test(ch)) return ch;
+    j += ch.length;
+  }
+  return undefined;
+}
 
 /**
- * Sentence spans of the SOURCE. Ends at . ; ! ? — and NOWHERE ELSE. ⚠️ A '.'
- * FOLLOWED BY A DIGIT IS A DECIMAL POINT, NOT AN END — otherwise "It took 4.5
- * minutes total." splits into "It took 4." and "5 minutes total.", and a quote
- * of the second grounds as 5.
+ * Sentence spans of the SOURCE. `;` `!` `?` end a sentence. ⚠️ A `.` ENDS ONE
+ * ONLY WHEN THE NEXT NON-WHITESPACE CHARACTER IS AN UPPERCASE LETTER, OR THERE
+ * IS NONE. v2 ended one at any '.' not followed by a digit, so an abbreviation
+ * period let the model's narrow quote choose which half was judged:
  *
- * ⚠️ A LINE BREAK DOES NOT END A SENTENCE, AND THAT IS A DECIDED TRADE. v2 as
- * first built ended one at every line break, so list-style notes would not be
- * refused — and measured, both of these then GROUNDED as 45, because the
- * negation / past-visit marker sat on the line before the total:
+ *     quote "15 minutes in total." in "Seen for 1 hr. 15 minutes in total." -> 15
  *
- *     "This was not⏎a total of 45 minutes."
- *     "Last visit,⏎total time was 45 minutes."
+ * Now "hr.", "approx.", "prev." and "4.5" do not split. "Dr. Patel" still does,
+ * and the half it leaves ("Patel, total time was ...") is not a canonical form,
+ * so it refuses. Joining two sentences can only cost a blank, never a figure.
  *
- * A line that carries its own terminal punctuation still ends its sentence
- * ("No fever.⏎Total time 45 minutes." grounds). An unpunctuated one joins the
- * next, so a negation above an unpunctuated total refuses it: a blank the doctor
- * fills is recoverable, a wrong billing figure on a signed note is not.
+ * A LINE BREAK DOES NOT END A SENTENCE (amendment 2), so a line with no
+ * terminal punctuation joins the next and the joined text is judged whole.
  */
 export function sentenceSpans(source: string): SourceSpan[] {
   const spans: SourceSpan[] = [];
   let start = 0;
   for (let i = 0; i < source.length; i += 1) {
     const c = source[i]!;
-    const ends =
-      c === ';' ||
-      c === '!' ||
-      c === '?' ||
-      (c === '.' && !DIGIT.test(source[i + 1] ?? ''));
+    let ends = c === ';' || c === '!' || c === '?';
+    if (c === '.') {
+      const next = nextVisibleCharacter(source, i + 1);
+      ends = next === undefined || UPPERCASE_LETTER.test(next);
+    }
     if (ends) {
       spans.push({ start, end: i + 1 });
       start = i + 1;
@@ -240,267 +249,112 @@ export function sentenceSpans(source: string): SourceSpan[] {
   return spans;
 }
 
-function sentencesSpannedBy(source: string, sentences: readonly SourceSpan[], span: SourceSpan): string {
-  const hit = sentences.filter((s) => s.start < span.end && s.end > span.start);
-  return source.slice(hit[0]!.start, hit[hit.length - 1]!.end);
-}
+// ── 3 · THE CANONICAL FORMS ─────────────────────────────────────────────────
 
-// ── 3 · TOKENS AND QUANTITIES ───────────────────────────────────────────────
+const NUMBER_WORD = `(?:${[...Object.keys(UNITS), ...Object.keys(TENS), 'hundred']
+  .sort((a, b) => b.length - a.length)
+  .join('|')})`;
+/** "forty-five" -> "forty five", "one-hundred" -> "one hundred". Nothing else. */
+const NUMBER_WORD_HYPHEN = new RegExp(`\\b(${NUMBER_WORD})[-\\u2010\\u2011](?=${NUMBER_WORD}\\b)`, 'gu');
 
 /**
- * A number (digits, possibly with a decimal/clock separator, or a leading-dot
- * decimal), a word (letters, with an inner apostrophe), a dash, or any other
- * single mark. ⚠️ DIGITS AND LETTERS ARE SEPARATE TOKENS BY CONSTRUCTION, so an
- * attached unit ("45min", "1h") splits without a rewrite step.
+ * `Q` — EXACTLY ONE quantity: digits, or a run of number words, directly
+ * followed by a minute unit. Nothing may sit between the number and its unit.
  */
-const TOKEN = /\d+(?:[.,:]\d+)*|[.,]\d+|\p{L}+(?:'\p{L}+)*|[-\u2010-\u2015\u2212]|\S/gu;
-const DASH = /^[-\u2010-\u2015\u2212]$/u;
-const DIGITS_ONLY = /^\d+$/;
-const STARTS_WITH_DIGIT = /^[.,]?\d/;
+const Q = `(?:(?<digits>\\d+) ?|(?<words>(?:a )?${NUMBER_WORD}(?: (?:${NUMBER_WORD}|and))*) )(?:minutes|minute|mins|min)`;
+const THIS_VISIT = '(?:with the patient|on this visit|on this encounter)';
 
-type Unit =
-  | { kind: 'num'; value: number | null; integer: boolean }
-  | { kind: 'word'; w: string }
-  | { kind: 'mark'; m: string }
-  | { kind: 'range' };
-
-const MINUTE_WORDS = new Set(['minute', 'minutes', 'min', 'mins']);
-const HOUR_WORDS = new Set(['hour', 'hours', 'hr', 'hrs']);
-const SECOND_WORDS = new Set(['second', 'seconds', 'sec', 'secs']);
-const RANGE_WORDS = new Set(['to', 'or', 'through', 'thru']);
-const NEGATIONS = new Set(['no', 'not', 'never', 'without', 'none', 'nor', 'neither', 'cannot', 'didnt', 'dont', 'doesnt', 'wasnt', 'isnt', 'werent']);
-const PAST_WORDS = new Set(['last', 'previous', 'prior']);
-const VISIT_WORDS = new Set(['visit', 'visits', 'encounter', 'encounters', 'appointment', 'appointments', 'session', 'consult', 'consultation', 'time']);
-
-/** The sentence as units: numbers assembled (digits, or a spoken run), dashes resolved. */
-function toUnits(sentence: string): Unit[] {
-  const raw = normaliseForGrounding(sentence).text.match(TOKEN) ?? [];
-  const isNumeric = (t: string | undefined): boolean =>
-    t !== undefined && (STARTS_WITH_DIGIT.test(t) || isNumberWord(t));
-
-  // Dashes first. Between two numbers a dash is a RANGE — unless it joins a
-  // compound cardinal ("forty-five", "one-hundred"). Anywhere else it joins
-  // words ("face-to-face") or a number to its unit ("45-minute"): dropped.
-  const tokens: Array<string | { range: true }> = [];
-  for (let i = 0; i < raw.length; i += 1) {
-    const t = raw[i]!;
-    if (!DASH.test(t)) {
-      tokens.push(t);
-      continue;
-    }
-    const prev = raw[i - 1];
-    const next = raw[i + 1];
-    if (!isNumeric(prev) || !isNumeric(next)) continue;
-    const compound =
-      (prev! in TENS && next! in UNITS && UNITS[next!]! >= 1 && UNITS[next!]! <= 9) ||
-      (prev! in UNITS && next === 'hundred');
-    if (!compound) tokens.push({ range: true });
-  }
-
-  const wordAt = (i: number): string | null => {
-    const t = tokens[i];
-    return typeof t === 'string' ? t : null;
-  };
-  const units: Unit[] = [];
-  for (let i = 0; i < tokens.length; ) {
-    const t = tokens[i]!;
-    if (typeof t !== 'string') {
-      units.push({ kind: 'range' });
-      i += 1;
-      continue;
-    }
-    if (STARTS_WITH_DIGIT.test(t)) {
-      const integer = DIGITS_ONLY.test(t);
-      units.push({ kind: 'num', value: integer ? Number(t) : null, integer });
-      i += 1;
-      continue;
-    }
-    if (isNumberWord(t) || (t === 'a' && wordAt(i + 1) === 'hundred')) {
-      const run = [t];
-      let j = i + 1;
-      for (;;) {
-        const w = wordAt(j);
-        if (w !== null && isNumberWord(w)) {
-          run.push(w);
-          j += 1;
-          continue;
-        }
-        const after = wordAt(j + 1);
-        if (w === 'and' && run.includes('hundred') && after !== null && isNumberWord(after)) {
-          run.push(w);
-          j += 1;
-          continue;
-        }
-        break;
-      }
-      // An unparseable run ("forty forty", "one thirty") is a number nobody can
-      // read: value null, never a guess.
-      units.push({ kind: 'num', value: parseSpokenCardinal(run), integer: true });
-      i = j;
-      continue;
-    }
-    units.push(/\p{L}/u.test(t) ? { kind: 'word', w: t } : { kind: 'mark', m: t });
-    i += 1;
-  }
-  return units;
-}
-
-const wordOf = (u: Unit | undefined): string | null => (u?.kind === 'word' ? u.w : null);
-
-interface MinuteQuantity {
-  /** null when the number is unreadable or not directly followed by its unit. */
-  value: number | null;
-  /** Units `numIndex..unitIndex` ARE the quantity; only meaningful when direct. */
-  numIndex: number;
-  unitIndex: number;
-}
+const anchored = (body: string): RegExp => new RegExp(`^${body}$`, 'u');
 
 /**
- * Every minute quantity the units state, as OCCURRENCES — two "20 minutes" are
- * two quantities, never one.
+ * ⚠️ THE ALLOWLIST. A normalised sentence grounds only when the WHOLE of it is
+ * one of these. Adding a form is widening a billing rule: it needs an accept
+ * arm and a mutation, and nothing else in this file may accept a sentence.
  *
- *   · a number DIRECTLY followed by a minute word is a readable quantity;
- *   · a number separated from its minute word by up to three words
- *     ("45 face-to-face minutes", "45 or more minutes", "20 additional
- *     minutes"), and a number directly AFTER a minute word ("minutes: 45",
- *     "45 minutes 30"), are quantities too — counted, but UNREADABLE, so they
- *     can refuse and can never ground.
+ * `tail` (F7 only) is words, commas and "and" — see `isPlainTail`.
  */
-function minuteQuantities(units: readonly Unit[]): MinuteQuantity[] {
-  const out: MinuteQuantity[] = [];
-  for (let i = 0; i < units.length; i += 1) {
-    const w = wordOf(units[i]);
-    if (w === null || !MINUTE_WORDS.has(w)) continue;
-    const prev = units[i - 1];
-    if (prev?.kind === 'num') {
-      out.push({ value: prev.integer ? prev.value : null, numIndex: i - 1, unitIndex: i });
-    } else {
-      let j = i - 1;
-      let skipped = 0;
-      while (skipped < 3 && j >= 0) {
-        const between = wordOf(units[j]);
-        if (between === null || MINUTE_WORDS.has(between) || HOUR_WORDS.has(between)) break;
-        j -= 1;
-        skipped += 1;
-      }
-      if (skipped > 0 && units[j]?.kind === 'num') out.push({ value: null, numIndex: j, unitIndex: i });
-    }
-    let k = i + 1;
-    if (units[k]?.kind === 'mark' && (units[k] as { m: string }).m === ':') k += 1;
-    if (units[k]?.kind === 'num') out.push({ value: null, numIndex: k, unitIndex: i });
-  }
-  return out;
-}
-
-/** Every minute quantity the text states, in order (null = unreadable). */
-export function statedMinuteQuantities(text: string): Array<number | null> {
-  return minuteQuantities(toUnits(text)).map((q) => q.value);
-}
-
-// ── 5 · THE TOTAL CONSTRUCTION ──────────────────────────────────────────────
-
-const QUANTITY = '§q';
-/**
- * Forms matched against the sentence with its ONE quantity replaced by `§q`,
- * so the construction is tied to that quantity and to nothing else.
- */
-const TOTAL_CONSTRUCTIONS: readonly RegExp[] = [
-  new RegExp(`(?:^| )total (?:(?:visit|encounter|face to face) )?time (?:spent )?(?:today )?(?:(?:was|of|is|:) )?${QUANTITY}(?= |$)`),
-  new RegExp(`(?:^| )a total of ${QUANTITY}(?= |$)`),
-  new RegExp(`(?:^| )total (?:of )?${QUANTITY}(?= |$)`),
-  new RegExp(`(?:^| )time spent (?:(?:was|is|:) )?${QUANTITY}(?= |$)`),
-  // "45 minutes total." — but not "45 minutes total cholesterol": a `total`
-  // that goes on to modify a noun is not the quantity's total.
-  new RegExp(
-    `(?:^| )${QUANTITY} (?:in )?total(?=$| [^\\p{L}\\p{N} ]| (?:with|for|today|spent|was|is|on|in|during|including|and|of)(?: |$))`,
-    'u',
-  ),
+export const CANONICAL_TOTAL_FORMS: ReadonlyArray<{ readonly id: string; readonly form: RegExp }> = [
+  { id: 'F1', form: anchored(`(?:the )?total (?:visit |encounter |face[ -]to[ -]face )?time(?: spent)?(?: today)?(?: (?:was|is|of))?(?: ?[:,])? ${Q}`) },
+  { id: 'F2', form: anchored(`(?:the )?total time spent ${THIS_VISIT}(?: today)?(?: (?:was|is))?(?: ?[:,])? ${Q}`) },
+  { id: 'F3', form: anchored(`(?:i |we )?spent a total of ${Q}(?: ${THIS_VISIT})?(?: today)?`) },
+  { id: 'F4', form: anchored(`(?:a )?total(?: of)?(?: ?[:,])? ${Q}`) },
+  { id: 'F5', form: anchored(`(?:the )?time spent(?: today)?(?: (?:was|is))?(?: ?[:,])? ${Q}`) },
+  { id: 'F6', form: anchored(`${Q}(?: in)? total(?: time)?`) },
+  { id: 'F6-spent', form: anchored(`${Q} spent(?: in)? total`) },
+  { id: 'F7', form: anchored(`a total time of ${Q} (?:was )?spent ${THIS_VISIT}(?:, including (?<tail>[\\p{L}' ,]+))?`) },
 ];
 
-function skeleton(units: readonly Unit[], q: MinuteQuantity): string {
-  const parts: string[] = [];
-  for (let i = 0; i < units.length; i += 1) {
-    if (i === q.numIndex) continue;
-    if (i === q.unitIndex) {
-      parts.push(QUANTITY);
-      continue;
-    }
-    const u = units[i]!;
-    parts.push(u.kind === 'word' ? u.w : u.kind === 'mark' ? u.m : u.kind === 'num' ? '#' : '-');
+const TIME_UNIT_WORDS = new Set([
+  'minute', 'minutes', 'min', 'mins', 'hour', 'hours', 'hr', 'hrs', 'second', 'seconds', 'sec', 'secs',
+  'day', 'days', 'week', 'weeks', 'month', 'months', 'year', 'years',
+]);
+
+/** F7's "including T": no digit (the character class), no number word, no time unit. */
+function isPlainTail(tail: string): boolean {
+  return tail
+    .split(/[ ,]+/u)
+    .filter((w) => w !== '')
+    .every((w) => !isNumberWord(w) && !TIME_UNIT_WORDS.has(w));
+}
+
+/** Normalised for the forms: see rule 3 in the header. */
+export function canonicalSentence(sentence: string): string {
+  const s = normaliseForGrounding(sentence).text.trim().replace(NUMBER_WORD_HYPHEN, '$1 ');
+  return s.endsWith('.') ? s.slice(0, -1) : s;
+}
+
+/** The minutes a canonical sentence states (null = unreadable), or null when it is no form. */
+function statedTotalOf(canonical: string): { minutes: number | null } | null {
+  for (const { form } of CANONICAL_TOTAL_FORMS) {
+    const m = form.exec(canonical);
+    if (m === null) continue;
+    const tail = m.groups?.tail;
+    if (tail !== undefined && !isPlainTail(tail)) continue;
+    const digits = m.groups?.digits;
+    const n = digits !== undefined ? Number(digits) : parseSpokenCardinal((m.groups?.words ?? '').split(' '));
+    return { minutes: n !== null && Number.isSafeInteger(n) && n > 0 ? n : null };
   }
-  return parts.join(' ');
+  return null;
 }
 
 // ── THE JUDGEMENT ───────────────────────────────────────────────────────────
+
+/** Refusals a single sentence can earn. */
+export type TotalTimeSentenceRefusal =
+  | 'not_a_statement'
+  | 'not_stated_as_a_total'
+  | 'minute_quantity_unreadable'
+  | 'stated_quantity_differs_from_value';
 
 export type TotalTimeRefusal =
   | 'quote_empty'
   | 'minutes_not_a_positive_integer'
   | 'quote_not_in_transcript'
   | 'quote_splits_a_word'
-  | 'hour_quantity_stated'
-  | 'seconds_quantity_stated'
-  | 'quantity_not_an_integer'
-  | 'quantity_is_a_range'
-  | 'no_minute_quantity_stated'
-  | 'several_minute_quantities_stated'
-  | 'minute_quantity_unreadable'
-  | 'stated_quantity_differs_from_value'
-  | 'negation_in_sentence'
-  | 'past_visit_marker'
-  | 'not_stated_as_a_total';
+  | TotalTimeSentenceRefusal
+  | 'corrected_in_next_sentence'
+  | 'several_totals_stated'
+  /** Emitted by the ONE call site in encounter-facts, never by this module. */
+  | 'conversation_mode_not_grounded';
 
 export type TotalTimeGrounding = { ok: true } | { ok: false; reason: TotalTimeRefusal };
 
-/** Rules 3–5 against ONE sentence text. null = this sentence grounds the value. */
-export function judgeTotalTimeSentence(sentence: string, minutes: number): TotalTimeRefusal | null {
-  const units = toUnits(sentence);
-
-  for (let i = 0; i < units.length; i += 1) {
-    const w = wordOf(units[i]);
-    if (w !== null && (HOUR_WORDS.has(w) || (w === 'h' && units[i - 1]?.kind === 'num'))) {
-      return 'hour_quantity_stated';
-    }
-  }
-  // "45 minutes 30 seconds" is not a whole number of minutes, and no
-  // conversion is attempted in either direction.
-  for (let i = 1; i < units.length; i += 1) {
-    const w = wordOf(units[i]);
-    if (w !== null && SECOND_WORDS.has(w) && units[i - 1]?.kind === 'num') return 'seconds_quantity_stated';
-  }
-  if (units.some((u) => u.kind === 'num' && !u.integer)) return 'quantity_not_an_integer';
-  for (let i = 0; i < units.length; i += 1) {
-    const u = units[i]!;
-    const next = units[i + 1];
-    const connective = next?.kind === 'range' || (wordOf(next) !== null && RANGE_WORDS.has(wordOf(next)!));
-    if (u.kind === 'num' && connective && units[i + 2]?.kind === 'num') return 'quantity_is_a_range';
-    if (wordOf(u) === 'between' && units[i + 1]?.kind === 'num' && wordOf(units[i + 2]) === 'and' && units[i + 3]?.kind === 'num') {
-      return 'quantity_is_a_range';
-    }
-  }
-
-  const quantities = minuteQuantities(units);
-  if (quantities.length === 0) return 'no_minute_quantity_stated';
-  if (quantities.length > 1) return 'several_minute_quantities_stated';
-  const only = quantities[0]!;
-  if (only.value === null) return 'minute_quantity_unreadable';
-  if (only.value !== minutes) return 'stated_quantity_differs_from_value';
-
-  for (let i = 0; i < units.length; i += 1) {
-    const w = wordOf(units[i]);
-    if (w === null) continue;
-    if (NEGATIONS.has(w) || w.endsWith("n't")) return 'negation_in_sentence';
-  }
-  for (let i = 0; i < units.length; i += 1) {
-    const w = wordOf(units[i]);
-    const next = wordOf(units[i + 1]);
-    if (w !== null && next !== null && PAST_WORDS.has(w) && VISIT_WORDS.has(next)) return 'past_visit_marker';
-  }
-
-  const shape = skeleton(units, only);
-  if (!TOTAL_CONSTRUCTIONS.some((form) => form.test(shape))) return 'not_stated_as_a_total';
+/** Rule 3 against ONE sentence. null = this sentence grounds the value. */
+export function judgeTotalTimeSentence(sentence: string, minutes: number): TotalTimeSentenceRefusal | null {
+  const canonical = canonicalSentence(sentence);
+  if (canonical.endsWith('?') || canonical.endsWith('!')) return 'not_a_statement';
+  const stated = statedTotalOf(canonical);
+  if (stated === null) return 'not_stated_as_a_total';
+  if (stated.minutes === null) return 'minute_quantity_unreadable';
+  if (stated.minutes !== minutes) return 'stated_quantity_differs_from_value';
   return null;
 }
+
+/** Rule 4: what the NEXT sentence may not begin with. */
+const RETRACTION =
+  /^(?:(?:correction|strike that|scratch that|sorry|no wait|wait|actually|i mean|make that|rather)\b|no(?:,|$))/u;
+
+const refuse = (reason: TotalTimeRefusal): TotalTimeGrounding => ({ ok: false, reason });
 
 /**
  * Whether an L3 `total_time_minutes` entity may become a fact.
@@ -515,21 +369,44 @@ export function groundTotalTime(input: {
   minutes: number;
 }): TotalTimeGrounding {
   const quote = normaliseForGrounding((input.quote ?? '').trim()).text;
-  if (!quote) return { ok: false, reason: 'quote_empty' };
+  if (!quote) return refuse('quote_empty');
   if (!Number.isSafeInteger(input.minutes) || input.minutes <= 0) {
-    return { ok: false, reason: 'minutes_not_a_positive_integer' };
+    return refuse('minutes_not_a_positive_integer');
   }
   const context = normaliseForGrounding(input.contextText);
   const { spans, midWord } = locateQuote(context, quote);
-  if (spans.length === 0) {
-    return { ok: false, reason: midWord > 0 ? 'quote_splits_a_word' : 'quote_not_in_transcript' };
-  }
-  // ⚠️ EVERY OCCURRENCE COUNTS. The same words can be today's total in one
-  // sentence and last visit's in another; the model does not get to pick.
+  if (spans.length === 0) return refuse(midWord > 0 ? 'quote_splits_a_word' : 'quote_not_in_transcript');
+
   const sentences = sentenceSpans(input.contextText);
+  const canonicalAt = (i: number): string =>
+    canonicalSentence(input.contextText.slice(sentences[i]!.start, sentences[i]!.end));
+
+  // Rules 1–3. ⚠️ EVERY OCCURRENCE COUNTS: the same words can be today's total
+  // in one sentence and last week's in another, and the model does not pick.
+  const homes: number[] = [];
   for (const span of spans) {
-    const refusal = judgeTotalTimeSentence(sentencesSpannedBy(input.contextText, sentences, span), input.minutes);
-    if (refusal !== null) return { ok: false, reason: refusal };
+    const hit = sentences.flatMap((s, i) => (s.start < span.end && s.end > span.start ? [i] : []));
+    // A quote across a sentence end is not ONE sentence stating a total.
+    if (hit.length !== 1) return refuse('not_stated_as_a_total');
+    const refusal = judgeTotalTimeSentence(input.contextText.slice(sentences[hit[0]!]!.start, sentences[hit[0]!]!.end), input.minutes);
+    if (refusal !== null) return refuse(refusal);
+    homes.push(hit[0]!);
+  }
+
+  // Rule 4 — a dictated correction retracts the total before it.
+  for (const home of homes) {
+    for (let i = home + 1; i < sentences.length; i += 1) {
+      const next = canonicalAt(i);
+      if (next === '') continue;
+      if (RETRACTION.test(next)) return refuse('corrected_in_next_sentence');
+      break;
+    }
+  }
+
+  // Rule 5 — two canonical totals that disagree: the model does not pick.
+  for (let i = 0; i < sentences.length; i += 1) {
+    const stated = statedTotalOf(canonicalAt(i));
+    if (stated !== null && stated.minutes !== input.minutes) return refuse('several_totals_stated');
   }
   return { ok: true };
 }

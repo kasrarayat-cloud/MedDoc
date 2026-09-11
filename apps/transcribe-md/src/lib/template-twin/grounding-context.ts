@@ -22,13 +22,21 @@
 //   text_notes       -> rawTextInput, trimmed   (= L3's `input.rawText.trim()`)
 //   voice_dictation  -> transcriptText, trimmed (= L3's `dictationText.trim()`;
 //                       L1b persists the same string it returns)
-//   conversation     -> TODAY'S BEHAVIOUR, KEPT, AND A NAMED RESIDUAL:
+//   conversation     -> TODAY'S BEHAVIOUR, KEPT for every other fact:
 //                       the worker passes the role-labelled transcript L3 read;
 //                       the doors have only `transcriptText`, which is NOT that
-//                       text (no role labels, different joins). A quote spanning
-//                       two utterances can ground at the worker and not at a
-//                       door. Production has ZERO audio_upload visits today
-//                       (measured 2026-09-10), so this is filed, not fixed.
+//                       text (no role labels, different joins).
+//                       ⚠️ #314 v3: A CONVERSATION TOTAL IS REFUSED EVERYWHERE.
+//                       Round two measured the v2 divergence running the other
+//                       way: the label "[Doctor #0, 3:05]:" put a clock time in
+//                       every utterance's first sentence, so the worker refused
+//                       a total that every door grounded (the preview showed 45,
+//                       the signature froze a blank). `encounter-facts` now
+//                       emits no total for mode 'conversation' at all, so the
+//                       worker and the four doors agree. The proper fix —
+//                       persist L3's labelled context so the doors can read it —
+//                       is FILED. Production has ZERO audio_upload visits
+//                       (measured 2026-09-11).
 //
 //   PROOF: __tests__/gate-314-grounding-context-doors.test.ts
 // ============================================================================

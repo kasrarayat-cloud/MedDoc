@@ -16,7 +16,7 @@ import {
   EncounterFactSchema,
   type EncounterFact,
 } from '../ir';
-import { groundTotalTime } from '../total-time-grounding';
+import { groundTotalTime, type TotalTimeGrounding } from '../total-time-grounding';
 
 export type EncounterInputMode = 'conversation' | 'dictation' | 'text';
 
@@ -863,14 +863,24 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
   // judged, never the quote alone (total-time-grounding.ts). So `contextText`
   // must be the text L3 read — `groundingContextFor` decides that for the
   // worker and every re-fill door, and a door that passed '' would blank this.
+  // ⚠️ #314 v3 — THE WHOLE SENTENCE MUST BE A CANONICAL FORM (an allowlist,
+  // not a refusal lexicon), and CONVERSATION MODE IS REFUSED, HERE AND ONLY
+  // HERE. The worker grounds a conversation against the role-labelled text L3
+  // read; the four doors can only read `transcriptText`. Round two measured the
+  // two disagreeing on every first-sentence total (the preview printed 45, the
+  // signature froze a blank). Every caller reaches this line through the fill
+  // engine with the visit's REAL mode, so refusing here makes all five agree.
+  // The proper fix (persist L3's labelled context for the doors) is FILED.
   const totalTime = entities.total_time_minutes;
-  const totalTimeGrounding = totalTime
-    ? groundTotalTime({
-        contextText: input.contextText,
-        quote: totalTime.evidence_quote,
-        minutes: totalTime.minutes,
-      })
-    : null;
+  const totalTimeGrounding: TotalTimeGrounding | null = !totalTime
+    ? null
+    : input.mode === 'conversation'
+      ? { ok: false, reason: 'conversation_mode_not_grounded' }
+      : groundTotalTime({
+          contextText: input.contextText,
+          quote: totalTime.evidence_quote,
+          minutes: totalTime.minutes,
+        });
   if (totalTimeGrounding && !totalTimeGrounding.ok) {
     console.warn(`[template-twin:facts] total_time_minutes withheld: ${totalTimeGrounding.reason}`);
   }
