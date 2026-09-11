@@ -9,10 +9,13 @@
 
 import 'server-only';
 
+import { assertSuperAdminCaller } from '@/app/admin/_lib/admin-gate';
+
 import { getThreats, getResolvedThreats } from '../../_lib/dashboard-data';
 import type { AdminThreatsInitialData } from '../_types';
 
 export async function getThreatsPageData(): Promise<AdminThreatsInitialData> {
+  await assertSuperAdminCaller();
   const [active, resolved] = await Promise.all([
     getThreats(),
     getResolvedThreats('7d'),

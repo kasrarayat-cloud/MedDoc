@@ -30,6 +30,7 @@ import { Product } from '@prisma/client';
 import { auth } from '@/lib/nextauth';
 import { logAudit } from '@/lib/audit';
 import { isAdminSessionStale } from '@/lib/admin-session-freshness';
+import { AdminAccessDeniedError } from '@/lib/admin-access-denied';
 
 /** What admin handlers actually need — slim subset of the next-auth
  *  session. The full app `Session` from @meddoc/auth requires
@@ -115,6 +116,11 @@ export function adminApi(
     try {
       return await handler(req, { session, routeKey });
     } catch (err) {
+      // A /admin data helper's own gate (assertSuperAdminCaller, ruling
+      // #310) refused the caller — an un-enrolled SUPER_ADMIN, or access
+      // revoked between this wrapper's check and the helper's. Same silent
+      // 404 as every other refusal here, never a 500.
+      if (err instanceof AdminAccessDeniedError) return notFoundResponse();
       console.error(
         `[admin-api:${routeKey}] handler threw:`,
         err instanceof Error ? err.message : err
