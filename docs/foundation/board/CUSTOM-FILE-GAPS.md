@@ -154,6 +154,30 @@ The custom-file lane wrapped its deploy in a watchdog.
 armed until the first recreate. The scratch watchdog is the prototype. Then an
 owner decision on the untagged images.
 
+⚠️ **AMENDED 2026-09-11, after the security hotfix deploy of `fd9f7cdb`. THE
+PROTOTYPE DISARMED ITSELF 12 SECONDS IN.**
+
+- **What happened.** The watchdog matched its disarm marker as a plain
+  substring, `grep -F "=== 5b."`. `deploy-prod.sh` prints the resolved §2.5
+  declaration into the log at step 1. That declaration's own watchdog
+  paragraph quoted the marker, so the guard stood down at 07:21:44Z. The real
+  step-5b header only arrived at 07:29:56Z.
+- **Recovery.** It was recovered at 07:28:37Z with a replacement guard that
+  anchors the marker at line start. The lowest free disk was 12.7G against a
+  6G floor, so no harm was done, by luck rather than by the guard. Full account:
+  `20260911-5020c68a-JUDGED.md`.
+- **Same class as #13.** It is a marker the process prints BEFORE the moment it
+  means, arriving this time in the prose describing the guard.
+- **What a tracked guard must do.** Match the step header **anchored at line
+  start** (`^=== 5b\.`), or better, have `deploy-prod.sh` emit a dedicated
+  machine token that no prose uses. The corrected prototype was proven on both
+  shapes before its first use, under an impossible floor so that any armed
+  moment would kill:
+  - a marker quoted mid-line stays armed and KILLS;
+  - the real header at line start disarms and does NOT kill.
+- **Its measured budget is filed as #16:** the peak consumed 16,330M, and
+  ~8.2G stays consumed after each deploy.
+
 ## 10 · STALE-MANIFEST-ACROSS-RULE-CHANGE — a rule change does not make a stored manifest stale
 
 Round two of #314, finding 1, was CONFIRMED and NON-BLOCKING. Freshness is
@@ -268,3 +292,70 @@ symlink** into another session's scratchpad (`ceac94df…/scratchpad/auto/`).
 
 **Not fixed here:** reinstalling mid-sequence would be a second, concurrent
 change to the surface that deploys.
+
+## 16 · DISK-BUDGET — every deploy keeps ~8G, and the box is out of room for the next one
+
+Measured on 2026-09-11 during the security hotfix deploy of `fd9f7cdb`:
+
+| moment | free disk |
+|---|---|
+| before the deploy | 29,070M |
+| lowest sample | 12,740M (peak consumption **16,330M**) |
+| right after the deploy | 13G |
+| after pruning the regenerable build cache | 20,830M |
+
+**About 8.2G stays consumed after every deploy.** Those are the new images; their
+predecessors are kept, correctly, by the rollback tags (ruling #137).
+
+The sanctioned levers are exhausted:
+- the build cache is 0B;
+- `prune-rollback-tags.sh` deletes 0 tags, because every tag is inside its keep set;
+- the npm and pip download caches were cleared, freeing 1.3G.
+
+**At 09:03Z the preflight read df 93% (22,813M free), so it BLOCKED on disk.** The
+certification-referrer fix was therefore **NOT deployed**: it was merged as
+`aaf8775a`, fully cited, and its declaration `20260911-e1d55da3.md` is committed.
+That declaration's own disk rule (≥ 22,474M) was met by 339M. The standing gate
+stopped the deploy, because a rule written by the deploying session does not
+overrule it.
+
+⚠️ **THAT UNDEPLOYED DECLARATION IS NOW A HELD ONE.** All four parts of the
+runbook §2.5 predicate hold:
+- it has no verdict;
+- it is not superseded;
+- `aaf8775a` is not an ancestor of the running `fd9f7cdb`;
+- it names runtime files (`verification-encounter.ts` and
+  `concept-registry.ts`).
+
+**Any deploy of `main` from here carries it, and must judge it jointly or defer it
+by name.**
+
+**Needs (owner, class d): free space.**
+- `docker system df` reports 46.3G of reclaimable images, mostly untagged.
+  Sessions are denied `docker rmi`, correctly.
+- It also reports 12.2G of unattached volumes. Those are data, and never a
+  session's call.
+
+Then, in order:
+1. re-run the preflight;
+2. run the deploy act, re-measuring the disk rule, under an anchored watchdog
+   (see 9b);
+3. run the certify act under its committed mutation declaration
+   (`20260910-certify-activate-reissued-form.md`, baseline re-read).
+
+## 17 · CI-RUNNER-HOST-DNS — both self-hosted runners lose DNS intermittently
+
+On 2026-09-11 there were four failures between 06:42 and 07:53Z. All four were
+network failures; none was a code failure:
+- npm audit on `quillmd-ci-1`, three times: `EAI_AGAIN`, then
+  `ECONNREFUSED 127.0.0.1:443`, so audit-gate reported "CANNOT TELL";
+- e2e's checkout on `quillmd-ci-2`, once: "Could not resolve host: github.com",
+  so Playwright was SKIPPED and the run FAILED.
+
+`quillmd-ci-1` also showed offline while marked busy from 05:33 to 06:28Z.
+
+The fail-closed gates were right to refuse. The cure used every time was
+`gh run rerun <id> --failed` on the same commit, never an override. The runners
+are not on the VPS, so no session can fix them.
+
+**Needs (owner):** fix the runner host's DNS resolver.
