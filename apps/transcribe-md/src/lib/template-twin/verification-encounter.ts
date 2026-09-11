@@ -363,6 +363,20 @@ const NARRATIVE_SENTENCES: ReadonlyMap<string, string> = new Map([
   // ⚠️ CHANGING THIS TEXT MEANS RE-RUNNING THE REAL GATE. CI can only check
   // the deterministic half; `gate-verification-encounter-passes-the-evidence-gate.test.ts`
   // pins this sentence verbatim so that the next edit reddens there first.
+  //
+  // ⚠️ AND RE-RUNNING THE LIVE L3 EXTRACTOR — the half that decides whether the
+  // control FILLS. L3 emits `referring_physician` "only when the dictation names
+  // them", and a null here does NOT fail certification: the version certifies
+  // and activates with the control blank, irreversibly. Measured 2026-09-11
+  // against the real gate and 5 live L3 dictation samples per phrasing, on the
+  // encounter derived from the owner's re-issued form:
+  //
+  //   this sentence                                               -> 5/5 non-null
+  //       ("Primary care physician (name not stated)")
+  //   "Referring physician: the patient's primary care physician." -> 0/5 (null)
+  //
+  // Both passed the gate. The "Label: value" shape that reads cleaner is the
+  // one that silently blanks the row — so do not tidy this sentence into it.
   [
     'visit_metadata.referring_physician',
     'The patient was referred by their primary care physician for further evaluation.',
