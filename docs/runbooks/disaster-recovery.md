@@ -69,8 +69,25 @@ ls -la /opt/meddoc-pro/backups/last/
 #   meddoc-2026-05-04T03:00:00.sql.gz
 # (latest = most recent successful daily run)
 
-# 3. Move the corrupted volume aside (don't delete; forensics)
-mv /var/lib/docker/volumes/meddoc-pro_pgdata /var/lib/docker/volumes/meddoc-pro_pgdata.corrupt-$(date +%Y%m%d)
+# 3. Move the corrupted data directory aside (don't delete; forensics).
+#
+#    ⚠️ THE LIVE DATA IS NOT A DOCKER-MANAGED DIRECTORY. The volume the container
+#    mounts, meddoc-pro_pgdata_encrypted, is a local BIND onto the LUKS
+#    filesystem at /mnt/pgdata-encrypted/pgdata (docker volume inspect, measured
+#    2026-09-10). Until 2026-09-10 this step moved `meddoc-pro_pgdata` aside,
+#    which is an ORPHANED PLAINTEXT April cluster that nothing mounts. That
+#    moves nothing production uses, and the restore in step 5 would then land
+#    ON TOP OF the real, corrupt data.
+#
+#    Root is required (no sudo on this host; root actions go through docker).
+#    FIRST prove the encrypted filesystem is mounted. On an unmounted path the
+#    mkdir below creates a PLAINTEXT directory on the root filesystem, and
+#    postgres will initdb into it without an error. That is the MinIO LUKS
+#    failure of 2026-07-29: a mountpoint directory exists whether or not
+#    anything is mounted on it.
+findmnt /mnt/pgdata-encrypted     # must name the dm-crypt device; empty output = STOP
+mv /mnt/pgdata-encrypted/pgdata /mnt/pgdata-encrypted/pgdata.corrupt-$(date +%Y%m%d)
+mkdir /mnt/pgdata-encrypted/pgdata && chown 999:999 /mnt/pgdata-encrypted/pgdata
 
 # 4. Start postgres with empty data dir (re-runs init script)
 docker compose up -d postgres

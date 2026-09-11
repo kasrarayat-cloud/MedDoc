@@ -52,8 +52,15 @@ case "$out_real" in
     echo "   worktree : $root_real" >&2
     echo "   resolves : $out_real" >&2
     echo >&2
-    echo "   `@prisma/client` resolves out of tree, so `prisma generate` would" >&2
-    echo "   rewrite a client another worktree — or another SESSION — is using." >&2
+    # ⚠️ SINGLE QUOTES, AND THE REASON IS THIS SCRIPT'S OWN BUG. The first
+    # version wrote these two lines with BACKTICKS around the package name in a
+    # double-quoted string, and the shell executed them: the refusal printed
+    # '@prisma/client: No such file' and 'prisma: command not found', and the
+    # message came out as "resolves out of tree, so  would" — the words eaten.
+    # A guard whose refusal is corrupted is a guard nobody can act on. Prose is
+    # never a shell argument, inside a script exactly as in a PR body.
+    echo '   @prisma/client resolves out of tree, so prisma generate would' >&2
+    echo '   rewrite a client another worktree — or another SESSION — is using.' >&2
     echo "   That happened on 2026-09-07 with seven peer test processes running." >&2
     echo >&2
     echo "   Fix: bash scripts/setup-worktree.sh $ROOT" >&2
