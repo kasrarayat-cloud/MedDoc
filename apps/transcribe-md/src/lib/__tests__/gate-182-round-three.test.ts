@@ -20,8 +20,8 @@
 // third pass: the consumer list is GREPPED FROM THE TREE, and a consumer that
 // appears tomorrow is watched tomorrow.
 // ============================================================================
-import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { execFileSync, execSync } from 'node:child_process';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
@@ -44,24 +44,209 @@ const NO_IDENTITY_CHECK_REQUIRED: Record<string, string> = {
     'practiceId, role, or any patient data.',
 };
 
-describe('#182 round 3 — every session consumer refuses an unverified token', () => {
-  const consumers = execSync(
-    "grep -rln 'await auth()' apps/*/src --include='*.ts' --include='*.tsx' " +
-      "| grep -v '__tests__' | grep -v '\\.test\\.'",
+/**
+ * ⚠️ ONE STRING, USED TWICE — the argument grep receives, and the thing the
+ * SCOPE arm measures. That sharing is what lets the arm fail: a rescope moves
+ * the population AND the measurement together, so the two derivations below
+ * stop agreeing. Never re-spell it at either use site.
+ */
+const CONSUMER_SCAN_ROOTS = 'apps/*/src';
+
+/**
+ * The directories the scan ACTUALLY reaches: the same roots string, handed to
+ * the same shell, from the same cwd grep runs in — so this expansion IS grep's
+ * expansion. ⚠️ Deliberately NOT read off this file's own source; that is the
+ * defect being repaired.
+ */
+function scannedDirs(roots: string): string[] {
+  return execSync(`ls -d ${roots} 2>/dev/null || true`, { cwd: REPO, encoding: 'utf8' })
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    // sh leaves an unmatched glob as its own literal, and a path that does not
+    // exist was never scanned.
+    .filter((p) => existsSync(join(REPO, p)))
+    .sort();
+}
+
+/** Every app that HAS sources — enumerated from the tree, never from a name. */
+function appSourceDirs(): string[] {
+  return readdirSync(join(REPO, 'apps'), { withFileTypes: true })
+    // sh globs skip dot-directories, so RIGHT must skip them too — otherwise a
+    // stray `apps/.something/src` reds this arm for a reason that has nothing
+    // to do with the scan's scope.
+    .filter((d) => d.isDirectory() && !d.name.startsWith('.'))
+    .map((d) => `apps/${d.name}/src`)
+    .filter((p) => existsSync(join(REPO, p)))
+    .sort();
+}
+
+/**
+ * The consumer enumeration, over whatever roots it is given.
+ * `|| true` because grep exits 1 on no match, and an app with no session
+ * consumers (apps/marketing) is a legitimate answer, not an error.
+ */
+function consumersUnder(roots: string): string[] {
+  return execSync(
+    `grep -rln 'await auth()' ${roots} --include='*.ts' --include='*.tsx' ` +
+      "| grep -v '__tests__' | grep -v '\\.test\\.' || true",
     { cwd: REPO, encoding: 'utf8' },
   )
     .split('\n')
     .map((l) => l.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .sort();
+}
 
-  it('NON-VACUITY: the enumeration finds the real population, across apps', () => {
-    expect(consumers.length, 'the consumer grep found nothing — every arm below is vacuous').toBeGreaterThan(12);
-    // it must reach BEYOND transcribe-md, or the cross-app blindness of round
-    // two is simply re-created inside the gate
+/**
+ * ⚠️ ROUND SIX — THE SAME POPULATION, DERIVED WITH NOTHING IN COMMON WITH THE
+ * SHELL PIPELINE. The POPULATION arm used to compare `consumersUnder(ROOTS)`
+ * with `appSourceDirs().flatMap(consumersUnder)` — the SAME helper on both
+ * sides — so a filter planted inside it (`| grep -v 'page\.tsx'`) removed the
+ * same files from both and they stayed equal: 7 of 20 consumers dropped
+ * (login, signup, reset-password, forgot-password, settings, settings/security/
+ * mfa, the root page), and the file went 13/13 GREEN, NON-VACUITY included,
+ * because 13 > 12. `| grep '^apps/transcribe-md/'` in the helper re-created
+ * round two's cross-app blindness the same way. A comparison whose two sides
+ * share a derivation cannot see a defect in that derivation.
+ *
+ * So this side shares nothing: no grep, no shell, no glob, no `appSourceDirs`.
+ * Node walks `apps/` itself and reads each file's CONTENT. It mirrors grep's
+ * semantics deliberately — `*.ts`/`*.tsx` by basename, `__tests__` and
+ * `.test.` excluded by path, symlinks not followed (as `grep -r` does not),
+ * dot-directories skipped (as the shell glob does) — so on an honest tree the
+ * two agree exactly, and a narrowing on EITHER side is a disagreement.
+ */
+function consumersIndependently(): string[] {
+  const out: string[] = [];
+  const walk = (rel: string) => {
+    for (const d of readdirSync(join(REPO, rel), { withFileTypes: true })) {
+      const p = `${rel}/${d.name}`;
+      if (d.isDirectory()) walk(p);
+      else if (
+        d.isFile() &&
+        (d.name.endsWith('.ts') || d.name.endsWith('.tsx')) &&
+        !p.includes('__tests__') &&
+        !/\.test\./.test(p) &&
+        readFileSync(join(REPO, p), 'utf8').includes('await auth()')
+      ) {
+        out.push(p);
+      }
+    }
+  };
+  for (const app of readdirSync(join(REPO, 'apps'), { withFileTypes: true })) {
+    if (!app.isDirectory() || app.name.startsWith('.')) continue;
+    if (existsSync(join(REPO, 'apps', app.name, 'src'))) walk(`apps/${app.name}/src`);
+  }
+  return out.sort();
+}
+
+describe('#182 round 3 — every session consumer refuses an unverified token', () => {
+  const consumers = consumersUnder(CONSUMER_SCAN_ROOTS);
+  const independent = consumersIndependently();
+
+  it('NON-VACUITY: the enumeration finds the real population — COUNTED by a derivation that shares nothing with it', () => {
+    // ⚠️ ROUND SIX: `> 12` alone was satisfied by 13 of 20. The floor stays as
+    // a guard on the independent side; the count is PINNED to it.
+    expect(independent.length, 'the independent walk found nothing — every arm below is vacuous').toBeGreaterThan(12);
     expect(
-      consumers.some((c) => c.startsWith('apps/meddoc-pro/')),
-      'the enumeration does not cross app boundaries — round two lived exactly there',
-    ).toBe(true);
+      consumers.length,
+      'the grep pipeline and an independent content walk disagree on HOW MANY consumers exist — the scan was narrowed',
+    ).toBe(independent.length);
+  });
+
+  it('⚠️ POSITIVE CONTROL: the tree can still EXPRESS a cross-app claim', () => {
+    // Without this, "the scan covers every app" is satisfied by a tree holding
+    // exactly ONE app, and the SCOPE arm below becomes a tautology of a new
+    // shape rather than a check. `apps/` is enumerated, never named.
+    expect(
+      appSourceDirs().length,
+      'apps/ holds fewer than two source trees, so there is no cross-app ' +
+        'property left to assert. RETIRE this describe deliberately — do not ' +
+        'let it pass empty.',
+    ).toBeGreaterThan(1);
+  });
+
+  it('⚠️ POSITIVE CONTROL: the comparison REJECTS a single-app scope', () => {
+    // Aimed where the answer is NOT predetermined — it plants the exact defect
+    // the SCOPE arm names and requires the comparison to say NO. The planted
+    // scope is DERIVED from the tree, so no app name is hard-coded here either.
+    const oneApp = appSourceDirs()[0];
+    expect(
+      scannedDirs(oneApp),
+      `the planted single-app scope ${oneApp} resolves to nothing — this control is vacuous`,
+    ).toEqual([oneApp]);
+    expect(
+      scannedDirs(oneApp),
+      'a one-app scope compared EQUAL to the whole tree — the SCOPE arm below cannot fail',
+    ).not.toEqual(appSourceDirs());
+  });
+
+  it('SCOPE: the enumeration scans EVERY app, not one', () => {
+    // ⚠️ DMP-a — THE CLAIM IS ABOUT THE ENUMERATION'S **SCOPE**, NOT ITS HITS.
+    //
+    // This asserted a consumer exists under `apps/meddoc-pro/`, which is right
+    // while that app has one and turns CI RED on `main` the moment
+    // DELETE-MEDDOC-PRO removes it. A6, the nine-row recon and #307's own
+    // filing all reasoned from "CI never touches meddoc-pro" — measured off the
+    // BUILD lines, true and incomplete: this is a MERGE-GATING test that reads
+    // it and asserts the directory is in the population.
+    //
+    // ⚠️ AND THE FIRST REWRITE OF THIS ARM WAS ALSO WRONG — it demanded a hit
+    // in whatever other app exists, so with `meddoc-pro` gone it failed on
+    // `apps/marketing`, which has no session consumers and never will. Found by
+    // actually deleting the app and re-running, not by reading.
+    //
+    // ⚠️ AND THE SECOND REWRITE WAS THE WORST OF THE THREE — IT COULD NOT FAIL.
+    // It did `readFileSync(__filename)` and asserted the file CONTAINED the
+    // literal `apps/*/src`, while the assertion's own argument was the third
+    // occurrence of that literal in the file. A probe whose pattern appears in
+    // the searcher cannot return false: rescoping the grep to one app left it
+    // GREEN, in the merge-gating `unit` job, on the very defect its failure
+    // message names. Refutation round, upheld 2 of 2.
+    //
+    // What round two's blindness was about is the SCAN. So the property is
+    // MEASURED, from two independent derivations that must agree:
+    //   LEFT   what the scan reaches — the same roots string, expanded by the
+    //          same shell from the same cwd that grep runs in.
+    //   RIGHT  what exists — `apps/` enumerated off the filesystem.
+    // Rescoping the roots moves LEFT and not RIGHT, so the arm reds. Deleting
+    // an app moves BOTH, so DELETE-MEDDOC-PRO stays green — which is the whole
+    // point of DMP-a.
+    expect(
+      scannedDirs(CONSUMER_SCAN_ROOTS),
+      'the enumeration is scoped to one app — the cross-app blindness of round two, re-created inside the gate',
+    ).toEqual(appSourceDirs());
+  });
+
+  it('POPULATION: the enumeration finds every consumer any app holds', () => {
+    // ⚠️ THE SCOPE ARM ABOVE MEASURES THE DECLARED ROOTS, AND THAT IS A HOLE
+    // ONE LAYER UP — re-spell the path at the CALL SITE and leave the constant
+    // alone, and it stays green while the population silently loses an app.
+    // Found by refuting the repair rather than by trusting it; the previous two
+    // rewrites of this arm both failed on the step after the one they fixed.
+    //
+    // So the POPULATION is compared too, and this side does not care how the
+    // scan is spelled: LEFT is whatever `consumers` actually contains, RIGHT is
+    // the same enumeration run once per app directory found on disk. Narrow the
+    // scan ANYWHERE — the constant, an inlined literal, a bypassed helper — and
+    // LEFT loses a file RIGHT still has.
+    //
+    // ⚠️ IT IS NOT A SUBSTITUTE FOR THE SCOPE ARM AND DOES NOT SUPERSEDE IT.
+    // A scan narrowed to the apps that happen to have consumers today passes
+    // THIS and fails THAT, and it is exactly round two's blindness pointed at
+    // whichever app gains its first consumer tomorrow. Two arms, two defects.
+    //
+    // ⚠️ CORRECTED 2026-09-10 (round six) — "Narrow the scan ANYWHERE … a
+    // bypassed helper" WAS FALSE AS WRITTEN. RIGHT was
+    // `appSourceDirs().flatMap((d) => consumersUnder(d))`: the same helper, so a
+    // narrowing INSIDE it moved both sides together and this arm stayed green
+    // (7 of 20 dropped, 13/13). RIGHT is now `consumersIndependently()`, which
+    // shares no code, no shell and no glob with `consumersUnder`.
+    expect(
+      consumers,
+      'the grep enumeration and an independent content walk disagree — the scan is not reaching every consumer in every app',
+    ).toEqual(independent);
   });
 
   it('each consumer gates on the IDENTITY, or is a named exemption with a reason', () => {
@@ -172,9 +357,37 @@ describe('#182 round 3 — apps/meddoc-pro is RECORDED, not verified', () => {
     // the source — it never reads the marker itself. If that app is ever
     // revived, this is the note that says its session handling was never
     // independently checked.
-    const src = readFileSync(join(REPO, 'apps/meddoc-pro/src/lib/auth.ts'), 'utf8');
-    expect(src, 'meddoc-pro now reads the marker — update this note').not.toContain(
-      'sessionVerifyFailed',
-    );
+    // ⚠️ DMP-a — this THREW when the file went. The note it carries is about a
+    // retired app; once the app is deleted the note has served its purpose and
+    // the arm must not be the thing that fails.
+    //
+    // ⚠️ ROUND SIX (R2), 2026-09-10 — KEYED ON THE TRACKED SET, AND ON THE
+    // MODULE'S PLACE RATHER THAN THE APP'S NAME. The DMP-a form discharged on
+    // `!existsSync(auth.ts)` and then asserted `existsSync('apps/meddoc-pro')`
+    // was false. A real `git rm -r apps/meddoc-pro` does not remove the
+    // directory where it has IGNORED leftovers — the shared tree carries
+    // `.next/`, `node_modules/`, `.env`, `next-env.d.ts` and `playwright-report/`
+    // there, and this worktree carries `node_modules/` — so the arm RED on a
+    // genuine deletion locally while a clean CI clone stayed green: one
+    // deletion, two answers. And keyed on the NAME, a renamed app discharged
+    // the note while its auth module still existed under the new name.
+    //
+    // So the subject is every TRACKED `apps/*/src/lib/auth.ts` outside the
+    // product app, wherever it lives; the note follows a rename, and it is
+    // discharged only when none is tracked AND nothing of the app is.
+    const trackedUnder = (spec: string) =>
+      execFileSync('git', ['ls-files', '--', spec], { cwd: REPO, encoding: 'utf8' }).split('\n').filter(Boolean);
+    const otherAuth = trackedUnder('apps/*/src/lib/auth.ts').filter((f) => !f.startsWith('apps/transcribe-md/'));
+    for (const f of otherAuth) {
+      expect(readFileSync(join(REPO, f), 'utf8'), `${f} now reads the marker — update this note`).not.toContain(
+        'sessionVerifyFailed',
+      );
+    }
+    if (otherAuth.length === 0) {
+      expect(
+        trackedUnder('apps/meddoc-pro'),
+        'the CRM\'s auth module left the tracked tree but the app did not — it MOVED; re-point this note, do not let it discharge',
+      ).toEqual([]);
+    }
   });
 });

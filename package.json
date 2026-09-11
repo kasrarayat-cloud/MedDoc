@@ -18,7 +18,7 @@
     "test:e2e:ui": "npm run test:e2e:ui -w meddoc-pro",
     "test:e2e:transcribe-md": "npm run test:e2e -w transcribe-md",
     "test:e2e:transcribe-md:install": "npm run test:e2e:install -w transcribe-md",
-    "test:all": "npm run test:all -w meddoc-pro",
+    "test:all": "echo '[root] test:all is DECOUPLED from the decommissioned meddoc-pro workspace (DMP-a). It used to hop there and run that workspace echo, so it has executed ZERO tests since the CRM was decommissioned. Merge is gated by the unit job (npm run test:unit -w transcribe-md) and .github/workflows/e2e.yml.'",
     "seed:e2e": "npm run seed:e2e -w meddoc-pro",
     "seed:e2e-admin": "npm run seed:e2e-admin -w meddoc-pro",
     "eval:doc-editor": "npm run eval:doc-editor -w meddoc-pro",

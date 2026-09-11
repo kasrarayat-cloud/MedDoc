@@ -294,52 +294,157 @@ describe('#289 — the door universe is derived from the filesystem', () => {
 // `docker-compose.yml` and one `docker compose up` from live. Whether to lock
 // these doors, delete the app, or accept the risk explicitly is not a call this
 // gate can make; what it CAN do is stop the risk being invisible.
+//
+// ⚠️ ROUND SIX, 2026-09-10 — THE PIN WAS KEYED ON A DIRECTORY NAME, AND A
+// RENAME READ AS A DELETION. The DMP-a form read `git ls-files src` inside
+// `join(APP, '..', 'meddoc-pro')` and returned EARLY when that path did not
+// exist. MEASURED: `git mv apps/meddoc-pro apps/crm-legacy` — all four unlocked
+// writers still tracked, still unlocked — left BOTH arms green in 0ms and 1ms by
+// early return, where origin/main's form red (ENOENT). The absent branch's one
+// assertion, `PINNED.length > 0` on a four-element literal, could not fail, so
+// its message "delete PINNED and this arm" was never enforced. **A missing path
+// is not a deleted writer.**
+//
+// So the pin is now keyed on the WRITERS, wherever they live: the universe is
+// every tracked non-test source OUTSIDE this app — the exact complement of the
+// derivation above — compared EXACTLY, by repo-relative path. A rename moves
+// the paths: red. A move into `packages/` adds an unlisted path: red. A
+// deletion drops the CRM's seven rows: red, until the deletion PR deletes them
+// in the same change — the DELETE-MEDDOC-PRO row's own words, "the pin retires
+// WITH this row and not before", now enforced rather than assumed. There is no
+// early return left for anything to fall through.
+//
+// ⚠️ NOT WATCHED HERE, SAID SO THE NAME DOES NOT READ WIDER THAN THE SET: this
+// app's OWN non-`src/` files. Measured 2026-09-10, seven unlocked `users`
+// writers live in `apps/transcribe-md/scripts/` (QA walks, seed scripts and
+// `prod-smoke/provision.ts`). They are a gap in the derivation ABOVE, not a
+// cross-app door, and are filed in RELAY rather than folded in here.
 describe('ruling #289 — the OTHER app writes the same table, and the derivation cannot see it', () => {
-  const OTHER_APP = join(APP, '..', 'meddoc-pro');
+  const REPO = join(APP, '..', '..');
+  const isTestPath = (f: string) => /(^|\/)__tests__\//.test(f) || /\.(test|spec)\.tsx?$/.test(f);
+
+  /** The complement of the derivation above: tracked, non-test, outside this app. */
+  function outsideSources(): string[] {
+    return execFileSync('git', ['ls-files', '-z', '--', '*.ts', '*.tsx'], { cwd: REPO, encoding: 'utf8' })
+      .split('\0')
+      .filter((f) => f && !f.startsWith('apps/transcribe-md/') && !isTestPath(f));
+  }
+
+  /** Unlocked `users` writers among the given sources — pure, so it can be planted. */
+  function unlockedWriters(files: { file: string; src: string }[]): string[] {
+    return files
+      .filter((f) => !isTestPath(f.file))
+      .map((f) => ({ file: f.file, src: stripComments(f.src) }))
+      .filter((f) => USER_WRITE.test(f.src) || RAW_USER_WRITE.test(f.src))
+      .filter((f) => !f.src.includes('withPracticeLock'))
+      .map((f) => f.file)
+      .sort();
+  }
+
   /**
-   * The unlocked cross-app writers, AS MEASURED — never as remembered.
+   * Every unlocked `users` writer outside this app, AS MEASURED — never as
+   * remembered. `door: true` rows are ruling #289's pin.
    *
    * ⚠️ I FIRST PINNED ONE FILE, BECAUSE THE ROUND NAMED FOUR *ACTIONS* AND I
    * READ THAT AS FOUR *DOORS IN ONE FILE*. The derivation says four FILES, and
    * `system-admin/actions.ts` is only the loudest of them. Transcribing a
    * finding's number without re-deriving its subject is how a pin ends up
    * understating exactly the risk it exists to hold still.
+   *
+   * ⚠️ MEASURED 2026-09-10 AND DELIBERATELY NOT ACTED ON: by this file's own
+   * `writtenColumns` parser, only `system-admin/actions.ts` writes a predicate
+   * column (`isActive`, `deactivatedAt`, `practiceRole`, `practiceId`); the
+   * other three write `name`, `failedLoginCount/lockedUntil/lastLogin` and
+   * `lastLoginIp`. The pin's recorded criterion is "unlocked `users` writer",
+   * so all four stay pinned. Whether three of them could deadlock is a question
+   * for the console PORT, which must port every one of them under
+   * `withPracticeLock` regardless.
    */
-  const PINNED = [
-    'src/app/dashboard/settings/actions.ts',
-    'src/app/system-admin/actions.ts',
-    'src/lib/nextauth.ts',
-    'src/lib/session-log.ts',
-  ];
+  const CROSS_APP_UNLOCKED: Record<string, { door: boolean; reason: string; retires: string; checkColumns?: true }> = {
+    'apps/meddoc-pro/src/app/dashboard/settings/actions.ts': { door: true, reason: 'ruling #289 pin', retires: 'DELETE-MEDDOC-PRO' },
+    'apps/meddoc-pro/src/app/system-admin/actions.ts': { door: true, reason: 'ruling #289 pin — the measured deadlock door', retires: 'DELETE-MEDDOC-PRO' },
+    'apps/meddoc-pro/src/lib/nextauth.ts': { door: true, reason: 'ruling #289 pin', retires: 'DELETE-MEDDOC-PRO' },
+    'apps/meddoc-pro/src/lib/session-log.ts': { door: true, reason: 'ruling #289 pin', retires: 'DELETE-MEDDOC-PRO' },
+    'apps/meddoc-pro/scripts/seed-admin.ts': {
+      door: false, reason: 'CRM seed script, run by hand against a dev/test database; never a runtime door', retires: 'DELETE-MEDDOC-PRO',
+    },
+    'apps/meddoc-pro/scripts/seed-e2e-admin.ts': {
+      door: false, reason: 'CRM seed script, run by hand against a dev/test database; never a runtime door', retires: 'DELETE-MEDDOC-PRO',
+    },
+    'apps/meddoc-pro/scripts/seed-tenancy-fixtures.ts': {
+      door: false, reason: 'CRM seed script, run by hand against a dev/test database; never a runtime door', retires: 'DELETE-MEDDOC-PRO',
+    },
+    'packages/auth/src/index.ts': {
+      door: false,
+      reason:
+        '⚠️ a SHARED package transcribe-md imports at RUNTIME, and invisible to the derivation above, which reads ' +
+        'apps/transcribe-md/src only. It writes `mfaBackupCodes` — no predicate column, and that is CHECKED below, ' +
+        'not asserted, so the day it writes one this row reds.',
+      retires: 'never with the CRM — it is shared',
+      checkColumns: true,
+    },
+    'scripts/qa/rc2-twin-door-on-qa.ts': {
+      door: false, reason: 'the RC-2 QA walk (raw SQL), run by hand against the isolated QA stack; not a runtime door', retires: 'never with the CRM',
+    },
+  };
 
-  it('⚠️ the cross-app unlocked-writer set has not changed — grown OR fixed', () => {
-    const files = execFileSync('git', ['ls-files', 'src'], { cwd: OTHER_APP, encoding: 'utf8' })
-      .split('\n')
-      .filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.includes('__tests__'));
-    const unlocked = files
-      .map((file) => ({ file, src: stripComments(readFileSync(join(OTHER_APP, file), 'utf8')) }))
-      .filter((f) => USER_WRITE.test(f.src) || RAW_USER_WRITE.test(f.src))
-      .filter((f) => !f.src.includes('withPracticeLock'))
-      .map((f) => f.file)
-      .sort();
-
+  it('⚠️ the unlocked-writer set outside this app is EXACTLY the filed set — keyed on the writers, never on a directory name', () => {
+    const universe = outsideSources();
+    const unlocked = unlockedWriters(universe.map((file) => ({ file, src: readFileSync(join(REPO, file), 'utf8') })));
     expect(
       unlocked,
-      'the cross-app unlocked `users`-writer set moved. If it GREW, a new door ' +
-        'can deadlock the locked ones (#268) and nothing else will say so. If it ' +
-        'SHRANK, the door was fixed — delete it from PINNED and say so, because a ' +
-        'pin that overstates the risk teaches the next reader to discount it.',
-    ).toEqual(PINNED);
+      'the unlocked `users`-writer set outside apps/transcribe-md moved. If a path is NEW, a door can deadlock ' +
+        'the locked ones (#268) and nothing else will say so — and a RENAMED or MOVED app arrives here as a ' +
+        'new path, not as a deletion. If a row is GONE, the writer was fixed or deleted: delete its row in the ' +
+        'same change and say which. DELETE-MEDDOC-PRO reds this on purpose — the pin retires WITH the app, by edit.',
+    ).toEqual(Object.keys(CROSS_APP_UNLOCKED).sort());
   });
 
-  it('⚠️ POSITIVE CONTROL — the pin is measuring, not restating itself', () => {
-    // The matcher must actually fire on that file's real content; a pin that
-    // passes because the derivation found nothing would be green forever.
-    const src = stripComments(readFileSync(join(OTHER_APP, 'src/app/system-admin/actions.ts'), 'utf8'));
-    expect(USER_WRITE.test(src), 'the pinned file no longer matches USER_WRITE').toBe(true);
-    expect(src.includes('withPracticeLock'), 'the pinned file now takes the lock').toBe(false);
-    for (const col of ['isActive', 'deactivatedAt', 'practiceRole']) {
-      expect(src, `${col} is no longer written there`).toContain(col);
+  it('⚠️ POSITIVE CONTROL — the universe is the whole repo outside this app, not one directory', () => {
+    // Derived independently of the writer filter: the population it scans.
+    const universe = outsideSources();
+    expect(universe.length, 'the scan universe is nearly empty — every arm here is vacuous').toBeGreaterThan(100);
+    const tops = new Set(universe.map((f) => f.split('/')[0]));
+    for (const top of ['apps', 'packages', 'scripts']) {
+      expect(tops.has(top), `the universe does not reach ${top}/ — it is scoped, not derived`).toBe(true);
+    }
+    expect(universe.some((f) => f.startsWith('apps/transcribe-md/')), 'the universe includes this app — it is not the complement').toBe(false);
+  });
+
+  it('⚠️ POSITIVE CONTROL — the filter is measuring, not restating itself', () => {
+    // Planted, so it cannot decay when the CRM's rows retire. A pin that passes
+    // because the filter found nothing would be green forever.
+    const planted = unlockedWriters([
+      { file: 'packages/x/door.ts', src: 'await (prisma.user as any).update({ data: { isActive: false } });' },
+      { file: 'packages/x/raw.ts', src: 'await prisma.$executeRawUnsafe(`UPDATE "users" SET "practiceRole" = $1`, r);' },
+      { file: 'packages/x/locked.ts', src: 'await withPracticeLock(tx, id, async () => tx.user.update({ data: {} }));' },
+      { file: 'packages/x/__tests__/t.ts', src: 'await prisma.user.update({ data: { isActive: false } });' },
+      { file: 'packages/x/read.ts', src: 'await prisma.user.findUnique({ where: { id } });' },
+    ]);
+    expect(planted).toEqual(['packages/x/door.ts', 'packages/x/raw.ts']);
+    // and on real content, for every pinned door still in the tree
+    for (const [file, row] of Object.entries(CROSS_APP_UNLOCKED)) {
+      if (!row.door) continue;
+      const src = stripComments(readFileSync(join(REPO, file), 'utf8'));
+      expect(USER_WRITE.test(src) || RAW_USER_WRITE.test(src), `${file} no longer matches the writer shapes`).toBe(true);
+    }
+    const loudest = 'apps/meddoc-pro/src/app/system-admin/actions.ts';
+    if (loudest in CROSS_APP_UNLOCKED) {
+      const src = stripComments(readFileSync(join(REPO, loudest), 'utf8'));
+      for (const col of ['isActive', 'deactivatedAt', 'practiceRole']) {
+        expect(src, `${col} is no longer written there`).toContain(col);
+      }
+    }
+  });
+
+  it('⚠️ A FILED NON-DOOR ON A RUNTIME PATH WRITES NO PREDICATE COLUMN — checked against the migration', () => {
+    const watched = watchedColumns();
+    const rows = Object.entries(CROSS_APP_UNLOCKED).filter(([, r]) => r.checkColumns);
+    expect(rows.length, 'no row is column-checked — this arm is vacuous').toBeGreaterThan(0);
+    for (const [file] of rows) {
+      const written = writtenColumns(stripComments(readFileSync(join(REPO, file), 'utf8')));
+      expect(written.length, `${file}: no written columns parsed — the check would be vacuous`).toBeGreaterThan(0);
+      expect(written.filter((c) => watched.has(c)), `${file} now writes a predicate column — it is a DOOR`).toEqual([]);
     }
   });
 });

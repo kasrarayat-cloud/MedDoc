@@ -1,9 +1,19 @@
 # ============================================================================
-# CI — runs the same pipeline as `npm run test:all` locally
+# CI
 # ----------------------------------------------------------------------------
-# Seeds tenancy fixtures + super-admin, runs Vitest adversarial suite, then
-# Playwright E2E suite. Playwright's webServer block boots `next dev` on its
-# own — no separate server step needed.
+# ⚠️ THIS HEADER USED TO READ "runs the same pipeline as `npm run test:all`
+# locally — seeds tenancy fixtures + super-admin, runs Vitest adversarial suite,
+# then Playwright E2E suite". NONE OF THAT HAS HAPPENED SINCE THE CRM WAS
+# DECOMMISSIONED: root `test:all` delegated to that workspace, whose `test:all`
+# is an echo. The description outlived the behaviour by months, and a reader
+# checking whether CI covered something would have believed it.
+#
+# WHAT ACTUALLY GATES MERGE, measured, not described:
+#   `unit`      — vitest in apps/transcribe-md (folds in packages/*/src)
+#   `typecheck` — tsc --noEmit on apps/transcribe-md
+#   `audit`     — npm audit, high+critical
+#   `test`      — services + prisma migrate deploy. NO tests. See its own step.
+#   e2e / a11y / secrets-scan live in their own workflows.
 #
 # The tests don't call OpenAI: unit tests are pure or mock the client, E2E
 # tests stop before the voice/AI flow (see tests/e2e/assistant.spec.ts). A
@@ -161,7 +171,11 @@ jobs:
       - name: Resolve Playwright version (for cache key)
         id: pw-version
         run: |
-          ver=$(node -p "require('./apps/meddoc-pro/package.json').devDependencies['@playwright/test']")
+          # ⚠️ DMP-a — READ FROM THE APP CI ACTUALLY TESTS. This read
+          # `apps/meddoc-pro/package.json`, a retired app slated for deletion,
+          # for a cache key used by the transcribe-md Playwright run. Deleting
+          # that app would have broken this job for a reason unrelated to it.
+          ver=$(node -p "require('./apps/transcribe-md/package.json').devDependencies['@playwright/test']")
           echo "version=${ver}" >> "$GITHUB_OUTPUT"
 
       # Same key namespace as a11y.yml on purpose — that workflow already
@@ -215,14 +229,34 @@ jobs:
       - name: Install Playwright system deps (apt half of --with-deps)
         timeout-minutes: 5
         run: npx playwright install-deps chromium
-        working-directory: apps/meddoc-pro
+        working-directory: apps/transcribe-md
 
       - name: Install Playwright Chromium (browser half of --with-deps)
         timeout-minutes: 5
         run: npx playwright install chromium
-        working-directory: apps/meddoc-pro
+        working-directory: apps/transcribe-md
 
-      - name: Run test pipeline (seed + vitest + playwright)
+      # ⚠️ DMP-a, ROUND TWO — THIS STEP WAS THE COUPLING THE FIRST PASS MISSED,
+      # THREE LINES BELOW ONE IT EDITED. `npm run test:all` resolved at the
+      # repo root to `npm run test:all -w meddoc-pro`, so DELETE-MEDDOC-PRO
+      # made it exit 1 with `npm error No workspaces found: --workspace=
+      # meddoc-pro` — in the `test` job, which is a REQUIRED context, so every
+      # PR would have been unmergeable until somebody deleted this step under
+      # pressure. Measured with the app moved out of the tree: EXIT=1 absent,
+      # EXIT=0 present.
+      #
+      # ⚠️ AND THE STEP NAME WAS A LIE THE WHOLE TIME. That workspace's
+      # `test:all` is an echo (the CRM decommission), so this step has run NO
+      # seed, NO vitest and NO playwright since. The name is corrected rather
+      # than the behaviour: what this job would need in order to gate anything
+      # again is a separate decision, filed — not something to smuggle into a
+      # decoupling fix. The in-scope unit suite is gated by the `unit` job
+      # below; e2e by `.github/workflows/e2e.yml`.
+      #
+      # The coupling is fixed at the SHARED SEAM — root `package.json`'s
+      # `test:all` — so every other caller of it is fixed too, and
+      # `gate-dmp-a-workspace-coupling` reds if any workflow acquires a new one.
+      - name: Run root test:all (a no-op echo since the CRM decommission)
         run: npm run test:all
 
       - name: Upload Playwright report on failure
@@ -230,7 +264,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: apps/meddoc-pro/playwright-report/
+          path: apps/transcribe-md/playwright-report/
           retention-days: 7
 
       - name: Upload Playwright traces on failure
@@ -238,7 +272,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-test-results
-          path: apps/meddoc-pro/test-results/
+          path: apps/transcribe-md/test-results/
           retention-days: 7
 
   # ──────────────────────────────────────────────────────────────────
@@ -439,9 +473,11 @@ jobs:
   # ──────────────────────────────────────────────────────────────────
   # In-scope unit gate (chore/ci-unit-gate-and-marketing-copy).
   # ----------------------------------------------------------------------------
-  # GAP this closes: the `test` job above runs `npm run test:all`, which
-  # delegates to the decommissioned meddoc-pro workspace and is now a no-op
-  # echo — so NO unit tests gated merge. The whole transcribe-md + packages/*
+  # GAP this closes: the `test` job above runs `npm run test:all`, which is a
+  # no-op echo — so NO unit tests gated merge. (⚠️ CORRECTED 2026-09-09: it used
+  # to reach that echo by DELEGATING to the decommissioned meddoc-pro workspace,
+  # which is the coupling DMP-a removed. The echo now lives at the repo root; the
+  # gap this job closes is unchanged, and so is the job's vacuity.) The whole transcribe-md + packages/*
   # suite (1500+ tests incl. the caution-first allergy merge, refusal
   # categorization, admin-gate structural test, rx-warning identity, dose
   # validator, db-guard, …) rotted unenforced (proven by the 2026-06-11

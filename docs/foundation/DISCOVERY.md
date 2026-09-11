@@ -237,10 +237,23 @@ if sequenced wrong:
 1. Rewrite the **13 root `package.json` scripts** (`package.json:11-25`) that
    route `dev`/`build`/`start`/`lint`/`test:*`/`seed:*`/`eval:*` through
    `-w meddoc-pro`. `npm run build` at the repo root currently builds the CRM.
+   ⚠️ **CORRECTED 2026-09-09 — the count is now TWELVE.** `test:all` was
+   decoupled ahead of the rest because it is the only one any workflow reaches
+   (`.github/workflows/test.yml`, the REQUIRED `test` job). The other twelve are
+   local-only and are enumerated with their reasons in
+   `gate-dmp-a-workspace-coupling.test.ts`, which reds if a thirteenth appears
+   or if one of the twelve is fixed without its row being removed.
 2. Delete or repoint the CI `test` job (`.github/workflows/test.yml:41-114`).
    It is **already vacuous** — it runs `npm run test:all`, which resolves to an
    `echo` in the decommissioned workspace, and `test.yml:269` says so in its own
    comment. The real unit gate is the separate `unit` job at `:285`.
+   ⚠️ **CORRECTED 2026-09-09 — the vacuity STANDS, the mechanism changed.** The
+   echo now lives at the repo ROOT: root `test:all` no longer delegates to the
+   retired workspace. The reason it could not wait for the delete-or-repoint
+   decision is that the delegation made the step exit 1 the moment
+   DELETE-MEDDOC-PRO ran (`npm error No workspaces found: --workspace=meddoc-pro`,
+   measured) — and `test` is a REQUIRED context, so that is not a red main, it is
+   every PR unmergeable. **Deleting or repointing the job is still owed.**
 3. Remove the pro.quillmd.com branch from
    `apps/transcribe-md/src/actions/auth.ts:227-241`, **and** decide the fate of
    the 12 `MEDDOC_PRO`-only accounts (SPEC §4.1). Doing the first without the
