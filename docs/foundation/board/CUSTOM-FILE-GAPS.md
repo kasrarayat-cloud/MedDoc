@@ -154,6 +154,30 @@ The custom-file lane wrapped its deploy in a watchdog.
 armed until the first recreate. The scratch watchdog is the prototype. Then an
 owner decision on the untagged images.
 
+⚠️ **AMENDED 2026-09-11, after the security hotfix deploy of `fd9f7cdb`. THE
+PROTOTYPE DISARMED ITSELF 12 SECONDS IN.**
+
+- **What happened.** The watchdog matched its disarm marker as a plain
+  substring, `grep -F "=== 5b."`. `deploy-prod.sh` prints the resolved §2.5
+  declaration into the log at step 1. That declaration's own watchdog
+  paragraph quoted the marker, so the guard stood down at 07:21:44Z. The real
+  step-5b header only arrived at 07:29:56Z.
+- **Recovery.** It was recovered at 07:28:37Z with a replacement guard that
+  anchors the marker at line start. The lowest free disk was 12.7G against a
+  6G floor, so no harm was done, by luck rather than by the guard. Full account:
+  `20260911-5020c68a-JUDGED.md`.
+- **Same class as #13.** It is a marker the process prints BEFORE the moment it
+  means, arriving this time in the prose describing the guard.
+- **What a tracked guard must do.** Match the step header **anchored at line
+  start** (`^=== 5b\.`), or better, have `deploy-prod.sh` emit a dedicated
+  machine token that no prose uses. The corrected prototype was proven on both
+  shapes before its first use, under an impossible floor so that any armed
+  moment would kill:
+  - a marker quoted mid-line stays armed and KILLS;
+  - the real header at line start disarms and does NOT kill.
+- **Its measured budget is filed as #16:** the peak consumed 16,330M, and
+  ~8.2G stays consumed after each deploy.
+
 ## 10 · STALE-MANIFEST-ACROSS-RULE-CHANGE — a rule change does not make a stored manifest stale
 
 Round two of #314, finding 1, was CONFIRMED and NON-BLOCKING. Freshness is
@@ -207,3 +231,131 @@ The gate that claims "exactly four doors / no sixth copy"
 `src/` only, so it cannot see a caller under `scripts/`. **Needs:** the gate's
 source scan widened to `scripts/`, and the smoke routed through
 `groundingContextFor`. Both belong to #314's deferred PR (#1101).
+
+## 13 · RULED-ACT-SCRIPTS-DO-NOT-EXIT — the act finishes, and its process never ends
+
+`scripts/backfill-sole-paragraph-control.ts` and
+`scripts/confirm-reissued-form.ts` each printed their own final line (`🟢
+backfill complete`, `🟢 confirm complete:`) on 2026-09-11 and then never
+exited. The cause is an open handle, not prisma. `run-ruled-mutation.sh`
+waited indefinitely. The lead confirmed the final line, allowed a grace
+period, verified the in-container pid's cmdline named the script, and sent
+SIGTERM to that pid only. The door then printed **exit 143**, and each act was
+judged by its before/after snapshots (both 🟢). `certify-active.ts` exited on
+its own, both in report mode and on refusal.
+
+**The hazard.** An exit code of 143 on a SUCCESSFUL act looks the same as an
+act killed mid-write. Only the snapshots tell them apart. The completion
+watcher this forces is itself a trap. One keyed on "DRY RUN" killed the
+confirm dry run, because that word is in the script's HEADER. That dry run
+wrote nothing and was re-run. **Needs:** each act script ends with an explicit
+exit, or closes the handle once it has been identified. The door also needs a
+timeout that reports "finished its output but did not exit", rather than a
+silent wait.
+
+## 14 · SYNTHETIC-TEST-BARE-CATCH — a scan that is UNAVAILABLE reads as "your evidence has PHI"
+
+`src/lib/template-twin/synthetic-test.ts:393` catches every error from the
+synthetic-evidence gate with a bare `catch {`. It answers all of them with
+*"Use clearly labeled synthetic test evidence without patient identifiers."*
+(:396). So an outage, exhausted credits or a timeout in the model scan is
+reported to the physician as an accusation about their evidence.
+
+The certify refusal of 2026-09-11 was a real rejection (`referring provider
+name`). Only a separate diagnostic could tell that apart. The product cannot.
+**Needs:** `TemplateTwinSyntheticEvidenceRejectedError` maps to the rejection.
+Anything else is reported as the scan being unavailable, and retryable.
+
+## 15 · SHARED-INSTALL-STALE — the shared tree's `node_modules` is not the locked install
+
+Measured 2026-09-11: `/opt/meddoc-pro/node_modules/next` is **16.2.11**, but
+`package-lock.json` on `main` (`b069ddbb`) pins **16.3.4**. The install marker
+(`node_modules/.package-lock.json`) is dated 2026-09-08 23:47.
+`setup-worktree.sh` links each worktree's `node_modules` into this shared
+install; it re-points only `@meddoc/*` at the worktree. **So every worktree's
+local vitest and `tsc` runs against 16.2.11, not the locked version.**
+Production images are unaffected, because the Dockerfile runs `npm ci`.
+
+This was found when a QA build that borrowed the shared install reported
+"Next.js 16.2.11". That build was thrown away as evidence, because a proof of
+framework behaviour built on the wrong framework version proves nothing.
+
+The same install also has `node_modules/node_modules`, a **dangling absolute
+symlink** into another session's scratchpad (`ceac94df…/scratchpad/auto/`).
+
+**Needs:**
+- Reinstall the shared tree. That is a deploy-surface act, so schedule it with
+  no deploy in flight.
+- `setup-worktree.sh` asserts installed == locked for a few sentinel packages
+  (next, prisma, react), and refuses loudly rather than linking a stale
+  install.
+
+**Not fixed here:** reinstalling mid-sequence would be a second, concurrent
+change to the surface that deploys.
+
+## 16 · DISK-BUDGET — every deploy keeps ~8G, and the box is out of room for the next one
+
+Measured on 2026-09-11 during the security hotfix deploy of `fd9f7cdb`:
+
+| moment | free disk |
+|---|---|
+| before the deploy | 29,070M |
+| lowest sample | 12,740M (peak consumption **16,330M**) |
+| right after the deploy | 13G |
+| after pruning the regenerable build cache | 20,830M |
+
+**About 8.2G stays consumed after every deploy.** Those are the new images; their
+predecessors are kept, correctly, by the rollback tags (ruling #137).
+
+The sanctioned levers are exhausted:
+- the build cache is 0B;
+- `prune-rollback-tags.sh` deletes 0 tags, because every tag is inside its keep set;
+- the npm and pip download caches were cleared, freeing 1.3G.
+
+**At 09:03Z the preflight read df 93% (22,813M free), so it BLOCKED on disk.** The
+certification-referrer fix was therefore **NOT deployed**: it was merged as
+`aaf8775a`, fully cited, and its declaration `20260911-e1d55da3.md` is committed.
+That declaration's own disk rule (≥ 22,474M) was met by 339M. The standing gate
+stopped the deploy, because a rule written by the deploying session does not
+overrule it.
+
+⚠️ **THAT UNDEPLOYED DECLARATION IS NOW A HELD ONE.** All four parts of the
+runbook §2.5 predicate hold:
+- it has no verdict;
+- it is not superseded;
+- `aaf8775a` is not an ancestor of the running `fd9f7cdb`;
+- it names runtime files (`verification-encounter.ts` and
+  `concept-registry.ts`).
+
+**Any deploy of `main` from here carries it, and must judge it jointly or defer it
+by name.**
+
+**Needs (owner, class d): free space.**
+- `docker system df` reports 46.3G of reclaimable images, mostly untagged.
+  Sessions are denied `docker rmi`, correctly.
+- It also reports 12.2G of unattached volumes. Those are data, and never a
+  session's call.
+
+Then, in order:
+1. re-run the preflight;
+2. run the deploy act, re-measuring the disk rule, under an anchored watchdog
+   (see 9b);
+3. run the certify act under its committed mutation declaration
+   (`20260910-certify-activate-reissued-form.md`, baseline re-read).
+
+## 17 · CI-RUNNER-HOST-DNS — both self-hosted runners lose DNS intermittently
+
+On 2026-09-11 there were four failures between 06:42 and 07:53Z. All four were
+network failures; none was a code failure:
+- npm audit on `quillmd-ci-1`, three times: `EAI_AGAIN`, then
+  `ECONNREFUSED 127.0.0.1:443`, so audit-gate reported "CANNOT TELL";
+- e2e's checkout on `quillmd-ci-2`, once: "Could not resolve host: github.com",
+  so Playwright was SKIPPED and the run FAILED.
+
+`quillmd-ci-1` also showed offline while marked busy from 05:33 to 06:28Z.
+
+The fail-closed gates were right to refuse. The cure used every time was
+`gh run rerun <id> --failed` on the same commit, never an override. The runners
+are not on the VPS, so no session can fix them.
+
+**Needs (owner):** fix the runner host's DNS resolver.
