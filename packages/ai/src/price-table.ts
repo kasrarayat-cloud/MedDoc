@@ -247,6 +247,114 @@ export function costMicroUsd(quantity: Quantity, rate: PriceRateRow): bigint {
  * Half-up at the micro-dollar is inherited from {@link divRoundHalfUp}. Cent
  * rounding is a DISPLAY concern and appears nowhere in this path.
  */
-export function chargeMicroUsd(costMicro: bigint): bigint {
-  return divRoundHalfUp(costMicro * 3n, 2n);
+export function chargeMicroUsd(costMicro: bigint, margin: MarginRate): bigint {
+  // ⚠️ ROUND 6 — A MISSING MARGIN REFUSES **BY NAME**, NOT BY ACCIDENT. It used
+  // to throw only because `isUsableMargin` dereferenced `null` — a TypeError
+  // nobody designed. And round 5's arity arm (`fn.length === 2`) is defeated by
+  // a one-line body fallback: `margin = margin ?? {3/2}` keeps the signature,
+  // the length and every source grep, and `chargeMicroUsd(1000n, null)` then
+  // returns 1500n — a rate nobody configured, from the public barrel. A caller
+  // spelling `chargeMicroUsd(cost, (await marginAt(at))!)` is tsc-clean and
+  // passes exactly that null. The refusal is DRIVEN by a behavioural arm
+  // (`gate-admin4-margin-readers.test.ts`), because only a call can see a body.
+  if (margin === null || margin === undefined) {
+    throw new Error(
+      'chargeMicroUsd: no margin supplied — #178: a missing multiplier REFUSES, it never bills at a default',
+    );
+  }
+  // ⚠️ THE OPERATION ENFORCES ITS OWN PRECONDITION — ROUND 3, AND ROUND 2's FIX
+  // WAS NOT ENOUGH. Round 2 EXPORTED `isUsableMargin` beside this function,
+  // which made the guard DISCOVERABLE and left the domain unchanged:
+  // `chargeMicroUsd(1000n, {1, 2})` still returned 500n, the platform billing
+  // HALF its own cost, from the public barrel. A precondition somebody must
+  // remember to call is not enforcement — it is documentation with a type.
+  if (!isUsableMargin(margin)) {
+    throw new Error(
+      `chargeMicroUsd: refusing an out-of-bounds margin ${margin.marginNumerator}/${margin.marginDenominator} (#178 bounds: >= 1.0, <= 5.0)`,
+    );
+  }
+  return divRoundHalfUp(costMicro * BigInt(margin.marginNumerator), BigInt(margin.marginDenominator));
+}
+
+/**
+ * The platform margin as an EXACT RATIO — ADMIN-4, ruling #178.
+ *
+ * ⚠️ THE SECOND ARGUMENT IS REQUIRED, AND ITS REQUIREDNESS IS THE FAIL-CLOSED.
+ * A default of `3/2` here would restore the whole defect: the compiler would
+ * stop asking callers where the rate came from, and a caller that could not
+ * read one would silently bill at the old constant. There is no default, so
+ * "the rate is missing" cannot be spelled in this file at all — it has to be
+ * decided by whoever tried to read it.
+ */
+export interface MarginRate {
+  readonly id: string;
+  readonly marginNumerator: number;
+  readonly marginDenominator: number;
+}
+
+/**
+ * The margin in effect at one instant, or `null` if none is configured.
+ *
+ * Same shape as {@link rateAt} one layer down, deliberately: greatest
+ * `effectiveFrom` not after the instant, forward-only, no `effectiveTo` because
+ * a later row supersedes by being later. `null` means **the platform has no
+ * configured margin**, which is a refusal and never a default.
+ *
+ * ⚠️ AND IT IS `null` ON AN EMPTY TABLE BY DESIGN. The migration deliberately
+ * seeds nothing: a seeded 3/2 would make the migration the thing that decided
+ * the rate, with no actor and no note — the same defect one layer up, in a
+ * migration's clothes.
+ */
+/**
+ * Is this margin usable — #178's bounds, in integer arithmetic.
+ *
+ * ⚠️ ONE PREDICATE, BECAUSE THE FIRST VERSION HAD THE CHECK IN THE WRONG PLACE.
+ * It lived only inside {@link marginAt}, and `priceUsageRows` accepts ANY
+ * lookup — so a fixture, a seed script or a future importer supplying its own
+ * reader bypassed the bounds completely. That is not hypothetical: every arm in
+ * the ADMIN-4 gate injects a lookup, which is exactly how it was found.
+ *
+ * ⚠️ AND THE BOUNDS OTHERWISE EXIST ONLY IN A POSTGRES `CHECK` THAT PRISMA
+ * CANNOT MODEL. `scripts/check-ledger-append-only.sh` documents that class in
+ * this repo already: *"prisma migrate dev … silently omits them … every test
+ * green. The only observable difference is that money can now be edited."*
+ *
+ * Same bounds as the migration, same cross-multiply, so both stay integer:
+ * `n >= d` is `n/d >= 1`, and `n <= 5d` is `n/d <= 5`.
+ */
+export function isUsableMargin(m: MarginRate): boolean {
+  if (!Number.isInteger(m.marginNumerator) || !Number.isInteger(m.marginDenominator)) return false;
+  if (m.marginDenominator <= 0 || m.marginNumerator <= 0) return false;
+  if (m.marginNumerator < m.marginDenominator) return false;
+  if (m.marginNumerator > 5 * m.marginDenominator) return false;
+  return true;
+}
+
+export async function marginAt(at: Date): Promise<MarginRate | null> {
+  const rows = (await prisma.platformRate.findMany({
+    where: { effectiveFrom: { lte: at } },
+    orderBy: [{ effectiveFrom: 'desc' }, { createdAt: 'desc' }],
+    take: 1,
+    select: { id: true, marginNumerator: true, marginDenominator: true },
+  })) as unknown as MarginRate[];
+  const row = rows[0];
+  if (!row) return null;
+  // ⚠️ THE READ ENFORCES THE **BOUNDS**, NOT MERELY NON-ZERO — AND THE FIRST
+  // VERSION OF THIS GUARD DID NOT, WHICH IS A MONEY DEFECT AND NOT A TIGHTENING.
+  //
+  // It checked `<= 0` only, and its comment claimed to protect the read "for
+  // the reason the constraint protects the write". It did not: a row of `1/2`
+  // passed it and the platform billed HALF its own cost; `100/1` passed it and
+  // billed a hundred times. Both stamp a `platform_rates.id` that resolves
+  // cleanly, so the §2.5 declaration's own failure criterion — "a multiplier
+  // that does not resolve to a row" — would never have fired.
+  //
+  // ⚠️ AND THE BOUNDS EXISTED ONLY IN A POSTGRES `CHECK` THAT PRISMA CANNOT
+  // MODEL AND NOTHING ASSERTS. This repo already documents that exact class in
+  // `scripts/check-ledger-append-only.sh`: *"prisma migrate dev … silently omits
+  // them … every test green. The only observable difference is that money can
+  // now be edited."* A constraint you cannot see from TypeScript is one
+  // `migrate dev` from being absent.
+  //
+  return isUsableMargin(row) ? row : null;
 }

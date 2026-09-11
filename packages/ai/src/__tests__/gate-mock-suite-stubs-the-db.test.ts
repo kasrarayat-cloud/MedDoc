@@ -66,6 +66,39 @@ import { join, relative, sep, dirname, resolve } from 'node:path';
 
 import { describe, it, expect } from 'vitest';
 
+/**
+ * Resolve `@meddoc/<pkg>/<rest…>` the way NODE does — through the workspace's
+ * own `exports` map — falling back to the `src/<rest…>` path convention.
+ *
+ * ⚠️ WHY THIS IS NOT A ONE-LINE `join`. The subpath in a specifier is an EXPORT
+ * NAME. `@meddoc/db/guard` is declared as `"./guard": "./src/db-guard.ts"`, so
+ * the convention resolves it to `packages/db/src/guard.ts`, which does not
+ * exist — and the dead-mock arm then reports a working mock as dead. Returns an
+ * absolute path with NO extension appended (the caller tries `.ts`/`.tsx`/
+ * `/index.ts`), or the exact file when the exports map names one.
+ */
+function resolveWorkspaceSubpath(pkg: string, rest: readonly string[]): string | null {
+  const pkgRoot = join(ROOT, 'packages', pkg);
+  const manifest = join(pkgRoot, 'package.json');
+  if (existsSync(manifest)) {
+    try {
+      const exp = (JSON.parse(readFileSync(manifest, 'utf8')) as { exports?: unknown }).exports;
+      const key = rest.length === 0 ? '.' : `./${rest.join('/')}`;
+      if (exp && typeof exp === 'object') {
+        const hit = (exp as Record<string, unknown>)[key];
+        // Only the string form is used. A conditional-exports object would need
+        // its own resolution order, and guessing one is how a resolver starts
+        // answering confidently about the wrong file.
+        if (typeof hit === 'string') return join(pkgRoot, hit);
+      }
+    } catch {
+      // A malformed manifest falls through to the convention rather than
+      // throwing — this arm must never be the thing that reds on a bad JSON.
+    }
+  }
+  return join(pkgRoot, 'src', ...rest);
+}
+
 /** Executable source only — prose must never satisfy a code assertion. */
 const strip = (s: string) =>
   s
@@ -278,7 +311,21 @@ describe('every mocked-vendor test prevents the real metering write', () => {
         if (spec.startsWith('.')) base = resolve(dirname(join(ROOT, rel)), spec);
         else if (spec.startsWith('@meddoc/')) {
           const [, pkg, ...rest] = spec.split('/');
-          base = join(ROOT, 'packages', pkg, 'src', ...rest);
+          // ⚠️ THE SUBPATH IS AN EXPORT NAME, NOT A FILE NAME — ROUND 5, AND THE
+          // OLD FORM WAS A FALSE REJECTION THAT WOULD HAVE MADE THE SUITE WORSE.
+          // `packages/<pkg>/src/<rest>` is only right when a workspace happens
+          // to name the file after the export. `@meddoc/db/guard` is
+          // `./src/db-guard.ts` in packages/db/package.json, so this arm called
+          // a LIVE, WORKING mock dead — and its own failure message tells the
+          // author to "point them at the module the code under test actually
+          // imports", i.e. to replace a correct specifier with a relative path
+          // that is one refactor from silently mocking nothing. A gate that
+          // pushes you toward the defect it exists to catch is worse than no
+          // gate; the same backfire AGENTS.md records for the `pgrep -f` entry.
+          //
+          // So the package's OWN `exports` map is consulted first, and the path
+          // convention is only the fallback for a workspace that has none.
+          base = resolveWorkspaceSubpath(pkg!, rest);
         } else if (spec.startsWith('@/')) {
           // vitest.config.ts aliases '@' -> apps/transcribe-md/src. Omitting it
           // dropped ~90 of the 197 file-resolvable specifiers from this arm —
@@ -302,6 +349,33 @@ describe('every mocked-vendor test prevents the real metering write', () => {
         'and the real implementation runs. Point them at the module the code under\n' +
         'test actually imports:\n  ' + dead.join('\n  '),
     ).toEqual([]);
+  });
+
+  it('POSITIVE CONTROL — the workspace resolver reads the exports map, not the path convention', () => {
+    // ⚠️ BOTH DIRECTIONS, because a resolver that returned a path for
+    // EVERYTHING would make the arm above vacuous, and one that returned
+    // nothing would make it fire on every workspace mock.
+    //
+    // TOWARD SUCCESS: an export whose file name differs from its subpath.
+    const guard = resolveWorkspaceSubpath('db', ['guard']);
+    expect(guard, '@meddoc/db/guard did not resolve — the exports map is not being read').not.toBeNull();
+    expect(existsSync(guard!), `@meddoc/db/guard resolved to a missing file: ${guard}`).toBe(true);
+    expect(guard, 'the resolver returned the PATH CONVENTION, not the exports target').toContain(
+      'db-guard',
+    );
+
+    // AND THE CONVENTION STILL WORKS where a package has no exports entry for
+    // the subpath, or names the file after it — the fallback must not regress.
+    const root = resolveWorkspaceSubpath('db', []);
+    expect(root).not.toBeNull();
+    expect(existsSync(root!)).toBe(true);
+
+    // TOWARD FAILURE: a subpath that is in NO exports map and has no file.
+    const bogus = resolveWorkspaceSubpath('db', ['no-such-subpath-xyz']);
+    expect(
+      bogus === null || !existsSync(bogus),
+      'a fabricated subpath resolved — the arm above can no longer detect a dead mock',
+    ).toBe(true);
   });
 
   it('POSITIVE CONTROL — the dead-mock matcher fires on a known-bad specifier', () => {

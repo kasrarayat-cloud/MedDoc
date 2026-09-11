@@ -154,6 +154,7 @@ import {
   BILLING_ENFORCED_ENV,
   classifyFailureAccountability,
 } from '@meddoc/ai';
+import { priceUsageRows } from '@meddoc/ai';
 import { prisma } from '@meddoc/db';
 import { assertNonProdDatabase } from '@meddoc/db/guard';
 
@@ -193,8 +194,22 @@ const SEEDED_OUTPUT_TOKENS = 500;
 
 /** B6's margin. Declared here only to DERIVE the expectation; the assertion
  *  compares against what the real pricer returned for the real rows. */
-const MARGIN_NUMERATOR = 3n;
-const MARGIN_DENOMINATOR = 2n;
+// ⚠️ THE MARGIN IS NO LONGER A CONSTANT HERE EITHER — ADMIN-4.
+//
+// This file held a SECOND encoding of `3/2`, inside the harness whose whole job
+// is to verify the money number. Once the platform rate became a row, this
+// would have kept computing the old answer and blamed `observeFailedVisitUsage`
+// for being right: on a QA stack with no rate it declares a correct refusal
+// wrong, and on a stack holding 7/4 it computes 9000 where the pricer charges
+// 10500.
+//
+// ⚠️ AND IT WAS ALREADY WRONG BY ONE MICRO-DOLLAR ON EVERY ODD COST, before
+// this change: `(cost * 3n) / 2n` TRUNCATES and `chargeMicroUsd` rounds HALF-UP.
+// A second implementation of a rule does not merely drift when the rule
+// changes — it can be wrong the whole time and pass, because nobody compares
+// the two.
+//
+// Both are now taken from the real pricer. One rule, one reader.
 
 type Verdict = 0 | 1 | 2;
 
@@ -341,11 +356,42 @@ async function expectedChargeForSeededRow(at: Date): Promise<bigint | null> {
   if (!input || !output) return null;
   if (rates.length !== 2) return null;
 
-  // cost = Σ units × rate / unitQuantity, then B6's ×1.5 margin.
-  const cost =
-    (BigInt(SEEDED_INPUT_TOKENS) * input.rateMicroUsd) / input.unitQuantity +
-    (BigInt(SEEDED_OUTPUT_TOKENS) * output.rateMicroUsd) / output.unitQuantity;
-  return (cost * MARGIN_NUMERATOR) / MARGIN_DENOMINATOR;
+  // ⚠️ ADMIN-4 ROUND 6 — THE COST HALF WAS STILL A SECOND, TRUNCATING RULE.
+  // The comment at the top of this file said "Both are now taken from the real
+  // pricer. One rule, one reader." — true of the MARGIN only. The cost was
+  // `(units * rateMicroUsd) / unitQuantity` per component, TRUNCATING, where the
+  // pricer rounds HALF-UP per component (`costMicroUsd`) and then applies the
+  // margin once to the sum. Measured at a tokens_input rate of 2,000,500 per
+  // 1,000,000 (output 10,000,000): this harness expected 10500, the observer
+  // correctly logs 10502, and the asserter's exact-string compare reports a
+  // FINDING against correct code. Latent only because today's seeded rates
+  // leave no remainder at 1000/500 tokens — and this function reads rates
+  // "rather than pinned" precisely so it survives a re-versioning.
+  //
+  // So the expectation is the REAL pricer over the seeded row's own shape, with
+  // the REAL rate and margin readers. What the harness then proves is what it
+  // is for: that the worker priced EXACTLY the seeded row, by the one rule.
+  // It cannot detect a defect inside `priceUsageRows` itself — the unit gates
+  // own that, and a harness with its own copy of the rule was the defect.
+  const decision = await priceUsageRows([
+    {
+      id: 'qa-expected-seeded-row',
+      provider: 'anthropic',
+      modelName: SEEDED_MODEL,
+      unitsSource: 'vendor',
+      createdAt: at,
+      audioSeconds: null,
+      inputTokens: SEEDED_INPUT_TOKENS,
+      outputTokens: SEEDED_OUTPUT_TOKENS,
+      cacheReadInputTokens: null,
+      cacheCreationInputTokens: null,
+    },
+  ]);
+  // ⚠️ `null` HERE MEANS CANNOT-TELL, NOT ZERO — the same contract the rate
+  // lookup above already uses. No platform rate configured (or any other
+  // decline) is a fact about the TABLES, and this harness must not compute an
+  // expectation of its own in its place, which is what the hard-coded 3/2 did.
+  return decision.charge ? decision.chargeMicroUsd : null;
 }
 
 async function main(): Promise<Verdict> {

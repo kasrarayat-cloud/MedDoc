@@ -86,16 +86,34 @@ const priceNothing = async () => null;
 // 1. THE ROUNDING RULE, AT THE BOUNDARY — the gate's own words
 // ---------------------------------------------------------------------------
 
+/**
+ * ⚠️ THE 3/2 THESE ARMS MEASURE IS NOW AN ARGUMENT, NOT A CONSTANT — ADMIN-4.
+ *
+ * `chargeMicroUsd` used to compile the margin in, so these arms could assert
+ * the arithmetic without ever naming the rate. The rate is now a row, and the
+ * second argument is REQUIRED precisely so no caller can bill at a rate it did
+ * not read.
+ *
+ * NOTHING THESE ARMS MEASURE HAS CHANGED: they are about half-up rounding at
+ * the micro-dollar, integer arithmetic above the float-safe range, and one
+ * rounding step on the total. Passing the rate explicitly makes the thing under
+ * test MORE visible, not less — the old arms asserted `× 3 / 2` against a
+ * literal nobody could see from the call site.
+ */
+const THREE_HALVES = { id: 'rate-3-2', marginNumerator: 3, marginDenominator: 2 } as const;
+/** The margin lookup these arms drive `priceUsageRows` with. */
+const margin3_2 = async () => THREE_HALVES;
+
 describe('B6 (1) — charge = cost × 3 / 2, half-up, at the boundary', () => {
   it('rounds half-up on every odd cost, which is where the boundary lives', () => {
     // cost × 3 / 2 lands exactly on .5 for every ODD cost, so the odd values
     // ARE the boundary cases — there is no other input that can round.
-    expect(chargeMicroUsd(0n)).toBe(0n); //  0   ->  0
-    expect(chargeMicroUsd(1n)).toBe(2n); //  1.5 ->  2   (half-up, not 1)
-    expect(chargeMicroUsd(2n)).toBe(3n); //  3   ->  3   (exact)
-    expect(chargeMicroUsd(3n)).toBe(5n); //  4.5 ->  5   (half-up, not 4)
-    expect(chargeMicroUsd(4n)).toBe(6n); //  6   ->  6   (exact)
-    expect(chargeMicroUsd(5n)).toBe(8n); //  7.5 ->  8   (half-up, not 7)
+    expect(chargeMicroUsd(0n, THREE_HALVES)).toBe(0n); //  0   ->  0
+    expect(chargeMicroUsd(1n, THREE_HALVES)).toBe(2n); //  1.5 ->  2   (half-up, not 1)
+    expect(chargeMicroUsd(2n, THREE_HALVES)).toBe(3n); //  3   ->  3   (exact)
+    expect(chargeMicroUsd(3n, THREE_HALVES)).toBe(5n); //  4.5 ->  5   (half-up, not 4)
+    expect(chargeMicroUsd(4n, THREE_HALVES)).toBe(6n); //  6   ->  6   (exact)
+    expect(chargeMicroUsd(5n, THREE_HALVES)).toBe(8n); //  7.5 ->  8   (half-up, not 7)
   });
 
   it('is `× 3 / 2` and NOT `* 1.5`, above the float-safe integer range', () => {
@@ -104,14 +122,14 @@ describe('B6 (1) — charge = cost × 3 / 2, half-up, at the boundary', () => {
     // pass against the float form and prove nothing about SPEC §4.4's rule.
     // At 2^53+1 micro-dollars the Number path loses the low bit.
     const big = 9_007_199_254_740_993n; // 2^53 + 1
-    expect(chargeMicroUsd(big)).toBe(13_510_798_882_111_490n);
+    expect(chargeMicroUsd(big, THREE_HALVES)).toBe(13_510_798_882_111_490n);
     // What `Math.round(cost * 1.5)` would have produced — a different number.
-    expect(BigInt(Math.round(Number(big) * 1.5))).not.toBe(chargeMicroUsd(big));
+    expect(BigInt(Math.round(Number(big) * 1.5))).not.toBe(chargeMicroUsd(big, THREE_HALVES));
   });
 
   it('inherits half-up from divRoundHalfUp rather than reimplementing it', () => {
     for (const cost of [0n, 1n, 7n, 999n, 1_000_001n]) {
-      expect(chargeMicroUsd(cost)).toBe(divRoundHalfUp(cost * 3n, 2n));
+      expect(chargeMicroUsd(cost, THREE_HALVES)).toBe(divRoundHalfUp(cost * 3n, 2n));
     }
   });
 });
@@ -129,19 +147,20 @@ describe('B6 (2) — one rounding step on the total, never one per component', (
     const decision = await priceUsageRows(
       [usageRow({ inputTokens: 1, outputTokens: 1 })],
       priceEverything,
+      margin3_2,
     );
     expect(decision.charge).toBe(true);
     if (!decision.charge) return;
     expect(decision.costMicroUsd).toBe(2n);
     expect(decision.chargeMicroUsd).toBe(3n);
-    expect(decision.chargeMicroUsd).not.toBe(chargeMicroUsd(1n) + chargeMicroUsd(1n));
+    expect(decision.chargeMicroUsd).not.toBe(chargeMicroUsd(1n, THREE_HALVES) + chargeMicroUsd(1n, THREE_HALVES));
   });
 
   it('the two orderings genuinely differ (positive control)', () => {
     // Without this, the assertion above could be satisfied by an input where
     // both orderings agree — which is most inputs.
-    expect(chargeMicroUsd(1n) + chargeMicroUsd(1n)).toBe(4n);
-    expect(chargeMicroUsd(2n)).toBe(3n);
+    expect(chargeMicroUsd(1n, THREE_HALVES) + chargeMicroUsd(1n, THREE_HALVES)).toBe(4n);
+    expect(chargeMicroUsd(2n, THREE_HALVES)).toBe(3n);
   });
 });
 
@@ -151,7 +170,7 @@ describe('B6 (2) — one rounding step on the total, never one per component', (
 
 describe('B6 (3) — an unpriceable component declines the WHOLE charge', () => {
   it('refuses rather than charging zero for the unpriced part', async () => {
-    const decision = await priceUsageRows([usageRow({ inputTokens: 1000 })], priceNothing);
+    const decision = await priceUsageRows([usageRow({ inputTokens: 1000 })], priceNothing, margin3_2);
     expect(decision.charge).toBe(false);
     if (decision.charge) return;
     expect(decision.reason).toBe('unpriced');
@@ -169,6 +188,7 @@ describe('B6 (3) — an unpriceable component declines the WHOLE charge', () => 
     const decision = await priceUsageRows(
       [usageRow({ inputTokens: 100, outputTokens: 50 })],
       lookup as never,
+      margin3_2,
     );
     expect(decision.charge).toBe(false);
     if (decision.charge) return;
@@ -183,6 +203,7 @@ describe('B6 (3) — an unpriceable component declines the WHOLE charge', () => 
     const decision = await priceUsageRows(
       [usageRow({ unitsSource: 'mock', inputTokens: 1000 })],
       priceEverything,
+      margin3_2,
     );
     expect(decision.charge).toBe(false);
     if (decision.charge) return;
@@ -194,6 +215,7 @@ describe('B6 (3) — an unpriceable component declines the WHOLE charge', () => 
     const decision = await priceUsageRows(
       [usageRow({ modelName: null, inputTokens: 10 })],
       priceEverything,
+      margin3_2,
     );
     expect(decision.charge).toBe(false);
     if (decision.charge) return;
@@ -207,7 +229,7 @@ describe('B6 (3) — an unpriceable component declines the WHOLE charge', () => 
       return rate(1n, 1n);
     };
     const at = new Date('2026-08-05T12:00:00Z');
-    await priceUsageRows([usageRow({ createdAt: at, inputTokens: 1 })], lookup as never);
+    await priceUsageRows([usageRow({ createdAt: at, inputTokens: 1 })], lookup as never, margin3_2);
     expect(seen).toEqual([at]);
   });
 });
@@ -229,6 +251,7 @@ describe('B6 (4) — GATE 0.5: Resend is not a billing input', () => {
     const decision = await priceUsageRows(
       [usageRow({ provider: 'resend', modelName: 'resend', inputTokens: 5 })],
       priceEverything,
+      margin3_2,
     );
     expect(decision.charge).toBe(false);
     if (decision.charge) return;

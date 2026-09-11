@@ -70,6 +70,9 @@ import { DRAW_ORDER, splitCharge, type BucketDraw, type LedgerBucket } from './b
 import {
   audioSeconds as audioQuantity,
   chargeMicroUsd,
+  isUsableMargin,
+  marginAt,
+  type MarginRate,
   costMicroUsd,
   rateAt,
   tokens,
@@ -188,6 +191,12 @@ export function componentsOf(row: ChargeableUsageRow): UsageComponent[] {
 
 /** One component that WAS priced, with the rate that priced it. */
 export interface PricedComponent {
+  /** ⚠️ ADMIN-4 — the instant this component's usage row was created. The
+   *  margin's read instant is DERIVED from the max of these, so the anchor
+   *  cannot be moved above a skip: a row that was not priced has no `at` here.
+   *  Round 2 moved round 1's free-standing tracking statement one line and
+   *  every test stayed green. */
+  at: Date;
   usageEventId: string;
   provider: string;
   modelName: string;
@@ -213,6 +222,13 @@ export type ChargeDecision =
       charge: true;
       costMicroUsd: bigint;
       chargeMicroUsd: bigint;
+      /** ADMIN-4 — the rate that ACTUALLY applied, carried so the ledger stamps
+       *  the row it used rather than a literal somebody hopes still matches. */
+      margin: MarginRate;
+      /** The ledger fields, built from `margin` at the moment it was applied.
+       *  ⚠️ The write site SPREADS this and passes nothing — see `stamp:` in
+       *  `priceUsageRows` for why an argument was the wrong shape. */
+      stamp: { multiplier: string; platformRateId: string };
       priced: PricedComponent[];
     }
   | {
@@ -225,7 +241,14 @@ export type ChargeDecision =
        *                      from `unpriced` because it is not a gap in our
        *                      knowledge, and B9 must not chase it.
        */
-      reason: 'unpriced' | 'nothing_billable';
+      /**
+       * `no_margin_rate`   — ADMIN-4: the platform has NO configured margin at
+       *                      this instant. ⚠️ REFUSES RATHER THAN DEFAULTING.
+       *                      A default here would re-create exactly what #178
+       *                      forbade — billing at a rate nobody set and no row
+       *                      records.
+       */
+      reason: 'unpriced' | 'nothing_billable' | 'no_margin_rate';
       unpriced: UnpricedComponent[];
       /** What WOULD have been charged for the components that did price. Never
        *  written anywhere — it exists so an operator can see the size of what is
@@ -250,6 +273,113 @@ export type ChargeDecision =
  * exists to prevent, and `claude-sonnet-5` already carries two periods with a
  * handover on 2026-09-01 — so this is live, not hypothetical.
  */
+/**
+ * The margin fields written onto `ledger_entries.pricing`.
+ *
+ * ⚠️ EXTRACTED SO IT CAN BE ASSERTED. The refutation pass reverted the stamp to
+ * the literal `'3/2'` beside a correctly-configured 7/4 rate and **835 of 835
+ * tests stayed green**: nothing anywhere read the value written to the ledger.
+ * `commitVisitCharge` calls `assertProdDatabase()` as its first statement, so
+ * the write site cannot be driven from a test at all — which is exactly why
+ * that seam was unguarded, and why the builder now lives outside it.
+ *
+ * ⚠️ THE ID TRAVELS WITH THE RATIO. A stamp you cannot resolve to a row is a
+ * number with a story rather than a record — and a ratio without an id cannot
+ * be checked against the rate that was in effect.
+ */
+export function marginStamp(margin: MarginRate): {
+  multiplier: string;
+  platformRateId: string;
+} {
+  return {
+    multiplier: `${margin.marginNumerator}/${margin.marginDenominator}`,
+    platformRateId: margin.id,
+  };
+}
+
+/** The `charge: true` arm of {@link ChargeDecision}, on its own. */
+export type ChargeableDecision = Extract<ChargeDecision, { charge: true }>;
+
+/**
+ * THE LEDGER'S `pricing` JSON FOR ONE DRAW — pure, and EXPORTED SO IT CAN BE
+ * DRIVEN.
+ *
+ * ⚠️ ROUND 5 — IT WAS AN OBJECT LITERAL AT AN UNDRIVABLE WRITE SITE, AND THE
+ * ONLY GUARD ON IT WAS A SOURCE GREP THAT MEASURED THE WRONG THING.
+ * `commitVisitCharge` calls `assertProdDatabase()` as its first statement, so
+ * no test could ever observe what it wrote; the gate therefore sliced the
+ * literal out of the file as TEXT and asserted, of that slice, that no
+ * `multiplier:` or `platformRateId:` KEY appeared after `...decision.stamp`.
+ *
+ * Measured against round 4: adding a module-level
+ * `const LEGACY = { multiplier: '3/2', platformRateId: 'legacy' }` and a second
+ * SPREAD — `...LEGACY,` on the line after `...decision.stamp,` — writes
+ * `multiplier: '3/2'` beside a charge computed at 7/4, stamping an id that
+ * resolves to no row, and the whole suite stays GREEN. A later spread is a
+ * second writer of the same field exactly as a later key is; the round-3 regex
+ * was written for "any `multiplier:` key at all" and a spread carries no key.
+ *
+ * ⚠️ THE CLASS IS "A SECOND WRITER OF THIS FIELD", AND A GREP CAN ONLY EVER
+ * ENUMERATE SPELLINGS OF ONE. So the object is built HERE, by a function that
+ * returns it, and the gate ASSERTS THE RETURNED VALUE — a second writer in any
+ * spelling changes what comes back, and the assertion is on the value rather
+ * than on the text that produced it. The write site is left with no literal to
+ * mutate: `pricing: buildUsagePricing({...})`.
+ *
+ * SPEC §2.2's versioned snapshot: WHICH rates priced this, and what the
+ * pre-multiplier cost was. Stored so a later rate change can never re-price
+ * history and so B9 can explain the number line by line.
+ *
+ * ⚠️ THE SNAPSHOT IS THE WHOLE VISIT'S, ON EVERY ROW, AND THAT IS DELIBERATE.
+ * The components priced ONE charge; the split is a settlement decision taken
+ * afterwards and is not a property of any rate. Apportioning the components
+ * across buckets would invent a per-component bucket attribution the pricing
+ * never made. So each row carries the full derivation plus `draw`, which says
+ * what THIS row settled — and B9 sums `draw.amountMicroUsd` across a visit's
+ * rows to get back to `chargeMicroUsd`, rather than summing `components` twice.
+ * The `visitId` is what joins them.
+ */
+export function buildUsagePricing(args: {
+  visitId: string;
+  decision: ChargeableDecision;
+  draw: BucketDraw;
+  ofBuckets: number;
+}): {
+  visitId: string;
+  costMicroUsd: string;
+  chargeMicroUsd: string;
+  multiplier: string;
+  platformRateId: string;
+  draw: { bucket: LedgerBucket; amountMicroUsd: string; ofBuckets: number };
+  components: ReadonlyArray<Record<string, string | null>>;
+} {
+  const { visitId, decision, draw, ofBuckets } = args;
+  return {
+    visitId,
+    costMicroUsd: decision.costMicroUsd.toString(),
+    chargeMicroUsd: decision.chargeMicroUsd.toString(),
+    // ⚠️ ADMIN-4 — THE RATE THAT APPLIED, NOT A LITERAL. This read `'3/2'` — a
+    // hard-coded string beside a hard-coded computation, so the two could drift
+    // apart and the ledger would still look right. The id is stamped with it: a
+    // stamp you cannot resolve to a row is a number with a story, not a record.
+    ...decision.stamp,
+    draw: {
+      bucket: draw.bucket,
+      amountMicroUsd: draw.amountMicroUsd.toString(),
+      ofBuckets,
+    },
+    components: decision.priced.map((p) => ({
+      usageEventId: p.usageEventId,
+      provider: p.provider,
+      modelName: p.modelName,
+      unitType: p.unitType,
+      deliveryMode: p.deliveryMode,
+      rateId: p.rateId,
+      costMicroUsd: p.costMicroUsd.toString(),
+    })),
+  };
+}
+
 export async function priceUsageRows(
   rows: readonly ChargeableUsageRow[],
   lookup: (args: {
@@ -259,9 +389,71 @@ export async function priceUsageRows(
     deliveryMode: DeliveryMode;
     at: Date;
   }) => Promise<PriceRateRow | null> = rateAt,
+  /** ADMIN-4 — the platform margin in effect. Injectable for the same reason
+   *  `lookup` is: so a gate can drive the absent case without a database. */
+  marginLookup: (at: Date) => Promise<MarginRate | null> = marginAt,
 ): Promise<ChargeDecision> {
   const priced: PricedComponent[] = [];
   const unpriced: UnpricedComponent[] = [];
+  /**
+   * ADMIN-4 — the instant the MARGIN is read at: the latest `createdAt` among
+   * the rows that actually priced.
+   *
+   * ⚠️ NOT `new Date()`. The vendor rate is looked up at `row.createdAt` a few
+   * lines below, and a margin read at wall-clock time would price the same
+   * usage against a rate that was not in effect when it happened — so a rate
+   * change would retroactively re-price a backlog the moment the worker caught
+   * up. #178 rules the change forward-only, and anchoring to the usage rather
+   * than to the RUN is what keeps a slow worker from re-pricing a backlog.
+   *
+   * ⚠️ LATEST rather than earliest, because a charge is one act: with several
+   * instants in one visit the rate that applies is the one in effect when the
+   * last billable component was produced, not the first.
+   *
+   * ═══════════════════════════════════════════════════════════════════════
+   * ⚠️ ROUND 5 — THE TWO LOOKUPS DO **NOT** MIRROR EACH OTHER, AND AN EARLIER
+   * VERSION OF THIS COMMENT SAID THEY DID.
+   * ═══════════════════════════════════════════════════════════════════════
+   *
+   * It read: *"#178 rules the change forward-only, and that is only true if
+   * BOTH lookups are anchored to the usage."* That sentence is FALSE, and
+   * measurably so. The VENDOR rate is looked up PER COMPONENT at that
+   * component's own instant; the MARGIN is looked up ONCE, at max(instants),
+   * and multiplied into the SUM. Measured against this unmodified function:
+   *
+   *   row a  2026-08-10  800 µ$ cost      pr_old 3/2 from 2026-08-01
+   *   row b  2026-08-12  200 µ$ cost      pr_new 5/1 from 2026-08-11T12:00
+   *   -> chargeMicroUsd 5000, stamp {"multiplier":"5/1","platformRateId":"pr_new"}
+   *
+   * 80% of that cost was metered more than a day BEFORE pr_new took effect and
+   * is billed at pr_new anyway. Per-component anchoring would give 2200.
+   *
+   * ⚠️ AND THAT IS THE RULED ANSWER, WHICH IS WHY THE CODE IS UNCHANGED AND THE
+   * COMMENT IS. Ruling #178 fixes the anchor: *"every metered charge records
+   * the multiplier IN EFFECT AT BILLING TIME on its own ledger line"*, effect
+   * *"at the next metering cycle"*, direction *"forward only — PAST BILLS are
+   * never rewritten"*. Billing time for that visit is >= 2026-08-12, after
+   * pr_new took effect, so 5/1 on the whole charge is what #178 prescribes.
+   * Reading at max(priced instant) is a self-imposed TIGHTENING of the ruled
+   * anchor — it can never reach past the last usage instant, where a wall-clock
+   * read could — not a violation of it. "Forward only" governs rewriting bills
+   * that EXIST; `ledger_entries` is append-only and the charge is written once
+   * per (visit, bucket).
+   *
+   * ⚠️ AND PER-COMPONENT ANCHORING IS UNREPRESENTABLE IN THE RULED STAMP, so
+   * "just fix it" is not available. `ledger_entries.pricing` carries ONE
+   * {multiplier, platformRateId} per line and `components` does not carry
+   * per-component instants, so a blended charge would stamp a multiplier that
+   * CANNOT REPRODUCE `chargeMicroUsd` from `costMicroUsd` — precisely the
+   * "number with a story" the stamp exists to prevent — and splitting rows per
+   * margin period collides with the per-(visit, bucket) idempotency key.
+   *
+   * Which anchor is right (max, min, per-component, or wall-clock billing time)
+   * is a MONEY-POLICY call and therefore the owner's. It is surfaced rather than
+   * decided here. What was a defect, and is fixed, is a comment asserting a
+   * property the code does not have. The arm below pins the anchor as a chosen
+   * behaviour so the next round meets a decision instead of an accident.
+   */
 
   for (const row of rows) {
     // ⚠️ A MOCK ROW IS NEVER CHARGED. Ruling 66 put `unitsSource` in a COLUMN
@@ -307,6 +499,15 @@ export async function priceUsageRows(
         continue;
       }
       priced.push({
+        // ⚠️ THE INSTANT RIDES THE PRICED COMPONENT — ROUND 2, CLASS FIX.
+        // Round 1 tracked it in a separate `chargeInstant` statement inside the
+        // loop, and round 2 moved that statement ONE LINE UP — above the
+        // non-billable-provider skip rather than above the mock skip round 1
+        // had covered — and every test stayed green. A statement that can be
+        // moved is a statement somebody will move. Carried on the row that
+        // actually PRICED, "latest priced instant" is true by construction and
+        // there is nothing left to hoist.
+        at: row.createdAt,
         usageEventId: row.id,
         provider,
         modelName: row.modelName,
@@ -331,11 +532,125 @@ export async function priceUsageRows(
       pricedSoFarMicroUsd: 0n,
     };
   }
+  // ⚠️ ADMIN-4 — THE MARGIN IS READ, AND ITS ABSENCE REFUSES.
+  //
+  // Read at the LATEST priced instant rather than `new Date()`, so the rate
+  // applied is the one that was in effect for the usage being charged and not
+  // the one in effect when the job happened to run. #178 rules the change
+  // forward-only; that is only true if the read is anchored to the usage.
+  // ⚠️ VALIDATED AT THE POINT OF USE, NOT ONLY AT THE POINT OF READ.
+  // `marginLookup` is injectable — that is the whole reason a gate can drive
+  // this — so a lookup that is not `marginAt` would otherwise deliver an
+  // out-of-bounds rate straight into the arithmetic. A `1/2` row bills HALF
+  // cost and stamps an id that resolves cleanly.
+  // Derived from the priced set itself — see the note on `at` above.
+  const chargeInstant = priced.reduce((mx, p) => (p.at > mx ? p.at : mx), new Date(0));
+  const found = await marginLookup(chargeInstant);
+  const marginAtInstant = found && isUsableMargin(found) ? found : null;
+  // ═════════════════════════════════════════════════════════════════════════
+  // ⚠️ ROUND 5, ADJUDICATED: THIS REFUSAL LOOKS LIKE A DEFECT AND IS THE
+  // SPECIFICATION. Recorded here so round 6 meets the answer, not the question.
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // THE FINDING, and it is correct on every measurement: usage that predates
+  // the FIRST `platform_rates` row can never be charged. (⚠️ ROUND 6: that
+  // sentence was true only for a visit ALL of whose usage predated the first
+  // rate — one post-rate row carried the whole visit over. It is true as
+  // written only since the coverage check below the refusal.) Verified on a real
+  // PG 16.15 with the migration applied byte-for-byte — every route to make a
+  // rate cover an earlier instant is refused BY NAME:
+  //
+  //   INSERT effectiveFrom = now()-1h              -> 'precedes insertion … never before'
+  //   INSERT effectiveFrom AND createdAt backdated -> same (the trigger overwrites createdAt)
+  //   UPDATE effectiveFrom                         -> 'platform_rates is append-only'
+  //   DELETE and re-insert                         -> 'DELETE is refused'
+  //
+  // ⚠️ EVERY ONE OF THOSE REFUSALS IS A GUARD THIS BRANCH ADDED ON PURPOSE, in
+  // round 1, because the adversarial pass had found the OPPOSITE behaviour to be
+  // the defect: inserting `{effectiveFrom: last month, 5/1}` re-priced every
+  // uncharged visit since then at a stamp that resolved cleanly. Ruling #178 is
+  // explicit — "forward only, past bills are never rewritten" — and equally
+  // explicit that "a missing multiplier REFUSES, never bills 0". So the finding
+  // measured the successful closure of a prior finding.
+  //
+  // ⚠️ WHAT IS NOT LOST, and this is the half that makes the trade acceptable:
+  // `loadVisitChargeableUsage` is a pure `findMany` and NOTHING in the tree
+  // updates or deletes `api_usage_events`. Every uncharged visit therefore stays
+  // permanently enumerable as "a usage event with no ledger row" — which
+  // `commitVisitCharge`'s own `balance_unreadable` comment names as the designed
+  // recovery, and which B9 exists to do. The exact micro-dollar figure is
+  // recomputable from those immutable rows forever, and the documented offset is
+  // an `adjustment` ledger row.
+  //
+  // ⚠️ WHAT IS OWED IS AN OPERATIONAL PRECONDITION, NOT A CODE CHANGE:
+  // **write the first `platform_rates` row BEFORE `BILLING_ENFORCED` is turned
+  // on.** Nothing gates rate writes on the flag, so the window is empty under
+  // correct sequencing and is forced by nothing in the code. It is recorded in
+  // the §2.5 declaration, where the person flipping the flag will meet it.
+  if (!marginAtInstant) {
+    return {
+      charge: false,
+      reason: 'no_margin_rate',
+      unpriced: [],
+      pricedSoFarMicroUsd: pricedSoFar,
+    };
+  }
+  // ═════════════════════════════════════════════════════════════════════════
+  // ⚠️ ROUND 6 — THE REFUSAL ABOVE FIRED ONLY WHEN **EVERY** PRICED ROW
+  // PREDATED THE FIRST RATE, AND THE ADJUDICATION ABOVE SAID IT WAS WIDER.
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // The margin is read at max(priced instants) and applied to the whole sum,
+  // so a visit whose usage STRADDLES the first `platform_rates` row priced all
+  // of it at that row. Measured: 1000 µ$ at 2026-07-31T23:59:59Z (no rate
+  // existed) plus 1 µ$ at 2026-08-01T00:00:01Z (pr_first 3/2 from 08-01)
+  // returned charge:true, 1502 µ$ — one micro-dollar of new usage moved the
+  // charge from 0 to 1502. The retry route reaches it: a visit that failed, or
+  // went READY uncharged as `no_margin_rate`, before the first rate and is
+  // retried after it loads its old rows together with the new.
+  //
+  // ⚠️ SO EVERY PRICED INSTANT MUST HAVE **SOME** USABLE MARGIN IN EFFECT, or
+  // the whole visit refuses — #310(b), fail closed, reporting what it declined.
+  // This is NOT per-component anchoring and does not reopen the adjudicated
+  // anchor: the rate that APPLIES is still the one at max(instants), exactly as
+  // the gate pins for old -> new. What is refused is applying ANY rate to usage
+  // metered while the platform had NONE — the case round 5's adjudication and
+  // the §2.5 declaration both state "can never be charged", which was true as
+  // written only for a visit ALL of whose usage predated the first rate.
+  //
+  // ⚠️ ASKED AT **EVERY** DISTINCT PRICED INSTANT, NOT ONLY THE EARLIEST.
+  // "The earliest suffices" is true of `marginAt` against a table that is
+  // append-only, forward-only and CHECK-bounded — three database properties
+  // this function cannot see. `marginLookup` is injectable; the invariant asked
+  // per instant needs no argument about what the lookup is.
+  const coveredAt = new Set<number>([chargeInstant.getTime()]);
+  for (const p of priced) {
+    const t = p.at.getTime();
+    if (coveredAt.has(t)) continue;
+    coveredAt.add(t);
+    const inEffect = await marginLookup(p.at);
+    if (!inEffect || !isUsableMargin(inEffect)) {
+      return {
+        charge: false,
+        reason: 'no_margin_rate',
+        unpriced: [],
+        pricedSoFarMicroUsd: pricedSoFar,
+      };
+    }
+  }
   // ONE rounding step, on the TOTAL. See the warning above.
   return {
     charge: true,
     costMicroUsd: pricedSoFar,
-    chargeMicroUsd: chargeMicroUsd(pricedSoFar),
+    chargeMicroUsd: chargeMicroUsd(pricedSoFar, marginAtInstant),
+    margin: marginAtInstant,
+    // ⚠️ THE STAMP IS BUILT HERE, FROM THE RATE THAT WAS JUST APPLIED — ROUND 2.
+    // Round 1 extracted `marginStamp()` so the write site could be asserted,
+    // and round 2 substituted its ARGUMENT: `marginStamp({...3/2})` beside a
+    // 7/4 charge passed every arm, because the arm greps for the TOKEN. The
+    // repair closed the literal spelling and left the class. With the stamp on
+    // the decision there is no argument at the write site to get wrong.
+    stamp: marginStamp(marginAtInstant),
     priced,
   };
 }
@@ -355,11 +670,20 @@ export async function priceUsageRows(
  *  whole transaction roll back — a visit that could pay would record nothing.
  *  The bucket is part of the identity of the row, so it is part of the key.
  *
- *  ⚠️ AND THE SPLIT IS STILL IDEMPOTENT AS A WHOLE, which is the property that
- *  matters: a retry re-derives the same draws from the same balances only if
- *  nothing landed, and if anything landed the balance has moved and the first
- *  colliding key aborts the retry. Partial double-charging is not reachable
- *  because both rows are written in ONE transaction — see the writer.
+ *  ⚠️ ADMIN-4 ROUND 6 — THE KEY IS **NOT** IDEMPOTENT AS A WHOLE, AND THIS
+ *  COMMENT USED TO SAY IT WAS. It read: *"if anything landed the balance has
+ *  moved and the first colliding key aborts the retry. Partial double-charging
+ *  is not reachable."* That does not follow. A retry collides only when its
+ *  bucket set OVERLAPS the first run's. Measured: a visit charged 6750 µ$
+ *  entirely from `promo` (key `…:promo`); other visits then drained promo to 0;
+ *  a Try-again on the still-READY visit re-derived the split as `paid:6750`
+ *  under key `…:paid` — a DIFFERENT key, accepted by the unique index against
+ *  the real B5 DDL — and the visit was debited 13 500 µ$ for a 6750 charge.
+ *
+ *  So the unique index is kept as the backstop for a same-bucket replay, and
+ *  the per-VISIT property is enforced by the writer: {@link commitVisitCharge}
+ *  refuses a visit that already carries ANY of {@link visitUsageKeys}, decided
+ *  inside its transaction under a per-visit lock. See the writer.
  *
  *  ⚠️ IDEMPOTENCY MATTERS MORE HERE THAN ANYWHERE. On a mutable table a double
  *  charge is an UPDATE away from fixed. On this one it can only be offset by an
@@ -368,6 +692,37 @@ export async function priceUsageRows(
 export function visitChargeKey(visitId: string, bucket: LedgerBucket): string {
   return `usage:visit:${visitId}:${bucket}`;
 }
+
+/**
+ * EVERY BUCKET IN THE DATABASE'S VOCABULARY, AS A RECORD THE COMPILER CHECKS.
+ *
+ * ⚠️ A RECORD, NOT AN ARRAY, BECAUSE A LIST CAN BE SHORT. `satisfies
+ * Record<LedgerBucket, true>` fails to compile if a bucket is MISSING and if one
+ * is INVENTED, so the key set below can never silently omit a bucket that a
+ * future split starts drawing from — which is exactly the shape of the defect
+ * this closes (a retry whose draw lands in a bucket the check did not look at).
+ */
+const EVERY_LEDGER_BUCKET = { paid: true, promo: true } as const satisfies Record<LedgerBucket, true>;
+
+/**
+ * EVERY idempotency key THIS WRITER CAN EVER EMIT FOR ONE VISIT.
+ *
+ * DERIVED from {@link visitChargeKey} over {@link EVERY_LEDGER_BUCKET}, never
+ * written out, so the check and the write cannot disagree about what a visit's
+ * usage row is called. Exact keys rather than a `LIKE 'usage:visit:<id>:%'`
+ * prefix: a prefix is one `%`/`_` in an id, or one `:` in a neighbouring id,
+ * away from matching a different visit.
+ */
+export function visitUsageKeys(visitId: string): string[] {
+  return (Object.keys(EVERY_LEDGER_BUCKET) as LedgerBucket[]).map((bucket) =>
+    visitChargeKey(visitId, bucket),
+  );
+}
+
+/** The advisory-lock namespace for "one usage charge per visit". Distinct from
+ *  the wallet's `hashtext('ledger_entries')` so it can never alias a wallet
+ *  lock; taken BEFORE the wallet locks by the only writer that takes it. */
+export const VISIT_CHARGE_LOCK_NAMESPACE = 'ledger_entries:visit_usage';
 
 export interface CommitVisitChargeArgs {
   practiceId: string;
@@ -401,7 +756,11 @@ export type CommitResult =
       chargeMicroUsd: bigint;
     }
   | { written: false; reason: 'not_chargeable'; decision: DeclinedChargeDecision }
-  | { written: false; reason: 'balance_unreadable'; detail: string };
+  | { written: false; reason: 'balance_unreadable'; detail: string }
+  /** ADMIN-4 round 6 — the visit ALREADY carries its usage charge, so nothing
+   *  was written. NOT a failure and NOT a pricing decline: the money for this
+   *  visit is on the ledger, and these are the rows that hold it. */
+  | { written: false; reason: 'already_charged'; ledgerEntryIds: readonly string[] };
 
 /**
  * APPEND ONE `usage` ROW FOR A VISIT — PRODUCTION ONLY.
@@ -429,6 +788,43 @@ export async function commitVisitCharge(args: CommitVisitChargeArgs): Promise<Co
   if (!decision.charge) return { written: false, reason: 'not_chargeable', decision };
 
   return prisma.$transaction(async (tx): Promise<CommitResult> => {
+    // ── ADMIN-4 ROUND 6 — READ COMMITTED OR NOTHING. ────────────────────────
+    //
+    // Everything below is "take a lock, THEN read" — the already-charged check
+    // and the balance both. Above READ COMMITTED the transaction's snapshot is
+    // taken at its FIRST statement, before any lock wait, and never refreshes:
+    // a competing charge that committed while we waited would be invisible, and
+    // the lock would serialize two writers that each believe they are first.
+    // Ruling #269 measured exactly this on the last-owner guard and REFUSES by
+    // name; `withPracticeLock` asserts the same thing first. Asserted, not
+    // assumed — Prisma inherits the database default, and a default is one
+    // `ALTER DATABASE … SET default_transaction_isolation` from being different.
+    const [iso] = await tx.$queryRawUnsafe<Array<{ level: string }>>(
+      `SELECT current_setting('transaction_isolation') AS level`,
+    );
+    const level = String(iso?.level ?? '').toLowerCase();
+    if (level !== 'read committed') {
+      throw new Error(
+        `commitVisitCharge: refusing to charge at isolation level ${JSON.stringify(level)} — ` +
+          'the per-visit and wallet locks only serialize reads taken AFTER them, which needs READ COMMITTED (ruling #269)',
+      );
+    }
+
+    // ── ADMIN-4 ROUND 6 — ONE USAGE CHARGE PER VISIT, decided HERE. ─────────
+    //
+    // ⚠️ THE WALLET LOCKS BELOW DO NOT SERIALIZE THIS. They are keyed on
+    // `args.practiceId`, and the worker passes the AUTHOR's practice (#287 in
+    // worker.ts, an open owner decision) — two charges of one visit can carry
+    // different practice ids and so take disjoint wallet locks. The visit lock
+    // is keyed on the visit and nothing else. Taken FIRST, and taken by no
+    // other writer, so there is no lock-order cycle with a grant or a top-up
+    // (each takes one wallet lock and never this one).
+    await tx.$executeRawUnsafe(
+      `SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))`,
+      VISIT_CHARGE_LOCK_NAMESPACE,
+      args.visitId,
+    );
+
     // ── THE LOCKS. Taken here, in DRAW_ORDER, before the balance is read. ────
     //
     // ⚠️ WITHOUT THIS THE SPLIT IS A READ-THEN-WRITE RACE, and the derive
@@ -453,6 +849,35 @@ export async function commitVisitCharge(args: CommitVisitChargeArgs): Promise<Co
         `SELECT pg_advisory_xact_lock(hashtext('ledger_entries'), hashtext($1))`,
         `${args.practiceId}:${bucket}`,
       );
+    }
+
+    // ── THE ALREADY-CHARGED CHECK — after every lock, before the balance. ────
+    //
+    // ⚠️ THIS IS THE DEFECT ROUND 6 FOUND, AND THE UNIQUE INDEX COULD NOT SEE
+    // IT. `idempotencyKey` is per (visit, BUCKET): a retry whose split lands in
+    // a bucket the first run did not use gets a key nothing collides with.
+    // Measured against the real B5 DDL: `usage:visit:V:promo -6750`, promo
+    // drained by other visits, then `usage:visit:V:paid -6750` → INSERT 0 1.
+    // One visit, 13 500 µ$ debited for a 6750 charge, on an append-only table.
+    //
+    // So the question asked is the PER-VISIT one — "does this visit carry ANY
+    // usage row this writer could have written?" — over the derived key set,
+    // not "does this (visit, bucket) exist?". A visit that already carries its
+    // charge is NOT re-priced and NOT re-debited, whatever its usage rows, the
+    // margin, or the wallet mix now say: a retry that re-ran a layer after its
+    // charge landed leaves that new usage uncharged and enumerable ("a usage
+    // event with no ledger row"), which is the fail-closed direction — it costs
+    // us, never the doctor.
+    const already = await tx.ledgerEntry.findMany({
+      where: { idempotencyKey: { in: visitUsageKeys(args.visitId) } },
+      select: { id: true },
+    });
+    if (already.length > 0) {
+      return {
+        written: false,
+        reason: 'already_charged',
+        ledgerEntryIds: already.map((r) => r.id),
+      };
     }
 
     // ── THE BALANCE. Same reader as admission, inside this transaction. ──────
@@ -510,39 +935,19 @@ export async function commitVisitCharge(args: CommitVisitChargeArgs): Promise<Co
           // backstop for the day this line is edited.
           amountMicroUsd: -draw.amountMicroUsd,
           idempotencyKey: visitChargeKey(args.visitId, draw.bucket),
-          // SPEC §2.2's versioned snapshot: WHICH rates priced this, and what
-          // the pre-multiplier cost was. Stored so a later rate change can never
-          // re-price history and so B9 can explain the number line by line.
-          //
-          // ⚠️ THE SNAPSHOT IS THE WHOLE VISIT'S, ON EVERY ROW, AND THAT IS
-          // DELIBERATE. The components priced ONE charge; the split is a
-          // settlement decision taken afterwards and is not a property of any
-          // rate. Apportioning the components across buckets would invent a
-          // per-component bucket attribution the pricing never made. So each row
-          // carries the full derivation plus `draw`, which says what THIS row
-          // settled — and B9 sums `draw.amountMicroUsd` across a visit's rows to
-          // get back to `chargeMicroUsd`, rather than summing `components`
-          // twice. The `visitId` is what joins them.
-          pricing: {
+          // ⚠️ NO OBJECT LITERAL HERE — ROUND 5. The snapshot is built by
+          // `buildUsagePricing`, a pure exported function the gate DRIVES, so
+          // the assertion is on the value that reaches the ledger rather than
+          // on the text of a literal at a write site no test can execute. A
+          // second writer of `multiplier` — a later key OR a later spread —
+          // changes the returned object and reds a behavioural arm; the grep it
+          // replaces could only ever enumerate spellings. See the function.
+          pricing: buildUsagePricing({
             visitId: args.visitId,
-            costMicroUsd: decision.costMicroUsd.toString(),
-            chargeMicroUsd: decision.chargeMicroUsd.toString(),
-            multiplier: '3/2',
-            draw: {
-              bucket: draw.bucket,
-              amountMicroUsd: draw.amountMicroUsd.toString(),
-              ofBuckets: draws.length,
-            },
-            components: decision.priced.map((p) => ({
-              usageEventId: p.usageEventId,
-              provider: p.provider,
-              modelName: p.modelName,
-              unitType: p.unitType,
-              deliveryMode: p.deliveryMode,
-              rateId: p.rateId,
-              costMicroUsd: p.costMicroUsd.toString(),
-            })),
-          },
+            decision,
+            draw,
+            ofBuckets: draws.length,
+          }),
         },
         select: { id: true },
       });

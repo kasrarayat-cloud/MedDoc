@@ -1,0 +1,21 @@
+{
+  "_why": "ONE list of margin pairs, read by BOTH encodings of ruling #178's bounds — the TypeScript predicate `isUsableMargin` (packages/ai/src/__tests__/gate-admin4-platform-rate.test.ts) and the Postgres CHECK `platform_rates_margin_bounds` (scripts/check-platform-rates-invariants.sh). ⚠️ THE CLASS THIS CLOSES: round 4 encoded the same bound twice and the two disagreed over a range of LEGAL inputs — `5 * \"marginDenominator\"` is int4*int4 and int4mul RAISES rather than widening, so every margin with a denominator above 429,496,729 aborted with an unnamed `integer out of range` while `isUsableMargin` returned true for the identical pair. Widening the list by hand closes instances; DERIVING both sides from one list closes the class, because a case added here is answered by both encodings or by neither.",
+  "cases": [
+    { "id": "b-1.0",        "n": 1,          "d": 1,          "usable": true,  "why": "exactly 1.0 — #178's floor" },
+    { "id": "b-3over2",     "n": 3,          "d": 2,          "usable": true,  "why": "the shipped constant this ruling replaced" },
+    { "id": "b-5.0",        "n": 5,          "d": 1,          "usable": true,  "why": "exactly 5.0 — #178's ceiling" },
+    { "id": "b-under",      "n": 999,        "d": 1000,       "usable": false, "why": "0.999 — below the floor, the platform bills less than cost" },
+    { "id": "b-over",       "n": 5001,       "d": 1000,       "usable": false, "why": "5.001 — above the ceiling" },
+    { "id": "b-wild",       "n": 100,        "d": 1,          "usable": false, "why": "100x" },
+    { "id": "b-zero-den",   "n": 3,          "d": 0,          "usable": false, "why": "a division fault, not a bad setting" },
+    { "id": "b-neg-num",    "n": -3,         "d": 2,          "usable": false, "why": "negative" },
+    { "id": "int4-last-ok", "n": 429496729,  "d": 429496729,  "usable": true,  "why": "1.0 — the largest denominator round 4 accepted" },
+    { "id": "int4-first",   "n": 429496730,  "d": 429496730,  "usable": true,  "why": "1.0 — the FIRST value round 4 refused with an unnamed 22003" },
+    { "id": "int4-1e9",     "n": 1000000000, "d": 1000000000, "usable": true,  "why": "1.0 — what a writer scaling a decimal to a fixed 1e9 denominator produces on its very first legal value" },
+    { "id": "int4-1.5e9",   "n": 1500000000, "d": 1000000000, "usable": true,  "why": "exactly 1.5 at a 1e9 denominator" },
+    { "id": "int4-4.0",     "n": 2000000000, "d": 500000000,  "usable": true,  "why": "exactly 4.0 with an overflowing 5*d" },
+    { "id": "int4-max",     "n": 2147483647, "d": 2147483647, "usable": true,  "why": "1.0 at the largest value the int4 column can hold" },
+    { "id": "int4-5.0",     "n": 2000000000, "d": 400000000,  "usable": true,  "why": "exactly 5.0, 5*d fits in int4 — the boundary from the other side" },
+    { "id": "int4-over",    "n": 2147483647, "d": 429496729,  "usable": false, "why": "5.0000000047 — the first genuinely ILLEGAL value above the old cutoff. ⚠️ NEGATIVE CONTROL FOR THE FIX: widening to bigint must not admit it" }
+  ]
+}

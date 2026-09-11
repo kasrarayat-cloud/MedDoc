@@ -159,7 +159,12 @@ export type ChargeOutcome =
    *  nothing billable at all. B6's ruling 90(a). */
   | { charged: 'declined'; reason: string }
   /** The charge threw. See the note on the catch below. */
-  | { charged: 'failed'; detail: string };
+  | { charged: 'failed'; detail: string }
+  /** ADMIN-4 round 6 — the visit ALREADY carries its usage charge (a retry of a
+   *  READY visit, or a replay). Nothing was read into the wallet and nothing was
+   *  written. Not `failed` — no money was lost — and not `declined`, which is a
+   *  pricing statement; this is "the ledger already holds it, in these rows". */
+  | { charged: 'already_charged'; ledgerEntryIds: readonly string[] };
 
 /**
  * APPEND THIS VISIT'S USAGE DEBIT.
@@ -219,6 +224,29 @@ export async function chargeVisitUsage(args: {
     // drew between `balance_unreadable` and an empty wallet at admission.
     if (result.reason === 'balance_unreadable') {
       return { charged: 'failed', detail: result.detail };
+    }
+    // ADMIN-4 round 6 — a retry of a visit that is already on the ledger. The
+    // writer refused it inside its transaction, under the per-visit lock.
+    if (result.reason === 'already_charged') {
+      return { charged: 'already_charged', ledgerEntryIds: result.ledgerEntryIds };
+    }
+    // ⚠️ AND `no_margin_rate` IS `failed` FOR THE SAME REASON — ADMIN-4.
+    //
+    // The first version of this change let it fall through to `declined`,
+    // which routes it BYTE-IDENTICALLY to `nothing_billable` — a genuinely free
+    // visit. The worker then logs `outcome: charge.charged` and NOT `reason`,
+    // so a platform with no configured margin would bill nothing, forever, and
+    // the only artifact would be a line indistinguishable from a mocked run.
+    //
+    // `declined` is a DECISION about a real visit: we looked, and there is
+    // nothing to charge. "I do not know the rate" is not that decision — it is
+    // the same class as a balance we could not read, and the comment above
+    // already argues it.
+    if (result.decision.reason === 'no_margin_rate') {
+      return {
+        charged: 'failed',
+        detail: 'no platform margin configured at the usage instant (ADMIN-4)',
+      };
     }
     return { charged: 'declined', reason: result.decision.reason };
   } catch (err) {

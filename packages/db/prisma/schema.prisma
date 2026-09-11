@@ -766,7 +766,8 @@ model Practice {
 // ============================================================================
 
 model User {
-  id String @id @default(cuid())
+  id                  String         @id @default(cuid())
+  platformRateChanges PlatformRate[] @relation("PlatformRateChangedBy")
 
   // === NextAuth standard fields ===
   /// User's email — unique, lowercased at application layer
@@ -3660,6 +3661,122 @@ model WaitlistEntry {
 /// for an unknown model (`pricing.ts:131`), which is why an unpriced model bills
 /// nothing instead of erroring — DISCOVERY §D.3 names it. The lookup over this
 /// table returns `null` and its callers must handle it; see `price-table.ts`.
+/// THE PLATFORM MARGIN — ADMIN-4, ruling #178.
+///
+/// ⚠️ THIS EXISTS BECAUSE THE MARGIN WAS ALREADY SHIPPED AS A CONSTANT, AND
+/// #178 WAS RULED TO FORECLOSE EXACTLY THAT. `price-table.ts` computed
+/// `costMicro * 3n / 2n` and `billing-charge.ts` stamped the literal string
+/// `'3/2'` onto every ledger row — both landed 2026-08-11, three weeks BEFORE
+/// the ruling that forbids "a rate nobody can change without a deploy, and —
+/// worse — a rate with no audit row saying who changed it".
+///
+/// ⚠️ AN EXACT RATIO IN INTEGERS, NEVER A FLOAT. `price-table.ts` states the
+/// reason and it is not pedantry: `1.5` is exactly representable in binary64,
+/// but `cost * 1.5` is a Number, so any cost above 2^53 micro-dollars silently
+/// loses precision. The margin is therefore a numerator and a denominator, and
+/// the arithmetic stays `bigint` end to end.
+///
+/// FORWARD-ONLY, INSERT-NEVER-UPDATE, effective-dated — the shape `PriceRate`
+/// already uses one layer down. A change is a NEW ROW; the previous value is
+/// carried on it so the history reads without a self-join, and so a reader can
+/// see what changed without reconstructing it.
+model PlatformRate {
+  id String @id @default(cuid())
+
+  /// The margin as `numerator / denominator`. The shipped constant was 3/2.
+  marginNumerator   Int
+  marginDenominator Int
+
+  /// The instant this rate begins to apply. **NULL on the way in means
+  /// "immediately"** — the BEFORE INSERT trigger fills it with the server's own
+  /// `clock_timestamp()`, so it is never null at rest and is never earlier than
+  /// the STATEMENT that set it. ⚠️ Round 3 stamped `createdAt` with
+  /// `clock_timestamp()` and thereby made every honest spelling of "now"
+  /// refusable BY MICROSECONDS; NULL is the one spelling that cannot lose that
+  /// race.
+  ///
+  /// ⚠️ THIS COMMENT USED TO SAY "can never be in the past" AND THAT IS FALSE —
+  /// ROUND 5, AND IT IS A DOCUMENTED LIMIT RATHER THAN A CLOSED ONE.
+  /// `clock_timestamp()` is evaluated at INSERT time and the row becomes
+  /// readable at COMMIT time, so between those two instants the row's own
+  /// `effectiveFrom` is already in the past while no reader can see it.
+  /// Measured on PG 16.15: a writer holding its transaction open for 5s stamped
+  /// `effectiveFrom = 15:18:13.077`, committed at `15:18:18.084`, and the SAME
+  /// `marginAt` query for a fixed instant 1.99s after that `effectiveFrom`
+  /// returned the OLD rate during the transaction and the NEW rate after it.
+  ///
+  /// ⚠️ NO DDL CLOSES IT, WHICH IS WHY THE MIGRATION IS UNCHANGED. Commit time
+  /// is unobtainable for a column in Postgres; `now()` is strictly worse
+  /// (transaction-start); and a guessed future offset is what round 4 rejected
+  /// because it stranded the writer. Any real closure is READER-side — a shared
+  /// advisory lock, or a visibility watermark — and lives in `price-table.ts`,
+  /// which is ordinary TypeScript editable at any time. The window's floor is
+  /// the writing transaction's commit latency, and a writer that supplies its
+  /// own future `effectiveFrom` avoids it entirely (measured: the divergence
+  /// disappears at `clock_timestamp() + 30s`). The ADMIN-4 writer does not
+  /// exist yet; when it lands, that is the cheap mitigation.
+  ///
+  /// ⚠️ FORWARD-ONLY BY **CONSTRAINT**,
+  /// not by policy: `platform_rates_forward_only` refuses `effectiveFrom <
+  /// createdAt`. Anchoring the READ to the usage instant stops a backlog being
+  /// re-priced by the run clock; it does NOT stop a backdated row, and the
+  /// first version of this file claimed otherwise — #178.
+  effectiveFrom DateTime? @db.Timestamptz(6)
+
+  /// ⚠️ WHO CHANGED IT — AND THE LINK IS NULLABLE WHILE THE FACT IS NOT.
+  ///
+  /// The FK detaches on user deletion, which is this codebase's rule for audit
+  /// rows. Detaching a rate change would erase who changed the price — the half
+  /// of #178 that is not about the rate at all — so the ACTOR IS SNAPSHOTTED
+  /// beside the link, `NOT NULL`, and survives the detach.
+  ///
+  /// ⚠️ AN EARLIER VERSION OF THIS COMMENT SAID "nullable ONLY for the seed row
+  /// … and the gate asserts it". Both halves were false: the table ships EMPTY
+  /// by design so there is no seed row to exempt, and no gate asserted anything
+  /// — the writer does not exist yet.
+  changedByUserId String?
+  /// Immutable snapshot of the actor, e.g. their email at the time of the
+  /// change. Survives user deletion.
+  changedByLabel  String
+  changedBy       User?   @relation("PlatformRateChangedBy", fields: [changedByUserId], references: [id], onDelete: SetNull)
+
+  /// ⚠️ THE MARGIN IN EFFECT WHEN THIS CHANGE WAS **WRITTEN** — DERIVED BY THE
+  /// DATABASE, NOT SUPPLIED. #178's audit row is "actor, timestamp, old -> new",
+  /// and "old" is what the operator was changing away from at the moment they
+  /// made the change. `platform_rates_stamp_created()` takes a table-scoped
+  /// `pg_advisory_xact_lock` and overwrites both columns from the row in effect
+  /// at `createdAt`; whatever a caller sends is discarded.
+  ///
+  /// ⚠️ AN EARLIER VERSION OF THIS COMMENT SAID "What it was immediately before.
+  /// NULL on the seed row only." BOTH HALVES WERE FALSE, and measurably so.
+  /// The pair was a CALLER CLAIM: measured on PG 16.15, a row could record a
+  /// previous value that was never in effect (4/1 claiming previous 5/1 while
+  /// superseding 3/2) and a SECOND change could carry no pair at all — and
+  /// neither could ever be corrected, because UPDATE, DELETE and TRUNCATE are
+  /// all refused. Two HONEST concurrent writers falsified each other too;
+  /// nothing serialized the read against the write.
+  ///
+  /// NULL now means exactly one thing: **no margin was in effect at the instant
+  /// this row was written.** That is the first row — and also a row written
+  /// while only FUTURE-dated rates existed, which is why the claim is stated
+  /// this way rather than as "the seed row".
+  ///
+  /// Anchoring to `createdAt` rather than `effectiveFrom` is what makes the
+  /// answer permanent: `platform_rates_forward_only` guarantees every later row
+  /// has `effectiveFrom >= its own createdAt > this row's createdAt`, so no
+  /// future insert can ever fall inside the derivation's predicate.
+  previousNumerator   Int?
+  previousDenominator Int?
+
+  /// Why. Free text, shown beside the change in the money view.
+  note String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([effectiveFrom])
+  @@map("platform_rates")
+}
+
 model PriceRate {
   id String @id @default(cuid())
 
