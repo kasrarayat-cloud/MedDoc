@@ -6,10 +6,16 @@
 // no caching surprises for an admin dashboard.
 //
 // We query Postgres (and ping Redis / MinIO) directly rather than calling
-// our own /api/admin/* routes via fetch. The route handlers re-check
-// SUPER_ADMIN via adminApi() on every hit; the layout has already done
-// that gate by the time this file runs, so the extra HTTP round-trip
-// would only burn latency.
+// our own /api/admin/* routes via fetch (the extra HTTP round-trip would
+// only burn latency).
+//
+// ⚠️ RULING #310 — EVERY EXPORTED HELPER GATES ITSELF, FIRST STATEMENT:
+// `await assertSuperAdminCaller()`. It used to trust that "the layout has
+// already done that gate by the time this file runs" — false on an RSC
+// refetch, where Next 16 renders the page without the layout. The
+// assertion throws AdminAccessDeniedError (never notFound/redirect), so
+// the same helpers stay correct under the /api/admin/threats routes,
+// whose adminApi() wrapper maps that error to its silent 404.
 //
 // Each helper is best-effort: a Prisma error surfaces as a "down"
 // marker or a synthetic empty result rather than throwing, so a flaky
@@ -17,6 +23,8 @@
 // ============================================================================
 
 import 'server-only';
+
+import { assertSuperAdminCaller } from '@/app/admin/_lib/admin-gate';
 
 import prisma from '@meddoc/db';
 import { getRedis, isRedisReady } from '@/lib/redis';
@@ -73,6 +81,7 @@ function detectorFail<T>(detector: string): (err: unknown) => T[] {
 }
 
 export async function getSystemHealth(): Promise<SystemHealth> {
+  await assertSuperAdminCaller();
   const [database, redis, minio, external] = await Promise.all([
     inspectDatabase(),
     inspectRedis(),
@@ -214,6 +223,7 @@ interface RawAuditRow {
 }
 
 export async function getRecentActivity(limit = 30): Promise<ActivityRow[]> {
+  await assertSuperAdminCaller();
   try {
     const rows = (await prisma.auditLog.findMany({
       orderBy: [{ timestamp: 'desc' }, { id: 'desc' }],
@@ -490,6 +500,7 @@ async function loadActiveResolutions(): Promise<{
 }
 
 export async function getThreats(): Promise<Threat[]> {
+  await assertSuperAdminCaller();
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const sincePriv = new Date(
     Date.now() - PRIVILEGE_ESCALATION_WINDOW_DAYS * 24 * 60 * 60 * 1000
@@ -781,6 +792,7 @@ interface ResolvedRow {
 export async function getResolvedThreats(
   window: '7d' | '30d' = '7d'
 ): Promise<ResolvedThreat[]> {
+  await assertSuperAdminCaller();
   const days = window === '30d' ? 30 : 7;
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
@@ -1067,6 +1079,7 @@ interface RawBucket {
 const TIMELINE_HOURS = 24;
 
 export async function getTimeline(): Promise<TimelineBucket[]> {
+  await assertSuperAdminCaller();
   try {
     // Phase 7A: shared anchor with /api/admin/audit-logs/{timeline,stats}
     // so the Overview's TimelineChartCard, the API's bucket array, and
@@ -1128,6 +1141,7 @@ interface RawPipelineRow {
 }
 
 export async function getPipelineMetrics(): Promise<PipelineMetrics> {
+  await assertSuperAdminCaller();
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
   try {
@@ -1214,6 +1228,7 @@ interface HipaaFindingRow {
 }
 
 export async function getHipaaState(): Promise<HipaaState> {
+  await assertSuperAdminCaller();
   let lastReviewLabel = 'never';
   let findings: HipaaState['findings'] = [];
   try {

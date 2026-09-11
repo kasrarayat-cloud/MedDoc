@@ -1,7 +1,8 @@
 // ============================================================================
 // /admin/usage — server entry
 // ----------------------------------------------------------------------------
-// SUPER_ADMIN gate + access audit log inherited from /admin/layout.tsx.
+// SUPER_ADMIN gate + access audit: requireAdminPage() FIRST (ruling #310 —
+// Next 16 skips the layout on an RSC refetch, so it is not relied on).
 // This page just fetches the four data slices in parallel and hands
 // them to the client orchestrator.
 // ============================================================================
@@ -15,6 +16,7 @@ import {
   fetchTopUsers,
   fetchUsageSummary,
 } from './_lib/usage-data';
+import { requireAdminPage } from '../_lib/admin-gate';
 
 export const metadata: Metadata = {
   title: 'API Usage · QuillMD Admin',
@@ -25,6 +27,7 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export default async function UsagePage() {
+  await requireAdminPage();
   const [summary, timeline, topUsers, anomalies] = await Promise.all([
     fetchUsageSummary('month'),
     fetchTimeline('month'),

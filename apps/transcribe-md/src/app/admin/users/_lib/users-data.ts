@@ -14,6 +14,8 @@
 
 import 'server-only';
 
+import { assertSuperAdminCaller } from '@/app/admin/_lib/admin-gate';
+
 import prisma from '@meddoc/db';
 
 import { defaultUnitLabel } from '../../_lib/admin-format';
@@ -29,6 +31,7 @@ import type {
 const PAGE_SIZE = 20;
 
 export async function fetchUserStats(): Promise<UserStats> {
+  await assertSuperAdminCaller();
   // Counts exclude soft-deleted users for the stats strip — those rows
   // exist in the DB for HIPAA retention but they're not part of the
   // "active platform population" headline number.
@@ -80,6 +83,7 @@ interface SessionRow {
 }
 
 export async function fetchUserListPage(p: ListParams): Promise<UserListPage> {
+  await assertSuperAdminCaller();
   const page = Math.max(1, Math.floor(p.page) || 1);
   const offset = (page - 1) * PAGE_SIZE;
 

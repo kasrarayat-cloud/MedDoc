@@ -1,8 +1,9 @@
 // ============================================================================
 // Platform-admin overview — server entry
 // ----------------------------------------------------------------------------
-// SUPER_ADMIN gate + access audit log live in `layout.tsx` (defense-in-
-// depth). This page assumes both have already run.
+// SUPER_ADMIN gate + access audit: requireAdminPage() FIRST. The layout
+// gates too, but Next 16 skips the layout on an RSC refetch (ruling
+// #310), so this page never assumes it ran.
 //
 // Initial data is fetched server-side in parallel via the helpers in
 // `_lib/dashboard-data.ts` so the page renders fully populated on first
@@ -13,7 +14,7 @@
 
 import type { Metadata } from 'next';
 
-import { auth } from '@/lib/nextauth';
+import { requireAdminPage } from './_lib/admin-gate';
 
 import AdminOverview from './_components/AdminOverview.client';
 import {
@@ -34,8 +35,8 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export default async function AdminHomePage() {
-  const [session, systemHealth, activity, threats, timeline, pipeline, hipaa] = await Promise.all([
-    auth().catch(() => null),
+  const session = await requireAdminPage();
+  const [systemHealth, activity, threats, timeline, pipeline, hipaa] = await Promise.all([
     getSystemHealth(),
     getRecentActivity(30),
     getThreats(),
@@ -44,7 +45,7 @@ export default async function AdminHomePage() {
     getHipaaState(),
   ]);
 
-  const userEmail = session?.user?.email ?? 'admin';
+  const userEmail = session.user.email ?? 'admin';
 
   return (
     <AdminOverview

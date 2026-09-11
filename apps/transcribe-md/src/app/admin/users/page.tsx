@@ -1,15 +1,15 @@
 // ============================================================================
 // /admin/users — server entry
 // ----------------------------------------------------------------------------
-// SUPER_ADMIN gate + access audit log live in `/admin/layout.tsx` (defense
-// in depth). This page assumes both have already run; it just reads the
+// SUPER_ADMIN gate + access audit: requireAdminPage() FIRST (ruling #310 —
+// the layout is skipped on an RSC refetch). Then it just reads the
 // URL search params, fetches the matching page, and hands the result to
 // the client orchestrator.
 // ============================================================================
 
 import type { Metadata } from 'next';
 
-import { auth } from '@/lib/nextauth';
+import { requireAdminPage } from '../_lib/admin-gate';
 
 import AdminUsers from './_components/AdminUsers.client';
 import {
@@ -31,6 +31,7 @@ interface Props {
 }
 
 export default async function UsersPage({ searchParams }: Props) {
+  const session = await requireAdminPage();
   const sp = await searchParams;
   const params: ListParams = {
     search: typeof sp.search === 'string' ? sp.search : '',
@@ -40,8 +41,7 @@ export default async function UsersPage({ searchParams }: Props) {
     page: parsePage(sp.page),
   };
 
-  const [session, page, stats] = await Promise.all([
-    auth().catch(() => null),
+  const [page, stats] = await Promise.all([
     fetchUserListPage(params),
     fetchUserStats(),
   ]);
@@ -51,8 +51,8 @@ export default async function UsersPage({ searchParams }: Props) {
       page={page}
       stats={stats}
       params={params}
-      currentUserId={session?.user?.id ?? ''}
-      currentUserEmail={session?.user?.email ?? 'admin'}
+      currentUserId={session.user.id}
+      currentUserEmail={session.user.email ?? 'admin'}
       theme="clinician"
     />
   );
