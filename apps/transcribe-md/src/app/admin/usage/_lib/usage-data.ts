@@ -16,6 +16,8 @@
 
 import 'server-only';
 
+import { assertSuperAdminCaller } from '@/app/admin/_lib/admin-gate';
+
 import prisma from '@meddoc/db';
 
 import {
@@ -42,6 +44,7 @@ interface ProvRow {
 }
 
 export async function fetchUsageSummary(window: WindowKey): Promise<UsageSummary> {
+  await assertSuperAdminCaller();
   const w = resolveWindow(window);
   const prev = resolveWindow(window, { offset: 1 });
 
@@ -105,6 +108,7 @@ export async function fetchTimeline(
   window: WindowKey,
   granularity?: 'hour' | 'day'
 ): Promise<TimelineResponse> {
+  await assertSuperAdminCaller();
   const gran =
     granularity ?? (window === '24h' ? 'hour' : 'day');
   const w = resolveWindow(window);
@@ -181,6 +185,7 @@ export async function fetchTopUsers(
   window: WindowKey,
   limit = 10
 ): Promise<TopUsersResponse> {
+  await assertSuperAdminCaller();
   const w = resolveWindow(window);
   const rows = await prisma.$queryRaw<TopUserRowRaw[]>`
     SELECT e."userId" AS "userId",
@@ -224,6 +229,7 @@ interface BurstRow {
 }
 
 export async function fetchAnomalies(): Promise<Anomaly[]> {
+  await assertSuperAdminCaller();
   const now = Date.now();
   const since24h = new Date(now - DAY_MS);
   const since7d = new Date(now - 7 * DAY_MS);

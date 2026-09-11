@@ -8,6 +8,8 @@
 
 import 'server-only';
 
+import { assertSuperAdminCaller } from '@/app/admin/_lib/admin-gate';
+
 import prisma from '@meddoc/db';
 
 import type { HipaaFindingRow } from '../_types';
@@ -20,6 +22,7 @@ const SEVERITY_RANK: Record<string, number> = {
 };
 
 export async function getAllFindings(): Promise<HipaaFindingRow[]> {
+  await assertSuperAdminCaller();
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const rows: any[] = await (prisma as any).hipaaFinding.findMany({

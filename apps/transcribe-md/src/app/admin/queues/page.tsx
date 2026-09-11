@@ -6,8 +6,9 @@
 //   - transcribe-md-cleanup (MinIO orphan / stale visit / retention sweeps)
 //   - dlq-permanent-failures (PR-L — exhausted-retry sink; no consumer)
 //
-// Auth gate inherits from apps/transcribe-md/src/app/admin/layout.tsx
-// (SUPER_ADMIN product entitlement + ≤12-hour session freshness).
+// Auth gate: requireAdminPage() FIRST (ruling #310) — SUPER_ADMIN product
+// entitlement + MFA + ≤12-hour session freshness. The layout is skipped
+// on an RSC refetch, so this page does not rely on it.
 // Non-SUPER_ADMIN users see notFound() — same posture as the rest of
 // /admin/*.
 //
@@ -27,6 +28,8 @@ import {
   getTranscribeMdQueue,
 } from '@/lib/queue';
 import type { Queue } from 'bullmq';
+
+import { requireAdminPage } from '../_lib/admin-gate';
 
 export const metadata: Metadata = { title: 'Queues · Admin · QuillMD' };
 export const dynamic = 'force-dynamic';
@@ -149,8 +152,7 @@ async function readDlqJobs(): Promise<DlqJobPreview[] | { error: string }> {
 }
 
 export default async function AdminQueuesPage() {
-  // The auth/SUPER_ADMIN gate is the parent layout's responsibility.
-  // Reaching here means the request already passed those checks.
+  await requireAdminPage();
   const [pipelineRow, cleanupRow, dlqRow, dlqJobs] = await Promise.all([
     readQueueRow(
       getTranscribeMdQueue(),
