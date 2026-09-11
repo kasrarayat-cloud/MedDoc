@@ -40,8 +40,10 @@
 //       integer equal to the value.
 //   4 · NOT RETRACTED. The sentence after each occurrence must not begin with
 //       a retraction ("correction", "strike that", "actually", "no, ...").
-//   5 · ONE TOTAL. Every sentence of the whole context that matches a
-//       canonical form states the same minutes as the value.
+//   5 · ONE TOTAL. Every OTHER sentence of the whole context that is
+//       total-shaped — "total" or "time spent" together with any number,
+//       number word, or hour/minute/second word — must itself ground this
+//       same value. Otherwise several totals were stated.
 //
 // Conversation mode is refused outright, in ONE place: the call site in
 // `encounter-facts/index.ts`. The doors cannot read the role-labelled text the
@@ -69,8 +71,6 @@ const UNITS: Readonly<Record<string, number>> = {
 const TENS: Readonly<Record<string, number>> = {
   twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90,
 };
-
-const isNumberWord = (t: string): boolean => t in UNITS || t in TENS || t === 'hundred';
 
 /**
  * A spoken cardinal from 0 to 999 — "forty five", "one hundred and twenty",
@@ -264,6 +264,26 @@ const NUMBER_WORD_HYPHEN = new RegExp(`\\b(${NUMBER_WORD})[-\\u2010\\u2011](?=${
 const Q = `(?:(?<digits>\\d+) ?|(?<words>(?:a )?${NUMBER_WORD}(?: (?:${NUMBER_WORD}|and))*) )(?:minutes|minute|mins|min)`;
 const THIS_VISIT = '(?:with the patient|on this visit|on this encounter)';
 
+/**
+ * F7's "including T" — an ALLOWLIST of activities, never free words. v3 as first
+ * built took any letters with no number or unit word, and measured,
+ * "…, including counselling, though I did not track it." grounded 45. T is now
+ * one or more of these, joined by ", " / " and " / ", and ".
+ */
+export const TAIL_ACTIVITIES = [
+  'counselling',
+  'counseling',
+  'coordination of care',
+  'care coordination',
+  'review of records',
+  'record review',
+  'reviewing records',
+  'documentation',
+  'patient education',
+] as const;
+const ACTIVITY = `(?:${TAIL_ACTIVITIES.join('|')})`;
+const ACTIVITY_TAIL = `${ACTIVITY}(?:(?:, and |, | and )${ACTIVITY})*`;
+
 const anchored = (body: string): RegExp => new RegExp(`^${body}$`, 'u');
 
 /**
@@ -271,7 +291,7 @@ const anchored = (body: string): RegExp => new RegExp(`^${body}$`, 'u');
  * one of these. Adding a form is widening a billing rule: it needs an accept
  * arm and a mutation, and nothing else in this file may accept a sentence.
  *
- * `tail` (F7 only) is words, commas and "and" — see `isPlainTail`.
+ * F7's "including" tail is the closed `TAIL_ACTIVITIES` list above.
  */
 export const CANONICAL_TOTAL_FORMS: ReadonlyArray<{ readonly id: string; readonly form: RegExp }> = [
   { id: 'F1', form: anchored(`(?:the )?total (?:visit |encounter |face[ -]to[ -]face )?time(?: spent)?(?: today)?(?: (?:was|is|of))?(?: ?[:,])? ${Q}`) },
@@ -281,21 +301,8 @@ export const CANONICAL_TOTAL_FORMS: ReadonlyArray<{ readonly id: string; readonl
   { id: 'F5', form: anchored(`(?:the )?time spent(?: today)?(?: (?:was|is))?(?: ?[:,])? ${Q}`) },
   { id: 'F6', form: anchored(`${Q}(?: in)? total(?: time)?`) },
   { id: 'F6-spent', form: anchored(`${Q} spent(?: in)? total`) },
-  { id: 'F7', form: anchored(`a total time of ${Q} (?:was )?spent ${THIS_VISIT}(?:, including (?<tail>[\\p{L}' ,]+))?`) },
+  { id: 'F7', form: anchored(`a total time of ${Q} (?:was )?spent ${THIS_VISIT}(?:, including ${ACTIVITY_TAIL})?`) },
 ];
-
-const TIME_UNIT_WORDS = new Set([
-  'minute', 'minutes', 'min', 'mins', 'hour', 'hours', 'hr', 'hrs', 'second', 'seconds', 'sec', 'secs',
-  'day', 'days', 'week', 'weeks', 'month', 'months', 'year', 'years',
-]);
-
-/** F7's "including T": no digit (the character class), no number word, no time unit. */
-function isPlainTail(tail: string): boolean {
-  return tail
-    .split(/[ ,]+/u)
-    .filter((w) => w !== '')
-    .every((w) => !isNumberWord(w) && !TIME_UNIT_WORDS.has(w));
-}
 
 /** Normalised for the forms: see rule 3 in the header. */
 export function canonicalSentence(sentence: string): string {
@@ -308,8 +315,6 @@ function statedTotalOf(canonical: string): { minutes: number | null } | null {
   for (const { form } of CANONICAL_TOTAL_FORMS) {
     const m = form.exec(canonical);
     if (m === null) continue;
-    const tail = m.groups?.tail;
-    if (tail !== undefined && !isPlainTail(tail)) continue;
     const digits = m.groups?.digits;
     const n = digits !== undefined ? Number(digits) : parseSpokenCardinal((m.groups?.words ?? '').split(' '));
     return { minutes: n !== null && Number.isSafeInteger(n) && n > 0 ? n : null };
@@ -354,6 +359,13 @@ export function judgeTotalTimeSentence(sentence: string, minutes: number): Total
 const RETRACTION =
   /^(?:(?:correction|strike that|scratch that|sorry|no wait|wait|actually|i mean|make that|rather)\b|no(?:,|$))/u;
 
+/** Rule 5: a sentence that states SOME total, canonical or not. */
+const TOTAL_SHAPED = /total|time spent/u;
+const QUANTITY_SHAPED = new RegExp(
+  `\\d|\\b${NUMBER_WORD}\\b|\\b(?:hours?|hrs?|minutes?|mins?|seconds?|secs?)\\b`,
+  'u',
+);
+
 const refuse = (reason: TotalTimeRefusal): TotalTimeGrounding => ({ ok: false, reason });
 
 /**
@@ -378,8 +390,8 @@ export function groundTotalTime(input: {
   if (spans.length === 0) return refuse(midWord > 0 ? 'quote_splits_a_word' : 'quote_not_in_transcript');
 
   const sentences = sentenceSpans(input.contextText);
-  const canonicalAt = (i: number): string =>
-    canonicalSentence(input.contextText.slice(sentences[i]!.start, sentences[i]!.end));
+  const sentenceAt = (i: number): string => input.contextText.slice(sentences[i]!.start, sentences[i]!.end);
+  const canonicalAt = (i: number): string => canonicalSentence(sentenceAt(i));
 
   // Rules 1–3. ⚠️ EVERY OCCURRENCE COUNTS: the same words can be today's total
   // in one sentence and last week's in another, and the model does not pick.
@@ -403,10 +415,16 @@ export function groundTotalTime(input: {
     }
   }
 
-  // Rule 5 — two canonical totals that disagree: the model does not pick.
+  // Rule 5 — ONE TOTAL. Every OTHER total-shaped sentence must itself ground
+  // this value. v3 as first built looked only at canonical sentences, and
+  // measured, "Total time 1 hr. Total 45 minutes." grounded 45: the hours
+  // total was no form, so nothing saw it. A canonical sentence restating the
+  // SAME minutes passes; any other total-shaped sentence refuses.
   for (let i = 0; i < sentences.length; i += 1) {
-    const stated = statedTotalOf(canonicalAt(i));
-    if (stated !== null && stated.minutes !== input.minutes) return refuse('several_totals_stated');
+    const s = canonicalAt(i);
+    if (!TOTAL_SHAPED.test(s) || !QUANTITY_SHAPED.test(s)) continue;
+    if (judgeTotalTimeSentence(sentenceAt(i), input.minutes) === null) continue;
+    return refuse('several_totals_stated');
   }
   return { ok: true };
 }

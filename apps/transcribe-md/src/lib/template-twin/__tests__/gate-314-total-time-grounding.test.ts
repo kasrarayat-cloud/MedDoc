@@ -296,6 +296,23 @@ const MUST_NOT_GROUND: readonly Row[] = [
   whole('F7 · a number word in the tail', 'A total time of 45 minutes was spent on this encounter, including twenty minutes of counselling.', 45),
   whole('F7 · a digit in the tail', 'A total time of 45 minutes was spent on this encounter, including 20 minutes of counselling.', 45),
   whole('F7 · a time unit in the tail', 'A total time of 45 minutes was spent on this encounter, including an hour of counselling.', 45),
+  // Fix 1 — F7's tail is a closed activity list; anything else refuses.
+  whole('F7 · a hedge in the tail (measured)', 'A total time of 45 minutes was spent on this encounter, including counselling, though I did not track it.', 45),
+  whole('F7 · an unlisted activity', 'A total time of 45 minutes was spent on this encounter, including counselling and a separate procedure.', 45),
+  whole('F7 · a negation in the tail', 'A total time of 45 minutes was spent on this encounter, including counselling, not including the procedure.', 45),
+  whole('F7 · bare "education"', 'A total time of 45 minutes was spent with the patient, including education.', 45),
+  whole('F7 · a qualifier after the list', 'A total time of 45 minutes was spent on this encounter, including counselling and coordination of care, approximately.', 45),
+  whole('F7 · the waiting room', 'A total time of 45 minutes was spent on this encounter, including time in the waiting room.', 45),
+  // Fix 2 — rule 5 sees EVERY total-shaped sentence, canonical or not.
+  ['rule 5 · an hours total in a separate sentence (measured)', 'Total time 1 hr. Total 45 minutes.', 'Total 45 minutes.', 45, 'several_totals_stated'],
+  ['rule 5 · one hour, spelled', 'Total time was one hour. Total 45 minutes.', 'Total 45 minutes.', 45, 'several_totals_stated'],
+  ['rule 5 · a non-canonical second total', 'Total 45 minutes. Total time including the procedure was 90 minutes.', 'Total 45 minutes.', 45, 'several_totals_stated'],
+  ['rule 5 · time spent on part of the visit', 'Time spent on records: 20. Total time 45 minutes.', 'Total time 45 minutes.', 45, 'several_totals_stated'],
+  ['rule 5 · a subtotal in words', 'Total time 45 minutes. Subtotal for counselling twenty minutes.', 'Total time 45 minutes.', 45, 'several_totals_stated'],
+  ['rule 5 · a question restating it', 'Total time 45 minutes. Was the total really 45 minutes?', 'Total time 45 minutes.', 45, 'several_totals_stated'],
+  ['rule 5 · about an hour', 'Total time 45 minutes. Total time spent about an hour.', 'Total time 45 minutes.', 45, 'several_totals_stated'],
+  // Every occurrence counts, even where the other sentence is not total-shaped.
+  ['every occurrence · a short quote, the second in a plain sentence', 'Total: 45 minutes. She waited 45 minutes in the lobby.', '45 minutes', 45, NS],
   // A quote that crosses a sentence end is not one sentence.
   ['a quote across a full stop', 'Total time 45 minutes. Follow up in two weeks.', 'minutes. Follow up', 45, NS],
 ];
@@ -338,7 +355,16 @@ const MUST_GROUND: readonly Accept[] = [
   plain('F1 · one hundred and twenty', 'Total time spent: one hundred and twenty minutes.', 120),
   plain('F4 · a hundred', 'A total of a hundred minutes.', 100),
   plain('F3 · forty-five, today', 'I spent a total of forty-five minutes with the patient today.'),
-  plain('F7 · a plain tail', 'A total time of 45 minutes was spent with the patient, including counselling, education and coordination of care.'),
+  // F7's tail is a closed activity list (fix 1) — each accepted shape.
+  plain('F7 · three activities, an Oxford comma', 'A total time of 45 minutes was spent on this visit, including counseling, care coordination, and documentation.'),
+  plain('F7 · patient education and record review', 'A total time of 45 minutes was spent with the patient, including patient education and record review.'),
+  plain('F7 · reviewing records, no "was"', 'A total time of 30 minutes spent on this encounter, including reviewing records.', 30),
+  plain('F7 · review of records, counselling and coordination of care', 'A total time of 45 minutes was spent on this encounter, including review of records, counselling and coordination of care.'),
+  plain('F7 · no tail at all', 'A total time of 45 minutes was spent on this encounter.'),
+  // Rule 5 (fix 2) must NOT refuse these.
+  ['rule 5 · "total" elsewhere with no quantity', 'Total cholesterol normal. Total time 45 minutes.', 'Total time 45 minutes.', 45],
+  ['rule 5 · a quantity elsewhere with no total', 'Reflux time 3.4 seconds on the right. Total time 45 minutes.', 'Total time 45 minutes.', 45],
+  ['rule 5 · another canonical sentence stating the SAME minutes', 'Total time 45 minutes. A total of 45 minutes.', 'Total time 45 minutes.', 45],
   ['inside a note', 'Exam normal. Total time 45 minutes. Follow up in two weeks.', 'Total time 45 minutes.', 45],
   ['REFLOWED across line breaks', 'Chief complaint: dysphagia.\nTotal time\n45 minutes.\nFollow up.', 'Total time 45 minutes.', 45],
   ['a different case in the transcript', 'TOTAL TIME 45 MINUTES.', 'total time 45 minutes.', 45],
@@ -548,8 +574,10 @@ describe('#314 · a refused total projects exactly as if L3 had returned no tota
   // The quote is SHARED with a fact projected BEFORE the total block (referring
   // physician) and one AFTER it (ROS). `add()` numbers quote occurrences, so a
   // refusal that still touched `add()` would shift the ROS fact and fail deep
-  // equality even if no total fact survived.
-  const Q = 'No fever, total time 25 minutes.';
+  // equality even if no total fact survived. ⚠️ The shared quote is NOT
+  // total-shaped: rule 5 would otherwise (correctly) refuse the grounded total
+  // in the non-vacuity arm, and that arm must be able to ground.
+  const Q = 'No fever, and the visit ran long.';
   const base = {
     referring_physician: { name: 'Dr. Alan Whitfield', evidence_quote: Q },
     ros: [{ system: 'constitutional', finding: 'fever', polarity: 'denied', evidence_quote: Q }],

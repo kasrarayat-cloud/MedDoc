@@ -162,26 +162,27 @@ describe('#246 — the projector emits them, and DISCRIMINATES', () => {
     const polarityOf = (quote: string, minutes: number) =>
       conceptOf(projectTotal(quote, minutes), 'total_time_minutes')[0]?.polarity;
 
-    // ⚠️ #314 v3 RE-FIXTURED ROUTE 2 AND RETIRED ROUTE 1 BY CONSTRUCTION — said
-    // here so it is not read as a weakening. v3 grounds a total only when the
-    // WHOLE sentence is a canonical form, and no form admits a word before its
-    // number. So route 1 (a denial cue BEFORE a locatable number, in the same
-    // clause) can no longer carry a grounded total at all; its fixtures produce
-    // no fact, pinned in the arm below.
+    // ⚠️ #314 v3 CLOSED BOTH ROUTES UPSTREAM — said here so it is not read as
+    // a weakening, and measured rather than assumed. v3 grounds a total only
+    // when the WHOLE sentence is a canonical form, and (since the 2026-09-11
+    // note) F7's tail is a closed activity list. No form and no listed activity
+    // contains a word `inferPolarity` reads (deny, without, negative for, no,
+    // not taking, never; possible, maybe, may, might; if, unless, in case). So
+    // route 1 (a cue BEFORE a locatable number) and route 2 (a cue anywhere in
+    // a quote that SPELLS its number) can no longer carry a grounded total: their
+    // fixtures produce no fact, pinned in the arm below. The stated polarity is
+    // now defence in depth — the v3 mutation table records whether deleting it
+    // still reds any arm.
     //
-    // Route 2 — the quote SPELLS the number, so String(40) is unlocatable and
-    // polarity falls back to the UNSCOPED whole-quote denial test. Driven now by
-    // the one form with a free tail (F7), carrying "negative for". Removing the
-    // stated `polarity: 'affirmed'` reds this line — measured in the #314 v3
-    // mutation table.
+    // What remains checkable is that a grounded total is AFFIRMED on both
+    // shapes the routes used: a spelled number (unlocatable, route 2's shape)
+    // and a digit (locatable, route 1's shape).
     expect(
       polarityOf(
-        'A total time of forty minutes was spent on this encounter, including counselling, negative for any separate procedure.',
+        'A total time of forty minutes was spent on this encounter, including counselling and coordination of care.',
         40,
       ),
     ).toBe('affirmed');
-    // And a clean quote was always fine — this is the control that says the
-    // arm above is about the denial route, not about polarity in general.
     expect(polarityOf('Total time 25 minutes.', 25)).toBe('affirmed');
   });
 
@@ -194,6 +195,7 @@ describe('#246 — the projector emits them, and DISCRIMINATES', () => {
       ['Total time of forty minutes spent, no separate procedure performed.', 40],
       ['Denies fever, total time 25 minutes.', 25],
       ['Total time of forty minutes spent, negative for any separate procedure.', 40],
+      ['A total time of forty minutes was spent on this encounter, including counselling, negative for any separate procedure.', 40],
     ] as const) {
       expect(conceptOf(projectTotal(quote, minutes), 'total_time_minutes'), quote).toHaveLength(0);
     }
