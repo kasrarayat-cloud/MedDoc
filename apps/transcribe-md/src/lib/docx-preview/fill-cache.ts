@@ -124,7 +124,13 @@ export type FillVariant = 'twin' | 'styled';
 // v6's own comment says "the shape changed and the key did not". This is
 // **the CONTENTS changed and the key did not**, which no schema check can see.
 // FOURTH instance of this class in this file; the three above are its record.
-const KEY_VERSION = 'v7';
+// ⚠️ v8 — #313, v7's class again: "the CONTENTS changed and the key did not".
+// A form whose IR carries `soleParagraphControl` now distributes one item per
+// bullet, so the same (visit, soapVersion) renders a DIFFERENT twin PDF and a
+// different `insertableDefaults` list (unused bullets are no longer offered).
+// A warm v7 entry would serve the whole-list-on-every-bullet preview for up to
+// the TTL after the draft's IR gains the property.
+const KEY_VERSION = 'v8';
 
 function key(visitId: string, soapVersion: number, variant: FillVariant): string {
   return `visitdoc:${KEY_VERSION}:${variant}:${visitId}:${soapVersion}`;

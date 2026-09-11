@@ -48,6 +48,7 @@ import {
   type SemanticMapping,
   type TemplateDocIR,
   type TemplateField,
+  LIST_ITEM_SLOT_UNUSED_REASON,
 } from './ir';
 
 /** One clinician correction, as stored.
@@ -308,6 +309,14 @@ export function scaffoldDefaultOfferable(input: {
   // visit. The predicate keeps its confirm-time callers, where the question
   // genuinely is "can this choice ever matter?".
   if (current?.reasonCode === 'omitted_unsupported_default') return false;
+  // ⚠️ #313 O3 — AN UNUSED BULLET IS NOT OFFERED "INSERT YOUR DEFAULT". The
+  // offered text would be the template's own "- ____" underscores: noise, not
+  // a default. Withdrawn HERE, beside the omit line, because this one
+  // predicate is what the preview panel offers and the door accepts. It is the
+  // OFFER that is withdrawn: `applyClinicianOverrides` is not given this
+  // clause, so a default the doctor already inserted into a now-unused bullet
+  // still applies (and stays listed for Undo via `inserted`).
+  if (current?.reasonCode === LIST_ITEM_SLOT_UNUSED_REASON) return false;
   return scaffoldTargetIsBlank(current);
 }
 

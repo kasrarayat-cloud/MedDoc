@@ -64,6 +64,13 @@ interface WalkContext {
   repeatAncestorPath: string | null;
   containerText: string | null;
   insideFieldContent: boolean;
+  /**
+   * #313 — the ONE content control that is alone in the enclosing paragraph
+   * (see `soleParagraphControlOf`), compared by NODE IDENTITY in
+   * `processContentControl`. Identity, not a flag, so it cannot leak: a
+   * control nested anywhere deeper is a different node and never matches.
+   */
+  soleControl: OrderedXmlNode | null;
 }
 
 interface CompilerState {
@@ -199,6 +206,7 @@ function defaultContext(partName: string): WalkContext {
     repeatAncestorPath: null,
     containerText: null,
     insideFieldContent: false,
+    soleControl: null,
   };
 }
 
@@ -289,9 +297,74 @@ function processParagraph(
   walkNodes(
     childrenOf(node),
     nodePath,
-    { ...context, containerText: text || null },
+    {
+      ...context,
+      containerText: text || null,
+      soleControl: soleParagraphControlOf(node, context),
+    },
     state,
   );
+}
+
+/**
+ * Content that is visible on the page (or in the markup) without being `w:t`
+ * text — a picture, a symbol glyph, a text box, an equation, a tracked change.
+ * `visibleText` does not see these, so a paragraph carrying one OUTSIDE its
+ * control is refused as a sole-control paragraph rather than trusted.
+ */
+const SOLE_PARAGRAPH_FORBIDDEN_OUTSIDE: ReadonlySet<string> = new Set([
+  "drawing", "pict", "object", "sym", "txbxContent", "oMath", "oMathPara",
+  "ptab", "fldSimple", "fldChar", "instrText", "delText", "del", "ins",
+  "moveFrom", "moveTo", "AlternateContent", "customXml", "smartTag",
+  "hyperlink",
+]);
+
+/**
+ * ⚠️ #313 — THE ONE CONTENT CONTROL THAT IS ALONE IN THIS PARAGRAPH, OR NULL.
+ *
+ * A bullet group (`template-twin/bullet-groups.ts`, rule G4) may only be made
+ * of controls that are the whole of their paragraph: on the owner's form the
+ * "- ____" is the control's OWN scaffold, and the paragraph holds nothing else.
+ * That is what refuses "Right leg: [control]" / "Left leg: [control]" and
+ * "Mother: [control]" — shapes where a shared alias carries a different
+ * meaning — and a ROS paragraph of six controls.
+ *
+ * Every condition is fail-closed:
+ *  · the paragraph is not itself inside a control's content;
+ *  · it has EXACTLY ONE `w:sdt` descendant (a nested control counts) and no
+ *    legacy or dynamic field (`fldChar`, `fldSimple`) anywhere;
+ *  · that control is a DIRECT child of the `w:p` — one wrapped in a hyperlink,
+ *    smart tag, custom XML or tracked change is refused;
+ *  · the visible text of every OTHER child trims to empty, and no other child
+ *    carries non-text visible content (`SOLE_PARAGRAPH_FORBIDDEN_OUTSIDE`).
+ *
+ * Nothing structural is read that `staticContentSha256` and the control hashes
+ * do not already cover, which is why the property is excluded from structural
+ * identity (`fieldForStructuralIdentity`).
+ */
+function soleParagraphControlOf(
+  paragraph: OrderedXmlNode,
+  context: WalkContext,
+): OrderedXmlNode | null {
+  if (context.insideFieldContent) return null;
+  const controls = descendants(paragraph, "sdt");
+  if (controls.length !== 1) return null;
+  if (
+    descendants(paragraph, "fldChar").length > 0 ||
+    descendants(paragraph, "fldSimple").length > 0
+  ) {
+    return null;
+  }
+  const only = controls[0]!;
+  const children = childrenOf(paragraph);
+  if (!children.includes(only)) return null;
+  const outside = children.filter((child) => child !== only);
+  if (visibleText(outside).trim() !== "") return null;
+  const carriesForbidden = (node: OrderedXmlNode): boolean =>
+    SOLE_PARAGRAPH_FORBIDDEN_OUTSIDE.has(localName(tagOf(node))) ||
+    childrenOf(node).some(carriesForbidden);
+  if (outside.some(carriesForbidden)) return null;
+  return only;
 }
 
 /**
@@ -383,7 +456,18 @@ function isScaffolded(
  * a second copy would drift from this one the day either is fixed.
  */
 export function fieldForStructuralIdentity(field: TemplateField): TemplateField {
-  const { scaffolded: _derived, scaffoldText: _text, ...rest } = field;
+  // ⚠️ #313 — `soleParagraphControl` IS STRIPPED HERE, THE #191 PRECEDENT,
+  // AND FOR THE SAME TWO CALLERS. It is a pure function of the paragraph's
+  // bytes (covered by `staticContentSha256`) and of the control's position
+  // (covered by `rendererBinding.path`), and every IR stored before #313 lacks
+  // it: hashing it would move `structureSha256` for every form that has a
+  // bullet, and `assertSourceMatchesIr` would refuse every stored IR at render.
+  const {
+    scaffolded: _derived,
+    scaffoldText: _text,
+    soleParagraphControl: _sole,
+    ...rest
+  } = field;
   return rest as TemplateField;
 }
 
@@ -919,6 +1003,9 @@ function processContentControl(
     ...(isScaffolded(properties, content)
       ? { scaffoldText: visibleText(content).trim().slice(0, 2000) }
       : {}),
+    // ⚠️ #313 — EMITTED ONLY WHEN TRUE, so a field that is not alone in its
+    // paragraph compiles byte-identical to before this property existed.
+    ...(context.soleControl === node ? { soleParagraphControl: true } : {}),
     originalLabel: label.label,
     labelSource: label.source,
     displayOrder: state.nextDisplayOrder++,

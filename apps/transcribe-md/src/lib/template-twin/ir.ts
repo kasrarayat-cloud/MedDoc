@@ -23,7 +23,12 @@ export const TEMPLATE_TWIN_COMPILER_VERSION = 'template-docx-compiler/1.0.0';
 // certified before the narrowing kept a certification whose stored manifest no
 // longer describes what the resolver produces — this file's own recorded
 // failure mode, re-armed by the commit that cites it.
-export const TEMPLATE_TWIN_RESOLVER_VERSION = 'template-field-resolver/2.0.0';
+// ⚠️ BUMPED FOR #313. No per-field resolver outcome changed, but the FILL's
+// resolutions did for identical input: a bullet group's members no longer all
+// carry the joined list (`list_item_slot_unused` is new), and certification
+// compares this string exactly — a synthetic manifest produced before the
+// distribution pass must not be accepted as describing what the fill does now.
+export const TEMPLATE_TWIN_RESOLVER_VERSION = 'template-field-resolver/3.0.0';
 export const TEMPLATE_TWIN_RENDERER_VERSION = 'template-docx-renderer/1.0.0';
 
 export const Sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
@@ -166,6 +171,30 @@ export const TemplateFieldSchema = z
      * covers.
      */
     scaffoldText: z.string().max(2000).optional(),
+    /**
+     * ⚠️ #313 — IS THIS CONTROL THE ONLY THING IN ITS PARAGRAPH?
+     *
+     * `true` only when the control's parent is a `w:p` whose only fillable
+     * descendant is this control and whose visible text OUTSIDE the control
+     * trims to empty. It is one of the conditions a bullet group requires
+     * (`bullet-groups.ts`, rule G4): it is what separates a bullet ("- ____" as
+     * the control's own scaffold) from "Right leg: [control]", "Mother:
+     * [control]", or six ROS clauses sharing one paragraph — shapes where a
+     * shared alias carries a different meaning per control.
+     *
+     * ⚠️ `.optional()`, AND ABSENT MEANS **NO GROUP**, WHICH IS FAIL-CLOSED.
+     * Every IR stored before #313 lacks it, so every stored form keeps exactly
+     * today's per-field behaviour until its IR carries the property by a
+     * declared act (ruling #313 O5). The compiler emits only `true`, never
+     * `false`, so a field that is not a sole control compiles byte-identical
+     * to before.
+     *
+     * ⚠️ EXCLUDED FROM STRUCTURAL IDENTITY with `scaffolded`/`scaffoldText`
+     * (`fieldForStructuralIdentity`) — it is a pure function of paragraph bytes
+     * that `staticContentSha256` and the control hashes already cover, and
+     * hashing it would orphan every stored IR at `assertSourceMatchesIr`.
+     */
+    soleParagraphControl: z.boolean().optional(),
     required: z.boolean(),
     unknownPolicy: z.enum(['blank', 'not_documented', 'requires_input']),
     clinicallyMaterial: z.boolean(),
@@ -753,6 +782,20 @@ export const TemplateTwinFillManifestSchema = z
          * existed.
          */
         recordDerived: z.number().int().nonnegative().optional(),
+        /**
+         * ⚠️ #313 — UNUSED BULLETS OF A LIST, COUNTED IN THEIR OWN BUCKET.
+         * A bullet group whose dictation carried fewer items than it has
+         * bullets clears the rest as `list_item_slot_unused`. Those are NOT
+         * "still blank — nothing dictated": the section WAS dictated, it just
+         * had fewer items. So they leave `notMentioned` and land here.
+         *
+         * ⚠️ `.optional()` AND EMITTED ONLY WHEN NON-ZERO — the `recordDerived`
+         * precedent above, for the same reason: certification recomputes these
+         * counts over a stored manifest and compares shas, so a key that
+         * appeared unconditionally would change the sha of every manifest
+         * already on disk.
+         */
+        slotsUnused: z.number().int().nonnegative().optional(),
         conflicts: z.number().int().nonnegative(),
         criticalUnresolved: z.number().int().nonnegative(),
       })
@@ -857,11 +900,34 @@ export function isRecordDerivedRefusal(reasonCode: string | null | undefined): b
   return (RECORD_DERIVED_REFUSAL_REASONS as readonly string[]).includes(reasonCode);
 }
 
+/**
+ * ⚠️ #313 — THE ONE NEW REASON TOKEN, DECLARED ONCE, HERE.
+ *
+ * An unused bullet of a list whose dictation carried fewer items than the form
+ * has bullets: `status: 'not_mentioned'`, `value: null`, no citations. It has
+ * FOUR readers — the distribution pass that mints it, the validator that
+ * checks it is legitimate (and exempts only a legitimate one from
+ * REQUIRED_FIELD_NOT_MENTIONED), these counts, and the insert-default offer
+ * that withdraws on it (ruling #313 O3). `ir.ts` is the module all four
+ * already import, so the spelling is shared rather than copied — the
+ * `RECORD_DERIVED_REFUSAL_REASONS` precedent below.
+ *
+ * ⚠️ DELIBERATELY NOT A MEMBER OF `OMIT_LADDER_PRE_CONCEPT` /
+ * `DESIGNED_BLANK_REASONS`: those tables drive the resolver's ladder and the
+ * omit offer, and a cross-field outcome must move neither.
+ */
+export const LIST_ITEM_SLOT_UNUSED_REASON = 'list_item_slot_unused' as const;
+
 export function templateTwinCounts(
   fields: readonly FieldResolution[],
   definitions: readonly TemplateField[],
 ): TemplateTwinFillManifest['counts'] {
   const critical = new Map(definitions.map((field) => [field.fieldId, field.criticality]));
+  // #313 — see the schema comment: PRESENT ONLY WHEN NON-ZERO, so a manifest
+  // with no bullet group recomputes to the same sha it always had.
+  const isUnusedSlot = (field: FieldResolution): boolean =>
+    field.status === 'not_mentioned' && field.reasonCode === LIST_ITEM_SLOT_UNUSED_REASON;
+  const slotsUnused = fields.filter(isUnusedSlot).length;
   // ⚠️ #157(b) — `denial_withheld` IS COUNTED, IN THE SAME COMMIT THAT
   // INTRODUCES IT. A new status is silently uncounted by default: `filled`
   // counts `value !== null`, so a blank-with-a-reason would land in NO bucket
@@ -907,14 +973,20 @@ export function templateTwinCounts(
     // 11 to 0 with the document byte-identical. The reconciliation arm exists
     // because of that, and it counts the omitted set explicitly rather than
     // letting it vanish.
+    //
+    // ⚠️ #313 — AN UNUSED BULLET IS NOT "NOTHING DICTATED". The section was
+    // dictated; it had fewer items than the form has bullets. It leaves this
+    // bucket for `slotsUnused` (below), and nothing falls into both or neither.
     notMentioned: fields.filter(
       (field) =>
         field.status === 'not_mentioned' &&
-        field.reasonCode !== 'omitted_unsupported_default',
+        field.reasonCode !== 'omitted_unsupported_default' &&
+        !isUnusedSlot(field),
     ).length,
     omitted: fields.filter(
       (field) => field.reasonCode === 'omitted_unsupported_default',
     ).length,
+    ...(slotsUnused > 0 ? { slotsUnused } : {}),
     conflicts: fields.filter((field) => field.status === 'conflict').length,
     criticalUnresolved: fields.filter(
       (field) =>

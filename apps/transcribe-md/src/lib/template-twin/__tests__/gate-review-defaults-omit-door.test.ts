@@ -1945,6 +1945,16 @@ describe('item 2 — the omitted field is counted exactly once', () => {
     // ⚠️ AND THE TOTAL IS CONSERVED. `default_kept` once fell into NO bucket and
     // one unrelated dictated sentence collapsed a form's blank count 11 -> 0.
     expect(omitted.omitted! + omitted.notMentioned).toBe(plain.omitted! + plain.notMentioned);
+
+    // ⚠️ #313 — THE FOURTH BUCKET, `slotsUnused`, IS EMITTED ONLY WHEN NON-ZERO.
+    // Neither run has a bullet group, so the key must be ABSENT (not zero): a
+    // key that appeared unconditionally would move the recomputed counts sha of
+    // every stored manifest. And the conservation still holds with it included.
+    expect('slotsUnused' in omitted).toBe(false);
+    expect('slotsUnused' in plain).toBe(false);
+    expect(omitted.omitted! + omitted.notMentioned + (omitted.slotsUnused ?? 0)).toBe(
+      plain.omitted! + plain.notMentioned + (plain.slotsUnused ?? 0),
+    );
   });
 });
 

@@ -23,7 +23,7 @@ import {
 import { withoutPlaceholderOptions } from '../../note-template-docx/placeholder-option';
 import { parseExplicitNumberAndUnit } from '../encounter-facts';
 import {
-  conceptMatches,
+  conceptCandidateFacts,
   normalizeConcept,
   requiredFactTemporality,
   temporalityMatches,
@@ -38,9 +38,11 @@ import {
   approvedPracticeDefaultFactId,
 } from '../practice-default';
 import {
+  DIRECT_EVIDENCE_SUPPORTED_REASON,
   isEmptyText,
   isListValuedNarrative,
   joinListValuedNarrative,
+  LIST_VALUED_NARRATIVE_JOINED_REASON,
 } from '../field-value-derivation';
 import { denialOutcome, mixedPolarityNarrative } from '../denial-contract';
 
@@ -91,7 +93,18 @@ function unique<T>(values: ReadonlyArray<T>): T[] {
   return [...new Set(values)];
 }
 
-function evidenceFor(facts: ReadonlyArray<EncounterFact>): {
+/**
+ * The citation a resolution carries for these facts: their ids and every one of
+ * their anchors, each de-duplicated in first-seen order.
+ *
+ * ⚠️ EXPORTED FOR #313, NOT RE-STATED. The bullet distribution pass
+ * (`list-distribution.ts`) rewrites a group's citations per bullet, and the
+ * validator refuses any anchor set that is not exactly the cited facts' anchors
+ * (EVIDENCE_COVERAGE_INCOMPLETE / EVIDENCE_ANCHOR_UNTRACEABLE, both blocking).
+ * Building them with the resolver's own helper is what keeps the two writers
+ * producing the same shape.
+ */
+export function evidenceFor(facts: ReadonlyArray<EncounterFact>): {
   sourceFactIds: string[];
   evidenceAnchorIds: string[];
 } {
@@ -560,10 +573,11 @@ function resolveOne(
   // scope — checked by the validator — was invisible here. The resolver filled
   // a field the validator then refused, and `fill-engine` turned that into a
   // WITHHELD DOCUMENT rather than a wrong value.
-  const conceptCandidates = allFacts.filter(
-    (fact) =>
-      fact.sourceType !== 'approved_practice_default' && conceptMatches(fact, mapping),
-  );
+  // ⚠️ #313 — THE FILTER LIVES IN `fact-mapping-match.ts` NOW, verbatim, so
+  // `listItemCandidates` (the validator's group check) composes the SAME stage
+  // rather than a copy of it. Behaviour is unchanged; the tense stage below
+  // stays a separate call, as it must.
+  const conceptCandidates = conceptCandidateFacts(mapping, allFacts);
   // ⚠️ #264 — A NAMED REFUSAL OUTRANKS "NOBODY SAID IT", AND IT IS CHECKED
   // BEFORE the concept search rather than after. An injector that declined to
   // compute a value mints no fact, so the concept search finds nothing and the
@@ -1000,7 +1014,7 @@ function resolveOne(
           'supported',
           joined,
           temporalCandidates,
-          'list_valued_narrative_joined',
+          LIST_VALUED_NARRATIVE_JOINED_REASON,
         );
       }
     }
@@ -1026,7 +1040,7 @@ function resolveOne(
     'supported',
     selected.value,
     temporalCandidates,
-    'direct_evidence_supported',
+    DIRECT_EVIDENCE_SUPPORTED_REASON,
     selected.optionOrdinal,
   );
 }
