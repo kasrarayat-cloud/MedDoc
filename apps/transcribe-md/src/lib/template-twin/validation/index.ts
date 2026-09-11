@@ -25,9 +25,15 @@ import {
   type TemplateTwinValidationResult,
   fieldDemandsInput,
   isRecordDerivedRefusal,
+  LIST_ITEM_SLOT_UNUSED_REASON,
 } from '../ir';
+import { bulletGroups } from '../bullet-groups';
 import { parseExplicitNumberAndUnit } from '../encounter-facts';
-import { factMatchesMapping, normalizeConcept } from '../fact-mapping-match';
+import {
+  factMatchesMapping,
+  listItemCandidates,
+  normalizeConcept,
+} from '../fact-mapping-match';
 import {
   deriveFieldValueFromFact,
   exactOption,
@@ -74,8 +80,18 @@ const DESIGNED_BLANK_REASONS = new Set(
   OMIT_LADDER_PRE_CONCEPT.filter((g) => g.status === 'not_mentioned').map((g) => g.reasonCode),
 );
 
+// ⚠️ BUMPED FOR #313 — three group checks (LIST_ITEM_DROPPED, LIST_ITEM_REPEATED,
+// LIST_SLOT_UNUSED_ILLEGITIMATE) and the legitimate-slot exemption change this
+// validator's output for identical input, and certification byte-compares the
+// stored validation against a re-run.
 export const TEMPLATE_TWIN_VALIDATOR_VERSION =
-  'template-field-validator/1.0.0';
+  'template-field-validator/2.0.0';
+
+/** #313 — the group-check issue codes, exported so certification can name one
+ *  without re-typing the string. */
+export const LIST_ITEM_DROPPED = 'LIST_ITEM_DROPPED';
+export const LIST_ITEM_REPEATED = 'LIST_ITEM_REPEATED';
+export const LIST_SLOT_UNUSED_ILLEGITIMATE = 'LIST_SLOT_UNUSED_ILLEGITIMATE';
 
 interface ValidationIssue {
   fieldId: string | null;
@@ -216,8 +232,16 @@ function practiceDefaultMatches(
  */
 export { factMatchesMapping };
 
-/** Returns true only when the output can be re-derived from cited facts. */
-function assertionSupported(
+/**
+ * Returns true only when the output can be re-derived from cited facts.
+ *
+ * ⚠️ EXPORTED FOR #313, UNCHANGED. The bullet distribution pass re-validates
+ * every bullet it rewrites with THIS function before emitting anything, and
+ * collapses the group rather than emit a value this would refuse. A second
+ * copy of the re-derivation on the writer's side is the defect
+ * `field-value-derivation.ts` was extracted to remove.
+ */
+export function assertionSupported(
   field: TemplateField,
   mapping: SemanticMapping,
   resolution: FieldResolution,
@@ -344,6 +368,155 @@ function assertionSupported(
   );
 }
 
+/**
+ * ══ #313 — THE SECOND READER OF A BULLET GROUP ══════════════════════════════
+ *
+ * Every other check in this module is per field, and per field a distribution
+ * that DROPS an item, or prints one twice, validates perfectly: each bullet
+ * re-derives from its own citation. So the group is checked as a group, from
+ * manifest data alone (the IR fields, the mappings, the facts, the stored
+ * resolutions), with the SAME grouping rule the writer used (`bulletGroups`)
+ * and the SAME candidate rule the resolver cites by (`listItemCandidates`).
+ *
+ *   LIST_SLOT_UNUSED_ILLEGITIMATE  blocking — the unused-bullet token outside
+ *                                  a group, on a non-blank resolution, in a
+ *                                  group with no dictated item, or BEFORE a
+ *                                  bullet that carries one.
+ *   LIST_ITEM_DROPPED              blocking — a dictated candidate fact that
+ *                                  reached no bullet.
+ *   LIST_ITEM_REPEATED             WARNING — a fact cited by two bullets. The
+ *                                  untouched shape (every bullet printing the
+ *                                  whole list) is today's live shape, so it
+ *                                  must cost a CERTIFICATE (certification
+ *                                  blocks on it), never a document.
+ *
+ * ⚠️ "DICTATED" IS `encounter_evidence`, DELIBERATELY NARROWER THAN THE
+ * CANDIDATE RULE. The facts this validator sees include the bridge's and the
+ * clinician's (a doctor's inserted default mints a `clinician_correction` fact
+ * carrying the field's own concept). Those are not list items and are cited by
+ * the one bullet they were minted for; counting them as droppable would refuse
+ * a document for a fact no dictation produced.
+ *
+ * DROPPED and REPEATED apply only to a group whose every member is populated-
+ * supported or a well-formed unused slot. A conflict, a withheld denial, a
+ * needs-input or a plain `fact_not_mentioned` group was never distributed and
+ * is judged by the per-field rules exactly as before.
+ */
+function listGroupFindings(
+  fields: readonly TemplateField[],
+  mappings: readonly SemanticMapping[],
+  mappingById: ReadonlyMap<string, SemanticMapping>,
+  resolutions: readonly FieldResolution[],
+  resolutionById: ReadonlyMap<string, FieldResolution>,
+  facts: readonly EncounterFact[],
+): { legitimateSlots: Set<string>; findings: ValidationIssue[] } {
+  const legitimateSlots = new Set<string>();
+  const findings: ValidationIssue[] = [];
+  const groups = bulletGroups(fields, mappings);
+  const grouped = new Set(groups.flatMap((group) => group.memberFieldIds));
+
+  for (const resolution of resolutions) {
+    if (
+      resolution.reasonCode === LIST_ITEM_SLOT_UNUSED_REASON &&
+      !grouped.has(resolution.fieldId)
+    ) {
+      findings.push({
+        fieldId: resolution.fieldId,
+        code: LIST_SLOT_UNUSED_ILLEGITIMATE,
+        severity: 'blocking',
+        message: 'An unused-bullet blank was recorded on a control that is not part of a bullet list.',
+      });
+    }
+  }
+
+  for (const group of groups) {
+    const mapping = mappingById.get(group.memberFieldIds[0]!);
+    // `bulletGroups` guarantees every member a mapping; MAPPING_MISSING and
+    // DUPLICATE_MAPPING report the cases where it could not.
+    if (!mapping) continue;
+    const dictated = [
+      ...new Map(
+        listItemCandidates(mapping, facts)
+          .filter((fact) => fact.sourceType === 'encounter_evidence')
+          .map((fact) => [fact.factId, fact] as const),
+      ).values(),
+    ];
+    const dictatedIds = new Set(dictated.map((fact) => fact.factId));
+    const members = group.memberFieldIds.map((id) => resolutionById.get(id));
+    let lastItem = -1;
+    members.forEach((resolution, index) => {
+      if (resolution?.sourceFactIds.some((id) => dictatedIds.has(id))) lastItem = index;
+    });
+
+    members.forEach((resolution, index) => {
+      if (!resolution || resolution.reasonCode !== LIST_ITEM_SLOT_UNUSED_REASON) return;
+      const legitimate =
+        resolution.status === 'not_mentioned' &&
+        resolution.value === null &&
+        resolution.sourceFactIds.length === 0 &&
+        resolution.evidenceAnchorIds.length === 0 &&
+        lastItem >= 0 &&
+        index > lastItem;
+      if (legitimate) {
+        legitimateSlots.add(resolution.fieldId);
+      } else {
+        findings.push({
+          fieldId: resolution.fieldId,
+          code: LIST_SLOT_UNUSED_ILLEGITIMATE,
+          severity: 'blocking',
+          message:
+            'An unused-bullet blank sits where a dictated list item belongs (before an item, in a list with no item, or on a non-blank control).',
+        });
+      }
+    });
+
+    const listShaped = members.every(
+      (resolution) =>
+        resolution !== undefined &&
+        ((resolution.status === 'supported' && resolution.value !== null) ||
+          (resolution.status === 'not_mentioned' &&
+            resolution.reasonCode === LIST_ITEM_SLOT_UNUSED_REASON)),
+    );
+    // ⚠️ #313 ROUND ONE — A GROUP WITH NO DICTATED ITEM ON ANY BULLET IS NOT A
+    // DISTRIBUTED LIST, AND DROPPED/REPEATED MUST NOT JUDGE IT. With the doctor's
+    // own default inserted on EVERY bullet over an ambiguous or conflicting fact,
+    // the group looked list-shaped, the uncertain fact counted as a dropped item,
+    // and LIST_ITEM_DROPPED withheld a document that rendered before #313 — the
+    // new check as the SOLE cause, against the ruling's own claims (the pass never
+    // withholds; the doctor's default always wins). Nothing is lost by the skip:
+    // a pass output with no bullet citing a dictated fact is all unused slots,
+    // which LIST_SLOT_UNUSED_ILLEGITIMATE already refuses (its legitimacy needs
+    // lastItem >= 0), and a PARTIAL drop still has lastItem >= 0.
+    if (!listShaped || lastItem < 0) continue;
+
+    const citations = new Map<string, number>();
+    for (const resolution of members) {
+      for (const id of new Set(resolution!.sourceFactIds)) {
+        citations.set(id, (citations.get(id) ?? 0) + 1);
+      }
+    }
+    const dropped = dictated.filter((fact) => !citations.has(fact.factId)).length;
+    if (dropped > 0) {
+      findings.push({
+        fieldId: group.memberFieldIds[0]!,
+        code: LIST_ITEM_DROPPED,
+        severity: 'blocking',
+        message: `${dropped} dictated item${dropped === 1 ? '' : 's'} of this list reached no bullet.`,
+      });
+    }
+    const repeated = [...citations.values()].filter((count) => count > 1).length;
+    if (repeated > 0) {
+      findings.push({
+        fieldId: group.memberFieldIds[0]!,
+        code: LIST_ITEM_REPEATED,
+        severity: 'warning',
+        message: `${repeated} dictated fact${repeated === 1 ? ' is' : 's are'} printed on more than one bullet of this list.`,
+      });
+    }
+  }
+  return { legitimateSlots, findings };
+}
+
 export function validateTemplateTwin(
   input: ValidateTemplateTwinInput,
 ): TemplateTwinValidationResult {
@@ -445,6 +618,16 @@ export function validateTemplateTwin(
   }
   const tableById = new Map(tables.map((table) => [table.tableId, table]));
   const certifiedFieldIds = new Set(input.certifiedFieldIds ?? []);
+  // #313 — computed BEFORE the per-field loop because the loop's required-blank
+  // arm reads `legitimateSlots`; the findings are added AFTER it.
+  const listGroups = listGroupFindings(
+    fields,
+    mappings,
+    mappingById,
+    resolutions,
+    resolutionById,
+    [...factById.values()],
+  );
   const repeatedCountsByTable = new Map<string, number>();
   const repeatedAnchorsByTable = new Map<string, string[]>();
 
@@ -719,6 +902,13 @@ export function validateTemplateTwin(
     } else if (
       resolution.status === 'not_mentioned' &&
       !DESIGNED_BLANK_REASONS.has(resolution.reasonCode ?? '') &&
+      // ⚠️ #313 — AN UNUSED BULLET IS EXEMPT ONLY WHEN IT IS **LEGITIMATE**:
+      // in an accepted bullet group, after every bullet that carries a
+      // dictated item (`listGroupFindings`). The token alone exempts nothing —
+      // otherwise it would be a way to blank any required field. It is kept
+      // OUT of `DESIGNED_BLANK_REASONS`, which the resolver's ladder and the
+      // omit offer both walk.
+      !listGroups.legitimateSlots.has(field.fieldId) &&
       fieldDemandsInput(field, mapping)
     ) {
       add('REQUIRED_FIELD_NOT_MENTIONED', 'blocking', 'A required field was not mentioned.', field.fieldId);
@@ -898,6 +1088,13 @@ export function validateTemplateTwin(
         }
       }
     }
+  }
+
+  // #313 — the group findings, generated HERE from manifest data alone, so a
+  // re-run over a STORED manifest (certification re-verification) reproduces
+  // them byte for byte.
+  for (const finding of listGroups.findings) {
+    add(finding.code, finding.severity, finding.message, finding.fieldId);
   }
 
   let checkedAt: string;
