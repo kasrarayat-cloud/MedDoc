@@ -410,11 +410,17 @@ describe('#313 A9 — the validator\'s group checks', () => {
     expect(v.issues.filter((i) => i.code === LIST_SLOT_UNUSED_ILLEGITIMATE).map((i) => i.fieldId)).toEqual([ids[0]]);
   });
 
-  it('a group of ONLY unused bullets -> ILLEGITIMATE (and the items are DROPPED)', async () => {
+  it('a group of ONLY unused bullets -> ILLEGITIMATE, and the document is REFUSED', async () => {
     const { slot, ids, run } = await setup();
     const v = run([slot(ids[0]), slot(ids[1]), slot(ids[2])]);
     expect(v.issues.filter((i) => i.code === LIST_SLOT_UNUSED_ILLEGITIMATE)).toHaveLength(3);
-    expect(codes(v)).toContain(`${LIST_ITEM_DROPPED}:blocking`);
+    // ⚠️ #313 ROUND ONE: DROPPED is no longer CO-reported here. A group in which
+    // no bullet carries a dictated item is skipped by DROPPED/REPEATED (the doctor's
+    // default on every bullet over an uncertain fact was being withheld by it). This
+    // shape is still refused, by ILLEGITIMATE alone, and that is the assertion.
+    expect(codes(v)).toContain(`${LIST_SLOT_UNUSED_ILLEGITIMATE}:blocking`);
+    expect(codes(v)).not.toContain(`${LIST_ITEM_DROPPED}:blocking`);
+    expect(v.valid).toBe(false);
   });
 
   it('the token on a non-blank status -> ILLEGITIMATE', async () => {
@@ -733,5 +739,47 @@ describe('#313 A15 — a note listing PMH items leaves the unused bullets unused
       expect(resolutionOf(bridged.manifest.fields, member)).toEqual(resolutionOf(plain.manifest.fields, member));
     }
     expect(resolutionOf(bridged.manifest.fields, members[2]!).reasonCode).toBe(LIST_ITEM_SLOT_UNUSED_REASON);
+  });
+});
+
+// ============================================================================
+// ROUND ONE — THE DOCTOR'S DEFAULT ON EVERY BULLET NEVER WITHHOLDS THE DOCUMENT.
+// ----------------------------------------------------------------------------
+// The refutation pass drove this through the real prepareTemplateTwinFill: with
+// the doctor's scaffold default inserted on EVERY bullet over an uncertain,
+// unclear or other-experiencer fact, the pass left the group untouched — and the
+// new LIST_ITEM_DROPPED check counted that fact as a dropped item and withheld a
+// document that rendered before #313. The group checks now skip a group in which
+// no bullet carries a dictated item. Each case runs twice: with the property
+// (post-#313) and without it (pre-#313 parity), and the two must agree.
+// ============================================================================
+describe('#313 round one — defaults on every bullet over an undistributable fact', () => {
+  const cases: Array<[string, EncounterFact[]]> = [
+    ['an uncertain second item', [
+      fact('r1-a', 'past_medical_history', 'Hypertension'),
+      fact('r1-b', 'past_medical_history', 'Diabetes', { polarity: 'uncertain' }),
+    ]],
+    ['an unclear-evidence item', [
+      fact('r1-c', 'past_medical_history', 'Hypertension', { quality: { asr: 'high', evidence: 'unclear' } }),
+    ]],
+    ['another experiencer\'s item', [
+      fact('r1-d', 'past_medical_history', 'Diabetes', { experiencer: 'other' }),
+    ]],
+  ];
+
+  it.each(cases)('%s — the document renders, and the defaults stand', async (_what, facts) => {
+    const { source, ir, mappings, members } = await pmhForm();
+    const clinicianOverrides = members.map((m) => ({ kind: 'scaffold_default' as const, fieldId: m.fieldId, insertedText: 'None' }));
+    const post = await prepare({ ir, source, mappings, facts, clinicianOverrides });
+    const pre = await prepare({ ir: withoutSoleParagraphControl(ir), source, mappings, facts, clinicianOverrides });
+
+    expect(blocking(post.manifest.validation.issues)).not.toContain('LIST_ITEM_DROPPED');
+    expect(post.manifest.validation.valid, 'post-#313 withheld a document').toBe(true);
+    // PARITY, not merely validity: #313 changes nothing about this document.
+    expect(post.manifest.validation.valid).toBe(pre.manifest.validation.valid);
+    expect(members.map((m) => resolutionOf(post.manifest.fields, m)!.value)).toEqual(
+      members.map((m) => resolutionOf(pre.manifest.fields, m)!.value),
+    );
+    for (const m of members) expect(resolutionOf(post.manifest.fields, m)!.value).toBe('None');
   });
 });

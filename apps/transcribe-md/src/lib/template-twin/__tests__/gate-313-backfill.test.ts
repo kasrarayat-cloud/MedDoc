@@ -76,6 +76,7 @@ async function scenario() {
     artifactSha256: ir.source.sha256,
     bytesSha256: ir.source.sha256,
     fillManifestCount: 0,
+    hasStoredSyntheticProof: false,
     expect: { fields: ir.fields.length, groups: 2, members: 5 },
   };
   return { source, ir, mappings, storedIr, input };
@@ -107,6 +108,8 @@ describe('#313 backfill — the plan', () => {
     ['a certification record', (i) => ({ ...i, hasCertificationRecord: true }), 'no certification record exists'],
     ['a template that is not a draft', (i) => ({ ...i, templateStatus: 'active' }), 'note template status'],
     ['fill manifests stored against it (#247)', (i) => ({ ...i, fillManifestCount: 1 }), 'fill manifests stored against this version (#247 window)'],
+    // #313 round one: a proof taken under the old IR would not re-verify.
+    ['a stored synthetic proof', (i) => ({ ...i, hasStoredSyntheticProof: true }), 'no stored synthetic proof (it would not re-verify under the new IR)'],
     ['bytes that are not the artifact', (i) => ({ ...i, bytesSha256: 'f'.repeat(64) }), 'bytes sha256 == artifact sha256'],
     ['a moved structure column', (i) => ({ ...i, columnStructureSha256: 'e'.repeat(64) }), 'structureSha256 (recompiled == column)'],
     ['a moved static column', (i) => ({ ...i, columnStaticContentSha256: 'e'.repeat(64) }), 'staticContentSha256 (recompiled == column)'],

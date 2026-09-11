@@ -477,7 +477,17 @@ function listGroupFindings(
           (resolution.status === 'not_mentioned' &&
             resolution.reasonCode === LIST_ITEM_SLOT_UNUSED_REASON)),
     );
-    if (!listShaped) continue;
+    // ⚠️ #313 ROUND ONE — A GROUP WITH NO DICTATED ITEM ON ANY BULLET IS NOT A
+    // DISTRIBUTED LIST, AND DROPPED/REPEATED MUST NOT JUDGE IT. With the doctor's
+    // own default inserted on EVERY bullet over an ambiguous or conflicting fact,
+    // the group looked list-shaped, the uncertain fact counted as a dropped item,
+    // and LIST_ITEM_DROPPED withheld a document that rendered before #313 — the
+    // new check as the SOLE cause, against the ruling's own claims (the pass never
+    // withholds; the doctor's default always wins). Nothing is lost by the skip:
+    // a pass output with no bullet citing a dictated fact is all unused slots,
+    // which LIST_SLOT_UNUSED_ILLEGITIMATE already refuses (its legitimacy needs
+    // lastItem >= 0), and a PARTIAL drop still has lastItem >= 0.
+    if (!listShaped || lastItem < 0) continue;
 
     const citations = new Map<string, number>();
     for (const resolution of members) {

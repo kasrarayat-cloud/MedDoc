@@ -90,6 +90,7 @@ async function main(): Promise<void> {
         structureSha256: true,
         staticContentSha256: true,
         certificationStatus: true,
+        latestSyntheticTestManifest: true,
         certification: { select: { id: true } },
         noteTemplate: { select: { id: true, status: true, doctorId: true } },
         sourceArtifact: {
@@ -137,6 +138,7 @@ async function main(): Promise<void> {
     artifactSha256: row.sourceArtifact.sha256,
     bytesSha256,
     fillManifestCount: row._count.fills,
+    hasStoredSyntheticProof: row.latestSyntheticTestManifest !== null,
     expect: { fields: args.expectFields, groups: args.expectGroups, members: args.expectMembers },
   });
 
@@ -214,6 +216,7 @@ async function main(): Promise<void> {
     artifactSha256: after.sourceArtifact.sha256,
     bytesSha256,
     fillManifestCount: after._count.fills,
+    hasStoredSyntheticProof: after.latestSyntheticTestManifest !== null,
     expect: { fields: args.expectFields, groups: args.expectGroups, members: args.expectMembers },
   });
   // The re-plan MUST now refuse on exactly one guard: the property is present.

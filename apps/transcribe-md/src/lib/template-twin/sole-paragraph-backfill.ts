@@ -135,6 +135,12 @@ export interface SoleParagraphBackfillInput {
   readonly bytesSha256: string;
   /** Fill manifests stored against this compiled version (the #247 window). */
   readonly fillManifestCount: number;
+  /**
+   * Whether a synthetic proof is stored on the version. #313 round one: a proof
+   * taken under the old IR fails re-verification under the new one, and the
+   * certify blocker then blames mappings that never changed — so refuse first.
+   */
+  readonly hasStoredSyntheticProof: boolean;
   readonly expect: {
     readonly fields: number;
     readonly groups: number;
@@ -179,6 +185,7 @@ export function planSoleParagraphBackfill(
   guard('no certification record exists', input.hasCertificationRecord, false);
   guard('note template status', input.templateStatus, 'draft');
   guard('fill manifests stored against this version (#247 window)', input.fillManifestCount, 0);
+  guard('no stored synthetic proof (it would not re-verify under the new IR)', input.hasStoredSyntheticProof, false);
 
   // ── the stored IR is the one the declaration names ─────────────────────────
   guard('stored IR parses', parsedStored.success, true);
