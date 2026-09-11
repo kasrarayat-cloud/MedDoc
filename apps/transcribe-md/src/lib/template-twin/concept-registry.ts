@@ -398,7 +398,7 @@ export const VISIT_METADATA_LABEL_CONCEPTS: ReadonlyArray<readonly [RegExp, stri
  * `…(?:physician|…)\b` with no trailing anchor, so it claimed every CONTACT
  * control that begins with the same words:
  *
- *   "Referring Physician Fax"     -> supported, "Dr. Alan Whitfield", valid, auto-confirmed
+ *   "Referring Physician Fax"     -> supported, the referrer's NAME, valid, auto-confirmed
  *   "Referring MD NPI"            -> the physician's NAME in an identifier box
  *   "Referring Physician Address" -> the name in an address box
  *   "Referring MD signature"      -> the name in a signature box

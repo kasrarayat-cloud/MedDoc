@@ -343,11 +343,29 @@ const NARRATIVE_SENTENCES: ReadonlyMap<string, string> = new Map([
   // certification, exactly as DATE OF PROCEDURE has always been, and they fill
   // at visit time from the record.
   //
-  // The referrer is a synthetic name in a synthetic encounter, the same class
-  // as every other value in this table.
+  // ⚠️ #312 — A ROLE, NEVER A PERSON. This sentence used to dictate a
+  // fictional physician's full name, on the reasoning that it was "a synthetic
+  // name in a synthetic encounter, the same class as every other value in this
+  // table". It is NOT the same class: every other value here is a clinical
+  // fact, and a person's name is a direct identifier whatever its provenance.
+  // Ruling #312 confirmed the owner's re-issued consult form's `Referring MD`
+  // row as dictated evidence, so this sentence reached a real certification
+  // for the first time, and the synthetic-evidence privacy gate
+  // (`synthetic-evidence-gate.ts`) refused the whole encounter:
+  //
+  //   {"directIdentifierClasses":["referring provider name"],
+  //    "appearsExplicitlySynthetic":true,"anyUncertain":true}
+  //
+  // The same derived encounter with this sentence, run through the REAL gate:
+  // [] / true / false, GATE PASSED. The concept mapping is unchanged — the
+  // control still receives a dictated referrer, and the role IS the value.
+  //
+  // ⚠️ CHANGING THIS TEXT MEANS RE-RUNNING THE REAL GATE. CI can only check
+  // the deterministic half; `gate-verification-encounter-passes-the-evidence-gate.test.ts`
+  // pins this sentence verbatim so that the next edit reddens there first.
   [
     'visit_metadata.referring_physician',
-    'The patient was referred by Dr. Alan Whitfield for further evaluation.',
+    'The patient was referred by their primary care physician for further evaluation.',
   ],
   ['medication', 'Medications: lisinopril ten milligrams daily and metformin five hundred milligrams twice daily.'],
   ['allergy', 'Allergies: no known drug allergies.'],

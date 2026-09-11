@@ -46,7 +46,7 @@ const CONTEXT_TEXT = [
   'Impression: syntheticcondition.',
   'Plan: follow up in two weeks.',
   'Great saphenous vein diameter 5.2 mm on the right.',
-  'Referred by Dr. Alan Whitfield for evaluation.',
+  'Referred by their primary care physician for evaluation.',
 ].join('\n');
 
 const FULL_ENTITIES = {
@@ -78,7 +78,7 @@ const FULL_ENTITIES = {
   // `patient_name` and `patient_age` are not projected from L3 at all — they
   // are injected by `withVisitMetadataFacts` as `visit_record` facts, so they
   // have no emission site in the projector for this census to reach.
-  referring_physician: { name: 'Dr. Alan Whitfield', evidence_quote: 'Referred by Dr. Alan Whitfield for evaluation.' },
+  referring_physician: { name: 'their primary care physician', evidence_quote: 'Referred by their primary care physician for evaluation.' },
   medications: [
     {
       name: 'syntheticmed',
