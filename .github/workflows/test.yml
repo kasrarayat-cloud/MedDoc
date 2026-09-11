@@ -258,7 +258,7 @@ jobs:
     # the figures this comment carried as a purchase spec. Job `name:`
     # is UNCHANGED so every required context is preserved byte-for-byte.
     # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
-    runs-on: [self-hosted, linux, x64, quillmd-ci-light]
+    runs-on: ubuntu-latest
     # ⚠️ BOX-CALIBRATED, NOT A SPEED SETTING. A timeout is a HANG-GUARD;
     # generous is free. quillmd-ci-1 (4 vCPU) is ~1.4-1.9x slower than a
     # hosted runner on CPU-bound work, and every timeout in this repo was
@@ -407,7 +407,7 @@ jobs:
     # the figures this comment carried as a purchase spec. Job `name:`
     # is UNCHANGED so every required context is preserved byte-for-byte.
     # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
-    runs-on: [self-hosted, linux, x64, quillmd-ci-light]
+    runs-on: ubuntu-latest
     # ⚠️ BOX-CALIBRATED, NOT A SPEED SETTING. A timeout is a HANG-GUARD;
     # generous is free. quillmd-ci-1 (4 vCPU) is ~1.4-1.9x slower than a
     # hosted runner on CPU-bound work, and every timeout in this repo was
@@ -473,7 +473,7 @@ jobs:
     # `services:` block, no database, no browser — the same condition on which
     # `unit` moved. `quillmd-ci-light` resolves to two machines where
     # `quillmd-ci` resolves to one.
-    runs-on: [self-hosted, linux, x64, quillmd-ci-light]
+    runs-on: ubuntu-latest
     # Box-calibrated like every other timeout here: a hang-guard, not a speed
     # setting. Measured ~40-50s locally on a faster box; 15m is generous.
     timeout-minutes: 15
@@ -525,7 +525,7 @@ jobs:
     # client and runs vitest. The `test` job DOES (`pgvector/pgvector:pg16`) and
     # stays heavy, as do e2e and the axe sweep. A job that needs a database
     # server does not belong on the light lane however fast it looks.
-    runs-on: [self-hosted, linux, x64, quillmd-ci-light]
+    runs-on: ubuntu-latest
     # ⚠️ BOX-CALIBRATED, NOT A SPEED SETTING. A timeout is a HANG-GUARD;
     # generous is free. quillmd-ci-1 (4 vCPU) is ~1.4-1.9x slower than a
     # hosted runner on CPU-bound work, and every timeout in this repo was
