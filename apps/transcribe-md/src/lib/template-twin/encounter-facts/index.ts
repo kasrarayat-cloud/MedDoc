@@ -123,6 +123,25 @@ export interface EncounterEntitySnapshot {
     EvidenceSnapshot & { finding: string }
   >;
   plan_discussed?: ReadonlyArray<EvidenceSnapshot & { item: string }>;
+  /**
+   * #319 REGISTRY-2 — the operative-note family. OPTIONAL (canon 133 — every
+   * existing snapshot and fixture builds without it). Polarity is optional HERE
+   * (it is required in the L3 schema's lists) so a snapshot captured before the
+   * field existed still projects; the projector defaults it to `affirmed`.
+   */
+  procedure?: {
+    performed?: (EvidenceSnapshot & { statement: string }) | null;
+    preop_diagnosis?: (EvidenceSnapshot & { statement: string }) | null;
+    consent?: (EvidenceSnapshot & { statement: string }) | null;
+    description?: (EvidenceSnapshot & { statement: string }) | null;
+    anesthesia?: (EvidenceSnapshot & { statement: string }) | null;
+    findings?: ReadonlyArray<
+      EvidenceSnapshot & { finding: string; polarity?: 'affirmed' | 'denied' }
+    >;
+    recommendations?: ReadonlyArray<
+      EvidenceSnapshot & { recommendation: string; polarity?: 'affirmed' | 'denied' }
+    >;
+  } | null;
 }
 
 export interface ProjectEncounterFactsInput {
@@ -989,6 +1008,117 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
       evidence: item,
       defaultTemporality: 'planned',
     });
+  }
+
+  // ── #319 REGISTRY-2 — THE OPERATIVE-NOTE FAMILY ──────────────────────────
+  // Five SINGLE sections and two accumulating lists (findings, recommendations).
+  // ⚠️ POLARITY IS STATED, NEVER INFERRED — every add() below passes it
+  // explicitly. `inferPolarity` flips to `denied` on the word "no", and a colon
+  // note's findings are full of affirmed negatives ("no masses", "no active
+  // bleeding") that a denial would silently withhold for a narrative control
+  // (certification-exempt, so it would blank green) — the total_time_minutes
+  // scar, one family over. The lists carry L3's stated polarity, defaulting to
+  // `affirmed` for a snapshot captured before the field existed.
+  const procedure = entities.procedure;
+  if (procedure) {
+    // ⚠️ EACH SINGLE SECTION IS A LITERAL add(), NOT A HELPER WITH A CONCEPT
+    // PARAMETER. `gate-159b`'s completeness census reads every emission site in
+    // this file and requires a form it can enumerate (a literal, a template, or a
+    // `fn(` call); a variable would hide the emitted concept from that scan, which
+    // is exactly the "silently unwatched emission site" the census forbids. So the
+    // five singles are spelled out with their literal concepts.
+    //
+    // ⚠️ LATERALITY IS STATED `not_applicable`, NEVER INFERRED — and an
+    // adversarial pass is why. An operative-note section is PROSE with no
+    // laterality axis: a colonoscopy findings list legitimately spans the "right
+    // colon" and the "left colon" in ONE list. Left to `inferLaterality`, those
+    // words assign the facts opposite sides, and `joinListValuedNarrative`
+    // (field-value-derivation.ts) then refuses a list carrying >1 laterality ->
+    // FIELD_CONFLICT -> the WHOLE native operative note is withheld. Measured:
+    // "polyp in the right colon; diverticulosis of the left colon" -> conflict,
+    // document lost. Stating `not_applicable` is the same move the record-derived
+    // and referring-physician facts make; the anatomy stays inside the finding
+    // text where it belongs, never as a discriminating axis on the fact.
+    if (procedure.performed) {
+      add({
+        path: 'procedure.performed',
+        concept: 'procedure.performed',
+        value: procedure.performed.statement,
+        evidence: procedure.performed,
+        defaultTemporality: 'current',
+        polarity: 'affirmed',
+        laterality: 'not_applicable',
+      });
+    }
+    if (procedure.preop_diagnosis) {
+      add({
+        path: 'procedure.preop_diagnosis',
+        concept: 'procedure.preop_diagnosis',
+        value: procedure.preop_diagnosis.statement,
+        evidence: procedure.preop_diagnosis,
+        defaultTemporality: 'current',
+        polarity: 'affirmed',
+        laterality: 'not_applicable',
+      });
+    }
+    if (procedure.consent) {
+      add({
+        path: 'procedure.consent',
+        concept: 'procedure.consent',
+        value: procedure.consent.statement,
+        evidence: procedure.consent,
+        defaultTemporality: 'current',
+        polarity: 'affirmed',
+        laterality: 'not_applicable',
+      });
+    }
+    if (procedure.description) {
+      add({
+        path: 'procedure.description',
+        concept: 'procedure.description',
+        value: procedure.description.statement,
+        evidence: procedure.description,
+        defaultTemporality: 'current',
+        polarity: 'affirmed',
+        laterality: 'not_applicable',
+      });
+    }
+    if (procedure.anesthesia) {
+      add({
+        path: 'procedure.anesthesia',
+        concept: 'procedure.anesthesia',
+        value: procedure.anesthesia.statement,
+        evidence: procedure.anesthesia,
+        defaultTemporality: 'current',
+        polarity: 'affirmed',
+        laterality: 'not_applicable',
+      });
+    }
+    for (const [index, item] of (procedure.findings ?? []).entries()) {
+      add({
+        path: `procedure.findings.${index}.finding`,
+        concept: 'procedure.findings',
+        value: item.finding,
+        evidence: item,
+        defaultTemporality: 'current',
+        polarity: item.polarity ?? 'affirmed',
+        // ⚠️ THE FIX ABOVE — a findings list spans both sides of the colon; a
+        // side inferred from "right colon" / "left colon" would conflict the join
+        // and withhold the whole document.
+        laterality: 'not_applicable',
+      });
+    }
+    for (const [index, item] of (procedure.recommendations ?? []).entries()) {
+      add({
+        path: `procedure.recommendations.${index}.recommendation`,
+        concept: 'procedure.recommendations',
+        value: item.recommendation,
+        evidence: item,
+        defaultTemporality: 'planned',
+        polarity: item.polarity ?? 'affirmed',
+        laterality: 'not_applicable',
+      });
+    }
   }
 
   // ── STRUCTURED MEASUREMENTS -> numeric EncounterFacts ────────────────────

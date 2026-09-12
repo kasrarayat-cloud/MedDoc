@@ -14,9 +14,9 @@ import {
   isRegisteredConcept,
   synonymsFor,
   REGISTRY_CONCEPTS,
+  RECORD_DERIVED_ONLY_CONCEPTS,
   type MappingSourceType,
 } from '../concept-registry';
-import { RECORD_DERIVED_CONCEPTS } from '../visit-metadata';
 import { isUnnamedRosConcept, ROS_SYSTEMS, symptomsFor } from '../ros-lexicon';
 import { withoutPlaceholderOptions } from '../../note-template-docx/placeholder-option';
 import { z } from 'zod';
@@ -218,6 +218,22 @@ export const TEMPLATE_TWIN_CANONICAL_CONCEPT_GUIDANCE = [
   'test.<test_name>.result',
   'assessment',
   'plan',
+  // #319 REGISTRY-2 — the operative-note family's DICTATED concepts, OFFERED so
+  // the proposer can select them (canon 136: a registered-but-unoffered concept
+  // is unmappable, which is precisely why the colon note mis-mapped Findings to
+  // exam.vascular before this ruling). The RECORD-DERIVED members —
+  // procedure.surgeon and visit_metadata.date_of_service / .date_of_birth /
+  // .patient_id / .dictated_at / .transcribed_at — are DELIBERATELY ABSENT,
+  // exactly as patient_name/age are: the compiler decides them from the label
+  // (CONCEPT_LABEL_OVERRIDES) and marks them sourceType 'visit_metadata', so the
+  // proposer is not their route, and refuseRecordDerivedOnNonMetadata is the gate.
+  'procedure.performed',
+  'procedure.preop_diagnosis',
+  'procedure.findings',
+  'procedure.consent',
+  'procedure.description',
+  'procedure.recommendations',
+  'procedure.anesthesia',
 ] as const;
 
 /**
@@ -250,9 +266,11 @@ export function refuseRecordDerivedOnNonMetadata(
 ): string | null {
   if (concept === null || sourceType === 'visit_metadata') return concept;
   const c = concept.trim().toLowerCase();
-  return c === RECORD_DERIVED_CONCEPTS.name || c === RECORD_DERIVED_CONCEPTS.age
-    ? null
-    : concept;
+  // #319 — the whole record/system-derived set now, not just name+age: a model
+  // proposing `procedure.surgeon`, a DOB, an MRN or a service date onto a
+  // clinical control would otherwise print a record value the doctor never
+  // dictated. `referring_physician` is not in the set (it IS dictated).
+  return RECORD_DERIVED_ONLY_CONCEPTS.has(c) ? null : concept;
 }
 
 export interface ProposeSemanticMappingsContext {

@@ -756,21 +756,37 @@ describe('T5 — clinical reads go through the practice-scoped accessor', () => 
     expect(visitByIdScope('v1', p1)).toEqual({ id: 'v1', practiceId: 'prac_1' });
   });
 
-  it('⚠️ #247 — THE PATIENT SELECT IS TWO COLUMNS, and this asserts it', () => {
+  it('⚠️ #247/#319 — THE PATIENT SELECT IS GUARDED (widening is a PHI decision)', () => {
     // ⚠️ THE ALLOWLIST COMMENT CLAIMED THIS AND NOTHING ENFORCED IT — found by
     // a refutation lens. The allowlist is a Record<file, count> and the scanner
     // matches `prisma.<model>.<readMethod>(`; it counts CALL SITES and cannot
-    // see a `select`. Widening the patient read to `mrn`, `insurance` or
-    // `problemList` leaves the count at 3 and every gate green, while the
-    // comment two lines above says such a widening "belongs in a diff someone
-    // reads". A control that describes a guarantee it does not provide is worse
-    // than no control: it is what the next reader checks INSTEAD of the code.
+    // see a `select`. Widening the patient read to `insurance` or `problemList`
+    // leaves the count unchanged and every gate green, while the comment above
+    // says such a widening "belongs in a diff someone reads". A control that
+    // describes a guarantee it does not provide is worse than no control: it is
+    // what the next reader checks INSTEAD of the code.
+    //
+    // ⚠️ #319 REGISTRY-2 WIDENED IT, DELIBERATELY. The operative-note header
+    // prints the patient's MRN (`Patient ID`) and the signing doctor's name
+    // (`Surgeon`), so the PATIENT select gains `mrn` and the read now also reaches
+    // the visit's `signer`/`user` for the clinician NAME. Each is a value ruling
+    // #319 authorised. The guard STAYS — it just pins the new, exact shape, so the
+    // NEXT widening is still a diff someone reads.
     const src = readFileSync(join(process.cwd(), 'src/lib/template-twin/fill-engine.ts'), 'utf8');
-    const read = /prisma\.transcribeVisit\.findFirst\(\{[\s\S]{0,400}?\}\);/.exec(src)?.[0];
-    expect(read, 'the patient read moved or was renamed — re-read #247 before editing this').toBeTruthy();
-    const selected = [...read!.matchAll(/\b(\w+):\s*true\b/g)].map((m) => m[1]).sort();
-    expect(selected, 'the patient select changed shape — a PHI decision, not a refactor')
-      .toEqual(['dateOfBirth', 'name']);
+    const read = /prisma\.transcribeVisit\.findFirst\(\{[\s\S]{0,500}?\}\);/.exec(src)?.[0];
+    expect(read, 'the patient read moved or was renamed — re-read #247/#319 before editing this').toBeTruthy();
+    // The PATIENT columns are PHI: name + DOB, plus the MRN #319 authorised for
+    // the header's `Patient ID` control. Nothing else.
+    const patientSelect = /patient:\s*\{\s*select:\s*\{([^}]*)\}/.exec(read!)?.[1] ?? '';
+    const patientCols = [...patientSelect.matchAll(/\b(\w+):\s*true\b/g)].map((m) => m[1]).sort();
+    expect(patientCols, 'the PATIENT select changed shape — a PHI decision, not a refactor')
+      .toEqual(['dateOfBirth', 'mrn', 'name']);
+    // The clinician (surgeon) read is the signer/author NAME only — a clinician's
+    // name, not patient PHI. #319 forbids reaching for anything else here.
+    const clinicianCols = [...read!.matchAll(/(?:signer|user):\s*\{\s*select:\s*\{([^}]*)\}/g)]
+      .flatMap((m) => [...m[1].matchAll(/\b(\w+):\s*true\b/g)].map((x) => x[1]));
+    expect([...new Set(clinicianCols)].sort(), 'the clinician read widened beyond name')
+      .toEqual(['name']);
   });
 
   it('⚠️ the BRAND is not cast away outside the session boundary', () => {

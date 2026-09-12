@@ -500,6 +500,64 @@ export const ExtractedEntities = z.object({
     })
     .nullable()
     .default(null),
+  /**
+   * #319 REGISTRY-2 — THE OPERATIVE-NOTE FAMILY.
+   *
+   * The clinical body of an operative / procedure note, dictated by the surgeon:
+   * five SINGLE sections plus two that ACCUMULATE (findings, recommendations —
+   * see `field-value-derivation.ts`). `anesthesia` is captured ONLY when a type
+   * was dictated.
+   *
+   * ⚠️ POLARITY IS STATED ON THE LISTS — RULING #319, "polarity stated, never
+   * inferred". A finding is an AFFIRMED observation even when its content is a
+   * negative ("no masses or strictures were seen" is a finding OF no masses); the
+   * projector passes this through explicitly so `inferPolarity` — which flips to
+   * `denied` on the word "no" — can never silently withhold a negatively-worded
+   * finding (the `total_time_minutes` scar, one family over). `denied` is for a
+   * statement the clinician explicitly negates or retracts, and is rare here.
+   *
+   * ⚠️ `.default(null)` / `.default([])` and the object's own `.default({})` are
+   * LOAD-BEARING — canon 133. Without them a key becomes REQUIRED and breaks the
+   * MOCK_AI fixture, the module-load parse, and every resumed job (which CASTS
+   * rather than parses) all at once.
+   */
+  procedure: z
+    .object({
+      performed: liftStringToFact('statement'),
+      preop_diagnosis: liftStringToFact('statement'),
+      consent: liftStringToFact('statement'),
+      description: liftStringToFact('statement'),
+      anesthesia: liftStringToFact('statement'),
+      findings: z
+        .array(
+          z.object({
+            finding: z.string().min(1),
+            polarity: z.enum(['affirmed', 'denied']),
+            evidence_quote: z.string().min(1),
+            speaker: z.string().optional(),
+            timestamp: z.number().nonnegative().optional(),
+          }),
+        )
+        .default([]),
+      recommendations: z
+        .array(
+          z.object({
+            recommendation: z.string().min(1),
+            polarity: z.enum(['affirmed', 'denied']),
+            evidence_quote: z.string().min(1),
+            speaker: z.string().optional(),
+            timestamp: z.number().nonnegative().optional(),
+          }),
+        )
+        .default([]),
+    })
+    // ⚠️ `.nullable().default(null)`, NOT `.default({})` — the `total_time_minutes`
+    // pattern above. A bare `.default({})` fails to typecheck here because the
+    // two list sub-fields make `{}` an incomplete input; a null default sidesteps
+    // it and is semantically identical for the projector, which guards `if
+    // (procedure)`. A non-operative visit yields null and emits nothing.
+    .nullable()
+    .default(null),
 });
 export type ExtractedEntities = z.infer<typeof ExtractedEntities>;
 
@@ -742,6 +800,37 @@ export const COMMON_CATEGORIES = [
   '    do not sum separate durations, and do not infer it from timestamps:',
   '    an unstated total is null, and a guessed one is a billing figure',
   '    nobody said.',
+  '',
+  '- procedure: an OBJECT for an OPERATIVE / PROCEDURE note (a colonoscopy,',
+  '  an endoscopy, a surgical procedure). Omit any sub-field the dictation',
+  '  does not cover; a non-operative visit yields {} (or omit it entirely).',
+  '  Sub-fields:',
+  '    performed:       {statement, evidence_quote, ...} — the procedure that',
+  '                     was performed ("colonoscopy with polypectomy").',
+  '    preop_diagnosis: {statement, evidence_quote, ...} — the pre-operative',
+  '                     (indication) diagnosis.',
+  '    consent:         {statement, evidence_quote, ...} — the consent',
+  '                     statement, when dictated.',
+  '    description:     {statement, evidence_quote, ...} — the narrative of',
+  '                     HOW the procedure was performed.',
+  '    anesthesia:      {statement, evidence_quote, ...} — ONLY when an',
+  '                     anesthesia type is dictated; omit it otherwise.',
+  '    findings:        list of {finding, polarity, evidence_quote, ...} — the',
+  '                     post-procedure findings, ONE ENTRY PER DISTINCT',
+  '                     finding. "a sigmoid polyp, diverticulosis, and normal',
+  '                     mucosa to the cecum" is THREE entries, not one.',
+  '    recommendations: list of {recommendation, polarity, evidence_quote,',
+  '                     ...} — the recommendations / plan, ONE ENTRY PER',
+  '                     DISTINCT recommendation.',
+  '    * polarity (findings and recommendations) is almost always "affirmed":',
+  '      a finding is an observation the surgeon is ASSERTING, even when its',
+  '      content is negative — "no masses were seen" is an AFFIRMED finding OF',
+  '      no masses, and the surgeon wants it printed. Use "denied" ONLY for a',
+  '      statement the clinician explicitly negates or retracts. NEVER read a',
+  '      denial out of the word "no" in the finding itself.',
+  '    * These are the CLINICAL, dictated fields only. Never put a patient',
+  '      name, a date, an MRN or the surgeon\'s own name here — those are read',
+  '      from the record, not dictated.',
 ].join('\n');
 
 function buildConversationPrompt(): { system: string; userPrefix: string } {

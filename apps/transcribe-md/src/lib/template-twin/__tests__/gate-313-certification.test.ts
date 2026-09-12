@@ -295,3 +295,33 @@ describe('#313 — a list item printed twice costs the CERTIFICATE', () => {
     expect(allIds(form.ir).length).toBe(form.ir.fields.length);
   });
 });
+
+describe('#319 — repeated slots whose mappings DIFFER are refused at certification', () => {
+  // ⚠️ AN ADVERSARIAL PASS FOUND THIS FALSE-GREEN. Three slots that share a
+  // bullet-group identity but carry different mappings do NOT distribute — each
+  // accumulates the whole joined list — yet the round-trip cannot see it (no group
+  // forms, so no LIST_ITEM_REPEATED, and fill coverage is blind to distribution).
+  // The certificate would ship a form that prints the whole list in every slot.
+  it('a non-distributing repeated-slot form is BLOCKED at certification', async () => {
+    const members = membersByAlias(form.ir, PMH);
+    const perturbedId = members[1]!.fieldId;
+    // Break bullet-group rule G7 on ONE slot — a different approvedSynonyms is a
+    // compared key. The three no longer group; each PMH slot accumulates the whole
+    // list (no fact matches the extra synonym, so the RESOLUTION is unchanged —
+    // only the mapping identity differs, which is exactly the invisible case).
+    const perturbed = form.mappings.map((mapping) =>
+      mapping.fieldId === perturbedId
+        ? ({ ...mapping, approvedSynonyms: ['past_surgical_history'] } as SemanticMapping)
+        : mapping,
+    );
+    const resolved = resolveAll(form.ir, perturbed, FACTS); // no distribution
+    const stored = await storedProof(form.source, form.ir, perturbed, resolved);
+    const error = await certify(stored);
+    expect(error, 'a non-distributing repeated-slot form certified').not.toBeNull();
+    expect(error!.code).toBe('CERTIFICATION_BLOCKED');
+    expect(
+      error!.blockers?.some((blocker) => /^bulletGroupMappingsDiffer=false/.test(blocker)),
+      `blockers were: ${JSON.stringify(error!.blockers)}`,
+    ).toBe(true);
+  });
+});

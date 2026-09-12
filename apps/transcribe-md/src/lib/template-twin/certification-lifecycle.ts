@@ -32,6 +32,7 @@ import type { TemplateTwinWorkspace } from './client-types';
 import { parseTemplateTwinArtifactKey } from './storage';
 import { canonicalSha256 } from './canonical';
 import { validateTemplateTwin, LIST_ITEM_REPEATED } from './validation';
+import { analyzeBulletGroups } from './bullet-groups';
 
 /** Minimum filled fields a synthetic proof must produce before a template may
  *  certify. Set from what the WM_IOV encounter legitimately supports; raise it
@@ -944,6 +945,39 @@ export async function certifyAndActivateTemplateTwin(input: {
         blockers.push(
           'blankVerification=false (no field was proven blank — the synthetic ' +
             'encounter must leave something unmentioned so blank behaviour is verified)',
+        );
+      }
+
+      // ── #319 — REPEATED SLOTS THAT WILL NOT DISTRIBUTE COST THE CERTIFICATE ──
+      // ⚠️ FOUND BY AN ADVERSARIAL PASS, AND THE ROUND-TRIP CANNOT SEE IT. A set
+      // of controls that share a bullet-group identity (same alias+tag, sole in
+      // its paragraph, one unbroken run, same scaffold — G1–G6) but whose
+      // MAPPINGS differ on any compared key is refused by `analyzeBulletGroups` as
+      // `member_mappings_differ`. Such a form certifies GREEN today: fill coverage
+      // is blind to distribution, and with no group each slot independently
+      // resolves an ACCUMULATING concept to the WHOLE joined list — so every slot
+      // fills (the floor is met) and `LIST_ITEM_REPEATED` never fires (that check
+      // also groups via `bulletGroups`, which has refused). Then at visit time the
+      // note prints the entire findings list into every numbered slot. The safety
+      // of the shipped form must not rest on an operator remembering to equalize
+      // the mappings by hand, so it is blocked HERE — where it costs a certificate,
+      // not a document. The fix is to make the slots' mappings identical, which is
+      // exactly what makes them distribute one item per slot.
+      const mismatchedSlotGroups = analyzeBulletGroups(ir.fields, mappings).refused.filter(
+        (refusal) => refusal.reason === 'member_mappings_differ',
+      );
+      if (mismatchedSlotGroups.length > 0) {
+        const memberCount = mismatchedSlotGroups.reduce(
+          (sum, group) => sum + group.memberFieldIds.length,
+          0,
+        );
+        blockers.push(
+          `bulletGroupMappingsDiffer=false (${memberCount} repeated-slot ` +
+            `control${memberCount === 1 ? '' : 's'} share one slot identity but carry different ` +
+            'mappings, so they will NOT distribute — each would print the whole joined list. Make ' +
+            'the slots’ mappings identical before certifying' +
+            (mismatchedSlotGroups[0]?.key ? ` (first differs on: ${mismatchedSlotGroups[0].key})` : '') +
+            ')',
         );
       }
 
