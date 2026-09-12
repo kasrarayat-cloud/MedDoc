@@ -154,24 +154,33 @@ export default async function NewVisitPage({
   }>;
   // Dedupe by id (a doctor's own certified template can match both OR arms).
   const seenTemplate = new Set<string>();
+  // The set of CERTIFIED template ids in scope — the only templates the fill will
+  // honour. Arm A (the doctor's own rows) carries NO certification filter, so a
+  // doctor's own row that was later DE-CERTIFIED (a mapping edit flips its compiled
+  // version out of CERTIFIED without touching NoteTemplate.status) is still listed;
+  // the default guard below must therefore check CERTIFICATION, not mere listing,
+  // or it would pre-select a template the fill then rejects (adversarial F1).
+  const certifiedIds = new Set<string>();
   const templates = noteFormats
     .filter((t) => (seenTemplate.has(t.id) ? false : (seenTemplate.add(t.id), true)))
-    .map((t) => ({
-      id: t.id,
-      name: t.name,
-      isActive: t.status === 'active',
-    }));
+    .map((t) => {
+      if (t.templateTwinCompiledVersion?.certificationStatus === 'CERTIFIED') {
+        certifiedIds.add(t.id);
+      }
+      return { id: t.id, name: t.name, isActive: t.status === 'active' };
+    });
 
-  // The practice's DEFAULT template (TEMPLATE-CHOICE-1): pre-select it in the
-  // picker when it is set AND still a choosable (certified, in-list) template.
-  // Unset or stale → '' (the per-doctor active-template fallback resolves at
-  // generation, exactly as before).
+  // The practice's DEFAULT template (TEMPLATE-CHOICE-1): pre-select it ONLY when
+  // it is set AND still a CERTIFIED template in scope — the exact condition the
+  // fill honours. A default that was retired or de-certified since it was set
+  // degrades to '' (the per-doctor active-template fallback resolves at
+  // generation), per the schema contract.
   const practice = await prisma.practice.findUnique({
     where: { id: session.user.practiceId },
     select: { defaultNoteTemplateId: true },
   });
   const defaultTemplateId =
-    practice?.defaultNoteTemplateId && seenTemplate.has(practice.defaultNoteTemplateId)
+    practice?.defaultNoteTemplateId && certifiedIds.has(practice.defaultNoteTemplateId)
       ? practice.defaultNoteTemplateId
       : null;
 

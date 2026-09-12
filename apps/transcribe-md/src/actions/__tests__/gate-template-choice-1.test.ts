@@ -110,13 +110,21 @@ describe('TEMPLATE-CHOICE-1 — setPracticeDefaultTemplateAction (OWNER setter)'
   };
 
   it('a non-owner is refused BY NAME, and nothing is written or audited', async () => {
+    // ⚠️ USE THE REAL REFUSAL REASON. requirePracticeAdmin emits exactly
+    // 'ROLE_MAY_NOT_ADMINISTER' (wrong role) or 'UNAUTHENTICATED'
+    // (practice-admin.ts:115,147) — nothing else. The first draft asserted a
+    // fictional 'NOT_PRACTICE_ADMIN' that production can never emit, which made
+    // the arm document a contract that cannot occur (adversarial F5). The action
+    // echoes guard.reason verbatim, so this proves the non-owner refusal is
+    // passed through with a REACHABLE reason and no write/audit happens; the real
+    // guard itself is exercised in gate-admin1-practice-admin.test.ts.
     h.requirePracticeAdmin.mockResolvedValue({
       ok: false,
-      reason: 'NOT_PRACTICE_ADMIN',
+      reason: 'ROLE_MAY_NOT_ADMINISTER',
       message: 'Only a practice owner can do that.',
     });
     const res = await setPracticeDefaultTemplateAction(null, fd('any'));
-    expect(res).toMatchObject({ ok: false, reason: 'NOT_PRACTICE_ADMIN' });
+    expect(res).toMatchObject({ ok: false, reason: 'ROLE_MAY_NOT_ADMINISTER' });
     expect(h.practiceUpdate).not.toHaveBeenCalled();
     expect(h.logAudit).not.toHaveBeenCalled();
   });

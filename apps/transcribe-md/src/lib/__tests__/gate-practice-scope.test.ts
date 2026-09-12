@@ -961,3 +961,48 @@ describe('T5 — clinical reads go through the practice-scoped accessor', () => 
     ).toBe(1);
   });
 });
+
+// ============================================================================
+// #318 (TEMPLATE-CHOICE-1) — THE WIDENED PICKER READ IS PRACTICE-BOUND.
+// ----------------------------------------------------------------------------
+// ⚠️ WHY A DEDICATED ARM, stated as the measurement the adversarial pass made:
+// clinicalReads() classifies a noteTemplate read in a DOCTOR_SCOPE file as
+// "doctor" and SHORT-CIRCUITS before isScoped() ever runs — so deleting
+// `practiceId: session.user.practiceId` from the picker's CERTIFIED OR-arm
+// (page.tsx) leaks every practice's certified templates into the picker and
+// BOTH gate suites stayed 28/28 green (measured). The per-file count tripwire
+// does not fire either (no call site added). This arm closes that hole: the
+// certified picker read MUST carry the practice predicate, so the leak mutation
+// reds here.
+describe('#318 — the certified-template picker read is bound to the practice', () => {
+  const PICKER = 'src/app/visits/new/page.tsx';
+  // src/lib/__tests__ -> src/app/visits/new/page.tsx
+  const src = readFileSync(join(__dirname, '..', '..', 'app', 'visits', 'new', 'page.tsx'), 'utf8');
+
+  it('the CERTIFIED picker arm carries `practiceId: session.user.practiceId`', () => {
+    const certAt = src.indexOf("certificationStatus: 'CERTIFIED'");
+    expect(certAt, `${PICKER}: no CERTIFIED picker arm found`).toBeGreaterThan(-1);
+    // The OR-arm is authored as `{ practiceId: ..., templateTwinCompiledVersion: {
+    // is: { certificationStatus: 'CERTIFIED' } } }`, so the practice predicate is
+    // within a few hundred chars BEFORE the certified filter. Deleting it (the
+    // adversarial leak mutation) removes this match and reds the arm.
+    const window = src.slice(Math.max(0, certAt - 400), certAt);
+    expect(
+      window.includes('practiceId: session.user.practiceId'),
+      `${PICKER}: the CERTIFIED picker arm is not bound to session.user.practiceId — it would list EVERY practice's certified templates`,
+    ).toBe(true);
+  });
+
+  it('the practice-default is honoured only when CERTIFIED (not mere list-membership)', () => {
+    // Adversarial F1: a de-certified own template stays listed (arm A has no cert
+    // filter), so the default guard must check certification, not seenTemplate.
+    expect(
+      src.includes('certifiedIds.has(practice.defaultNoteTemplateId)'),
+      `${PICKER}: the practice-default guard must check the CERTIFIED set, not list-membership`,
+    ).toBe(true);
+    expect(
+      /seenTemplate\.has\(practice\.defaultNoteTemplateId\)/.test(src),
+      `${PICKER}: the default guard still checks seenTemplate (list-membership) — a de-certified default would be pre-selected`,
+    ).toBe(false);
+  });
+});

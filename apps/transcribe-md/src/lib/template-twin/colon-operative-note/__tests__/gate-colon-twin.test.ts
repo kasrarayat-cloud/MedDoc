@@ -16,6 +16,7 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
+import JSZip from 'jszip';
 
 import { compileTemplateDocx } from '../../../note-template-docx/compiler';
 import { inspectDocxPackage } from '../../../note-template-docx/package-security';
@@ -125,11 +126,7 @@ describe('SLICE-0 colon operative-note twin — five additive proofs', () => {
   // never a filled value. Catches a filled document being committed as the twin.
   // (The live no-clinical-data gate `assertTemplateTwinSourcePhiFree` runs again
   // at certification; this is its deterministic build-time counterpart.)
-  it('P5 — carries only blank-form furniture and placeholder prompts, no patient data', () => {
-    const texts = [...COLON_OPERATIVE_NOTE_DOCUMENT_XML.matchAll(/<w:t>([^<]*)<\/w:t>/g)].map(
-      (m) => m[1],
-    );
-    expect(texts.length).toBeGreaterThan(COLON_TWIN_CONTROL_COUNT); // labels + prompts present
+  it('P5 — carries only blank-form furniture and placeholder prompts, no patient data', async () => {
     const allowedLabels = new Set<string>([
       'OPERATIVE NOTE', 'PATIENT NAME:', 'PATIENT DOB:', 'PATIENT ID #:',
       'DATE OF SURGERY:', 'SURGEON:', 'PROCEDURE:', 'PREOPERATIVE DIAGNOSIS:',
@@ -137,10 +134,24 @@ describe('SLICE-0 colon operative-note twin — five additive proofs', () => {
       'RECOMMENDATIONS:', 'Electronically Signed', 'DD:', 'DT:',
       '1.', '2.', '3.',
     ]);
-    for (const t of texts) {
-      const value = t.trim();
-      const ok = value === '' || allowedLabels.has(value) || value.startsWith('Enter ');
-      expect(ok, `unexpected text run (possible patient data): ${JSON.stringify(value)}`).toBe(true);
-    }
+    // ⚠️ MATCH ATTRIBUTED RUNS TOO. `<w:t xml:space="preserve">…</w:t>` is the
+    // standard OOXML serialization for any run carrying significant whitespace,
+    // and an attribute-free-only regex lets a filled value hide in one (adversarial
+    // F2). `<w:t\b[^>]*>` matches both forms; `[\s\S]*?` spans newlines in a value.
+    const scan = (xml: string, where: string) => {
+      const texts = [...xml.matchAll(/<w:t\b[^>]*>([\s\S]*?)<\/w:t>/g)].map((m) => m[1]);
+      expect(texts.length, `${where}: no text runs found`).toBeGreaterThan(COLON_TWIN_CONTROL_COUNT);
+      for (const t of texts) {
+        const value = t.trim();
+        const ok = value === '' || allowedLabels.has(value) || value.startsWith('Enter ');
+        expect(ok, `${where}: unexpected text run (possible patient data): ${JSON.stringify(value)}`).toBe(true);
+      }
+    };
+    // Scan the source constant AND the COMMITTED .docx's document.xml — the latter
+    // is what actually fills notes, so it, not only the source, must be blank.
+    scan(COLON_OPERATIVE_NOTE_DOCUMENT_XML, 'source constant');
+    const zip = await JSZip.loadAsync(artifactBytes());
+    const committedDocXml = await zip.file('word/document.xml')!.async('string');
+    scan(committedDocXml, 'committed .docx document.xml');
   });
 });
