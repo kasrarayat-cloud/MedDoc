@@ -545,12 +545,28 @@ jobs:
         # @meddoc/db imports resolve to the generated @prisma/client; generate
         # reads the schema only (no DATABASE_URL / DB connection required).
         run: npm run db:generate
-      # ⚠️ HOSTED-RUNNER RE-AUDIT (the migration off self-hosted). Some gate
-      # tests resolve `origin/main` in the real repo (the lens-sandbox builder,
-      # the branch-retire guard). A persistent self-hosted clone had it; a hosted
-      # shallow checkout does not. Fetch it as a tracking ref so those tests can
-      # resolve it, exactly as they did on the old runner.
-      - name: Fetch origin/main (gate tests resolve it)
-        run: git fetch --no-tags origin main:refs/remotes/origin/main
+      # ⚠️ HOSTED-RUNNER RE-AUDIT (the migration off self-hosted). Gate tests
+      # read the repo's git state that a persistent self-hosted clone carried and
+      # a fresh hosted checkout does not:
+      #   · the lens-sandbox builder + the branch-retire guard resolve
+      #     `origin/main`;
+      #   · the orphan-branch-sweep gate (F29) enumerates `git branch -r` and
+      #     REFUSES — exit 2, "enumerated N remote branches, which cannot be
+      #     right" — on fewer than 2 remote heads, because a broken enumeration
+      #     and a tidy remote both produce zero.
+      # ⚠️ AND THE FAILURE WAS PUSH-ONLY, WHICH IS THE TELL. A `pull_request`
+      # checkout happens to carry a second remote-tracking ref, so its `git
+      # branch -r` is >= 2 and the gate's positive-control arm passed on every PR
+      # (measured: #1116 unit job green on hosted). A `push`-to-`main` checkout
+      # carries `origin/main` ALONE (the single-ref fetch this step used to do),
+      # so TOTAL=1 and the arm went red on EVERY main-push run after the
+      # migration (fa3a8756, b2f4b495, 0089372b, 4f259440) — a systemic
+      # citation-blocker the migration surfaced, not a flake. The self-hosted
+      # clone had all ~179 heads and never hit it.
+      # Fetch every head as a tracking ref — a strict SUPERSET of `origin/main`,
+      # so the resolve-`origin/main` tests are unaffected and the sweep gate sees
+      # a plausible remote on both events.
+      - name: Fetch remote heads (gate tests read git state)
+        run: git fetch --no-tags origin '+refs/heads/*:refs/remotes/origin/*'
       - name: Run in-scope unit suite (transcribe-md + packages/*)
         run: npm run test:unit -w transcribe-md
