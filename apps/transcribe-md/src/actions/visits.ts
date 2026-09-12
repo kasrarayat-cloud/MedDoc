@@ -87,7 +87,9 @@ const CreateVisitSchema = z.object({
 
 /** Resolve the new-visit template pick into a concrete NoteTemplate id to pin on
  *  the visit, or null to leave active-template resolution to the worker. */
-async function resolveRequestedTemplate(
+// Exported for the TEMPLATE-CHOICE-1 behavioural gate (#318): the pick→id
+// resolution decides which template a visit uses, so it is tested directly.
+export async function resolveRequestedTemplate(
   doctorId: string,
   practiceId: string,
   pick: string | null
