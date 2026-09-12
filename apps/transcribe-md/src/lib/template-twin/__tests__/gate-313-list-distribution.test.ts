@@ -704,7 +704,26 @@ describe('#313 A14 — "insert your default" on an unused bullet (O3)', () => {
     const offer = (c: FieldResolution) =>
       scaffoldDefaultOfferable({ field: bullet3, mapping: { clinicalConcept: 'past_medical_history' }, current: c });
     expect(offer(current)).toBe(false);
-    expect(offer({ ...current, reasonCode: 'fact_not_mentioned' })).toBe(true);
+    // ⚠️ SUPERSEDED BY RULING #316(a) (PANEL-1), 2026-09-11 — NOT weakened.
+    // This bullet's scaffold is "- ____" (helpers-313 `ctl`/`bullets` default),
+    // which is FURNITURE (underscores/dashes/whitespace only). #316(a): never
+    // offer a furniture scaffold as an "insert my default" — its "default" is a
+    // fill-in line, not wording. So the field is now NOT offered even as a plain
+    // blank; the doctor dictates the bullet, they do not insert "- ____". Before
+    // #316(a) this asserted `true`. The slot-unused withdrawal above is
+    // unchanged; #316(a) additionally withdraws the furniture case.
+    expect(offer({ ...current, reasonCode: 'fact_not_mentioned' })).toBe(false);
+    // Positive control: the SAME field with a real (non-furniture) scaffold IS
+    // offered when plain-blank — proving it is the furniture, not the blank
+    // state or the concept, that withdraws the offer.
+    const withWording = { ...bullet3, scaffoldText: 'Hypertension.' };
+    expect(
+      scaffoldDefaultOfferable({
+        field: withWording,
+        mapping: { clinicalConcept: 'past_medical_history' },
+        current: { ...current, reasonCode: 'fact_not_mentioned' },
+      }),
+    ).toBe(true);
   });
 
   it('a default the doctor ALREADY inserted on that bullet still applies', async () => {

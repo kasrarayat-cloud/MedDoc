@@ -130,7 +130,14 @@ export type FillVariant = 'twin' | 'styled';
 // different `insertableDefaults` list (unused bullets are no longer offered).
 // A warm v7 entry would serve the whole-list-on-every-bullet preview for up to
 // the TTL after the draft's IR gains the property.
-const KEY_VERSION = 'v8';
+// ⚠️ v9 — PANEL-1 (b), v7's class a SIXTH time: "the CONTENTS changed and the
+// key did not". `insertableDefaults` is now GROUPED — one entry per distinct
+// `scaffoldText` with `{ labels, fieldIds, insertedFieldIds }` — where it used
+// to be one entry per field. The SHAPE changed too, so a warm v8 entry would
+// also mis-deserialise (a per-field `fieldId`/`label`/`inserted` object has no
+// `fieldIds`), and the panel would read `undefined` where it expects arrays.
+// Bump so no v8 payload is ever handed to the grouped panel.
+const KEY_VERSION = 'v9';
 
 function key(visitId: string, soapVersion: number, variant: FillVariant): string {
   return `visitdoc:${KEY_VERSION}:${variant}:${visitId}:${soapVersion}`;
@@ -146,15 +153,16 @@ export interface CachedFill {
     notMentioned: number;
   } | null;
   /** REVIEW-DEFAULTS item 1 — the blank scaffolded controls this fill found a
-   *  doctor default for. OPTIONAL, because an entry cached before this field
-   *  existed carries none and `undefined` is the honest answer: *we did not
-   *  compute it*, which is different from *there are none*. The surface renders
-   *  nothing rather than an empty panel. */
+   *  doctor default for, PANEL-1 (b) GROUPED by distinct `scaffoldText`.
+   *  OPTIONAL, because an entry cached before this field existed carries none
+   *  and `undefined` is the honest answer: *we did not compute it*, which is
+   *  different from *there are none*. The surface renders nothing rather than an
+   *  empty panel. */
   insertableDefaults?: {
-    fieldId: string;
-    label: string;
     scaffoldText: string;
-    inserted: boolean;
+    labels: string[];
+    fieldIds: string[];
+    insertedFieldIds: string[];
   }[] | null;
   fillSha: string;
   /** The named reason the PDF path was missed, when it was. */

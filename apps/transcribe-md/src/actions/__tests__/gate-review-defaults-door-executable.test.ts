@@ -639,6 +639,107 @@ describe('ROUND FOUR — the door judges the POST-write fill, not the pre-write 
     expect(res.ok, res.error).toBe(true);
     expect(overrideUpsert).toHaveBeenCalledTimes(1);
   });
+
+  // ⚠️ TOKEN-1 (#315) — a scaffold {patient}/{age} the visit record cannot
+  // resolve DECLINES the insert; the fill still renders (the decline is a
+  // non-blocking warning), so a door that trusted render-non-null would write a
+  // false DEFAULT_INSERTED_BY_DOCTOR over a permanently-blank field. The door
+  // must see the CLINICIAN_OVERRIDE_DECLINED(token_unresolvable) warning and
+  // refuse — the "success is a lie" class the adversarial pass found.
+  it('TOKEN-1 — REFUSES a token_unresolvable decline; no row, no audit', async () => {
+    readAndPrepare.mockImplementation((input: Record<string, unknown>) =>
+      Promise.resolve(
+        input.simulateOverrides
+          ? {
+              prepared: {
+                render: { document: new Uint8Array([1, 2, 3]) },
+                manifest: {
+                  fields: [{ ...resolution({}), fieldId: DECOY }, resolution()],
+                  validation: {
+                    issues: [
+                      {
+                        fieldId: FIELD,
+                        code: 'CLINICIAN_OVERRIDE_DECLINED',
+                        severity: 'warning',
+                        message: `A clinician correction to control ${FIELD} was not applied (token_unresolvable:age_input_absent). The control shows the value the evidence resolver derived.`,
+                      },
+                    ],
+                  },
+                },
+              },
+            }
+          : manifest(resolution()),
+      ),
+    );
+    const res = await insert();
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/date of birth/);
+    expect(overrideUpsert, 'a row was stored for an insert that declined').not.toHaveBeenCalled();
+    expect(audit, 'a DEFAULT_INSERTED_BY_DOCTOR was written for a blank field').not.toHaveBeenCalled();
+  });
+
+  // ⚠️ TOKEN-1 (#315) — an UNREGISTERED `{word}` is not substituted, so it would
+  // print its braces into the note. The door scans the simulated inserted value
+  // and refuses. The registered {patient}/{age} case is exercised by the
+  // predicate gate; this is the escape it does not substitute.
+  it('TOKEN-1 — REFUSES an unregistered {word} left in the inserted value', async () => {
+    readAndPrepare.mockImplementation((input: Record<string, unknown>) =>
+      Promise.resolve(
+        input.simulateOverrides
+          ? {
+              prepared: {
+                render: { document: new Uint8Array([1, 2, 3]) },
+                manifest: {
+                  fields: [
+                    { ...resolution({}), fieldId: DECOY },
+                    resolution({
+                      value: 'Seen with MRN {mrn} today.',
+                      status: 'supported',
+                      reasonCode: 'clinician_scaffold_default',
+                    }),
+                  ],
+                  validation: { issues: [] },
+                },
+              },
+            }
+          : manifest(resolution()),
+      ),
+    );
+    const res = await insert();
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/\{mrn\}/);
+    expect(overrideUpsert).not.toHaveBeenCalled();
+  });
+
+  // ⚠️ THE CONTROL — a clean insert (render present, no decline, no residual)
+  // still ADMITS. Without it the two arms above pass for any door that refuses.
+  it('TOKEN-1 CONTROL — a clean scaffold still admits and writes', async () => {
+    readAndPrepare.mockImplementation((input: Record<string, unknown>) =>
+      Promise.resolve(
+        input.simulateOverrides
+          ? {
+              prepared: {
+                render: { document: new Uint8Array([1, 2, 3]) },
+                manifest: {
+                  fields: [
+                    { ...resolution({}), fieldId: DECOY },
+                    resolution({
+                      value: 'No acute findings.',
+                      status: 'supported',
+                      reasonCode: 'clinician_scaffold_default',
+                    }),
+                  ],
+                  validation: { issues: [] },
+                },
+              },
+            }
+          : manifest(resolution()),
+      ),
+    );
+    const res = await insert();
+    expect(res.ok, res.error).toBe(true);
+    expect(overrideUpsert).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('#204 — the door consults the PER-VISIT resolution', () => {

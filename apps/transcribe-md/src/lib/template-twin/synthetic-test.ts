@@ -32,6 +32,8 @@ import type { TemplateTwinActor } from './certification-lifecycle';
 import type { DerivedEncounter } from './verification-encounter';
 import { readTemplateTwinWorkspace } from './workspace-read';
 import { assertTemplateTwinSyntheticEvidencePhiFree } from './synthetic-evidence-gate';
+import { residualPlaceholdersInDocx } from './residual-token-scan';
+import { residualPlaceholders, unregisteredPlaceholders } from './scaffold-text';
 import { docxToTextWithControls } from '@/lib/note-template-parse/docx-content-controls';
 
 /** Injected entity-extraction seam — synthetic-test never imports the worker
@@ -398,6 +400,36 @@ export async function runTemplateTwinSyntheticTest(input: {
   }
 
   const ir = TemplateDocIRSchema.parse(compiled.compiledDocumentIr);
+
+  // ⚠️ TOKEN-1 STATIC GATE — NON-VACUOUS, unlike the rendered-bytes scan below.
+  // The synthetic path inserts NO scaffold default, so scaffolds render blank
+  // and the rendered scan sees no brace. But a scaffold whose TEXT carries an
+  // UNREGISTERED placeholder ({mrn}, {provider}, …) can never be inserted
+  // safely: substitution touches only the closed {patient}/{age} set, so the
+  // brace would print verbatim on a real visit. Refuse to certify such a
+  // template here, where the scaffold text is still visible. A registered token
+  // in a scaffold is fine — it substitutes on insert.
+  const scaffoldTokenOffenders = ir.fields.flatMap((field) => {
+    const bad = unregisteredPlaceholders(field.scaffoldText ?? '');
+    return bad.length > 0 ? [`${field.fieldId}:${bad.join('|')}`] : [];
+  });
+  // ⚠️ And the PRACTICE-DEFAULT channel: the resolver applies mapping.practiceDefault
+  // VERBATIM (resolver/index.ts), never through substitution — so ANY placeholder
+  // there prints its braces, a REGISTERED {patient} included. Scan it with
+  // residualPlaceholders (all placeholders), not unregisteredPlaceholders.
+  const practiceDefaultOffenders = mappings.flatMap((m) => {
+    const bad = residualPlaceholders(m.practiceDefault ?? '');
+    return bad.length > 0 ? [`${m.fieldId}(practiceDefault):${bad.join('|')}`] : [];
+  });
+  const tokenOffenders = [...scaffoldTokenOffenders, ...practiceDefaultOffenders];
+  if (tokenOffenders.length > 0) {
+    throw new TemplateTwinSyntheticTestError(
+      'RESIDUAL_TOKEN',
+      `A placeholder that cannot be filled from the visit record would print its braces: ${tokenOffenders.join(', ')}. A scaffold may use {patient}/{age}; a practice default may use no placeholder at all.`,
+      { residualTokens: tokenOffenders },
+    );
+  }
+
   const encounterMode = input.encounterMode ?? 'text';
   const encounterSha256 = createHash('sha256').update(encounterText).digest('hex');
 
@@ -680,6 +712,24 @@ export async function runTemplateTwinSyntheticTest(input: {
     );
   }
   const render = prepared.render;
+
+  // ⚠️ TOKEN-1 GATE — no brace placeholder may reach the certified document.
+  // The blank-proof machinery only ever tests source/write BYTE-IDENTITY, so a
+  // surviving `{patient}`/`{age}` (or any `{word}`) is invisible to every proof
+  // kind. This scans the rendered bytes across all parts and refuses to certify
+  // a template whose output still carries one. It is content-inspection, which
+  // no proof does.
+  const residualTokens = await residualPlaceholdersInDocx(render.document);
+  if (residualTokens.length > 0) {
+    throw new TemplateTwinSyntheticTestError(
+      'RESIDUAL_TOKEN',
+      `The rendered document still carries unresolved placeholder${
+        residualTokens.length === 1 ? '' : 's'
+      } ${residualTokens.join(', ')}. A scaffold token must be substituted from the visit record or the field must render blank — braces never print.`,
+      { residualTokens },
+    );
+  }
+
   const output = await storage.storeOutputArtifact({
     practiceId: input.actor.practiceId,
     visitId: `synthetic_${compiled.id}`,

@@ -33,6 +33,7 @@ import { TemplateDocIRSchema, type TemplateDocIR } from '@/lib/template-twin/ir'
 import { isWordPlaceholderOption } from '@/lib/note-template-docx/placeholder-option';
 import { SCAFFOLD_INSERTABLE_KINDS } from '@/lib/template-twin/clinician-override';
 import { scaffoldDefaultOfferable } from '@/lib/template-twin/clinician-override';
+import { residualPlaceholders } from '@/lib/template-twin/scaffold-text';
 import type { ProcessTemplateTwinVisitInput } from '@/lib/template-twin/fill-engine';
 import { readAndPrepareTemplateTwinFill } from '@/lib/template-twin/fill-engine';
 
@@ -758,6 +759,46 @@ async function scaffoldDefaultAdmissible(input: {
         return {
           ok: false,
           error: `${field.originalLabel} cannot take a default on this visit — inserting it would stop your form from being produced, so nothing was inserted.`,
+        };
+      }
+      // ⚠️ TOKEN-1 (F-A) — THE INSERT MUST ACTUALLY APPLY, NOT MERELY RENDER.
+      // A `token_unresolvable` decline (a scaffold {patient}/{age} the record
+      // cannot fill — no name, no/implausible DOB) is a NON-BLOCKING warning, so
+      // `after.render` is still produced and the render-null check above passes.
+      // But the field was NOT filled. Without this the door would store the row,
+      // write a DEFAULT_INSERTED_BY_DOCTOR success audit, and return ok:true over
+      // a field that renders blank on every fill — the "success is a lie" class
+      // this door already closed for the other STATIC-forever declines. The
+      // decline surfaces as a CLINICIAN_OVERRIDE_DECLINED warning on the fill
+      // (declinedOverrideIssues); the door refuses when one names this field.
+      const tokenDeclined = (after.manifest.validation?.issues ?? []).some(
+        (i) =>
+          i.code === 'CLINICIAN_OVERRIDE_DECLINED' &&
+          typeof i.message === 'string' &&
+          i.message.includes(fieldId) &&
+          i.message.includes('token_unresolvable'),
+      );
+      if (tokenDeclined) {
+        return {
+          ok: false,
+          error: `${field.originalLabel} could not be completed from this visit — its default needs the patient's name and date of birth on the chart. Add them, or type this field. Nothing was inserted.`,
+        };
+      }
+      // ⚠️ TOKEN-1 (F-B) GATE ON THE REAL PATH (owner ruling: "a brace
+      // placeholder never reaches a rendered document"). Substitution touches
+      // only the CLOSED token set, so an UNREGISTERED `{word}` (e.g. `{mrn}`) is
+      // left verbatim in the inserted value and would print its braces into a
+      // signed note. The cert self-test cannot see this (it never inserts a
+      // scaffold default), so the door scans the SIMULATED inserted value and
+      // refuses to persist an insert that leaves any placeholder standing.
+      const simulatedValue = after.manifest.fields.find((f) => f.fieldId === fieldId)?.value;
+      const residual = residualPlaceholders(
+        typeof simulatedValue === 'string' ? simulatedValue : '',
+      );
+      if (residual.length > 0) {
+        return {
+          ok: false,
+          error: `${field.originalLabel} carries a placeholder (${residual.join(', ')}) that cannot be filled from the record, so nothing was inserted — it would print its braces literally. Edit your form's wording, then try again.`,
         };
       }
     }

@@ -26,7 +26,11 @@ export class TemplateTwinSyntheticTestError extends Error {
      *  nothing was run. ⚠️ Distinct from every code above, which report that a
      *  proof RAN and failed — conflating them would let "we never tested your
      *  form" read as "your form was tested". */
-    | 'ENCOUNTER_NOT_DERIVABLE';
+    | 'ENCOUNTER_NOT_DERIVABLE'
+    /** TOKEN-1. The rendered document still carried a brace placeholder
+     *  ({patient}/{age}/any `{word}`). A scaffold token must be substituted from
+     *  the visit record or the field must render blank — braces never certify. */
+    | 'RESIDUAL_TOKEN';
 
   /** For VALIDATION_FAILED: "<fieldId>:<issueCode>" per blocking check.
    *  For MAPPINGS_NOT_READY: "<fieldId>:<no_mapping|unconfirmed|no_concept>".
@@ -47,15 +51,24 @@ export class TemplateTwinSyntheticTestError extends Error {
    *  `blocking` are the ONLY things about it that may cross to a UI. */
   readonly totalFields: number | null;
 
+  /** For RESIDUAL_TOKEN: the brace placeholders that survived into the rendered
+   *  document. Ids/token literals only — never a filled value. */
+  readonly residualTokens: readonly string[];
+
   constructor(
     code: TemplateTwinSyntheticTestError['code'],
     message: string,
-    detail?: { blocking?: readonly string[]; totalFields?: number },
+    detail?: {
+      blocking?: readonly string[];
+      totalFields?: number;
+      residualTokens?: readonly string[];
+    },
   ) {
     super(message);
     this.name = 'TemplateTwinSyntheticTestError';
     this.code = code;
     this.blocking = detail?.blocking ?? [];
     this.totalFields = detail?.totalFields ?? null;
+    this.residualTokens = detail?.residualTokens ?? [];
   }
 }
