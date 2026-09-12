@@ -17,9 +17,9 @@ import { z } from 'zod';
 
 import prisma from '@meddoc/db';
 
-import { logAudit } from '@/lib/audit';
 import { getSession } from '@/lib/auth';
 import { requirePracticeAdmin, type AdminRefusal } from '@/lib/practice-admin';
+import { updatePractice } from '@/lib/practice-write';
 
 export type DefaultTemplateState =
   | { ok: true; defaultNoteTemplateId: string | null }
@@ -71,25 +71,19 @@ export async function setPracticeDefaultTemplateAction(
     toSet = t.id;
   }
 
-  const before = await prisma.practice.findUnique({
-    where: { id: guard.practiceId },
-    select: { defaultNoteTemplateId: true },
+  // Write through the SINGLE audited practice-update verb (ADMIN-3a) — it reads
+  // before, records from→to, writes, and audits PRACTICE_UPDATED. A no-op (the
+  // default already equals `toSet`) returns `no_change`, which is success here:
+  // the requested state already holds.
+  const result = await updatePractice({
+    practiceId: guard.practiceId,
+    patch: { defaultNoteTemplateId: toSet },
+    actorUserId: guard.actorId,
+    reason: 'set practice default note template (TEMPLATE-CHOICE-1)',
   });
-  await prisma.practice.update({
-    where: { id: guard.practiceId },
-    data: { defaultNoteTemplateId: toSet },
-  });
-
-  await logAudit({
-    action: 'PRACTICE_UPDATED',
-    targetType: 'Practice',
-    targetId: guard.practiceId,
-    metadata: {
-      field: 'defaultNoteTemplateId',
-      from: before?.defaultNoteTemplateId ?? null,
-      to: toSet,
-    },
-  });
+  if (!result.ok && result.reason !== 'no_change') {
+    return { ok: false, reason: 'INVALID', message: `Could not set the default (${result.reason}).` };
+  }
 
   revalidatePath('/settings');
   revalidatePath('/visits/new');

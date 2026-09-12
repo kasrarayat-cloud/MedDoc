@@ -14,24 +14,27 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const h = vi.hoisted(() => ({
   noteTemplateFindFirst: vi.fn(),
-  practiceFindUnique: vi.fn(),
-  practiceUpdate: vi.fn(),
   requirePracticeAdmin: vi.fn(),
   getSession: vi.fn(),
-  logAudit: vi.fn(),
+  updatePractice: vi.fn(),
 }));
 
 vi.mock('@meddoc/db', () => ({
   default: {
     noteTemplate: { findFirst: h.noteTemplateFindFirst },
-    practice: { findUnique: h.practiceFindUnique, update: h.practiceUpdate },
   },
 }));
 vi.mock('@/lib/practice-admin', () => ({
   requirePracticeAdmin: h.requirePracticeAdmin,
 }));
-vi.mock('@/lib/auth', () => ({ getSession: h.getSession }));
-vi.mock('@/lib/audit', () => ({ logAudit: h.logAudit }));
+vi.mock('@/lib/auth', () => ({ getSession: h.getSession, requireSession: h.getSession }));
+// The setter writes through the single audited practice-update verb (ADMIN-3a),
+// not prisma.practice.update directly — so it is mocked here.
+vi.mock('@/lib/practice-write', () => ({ updatePractice: h.updatePractice }));
+// ⚠️ visits.ts (imported for resolveRequestedTemplate) imports @/lib/audit, which
+// pulls @/lib/nextauth -> next-auth -> next/server; stub it so the module graph
+// loads without the auth runtime (the setter no longer uses logAudit directly).
+vi.mock('@/lib/audit', () => ({ logAudit: vi.fn() }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 import { resolveRequestedTemplate } from '../visits';
@@ -125,28 +128,26 @@ describe('TEMPLATE-CHOICE-1 — setPracticeDefaultTemplateAction (OWNER setter)'
     });
     const res = await setPracticeDefaultTemplateAction(null, fd('any'));
     expect(res).toMatchObject({ ok: false, reason: 'ROLE_MAY_NOT_ADMINISTER' });
-    expect(h.practiceUpdate).not.toHaveBeenCalled();
-    expect(h.logAudit).not.toHaveBeenCalled();
+    expect(h.updatePractice).not.toHaveBeenCalled();
   });
 
-  it('an OWNER setting a CERTIFIED-in-practice template writes it and audits old→new', async () => {
+  it('an OWNER setting a CERTIFIED-in-practice template writes it through the audited verb', async () => {
     h.requirePracticeAdmin.mockResolvedValue({ ok: true, actorId: DOCTOR, practiceId: PRACTICE });
     h.noteTemplateFindFirst.mockImplementation(async ({ where }: any) => {
       expect(where.practiceId).toBe(PRACTICE);
       expect(where.templateTwinCompiledVersion).toEqual(CERTIFIED);
       return where.id === 'cert-1' ? { id: 'cert-1' } : null;
     });
-    h.practiceFindUnique.mockResolvedValue({ defaultNoteTemplateId: null });
-    h.practiceUpdate.mockResolvedValue({});
+    h.updatePractice.mockResolvedValue({ ok: true, changed: { defaultNoteTemplateId: { from: null, to: 'cert-1' } } });
     const res = await setPracticeDefaultTemplateAction(null, fd('cert-1'));
     expect(res).toMatchObject({ ok: true, defaultNoteTemplateId: 'cert-1' });
-    expect(h.practiceUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { defaultNoteTemplateId: 'cert-1' } }),
-    );
-    expect(h.logAudit).toHaveBeenCalledWith(
+    // Written through the single audited practice-update verb (ADMIN-3a), which
+    // records from→to and audits PRACTICE_UPDATED — not a direct prisma write.
+    expect(h.updatePractice).toHaveBeenCalledWith(
       expect.objectContaining({
-        action: 'PRACTICE_UPDATED',
-        metadata: expect.objectContaining({ field: 'defaultNoteTemplateId', from: null, to: 'cert-1' }),
+        practiceId: PRACTICE,
+        actorUserId: DOCTOR,
+        patch: { defaultNoteTemplateId: 'cert-1' },
       }),
     );
   });
@@ -156,19 +157,17 @@ describe('TEMPLATE-CHOICE-1 — setPracticeDefaultTemplateAction (OWNER setter)'
     h.noteTemplateFindFirst.mockResolvedValue(null); // not certified in practice
     const res = await setPracticeDefaultTemplateAction(null, fd('not-certified'));
     expect(res).toMatchObject({ ok: false, reason: 'TEMPLATE_NOT_CERTIFIED' });
-    expect(h.practiceUpdate).not.toHaveBeenCalled();
-    expect(h.logAudit).not.toHaveBeenCalled();
+    expect(h.updatePractice).not.toHaveBeenCalled();
   });
 
   it('__clear__ clears the default (no certified lookup needed)', async () => {
     h.requirePracticeAdmin.mockResolvedValue({ ok: true, actorId: DOCTOR, practiceId: PRACTICE });
-    h.practiceFindUnique.mockResolvedValue({ defaultNoteTemplateId: 'cert-1' });
-    h.practiceUpdate.mockResolvedValue({});
+    h.updatePractice.mockResolvedValue({ ok: true, changed: { defaultNoteTemplateId: { from: 'cert-1', to: null } } });
     const res = await setPracticeDefaultTemplateAction(null, fd('__clear__'));
     expect(res).toMatchObject({ ok: true, defaultNoteTemplateId: null });
     expect(h.noteTemplateFindFirst).not.toHaveBeenCalled();
-    expect(h.practiceUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { defaultNoteTemplateId: null } }),
+    expect(h.updatePractice).toHaveBeenCalledWith(
+      expect.objectContaining({ patch: { defaultNoteTemplateId: null } }),
     );
   });
 });
