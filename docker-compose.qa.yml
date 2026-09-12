@@ -91,7 +91,12 @@ services:
       retries: 10
 
   minio:
-    image: minio/minio:latest
+    # ⚠️ quay.io, NOT Docker Hub — the migration to GitHub-hosted CI runners
+    # surfaced Docker Hub's anonymous pull quota on shared hosted IPs: e2e failed
+    # with "pull access denied for minio/minio" while pgvector/redis pulled. MinIO
+    # publishes the same image to quay.io/minio/minio, which has no anonymous
+    # quota. QA/e2e ONLY — the production compose is deliberately untouched.
+    image: quay.io/minio/minio:latest
     restart: "no"
     mem_limit: 256m
     cpus: '0.5'

@@ -1,4 +1,9 @@
 // ============================================================================
+// ⚠️ SUPERSEDED 2026-09-12 — self-hosted retired; this gate now FORBIDS a
+// self-hosted lane (see the describe block below). The historical rationale is
+// KEPT because it explains WHY the shared-box hazard existed and why removing
+// the box removes it — the correction is the point.
+// ----------------------------------------------------------------------------
 // A JOB WITH FIXED-PORT SERVICE CONTAINERS MAY NOT RIDE A SHARED-BOX LANE
 // ----------------------------------------------------------------------------
 // Both self-hosted runners live on the SAME BOX and share its network namespace.
@@ -87,33 +92,32 @@ function jobs(): { file: string; job: string; lane: string; services: boolean }[
  */
 const sharesTheBox = (lane: string) => lane.includes('self-hosted');
 
-describe('CI lanes — fixed-port services stay off the shared lane', () => {
+// ⚠️ SUPERSEDED 2026-09-12 — THE SELF-HOSTED POOL IS RETIRED (owner directive).
+// Every CI lane moved to GitHub-hosted `ubuntu-latest` because the self-hosted
+// `quillmd-ci-light` pool blocked the program three times in two days. The
+// shared-box hazard this gate managed is now GONE by construction: there is no
+// shared box. So the gate is inverted — instead of keeping fixed-port services
+// OFF the self-hosted lane, it now forbids ANY job from riding a self-hosted lane
+// at all, which is the invariant the migration must keep true. If a `self-hosted`
+// lane ever returns, this fails and the shared-box collision (and the outages)
+// are back on the table.
+describe('CI lanes — the self-hosted pool is retired; every lane is GitHub-hosted', () => {
   it('parses a populated set of jobs — the arm is not vacuous', () => {
-    // Without this, a parser that silently matched nothing would pass every
+    // Without this, a parser that silently matched nothing would pass the
     // assertion below by having no jobs to judge.
     const all = jobs();
     expect(all.length).toBeGreaterThan(8);
-    expect(all.filter((j) => sharesTheBox(j.lane)).length).toBeGreaterThan(5);
+    expect(all.filter((j) => j.lane.includes('ubuntu-latest')).length).toBeGreaterThan(5);
     expect(all.filter((j) => j.services).length).toBeGreaterThan(0);
   });
 
-  it('no job on the LIGHT lane declares service containers', () => {
-    const offenders = jobs()
-      .filter((j) => j.lane.includes(LIGHT) && j.services)
-      .map((j) => `${j.file}:${j.job}`);
-    expect(
-      offenders,
-      'two runners share one box — fixed host ports collide when these run concurrently',
-    ).toEqual([]);
-  });
-
-  it('every SELF-HOSTED service-declaring job sits on the serialising lane', () => {
-    // ⚠️ Hosted jobs are excluded BY MECHANISM, not by exemption: each runs on its
-    // own ephemeral VM, so it shares a network namespace with nothing. See the
-    // header — this arm's population is zero today and it is latent, not proven.
-    const misplaced = jobs()
-      .filter((j) => j.services && sharesTheBox(j.lane) && !/quillmd-ci\]/.test(j.lane))
+  it('NO job runs on a self-hosted lane — the retirement is enforced', () => {
+    const onSelfHosted = jobs()
+      .filter((j) => sharesTheBox(j.lane) || j.lane.includes(LIGHT))
       .map((j) => `${j.file}:${j.job} -> ${j.lane.trim()}`);
-    expect(misplaced).toEqual([]);
+    expect(
+      onSelfHosted,
+      'a self-hosted lane returned — the shared-box collision and the runner outages come back with it',
+    ).toEqual([]);
   });
 });
