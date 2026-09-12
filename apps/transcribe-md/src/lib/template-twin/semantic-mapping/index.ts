@@ -218,6 +218,22 @@ export const TEMPLATE_TWIN_CANONICAL_CONCEPT_GUIDANCE = [
   'test.<test_name>.result',
   'assessment',
   'plan',
+  // #319 REGISTRY-2 — the operative-note family's DICTATED concepts, OFFERED so
+  // the proposer can select them (canon 136: a registered-but-unoffered concept
+  // is unmappable, which is precisely why the colon note mis-mapped Findings to
+  // exam.vascular before this ruling). The RECORD-DERIVED members —
+  // procedure.surgeon and visit_metadata.date_of_service / .date_of_birth /
+  // .patient_id / .dictated_at / .transcribed_at — are DELIBERATELY ABSENT,
+  // exactly as patient_name/age are: the compiler decides them from the label
+  // (CONCEPT_LABEL_OVERRIDES) and marks them sourceType 'visit_metadata', so the
+  // proposer is not their route, and refuseRecordDerivedOnNonMetadata is the gate.
+  'procedure.performed',
+  'procedure.preop_diagnosis',
+  'procedure.findings',
+  'procedure.consent',
+  'procedure.description',
+  'procedure.recommendations',
+  'procedure.anesthesia',
 ] as const;
 
 /**

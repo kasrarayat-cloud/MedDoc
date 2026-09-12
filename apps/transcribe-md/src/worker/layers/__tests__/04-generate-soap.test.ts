@@ -111,6 +111,8 @@ function makeInput(overrides: Partial<Layer4Input> = {}): Layer4Input {
       measurements: [],
   spoken_procedure_codes: [],
   total_time_minutes: null,
+      // #319 REGISTRY-2 additive slot; a SOAP fixture has no procedure.
+      procedure: null,
     },
     audioConfidenceStats: null,
     interpreterMode: false,

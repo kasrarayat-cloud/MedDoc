@@ -389,6 +389,46 @@ const NARRATIVE_SENTENCES: ReadonlyMap<string, string> = new Map([
   ],
   ['plan', 'Plan: continue current medications and review again in three months.'],
   ['test.name', 'Test performed: the synthetic example study this form documents.'],
+  // #319 REGISTRY-2 — the operative-note family's DICTATED concepts. The SINGLE
+  // sections get one sentence each; the two LISTS enumerate FOUR distinct items
+  // so the round-trip exercises accumulation and fills every numbered slot on a
+  // three-slot form (3 slots, 4 items -> slots 1,2 one item, slot 3 the
+  // remainder). Values are globally distinct per this table's contract, and
+  // NO name or identifier appears, so the synthetic-evidence privacy gate passes.
+  // The RECORD-DERIVED members (procedure.surgeon, visit_metadata.date_of_service
+  // /.date_of_birth/.patient_id/.dictated_at/.transcribed_at) get NO sentence, for
+  // the same reason patient_name/age do not: a sentence here would certify the
+  // claim that a value read off the record was DICTATED, and would put it in the
+  // manifest. Those controls are honestly blank at certification and fill at visit
+  // time from the record.
+  [
+    'procedure.performed',
+    'Procedure performed: diagnostic colonoscopy with snare polypectomy in this synthetic example.',
+  ],
+  [
+    'procedure.preop_diagnosis',
+    'Preoperative diagnosis: screening for colorectal neoplasia in this synthetic example.',
+  ],
+  [
+    'procedure.consent',
+    'Consent: indication, risks, benefits and alternatives were explained and written informed consent was obtained for this synthetic example.',
+  ],
+  [
+    'procedure.description',
+    'Description of procedure: the scope was advanced to the cecum and slowly withdrawn with careful mucosal inspection throughout this synthetic example.',
+  ],
+  [
+    'procedure.anesthesia',
+    'Anesthesia: monitored anesthesia care with propofol sedation in this synthetic example.',
+  ],
+  [
+    'procedure.findings',
+    'Postoperative findings: first, a five millimetre sessile polyp in the sigmoid colon, removed by snare; second, scattered diverticulosis of the descending colon; third, a single non-bleeding angioectasia in the ascending colon; fourth, otherwise unremarkable mucosa to the cecum.',
+  ],
+  [
+    'procedure.recommendations',
+    'Recommendations: first, surveillance colonoscopy in five years; second, a high-fibre diet with adequate hydration; third, follow up on the polyp histopathology; fourth, return sooner for any rectal bleeding.',
+  ],
 ]);
 
 /** Registry families whose concept slug NAMES its own subject, so the subject

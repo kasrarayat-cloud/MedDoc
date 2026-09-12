@@ -310,6 +310,18 @@ export const ACCUMULATING_NARRATIVE_CONCEPTS: ReadonlySet<string> = new Set([
   'medication',
   'allergy',
 
+  // ⚠️ #319 REGISTRY-2 — THE TWO OPERATIVE-NOTE SECTIONS THAT ACCUMULATE.
+  // A colonoscopy names several findings ("a sigmoid polyp AND scattered
+  // diverticulosis AND normal mucosa to the cecum") and several recommendations
+  // ("repeat surveillance in five years AND a high-fibre diet AND follow the
+  // polyp pathology"). Those are one section holding a LIST, not competing
+  // answers to one slot — exactly the past_medical_history / plan shape above.
+  // The other five procedure.* concepts are SINGLE and are absent here, so a
+  // second `procedure.performed` fact fails closed to FIELD_CONFLICT rather than
+  // silently joining two procedures into one line.
+  'procedure.findings',
+  'procedure.recommendations',
+
   // ⚠️ #159(b) — THE ENTITY-NAMING SUB-CONCEPTS, AND ONLY THOSE **TWO**.
   // A field the doctor maps to `allergy.substance` is an ALLERGY LIST and must
   // accumulate, exactly as a field mapped to bare `allergy` does. Without these

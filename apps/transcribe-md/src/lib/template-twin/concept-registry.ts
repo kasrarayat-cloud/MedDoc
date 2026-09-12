@@ -78,6 +78,45 @@ export const REGISTRY_CONCEPTS: readonly string[] = [
   'visit_metadata.patient_name',
   'visit_metadata.patient_age',
   'visit_metadata.referring_physician',
+
+  /**
+   * #319 REGISTRY-2 — THE OPERATIVE-NOTE FAMILY. Registered as NAMES, never a
+   * `^procedure\.` pattern — the same closed-set safety as visit_metadata above:
+   * a pattern would admit `procedure.<anything>` the day somebody types it. The
+   * set is closed at these eight because the ruling closed it there.
+   *
+   * The clinical body (dictated by the surgeon): performed / preop_diagnosis /
+   * findings / consent / description / recommendations / anesthesia. `findings`
+   * and `recommendations` ACCUMULATE (see field-value-derivation.ts); the rest
+   * are SINGLE. `procedure.surgeon` is RECORD-DERIVED — the signing doctor's
+   * name off the visit record, NOT model-asserted, so #127 holds (the
+   * distinction is enforced by classifyFieldSource + the resolver/validator).
+   */
+  'procedure.performed',
+  'procedure.preop_diagnosis',
+  'procedure.findings',
+  'procedure.consent',
+  'procedure.description',
+  'procedure.recommendations',
+  'procedure.anesthesia',
+  'procedure.surgeon',
+
+  /**
+   * #319 — the visit's date of service, a fourth visit_metadata member. Like the
+   * other record-derived members it is filled from the visit record, never the
+   * model; registered as a NAME for the same closed-set reason.
+   */
+  'visit_metadata.date_of_service',
+  /**
+   * #319 — the patient's date of birth and MRN off the record (each blank with a
+   * named reason when the record has none), and the dictation/transcription
+   * system timestamps. Names, not patterns; all record/system-derived, never
+   * model-asserted.
+   */
+  'visit_metadata.date_of_birth',
+  'visit_metadata.patient_id',
+  'visit_metadata.dictated_at',
+  'visit_metadata.transcribed_at',
 ];
 
 /**

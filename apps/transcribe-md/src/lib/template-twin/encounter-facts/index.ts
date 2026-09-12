@@ -123,6 +123,25 @@ export interface EncounterEntitySnapshot {
     EvidenceSnapshot & { finding: string }
   >;
   plan_discussed?: ReadonlyArray<EvidenceSnapshot & { item: string }>;
+  /**
+   * #319 REGISTRY-2 — the operative-note family. OPTIONAL (canon 133 — every
+   * existing snapshot and fixture builds without it). Polarity is optional HERE
+   * (it is required in the L3 schema's lists) so a snapshot captured before the
+   * field existed still projects; the projector defaults it to `affirmed`.
+   */
+  procedure?: {
+    performed?: (EvidenceSnapshot & { statement: string }) | null;
+    preop_diagnosis?: (EvidenceSnapshot & { statement: string }) | null;
+    consent?: (EvidenceSnapshot & { statement: string }) | null;
+    description?: (EvidenceSnapshot & { statement: string }) | null;
+    anesthesia?: (EvidenceSnapshot & { statement: string }) | null;
+    findings?: ReadonlyArray<
+      EvidenceSnapshot & { finding: string; polarity?: 'affirmed' | 'denied' }
+    >;
+    recommendations?: ReadonlyArray<
+      EvidenceSnapshot & { recommendation: string; polarity?: 'affirmed' | 'denied' }
+    >;
+  } | null;
 }
 
 export interface ProjectEncounterFactsInput {
@@ -989,6 +1008,58 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
       evidence: item,
       defaultTemporality: 'planned',
     });
+  }
+
+  // ── #319 REGISTRY-2 — THE OPERATIVE-NOTE FAMILY ──────────────────────────
+  // Five SINGLE sections and two accumulating lists (findings, recommendations).
+  // ⚠️ POLARITY IS STATED, NEVER INFERRED — every add() below passes it
+  // explicitly. `inferPolarity` flips to `denied` on the word "no", and a colon
+  // note's findings are full of affirmed negatives ("no masses", "no active
+  // bleeding") that a denial would silently withhold for a narrative control
+  // (certification-exempt, so it would blank green) — the total_time_minutes
+  // scar, one family over. The lists carry L3's stated polarity, defaulting to
+  // `affirmed` for a snapshot captured before the field existed.
+  const procedure = entities.procedure;
+  if (procedure) {
+    const emitSingle = (
+      snapshot: (EvidenceSnapshot & { statement: string }) | null | undefined,
+      concept: string,
+    ): void => {
+      if (!snapshot) return;
+      add({
+        path: concept,
+        concept,
+        value: snapshot.statement,
+        evidence: snapshot,
+        defaultTemporality: 'current',
+        polarity: 'affirmed',
+      });
+    };
+    emitSingle(procedure.performed, 'procedure.performed');
+    emitSingle(procedure.preop_diagnosis, 'procedure.preop_diagnosis');
+    emitSingle(procedure.consent, 'procedure.consent');
+    emitSingle(procedure.description, 'procedure.description');
+    emitSingle(procedure.anesthesia, 'procedure.anesthesia');
+    for (const [index, item] of (procedure.findings ?? []).entries()) {
+      add({
+        path: `procedure.findings.${index}.finding`,
+        concept: 'procedure.findings',
+        value: item.finding,
+        evidence: item,
+        defaultTemporality: 'current',
+        polarity: item.polarity ?? 'affirmed',
+      });
+    }
+    for (const [index, item] of (procedure.recommendations ?? []).entries()) {
+      add({
+        path: `procedure.recommendations.${index}.recommendation`,
+        concept: 'procedure.recommendations',
+        value: item.recommendation,
+        evidence: item,
+        defaultTemporality: 'planned',
+        polarity: item.polarity ?? 'affirmed',
+      });
+    }
   }
 
   // ── STRUCTURED MEASUREMENTS -> numeric EncounterFacts ────────────────────
