@@ -121,6 +121,13 @@ while IFS= read -r f; do
     # see "Tracked fixtures" in AGENTS.md. Do not re-flag it.
     "WM IOV Template.docx")                              continue ;;
     "colon_blank_answers.pdf")                           continue ;;
+    # SLICE-0 (#317): the colon OPERATIVE NOTE native DOCX Template Twin, authored
+    # from the blank `colon_blank_answers.pdf` above. A BLANK form — 17 empty
+    # content controls with placeholder prompts, no patient data. Deterministically
+    # built from `colon-operative-note/source.ts` and PINNED (produced once; the
+    # package sha is not reproducible and fieldId is salted by it, so re-emitting
+    # mints a new identity). PACKAGE_SHA256 64aef465d7b9aba5f82329b61bdffeecd4a8b85d9f2026f46a7232e026c8b589.
+    "apps/transcribe-md/src/lib/template-twin/colon-operative-note/colon-operative-note.docx") continue ;;
     # ── ADJUDICATED, NOT ASSUMED — 2026-08-03 ────────────────────────────
     # A 17-page code/logic audit report. READ before it was allowed: title
     # "Comprehensive code/logic/data quality audit — QuillMD pilot readiness",

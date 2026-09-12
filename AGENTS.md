@@ -1157,6 +1157,7 @@ file is fine without checking that list is guessing. As of 2026-07-28 it is:
 |---|---|
 | `WM IOV Template.docx` | the customer's BLANK form — recorded decision, see "Tracked fixtures" |
 | `colon_blank_answers.pdf` | committed blank form |
+| `apps/transcribe-md/src/lib/template-twin/colon-operative-note/colon-operative-note.docx` | SLICE-0 (#317) — the colon OPERATIVE NOTE native DOCX twin authored from the blank above; 17 empty controls, no patient data; pinned |
 | `docs/qa-reports/comprehensive-audit-20260514T030426Z.pdf` | **adjudicated 2026-08-03** — 17-page code/logic audit report, NO clinical content, predates the hook |
 | `apps/transcribe-md/tests/e2e/fixtures/**` | committed E2E fixtures |
 | `apps/transcribe-md/src/**/__tests__/__fixtures__/**` | committed unit fixtures |
