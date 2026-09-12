@@ -9,7 +9,8 @@
 // and reports the outcome. A declined field or a failed proof leaves a
 // NEEDS_CONFIRMATION draft and names the reason — it never half-certifies.
 //
-// Env:  DOCX_PATH  ACTOR_USER  ACTOR_EMAIL  ACTOR_PRACTICE
+// Args (positional; docker exec forwards args, not env):
+//   npx tsx scripts/certify-native-twin.ts <docxPath> <userId> <userEmail> <practiceId>
 // Run inside transcribe-md-worker (has DATABASE_URL, the @/* alias, the image
 // code) via scripts/run-ruled-mutation.sh --in transcribe-md-worker.
 // ============================================================================
@@ -20,19 +21,12 @@ import { createTemplateTwinDraft } from '@/lib/template-twin/create-draft';
 import { runAutoCertifyTwin } from '@/worker/auto-certify-twin-job';
 import prisma from '@meddoc/db';
 
-function req(name: string): string {
-  const v = process.env[name];
-  if (!v) throw new Error(`missing env ${name}`);
-  return v;
-}
-
 async function main() {
-  const docxPath = req('DOCX_PATH');
-  const actor = {
-    userId: req('ACTOR_USER'),
-    userEmail: req('ACTOR_EMAIL'),
-    practiceId: req('ACTOR_PRACTICE'),
-  };
+  const [docxPath, userId, userEmail, practiceId] = process.argv.slice(2);
+  if (!docxPath || !userId || !userEmail || !practiceId) {
+    throw new Error('usage: certify-native-twin.ts <docxPath> <userId> <userEmail> <practiceId>');
+  }
+  const actor = { userId, userEmail, practiceId };
   const source = new Uint8Array(readFileSync(docxPath));
   const sha = createHash('sha256').update(source).digest('hex');
   console.log(`[certify-twin] source ${docxPath} bytes=${source.byteLength} sha256=${sha}`);
