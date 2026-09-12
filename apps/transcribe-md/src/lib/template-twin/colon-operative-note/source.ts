@@ -5,10 +5,25 @@
 // `colon_questions_only.pdf` was not retained — board/PDF-UPLOAD-NOT-RETAINED).
 //
 // Every fillable slot is a Word CONTENT CONTROL (w:sdt) identified by w:alias,
-// which the compiler (`note-template-docx/compiler.ts`) turns into a field. The
-// three Findings and three Recommendations slots deliberately reuse their base
-// label — `fieldId` is salted by structural POSITION, not label, so each of the
-// six compiles to a distinct field.
+// which the compiler (`note-template-docx/compiler.ts`) turns into a field.
+//
+// ⚠️ #319 — THE THREE FINDINGS AND THREE RECOMMENDATIONS SLOTS SHARE ONE
+// IDENTITY ON PURPOSE, SO THEY DISTRIBUTE. Each Findings slot carries the SAME
+// alias ("Findings") AND the same tag ("findings"), and each is ALONE in its
+// paragraph (no leading "N." run). That is exactly what a #313 bullet group
+// requires — shared declared identity (G3), sole-in-paragraph (G4), one unbroken
+// run (G5), same scaffold (G6) — so `distributeListItems` places ONE dictated
+// finding per slot instead of the whole joined list in every slot. `fieldId` is
+// salted by structural POSITION, so the three still compile to distinct fields.
+// (The bullet group also needs its three mappings identical (G7); the certify
+// act pins them, since the model could otherwise propose three slightly
+// different ones for three identical labels.)
+//
+// The visible "1. 2. 3." numbering the earlier draft carried is dropped: a
+// leading number RUN is visible text in the paragraph, which disqualifies the
+// control from being sole-in-paragraph and breaks distribution outright. The
+// slots render as consecutive lines under the section heading — clinically the
+// same numbered list, and the content (one finding per line) is what fills.
 //
 // ⚠️ AUTHORED ONCE, PINNED BY SHA. `fieldId` is salted with the whole-package
 // sha256 and JSZip is not a reproducible-archive writer, so the PACKAGE identity
@@ -27,6 +42,17 @@ function textField(id: number, alias: string, prompt: string): string {
   );
 }
 
+/** A control with a SHARED declared identity — the same `alias` AND `tag` on
+ *  every slot of a numbered section, which is what lets the three join one #313
+ *  bullet group (G3). `alias` still wins as the label source, so `labelSource`
+ *  stays 'alias' and the tag is carried alongside it. */
+function taggedField(id: number, alias: string, tag: string, prompt: string): string {
+  return (
+    `<w:sdt><w:sdtPr><w:id w:val="${id}"/><w:alias w:val="${alias}"/><w:tag w:val="${tag}"/><w:text/></w:sdtPr>` +
+    `<w:sdtContent><w:r><w:t>${prompt}</w:t></w:r></w:sdtContent></w:sdt>`
+  );
+}
+
 function heading(text: string): string {
   return `<w:p><w:r><w:t>${text}</w:t></w:r></w:p>`;
 }
@@ -36,15 +62,21 @@ function labelledLine(label: string, control: string): string {
   return `<w:p><w:r><w:t>${label} </w:t></w:r>${control}</w:p>`;
 }
 
-/** A numbered slot line, e.g. "1. [ ]", inside a numbered section. */
-function numberedSlot(n: number, control: string): string {
-  return `<w:p><w:r><w:t>${n}. </w:t></w:r>${control}</w:p>`;
+/** A bullet slot: the control ALONE in its paragraph (no leading number run), so
+ *  `soleParagraphControlOf` accepts it (G4) and the section's slots distribute
+ *  one dictated item each. A visible "N." run here would break that. */
+function bulletSlot(control: string): string {
+  return `<w:p>${control}</w:p>`;
 }
 
 // The controls, in DOCUMENT ORDER (the order the compiler walks them and the
-// order they are declared below). Aliases mirror the form's field names.
+// order they are declared below), as their compiled labels. `alias` is the label
+// source, so this is the `originalLabel` sequence P1 asserts.
 // LABELS (5) · SECTION BODIES: Procedure/Preop Dx/Consent/Description + DD/DT (6)
-// · NUMBERED SLOTS: Findings 1–3, Recommendations 1–3 (6) = 17 controls.
+// · NUMBERED SLOTS: three "Findings" + three "Recommendations" (6) = 17 controls.
+// ⚠️ THE NUMBERED SLOTS SHARE A LABEL — that is the #313 bullet-group identity
+// (G3), not an accident, so this list carries the repeats. `fieldId` is salted
+// by structural position, so the three still compile to distinct fields.
 // DD/DT print last on the form (after "Electronically Signed"), so they are last
 // in document order even though they are "section bodies" in the owner's list.
 export const COLON_TWIN_ALIASES = [
@@ -57,12 +89,12 @@ export const COLON_TWIN_ALIASES = [
   'Preoperative Diagnosis',
   'Consent',
   'Description of Procedure',
-  'Findings 1',
-  'Findings 2',
-  'Findings 3',
-  'Recommendations 1',
-  'Recommendations 2',
-  'Recommendations 3',
+  'Findings',
+  'Findings',
+  'Findings',
+  'Recommendations',
+  'Recommendations',
+  'Recommendations',
   'DD',
   'DT',
 ] as const;
@@ -90,13 +122,13 @@ export const COLON_OPERATIVE_NOTE_DOCUMENT_XML = `<?xml version="1.0" encoding="
     ${heading('DESCRIPTION OF PROCEDURE:')}
     <w:p>${textField(108, 'Description of Procedure', 'Enter the description of the procedure.')}</w:p>
     ${heading('POSTOPERATIVE FINDINGS:')}
-    ${numberedSlot(1, textField(109, 'Findings 1', 'Enter finding 1.'))}
-    ${numberedSlot(2, textField(110, 'Findings 2', 'Enter finding 2.'))}
-    ${numberedSlot(3, textField(111, 'Findings 3', 'Enter finding 3.'))}
+    ${bulletSlot(taggedField(109, 'Findings', 'findings', 'Enter a finding.'))}
+    ${bulletSlot(taggedField(110, 'Findings', 'findings', 'Enter a finding.'))}
+    ${bulletSlot(taggedField(111, 'Findings', 'findings', 'Enter a finding.'))}
     ${heading('RECOMMENDATIONS:')}
-    ${numberedSlot(1, textField(112, 'Recommendations 1', 'Enter recommendation 1.'))}
-    ${numberedSlot(2, textField(113, 'Recommendations 2', 'Enter recommendation 2.'))}
-    ${numberedSlot(3, textField(114, 'Recommendations 3', 'Enter recommendation 3.'))}
+    ${bulletSlot(taggedField(112, 'Recommendations', 'recommendations', 'Enter a recommendation.'))}
+    ${bulletSlot(taggedField(113, 'Recommendations', 'recommendations', 'Enter a recommendation.'))}
+    ${bulletSlot(taggedField(114, 'Recommendations', 'recommendations', 'Enter a recommendation.'))}
     ${heading('Electronically Signed')}
     ${labelledLine('DD:', textField(115, 'DD', 'Enter the dictation date.'))}
     ${labelledLine('DT:', textField(116, 'DT', 'Enter the transcription date.'))}
