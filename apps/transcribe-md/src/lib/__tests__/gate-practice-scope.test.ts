@@ -479,9 +479,24 @@ const PERSONAL_SCOPE: Record<string, number> = {
  * clinic asset. That is a product decision nobody has made, and it is not T5's
  * to make. Measured 2026-08-06.
  */
+// ⚠️ #318 (TEMPLATE-CHOICE-1) RE-OPENED note_templates FOR CERTIFIED-TEMPLATE
+// CHOICE — a deliberate widening of the doctor-scoped rule above, and this map
+// records it rather than hiding it. A practice may now CHOOSE among its several
+// CERTIFIED templates, so the visit pick-resolution and the picker read
+// note_templates by `practiceId` (filtered to certificationStatus === CERTIFIED,
+// the exact condition the fill honours). Those reads are SCOPED (isScoped sees
+// the explicit `practiceId:`), so the unscoped-read ratchet stays 0 — the
+// re-open did NOT open an unscoped read. What changed is the per-file COUNT, and
+// the count is a tripwire: it moved because a real, ruled read was added, and the
+// move is acknowledged here. The doctor-scoped WRITE (DOCTOR_SCOPED_WRITE) is
+// unchanged — authorship stays per-doctor; only CHOICE became practice-wide.
 const DOCTOR_SCOPE: Record<string, number> = {
   'src/actions/certify-pdf-template.ts': 1,
-  'src/actions/visits.ts': 1,
+  // 1 -> 2 on 2026-09-12 (#318): resolveRequestedTemplate resolves a pick that is
+  // the caller's OWN row (doctor-scoped, read #1) OR a CERTIFIED template in the
+  // caller's PRACTICE (practice-scoped by explicit practiceId + CERTIFIED, read
+  // #2). Read #2 is the TEMPLATE-CHOICE-1 re-open; it is scoped, not unscoped.
+  'src/actions/visits.ts': 2,
   // 4 -> 5 on 2026-08-28: R1's delete fence reads the template by { id, doctorId }
   // before refusing, so a foreign id cannot be probed for its visit count. The
   // sibling `updateMany` in archiveNoteTemplateAction is a WRITE and is counted
