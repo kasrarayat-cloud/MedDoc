@@ -118,23 +118,71 @@ export default async function NewVisitPage({
     ? findSpecialty(mostRecentVisit.specialty).id
     : pickerSpecialties[0].id;
 
-  // The doctor's OWN custom note formats, for the per-visit picker (active first,
-  // then drafts). Empty for the vast majority (no custom template) → the picker
-  // is not rendered and the flow is unchanged.
+  // TEMPLATE-CHOICE-1 (#318): the per-visit picker lists (a) the doctor's OWN
+  // custom formats (active first, then drafts) AND (b) every CERTIFIED template
+  // held by the PRACTICE — so a practice's several certified templates are all
+  // choosable. The CERTIFIED filter is the SAME condition the worker + fill honour
+  // (native-export/fill-engine require certificationStatus === 'CERTIFIED'), so the
+  // list never offers a template the fill would then reject. Empty for the vast
+  // majority (no custom or certified template) → the picker is not rendered and the
+  // flow is unchanged.
   const noteFormats = (await prisma.noteTemplate.findMany({
     where: {
-      doctorId: session.user.id,
       isSystemDefault: false,
-      status: { in: ['active', 'draft'] },
+      OR: [
+        { doctorId: session.user.id, status: { in: ['active', 'draft'] } },
+        {
+          practiceId: session.user.practiceId,
+          templateTwinCompiledVersion: { is: { certificationStatus: 'CERTIFIED' } },
+        },
+      ],
     },
-    select: { id: true, name: true, status: true },
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      doctorId: true,
+      templateTwinCompiledVersion: { select: { certificationStatus: true } },
+    },
     orderBy: [{ status: 'asc' }, { updatedAt: 'desc' }],
-  })) as Array<{ id: string; name: string; status: string }>;
-  const templates = noteFormats.map((t) => ({
-    id: t.id,
-    name: t.name,
-    isActive: t.status === 'active',
-  }));
+  })) as Array<{
+    id: string;
+    name: string;
+    status: string;
+    doctorId: string | null;
+    templateTwinCompiledVersion: { certificationStatus: string } | null;
+  }>;
+  // Dedupe by id (a doctor's own certified template can match both OR arms).
+  const seenTemplate = new Set<string>();
+  // The set of CERTIFIED template ids in scope — the only templates the fill will
+  // honour. Arm A (the doctor's own rows) carries NO certification filter, so a
+  // doctor's own row that was later DE-CERTIFIED (a mapping edit flips its compiled
+  // version out of CERTIFIED without touching NoteTemplate.status) is still listed;
+  // the default guard below must therefore check CERTIFICATION, not mere listing,
+  // or it would pre-select a template the fill then rejects (adversarial F1).
+  const certifiedIds = new Set<string>();
+  const templates = noteFormats
+    .filter((t) => (seenTemplate.has(t.id) ? false : (seenTemplate.add(t.id), true)))
+    .map((t) => {
+      if (t.templateTwinCompiledVersion?.certificationStatus === 'CERTIFIED') {
+        certifiedIds.add(t.id);
+      }
+      return { id: t.id, name: t.name, isActive: t.status === 'active' };
+    });
+
+  // The practice's DEFAULT template (TEMPLATE-CHOICE-1): pre-select it ONLY when
+  // it is set AND still a CERTIFIED template in scope — the exact condition the
+  // fill honours. A default that was retired or de-certified since it was set
+  // degrades to '' (the per-doctor active-template fallback resolves at
+  // generation), per the schema contract.
+  const practice = await prisma.practice.findUnique({
+    where: { id: session.user.practiceId },
+    select: { defaultNoteTemplateId: true },
+  });
+  const defaultTemplateId =
+    practice?.defaultNoteTemplateId && certifiedIds.has(practice.defaultNoteTemplateId)
+      ? practice.defaultNoteTemplateId
+      : null;
 
   // \u2500\u2500 C3 calm "just start" create flow (flag-gated) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   // SKIN-ONLY: identical auth + patient-scope reads + defaultSpecialty above.
@@ -160,6 +208,7 @@ export default async function NewVisitPage({
           specialties={pickerSpecialties}
           defaultSpecialty={defaultSpecialty}
           templates={templates}
+          defaultTemplateId={defaultTemplateId ?? undefined}
         />
       </AppFrame>
     );
@@ -193,6 +242,7 @@ export default async function NewVisitPage({
           specialties={pickerSpecialties}
           defaultSpecialty={defaultSpecialty}
           templates={templates}
+          defaultTemplateId={defaultTemplateId ?? undefined}
         />
       </div>
     </AppFrame>

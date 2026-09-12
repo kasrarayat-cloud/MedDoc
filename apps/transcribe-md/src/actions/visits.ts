@@ -87,8 +87,11 @@ const CreateVisitSchema = z.object({
 
 /** Resolve the new-visit template pick into a concrete NoteTemplate id to pin on
  *  the visit, or null to leave active-template resolution to the worker. */
-async function resolveRequestedTemplate(
+// Exported for the TEMPLATE-CHOICE-1 behavioural gate (#318): the pick→id
+// resolution decides which template a visit uses, so it is tested directly.
+export async function resolveRequestedTemplate(
   doctorId: string,
+  practiceId: string,
   pick: string | null
 ): Promise<string | null> {
   if (!pick) return null; // 'auto' → worker resolves the active format at generation
@@ -99,12 +102,30 @@ async function resolveRequestedTemplate(
     });
     return sys?.id ?? null;
   }
-  // A specific format — must be the caller's own row (never another doctor's).
+  // The caller's OWN row (any status) resolves, exactly as before — a doctor may
+  // still pick their own draft to test it.
   const owned = await prisma.noteTemplate.findFirst({
     where: { id: pick, doctorId },
     select: { id: true },
   });
-  return owned?.id ?? null;
+  if (owned) return owned.id;
+  // TEMPLATE-CHOICE-1 (#318): a specific pick may also be a CERTIFIED template
+  // held by the caller's PRACTICE (not their own). This re-opens the doctor-scoped
+  // note_templates ruling for certified-template CHOICE only, and is scoped to the
+  // EXACT condition the worker + fill honour (native-export.ts:275,
+  // fill-engine.ts:582 require certificationStatus === 'CERTIFIED'), so the picker,
+  // the persist pin, and the fill never disagree about what is choosable. A pick
+  // that is neither the caller's own row nor a practice-certified template resolves
+  // to null (auto) — never to a co-tenant's DRAFT or another practice's row.
+  const practiceCertified = await prisma.noteTemplate.findFirst({
+    where: {
+      id: pick,
+      practiceId,
+      templateTwinCompiledVersion: { is: { certificationStatus: 'CERTIFIED' } },
+    },
+    select: { id: true },
+  });
+  return practiceCertified?.id ?? null;
 }
 
 /** Resolve the (patientId, patientName) pair into a real TranscribeMdPatient.
@@ -203,6 +224,7 @@ export async function createVisitAction(formData: FormData): Promise<void> {
 
   const requestedTemplateId = await resolveRequestedTemplate(
     session.user.id,
+    session.user.practiceId,
     parsed.data.noteTemplateId ?? null
   );
 

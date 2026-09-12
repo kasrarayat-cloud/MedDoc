@@ -1,0 +1,12 @@
+-- TEMPLATE-CHOICE-1 (#318) — the practice's DEFAULT note template.
+--
+-- A practice may hold several CERTIFIED templates; the visit picker defaults to
+-- the practice default and the choice is recorded on the visit. This adds the
+-- nullable id column that holds that default.
+--
+-- Nullable and NOT a foreign key: a template can be retired or re-issued, and
+-- this must degrade to the per-doctor fallback resolution rather than block or
+-- cascade. The reader validates the id is still a CERTIFIED template in this
+-- practice before honouring it. Additive and reversible (unlike an enum value):
+-- DROP COLUMN restores the prior shape.
+ALTER TABLE "practices" ADD COLUMN "defaultNoteTemplateId" TEXT;

@@ -1,0 +1,173 @@
+// ============================================================================
+// TEMPLATE-CHOICE-1 (#318) — behavioural gate.
+// ----------------------------------------------------------------------------
+// Two security-relevant surfaces:
+//   1. resolveRequestedTemplate — which template a VISIT uses. A pick resolves
+//      to the caller's OWN row OR a CERTIFIED template in the caller's PRACTICE,
+//      and to NOTHING ELSE (never a co-tenant's draft, never another practice's
+//      row). The practice arm uses the EXACT predicate the fill honours.
+//   2. setPracticeDefaultTemplateAction — OWNER-gated, validates certified-in-
+//      practice, audits, and refuses by name otherwise.
+// Each arm plants the OPPOSITE case so a vacuous pass cannot hide a leak.
+// ============================================================================
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+const h = vi.hoisted(() => ({
+  noteTemplateFindFirst: vi.fn(),
+  requirePracticeAdmin: vi.fn(),
+  getSession: vi.fn(),
+  updatePractice: vi.fn(),
+}));
+
+vi.mock('@meddoc/db', () => ({
+  default: {
+    noteTemplate: { findFirst: h.noteTemplateFindFirst },
+  },
+}));
+vi.mock('@/lib/practice-admin', () => ({
+  requirePracticeAdmin: h.requirePracticeAdmin,
+}));
+vi.mock('@/lib/auth', () => ({ getSession: h.getSession, requireSession: h.getSession }));
+// The setter writes through the single audited practice-update verb (ADMIN-3a),
+// not prisma.practice.update directly — so it is mocked here.
+vi.mock('@/lib/practice-write', () => ({ updatePractice: h.updatePractice }));
+// ⚠️ visits.ts (imported for resolveRequestedTemplate) imports @/lib/audit, which
+// pulls @/lib/nextauth -> next-auth -> next/server; stub it so the module graph
+// loads without the auth runtime (the setter no longer uses logAudit directly).
+vi.mock('@/lib/audit', () => ({ logAudit: vi.fn() }));
+vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
+
+import { resolveRequestedTemplate } from '../visits';
+import { setPracticeDefaultTemplateAction } from '../practice-template-default';
+
+const DOCTOR = 'doc-1';
+const PRACTICE = 'prac-1';
+const CERTIFIED = { is: { certificationStatus: 'CERTIFIED' } };
+
+/** Model the DB: `own` = the doctor's own rows; `practiceCertified` = CERTIFIED
+ *  rows in the practice. Everything else (co-tenant drafts, other practices) is
+ *  absent, i.e. neither query matches. */
+function seedDb(opts: { own?: Set<string>; practiceCertified?: Set<string> }) {
+  h.noteTemplateFindFirst.mockImplementation(async ({ where }: any) => {
+    if (where.doctorId !== undefined) {
+      return opts.own?.has(where.id) ? { id: where.id } : null;
+    }
+    if (where.practiceId !== undefined) {
+      // The practice arm MUST carry the CERTIFIED predicate — assert it, so a
+      // future edit that drops the filter (widening to any practice template)
+      // fails here rather than silently shipping.
+      expect(where.templateTwinCompiledVersion).toEqual(CERTIFIED);
+      return opts.practiceCertified?.has(where.id) ? { id: where.id } : null;
+    }
+    if (where.isSystemDefault) return { id: 'sys-default' };
+    return null;
+  });
+}
+
+describe('TEMPLATE-CHOICE-1 — resolveRequestedTemplate (the visit pick)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('null and empty → null (worker resolves the active format)', async () => {
+    seedDb({});
+    expect(await resolveRequestedTemplate(DOCTOR, PRACTICE, null)).toBeNull();
+  });
+
+  it("__default__ → the system default id", async () => {
+    seedDb({});
+    expect(await resolveRequestedTemplate(DOCTOR, PRACTICE, '__default__')).toBe('sys-default');
+  });
+
+  it("the caller's OWN row resolves (any status) — unchanged behaviour", async () => {
+    seedDb({ own: new Set(['own-draft']) });
+    expect(await resolveRequestedTemplate(DOCTOR, PRACTICE, 'own-draft')).toBe('own-draft');
+  });
+
+  it("a co-tenant's CERTIFIED template in the practice resolves (the #318 widening)", async () => {
+    seedDb({ practiceCertified: new Set(['cotenant-certified']) });
+    expect(await resolveRequestedTemplate(DOCTOR, PRACTICE, 'cotenant-certified')).toBe(
+      'cotenant-certified',
+    );
+  });
+
+  it("a co-tenant's NON-certified template does NOT resolve → null (auto)", async () => {
+    // Present as neither own nor practice-certified → both queries miss.
+    seedDb({ own: new Set(['own-draft']), practiceCertified: new Set(['cotenant-certified']) });
+    expect(await resolveRequestedTemplate(DOCTOR, PRACTICE, 'cotenant-DRAFT')).toBeNull();
+  });
+
+  it('another practice’s certified template does NOT resolve → null', async () => {
+    // It would be certified in ITS practice, but our practice query is scoped to
+    // PRACTICE, so it is absent here.
+    seedDb({ practiceCertified: new Set(['ours-only']) });
+    expect(await resolveRequestedTemplate(DOCTOR, PRACTICE, 'foreign-practice-certified')).toBeNull();
+  });
+});
+
+describe('TEMPLATE-CHOICE-1 — setPracticeDefaultTemplateAction (OWNER setter)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const fd = (templateId: string) => {
+    const f = new FormData();
+    f.set('templateId', templateId);
+    return f;
+  };
+
+  it('a non-owner is refused BY NAME, and nothing is written or audited', async () => {
+    // ⚠️ USE THE REAL REFUSAL REASON. requirePracticeAdmin emits exactly
+    // 'ROLE_MAY_NOT_ADMINISTER' (wrong role) or 'UNAUTHENTICATED'
+    // (practice-admin.ts:115,147) — nothing else. The first draft asserted a
+    // fictional 'NOT_PRACTICE_ADMIN' that production can never emit, which made
+    // the arm document a contract that cannot occur (adversarial F5). The action
+    // echoes guard.reason verbatim, so this proves the non-owner refusal is
+    // passed through with a REACHABLE reason and no write/audit happens; the real
+    // guard itself is exercised in gate-admin1-practice-admin.test.ts.
+    h.requirePracticeAdmin.mockResolvedValue({
+      ok: false,
+      reason: 'ROLE_MAY_NOT_ADMINISTER',
+      message: 'Only a practice owner can do that.',
+    });
+    const res = await setPracticeDefaultTemplateAction(null, fd('any'));
+    expect(res).toMatchObject({ ok: false, reason: 'ROLE_MAY_NOT_ADMINISTER' });
+    expect(h.updatePractice).not.toHaveBeenCalled();
+  });
+
+  it('an OWNER setting a CERTIFIED-in-practice template writes it through the audited verb', async () => {
+    h.requirePracticeAdmin.mockResolvedValue({ ok: true, actorId: DOCTOR, practiceId: PRACTICE });
+    h.noteTemplateFindFirst.mockImplementation(async ({ where }: any) => {
+      expect(where.practiceId).toBe(PRACTICE);
+      expect(where.templateTwinCompiledVersion).toEqual(CERTIFIED);
+      return where.id === 'cert-1' ? { id: 'cert-1' } : null;
+    });
+    h.updatePractice.mockResolvedValue({ ok: true, changed: { defaultNoteTemplateId: { from: null, to: 'cert-1' } } });
+    const res = await setPracticeDefaultTemplateAction(null, fd('cert-1'));
+    expect(res).toMatchObject({ ok: true, defaultNoteTemplateId: 'cert-1' });
+    // Written through the single audited practice-update verb (ADMIN-3a), which
+    // records from→to and audits PRACTICE_UPDATED — not a direct prisma write.
+    expect(h.updatePractice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        practiceId: PRACTICE,
+        actorUserId: DOCTOR,
+        patch: { defaultNoteTemplateId: 'cert-1' },
+      }),
+    );
+  });
+
+  it('an OWNER picking an UNCERTIFIED template is refused; nothing is written', async () => {
+    h.requirePracticeAdmin.mockResolvedValue({ ok: true, actorId: DOCTOR, practiceId: PRACTICE });
+    h.noteTemplateFindFirst.mockResolvedValue(null); // not certified in practice
+    const res = await setPracticeDefaultTemplateAction(null, fd('not-certified'));
+    expect(res).toMatchObject({ ok: false, reason: 'TEMPLATE_NOT_CERTIFIED' });
+    expect(h.updatePractice).not.toHaveBeenCalled();
+  });
+
+  it('__clear__ clears the default (no certified lookup needed)', async () => {
+    h.requirePracticeAdmin.mockResolvedValue({ ok: true, actorId: DOCTOR, practiceId: PRACTICE });
+    h.updatePractice.mockResolvedValue({ ok: true, changed: { defaultNoteTemplateId: { from: 'cert-1', to: null } } });
+    const res = await setPracticeDefaultTemplateAction(null, fd('__clear__'));
+    expect(res).toMatchObject({ ok: true, defaultNoteTemplateId: null });
+    expect(h.noteTemplateFindFirst).not.toHaveBeenCalled();
+    expect(h.updatePractice).toHaveBeenCalledWith(
+      expect.objectContaining({ patch: { defaultNoteTemplateId: null } }),
+    );
+  });
+});

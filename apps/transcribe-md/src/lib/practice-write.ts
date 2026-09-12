@@ -35,13 +35,25 @@ import { logAudit } from './audit';
  * ordinary practice-update verb should be able to touch on the way past, and
  * adding it is its own decision with its own declaration.
  */
-export const PRACTICE_WRITABLE_FIELDS = ['name', 'slug', 'isActive'] as const;
+// ⚠️ `defaultNoteTemplateId` ADDED 2026-09-12 (#318, TEMPLATE-CHOICE-1) — its own
+// declared decision, like the note above about retention columns. Unlike those it
+// is benign (a pointer to the practice's default note template, or NULL to clear;
+// it destroys nothing on write), and it must go through THIS verb so it is audited
+// and so the practice-write population stays pinned at three files (ADMIN-3a). The
+// caller validates the id is a CERTIFIED template in the practice before setting it.
+export const PRACTICE_WRITABLE_FIELDS = [
+  'name',
+  'slug',
+  'isActive',
+  'defaultNoteTemplateId',
+] as const;
 export type PracticeWritableField = (typeof PRACTICE_WRITABLE_FIELDS)[number];
 
 export type PracticePatch = Partial<{
   name: string;
   slug: string;
   isActive: boolean;
+  defaultNoteTemplateId: string | null;
 }>;
 
 export type PracticeWriteResult =
@@ -113,7 +125,7 @@ export async function updatePractice(args: {
 
   const before = await prisma.practice.findUnique({
     where: { id: args.practiceId },
-    select: { id: true, name: true, slug: true, isActive: true },
+    select: { id: true, name: true, slug: true, isActive: true, defaultNoteTemplateId: true },
   });
   if (!before) return { ok: false, reason: 'not_found', detail: args.practiceId };
 

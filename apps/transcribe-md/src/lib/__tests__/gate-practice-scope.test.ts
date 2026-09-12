@@ -479,9 +479,24 @@ const PERSONAL_SCOPE: Record<string, number> = {
  * clinic asset. That is a product decision nobody has made, and it is not T5's
  * to make. Measured 2026-08-06.
  */
+// ⚠️ #318 (TEMPLATE-CHOICE-1) RE-OPENED note_templates FOR CERTIFIED-TEMPLATE
+// CHOICE — a deliberate widening of the doctor-scoped rule above, and this map
+// records it rather than hiding it. A practice may now CHOOSE among its several
+// CERTIFIED templates, so the visit pick-resolution and the picker read
+// note_templates by `practiceId` (filtered to certificationStatus === CERTIFIED,
+// the exact condition the fill honours). Those reads are SCOPED (isScoped sees
+// the explicit `practiceId:`), so the unscoped-read ratchet stays 0 — the
+// re-open did NOT open an unscoped read. What changed is the per-file COUNT, and
+// the count is a tripwire: it moved because a real, ruled read was added, and the
+// move is acknowledged here. The doctor-scoped WRITE (DOCTOR_SCOPED_WRITE) is
+// unchanged — authorship stays per-doctor; only CHOICE became practice-wide.
 const DOCTOR_SCOPE: Record<string, number> = {
   'src/actions/certify-pdf-template.ts': 1,
-  'src/actions/visits.ts': 1,
+  // 1 -> 2 on 2026-09-12 (#318): resolveRequestedTemplate resolves a pick that is
+  // the caller's OWN row (doctor-scoped, read #1) OR a CERTIFIED template in the
+  // caller's PRACTICE (practice-scoped by explicit practiceId + CERTIFIED, read
+  // #2). Read #2 is the TEMPLATE-CHOICE-1 re-open; it is scoped, not unscoped.
+  'src/actions/visits.ts': 2,
   // 4 -> 5 on 2026-08-28: R1's delete fence reads the template by { id, doctorId }
   // before refusing, so a foreign id cannot be probed for its visit count. The
   // sibling `updateMany` in archiveNoteTemplateAction is a WRITE and is counted
@@ -944,5 +959,50 @@ describe('T5 — clinical reads go through the practice-scoped accessor', () => 
       [...stripComments(url).matchAll(re)].length,
       'a read after a URL literal was swallowed — the stripper treats // in a string as a comment',
     ).toBe(1);
+  });
+});
+
+// ============================================================================
+// #318 (TEMPLATE-CHOICE-1) — THE WIDENED PICKER READ IS PRACTICE-BOUND.
+// ----------------------------------------------------------------------------
+// ⚠️ WHY A DEDICATED ARM, stated as the measurement the adversarial pass made:
+// clinicalReads() classifies a noteTemplate read in a DOCTOR_SCOPE file as
+// "doctor" and SHORT-CIRCUITS before isScoped() ever runs — so deleting
+// `practiceId: session.user.practiceId` from the picker's CERTIFIED OR-arm
+// (page.tsx) leaks every practice's certified templates into the picker and
+// BOTH gate suites stayed 28/28 green (measured). The per-file count tripwire
+// does not fire either (no call site added). This arm closes that hole: the
+// certified picker read MUST carry the practice predicate, so the leak mutation
+// reds here.
+describe('#318 — the certified-template picker read is bound to the practice', () => {
+  const PICKER = 'src/app/visits/new/page.tsx';
+  // src/lib/__tests__ -> src/app/visits/new/page.tsx
+  const src = readFileSync(join(__dirname, '..', '..', 'app', 'visits', 'new', 'page.tsx'), 'utf8');
+
+  it('the CERTIFIED picker arm carries `practiceId: session.user.practiceId`', () => {
+    const certAt = src.indexOf("certificationStatus: 'CERTIFIED'");
+    expect(certAt, `${PICKER}: no CERTIFIED picker arm found`).toBeGreaterThan(-1);
+    // The OR-arm is authored as `{ practiceId: ..., templateTwinCompiledVersion: {
+    // is: { certificationStatus: 'CERTIFIED' } } }`, so the practice predicate is
+    // within a few hundred chars BEFORE the certified filter. Deleting it (the
+    // adversarial leak mutation) removes this match and reds the arm.
+    const window = src.slice(Math.max(0, certAt - 400), certAt);
+    expect(
+      window.includes('practiceId: session.user.practiceId'),
+      `${PICKER}: the CERTIFIED picker arm is not bound to session.user.practiceId — it would list EVERY practice's certified templates`,
+    ).toBe(true);
+  });
+
+  it('the practice-default is honoured only when CERTIFIED (not mere list-membership)', () => {
+    // Adversarial F1: a de-certified own template stays listed (arm A has no cert
+    // filter), so the default guard must check certification, not seenTemplate.
+    expect(
+      src.includes('certifiedIds.has(practice.defaultNoteTemplateId)'),
+      `${PICKER}: the practice-default guard must check the CERTIFIED set, not list-membership`,
+    ).toBe(true);
+    expect(
+      /seenTemplate\.has\(practice\.defaultNoteTemplateId\)/.test(src),
+      `${PICKER}: the default guard still checks seenTemplate (list-membership) — a de-certified default would be pre-selected`,
+    ).toBe(false);
   });
 });
