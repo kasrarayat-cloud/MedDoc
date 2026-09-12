@@ -207,6 +207,34 @@ describe('#319 — withOperativeRecordFacts', () => {
     expect(facts.find((f) => f.concept === 'procedure.surgeon')?.value).toBe('Dr. Someone Else');
   });
 
+  it('refuses a boolean (checkbox) mapping — a record value must never tick a box', () => {
+    // ⚠️ THE #247 CHECKBOX MISATTRIBUTION, ONE FAMILY OVER — found by an
+    // adversarial pass. The resolver's checkbox arm reads polarity and discards
+    // the value; without the kind wall, a certified boolean "Surgeon" mapping
+    // (reachable via restore/hand-edit) would render ☒ with the doctor's name
+    // thrown away and the manifest attributing the tick to the record.
+    const facts = withOperativeRecordFacts({
+      fields: [field(SURGEON_ID, 'Surgeon')],
+      mappings: [mapping(SURGEON_ID, 'procedure.surgeon', { expectedDataType: 'boolean' })],
+      facts: [],
+      record: RECORD,
+      visitDate: VISIT,
+    });
+    expect(facts).toEqual([]);
+  });
+
+  it('fills a date-kind control — DOB / service date are legitimately date-typed', () => {
+    const facts = withOperativeRecordFacts({
+      fields: [field(DOB_ID, 'Patient DOB')],
+      mappings: [mapping(DOB_ID, 'visit_metadata.date_of_birth', { expectedDataType: 'date' })],
+      facts: [],
+      record: RECORD,
+      visitDate: VISIT,
+    });
+    expect(facts).toHaveLength(1);
+    expect(facts[0]!.value).toBe('1971-04-08');
+  });
+
   it('ignores mappings that are not certified visit_metadata', () => {
     const facts = withOperativeRecordFacts({
       fields: [field(MRN_ID, 'Patient ID'), field(DOB_ID, 'Patient DOB')],

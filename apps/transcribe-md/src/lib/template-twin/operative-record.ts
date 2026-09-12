@@ -50,6 +50,25 @@ import { visitDateToIso } from './procedure-date';
 
 const ANCHOR = 'operative-record-metadata';
 
+/**
+ * ⚠️ THE SECOND WALL, THE SAME ONE `withVisitMetadataFacts` CARRIES (#247) — and
+ * an adversarial pass caught its ABSENCE here. A record-derived fact is minted
+ * `polarity: 'affirmed'`, and the resolver's CHECKBOX arm reads polarity and
+ * DISCARDS the value: a `boolean` mapping labelled "Surgeon" would render ☒ with
+ * the doctor's name thrown away — the #247 misattribution, one family over. A
+ * certified mapping is DATA (restored, hand-editable) and `classifyFieldSource`
+ * does not re-run at fill time, so the injector is the only guard. Prose (`text`)
+ * prints the value; a `number` and a `date` carry it too — the header's DOB /
+ * service date / DD / DT are legitimately `date`-kind on some forms, which is why
+ * this set is WIDER than the sibling's `{text,number}`. `boolean` and the
+ * enumerated types are excluded: nothing selects a name or an MRN from them.
+ */
+const RECORD_DERIVABLE_DATA_TYPES: ReadonlySet<string> = new Set([
+  'text',
+  'number',
+  'date',
+]);
+
 /** The visit-record values this module may read. Every field optional — a null
  *  or absent value renders the control blank (with a named reason where the
  *  record was present and the value was not). */
@@ -197,6 +216,8 @@ export function withOperativeRecordFacts(input: {
     if (!fieldIds.has(mapping.fieldId)) continue;
     if (mapping.sourceType !== 'visit_metadata') continue;
     if (mapping.status !== 'certified') continue;
+    // ⚠️ THE KIND WALL — a checkbox cannot carry a name or a date; see above.
+    if (!RECORD_DERIVABLE_DATA_TYPES.has(mapping.expectedDataType)) continue;
     const rawConcept = mapping.clinicalConcept;
     if (!rawConcept) continue;
     const concept = normalizeConcept(rawConcept);

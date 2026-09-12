@@ -1027,6 +1027,18 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
     // `fn(` call); a variable would hide the emitted concept from that scan, which
     // is exactly the "silently unwatched emission site" the census forbids. So the
     // five singles are spelled out with their literal concepts.
+    //
+    // ⚠️ LATERALITY IS STATED `not_applicable`, NEVER INFERRED — and an
+    // adversarial pass is why. An operative-note section is PROSE with no
+    // laterality axis: a colonoscopy findings list legitimately spans the "right
+    // colon" and the "left colon" in ONE list. Left to `inferLaterality`, those
+    // words assign the facts opposite sides, and `joinListValuedNarrative`
+    // (field-value-derivation.ts) then refuses a list carrying >1 laterality ->
+    // FIELD_CONFLICT -> the WHOLE native operative note is withheld. Measured:
+    // "polyp in the right colon; diverticulosis of the left colon" -> conflict,
+    // document lost. Stating `not_applicable` is the same move the record-derived
+    // and referring-physician facts make; the anatomy stays inside the finding
+    // text where it belongs, never as a discriminating axis on the fact.
     if (procedure.performed) {
       add({
         path: 'procedure.performed',
@@ -1035,6 +1047,7 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
         evidence: procedure.performed,
         defaultTemporality: 'current',
         polarity: 'affirmed',
+        laterality: 'not_applicable',
       });
     }
     if (procedure.preop_diagnosis) {
@@ -1045,6 +1058,7 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
         evidence: procedure.preop_diagnosis,
         defaultTemporality: 'current',
         polarity: 'affirmed',
+        laterality: 'not_applicable',
       });
     }
     if (procedure.consent) {
@@ -1055,6 +1069,7 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
         evidence: procedure.consent,
         defaultTemporality: 'current',
         polarity: 'affirmed',
+        laterality: 'not_applicable',
       });
     }
     if (procedure.description) {
@@ -1065,6 +1080,7 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
         evidence: procedure.description,
         defaultTemporality: 'current',
         polarity: 'affirmed',
+        laterality: 'not_applicable',
       });
     }
     if (procedure.anesthesia) {
@@ -1075,6 +1091,7 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
         evidence: procedure.anesthesia,
         defaultTemporality: 'current',
         polarity: 'affirmed',
+        laterality: 'not_applicable',
       });
     }
     for (const [index, item] of (procedure.findings ?? []).entries()) {
@@ -1085,6 +1102,10 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
         evidence: item,
         defaultTemporality: 'current',
         polarity: item.polarity ?? 'affirmed',
+        // ⚠️ THE FIX ABOVE — a findings list spans both sides of the colon; a
+        // side inferred from "right colon" / "left colon" would conflict the join
+        // and withhold the whole document.
+        laterality: 'not_applicable',
       });
     }
     for (const [index, item] of (procedure.recommendations ?? []).entries()) {
@@ -1095,6 +1116,7 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
         evidence: item,
         defaultTemporality: 'planned',
         polarity: item.polarity ?? 'affirmed',
+        laterality: 'not_applicable',
       });
     }
   }
