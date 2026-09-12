@@ -36,6 +36,8 @@ interface Props {
   /** The doctor's own note formats (active + drafts), for the per-visit picker.
    *  Empty/omitted → the picker is not shown (standard SOAP users see no change). */
   templates?: ReadonlyArray<{ id: string; name: string; isActive: boolean }>;
+  /** TEMPLATE-CHOICE-1 (#318): the practice's default template, pre-selected. */
+  defaultTemplateId?: string;
   /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: VisitFormStep2Theme;
 }
@@ -56,7 +58,8 @@ export function VisitFormStep2({
   specialties,
   defaultSpecialty,
   templates,
-}: Props) {
+  defaultTemplateId,
+}:Props) {
   const hasTemplates = (templates?.length ?? 0) > 0;
   return (
     <>
@@ -144,10 +147,14 @@ export function VisitFormStep2({
             <select
               id="note-format-select"
               name="noteTemplateId"
-              defaultValue=""
+              defaultValue={defaultTemplateId ?? ''}
               className={INPUT_CLS}
             >
-              <option value="">My active note format (default)</option>
+              <option value="">
+                {defaultTemplateId
+                  ? 'My active note format'
+                  : 'My active note format (default)'}
+              </option>
               {templates!.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name}

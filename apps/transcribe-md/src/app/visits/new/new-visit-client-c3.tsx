@@ -26,6 +26,7 @@ interface Props {
   specialties: readonly Specialty[];
   defaultSpecialty: string;
   templates?: ReadonlyArray<{ id: string; name: string; isActive: boolean }>;
+  defaultTemplateId?: string;
 }
 
 export function NewVisitClientC3({
@@ -33,6 +34,7 @@ export function NewVisitClientC3({
   specialties,
   defaultSpecialty,
   templates,
+  defaultTemplateId,
 }: Props) {
   const [patient, setPatient] = useState<SelectedPatient | null>(initialPatient);
 
@@ -73,6 +75,7 @@ export function NewVisitClientC3({
             specialties={specialties}
             defaultSpecialty={defaultSpecialty}
             templates={templates}
+            defaultTemplateId={defaultTemplateId}
           />
         )}
       </div>
