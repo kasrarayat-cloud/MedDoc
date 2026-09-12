@@ -1021,25 +1021,62 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
   // `affirmed` for a snapshot captured before the field existed.
   const procedure = entities.procedure;
   if (procedure) {
-    const emitSingle = (
-      snapshot: (EvidenceSnapshot & { statement: string }) | null | undefined,
-      concept: string,
-    ): void => {
-      if (!snapshot) return;
+    // ⚠️ EACH SINGLE SECTION IS A LITERAL add(), NOT A HELPER WITH A CONCEPT
+    // PARAMETER. `gate-159b`'s completeness census reads every emission site in
+    // this file and requires a form it can enumerate (a literal, a template, or a
+    // `fn(` call); a variable would hide the emitted concept from that scan, which
+    // is exactly the "silently unwatched emission site" the census forbids. So the
+    // five singles are spelled out with their literal concepts.
+    if (procedure.performed) {
       add({
-        path: concept,
-        concept,
-        value: snapshot.statement,
-        evidence: snapshot,
+        path: 'procedure.performed',
+        concept: 'procedure.performed',
+        value: procedure.performed.statement,
+        evidence: procedure.performed,
         defaultTemporality: 'current',
         polarity: 'affirmed',
       });
-    };
-    emitSingle(procedure.performed, 'procedure.performed');
-    emitSingle(procedure.preop_diagnosis, 'procedure.preop_diagnosis');
-    emitSingle(procedure.consent, 'procedure.consent');
-    emitSingle(procedure.description, 'procedure.description');
-    emitSingle(procedure.anesthesia, 'procedure.anesthesia');
+    }
+    if (procedure.preop_diagnosis) {
+      add({
+        path: 'procedure.preop_diagnosis',
+        concept: 'procedure.preop_diagnosis',
+        value: procedure.preop_diagnosis.statement,
+        evidence: procedure.preop_diagnosis,
+        defaultTemporality: 'current',
+        polarity: 'affirmed',
+      });
+    }
+    if (procedure.consent) {
+      add({
+        path: 'procedure.consent',
+        concept: 'procedure.consent',
+        value: procedure.consent.statement,
+        evidence: procedure.consent,
+        defaultTemporality: 'current',
+        polarity: 'affirmed',
+      });
+    }
+    if (procedure.description) {
+      add({
+        path: 'procedure.description',
+        concept: 'procedure.description',
+        value: procedure.description.statement,
+        evidence: procedure.description,
+        defaultTemporality: 'current',
+        polarity: 'affirmed',
+      });
+    }
+    if (procedure.anesthesia) {
+      add({
+        path: 'procedure.anesthesia',
+        concept: 'procedure.anesthesia',
+        value: procedure.anesthesia.statement,
+        evidence: procedure.anesthesia,
+        defaultTemporality: 'current',
+        polarity: 'affirmed',
+      });
+    }
     for (const [index, item] of (procedure.findings ?? []).entries()) {
       add({
         path: `procedure.findings.${index}.finding`,

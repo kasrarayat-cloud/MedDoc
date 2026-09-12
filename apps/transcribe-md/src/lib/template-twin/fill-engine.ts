@@ -52,6 +52,10 @@ import {
   type VisitPatientRecord,
 } from './visit-metadata';
 import {
+  withOperativeRecordFacts,
+  type OperativeVisitRecord,
+} from './operative-record';
+import {
   resolveTemplateFields,
   withApprovedPracticeDefaultFacts,
 } from './resolver';
@@ -113,6 +117,15 @@ export interface PrepareTemplateTwinFillInput {
    * hand.
    */
   patient?: VisitPatientRecord | null;
+  /**
+   * #319 REGISTRY-2 — the operative-note header's OTHER record-derived values
+   * (patient DOB and MRN, the signing clinician's name; the service / dictation /
+   * transcription dates come from `visitDate`). OPTIONAL and loaded by the shared
+   * reader, exactly as `patient` is, and for the same reason: the certification
+   * self-test constructs this input directly and must pass NONE of it, or
+   * `assertNoRecordDerivedFacts` refuses.
+   */
+  record?: OperativeVisitRecord | null;
   /** The LIVE brain's generated note — its picks + table measurements are bridged
    *  onto the resolver baseline. When absent, only the evidence resolver runs
    *  (behaviour-identical to the pre-bridge fill path). */
@@ -255,16 +268,27 @@ export async function prepareTemplateTwinFill(
     fields: ir.fields,
     mappings,
     visitDate: input.visitDate,
-    facts: withVisitMetadataFacts({
+    // #319 — the operative-note header's record/date-derived values, composed
+    // INSIDE the name/age injector so each layer still sees any real dictated
+    // fact that outranks it. A no-op on the certification path (no `record`, no
+    // `visitDate`), so no `visit_record` fact reaches the synthetic test.
+    facts: withOperativeRecordFacts({
       fields: ir.fields,
       mappings,
-      patient: input.patient,
+      record: input.record,
       visitDate: input.visitDate,
       refusals: injectorRefusals,
-      facts: withApprovedPracticeDefaultFacts({
+      facts: withVisitMetadataFacts({
         fields: ir.fields,
         mappings,
-        facts: input.facts,
+        patient: input.patient,
+        visitDate: input.visitDate,
+        refusals: injectorRefusals,
+        facts: withApprovedPracticeDefaultFacts({
+          fields: ir.fields,
+          mappings,
+          facts: input.facts,
+        }),
       }),
     }),
   });
@@ -671,10 +695,31 @@ export async function readAndPrepareTemplateTwinFill(
     // fields anything downstream may print, and the `where` names the practice
     // as well as the visit so a cross-tenant id cannot return a record at all.
     // Widening this select is a PHI decision, not a convenience.
+    //
+    // ⚠️ #319 REGISTRY-2 WIDENS IT, DELIBERATELY AND MINIMALLY. The colon
+    // operative note's header prints the patient's MRN and the signing doctor's
+    // name; both are read here, both go through the SAME record-derived fact road
+    // (`withOperativeRecordFacts`), and each is a value the ruling authorised. The
+    // `signer` is the signing doctor when signed; the `user` is the visit's author
+    // (the same doctor before sign — T4). A clinician's name is not the patient's.
     const visitPatient = await prisma.transcribeVisit.findFirst({
       where: { id: input.visitId, practiceId: input.tenantPracticeId },
-      select: { patient: { select: { name: true, dateOfBirth: true } } },
+      select: {
+        patient: { select: { name: true, dateOfBirth: true, mrn: true } },
+        signer: { select: { name: true } },
+        user: { select: { name: true } },
+      },
     });
+    // #319 — the signing doctor when signed, else the visit's author. Both are
+    // the operating clinician on an operative note; NULL only if neither has a
+    // name, which the record-derived injector then names as `surgeon_absent`.
+    const operativeRecord: OperativeVisitRecord | null = visitPatient
+      ? {
+          patientDateOfBirth: visitPatient.patient?.dateOfBirth ?? null,
+          patientMrn: visitPatient.patient?.mrn ?? null,
+          clinicianName: visitPatient.signer?.name ?? visitPatient.user?.name ?? null,
+        }
+      : null;
     const clinicianOverrides = await prisma.templateTwinFieldOverride.findMany({
       where: { visitId: input.visitId, practiceId: input.tenantPracticeId },
       orderBy: { fieldId: 'asc' },
@@ -711,6 +756,7 @@ export async function readAndPrepareTemplateTwinFill(
       validationNow: input.validationNow,
       visitDate: input.visitDate,
       patient: visitPatient?.patient ?? null,
+      record: operativeRecord,
       markerText,
       generatedNote: input.generatedNote,
       // ⚠️ THE DATABASE ROW IS NOT THE DOMAIN TYPE, AND THE NARROWING HAPPENS

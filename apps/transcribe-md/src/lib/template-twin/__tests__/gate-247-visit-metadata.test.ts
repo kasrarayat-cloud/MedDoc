@@ -36,6 +36,7 @@ import {
   withVisitMetadataFacts,
   RECORD_DERIVED_CONCEPTS,
 } from '../visit-metadata';
+import { withOperativeRecordFacts } from '../operative-record';
 import {
   RECORD_DERIVED_REFUSAL_REASONS,
   fieldDemandsInput,
@@ -1553,6 +1554,33 @@ describe('#272 — the three readers of the refusal vocabulary cannot drift', ()
       const r = ageAtDateResolved(dob, at);
       if (!r.ok) emitted.add(r.reason);
     }
+
+    // #319 — the OTHER injector's NAMED blanks (date_of_birth / patient_id /
+    // surgeon). Drive `withOperativeRecordFacts` with a record PRESENT (so it is
+    // not read as the certification path) but every value absent, and collect the
+    // refusals it pushes. The service/dictation/transcription dates come off the
+    // visit date and have no absent token, so they are not probed here.
+    const OP_DOB_ID = `ttf_${'d'.repeat(24)}`;
+    const OP_MRN_ID = `ttf_${'e'.repeat(24)}`;
+    const OP_SURGEON_ID = `ttf_${'f'.repeat(24)}`;
+    const opRefusals: RecordDerivedRefusal[] = [];
+    withOperativeRecordFacts({
+      fields: [
+        field(OP_DOB_ID, 'Patient DOB'),
+        field(OP_MRN_ID, 'Patient ID'),
+        field(OP_SURGEON_ID, 'Surgeon'),
+      ],
+      mappings: [
+        mapping(OP_DOB_ID, 'visit_metadata.date_of_birth'),
+        mapping(OP_MRN_ID, 'visit_metadata.patient_id'),
+        mapping(OP_SURGEON_ID, 'procedure.surgeon'),
+      ],
+      facts: [],
+      record: { patientDateOfBirth: null, patientMrn: null, clinicianName: null },
+      visitDate: VISIT,
+      refusals: opRefusals,
+    });
+    for (const r of opRefusals) emitted.add(r.unfilled);
 
     // ⚠️ NON-VACUITY: the probe set must reach EVERY reason, or a subset would
     // satisfy the membership test while a missing token went unchecked.

@@ -853,6 +853,14 @@ export const RECORD_DERIVED_REFUSAL_REASONS = [
   'age_unparseable',
   'age_implausible',
   'age_timezone_ambiguous',
+  // #319 REGISTRY-2 — the operative-note header's NAMED blanks. Each says the
+  // record was consulted and had no value, so the manifest reads "no MRN on the
+  // record" rather than `fact_not_mentioned` ("nobody said it") — the #264
+  // distinction, one family over. The service date / DD / DT come off the visit
+  // date, which is always present at fill, so they have no absent-token here.
+  'date_of_birth_absent',
+  'patient_id_absent',
+  'surgeon_absent',
 ] as const;
 
 export type RecordDerivedRefusalReason = (typeof RECORD_DERIVED_REFUSAL_REASONS)[number];

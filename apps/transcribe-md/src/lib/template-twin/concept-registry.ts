@@ -420,7 +420,48 @@ const MANUAL_LABEL_PATTERNS: ReadonlyArray<RegExp> = [
 export const VISIT_METADATA_LABEL_CONCEPTS: ReadonlyArray<readonly [RegExp, string]> = [
   [/^\s*patient(?:'s)?(?:\s+(?:full\s+)?name)?\s*:?\s*$/i, 'visit_metadata.patient_name'],
   [/^\s*(?:patient(?:'s)?\s+)?age\s*:?\s*$/i, 'visit_metadata.patient_age'],
+  // #319 REGISTRY-2 — THE OPERATIVE-NOTE HEADER'S RECORD-DERIVED MEMBERS.
+  //
+  // ⚠️ ANCHORED AT BOTH ENDS, EXACTLY AS NAME AND AGE ARE — the #247 lesson: a
+  // prefix match seats a record value (a name, an MRN, a date) inside a clinical
+  // narrative control. Each admits only the spellings a real operative note uses,
+  // measured against the owner's colon form's own aliases ("Patient DOB",
+  // "Patient ID", "Date of Surgery", "Surgeon", "DD", "DT").
+  //
+  // ⚠️ `procedure.surgeon` IS RECORD-DERIVED THOUGH ITS CONCEPT IS NOT
+  // `visit_metadata.*` — ruling #319. It is the SIGNING DOCTOR'S name off the
+  // visit record, not a dictated value and not the patient, so it belongs in this
+  // table (which decides BOTH the concept and `sourceType: 'visit_metadata'`) and
+  // NOT in the proposer's guidance. A clinician's name here does not violate #127:
+  // #127 forbids the MODEL asserting a name; this is read from the record.
+  [/^\s*patient(?:'s)?\s+(?:dob|d\.?\s*o\.?\s*b\.?|date\s+of\s+birth)\s*:?\s*$/i, 'visit_metadata.date_of_birth'],
+  [/^\s*patient(?:'s)?\s+(?:id|identifier|mrn|chart(?:\s+(?:id|number|no\.?|#))?)\s*#?\s*:?\s*$/i, 'visit_metadata.patient_id'],
+  [/^\s*date\s+of\s+(?:surgery|service|operation)\s*:?\s*$/i, 'visit_metadata.date_of_service'],
+  [/^\s*(?:operating\s+)?surgeon\s*:?\s*$/i, 'procedure.surgeon'],
+  [/^\s*(?:dd|date\s+dictated|dictat(?:ed|ion)(?:\s+date)?)\s*:?\s*$/i, 'visit_metadata.dictated_at'],
+  [/^\s*(?:dt|date\s+transcribed|transcri(?:bed|ption)(?:\s+date)?)\s*:?\s*$/i, 'visit_metadata.transcribed_at'],
 ];
+
+/**
+ * #319 — EVERY CONCEPT THAT MAY ONLY EVER BE RECORD/SYSTEM-DERIVED, never
+ * dictated. This is the set `refuseRecordDerivedOnNonMetadata` nulls off any
+ * mapping the compiler did not classify `visit_metadata`, and the set the
+ * record injector recognises.
+ *
+ * ⚠️ `visit_metadata.referring_physician` IS DELIBERATELY ABSENT — it is the one
+ * `visit_metadata.*` member that is DICTATED (an ordinary L3 extraction), so it
+ * is legitimate on an `extraction` mapping and must not be nulled there.
+ */
+export const RECORD_DERIVED_ONLY_CONCEPTS: ReadonlySet<string> = new Set([
+  'visit_metadata.patient_name',
+  'visit_metadata.patient_age',
+  'visit_metadata.date_of_birth',
+  'visit_metadata.patient_id',
+  'visit_metadata.date_of_service',
+  'visit_metadata.dictated_at',
+  'visit_metadata.transcribed_at',
+  'procedure.surgeon',
+]);
 
 /**
  * The referring clinician's label, in the spellings a real consult form uses.

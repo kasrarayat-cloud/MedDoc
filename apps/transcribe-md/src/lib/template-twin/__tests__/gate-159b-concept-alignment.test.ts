@@ -134,6 +134,22 @@ const FULL_ENTITIES = {
       sourceSpan: 'Great saphenous vein diameter 5.2 mm on the right.',
     },
   ],
+  // #319 REGISTRY-2 — the operative-note family. All five SINGLE sections and
+  // both accumulating lists are populated so the projector reaches every one of
+  // the seven `procedure.*` emission sites the completeness census now watches.
+  procedure: {
+    performed: { statement: 'Colonoscopy with polypectomy', evidence_quote: 'Procedure: colonoscopy with polypectomy.' },
+    preop_diagnosis: { statement: 'Screening for neoplasia', evidence_quote: 'Preoperative diagnosis: screening for neoplasia.' },
+    consent: { statement: 'Written informed consent obtained', evidence_quote: 'Consent: written informed consent obtained.' },
+    description: { statement: 'Scope advanced to the cecum and withdrawn', evidence_quote: 'Description: scope advanced to the cecum and withdrawn.' },
+    anesthesia: { statement: 'Monitored anesthesia care', evidence_quote: 'Anesthesia: monitored anesthesia care.' },
+    findings: [
+      { finding: 'A sigmoid polyp, removed', polarity: 'affirmed' as const, evidence_quote: 'Findings: a sigmoid polyp, removed.' },
+    ],
+    recommendations: [
+      { recommendation: 'Surveillance colonoscopy in five years', polarity: 'affirmed' as const, evidence_quote: 'Recommendations: surveillance colonoscopy in five years.' },
+    ],
+  },
 };
 
 const emittedFacts = (): EncounterFact[] =>

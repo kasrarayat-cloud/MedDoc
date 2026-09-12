@@ -14,9 +14,9 @@ import {
   isRegisteredConcept,
   synonymsFor,
   REGISTRY_CONCEPTS,
+  RECORD_DERIVED_ONLY_CONCEPTS,
   type MappingSourceType,
 } from '../concept-registry';
-import { RECORD_DERIVED_CONCEPTS } from '../visit-metadata';
 import { isUnnamedRosConcept, ROS_SYSTEMS, symptomsFor } from '../ros-lexicon';
 import { withoutPlaceholderOptions } from '../../note-template-docx/placeholder-option';
 import { z } from 'zod';
@@ -266,9 +266,11 @@ export function refuseRecordDerivedOnNonMetadata(
 ): string | null {
   if (concept === null || sourceType === 'visit_metadata') return concept;
   const c = concept.trim().toLowerCase();
-  return c === RECORD_DERIVED_CONCEPTS.name || c === RECORD_DERIVED_CONCEPTS.age
-    ? null
-    : concept;
+  // #319 — the whole record/system-derived set now, not just name+age: a model
+  // proposing `procedure.surgeon`, a DOB, an MRN or a service date onto a
+  // clinical control would otherwise print a record value the doctor never
+  // dictated. `referring_physician` is not in the set (it IS dictated).
+  return RECORD_DERIVED_ONLY_CONCEPTS.has(c) ? null : concept;
 }
 
 export interface ProposeSemanticMappingsContext {

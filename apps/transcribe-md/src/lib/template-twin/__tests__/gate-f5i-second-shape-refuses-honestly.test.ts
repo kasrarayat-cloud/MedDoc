@@ -261,20 +261,30 @@ describe('F5-i part 1a — a second SHAPE reaches a named refusal from real .doc
     // If that range ever widens, this arm reddens and whoever widens it has to
     // come back and re-read what this gate is entitled to conclude.
     //
-    // ⚠️ IT WIDENED, AND THIS IS THAT RE-READ. #247 added three label overrides
-    // (`Patient` / `Age` / `Referring MD`), so the fallback path can now decide
-    // six concepts rather than three. What the gate CONCLUDES is unchanged: all
-    // three additions are header metadata, none of them is a measurement, so
-    // "no measurement rows on this path" still means what it meant. The arm is
-    // updated with the reason rather than re-baselined, because the next widen
-    // may not be so harmless.
+    // ⚠️ IT WIDENED TWICE, AND THIS IS THAT RE-READ. #247 added three label
+    // overrides (`Patient` / `Age` / `Referring MD`); #319 REGISTRY-2 added the
+    // operative-note header's six record-derived members (DOB, MRN/patient_id,
+    // date of service, surgeon, DD, DT). What the gate CONCLUDES is STILL
+    // unchanged: every addition is header metadata or a record-derived value, and
+    // NONE of them is a `measurement.*`, so "no measurement rows on this path"
+    // means exactly what it meant. `procedure.surgeon` is the one non-
+    // `visit_metadata` concept here, and it is deliberately so — the signing
+    // doctor is record-derived, not a measurement. The arm is updated with the
+    // reason rather than re-baselined, because the next widen may not be so
+    // harmless.
     expect([...compilerDecidableConcepts()].sort()).toEqual([
       'measurement.diameter',
       'measurement.reflux_time',
+      'procedure.surgeon',
       'test.name',
+      'visit_metadata.date_of_birth',
+      'visit_metadata.date_of_service',
+      'visit_metadata.dictated_at',
       'visit_metadata.patient_age',
+      'visit_metadata.patient_id',
       'visit_metadata.patient_name',
       'visit_metadata.referring_physician',
+      'visit_metadata.transcribed_at',
     ]);
   });
 });
