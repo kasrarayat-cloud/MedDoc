@@ -875,7 +875,7 @@ jobs:
       # immediately keeps it independent of anything downstream.
       - name: Upload Rounds screenshots (Gate B)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rounds-shots
           path: apps/transcribe-md/rounds-shots/
@@ -1004,7 +1004,7 @@ jobs:
 
       - name: Upload Playwright HTML report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: apps/transcribe-md/playwright-report/
@@ -1012,7 +1012,7 @@ jobs:
 
       - name: Upload Playwright traces + videos
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-traces
           path: apps/transcribe-md/test-results/
