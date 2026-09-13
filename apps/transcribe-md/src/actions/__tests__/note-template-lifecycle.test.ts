@@ -126,7 +126,14 @@ describe('saveNoteTemplateAction — activate (new)', () => {
 
 describe('saveNoteTemplateAction — editing an ACTIVE row → new version', () => {
   it('creates version+1 (live row not mutated) and supersedes the old', async () => {
-    mocks.findFirst.mockResolvedValue({ id: CUID, status: 'active', version: 3 });
+    // ⚠️ WHERE-AWARE: the ownership pre-check ({id, doctorId}) returns the active
+    // row; the OWNER-RULE active-slot check ({doctorId, encounterType, status:'active'},
+    // no id) finds NO active row (thus no certified sibling), so this edit still
+    // activates as before. When a certified sibling DOES exist the save is held as
+    // a draft — covered by gate-upload-never-displaces-certified.
+    mocks.findFirst.mockImplementation(async ({ where }: { where: Record<string, unknown> }) =>
+      where.id === undefined ? null : { id: CUID, status: 'active', version: 3 },
+    );
     const r = await saveNoteTemplateAction(input({ id: CUID }), true);
     expect(r.ok).toBe(true);
     expect(mocks.update).not.toHaveBeenCalled(); // never mutate the live row

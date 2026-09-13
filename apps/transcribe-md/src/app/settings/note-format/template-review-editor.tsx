@@ -283,12 +283,21 @@ export function TemplateReviewEditor({
     startTransition(async () => {
       const res = await saveNoteTemplateAction(buildPayload(), activate);
       if (res.ok) {
+        // ⚠️ OWNER RULE — key the message off the ACTUAL status, not the
+        // requested `activate`. A save that asked to activate is HELD as a draft
+        // when an active certified form exists for this slot (res.activationHeld
+        // set, res.status 'draft'); saying "Format activated" there is the exact
+        // lie the parent finding is about. The held sentence explains WHY it is a
+        // draft and the certified form stays active.
+        const landedActive = res.status === 'active';
         toast.success(
-          activate ? 'Format activated' : 'Draft saved',
+          landedActive ? 'Format activated' : 'Draft saved',
           {
-            description: activate
-              ? 'New visits that match will be written in this format.'
-              : 'Saved as a draft — activate it when you’re ready.',
+            description:
+              res.activationHeld ??
+              (landedActive
+                ? 'New visits that match will be written in this format.'
+                : 'Saved as a draft — activate it when you’re ready.'),
           },
         );
         if (res.flags.length > 0) {

@@ -58,6 +58,13 @@ export type SaveTemplateResult =
       /** Doctor-facing sentence naming the reason AND the consequence, or
        *  null when the exact-form path is fine. Never a raw error code. */
       twinNotice?: string | null;
+      /** ⚠️ OWNER RULE — set when a save that ASKED to activate was HELD as a
+       *  draft because an active, CERTIFIED template already exists for this
+       *  (doctor, encounterType). The certified form stays active; this one goes
+       *  live only through certification or the owner's explicit choice. The
+       *  plain sentence to show the doctor; null when nothing was held back.
+       *  When set, `status` is 'draft'. */
+      activationHeld?: string | null;
     }
   | { ok: false; error: string };
 
@@ -206,13 +213,70 @@ export async function saveNoteTemplateAction(
     isNewUpload = true;
   }
 
+  // ── OWNER RULE — AN UPLOAD/SAVE NEVER DISPLACES A CERTIFIED ACTIVE FORM ────
+  //
+  // When an ACTIVE, CERTIFIED template already exists for this (doctor,
+  // encounterType), a save that asked to go live is HELD as a draft. The
+  // certified form stays active; the new one becomes active only through
+  // CERTIFICATION (auto-certify for a compilable upload, or the certify flow) or
+  // the owner's explicit choice. Otherwise an uncertified upload silently
+  // supersedes the working certified form — and if its certification then FAILS
+  // (blocking mappings, a prose "form", a converter outage), the doctor is left
+  // with NO certified native form at all. Measured cause of the parent finding.
+  //
+  // Scoped to an ACTIVE certified sibling, so a doctor's FIRST form (nothing
+  // certified yet) still activates on save, unchanged. Editing the certified
+  // active row itself is held too: an edit drops certification, so auto-
+  // activating the edited version would replace a certified form with an
+  // uncertified one — the same displacement. The certify and explicit-activate
+  // paths do not route through here, so both remain able to go live.
+  //
+  // ⚠️ The check is deliberately NOT scoped `NOT: { id: existing?.id }`: when the
+  // certified active row is the one being edited it SHOULD hold (see above), and
+  // when a draft/inactive row is edited it can never match `status: 'active'`
+  // anyway, so no exclusion is needed.
+  let activationHeld: string | null = null;
+  let effectiveActivate = activate;
+  if (activate) {
+    // There is at most ONE active row per (doctorId, encounterType) — the
+    // partial-unique index — so read it and decide certification IN CODE. This
+    // must recognise BOTH certification kinds, because they are stored in two
+    // different places and a flat-PDF form has NO twin row at all:
+    //   • DOCX twin  → templateTwinCompiledVersion.certificationStatus 'CERTIFIED'
+    //   • flat PDF   → styleProfile.pdfNativeCertified === true (pdf-native/certify)
+    // A twin-only check silently failed to hold an upload that would displace a
+    // PDF-native certified form — the exact harm, for the other cert kind
+    // (adversarial finding). Selecting both and testing here cannot drift the way
+    // a relation-only filter did.
+    const activeInSlot = await prisma.noteTemplate.findFirst({
+      where: { doctorId, encounterType, status: 'active' },
+      select: {
+        name: true,
+        styleProfile: true,
+        templateTwinCompiledVersion: { select: { certificationStatus: true } },
+      },
+    });
+    const isCertified =
+      !!activeInSlot &&
+      (activeInSlot.templateTwinCompiledVersion?.certificationStatus === 'CERTIFIED' ||
+        (activeInSlot.styleProfile as { pdfNativeCertified?: boolean } | null)
+          ?.pdfNativeCertified === true);
+    if (activeInSlot && isCertified) {
+      effectiveActivate = false;
+      activationHeld =
+        `Your certified “${activeInSlot.name}” stays active — this format is ` +
+        `saved as a draft so it doesn't replace your working form. Certify it, or ` +
+        `choose it in Settings, to make it your active format.`;
+    }
+  }
+
   try {
     const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // 1. If activating, CLEAR the active slot first (deactivate prior active
       //    for this doctor+encounterType) so the partial-unique index holds
       //    when we set the new row active. This also supersedes the live row
       //    when an active template is being re-activated as a new version.
-      if (activate) {
+      if (effectiveActivate) {
         await tx.noteTemplate.updateMany({
           where: { doctorId, encounterType, status: 'active' },
           data: { status: 'inactive' },
@@ -225,7 +289,7 @@ export async function saveNoteTemplateAction(
       // `string` and the action's declared `status: 'draft' | 'active'` no
       // longer accepts it. The annotation pins the union; the runtime value is
       // unchanged.
-      const status: 'draft' | 'active' = activate ? 'active' : 'draft';
+      const status: 'draft' | 'active' = effectiveActivate ? 'active' : 'draft';
       if (existing && existing.status !== 'active') {
         // draft / inactive → update in place (not a live row)
         // ⚠️ `sourceObjectKey` / `sourceSha256` ARE ABSENT FROM `data` ON
@@ -469,6 +533,7 @@ export async function saveNoteTemplateAction(
             : 'This format was saved, but it could not be prepared for exact-form export. Notes will ' +
               'export in the standard layout rather than on your own form.'
           : null,
+      activationHeld,
     };
   } catch {
     // e.g. a concurrent-activation race tripping the partial-unique index.
