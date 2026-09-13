@@ -689,6 +689,11 @@ function resolveOne(
   // `conceptCandidates.length === 0` is the ONE site that earns #191's kept
   // practice default; this stage is a DEFERRAL that must not. A single combined
   // predicate cannot tell them apart and would silently re-route kept defaults.
+  // ⚠️ temporalityMatches is TEMPORALITY-AGNOSTIC for the operative family (see
+  // fact-mapping-match.ts) — the operative body mixes tenses. The agnostic check
+  // lives in that ONE shared reader so this filter and the validator's
+  // factMatchesMapping stay in agreement; a resolver-only fix cited off-tense
+  // facts the validator then refused, withholding the whole native note.
   const temporalCandidates = conceptCandidates.filter((fact) =>
     temporalityMatches(fact, mapping),
   );
