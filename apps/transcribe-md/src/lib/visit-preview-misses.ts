@@ -30,6 +30,26 @@ export const VISIT_PREVIEW_MISSES = [
   /** The fill itself failed. Named, so it is never a blank screen. */
   'fill_failed',
   /**
+   * ⚠️ OWNER FINDING (blocking) — THE NATIVE FILL WAS WITHHELD, NOT FAILED.
+   *
+   * `fill-engine.ts` returns `render: null` when `!validation.valid` — a
+   * BLOCKING validation issue (a field the resolver could not fill without a
+   * doctor's eye, e.g. an experiencer it is not allowed to approve). The fill
+   * did not error and the form is fine; one field simply needs review, so the
+   * verified native page is deliberately not produced.
+   *
+   * This is DISTINCT from `no_render` ("could not DRAW"), which now names only a
+   * genuine render/draw failure (the styled build threw, or the browser could
+   * not paint the PDF). Reporting a blocked fill as `no_render` told the doctor
+   * their form could not be drawn when the truth is a field awaits review — and,
+   * worse, it returned a bare miss that HID the whole document surface, so a
+   * certified Operative Note visit showed the SOAP editor with no PDF/Word
+   * export at all. The export surface is never hidden: a blocked fill now
+   * degrades to the styled document (same paginated surface, same export) with
+   * this reason spoken beside it.
+   */
+  'native_fill_blocked',
+  /**
    * ⚠️ RULING #287 — THE TENANT PRACTICE HAS NO ACTIVE CERTIFIED TEMPLATE.
    *
    * A visit is documented in the TENANT's format, so a locum from B seeing A's

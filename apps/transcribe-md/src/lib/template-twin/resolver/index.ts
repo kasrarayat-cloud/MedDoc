@@ -44,6 +44,7 @@ import {
   joinListValuedNarrative,
   LIST_VALUED_NARRATIVE_JOINED_REASON,
 } from '../field-value-derivation';
+import { OTHER_EXPERIENCER_CLINICIAN_CONCEPTS } from '../concept-registry';
 import { denialOutcome, mixedPolarityNarrative } from '../denial-contract';
 
 export interface ResolveTemplateFieldsInput {
@@ -734,10 +735,20 @@ function resolveOne(
    * created the `visit_record` class: the cheap fix corrupts the audit trail
    * rather than the render, so nothing fails and the record is wrong.
    *
-   * Named by CONCEPT and by exactly one, like `permitsFamily` above.
+   * Named by CONCEPT, via the single shared set — NOT a hard-coded `||` string.
+   *
+   * ⚠️ WAS `=== 'visit_metadata.referring_physician'` — A SINGLE-CONCEPT WHITELIST,
+   * AND A BLOCKING OWNER FINDING CAUGHT WHAT IT LEFT OUT. `procedure.surgeon` is
+   * the signing clinician (record-derived, `experiencer: 'other'`, exactly like
+   * the referrer), but it was not on the whitelist, so a certified operative note
+   * came back `ambiguous / experiencer_not_approved` on Surgeon → FIELD_AMBIGUOUS
+   * (blocking) → native render withheld → export surface hidden. The set
+   * `OTHER_EXPERIENCER_CLINICIAN_CONCEPTS` is now the ONE source of truth for
+   * "whose subject is a clinician", so adding the next such concept is a one-line
+   * edit in the registry, not a second string here that drifts from it.
    */
   const permitsOtherClinician =
-    normalizedConcept === 'visit_metadata.referring_physician';
+    OTHER_EXPERIENCER_CLINICIAN_CONCEPTS.has(normalizedConcept);
   if (
     temporalCandidates.some(
       (fact) =>

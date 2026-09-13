@@ -17,6 +17,7 @@ import { AppFrame } from '@/components/ui/app-frame';
 import { Ic } from '@/components/ui/icon';
 import { PageHeader } from '@/components/ui/page-header';
 import { visibleSpecialties, findSpecialty } from '@meddoc/shared/specialties';
+import { displacedByReupload } from '@/lib/template-picker-dedupe';
 import { NewVisitClient } from './new-visit-client';
 import { NewVisitClientC3 } from './new-visit-client-c3';
 import type { SelectedPatient } from './patient-types';
@@ -141,7 +142,15 @@ export default async function NewVisitPage({
       id: true,
       name: true,
       status: true,
+      // doctorId + encounterType are the RE-UPLOAD DISPLACEMENT grouping key
+      // (with name): same-name collapse only WITHIN one (doctor, encounter), so
+      // two different doctors' — or one doctor's two encounters' — same-named
+      // certified forms never collapse into one wrong offering.
       doctorId: true,
+      encounterType: true,
+      // Among a group, the most-recently-created survives unless the default is
+      // present.
+      createdAt: true,
       templateTwinCompiledVersion: { select: { certificationStatus: true } },
     },
     orderBy: [{ status: 'asc' }, { updatedAt: 'desc' }],
@@ -150,10 +159,15 @@ export default async function NewVisitPage({
     name: string;
     status: string;
     doctorId: string | null;
+    encounterType: string | null;
+    createdAt: Date;
     templateTwinCompiledVersion: { certificationStatus: string } | null;
   }>;
   // Dedupe by id (a doctor's own certified template can match both OR arms).
   const seenTemplate = new Set<string>();
+  const deduped = noteFormats.filter((t) =>
+    seenTemplate.has(t.id) ? false : (seenTemplate.add(t.id), true),
+  );
   // The set of CERTIFIED template ids in scope — the only templates the fill will
   // honour. Arm A (the doctor's own rows) carries NO certification filter, so a
   // doctor's own row that was later DE-CERTIFIED (a mapping edit flips its compiled
@@ -161,26 +175,57 @@ export default async function NewVisitPage({
   // the default guard below must therefore check CERTIFICATION, not mere listing,
   // or it would pre-select a template the fill then rejects (adversarial F1).
   const certifiedIds = new Set<string>();
-  const templates = noteFormats
-    .filter((t) => (seenTemplate.has(t.id) ? false : (seenTemplate.add(t.id), true)))
-    .map((t) => {
-      if (t.templateTwinCompiledVersion?.certificationStatus === 'CERTIFIED') {
-        certifiedIds.add(t.id);
-      }
-      return { id: t.id, name: t.name, isActive: t.status === 'active' };
-    });
+  for (const t of deduped) {
+    if (t.templateTwinCompiledVersion?.certificationStatus === 'CERTIFIED') {
+      certifiedIds.add(t.id);
+    }
+  }
 
   // The practice's DEFAULT template (TEMPLATE-CHOICE-1): pre-select it ONLY when
   // it is set AND still a CERTIFIED template in scope — the exact condition the
   // fill honours. A default that was retired or de-certified since it was set
   // degrades to '' (the per-doctor active-template fallback resolves at
-  // generation), per the schema contract.
+  // generation), per the schema contract. Read BEFORE the displacement below so
+  // the practice's explicit choice can protect its own row from being collapsed.
   const practice = await prisma.practice.findUnique({
     where: { id: session.user.practiceId },
     select: { defaultNoteTemplateId: true },
   });
+
+  // ⚠️ RE-UPLOAD DISPLACEMENT (owner finding) — ONE CURRENT FORM PER NAME.
+  //
+  // A re-upload mints a NEW lineage (new id, SAME name) and certifies it, so the
+  // practice's certified rows accumulate indistinguishable duplicates — two
+  // "Gastroenterology Consultation" entries, and no way to tell which is current.
+  // Offer the ONE the practice means: its default when that is among the
+  // same-named group (never displace the explicit choice), else the
+  // most-recently-created (the re-upload displaces the form it replaced). Drafts
+  // and non-certified rows are untouched. Display-only and reversible — no
+  // template row is edited or retired. See lib/template-picker-dedupe.
+  const displacedTemplateIds = displacedByReupload(
+    deduped.map((t) => ({
+      id: t.id,
+      doctorId: t.doctorId,
+      encounterType: t.encounterType,
+      name: t.name,
+      status: t.status,
+      createdAt: t.createdAt,
+      certified:
+        t.templateTwinCompiledVersion?.certificationStatus === 'CERTIFIED',
+    })),
+    practice?.defaultNoteTemplateId ?? null,
+  );
+
+  const templates = deduped
+    .filter((t) => !displacedTemplateIds.has(t.id))
+    .map((t) => ({ id: t.id, name: t.name, isActive: t.status === 'active' }));
+
   const defaultTemplateId =
-    practice?.defaultNoteTemplateId && certifiedIds.has(practice.defaultNoteTemplateId)
+    practice?.defaultNoteTemplateId &&
+    certifiedIds.has(practice.defaultNoteTemplateId) &&
+    // The default is never displaced (the survivor prefers it), but assert it:
+    // a pre-selected id the list does not contain would be a phantom selection.
+    !displacedTemplateIds.has(practice.defaultNoteTemplateId)
       ? practice.defaultNoteTemplateId
       : null;
 

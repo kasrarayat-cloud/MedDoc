@@ -70,6 +70,14 @@ const MISS_TEXT: Required<Record<VisitPreviewMiss, string>> &
     'confirming once before it can be used. Settings › My Note Format › Confirm fields.',
   no_render: 'We could not draw your form for this visit, so the note is shown instead.',
   fill_failed: 'We could not fill your form for this visit, so the note is shown instead.',
+  // ⚠️ OWNER FINDING — A BLOCKED FILL, NOT A FAILED ONE. The form is fine; one
+  // field needs a doctor's eye before the verified page can be produced, so
+  // QuillMD's layout is shown here and stays exportable. It does NOT say "draw"
+  // (the page could be drawn) and does NOT send the doctor to re-upload a form
+  // they already have — the cure is reviewing the flagged field, not the form.
+  native_fill_blocked:
+    'A field on your form needs review, so it could not be filled cleanly for ' +
+    'this visit — QuillMD’s layout is shown here and can still be exported.',
   sample_unavailable: 'We could not open your form this time, so the note is shown instead.',
   // ⚠️ #287 — THE TENANT HAS NO CERTIFIED FORM, WHICH IS AN ORDINARY STATE.
   // A locum documenting another practice's patient fills THAT practice's form;
@@ -158,6 +166,21 @@ export function VisitDocumentSurface(props: VisitDocumentSurfaceProps) {
   // shown together under the document rather than at pages we cannot locate.
   const styledLayout = Boolean(result.fillSha?.startsWith('styled:'));
 
+  // WHY this is the styled layout, when there is a specific reason to give.
+  //
+  // ⚠️ OWNER FINDING — THE REASON MUST BE SHOWN ON A RENDERED DOCUMENT, not only
+  // when the surface steps aside. A blocked/failed fill (or a tenant with no
+  // confirmed form) now degrades to the styled document with `ok:true`, so
+  // `onUnavailable` never fires and the caller's miss line never draws — this is
+  // the only place left to speak the reason. It is also MORE use than the
+  // generic "set up a form" hint, and for a doctor who HAS a certified form that
+  // simply could not fill this visit, that generic hint is wrong. So a specific
+  // reason wins; the generic hint stands only for the genuine no-form case
+  // (`reason === null`), which is the common styled visit the e2e pins.
+  const styledReasonText = styledLayout
+    ? visitDocumentMissText(result.reason)
+    : undefined;
+
   // ONE slim row. The format control and the "whose page is this" hint were two
   // stacked blocks above the document, which is most of the dead band that used
   // to sit between the heading and the page. Same controls, same words, one
@@ -182,12 +205,17 @@ export function VisitDocumentSurface(props: VisitDocumentSurfaceProps) {
       {/* WHOSE page this is. A styled document is still a document — but the
           doctor should know it is our layout, not their form, and what to do
           about it. Quiet, and only when it is true. */}
-      {styledLayout && (
-        <p className="qm-vdoc-toolbar-hint" data-testid="visit-document-styled-note">
-          QuillMD&rsquo;s layout — set up your own blank form in Settings ›{' '}
-          <em>My Note Format</em> and this becomes your page.
-        </p>
-      )}
+      {styledLayout &&
+        (styledReasonText ? (
+          <p className="qm-vdoc-toolbar-hint" data-testid="visit-document-styled-reason">
+            {styledReasonText}
+          </p>
+        ) : (
+          <p className="qm-vdoc-toolbar-hint" data-testid="visit-document-styled-note">
+            QuillMD&rsquo;s layout — set up your own blank form in Settings ›{' '}
+            <em>My Note Format</em> and this becomes your page.
+          </p>
+        ))}
     </div>
   );
 
@@ -201,7 +229,14 @@ export function VisitDocumentSurface(props: VisitDocumentSurfaceProps) {
         <NativeDocumentPreview
           kind={result.kind}
           data={result.data}
-          reason={result.reason}
+          // ⚠️ DON'T SPEAK THE SAME REASON TWICE. When the toolbar already shows
+          // the styled reason (`styledReasonText` set — a degrade the doctor can
+          // act on), suppress it here so the figcaption does not repeat it or
+          // render an empty status line for a reason NativeDocumentPreview has no
+          // text for. When the toolbar shows only the generic hint
+          // (`styledReasonText` unset), the reason still surfaces here — that is
+          // where a converter notice ('converter_error' etc.) is spoken.
+          reason={styledReasonText ? null : result.reason}
           label={styledLayout ? 'this visit' : 'this visit, on your form'}
           caption={
             styledLayout
