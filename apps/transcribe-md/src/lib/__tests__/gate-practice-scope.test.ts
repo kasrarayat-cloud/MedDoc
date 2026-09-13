@@ -501,7 +501,12 @@ const DOCTOR_SCOPE: Record<string, number> = {
   // before refusing, so a foreign id cannot be probed for its visit count. The
   // sibling `updateMany` in archiveNoteTemplateAction is a WRITE and is counted
   // by clinicalWrites(), which is why this moved by one and not by two.
-  'src/actions/note-template-lifecycle.ts': 5,
+  // 5 -> 6 on 2026-09-13 (OWNER RULE): saveNoteTemplateAction reads the ACTIVE
+  // row for { doctorId, encounterType } before activating and checks its
+  // certification (twin OR pdf-native) in code, so an uncertified upload can
+  // never supersede a working certified form. Doctor-scoped by construction (the
+  // doctor's own slot).
+  'src/actions/note-template-lifecycle.ts': 6,
   'src/actions/preview-native-document.ts': 1,
   'src/app/settings/page.tsx': 1,
   'src/app/visits/new/page.tsx': 1,

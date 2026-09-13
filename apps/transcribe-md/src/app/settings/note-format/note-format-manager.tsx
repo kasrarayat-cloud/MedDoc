@@ -136,6 +136,11 @@ export function NoteFormatManager({
   const [pendingSource, setPendingSource] = useState<
     { objectKey: string; sha256: string } | null
   >(null);
+  /** ⚠️ OWNER RULE — set when the save was HELD as a draft because an active
+   *  CERTIFIED template already exists for this slot. Held across confirm/cert
+   *  retries so the terminal toast never claims "Format activated" for a form
+   *  that is still a draft, and so the retry path stays honest too. */
+  const [heldNotice, setHeldNotice] = useState<string | null>(null);
 
   /**
    * Drop the pending upload — the File AND its source ref, together, always.
@@ -152,6 +157,10 @@ export function NoteFormatManager({
   const clearPendingUpload = useCallback(() => {
     setPendingFile(null);
     setPendingSource(null);
+    // The held notice belongs to THIS upload; clear it with the upload so it can
+    // never label a later, unrelated confirm as a held draft (the same
+    // outlives-its-upload hazard this one function exists to prevent).
+    setHeldNotice(null);
   }, []);
   const { stages, step, reset: resetStages } = useStages(true);
   const [sample, setSample] = useState<NativePreviewResult | null>(null);
@@ -377,6 +386,11 @@ export function NoteFormatManager({
     startTransition(async () => {
       try {
         let templateId = activatedId;
+        // ⚠️ OWNER RULE — carried from the save so the terminal toasts below
+        // never say "Format activated" when the upload was HELD as a draft (an
+        // active certified form for this slot stays active). Seeded from state so
+        // a confirm re-invocation after a prior held save stays honest.
+        let held: string | null = heldNotice;
 
         // 1. Save + activate (skipped when a previous attempt already did it).
         if (!templateId) {
@@ -388,6 +402,8 @@ export function NoteFormatManager({
             return;
           }
           templateId = saved.id;
+          held = saved.activationHeld ?? null;
+          setHeldNotice(held);
           // ⚠️ R2 — SILENCE IS ILLEGAL. If the exact-form (twin) path could not be
           // prepared, the doctor is told HERE, at upload, with the reason AND the
           // consequence — not left to discover it in a signed export. The owner
@@ -414,21 +430,37 @@ export function NoteFormatManager({
         if (certFailure) {
           setCertError(certFailure);
           setConfirmBusy(false);
-          toast.warning('Format activated — native export needs another try', {
-            description: certFailure,
-            duration: 9000,
-          });
+          // Held: it is a DRAFT and the certified form stays active — never say
+          // "Format activated" here (the parent finding's exact lie class).
+          toast.warning(
+            held ? 'Saved as a draft — your certified form stays active' : 'Format activated — native export needs another try',
+            {
+              description: held ? `${held} (Certification needs another try: ${certFailure})` : certFailure,
+              duration: held ? 12000 : 9000,
+            },
+          );
           router.refresh();
           return;
         }
 
-        toast.success('Format activated', {
-          description: isNativeCandidate
-            ? 'New matching visits will be written in this format and exported on your own page.'
-            : 'New matching visits will be written in this format.',
-        });
+        if (held) {
+          // The upload landed as a draft; certification (auto-certify for a
+          // compilable form) or the explicit choice in Settings makes it live.
+          // The certified form the doctor is working from is untouched.
+          toast.info('Saved as a draft — your certified form stays active', {
+            description: held,
+            duration: 12000,
+          });
+        } else {
+          toast.success('Format activated', {
+            description: isNativeCandidate
+              ? 'New matching visits will be written in this format and exported on your own page.'
+              : 'New matching visits will be written in this format.',
+          });
+        }
         clearPendingUpload();
         setActivatedId(null);
+        setHeldNotice(null);
         refreshHome();
       } catch (err) {
         setConfirmBusy(false);
@@ -445,11 +477,23 @@ export function NoteFormatManager({
       setCertError(failure);
       setConfirmBusy(false);
       if (!failure) {
-        toast.success('Native export is set up', {
-          description: 'Exports will use your own page.',
-        });
+        // Held: certifying a PDF prepares it but does not activate it (only the
+        // DOCX certify flow activates), so a held PDF form is a certified DRAFT —
+        // the certified form the doctor is working from stays active until they
+        // choose the new one in Settings. Say so rather than claiming it is live.
+        if (heldNotice) {
+          toast.info('Certified and saved as a draft — your certified form stays active', {
+            description: 'Choose this format in Settings to make it your active form.',
+            duration: 12000,
+          });
+        } else {
+          toast.success('Native export is set up', {
+            description: 'Exports will use your own page.',
+          });
+        }
         clearPendingUpload();
         setActivatedId(null);
+        setHeldNotice(null);
         refreshHome();
       }
     });
@@ -657,6 +701,7 @@ export function NoteFormatManager({
         nativeCandidate={isNativeCandidate}
         busy={confirmBusy || pending}
         certError={certError}
+        held={heldNotice}
         saveError={saveError}
         onConfirm={onConfirmFormat}
         onRetryCert={onRetryCert}

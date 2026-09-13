@@ -156,6 +156,10 @@ export interface ConfirmCardProps {
   /** Non-null after a confirm attempt where activation succeeded but native
    *  certification did not. Never silent — shown with a retry. */
   certError: string | null;
+  /** ⚠️ OWNER RULE — non-null when this upload was HELD as a DRAFT because an
+   *  active CERTIFIED form already exists for the slot. It is NOT active, so the
+   *  cert-failure banner must not claim it is. The plain sentence to show. */
+  held?: string | null;
   /** Non-null when the confirm itself was REJECTED (nothing was activated).
    *  Rendered in the card, not just toasted: a toast auto-dismisses after 4s,
    *  and a failure that leaves no trace is indistinguishable from a dead
@@ -285,12 +289,25 @@ export function ConfirmCard(props: ConfirmCardProps) {
         <div className="qm-ux-cert-warn" role="alert">
           <ShieldAlert className="h-4 w-4 flex-none" aria-hidden />
           <div>
-            <strong>Your format is active</strong> — but setting it up to export on
-            your own PDF page didn&rsquo;t finish: {props.certError}
-            <br />
-            <span className="qm-ux-cert-note">
-              Exports will use the QuillMD-styled layout until this succeeds.
-            </span>
+            {props.held ? (
+              // Held: the upload is a DRAFT and the certified form stays active —
+              // never claim "Your format is active" here (the exact lie the
+              // OWNER RULE removes, on the surface that persists past a toast).
+              <>
+                <strong>Saved as a draft — your certified form stays active</strong>
+                {' '}— {props.held} Setting up native export didn&rsquo;t finish:{' '}
+                {props.certError}
+              </>
+            ) : (
+              <>
+                <strong>Your format is active</strong> — but setting it up to export on
+                your own PDF page didn&rsquo;t finish: {props.certError}
+                <br />
+                <span className="qm-ux-cert-note">
+                  Exports will use the QuillMD-styled layout until this succeeds.
+                </span>
+              </>
+            )}
             <button
               type="button"
               className="qm-ux-cert-retry qm-tap-44"
