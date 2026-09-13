@@ -20,6 +20,7 @@ import { logTwinAudit as logAudit } from './twin-audit';
 
 import type { SemanticMapping, TemplateDocIR } from './ir';
 import { DOCX_TEMPLATE_COMPILER } from './artifact-compiler';
+import { deriveProseTwin, derivedTwinProbeIsValid } from './prose-form/derive-prose-twin';
 import {
   fallbackSemanticMappings,
   proposeSemanticMappings,
@@ -243,40 +244,66 @@ export function fieldCreateInput(
 export async function createTemplateTwinDraft(
   input: CreateTemplateTwinDraftInput,
 ): Promise<CreateTemplateTwinDraftResult> {
+  // ⚠️ S1 — `source` is the twin's SOURCE OF TRUTH from here down. For a prose
+  // form it is REPLACED by the derived-twin bytes below, so the compiled version,
+  // the PHI scan, the stored source artifact and `sourceSha256` all describe the
+  // SAME controlled document. Everything downstream reads `source`, never
+  // `input.source`.
+  let source = input.source;
   let ir: TemplateDocIR;
   try {
-    ir = DOCX_TEMPLATE_COMPILER.compile(input.source);
+    ir = DOCX_TEMPLATE_COMPILER.compile(source);
   } catch (error) {
     const code = error instanceof TemplateDocxError ? error.code : 'DOCX_COMPILE_FAILED';
     await quarantineRejectedSource({
-      bytes: input.source,
+      bytes: source,
       actor: input.actor,
       rejectionCode: code,
     });
     throw error;
   }
   if (ir.fields.length === 0) {
-    await quarantineRejectedSource({
-      bytes: input.source,
-      actor: input.actor,
-      rejectionCode: 'NO_FILLABLE_FIELDS',
+    // ── S1 · UPLOAD-AND-CERTIFIED — DERIVE BEFORE QUARANTINE ──────────────────
+    // A prose Word form (labels / blanks, no controls) compiled to zero fields.
+    // Before quarantining, try to derive a fillable twin by inserting one control
+    // per label/blank (layout preserved). The derivation SELF-VERIFIES against
+    // this very compiler and returns null unless the derived package re-compiles
+    // to EXACTLY the controls it added — so a wrong twin is never produced, and a
+    // form we cannot derive falls through to the same NO_FILLABLE_FIELDS
+    // quarantine as before. On success the derived bytes BECOME the source.
+    const derived = await deriveProseTwin(source, async (bytes, expected) => {
+      try {
+        return derivedTwinProbeIsValid(DOCX_TEMPLATE_COMPILER.compile(bytes), expected);
+      } catch {
+        return false;
+      }
     });
-    throw new TemplateTwinDraftError(
-      'NO_FILLABLE_FIELDS',
-      'No supported fillable Word controls or table fields were detected.',
-    );
+    if (derived) {
+      source = derived.bytes;
+      ir = DOCX_TEMPLATE_COMPILER.compile(source);
+    } else {
+      await quarantineRejectedSource({
+        bytes: source,
+        actor: input.actor,
+        rejectionCode: 'NO_FILLABLE_FIELDS',
+      });
+      throw new TemplateTwinDraftError(
+        'NO_FILLABLE_FIELDS',
+        'No supported fillable Word controls or table fields were detected.',
+      );
+    }
   }
 
   try {
     await assertTemplateTwinSourcePhiFree({
-      source: input.source,
+      source,
       practiceId: input.actor.practiceId,
       userId: input.actor.userId,
     });
   } catch (error) {
     if (error instanceof TemplateTwinPhiRejectedError) {
       await quarantineRejectedSource({
-        bytes: input.source,
+        bytes: source,
         actor: input.actor,
         rejectionCode: error.code,
       });
@@ -383,7 +410,7 @@ export async function createTemplateTwinDraft(
 
   if (!attachedTemplateId) try {
     const extracted = await extractNoteTextFromUpload(
-      input.source,
+      source,
       'template.docx',
       DOCX_MIME_TYPE,
     );
@@ -428,7 +455,10 @@ export async function createTemplateTwinDraft(
     practiceId: input.actor.practiceId,
     lineageId,
     templateVersion: 1,
-    bytes: input.source,
+    // ⚠️ S1 — the DERIVED twin bytes when a prose form was derived (see top), so
+    // the persisted source-of-truth carries the controls the compiled version and
+    // every later fill/render/certify read. Identical to input.source otherwise.
+    bytes: source,
   });
 
   try {
