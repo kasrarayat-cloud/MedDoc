@@ -498,9 +498,11 @@ export interface ProcessTemplateTwinVisitInput {
    * from two independent lenses: an insert onto a `rowPrototype` narrative_text
    * field, and one onto a `laterality: 'required'` mapping. Either makes
    * `finalizeTemplateTwinFill` return `render: null` for the WHOLE fill; the
-   * offer then returns `miss('no_render')` and the surface draws no panel — and
-   * with no panel there is no Undo button, so the row is permanent and the
-   * doctor's document never renders again.
+   * preview then degrades to the styled document with reason `native_fill_blocked`
+   * (it used to return a bare `miss('no_render')` that drew no panel at all — the
+   * owner-finding defect). The styled surface still has no per-field Undo, so an
+   * insert that withholds the render is still a trap for that override; the
+   * export surface itself is no longer hidden.
    *
    * Nothing is persisted by passing this: it changes what the fill is computed
    * FROM, never what is stored. `processTemplateTwinVisit` REFUSES it outright.

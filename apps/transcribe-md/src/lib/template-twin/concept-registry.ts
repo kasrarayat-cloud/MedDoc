@@ -464,6 +464,35 @@ export const RECORD_DERIVED_ONLY_CONCEPTS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * EVERY CONCEPT WHOSE SUBJECT IS A CLINICIAN, NOT THE PATIENT — the only concepts
+ * whose facts may legitimately carry `experiencer: 'other'`. The resolver's
+ * experiencer gate approves 'other' ONLY for members of this set; every other
+ * concept describes the patient, so an 'other' fact on it is refused
+ * (`experiencer_not_approved`).
+ *
+ * ⚠️ THE SURGEON WAS FOUND MISSING BY A BLOCKING OWNER FINDING. `procedure.surgeon`
+ * is the signing clinician (minted `experiencer: 'other'` by `withOperativeRecordFacts`,
+ * exactly as the referrer is by the projector), but the gate hard-coded the SINGLE
+ * concept `visit_metadata.referring_physician`, so a certified operative note came
+ * back `ambiguous / experiencer_not_approved` on the Surgeon field → FIELD_AMBIGUOUS
+ * (blocking) → the native render withheld → the export surface hid. The synthetic
+ * round-trip could not catch it: record-derived fields never fill synthetically
+ * (no record), so the surgeon fact — and this gate — were never exercised until a
+ * real visit.
+ *
+ * ⚠️ DISTINCT FROM `RECORD_DERIVED_ONLY_CONCEPTS`, AND THE AXES ARE ORTHOGONAL.
+ * The referrer is DICTATED (not record-derived) yet clinician-subject, so it
+ * belongs here and not there; and that set contains PATIENT-subject concepts
+ * (name, DOB, patient_id) that must NEVER be admitted as 'other'. Reusing either
+ * set for the other job would be wrong in a way that prints a patient's identity
+ * where a clinician's belongs, or the reverse.
+ */
+export const OTHER_EXPERIENCER_CLINICIAN_CONCEPTS: ReadonlySet<string> = new Set([
+  'visit_metadata.referring_physician',
+  'procedure.surgeon',
+]);
+
+/**
  * The referring clinician's label, in the spellings a real consult form uses.
  *
  * ⚠️ "Referring MD" IS THE OWNER'S ACTUAL LABEL AND IT IS WHY THIS EXISTS.

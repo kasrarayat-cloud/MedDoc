@@ -136,7 +136,16 @@ async function styledDocument(
         ok: true,
         kind: hit.kind,
         data: hit.data,
-        reason: hit.reason as VisitPreviewResult['reason'],
+        // ⚠️ THE REASON COMES FROM THE CURRENT CALLER, NOT THE CACHED SNAPSHOT.
+        // The styled render is deterministic per (visit, soapVersion) — the SAME
+        // bytes serve every degrade cause — so one slot is shared by the null,
+        // not_certified, native_fill_blocked, fill_failed and no_tenant_template
+        // callers. Returning `hit.reason` served whichever cause wrote the slot
+        // first (a not_certified visit shown the null "no form" hint, or the
+        // reverse) — the stale-reason the adversarial pass found. `note` is
+        // recomputed from the live template state on every call, so it is always
+        // the current truth; the cached bytes are still reused.
+        reason: note,
         counts: hit.counts,
         // A cache entry written before this field existed carries no list, and
         // null is the honest answer: 'we did not compute it', not 'there are
@@ -170,7 +179,16 @@ async function styledDocument(
     : {
         kind: 'docx_fallback',
         data: docx.toString('base64'),
-        reason: converted.reason,
+        // ⚠️ THE DEGRADE REASON SURVIVES THE WORD TOGGLE AND A DOWN CONVERTER.
+        // In Word mode `converted` is forced to {pdf:null, reason:null}, and a
+        // down converter yields a NativePreviewError with no doctor-facing text,
+        // so `converted.reason` alone dropped the caller's `note`
+        // ('native_fill_blocked' / 'fill_failed' / 'no_tenant_template' /
+        // 'not_certified') — and the surface then showed the generic "set up a
+        // form" hint to a doctor who HAS a certified form (adversarial finding).
+        // The degrade reason is the one the doctor can act on, so it wins;
+        // `converted.reason` remains the fallback when there is no `note`.
+        reason: note ?? converted.reason,
         counts: null,
         insertableDefaults: null,
         fillSha: `styled:${soapVersion}`,
@@ -392,7 +410,32 @@ export async function previewVisitDocumentAction(
       visitDate: visit.createdAt,
       resolverModelVersion: null,
     });
-    if (!prepared.render?.document) return miss('no_render');
+    // ⚠️ OWNER FINDING (blocking) — A WITHHELD RENDER IS NOT AN ABSENT DOCUMENT.
+    //
+    // `fill-engine` returns `render: null` when `!validation.valid` — a BLOCKING
+    // validation issue withholds the verified native page (the fill did not
+    // error; one field needs a doctor's eye). This returned `miss('no_render')`,
+    // and a bare miss makes `VisitDocumentSurface` render nothing and step aside
+    // to the chromeless SOAP editor — so a certified Operative Note visit showed
+    // the note with NO PDF/Word export at all. The export surface is never
+    // hidden: degrade to the styled document — the same paginated surface, the
+    // same export the doctor would download — with the reason spoken beside it.
+    // The non-certified path two branches up already degrades exactly this way;
+    // a blocked certified fill now behaves the same rather than falling off the
+    // page.
+    if (!prepared.render?.document) {
+      // Cacheable: the styled render is the same bytes at this soapVersion
+      // whatever the degrade cause, and the cache HIT now reports the CURRENT
+      // caller's reason (see styledDocument), so no stale label is served and
+      // the LibreOffice conversion is not re-run on every mount.
+      return styledDocument(
+        visitId,
+        session.user.practiceId,
+        visit.soapVersion,
+        'native_fill_blocked',
+        format,
+      );
+    }
     docx = prepared.render.document;
     counts = {
       filled: prepared.manifest.counts.filled,
@@ -490,13 +533,31 @@ export async function previewVisitDocumentAction(
       console.info(
         `[visit-preview] visit=${visitId} the tenant practice has no active certified template; the styled note renders`,
       );
-      return miss('no_tenant_template');
+      // ⚠️ THE COMMENT SAID "THE STYLED NOTE RENDERS" AND THE CODE RETURNED A
+      // BARE MISS, which hides the document surface entirely — the same
+      // export-surface-hidden defect as the withheld-render branch above. Make
+      // the code match the comment: render the styled document with the reason.
+      return styledDocument(
+        visitId,
+        session.user.practiceId,
+        visit.soapVersion,
+        'no_tenant_template',
+        format,
+      );
     }
     const cls = err instanceof Error ? err.constructor.name : 'Unknown';
     console.warn(
       `[visit-preview] visit=${visitId} fill failed (${cls}); the styled note still renders`,
     );
-    return miss('fill_failed');
+    // Same fix: a failed fill still shows the document — the styled export the
+    // doctor would download — with the reason spoken, never a hidden surface.
+    return styledDocument(
+      visitId,
+      session.user.practiceId,
+      visit.soapVersion,
+      'fill_failed',
+      format,
+    );
   }
 
   const converted = format === 'word' ? { pdf: null, reason: null } : await convertDocxToPdf(docx, 'visit.docx');
