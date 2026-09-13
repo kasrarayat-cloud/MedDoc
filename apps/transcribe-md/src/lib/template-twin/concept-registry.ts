@@ -493,6 +493,45 @@ export const OTHER_EXPERIENCER_CLINICIAN_CONCEPTS: ReadonlySet<string> = new Set
 ]);
 
 /**
+ * THE OPERATIVE-NOTE BODY IS TEMPORALITY-AGNOSTIC — the resolver accepts a fact
+ * of ANY tense for these concepts, regardless of the compiled mapping's declared
+ * temporality.
+ *
+ * ⚠️ FOUND BY A BLOCKING OWNER FINDING. A certified operative note exported BLANK
+ * "Preoperative Diagnosis" and "Description of Procedure" although L3 extracted
+ * both: the auto-mapper had narrowed those concepts to `temporality: 'current'`,
+ * but an operative note MIXES TENSES — the pre-op diagnosis is the indication and
+ * is usually HISTORICAL ("personal history of adenomatous colon polyps"), the
+ * description is PAST/PLANNED, the recommendations are FUTURE. `temporalityMatches`
+ * then failed (`'current' !== 'historical'/'planned'`) and the resolver returned
+ * `temporality_not_approved` → a permanently blank control. Tense-gating a
+ * surgeon's operative narrative is wrong for the whole family, so every member is
+ * agnostic.
+ *
+ * ⚠️ CONSULTED IN `temporalityMatches` (fact-mapping-match.ts) — the ONE shared
+ * temporality reader used by BOTH the resolver's candidate filter AND the
+ * validator's `factMatchesMapping`. It must live there, not in a single caller:
+ * a first cut patched only the resolver, which then CITED an off-tense fact the
+ * validator still refused (SOURCE_FACT_CONCEPT_MISMATCH → the whole native note
+ * withheld). Because the check is at resolve/validate time, an ALREADY-CERTIFIED
+ * twin whose frozen mapping says 'current' is fixed WITHOUT re-certification —
+ * like OTHER_EXPERIENCER_CLINICIAN_CONCEPTS. The list members (findings /
+ * recommendations) and the record-derived surgeon already carry a null → 'any'
+ * mapping; they are included so the rule is the whole closed operative family,
+ * not a subset that drifts.
+ */
+export const TEMPORALITY_AGNOSTIC_CONCEPTS: ReadonlySet<string> = new Set([
+  'procedure.performed',
+  'procedure.preop_diagnosis',
+  'procedure.findings',
+  'procedure.consent',
+  'procedure.description',
+  'procedure.recommendations',
+  'procedure.anesthesia',
+  'procedure.surgeon',
+]);
+
+/**
  * The referring clinician's label, in the spellings a real consult form uses.
  *
  * ⚠️ "Referring MD" IS THE OWNER'S ACTUAL LABEL AND IT IS WHY THIS EXISTS.

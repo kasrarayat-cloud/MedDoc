@@ -39,6 +39,9 @@ import type { EncounterFact, SemanticMapping } from './ir';
 // and string work, no zod, no db, no framework. `bridge-evidence` therefore
 // still pulls in no graph of consequence.
 import { isUnnamedRosConcept } from './ros-lexicon';
+// ⚠️ PURE-DATA IMPORT, NO CYCLE. concept-registry.ts imports nothing from this
+// module, so this stays a leaf edge. TEMPORALITY_AGNOSTIC_CONCEPTS is a plain Set.
+import { TEMPORALITY_AGNOSTIC_CONCEPTS } from './concept-registry';
 
 /**
  * NFKC, trimmed, lower-cased — the one spelling comparison for concepts.
@@ -125,8 +128,29 @@ export function requiredFactTemporality(
  */
 export function temporalityMatches(
   fact: Pick<EncounterFact, 'temporality'>,
-  mapping: Pick<SemanticMapping, 'temporality'>,
+  mapping: Pick<SemanticMapping, 'temporality' | 'clinicalConcept'>,
 ): boolean {
+  // ⚠️ THE OPERATIVE BODY IS TEMPORALITY-AGNOSTIC — OWNER FINDING. An operative
+  // note mixes tenses: the pre-op diagnosis/indication is HISTORICAL ("personal
+  // history of adenomatous colon polyps"), the description PAST/PLANNED, the plan
+  // FUTURE. The auto-mapper had narrowed those concepts to temporality 'current',
+  // so an EXTRACTED fact was refused and the control exported blank
+  // (temporality_not_approved).
+  //
+  // ⚠️ THE CHECK LIVES HERE, IN THE ONE SHARED TEMPORALITY READER, NOT IN A SINGLE
+  // CALLER. temporalityMatches is consulted by BOTH the resolver's candidate
+  // filter AND the validator's `factMatchesMapping`. A first cut patched only the
+  // resolver: it then CITED an off-tense fact the validator still refused
+  // (SOURCE_FACT_CONCEPT_MISMATCH), so `finalizeTemplateTwinFill` withheld the
+  // WHOLE native note — strictly worse than the blank. Fixing the shared reader
+  // keeps the two in agreement, and fixes an already-CERTIFIED twin whose frozen
+  // mapping still says 'current' WITHOUT re-certification.
+  if (
+    mapping.clinicalConcept &&
+    TEMPORALITY_AGNOSTIC_CONCEPTS.has(normalizeConcept(mapping.clinicalConcept))
+  ) {
+    return true;
+  }
   if (mapping.temporality === 'any') return true;
   if (mapping.temporality === null) {
     return NULL_TEMPORALITY_MEANS === 'any' || fact.temporality === 'current';
