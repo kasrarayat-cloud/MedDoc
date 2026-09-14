@@ -71,11 +71,21 @@ export async function relocateFillLinesToBlankState(
   // still filling the control would render "LABEL: ______ minutes  <value>"
   // (both), which is strictly worse; the combined match prevents that
   // (adversarial pass, 2026-09-14).
+  // ⚠️ THE LABEL CAPTURE FORBIDS AN EARLIER BLANK RUN — (?:(?!_{2,})[^<])*?.
+  // A line with TWO blank runs under ONE control ("BP: ______/______", a ratio,
+  // a "___/___/___" date) has only ONE control (S1 emits one per paragraph). If
+  // the capture were plain [^<]*?, it would bind the control to the LAST blank
+  // and orphan the FIRST as a dead underscore run that NO control ever replaces —
+  // the exact never-replaced state the ruling forbids. Refusing the match when a
+  // second blank precedes the terminal one leaves such a line ALONE (its single
+  // control keeps its prompt; the label keeps both runs, the pre-ruling state —
+  // never made worse). A clean single-blank label still matches (re-pass fix,
+  // 2026-09-14).
   const out = xml.replace(
-    /(<w:t xml:space="preserve">[^<]*?)_{2,}(<\/w:t><\/w:r><w:sdt><w:sdtPr>(?:(?!<\/w:sdtPr>)[\s\S])*?<\/w:sdtPr><w:sdtContent><w:r><w:t xml:space="preserve">)[^<]*(<\/w:t><\/w:r><\/w:sdtContent><\/w:sdt>)/g,
+    /(<w:t xml:space="preserve">(?:(?!_{2,})[^<])*?)_{2,}(<\/w:t><\/w:r><w:sdt><w:sdtPr>(?:(?!<\/w:sdtPr>)[\s\S])*?<\/w:sdtPr><w:sdtContent><w:r><w:t xml:space="preserve">)[^<]*(<\/w:t><\/w:r><\/w:sdtContent><\/w:sdt>)/g,
     `$1$2${FILL_LINE_BLANK}$3`,
   );
-  if (out === xml) return null; // no adjacent materialised line — nothing we own
+  if (out === xml) return null; // no single adjacent materialised line — nothing we own
 
   zip.file('word/document.xml', out);
   const bytes = await zip.generateAsync({ type: 'uint8array' });

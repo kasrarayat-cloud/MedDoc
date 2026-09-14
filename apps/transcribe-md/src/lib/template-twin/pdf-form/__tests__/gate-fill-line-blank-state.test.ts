@@ -137,6 +137,27 @@ describe('S2 — fill-line becomes the blank state (never both)', () => {
     // sdtContent underscores belong to the single relocated control.
   });
 
+  // ⚠️ RE-PASS FIX (2026-09-14): a line with TWO blank runs under ONE control
+  // ("BP: ______/______", a "___/___/___" date). S1 makes ONE control; binding it
+  // to the last blank would orphan the first as a dead underscore run that no
+  // value ever replaces. Such a line must be LEFT ALONE (no relocation).
+  it('does NOT relocate a multi-blank line (would orphan the first blank)', async () => {
+    const docx = await linesToProseDocx([
+      'PATIENT NAME: ______', // single adjacent — WILL relocate
+      'BP: ______/______', // two blanks, one control — must NOT relocate
+    ]);
+    const d = await deriveProseTwin(docx, verify);
+    const out = await relocateFillLinesToBlankState(d!.bytes, d!.slots.length, verify);
+    expect(out).not.toBeNull(); // the PATIENT NAME line still relocates
+    const after = await docXml(out!);
+    // The multi-blank line is untouched: both runs stay, the control keeps "Enter BP".
+    expect(after).toContain('BP: ______/______');
+    expect(after).toContain('Enter BP');
+    // Only ONE control shows the fill line (PATIENT NAME); BP's control is not
+    // turned into a line beside an orphaned first blank.
+    expect((after.match(new RegExp(FILL_LINE_BLANK, 'g')) ?? []).length).toBe(1);
+  });
+
   it('handles an alias/label carrying an XML entity without corrupting it', async () => {
     const docx = await linesToProseDocx(['Height & weight: ______']);
     const d = await deriveProseTwin(docx, verify);
