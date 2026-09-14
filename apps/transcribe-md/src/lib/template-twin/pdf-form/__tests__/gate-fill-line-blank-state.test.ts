@@ -104,4 +104,46 @@ describe('S2 — fill-line becomes the blank state (never both)', () => {
     const empty = await linesToProseDocx(['Just prose, no fields.']);
     expect(await relocateFillLinesToBlankState(empty, 0, verify)).toBeNull();
   });
+
+  // ⚠️ ADVERSARIAL FIX (2026-09-14): a real text-layer blank with TRAILING
+  // FURNITURE ("Total time: ______ minutes") puts the underscores in the MIDDLE
+  // of the label — the control lands at the paragraph END. It must be LEFT ALONE:
+  // NEVER strip the label furniture while still filling the control (that renders
+  // the line beside the value — "both", strictly worse than untransformed).
+  it('leaves a NON-ADJACENT fill line (trailing unit/format hint) untouched — no double line', async () => {
+    // These derive one control each (S1's colon form is un-anchored for a unit).
+    const docx = await linesToProseDocx([
+      'PATIENT NAME: ______', // adjacent (materialised) — WILL relocate
+      'Total time: ______ minutes', // trailing unit — must NOT relocate
+      'DOB: ______ (mm/dd/yyyy)', // trailing format hint — must NOT relocate
+    ]);
+    const d = await deriveProseTwin(docx, verify);
+    const out = await relocateFillLinesToBlankState(d!.bytes, d!.slots.length, verify);
+    expect(out).not.toBeNull();
+    const after = await docXml(out!);
+
+    // The adjacent one relocated: label cleaned, control holds the line.
+    expect(after).toMatch(/PATIENT NAME: <\/w:t><\/w:r><w:sdt/);
+    // The trailing-furniture ones are UNCHANGED: underscores stay in the label,
+    // control content stays the prompt — NOT a line. So a fill shows the value
+    // once (beside the untouched label), never a SECOND line inside the control.
+    expect(after).toContain('Total time: ______ minutes');
+    expect(after).toContain('DOB: ______ (mm/dd/yyyy)');
+    expect(after).toContain('Enter Total time'); // prompt not replaced by a line
+    expect(after).toContain('Enter DOB');
+    // Exactly ONE control shows the fill line (the adjacent PATIENT NAME).
+    expect((after.match(new RegExp(FILL_LINE_BLANK, 'g')) ?? []).length).toBe(1);
+    // And no control's content is a line-beside-label-line double: the only
+    // sdtContent underscores belong to the single relocated control.
+  });
+
+  it('handles an alias/label carrying an XML entity without corrupting it', async () => {
+    const docx = await linesToProseDocx(['Height & weight: ______']);
+    const d = await deriveProseTwin(docx, verify);
+    const out = await relocateFillLinesToBlankState(d!.bytes, d!.slots.length, verify);
+    expect(out).not.toBeNull();
+    const after = await docXml(out!);
+    expect(after).toContain('Height &amp; weight: </w:t>'); // entity intact, underscores stripped
+    expect(after).toContain(FILL_LINE_BLANK);
+  });
 });

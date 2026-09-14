@@ -54,20 +54,28 @@ export async function relocateFillLinesToBlankState(
   if (!entry) return null;
   const xml = await entry.async('string');
 
-  // 1. Strip the materialised underscore run that sits at the END of a label run
-  //    IMMEDIATELY before a derived control — "LABEL: ______" → "LABEL: ". The
-  //    lookahead pins it to a run that is directly followed by a `<w:sdt>`, so no
-  //    other underscores (a divider line, a body run) are touched.
-  let out = xml.replace(/_{2,}(?=<\/w:t><\/w:r><w:sdt\b)/g, '');
-  // 2. Replace each derived control's blank content ("Enter X" / "Enter value")
-  //    with the fill line, so an unfilled control SHOWS the line and a fill
-  //    replaces the whole subtree with the value. Matches only the exact
-  //    proseControlSdt content shape.
-  out = out.replace(
-    /(<w:sdtContent><w:r><w:t xml:space="preserve">)[^<]*(<\/w:t><\/w:r><\/w:sdtContent>)/g,
-    `$1${FILL_LINE_BLANK}$2`,
+  // ⚠️ ONE COMBINED, PER-CONTROL MATCH — NOT two independent passes.
+  // A label run whose fill blank is IMMEDIATELY before its control ("LABEL:
+  // ______" then the control) is the MATERIALISED shape (S2 always appends the
+  // affordance at the END of a bare colon/marker label, so it lands adjacent).
+  // Only THAT shape is transformed: the underscores are moved off the label and
+  // the control's blank content becomes the fill line, together, in one match.
+  //
+  // ⚠️ A NON-ADJACENT fill line is LEFT ALONE. A real text-layer blank with a
+  // TRAILING unit or format hint — "Total time: ______ minutes", "DOB: ______
+  // (mm/dd/yyyy)" — puts the underscores in the MIDDLE of the label (the control
+  // is inserted at the paragraph END, after "minutes"). Relocating there is not
+  // structurally possible (the fill zone is not where the control is), so this is
+  // left in its pre-ruling state — NEVER given a second line inside the control
+  // on top of the one on the label. Stripping the underscores independently while
+  // still filling the control would render "LABEL: ______ minutes  <value>"
+  // (both), which is strictly worse; the combined match prevents that
+  // (adversarial pass, 2026-09-14).
+  const out = xml.replace(
+    /(<w:t xml:space="preserve">[^<]*?)_{2,}(<\/w:t><\/w:r><w:sdt><w:sdtPr>(?:(?!<\/w:sdtPr>)[\s\S])*?<\/w:sdtPr><w:sdtContent><w:r><w:t xml:space="preserve">)[^<]*(<\/w:t><\/w:r><\/w:sdtContent><\/w:sdt>)/g,
+    `$1$2${FILL_LINE_BLANK}$3`,
   );
-  if (out === xml) return null; // nothing matched — not the shape we own
+  if (out === xml) return null; // no adjacent materialised line — nothing we own
 
   zip.file('word/document.xml', out);
   const bytes = await zip.generateAsync({ type: 'uint8array' });
