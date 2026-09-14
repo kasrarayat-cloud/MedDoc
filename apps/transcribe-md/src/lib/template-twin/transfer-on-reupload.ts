@@ -49,11 +49,20 @@ export interface TransferOnReuploadResult {
 }
 
 /**
- * Resolve the newest OTHER compiled version for this slot whose twin is
- * CERTIFIED — the source of the transfer. Tenant-scoped by construction (the
- * doctorId + practiceId filter), newest lineage first, never the new draft
- * itself. Returns null when the slot has no prior certified twin (a first
- * upload, or only PDF-native certs).
+ * Resolve the slot's CURRENTLY-ACTIVE certified twin — the source of the
+ * transfer. Tenant-scoped by construction (practiceId + doctorId), and scoped to
+ * the ACTIVE row, never merely the newest.
+ *
+ * ⚠️ ACTIVE, NOT NEWEST — AND THE DISTINCTION IS CLINICAL. A doctor can
+ * re-activate an OLDER certified form (`activateNoteTemplateAction`), leaving a
+ * newer certified sibling inactive. Transferring the NEWEST certified sibling's
+ * dispositions would carry a DESELECTED form's clinical meaning onto the new
+ * controls and certify it — mis-pairing a certified disposition to a control the
+ * doctor never approved for it (adversarial pass, 2026-09-14). The active form is
+ * the one the doctor chose; its dispositions are the only ones to carry. The slot
+ * holds at most one active row (the partial-unique index). Returns null when the
+ * active form is not a certified twin (a first upload, a PDF-native cert, or an
+ * uncertified draft) — nothing to transfer.
  */
 export async function resolvePriorCertifiedTwinVersion(input: {
   doctorId: string;
@@ -61,11 +70,12 @@ export async function resolvePriorCertifiedTwinVersion(input: {
   practiceId: string;
   excludeNoteTemplateId: string;
 }): Promise<{ compiledVersionId: string; noteTemplateId: string } | null> {
-  const priors = await prisma.noteTemplate.findMany({
+  const active = await prisma.noteTemplate.findFirst({
     where: {
       practiceId: input.practiceId,
       doctorId: input.doctorId,
       encounterType: input.encounterType,
+      status: 'active',
       NOT: { id: input.excludeNoteTemplateId },
     },
     select: {
@@ -74,13 +84,10 @@ export async function resolvePriorCertifiedTwinVersion(input: {
         select: { id: true, certificationStatus: true },
       },
     },
-    orderBy: [{ version: 'desc' }, { createdAt: 'desc' }],
   });
-  for (const p of priors) {
-    const cv = p.templateTwinCompiledVersion;
-    if (cv && cv.certificationStatus === 'CERTIFIED') {
-      return { compiledVersionId: cv.id, noteTemplateId: p.id };
-    }
+  const cv = active?.templateTwinCompiledVersion;
+  if (active && cv && cv.certificationStatus === 'CERTIFIED') {
+    return { compiledVersionId: cv.id, noteTemplateId: active.id };
   }
   return null;
 }

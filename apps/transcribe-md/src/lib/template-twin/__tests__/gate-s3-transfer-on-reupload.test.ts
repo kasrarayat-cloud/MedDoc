@@ -116,6 +116,23 @@ describe('S3 — planReuploadTransfer: #247 record-derived exclusion + #274 matc
     expect(plan.transferred.map((t) => t.mapping.sourceType)).not.toContain('visit_metadata');
   });
 
+  it('⚠️ CLINICAL — a record-derived CONCEPT is excluded even when sourceType is "extraction"', () => {
+    // The fallback proposer (model outage) assigns a record-derived concept to a
+    // date/short_text control while leaving sourceType 'extraction'. The exclusion
+    // must key on the CONCEPT, not only the sourceType, or a patient DOB would
+    // transfer-as-certified with no human (adversarial pass, 2026-09-14).
+    const dob = mapping(M, 'extraction', 'visit_metadata.date_of_birth'); // record-derived CONCEPT, extraction sourceType
+    const clinicalMap = new Map<string, SemanticMapping>([
+      [A, mapping(A, 'extraction', 'preoperative_diagnosis')],
+      [M, dob],
+    ]);
+    const plan = planReuploadTransfer({ target: SOURCE, sourceIr: SOURCE, certified: clinicalMap });
+    const transferredIds = plan.transferred.map((t) => t.fieldId);
+    expect(transferredIds).toEqual([A]); // the clinical row carries
+    expect(transferredIds).not.toContain(M); // the record-derived DOB does NOT, despite sourceType 'extraction'
+    expect(plan.reproposed).toContain(M);
+  });
+
   it('a shared tag is ambiguous → the #274 bijection transfers NEITHER member', () => {
     const src = ir([
       field({ fieldId: A, path: '/doc/sdt[1]', ordinal: 0, label: 'Dx 1', tag: 't_dup' }),
