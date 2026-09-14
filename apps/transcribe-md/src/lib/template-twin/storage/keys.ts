@@ -3,8 +3,39 @@ import { randomUUID } from 'node:crypto';
 export const DOCX_MIME_TYPE =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
+export const PDF_MIME_TYPE = 'application/pdf';
+
 export const DEFAULT_TEMPLATE_TWIN_BUCKET =
   'transcribe-md-template-artifacts';
+
+/**
+ * The media an UPLOAD artifact may be — an EXPLICIT ALLOWLIST, never a pattern
+ * (S2, upload-and-certified). `sources` and `outputs` are ALWAYS `.docx`; an
+ * upload keeps the doctor's ORIGINAL, which is a Word `.docx` or (S2) a `.pdf`
+ * form. Each entry binds an extension to the content-type the integrity check
+ * requires, so the key's extension and the stored bytes' declared type are ONE
+ * contract read the same way by the builder, the parser and the integrity check.
+ *
+ * ⚠️ ADDING A ROW HERE WIDENS WHAT THE PRIVATE STORE WILL HOLD. It is a
+ * deliberate act reviewed as one — a new media type is admitted only by its own
+ * allowlist entry, never by loosening a check to accept "any extension".
+ */
+export const UPLOAD_ARTIFACT_MEDIA = {
+  docx: { ext: 'docx', contentType: DOCX_MIME_TYPE },
+  pdf: { ext: 'pdf', contentType: PDF_MIME_TYPE },
+} as const;
+
+export type UploadArtifactMedia = keyof typeof UPLOAD_ARTIFACT_MEDIA;
+
+/** Reverse lookup: a filename's extension → its allowlisted upload media, or
+ *  null. The ONLY admission path — an unknown extension is refused, not
+ *  normalized. */
+export function uploadMediaForExtension(filename: string): UploadArtifactMedia | null {
+  for (const media of Object.keys(UPLOAD_ARTIFACT_MEDIA) as UploadArtifactMedia[]) {
+    if (filename.endsWith(`.${UPLOAD_ARTIFACT_MEDIA[media].ext}`)) return media;
+  }
+  return null;
+}
 
 /**
  * ⚠️ `upload` IS NOT A TWIN ARTIFACT, AND IT LIVES HERE ANYWAY — deliberately.
@@ -111,6 +142,9 @@ export interface CreateUploadArtifactKeyInput {
    *  exists yet, which is the entire reason this key shape is needed. */
   uploadId: string;
   sha256: string;
+  /** The upload's media — an allowlisted `docx` (default) or `pdf` (S2). The
+   *  extension is taken from `UPLOAD_ARTIFACT_MEDIA`, never accepted raw. */
+  media?: UploadArtifactMedia;
 }
 
 /**
@@ -140,11 +174,21 @@ export function createUploadArtifactKey({
   practiceId,
   uploadId,
   sha256,
+  media = 'docx',
 }: CreateUploadArtifactKeyInput): string {
+  // ⚠️ THE EXTENSION COMES FROM THE ALLOWLIST, NEVER FROM THE CALLER. An
+  // unrecognized media is refused here — the builder's arm — so a key with an
+  // out-of-allowlist extension can never be minted.
+  const entry = UPLOAD_ARTIFACT_MEDIA[media];
+  if (!entry) {
+    throw new InvalidTemplateTwinStorageInputError(
+      `upload media must be one of ${Object.keys(UPLOAD_ARTIFACT_MEDIA).join(', ')}.`,
+    );
+  }
   const prefix = templateTwinTenantPrefix(practiceId);
   const upload = assertOpaqueId(uploadId, 'uploadId');
   const digest = assertSha256(sha256);
-  return `${prefix}/uploads/${upload}/${upload}/${digest}.docx`;
+  return `${prefix}/uploads/${upload}/${upload}/${digest}.${entry.ext}`;
 }
 
 export interface CreateOutputArtifactKeyInput {

@@ -530,8 +530,12 @@ export async function saveNoteTemplateAction(
             ? "This format was saved, but it can't be certified for exact-form export: it's written as " +
               'prose, with no Word form fields to fill. Notes will export in the standard layout rather ' +
               'than on your own form. To get your exact form, add form fields in Word and re-upload.'
-            : 'This format was saved, but it could not be prepared for exact-form export. Notes will ' +
-              'export in the standard layout rather than on your own form.'
+            : twinFailureCode === 'PDF_NO_TEXT_LAYER'
+              ? 'This format was saved, but this PDF has no readable text layer — it looks scanned, so it ' +
+                'could not be read into a form. Upload a text-based PDF or a Word .docx to get exact-form ' +
+                'export; until then notes will export in the standard layout.'
+              : 'This format was saved, but it could not be prepared for exact-form export. Notes will ' +
+                'export in the standard layout rather than on your own form.'
           : null,
       activationHeld,
     };

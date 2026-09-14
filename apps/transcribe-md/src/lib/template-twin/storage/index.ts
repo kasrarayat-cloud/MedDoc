@@ -22,10 +22,14 @@ export {
   createUploadArtifactKey,
   DEFAULT_TEMPLATE_TWIN_BUCKET,
   DOCX_MIME_TYPE,
+  PDF_MIME_TYPE,
+  UPLOAD_ARTIFACT_MEDIA,
+  uploadMediaForExtension,
   InvalidTemplateTwinStorageInputError,
   resolveTemplateTwinBucket,
   templateTwinTenantPrefix,
   type TemplateTwinArtifactKind,
+  type UploadArtifactMedia,
 } from './keys';
 
 export {

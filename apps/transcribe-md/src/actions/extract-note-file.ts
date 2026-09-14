@@ -36,6 +36,7 @@ import {
 import {
   createTemplateTwinArtifactStore,
   hasTemplateTwinStorageProvider,
+  type UploadArtifactMedia,
 } from '@/lib/template-twin/storage';
 import { log } from '@/lib/log';
 
@@ -58,19 +59,25 @@ export type ExtractWithSourceResult = ExtractResult & {
 };
 
 /**
- * ⚠️ ONLY `.docx` IS KEPT, AND THE NARROWNESS IS DELIBERATE. The ruling is
- * about the doctor's FORM — the file whose letterhead, logo and layout the twin
- * pipeline needs and which cannot be reconstructed from extracted text. A
- * pasted note has no file; a `.txt` or `.md` upload IS its own text, so storing
- * it would keep a second copy of something already in the row. PDF has its own
- * certification path that already persists its canvas.
+ * The doctor's FORM is kept — the file whose layout the twin pipeline needs and
+ * which cannot be reconstructed from extracted text. That is a `.docx` OR (S2,
+ * upload-and-certified) a `.pdf`: the PDF is no longer dropped at upload — it is
+ * retained (content-addressed, put-once) and becomes a faithful DOCX twin. A
+ * pasted note has no file; a `.txt`/`.md` upload IS its own text, so keeping it
+ * would duplicate the row. Returns the allowlisted upload media, or null to skip.
  */
-function isKeepableUpload(filename: string, mime: string): boolean {
+function keepableUploadMedia(filename: string, mime: string): UploadArtifactMedia | null {
   const name = filename.toLowerCase();
-  return (
+  if (
     name.endsWith('.docx') ||
     mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-  );
+  ) {
+    return 'docx';
+  }
+  if (name.endsWith('.pdf') || mime === 'application/pdf') {
+    return 'pdf';
+  }
+  return null;
 }
 
 export async function extractNoteFileAction(
@@ -101,12 +108,13 @@ export async function extractNoteFileAction(
   // shape failing open for tenant predicates. If it is ever absent that is a
   // bug to surface, not a reason to quietly discard a doctor's file.
   const { practiceId } = session.user;
+  const uploadMedia = keepableUploadMedia(file.name, file.type);
   let source: KeptSourceRef | undefined;
   if (typeof practiceId !== 'string' || practiceId.length === 0) {
     log.error('note-template:source', 'session carries no practice — file NOT kept', {
       userId: session.user.id,
     });
-  } else if (isKeepableUpload(file.name, file.type) && hasTemplateTwinStorageProvider()) {
+  } else if (uploadMedia && hasTemplateTwinStorageProvider()) {
     try {
       const stored = await createTemplateTwinArtifactStore().storeUploadArtifact({
         practiceId,
@@ -114,6 +122,7 @@ export async function extractNoteFileAction(
         // is the entire reason this key shape had to be added.
         uploadId: randomUUID(),
         bytes,
+        media: uploadMedia,
       });
       source = { objectKey: stored.objectKey, sha256: stored.sha256 };
     } catch (err) {

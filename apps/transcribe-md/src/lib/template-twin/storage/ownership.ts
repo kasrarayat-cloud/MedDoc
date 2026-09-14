@@ -1,13 +1,20 @@
 import {
   assertOpaqueId,
   assertSha256,
+  UPLOAD_ARTIFACT_MEDIA,
+  uploadMediaForExtension,
   type TemplateTwinArtifactKind,
+  type UploadArtifactMedia,
 } from './keys';
 
 export interface ParsedTemplateTwinArtifactKey {
   practiceId: string;
   kind: TemplateTwinArtifactKind;
   sha256: string;
+  /** For an `upload` key only: which allowlisted media the extension declared
+   *  (`docx`|`pdf`). Binds the key's extension to the content-type the integrity
+   *  check requires. Absent for sources/outputs (always `.docx`). */
+  media?: UploadArtifactMedia;
 }
 
 /**
@@ -51,10 +58,10 @@ export function parseTemplateTwinArtifactKey(
     const practiceId = assertOpaqueId(parts[1] ?? '', 'practiceId');
     const category = parts[3];
     const filename = parts[expectedLength - 1] ?? '';
-    if (!filename.endsWith('.docx')) return null;
-    const sha256 = assertSha256(filename.slice(0, -5));
 
     if (category === 'sources') {
+      if (!filename.endsWith('.docx')) return null; // sources are ALWAYS .docx
+      const sha256 = assertSha256(filename.slice(0, -5));
       assertOpaqueId(parts[4] ?? '', 'lineageId');
       if (!/^v[1-9][0-9]*$/.test(parts[5] ?? '')) return null;
       assertOpaqueId(parts[6] ?? '', 'artifactId');
@@ -62,16 +69,26 @@ export function parseTemplateTwinArtifactKey(
     }
 
     if (category === 'uploads') {
+      // ⚠️ EXTENSION ALLOWLIST (S2). An upload is `.docx` OR `.pdf` ONLY —
+      // `uploadMediaForExtension` is the SOLE admission path; anything else
+      // returns null (refused, not normalized). sources/outputs stay `.docx`.
+      const media = uploadMediaForExtension(filename);
+      if (!media) return null;
+      const sha256 = assertSha256(
+        filename.slice(0, -(UPLOAD_ARTIFACT_MEDIA[media].ext.length + 1)),
+      );
       // Both id segments are the uploadId — an upload IS its own artifact, so
       // a second random id would suggest a grouping that does not exist.
       // Requiring them EQUAL is what stops a crafted key smuggling an
       // unrelated id through the second position.
       const uploadId = assertOpaqueId(parts[4] ?? '', 'uploadId');
       if (parts[5] !== uploadId) return null;
-      return { practiceId, kind: 'upload', sha256 };
+      return { practiceId, kind: 'upload', sha256, media };
     }
 
     if (category === 'outputs') {
+      if (!filename.endsWith('.docx')) return null; // outputs are ALWAYS .docx
+      const sha256 = assertSha256(filename.slice(0, -5));
       assertOpaqueId(parts[4] ?? '', 'visitId');
       assertSha256(parts[5] ?? '', 'manifestSha256');
       assertOpaqueId(parts[6] ?? '', 'artifactId');
