@@ -22,6 +22,7 @@ import type { SemanticMapping, TemplateDocIR } from './ir';
 import { DOCX_TEMPLATE_COMPILER } from './artifact-compiler';
 import { deriveProseTwin, derivedTwinProbeIsValid } from './prose-form/derive-prose-twin';
 import { isPdfSource, pdfToProseDocx } from './pdf-form/pdf-to-prose-docx';
+import { relocateFillLinesToBlankState } from './pdf-form/fill-line-blank-state';
 import {
   fallbackSemanticMappings,
   proposeSemanticMappings,
@@ -264,7 +265,11 @@ export async function createTemplateTwinDraft(
   // beside the twin. A scanned / text-less PDF reconstructs to nothing → null →
   // quarantine PDF_NO_TEXT_LAYER, declined cleanly with a plain message (ruling
   // S2-2; we never OCR).
-  if (isPdfSource(source)) {
+  // ⚠️ Captured BEFORE `source` is overwritten with the reconstructed prose DOCX:
+  // the S2 fill-line-blank-state relocation below runs ONLY for a PDF (a form S2
+  // synthesised), never for an S1 doctor-uploaded DOCX (byte-preserved).
+  const wasPdf = isPdfSource(source);
+  if (wasPdf) {
     const prose = await pdfToProseDocx(source);
     if (!prose) {
       await quarantineRejectedSource({
@@ -301,15 +306,24 @@ export async function createTemplateTwinDraft(
     // to EXACTLY the controls it added — so a wrong twin is never produced, and a
     // form we cannot derive falls through to the same NO_FILLABLE_FIELDS
     // quarantine as before. On success the derived bytes BECOME the source.
-    const derived = await deriveProseTwin(source, async (bytes, expected) => {
+    const probe = async (bytes: Uint8Array, expected: number): Promise<boolean> => {
       try {
         return derivedTwinProbeIsValid(DOCX_TEMPLATE_COMPILER.compile(bytes), expected);
       } catch {
         return false;
       }
-    });
+    };
+    const derived = await deriveProseTwin(source, probe);
     if (derived) {
       source = derived.bytes;
+      // ⚠️ S2 ONLY (owner ruling, 2026-09-14): move each MATERIALISED fill-line
+      // off the label and INTO its control's blank content, so a filled twin
+      // shows the value alone — never "LABEL: ______value". Self-verifying (same
+      // controls) and fail-safe: on any doubt it keeps the derived twin as-is.
+      if (wasPdf) {
+        const relocated = await relocateFillLinesToBlankState(source, derived.slots.length, probe);
+        if (relocated) source = relocated;
+      }
       ir = DOCX_TEMPLATE_COMPILER.compile(source);
     } else {
       await quarantineRejectedSource({
