@@ -129,8 +129,7 @@ describe('what is NOT kept, and why', () => {
   it.each([
     ['note.txt', 'text/plain'],
     ['note.md', 'text/markdown'],
-    ['scan.pdf', 'application/pdf'],
-  ])('%s is not stored — it is its own text, or has its own path', async (name, type) => {
+  ])('%s is not stored — it is its own text', async (name, type) => {
     await extractNoteFileAction(upload(name, type));
     expect(mocks.storeUploadArtifact).not.toHaveBeenCalled();
   });
@@ -138,6 +137,31 @@ describe('what is NOT kept, and why', () => {
   it('a .docx by EXTENSION is kept even when the browser sends a vague mime', async () => {
     await extractNoteFileAction(upload('form.docx', 'application/octet-stream'));
     expect(mocks.storeUploadArtifact).toHaveBeenCalledTimes(1);
+    expect(mocks.storeUploadArtifact.mock.calls[0]?.[0]?.media).toBe('docx');
+  });
+});
+
+describe('⚠️ S2 — a PDF form is KEPT now (it used to be dropped), stored as media:pdf', () => {
+  it('a .pdf upload is stored with media:pdf — the owner-fix: bytes no longer dropped', async () => {
+    mocks.storeUploadArtifact.mockResolvedValue({
+      objectKey: `practices/prac_1/template-twin/uploads/up_1/up_1/${SHA}.pdf`,
+      sha256: SHA,
+    });
+    mocks.extract.mockResolvedValue({ ok: true, text: '## Technique\nx', kind: 'pdf' });
+    const out = await extractNoteFileAction(upload('form.pdf', 'application/pdf'));
+    expect(mocks.storeUploadArtifact).toHaveBeenCalledTimes(1);
+    expect(mocks.storeUploadArtifact.mock.calls[0]?.[0]?.media).toBe('pdf');
+    expect(out.source?.objectKey).toContain('.pdf');
+  });
+
+  it('a .pdf by EXTENSION is kept even when the browser sends a vague mime', async () => {
+    mocks.storeUploadArtifact.mockResolvedValue({
+      objectKey: `practices/prac_1/template-twin/uploads/up_1/up_1/${SHA}.pdf`,
+      sha256: SHA,
+    });
+    await extractNoteFileAction(upload('form.pdf', 'application/octet-stream'));
+    expect(mocks.storeUploadArtifact).toHaveBeenCalledTimes(1);
+    expect(mocks.storeUploadArtifact.mock.calls[0]?.[0]?.media).toBe('pdf');
   });
 });
 

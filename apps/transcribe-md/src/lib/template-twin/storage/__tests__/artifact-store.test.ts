@@ -6,6 +6,7 @@ import {
   createTemplateTwinArtifactStore,
   DEFAULT_TEMPLATE_TWIN_BUCKET,
   DOCX_MIME_TYPE,
+  PDF_MIME_TYPE,
   hasTemplateTwinStorageProvider,
   TemplateTwinArtifactCollisionError,
   TemplateTwinArtifactIntegrityError,
@@ -321,6 +322,60 @@ describe('Template Twin verified reads', () => {
         objectKey: source.objectKey,
         expectedSha256: source.sha256,
       })
+    ).rejects.toBeInstanceOf(TemplateTwinArtifactNotFoundError);
+    expect(factory).not.toHaveBeenCalled();
+  });
+});
+
+describe('⚠️ S2 — .pdf upload storage: put-once, content-addressed, integrity-bound', () => {
+  const PDF_BYTES = Buffer.from('%PDF-1.4\nsynthetic pdf form\n%%EOF');
+
+  it('stores a .pdf upload PUT-ONCE with application/pdf and round-trips the bytes', async () => {
+    const { client, store } = setup();
+    const up = await store.storeUploadArtifact({
+      practiceId: 'practice_1',
+      uploadId: 'up_1',
+      bytes: PDF_BYTES,
+      media: 'pdf',
+    });
+    expect(up.objectKey.endsWith('.pdf')).toBe(true); // content-addressed .pdf key
+    expect(up.mimeType).toBe(PDF_MIME_TYPE);
+    expect(client.putObject).toHaveBeenCalledTimes(1); // put-once
+    expect(client.putObject.mock.calls[0]?.[4]?.['Content-Type']).toBe(PDF_MIME_TYPE);
+    expect(client.putObject.mock.calls[0]?.[4]?.['If-None-Match']).toBe('*');
+    const read = await store.readUploadArtifact({
+      practiceId: 'practice_1',
+      objectKey: up.objectKey,
+      expectedSha256: up.sha256,
+    });
+    expect(read.equals(PDF_BYTES)).toBe(true);
+  });
+
+  it('integrity ARM: a .pdf key whose stored object claims DOCX content-type is REFUSED', async () => {
+    const { client, store } = setup();
+    const up = await store.storeUploadArtifact({
+      practiceId: 'practice_1', uploadId: 'up_1', bytes: PDF_BYTES, media: 'pdf',
+    });
+    // The extension says pdf; make the stored content-type disagree.
+    client.tamperMetadata(DEFAULT_TEMPLATE_TWIN_BUCKET, up.objectKey, 'Content-Type', DOCX_MIME_TYPE);
+    await expect(
+      store.readUploadArtifact({
+        practiceId: 'practice_1', objectKey: up.objectKey, expectedSha256: up.sha256,
+      }),
+    ).rejects.toBeInstanceOf(TemplateTwinArtifactIntegrityError);
+  });
+
+  it('tenant ARM: a .pdf upload from ANOTHER practice is refused before any provider I/O', async () => {
+    const { store } = setup();
+    const up = await store.storeUploadArtifact({
+      practiceId: 'practice_1', uploadId: 'up_1', bytes: PDF_BYTES, media: 'pdf',
+    });
+    const factory = vi.fn(() => new MemoryObjectClient());
+    const isolated = createTemplateTwinArtifactStore({ clientFactory: factory });
+    await expect(
+      isolated.readUploadArtifact({
+        practiceId: 'practice_2', objectKey: up.objectKey, expectedSha256: up.sha256,
+      }),
     ).rejects.toBeInstanceOf(TemplateTwinArtifactNotFoundError);
     expect(factory).not.toHaveBeenCalled();
   });

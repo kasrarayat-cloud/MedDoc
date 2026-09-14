@@ -21,6 +21,7 @@ import { logTwinAudit as logAudit } from './twin-audit';
 import type { SemanticMapping, TemplateDocIR } from './ir';
 import { DOCX_TEMPLATE_COMPILER } from './artifact-compiler';
 import { deriveProseTwin, derivedTwinProbeIsValid } from './prose-form/derive-prose-twin';
+import { pdfToProseDocx } from './pdf-form/pdf-to-prose-docx';
 import {
   fallbackSemanticMappings,
   proposeSemanticMappings,
@@ -28,6 +29,7 @@ import {
 import {
   createTemplateTwinArtifactStore,
   DOCX_MIME_TYPE,
+  PDF_MIME_TYPE,
   type TemplateTwinArtifactStore,
 } from './storage';
 import {
@@ -38,6 +40,7 @@ import {
 export class TemplateTwinDraftError extends Error {
   readonly code:
     | 'NO_FILLABLE_FIELDS'
+    | 'PDF_NO_TEXT_LAYER'
     | 'SYSTEM_TEMPLATE_MISSING'
     | 'ATTACH_TARGET_NOT_FOUND'
     | 'PERSISTENCE_FAILED';
@@ -47,6 +50,19 @@ export class TemplateTwinDraftError extends Error {
     this.name = 'TemplateTwinDraftError';
     this.code = code;
   }
+}
+
+/** A PDF by its magic bytes `%PDF-` — the content, never the filename. A DOCX is
+ *  a ZIP (`PK\x03\x04`), so this cannot mistake one for the other. */
+function isPdfSource(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= 5 &&
+    bytes[0] === 0x25 && // %
+    bytes[1] === 0x50 && // P
+    bytes[2] === 0x44 && // D
+    bytes[3] === 0x46 && // F
+    bytes[4] === 0x2d //   -
+  );
 }
 
 export interface CreateTemplateTwinDraftInput {
@@ -114,6 +130,9 @@ async function quarantineRejectedSource(input: {
   bytes: Uint8Array;
   actor: CreateTemplateTwinDraftInput['actor'];
   rejectionCode: string;
+  /** The rejected bytes' media — DOCX by default, PDF for an S2 PDF rejection.
+   *  Recorded on the quarantine row so it names what was actually rejected. */
+  mimeType?: string;
 }): Promise<void> {
   if (input.bytes.byteLength < 1) return;
   const digest = createHash('sha256').update(input.bytes).digest('hex');
@@ -126,7 +145,7 @@ async function quarantineRejectedSource(input: {
         lineageVersion: 1,
         objectKey: null,
         sha256: digest,
-        mimeType: DOCX_MIME_TYPE,
+        mimeType: input.mimeType ?? DOCX_MIME_TYPE,
         sizeBytes: input.bytes.byteLength,
         validationStatus: 'quarantined',
         rejectionCodes: [input.rejectionCode.slice(0, 80)],
@@ -250,6 +269,30 @@ export async function createTemplateTwinDraft(
   // SAME controlled document. Everything downstream reads `source`, never
   // `input.source`.
   let source = input.source;
+  // ── S2 · UPLOAD-AND-CERTIFIED — PDF FORM → FAITHFUL PROSE DOCX ─────────────
+  // A PDF has no `word/document.xml`, so it is reconstructed into a prose DOCX
+  // FIRST (STRUCTURAL fidelity, ruling S2-1); everything below then runs the
+  // IDENTICAL DOCX path (S1 derive → compile → propose → certify). The ORIGINAL
+  // PDF is retained as the upload artifact (content-addressed, put-once) — stored
+  // beside the twin. A scanned / text-less PDF reconstructs to nothing → null →
+  // quarantine PDF_NO_TEXT_LAYER, declined cleanly with a plain message (ruling
+  // S2-2; we never OCR).
+  if (isPdfSource(source)) {
+    const prose = await pdfToProseDocx(source);
+    if (!prose) {
+      await quarantineRejectedSource({
+        bytes: source,
+        actor: input.actor,
+        rejectionCode: 'PDF_NO_TEXT_LAYER',
+        mimeType: PDF_MIME_TYPE,
+      });
+      throw new TemplateTwinDraftError(
+        'PDF_NO_TEXT_LAYER',
+        'This PDF has no readable text layer (it looks scanned). Upload a text-based PDF or a Word .docx, or paste the note instead.',
+      );
+    }
+    source = prose;
+  }
   let ir: TemplateDocIR;
   try {
     ir = DOCX_TEMPLATE_COMPILER.compile(source);

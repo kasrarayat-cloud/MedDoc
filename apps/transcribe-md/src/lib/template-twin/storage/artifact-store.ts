@@ -5,6 +5,9 @@ import {
   createSourceArtifactKey,
   createUploadArtifactKey,
   DOCX_MIME_TYPE,
+  PDF_MIME_TYPE,
+  UPLOAD_ARTIFACT_MEDIA,
+  type UploadArtifactMedia,
   resolveTemplateTwinBucket,
   type TemplateTwinArtifactKind,
 } from './keys';
@@ -77,7 +80,9 @@ export interface StoredTemplateTwinArtifact {
   bucket: string;
   objectKey: string;
   sha256: string;
-  mimeType: typeof DOCX_MIME_TYPE;
+  /** DOCX for sources/outputs and DOCX uploads; PDF for a `.pdf` upload (S2).
+   *  Always an allowlisted content-type, never arbitrary. */
+  mimeType: typeof DOCX_MIME_TYPE | typeof PDF_MIME_TYPE;
   sizeBytes: number;
   created: boolean;
 }
@@ -94,6 +99,10 @@ export interface StoreUploadArtifactInput {
   /** Opaque id minted per upload attempt — NOT a template id. */
   uploadId: string;
   bytes: Buffer | Uint8Array;
+  /** The upload's media — allowlisted `docx` (default) or `pdf` (S2). Chooses
+   *  the key extension AND the stored content-type from `UPLOAD_ARTIFACT_MEDIA`,
+   *  which the integrity check then binds together. */
+  media?: UploadArtifactMedia;
 }
 
 export interface StoreOutputArtifactInput {
@@ -178,13 +187,19 @@ function assertStoredMetadata(
   stat: TemplateTwinObjectStat,
   expectedSha256: string,
   expectedSizeBytes: number,
-  expectedKind: TemplateTwinArtifactKind
+  expectedKind: TemplateTwinArtifactKind,
+  expectedContentType: string
 ): void {
+  // ⚠️ THE CONTENT-TYPE IS THE ONE THE KEY'S EXTENSION DECLARES, not a constant.
+  // A `.pdf` upload key MUST carry application/pdf and a `.docx` key DOCX — so an
+  // object whose stored type does not match its key's extension is refused (the
+  // integrity arm). `expectedContentType` is always an allowlisted value the
+  // caller derived from the key/media, never caller-supplied free text.
   if (
     stat.size !== expectedSizeBytes ||
     metadataValue(stat, 'sha256') !== expectedSha256 ||
     metadataValue(stat, 'artifact-kind') !== expectedKind ||
-    metadataValue(stat, 'content-type') !== DOCX_MIME_TYPE
+    metadataValue(stat, 'content-type') !== expectedContentType
   ) {
     throw new TemplateTwinArtifactIntegrityError();
   }
@@ -264,6 +279,9 @@ export function createTemplateTwinArtifactStore(
     bytes: Buffer;
     digest: string;
     kind: TemplateTwinArtifactKind;
+    /** Allowlisted content-type the object is stored + verified with; bound to
+     *  the key's extension by the caller (never arbitrary free text). */
+    contentType: typeof DOCX_MIME_TYPE | typeof PDF_MIME_TYPE;
   }): Promise<StoredTemplateTwinArtifact> {
     assertBoundedSize(input.bytes.byteLength, maxBytes);
     const client = await readyClient();
@@ -275,7 +293,8 @@ export function createTemplateTwinArtifactStore(
           existing,
           input.digest,
           input.bytes.byteLength,
-          input.kind
+          input.kind,
+          input.contentType
         );
       } catch {
         throw new TemplateTwinArtifactCollisionError();
@@ -284,7 +303,7 @@ export function createTemplateTwinArtifactStore(
         bucket,
         objectKey: input.objectKey,
         sha256: input.digest,
-        mimeType: DOCX_MIME_TYPE,
+        mimeType: input.contentType,
         sizeBytes: input.bytes.byteLength,
         created: false,
       };
@@ -302,7 +321,7 @@ export function createTemplateTwinArtifactStore(
         input.bytes,
         input.bytes.byteLength,
         {
-          'Content-Type': DOCX_MIME_TYPE,
+          'Content-Type': input.contentType,
           'If-None-Match': '*',
           'X-Amz-Meta-Sha256': input.digest,
           'X-Amz-Meta-Artifact-Kind': input.kind,
@@ -322,7 +341,8 @@ export function createTemplateTwinArtifactStore(
           existing,
           input.digest,
           input.bytes.byteLength,
-          input.kind
+          input.kind,
+          input.contentType
         );
       } catch (verificationError) {
         if (verificationError instanceof TemplateTwinArtifactIntegrityError) {
@@ -334,7 +354,7 @@ export function createTemplateTwinArtifactStore(
         bucket,
         objectKey: input.objectKey,
         sha256: input.digest,
-        mimeType: DOCX_MIME_TYPE,
+        mimeType: input.contentType,
         sizeBytes: input.bytes.byteLength,
         created: false,
       };
@@ -352,14 +372,15 @@ export function createTemplateTwinArtifactStore(
       stored,
       input.digest,
       input.bytes.byteLength,
-      input.kind
+      input.kind,
+      input.contentType
     );
 
     return {
       bucket,
       objectKey: input.objectKey,
       sha256: input.digest,
-      mimeType: DOCX_MIME_TYPE,
+      mimeType: input.contentType,
       sizeBytes: input.bytes.byteLength,
       created: true,
     };
@@ -377,6 +398,14 @@ export function createTemplateTwinArtifactStore(
     if (parsed.sha256 !== input.expectedSha256) {
       throw new TemplateTwinArtifactIntegrityError();
     }
+    // The content-type the stored object MUST carry is fixed by the key: an
+    // upload's allowlisted media (docx|pdf) — parsed from its extension — and
+    // DOCX for every source/output. A `.pdf` key whose object is not
+    // application/pdf (or vice versa) is refused by the integrity check below.
+    const expectedContentType =
+      parsed.kind === 'upload'
+        ? UPLOAD_ARTIFACT_MEDIA[parsed.media ?? 'docx'].contentType
+        : DOCX_MIME_TYPE;
 
     const client = await readyClient();
     let stat: TemplateTwinObjectStat;
@@ -391,7 +420,7 @@ export function createTemplateTwinArtifactStore(
     if (!Number.isSafeInteger(expectedSize) || expectedSize < 1) {
       throw new TemplateTwinArtifactIntegrityError();
     }
-    assertStoredMetadata(stat, input.expectedSha256, expectedSize, kind);
+    assertStoredMetadata(stat, input.expectedSha256, expectedSize, kind, expectedContentType);
 
     let stream: AsyncIterable<unknown>;
     try {
@@ -439,19 +468,29 @@ export function createTemplateTwinArtifactStore(
         sha256: digest,
         ...(idFactory ? { idFactory } : {}),
       });
-      return putOnce({ objectKey, bytes, digest, kind: 'source' });
+      return putOnce({ objectKey, bytes, digest, kind: 'source', contentType: DOCX_MIME_TYPE });
     },
     async storeUploadArtifact(
       input: StoreUploadArtifactInput
     ): Promise<StoredTemplateTwinArtifact> {
       const bytes = asBuffer(input.bytes);
       const digest = sha256(bytes);
+      const media = input.media ?? 'docx';
       const objectKey = createUploadArtifactKey({
         practiceId: input.practiceId,
         uploadId: input.uploadId,
         sha256: digest,
+        media,
       });
-      return putOnce({ objectKey, bytes, digest, kind: 'upload' });
+      // Extension and content-type come from ONE allowlist entry, so the key and
+      // the stored bytes' declared type can never disagree.
+      return putOnce({
+        objectKey,
+        bytes,
+        digest,
+        kind: 'upload',
+        contentType: UPLOAD_ARTIFACT_MEDIA[media].contentType,
+      });
     },
     async storeOutputArtifact(
       input: StoreOutputArtifactInput
@@ -465,7 +504,7 @@ export function createTemplateTwinArtifactStore(
         outputSha256: digest,
         ...(idFactory ? { idFactory } : {}),
       });
-      return putOnce({ objectKey, bytes, digest, kind: 'output' });
+      return putOnce({ objectKey, bytes, digest, kind: 'output', contentType: DOCX_MIME_TYPE });
     },
     readSourceArtifact(input: ReadArtifactInput): Promise<Buffer> {
       return readVerified(input, 'source');

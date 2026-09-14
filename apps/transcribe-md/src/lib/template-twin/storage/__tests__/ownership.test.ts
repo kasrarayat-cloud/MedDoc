@@ -6,6 +6,7 @@ import {
   createOutputArtifactKey,
   createSourceArtifactKey,
   createUploadArtifactKey,
+  InvalidTemplateTwinStorageInputError,
   isTemplateTwinRecordOwner,
   isTenantOwnedArtifactKey,
   parseTemplateTwinArtifactKey,
@@ -205,5 +206,60 @@ describe('⚠️ the upload shape refuses what it must', () => {
     const good = createUploadArtifactKey({ practiceId: PRACTICE, uploadId: 'up_1', sha256: SHA_A });
     const padded = good.replace('/uploads/', '/uploads/extra/');
     expect(parseTemplateTwinArtifactKey(padded)).toBeNull();
+  });
+});
+
+describe('⚠️ S2 — .pdf upload media is an EXPLICIT allowlist entry, tenant-scoped', () => {
+  it('builder: an upload key may be .pdf (allowlist) and is tenant-prefixed; default stays .docx', () => {
+    const pdf = createUploadArtifactKey({ practiceId: PRACTICE, uploadId: 'up_1', sha256: SHA_A, media: 'pdf' });
+    expect(pdf.endsWith(`/${SHA_A}.pdf`)).toBe(true);
+    expect(pdf.startsWith(`practices/${PRACTICE}/template-twin/uploads/`)).toBe(true);
+    const docx = createUploadArtifactKey({ practiceId: PRACTICE, uploadId: 'up_1', sha256: SHA_A });
+    expect(docx.endsWith('.docx')).toBe(true);
+  });
+
+  it('builder ARM: a media OUTSIDE the allowlist is refused, never normalized', () => {
+    expect(() =>
+      createUploadArtifactKey({
+        practiceId: PRACTICE,
+        uploadId: 'up_1',
+        sha256: SHA_A,
+        // @ts-expect-error — 'png' is not an allowlisted upload media
+        media: 'png',
+      }),
+    ).toThrow(InvalidTemplateTwinStorageInputError);
+  });
+
+  it('parser: a .pdf UPLOAD key parses to media:pdf; a .pdf in the source namespace is refused', () => {
+    const pdf = createUploadArtifactKey({ practiceId: PRACTICE, uploadId: 'up_1', sha256: SHA_A, media: 'pdf' });
+    expect(parseTemplateTwinArtifactKey(pdf)).toEqual({
+      practiceId: PRACTICE,
+      kind: 'upload',
+      sha256: SHA_A,
+      media: 'pdf',
+    });
+    const docx = createUploadArtifactKey({ practiceId: PRACTICE, uploadId: 'up_1', sha256: SHA_A });
+    expect(parseTemplateTwinArtifactKey(docx)?.media).toBe('docx');
+    // sources are ALWAYS .docx — a .pdf there is not admitted by the widening.
+    const source = createSourceArtifactKey({
+      practiceId: PRACTICE, lineageId: 'lin_1', templateVersion: 1, sha256: SHA_A, idFactory: ID,
+    });
+    expect(parseTemplateTwinArtifactKey(source.replace('.docx', '.pdf'))).toBeNull();
+  });
+
+  it('parser ARM: an upload extension outside the {docx,pdf} allowlist is refused', () => {
+    const pdf = createUploadArtifactKey({ practiceId: PRACTICE, uploadId: 'up_1', sha256: SHA_A, media: 'pdf' });
+    expect(parseTemplateTwinArtifactKey(pdf.replace('.pdf', '.png'))).toBeNull();
+    expect(parseTemplateTwinArtifactKey(pdf.replace('.pdf', '.exe'))).toBeNull();
+    expect(parseTemplateTwinArtifactKey(pdf.replace(`.pdf`, ''))).toBeNull();
+  });
+
+  it('tenant ARM: a .pdf upload key from ANOTHER practice is refused — the same guard as .docx', () => {
+    const pdfA = createUploadArtifactKey({ practiceId: PRACTICE, uploadId: 'up_1', sha256: SHA_A, media: 'pdf' });
+    expect(isTenantOwnedArtifactKey({ objectKey: pdfA, practiceId: PRACTICE, kind: 'upload' })).toBe(true);
+    expect(isTenantOwnedArtifactKey({ objectKey: pdfA, practiceId: 'prac_other', kind: 'upload' })).toBe(false);
+    expect(() =>
+      assertTenantOwnedArtifactKey({ objectKey: pdfA, practiceId: 'prac_other' }),
+    ).toThrow(TemplateTwinArtifactNotFoundError);
   });
 });
