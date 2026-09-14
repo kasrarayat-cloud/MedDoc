@@ -219,5 +219,20 @@ export async function fillPdfTemplate(input: PdfFillInput): Promise<Uint8Array> 
     pages[0].drawText(input.signedStatusLine, { x: 54, y: 22, size: 7, font, color: rgb(0.5, 0.5, 0.5) });
   }
 
-  return doc.save();
+  // ⚠️ useObjectStreams: false is LOAD-BEARING, not a size preference.
+  // pdf-lib's default save (useObjectStreams: true) writes a cross-reference
+  // STREAM. When we APPEND a continuation page (drawAppendedSection → addPage)
+  // to a template that ITSELF uses xref streams — which ReportLab-generated
+  // forms do, e.g. the owner's Colonoscopy_Operative_Template.pdf — that save
+  // emits a broken xref whose /Root reference resolves to a bad entry
+  // ("Bad (uncompressed) XRef entry", "/Pages tree /Count: N"). The browser's
+  // pdfjs cannot recover and paints a SOLID WHITE page (owner finding,
+  // 2026-09-14). It is reproducible ONLY with the addPage step present: load +
+  // draw + save is fine; load + draw + addPage + save corrupts. A classic xref
+  // TABLE (useObjectStreams: false) is what every real PDF viewer reads without
+  // recovery, so it is the correct serialisation for a document we hand to a
+  // renderer — a slightly larger file for a PDF that actually opens. This
+  // guards the SIGNED EXPORT too, not only the preview: any filled note whose
+  // content overflowed onto a continuation page was shipping corrupt before.
+  return doc.save({ useObjectStreams: false });
 }
