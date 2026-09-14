@@ -133,6 +133,18 @@ describe('S3 — planReuploadTransfer: #247 record-derived exclusion + #274 matc
     expect(plan.reproposed).toContain(M);
   });
 
+  it('the record-derived concept check is NORMALIZED (trim/case) like the model path', () => {
+    // clinicalConcept is a free string in the schema; a mis-cased/padded record
+    // concept must still be excluded so the two readers cannot drift.
+    const misCased = new Map<string, SemanticMapping>([
+      [A, mapping(A, 'extraction', 'preoperative_diagnosis')],
+      [M, mapping(M, 'extraction', '  Procedure.Surgeon ')], // record-derived, padded + mixed case
+    ]);
+    const plan = planReuploadTransfer({ target: SOURCE, sourceIr: SOURCE, certified: misCased });
+    expect(plan.transferred.map((t) => t.fieldId)).toEqual([A]);
+    expect(plan.reproposed).toContain(M);
+  });
+
   it('a shared tag is ambiguous → the #274 bijection transfers NEITHER member', () => {
     const src = ir([
       field({ fieldId: A, path: '/doc/sdt[1]', ordinal: 0, label: 'Dx 1', tag: 't_dup' }),

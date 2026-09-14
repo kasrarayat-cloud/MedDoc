@@ -534,12 +534,15 @@ export const NEVER_TRANSFERRED_SOURCE_TYPES: ReadonlySet<string> = new Set([
  * visit_metadata" is broken upstream, and a sourceType-only exclusion would carry
  * a patient DOB forward as certified with no human (adversarial pass, 2026-09-14).
  * The concept set is `RECORD_DERIVED_ONLY_CONCEPTS`, the SAME set the model path's
- * `refuseRecordDerivedOnNonMetadata` nulls — one reader, no drift.
+ * `refuseRecordDerivedOnNonMetadata` nulls — and the concept is normalized the
+ * SAME way (`trim().toLowerCase()`) before the membership test, so the two readers
+ * cannot drift on casing/whitespace (`clinicalConcept` is a free string in the
+ * schema, not a registry enum — a padded/mis-cased value is schema-legal).
  */
 function isRecordDerivedDisposition(mapping: SemanticMapping): boolean {
   if (NEVER_TRANSFERRED_SOURCE_TYPES.has(mapping.sourceType ?? '')) return true;
   const concept = mapping.clinicalConcept;
-  return concept != null && RECORD_DERIVED_ONLY_CONCEPTS.has(concept);
+  return concept != null && RECORD_DERIVED_ONLY_CONCEPTS.has(concept.trim().toLowerCase());
 }
 
 /**
