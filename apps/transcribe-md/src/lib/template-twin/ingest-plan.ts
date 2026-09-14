@@ -514,3 +514,35 @@ export function planTransfer(input: {
   return { transferred, reproposed };
 }
 
+/** The record-derived source types that never transfer-as-certified (#247): a
+ *  control that prints a value from the patient record requires a human to have
+ *  seen THIS form's control, which a machine identity-match is not. */
+export const NEVER_TRANSFERRED_SOURCE_TYPES: ReadonlySet<string> = new Set([
+  'visit_metadata',
+]);
+
+/**
+ * S3 · re-upload transfer planner. PURE. Drops the record-derived
+ * (visit_metadata) dispositions FIRST (#247 — they are reproposed and confirmed
+ * every time), then runs the #274 fieldId|tag bijection matcher over the clinical
+ * remainder. Kept here in the pure module so the safety-critical exclusion is
+ * unit-tested without the database graph.
+ */
+export function planReuploadTransfer(input: {
+  target: TemplateDocIR;
+  sourceIr: TemplateDocIR;
+  certified: ReadonlyMap<string, SemanticMapping>;
+}): TransferPlan {
+  const clinical = new Map<string, SemanticMapping>();
+  for (const [fieldId, mapping] of input.certified) {
+    if (!NEVER_TRANSFERRED_SOURCE_TYPES.has(mapping.sourceType ?? '')) {
+      clinical.set(fieldId, mapping);
+    }
+  }
+  return planTransfer({
+    target: input.target,
+    sourceIr: input.sourceIr,
+    certifiedByFieldId: clinical,
+  });
+}
+
