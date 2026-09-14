@@ -21,7 +21,7 @@ import { logTwinAudit as logAudit } from './twin-audit';
 import type { SemanticMapping, TemplateDocIR } from './ir';
 import { DOCX_TEMPLATE_COMPILER } from './artifact-compiler';
 import { deriveProseTwin, derivedTwinProbeIsValid } from './prose-form/derive-prose-twin';
-import { pdfToProseDocx } from './pdf-form/pdf-to-prose-docx';
+import { isPdfSource, pdfToProseDocx } from './pdf-form/pdf-to-prose-docx';
 import {
   fallbackSemanticMappings,
   proposeSemanticMappings,
@@ -50,19 +50,6 @@ export class TemplateTwinDraftError extends Error {
     this.name = 'TemplateTwinDraftError';
     this.code = code;
   }
-}
-
-/** A PDF by its magic bytes `%PDF-` — the content, never the filename. A DOCX is
- *  a ZIP (`PK\x03\x04`), so this cannot mistake one for the other. */
-function isPdfSource(bytes: Uint8Array): boolean {
-  return (
-    bytes.length >= 5 &&
-    bytes[0] === 0x25 && // %
-    bytes[1] === 0x50 && // P
-    bytes[2] === 0x44 && // D
-    bytes[3] === 0x46 && // F
-    bytes[4] === 0x2d //   -
-  );
 }
 
 export interface CreateTemplateTwinDraftInput {

@@ -17,6 +17,7 @@ import { deriveProseTwin, derivedTwinProbeIsValid } from '../../prose-form/deriv
 import {
   reconstructLines,
   extractProseLinesFromProxy,
+  isPdfSource,
   linesToProseDocx,
   linesToDocumentXml,
   type PdfjsProxy,
@@ -131,3 +132,35 @@ describe('S2 — end-to-end: real PDF → extract → prose DOCX → S1 twin', (
     expect(await extractProseLinesFromProxy(proxy)).toBeNull();
   });
 });
+
+describe('S2 — isPdfSource: content detection agrees with the PDF reader', () => {
+  const PDF = [0x25, 0x50, 0x44, 0x46, 0x2d]; // %PDF-
+  const bufWith = (...prefix: number[]) => new Uint8Array([...prefix, ...PDF, 0x31, 0x2e, 0x34]);
+
+  it('accepts %PDF- at offset 0', () => {
+    expect(isPdfSource(bufWith())).toBe(true);
+  });
+
+  it('⚠️ fixed — accepts a PDF led by a UTF-8 BOM / whitespace / newline (pdf.js does)', () => {
+    expect(isPdfSource(bufWith(0xef, 0xbb, 0xbf))).toBe(true); // BOM
+    expect(isPdfSource(bufWith(0x0a))).toBe(true); // newline
+    expect(isPdfSource(bufWith(0x20, 0x20, 0x20))).toBe(true); // spaces
+    expect(isPdfSource(bufWith(0x0d, 0x0a))).toBe(true); // CRLF
+  });
+
+  it('accepts a real pdf-lib PDF and rejects a real prose DOCX', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+    expect(isPdfSource(await doc.save())).toBe(true);
+    const docx = await linesToProseDocx(['Patient Name: ______']); // a ZIP (PK\x03\x04)
+    expect(isPdfSource(docx)).toBe(false);
+  });
+
+  it('rejects plain text, empty, and a %PDF- header beyond the first 1KB', () => {
+    expect(isPdfSource(new Uint8Array([0x68, 0x69]))).toBe(false); // "hi"
+    expect(isPdfSource(new Uint8Array())).toBe(false);
+    const farHeader = new Uint8Array(2000);
+    farHeader.set(PDF, 1500); // header at offset 1500 — past the 1KB scan window
+    expect(isPdfSource(farHeader)).toBe(false);
+  });
+})

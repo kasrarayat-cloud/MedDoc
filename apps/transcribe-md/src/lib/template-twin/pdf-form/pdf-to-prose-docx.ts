@@ -52,6 +52,42 @@ export interface PlacedItem {
 }
 
 /**
+ * Is this upload a PDF, by its CONTENT? A ZIP (DOCX) always opens with
+ * `PK\x03\x04`, so that is rejected outright; otherwise it is a PDF iff `%PDF-`
+ * appears within the first 1KB.
+ *
+ * ⚠️ THE HEADER IS NOT REQUIRED AT OFFSET 0. pdf.js / unpdf — and every PDF
+ * viewer — accept a leading UTF-8 BOM, whitespace, or newline before `%PDF-`,
+ * and `extract-note-file` already routes such a file as a PDF by name/mime.
+ * Requiring the header at byte 0 misrouted a perfectly readable PDF to the DOCX
+ * compiler (a false rejection of exactly the capability S2 adds) — adversarial
+ * pass, 2026-09-14. Scanning the first 1KB matches what the PDF reader itself
+ * accepts, so create-draft's classifier agrees with extract-note-file's.
+ */
+export function isPdfSource(bytes: Uint8Array): boolean {
+  // A ZIP / DOCX opens with `PK\x03\x04` — never a PDF, whatever follows.
+  if (
+    bytes.length >= 4 &&
+    bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04
+  ) {
+    return false;
+  }
+  const limit = Math.min(bytes.length - 5, 1024);
+  for (let i = 0; i <= limit; i++) {
+    if (
+      bytes[i] === 0x25 && // %
+      bytes[i + 1] === 0x50 && // P
+      bytes[i + 2] === 0x44 && // D
+      bytes[i + 3] === 0x46 && // F
+      bytes[i + 4] === 0x2d //   -
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Reconstruct the form's visible lines, in reading order, from positioned text
  * tokens. PURE (no I/O) so it is exhaustively unit-testable without a real PDF.
  *
