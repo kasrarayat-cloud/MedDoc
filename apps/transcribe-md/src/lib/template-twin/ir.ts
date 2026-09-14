@@ -674,6 +674,11 @@ export const ResolvedFieldValueSchema = z.union([
   z.array(z.record(z.string(), z.string().nullable())),
 ]);
 
+/** A resolved field's value: a scalar, a multi-select list, or table rows.
+ *  Exported so the pdf-native value bridge (S2-4, #322) can reduce it to the
+ *  text a coordinate region draws, or reject a non-scalar as unplaceable. */
+export type ResolvedFieldValue = z.infer<typeof ResolvedFieldValueSchema>;
+
 export const FieldResolutionSchema = z
   .object({
     fieldId: z.string().regex(/^ttf_[a-f0-9]{24}$/),

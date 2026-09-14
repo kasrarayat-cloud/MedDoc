@@ -10,6 +10,7 @@ import { getDocumentProxy } from 'unpdf';
 
 import { extractPdfAnchors, missingAnchors, type AnchorLabelSpec } from './anchors';
 import { fillPdfTemplate, type PdfFillAnchor } from './fill-engine';
+import { deriveTwinAnchors, type TwinAnchorField } from './twin-anchor-derivation';
 import { putTemplateCanvas } from './store';
 import { canvasHash, templateStructureHash } from './hash';
 import { extractHeaderFields, deriveHeaderFieldsFromRun } from '@/lib/note-template-parse/header-fields';
@@ -162,17 +163,37 @@ export async function certifyPdfTemplate(input: {
 }
 
 /** Preview-once: fill the anchors with SYNTHETIC text so the doctor confirms the
- *  regions before real use (no visit, no patient data). */
+ *  regions before real use (no visit, no patient data).
+ *
+ *  ⚠️ S2-4 (#322): PREVIEW AND EXPORT SHARE ONE RENDERER. When `twinFields` is
+ *  given — the template has a CERTIFIED twin — the preview derives its anchors
+ *  the SAME way the visit export does (`deriveTwinAnchors`, one per twin field),
+ *  so the settings preview and a real export of the same template are the same
+ *  page shape. Without it (upload/setup, before any twin), the anchors come from
+ *  the note-template's section/header labels, unchanged. */
 export async function previewPdfTemplateFill(input: {
   sections: ReadonlyArray<{ key: string; label: string }>;
   headerFields: ReadonlyArray<{ key: string; label: string }>;
   pdfBytes: Buffer;
+  twinFields?: ReadonlyArray<TwinAnchorField>;
 }): Promise<Uint8Array> {
+  const proxy = (await getDocumentProxy(new Uint8Array(input.pdfBytes).slice())) as never;
+
+  if (input.twinFields && input.twinFields.length > 0) {
+    // Same renderer as the export: anchors derived from the twin's own fields.
+    const { anchors } = await deriveTwinAnchors(proxy, input.twinFields);
+    const texts: Record<string, string> = {};
+    for (const a of anchors) texts[a.key] = '[sample value]';
+    return fillPdfTemplate({
+      canvasPdf: new Uint8Array(input.pdfBytes),
+      anchors,
+      texts,
+      signedStatusLine: 'PREVIEW · synthetic content · QuillMD',
+    });
+  }
+
   const specs = anchorSpecsFor(input.sections, input.headerFields);
-  const anchors = await extractPdfAnchors(
-    (await getDocumentProxy(new Uint8Array(input.pdfBytes).slice())) as never,
-    specs
-  );
+  const anchors = await extractPdfAnchors(proxy, specs);
   const texts: Record<string, string> = {};
   for (const s of specs) {
     texts[s.key] =

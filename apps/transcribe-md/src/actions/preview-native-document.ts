@@ -30,6 +30,7 @@ import prisma from '@meddoc/db';
 import { requireSession } from '@/lib/auth';
 import { convertDocxToPdf, type ConvertFailure } from '@/lib/docx-preview/convert';
 import { previewPdfTemplateFill } from '@/lib/pdf-native/certify';
+import { loadCertifiedTwinFields } from '@/lib/pdf-native/twin-export-data';
 import { getTemplateCanvas } from '@/lib/pdf-native/store';
 import { createTemplateTwinArtifactStore } from '@/lib/template-twin/storage';
 
@@ -93,6 +94,14 @@ export async function previewNativeDocumentAction(
   if (canvas) {
     try {
       const style = (row.styleProfile ?? {}) as Record<string, unknown>;
+      // S2-4 (#322): when the template's twin is CERTIFIED, the preview derives
+      // its anchors from the twin's OWN fields — the SAME renderer the visit
+      // export uses — so the settings preview and a real export are the same
+      // page shape. Otherwise the note-template section/header labels stand.
+      const twinFields = await loadCertifiedTwinFields(
+        row.id,
+        session.user.practiceId,
+      ).catch(() => null);
       const filled = await previewPdfTemplateFill({
         sections: ((row.sections ?? []) as unknown) as ReadonlyArray<{
           key: string;
@@ -103,6 +112,7 @@ export async function previewNativeDocumentAction(
           label: string;
         }>,
         pdfBytes: canvas,
+        twinFields: twinFields ?? undefined,
       });
       return {
         ok: true,
