@@ -126,13 +126,15 @@ function estRight(it: PlacedItem): number {
 // (adversarial pass, 2026-09-14).
 const COLUMN_GAP_FACTOR = 0.8;
 
-/** Has this segment reached a COMPLETED field — a colon label, a bare marker
- *  slot, or a label whose underscore blank has been consumed ("Name: ____")? A
- *  following gap after a completed field is a column gutter, not intra-label
- *  spacing. */
-function isFieldBoundary(text: string): boolean {
+/** The KIND of completed-field boundary the accumulated left segment has reached,
+ *  or null if it is not yet a complete field. A following gap after a boundary is
+ *  a column gutter — but the split also depends on what the NEXT token is. */
+function fieldBoundaryKind(text: string): 'colon' | 'marker' | 'blank' | null {
   const t = text.trim();
-  return /:$/.test(t) || PDF_MARKER_ONLY_RE.test(t) || /_{2,}\s*$/.test(t);
+  if (/:$/.test(t)) return 'colon';
+  if (/_{2,}\s*$/.test(t)) return 'blank';
+  if (PDF_MARKER_ONLY_RE.test(t)) return 'marker';
+  return null;
 }
 
 /** Does the next token BELONG to the current field (its underscore blank) rather
@@ -144,13 +146,21 @@ function isTrailingBlank(str: string): boolean {
 
 /**
  * Split one row's items into READING-ORDER columns (ruling #320: "two-column rows
- * yield two controls in reading order"). Splits at an internal gap wider than
+ * yield two controls in reading order"). Splits at a gap wider than
  * `COLUMN_GAP_FACTOR × height` where the LEFT side is a completed field AND the
- * NEXT token starts a NEW field (not this field's own underscore blank). So
- * "PATIENT NAME: ____   DOB: ____" and "DD:  DT:" and "1.  2." split into two,
- * while "Name: ______" (label + its blank) and "DATE OF SURGERY:" (one wide
- * label) stay whole. Splitting reliably is what stops a fused multi-colon line
- * reaching S1, which parses it as zero controls (its label class excludes ':').
+ * NEXT token starts a NEW field.
+ *
+ * ⚠️ THE NEXT TOKEN DECIDES, BY BOUNDARY KIND (re-pass, 2026-09-14):
+ *  - after a MARKER slot ("1."), split ONLY if the next token is ALSO a bare
+ *    marker ("2.") — a sibling column. A word ("Chief") is the numbered item's
+ *    LABEL, so "1. Chief Complaint:" stays ONE field, not "1." + "Chief …".
+ *  - after a COLON label ("DD:") or a consumed BLANK ("Name: ____"), split when
+ *    the next token is not this field's own trailing blank — a new column
+ *    ("DT:", "DOB: ____").
+ * So "DD:  DT:", "PATIENT NAME: ____   DOB: ____" and "1.  2." split; "Name:
+ * ______", "1. Chief Complaint:" and "DATE OF SURGERY:" stay whole. Splitting
+ * reliably is what stops a fused multi-colon line reaching S1, which parses it as
+ * zero controls (its label class excludes ':').
  */
 function splitRowIntoColumns(sortedItems: PlacedItem[]): PlacedItem[][] {
   const cols: PlacedItem[][] = [];
@@ -162,7 +172,12 @@ function splitRowIntoColumns(sortedItems: PlacedItem[]): PlacedItem[][] {
     const gap = next.x - estRight(sortedItems[i]);
     const threshold = (sortedItems[i].height || 10) * COLUMN_GAP_FACTOR;
     const leftText = seg.map((s) => s.str).join(' ').replace(/\s+/g, ' ').trim();
-    if (gap >= threshold && isFieldBoundary(leftText) && !isTrailingBlank(next.str)) {
+    const kind = fieldBoundaryKind(leftText);
+    const nextStartsNewColumn =
+      kind === 'marker'
+        ? PDF_MARKER_ONLY_RE.test(next.str.trim()) // a SIBLING marker, not this item's label
+        : (kind === 'colon' || kind === 'blank') && !isTrailingBlank(next.str);
+    if (gap >= threshold && nextStartsNewColumn) {
       cols.push(seg);
       seg = [];
     }
@@ -261,8 +276,13 @@ const PDF_MARKER_ONLY_RE =
  *  reject a short sentence (adversarial pass, 2026-09-14). A sentence carries a
  *  finite verb / connective a noun-phrase form label does not — that is the tell.
  *  The set is TIGHT (clear sentence words that never appear in a form label);
- *  "Performed", "Reviewed", "Diagnosis" stay label words. */
-const SENTENCE_MARKER_RE = /\b(?:was|were|is|are|am|be|been|being|following|follows|then)\b/i;
+ *  "Performed", "Reviewed", "Diagnosis" stay label words. ⚠️ `am` was REMOVED —
+ *  it collides with "AM" (ante meridiem): "AM Dose:" is a real medication-form
+ *  label, and dropping it (while "PM Dose:" survived) was an asymmetric silent
+ *  loss (re-pass, 2026-09-14). `is`/`be` are likewise excluded — they double as
+ *  clinical abbreviations (incentive spirometry, barium enema). Only unambiguous
+ *  multi-letter sentence verbs remain; the >8-word cap catches the rest. */
+const SENTENCE_MARKER_RE = /\b(?:was|were|are|been|being|following|follows)\b/i;
 function looksLikeSentence(phrase: string): boolean {
   return SENTENCE_MARKER_RE.test(phrase) || phrase.split(/\s+/).filter(Boolean).length > 8;
 }
@@ -319,15 +339,21 @@ export function annotateAffordances(
 
     const next = i + 1 < boxes.length && boxes[i + 1].page === b.page ? boxes[i + 1] : null;
 
-    // A visible rule line on this line's row (right of the label) or on the row
-    // just below it — branch (b). `y` is baseline (up), so "below" is a smaller y.
-    const lowerY = next ? next.y : b.y - (b.height || 10) * 3;
+    // A FILL rule line: a visible horizontal segment on this label's row that
+    // STARTS at or after the label's right edge and extends further right — i.e.
+    // the blank line a value is written on. ⚠️ THE "STARTS AFTER THE LABEL"
+    // CONDITION IS LOAD-BEARING (re-pass, 2026-09-14): a decorative underline
+    // beneath a heading, or a table cell's bottom border, spans from UNDER the
+    // label (s.x0 ≤ label.x1) and must NOT be read as a fill affordance — that
+    // over-derived a phantom control on "Vital Signs" / "Blood Pressure". A real
+    // fill line begins to the RIGHT of the label.
+    const h = b.height || 10;
     const hasDrawnLine = segments.some(
       (s) =>
         s.page === b.page &&
-        s.x1 > b.x1 + 2 &&
-        s.y <= b.y + (b.height || 10) &&
-        s.y >= lowerY - (b.height || 10),
+        Math.abs(s.y - b.y) <= h * 1.2 && // same row (baseline ± ~1 line)
+        s.x0 >= b.x1 - h && // begins at/after the label's right edge — not an underline
+        s.x1 > b.x1 + 2, // and extends further right
     );
 
     if (wantsBlank(b.text)) {

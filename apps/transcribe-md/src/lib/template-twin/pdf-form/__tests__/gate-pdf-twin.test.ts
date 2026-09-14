@@ -211,13 +211,21 @@ describe('S2 #320 — annotateAffordances: colon/number + empty span OR drawn li
     expect(annotateAffordances(boxes, [], W)[0]).toBe('DESCRIPTION OF PROCEDURE: ______');
   });
 
-  it('appends via a DRAWN RULE LINE following the label (branch b), even with no span', () => {
-    const boxes = [box('SIGNATURE:', { x1: 556, y: 200 })];
-    const segs: RuleSegment[] = [{ page: 0, y: 200, x0: 300, x1: 560 }];
-    expect(annotateAffordances(boxes, segs, W)).toEqual(['SIGNATURE: ______']);
-    // …and a WHITE (absent) line is never passed here — the extractor drops it —
-    // so with no segment the same label stays prose:
-    expect(annotateAffordances(boxes, [], W)).toEqual(['SIGNATURE:']);
+  it('appends via a DRAWN FILL LINE to the RIGHT of a colon-less label (branch b)', () => {
+    // A colon-less label "Weight" (x1≈87) with a fill line beginning to its right.
+    const boxes = [box('Weight', { x0: 54, x1: 87, y: 200 })];
+    const segs: RuleSegment[] = [{ page: 0, y: 199, x0: 130, x1: 300 }];
+    expect(annotateAffordances(boxes, segs, W)).toEqual(['Weight ______']);
+    // …with no segment the same label stays prose:
+    expect(annotateAffordances(boxes, [], W)).toEqual(['Weight']);
+  });
+
+  // ⚠️ RE-PASS FIX (2026-09-14): a decorative underline/border UNDER a heading
+  // (starts at/before the label's left, not to its right) is NOT a fill line.
+  it('does NOT derive from a heading/table label sitting above a decorative rule', () => {
+    const boxes = [box('Vital Signs', { x0: 54, x1: 110, y: 700 })];
+    const divider: RuleSegment[] = [{ page: 0, y: 694, x0: 54, x1: 550 }]; // full-width, starts under the label
+    expect(annotateAffordances(boxes, divider, W)).toEqual(['Vital Signs']);
   });
 
   // ⚠️ ADVERSARIAL FIX (2026-09-14): a colon LEAD-IN SENTENCE is not a fill label.
@@ -233,6 +241,14 @@ describe('S2 #320 — annotateAffordances: colon/number + empty span OR drawn li
     expect(annotateAffordances([box('History of Present Illness:')], [], W)).toEqual([
       'History of Present Illness: ______',
     ]);
+  });
+
+  // ⚠️ RE-PASS FIX (2026-09-14): "am"/"is"/"be" collide with clinical
+  // abbreviations (AM/PM, incentive spirometry, barium enema) — they must NOT be
+  // treated as sentence markers, or a real label is silently dropped.
+  it('does NOT drop a label whose word collides with a clinical abbreviation', () => {
+    expect(annotateAffordances([box('AM Dose:')], [], W)).toEqual(['AM Dose: ______']);
+    expect(annotateAffordances([box('PM Dose:')], [], W)).toEqual(['PM Dose: ______']);
   });
 });
 
@@ -276,6 +292,17 @@ describe('S2 #320 — groupLineBoxes: two-column reading order', () => {
       { str: '2.', x: 80, y: 700, height: 11, page: 0 },
     ];
     expect(groupLineBoxes(items).map((b) => b.text)).toEqual(['1.', '2.']);
+  });
+
+  // ⚠️ RE-PASS FIX (2026-09-14): a bare "1." followed by its LABEL (not a sibling
+  // marker) is ONE numbered field — must NOT split into "1." + "Chief Complaint:".
+  it('does NOT split a single numbered field ("1. Chief Complaint:") into two', () => {
+    const items: PlacedItem[] = [
+      { str: '1.', x: 54, y: 700, height: 11, page: 0 },
+      { str: 'Chief', x: 90, y: 700, height: 11, page: 0 },
+      { str: 'Complaint:', x: 124, y: 700, height: 11, page: 0 },
+    ];
+    expect(groupLineBoxes(items).map((b) => b.text)).toEqual(['1. Chief Complaint:']);
   });
 });
 
