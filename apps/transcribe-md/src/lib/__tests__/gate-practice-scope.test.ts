@@ -190,6 +190,16 @@ const SYSTEM_ALLOWLIST: Record<string, number> = {
   // scoping moves it. The line is written rather than the classifier loosened.
   'src/lib/template-twin/native-export.ts': 2,
   'src/lib/template-twin/synthetic-test.ts': 1,
+  // NEW 2026-09-14, S3 (upload-and-certified): the transfer-on-re-upload resolver
+  // (`resolvePriorCertifiedTwinVersion`) reads the slot's prior templates to find
+  // the certified twin whose dispositions carry forward on a re-upload. It is
+  // PRACTICE-bound in the query itself (`where: { practiceId, doctorId,
+  // encounterType }`) and doctor-scoped besides, but lands in the SYSTEM bucket
+  // because the whole `template-twin/` directory is path-classified before scoping
+  // is considered — so the line is declared here rather than the classifier
+  // loosened. The sibling `templateTwinCompiledVersion` reads are not a
+  // CLINICAL_MODELS entry and are not counted.
+  'src/lib/template-twin/transfer-on-reupload.ts': 1,
   'src/lib/template-twin/workspace-read.ts': 1,
   // 5 → 6 on 2026-08-13, RC-3 (#106(c)): the applicable-active-template probe.
   // ⚠️ DELIBERATE, and it is the SAME CLASS as the read directly below it —

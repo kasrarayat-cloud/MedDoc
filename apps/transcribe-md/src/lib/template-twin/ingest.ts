@@ -104,8 +104,10 @@ function sha256(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
-/** Read a compiled version's certified dispositions, keyed by field id. */
-async function readCertified(
+/** Read a compiled version's certified dispositions, keyed by field id.
+ *  Exported so the re-upload transfer path reuses the SAME tenant-checked read
+ *  (one reader, #274) rather than a second copy that could drift. */
+export async function readCertified(
   compiledVersionId: string,
   practiceId: string,
   /**

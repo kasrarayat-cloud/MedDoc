@@ -69,6 +69,7 @@ import {
   type TemplateDocIR,
   type TemplateField,
 } from './ir';
+import { RECORD_DERIVED_ONLY_CONCEPTS } from './concept-registry';
 
 /**
  * A field's IDENTITY. Two of them, both SEMANTIC, and nothing else.
@@ -512,5 +513,60 @@ export function planTransfer(input: {
   }
 
   return { transferred, reproposed };
+}
+
+/** The source type that never transfers-as-certified (#247): a control that
+ *  prints a value from the patient record requires a human to have seen THIS
+ *  form's control, which a machine identity-match is not. */
+export const NEVER_TRANSFERRED_SOURCE_TYPES: ReadonlySet<string> = new Set([
+  'visit_metadata',
+]);
+
+/**
+ * Is this a RECORD-DERIVED disposition that must never carry across a re-upload
+ * as certified (#247)? BY EITHER AXIS — its sourceType OR its concept.
+ *
+ * ⚠️ THE CONCEPT AXIS IS LOAD-BEARING, NOT BELT-AND-BRACES. `sourceType` alone is
+ * not enough: the fallback proposer (used on a model outage) assigns a
+ * record-derived CONCEPT ("visit_metadata.date_of_birth") to a `date`/`short_text`
+ * control while leaving sourceType 'extraction' — because 'date' is not a
+ * record-DERIVABLE kind — so the invariant "record-derived concept ⇒ sourceType
+ * visit_metadata" is broken upstream, and a sourceType-only exclusion would carry
+ * a patient DOB forward as certified with no human (adversarial pass, 2026-09-14).
+ * The concept set is `RECORD_DERIVED_ONLY_CONCEPTS`, the SAME set the model path's
+ * `refuseRecordDerivedOnNonMetadata` nulls — and the concept is normalized the
+ * SAME way (`trim().toLowerCase()`) before the membership test, so the two readers
+ * cannot drift on casing/whitespace (`clinicalConcept` is a free string in the
+ * schema, not a registry enum — a padded/mis-cased value is schema-legal).
+ */
+function isRecordDerivedDisposition(mapping: SemanticMapping): boolean {
+  if (NEVER_TRANSFERRED_SOURCE_TYPES.has(mapping.sourceType ?? '')) return true;
+  const concept = mapping.clinicalConcept;
+  return concept != null && RECORD_DERIVED_ONLY_CONCEPTS.has(concept.trim().toLowerCase());
+}
+
+/**
+ * S3 · re-upload transfer planner. PURE. Drops the record-derived dispositions
+ * FIRST (#247 — by sourceType OR concept; they are reproposed and confirmed every
+ * time), then runs the #274 fieldId|tag bijection matcher over the clinical
+ * remainder. Kept here in the pure module so the safety-critical exclusion is
+ * unit-tested without the database graph.
+ */
+export function planReuploadTransfer(input: {
+  target: TemplateDocIR;
+  sourceIr: TemplateDocIR;
+  certified: ReadonlyMap<string, SemanticMapping>;
+}): TransferPlan {
+  const clinical = new Map<string, SemanticMapping>();
+  for (const [fieldId, mapping] of input.certified) {
+    if (!isRecordDerivedDisposition(mapping)) {
+      clinical.set(fieldId, mapping);
+    }
+  }
+  return planTransfer({
+    target: input.target,
+    sourceIr: input.sourceIr,
+    certifiedByFieldId: clinical,
+  });
 }
 

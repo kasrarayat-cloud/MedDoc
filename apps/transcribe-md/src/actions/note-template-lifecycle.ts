@@ -381,6 +381,45 @@ export async function saveNoteTemplateAction(
         });
         twinCompile = 'compiled';
 
+        // ── S3 · UPLOAD-AND-CERTIFIED — TRANSFER-BY-IDENTITY ON RE-UPLOAD ──
+        //
+        // If this slot (doctor, encounterType) already has a certified twin, its
+        // prior certified CLINICAL dispositions carry onto this fresh draft by
+        // fieldId|tag identity (#274) — so a re-upload does not re-ask the doctor
+        // for rows a machine can pair to an already-approved one. Record-derived
+        // (visit_metadata) rows are deliberately NOT transferred (#247): they are
+        // reproposed and land in the confirm list every time. The remainder is
+        // handled by the auto-confirm class rules below.
+        //
+        // ⚠️ FAIL-SAFE. A transfer failure must NEVER fail the upload — the twin
+        // already compiled with freshly proposed mappings, so the worst case is
+        // the pre-S3 behaviour (the doctor re-confirms). Log and continue; the
+        // auto-certify gate below still runs against whatever mappings landed.
+        try {
+          const { transferCertifiedDispositionsOnReupload } = await import(
+            '@/lib/template-twin/transfer-on-reupload'
+          );
+          const transfer = await transferCertifiedDispositionsOnReupload({
+            newNoteTemplateId: result.id,
+            doctorId,
+            encounterType: encounterType ?? null,
+            practiceId: session.user.practiceId,
+          });
+          if (transfer) {
+            console.info(
+              `[template-twin:transfer-on-reupload] template=${result.id} ` +
+                `from=${transfer.fromCompiledVersionId} transferred=${transfer.transferred} ` +
+                `reproposed=${transfer.reproposed}`,
+            );
+          }
+        } catch (transferError) {
+          console.warn(
+            `[template-twin:transfer-on-reupload] template=${result.id} SKIPPED — ` +
+              'the upload is saved and the twin compiled; prior dispositions were not ' +
+              `carried: ${transferError instanceof Error ? transferError.message : String(transferError)}`,
+          );
+        }
+
         // ── RULING #127 — AUTO-CERTIFY. ──────────────────────────────────
         //
         // The doctor's job is upload then run visits. When the twin compiles

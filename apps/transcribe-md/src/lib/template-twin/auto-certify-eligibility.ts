@@ -264,6 +264,16 @@ export function planAutoConfirm(workspace: TemplateTwinWorkspace): AutoConfirmOu
   };
 
   const mappings = workspace.fields.map(({ field, mapping }) => {
+    // ⚠️ S3 — AN ALREADY-CERTIFIED ROW IS KEPT, NOT RE-DECIDED. A re-upload
+    // transfers prior certified dispositions by identity (#274) and lands them
+    // 'certified'; the doctor already confirmed those on the prior version, so
+    // re-running decideAutoConfirm over them would (e.g. for a laterality or
+    // scoped row) needlessly re-open a settled disposition — and for a
+    // transferred row it must not. Auto-confirm only decides the REPROPOSED
+    // remainder; the transfer is what carried the rest.
+    if (mapping.status === 'certified') {
+      return mapping;
+    }
     const decision = decideAutoConfirm({
       originalLabel: field.originalLabel ?? null,
       criticality: field.criticality ?? null,
