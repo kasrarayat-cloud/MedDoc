@@ -28,6 +28,10 @@
 // ============================================================================
 import JSZip from 'jszip';
 
+import { extractRuleSegments, type RuleSegment } from './pdf-geometry';
+
+export type { RuleSegment } from './pdf-geometry';
+
 /** The minimal pdfjs document-proxy shape unpdf's `getDocumentProxy` returns —
  *  identical to the one `pdf-native/anchors.ts` reads. */
 export interface PdfjsProxy {
@@ -87,24 +91,108 @@ export function isPdfSource(bytes: Uint8Array): boolean {
   return false;
 }
 
+/** One reconstructed line WITH its geometry — the unit the affordance annotator
+ *  reasons over (ruling #320). `x0`/`x1` are the line's horizontal extent, `y`
+ *  its anchor baseline (topmost item), `height` its tallest item. */
+export interface LineBox {
+  text: string;
+  page: number;
+  y: number;
+  x0: number;
+  x1: number;
+  height: number;
+}
+
 /**
- * Reconstruct the form's visible lines, in reading order, from positioned text
- * tokens. PURE (no I/O) so it is exhaustively unit-testable without a real PDF.
- *
- * Order: page ascending, then `y` DESCENDING (top-to-bottom), then `x` ascending
- * (left-to-right). Items whose baselines fall within a height-relative tolerance
- * are one line; the line's `y` anchor is its first (topmost) item and does not
- * drift, so a subscript/superscript does not split the line. Tokens are joined
- * with single spaces and collapsed — enough for S1's label/affordance detection,
- * which tolerates a space before the colon (`\s*:`).
+ * Group positioned text tokens into reconstructed lines WITH geometry, in reading
+ * order. PURE. Order: page ascending, then `y` DESCENDING (top-to-bottom), then
+ * `x` ascending (left-to-right). Items whose baselines fall within a
+ * height-relative tolerance are one line; the line's `y` anchor is its first
+ * (topmost) item and does not drift, so a subscript/superscript does not split
+ * the line. Tokens are joined with single spaces and collapsed.
  */
-export function reconstructLines(items: PlacedItem[]): string[] {
+/** A token's estimated RIGHT edge. `x` is its LEFT edge and pdfjs does not expose
+ *  per-token advance here, so width is approximated from character count × a
+ *  fraction of height. A slight under/over-estimate is harmless — the empty-span
+ *  and column-gap tests both use generous thresholds. */
+function estRight(it: PlacedItem): number {
+  return it.x + Math.max(it.str.length * (it.height || 10) * 0.5, it.height || 10);
+}
+
+// A column boundary is a gap wider than this MULTIPLE of the line height — well
+// above a word space (~0.25×) and below a typical gutter (~1×+). Height-relative,
+// not an absolute pt floor: an absolute 48pt missed a real ~1×-height gutter and
+// FUSED the two fields into one line S1 then parsed as ZERO controls, losing both
+// (adversarial pass, 2026-09-14).
+const COLUMN_GAP_FACTOR = 0.8;
+
+/** The KIND of completed-field boundary the accumulated left segment has reached,
+ *  or null if it is not yet a complete field. A following gap after a boundary is
+ *  a column gutter — but the split also depends on what the NEXT token is. */
+function fieldBoundaryKind(text: string): 'colon' | 'marker' | 'blank' | null {
+  const t = text.trim();
+  if (/:$/.test(t)) return 'colon';
+  if (/_{2,}\s*$/.test(t)) return 'blank';
+  if (PDF_MARKER_ONLY_RE.test(t)) return 'marker';
+  return null;
+}
+
+/** Does the next token BELONG to the current field (its underscore blank) rather
+ *  than start a NEW column? "Name: ____" — the "____" is Name's blank, so the row
+ *  must NOT split there (it is one field, not two columns). */
+function isTrailingBlank(str: string): boolean {
+  return /^\s*_{2,}/.test(str);
+}
+
+/**
+ * Split one row's items into READING-ORDER columns (ruling #320: "two-column rows
+ * yield two controls in reading order"). Splits at a gap wider than
+ * `COLUMN_GAP_FACTOR × height` where the LEFT side is a completed field AND the
+ * NEXT token starts a NEW field.
+ *
+ * ⚠️ THE NEXT TOKEN DECIDES, BY BOUNDARY KIND (re-pass, 2026-09-14):
+ *  - after a MARKER slot ("1."), split ONLY if the next token is ALSO a bare
+ *    marker ("2.") — a sibling column. A word ("Chief") is the numbered item's
+ *    LABEL, so "1. Chief Complaint:" stays ONE field, not "1." + "Chief …".
+ *  - after a COLON label ("DD:") or a consumed BLANK ("Name: ____"), split when
+ *    the next token is not this field's own trailing blank — a new column
+ *    ("DT:", "DOB: ____").
+ * So "DD:  DT:", "PATIENT NAME: ____   DOB: ____" and "1.  2." split; "Name:
+ * ______", "1. Chief Complaint:" and "DATE OF SURGERY:" stay whole. Splitting
+ * reliably is what stops a fused multi-colon line reaching S1, which parses it as
+ * zero controls (its label class excludes ':').
+ */
+function splitRowIntoColumns(sortedItems: PlacedItem[]): PlacedItem[][] {
+  const cols: PlacedItem[][] = [];
+  let seg: PlacedItem[] = [];
+  for (let i = 0; i < sortedItems.length; i += 1) {
+    seg.push(sortedItems[i]);
+    const next = sortedItems[i + 1];
+    if (!next) break;
+    const gap = next.x - estRight(sortedItems[i]);
+    const threshold = (sortedItems[i].height || 10) * COLUMN_GAP_FACTOR;
+    const leftText = seg.map((s) => s.str).join(' ').replace(/\s+/g, ' ').trim();
+    const kind = fieldBoundaryKind(leftText);
+    const nextStartsNewColumn =
+      kind === 'marker'
+        ? PDF_MARKER_ONLY_RE.test(next.str.trim()) // a SIBLING marker, not this item's label
+        : (kind === 'colon' || kind === 'blank') && !isTrailingBlank(next.str);
+    if (gap >= threshold && nextStartsNewColumn) {
+      cols.push(seg);
+      seg = [];
+    }
+  }
+  if (seg.length) cols.push(seg);
+  return cols.length ? cols : [sortedItems];
+}
+
+export function groupLineBoxes(items: PlacedItem[]): LineBox[] {
   const usable = items.filter((it) => it.str && it.str.trim().length > 0);
   if (usable.length === 0) return [];
   const sorted = [...usable].sort(
     (a, b) => a.page - b.page || b.y - a.y || a.x - b.x,
   );
-  const lines: string[] = [];
+  const boxes: LineBox[] = [];
   let cur: PlacedItem[] = [];
   let curPage = sorted[0].page;
   let curY = sorted[0].y;
@@ -112,8 +200,20 @@ export function reconstructLines(items: PlacedItem[]): string[] {
   const flush = (): void => {
     if (cur.length === 0) return;
     cur.sort((a, b) => a.x - b.x);
-    const text = cur.map((i) => i.str).join(' ').replace(/\s+/g, ' ').trim();
-    if (text) lines.push(text);
+    // Reading-order columns: a single-column row yields one group; a two-column
+    // header yields two, left then right (ruling #320).
+    for (const col of splitRowIntoColumns(cur)) {
+      const text = col.map((i) => i.str).join(' ').replace(/\s+/g, ' ').trim();
+      if (!text) continue;
+      boxes.push({
+        text,
+        page: curPage,
+        y: curY,
+        x0: Math.min(...col.map((i) => i.x)),
+        x1: Math.max(...col.map(estRight)),
+        height: Math.max(...col.map((i) => i.height || 10)),
+      });
+    }
     cur = [];
   };
 
@@ -129,7 +229,149 @@ export function reconstructLines(items: PlacedItem[]): string[] {
     cur.push(it);
   }
   flush();
-  return lines;
+  return boxes;
+}
+
+/**
+ * Reconstruct the form's visible lines (text only), in reading order. PURE, and
+ * the thin string projection of `groupLineBoxes` — one reader of the grouping so
+ * geometry and text can never disagree.
+ */
+export function reconstructLines(items: PlacedItem[]): string[] {
+  return groupLineBoxes(items).map((b) => b.text);
+}
+
+// ── RULING #320 — the union blank-affordance annotation ────────────────────
+// A line already carrying a real underscore run flows through S1 untouched. For a
+// line that does NOT, we APPEND a synthetic underscore run iff the geometry proves
+// a blank: (a) it is a colon label or a bare numbered/bulleted slot AND has an
+// empty writable span (rest of row to the right margin, or a big gap to the next
+// line); OR (b) a VISIBLE drawn rule line follows the label on its row or the row
+// below. S1 then derives exactly one control per annotated line, and S1's own
+// label-shape guards + the keystone re-compile backstop precision.
+
+const SPAN_MARGIN = 40; // pt of empty width to the right that counts as "writable"
+const GAP_LINES = 1.9; // a vertical gap > this × line-height is a writing area below
+const AFFORDANCE = ' ______'; // the materialised blank S1 consumes (>= 2 underscores)
+
+/** A leading list/enumeration marker (digit/bracket/bullet/checkbox) FOLLOWED by
+ *  label text — the SAME set S1 strips, so a `1. Primary Dx:` slot is recognised
+ *  identically on both sides. Single letters are deliberately excluded (they
+ *  collide with clinical shorthand — "T. Bili", "(R) Knee"). */
+const PDF_LEADING_MARKER_RE =
+  /^\s*(?:[-*•▪◦·‣⁃>|]+|[([]?\d{1,3}[.)\]]|[☐☑☒□■▢◻◼✓✔])\s+/;
+
+/** A line that is ONLY a list/enumeration marker — a bare `1.`, `2)`, `•`, `☐` —
+ *  the numbered fill SLOTS of an operative note (Findings 1–3). ⚠️ No trailing
+ *  `\s+` here (the marker is the WHOLE line, nothing follows), which is exactly
+ *  why `PDF_LEADING_MARKER_RE` alone missed them. Single letters stay excluded. */
+const PDF_MARKER_ONLY_RE =
+  /^\s*(?:[-*•▪◦·‣⁃>|]+|[([]?\d{1,3}[.)\]]|[☐☑☒□■▢◻◼✓✔])\s*$/;
+
+/** A colon-terminated line that is a LEAD-IN SENTENCE, not a fill label — its
+ *  value is the prose/list BELOW, not an inline slot ("Findings were as follows:",
+ *  "The following were noted:"). ⚠️ THIS GUARD EXISTS BECAUSE #320 MANUFACTURES
+ *  THE AFFORDANCE S1's own fix relied on: S1 left a bare `LABEL:` as prose, but
+ *  the annotator appends underscores, and S1's ≤48-char label guard does NOT
+ *  reject a short sentence (adversarial pass, 2026-09-14). A sentence carries a
+ *  finite verb / connective a noun-phrase form label does not — that is the tell.
+ *  The set is TIGHT (clear sentence words that never appear in a form label);
+ *  "Performed", "Reviewed", "Diagnosis" stay label words. ⚠️ `am` was REMOVED —
+ *  it collides with "AM" (ante meridiem): "AM Dose:" is a real medication-form
+ *  label, and dropping it (while "PM Dose:" survived) was an asymmetric silent
+ *  loss (re-pass, 2026-09-14). `is`/`be` are likewise excluded — they double as
+ *  clinical abbreviations (incentive spirometry, barium enema). Only unambiguous
+ *  multi-letter sentence verbs remain; the >8-word cap catches the rest. */
+const SENTENCE_MARKER_RE = /\b(?:was|were|are|been|being|following|follows)\b/i;
+function looksLikeSentence(phrase: string): boolean {
+  return SENTENCE_MARKER_RE.test(phrase) || phrase.split(/\s+/).filter(Boolean).length > 8;
+}
+
+/** Does this line, on its own text, look like a label/slot that WANTS a blank —
+ *  i.e. it is a bare numbered/bullet slot (`1.`), or after dropping one leading
+ *  marker it ends with a colon AND reads as a label (noun phrase), not a lead-in
+ *  sentence? A title/sentence without a trailing colon never qualifies. */
+function wantsBlank(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (PDF_MARKER_ONLY_RE.test(t)) return true; // bare "1." / "•" slot
+  const afterMarker = t.replace(PDF_LEADING_MARKER_RE, '').trim();
+  if (!/:$/.test(afterMarker)) return false; // must be colon-terminated
+  return !looksLikeSentence(afterMarker.replace(/:$/, '').trim()); // …and not a sentence
+}
+
+/** Already carries a real fill affordance (underscore run) — leave it for S1. */
+function hasTextAffordance(text: string): boolean {
+  return /_{2,}/.test(text);
+}
+
+/** A colon-LESS line that still reads as a fill LABEL (for branch (b): a drawn
+ *  rule line following it is the affordance). Starts with a letter, is short (S1's
+ *  own label cap), and is not a lead-in sentence. A colon label is handled by
+ *  `wantsBlank`, so this is the no-colon case only. */
+function isLabelShaped(text: string): boolean {
+  const t = text.trim().replace(PDF_LEADING_MARKER_RE, '').trim();
+  return /^[A-Za-z]/.test(t) && t.length <= 48 && !looksLikeSentence(t);
+}
+
+/**
+ * Annotate reconstructed line-boxes with materialised blank affordances per
+ * ruling #320. PURE. `pageWidth(page)` gives the page's width in the same units
+ * as the boxes' x; `segments` are visible drawn rule lines (may be empty).
+ * Returns the line TEXTS in reading order, with ` ______` appended where a blank
+ * was proven — the input to `linesToProseDocx` → `deriveProseTwin`.
+ */
+export function annotateAffordances(
+  boxes: LineBox[],
+  segments: ReadonlyArray<RuleSegment>,
+  pageWidth: (page: number) => number,
+): string[] {
+  if (boxes.length === 0) return [];
+  // Per-page left margin (min x0) → right writable edge R = pageWidth − margin.
+  const leftMargin = new Map<number, number>();
+  for (const b of boxes) {
+    const cur = leftMargin.get(b.page);
+    if (cur === undefined || b.x0 < cur) leftMargin.set(b.page, b.x0);
+  }
+
+  return boxes.map((b, i) => {
+    if (hasTextAffordance(b.text)) return b.text; // already has a real underscore run — S1 owns it
+
+    const next = i + 1 < boxes.length && boxes[i + 1].page === b.page ? boxes[i + 1] : null;
+
+    // A FILL rule line: a visible horizontal segment on this label's row that
+    // STARTS at or after the label's right edge and extends further right — i.e.
+    // the blank line a value is written on. ⚠️ THE "STARTS AFTER THE LABEL"
+    // CONDITION IS LOAD-BEARING (re-pass, 2026-09-14): a decorative underline
+    // beneath a heading, or a table cell's bottom border, spans from UNDER the
+    // label (s.x0 ≤ label.x1) and must NOT be read as a fill affordance — that
+    // over-derived a phantom control on "Vital Signs" / "Blood Pressure". A real
+    // fill line begins to the RIGHT of the label.
+    const h = b.height || 10;
+    const hasDrawnLine = segments.some(
+      (s) =>
+        s.page === b.page &&
+        Math.abs(s.y - b.y) <= h * 1.2 && // same row (baseline ± ~1 line)
+        s.x0 >= b.x1 - h && // begins at/after the label's right edge — not an underline
+        s.x1 > b.x1 + 2, // and extends further right
+    );
+
+    if (wantsBlank(b.text)) {
+      // Branch (a): a colon/marker label with an empty writable span — same-row
+      // to the right margin, or a big gap to the next line — OR a drawn line.
+      const margin = leftMargin.get(b.page) ?? 0;
+      const hasSameRowSpan = pageWidth(b.page) - margin - b.x1 >= SPAN_MARGIN;
+      const hasNextLineGap = next !== null && b.y - next.y > (b.height || 10) * GAP_LINES;
+      return hasSameRowSpan || hasNextLineGap || hasDrawnLine ? b.text + AFFORDANCE : b.text;
+    }
+
+    // Branch (b) for a COLON-LESS label: a drawn rule line following a
+    // label-shaped line IS the affordance ("Weight ____line____"). The line is the
+    // signal; a title/sentence is excluded by isLabelShaped, and S1's colon-less
+    // form still requires the appended blank to END the line.
+    if (hasDrawnLine && isLabelShaped(b.text)) return b.text + AFFORDANCE;
+    return b.text;
+  });
 }
 
 /** Read every positioned token across all pages from a pdfjs proxy — mirrors
@@ -155,17 +397,32 @@ async function placedItems(proxy: PdfjsProxy): Promise<PlacedItem[]> {
   return items;
 }
 
+/** Page widths from a pdfjs proxy, keyed 0-based (matching PlacedItem.page). */
+async function pageWidths(proxy: PdfjsProxy): Promise<Map<number, number>> {
+  const widths = new Map<number, number>();
+  for (let p = 1; p <= proxy.numPages; p++) {
+    const page = await proxy.getPage(p);
+    widths.set(p - 1, page.getViewport({ scale: 1 }).width);
+  }
+  return widths;
+}
+
 /**
- * Extract the form's prose lines from a pdfjs proxy. Returns null when the PDF
- * carries no text layer (scanned / image-only — ruling S2-2, fail safe). Proxy
- * in (not raw bytes) so the unpdf import stays at the I/O boundary and this is
- * testable with a pdf-lib-built fixture, exactly like `extractPdfAnchors`.
+ * Extract the form's prose lines from a pdfjs proxy, WITH ruling #320 blank
+ * affordances materialised. Returns null when the PDF carries no text layer
+ * (scanned / image-only — ruling S2-2, fail safe). Proxy in (not raw bytes) so
+ * the unpdf import stays at the I/O boundary and this is testable with a
+ * pdf-lib-built fixture. `segments` (visible drawn rule lines) is injected so the
+ * pure annotation stays unit-testable; the real caller extracts them.
  */
 export async function extractProseLinesFromProxy(
   proxy: PdfjsProxy,
+  segments: ReadonlyArray<RuleSegment> = [],
 ): Promise<string[] | null> {
-  const lines = reconstructLines(await placedItems(proxy));
-  return lines.length > 0 ? lines : null;
+  const boxes = groupLineBoxes(await placedItems(proxy));
+  if (boxes.length === 0) return null;
+  const widths = await pageWidths(proxy);
+  return annotateAffordances(boxes, segments, (page) => widths.get(page) ?? 612);
 }
 
 function xmlText(s: string): string {
@@ -226,7 +483,10 @@ export async function pdfToProseDocx(pdfBytes: Uint8Array): Promise<Uint8Array |
   } catch {
     return null; // unreadable / malformed PDF — caller declines cleanly
   }
-  const lines = await extractProseLinesFromProxy(proxy);
+  // Branch (b): visible drawn rule lines, fail-safe to none (branch (a) covers a
+  // text-labelled form on its own — the owner's file has no visible lines).
+  const segments = await extractRuleSegments(proxy as unknown as Parameters<typeof extractRuleSegments>[0]);
+  const lines = await extractProseLinesFromProxy(proxy, segments);
   if (!lines) return null; // no text layer — scanned, out of scope (ruling S2-2)
   return linesToProseDocx(lines);
 }

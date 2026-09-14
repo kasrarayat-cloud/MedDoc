@@ -64,6 +64,39 @@ function base64ToBytes(b64: string): Uint8Array {
 }
 
 /**
+ * Is there any INK in this rendered page — a pixel meaningfully darker than the
+ * white page? PURE, so the blank-render guard is unit-testable without a canvas.
+ * Samples on a stride (a preview, not a scanner). RULING #320 (2): a page that
+ * carries text but draws NO ink is a RENDER FAILURE, not an empty form — the
+ * exact "blank white rectangle" a doctor reads as "my form came back empty".
+ * Distinguishing it from a legitimately sparse form is why the caller ALSO
+ * requires the page to carry text before treating a no-ink canvas as failed: a
+ * sparse form still draws its labels as ink, so it is never mistaken for blank.
+ */
+export function imageDataHasInk(
+  data: Uint8ClampedArray | ReadonlyArray<number>,
+  opts?: { pixelStride?: number; darkness?: number },
+): boolean {
+  // ⚠️ SCAN EVERY PIXEL BY DEFAULT (stride 1), with an early exit on the first
+  // ink. A FIXED stride > 1 phase-locks to columns 0, stride, 2·stride, … on
+  // every row (ImageData rows are exactly width·4 bytes), so on a canvas whose
+  // width is a multiple of the stride, a sub-stride-wide label sitting between
+  // sampled columns is missed on EVERY row → a rendered form falsely reads BLANK
+  // (adversarial pass, 2026-09-14). The early exit keeps the common (inked) case
+  // O(first ink); only a truly blank page scans the whole buffer, once.
+  const stride = Math.max(1, opts?.pixelStride ?? 1) * 4;
+  const darkness = opts?.darkness ?? 24;
+  for (let i = 0; i + 3 < data.length; i += stride) {
+    const a = data[i + 3];
+    if (a < 8) continue; // fully transparent — not ink
+    if (255 - data[i] > darkness || 255 - data[i + 1] > darkness || 255 - data[i + 2] > darkness) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Make the Word preview frame like the PDF one.
  *
  * THE ASYMMETRY THIS FIXES. The PDF path draws each page to a canvas and lets
@@ -171,6 +204,12 @@ export function NativeDocumentPreview(props: NativeDocumentPreviewProps) {
         // 2x for legibility on the hidpi screens most doctors read on; the
         // canvas is laid out at CSS width so it still fits a phone.
         const dpr = Math.min(2, typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1);
+        // RULING #320 (2): track whether the render actually PUT INK ON THE PAGE,
+        // and whether the page carries text that should have drawn as ink. A
+        // no-ink canvas on a text-bearing page is a blank render — surfaced as a
+        // named reason below, never shown as an empty white rectangle.
+        let anyInk = false;
+        let anyText = false;
         for (let n = 1; n <= doc.numPages; n += 1) {
           const page = await doc.getPage(n);
           if (cancelled) return;
@@ -185,9 +224,33 @@ export function NativeDocumentPreview(props: NativeDocumentPreviewProps) {
           if (!ctx) throw new Error('no 2d context');
           await page.render({ canvasContext: ctx, viewport }).promise;
           if (cancelled) return;
+          if (!anyInk) {
+            try {
+              const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+              if (imageDataHasInk(img.data)) anyInk = true;
+            } catch {
+              // getImageData can throw on a tainted canvas — never here (same
+              // origin) — but if it does, assume ink so we never HIDE a page.
+              anyInk = true;
+            }
+          }
+          if (!anyText) {
+            try {
+              const tc = await page.getTextContent();
+              if (tc.items.some((it) => 'str' in it && (it as { str: string }).str.trim())) {
+                anyText = true;
+              }
+            } catch {
+              /* text layer unavailable — leave anyText as measured */
+            }
+          }
           host.appendChild(canvas);
         }
-        if (!cancelled) setPdfDrawn(true);
+        if (cancelled) return;
+        // A page that carries text but drew NO ink came back blank — report the
+        // reason (the doctor gets a download link) rather than an empty page.
+        if (anyText && !anyInk) setPdfFailed(true);
+        else setPdfDrawn(true);
       } catch {
         if (!cancelled) setPdfFailed(true);
       }
