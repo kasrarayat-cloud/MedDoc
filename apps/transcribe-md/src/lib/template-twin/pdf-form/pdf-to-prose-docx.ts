@@ -119,14 +119,38 @@ function estRight(it: PlacedItem): number {
   return it.x + Math.max(it.str.length * (it.height || 10) * 0.5, it.height || 10);
 }
 
-const COLUMN_GAP = 48; // pt of empty width between two columns of a header row
+// A column boundary is a gap wider than this MULTIPLE of the line height — well
+// above a word space (~0.25×) and below a typical gutter (~1×+). Height-relative,
+// not an absolute pt floor: an absolute 48pt missed a real ~1×-height gutter and
+// FUSED the two fields into one line S1 then parsed as ZERO controls, losing both
+// (adversarial pass, 2026-09-14).
+const COLUMN_GAP_FACTOR = 0.8;
+
+/** Has this segment reached a COMPLETED field — a colon label, a bare marker
+ *  slot, or a label whose underscore blank has been consumed ("Name: ____")? A
+ *  following gap after a completed field is a column gutter, not intra-label
+ *  spacing. */
+function isFieldBoundary(text: string): boolean {
+  const t = text.trim();
+  return /:$/.test(t) || PDF_MARKER_ONLY_RE.test(t) || /_{2,}\s*$/.test(t);
+}
+
+/** Does the next token BELONG to the current field (its underscore blank) rather
+ *  than start a NEW column? "Name: ____" — the "____" is Name's blank, so the row
+ *  must NOT split there (it is one field, not two columns). */
+function isTrailingBlank(str: string): boolean {
+  return /^\s*_{2,}/.test(str);
+}
 
 /**
  * Split one row's items into READING-ORDER columns (ruling #320: "two-column rows
- * yield two controls in reading order"). Splits ONLY at a large internal gap
- * whose LEFT side is a completed colon label — the shape of a two-column form
- * header ("PATIENT NAME: ____   DOB: ____"). A single wide label ("DATE OF
- * SURGERY:") has only normal word gaps and no internal colon, so it never splits.
+ * yield two controls in reading order"). Splits at an internal gap wider than
+ * `COLUMN_GAP_FACTOR × height` where the LEFT side is a completed field AND the
+ * NEXT token starts a NEW field (not this field's own underscore blank). So
+ * "PATIENT NAME: ____   DOB: ____" and "DD:  DT:" and "1.  2." split into two,
+ * while "Name: ______" (label + its blank) and "DATE OF SURGERY:" (one wide
+ * label) stay whole. Splitting reliably is what stops a fused multi-colon line
+ * reaching S1, which parses it as zero controls (its label class excludes ':').
  */
 function splitRowIntoColumns(sortedItems: PlacedItem[]): PlacedItem[][] {
   const cols: PlacedItem[][] = [];
@@ -136,8 +160,9 @@ function splitRowIntoColumns(sortedItems: PlacedItem[]): PlacedItem[][] {
     const next = sortedItems[i + 1];
     if (!next) break;
     const gap = next.x - estRight(sortedItems[i]);
+    const threshold = (sortedItems[i].height || 10) * COLUMN_GAP_FACTOR;
     const leftText = seg.map((s) => s.str).join(' ').replace(/\s+/g, ' ').trim();
-    if (gap >= COLUMN_GAP && /:$/.test(leftText)) {
+    if (gap >= threshold && isFieldBoundary(leftText) && !isTrailingBlank(next.str)) {
       cols.push(seg);
       seg = [];
     }
@@ -228,21 +253,45 @@ const PDF_LEADING_MARKER_RE =
 const PDF_MARKER_ONLY_RE =
   /^\s*(?:[-*•▪◦·‣⁃>|]+|[([]?\d{1,3}[.)\]]|[☐☑☒□■▢◻◼✓✔])\s*$/;
 
+/** A colon-terminated line that is a LEAD-IN SENTENCE, not a fill label — its
+ *  value is the prose/list BELOW, not an inline slot ("Findings were as follows:",
+ *  "The following were noted:"). ⚠️ THIS GUARD EXISTS BECAUSE #320 MANUFACTURES
+ *  THE AFFORDANCE S1's own fix relied on: S1 left a bare `LABEL:` as prose, but
+ *  the annotator appends underscores, and S1's ≤48-char label guard does NOT
+ *  reject a short sentence (adversarial pass, 2026-09-14). A sentence carries a
+ *  finite verb / connective a noun-phrase form label does not — that is the tell.
+ *  The set is TIGHT (clear sentence words that never appear in a form label);
+ *  "Performed", "Reviewed", "Diagnosis" stay label words. */
+const SENTENCE_MARKER_RE = /\b(?:was|were|is|are|am|be|been|being|following|follows|then)\b/i;
+function looksLikeSentence(phrase: string): boolean {
+  return SENTENCE_MARKER_RE.test(phrase) || phrase.split(/\s+/).filter(Boolean).length > 8;
+}
+
 /** Does this line, on its own text, look like a label/slot that WANTS a blank —
  *  i.e. it is a bare numbered/bullet slot (`1.`), or after dropping one leading
- *  marker it ends with a colon? A title/sentence without a trailing colon does
- *  NOT qualify (and S1 rejects a sentence-shaped label even if it did). */
+ *  marker it ends with a colon AND reads as a label (noun phrase), not a lead-in
+ *  sentence? A title/sentence without a trailing colon never qualifies. */
 function wantsBlank(text: string): boolean {
   const t = text.trim();
   if (!t) return false;
   if (PDF_MARKER_ONLY_RE.test(t)) return true; // bare "1." / "•" slot
   const afterMarker = t.replace(PDF_LEADING_MARKER_RE, '').trim();
-  return /:$/.test(afterMarker); // colon-terminated label (leading marker optional)
+  if (!/:$/.test(afterMarker)) return false; // must be colon-terminated
+  return !looksLikeSentence(afterMarker.replace(/:$/, '').trim()); // …and not a sentence
 }
 
 /** Already carries a real fill affordance (underscore run) — leave it for S1. */
 function hasTextAffordance(text: string): boolean {
   return /_{2,}/.test(text);
+}
+
+/** A colon-LESS line that still reads as a fill LABEL (for branch (b): a drawn
+ *  rule line following it is the affordance). Starts with a letter, is short (S1's
+ *  own label cap), and is not a lead-in sentence. A colon label is handled by
+ *  `wantsBlank`, so this is the no-colon case only. */
+function isLabelShaped(text: string): boolean {
+  const t = text.trim().replace(PDF_LEADING_MARKER_RE, '').trim();
+  return /^[A-Za-z]/.test(t) && t.length <= 48 && !looksLikeSentence(t);
 }
 
 /**
@@ -266,16 +315,9 @@ export function annotateAffordances(
   }
 
   return boxes.map((b, i) => {
-    if (hasTextAffordance(b.text) || !wantsBlank(b.text)) return b.text;
+    if (hasTextAffordance(b.text)) return b.text; // already has a real underscore run — S1 owns it
 
-    const margin = leftMargin.get(b.page) ?? 0;
-    const right = pageWidth(b.page) - margin;
-    const hasSameRowSpan = right - b.x1 >= SPAN_MARGIN;
-
-    // The next content line BELOW on the same page (boxes are in reading order,
-    // so the next same-page box is the one immediately below).
     const next = i + 1 < boxes.length && boxes[i + 1].page === b.page ? boxes[i + 1] : null;
-    const hasNextLineGap = next !== null && b.y - next.y > (b.height || 10) * GAP_LINES;
 
     // A visible rule line on this line's row (right of the label) or on the row
     // just below it — branch (b). `y` is baseline (up), so "below" is a smaller y.
@@ -288,7 +330,21 @@ export function annotateAffordances(
         s.y >= lowerY - (b.height || 10),
     );
 
-    return hasSameRowSpan || hasNextLineGap || hasDrawnLine ? b.text + AFFORDANCE : b.text;
+    if (wantsBlank(b.text)) {
+      // Branch (a): a colon/marker label with an empty writable span — same-row
+      // to the right margin, or a big gap to the next line — OR a drawn line.
+      const margin = leftMargin.get(b.page) ?? 0;
+      const hasSameRowSpan = pageWidth(b.page) - margin - b.x1 >= SPAN_MARGIN;
+      const hasNextLineGap = next !== null && b.y - next.y > (b.height || 10) * GAP_LINES;
+      return hasSameRowSpan || hasNextLineGap || hasDrawnLine ? b.text + AFFORDANCE : b.text;
+    }
+
+    // Branch (b) for a COLON-LESS label: a drawn rule line following a
+    // label-shaped line IS the affordance ("Weight ____line____"). The line is the
+    // signal; a title/sentence is excluded by isLabelShaped, and S1's colon-less
+    // form still requires the appended blank to END the line.
+    if (hasDrawnLine && isLabelShaped(b.text)) return b.text + AFFORDANCE;
+    return b.text;
   });
 }
 

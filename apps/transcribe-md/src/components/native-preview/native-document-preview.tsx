@@ -77,7 +77,14 @@ export function imageDataHasInk(
   data: Uint8ClampedArray | ReadonlyArray<number>,
   opts?: { pixelStride?: number; darkness?: number },
 ): boolean {
-  const stride = Math.max(1, opts?.pixelStride ?? 16) * 4;
+  // ⚠️ SCAN EVERY PIXEL BY DEFAULT (stride 1), with an early exit on the first
+  // ink. A FIXED stride > 1 phase-locks to columns 0, stride, 2·stride, … on
+  // every row (ImageData rows are exactly width·4 bytes), so on a canvas whose
+  // width is a multiple of the stride, a sub-stride-wide label sitting between
+  // sampled columns is missed on EVERY row → a rendered form falsely reads BLANK
+  // (adversarial pass, 2026-09-14). The early exit keeps the common (inked) case
+  // O(first ink); only a truly blank page scans the whole buffer, once.
+  const stride = Math.max(1, opts?.pixelStride ?? 1) * 4;
   const darkness = opts?.darkness ?? 24;
   for (let i = 0; i + 3 < data.length; i += stride) {
     const a = data[i + 3];

@@ -135,12 +135,20 @@ export async function extractRuleSegments(proxy: OpProxy): Promise<RuleSegment[]
         } else if (fn === OPS.setFillRGBColor) {
           if (Array.isArray(a)) fill = a[0];
         } else if (fn === OPS.constructPath) {
-          // args = [drawKind, subpaths, bbox]; each subpath is a flat
-          // [op, x, y, op, x, y, …] list (0=moveTo, 1=lineTo, 5=rectangle).
+          // args = [drawKindOps, subpaths, bbox]; `subpaths` is an array whose
+          // elements are each a flat [op, x, y, op, x, y, …] list (0=moveTo,
+          // 1=lineTo, 5=rectangle). ⚠️ EACH ELEMENT IS ARRAY-*LIKE*, NOT a plain
+          // Array: pdfjs emits a Float32Array/typed array for a path built from
+          // vector ops, and `Array.isArray(typedArray)` is FALSE — so a plain
+          // `Array.isArray` skip silently dropped every segment on pdf-lib-
+          // authored forms (adversarial pass, 2026-09-14). Accept any indexable
+          // with a numeric length.
           const subpaths = Array.isArray(a) ? (a[1] as unknown) : null;
-          if (!Array.isArray(subpaths)) continue;
-          for (const sp of subpaths) {
-            if (!Array.isArray(sp)) continue;
+          if (!subpaths || typeof (subpaths as ArrayLike<unknown>).length !== 'number') continue;
+          const sub = subpaths as ArrayLike<ArrayLike<number>>;
+          for (let s = 0; s < sub.length; s += 1) {
+            const sp = sub[s];
+            if (!sp || typeof sp.length !== 'number') continue;
             let ci = 0, cx = 0, cy = 0;
             while (ci < sp.length) {
               const op = sp[ci++];

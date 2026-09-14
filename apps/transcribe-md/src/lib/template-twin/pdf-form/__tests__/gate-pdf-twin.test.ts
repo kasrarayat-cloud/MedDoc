@@ -9,8 +9,10 @@
 // fail-safe (no text layer → null).
 // ============================================================================
 import { describe, expect, it } from 'vitest';
-import { PDFDocument, StandardFonts } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { getDocumentProxy } from 'unpdf';
+
+import { extractRuleSegments } from '../pdf-geometry';
 
 import { compileTemplateDocx } from '@/lib/note-template-docx';
 import { deriveProseTwin, derivedTwinProbeIsValid } from '../../prose-form/derive-prose-twin';
@@ -217,6 +219,21 @@ describe('S2 #320 — annotateAffordances: colon/number + empty span OR drawn li
     // so with no segment the same label stays prose:
     expect(annotateAffordances(boxes, [], W)).toEqual(['SIGNATURE:']);
   });
+
+  // ⚠️ ADVERSARIAL FIX (2026-09-14): a colon LEAD-IN SENTENCE is not a fill label.
+  it('leaves a colon-terminated LEAD-IN SENTENCE as prose (not a fillable control)', () => {
+    expect(annotateAffordances([box('Findings were as follows:')], [], W)).toEqual([
+      'Findings were as follows:',
+    ]);
+    expect(annotateAffordances([box('The following were noted:')], [], W)).toEqual([
+      'The following were noted:',
+    ]);
+    // …but a real NOUN-PHRASE label with those-adjacent words still derives.
+    expect(annotateAffordances([box('Procedure Performed:')], [], W)).toEqual(['Procedure Performed: ______']);
+    expect(annotateAffordances([box('History of Present Illness:')], [], W)).toEqual([
+      'History of Present Illness: ______',
+    ]);
+  });
 });
 
 describe('S2 #320 — groupLineBoxes: two-column reading order', () => {
@@ -236,6 +253,60 @@ describe('S2 #320 — groupLineBoxes: two-column reading order', () => {
       { str: 'SURGERY:', x: 110, y: 700, height: 11, page: 0 },
     ];
     expect(groupLineBoxes(items).map((b) => b.text)).toEqual(['DATE OF SURGERY:']);
+  });
+
+  // ⚠️ ADVERSARIAL FIX (2026-09-14): a SMALL (~1×height) gutter must still split,
+  // or the fused "DD: DT:" reaches S1 as a two-colon line and derives ZERO
+  // controls (its label class excludes ':'), losing BOTH fields.
+  it('splits a two-column row with a small (~1×height) gutter — the DD/DT case', () => {
+    // "DD:" at 54; estRight ≈ 54 + max(3·11·0.5, 11) = 70.5; "DT:" at 82 → gap ≈ 11.5 > 0.8·11.
+    const items: PlacedItem[] = [
+      { str: 'DD:', x: 54, y: 700, height: 11, page: 0 },
+      { str: 'DT:', x: 82, y: 700, height: 11, page: 0 },
+    ];
+    const twoBoxes = groupLineBoxes(items).map((b) => b.text);
+    expect(twoBoxes).toEqual(['DD:', 'DT:']);
+    // …and each column then derives its own affordance (not zero for the row).
+    expect(annotateAffordances(groupLineBoxes(items), [], () => 612)).toEqual(['DD: ______', 'DT: ______']);
+  });
+
+  it('splits two bare numbered slots side by side ("1.  2.")', () => {
+    const items: PlacedItem[] = [
+      { str: '1.', x: 54, y: 700, height: 11, page: 0 },
+      { str: '2.', x: 80, y: 700, height: 11, page: 0 },
+    ];
+    expect(groupLineBoxes(items).map((b) => b.text)).toEqual(['1.', '2.']);
+  });
+});
+
+// ⚠️ ADVERSARIAL FIX (2026-09-14): branch (b) end-to-end through the REAL
+// producer (extractRuleSegments) — earlier tests fed RuleSegment[] literals, so
+// the pdfjs op-list decode (which returned [] for every PDF) went untested.
+describe('S2 #320 — drawn VECTOR rule line derives a control (real op-list)', () => {
+  it('extractRuleSegments finds a black rule line and drops a white one', async () => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([612, 792]);
+    page.drawLine({ start: { x: 150, y: 698 }, end: { x: 400, y: 698 }, thickness: 1, color: rgb(0, 0, 0) });
+    page.drawLine({ start: { x: 150, y: 600 }, end: { x: 400, y: 600 }, thickness: 1, color: rgb(1, 1, 1) });
+    const segs = await extractRuleSegments((await proxyFor(await doc.save())) as never);
+    expect(segs.length).toBe(1); // the black line; the white one is not ink
+    expect(segs[0].y).toBeCloseTo(698, 0);
+  });
+
+  it('a colon-LESS label followed by a drawn line derives a control via branch (b)', async () => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([612, 792]);
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    // A label with NO colon and NO underscores — only a drawn rule line to its right.
+    page.drawText('Weight', { x: 54, y: 700, size: 11, font });
+    page.drawLine({ start: { x: 130, y: 698 }, end: { x: 300, y: 698 }, thickness: 1, color: rgb(0, 0, 0) });
+    const proxy = await proxyFor(await doc.save());
+    const segs = await extractRuleSegments(proxy as never);
+    const lines = await extractProseLinesFromProxy(proxy, segs);
+    // The colon-less label gained a materialised blank from the drawn line…
+    expect(lines).toContain('Weight ______');
+    const twin = await deriveProseTwin(await linesToProseDocx(lines!), verify);
+    expect(twin!.slots.map((s) => s.alias)).toContain('Weight');
   });
 });
 
