@@ -16,12 +16,16 @@ import { compileTemplateDocx } from '@/lib/note-template-docx';
 import { deriveProseTwin, derivedTwinProbeIsValid } from '../../prose-form/derive-prose-twin';
 import {
   reconstructLines,
+  groupLineBoxes,
+  annotateAffordances,
   extractProseLinesFromProxy,
   isPdfSource,
   linesToProseDocx,
   linesToDocumentXml,
   type PdfjsProxy,
   type PlacedItem,
+  type LineBox,
+  type RuleSegment,
 } from '../pdf-to-prose-docx';
 
 const verify = async (bytes: Uint8Array, expected: number): Promise<boolean> => {
@@ -89,16 +93,19 @@ describe('S2 — pdfToProseDocx: reconstruct + build (pure)', () => {
 });
 
 describe('S2 — end-to-end: real PDF → extract → prose DOCX → S1 twin', () => {
-  it('extracts the form lines in reading order from a real PDF text layer', async () => {
+  it('extracts the form lines, MATERIALISING a blank on a colon label with empty span (ruling #320)', async () => {
     const lines = await extractProseLinesFromProxy(await proxyFor(await makeFormPdf()));
     expect(lines).not.toBeNull();
     expect(lines).toEqual([
-      'OPERATIVE NOTE',
-      'Patient Name: ______________________',
+      'OPERATIVE NOTE', // no colon → stays prose (still a negative control)
+      'Patient Name: ______________________', // real underscores → untouched
       'Date of Service: ______________________',
       'Weight: ______',
       'Procedure Performed: ______________________',
-      'Assessment and Plan:',
+      // ⚠️ RULING #320: a colon label with an empty writable span IS an
+      // affordance now — the old "bare LABEL: stays prose" was AMENDED. So the
+      // annotator materialises the blank and S1 derives it.
+      'Assessment and Plan: ______',
     ]);
   });
 
@@ -107,20 +114,17 @@ describe('S2 — end-to-end: real PDF → extract → prose DOCX → S1 twin', (
     const docx = await linesToProseDocx(lines!);
     const twin = await deriveProseTwin(docx, verify);
     expect(twin).not.toBeNull();
-    // The four affordance labels become controls; heading + bare "Assessment and
-    // Plan:" (no affordance) stay prose. "Weight" is a measurement kind — accepted.
+    // The four underscore labels PLUS "Assessment and Plan:" (colon + empty span,
+    // ruling #320) become controls; the no-colon heading stays prose. "Weight"
+    // is a measurement kind — accepted.
     expect(twin!.slots.map((s) => s.alias)).toEqual([
-      'Patient Name', 'Date of Service', 'Weight', 'Procedure Performed',
+      'Patient Name', 'Date of Service', 'Weight', 'Procedure Performed', 'Assessment and Plan',
     ]);
     const ir = compileTemplateDocx(twin!.bytes);
-    expect(ir.fields.map((f) => f.originalLabel)).toEqual([
-      'Patient Name', 'Date of Service', 'Weight', 'Procedure Performed',
-    ]);
     expect(ir.stats.blockingUnsupported).toBe(0);
     expect(ir.fields.find((f) => f.originalLabel === 'Weight')?.kind).toBe('measurement');
-    // The heading survived as prose, not a control.
+    // The no-colon heading survived as prose, not a control (negative control).
     expect(twin!.documentXml).toContain('<w:t xml:space="preserve">OPERATIVE NOTE</w:t>');
-    expect(/Assessment and Plan:<\/w:t><\/w:r><\/w:p>/.test(twin!.documentXml)).toBe(true);
   });
 
   it('a text-less (scanned/image-only) PDF extracts to null — fail safe (ruling S2-2)', async () => {
@@ -162,5 +166,117 @@ describe('S2 — isPdfSource: content detection agrees with the PDF reader', () 
     const farHeader = new Uint8Array(2000);
     farHeader.set(PDF, 1500); // header at offset 1500 — past the 1KB scan window
     expect(isPdfSource(farHeader)).toBe(false);
+  });
+});
+
+// ── RULING #320 — the union blank affordance (pure) ────────────────────────
+describe('S2 #320 — annotateAffordances: colon/number + empty span OR drawn line', () => {
+  const W = (): number => 612; // page width; margin comes from the boxes' min x0
+  function box(text: string, over?: Partial<LineBox>): LineBox {
+    return { text, page: 0, y: 700, x0: 54, x1: 120, height: 11, ...over };
+  }
+
+  it('appends a blank to a COLON LABEL with an empty span to the right margin', () => {
+    expect(annotateAffordances([box('PATIENT NAME:')], [], W)).toEqual(['PATIENT NAME: ______']);
+  });
+
+  it('appends a blank to a BARE NUMBERED SLOT ("1.") — the owner-file findings', () => {
+    expect(annotateAffordances([box('1.', { x1: 64 })], [], W)).toEqual(['1. ______']);
+    expect(annotateAffordances([box('•', { x1: 60 })], [], W)).toEqual(['• ______']);
+  });
+
+  it('leaves a NO-COLON title and a DASH-terminated line as prose (negative controls)', () => {
+    expect(annotateAffordances([box('OPERATIVE NOTE', { x0: 250, x1: 360 })], [], W)).toEqual(['OPERATIVE NOTE']);
+    expect(annotateAffordances([box('Electronically Signed -')], [], W)).toEqual(['Electronically Signed -']);
+  });
+
+  it('leaves a line that ALREADY carries an underscore run untouched (S1 owns it)', () => {
+    expect(annotateAffordances([box('Total time: ______')], [], W)).toEqual(['Total time: ______']);
+  });
+
+  it('does NOT append when a colon label fills the row (no span, no gap, no line)', () => {
+    // x1 = 574 is within SPAN_MARGIN (40) of the right edge (612 - margin 54 = 558)… use a wide label.
+    expect(annotateAffordances([box('A VERY WIDE LABEL FILLING THE ROW:', { x1: 556 })], [], W)).toEqual([
+      'A VERY WIDE LABEL FILLING THE ROW:',
+    ]);
+  });
+
+  it('appends via a NEXT-LINE GAP when there is no same-row span (a block field)', () => {
+    const boxes = [
+      box('DESCRIPTION OF PROCEDURE:', { x1: 556, y: 400 }),
+      box('RECOMMENDATIONS:', { x1: 556, y: 280 }), // 120pt below → a writing area
+    ];
+    expect(annotateAffordances(boxes, [], W)[0]).toBe('DESCRIPTION OF PROCEDURE: ______');
+  });
+
+  it('appends via a DRAWN RULE LINE following the label (branch b), even with no span', () => {
+    const boxes = [box('SIGNATURE:', { x1: 556, y: 200 })];
+    const segs: RuleSegment[] = [{ page: 0, y: 200, x0: 300, x1: 560 }];
+    expect(annotateAffordances(boxes, segs, W)).toEqual(['SIGNATURE: ______']);
+    // …and a WHITE (absent) line is never passed here — the extractor drops it —
+    // so with no segment the same label stays prose:
+    expect(annotateAffordances(boxes, [], W)).toEqual(['SIGNATURE:']);
+  });
+});
+
+describe('S2 #320 — groupLineBoxes: two-column reading order', () => {
+  it('splits a two-column header row into two boxes, left then right', () => {
+    const items: PlacedItem[] = [
+      { str: 'PATIENT NAME:', x: 54, y: 700, height: 11, page: 0 },
+      { str: 'DOB:', x: 360, y: 700, height: 11, page: 0 }, // far right, big gap → second column
+    ];
+    const boxes = groupLineBoxes(items);
+    expect(boxes.map((b) => b.text)).toEqual(['PATIENT NAME:', 'DOB:']);
+  });
+
+  it('does NOT split a single wide label with only normal word gaps', () => {
+    const items: PlacedItem[] = [
+      { str: 'DATE', x: 54, y: 700, height: 11, page: 0 },
+      { str: 'OF', x: 90, y: 700, height: 11, page: 0 },
+      { str: 'SURGERY:', x: 110, y: 700, height: 11, page: 0 },
+    ];
+    expect(groupLineBoxes(items).map((b) => b.text)).toEqual(['DATE OF SURGERY:']);
+  });
+});
+
+describe('S2 #320 — end-to-end: an operative note with NO underscore blanks derives controls', () => {
+  // The owner's file shape: colon labels + numbered slots drawn with NO underscore
+  // characters (the blanks are drawn/whitespace). Before #320 this derived ZERO.
+  async function makeOpNotePdf(): Promise<Uint8Array> {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([612, 792]);
+    const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const L = (t: string, y: number, f = font, x = 54) => page.drawText(t, { x, y, size: 11, font: f });
+    L('OPERATIVE NOTE', 740, bold, 250); // title (centred-ish, no colon) → prose
+    L('PATIENT NAME:', 710);
+    L('SURGEON:', 688);
+    L('PROCEDURE:', 666);
+    L('POSTOPERATIVE FINDINGS:', 640);
+    L('1.', 620, font, 58);
+    L('2.', 604, font, 58);
+    L('3.', 588, font, 58);
+    L('DESCRIPTION OF PROCEDURE:', 560);
+    L('The findings were reviewed with the patient.', 300); // sentence, no colon → prose
+    return doc.save();
+  }
+
+  it('derives one control per colon label + numbered slot; title/sentence stay prose', async () => {
+    const lines = await extractProseLinesFromProxy(await proxyFor(await makeOpNotePdf()));
+    const twin = await deriveProseTwin(await linesToProseDocx(lines!), verify);
+    expect(twin).not.toBeNull();
+    // 5 colon labels + 3 numbered slots = 8 controls; the title and the trailing
+    // sentence (no colon, no marker) stay prose.
+    expect(twin!.slots.map((s) => s.alias)).toEqual([
+      'PATIENT NAME', 'SURGEON', 'PROCEDURE', 'POSTOPERATIVE FINDINGS',
+      'Fill-in', 'Fill-in', 'Fill-in', 'DESCRIPTION OF PROCEDURE',
+    ]);
+    expect(twin!.documentXml).toContain('<w:t xml:space="preserve">OPERATIVE NOTE</w:t>');
+    expect(twin!.documentXml).toContain(
+      '<w:t xml:space="preserve">The findings were reviewed with the patient.</w:t>',
+    );
+    // Every derived field is a fillable plain-text kind (keystone) — 0 blocking.
+    const ir = compileTemplateDocx(twin!.bytes);
+    expect(ir.stats.blockingUnsupported).toBe(0);
   });
 })
