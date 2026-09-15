@@ -130,7 +130,7 @@ export async function nativePdfExport(
   let twinFields: Awaited<ReturnType<typeof loadCertifiedTwinFields>> = null;
   if (templateNativeDocxEnabled()) {
     try {
-      twinFields = await loadCertifiedTwinFields(visit.noteTemplate.id, String(practiceId));
+      twinFields = await loadCertifiedTwinFields(visit.noteTemplate.id, practiceId);
     } catch (loadErr) {
       console.error(
         '[pdf-native] twin field load failed:',
@@ -141,7 +141,7 @@ export async function nativePdfExport(
   }
   if (twinFields) {
     try {
-      const resolutions = await loadVisitTwinResolutions(visitId, String(practiceId));
+      const resolutions = await loadVisitTwinResolutions(visitId, practiceId);
       // No VERIFIED+FRESH manifest → styled, exactly as the DOCX export does.
       if (!resolutions) return miss('twin_no_manifest');
       const proxy = await getDocumentProxy(new Uint8Array(canvas).slice());

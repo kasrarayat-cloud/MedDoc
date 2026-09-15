@@ -6,8 +6,9 @@
 //   • loadCertifiedTwinFields — the compiled twin's field list (id, label,
 //     order), for anchor derivation. Used by BOTH the visit export and the
 //     settings preview, so they place the same fields on the same page.
-//   • loadCertifiedTwinExportData — the above PLUS the visit's VERIFIED fill
-//     manifest resolutions, for the real export.
+//   • loadVisitTwinResolutions — a visit's VERIFIED fill-manifest resolutions,
+//     for the real export (kept separate so the caller can tell "no certified
+//     twin" from "certified twin, no manifest").
 //
 // Both return null unless the template's compiled twin is CERTIFIED — S2-4's
 // twin-driven fill fires only for a certified twin; an uncertified or non-twin
@@ -20,6 +21,7 @@
 // ============================================================================
 import prisma from '@meddoc/db';
 
+import { visitByIdScope, type PracticeId } from '@/lib/practice-scope';
 import { FieldResolutionSchema, type FieldResolution } from '@/lib/template-twin/ir';
 import { manifestMatchesDocument } from '@/lib/template-twin/note-identity';
 import type { TwinAnchorField } from './twin-anchor-derivation';
@@ -28,7 +30,7 @@ import type { TwinAnchorField } from './twin-anchor-derivation';
  *  compiled twin is not CERTIFIED. Ordered by displayOrder (reading order). */
 export async function loadCertifiedTwinFields(
   noteTemplateId: string,
-  practiceId: string,
+  practiceId: PracticeId,
 ): Promise<TwinAnchorField[] | null> {
   const compiled = await prisma.templateTwinCompiledVersion.findFirst({
     where: { noteTemplateId, practiceId, certificationStatus: 'CERTIFIED' },
@@ -57,12 +59,14 @@ export async function loadCertifiedTwinFields(
  *  twin" (loadCertifiedTwinFields === null) from "certified twin, no manifest". */
 export async function loadVisitTwinResolutions(
   visitId: string,
-  practiceId: string,
+  practiceId: PracticeId,
 ): Promise<FieldResolution[] | null> {
   // Signed → the frozen manifest by pointer; unsigned → the visit's verified
   // manifest. NULL on a signed visit that froze none: the answer is styled.
+  // Practice-scoped through the sanctioned accessor (src/lib/practice-scope.ts),
+  // which also asserts a non-empty practice — the same guard nativePdfExport uses.
   const visit = await prisma.transcribeVisit.findFirst({
-    where: { id: visitId, practiceId, deletedAt: null },
+    where: { ...visitByIdScope(visitId, practiceId), deletedAt: null },
     select: { status: true, frozenFillManifestId: true },
   });
   if (!visit) return null;
