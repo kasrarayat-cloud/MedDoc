@@ -12,11 +12,12 @@
 //   (one-to-one), so a fresh compiled version cannot attach to the prior template;
 //   the real upload path mints a new template VERSION. This reproduces that path:
 //     1 · mint a new note_template, COPYING the prior's structural fields (name,
-//         sections, styleProfile.headerFields, sourceObjectKey/Sha) — the copy is
-//         what guarantees carryForwardPdfCertification's structure-hash match so the
-//         PDF-native canvas + pdfNativeCertified carry onto the new id;
-//     2 · createTemplateTwinDraft(attachTo=new id) — #324 controls, REGISTRY-3 map;
-//     3 · carryForwardPdfCertification — copies the prior canvas + cert flags;
+//         sections, styleProfile.headerFields, sourceObjectKey/Sha);
+//     2 · createTemplateTwinDraft(attachTo=new id) — #324/#325 controls, REGISTRY-3 map;
+//     3 · certifyPdfTemplate(new id, ORIGINAL PDF BYTES) — the AUTHORITATIVE pdf-native
+//         cert (canvas + anchors + pdfNativeCertified from the bytes). NOT the
+//         label-only carryForwardPdfCertification, which refuses on anchors_missing;
+
 //     4 · AUTO-CONFIRM the model's clinical proposals (the REAL auto path); CONFIRM
 //         the record-derived (visit_metadata) headers as the ruled human act (#247
 //         declines them for a human, and RULING C is that authorisation — exactly as
@@ -38,7 +39,7 @@ import { randomUUID } from 'node:crypto';
 
 import { createTemplateTwinDraft } from '@/lib/template-twin/create-draft';
 import { createTemplateTwinArtifactStore } from '@/lib/template-twin/storage';
-import { carryForwardPdfCertification } from '@/lib/pdf-native/carry-forward';
+import { certifyPdfTemplate } from '@/lib/pdf-native/certify';
 import { readTemplateTwinWorkspace } from '@/lib/template-twin/workspace-read';
 import {
   updateTemplateTwinMappings,
@@ -207,15 +208,22 @@ async function main() {
     return;
   }
 
-  // ── 4 · carry the PDF-native canvas + cert flags forward from the prior ──────
-  const cf = await carryForwardPdfCertification({
+  // ── 4 · set up the PDF-native cert on the mint from the ORIGINAL PDF BYTES ────
+  // ⚠️ NOT carryForwardPdfCertification: that re-keys the PRIOR canvas by LABEL
+  // identity (no bytes) and REFUSES on any spec that does not re-anchor
+  // ("anchors_missing") — which the owner's form hits, because the prior was itself
+  // certified from bytes, not carried. `certifyPdfTemplate` is the AUTHORITY (it has
+  // the bytes): it re-derives the header fields + anchors from the PDF, stores the
+  // canvas, and sets pdfNativeCertified. S2-4 re-derives the actual fill anchors from
+  // the twin at export, so the stored anchors need only be non-empty (the gate).
+  const pdfCert = await certifyPdfTemplate({
+    templateId: newTemplateId,
+    pdfBytes: Buffer.from(pdfBytes),
     doctorId: userId,
-    encounterType: prior.encounterType,
-    newTemplateId,
   });
-  console.log(`${L} carry-forward: ${JSON.stringify(cf)}`);
-  if (!cf.carried) {
-    throw new Error(`PDF-native carry-forward did NOT carry (reason=${cf.reason}) — the pdf-native export would fall back to styled; refusing to certify a half-set-up template`);
+  console.log(`${L} pdf-native certify: anchors=${pdfCert.anchors.length} missing=${pdfCert.missing.length}`);
+  if (pdfCert.anchors.length === 0) {
+    throw new Error('pdf-native certify found NO anchors — the form is not a fillable flat PDF; refusing to certify a template whose export would silently fall back to styled');
   }
 
   // Confirm the visit_metadata headers by keeping their (deterministic, label-derived)
