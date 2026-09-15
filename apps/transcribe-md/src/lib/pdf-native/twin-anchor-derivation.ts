@@ -40,7 +40,6 @@ import {
 } from '@/lib/template-twin/pdf-form/pdf-to-prose-docx';
 import { extractRuleSegments } from '@/lib/template-twin/pdf-form/pdf-geometry';
 import { classifyParagraph } from '@/lib/template-twin/prose-form/derive-prose-twin';
-import { extractPdfAnchors, type AnchorLabelSpec } from './anchors';
 import type { PdfFillAnchor } from './fill-engine';
 
 /** The generic label S2 gives a bare numbered/blank slot (derive-prose-twin). */
@@ -101,75 +100,100 @@ export interface TwinAnchorResult {
   unlocatable: string[];
 }
 
+/** One reconstructed line the S1 pipeline classified as a field, with its box. */
+interface FieldBox {
+  box: { text: string; page: number; y: number; x0: number; x1: number; height: number };
+  alias: string;
+  kind: 'label' | 'blank';
+}
+
 /**
  * Re-derive pdf-native anchors from the twin's fields. PURE (reads only the
  * proxy). Anchor `key` is the twin `fieldId`, so the value bridge is 1:1.
+ *
+ * ⚠️ ONE READER OF "WHAT IS A FIELD" (four adversarial passes, 2026-09-15). Both
+ * LABELLED and BLANK fields are located by running the SAME S1 pipeline the twin
+ * was compiled with — groupLineBoxes → annotateAffordances → classifyParagraph —
+ * over the doctor's page, then matching the twin's fields to the classified boxes
+ * by EXACT alias (labels) and reading ORDER (blank slots). This replaced
+ * `extractPdfAnchors`/`findLabel`, which matched a label by PREFIX + first
+ * occurrence and drew "DATE" onto an earlier "DATE OF BIRTH:" line. Anything the
+ * one-reader match cannot resolve UNIQUELY and UNAMBIGUOUSLY is unlocatable → the
+ * caller falls back to the styled render, never a value on a guessed line.
  */
 export async function deriveTwinAnchors(
   proxy: PdfjsProxy,
   fields: readonly TwinAnchorField[],
 ): Promise<TwinAnchorResult> {
   const ordered = [...fields].sort((a, b) => a.displayOrder - b.displayOrder);
-  const labelled = ordered.filter((f) => norm(f.label) !== norm(FILL_IN_LABEL));
-  const slots = ordered.filter((f) => norm(f.label) === norm(FILL_IN_LABEL));
   const unlocatable: string[] = [];
 
-  // 1) LABELLED fields — locate each by its label. ⚠️ A label that is NOT UNIQUE
-  //    among the twin's fields is ambiguous: findLabel returns the FIRST match,
-  //    so two same-label fields would BOTH draw onto the first occurrence and
-  //    overprint (adversarial pass, 2026-09-15). Such fields are excluded from
-  //    location → unlocatable → fallback, never a guessed overdraw.
-  const labelCounts = new Map<string, number>();
-  for (const f of labelled) labelCounts.set(norm(f.label), (labelCounts.get(norm(f.label)) ?? 0) + 1);
-  const uniqueLabelled = labelled.filter((f) => (labelCounts.get(norm(f.label)) ?? 0) === 1);
-  for (const f of labelled) {
-    if ((labelCounts.get(norm(f.label)) ?? 0) !== 1) unlocatable.push(f.fieldId);
-  }
-  const specs: AnchorLabelSpec[] = uniqueLabelled.map((f) => ({
-    key: f.fieldId,
-    label: f.label,
-    kind: anchorKind(f.label),
-  }));
-  const labelledAnchors = await extractPdfAnchors(proxy as never, specs);
-  const locatedKeys = new Set(labelledAnchors.map((a) => a.key));
-  for (const f of uniqueLabelled) if (!locatedKeys.has(f.fieldId)) unlocatable.push(f.fieldId);
-
-  // 2) BLANK SLOTS — identified by S1's OWN predicate, not a re-detection.
-  //    ⚠️ ONE READER OF "WHAT IS A FIELD" (adversarial pass ×3, 2026-09-15). A
-  //    twin "Fill-in" field is exactly a line the S1 pipeline classifies 'blank'
-  //    AFTER affordance annotation — a bare "1." whose blank was materialised, or
-  //    a "1. ______" / "______" underscore blank. A marker-only regex drifted
-  //    from that both ways (missed "1. ______", over-counted a no-affordance
-  //    "3."), transposing clinical values. So this reconstructs the SAME line
-  //    boxes, runs the SAME annotateAffordances + classifyParagraph, and takes
-  //    the 'blank'-classified boxes in reading order — the twin's exact Fill-in
-  //    set, same count AND same order.
+  // Run the SAME pipeline S1 used to mint the twin's fields.
   const segments = await extractRuleSegments(proxy as never).catch(() => []);
   const { items, pageW } = await readItems(proxy);
   const boxes = groupLineBoxes(items);
   const annotated = annotateAffordances(boxes, segments, (page) => pageW[page] ?? 612);
-  const blankBoxes = boxes.filter((_, i) => classifyParagraph(annotated[i])?.kind === 'blank');
+  const fieldBoxes: FieldBox[] = [];
+  boxes.forEach((box, i) => {
+    const cls = classifyParagraph(annotated[i]);
+    if (cls) fieldBoxes.push({ box, alias: cls.alias, kind: cls.kind });
+  });
 
-  // ⚠️ PLACEMENT GUARD. The box geometry is the RAW line, so the value's start is
-  // unambiguous only for a bare MARKER ("1." → value to its right). A raw
-  // underscore blank ("1. ______" / "______") has its box right-edge PAST the
-  // blank, so the exact start is unknown from geometry alone — and a compile-time
-  // stored position is the proper fix (future S2). Until then, if the counts
-  // disagree (a divergence) OR any blank is not a bare marker (ambiguous start),
-  // EVERY Fill-in field is left unlocatable and the caller falls back to the
-  // styled render — never a value drawn on a guessed line. The owner's colon
-  // form (6 bare markers == 6 Fill-ins) zips exactly.
-  const slotAnchors: PdfFillAnchor[] = [];
-  const placeable = blankBoxes.length === slots.length && blankBoxes.every((b) => PDF_MARKER_ONLY_RE.test(b.text));
+  const anchors: PdfFillAnchor[] = [];
+
+  // The nearest FORM INK below a y (a block region must stop above the next
+  // label/footer) — mirrors anchors.ts::nearestInkYBelow.
+  const nearestInkYBelow = (page: number, y: number): number | undefined =>
+    items
+      .filter((it) => it.page === page && it.y < y - 2)
+      .map((it) => it.y)
+      .sort((a, b) => b - a)[0];
+  const INK_CLEAR = 14;
+
+  const anchorForLabel = (fieldId: string, fb: FieldBox): PdfFillAnchor => {
+    const pageWidth = pageW[fb.box.page] ?? 612;
+    const size = Math.max(8, Math.min(fb.box.height || 11, 12));
+    const firstLineX = fb.box.x1 + 6; // just past the printed label
+    const rightEdge = pageWidth - 54;
+    if (anchorKind(fb.alias) === 'inline') {
+      return { key: fieldId, label: fb.alias, page: fb.box.page, yTop: fb.box.y, yBottom: fb.box.y - size * 1.2, firstLineX, wrapX: firstLineX, rightEdge, fontSize: size };
+    }
+    const inkY = nearestInkYBelow(fb.box.page, fb.box.y);
+    const yBottom = inkY !== undefined ? inkY + INK_CLEAR : 40;
+    return { key: fieldId, label: fb.alias, page: fb.box.page, yTop: fb.box.y, yBottom, firstLineX, wrapX: fb.box.x0, rightEdge, fontSize: size };
+  };
+
+  // 1) LABELLED fields — match to a classified 'label' box by EXACT alias. An
+  //    alias that matches ZERO or MORE THAN ONE box (a duplicate label, or a
+  //    label that is not on the page) is ambiguous → unlocatable, never guessed.
+  const labelBoxes = fieldBoxes.filter((fb) => fb.kind === 'label');
+  const labelled = ordered.filter((f) => norm(f.label) !== norm(FILL_IN_LABEL));
+  for (const field of labelled) {
+    const matches = labelBoxes.filter((fb) => norm(fb.alias) === norm(field.label));
+    if (matches.length === 1) anchors.push(anchorForLabel(field.fieldId, matches[0]));
+    else unlocatable.push(field.fieldId);
+  }
+
+  // 2) BLANK SLOTS — the 'blank'-classified boxes in reading order are the twin's
+  //    exact Fill-in set (same count + order; verified). ⚠️ PLACEMENT GUARD: the
+  //    box geometry is the RAW line, so the value's start is unambiguous only for
+  //    a bare MARKER ("1." → value to its right); a raw underscore blank has its
+  //    box right-edge PAST the blank. If counts disagree OR any blank is not a
+  //    bare marker, EVERY Fill-in falls back to the styled render (the proper fix
+  //    for underscore blanks is a compile-time stored position, future S2). The
+  //    owner's colon form (6 bare markers == 6 Fill-ins) zips exactly.
+  const blankBoxes = fieldBoxes.filter((fb) => fb.kind === 'blank');
+  const slots = ordered.filter((f) => norm(f.label) === norm(FILL_IN_LABEL));
+  const placeable = blankBoxes.length === slots.length && blankBoxes.every((fb) => PDF_MARKER_ONLY_RE.test(fb.box.text));
   if (!placeable) {
     for (const field of slots) unlocatable.push(field.fieldId);
   } else {
     slots.forEach((field, i) => {
-      const box = blankBoxes[i];
+      const { box } = blankBoxes[i];
       const pageWidth = pageW[box.page] ?? 612;
       const size = Math.max(8, Math.min(box.height || 11, 12));
       const firstLineX = box.x1 + 6; // just past the bare marker "1."
-      slotAnchors.push({
+      anchors.push({
         key: field.fieldId,
         label: `${FILL_IN_LABEL} ${i + 1}`,
         page: box.page,
@@ -183,5 +207,5 @@ export async function deriveTwinAnchors(
     });
   }
 
-  return { anchors: [...labelledAnchors, ...slotAnchors], unlocatable };
+  return { anchors, unlocatable };
 }

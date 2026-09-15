@@ -198,4 +198,23 @@ describe('deriveTwinAnchors — adversarial regressions (2026-09-15)', () => {
     expect(anchors).toHaveLength(0);
     expect(unlocatable.sort()).toEqual(['ttf_00000000000000000000e111', 'ttf_00000000000000000000e222']);
   });
+
+  it('a PREFIX-related label ("DATE" vs an earlier "DATE OF BIRTH:") lands on its OWN line, not the prefix line', async () => {
+    // findLabel would prefix-match "DATE" to the earlier "DATE OF BIRTH:" line.
+    // Exact-alias matching against the classified boxes places each on its own.
+    const px = fakeProxy([
+      { str: 'DATE OF BIRTH:', x: 60, y: 700 },
+      { str: 'DATE:', x: 60, y: 680 },
+    ]);
+    const fields: TwinAnchorField[] = [
+      { fieldId: 'ttf_0000000000000000000date1', label: 'DATE', displayOrder: 2 },
+      { fieldId: 'ttf_0000000000000000000dob01', label: 'DATE OF BIRTH', displayOrder: 1 },
+    ];
+    const { anchors, unlocatable } = await deriveTwinAnchors(px as never, fields);
+    expect(unlocatable).toEqual([]);
+    const date = anchors.find((a) => a.key === 'ttf_0000000000000000000date1')!;
+    const dob = anchors.find((a) => a.key === 'ttf_0000000000000000000dob01')!;
+    expect(Math.round(date.yTop)).toBe(680); // its OWN line, not 700
+    expect(Math.round(dob.yTop)).toBe(700);
+  });
 });
