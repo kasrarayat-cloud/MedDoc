@@ -34,9 +34,12 @@
 // ============================================================================
 import {
   groupLineBoxes,
+  annotateAffordances,
   PDF_MARKER_ONLY_RE,
   type PlacedItem as GeomItem,
 } from '@/lib/template-twin/pdf-form/pdf-to-prose-docx';
+import { extractRuleSegments } from '@/lib/template-twin/pdf-form/pdf-geometry';
+import { classifyParagraph } from '@/lib/template-twin/prose-form/derive-prose-twin';
 import { extractPdfAnchors, type AnchorLabelSpec } from './anchors';
 import type { PdfFillAnchor } from './fill-engine';
 
@@ -131,35 +134,41 @@ export async function deriveTwinAnchors(
   const locatedKeys = new Set(labelledAnchors.map((a) => a.key));
   for (const f of uniqueLabelled) if (!locatedKeys.has(f.fieldId)) unlocatable.push(f.fieldId);
 
-  // 2) BLANK SLOTS — a twin "Fill-in" field is produced by S1 from a bare-blank
-  //    line that is EITHER a bare enumeration marker ("1.", "•") OR a bare
-  //    UNDERSCORE run (isBlankFillLine: /^_{2,}$/). Detect BOTH, reconstructed
-  //    over the SAME line boxes S2 used, then zip the ordered Fill-in fields to
-  //    the ordered slot lines.
-  //
-  // ⚠️ COUNT GUARD (adversarial re-pass, 2026-09-15). The slot set here and the
-  // twin's Fill-in field set are computed by DIFFERENT predicates over DIFFERENT
-  // inputs (raw geometry vs the S1 affordance pipeline), so a positional zip is
-  // only trustworthy when they agree in COUNT. A mismatch means a divergence
-  // (an affordance-less marker counted here but not a field, an underscore blank
-  // missed, a two-column edge) — so rather than guess a shifted zip that draws
-  // clinical values on the wrong lines, EVERY Fill-in field is left unlocatable
-  // and the caller falls back to the styled render. Only an exact count match
-  // (the common case: the owner's colon form, 6 markers == 6 Fill-ins) zips.
+  // 2) BLANK SLOTS — identified by S1's OWN predicate, not a re-detection.
+  //    ⚠️ ONE READER OF "WHAT IS A FIELD" (adversarial pass ×3, 2026-09-15). A
+  //    twin "Fill-in" field is exactly a line the S1 pipeline classifies 'blank'
+  //    AFTER affordance annotation — a bare "1." whose blank was materialised, or
+  //    a "1. ______" / "______" underscore blank. A marker-only regex drifted
+  //    from that both ways (missed "1. ______", over-counted a no-affordance
+  //    "3."), transposing clinical values. So this reconstructs the SAME line
+  //    boxes, runs the SAME annotateAffordances + classifyParagraph, and takes
+  //    the 'blank'-classified boxes in reading order — the twin's exact Fill-in
+  //    set, same count AND same order.
+  const segments = await extractRuleSegments(proxy as never).catch(() => []);
   const { items, pageW } = await readItems(proxy);
-  const isBareUnderscoreRun = (t: string): boolean => /^_{2,}$/.test(t.replace(/\s+/g, ''));
-  const slotBoxes = groupLineBoxes(items).filter(
-    (b) => PDF_MARKER_ONLY_RE.test(b.text) || isBareUnderscoreRun(b.text),
-  );
+  const boxes = groupLineBoxes(items);
+  const annotated = annotateAffordances(boxes, segments, (page) => pageW[page] ?? 612);
+  const blankBoxes = boxes.filter((_, i) => classifyParagraph(annotated[i])?.kind === 'blank');
+
+  // ⚠️ PLACEMENT GUARD. The box geometry is the RAW line, so the value's start is
+  // unambiguous only for a bare MARKER ("1." → value to its right). A raw
+  // underscore blank ("1. ______" / "______") has its box right-edge PAST the
+  // blank, so the exact start is unknown from geometry alone — and a compile-time
+  // stored position is the proper fix (future S2). Until then, if the counts
+  // disagree (a divergence) OR any blank is not a bare marker (ambiguous start),
+  // EVERY Fill-in field is left unlocatable and the caller falls back to the
+  // styled render — never a value drawn on a guessed line. The owner's colon
+  // form (6 bare markers == 6 Fill-ins) zips exactly.
   const slotAnchors: PdfFillAnchor[] = [];
-  if (slotBoxes.length !== slots.length) {
+  const placeable = blankBoxes.length === slots.length && blankBoxes.every((b) => PDF_MARKER_ONLY_RE.test(b.text));
+  if (!placeable) {
     for (const field of slots) unlocatable.push(field.fieldId);
   } else {
     slots.forEach((field, i) => {
-      const box = slotBoxes[i];
+      const box = blankBoxes[i];
       const pageWidth = pageW[box.page] ?? 612;
       const size = Math.max(8, Math.min(box.height || 11, 12));
-      const firstLineX = box.x1 + 6; // just past the "1." / underscores
+      const firstLineX = box.x1 + 6; // just past the bare marker "1."
       slotAnchors.push({
         key: field.fieldId,
         label: `${FILL_IN_LABEL} ${i + 1}`,

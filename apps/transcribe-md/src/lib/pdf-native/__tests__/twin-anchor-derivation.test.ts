@@ -147,10 +147,12 @@ describe('deriveTwinAnchors — adversarial regressions (2026-09-15)', () => {
     expect(Math.round(slot2.yTop)).toBe(590);
   });
 
-  it('an UNDERSCORE-blank Fill-in is placed (not just numbered markers); order preserved', async () => {
-    // A bare underscore line "____" is ALSO a twin Fill-in (S1 isBlankFillLine).
-    // With it detected, 1 underscore + 2 markers == 3 Fill-in fields → the values
-    // land on their own lines, not shifted onto the wrong ones.
+  it('an UNDERSCORE-blank slot has an AMBIGUOUS start position → all slots fall back (never a guessed line)', async () => {
+    // A raw underscore blank ("____") IS a twin Fill-in (S1 isBlankFillLine), and
+    // the S1-predicate detection finds it — but its box right-edge is PAST the
+    // blank, so the value's start is not known from geometry. Rather than draw on
+    // a guessed position, the placement guard falls the whole slot set back to the
+    // styled render. (The exact fix is a compile-time stored position; future S2.)
     const px = fakeProxy([
       { str: '____________', x: 60, y: 700 },
       { str: '1.', x: 60, y: 680 },
@@ -162,10 +164,8 @@ describe('deriveTwinAnchors — adversarial regressions (2026-09-15)', () => {
       { fieldId: 'ttf_0000000000000000000000m2', label: 'Fill-in', displayOrder: 5 },
     ];
     const { anchors, unlocatable } = await deriveTwinAnchors(px as never, fields);
-    expect(unlocatable).toEqual([]);
-    expect(Math.round(anchors.find((a) => a.key === 'ttf_0000000000000000000000u1')!.yTop)).toBe(700);
-    expect(Math.round(anchors.find((a) => a.key === 'ttf_0000000000000000000000m1')!.yTop)).toBe(680);
-    expect(Math.round(anchors.find((a) => a.key === 'ttf_0000000000000000000000m2')!.yTop)).toBe(660);
+    expect(anchors).toHaveLength(0);
+    expect(unlocatable.sort()).toEqual(fields.map((f) => f.fieldId).sort());
   });
 
   it('COUNT GUARD: detected slot lines ≠ Fill-in fields → ALL slots unlocatable (styled fallback, never a shifted zip)', async () => {
