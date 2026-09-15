@@ -4,11 +4,16 @@
 // stays prose (owner ruling, 2026-09-15).
 //
 // "Bold" is approximated structurally — unpdf's text layer carries no font
-// weight — so the affordance is: a colon-less, label-shaped line, IN THE BODY,
-// with a multi-line empty gap beneath it. The BODY gate is load-bearing: the
-// same shape ABOVE the topmost labelled row is a document TITLE (OPERATIVE NOTE,
-// COLONOSCOPY) and must stay prose, or every title with spacing beneath it mints
-// a phantom control.
+// weight — so the fill signal is THREE robust conditions, each hardened against
+// an arm an adversarial pass broke on the first (topmost-label) attempt:
+//   1 · IN THE BODY by DEPTH (>= MIN_ROWS_ABOVE rows above) — a title stays
+//       shallow even beneath a letterhead colon-label; the old MAX-label gate was
+//       defeated BOTH ways (top letterhead minted the title; bottom-only labels
+//       dropped CONSENT).
+//   2 · NOT a slot-heading — the next line is not a numbered/bulleted MARKER
+//       (POSTOPERATIVE FINDINGS / RECOMMENDATIONS fill their 1./2./3. slots).
+//   3 · a MULTI-LINE gap measured against the page MEDIAN line height, never the
+//       heading's own font size (which a compact heading otherwise shrank).
 // ============================================================================
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -19,20 +24,19 @@ import { getDocumentProxy } from 'unpdf';
 import { annotateAffordances, groupLineBoxes, type LineBox } from '../pdf-to-prose-docx';
 import { extractRuleSegments } from '../pdf-geometry';
 
-// A page ~612pt wide (US Letter). No drawn rule segments — the gap is the only
-// affordance under test, so the multi-line-gap heuristic is exercised in
-// isolation from `hasDrawnLine`.
 const W = 612;
 const pageWidth = () => W;
 
-/** A colon label near the left margin; `wantsBlank` fires on the trailing colon,
- *  so this counts as a "real label" for the topmost-label computation. */
-function label(text: string, y: number): LineBox {
-  return { text, page: 0, y, x0: 44, x1: 140, height: 10 };
+function label(text: string, y: number, x0 = 44, x1 = 140): LineBox {
+  return { text, page: 0, y, x0, x1, height: 10 };
 }
-/** A colon-less heading near the left margin (no drawn line, no colon). */
-function heading(text: string, y: number): LineBox {
-  return { text, page: 0, y, x0: 44, x1: 200, height: 10 };
+function heading(text: string, y: number, height = 12): LineBox {
+  return { text, page: 0, y, x0: 44, x1: 200, height };
+}
+/** A demographic block of colon labels descending from `topY`, one per 20pt row —
+ *  the ordinary top-of-form strip that puts a section heading deep in the body. */
+function demographicBlock(topY: number, rows: number): LineBox[] {
+  return Array.from({ length: rows }, (_, i) => label(`FIELD ${i}:`, topY - i * 20));
 }
 
 function annotate(boxes: LineBox[]): Map<string, boolean> {
@@ -42,55 +46,63 @@ function annotate(boxes: LineBox[]): Map<string, boolean> {
   return m;
 }
 
-describe('#324 — multi-line-gap heading affordance (body-gated)', () => {
-  it('a body heading with a multi-line gap beneath it becomes ONE control', () => {
-    // A colon label at the top establishes the body; CONSENT sits below it with a
-    // large empty gap before the next line → the writing area is a control.
+describe('#324 — multi-line-gap heading affordance (depth-gated, slot-aware)', () => {
+  it('a body heading (deep) with a multi-line writing gap becomes ONE control', () => {
+    // Six demographic rows put CONSENT well into the body; a 60pt empty gap to the
+    // next heading is the writing area.
     const got = annotate([
-      label('PATIENT NAME:', 700),
-      heading('CONSENT', 600),
-      heading('SPECIMENS:', 540), // colon label — the "next line" 60pt below CONSENT
+      ...demographicBlock(700, 6), // rows at 700..600
+      heading('CONSENT', 560),
+      heading('DESCRIPTION OF PROCEDURE', 480), // 80pt gap below CONSENT
+      heading('SIGNATURE', 400),
     ]);
     expect(got.get('CONSENT')).toBe(true);
+    expect(got.get('DESCRIPTION OF PROCEDURE')).toBe(true);
   });
 
-  it('⚠️ THE BODY GATE: the SAME heading ABOVE the topmost label stays prose (it is a title)', () => {
-    // Identical gap, identical shape — only its position relative to the first
-    // labelled row differs. Above it → title → prose. This is the mutation that
-    // distinguishes the fix from an ungated multi-line-gap rule.
-    const asTitle = annotate([
-      heading('COLONOSCOPY', 730), // ABOVE the first label, big gap beneath
-      label('PATIENT NAME:', 698),
-      label('PROCEDURE:', 629),
-    ]);
-    expect(asTitle.get('COLONOSCOPY')).toBe(false);
-
-    const asBody = annotate([
-      label('PATIENT NAME:', 730), // now the label is on top…
-      heading('COLONOSCOPY', 698), // …and the identical heading is in the body
-      label('PROCEDURE:', 629),
-    ]);
-    expect(asBody.get('COLONOSCOPY')).toBe(true); // proves the ONLY difference is position
-  });
-
-  it('a heading whose fill is its own numbered slots (small gap) stays prose', () => {
-    // POSTOPERATIVE FINDINGS with 1./2./3. immediately below: the slots are the
-    // fields, the heading is not. Gap to the next line is one line, not many.
+  it('⚠️ TITLE ZONE: a title beneath a top-of-page letterhead colon-label stays prose', () => {
+    // Adversarial arm [2]/[5]: a top demographics strip (Patient:/Date:) sits ABOVE
+    // the title, which defeated the old topmost-label gate. Depth catches it: the
+    // title has only one row above it.
     const got = annotate([
-      label('PATIENT NAME:', 700),
-      heading('POSTOPERATIVE FINDINGS', 516),
-      { text: '1.', page: 0, y: 496, x0: 46, x1: 55, height: 10 }, // 20pt below → no multi-line gap
-      { text: '2.', page: 0, y: 477, x0: 46, x1: 55, height: 10 },
+      label('Patient:', 760, 60, 110),
+      label('Date:', 760, 400, 440),
+      heading('COLONOSCOPY REPORT', 730, 14), // colon-less title, one row above
+      label('Indication:', 650, 60, 140),
+    ]);
+    expect(got.get('COLONOSCOPY REPORT')).toBe(false);
+  });
+
+  it('⚠️ DEPTH is the ONLY difference: the same heading deep in the body IS a control', () => {
+    const got = annotate([
+      ...demographicBlock(760, 6), // rows 760..660
+      heading('COLONOSCOPY REPORT', 620, 14),
+      heading('NEXT SECTION', 540), // 80pt writing gap below
+      heading('SIGNATURE', 460),
+    ]);
+    expect(got.get('COLONOSCOPY REPORT')).toBe(true);
+  });
+
+  it('⚠️ SLOT-HEADING: a heading whose next line is a numbered MARKER stays prose', () => {
+    // Adversarial arm [4]: POSTOPERATIVE FINDINGS with a COMPACT font (height 7)
+    // over-derived under a height-based threshold. Two guards now hold it prose:
+    // its fill is the 1./2./3. slots (next is a marker), and the gap is measured
+    // against the page median height, not the heading's own.
+    const got = annotate([
+      ...demographicBlock(760, 6),
+      heading('POSTOPERATIVE FINDINGS', 600, 7), // compact heading, deep in body
+      { text: '1.', page: 0, y: 580, x0: 46, x1: 55, height: 10 }, // marker slot below
+      { text: '2.', page: 0, y: 560, x0: 46, x1: 55, height: 10 },
+      { text: '3.', page: 0, y: 540, x0: 46, x1: 55, height: 10 },
     ]);
     expect(got.get('POSTOPERATIVE FINDINGS')).toBe(false);
-    expect(got.get('1.')).toBe(true); // the numbered slot IS the field (marker branch)
+    expect(got.get('1.')).toBe(true); // the numbered slot itself IS the field
   });
 
-  it('a page with NO labels never over-derives a heading (safe-biased)', () => {
-    // firstLabelY is undefined for the page → inBody is false → no gap rule fires.
-    const got = annotate([heading('COVER PAGE', 700), heading('SUBTITLE', 600)]);
-    expect(got.get('COVER PAGE')).toBe(false);
-    expect(got.get('SUBTITLE')).toBe(false);
+  it('a shallow title page never over-derives (few rows above, no labels)', () => {
+    const got = annotate([heading('OPERATIVE NOTE', 740, 16), heading('COLONOSCOPY', 715, 14)]);
+    expect(got.get('OPERATIVE NOTE')).toBe(false);
+    expect(got.get('COLONOSCOPY')).toBe(false);
   });
 });
 
@@ -135,15 +147,15 @@ describe("#324 — owner's colonoscopy operative form (the ruling's fixture)", (
     expect(got.get('CONSENT')).toBe(true);
     expect(got.get('DESCRIPTION OF PROCEDURE')).toBe(true);
 
-    // Titles — a colon-less heading ABOVE the first labelled row stays prose.
+    // Titles — colon-less headings in the shallow top zone stay prose.
     expect(got.get('OPERATIVE NOTE')).toBe(false);
     expect(got.get('COLONOSCOPY')).toBe(false);
 
-    // Slot-headings — their fill is the numbered slots below, so the heading is prose.
+    // Slot-headings — their fill is the numbered slots below (next is a marker).
     expect(got.get('POSTOPERATIVE FINDINGS')).toBe(false);
     expect(got.get('RECOMMENDATIONS')).toBe(false);
 
-    // The colon labels are still controls (branch (a) unaffected by #324).
+    // The colon labels are still controls (branch (a), unaffected by #324).
     expect(got.get('SPECIMENS:')).toBe(true);
     expect(got.get('COMPLICATIONS:')).toBe(true);
     expect(got.get('BOWEL PREPARATION / BBPS:')).toBe(true);

@@ -42,6 +42,7 @@ import {
   isEmptyText,
   isListValuedNarrative,
   joinListValuedNarrative,
+  preservesDuplicateItems,
   LIST_VALUED_NARRATIVE_JOINED_REASON,
 } from '../field-value-derivation';
 import { OTHER_EXPERIENCER_CLINICIAN_CONCEPTS } from '../concept-registry';
@@ -1012,28 +1013,38 @@ function resolveOne(
   const distinctValues = unique(
     convertedPairs.map(({ converted }) => JSON.stringify(converted.value)),
   );
-  if (distinctValues.length > 1) {
-    // A narrative SECTION accumulates; it does not contradict itself. Two past
-    // medical conditions are not two answers to one question. See
-    // field-value-derivation.ts for why measurements deliberately keep
-    // conflicting here rather than joining.
-    // ⚠️ `!allDenied` IS GONE, NOT RELAXED. It was the guard that sent a
-    // multi-fact DENIED narrative into `multiple_distinct_supported_values`,
-    // and a denial can no longer arrive here at all — it returned at the
-    // #157(b) block above. Re-adding a polarity test here would be dead code
-    // that looks like a safety property.
-    if (isListValuedNarrative(field, mapping)) {
-      const joined = joinListValuedNarrative(field, mapping, temporalCandidates);
-      if (joined !== null) {
-        return makeResolution(
-          field.fieldId,
-          'supported',
-          joined,
-          temporalCandidates,
-          LIST_VALUED_NARRATIVE_JOINED_REASON,
-        );
-      }
+  // A narrative SECTION accumulates its cited facts into a list; it does not
+  // contradict itself. Two past medical conditions are not two answers to one
+  // question. See field-value-derivation.ts for why measurements deliberately keep
+  // conflicting here rather than joining.
+  // ⚠️ `!allDenied` IS GONE, NOT RELAXED. It was the guard that sent a
+  // multi-fact DENIED narrative into `multiple_distinct_supported_values`, and a
+  // denial can no longer arrive here at all — it returned at the #157(b) block
+  // above. Re-adding a polarity test here would be dead code that looks like a
+  // safety property.
+  // ⚠️ REGISTRY-3 (#323) — the normal join trigger is >1 DISTINCT value. A
+  // COUNT-PRESERVING list (specimens) ALSO joins when the values REPEAT: two
+  // identical specimen descriptions are two distinct pathology containers, and
+  // falling through to the single-value path below would print one and silently
+  // drop the other. Non-count-preserving lists are unchanged — with one distinct
+  // value they take the single-value path and de-dup as before.
+  if (
+    isListValuedNarrative(field, mapping) &&
+    convertedPairs.length > 1 &&
+    (distinctValues.length > 1 || preservesDuplicateItems(field, mapping))
+  ) {
+    const joined = joinListValuedNarrative(field, mapping, temporalCandidates);
+    if (joined !== null) {
+      return makeResolution(
+        field.fieldId,
+        'supported',
+        joined,
+        temporalCandidates,
+        LIST_VALUED_NARRATIVE_JOINED_REASON,
+      );
     }
+  }
+  if (distinctValues.length > 1) {
     return makeResolution(
       field.fieldId,
       'conflict',

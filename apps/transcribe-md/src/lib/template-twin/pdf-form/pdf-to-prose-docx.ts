@@ -259,6 +259,15 @@ const GAP_LINES = 1.9; // a vertical gap > this × line-height is a writing area
 // numbered slots) must stay prose. Measured on the owner colon form: CONSENT and
 // DESCRIPTION OF PROCEDURE clear this; the titles and slot-headings do not.
 const MULTI_LINE_GAP = 2.6;
+// ⚠️ #324 — a colon-less heading is a FILL SECTION only in the BODY, never the
+// title zone. "Body" is measured by DEPTH: at least this many distinct text rows
+// sit ABOVE it on the page. A document title — even beneath a one- or two-line
+// letterhead strip — keeps a small count; a real section (CONSENT, DESCRIPTION)
+// sits below the whole demographic block. This replaces the topmost-labelled-row
+// gate, which an adversarial pass defeated in BOTH directions: a top-of-page
+// letterhead colon-label minted the title, and bottom-only labels dropped the
+// ruling's own targets.
+const MIN_ROWS_ABOVE = 4;
 const AFFORDANCE = ' ______'; // the materialised blank S1 consumes (>= 2 underscores)
 
 /** A leading list/enumeration marker (digit/bracket/bullet/checkbox) FOLLOWED by
@@ -345,17 +354,51 @@ export function annotateAffordances(
     const cur = leftMargin.get(b.page);
     if (cur === undefined || b.x0 < cur) leftMargin.set(b.page, b.x0);
   }
-  // ⚠️ #324 — the TOPMOST labelled row per page (highest y among colon/marker
-  // labels). A colon-less heading ABOVE it is a document TITLE ("OPERATIVE NOTE",
-  // "COLONOSCOPY"), not a fill section — the multi-line-gap rule below is gated to
-  // the BODY (b.y < this) so a title with spacing beneath it never becomes a
-  // phantom control.
-  const firstLabelY = new Map<number, number>();
+  // ⚠️ #324 — ROBUST per-page geometry for the colon-less heading rule (branch b).
+  //   · medianHeight — the page's typical line height, used as the multi-line-gap
+  //     UNIT so the threshold never rides on a heading's OWN font size (a compact
+  //     heading otherwise lowered its own bar and over-derived a slot-heading).
+  //   · rowYsDesc — the DISTINCT text rows top→bottom, so a heading's DEPTH gates
+  //     the title zone (see MIN_ROWS_ABOVE). Two columns on one visual row (e.g.
+  //     "PATIENT NAME:" / "PATIENT DOB:") are clustered to one row.
+  const heightsByPage = new Map<number, number[]>();
+  const ysByPage = new Map<number, number[]>();
   for (const b of boxes) {
-    if (!wantsBlank(b.text)) continue;
-    const cur = firstLabelY.get(b.page);
-    if (cur === undefined || b.y > cur) firstLabelY.set(b.page, b.y);
+    let hs = heightsByPage.get(b.page);
+    if (!hs) heightsByPage.set(b.page, (hs = []));
+    hs.push(b.height || 10);
+    let ys = ysByPage.get(b.page);
+    if (!ys) ysByPage.set(b.page, (ys = []));
+    ys.push(b.y);
   }
+  const medianOf = (xs: number[]): number => {
+    if (xs.length === 0) return 10;
+    const s = [...xs].sort((a, c) => a - c);
+    return s[Math.floor(s.length / 2)] || 10;
+  };
+  const medianHeightByPage = new Map<number, number>();
+  const rowYsDescByPage = new Map<number, number[]>();
+  for (const [page, hs] of heightsByPage) {
+    const mh = medianOf(hs);
+    medianHeightByPage.set(page, mh);
+    const tol = mh * 0.6; // cluster near-equal Ys into one row
+    const rows: number[] = [];
+    for (const y of [...(ysByPage.get(page) ?? [])].sort((a, c) => c - a)) {
+      if (rows.length === 0 || rows[rows.length - 1] - y > tol) rows.push(y);
+    }
+    rowYsDescByPage.set(page, rows);
+  }
+  // Distinct text rows strictly ABOVE a box's own row, on its page.
+  const rowsAbove = (b: LineBox): number => {
+    const rows = rowYsDescByPage.get(b.page) ?? [];
+    const tol = (medianHeightByPage.get(b.page) ?? 10) * 0.6;
+    let n = 0;
+    for (const y of rows) {
+      if (y - b.y > tol) n += 1;
+      else break; // descending — once we reach b's own row, everything after is below
+    }
+    return n;
+  };
 
   return boxes.map((b, i) => {
     if (hasTextAffordance(b.text)) return b.text; // already has a real underscore run — S1 owns it
@@ -389,29 +432,33 @@ export function annotateAffordances(
     }
 
     // Branch (b) for a COLON-LESS label: either a drawn rule line following a
-    // label-shaped line ("Weight ____line____"), OR — ruling #324 — a bold
-    // heading followed by an empty MULTI-LINE GAP (CONSENT, DESCRIPTION OF
-    // PROCEDURE: a heading with a multi-line writing area beneath). Both field
-    // ONE control whose value flows BELOW (S2-4 routes a colon-less label to its
-    // block branch). A heading with NO gap (a title, or a heading whose fill is
-    // its own numbered slots just below) stays prose.
+    // label-shaped line ("Weight ____line____"), OR — ruling #324 — a bold heading
+    // followed by an empty MULTI-LINE writing gap (CONSENT, DESCRIPTION OF
+    // PROCEDURE). Both field ONE control whose value flows BELOW (S2-4 routes a
+    // colon-less label to its block branch).
     //
-    // ⚠️ "BOLD" IS APPROXIMATED STRUCTURALLY. unpdf's text layer carries no font
-    // weight, so a heading is recognised as a label-shaped, colon-less line with a
-    // multi-line empty gap beneath — the gap is the load-bearing affordance. The
-    // isLabelShaped/looksLikeSentence guards keep prose out.
+    // ⚠️ "BOLD" IS APPROXIMATED STRUCTURALLY — unpdf's text layer carries no font
+    // weight — so the fill signal is THREE robust conditions, each the fix to an
+    // arm an adversarial pass broke on the earlier topmost-label gate:
+    //
+    //   1 · IN THE BODY, not the title zone — measured by DEPTH (rowsAbove ≥
+    //       MIN_ROWS_ABOVE). A title stays shallow even beneath a letterhead
+    //       colon-label, where the old MAX-label test was defeated BOTH ways (a
+    //       top letterhead minted the title; bottom-only labels dropped CONSENT).
+    //   2 · NOT a slot-heading — the next line is not a numbered/bulleted MARKER.
+    //       POSTOPERATIVE FINDINGS / RECOMMENDATIONS fill their own 1./2./3. slots
+    //       below, so they stay prose REGARDLESS of the heading's font size (the
+    //       old height-based threshold over-derived a compact-font slot-heading).
+    //   3 · a genuine MULTI-LINE empty gap beneath — measured against the page's
+    //       MEDIAN line height, NEVER the heading's own.
+    //
+    // A drawn rule line stays a fill affordance ANYWHERE (ungated by the above).
     if (isLabelShaped(b.text)) {
-      // ⚠️ #324 — the multi-line-gap heuristic is gated to the BODY. A colon-less
-      // label ABOVE the topmost labelled row is a document title ("OPERATIVE NOTE",
-      // "COLONOSCOPY") that happens to have spacing beneath it; firing the gap rule
-      // there mints a phantom control. `topLabelY` is the highest y among real
-      // labels; a body heading sits BELOW it (b.y < topLabelY). No labels on the
-      // page → treat nothing as body (safe-biased: never over-derive on a title
-      // page). A drawn rule line stays ungated — it is a fill affordance anywhere.
-      const topLabelY = firstLabelY.get(b.page);
-      const inBody = topLabelY !== undefined && b.y < topLabelY;
+      const inBody = rowsAbove(b) >= MIN_ROWS_ABOVE;
+      const nextIsSlot = next !== null && fieldBoundaryKind(next.text) === 'marker';
+      const unit = medianHeightByPage.get(b.page) ?? 10;
       const hasMultiLineGap =
-        inBody && next !== null && b.y - next.y > (b.height || 10) * MULTI_LINE_GAP;
+        inBody && !nextIsSlot && next !== null && b.y - next.y > unit * MULTI_LINE_GAP;
       if (hasDrawnLine || hasMultiLineGap) return b.text + AFFORDANCE;
     }
     return b.text;
