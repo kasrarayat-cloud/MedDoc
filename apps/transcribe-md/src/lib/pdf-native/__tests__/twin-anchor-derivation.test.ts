@@ -199,6 +199,31 @@ describe('deriveTwinAnchors — adversarial regressions (2026-09-15)', () => {
     expect(unlocatable.sort()).toEqual(['ttf_00000000000000000000e111', 'ttf_00000000000000000000e222']);
   });
 
+  it('a COMPACT colon header (tight line spacing) places every field inline — value NOT dropped by an inverted block region', async () => {
+    // 12pt line pitch: the nearest ink below each label is <14pt away. A colon
+    // label must fill INLINE (to the right), never the block path whose floor
+    // would invert and silently drop the value.
+    const px = fakeProxy([
+      { str: 'PATIENT NAME:', x: 60, y: 700 },
+      { str: 'DATE OF SURGERY:', x: 60, y: 688 },
+      { str: 'SURGEON:', x: 60, y: 676 },
+    ]);
+    const fields: TwinAnchorField[] = [
+      { fieldId: 'ttf_00000000000000000000pn01', label: 'PATIENT NAME', displayOrder: 1 },
+      { fieldId: 'ttf_00000000000000000000dos1', label: 'DATE OF SURGERY', displayOrder: 2 },
+      { fieldId: 'ttf_00000000000000000000sg01', label: 'SURGEON', displayOrder: 3 },
+    ];
+    const { anchors, unlocatable } = await deriveTwinAnchors(px as never, fields);
+    expect(unlocatable).toEqual([]);
+    expect(anchors).toHaveLength(3);
+    // Every region is a valid (non-inverted) inline line: yBottom strictly below yTop.
+    for (const a of anchors) expect(a.yBottom).toBeLessThan(a.yTop);
+    // And the value sits to the RIGHT of the label on the label's own baseline.
+    const dos = anchors.find((a) => a.key === 'ttf_00000000000000000000dos1')!;
+    expect(Math.round(dos.yTop)).toBe(688);
+    expect(dos.firstLineX).toBeGreaterThan(60);
+  });
+
   it('a PREFIX-related label ("DATE" vs an earlier "DATE OF BIRTH:") lands on its OWN line, not the prefix line', async () => {
     // findLabel would prefix-match "DATE" to the earlier "DATE OF BIRTH:" line.
     // Exact-alias matching against the classified boxes places each on its own.

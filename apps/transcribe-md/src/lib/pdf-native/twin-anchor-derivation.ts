@@ -66,16 +66,6 @@ interface PdfjsProxy {
 
 const norm = (s: string): string => s.toLowerCase().replace(/\s+/g, ' ').replace(/:\s*$/, '').trim();
 
-/** Same-line ("inline") fill vs below-the-label ("block"). The twin's fields are
- *  label/marker fill-ins, so a colon label or a marker is inline; a bare section
- *  heading with no colon is block. Deterministic, label-only. */
-function anchorKind(label: string): 'inline' | 'block' {
-  const raw = label.trim();
-  if (raw === FILL_IN_LABEL) return 'inline';
-  if (/[:：]\s*$/.test(raw)) return 'inline';
-  return 'block';
-}
-
 /** Positioned tokens (S2's `PlacedItem` shape) + per-page width. */
 async function readItems(proxy: PdfjsProxy): Promise<{ items: GeomItem[]; pageW: number[] }> {
   const items: GeomItem[] = [];
@@ -150,16 +140,27 @@ export async function deriveTwinAnchors(
       .sort((a, b) => b - a)[0];
   const INK_CLEAR = 14;
 
-  const anchorForLabel = (fieldId: string, fb: FieldBox): PdfFillAnchor => {
+  // ⚠️ INLINE vs BLOCK IS DECIDED FROM THE RAW BOX TEXT, NOT THE ALIAS. The alias
+  // from classifyParagraph has its trailing colon STRIPPED, so testing the alias
+  // for a colon made the inline branch DEAD and forced every labelled field onto
+  // the block path — whose nearestInkYBelow floor INVERTS when the next line is
+  // <INK_CLEAR below, silently dropping the value (adversarial pass, 2026-09-15).
+  // A colon in the raw line means the value fills to the RIGHT (a header field);
+  // a colon-less label fills BELOW (a section heading). And a block region with
+  // no room (inverted / < one line) returns null → the field is UNLOCATABLE → the
+  // caller falls back to the styled render, never a silent drop.
+  const anchorForLabel = (fieldId: string, fb: FieldBox): PdfFillAnchor | null => {
     const pageWidth = pageW[fb.box.page] ?? 612;
     const size = Math.max(8, Math.min(fb.box.height || 11, 12));
     const firstLineX = fb.box.x1 + 6; // just past the printed label
     const rightEdge = pageWidth - 54;
-    if (anchorKind(fb.alias) === 'inline') {
+    if (/[:：]/.test(fb.box.text)) {
+      // Inline (header field): one line to the right of the label; never inverts.
       return { key: fieldId, label: fb.alias, page: fb.box.page, yTop: fb.box.y, yBottom: fb.box.y - size * 1.2, firstLineX, wrapX: firstLineX, rightEdge, fontSize: size };
     }
     const inkY = nearestInkYBelow(fb.box.page, fb.box.y);
     const yBottom = inkY !== undefined ? inkY + INK_CLEAR : 40;
+    if (fb.box.y - yBottom < size) return null; // no room below → unlocatable (fallback)
     return { key: fieldId, label: fb.alias, page: fb.box.page, yTop: fb.box.y, yBottom, firstLineX, wrapX: fb.box.x0, rightEdge, fontSize: size };
   };
 
@@ -170,7 +171,8 @@ export async function deriveTwinAnchors(
   const labelled = ordered.filter((f) => norm(f.label) !== norm(FILL_IN_LABEL));
   for (const field of labelled) {
     const matches = labelBoxes.filter((fb) => norm(fb.alias) === norm(field.label));
-    if (matches.length === 1) anchors.push(anchorForLabel(field.fieldId, matches[0]));
+    const anchor = matches.length === 1 ? anchorForLabel(field.fieldId, matches[0]) : null;
+    if (anchor) anchors.push(anchor);
     else unlocatable.push(field.fieldId);
   }
 
