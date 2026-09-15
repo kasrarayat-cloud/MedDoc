@@ -666,11 +666,28 @@ export const CONCEPT_LABEL_OVERRIDES: ReadonlyArray<readonly [RegExp, string]> =
  * control whose value flows below the heading). The affordance path decides which
  * by whether the heading is followed by marker slots.
  */
+// ⚠️ OPERATIVE-SPECIFIC BY CONSTRUCTION. `procedure.findings` / `.recommendations`
+// are the OPERATIVE concepts, so a bare "FINDINGS" (the radiology/ultrasound heading
+// style) must NOT match — an adversarial pass caught a bare `findings` binding an
+// imaging FINDINGS section to `procedure.findings`. So findings requires the
+// `post-operative` qualifier. `RECOMMENDATIONS` stays generic, but is reachable ONLY
+// through the NUMBERED-GROUP path (it needs `1./2./3.` marker slots beneath it — a
+// structural signal a radiology recommendations section does not carry); it is NOT
+// a single-block section (see SECTION_SINGLE_BLOCK_CONCEPTS), so the gap-6 branch,
+// which fields a heading on its NAME alone, can never bind it.
 export const SECTION_HEADING_CONCEPTS: ReadonlyArray<readonly [RegExp, string]> = [
-  [/^\s*(?:post[\s-]?operative\s+)?findings\s*:?\s*$/i, 'procedure.findings'],
+  [/^\s*post[\s-]?operative\s+findings\s*:?\s*$/i, 'procedure.findings'],
   [/^\s*recommendations?\s*:?\s*$/i, 'procedure.recommendations'],
   [/^\s*pre[\s-]?operative\s+diagnosis(?:\s*\/\s*indication)?\s*:?\s*$/i, 'procedure.preop_diagnosis'],
 ];
+
+/** Sections that may be fielded as a SINGLE block control on the heading's NAME
+ *  alone (the gap-6 branch, no marker slots). Restricted to operative-specific,
+ *  single-valued concepts so a generic list heading (RECOMMENDATIONS) is never bound
+ *  by name — it must earn its concept through the numbered-slot structure. */
+export const SECTION_SINGLE_BLOCK_CONCEPTS: ReadonlySet<string> = new Set([
+  'procedure.preop_diagnosis',
+]);
 
 /** The operative-section concept for a colon-less heading, or null. */
 export function sectionHeadingConceptFor(heading: string): string | null {

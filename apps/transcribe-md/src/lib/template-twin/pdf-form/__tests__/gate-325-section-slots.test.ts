@@ -13,7 +13,8 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { getDocumentProxy } from 'unpdf';
 
-import { pdfToProseDocx } from '../pdf-to-prose-docx';
+import { pdfToProseDocx, annotateAffordancesWithGroups, type LineBox } from '../pdf-to-prose-docx';
+import { visitMetadataConceptFor } from '../../concept-registry';
 import { deriveProseTwin, derivedTwinProbeIsValid, FILL_IN_LABEL } from '../../prose-form/derive-prose-twin';
 import { compileTemplateDocx } from '@/lib/note-template-docx';
 import { compilerDecidedConcept } from '../../semantic-mapping';
@@ -107,6 +108,38 @@ describe("#325 — the owner's colon form's section slots bind + group", () => {
     const dt = ir.fields.find((f) => /^dt\b/i.test(f.originalLabel));
     expect(compilerDecidedConcept(dd!, [])).toBe('visit_metadata.dictated_at');
     expect(compilerDecidedConcept(dt!, [])).toBe('visit_metadata.transcribed_at');
+  });
+
+  // ── ADVERSARIAL FIXES: no cross-specialty over-reach ────────────────────────
+  it('⚠️ a radiology-style bare FINDINGS / free-text RECOMMENDATIONS is NOT tagged operative', () => {
+    // An ultrasound/radiology report: colon-less "FINDINGS" and "RECOMMENDATIONS"
+    // headings over a free-text writing area (no numbered markers), deep in the body.
+    // procedure.findings/.recommendations are OPERATIVE concepts — they must not bind
+    // an imaging section (which would override the model + auto-confirm).
+    const row = (text: string, y: number, x0 = 44, x1 = 200): LineBox => ({ text, page: 0, y, x0, x1, height: 10 });
+    const boxes: LineBox[] = [
+      row('SPRINGFIELD IMAGING', 760),
+      row('PATIENT NAME:', 740, 44, 120),
+      row('DOB:', 720, 44, 80),
+      row('MRN:', 700, 44, 80),
+      row('DATE:', 680, 44, 90),
+      row('STUDY:', 660, 44, 100),
+      row('FINDINGS', 620), // bare — radiology style, deep (>= 6 rows above)
+      row('IMPRESSION', 520),
+      row('RECOMMENDATIONS', 480), // free-text, no markers below
+      row('SIGNATURE', 380),
+    ];
+    const annotated = annotateAffordancesWithGroups(boxes, [], () => 612);
+    const byText = new Map(boxes.map((b, i) => [b.text, annotated[i]]));
+    // Neither imaging heading acquires a pdfsec tag.
+    expect(byText.get('FINDINGS')?.group).toBeNull();
+    expect(byText.get('RECOMMENDATIONS')?.group).toBeNull();
+  });
+
+  it('⚠️ "DD (differential diagnosis)" is NOT a dictation date (only the literal clarifier)', () => {
+    expect(visitMetadataConceptFor('DD (dictated)')).toBe('visit_metadata.dictated_at');
+    expect(visitMetadataConceptFor('DT (transcribed)')).toBe('visit_metadata.transcribed_at');
+    expect(visitMetadataConceptFor('DD (differential diagnosis)')).toBeNull();
   });
 
   it('every field is now conceptable — no bare Fill-in with a null concept remains', async () => {

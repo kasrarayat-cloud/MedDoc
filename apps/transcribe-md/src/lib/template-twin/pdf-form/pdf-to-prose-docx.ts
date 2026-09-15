@@ -29,7 +29,11 @@
 import JSZip from 'jszip';
 
 import { extractRuleSegments, type RuleSegment } from './pdf-geometry';
-import { sectionHeadingConceptFor, PDF_SECTION_TAG_PREFIX } from '../concept-registry';
+import {
+  sectionHeadingConceptFor,
+  SECTION_SINGLE_BLOCK_CONCEPTS,
+  PDF_SECTION_TAG_PREFIX,
+} from '../concept-registry';
 
 export type { RuleSegment } from './pdf-geometry';
 
@@ -460,8 +464,16 @@ export function annotateAffordancesWithGroups(
       openGroupTag = PDF_SECTION_TAG_PREFIX + sectionConcept; // numbered group; heading stays prose
     } else if (thisIsMarker && openGroupTag) {
       sectionTags[i] = openGroupTag; // this slot inherits the section concept
-    } else if (sectionConcept && rowsAbove(b) >= MIN_ROWS_ABOVE) {
-      sectionTags[i] = PDF_SECTION_TAG_PREFIX + sectionConcept; // single section block, fielded
+    } else if (
+      sectionConcept &&
+      SECTION_SINGLE_BLOCK_CONCEPTS.has(sectionConcept) &&
+      rowsAbove(b) >= MIN_ROWS_ABOVE
+    ) {
+      // ⚠️ SINGLE-BLOCK ONLY. Fielding a heading on its NAME alone (no marker slots)
+      // is the riskiest branch, so it is restricted to operative-specific single
+      // concepts — a generic list heading (RECOMMENDATIONS, or a radiology FINDINGS)
+      // is never bound here; it must earn its concept through the numbered structure.
+      sectionTags[i] = PDF_SECTION_TAG_PREFIX + sectionConcept;
       openGroupTag = null;
     } else {
       openGroupTag = null; // any other line closes an open group
