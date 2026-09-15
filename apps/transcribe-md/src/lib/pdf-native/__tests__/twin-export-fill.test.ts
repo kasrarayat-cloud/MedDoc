@@ -22,12 +22,18 @@ const FIXTURE = join(
 );
 const canvas = () => new Uint8Array(readFileSync(FIXTURE));
 
-// A representative subset of the colon twin: 3 header fields + 1 numbered slot.
+// 3 header fields + ALL 6 numbered slots (the count guard requires the full
+// Fill-in set to match the form's 6 markers; a partial set falls back by design).
 const FIELDS: TwinAnchorField[] = [
   { fieldId: 'ttf_000000000000000000000002', label: 'PATIENT NAME', displayOrder: 2 },
   { fieldId: 'ttf_000000000000000000000005', label: 'DATE OF PROCEDURE', displayOrder: 5 },
   { fieldId: 'ttf_000000000000000000000007', label: 'PROCEDURE', displayOrder: 7 },
   { fieldId: 'ttf_00000000000000000000000b', label: 'Fill-in', displayOrder: 13 },
+  { fieldId: 'ttf_00000000000000000000000c', label: 'Fill-in', displayOrder: 14 },
+  { fieldId: 'ttf_00000000000000000000000d', label: 'Fill-in', displayOrder: 15 },
+  { fieldId: 'ttf_000000000000000000000011', label: 'Fill-in', displayOrder: 22 },
+  { fieldId: 'ttf_000000000000000000000012', label: 'Fill-in', displayOrder: 23 },
+  { fieldId: 'ttf_000000000000000000000013', label: 'Fill-in', displayOrder: 24 },
 ];
 
 const res = (fieldId: string, value: string | null): FieldResolution => ({
@@ -60,8 +66,9 @@ describe('S2-4 — twin values fill the doctor original colon page', () => {
     ];
     const { texts, unplaceable } = buildTwinFillTexts(resolutions, anchors, unlocatable);
     expect(unplaceable).toEqual([]);
-    // Every value routed to its fieldId-keyed anchor.
-    expect(Object.keys(texts).sort()).toEqual(FIELDS.map((f) => f.fieldId).sort());
+    // Each RESOLVED value routed to its fieldId-keyed anchor (the other Fill-in
+    // slots have no resolution here, so they stay blank — nothing to place).
+    expect(Object.keys(texts).sort()).toEqual(resolutions.map((r) => r.fieldId).sort());
 
     const out = await fillPdfTemplate({ canvasPdf: canvas(), anchors, texts });
     const text = await pageText(out);

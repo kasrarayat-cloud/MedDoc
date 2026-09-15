@@ -131,34 +131,48 @@ export async function deriveTwinAnchors(
   const locatedKeys = new Set(labelledAnchors.map((a) => a.key));
   for (const f of uniqueLabelled) if (!locatedKeys.has(f.fieldId)) unlocatable.push(f.fieldId);
 
-  // 2) NUMBERED SLOTS — reconstruct the SAME line boxes S2 used, keep the ones
-  //    whose whole text is a bare marker, in reading order, and zip to the
-  //    ordered Fill-in fields. A slot with no marker is UNLOCATABLE (→ fallback),
-  //    never zipped onto an unrelated marker.
+  // 2) BLANK SLOTS — a twin "Fill-in" field is produced by S1 from a bare-blank
+  //    line that is EITHER a bare enumeration marker ("1.", "•") OR a bare
+  //    UNDERSCORE run (isBlankFillLine: /^_{2,}$/). Detect BOTH, reconstructed
+  //    over the SAME line boxes S2 used, then zip the ordered Fill-in fields to
+  //    the ordered slot lines.
+  //
+  // ⚠️ COUNT GUARD (adversarial re-pass, 2026-09-15). The slot set here and the
+  // twin's Fill-in field set are computed by DIFFERENT predicates over DIFFERENT
+  // inputs (raw geometry vs the S1 affordance pipeline), so a positional zip is
+  // only trustworthy when they agree in COUNT. A mismatch means a divergence
+  // (an affordance-less marker counted here but not a field, an underscore blank
+  // missed, a two-column edge) — so rather than guess a shifted zip that draws
+  // clinical values on the wrong lines, EVERY Fill-in field is left unlocatable
+  // and the caller falls back to the styled render. Only an exact count match
+  // (the common case: the owner's colon form, 6 markers == 6 Fill-ins) zips.
   const { items, pageW } = await readItems(proxy);
-  const markerBoxes = groupLineBoxes(items).filter((b) => PDF_MARKER_ONLY_RE.test(b.text));
+  const isBareUnderscoreRun = (t: string): boolean => /^_{2,}$/.test(t.replace(/\s+/g, ''));
+  const slotBoxes = groupLineBoxes(items).filter(
+    (b) => PDF_MARKER_ONLY_RE.test(b.text) || isBareUnderscoreRun(b.text),
+  );
   const slotAnchors: PdfFillAnchor[] = [];
-  slots.forEach((field, i) => {
-    const box = markerBoxes[i];
-    if (!box) {
-      unlocatable.push(field.fieldId);
-      return;
-    }
-    const pageWidth = pageW[box.page] ?? 612;
-    const size = Math.max(8, Math.min(box.height || 11, 12));
-    const firstLineX = box.x1 + 6; // just past the "1."
-    slotAnchors.push({
-      key: field.fieldId,
-      label: `${FILL_IN_LABEL} ${i + 1}`,
-      page: box.page,
-      yTop: box.y,
-      yBottom: box.y - size * 1.2,
-      firstLineX,
-      wrapX: firstLineX,
-      rightEdge: pageWidth - 54,
-      fontSize: size,
+  if (slotBoxes.length !== slots.length) {
+    for (const field of slots) unlocatable.push(field.fieldId);
+  } else {
+    slots.forEach((field, i) => {
+      const box = slotBoxes[i];
+      const pageWidth = pageW[box.page] ?? 612;
+      const size = Math.max(8, Math.min(box.height || 11, 12));
+      const firstLineX = box.x1 + 6; // just past the "1." / underscores
+      slotAnchors.push({
+        key: field.fieldId,
+        label: `${FILL_IN_LABEL} ${i + 1}`,
+        page: box.page,
+        yTop: box.y,
+        yBottom: box.y - size * 1.2,
+        firstLineX,
+        wrapX: firstLineX,
+        rightEdge: pageWidth - 54,
+        fontSize: size,
+      });
     });
-  });
+  }
 
   return { anchors: [...labelledAnchors, ...slotAnchors], unlocatable };
 }

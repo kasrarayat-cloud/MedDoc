@@ -84,14 +84,16 @@ describe('deriveTwinAnchors — the colon form, from its own twin fields', () =>
     expect(anchors.find((a) => a.key === 'ttf_ffffffffffffffffffffffff')).toBeUndefined();
   });
 
-  it('a surplus Fill-in with no marker is UNLOCATABLE (never zipped onto an unrelated marker)', async () => {
+  it('a surplus Fill-in (7 fields vs 6 slot lines) trips the count guard → all Fill-ins fall back', async () => {
     const withExtraSlot: TwinAnchorField[] = [
       ...COLON_TWIN_FIELDS,
       { fieldId: 'ttf_eeeeeeeeeeeeeeeeeeeeeeee', label: 'Fill-in', displayOrder: 30 },
     ];
     const { unlocatable } = await deriveTwinAnchors((await proxy()) as never, withExtraSlot);
-    // 7 Fill-in fields, only 6 markers → the 7th (last by order) is unlocatable.
-    expect(unlocatable).toContain('ttf_eeeeeeeeeeeeeeeeeeeeeeee');
+    // Count mismatch (7 Fill-in fields, 6 slot lines) → EVERY Fill-in field is
+    // unlocatable, never a shifted zip. The 15 labelled fields still locate.
+    const fillInIds = withExtraSlot.filter((f) => f.label === 'Fill-in').map((f) => f.fieldId);
+    for (const id of fillInIds) expect(unlocatable).toContain(id);
   });
 });
 
@@ -143,6 +145,43 @@ describe('deriveTwinAnchors — adversarial regressions (2026-09-15)', () => {
     // The slots land on the bare markers at y=610 / 590, NOT the labelled rows.
     expect(Math.round(slot1.yTop)).toBe(610);
     expect(Math.round(slot2.yTop)).toBe(590);
+  });
+
+  it('an UNDERSCORE-blank Fill-in is placed (not just numbered markers); order preserved', async () => {
+    // A bare underscore line "____" is ALSO a twin Fill-in (S1 isBlankFillLine).
+    // With it detected, 1 underscore + 2 markers == 3 Fill-in fields → the values
+    // land on their own lines, not shifted onto the wrong ones.
+    const px = fakeProxy([
+      { str: '____________', x: 60, y: 700 },
+      { str: '1.', x: 60, y: 680 },
+      { str: '2.', x: 60, y: 660 },
+    ]);
+    const fields: TwinAnchorField[] = [
+      { fieldId: 'ttf_0000000000000000000000u1', label: 'Fill-in', displayOrder: 3 },
+      { fieldId: 'ttf_0000000000000000000000m1', label: 'Fill-in', displayOrder: 4 },
+      { fieldId: 'ttf_0000000000000000000000m2', label: 'Fill-in', displayOrder: 5 },
+    ];
+    const { anchors, unlocatable } = await deriveTwinAnchors(px as never, fields);
+    expect(unlocatable).toEqual([]);
+    expect(Math.round(anchors.find((a) => a.key === 'ttf_0000000000000000000000u1')!.yTop)).toBe(700);
+    expect(Math.round(anchors.find((a) => a.key === 'ttf_0000000000000000000000m1')!.yTop)).toBe(680);
+    expect(Math.round(anchors.find((a) => a.key === 'ttf_0000000000000000000000m2')!.yTop)).toBe(660);
+  });
+
+  it('COUNT GUARD: detected slot lines ≠ Fill-in fields → ALL slots unlocatable (styled fallback, never a shifted zip)', async () => {
+    // Two bare markers on the page but only ONE Fill-in field (the other marker
+    // is not an affordance the twin fielded). Rather than draw the value on a
+    // guessed line, the slot is left unlocatable.
+    const px = fakeProxy([
+      { str: '1.', x: 60, y: 700 },
+      { str: '2.', x: 60, y: 680 },
+    ]);
+    const fields: TwinAnchorField[] = [
+      { fieldId: 'ttf_00000000000000000000cnt1', label: 'Fill-in', displayOrder: 1 },
+    ];
+    const { anchors, unlocatable } = await deriveTwinAnchors(px as never, fields);
+    expect(anchors).toHaveLength(0);
+    expect(unlocatable).toEqual(['ttf_00000000000000000000cnt1']);
   });
 
   it('two twin fields with the SAME label are UNLOCATABLE (no first-match overdraw)', async () => {
