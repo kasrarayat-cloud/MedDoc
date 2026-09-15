@@ -38,6 +38,7 @@ import {
 } from './ir';
 import { isListValuedNarrative } from './field-value-derivation';
 import { normalizeConcept } from './fact-mapping-match';
+import { FILL_IN_LABEL } from './prose-form/derive-prose-twin';
 
 /**
  * The mapping keys that name WHICH control a mapping belongs to, rather than
@@ -298,7 +299,15 @@ export function analyzeBulletGroups(
   }
   for (const field of fields) {
     const keys = [
-      field.rendererBinding.alias !== null ? `alias\0${field.rendererBinding.alias}` : null,
+      // ⚠️ #325 — the generic `Fill-in` alias is NOT an identity for grouping. It is
+      // shared by EVERY bare slot in a form, so linking on it would merge all of them
+      // into one component (which G5 then refuses). The S2 numbered slots of one
+      // section instead share a `pdfsec:<concept>` TAG and link on THAT. G3 still
+      // demands alias+tag byte-equal across a group, which the identical Fill-in
+      // alias + identical section tag satisfy.
+      field.rendererBinding.alias !== null && field.rendererBinding.alias !== FILL_IN_LABEL
+        ? `alias\0${field.rendererBinding.alias}`
+        : null,
       field.rendererBinding.tag !== null ? `tag\0${field.rendererBinding.tag}` : null,
     ].filter((key): key is string => key !== null);
     for (const key of keys) {

@@ -454,8 +454,12 @@ export const VISIT_METADATA_LABEL_CONCEPTS: ReadonlyArray<readonly [RegExp, stri
   // already in RECORD_DERIVED_ONLY_CONCEPTS + OTHER_EXPERIENCER_CLINICIAN_CONCEPTS,
   // so classifyFieldSource classes it visit_metadata and #127 holds).
   [/^\s*electronically\s+signed\s+by\s*:?\s*$/i, 'procedure.surgeon'],
-  [/^\s*(?:dd|date\s+dictated|dictat(?:ed|ion)(?:\s+date)?)\s*:?\s*$/i, 'visit_metadata.dictated_at'],
-  [/^\s*(?:dt|date\s+transcribed|transcri(?:bed|ption)(?:\s+date)?)\s*:?\s*$/i, 'visit_metadata.transcribed_at'],
+  // ⚠️ #325 — the owner's colon form labels these "DD (dictated)" / "DT (transcribed)".
+  // The optional parenthetical admits ONLY the literal clarifiers so that
+  // "DD (differential diagnosis)" does NOT map to dictated_at (falls through). Bare
+  // "DD"/"DT" behaviour is unchanged.
+  [/^\s*(?:dd|date\s+dictated|dictat(?:ed|ion)(?:\s+date)?)(?:\s*\((?:dictated|dictation)\))?\s*:?\s*$/i, 'visit_metadata.dictated_at'],
+  [/^\s*(?:dt|date\s+transcribed|transcri(?:bed|ption)(?:\s+date)?)(?:\s*\((?:transcribed|transcription)\))?\s*:?\s*$/i, 'visit_metadata.transcribed_at'],
 ];
 
 /**
@@ -647,6 +651,49 @@ export const CONCEPT_LABEL_OVERRIDES: ReadonlyArray<readonly [RegExp, string]> =
 ];
 
 /**
+ * ⚠️ #325 — COLON-LESS OPERATIVE SECTION HEADINGS → their concept.
+ *
+ * The S2 PDF path derives a numbered-slot section's slots as bare `Fill-in`
+ * controls (the heading stays prose, #324; the slots are the fields), so the model
+ * has no label to map them from. This closed table lets the DERIVATION pin the
+ * section concept onto its slots (or, for a single-valued section with no slots,
+ * onto the heading control) via the `w:tag` channel — same document-decides
+ * doctrine as `CONCEPT_LABEL_OVERRIDES`, registry-gated, still physician
+ * auto-confirmed. Closed set, both-ends anchored (the #247 lesson).
+ *
+ * `procedure.findings` / `.recommendations` are ACCUMULATING (numbered groups that
+ * distribute one item per slot); `procedure.preop_diagnosis` is SINGLE (one block
+ * control whose value flows below the heading). The affordance path decides which
+ * by whether the heading is followed by marker slots.
+ */
+export const SECTION_HEADING_CONCEPTS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/^\s*(?:post[\s-]?operative\s+)?findings\s*:?\s*$/i, 'procedure.findings'],
+  [/^\s*recommendations?\s*:?\s*$/i, 'procedure.recommendations'],
+  [/^\s*pre[\s-]?operative\s+diagnosis(?:\s*\/\s*indication)?\s*:?\s*$/i, 'procedure.preop_diagnosis'],
+];
+
+/** The operative-section concept for a colon-less heading, or null. */
+export function sectionHeadingConceptFor(heading: string): string | null {
+  const label = withoutTrailingPlaceholder(heading);
+  for (const [pattern, concept] of SECTION_HEADING_CONCEPTS) {
+    if (pattern.test(label)) return concept;
+  }
+  return null;
+}
+
+/** The reserved `w:tag` prefix that carries a section concept onto a Fill-in slot
+ *  or a section block control. The suffix is the registered concept. */
+export const PDF_SECTION_TAG_PREFIX = 'pdfsec:';
+
+/** The section concept encoded in a tag, or null. Registry-gated: a tag naming a
+ *  concept the registry does not know returns null (never trusted blindly). */
+export function sectionConceptForTag(tag: string | null | undefined): string | null {
+  if (!tag || !tag.startsWith(PDF_SECTION_TAG_PREFIX)) return null;
+  const concept = tag.slice(PDF_SECTION_TAG_PREFIX.length);
+  return isRegisteredConcept(concept) ? concept : null;
+}
+
+/**
  * The concepts `veinGridCellConcept` can emit. Declared beside the function and
  * USED BY IT, so the enumeration cannot drift from the implementation the way a
  * hand-kept list would.
@@ -673,6 +720,8 @@ export function compilerDecidableConcepts(): readonly string[] {
     ...new Set([
       ...CONCEPT_LABEL_OVERRIDES.map(([, concept]) => concept),
       ...Object.values(VEIN_GRID_CONCEPTS),
+      // #325 — the section-heading concepts the compiler pins via the `pdfsec:` tag.
+      ...SECTION_HEADING_CONCEPTS.map(([, concept]) => concept),
     ]),
   ];
 }

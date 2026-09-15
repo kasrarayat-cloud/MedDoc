@@ -39,11 +39,13 @@ import {
   type PlacedItem as GeomItem,
 } from '@/lib/template-twin/pdf-form/pdf-to-prose-docx';
 import { extractRuleSegments } from '@/lib/template-twin/pdf-form/pdf-geometry';
-import { classifyParagraph } from '@/lib/template-twin/prose-form/derive-prose-twin';
+import { classifyParagraph, FILL_IN_LABEL } from '@/lib/template-twin/prose-form/derive-prose-twin';
 import type { PdfFillAnchor } from './fill-engine';
 
-/** The generic label S2 gives a bare numbered/blank slot (derive-prose-twin). */
-export const FILL_IN_LABEL = 'Fill-in';
+// ⚠️ #325 — the generic label S2 gives a bare numbered/blank slot now lives in ONE
+// place (derive-prose-twin, where the control is authored). Re-exported here so the
+// existing importers of `FILL_IN_LABEL` from this module keep working.
+export { FILL_IN_LABEL };
 
 /** A twin field, reduced to what anchor derivation needs. `label` is the field
  *  definition's originalLabel; `displayOrder` is its position in the compiled
