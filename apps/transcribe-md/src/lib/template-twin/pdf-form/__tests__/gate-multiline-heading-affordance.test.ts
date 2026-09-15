@@ -104,6 +104,38 @@ describe('#324 — multi-line-gap heading affordance (depth-gated, slot-aware)',
     expect(got.get('OPERATIVE NOTE')).toBe(false);
     expect(got.get('COLONOSCOPY')).toBe(false);
   });
+
+  it('⚠️ MULTI-ROW LETTERHEAD: a title beneath a 4-line clinic letterhead stays prose', () => {
+    // Adversarial re-open of the over-derive: 4 letterhead rows push a depth gate
+    // past its bar, so the title's normal ~1-row gap to the body — NOT a writing
+    // area — is what must keep it prose. Row spacing here is 14pt; the title→body
+    // gap (30pt ≈ 2 rows) is below the multi-line-gap bar.
+    const got = annotate([
+      heading('Springfield Gastroenterology Associates', 760, 11),
+      heading('123 Main Street, Suite 400', 746, 10),
+      heading('Springfield, IL 62701', 732, 10),
+      heading('Phone (555) 123-4567', 718, 10),
+      heading('COLONOSCOPY REPORT', 690, 14), // colon-less centered title
+      label('Patient Name:', 660, 60, 130),
+      label('Date of Birth:', 646, 60, 130),
+      label('MRN:', 632, 60, 100),
+    ]);
+    expect(got.get('COLONOSCOPY REPORT')).toBe(false);
+  });
+
+  it('⚠️ MINIMAL CONSENT FORM: CONSENT with only two demographic rows above still fields', () => {
+    // Adversarial under-derive: a short consent form whose demographic block is two
+    // rows. A high depth bar dropped the named target CONSENT; the writing gap
+    // (120pt) below it is unmistakable, and depth=2 clears the two rows above.
+    const got = annotate([
+      heading('INFORMED CONSENT', 760, 16),
+      label('Patient Name:', 720, 60, 130),
+      label('Procedure Date:', 706, 60, 140),
+      heading('CONSENT', 660, 12),
+      heading('SIGNATURE', 540, 12), // 120pt writing gap above
+    ]);
+    expect(got.get('CONSENT')).toBe(true);
+  });
 });
 
 // ── End-to-end: the owner's colonoscopy operative form, the ruling's fixture ──

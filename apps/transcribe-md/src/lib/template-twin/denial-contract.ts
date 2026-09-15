@@ -92,6 +92,7 @@ import type {
 import {
   deriveFieldValueFromFact,
   isListValuedNarrative,
+  preservesDuplicateItems,
   NARRATIVE_LIST_SEPARATOR,
 } from './field-value-derivation';
 
@@ -359,6 +360,12 @@ export function mixedPolarityNarrative(
   // AFFIRMED-ALONE PATH'S OWN BASIS. Read the comment on
   // `affirmedDistinctValues` — and note this reads NO new property of a fact,
   // which is what keeps arm (9)'s no-heuristic wall intact.
+  // ⚠️ REGISTRY-3 (#323) — the THIRD de-dup reader. This loop must stay
+  // byte-identical to `joinListValuedNarrative(field, mapping, affirmed)` (the
+  // property the gate asserts), so it honours the SAME count-preserving predicate:
+  // a specimens field keeps two identical containers here too, or the affirmed
+  // path and this one would render different specimen COUNTS for the same facts.
+  const preserve = preservesDuplicateItems(field, mapping);
   const rawDerived = new Set<string>();
   for (const fact of affirmed) {
     const derived = deriveFieldValueFromFact(field, mapping, fact);
@@ -369,7 +376,7 @@ export function mixedPolarityNarrative(
     rawDerived.add(JSON.stringify(derived));
     const text = String(derived).trim();
     if (!text) continue;
-    if (!segments.includes(text)) segments.push(text);
+    if (preserve || !segments.includes(text)) segments.push(text);
   }
 
   // ⚠️ THE NEVER-BETTER-THAN-AFFIRMED-ALONE INVARIANT — AND IT IS MEASURED ON
