@@ -54,6 +54,8 @@
 // ============================================================================
 import JSZip from 'jszip';
 
+import { FILL_LINE_BLANK } from '../pdf-form/fill-line-blank-state';
+
 /** A slot the derivation decided to make fillable, in document order. */
 export interface DerivedSlot {
   /** The control's `w:alias` — the doctor's own label (or a generic blank name).
@@ -91,6 +93,15 @@ export function proseControlSdt(alias: string, tag: string, id: number, inner: s
     `</w:sdtContent></w:sdt>`
   );
 }
+
+/** ⚠️ THE ONE `Fill-in` STRING. A bare blank slot (no label) gets this generic
+ *  alias, which becomes the field's `originalLabel`. THREE readers depend on it
+ *  being byte-identical — this classifier (writer), `twin-anchor-derivation`
+ *  (routes a Fill-in field to the order-based marker zip, not the label match),
+ *  and `bullet-groups` (skips this alias in the union-find). A second copy would
+ *  drift the day any one is fixed, and this one decides which slots anchor and
+ *  which certify. */
+export const FILL_IN_LABEL = 'Fill-in';
 
 function xmlAttr(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -213,7 +224,7 @@ export function classifyParagraph(text: string): { alias: string; kind: 'label' 
   // SAME affordance the label branch requires (>=2 underscores), applied to the
   // label-less case — a fill line is a fill line whether or not it has a label.
   if (isBlankFillLine(marked)) {
-    return { alias: 'Fill-in', kind: 'blank' };
+    return { alias: FILL_IN_LABEL, kind: 'blank' };
   }
   const m = LABEL_PARAGRAPH_RE.exec(marked);
   if (m) {
@@ -238,7 +249,10 @@ export function classifyParagraph(text: string): { alias: string; kind: 'label' 
  * body child by child, tracking element nesting, and only classifies a paragraph
  * that is a DIRECT body child.
  */
-function injectControls(documentXml: string): { out: string; slots: DerivedSlot[] } {
+function injectControls(
+  documentXml: string,
+  directives?: ReadonlyArray<{ tag: string } | null>,
+): { out: string; slots: DerivedSlot[] } {
   const bodyOpen = documentXml.match(/<w:body\b[^>]*>/);
   const bodyCloseIdx = documentXml.lastIndexOf('</w:body>');
   if (!bodyOpen || bodyCloseIdx < 0) return { out: documentXml, slots: [] };
@@ -251,6 +265,11 @@ function injectControls(documentXml: string): { out: string; slots: DerivedSlot[
   let out = '';
   let nextId = 990001; // high, fixed base — never collides with a form's own ids
   let seq = 0;
+  // ⚠️ #325 — a paragraph counter aligned to the input LINES. `directives` (present
+  // only on the S2 PDF path, where `linesToDocumentXml` emits exactly one `<w:p>`
+  // per line in order) is indexed by it. It counts EVERY body paragraph — including
+  // skipped/prose ones — so the alignment never drifts.
+  let paraIdx = -1;
 
   // Split the body into top-level element blocks (paragraphs and everything else)
   // using a nesting-aware scan. We only transform blocks that are a single
@@ -260,6 +279,8 @@ function injectControls(documentXml: string): { out: string; slots: DerivedSlot[
       out += block;
       continue;
     }
+    paraIdx += 1;
+    const directive = directives?.[paraIdx] ?? null;
     // ⚠️ A body paragraph that EMBEDS nested block content — a text box
     // (`<v:textbox>`/`<wps:txbx>` → `<w:txbxContent>`, VML or DrawingML) or any
     // other nested `<w:p>` — is NOT a simple prose line. Its visible fill label
@@ -280,6 +301,28 @@ function injectControls(documentXml: string): { out: string; slots: DerivedSlot[
       continue;
     }
     seq += 1;
+    // ⚠️ #325 — a SECTION-TAGGED line. Its concept rides the `w:tag` (`pdfsec:…`),
+    // so all slots of one section share alias+tag and BULLET-GROUP (G3), distributing
+    // one list item per slot.
+    if (directive) {
+      nextId += 1;
+      if (decided.kind === 'blank') {
+        // A numbered slot: emit a SOLE control (drop the visible "N. ______" runs) so
+        // it satisfies G4 (sole-paragraph-control); alias stays the generic Fill-in
+        // (anchoring is by order over the ORIGINAL PDF's markers, not this DOCX), and
+        // the blank scaffold is byte-identical across the group (G6).
+        out += `<w:p>${proseControlSdt(FILL_IN_LABEL, directive.tag, nextId - 1, FILL_LINE_BLANK)}</w:p>`;
+        slots.push({ alias: FILL_IN_LABEL, tag: directive.tag, kind: 'blank' });
+      } else {
+        // A single section block heading (PREOP): keep the heading runs, tag the
+        // control so `compilerDecidedConcept` pins its concept.
+        const control = proseControlSdt(decided.alias, directive.tag, nextId - 1, `Enter ${decided.alias}`);
+        const closeIdx = block.lastIndexOf('</w:p>');
+        out += block.slice(0, closeIdx) + control + block.slice(closeIdx);
+        slots.push({ alias: decided.alias, tag: directive.tag, kind: decided.kind });
+      }
+      continue;
+    }
     const tag = `prose_${decided.kind}_${seq}`;
     const prompt = decided.kind === 'label' ? `Enter ${decided.alias}` : 'Enter value';
     const control = proseControlSdt(decided.alias, tag, nextId, prompt);
@@ -397,6 +440,7 @@ export function derivedTwinProbeIsValid(
 export async function deriveProseTwin(
   source: Uint8Array,
   verify: (bytes: Uint8Array, expected: number) => Promise<boolean>,
+  directives?: ReadonlyArray<{ tag: string } | null>,
 ): Promise<DerivedProseTwin | null> {
   let zip: JSZip;
   try {
@@ -410,7 +454,7 @@ export async function deriveProseTwin(
   // No-controls precondition: a form that already declares controls is not ours.
   if (/<w:sdt[\s>]/.test(sourceDocumentXml)) return null;
 
-  const { out, slots } = injectControls(sourceDocumentXml);
+  const { out, slots } = injectControls(sourceDocumentXml, directives);
   if (slots.length === 0) return null;
 
   zip.file('word/document.xml', out);

@@ -272,9 +272,15 @@ describe('F5-i part 1a — a second SHAPE reaches a named refusal from real .doc
     // doctor is record-derived, not a measurement. The arm is updated with the
     // reason rather than re-baselined, because the next widen may not be so
     // harmless.
+    // ⚠️ #325 — the three SECTION_HEADING_CONCEPTS join this set: the compiler now
+    // pins them via the `pdfsec:` tag on a numbered slot / single section block. They
+    // are NOT `measurement.*`, so "no measurement rows on this path" still holds.
     expect([...compilerDecidableConcepts()].sort()).toEqual([
       'measurement.diameter',
       'measurement.reflux_time',
+      'procedure.findings',
+      'procedure.preop_diagnosis',
+      'procedure.recommendations',
       'procedure.surgeon',
       'test.name',
       'visit_metadata.date_of_birth',

@@ -29,8 +29,21 @@
 import JSZip from 'jszip';
 
 import { extractRuleSegments, type RuleSegment } from './pdf-geometry';
+import {
+  sectionHeadingConceptFor,
+  SECTION_SINGLE_BLOCK_CONCEPTS,
+  PDF_SECTION_TAG_PREFIX,
+} from '../concept-registry';
 
 export type { RuleSegment } from './pdf-geometry';
+
+/** An affordance-annotated line, plus the optional section tag (#325) that pins a
+ *  numbered slot's / a single section block's concept onto the control derived from
+ *  it (via `pdfsec:<concept>` → the field's `w:tag`). */
+export interface AnnotatedLine {
+  text: string;
+  group: { tag: string } | null;
+}
 
 /** The minimal pdfjs document-proxy shape unpdf's `getDocumentProxy` returns —
  *  identical to the one `pdf-native/anchors.ts` reads. */
@@ -357,11 +370,14 @@ function isLabelShaped(text: string): boolean {
  * Returns the line TEXTS in reading order, with ` ______` appended where a blank
  * was proven — the input to `linesToProseDocx` → `deriveProseTwin`.
  */
-export function annotateAffordances(
+/** The affordance annotator, group-aware (#325). Returns each line's affordance
+ *  text AND the section tag (if any). `annotateAffordances` below is the thin
+ *  text-only projection the page-side anchor re-derivation consumes. */
+export function annotateAffordancesWithGroups(
   boxes: LineBox[],
   segments: ReadonlyArray<RuleSegment>,
   pageWidth: (page: number) => number,
-): string[] {
+): AnnotatedLine[] {
   if (boxes.length === 0) return [];
   // Per-page left margin (min x0) → right writable edge R = pageWidth − margin.
   const leftMargin = new Map<number, number>();
@@ -428,8 +444,46 @@ export function annotateAffordances(
     return n;
   };
 
-  return boxes.map((b, i) => {
-    if (hasTextAffordance(b.text)) return b.text; // already has a real underscore run — S1 owns it
+  // ⚠️ #325 — SECTION-TAG forward pass. A recognised colon-less operative heading
+  // (SECTION_HEADING_CONCEPTS) either OPENS a numbered group (its `1./2./3.` marker
+  // slots below inherit the section tag; the heading itself stays prose per #324) or,
+  // when it has NO marker slots beneath it and sits below the title zone, is a SINGLE
+  // section block (the heading itself is fielded and tagged — this is what lets
+  // PREOPERATIVE DIAGNOSIS fill though its writing gap is below the #324 bar). The
+  // tag rides the control's `w:tag`; the alias/anchoring is untouched.
+  const sectionTags: (string | null)[] = new Array(boxes.length).fill(null);
+  let openGroupTag: string | null = null;
+  for (let i = 0; i < boxes.length; i += 1) {
+    const b = boxes[i];
+    const nxt = i + 1 < boxes.length && boxes[i + 1].page === b.page ? boxes[i + 1] : null;
+    const nextIsMarker = nxt !== null && fieldBoundaryKind(nxt.text) === 'marker';
+    const thisIsMarker = fieldBoundaryKind(b.text) === 'marker';
+    const sectionConcept =
+      !wantsBlank(b.text) && isLabelShaped(b.text) ? sectionHeadingConceptFor(b.text) : null;
+    if (sectionConcept && nextIsMarker) {
+      openGroupTag = PDF_SECTION_TAG_PREFIX + sectionConcept; // numbered group; heading stays prose
+    } else if (thisIsMarker && openGroupTag) {
+      sectionTags[i] = openGroupTag; // this slot inherits the section concept
+    } else if (
+      sectionConcept &&
+      SECTION_SINGLE_BLOCK_CONCEPTS.has(sectionConcept) &&
+      rowsAbove(b) >= MIN_ROWS_ABOVE
+    ) {
+      // ⚠️ SINGLE-BLOCK ONLY. Fielding a heading on its NAME alone (no marker slots)
+      // is the riskiest branch, so it is restricted to operative-specific single
+      // concepts — a generic list heading (RECOMMENDATIONS, or a radiology FINDINGS)
+      // is never bound here; it must earn its concept through the numbered structure.
+      sectionTags[i] = PDF_SECTION_TAG_PREFIX + sectionConcept;
+      openGroupTag = null;
+    } else {
+      openGroupTag = null; // any other line closes an open group
+    }
+  }
+
+  return boxes.map((b, i): AnnotatedLine => {
+    const tag = sectionTags[i];
+    const withTag = (text: string): AnnotatedLine => ({ text, group: tag ? { tag } : null });
+    if (hasTextAffordance(b.text)) return withTag(b.text); // already has a real underscore run — S1 owns it
 
     const next = i + 1 < boxes.length && boxes[i + 1].page === b.page ? boxes[i + 1] : null;
 
@@ -456,7 +510,9 @@ export function annotateAffordances(
       const margin = leftMargin.get(b.page) ?? 0;
       const hasSameRowSpan = pageWidth(b.page) - margin - b.x1 >= SPAN_MARGIN;
       const hasNextLineGap = next !== null && b.y - next.y > (b.height || 10) * GAP_LINES;
-      return hasSameRowSpan || hasNextLineGap || hasDrawnLine ? b.text + AFFORDANCE : b.text;
+      return withTag(
+        hasSameRowSpan || hasNextLineGap || hasDrawnLine ? b.text + AFFORDANCE : b.text,
+      );
     }
 
     // Branch (b) for a COLON-LESS label: either a drawn rule line following a
@@ -479,6 +535,13 @@ export function annotateAffordances(
     //   · WRITING GAP — below the title zone, a gap of > MULTI_LINE_GAP row-spacings
     //     beneath the heading is the fill region. Fields CONSENT/DESCRIPTION.
     //
+    //   · SECTION BLOCK (#325) — a RECOGNISED single-valued operative section
+    //     (PREOPERATIVE DIAGNOSIS) carries a section tag from the pass above and is
+    //     fielded regardless of the gap: the KNOWN heading + depth is a stronger,
+    //     safer signal than geometry for a closed set, and it fills a section the
+    //     ~1.9-row gap left prose. Its concept rides the tag, so no over-derive of an
+    //     unknown heading is introduced.
+    //
     // A drawn rule line stays a fill affordance ANYWHERE (ungated by the above).
     if (isLabelShaped(b.text)) {
       const inBody = rowsAbove(b) >= MIN_ROWS_ABOVE;
@@ -486,10 +549,24 @@ export function annotateAffordances(
       const rowSpacing = medianRowSpacingByPage.get(b.page) ?? (b.height || 10) * 2;
       const hasMultiLineGap =
         inBody && !nextIsSlot && next !== null && b.y - next.y > rowSpacing * MULTI_LINE_GAP;
-      if (hasDrawnLine || hasMultiLineGap) return b.text + AFFORDANCE;
+      // `tag` here is only set for a single section block (numbered-group slots take
+      // branch (a); a group heading carries no tag). So a tag means "field this known
+      // section heading".
+      if (hasDrawnLine || hasMultiLineGap || tag) return withTag(b.text + AFFORDANCE);
     }
-    return b.text;
+    return withTag(b.text);
   });
+}
+
+/** Text-only projection of {@link annotateAffordancesWithGroups} — the page-side
+ *  anchor re-derivation (`twin-anchor-derivation`) consumes only the lines. Both
+ *  callers therefore see byte-identical affordance text. */
+export function annotateAffordances(
+  boxes: LineBox[],
+  segments: ReadonlyArray<RuleSegment>,
+  pageWidth: (page: number) => number,
+): string[] {
+  return annotateAffordancesWithGroups(boxes, segments, pageWidth).map((l) => l.text);
 }
 
 /** Read every positioned token across all pages from a pdfjs proxy — mirrors
@@ -537,10 +614,29 @@ export async function extractProseLinesFromProxy(
   proxy: PdfjsProxy,
   segments: ReadonlyArray<RuleSegment> = [],
 ): Promise<string[] | null> {
+  return (await extractAnnotatedLinesFromProxy(proxy, segments))?.map((l) => l.text) ?? null;
+}
+
+/** As {@link extractProseLinesFromProxy} but carrying each line's section directive
+ *  (#325), so the caller can hand them to `deriveProseTwin`. */
+export async function extractAnnotatedLinesFromProxy(
+  proxy: PdfjsProxy,
+  segments: ReadonlyArray<RuleSegment> = [],
+): Promise<AnnotatedLine[] | null> {
   const boxes = groupLineBoxes(await placedItems(proxy));
   if (boxes.length === 0) return null;
   const widths = await pageWidths(proxy);
-  return annotateAffordances(boxes, segments, (page) => widths.get(page) ?? 612);
+  return annotateAffordancesWithGroups(boxes, segments, (page) => widths.get(page) ?? 612);
+}
+
+/** A per-line section directive threaded from the PDF derivation to
+ *  `deriveProseTwin`: the `pdfsec:` tag to stamp on that line's control, or null. */
+export type SectionDirective = { tag: string } | null;
+
+/** The prose DOCX bytes plus the per-line (== per-paragraph) section directives. */
+export interface PdfProseResult {
+  bytes: Uint8Array;
+  directives: SectionDirective[];
 }
 
 function xmlText(s: string): string {
@@ -593,7 +689,7 @@ export async function linesToProseDocx(lines: string[]): Promise<Uint8Array> {
  * (create-draft) does not force pdfjs into the bundle — unpdf is a
  * `serverExternalPackages` entry. The result is the INPUT to `deriveProseTwin`.
  */
-export async function pdfToProseDocx(pdfBytes: Uint8Array): Promise<Uint8Array | null> {
+export async function pdfToProseDocx(pdfBytes: Uint8Array): Promise<PdfProseResult | null> {
   let proxy: PdfjsProxy;
   try {
     const { getDocumentProxy } = await import('unpdf');
@@ -604,7 +700,10 @@ export async function pdfToProseDocx(pdfBytes: Uint8Array): Promise<Uint8Array |
   // Branch (b): visible drawn rule lines, fail-safe to none (branch (a) covers a
   // text-labelled form on its own — the owner's file has no visible lines).
   const segments = await extractRuleSegments(proxy as unknown as Parameters<typeof extractRuleSegments>[0]);
-  const lines = await extractProseLinesFromProxy(proxy, segments);
-  if (!lines) return null; // no text layer — scanned, out of scope (ruling S2-2)
-  return linesToProseDocx(lines);
+  const annotated = await extractAnnotatedLinesFromProxy(proxy, segments);
+  if (!annotated) return null; // no text layer — scanned, out of scope (ruling S2-2)
+  return {
+    bytes: await linesToProseDocx(annotated.map((l) => l.text)),
+    directives: annotated.map((l) => l.group),
+  };
 }

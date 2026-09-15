@@ -10,6 +10,7 @@ import {
   classifyFieldSource,
   isSubConcept,
   conceptOverrideFor,
+  sectionConceptForTag,
   veinGridCellConcept,
   isRegisteredConcept,
   synonymsFor,
@@ -372,7 +373,15 @@ export function compilerDecidedConcept(
     rowHasRefluxCell: rowCells.some((c) => /reflux/i.test(c.originalLabel)),
     isRowLabelCell: field.labelSource === 'left_cell',
   });
-  return gridConcept ?? conceptOverrideFor(field.originalLabel);
+  // #325 — a bare `Fill-in` slot (or a single section block) under a recognised
+  // operative heading carries its concept on the `pdfsec:` tag; a Fill-in has no
+  // label override, so this is the only channel that can concept it. Registry-gated
+  // inside `sectionConceptForTag`.
+  return (
+    gridConcept ??
+    conceptOverrideFor(field.originalLabel) ??
+    sectionConceptForTag(field.rendererBinding?.tag)
+  );
 }
 
 /**

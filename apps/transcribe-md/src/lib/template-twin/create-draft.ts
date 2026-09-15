@@ -21,7 +21,7 @@ import { logTwinAudit as logAudit } from './twin-audit';
 import type { SemanticMapping, TemplateDocIR } from './ir';
 import { DOCX_TEMPLATE_COMPILER } from './artifact-compiler';
 import { deriveProseTwin, derivedTwinProbeIsValid } from './prose-form/derive-prose-twin';
-import { isPdfSource, pdfToProseDocx } from './pdf-form/pdf-to-prose-docx';
+import { isPdfSource, pdfToProseDocx, type SectionDirective } from './pdf-form/pdf-to-prose-docx';
 import { relocateFillLinesToBlankState } from './pdf-form/fill-line-blank-state';
 import {
   fallbackSemanticMappings,
@@ -269,6 +269,10 @@ export async function createTemplateTwinDraft(
   // the S2 fill-line-blank-state relocation below runs ONLY for a PDF (a form S2
   // synthesised), never for an S1 doctor-uploaded DOCX (byte-preserved).
   const wasPdf = isPdfSource(source);
+  // #325 — the per-line section directives from the PDF derivation, threaded to
+  // `deriveProseTwin` so a numbered slot / single section block gets its concept
+  // tag. Undefined for a DOCX upload (that path is byte-preserving, no directives).
+  let proseDirectives: SectionDirective[] | undefined;
   if (wasPdf) {
     const prose = await pdfToProseDocx(source);
     if (!prose) {
@@ -283,7 +287,8 @@ export async function createTemplateTwinDraft(
         'This PDF has no readable text layer (it looks scanned). Upload a text-based PDF or a Word .docx, or paste the note instead.',
       );
     }
-    source = prose;
+    source = prose.bytes;
+    proseDirectives = prose.directives;
   }
   let ir: TemplateDocIR;
   try {
@@ -313,7 +318,7 @@ export async function createTemplateTwinDraft(
         return false;
       }
     };
-    const derived = await deriveProseTwin(source, probe);
+    const derived = await deriveProseTwin(source, probe, proseDirectives);
     if (derived) {
       source = derived.bytes;
       // ⚠️ S2 ONLY (owner ruling, 2026-09-14): move each MATERIALISED fill-line

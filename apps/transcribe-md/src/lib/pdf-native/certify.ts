@@ -112,7 +112,17 @@ export async function certifyPdfTemplate(input: {
     // Capture the form's own DD:/DT: (dictation/transcription date) lines for
     // form-only exports. The "Electronically Signed –" attestation is always
     // rendered; these add the form's own date lines when it has them.
-    const sig = { dd: /\bDD\s*:/i.test(pdfText), dt: /\bDT\s*:/i.test(pdfText) };
+    // ⚠️ #325 — allow ONLY the literal clarifier between the label and the colon
+    // ("DD (dictated):" / "DT (transcribed):"), byte-for-byte the same parenthetical
+    // the concept regex (VISIT_METADATA_LABEL_CONCEPTS) admits. ⚠️ NOT any
+    // parenthetical: an adversarial pass caught `\([^)]*\)` matching
+    // "DD (differential diagnosis):" — a standard derm/path usage — which the
+    // concept side correctly rejects, so a signed form-only export would have printed
+    // a fabricated "DD: <date>" dictation line the form never had. Still colon-anchored.
+    const sig = {
+      dd: /\bDD\b\s*(?:\((?:dictated|dictation)\))?\s*:/i.test(pdfText),
+      dt: /\bDT\b\s*(?:\((?:transcribed|transcription)\))?\s*:/i.test(pdfText),
+    };
     if (sig.dd || sig.dt) formSignature = sig;
   } catch {
     // Text-layer extraction failed → keep whatever headerFields were parsed.
