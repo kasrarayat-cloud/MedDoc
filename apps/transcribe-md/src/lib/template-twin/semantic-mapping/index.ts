@@ -234,6 +234,14 @@ export const TEMPLATE_TWIN_CANONICAL_CONCEPT_GUIDANCE = [
   'procedure.description',
   'procedure.recommendations',
   'procedure.anesthesia',
+  // REGISTRY-3 (#323) — colonoscopy specifics, DICTATED, offered to the proposer
+  // (these are the labels that mis-mapped to procedure.description / .findings
+  // before this ruling).
+  'procedure.bowel_prep',
+  'procedure.extent_of_exam',
+  'procedure.specimens',
+  'procedure.estimated_blood_loss',
+  'procedure.complications',
 ] as const;
 
 /**

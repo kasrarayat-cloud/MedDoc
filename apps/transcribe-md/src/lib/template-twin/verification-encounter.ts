@@ -422,12 +422,32 @@ const NARRATIVE_SENTENCES: ReadonlyMap<string, string> = new Map([
     'Anesthesia: monitored anesthesia care with propofol sedation in this synthetic example.',
   ],
   [
+    'procedure.bowel_prep',
+    'Bowel preparation was adequate, Boston Bowel Preparation Scale eight of nine, in this synthetic example.',
+  ],
+  [
+    'procedure.extent_of_exam',
+    'Extent of examination: the colonoscope was advanced to the cecum and terminal ileum in this synthetic example.',
+  ],
+  [
+    'procedure.estimated_blood_loss',
+    'Estimated blood loss was minimal, less than five millilitres, in this synthetic example.',
+  ],
+  [
+    'procedure.complications',
+    'Complications: none were encountered during this synthetic example.',
+  ],
+  [
     'procedure.findings',
     'Postoperative findings: first, a five millimetre sessile polyp in the sigmoid colon, removed by snare; second, scattered diverticulosis of the descending colon; third, a single non-bleeding angioectasia in the ascending colon; fourth, otherwise unremarkable mucosa to the cecum.',
   ],
   [
     'procedure.recommendations',
     'Recommendations: first, surveillance colonoscopy in five years; second, a high-fibre diet with adequate hydration; third, follow up on the polyp histopathology; fourth, return sooner for any rectal bleeding.',
+  ],
+  [
+    'procedure.specimens',
+    'Specimens sent to pathology: first, a sigmoid polyp; second, a cecal biopsy; third, a rectal biopsy, in this synthetic example.',
   ],
 ]);
 

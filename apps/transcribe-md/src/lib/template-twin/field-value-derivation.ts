@@ -316,11 +316,16 @@ export const ACCUMULATING_NARRATIVE_CONCEPTS: ReadonlySet<string> = new Set([
   // ("repeat surveillance in five years AND a high-fibre diet AND follow the
   // polyp pathology"). Those are one section holding a LIST, not competing
   // answers to one slot — exactly the past_medical_history / plan shape above.
-  // The other five procedure.* concepts are SINGLE and are absent here, so a
-  // second `procedure.performed` fact fails closed to FIELD_CONFLICT rather than
+  // The SINGLE procedure.* concepts are absent here, so a second
+  // `procedure.performed` fact fails closed to FIELD_CONFLICT rather than
   // silently joining two procedures into one line.
+  // ⚠️ REGISTRY-3 (#323) — procedure.specimens ALSO accumulates: a colonoscopy
+  // sends several biopsies to pathology. The other four new concepts
+  // (bowel_prep, extent_of_exam, estimated_blood_loss, complications) are SINGLE
+  // and stay absent.
   'procedure.findings',
   'procedure.recommendations',
+  'procedure.specimens',
 
   // ⚠️ #159(b) — THE ENTITY-NAMING SUB-CONCEPTS, AND ONLY THOSE **TWO**.
   // A field the doctor maps to `allergy.substance` is an ALLERGY LIST and must
@@ -357,6 +362,38 @@ export const ACCUMULATING_NARRATIVE_CONCEPTS: ReadonlySet<string> = new Set([
   'allergy.substance',
   'medication.name',
 ]);
+
+/**
+ * ⚠️ REGISTRY-3 (#323) — CONCEPTS WHERE AN IDENTICAL REPEAT IS A DISTINCT ITEM,
+ * NOT A DUPLICATE. `procedure.specimens` is the one so far: two polyps sent to
+ * pathology in two separate containers, both dictated "sigmoid polyp", are TWO
+ * specimens a pathologist numbers separately — collapsing them undercounts a
+ * signed operative note (found by the adversarial pass). Every OTHER accumulating
+ * narrative de-dups ON PURPOSE (a Past Medical History must not read
+ * "Hypertension; Hypertension"). This is therefore a SUBSET of
+ * ACCUMULATING_NARRATIVE_CONCEPTS that additionally keeps identical items.
+ */
+const COUNT_PRESERVING_NARRATIVE_CONCEPTS: ReadonlySet<string> = new Set([
+  'procedure.specimens',
+]);
+
+/**
+ * Whether this list-valued narrative KEEPS identical items instead of de-duping.
+ *
+ * ⚠️ ONE PREDICATE, TWO READERS. Both places that would otherwise collapse a
+ * repeat — the resolver's distinct-value gate AND `joinListValuedNarrative`'s
+ * de-dup — consult THIS function, so the two cannot drift into disagreeing about
+ * whether a second "sigmoid polyp" survives. Count-preserving is a strict subset
+ * of list-valued, so a non-list mapping is never affected.
+ */
+export function preservesDuplicateItems(
+  field: TemplateField,
+  mapping: SemanticMapping | undefined,
+): boolean {
+  if (!isListValuedNarrative(field, mapping)) return false;
+  const canonical = canonicalConcept((mapping?.clinicalConcept ?? '').normalize('NFKC'));
+  return COUNT_PRESERVING_NARRATIVE_CONCEPTS.has(canonical);
+}
 
 /**
  * Whether this (field, mapping) is a narrative SECTION that accumulates facts.
@@ -413,13 +450,17 @@ export function joinListValuedNarrative(
   );
   if (lateralities.size > 1) return null;
 
+  // ⚠️ REGISTRY-3 (#323) — a COUNT-PRESERVING section (specimens) keeps identical
+  // items; every other section de-dups so it does not read "Hypertension;
+  // Hypertension". Same predicate the resolver's distinct-value gate uses.
+  const preserve = preservesDuplicateItems(field, mapping);
   const parts: string[] = [];
   for (const fact of facts) {
     const derived = deriveFieldValueFromFact(field, mapping, fact);
     if (derived === null) return null;
     const text = String(derived).trim();
     if (!text) continue;
-    if (!parts.includes(text)) parts.push(text);
+    if (preserve || !parts.includes(text)) parts.push(text);
   }
   return parts.length > 0 ? parts.join(NARRATIVE_LIST_SEPARATOR) : null;
 }

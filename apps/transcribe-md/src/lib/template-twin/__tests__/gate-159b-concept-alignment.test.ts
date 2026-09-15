@@ -136,18 +136,27 @@ const FULL_ENTITIES = {
   ],
   // #319 REGISTRY-2 — the operative-note family. All five SINGLE sections and
   // both accumulating lists are populated so the projector reaches every one of
-  // the seven `procedure.*` emission sites the completeness census now watches.
+  // the procedure.* emission sites the completeness census now watches (REGISTRY-3
+  // #323 added five more: bowel_prep, extent_of_exam, estimated_blood_loss,
+  // complications and the specimens list).
   procedure: {
     performed: { statement: 'Colonoscopy with polypectomy', evidence_quote: 'Procedure: colonoscopy with polypectomy.' },
     preop_diagnosis: { statement: 'Screening for neoplasia', evidence_quote: 'Preoperative diagnosis: screening for neoplasia.' },
     consent: { statement: 'Written informed consent obtained', evidence_quote: 'Consent: written informed consent obtained.' },
     description: { statement: 'Scope advanced to the cecum and withdrawn', evidence_quote: 'Description: scope advanced to the cecum and withdrawn.' },
     anesthesia: { statement: 'Monitored anesthesia care', evidence_quote: 'Anesthesia: monitored anesthesia care.' },
+    bowel_prep: { statement: 'Adequate, BBPS 8/9', evidence_quote: 'Bowel preparation: adequate, BBPS 8/9.' },
+    extent_of_exam: { statement: 'To the cecum', evidence_quote: 'Extent of examination: to the cecum.' },
+    estimated_blood_loss: { statement: 'Minimal', evidence_quote: 'Estimated blood loss: minimal.' },
+    complications: { statement: 'None', evidence_quote: 'Complications: none.' },
     findings: [
       { finding: 'A sigmoid polyp, removed', polarity: 'affirmed' as const, evidence_quote: 'Findings: a sigmoid polyp, removed.' },
     ],
     recommendations: [
       { recommendation: 'Surveillance colonoscopy in five years', polarity: 'affirmed' as const, evidence_quote: 'Recommendations: surveillance colonoscopy in five years.' },
+    ],
+    specimens: [
+      { specimen: 'Sigmoid polyp', polarity: 'affirmed' as const, evidence_quote: 'Specimens: sigmoid polyp.' },
     ],
   },
 };

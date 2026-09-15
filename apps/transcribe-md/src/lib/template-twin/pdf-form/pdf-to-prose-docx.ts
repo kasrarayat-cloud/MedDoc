@@ -252,6 +252,37 @@ export function reconstructLines(items: PlacedItem[]): string[] {
 
 const SPAN_MARGIN = 40; // pt of empty width to the right that counts as "writable"
 const GAP_LINES = 1.9; // a vertical gap > this × line-height is a writing area below
+// ⚠️ #324 — a colon-LESS heading needs a MULTI-line empty gap beneath it (a real
+// writing area, not a one-line space) to become a control. Larger than GAP_LINES
+// on purpose: a bare heading is more ambiguous than a colon label, and a heading
+// with the next line just below (a title, or a heading whose fill is its OWN
+// numbered slots) must stay prose. Measured on the owner colon form: CONSENT and
+// DESCRIPTION OF PROCEDURE clear this; the titles and slot-headings do not.
+// ⚠️ #324 — a WRITING AREA is a gap of this many ROW-SPACINGS beneath a heading.
+// Measured against median row spacing, NOT font height (see medianRowSpacingByPage).
+// ⚠️ THIS BAR ALONE CANNOT SEPARATE A TITLE FROM A SECTION — three adversarial
+// passes proved it: a title's ordinary leading to a dense body is ≈2–2.3 rows, and a
+// small writing area is ≈2.6 rows; they are ~0.3 rows apart, and the median spacing
+// is calibrated to whichever block dominates the page. So this bar only fires WITH
+// the depth gate (MIN_ROWS_ABOVE), which is what actually excludes titles.
+const MULTI_LINE_GAP = 2.2;
+// ⚠️ #324 — the TITLE ZONE: a colon-less heading with fewer than this many distinct
+// text rows above it is a title/subtitle (possibly beneath a multi-row letterhead),
+// NOT a fill section. This is the PRIMARY title/letterhead guard — the gap bar alone
+// cannot do it (a title's leading and a small writing area are ~0.3 rows apart, so a
+// depth-only-shallow title clears the gap bar). Set to clear a typical letterhead
+// (name / street / city / phone ≈ 3–5 lines) plus the title row while staying well
+// under the owner form's real sections (CONSENT/DESCRIPTION sit 13–14 rows down).
+//
+// ⚠️ ACCEPTED LIMITATION, recorded so it is not "fixed" back into an over-derive: a
+// shallow real section — e.g. a one-page standalone consent form whose CONSENT sits
+// ~3 rows down — stays PROSE. That is SAFE (styled fallback, the pre-#324 behaviour)
+// and is NOT this ruling's target (the owner's operative form). The alternative, a
+// depth-free "big gap" escape hatch, re-mints titles as controls (an unsafe
+// over-derive, three passes running), because "how big is a writing area" has no
+// unit that holds across dense and sparse pages. Over-derive is the worse error
+// here, so depth stays strict.
+const MIN_ROWS_ABOVE = 6;
 const AFFORDANCE = ' ______'; // the materialised blank S1 consumes (>= 2 underscores)
 
 /** A leading list/enumeration marker (digit/bracket/bullet/checkbox) FOLLOWED by
@@ -338,6 +369,64 @@ export function annotateAffordances(
     const cur = leftMargin.get(b.page);
     if (cur === undefined || b.x0 < cur) leftMargin.set(b.page, b.x0);
   }
+  // ⚠️ #324 — ROBUST per-page geometry for the colon-less heading rule (branch b).
+  //   · medianHeight — the page's typical FONT height, used only to cluster boxes
+  //     into rows (same-row columns share a y within a fraction of it).
+  //   · rowYsDesc — the DISTINCT text rows top→bottom, so a heading's DEPTH gates
+  //     the title zone (see MIN_ROWS_ABOVE). Two columns on one visual row (e.g.
+  //     "PATIENT NAME:" / "PATIENT DOB:") are clustered to one row.
+  //   · medianRowSpacing — the typical row-to-row GAP, the UNIT for the
+  //     multi-line-gap test. ⚠️ ROW SPACING, NOT FONT HEIGHT: a "writing area" is a
+  //     gap of SEVERAL empty rows, and font height (~8pt) is ~⅓ of row spacing
+  //     (~22pt) here — measuring the gap in font-heights set the bar at one row, so
+  //     ordinary title-to-body spacing cleared it. In row-spacings the named
+  //     targets (CONSENT 61pt≈2.8 rows, DESCRIPTION 101pt≈4.6) clear a genuine
+  //     writing-area bar while a title's normal spacing to the body does not —
+  //     which is what an adversarial pass needed (a tall letterhead defeated the
+  //     depth gate alone).
+  const heightsByPage = new Map<number, number[]>();
+  const ysByPage = new Map<number, number[]>();
+  for (const b of boxes) {
+    let hs = heightsByPage.get(b.page);
+    if (!hs) heightsByPage.set(b.page, (hs = []));
+    hs.push(b.height || 10);
+    let ys = ysByPage.get(b.page);
+    if (!ys) ysByPage.set(b.page, (ys = []));
+    ys.push(b.y);
+  }
+  const medianOf = (xs: number[]): number => {
+    if (xs.length === 0) return 10;
+    const s = [...xs].sort((a, c) => a - c);
+    return s[Math.floor(s.length / 2)] || 10;
+  };
+  const medianHeightByPage = new Map<number, number>();
+  const rowYsDescByPage = new Map<number, number[]>();
+  const medianRowSpacingByPage = new Map<number, number>();
+  for (const [page, hs] of heightsByPage) {
+    const mh = medianOf(hs);
+    medianHeightByPage.set(page, mh);
+    const tol = mh * 0.6; // cluster near-equal Ys into one row
+    const rows: number[] = [];
+    for (const y of [...(ysByPage.get(page) ?? [])].sort((a, c) => c - a)) {
+      if (rows.length === 0 || rows[rows.length - 1] - y > tol) rows.push(y);
+    }
+    rowYsDescByPage.set(page, rows);
+    const gaps: number[] = [];
+    for (let k = 1; k < rows.length; k += 1) gaps.push(rows[k - 1] - rows[k]);
+    // Fall back to ~2 font-heights when a page has too few rows to measure spacing.
+    medianRowSpacingByPage.set(page, gaps.length > 0 ? medianOf(gaps) : mh * 2);
+  }
+  // Distinct text rows strictly ABOVE a box's own row, on its page.
+  const rowsAbove = (b: LineBox): number => {
+    const rows = rowYsDescByPage.get(b.page) ?? [];
+    const tol = (medianHeightByPage.get(b.page) ?? 10) * 0.6;
+    let n = 0;
+    for (const y of rows) {
+      if (y - b.y > tol) n += 1;
+      else break; // descending — once we reach b's own row, everything after is below
+    }
+    return n;
+  };
 
   return boxes.map((b, i) => {
     if (hasTextAffordance(b.text)) return b.text; // already has a real underscore run — S1 owns it
@@ -370,11 +459,35 @@ export function annotateAffordances(
       return hasSameRowSpan || hasNextLineGap || hasDrawnLine ? b.text + AFFORDANCE : b.text;
     }
 
-    // Branch (b) for a COLON-LESS label: a drawn rule line following a
-    // label-shaped line IS the affordance ("Weight ____line____"). The line is the
-    // signal; a title/sentence is excluded by isLabelShaped, and S1's colon-less
-    // form still requires the appended blank to END the line.
-    if (hasDrawnLine && isLabelShaped(b.text)) return b.text + AFFORDANCE;
+    // Branch (b) for a COLON-LESS label: either a drawn rule line following a
+    // label-shaped line ("Weight ____line____"), OR — ruling #324 — a bold heading
+    // followed by an empty MULTI-LINE writing gap (CONSENT, DESCRIPTION OF
+    // PROCEDURE). Both field ONE control whose value flows BELOW (S2-4 routes a
+    // colon-less label to its block branch).
+    //
+    // ⚠️ "BOLD" IS APPROXIMATED STRUCTURALLY — unpdf's text layer carries no font
+    // weight. THREE adversarial passes settled the shape below. The core difficulty
+    // is that a document TITLE's leading to the body and a small section WRITING AREA
+    // are geometrically ~0.3 row-spacings apart, so no single gap bar separates them.
+    // The resolution is a two-tier gap gated by DEPTH:
+    //
+    //   · SLOT-HEADING — if the next line is a numbered/bulleted MARKER, the heading
+    //     fills its own 1./2./3. slots below → prose, always (regardless of gap/font).
+    //   · DEPTH — a heading in the top MIN_ROWS_ABOVE rows is a title/subtitle (even
+    //     beneath a multi-row letterhead) → prose. This is what excludes titles: their
+    //     leading clears the gap bar, but their DEPTH does not.
+    //   · WRITING GAP — below the title zone, a gap of > MULTI_LINE_GAP row-spacings
+    //     beneath the heading is the fill region. Fields CONSENT/DESCRIPTION.
+    //
+    // A drawn rule line stays a fill affordance ANYWHERE (ungated by the above).
+    if (isLabelShaped(b.text)) {
+      const inBody = rowsAbove(b) >= MIN_ROWS_ABOVE;
+      const nextIsSlot = next !== null && fieldBoundaryKind(next.text) === 'marker';
+      const rowSpacing = medianRowSpacingByPage.get(b.page) ?? (b.height || 10) * 2;
+      const hasMultiLineGap =
+        inBody && !nextIsSlot && next !== null && b.y - next.y > rowSpacing * MULTI_LINE_GAP;
+      if (hasDrawnLine || hasMultiLineGap) return b.text + AFFORDANCE;
+    }
     return b.text;
   });
 }

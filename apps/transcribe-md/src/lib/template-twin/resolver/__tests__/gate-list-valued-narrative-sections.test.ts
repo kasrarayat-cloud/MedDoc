@@ -164,6 +164,89 @@ describe('list-valued narrative sections', () => {
     expect(blocking).toEqual([]);
   });
 
+  // ── REGISTRY-3 (#323) — SPECIMENS COUNT IS PRESERVED ────────────────────────
+  // Found by the adversarial pass: two polyps sent to pathology in two separate
+  // containers, both dictated "Sigmoid polyp", are TWO specimens a pathologist
+  // numbers separately. Every OTHER accumulating narrative de-dups (a PMH must not
+  // read "Hypertension; Hypertension"), so specimens is a count-preserving subset.
+  //
+  // WHAT WOULD MAKE THIS FAIL: remove 'procedure.specimens' from
+  // COUNT_PRESERVING_NARRATIVE_CONCEPTS, and the two identical facts collapse — the
+  // resolver's distinct-value gate takes the single-value path and prints ONE
+  // specimen, silently dropping the other from a signed operative note.
+  it('preserves TWO identical specimens rather than collapsing them to one', () => {
+    const definition = field('a', 'narrative_text');
+    const semantic = mapping(definition, 'procedure.specimens');
+    const facts = [
+      fact('a', 'procedure.specimens', 'Sigmoid polyp'),
+      fact('b', 'procedure.specimens', 'Sigmoid polyp'),
+    ];
+
+    const resolutions = resolveTemplateFields({
+      fields: [definition],
+      mappings: [semantic],
+      facts,
+    });
+    const [resolved] = resolutions;
+
+    expect(resolved).toMatchObject({
+      status: 'supported',
+      value: 'Sigmoid polyp; Sigmoid polyp', // BOTH containers, not one
+      reasonCode: 'list_valued_narrative_joined',
+    });
+    expect(resolved?.sourceFactIds).toHaveLength(2);
+
+    // And validation accepts the count-preserving join (both readers agree).
+    const result = validateTemplateTwin({
+      fields: [definition],
+      mappings: [semantic],
+      facts,
+      resolutions,
+    });
+    expect(result.issues.filter((i) => i.severity === 'blocking')).toEqual([]);
+  });
+
+  it('preserves identical specimens even on the MIXED-POLARITY path (the third reader)', () => {
+    // Found by the adversarial pass: a specimens field with mixed polarity (two
+    // affirmed identical containers + one denied) diverts to mixedPolarityNarrative
+    // BEFORE the count-preserving join, and that reader had its own de-dup. Both
+    // 'Sigmoid polyp' containers must survive there too, or affirmed-count and
+    // mixed-count disagree for the same facts.
+    const definition = field('a', 'narrative_text');
+    const semantic = mapping(definition, 'procedure.specimens');
+    const facts = [
+      fact('a', 'procedure.specimens', 'Sigmoid polyp'),
+      fact('b', 'procedure.specimens', 'Sigmoid polyp'),
+      fact('c', 'procedure.specimens', 'Cecal biopsy', { polarity: 'denied' }),
+    ];
+    const resolutions = resolveTemplateFields({ fields: [definition], mappings: [semantic], facts });
+    const [resolved] = resolutions;
+    expect(resolved?.status).toBe('supported');
+    expect(resolved?.value).toBe('Sigmoid polyp; Sigmoid polyp'); // BOTH containers survive
+
+    const result = validateTemplateTwin({ fields: [definition], mappings: [semantic], facts, resolutions });
+    expect(result.issues.filter((i) => i.severity === 'blocking')).toEqual([]);
+  });
+
+  it('a NON-specimens list still de-dups two identical items (the contrast)', () => {
+    // Two identical PMH facts are one condition, not two — count is NOT preserved.
+    const definition = field('a', 'narrative_text');
+    const semantic = mapping(definition, 'past_medical_history');
+    const facts = [
+      fact('a', 'past_medical_history', 'Hypertension'),
+      fact('b', 'past_medical_history', 'Hypertension'),
+    ];
+
+    const [resolved] = resolveTemplateFields({
+      fields: [definition],
+      mappings: [semantic],
+      facts,
+    });
+
+    expect(resolved?.status).toBe('supported');
+    expect(resolved?.value).toBe('Hypertension'); // collapsed to one
+  });
+
   it('STILL conflicts on two distinct measurements — the arm that must not regress', () => {
     const definition = field('c', 'measurement');
     const semantic = mapping(definition, 'measurement.diameter');

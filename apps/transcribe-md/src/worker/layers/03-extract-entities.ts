@@ -528,6 +528,12 @@ export const ExtractedEntities = z.object({
       consent: liftStringToFact('statement'),
       description: liftStringToFact('statement'),
       anesthesia: liftStringToFact('statement'),
+      // REGISTRY-3 (#323) — colonoscopy specifics. SINGLE narrative sections;
+      // bowel_prep carries the BBPS score inside the statement (canon 131).
+      bowel_prep: liftStringToFact('statement'),
+      extent_of_exam: liftStringToFact('statement'),
+      estimated_blood_loss: liftStringToFact('statement'),
+      complications: liftStringToFact('statement'),
       findings: z
         .array(
           z.object({
@@ -543,6 +549,19 @@ export const ExtractedEntities = z.object({
         .array(
           z.object({
             recommendation: z.string().min(1),
+            polarity: z.enum(['affirmed', 'denied']),
+            evidence_quote: z.string().min(1),
+            speaker: z.string().optional(),
+            timestamp: z.number().nonnegative().optional(),
+          }),
+        )
+        .default([]),
+      // REGISTRY-3 (#323) — procedure.specimens is a LIST (a colonoscopy sends
+      // several biopsies to pathology); ONE entry per specimen.
+      specimens: z
+        .array(
+          z.object({
+            specimen: z.string().min(1),
             polarity: z.enum(['affirmed', 'denied']),
             evidence_quote: z.string().min(1),
             speaker: z.string().optional(),
@@ -828,6 +847,15 @@ export const COMMON_CATEGORIES = [
   '                     belongs here.)',
   '    anesthesia:      {statement, evidence_quote, ...} — ONLY when an',
   '                     anesthesia type is dictated; omit it otherwise.',
+  '    bowel_prep:      {statement, evidence_quote, ...} — the bowel preparation',
+  '                     quality, INCLUDING the BBPS score if dictated (e.g.',
+  '                     "adequate, Boston Bowel Prep Scale 8/9"). Omit if absent.',
+  '    extent_of_exam:  {statement, evidence_quote, ...} — how far the scope',
+  '                     reached (e.g. "to the cecum"). Omit if absent.',
+  '    estimated_blood_loss: {statement, evidence_quote, ...} — the EBL',
+  '                     ("minimal", "5 mL"). Omit if absent.',
+  '    complications:   {statement, evidence_quote, ...} — intra-procedure',
+  '                     complications ("none"). Omit if absent.',
   '    findings:        list of {finding, polarity, evidence_quote, ...} — the',
   '                     post-procedure findings, ONE ENTRY PER DISTINCT',
   '                     finding. "a sigmoid polyp, diverticulosis, and normal',
@@ -835,7 +863,11 @@ export const COMMON_CATEGORIES = [
   '    recommendations: list of {recommendation, polarity, evidence_quote,',
   '                     ...} — the recommendations / plan, ONE ENTRY PER',
   '                     DISTINCT recommendation.',
-  '    * polarity (findings and recommendations) is almost always "affirmed":',
+  '    specimens:       list of {specimen, polarity, evidence_quote, ...} — the',
+  '                     specimens sent to pathology, ONE ENTRY PER SPECIMEN',
+  '                     ("sigmoid polyp" and "cecal biopsy" are TWO entries).',
+  '    * polarity (findings, recommendations and specimens) is almost always',
+  '      "affirmed":',
   '      a finding is an observation the surgeon is ASSERTING, even when its',
   '      content is negative — "no masses were seen" is an AFFIRMED finding OF',
   '      no masses, and the surgeon wants it printed. Use "denied" ONLY for a',
