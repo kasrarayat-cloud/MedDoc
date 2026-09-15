@@ -155,8 +155,13 @@ export async function deriveTwinAnchors(
     const firstLineX = fb.box.x1 + 6; // just past the printed label
     const rightEdge = pageWidth - 54;
     if (/[:：]/.test(fb.box.text)) {
-      // Inline (header field): one line to the right of the label; never inverts.
-      return { key: fieldId, label: fb.alias, page: fb.box.page, yTop: fb.box.y, yBottom: fb.box.y - size * 1.2, firstLineX, wrapX: firstLineX, rightEdge, fontSize: size };
+      // Inline (header field): STRICTLY one line to the right of the label. ⚠️ A
+      // 1pt-tall region so capacity() is 1 for EVERY font size (a taller region
+      // makes capacity() return 2 via its +1, and the shrink-to-fit loop grows it
+      // further — a wrapping value then drew a 2nd line one row DOWN, over the
+      // next form row; adversarial pass, 2026-09-15). A value too long for one
+      // line overflows to the continuation page, never onto the next row.
+      return { key: fieldId, label: fb.alias, page: fb.box.page, yTop: fb.box.y, yBottom: fb.box.y - 1, firstLineX, wrapX: firstLineX, rightEdge, fontSize: size };
     }
     const inkY = nearestInkYBelow(fb.box.page, fb.box.y);
     const yBottom = inkY !== undefined ? inkY + INK_CLEAR : 40;

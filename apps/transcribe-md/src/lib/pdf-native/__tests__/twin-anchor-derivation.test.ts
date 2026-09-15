@@ -216,8 +216,10 @@ describe('deriveTwinAnchors — adversarial regressions (2026-09-15)', () => {
     const { anchors, unlocatable } = await deriveTwinAnchors(px as never, fields);
     expect(unlocatable).toEqual([]);
     expect(anchors).toHaveLength(3);
-    // Every region is a valid (non-inverted) inline line: yBottom strictly below yTop.
-    for (const a of anchors) expect(a.yBottom).toBeLessThan(a.yTop);
+    // Every inline region is STRICTLY one line (1pt tall → capacity 1 at every
+    // font size), so a wrapping value overflows to the continuation page, never
+    // draws a 2nd line onto the next form row.
+    for (const a of anchors) expect(a.yTop - a.yBottom).toBeCloseTo(1, 5);
     // And the value sits to the RIGHT of the label on the label's own baseline.
     const dos = anchors.find((a) => a.key === 'ttf_00000000000000000000dos1')!;
     expect(Math.round(dos.yTop)).toBe(688);
