@@ -34,7 +34,7 @@ cmu1tpvsj, which this act supersedes (kept). Factual drift, not a new decision.
 
 1. **INSPECT** — mint, re-derive under the deployed #325 code, LOG the proposal + plan,
    roll back. NET-ZERO. Confirms the auto path declines ONLY record-derived headers.
-2. **REAL** — mint → re-derive → carry the PDF-native canvas forward → auto-confirm the
+2. **REAL** — mint → re-derive → set up the pdf-native cert from the original PDF bytes → auto-confirm the
    clinical proposals + confirm the record-derived headers → synthetic round-trip →
    certify + activate.
 
