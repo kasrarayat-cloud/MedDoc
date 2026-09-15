@@ -135,11 +135,19 @@ export interface EncounterEntitySnapshot {
     consent?: (EvidenceSnapshot & { statement: string }) | null;
     description?: (EvidenceSnapshot & { statement: string }) | null;
     anesthesia?: (EvidenceSnapshot & { statement: string }) | null;
+    // REGISTRY-3 (#323) — colonoscopy specifics (4 SINGLE + specimens LIST).
+    bowel_prep?: (EvidenceSnapshot & { statement: string }) | null;
+    extent_of_exam?: (EvidenceSnapshot & { statement: string }) | null;
+    estimated_blood_loss?: (EvidenceSnapshot & { statement: string }) | null;
+    complications?: (EvidenceSnapshot & { statement: string }) | null;
     findings?: ReadonlyArray<
       EvidenceSnapshot & { finding: string; polarity?: 'affirmed' | 'denied' }
     >;
     recommendations?: ReadonlyArray<
       EvidenceSnapshot & { recommendation: string; polarity?: 'affirmed' | 'denied' }
+    >;
+    specimens?: ReadonlyArray<
+      EvidenceSnapshot & { specimen: string; polarity?: 'affirmed' | 'denied' }
     >;
   } | null;
 }
@@ -1094,6 +1102,52 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
         laterality: 'not_applicable',
       });
     }
+    // REGISTRY-3 (#323) — colonoscopy specifics. Each a LITERAL add() with a
+    // literal concept string so gate-159b's completeness census can enumerate it.
+    if (procedure.bowel_prep) {
+      add({
+        path: 'procedure.bowel_prep',
+        concept: 'procedure.bowel_prep',
+        value: procedure.bowel_prep.statement,
+        evidence: procedure.bowel_prep,
+        defaultTemporality: 'current',
+        polarity: 'affirmed',
+        laterality: 'not_applicable',
+      });
+    }
+    if (procedure.extent_of_exam) {
+      add({
+        path: 'procedure.extent_of_exam',
+        concept: 'procedure.extent_of_exam',
+        value: procedure.extent_of_exam.statement,
+        evidence: procedure.extent_of_exam,
+        defaultTemporality: 'current',
+        polarity: 'affirmed',
+        laterality: 'not_applicable',
+      });
+    }
+    if (procedure.estimated_blood_loss) {
+      add({
+        path: 'procedure.estimated_blood_loss',
+        concept: 'procedure.estimated_blood_loss',
+        value: procedure.estimated_blood_loss.statement,
+        evidence: procedure.estimated_blood_loss,
+        defaultTemporality: 'current',
+        polarity: 'affirmed',
+        laterality: 'not_applicable',
+      });
+    }
+    if (procedure.complications) {
+      add({
+        path: 'procedure.complications',
+        concept: 'procedure.complications',
+        value: procedure.complications.statement,
+        evidence: procedure.complications,
+        defaultTemporality: 'current',
+        polarity: 'affirmed',
+        laterality: 'not_applicable',
+      });
+    }
     for (const [index, item] of (procedure.findings ?? []).entries()) {
       add({
         path: `procedure.findings.${index}.finding`,
@@ -1115,6 +1169,19 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
         value: item.recommendation,
         evidence: item,
         defaultTemporality: 'planned',
+        polarity: item.polarity ?? 'affirmed',
+        laterality: 'not_applicable',
+      });
+    }
+    // REGISTRY-3 (#323) — procedure.specimens is a LIST, ONE fact per specimen
+    // (mirrors findings/recommendations).
+    for (const [index, item] of (procedure.specimens ?? []).entries()) {
+      add({
+        path: `procedure.specimens.${index}.specimen`,
+        concept: 'procedure.specimens',
+        value: item.specimen,
+        evidence: item,
+        defaultTemporality: 'current',
         polarity: item.polarity ?? 'affirmed',
         laterality: 'not_applicable',
       });

@@ -316,11 +316,16 @@ export const ACCUMULATING_NARRATIVE_CONCEPTS: ReadonlySet<string> = new Set([
   // ("repeat surveillance in five years AND a high-fibre diet AND follow the
   // polyp pathology"). Those are one section holding a LIST, not competing
   // answers to one slot — exactly the past_medical_history / plan shape above.
-  // The other five procedure.* concepts are SINGLE and are absent here, so a
-  // second `procedure.performed` fact fails closed to FIELD_CONFLICT rather than
+  // The SINGLE procedure.* concepts are absent here, so a second
+  // `procedure.performed` fact fails closed to FIELD_CONFLICT rather than
   // silently joining two procedures into one line.
+  // ⚠️ REGISTRY-3 (#323) — procedure.specimens ALSO accumulates: a colonoscopy
+  // sends several biopsies to pathology. The other four new concepts
+  // (bowel_prep, extent_of_exam, estimated_blood_loss, complications) are SINGLE
+  // and stay absent.
   'procedure.findings',
   'procedure.recommendations',
+  'procedure.specimens',
 
   // ⚠️ #159(b) — THE ENTITY-NAMING SUB-CONCEPTS, AND ONLY THOSE **TWO**.
   // A field the doctor maps to `allergy.substance` is an ALLERGY LIST and must

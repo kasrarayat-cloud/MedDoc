@@ -100,6 +100,15 @@ export const REGISTRY_CONCEPTS: readonly string[] = [
   'procedure.recommendations',
   'procedure.anesthesia',
   'procedure.surgeon',
+  // REGISTRY-3 (#323) — colonoscopy specifics. SINGLE narrative sections like
+  // anesthesia, except `specimens` which is a LIST (see ACCUMULATING_NARRATIVE_
+  // CONCEPTS). `bowel_prep` carries its BBPS score inside the statement text
+  // (canon 131: "number" describes L3 extraction, not the control's data type).
+  'procedure.bowel_prep',
+  'procedure.extent_of_exam',
+  'procedure.specimens',
+  'procedure.estimated_blood_loss',
+  'procedure.complications',
 
   /**
    * #319 — the visit's date of service, a fourth visit_metadata member. Like the
@@ -436,8 +445,15 @@ export const VISIT_METADATA_LABEL_CONCEPTS: ReadonlyArray<readonly [RegExp, stri
   // #127 forbids the MODEL asserting a name; this is read from the record.
   [/^\s*patient(?:'s)?\s+(?:dob|d\.?\s*o\.?\s*b\.?|date\s+of\s+birth)\s*:?\s*$/i, 'visit_metadata.date_of_birth'],
   [/^\s*patient(?:'s)?\s+(?:id|identifier|mrn|chart(?:\s+(?:id|number|no\.?|#))?)\s*#?\s*:?\s*$/i, 'visit_metadata.patient_id'],
-  [/^\s*date\s+of\s+(?:surgery|service|operation)\s*:?\s*$/i, 'visit_metadata.date_of_service'],
-  [/^\s*(?:operating\s+)?surgeon\s*:?\s*$/i, 'procedure.surgeon'],
+  [/^\s*date\s+of\s+(?:surgery|service|operation|procedure)\s*:?\s*$/i, 'visit_metadata.date_of_service'],
+  // "SURGEON / ENDOSCOPIST" (the colon operative note) as well as bare surgeon —
+  // both the operating clinician, record-derived.
+  [/^\s*(?:operating\s+)?(?:surgeon(?:\s*\/\s*endoscopist)?|endoscopist)\s*:?\s*$/i, 'procedure.surgeon'],
+  // REGISTRY-3 (#323): "Electronically signed by" is RECORD-DERIVED — the signing
+  // doctor, the SAME record-derived concept as the surgeon (procedure.surgeon is
+  // already in RECORD_DERIVED_ONLY_CONCEPTS + OTHER_EXPERIENCER_CLINICIAN_CONCEPTS,
+  // so classifyFieldSource classes it visit_metadata and #127 holds).
+  [/^\s*electronically\s+signed\s+by\s*:?\s*$/i, 'procedure.surgeon'],
   [/^\s*(?:dd|date\s+dictated|dictat(?:ed|ion)(?:\s+date)?)\s*:?\s*$/i, 'visit_metadata.dictated_at'],
   [/^\s*(?:dt|date\s+transcribed|transcri(?:bed|ption)(?:\s+date)?)\s*:?\s*$/i, 'visit_metadata.transcribed_at'],
 ];
@@ -529,6 +545,12 @@ export const TEMPORALITY_AGNOSTIC_CONCEPTS: ReadonlySet<string> = new Set([
   'procedure.recommendations',
   'procedure.anesthesia',
   'procedure.surgeon',
+  // REGISTRY-3 (#323) — the whole operative family is tense-agnostic.
+  'procedure.bowel_prep',
+  'procedure.extent_of_exam',
+  'procedure.specimens',
+  'procedure.estimated_blood_loss',
+  'procedure.complications',
 ]);
 
 /**

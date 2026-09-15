@@ -252,6 +252,13 @@ export function reconstructLines(items: PlacedItem[]): string[] {
 
 const SPAN_MARGIN = 40; // pt of empty width to the right that counts as "writable"
 const GAP_LINES = 1.9; // a vertical gap > this × line-height is a writing area below
+// ⚠️ #324 — a colon-LESS heading needs a MULTI-line empty gap beneath it (a real
+// writing area, not a one-line space) to become a control. Larger than GAP_LINES
+// on purpose: a bare heading is more ambiguous than a colon label, and a heading
+// with the next line just below (a title, or a heading whose fill is its OWN
+// numbered slots) must stay prose. Measured on the owner colon form: CONSENT and
+// DESCRIPTION OF PROCEDURE clear this; the titles and slot-headings do not.
+const MULTI_LINE_GAP = 2.6;
 const AFFORDANCE = ' ______'; // the materialised blank S1 consumes (>= 2 underscores)
 
 /** A leading list/enumeration marker (digit/bracket/bullet/checkbox) FOLLOWED by
@@ -338,6 +345,17 @@ export function annotateAffordances(
     const cur = leftMargin.get(b.page);
     if (cur === undefined || b.x0 < cur) leftMargin.set(b.page, b.x0);
   }
+  // ⚠️ #324 — the TOPMOST labelled row per page (highest y among colon/marker
+  // labels). A colon-less heading ABOVE it is a document TITLE ("OPERATIVE NOTE",
+  // "COLONOSCOPY"), not a fill section — the multi-line-gap rule below is gated to
+  // the BODY (b.y < this) so a title with spacing beneath it never becomes a
+  // phantom control.
+  const firstLabelY = new Map<number, number>();
+  for (const b of boxes) {
+    if (!wantsBlank(b.text)) continue;
+    const cur = firstLabelY.get(b.page);
+    if (cur === undefined || b.y > cur) firstLabelY.set(b.page, b.y);
+  }
 
   return boxes.map((b, i) => {
     if (hasTextAffordance(b.text)) return b.text; // already has a real underscore run — S1 owns it
@@ -370,11 +388,32 @@ export function annotateAffordances(
       return hasSameRowSpan || hasNextLineGap || hasDrawnLine ? b.text + AFFORDANCE : b.text;
     }
 
-    // Branch (b) for a COLON-LESS label: a drawn rule line following a
-    // label-shaped line IS the affordance ("Weight ____line____"). The line is the
-    // signal; a title/sentence is excluded by isLabelShaped, and S1's colon-less
-    // form still requires the appended blank to END the line.
-    if (hasDrawnLine && isLabelShaped(b.text)) return b.text + AFFORDANCE;
+    // Branch (b) for a COLON-LESS label: either a drawn rule line following a
+    // label-shaped line ("Weight ____line____"), OR — ruling #324 — a bold
+    // heading followed by an empty MULTI-LINE GAP (CONSENT, DESCRIPTION OF
+    // PROCEDURE: a heading with a multi-line writing area beneath). Both field
+    // ONE control whose value flows BELOW (S2-4 routes a colon-less label to its
+    // block branch). A heading with NO gap (a title, or a heading whose fill is
+    // its own numbered slots just below) stays prose.
+    //
+    // ⚠️ "BOLD" IS APPROXIMATED STRUCTURALLY. unpdf's text layer carries no font
+    // weight, so a heading is recognised as a label-shaped, colon-less line with a
+    // multi-line empty gap beneath — the gap is the load-bearing affordance. The
+    // isLabelShaped/looksLikeSentence guards keep prose out.
+    if (isLabelShaped(b.text)) {
+      // ⚠️ #324 — the multi-line-gap heuristic is gated to the BODY. A colon-less
+      // label ABOVE the topmost labelled row is a document title ("OPERATIVE NOTE",
+      // "COLONOSCOPY") that happens to have spacing beneath it; firing the gap rule
+      // there mints a phantom control. `topLabelY` is the highest y among real
+      // labels; a body heading sits BELOW it (b.y < topLabelY). No labels on the
+      // page → treat nothing as body (safe-biased: never over-derive on a title
+      // page). A drawn rule line stays ungated — it is a fill affordance anywhere.
+      const topLabelY = firstLabelY.get(b.page);
+      const inBody = topLabelY !== undefined && b.y < topLabelY;
+      const hasMultiLineGap =
+        inBody && next !== null && b.y - next.y > (b.height || 10) * MULTI_LINE_GAP;
+      if (hasDrawnLine || hasMultiLineGap) return b.text + AFFORDANCE;
+    }
     return b.text;
   });
 }
