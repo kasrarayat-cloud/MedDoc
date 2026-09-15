@@ -123,18 +123,39 @@ describe('#324 — multi-line-gap heading affordance (depth-gated, slot-aware)',
     expect(got.get('COLONOSCOPY REPORT')).toBe(false);
   });
 
-  it('⚠️ MINIMAL CONSENT FORM: CONSENT with only two demographic rows above still fields', () => {
-    // Adversarial under-derive: a short consent form whose demographic block is two
-    // rows. A high depth bar dropped the named target CONSENT; the writing gap
-    // (120pt) below it is unmistakable, and depth=2 clears the two rows above.
+  it('⚠️ DENSE-BODY TITLE: a colon-less title over a dense demographic body stays prose', () => {
+    // Adversarial re-open (pass 3): with a dense 14pt-spaced body the row-spacing bar
+    // drops to ~31pt, and the title's ordinary ~2.3-row leading clears it. The DEPTH
+    // gate is what must keep the title prose — it sits at depth 3 (3-line letterhead),
+    // below MIN_ROWS_ABOVE, so its leading never gets a vote.
+    const got = annotate([
+      heading('Springfield Gastroenterology Associates', 760, 11),
+      heading('123 Main Street, Suite 400', 746, 10),
+      heading('Springfield, IL 62701 (555) 123-4567', 732, 10),
+      heading('COLONOSCOPY PROCEDURE REPORT', 700, 14),
+      label('Patient Name:', 668, 60, 130),
+      label('Date of Birth:', 654, 60, 130),
+      label('Medical Record #:', 640, 60, 140),
+      label('Referring Physician:', 626, 60, 150),
+      label('Date of Procedure:', 612, 60, 150),
+    ]);
+    expect(got.get('COLONOSCOPY PROCEDURE REPORT')).toBe(false);
+  });
+
+  it('⚠️ ACCEPTED LIMITATION: a shallow standalone-consent CONSENT stays prose (safe, not the ruling target)', () => {
+    // A minimal one-page consent form puts CONSENT ~3 rows down. Depth (< MIN_ROWS_
+    // ABOVE) keeps it prose — a SAFE under-derive (styled fallback), the deliberate
+    // trade recorded on MIN_ROWS_ABOVE: a depth-free "big gap" escape hatch would
+    // re-mint dense-body titles as controls, the worse (unsafe) error. This asserts
+    // the accepted behaviour so a future "fix" that re-opens the over-derive fails here.
     const got = annotate([
       heading('INFORMED CONSENT', 760, 16),
       label('Patient Name:', 720, 60, 130),
       label('Procedure Date:', 706, 60, 140),
       heading('CONSENT', 660, 12),
-      heading('SIGNATURE', 540, 12), // 120pt writing gap above
+      heading('SIGNATURE', 540, 12),
     ]);
-    expect(got.get('CONSENT')).toBe(true);
+    expect(got.get('CONSENT')).toBe(false);
   });
 });
 

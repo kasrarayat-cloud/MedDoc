@@ -259,20 +259,30 @@ const GAP_LINES = 1.9; // a vertical gap > this × line-height is a writing area
 // numbered slots) must stay prose. Measured on the owner colon form: CONSENT and
 // DESCRIPTION OF PROCEDURE clear this; the titles and slot-headings do not.
 // ⚠️ #324 — a WRITING AREA is a gap of this many ROW-SPACINGS beneath a heading.
-// > 2 rows of empty space is a genuine fill region; ordinary title-to-body or
-// heading-to-text spacing (≈ 1–1.5 rows) is not. Measured against median row
-// spacing, NOT font height — see medianRowSpacingByPage. The owner's named targets
-// clear it (CONSENT ≈2.8 rows, DESCRIPTION ≈4.6); titles and slot-headings do not.
+// Measured against median row spacing, NOT font height (see medianRowSpacingByPage).
+// ⚠️ THIS BAR ALONE CANNOT SEPARATE A TITLE FROM A SECTION — three adversarial
+// passes proved it: a title's ordinary leading to a dense body is ≈2–2.3 rows, and a
+// small writing area is ≈2.6 rows; they are ~0.3 rows apart, and the median spacing
+// is calibrated to whichever block dominates the page. So this bar only fires WITH
+// the depth gate (MIN_ROWS_ABOVE), which is what actually excludes titles.
 const MULTI_LINE_GAP = 2.2;
-// ⚠️ #324 — a colon-less heading in the top TWO rows of a page is a title/subtitle,
-// never a fill section. This is a SECONDARY guard: the primary writing-area signal
-// is the multi-line ROW-SPACING gap below (MULTI_LINE_GAP), which on its own keeps a
-// title beneath even a multi-row letterhead as prose (its gap to the body is normal
-// spacing, not a writing area). Depth only catches the degenerate case the gap
-// cannot — a title on a sparse page with lots of empty space beneath it. Kept LOW (2)
-// on purpose: a higher bar dropped a named target (CONSENT) on a minimal single-page
-// consent form whose demographic block is only two rows — an adversarial finding.
-const MIN_ROWS_ABOVE = 2;
+// ⚠️ #324 — the TITLE ZONE: a colon-less heading with fewer than this many distinct
+// text rows above it is a title/subtitle (possibly beneath a multi-row letterhead),
+// NOT a fill section. This is the PRIMARY title/letterhead guard — the gap bar alone
+// cannot do it (a title's leading and a small writing area are ~0.3 rows apart, so a
+// depth-only-shallow title clears the gap bar). Set to clear a typical letterhead
+// (name / street / city / phone ≈ 3–5 lines) plus the title row while staying well
+// under the owner form's real sections (CONSENT/DESCRIPTION sit 13–14 rows down).
+//
+// ⚠️ ACCEPTED LIMITATION, recorded so it is not "fixed" back into an over-derive: a
+// shallow real section — e.g. a one-page standalone consent form whose CONSENT sits
+// ~3 rows down — stays PROSE. That is SAFE (styled fallback, the pre-#324 behaviour)
+// and is NOT this ruling's target (the owner's operative form). The alternative, a
+// depth-free "big gap" escape hatch, re-mints titles as controls (an unsafe
+// over-derive, three passes running), because "how big is a writing area" has no
+// unit that holds across dense and sparse pages. Over-derive is the worse error
+// here, so depth stays strict.
+const MIN_ROWS_ABOVE = 6;
 const AFFORDANCE = ' ______'; // the materialised blank S1 consumes (>= 2 underscores)
 
 /** A leading list/enumeration marker (digit/bracket/bullet/checkbox) FOLLOWED by
@@ -456,21 +466,18 @@ export function annotateAffordances(
     // colon-less label to its block branch).
     //
     // ⚠️ "BOLD" IS APPROXIMATED STRUCTURALLY — unpdf's text layer carries no font
-    // weight — so the fill signal is THREE conditions. Two adversarial passes
-    // reduced this to: a WRITING AREA is a big empty gap; a title is not followed by
-    // one. The gap is the load-bearing signal; depth is a cheap backstop.
+    // weight. THREE adversarial passes settled the shape below. The core difficulty
+    // is that a document TITLE's leading to the body and a small section WRITING AREA
+    // are geometrically ~0.3 row-spacings apart, so no single gap bar separates them.
+    // The resolution is a two-tier gap gated by DEPTH:
     //
-    //   1 · a genuine MULTI-LINE empty gap beneath — the writing area — measured in
-    //       ROW-SPACINGS (> MULTI_LINE_GAP of them), NOT font-heights. This is what
-    //       separates CONSENT/DESCRIPTION (2.8–4.6 rows of empty space) from a title,
-    //       whose gap to the body is ordinary ~1-row spacing — and it holds even when
-    //       a multi-row letterhead sits above the title (the case a depth-only gate
-    //       re-opened).
-    //   2 · NOT a slot-heading — the next line is not a numbered/bulleted MARKER.
-    //       POSTOPERATIVE FINDINGS / RECOMMENDATIONS fill their own 1./2./3. slots
-    //       below, so they stay prose REGARDLESS of the heading's font size.
-    //   3 · NOT in the top two rows (depth) — the degenerate title case the gap
-    //       cannot see: a lone title high on a sparse page with empty space beneath.
+    //   · SLOT-HEADING — if the next line is a numbered/bulleted MARKER, the heading
+    //     fills its own 1./2./3. slots below → prose, always (regardless of gap/font).
+    //   · DEPTH — a heading in the top MIN_ROWS_ABOVE rows is a title/subtitle (even
+    //     beneath a multi-row letterhead) → prose. This is what excludes titles: their
+    //     leading clears the gap bar, but their DEPTH does not.
+    //   · WRITING GAP — below the title zone, a gap of > MULTI_LINE_GAP row-spacings
+    //     beneath the heading is the fill region. Fields CONSENT/DESCRIPTION.
     //
     // A drawn rule line stays a fill affordance ANYWHERE (ungated by the above).
     if (isLabelShaped(b.text)) {
