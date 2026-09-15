@@ -125,13 +125,27 @@ function drawRegion(page: PDFPage, font: PDFFont, a: PdfFillAnchor, text: string
   let overflow: Overflow | null = null;
   if (lines.length > cap) {
     const keep = Math.max(1, cap);
-    drawn = lines.slice(0, keep);
-    const last = drawn[keep - 1] ?? '';
+    const last = lines[keep - 1] ?? '';
     const withMark = `${last}${CONTINUED}`;
     const wLast = keep === 1 ? firstWidth : restWidth;
-    drawn[keep - 1] = font.widthOfTextAtSize(withMark, size) <= wLast ? withMark : CONTINUED.trim();
-    const remainder = lines.slice(keep).join(' ').trim();
-    if (remainder) overflow = { key: a.key, label: a.label, text: remainder };
+    if (font.widthOfTextAtSize(withMark, size) <= wLast) {
+      // The marker fits beside the last kept line — append it; overflow is the rest.
+      drawn = lines.slice(0, keep);
+      drawn[keep - 1] = withMark;
+      const remainder = lines.slice(keep).join(' ').trim();
+      if (remainder) overflow = { key: a.key, label: a.label, text: remainder };
+    } else {
+      // ⚠️ THE MARKER DOES NOT FIT — DO NOT DISCARD THE LINE IT WOULD REPLACE.
+      // The old code set the last kept line to a bare "(continued)" AND started
+      // the remainder AFTER it, so that line's clinical text vanished from the
+      // page AND the continuation (adversarial pass, 2026-09-15). Instead keep a
+      // bare "(continued)" pointer and push that line's text into the OVERFLOW,
+      // so nothing is dropped.
+      drawn = lines.slice(0, keep - 1);
+      drawn.push(CONTINUED.trim());
+      const remainder = lines.slice(keep - 1).join(' ').trim();
+      if (remainder) overflow = { key: a.key, label: a.label, text: remainder };
+    }
   }
 
   const lineH = size * LINE_GAP;

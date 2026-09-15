@@ -94,6 +94,22 @@ describe('fillPdfTemplate', () => {
     expect(text).toContain('PROCEDURE:');
   });
 
+  it('never DROPS a line when the "(continued)" marker does not fit — the boundary line flows to overflow', async () => {
+    // cap=1 region: the single kept line, plus " (continued)", overruns the width
+    // (greedy wrap fills the line, so the marker never fits). The boundary line's
+    // words must NOT vanish — they belong on the continuation page (adversarial
+    // pass, 2026-09-15). Every input word must appear somewhere in the output.
+    const TIGHT: PdfFillAnchor[] = [
+      { key: 'recommendations', label: 'RECOMMENDATIONS:', page: 0, yTop: 300, yBottom: 292, firstLineX: 170, wrapX: 54, rightEdge: 300, fontSize: 11 },
+    ];
+    const words = Array.from({ length: 24 }, (_, i) => `Findingword${i}`);
+    const out = await fillPdfTemplate({ canvasPdf: await makeCanvas(), anchors: TIGHT, texts: { recommendations: words.join(' ') } });
+    const text = (await pdfText(out)).replace(/\s+/g, ' ');
+    expect(text).toContain('(continued)');
+    // No word is dropped — the first line's words are on the continuation page too.
+    for (const w of words) expect(text).toContain(w);
+  });
+
   it('draws the signed-status line in the bottom margin', async () => {
     const out = await fillPdfTemplate({
       canvasPdf: await makeCanvas(),

@@ -192,7 +192,14 @@ function stripLeadingMarker(s: string): string {
  *  Fail-safe: anything that is not unambiguously a label or a blank is left as
  *  static prose (headings, sentences, letterhead) — a form we only partly
  *  understand still yields a partly-filled twin, never a corrupted one. */
-function classifyParagraph(text: string): { alias: string; kind: 'label' | 'blank' } | null {
+// ⚠️ EXPORTED so the S2-4 pdf-native export identifies the SAME fields this
+// derivation created — ONE reader of "what is a field". The export re-detecting
+// slots with its own marker/underscore regex drifted repeatedly (a "1. ______"
+// numbered blank missed, a no-affordance "3." over-counted), transposing clinical
+// values (adversarial pass, 2026-09-15). It now runs THIS over the same
+// annotated line boxes. `text` is the affordance-ANNOTATED line (post
+// annotateAffordances), exactly as the derivation classifies it.
+export function classifyParagraph(text: string): { alias: string; kind: 'label' | 'blank' } | null {
   const trimmed = text.trim();
   if (trimmed.length === 0) return null; // truly empty paragraph — spacing, not a slot
   // Drop a leading list/enumeration marker ("1.", "a)", "☐", …) so a numbered or
