@@ -15,17 +15,28 @@
 //   • a LABELLED field ("PATIENT NAME", "PROCEDURE", "DD (dictated)") is located
 //     by its label in the PDF text layer — the existing `extractPdfAnchors`.
 //   • a bare NUMBERED SLOT (a twin "Fill-in" field, from a `1.`/`2.`/`3.` line)
-//     has no locatable label, so it is placed at its numbered MARKER. The twin
-//     derived one Fill-in field per marker in READING ORDER, so the Nth Fill-in
-//     field (by displayOrder) is the Nth bare marker (by reading order). The zip
-//     is order-for-order; a count mismatch leaves the surplus UNLOCATABLE.
+//     has no locatable label, so it is placed at its numbered MARKER.
 //
-// A field that cannot be located (a label absent from the page, or a Fill-in
-// with no matching marker) is returned in `unlocatable`. The caller treats a
-// certified-twin field it cannot place as a fallback trigger (ruling #322: "a
-// control with no anchor" → the structural styled render), so no clinical value
-// is ever drawn in the wrong place or silently dropped.
+// ⚠️ ONE READER OF "WHAT IS A MARKER", NOT TWO (adversarial pass, 2026-09-15).
+// The twin's Fill-in fields were derived by S2 over RECONSTRUCTED LINES
+// (`groupLineBoxes`): "1. Chief Complaint:" is ONE labelled line, never a bare
+// marker. This module therefore reconstructs the SAME line boxes and applies
+// S2's OWN `PDF_MARKER_ONLY_RE` — so a labelled numbered item is never mistaken
+// for a slot, and the Nth Fill-in field (reading order) is the Nth bare-marker
+// line (reading order). A first version scanned RAW pdfjs items with a broader
+// regex and drifted, drawing Fill-in values onto labelled rows.
+//
+// A field that cannot be located UNIQUELY (a label absent, a label that appears
+// more than once so its position is ambiguous, or a Fill-in with no matching
+// marker) is returned in `unlocatable`. The caller treats a certified-twin field
+// it cannot place as a fallback trigger (ruling #322), so no clinical value is
+// ever drawn in the wrong place or silently dropped.
 // ============================================================================
+import {
+  groupLineBoxes,
+  PDF_MARKER_ONLY_RE,
+  type PlacedItem as GeomItem,
+} from '@/lib/template-twin/pdf-form/pdf-to-prose-docx';
 import { extractPdfAnchors, type AnchorLabelSpec } from './anchors';
 import type { PdfFillAnchor } from './fill-engine';
 
@@ -41,7 +52,6 @@ export interface TwinAnchorField {
   displayOrder: number;
 }
 
-/** Minimal pdfjs proxy shape (same as anchors.ts consumes). */
 interface PdfjsProxy {
   numPages: number;
   getPage(n: number): Promise<{
@@ -52,18 +62,11 @@ interface PdfjsProxy {
   }>;
 }
 
-/** A bare list/enumeration marker that is the WHOLE token — `1.`, `2)`, `3`,
- *  `•`, `-`, a checkbox. Mirrors S2's PDF_MARKER_ONLY_RE (pdf-to-prose-docx):
- *  the numbered fill SLOTS of an operative note. Trailing text disqualifies it
- *  (that is a labelled item like "1. Chief Complaint:", located by label). */
-const MARKER_ONLY_RE = /^(?:\(?\d{1,2}[.)]?|[a-z][.)]|[ivx]{1,4}[.)]|[•·▪◦‣*+–—-]|[☐☑☒])$/i;
-
 const norm = (s: string): string => s.toLowerCase().replace(/\s+/g, ' ').replace(/:\s*$/, '').trim();
 
-/** Is this label a same-line ("inline") fill, or a below-the-label ("block")
- *  one? The twin's fields are label/marker fill-ins (value beside the label), so
- *  a colon label or a marker is inline; a bare section heading with no colon is
- *  block (its value flows beneath). Deterministic, label-only. */
+/** Same-line ("inline") fill vs below-the-label ("block"). The twin's fields are
+ *  label/marker fill-ins, so a colon label or a marker is inline; a bare section
+ *  heading with no colon is block. Deterministic, label-only. */
 function anchorKind(label: string): 'inline' | 'block' {
   const raw = label.trim();
   if (raw === FILL_IN_LABEL) return 'inline';
@@ -71,19 +74,9 @@ function anchorKind(label: string): 'inline' | 'block' {
   return 'block';
 }
 
-interface PlacedItem {
-  str: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  page: number;
-}
-
-/** Flatten positioned text tokens across pages (same transform reading as
- *  anchors.ts::placedItems, kept local so this module owns its marker scan). */
-async function placedItems(proxy: PdfjsProxy): Promise<{ items: PlacedItem[]; pageW: number[] }> {
-  const items: PlacedItem[] = [];
+/** Positioned tokens (S2's `PlacedItem` shape) + per-page width. */
+async function readItems(proxy: PdfjsProxy): Promise<{ items: GeomItem[]; pageW: number[] }> {
+  const items: GeomItem[] = [];
   const pageW: number[] = [];
   for (let p = 1; p <= proxy.numPages; p += 1) {
     const page = await proxy.getPage(p);
@@ -92,31 +85,16 @@ async function placedItems(proxy: PdfjsProxy): Promise<{ items: PlacedItem[]; pa
     for (const it of content.items) {
       if (!it.str || !it.str.trim()) continue;
       const t = it.transform;
-      items.push({
-        str: it.str,
-        x: t[4],
-        y: t[5],
-        width: it.width,
-        height: Math.abs(t[3]) || it.height,
-        page: p - 1,
-      });
+      items.push({ str: it.str, x: t[4], y: t[5], height: Math.abs(t[3]) || it.height, page: p - 1 });
     }
   }
   return { items, pageW };
 }
 
-/** Bare numbered/blank markers, in READING ORDER (page, then y descending,
- *  then x ascending). One per Fill-in slot the twin derived. */
-function markersInReadingOrder(items: PlacedItem[]): PlacedItem[] {
-  return items
-    .filter((it) => MARKER_ONLY_RE.test(it.str.trim()))
-    .sort((a, b) => a.page - b.page || b.y - a.y || a.x - b.x);
-}
-
 export interface TwinAnchorResult {
   /** One anchor per twin field that could be located, keyed by `fieldId`. */
   anchors: PdfFillAnchor[];
-  /** fieldIds that could NOT be located (label absent / no matching marker). */
+  /** fieldIds that could NOT be located uniquely (absent / ambiguous / no marker). */
   unlocatable: string[];
 }
 
@@ -131,41 +109,50 @@ export async function deriveTwinAnchors(
   const ordered = [...fields].sort((a, b) => a.displayOrder - b.displayOrder);
   const labelled = ordered.filter((f) => norm(f.label) !== norm(FILL_IN_LABEL));
   const slots = ordered.filter((f) => norm(f.label) === norm(FILL_IN_LABEL));
+  const unlocatable: string[] = [];
 
-  // 1) LABELLED fields — locate each by its label (existing, tested path). A
-  //    label that appears more than once in `fields` would collide on key, but
-  //    the twin's fieldId is unique, so specs are unique by key.
-  const specs: AnchorLabelSpec[] = labelled.map((f) => ({
+  // 1) LABELLED fields — locate each by its label. ⚠️ A label that is NOT UNIQUE
+  //    among the twin's fields is ambiguous: findLabel returns the FIRST match,
+  //    so two same-label fields would BOTH draw onto the first occurrence and
+  //    overprint (adversarial pass, 2026-09-15). Such fields are excluded from
+  //    location → unlocatable → fallback, never a guessed overdraw.
+  const labelCounts = new Map<string, number>();
+  for (const f of labelled) labelCounts.set(norm(f.label), (labelCounts.get(norm(f.label)) ?? 0) + 1);
+  const uniqueLabelled = labelled.filter((f) => (labelCounts.get(norm(f.label)) ?? 0) === 1);
+  for (const f of labelled) {
+    if ((labelCounts.get(norm(f.label)) ?? 0) !== 1) unlocatable.push(f.fieldId);
+  }
+  const specs: AnchorLabelSpec[] = uniqueLabelled.map((f) => ({
     key: f.fieldId,
     label: f.label,
     kind: anchorKind(f.label),
   }));
-  const labelledAnchors = await extractPdfAnchors(proxy, specs);
+  const labelledAnchors = await extractPdfAnchors(proxy as never, specs);
   const locatedKeys = new Set(labelledAnchors.map((a) => a.key));
-  const unlocatable = labelled.filter((f) => !locatedKeys.has(f.fieldId)).map((f) => f.fieldId);
+  for (const f of uniqueLabelled) if (!locatedKeys.has(f.fieldId)) unlocatable.push(f.fieldId);
 
-  // 2) NUMBERED SLOTS — zip the ordered Fill-in fields to the reading-order
-  //    markers. Extra fields (more slots than markers) or extra markers are not
-  //    forced: a slot with no marker is UNLOCATABLE (→ fallback), never guessed
-  //    onto an unrelated marker.
-  const { items, pageW } = await placedItems(proxy);
-  const markers = markersInReadingOrder(items);
+  // 2) NUMBERED SLOTS — reconstruct the SAME line boxes S2 used, keep the ones
+  //    whose whole text is a bare marker, in reading order, and zip to the
+  //    ordered Fill-in fields. A slot with no marker is UNLOCATABLE (→ fallback),
+  //    never zipped onto an unrelated marker.
+  const { items, pageW } = await readItems(proxy);
+  const markerBoxes = groupLineBoxes(items).filter((b) => PDF_MARKER_ONLY_RE.test(b.text));
   const slotAnchors: PdfFillAnchor[] = [];
   slots.forEach((field, i) => {
-    const marker = markers[i];
-    if (!marker) {
+    const box = markerBoxes[i];
+    if (!box) {
       unlocatable.push(field.fieldId);
       return;
     }
-    const pageWidth = pageW[marker.page] ?? 612;
-    const size = Math.max(8, Math.min(marker.height || 11, 12));
-    const firstLineX = marker.x + marker.width + 6; // just past the "1."
+    const pageWidth = pageW[box.page] ?? 612;
+    const size = Math.max(8, Math.min(box.height || 11, 12));
+    const firstLineX = box.x1 + 6; // just past the "1."
     slotAnchors.push({
       key: field.fieldId,
       label: `${FILL_IN_LABEL} ${i + 1}`,
-      page: marker.page,
-      yTop: marker.y,
-      yBottom: marker.y - size * 1.2,
+      page: box.page,
+      yTop: box.y,
+      yBottom: box.y - size * 1.2,
       firstLineX,
       wrapX: firstLineX,
       rightEdge: pageWidth - 54,

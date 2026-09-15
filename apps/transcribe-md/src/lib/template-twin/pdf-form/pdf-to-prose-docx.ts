@@ -265,7 +265,12 @@ const PDF_LEADING_MARKER_RE =
  *  the numbered fill SLOTS of an operative note (Findings 1–3). ⚠️ No trailing
  *  `\s+` here (the marker is the WHOLE line, nothing follows), which is exactly
  *  why `PDF_LEADING_MARKER_RE` alone missed them. Single letters stay excluded. */
-const PDF_MARKER_ONLY_RE =
+// ⚠️ EXPORTED so the S2-4 pdf-native export locates the SAME numbered slots this
+// derivation created — one reader of "what is a bare marker", not two. When the
+// export re-detected markers with its own regex it drifted (a labelled "1. …"
+// counted as a slot), shifting the value zip onto the wrong line (adversarial
+// pass, 2026-09-15). deriveTwinAnchors now imports THIS.
+export const PDF_MARKER_ONLY_RE =
   /^\s*(?:[-*•▪◦·‣⁃>|]+|[([]?\d{1,3}[.)\]]|[☐☑☒□■▢◻◼✓✔])\s*$/;
 
 /** A colon-terminated line that is a LEAD-IN SENTENCE, not a fill label — its

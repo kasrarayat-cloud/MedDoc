@@ -94,3 +94,69 @@ describe('deriveTwinAnchors — the colon form, from its own twin fields', () =>
     expect(unlocatable).toContain('ttf_eeeeeeeeeeeeeeeeeeeeeeee');
   });
 });
+
+// ── A synthetic proxy: positioned text items, one page. ──────────────────────
+function fakeProxy(items: Array<{ str: string; x: number; y: number; h?: number }>) {
+  return {
+    numPages: 1,
+    async getPage() {
+      return {
+        getViewport: () => ({ width: 612, height: 792 }),
+        async getTextContent() {
+          return {
+            items: items.map((it) => ({
+              str: it.str,
+              transform: [it.h ?? 10, 0, 0, it.h ?? 10, it.x, it.y],
+              width: it.str.length * (it.h ?? 10) * 0.5,
+              height: it.h ?? 10,
+            })),
+          };
+        },
+      };
+    },
+  };
+}
+
+describe('deriveTwinAnchors — adversarial regressions (2026-09-15)', () => {
+  it('a LABELLED numbered item ("1. History:") is NOT mistaken for a bare Fill-in slot', async () => {
+    // The '1.' is a separate text token (as ReportLab emits it), but on the
+    // reconstructed LINE it reads "1. History:" — a labelled item, not a marker.
+    // Two REAL bare slots ("3."/"4.") follow. The two Fill-in fields must land on
+    // the bare slots, never on the Chief Complaint / History rows.
+    const px = fakeProxy([
+      { str: '1.', x: 60, y: 700 }, { str: 'Chief', x: 80, y: 700 }, { str: 'Complaint:', x: 120, y: 700 },
+      { str: '2.', x: 60, y: 680 }, { str: 'History:', x: 80, y: 680 },
+      { str: 'FINDINGS', x: 60, y: 640 },
+      { str: '3.', x: 60, y: 610 },
+      { str: '4.', x: 60, y: 590 },
+    ]);
+    const fields: TwinAnchorField[] = [
+      { fieldId: 'ttf_00000000000000000000aaaa', label: 'Chief Complaint', displayOrder: 1 },
+      { fieldId: 'ttf_00000000000000000000bbbb', label: 'History', displayOrder: 2 },
+      { fieldId: 'ttf_00000000000000000000cccc', label: 'Fill-in', displayOrder: 4 },
+      { fieldId: 'ttf_00000000000000000000dddd', label: 'Fill-in', displayOrder: 5 },
+    ];
+    const { anchors, unlocatable } = await deriveTwinAnchors(px as never, fields);
+    expect(unlocatable).toEqual([]);
+    const slot1 = anchors.find((a) => a.key === 'ttf_00000000000000000000cccc')!;
+    const slot2 = anchors.find((a) => a.key === 'ttf_00000000000000000000dddd')!;
+    // The slots land on the bare markers at y=610 / 590, NOT the labelled rows.
+    expect(Math.round(slot1.yTop)).toBe(610);
+    expect(Math.round(slot2.yTop)).toBe(590);
+  });
+
+  it('two twin fields with the SAME label are UNLOCATABLE (no first-match overdraw)', async () => {
+    const px = fakeProxy([
+      { str: 'DOSE:', x: 60, y: 700 },
+      { str: 'DOSE:', x: 60, y: 680 },
+    ]);
+    const fields: TwinAnchorField[] = [
+      { fieldId: 'ttf_00000000000000000000e111', label: 'DOSE', displayOrder: 1 },
+      { fieldId: 'ttf_00000000000000000000e222', label: 'DOSE', displayOrder: 2 },
+    ];
+    const { anchors, unlocatable } = await deriveTwinAnchors(px as never, fields);
+    // Neither is placed (ambiguous position) → both fall back, no overdraw.
+    expect(anchors).toHaveLength(0);
+    expect(unlocatable.sort()).toEqual(['ttf_00000000000000000000e111', 'ttf_00000000000000000000e222']);
+  });
+});

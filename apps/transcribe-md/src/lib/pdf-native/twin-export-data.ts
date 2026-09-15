@@ -21,6 +21,7 @@
 import prisma from '@meddoc/db';
 
 import { FieldResolutionSchema, type FieldResolution } from '@/lib/template-twin/ir';
+import { manifestMatchesDocument } from '@/lib/template-twin/note-identity';
 import type { TwinAnchorField } from './twin-anchor-derivation';
 
 /** The compiled twin's fields for a note template, or null when the template's
@@ -49,22 +50,15 @@ export async function loadCertifiedTwinFields(
   }));
 }
 
-export interface TwinExportData {
-  fields: TwinAnchorField[];
-  resolutions: FieldResolution[];
-}
-
-/** The certified twin's fields + a visit's VERIFIED resolutions, or null when
- *  the template's twin is not certified OR the visit has no verified manifest
- *  (→ the caller keeps the note-heading fill / styled fallback). */
-export async function loadCertifiedTwinExportData(
+/** A visit's VERIFIED + FRESH twin resolutions, or null when the visit has no
+ *  usable manifest (→ the caller falls back to the STYLED render, exactly as the
+ *  DOCX export does — a certified-twin template never reverts to note-heading).
+ *  Independent of the field list so the caller can distinguish "no certified
+ *  twin" (loadCertifiedTwinFields === null) from "certified twin, no manifest". */
+export async function loadVisitTwinResolutions(
   visitId: string,
-  noteTemplateId: string,
   practiceId: string,
-): Promise<TwinExportData | null> {
-  const fields = await loadCertifiedTwinFields(noteTemplateId, practiceId);
-  if (!fields) return null;
-
+): Promise<FieldResolution[] | null> {
   // Signed → the frozen manifest by pointer; unsigned → the visit's verified
   // manifest. NULL on a signed visit that froze none: the answer is styled.
   const visit = await prisma.transcribeVisit.findFirst({
@@ -83,10 +77,36 @@ export async function loadCertifiedTwinExportData(
       status: 'VERIFIED',
       roundTripVerified: true,
     },
-    select: { fillManifest: true },
+    select: {
+      fillManifest: true,
+      noteSha256: true,
+      overridesSha256: true,
+      visit: { select: { soapFinal: true } },
+    },
     orderBy: isSigned ? undefined : { createdAt: 'desc' },
   });
   if (!manifestRow?.fillManifest) return null;
+
+  // ⚠️ FRESHNESS GOVERNS THE UNSIGNED RECORD; THE POINTER GOVERNS THE SIGNED ONE
+  // (F24-S5, mirrored from loadNativeTemplateDocxForVisit). A VERIFIED manifest
+  // stays VERIFIED after the doctor edits the note or a control override — so
+  // for an UNSIGNED visit, serving those bytes could draw STALE clinical values
+  // on the doctor's page. Re-derive freshness from the note + overrides here,
+  // exactly as the DOCX export does, so the PDF and Word answer identically. A
+  // signed visit resolved by pointer skips it (the signature froze the pair).
+  if (!isSigned) {
+    const currentOverrides = await prisma.templateTwinFieldOverride.findMany({
+      where: { visitId, practiceId },
+      select: { fieldId: true, selectedOptionOrdinal: true, overrideKind: true, insertedText: true },
+    });
+    const freshness = manifestMatchesDocument({
+      manifestNoteSha256: manifestRow.noteSha256,
+      manifestOverridesSha256: manifestRow.overridesSha256,
+      soapFinal: manifestRow.visit?.soapFinal,
+      currentOverrides,
+    });
+    if (!freshness.ok) return null; // note/overrides moved → styled fallback, not stale bytes
+  }
 
   const rawFields = (manifestRow.fillManifest as { fields?: unknown }).fields;
   if (!Array.isArray(rawFields)) return null;
@@ -102,5 +122,5 @@ export async function loadCertifiedTwinExportData(
   }
   if (resolutions.length === 0) return null;
 
-  return { fields, resolutions };
+  return resolutions;
 }

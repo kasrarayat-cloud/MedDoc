@@ -37,11 +37,13 @@ const F2 = 'ttf_000000000000000000000002';
 const F3 = 'ttf_000000000000000000000003';
 
 describe('resolvedValueToText', () => {
-  it('renders scalars', () => {
+  it('renders string / number scalars', () => {
     expect(resolvedValueToText('Screening colonoscopy')).toBe('Screening colonoscopy');
     expect(resolvedValueToText(6)).toBe('6');
-    expect(resolvedValueToText(true)).toBe('Yes');
-    expect(resolvedValueToText(false)).toBe('No');
+  });
+  it('a boolean (checkbox) is UNPLACEABLE — never the literal "Yes"/"No"', () => {
+    expect(resolvedValueToText(true)).toBeNull();
+    expect(resolvedValueToText(false)).toBeNull();
   });
   it('joins a multi-select string list', () => {
     expect(resolvedValueToText(['Sigmoid', 'Cecum'])).toBe('Sigmoid; Cecum');

@@ -28,7 +28,13 @@ import type { PdfFillAnchor } from './fill-engine';
 export function resolvedValueToText(value: ResolvedFieldValue): string | null {
   if (typeof value === 'string') return value;
   if (typeof value === 'number') return String(value);
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  // ⚠️ A boolean is a CHECKBOX. The twin's structural render ticks (or leaves
+  // blank) a real box; stamping the literal word "Yes"/"No" at the label anchor
+  // misrepresents it — worst of all a denied box that would draw "No" where the
+  // form shows an unticked box (adversarial pass, 2026-09-15). A coordinate text
+  // region cannot tick a box, so a boolean is UNPLACEABLE → the styled fallback
+  // renders the checkbox correctly.
+  if (typeof value === 'boolean') return null;
   if (Array.isArray(value)) {
     // A multi-select is string[]; join for a single region. A table value is an
     // array of row records — NOT placeable on a coordinate anchor → null.

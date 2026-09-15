@@ -17,7 +17,7 @@ import { fillPdfTemplate, type PdfFillAnchor } from './fill-engine';
 import { buildPdfFillTexts } from './note-to-texts';
 import { deriveTwinAnchors } from './twin-anchor-derivation';
 import { buildTwinFillTexts } from './twin-value-bridge';
-import { loadCertifiedTwinExportData } from './twin-export-data';
+import { loadCertifiedTwinFields, loadVisitTwinResolutions } from './twin-export-data';
 import { sanitizeExportedSoap, coerceHeaderFields, extractSurgeonFromNote } from '@/lib/visit-export';
 import type { NoteTemplateSection } from '@/worker/note-templates/system-default-template';
 
@@ -30,11 +30,16 @@ export type NativePdfReason =
   | 'not_certified'
   | 'stale_cert'
   | 'no_canvas'
-  // S2-4 (#322): a CERTIFIED twin resolved a value that cannot be placed on the
-  // doctor's page — a field whose label/marker is absent from the PDF, or a
-  // non-scalar (table) value. The route falls back to the twin's STRUCTURAL
-  // styled render, which can place every field; no clinical value is dropped.
+  // S2-4 (#322) — a CERTIFIED-twin template did not draw the doctor's page; the
+  // route falls back to the twin's STRUCTURAL styled render (never note-heading,
+  // so the PDF and the DOCX stay ONE document — F5-f). Reasons:
+  //  • twin_unplaceable — a resolved value has no anchor, or is a non-scalar.
+  //  • twin_no_manifest — no VERIFIED+FRESH fill manifest for this visit (the
+  //    same condition under which the DOCX export falls back to styled).
+  //  • twin_error       — the twin fill threw (canvas/render); styled, not stale.
   | 'twin_unplaceable'
+  | 'twin_no_manifest'
+  | 'twin_error'
   // Coded only — NEVER carries the raw error text (which can echo patient-derived
   // characters, e.g. a WinAnsi encode failure). The detail is logged redacted.
   | 'fill_error';
@@ -112,49 +117,56 @@ export async function nativePdfExport(
   if (recordedHash && canvasHash(canvas) !== recordedHash) return miss('stale_cert');
 
   // ── S2-4 (#322): THE CERTIFIED TWIN DECIDES WHAT FILLS ────────────────────
-  // When the template's compiled twin is CERTIFIED and the visit has a VERIFIED
-  // fill manifest, the doctor's page is filled by the TWIN's resolved values —
-  // not the note-heading split. The anchors are re-derived FROM the twin's own
-  // fields (one per field, keyed by fieldId), so the value bridge is 1:1.
+  // When the template's compiled twin is CERTIFIED, the doctor's page is filled
+  // by the TWIN's resolved values — anchors re-derived FROM the twin's own fields
+  // (keyed by fieldId, value bridge 1:1). ⚠️ A certified-twin template is
+  // twin-or-STYLED, NEVER note-heading: falling back to the note-heading split
+  // would make the PDF a DIFFERENT document than the twin DOCX export for the
+  // same record (F5-f). So once we know the twin is certified, every decline
+  // routes to the twin's structural styled render (route.ts), keeping PDF == DOCX.
   //
-  // Fail-safe: any error here falls THROUGH to the note-heading path below
-  // (never a throw, never a blocked export). "A value that cannot be placed"
-  // (a field with a value but no anchor, or a non-scalar value) declines with a
-  // coded reason so the route renders the twin's structural styled document —
-  // which can place every field — instead of a partial page (ruling #322).
+  // Load failure (DB) is not a decision about the twin → fall through to the
+  // note-heading path only if we could not even determine the twin is certified.
+  let twinFields: Awaited<ReturnType<typeof loadCertifiedTwinFields>> = null;
   if (templateNativeDocxEnabled()) {
     try {
-      const twin = await loadCertifiedTwinExportData(
-        visitId,
-        visit.noteTemplate.id,
-        String(practiceId),
-      );
-      if (twin) {
-        const proxy = await getDocumentProxy(new Uint8Array(canvas).slice());
-        const { anchors: twinAnchors, unlocatable } = await deriveTwinAnchors(
-          proxy as never,
-          twin.fields,
-        );
-        const { texts, unplaceable } = buildTwinFillTexts(twin.resolutions, twinAnchors, unlocatable);
-        if (unplaceable.length > 0) return miss('twin_unplaceable');
-        const signedLine = visit.signedAt
-          ? `Electronically signed on ${visit.signedAt.toISOString().slice(0, 10)} · QuillMD`
-          : null;
-        const out = await fillPdfTemplate({
-          canvasPdf: new Uint8Array(canvas),
-          anchors: twinAnchors,
-          texts,
-          signedStatusLine: signedLine,
-        });
-        return { pdf: Buffer.from(out), applied: true, reason: 'true' };
-      }
-    } catch (twinErr) {
-      // Fall through to the note-heading path — the twin fill is a refinement,
-      // never a gate. Coded log only (the message can echo patient characters).
+      twinFields = await loadCertifiedTwinFields(visit.noteTemplate.id, String(practiceId));
+    } catch (loadErr) {
       console.error(
-        '[pdf-native] twin fill failed, falling back to note-heading fill:',
+        '[pdf-native] twin field load failed:',
+        redactPhi(loadErr instanceof Error ? loadErr.message : String(loadErr)),
+      );
+      twinFields = null;
+    }
+  }
+  if (twinFields) {
+    try {
+      const resolutions = await loadVisitTwinResolutions(visitId, String(practiceId));
+      // No VERIFIED+FRESH manifest → styled, exactly as the DOCX export does.
+      if (!resolutions) return miss('twin_no_manifest');
+      const proxy = await getDocumentProxy(new Uint8Array(canvas).slice());
+      const { anchors: twinAnchors, unlocatable } = await deriveTwinAnchors(proxy as never, twinFields);
+      const { texts, unplaceable } = buildTwinFillTexts(resolutions, twinAnchors, unlocatable);
+      // A value that cannot be placed → styled (which can place every field).
+      if (unplaceable.length > 0) return miss('twin_unplaceable');
+      const signedLine = visit.signedAt
+        ? `Electronically signed on ${visit.signedAt.toISOString().slice(0, 10)} · QuillMD`
+        : null;
+      const out = await fillPdfTemplate({
+        canvasPdf: new Uint8Array(canvas),
+        anchors: twinAnchors,
+        texts,
+        signedStatusLine: signedLine,
+      });
+      return { pdf: Buffer.from(out), applied: true, reason: 'true' };
+    } catch (twinErr) {
+      // A certified twin that threw falls back to STYLED (visible reason), never
+      // silently to the old note-heading map (ruling #322 / F5-f).
+      console.error(
+        '[pdf-native] twin fill failed → styled fallback:',
         redactPhi(twinErr instanceof Error ? twinErr.message : String(twinErr)),
       );
+      return miss('twin_error');
     }
   }
 
