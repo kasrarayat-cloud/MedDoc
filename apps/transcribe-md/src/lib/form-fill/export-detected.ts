@@ -107,7 +107,7 @@ export async function detectedFormExport(
 
     // Ruling #115 — the ENCOUNTER date (createdAt) fills date-of-service, never the
     // signing date. The signing line, when signed, is added by the fill engine.
-    const { values } = deriveDetectedFormValues({
+    const { values, addenda } = deriveDetectedFormValues({
       fields: form.fields,
       facts,
       noteCtx: {
@@ -124,6 +124,9 @@ export async function detectedFormExport(
       originalPdf: new Uint8Array(canvas),
       fields: form.fields,
       values,
+      // Unmatched note sections (and ruled-blank boxes' prose) → continuation
+      // page, never dropped from the exported record.
+      addenda,
     });
     return {
       pdf: Buffer.from(filled.pdf),

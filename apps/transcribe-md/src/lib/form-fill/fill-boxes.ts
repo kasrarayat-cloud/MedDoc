@@ -18,12 +18,23 @@ export interface FillDetectedInput {
   fields: FormField[];
   /** fieldId → value text */
   values: Map<string, string>;
+  /**
+   * Note content that matches NO detected box (an unmatched section, or the
+   * heading prose of a box the ruled resolver left blank). Rendered on the
+   * continuation page under its label — NEVER silently dropped. Mirrors the
+   * pdf-native "Additional documentation" page. Without this, real clinical
+   * content documented by the doctor would vanish from the exported record
+   * (adversarial finding, 2026-09-16).
+   */
+  addenda?: ReadonlyArray<{ label: string; text: string }>;
 }
 
 export interface FillDetectedResult {
   pdf: Uint8Array;
   /** fields whose value did not fit their boxes and spilled to a continuation page */
   overflowed: Array<{ id: string; label: string; lines: number }>;
+  /** unmatched note sections carried to the continuation page (never dropped) */
+  addenda: number;
   filledFields: number;
 }
 
@@ -153,6 +164,17 @@ export async function fillDetectedForm(input: FillDetectedInput): Promise<FillDe
     }
   }
 
+  // ── ADDENDA — note content matching no box (unmatched sections, or the prose of
+  // a box the ruled resolver left blank). Carried to the continuation page under
+  // its label so real clinical content is NEVER dropped (adversarial finding).
+  let addendaCount = 0;
+  for (const a of input.addenda ?? []) {
+    const text = a.text.trim();
+    if (!text) continue;
+    continuation.push({ label: a.label, lines: [text] });
+    addendaCount += 1;
+  }
+
   if (continuation.length > 0) {
     drawContinuation(doc, font, fontBold, continuation);
   }
@@ -160,7 +182,7 @@ export async function fillDetectedForm(input: FillDetectedInput): Promise<FillDe
   // ⚠️ useObjectStreams:false is LOAD-BEARING — pdf-lib's default xref stream
   // renders WHITE in some viewers on ReportLab-origin PDFs (see PDF-native fill).
   const pdf = await doc.save({ useObjectStreams: false });
-  return { pdf, overflowed, filledFields };
+  return { pdf, overflowed, addenda: addendaCount, filledFields };
 }
 
 function drawContinuation(

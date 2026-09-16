@@ -108,31 +108,14 @@ describe('headerKeyForConcept', () => {
 });
 
 describe('buildSyntheticDetectedNote', () => {
-  it('emits a heading per BODY field + a synthetic surgeon line, no headings for metadata', () => {
-    const fields = [
-      field('p0_f0', 'DESCRIPTION OF PROCEDURE', { concept: 'procedure.description' }),
-      field('p0_h0', 'PATIENT NAME:', { concept: 'visit_metadata.patient_name', headerKey: 'patient_name' }),
-    ];
-    const note = buildSyntheticDetectedNote(fields);
-    expect(note).toMatch(/## DESCRIPTION OF PROCEDURE/);
+  it('carries the surgeon line (so metadata fills) and NO `## <label>` headings', () => {
+    // Certify covers every clinical box via a synthetic FACT (tier 1), so the note
+    // needs no headings — a heading would match no section and become a spurious
+    // addendum continuation page that breaks the fidelity check.
+    const note = buildSyntheticDetectedNote();
     expect(note).toMatch(/Operating surgeon: Dr\. Synthetic Example/);
-    // the metadata field has NO body heading (it fills from the record)
-    expect(note).not.toMatch(/## PATIENT NAME/);
-  });
-
-  it('the synthetic note actually fills every body field it names', () => {
-    const fields = [
-      field('p0_f0', 'DESCRIPTION OF PROCEDURE', { concept: 'procedure.description' }),
-      field('p0_f1', 'FINDINGS', { concept: 'procedure.findings' }),
-    ];
-    const note = buildSyntheticDetectedNote(fields);
-    const { values } = fillFromNote(fields, {
-      patientName: 'SAMPLE',
-      visitDate: DATE,
-      noteText: note,
-      dictationText: note,
-    });
-    expect(values.has('p0_f0')).toBe(true);
-    expect(values.has('p0_f1')).toBe(true);
+    expect(note).not.toMatch(/^##\s/m);
+    // clearly labeled synthetic — no patient identifiers
+    expect(note.toLowerCase()).toMatch(/synthetic/);
   });
 });

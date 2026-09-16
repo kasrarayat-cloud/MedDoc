@@ -43,7 +43,7 @@ import { deriveDetectedFormValues } from './derive-values';
 import { DETERMINISTICALLY_FILLED_HEADER_KEYS } from './fill-from-note';
 import { fillDetectedForm } from './fill-boxes';
 import { verifyFidelity, isPixelIdenticalOutsideBoxes } from './verify-fidelity';
-import type { DetectedForm, DetectedPage } from './types';
+import type { DetectedBox, DetectedForm, DetectedPage } from './types';
 
 export class DetectedFormCertifyError extends Error {
   readonly code:
@@ -72,20 +72,29 @@ export function fieldExpectedToFill(field: StoredDetectedField): boolean {
 }
 
 /** Reconstruct a minimal `DetectedForm` for the fidelity verifier from the stored
- *  fields (verifyFidelity reads only `pages[].boxes`). */
+ *  fields (verifyFidelity reads only `pages[].boxes`).
+ *
+ *  ⚠️ ONE ENTRY PER RENDERED PAGE, 0..pageCount-1 — NOT a compacted list of only
+ *  the pages that carry fields. verifyFidelity sends a POSITIONAL array and the
+ *  sidecar masks rendered page i with boxes[i]; a compacted list misaligns the
+ *  masks whenever the fields do not occupy a contiguous 0..k prefix (e.g. a
+ *  letterhead page 0 with all fields on page 1), counting a clean fill as an
+ *  outside-box change and FALSE-REJECTING a pixel-perfect form (adversarial
+ *  finding, 2026-09-16). */
 function detectedFormForVerify(form: StoredDetectedForm): DetectedForm {
-  const byPage = new Map<number, DetectedPage>();
+  const boxesByPage = new Map<number, DetectedBox[]>();
   for (const f of form.fields) {
     for (const box of f.boxes) {
-      let page = byPage.get(f.page);
-      if (!page) {
-        page = { index: f.page, widthPt: 0, heightPt: 0, boxes: [] };
-        byPage.set(f.page, page);
-      }
-      page.boxes.push(box);
+      const arr = boxesByPage.get(f.page) ?? [];
+      arr.push(box);
+      boxesByPage.set(f.page, arr);
     }
   }
-  const pages = [...byPage.values()].sort((a, b) => a.index - b.index);
+  const count = Math.max(form.pageCount, 0, ...form.fields.map((f) => f.page + 1));
+  const pages: DetectedPage[] = [];
+  for (let i = 0; i < count; i++) {
+    pages.push({ index: i, widthPt: 0, heightPt: 0, boxes: boxesByPage.get(i) ?? [] });
+  }
   return { model: form.model, weightsSha: form.detector.weightsSha, detector: form.detector, pages };
 }
 
@@ -112,19 +121,21 @@ export function syntheticFactFor(concept: string, seed: string): EncounterFact {
   });
 }
 
-/** A synthetic note carrying a `## <label>` for each clinical/section box (so a
- *  note-split box would fill) + a synthetic surgeon line (so `procedure.surgeon`
- *  fills). PHI-free — gated by the caller through `deriveSyntheticEncounter`. */
-export function buildSyntheticDetectedNote(fields: ReadonlyArray<StoredDetectedField>): string {
-  const lines: string[] = ['Operating surgeon: Dr. Synthetic Example (self-test).', ''];
-  for (const f of fields) {
-    if (f.headerKey !== null) continue;
-    const label = f.label.replace(/[:*_]+$/g, '').trim() || f.id;
-    lines.push(`## ${label}`);
-    lines.push(`Synthetic self-test content for "${label}" — no patient identifiers.`);
-    lines.push('');
-  }
-  return lines.join('\n');
+/** The synthetic self-test note. Clearly-synthetic prose + a surgeon line (so the
+ *  record-derived `procedure.surgeon` metadata fills). PHI-free — gated by the
+ *  caller through `deriveSyntheticEncounter`.
+ *
+ *  ⚠️ NO `## <label>` HEADINGS. At certify every clinical box is fact-covered
+ *  (one synthetic fact each → tier 1), so no box routes to the note-heading split;
+ *  a `## <label>` heading would then match no section and be carried to the
+ *  continuation page as an addendum, appending a page the fidelity check has no
+ *  mask for → a spurious FIDELITY_FAILED. The note carries only what a metadata
+ *  field reads (the surgeon line); the clinical boxes fill from the facts. */
+export function buildSyntheticDetectedNote(): string {
+  return [
+    'Synthetic self-test encounter — clearly labeled example content, no patient identifiers.',
+    'Operating surgeon: Dr. Synthetic Example (self-test).',
+  ].join('\n');
 }
 
 export interface CertifyDetectedFormResult {
@@ -171,7 +182,7 @@ export async function certifyDetectedForm(input: {
   }
 
   // ── SYNTHETIC VISIT — a note (PHI-gated) + one affirmed fact per clinical box.
-  const noteText = buildSyntheticDetectedNote(form.fields);
+  const noteText = buildSyntheticDetectedNote();
   await deriveSyntheticEncounter({
     deriveEncounter: () => ({ ok: true, text: noteText }) as never,
     actor: input.actor,
@@ -182,7 +193,7 @@ export async function certifyDetectedForm(input: {
     .map((f) => syntheticFactFor(f.concept as string, f.id));
 
   const syntheticDate = new Date('2020-01-01T00:00:00.000Z');
-  const { values } = deriveDetectedFormValues({
+  const { values, addenda } = deriveDetectedFormValues({
     fields: form.fields,
     facts,
     noteCtx: {
@@ -194,23 +205,30 @@ export async function certifyDetectedForm(input: {
     allowUncertified: true,
   });
 
-  // Every EXPECTED-TO-FILL field must have drawn a value; policy blanks may be empty.
-  const shouldFillButBlank = form.fields.filter(
-    (f) => fieldExpectedToFill(f) && !values.has(f.id),
-  );
+  // Every EXPECTED-TO-FILL field must actually DRAW. A value alone is not enough:
+  // the fill engine draws only into `TextBox` boxes (fill-boxes.ts), so a clinical
+  // concept on a ChoiceButton/Signature box gets a resolved value yet draws nothing
+  // and would be a permanently blank clinical box in production. Requiring a
+  // drawable box surfaces that at certify (refuse, named) instead of silently at
+  // export (adversarial finding, 2026-09-16).
+  const willDraw = (f: StoredDetectedField): boolean =>
+    values.has(f.id) && f.boxes.some((b) => b.type === 'TextBox');
+  const shouldFillButBlank = form.fields.filter((f) => fieldExpectedToFill(f) && !willDraw(f));
   if (shouldFillButBlank.length > 0) {
     throw new DetectedFormCertifyError(
       'BOX_DID_NOT_FILL',
-      'A detected box that should fill did not on the synthetic visit.',
+      'A detected box that should fill did not draw on the synthetic visit (no value, or no fillable text region).',
       shouldFillButBlank.map((f) => `${f.id}:${f.label}`),
     );
   }
 
-  // ── FILL + FIDELITY.
+  // ── FILL + FIDELITY. addenda is empty at certify (the synthetic note's headings
+  // all match boxes) but threaded for parity with the export path.
   const filled = await fillDetectedForm({
     originalPdf: new Uint8Array(canvas),
     fields: form.fields,
     values,
+    addenda,
   });
   const fidelity = await verifyFidelity(
     new Uint8Array(canvas),
