@@ -156,7 +156,10 @@ export async function certifyDetectedForm(input: {
   actor: TemplateTwinActor;
 }): Promise<CertifyDetectedFormResult> {
   const row = await prisma.noteTemplate.findFirst({
-    where: { id: input.templateId, doctorId: input.actor.userId },
+    // Practice-scoped (defense-in-depth beyond doctorId; the practice_iff_doctor
+    // biconditional makes both consistent) so a template id can never reach across
+    // a practice boundary — the T5 scope discipline.
+    where: { id: input.templateId, doctorId: input.actor.userId, practiceId: input.actor.practiceId },
     select: { styleProfile: true },
   });
   if (!row) throw new DetectedFormCertifyError('NOT_FOUND', 'Detected form template not found.');
