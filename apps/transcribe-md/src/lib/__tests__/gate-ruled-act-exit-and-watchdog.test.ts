@@ -17,6 +17,11 @@ import { describe, it, expect } from 'vitest';
 // The design and these cases answer the 2026-09-16 adversarial refutation pass.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// One named constant per shell-out, shared by the subprocess timeout and the
+// enclosing `it` budget, per ruling #265(c) (gate-265-shellout-budgets).
+const RW_BUDGET_MS = 30_000;
+const TSX_BUDGET_MS = 20_000;
+
 const REPO_ROOT = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
 }).trim();
@@ -34,6 +39,7 @@ const EXIT_FIXTURE = path.join(
 const SENTINEL = '__RULED_ACT_COMPLETE__';
 
 /** Run run-watched.sh over `inner`, return { rc (RUN_RC), out (combined) }. */
+// shell-budget-governed-by: RW_BUDGET_MS
 function runWatched(
   inner: string[],
   env: Record<string, string> = {},
@@ -43,7 +49,7 @@ function runWatched(
     encoding: 'utf8',
     cwd: REPO_ROOT,
     env: { RULED_ACT_POLL: '1', ...process.env, ...env },
-    timeout: 40_000,
+    timeout: RW_BUDGET_MS,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   const m = out.match(/___RUN_RC=(\d+)/);
@@ -68,17 +74,17 @@ describe('the door watchdog — pass-through of a command that exits on its own'
     const { rc, out } = runWatched(['sh', '-c', 'echo hi; exit 0']);
     expect(rc).toBe(0);
     expect(out).toContain('hi');
-  }, 20_000);
+  }, RW_BUDGET_MS);
 
   it("preserves a command's own non-zero exit code", () => {
     const { rc } = runWatched(['sh', '-c', 'echo boom; exit 3']);
     expect(rc).toBe(3);
-  }, 20_000);
+  }, RW_BUDGET_MS);
 
   it('passes the exit-2 "refused before acting" code through unchanged', () => {
     const { rc } = runWatched(['sh', '-c', 'exit 2']);
     expect(rc).toBe(2);
-  }, 20_000);
+  }, RW_BUDGET_MS);
 });
 
 describe('the door watchdog — timing out a hang without murdering a quiet act', () => {
@@ -92,7 +98,7 @@ describe('the door watchdog — timing out a hang without murdering a quiet act'
     expect(out).toContain('SIGNALLED COMPLETION BUT DID NOT EXIT');
     // it must NOT wait out the full sleep NOR the 60s ceiling
     expect(Date.now() - started).toBeLessThan(20_000);
-  }, 30_000);
+  }, RW_BUDGET_MS);
 
   it('does NOT idle-kill a busy-quiet act with no sentinel — the ceiling does', () => {
     const started = Date.now();
@@ -110,7 +116,7 @@ describe('the door watchdog — timing out a hang without murdering a quiet act'
     expect(out).not.toContain('SIGNALLED COMPLETION'); // never claims it landed
     // proves it waited for the ~5s ceiling, not the 2s idle window
     expect(elapsedMs).toBeGreaterThan(4_000);
-  }, 30_000);
+  }, RW_BUDGET_MS);
 });
 
 describe('the door watchdog — the ceiling cannot be disabled (adversarial F1)', () => {
@@ -142,13 +148,13 @@ describe('a ruled-act script exits explicitly and announces completion', () => {
     const out = execFileSync(TSX, [EXIT_FIXTURE], {
       encoding: 'utf8',
       cwd: REPO_ROOT,
-      timeout: 8_000,
+      timeout: TSX_BUDGET_MS,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     expect(out).toContain('FIXTURE_MARKER_BEGIN');
     expect(out).toContain('FIXTURE_MARKER_END');
     expect(out).toContain(SENTINEL);
-  }, 20_000);
+  }, TSX_BUDGET_MS);
 
   it('the sentinel literal is identical in the printer and the door (one rule, two readers)', () => {
     expect(readFileSync(EXIT_CLEANLY, 'utf8')).toContain(SENTINEL);
