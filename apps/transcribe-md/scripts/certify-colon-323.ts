@@ -36,6 +36,7 @@
 // PDF + structure are the re-derivation input (superseded by this act, kept).
 // ============================================================================
 import { randomUUID } from 'node:crypto';
+import { exitCleanly } from './lib/exit-cleanly';
 
 import { createTemplateTwinDraft } from '@/lib/template-twin/create-draft';
 import { createTemplateTwinArtifactStore } from '@/lib/template-twin/storage';
@@ -295,7 +296,9 @@ async function main() {
   console.log(`${L} DONE newTemplateId=${newTemplateId}`);
 }
 
-main().catch((e) => {
-  console.error(`${L} FAILED:`, e?.stack ?? e?.message ?? e);
-  process.exit(1);
-});
+main()
+  .then(() => exitCleanly(0))
+  .catch((e) => {
+    console.error(`${L} FAILED:`, e?.stack ?? e?.message ?? e);
+    exitCleanly(1);
+  });
