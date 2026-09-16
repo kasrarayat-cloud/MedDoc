@@ -48,6 +48,12 @@ import type { TemplateTwinWorkspace } from '@/lib/template-twin/client-types';
 import { sendTemplateCertifiedEmail } from '@/lib/email';
 import { isEmailDeliveryEnabled } from '@/lib/email-enabled';
 import { logTwinAudit } from '@/lib/template-twin/twin-audit';
+import { formDetectFillEnabled } from '@/config/form-detect-fill';
+import {
+  certifyDetectedForm,
+  DetectedFormCertifyError,
+  type CertifyDetectedFormResult,
+} from '@/lib/form-fill';
 
 // A synthetic, PHI-free clinical encounter used to prove the template renders +
 // roundtrips before certification (the certify step binds this verified proof).
@@ -457,6 +463,63 @@ export async function certifyNativeTemplateAction(
       reason: 'unexpected',
       errorClass,
       error: `Certification could not be completed (${structuredCode ?? errorClass}). This has been recorded — it will not succeed on a retry until it is fixed.`,
+    };
+  }
+}
+
+// ============================================================================
+// #326 ONE-PIPELINE (Slice B) — certify a DETECTED form. Its own action because
+// a detected form has no compiled-twin mappings sha: the proof is the synthetic
+// fill + pixel-fidelity (`certifyDetectedForm`), not the DOCX roundtrip.
+// Behind formDetectFillEnabled; nothing reaches it while the flag is OFF.
+// ============================================================================
+export async function certifyDetectedFormAction(
+  noteTemplateId: string,
+): Promise<CertifyActionResult<CertifyDetectedFormResult>> {
+  if (!formDetectFillEnabled()) return { ok: false, error: DISABLED, reason: 'disabled' };
+  const session = await requireSession();
+  const actor = actorFrom(session);
+  try {
+    const result = await certifyDetectedForm({ templateId: noteTemplateId, actor });
+    // Existing AuditAction — no new enum value, so #326 stays migration-free.
+    await logTwinAudit({
+      action: 'TEMPLATE_TWIN_CERTIFIED',
+      targetType: 'NoteTemplate',
+      targetId: noteTemplateId,
+      userId: actor.userId,
+      userEmail: actor.userEmail,
+      practiceId: actor.practiceId,
+      metadata: {
+        pipeline: 'form_detect',
+        fieldCount: result.fieldCount,
+        filledCount: result.filledCount,
+        policyBlankCount: result.policyBlankCount,
+        fidelityPages: result.fidelity.pages,
+      },
+    });
+    return { ok: true, data: result };
+  } catch (err) {
+    if (err instanceof DetectedFormCertifyError) {
+      // Designed refusals — actionable, PHI-safe (the detail carries opaque
+      // fieldIds + the form's own labels, never patient data).
+      if (err.code === 'FIELDS_NOT_READY') {
+        return {
+          ok: false,
+          reason: 'mappings_not_ready',
+          error: 'Every detected field needs a confirmed mapping before certifying.',
+          remaining: err.detail.length,
+        };
+      }
+      return { ok: false, reason: 'certification_blocked', error: err.message };
+    }
+    // Coded class only — never the raw message (it can quote document content).
+    const errorClass = err instanceof Error ? err.constructor.name : 'Unknown';
+    console.error('[form-detect:certify-action] unexpected:', errorClass);
+    return {
+      ok: false,
+      reason: 'unexpected',
+      error: 'Certification could not be completed. This has been recorded.',
+      errorClass,
     };
   }
 }

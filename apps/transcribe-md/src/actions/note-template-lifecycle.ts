@@ -242,12 +242,14 @@ export async function saveNoteTemplateAction(
     // partial-unique index — so read it and decide certification IN CODE. This
     // must recognise BOTH certification kinds, because they are stored in two
     // different places and a flat-PDF form has NO twin row at all:
-    //   • DOCX twin  → templateTwinCompiledVersion.certificationStatus 'CERTIFIED'
-    //   • flat PDF   → styleProfile.pdfNativeCertified === true (pdf-native/certify)
+    //   • DOCX twin    → templateTwinCompiledVersion.certificationStatus 'CERTIFIED'
+    //   • flat PDF     → styleProfile.pdfNativeCertified === true (pdf-native/certify)
+    //   • detected form→ styleProfile.formDetectCertified === true (#326 form-fill)
     // A twin-only check silently failed to hold an upload that would displace a
     // PDF-native certified form — the exact harm, for the other cert kind
-    // (adversarial finding). Selecting both and testing here cannot drift the way
-    // a relation-only filter did.
+    // (adversarial finding). The #326 detected form is a THIRD cert kind stored the
+    // same way; omitting it would re-open the identical displacement for it.
+    // Selecting all and testing here cannot drift the way a relation-only filter did.
     const activeInSlot = await prisma.noteTemplate.findFirst({
       where: { doctorId, encounterType, status: 'active' },
       select: {
@@ -256,11 +258,14 @@ export async function saveNoteTemplateAction(
         templateTwinCompiledVersion: { select: { certificationStatus: true } },
       },
     });
+    const sp = activeInSlot?.styleProfile as
+      | { pdfNativeCertified?: boolean; formDetectCertified?: boolean }
+      | null;
     const isCertified =
       !!activeInSlot &&
       (activeInSlot.templateTwinCompiledVersion?.certificationStatus === 'CERTIFIED' ||
-        (activeInSlot.styleProfile as { pdfNativeCertified?: boolean } | null)
-          ?.pdfNativeCertified === true);
+        sp?.pdfNativeCertified === true ||
+        sp?.formDetectCertified === true);
     if (activeInSlot && isCertified) {
       effectiveActivate = false;
       activationHeld =

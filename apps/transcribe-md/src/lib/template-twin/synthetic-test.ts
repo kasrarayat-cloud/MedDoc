@@ -172,6 +172,13 @@ export function assertNoRecordDerivedFacts(
   );
 }
 
+// #326 — the shared synthetic front-half lives in a LIGHT module so the
+// detected-form certify can reuse it without pulling this heavy graph. Imported
+// for local use here AND re-exported so existing callers of synthetic-test keep
+// resolving it.
+import { deriveSyntheticEncounter } from './synthetic-front-half';
+export { deriveSyntheticEncounter };
+
 export async function runTemplateTwinSyntheticTest(input: {
   noteTemplateId: string;
   actor: TemplateTwinActor;
@@ -373,31 +380,15 @@ export async function runTemplateTwinSyntheticTest(input: {
   // gate immediately above refuses otherwise. Only now is "this generator
   // cannot speak to this form" a fact about the FORM rather than a fact about
   // how much of it has been confirmed. See the `deriveEncounter` doc above.
-  const derived = input.deriveEncounter();
-  if (!derived.ok) {
-    throw new TemplateTwinSyntheticTestError(
-      'ENCOUNTER_NOT_DERIVABLE',
-      'We could not generate a self-test that matches this form, so nothing was certified.',
-      { blocking: [derived.reason], totalFields: mappings.length },
-    );
-  }
-  const encounterText = derived.text;
-
-  // Certification artifacts retain evidence anchors and filled values. Gate
-  // the encounter before Layer 3 or storage so a mislabeled real encounter is
-  // not persisted as a synthetic proof.
-  try {
-    await assertTemplateTwinSyntheticEvidencePhiFree({
-      encounterText: encounterText,
-      practiceId: input.actor.practiceId,
-      userId: input.actor.userId,
-    });
-  } catch {
-    throw new TemplateTwinSyntheticTestError(
-      'SYNTHETIC_EVIDENCE_REJECTED',
-      'Use clearly labeled synthetic test evidence without patient identifiers.',
-    );
-  }
+  // #326 — the ruled encounter derivation + synthetic-evidence PHI gate + the
+  // content hash, shared verbatim with the detected-form proof (one function so
+  // the order cannot drift). The DOCX-specific IR/TOKEN gate below is unchanged;
+  // moving the pure sha ahead of it is byte-identical (sha has no side effect).
+  const { encounterText, encounterSha256 } = await deriveSyntheticEncounter({
+    deriveEncounter: input.deriveEncounter,
+    actor: input.actor,
+    totalFields: mappings.length,
+  });
 
   const ir = TemplateDocIRSchema.parse(compiled.compiledDocumentIr);
 
@@ -431,7 +422,6 @@ export async function runTemplateTwinSyntheticTest(input: {
   }
 
   const encounterMode = input.encounterMode ?? 'text';
-  const encounterSha256 = createHash('sha256').update(encounterText).digest('hex');
 
   // Run the LIVE brain over the synthetic encounter, then recover the compiled
   // {{one of}} marker form from the SAME verified source the IR came from —

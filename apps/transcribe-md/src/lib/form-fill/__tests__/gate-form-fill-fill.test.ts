@@ -160,4 +160,41 @@ describe('fill-boxes (draw + overflow)', () => {
     });
     expect(filledFields).toBe(0);
   });
+
+  it('carries an addendum (unmatched note section) to the continuation page — never dropped (adv #1/#5)', async () => {
+    const { pdf, addenda } = await fillDetectedForm({
+      originalPdf: await blankPdf(1),
+      fields: [field('f0', [tbox(50, 700, 200, 20)])],
+      values: new Map([['f0', 'short value']]),
+      addenda: [{ label: 'COMPLICATIONS', text: 'Estimated blood loss 500 mL; ICU transfer for monitoring.' }],
+    });
+    expect(addenda).toBe(1);
+    const reload = await PDFDocument.load(pdf);
+    expect(reload.getPageCount()).toBeGreaterThan(1); // continuation appended for the addendum
+  });
+
+  it('a whitespace-only addendum is not carried (nothing to draw)', async () => {
+    const { pdf, addenda } = await fillDetectedForm({
+      originalPdf: await blankPdf(1),
+      fields: [field('f0', [tbox(50, 700, 200, 20)])],
+      values: new Map([['f0', 'short value']]),
+      addenda: [{ label: 'EMPTY', text: '   ' }],
+    });
+    expect(addenda).toBe(0);
+    expect((await PDFDocument.load(pdf)).getPageCount()).toBe(1);
+  });
+
+  it('does NOT draw a clinical box whose boxes are all non-TextBox (certify must guard this — adv #3)', async () => {
+    const choice: DetectedBox = { x: 50, y: 700, w: 100, h: 20, type: 'ChoiceButton', label: '', labelSource: '' };
+    const { filledFields, addenda } = await fillDetectedForm({
+      originalPdf: await blankPdf(1),
+      fields: [field('c0', [choice])],
+      values: new Map([['c0', 'a value that cannot draw into a choice box']]),
+    });
+    // The value exists but there is no TextBox to draw it → skipped. This is why
+    // certifyDetectedForm requires a drawable box, so the box is never certified
+    // as filling while silently blanking at export.
+    expect(filledFields).toBe(0);
+    expect(addenda).toBe(0);
+  });
 });
