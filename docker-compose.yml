@@ -520,6 +520,34 @@ services:
       retries: 3
       start_period: 20s
 
+  # ── Form-vision sidecar — FFDNet field detection + fidelity verify (#326). ──
+  # Self-hosted CommonForms/FFDNet on CPU. Internal-only (no egress; the pinned
+  # weights are baked at build and asserted by sha256 — that sha enters the
+  # certification signature). Reached by the app on `converter`, like Gotenberg.
+  # Slice A ships it ADDITIVELY — nothing calls it until the flag routes uploads.
+  form-detect:
+    build:
+      context: services/form-detect
+      dockerfile: Dockerfile
+    image: meddoc-pro-form-detect:latest
+    restart: unless-stopped
+    # FFDNet (YOLO) inference on a page peaks ~1–1.5g; the cap keeps a
+    # pathological upload from competing with the clinical pipeline.
+    mem_limit: 2g
+    cpus: '2.0'
+    networks:
+      - converter
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+      start_period: 40s
+
   transcribe-md:
     networks:
       - default

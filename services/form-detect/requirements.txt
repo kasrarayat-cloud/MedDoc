@@ -1,0 +1,22 @@
+# PINNED detection + render stack (#326 adversarial pass, finding #6). The
+# weights sha alone does not identify detection behaviour — the NMS/post-
+# processing in ultralytics, the tensor ops in torch/numpy, and the rasterizer
+# in pypdfium2/formalpdf all move the boxes. These are pinned so an unchanged
+# weights sha cannot hide a numerics drift. torch + torchvision are pinned in
+# the Dockerfile (installed CPU-only from a separate index).
+commonforms==0.2.1
+formalpdf==0.1.6
+ultralytics==8.4.153
+ultralytics-thop==2.1.6
+numpy==2.5.3
+opencv-python==5.0.0.93
+pillow==12.3.0
+pypdfium2==5.13.0
+onnx==1.22.0
+onnxruntime==1.30.0
+onnxslim==0.1.96
+rfdetr==1.10.1
+supervision==0.30.3
+transformers==5.17.0
+scipy==1.18.1
+pydantic==2.13.5
