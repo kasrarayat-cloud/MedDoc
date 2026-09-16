@@ -29,6 +29,7 @@
 // Run inside transcribe-md-worker via scripts/run-ruled-mutation.sh --in transcribe-md-worker.
 // ============================================================================
 import { readFileSync } from 'node:fs';
+import { exitCleanly } from './lib/exit-cleanly';
 import { createHash } from 'node:crypto';
 
 import { createTemplateTwinDraft } from '@/lib/template-twin/create-draft';
@@ -251,7 +252,9 @@ async function main() {
   console.log(`[319] DONE noteTemplateId=${draft.noteTemplateId}`);
 }
 
-main().catch((e) => {
-  console.error('[319] FAILED:', e?.stack ?? e?.message ?? e);
-  process.exit(1);
-});
+main()
+  .then(() => exitCleanly(0))
+  .catch((e) => {
+    console.error('[319] FAILED:', e?.stack ?? e?.message ?? e);
+    exitCleanly(1);
+  });

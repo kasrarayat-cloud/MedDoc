@@ -2,6 +2,8 @@
 # ============================================================================
 # THE RULED-MUTATION RUNNER — the only door to an irreversible production act.
 #   0 = the mutation ran and exited 0   1 = REFUSED (nothing ran)   n = its code
+#   124 = the WATCHDOG killed a command that outran its idle/ceiling limit — the
+#         WATCHDOG block says WHICH, and whether the command signalled completion
 #
 #   bash scripts/run-ruled-mutation.sh --declaration <path> [--in <service>] -- <command…>
 # ----------------------------------------------------------------------------
@@ -102,6 +104,17 @@ LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/lib" 2>/dev/null && pwd)/declaration.s
 # shellcheck source=lib/declaration.sh
 . "$LIB"
 
+# ⚠️ THE WATCHDOG — a ruled act that finishes its work and never exits must not
+# be waited on in SILENCE. On 2026-09-15 a certify script printed its whole
+# transcript and hung 5h24m on an open pg pool handle; this door blocked on it
+# and said nothing. `run_watched` streams the output live and times out with a
+# reason instead. Fail-closed if the library is missing — a door that cannot
+# arm its own timeout is not a door that will notice the next hang.
+WLIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/lib" 2>/dev/null && pwd)/run-watched.sh"
+[ -r "$WLIB" ] || { echo "🔴 run-ruled-mutation: $WLIB missing or unreadable. Refusing."; exit 1; }
+# shellcheck source=lib/run-watched.sh
+. "$WLIB"
+
 declaration_gate "$DECL" strict "ruled mutation" || exit 1
 
 DECL_COMMIT=$(git log -1 --format=%H -- "$DECL" 2>/dev/null)
@@ -122,9 +135,21 @@ echo "════════════════════════�
 export RULED_MUTATION_DECLARATION="$DECL"
 export RULED_MUTATION_DECL_COMMIT="$DECL_COMMIT"
 
+# The watchdog's in-container kill signature: prefer the script-path token
+# (…/foo.ts) — narrow and stable — else fall back to the whole command.
+# `run_watched` ERE-ESCAPES this to a LITERAL before `pkill -f`, so a fallback
+# command containing shell operators (`||`, `$`, `[`) cannot over-match, under-
+# match, or error. The script-path token matches the npx → tsx → node chain
+# (pids 448/465/476 on 2026-09-15).
+WATCH_SIG=""
+for _tok in "${CMD[@]}"; do
+  case "$_tok" in *.ts|*.js|*/scripts/*) WATCH_SIG="$_tok"; break ;; esac
+done
+[ -z "$WATCH_SIG" ] && WATCH_SIG="${CMD[*]}"
+
 if [ -z "$IN_SERVICE" ]; then
-  "${CMD[@]}"
-  rc=$?
+  run_watched -- "${CMD[@]}"
+  rc=$RUN_RC
 else
   # ══ --in <service>: THE ACT RUNS INSIDE THE CONTAINER (ruling #262) ═══════
   SHARED_TREE="/opt/meddoc-pro"
@@ -197,12 +222,13 @@ else
   # ⚠️ `-e` EXPLICITLY: `docker exec` DOES NOT FORWARD THE HOST ENVIRONMENT.
   # A child written to refuse outside this door would otherwise be unable to see
   # that it is inside it, and would refuse a legitimate act.
-  docker exec \
-    -e RULED_MUTATION_DECLARATION="$DECL" \
-    -e RULED_MUTATION_DECL_COMMIT="$DECL_COMMIT" \
-    -e RULED_MUTATION_IN_CONTAINER="$IN_SERVICE" \
-    "$CID" "${CMD[@]}"
-  rc=$?
+  run_watched --in-cid "$CID" --sig "$WATCH_SIG" -- \
+    docker exec \
+      -e RULED_MUTATION_DECLARATION="$DECL" \
+      -e RULED_MUTATION_DECL_COMMIT="$DECL_COMMIT" \
+      -e RULED_MUTATION_IN_CONTAINER="$IN_SERVICE" \
+      "$CID" "${CMD[@]}"
+  rc=$RUN_RC
 fi
 
 echo "═══════════════════════════════════════════════════════════════════"
@@ -227,6 +253,13 @@ if [ "$rc" -eq 2 ]; then
   echo "  ℹ️  EXIT 2 — the command REFUSED before acting (usage / bad arguments)."
   echo "     Nothing was opened and nothing was written. Fix the invocation and"
   echo "     re-run; there is no partial state to reconcile."
+elif [ "$rc" -eq 124 ]; then
+  echo "  ⏱️ WATCHDOG TIMEOUT — the door killed a command that did not exit in"
+  echo "     time. This is NOT a verdict on the act. Read the WATCHDOG block"
+  echo "     above: 'SIGNALLED COMPLETION' means the act LIKELY landed and the"
+  echo "     script merely failed to exit (the 2026-09-15 shape); 'CEILING"
+  echo "     REACHED' means it was killed WITHOUT signalling completion and may"
+  echo "     be PARTIAL. Either way, JUDGE the declaration, every row, first."
 elif [ "$rc" -ne 0 ]; then
   echo "  ⚠️ NON-ZERO EXIT. Do not re-run until you know what landed — an"
   echo "     irreversible act that failed partway is not the same as one that"
