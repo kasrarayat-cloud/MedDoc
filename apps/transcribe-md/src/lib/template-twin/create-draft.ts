@@ -23,6 +23,8 @@ import { DOCX_TEMPLATE_COMPILER } from './artifact-compiler';
 import { deriveProseTwin, derivedTwinProbeIsValid } from './prose-form/derive-prose-twin';
 import { isPdfSource, pdfToProseDocx, type SectionDirective } from './pdf-form/pdf-to-prose-docx';
 import { relocateFillLinesToBlankState } from './pdf-form/fill-line-blank-state';
+import { formDetectFillEnabled } from '@/config/form-detect-fill';
+import { createDetectedFormDraft } from './create-detected-draft';
 import {
   fallbackSemanticMappings,
   proposeSemanticMappings,
@@ -269,6 +271,18 @@ export async function createTemplateTwinDraft(
   // the S2 fill-line-blank-state relocation below runs ONLY for a PDF (a form S2
   // synthesised), never for an S1 doctor-uploaded DOCX (byte-preserved).
   const wasPdf = isPdfSource(source);
+  // ── #326 ONE-PIPELINE INTERCEPT (Slice B, behind formDetectFillEnabled). A PDF
+  // upload is routed onto the detect→fill pipeline instead of the PDF→prose-DOCX
+  // twin derivation. `source` is still the ORIGINAL PDF here (it is overwritten by
+  // the reconstructed prose DOCX below). Flag OFF ⇒ the existing DOCX-twin path
+  // runs unchanged, byte-identical to today.
+  if (wasPdf && formDetectFillEnabled()) {
+    return await createDetectedFormDraft({
+      pdf: source,
+      actor: input.actor,
+      attachToNoteTemplateId: input.attachToNoteTemplateId,
+    });
+  }
   // #325 — the per-line section directives from the PDF derivation, threaded to
   // `deriveProseTwin` so a numbered slot / single section block gets its concept
   // tag. Undefined for a DOCX upload (that path is byte-preserving, no directives).

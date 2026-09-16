@@ -15,6 +15,7 @@ import { loadVisitExportData } from '@/lib/visit-export-server';
 import { renderVisitPdfFromDocx, VisitPdfUnavailableError } from '@/lib/visit-pdf';
 import { resolveVisitDocx } from '@/lib/visit-docx-source';
 import { nativePdfExport } from '@/lib/pdf-native/export';
+import { detectedFormExport } from '@/lib/form-fill';
 import { logDelivery } from '@/lib/deliveries';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
@@ -52,7 +53,24 @@ export const GET = withApiHandler<{ id: string }>(
       // its blanks; otherwise fall through to the styled generator. Fail-open —
       // any native-fill error falls back to the styled export, never a 500.
       let nativePdf: Buffer | null = null;
+      // #326 ONE-PIPELINE (Slice B) — a CERTIFIED detected form fills the doctor's
+      // OWN page from the detect→fill pipeline. Behind formDetectFillEnabled (it
+      // returns flag_off → not applied → the pdf-native + styled paths below run
+      // unchanged). Fail-open, exactly like the pdf-native path.
       try {
+        const detected = await detectedFormExport(visitId, session.user.practiceId);
+        if (detected.applied && detected.pdf) {
+          nativePdf = detected.pdf;
+          nativeApplied = true;
+          nativeReason = detected.reason;
+        }
+      } catch (detErr) {
+        console.error(
+          '[api:visits:export:pdf] detected-form fill failed, falling back:',
+          redactPhi(detErr instanceof Error ? detErr.message : detErr)
+        );
+      }
+      if (!nativePdf) try {
         const native = await nativePdfExport(visitId, session.user.practiceId);
         nativePdf = native.pdf;
         nativeApplied = native.applied;
