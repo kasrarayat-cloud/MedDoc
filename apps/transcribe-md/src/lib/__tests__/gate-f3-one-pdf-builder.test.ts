@@ -183,9 +183,18 @@ describe('F3 — the retired builder is GONE, by traversal', () => {
     // permitted: `pdf-native/export.ts` fills the doctor's OWN certified page
     // and is a different product surface, not a styled re-creation. It is the
     // one live producer this gate does not converge, by ruling #113's scope.
+    // `form-fill/` (#326 Slice A) is the SAME native-fill surface for the
+    // ONE-PIPELINE: it draws values onto the doctor's own page at detected-box
+    // coordinates — never a styled re-creation — and folds in the pdf-native
+    // drawing it eventually replaces.
     const pdfLib = gitGrep("from 'pdf-lib'", SRC_ONLY);
     expect(
-      pdfLib.every((h) => h.includes('pdf-native/') || h.includes('template-twin/')),
+      pdfLib.every(
+        (h) =>
+          h.includes('pdf-native/') ||
+          h.includes('template-twin/') ||
+          h.includes('form-fill/'),
+      ),
       `pdf-lib is used outside the native-fill surfaces:\n  ${pdfLib.join('\n  ')}`,
     ).toBe(true);
   });

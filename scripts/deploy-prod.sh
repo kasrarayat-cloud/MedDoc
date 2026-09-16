@@ -379,13 +379,27 @@ docker compose build gotenberg
 docker compose up -d gotenberg
 echo
 
+# #326 Slice A: the form-vision sidecar (FFDNet). Built AND recreated here for the
+# same reason as gotenberg — step 6 only ups the app + worker, so a form-detect
+# left on an old image would answer with a different model after a deploy that
+# "succeeded". It is deliberately NOT in the rollback-tag set above: unlike the
+# app image (whose bytes depend on the whole tree), this sidecar is fully PINNED
+# and REPRODUCIBLE from its committed Dockerfile (weights sha + commonforms
+# version asserted at build), so a rollback rebuilds the exact image from the
+# target commit — and on a FIRST deploy it is not yet running, so rollback_tag_cut
+# would refuse it. Nothing is routed onto it while the flag is OFF.
+echo "=== 5c. build + recreate the form-detect sidecar (#326 Slice A) ==="
+docker compose build form-detect
+docker compose up -d form-detect
+echo
+
 echo "=== 6. recreate ==="
 docker compose up -d transcribe-md transcribe-md-worker
 echo
 
 echo "=== 7. settle, then health ==="
 sleep 30
-docker compose ps --format '{{.Service}}\t{{.State}}\t{{.Status}}' | grep -E 'transcribe-md|gotenberg'
+docker compose ps --format '{{.Service}}\t{{.State}}\t{{.Status}}' | grep -E 'transcribe-md|gotenberg|form-detect'
 echo "app /api/health: $(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://app.quillmd.com/api/health)"
 echo
 echo "=== 8. JUDGE AGAINST THE DECLARATION ==="
