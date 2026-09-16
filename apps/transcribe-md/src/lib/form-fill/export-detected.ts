@@ -12,9 +12,14 @@ import { visitByIdScope, type PracticeId } from '@/lib/practice-scope';
 import { formDetectFillEnabled } from '@/config/form-detect-fill';
 import { sanitizeExportedSoap } from '@/lib/visit-export';
 import { canvasHash } from '@/lib/pdf-native/hash';
+import {
+  projectEncounterFacts,
+  type EncounterEntitySnapshot,
+} from '@/lib/template-twin/encounter-facts';
+import type { EncounterFact } from '@/lib/template-twin/ir';
 
 import { readDetectedForm, isDetectedFormCertified, getTemplateCanvas } from './detected-form-store';
-import { fillFromNote } from './fill-from-note';
+import { deriveDetectedFormValues } from './derive-values';
 import { fillDetectedForm } from './fill-boxes';
 
 /** Why detected-form fill did or did not apply — logged + surfaced on every export
@@ -65,6 +70,7 @@ export async function detectedFormExport(
       soapFinal: true,
       signedSoap: true,
       rawTextInput: true,
+      entities: true,
       noteTemplate: { select: { id: true, styleProfile: true } },
     },
   });
@@ -85,13 +91,32 @@ export async function detectedFormExport(
     const raw =
       visit.status === 'SIGNED' ? visit.signedSoap ?? visit.soapFinal ?? '' : visit.soapFinal ?? '';
     const noteText = sanitizeExportedSoap(raw);
+
+    // Project the visit's STORED L3 entities → facts (deterministic; NO AI at
+    // export — the projection is not extraction). No entities → no facts, so every
+    // concept box routes to the note-heading split (tier 2), which is safe.
+    let facts: EncounterFact[] = [];
+    if (visit.entities) {
+      facts = projectEncounterFacts({
+        mode: 'text',
+        contextText: noteText,
+        entities: visit.entities as unknown as EncounterEntitySnapshot,
+        asrQuality: 'unknown',
+      });
+    }
+
     // Ruling #115 — the ENCOUNTER date (createdAt) fills date-of-service, never the
     // signing date. The signing line, when signed, is added by the fill engine.
-    const { values } = fillFromNote(form.fields, {
-      patientName: visit.patientName,
-      visitDate: visit.createdAt,
-      noteText,
-      dictationText: visit.rawTextInput,
+    const { values } = deriveDetectedFormValues({
+      fields: form.fields,
+      facts,
+      noteCtx: {
+        patientName: visit.patientName,
+        visitDate: visit.createdAt,
+        noteText,
+        dictationText: visit.rawTextInput,
+      },
+      allowUncertified: false,
     });
     if (values.size === 0) return miss('nothing_to_fill'); // no box has a value → styled
 

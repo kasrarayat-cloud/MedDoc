@@ -1,30 +1,36 @@
 // ============================================================================
 // ONE-PIPELINE (ruling #326, Slice B) — CERTIFY a detected form. Server-only.
-// prisma singleton + injectable storage + logTwinAudit.
+// prisma singleton.
 // ----------------------------------------------------------------------------
 // certify = on a SYNTHETIC visit, every box that CAN fill fills, and the page is
 // PIXEL-IDENTICAL outside the detected boxes. The proof runs the SAME value path a
-// real export takes (`fillFromNote`) → the SAME fill engine (`fillDetectedForm`) →
-// the fidelity sidecar (`verifyFidelity`). Nothing is bypassed.
+// real export takes (`deriveDetectedFormValues`) → the SAME fill engine
+// (`fillDetectedForm`) → the fidelity sidecar (`verifyFidelity`). Nothing is
+// bypassed.
 //
-// ⚠️ "EVERY BOX FILLS" IS AGAINST THE #247/#319 PRECEDENT, NOT LITERAL. A detected
-// form's record-derived metadata boxes (PATIENT DOB, PATIENT ID, AGE, DD/DT on the
-// owner's own colon form) are blank-unless-dictated — the DOCX twin attests them
-// blank rather than filling, and a blank there is correct, not a failure. So the
-// gate is: every field is either (a) FILLED on the synthetic visit, or (b) a POLICY
-// BLANK (a record-derived metadata field `resolveHeaderFields` does not fill
-// deterministically). A field the doctor has NOT yet mapped (concept === null)
-// refuses — it is the "confirm every field first" gate, the twin's MAPPINGS_NOT_READY
-// applied here.
+// ⚠️ THE SYNTHETIC VISIT'S FACTS ARE CONSTRUCTED DIRECTLY, NOT VIA L3/L4. A real
+// export projects the visit's stored `entities` into facts; the certify proof
+// constructs one affirmed synthetic fact per clinical-concept box (PHI-free) —
+// the SAME `EncounterFact` shape, so the tier-1 resolver, the fill engine and the
+// fidelity check are exercised identically. L3 extraction fidelity is the shared
+// twin's, already proven; this proves the DETECTED-form binding + fill + page
+// fidelity, which is what is new. `deriveVerificationEncounter` is NOT usable here
+// — it generates dictation only for MEASUREMENT forms and refuses a narrative
+// operative note (the owner's colon note certified via the #127 auto-certify path,
+// not that generator).
 //
-// The synthetic note carries NO patient data and is PHI-gated through the SHARED
-// front-half (`deriveSyntheticEncounter`) — one PHI gate for the DOCX twin and the
-// detected form both (#326 extraction).
+// ⚠️ "EVERY BOX FILLS" IS AGAINST THE #247/#319 PRECEDENT, NOT LITERAL. Record-
+// derived metadata boxes the record cannot answer (PATIENT DOB / ID / AGE / DD /
+// DT) are POLICY BLANKS — attested blank, not fill failures. The gate: every field
+// is either FILLED or a policy blank; an unmapped box (concept === null) refuses.
 // ============================================================================
 import prisma from '@meddoc/db';
+import { createHash } from 'node:crypto';
 
 import { deriveSyntheticEncounter } from '@/lib/template-twin/synthetic-front-half';
 import type { TemplateTwinActor } from '@/lib/template-twin/certification-lifecycle';
+import { EncounterFactSchema, type EncounterFact } from '@/lib/template-twin/ir';
+import { canvasHash } from '@/lib/pdf-native/hash';
 
 import {
   readDetectedForm,
@@ -33,10 +39,10 @@ import {
   type StoredDetectedField,
   type StoredDetectedForm,
 } from './detected-form-store';
-import { fillFromNote, DETERMINISTICALLY_FILLED_HEADER_KEYS } from './fill-from-note';
+import { deriveDetectedFormValues } from './derive-values';
+import { DETERMINISTICALLY_FILLED_HEADER_KEYS } from './fill-from-note';
 import { fillDetectedForm } from './fill-boxes';
 import { verifyFidelity, isPixelIdenticalOutsideBoxes } from './verify-fidelity';
-import { canvasHash } from '@/lib/pdf-native/hash';
 import type { DetectedForm, DetectedPage } from './types';
 
 export class DetectedFormCertifyError extends Error {
@@ -58,10 +64,10 @@ export class DetectedFormCertifyError extends Error {
 }
 
 /** A field is EXPECTED to fill on a real (and the synthetic) visit iff it is a
- *  body section OR a metadata field on a deterministically-filled header key.
- *  A record-derived metadata field on any other key is a POLICY BLANK. */
+ *  clinical/section box OR a metadata field on a deterministically-filled header
+ *  key. A record-derived metadata field on any other key is a POLICY BLANK. */
 export function fieldExpectedToFill(field: StoredDetectedField): boolean {
-  if (field.headerKey === null) return true; // body section
+  if (field.headerKey === null) return true;
   return DETERMINISTICALLY_FILLED_HEADER_KEYS.has(field.headerKey);
 }
 
@@ -83,23 +89,39 @@ function detectedFormForVerify(form: StoredDetectedForm): DetectedForm {
   return { model: form.model, weightsSha: form.detector.weightsSha, detector: form.detector, pages };
 }
 
-/**
- * Build the synthetic self-test note: a `## <label>` heading + clearly-synthetic
- * body for every BODY field, and a synthetic surgeon line so `procedure.surgeon`
- * fills. NO patient data — PHI-gated by the caller through `deriveSyntheticEncounter`.
- */
+/** One affirmed, PHI-free synthetic fact for a clinical concept — the shape
+ *  `projectEncounterFacts` emits, so the resolver treats it identically. */
+export function syntheticFactFor(concept: string, seed: string): EncounterFact {
+  return EncounterFactSchema.parse({
+    factId: `ttfact_${createHash('sha256').update(`synthetic:${concept}:${seed}`).digest('hex').slice(0, 24)}`,
+    sourceType: 'encounter_evidence',
+    concept,
+    value: 'Synthetic self-test value',
+    polarity: 'affirmed',
+    temporality: 'current',
+    experiencer: 'patient',
+    laterality: 'not_applicable',
+    number: null,
+    unit: null,
+    speaker: null,
+    sourceTranscriptOffsets: null,
+    audioTimestampSeconds: null,
+    evidenceAnchorIds: ['synthetic-self-test'],
+    evidenceQuote: 'Clearly labeled synthetic self-test evidence, no patient identifiers.',
+    quality: { asr: 'high', evidence: 'direct' },
+  });
+}
+
+/** A synthetic note carrying a `## <label>` for each clinical/section box (so a
+ *  note-split box would fill) + a synthetic surgeon line (so `procedure.surgeon`
+ *  fills). PHI-free — gated by the caller through `deriveSyntheticEncounter`. */
 export function buildSyntheticDetectedNote(fields: ReadonlyArray<StoredDetectedField>): string {
-  const lines: string[] = [];
-  // A surgeon line the note-based extractor recognises, clearly synthetic.
-  lines.push('Operating surgeon: Dr. Synthetic Example (self-test).');
-  lines.push('');
+  const lines: string[] = ['Operating surgeon: Dr. Synthetic Example (self-test).', ''];
   for (const f of fields) {
-    if (f.headerKey !== null) continue; // header fields fill from the record, not the note body
+    if (f.headerKey !== null) continue;
     const label = f.label.replace(/[:*_]+$/g, '').trim() || f.id;
     lines.push(`## ${label}`);
-    lines.push(
-      `Synthetic self-test content for "${label}" — clearly labeled example text, no patient identifiers.`,
-    );
+    lines.push(`Synthetic self-test content for "${label}" — no patient identifiers.`);
     lines.push('');
   }
   return lines.join('\n');
@@ -114,10 +136,9 @@ export interface CertifyDetectedFormResult {
 }
 
 /**
- * Certify a detected form. Loads its stored shape + blank canvas, proves on a
- * synthetic visit that every fillable box fills and the page is pixel-identical
- * outside the boxes, then marks it certified. Refuses (never certifies) on any
- * failure, naming the offending fields.
+ * Certify a detected form. Proves on a synthetic visit that every fillable box
+ * fills and the page is pixel-identical outside the boxes, then marks it
+ * certified. Refuses (never certifies) on any failure, naming the offenders.
  */
 export async function certifyDetectedForm(input: {
   templateId: string;
@@ -132,7 +153,7 @@ export async function certifyDetectedForm(input: {
   const form = readDetectedForm(styleProfile);
   if (!form) throw new DetectedFormCertifyError('NOT_FOUND', 'No detected form is stored on this template.');
 
-  // ── Every field must be MAPPED first (the doctor confirmed the sample-value
+  // Every field must be MAPPED first (the doctor confirmed the sample-value
   // preview). A null concept is "needs_confirmation" → refuse, naming them.
   const unconfirmed = form.fields.filter((f) => f.concept === null);
   if (unconfirmed.length > 0) {
@@ -145,30 +166,35 @@ export async function certifyDetectedForm(input: {
 
   const canvas = await getTemplateCanvas(input.templateId);
   if (!canvas) throw new DetectedFormCertifyError('NO_CANVAS', 'The blank form canvas is missing.');
-  // Integrity — the stored canvas must still match the hash recorded at persist.
   if (canvasHash(canvas) !== form.canvasHash) {
     throw new DetectedFormCertifyError('STALE_CANVAS', 'The stored canvas no longer matches the detected form.');
   }
 
-  // ── SYNTHETIC VISIT — build the note, PHI-gate it through the SHARED front-half.
+  // ── SYNTHETIC VISIT — a note (PHI-gated) + one affirmed fact per clinical box.
   const noteText = buildSyntheticDetectedNote(form.fields);
   await deriveSyntheticEncounter({
     deriveEncounter: () => ({ ok: true, text: noteText }) as never,
     actor: input.actor,
     totalFields: form.fields.length,
   });
+  const facts = form.fields
+    .filter((f) => f.headerKey === null && f.concept)
+    .map((f) => syntheticFactFor(f.concept as string, f.id));
 
-  // Fixed synthetic visit date (no Date.now — reproducible proof).
   const syntheticDate = new Date('2020-01-01T00:00:00.000Z');
-  const { values } = fillFromNote(form.fields, {
-    patientName: 'SAMPLE PATIENT (SYNTHETIC)',
-    visitDate: syntheticDate,
-    noteText,
-    dictationText: noteText,
+  const { values } = deriveDetectedFormValues({
+    fields: form.fields,
+    facts,
+    noteCtx: {
+      patientName: 'SAMPLE PATIENT (SYNTHETIC)',
+      visitDate: syntheticDate,
+      noteText,
+      dictationText: noteText,
+    },
+    allowUncertified: true,
   });
 
-  // ── Every EXPECTED-TO-FILL field must have drawn a value; policy blanks may be
-  // empty. A box that should fill and did not means the pipeline does not bind.
+  // Every EXPECTED-TO-FILL field must have drawn a value; policy blanks may be empty.
   const shouldFillButBlank = form.fields.filter(
     (f) => fieldExpectedToFill(f) && !values.has(f.id),
   );
@@ -203,9 +229,8 @@ export async function certifyDetectedForm(input: {
   }
 
   // ── PERSIST CERTIFIED. The ACTION layer writes the audit row (an existing
-  // AuditAction — no new enum value, so #326 stays migration-free); the library
-  // logs the proof structurally (PHI-safe: ids + counts, never a field label's
-  // content beyond what the doctor's own form already carries in the styleProfile).
+  // AuditAction — no new enum value, #326 stays migration-free); the library logs
+  // the proof structurally (PHI-safe: ids + counts only).
   await markDetectedFormCertified({
     templateId: input.templateId,
     doctorId: input.actor.userId,

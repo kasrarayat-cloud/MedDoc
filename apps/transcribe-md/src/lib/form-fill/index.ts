@@ -37,6 +37,14 @@ export {
   type FillFromNoteResult,
 } from './fill-from-note';
 export {
+  fillFromFacts,
+  synthesizeTemplateField,
+  synthesizeMapping,
+  syntheticFieldId,
+  type FactValueResult,
+} from './fill-from-facts';
+export { deriveDetectedFormValues, type DeriveValuesResult } from './derive-values';
+export {
   certifyDetectedForm,
   DetectedFormCertifyError,
   fieldExpectedToFill,
