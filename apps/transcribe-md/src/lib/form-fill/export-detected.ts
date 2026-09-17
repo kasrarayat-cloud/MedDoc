@@ -58,7 +58,7 @@ export async function detectedFormExport(
     reason,
   });
 
-  if (!formDetectFillEnabled()) return miss('flag_off');
+  if (!formDetectFillEnabled(practiceId)) return miss('flag_off');
 
   const visit = await prisma.transcribeVisit.findFirst({
     where: { ...visitByIdScope(visitId, practiceId), deletedAt: null },
