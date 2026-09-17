@@ -51,10 +51,19 @@ jobs:
           cache-dependency-path: rebuild/requirements.txt
       - name: Install locked Python dependencies
         run: python -m pip install -r rebuild/requirements.txt
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: rebuild/documents/sdk_word/global.json
+      - name: Build locked and pinned Word helper
+        run: bash scripts/ci/prepare-word.sh
       - name: Verify kernel sandbox library
         run: ldconfig -p | grep 'libseccomp.so.2'
       - name: Fresh application, document and operations tests
         run: bash scripts/ci/verify-fresh.sh python
+      - name: Actual Word adapter and kernel qualification
+        working-directory: rebuild
+        run: |
+          python documents/sdk_word/verify_adapter_v2.py --original '../WM IOV Template.docx' --runtime "$QUILLMD_WORD_RUNTIME" --manifest "$QUILLMD_WORD_MANIFEST" --manifest-sha "$QUILLMD_WORD_MANIFEST_SHA256" --output .runtime/word-qualification
       - name: Python dependency audit
         run: python -m pip_audit -r rebuild/requirements.txt
 
@@ -122,6 +131,11 @@ jobs:
           python -m pip install -r rebuild/requirements.txt
           npm ci --ignore-scripts --no-audit --no-fund
           npx playwright install --with-deps chromium
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: rebuild/documents/sdk_word/global.json
+      - name: Build locked and pinned Word helper
+        run: bash scripts/ci/prepare-word.sh
       - name: Verify kernel sandbox library
         run: ldconfig -p | grep 'libseccomp.so.2'
       - name: Seed isolated synthetic database and collect assets
@@ -144,6 +158,8 @@ jobs:
           done
           curl --fail --silent http://127.0.0.1:9130/health/ > /dev/null
           node browser-tests.mjs
+          python prepare-wm-browser.py
+          node wm-browser-tests.mjs
       - name: Upload synthetic browser evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -152,4 +168,6 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
           include-hidden-files: true
-          path: rebuild/.runtime/browser-artifacts/report.json
+          path: |
+            rebuild/.runtime/browser-artifacts/report.json
+            rebuild/.runtime/wm-browser-artifacts/report.json

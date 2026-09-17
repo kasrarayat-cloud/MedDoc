@@ -5,3 +5,8 @@ __pycache__/
 *.pyc
 staticfiles/
 .coverage
+
+# Pinned SDK installations and build intermediates are private release artifacts.
+.word-sdk/
+documents/sdk_word/**/bin/
+documents/sdk_word/**/obj/

@@ -152,10 +152,12 @@ license is being purchased automatically.
 
 Word templates, including all 28 WM IOV content controls and completed-document
 formatting, are already required for the first release. Scanned forms are
-deferred. The running adapter still supports only the documented DOCX subset
-and visible text-field AcroForm PDFs. Engineering is qualifying WM IOV with an
-established Word SDK, including the additional blank fields and prewritten
-clinical assertions, before integrating it. No further template-scope decision
+deferred. The qualified Word implementation covers the accepted WM IOV original with
+28 content controls, 90 answer locations and 14 evidence-bound review
+requirements, alongside the existing DOCX subset and visible text-field AcroForm
+PDFs. Check the latest private checkpoint for activation status. Native Word
+appearance acceptance remains a release check; evaluation rendering uses
+substituted fonts and is recorded with that limit. No further template-scope decision
 or SDK purchase is currently requested; any purchase recommendation must name
 the specific required case that cannot be met by the qualified implementation.
 

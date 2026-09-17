@@ -323,6 +323,11 @@ def restore(args):
               'started_at_utc': datetime.now(timezone.utc).isoformat(), 'provider_actions': 0}
     created = False
     try:
+        # Recovery uses the reviewed local image recorded in the manifest.
+        # Inspect never pulls; --pull=never also closes removal races before run.
+        image_id = run(['docker', 'image', 'inspect', '--format', '{{.Id}}',
+                        manifest['image_id']]).decode().strip()
+        require(image_id == manifest['image_id'], 'Reviewed PostgreSQL restore image is unavailable locally.')
         # Authenticate and verify every object before starting the isolated DB.
         dump = decrypt_checked(backup_path / 'database.dump.fernet', manifest['dump'], cipher)
         for row in manifest['files']:
@@ -330,7 +335,7 @@ def restore(args):
             target = restored / 'files' / row['path']
             target.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
             write_private(target, data)
-        run(['docker', 'run', '--detach', '--name', name, '--label', LABEL + '=' + run_id,
+        run(['docker', 'run', '--pull=never', '--detach', '--name', name, '--label', LABEL + '=' + run_id,
              '--network', 'none', '--read-only', '--memory', '768m', '--cpus', '1',
              '--tmpfs', '/var/lib/postgresql/data:rw,size=512m,mode=0700',
              '--tmpfs', '/var/run/postgresql:rw,mode=0777', '--tmpfs', '/tmp:rw,mode=1777',
