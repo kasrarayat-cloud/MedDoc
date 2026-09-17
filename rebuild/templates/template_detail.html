@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block title %}{{ template.name }}{% endblock %}
+{% block breadcrumb %}Form library <span>/</span> Mapping{% endblock %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow">Original form · {{ template.format|upper }}</div><h1>{{ template.name }}</h1><p>Review where each answer belongs. Saving a mapping creates a new version.</p></div><div class="actions"><a class="button secondary" href="{% url 'template_original' template.pk %}">Download original</a><a class="button" href="{% url 'encounter_new' %}?template={{ template.pk }}">Use this form <span aria-hidden="true">→</span></a></div></div>
+<ol class="step-list" aria-label="Document workflow"><li>Upload original</li><li class="current" aria-current="step">Review mapping</li><li>Add notes</li><li>Review & export</li></ol>
+{% if template.warnings %}<div class="notice warning"><strong>Form inspection notes</strong><ul>{% for warning in template.warnings %}<li>{{ warning }}</li>{% endfor %}</ul></div>{% endif %}
+<div class="split">
+  <section>
+    <div class="section-heading"><h2>Answer fields</h2><span class="badge">Mapping v{{ version.number }}</span></div>
+    {% if version.fields %}<div class="table-wrap"><table><thead><tr><th scope="col">Question / field</th><th scope="col">Field key</th><th scope="col">Location</th></tr></thead><tbody>{% for field in version.fields %}<tr><td>{{ field.label }}</td><td class="mono">{{ field.key }}</td><td>{% firstof field.location field.kind 'Original form field' %}</td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="notice warning">No supported answer fields were detected. Check the inspection notes before using this form.</div>{% endif %}
+    <details><summary>Edit field mapping</summary><div class="details-body"><p class="small muted">Keep each field key matched to its original location. Use clear clinical question labels to guide answer generation.</p><form method="post" data-submit-once data-mapping-form>{% csrf_token %}<div data-mapping-editor></div><div data-mapping-json>{{ form.as_p }}</div><div class="form-footer"><button type="submit">Save new mapping version</button></div></form></div></details>
+  </section>
+  <aside class="aside"><h2>Original file record</h2><dl class="metadata"><dt>Format</dt><dd>{{ template.format|upper }}</dd><dt>Uploaded</dt><dd>{{ template.created_at|date:'M j, Y, H:i' }} UTC</dd><dt>Mapping</dt><dd>Version {{ version.number }}</dd><dt>Fingerprint</dt><dd class="mono">{{ template.sha256 }}</dd></dl><p>Exports use the preserved original and the selected mapping version. Editing a mapping does not change documents already created with an earlier version.</p></aside>
+</div>
+{% endblock %}

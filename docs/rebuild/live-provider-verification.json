@@ -1,0 +1,25 @@
+{
+  "verified_at": "2026-09-17T08:48:57.738047+00:00",
+  "generation": {
+    "state": "succeeded",
+    "provider": "anthropic:claude-sonnet-4-6",
+    "actual_cost": "0.002790000000",
+    "charge": "0.004185000000",
+    "units": {
+      "input_tokens": 535,
+      "output_tokens": 79,
+      "cached_input_tokens": 0,
+      "cache_creation_tokens": 0
+    }
+  },
+  "transcription": {
+    "state": "succeeded",
+    "provider": "deepgram:nova-3-medical",
+    "actual_cost": "0.000071666700",
+    "charge": "0.000107500050",
+    "units": {
+      "duration_seconds": "1.0"
+    }
+  },
+  "limits": "Transcription smoke uses 1-second generated silence; speech accuracy is not assessed."
+}

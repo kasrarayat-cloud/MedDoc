@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # tests/automated/monitoring/uptime-check.sh — cron-driven ping.
 #
-# Pings the three public surfaces; logs every run; on consecutive
+# Checks preserved marketing, intentional public maintenance, and the two
+# private application listeners; logs every run; on consecutive
 # failures sends an alert via Resend (if configured).
 #
 # Cron: */5 * * * *
@@ -26,29 +27,28 @@ if ! touch "$LOG" 2>/dev/null; then
 fi
 touch "$LOG" "$STATE"
 
-# ⚠️ pro.quillmd.com WAS REMOVED FROM THIS LIST 2026-08-04, DECLARED.
-#
-# It was taken offline deliberately — a publicly reachable, PHI-capable write
-# path into the production clinical database, decommissioned since 2026-05-04
-# and still serving. See DEPLOYMENT_RUNBOOK §3.5 and docs/foundation/DISCOVERY
-# §A.2. `check_one` here passes on 2xx/3xx, so leaving it in would page
-# somebody every cycle for a state that is intended.
-#
-# It is NOT simply dropped: `tests/automated/smoke/health.sh` now asserts the
-# host answers **410**, so "the host came back" is still a detectable event.
-# This file is the paging path and should stay quiet; that one is the audit.
+# Public clinical hosts are deliberately unavailable during private testing.
+# Exact expected codes detect both an outage and accidental public reactivation.
+# The retired pro.quillmd.com host remains outside this monitor’s target set.
+uptime_admin_base="${TEST_ADMIN_URL:-https://admin.quillmd.com}"
+uptime_doctor_private_base="${TEST_PRIVATE_DOCTOR_URL:-http://127.0.0.1:9130}"
+uptime_admin_private_base="${TEST_PRIVATE_ADMIN_URL:-http://127.0.0.1:9131}"
 URLS=(
-  "$TEST_MARKETING_URL"
-  "$TEST_APP_URL/api/health"
+  "${TEST_MARKETING_URL%/}/"
+  "${TEST_APP_URL%/}/"
+  "${uptime_admin_base%/}/"
+  "${uptime_doctor_private_base%/}/health/"
+  "${uptime_admin_private_base%/}/health/"
 )
+EXPECTED_CODES=(200 503 503 200 200)
 
 ts() { date -u '+%Y-%m-%dT%H:%M:%SZ'; }
 
 check_one() {
-  local url="$1"
+  local url="$1" expected="$2"
   local code
-  code=$(curl --max-time 10 -sk -o /dev/null -w '%{http_code}' "$url" || echo 000)
-  [[ "$code" == 2* || "$code" == 3* ]]
+  code=$(curl --max-time 10 -sk -o /dev/null -w '%{http_code}' "$url") || code=000
+  [[ "$code" == "$expected" ]]
 }
 
 send_alert() {
@@ -72,13 +72,14 @@ print(json.dumps({
 }
 
 main() {
-  local all_ok=true failures=()
-  for u in "${URLS[@]}"; do
-    if check_one "$u"; then
-      echo "[$(ts)] OK  $u" >> "$LOG"
+  local all_ok=true failures=() i u expected
+  for i in "${!URLS[@]}"; do
+    u="${URLS[$i]}"; expected="${EXPECTED_CODES[$i]}"
+    if check_one "$u" "$expected"; then
+      echo "[$(ts)] OK  $u (expected $expected)" >> "$LOG"
     else
-      echo "[$(ts)] DOWN $u" >> "$LOG"
-      failures+=("$u")
+      echo "[$(ts)] DOWN $u (expected $expected)" >> "$LOG"
+      failures+=("$u (expected $expected)")
       all_ok=false
     fi
   done
@@ -95,7 +96,7 @@ main() {
   fi
   # Recovery: announce when we flip DOWN → OK.
   if [[ "$prev" == "DOWN" && "$current" == "OK" ]]; then
-    send_alert "MedDoc recovered" "All URLs back to 2xx/3xx."
+    send_alert "MedDoc recovered" "All monitored URLs returned their expected status codes."
   fi
 }
 

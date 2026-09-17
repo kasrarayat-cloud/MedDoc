@@ -1,345 +1,135 @@
-# ============================================================================
-# MedDoc Pro — Docker Compose (App + Postgres + Caddy)
-# ============================================================================
-# Usage:
-#   docker compose up -d --build    (first deploy or after code changes)
-#   docker compose logs -f app      (view app logs)
-#   docker compose logs -f caddy    (view proxy/access logs)
-#   docker compose down              (stop everything)
-#
-# Public entry:     Caddy on :80 (add :443 + domain later for auto-TLS)
-# Dev direct entry: http://127.0.0.1:3001 → app (bypasses the proxy, so
-#                   requests from localhost will NOT carry X-Forwarded-For
-#                   and the admin UI will show "--" for the IP. Expected.)
-
+# Preserved QuillMD infrastructure and marketing only.
+# The fresh doctor/admin preview runs separately on localhost 9130/9131.
+# Run live compose commands from /opt/meddoc-pro: the Caddyfile bind is relative.
+# Do not use --remove-orphans, down -v, or global prune for this shared stack.
+# Legacy/mixed volume declarations remain pending narrower ownership decisions.
+# No old application image, worker, migration, QA, or backup scheduler is started.
 services:
-  # ── PostgreSQL Database ──
   postgres:
-    # T-M14.1: pgvector/pgvector:pg16 is the stock postgres:16 image
-    # with the `vector` extension compiled in. Same PG 16 major → same
-    # on-disk format → the existing `pgdata` volume mounts unchanged.
     image: pgvector/pgvector:pg16
     restart: unless-stopped
-    # Phase 13 — H4: non-root containers. The pgvector image's
-    # `postgres` user is uid 999 and the data dir was already owned
-    # by 999 from initdb (verified via `ls -ldn` before this directive
-    # landed). Adding user: makes the runtime uid match what postgres
-    # expects + makes the non-root posture explicit in compose.
-    user: "999:999"
-    # Phase 19 — h16-cap-drop. Postgres binds 5432 (>1024, no
-    # privileged-port cap needed) and reads/writes its own data dir
-    # as uid 999 (no chown needed at runtime). Default Docker caps
-    # (CHOWN, DAC_OVERRIDE, SETGID, SETUID, etc.) are pure blast
-    # radius — drop ALL.
+    user: 999:999
     cap_drop:
-      - ALL
-    # T-M16.4: protective ceilings, not reservations. Sum across all
-    # services > host RAM is intentional — compose mem_limits only
-    # fire when a container actually hits the limit, preventing one
-    # runaway from OOM-killing its neighbours. See DEPLOYMENT_RUNBOOK
-    # §8 for the host-memory breakdown.
+    - ALL
     mem_limit: 512m
     cpus: '1.0'
     environment:
       POSTGRES_DB: meddoc
       POSTGRES_USER: meddoc
       POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme_in_production}
-      # The `pgdata` SUBDIR of the encrypted filesystem is now the volume
-      # itself (see the volumes: block below), so PGDATA is the mount root
-      # here rather than a subdir of it. Same physical directory on the host
-      # — /mnt/pgdata-encrypted/pgdata — bound one level deeper. Nothing moved.
-      #
-      # ext4's `lost+found` still sits at /mnt/pgdata-encrypted and would still
-      # block initdb; binding the subdir keeps it out of PGDATA's way as before.
       PGDATA: /var/lib/postgresql/data
-    # Phase 6.1 / HIPAA h8 — encryption-at-rest (MIGRATION COMPLETE, verified
-    # 2026-06-10). The volume below bind-mounts the LUKS dm-crypt device
-    # /dev/mapper/pg-encrypted (mounted at /mnt/pgdata-encrypted), so all
-    # postgres data rests encrypted. This supersedes the earlier pre-migration
-    # plan (legacy named `pgdata` volume → flip to /var/lib/meddoc-postgres-data
-    # after setup-encrypted-volume.sh); the encrypted bind-mount is already the
-    # live data path. The `pgdata` named volume declared at the bottom of this
-    # file is now vestigial. Key-escrow/rotation + the boot-remount unit are
-    # operator-owned per docs/RUNBOOK_ENCRYPTED_VOLUME.md.
-    #
-    # ── FAIL-CLOSED, 2026-07-29. This was a SHORT-FORM bind, and that is the
-    #    bug class that put patient audio on the plaintext root filesystem for
-    #    four hours the same day (runbook §5.7.1). Short-form binds AUTO-CREATE
-    #    the host path, so with the LUKS volume unmounted this line would have
-    #    silently handed Postgres an empty directory on /dev/sda2 — and the
-    #    postgres image would have `initdb`'d a BRAND NEW EMPTY CLUSTER into it
-    #    and started up healthy. An app pointed at an empty database, no error
-    #    anywhere, and the real cluster still sitting unmounted underneath.
-    #
-    #    Now a named volume whose device is the `pgdata` SUBDIR, which exists
-    #    only on the encrypted filesystem. Docker's local driver does NOT create
-    #    a missing driver_opts device, so:
-    #        mount present → cluster found → Postgres starts
-    #        mount ABSENT  → docker refuses → Postgres FAILS CLOSED
-    #    Verified by scripts/check-pg-encrypted-mount.sh; negative-controlled in
-    #    a throwaway compose project, never against this data.
     volumes:
-      - pgdata_encrypted:/var/lib/postgresql/data
+    - pgdata_encrypted:/var/lib/postgresql/data
     ports:
-      - "127.0.0.1:5432:5432"   # only accessible from localhost
+    - 127.0.0.1:5432:5432
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U meddoc"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U meddoc
       interval: 5s
       timeout: 5s
       retries: 5
-
-  # ── Next.js App (MedDoc Pro) ──
-  meddoc-pro:
-    build:
-      context: .
-      dockerfile: apps/meddoc-pro/Dockerfile
-    restart: unless-stopped
-    # Phase 19 — h16-cap-drop. Node app, binds 3000 inside the
-    # container, runs as uid 1001 (USER in Dockerfile). No need for
-    # any of the default Docker capabilities.
-    cap_drop:
-      - ALL
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    mem_limit: 512m
-    cpus: '1.0'
-    # T-M16.3: app-level health — hits /api/health which checks
-    # postgres. 30s start_period covers Next cold-start + Prisma client
-    # init; without it the first check fires before the app is ready
-    # and the container reports "unhealthy" until a retry passes.
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "--spider", "http://127.0.0.1:3000/api/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    depends_on:
-      postgres:
-        condition: service_healthy
-      # Phase 1B v2 — meddoc-pro publishes to Redis from logAudit() for
-      # the admin SSE stream. We don't gate on `service_healthy` here
-      # (the publish path is fire-and-forget and skipped when the
-      # client isn't `ready`), but `service_started` keeps the
-      # dependency explicit so a fresh `docker compose up` brings
-      # redis up first.
-      redis:
-        condition: service_started
-    env_file:
-      - .env
-    environment:
-      DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:-changeme_in_production}@postgres:5432/meddoc?schema=public
-      # Phase 1B v2 — explicit Redis URL for the audit-stream publish
-      # path and the /api/admin/stream/activity subscriber. Same value
-      # the singleton in lib/redis.ts defaults to, but spelled out so
-      # the next person reading the compose file doesn't have to grep
-      # for it.
-      REDIS_URL: redis://redis:6379
-      # Canonical external URL NextAuth uses to build callbacks. Override
-      # via PUBLIC_URL in .env once you move to a real domain (e.g.,
-      # https://meddoc.example.com). Must match exactly what users see in
-      # the browser — if they hit http://1.2.3.4 but AUTH_URL says
-      # https://meddoc.example.com, the auth callback mismatches.
-      AUTH_URL: ${PUBLIC_URL:-http://5.231.107.93}
-      NEXTAUTH_URL: ${PUBLIC_URL:-http://5.231.107.93}  # v4 compat name
-      AUTH_TRUST_HOST: "true"  # redundant (also hardcoded in auth.config.ts) — safe belt-and-braces
-    ports:
-      # Bound to loopback only — public traffic goes through Caddy. Kept
-      # for dev debugging (e.g., curl http://127.0.0.1:3001 from the host).
-      - "127.0.0.1:3001:3000"
-
-  # ── Redis (BullMQ broker + ephemeral state) ──
-  # Introduced in M2 for the batch pipeline. Internal-only — bound to
-  # loopback for ops visibility, but apps reach it via the compose
-  # network name `redis`.
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    # Phase 13 — H4: non-root containers. The official redis image
-    # ships a `redis` user at uid 999. Volume contents were chowned
-    # to 999:999 once before this directive landed; subsequent
-    # restarts inherit ownership.
-    user: "999:999"
-    # Phase 19 — h16-cap-drop. Redis binds 6379 (>1024) and reads/
-    # writes /data as uid 999. No default cap is required.
+    user: 999:999
     cap_drop:
-      - ALL
-    # Round 3 PR-H — A11-P1 BullMQ durability.
-    # AOF (append-only file) with `everysec` fsync gives at-most-1s
-    # job loss if the host hard-crashes. RDB snapshots alone (the
-    # default) lose every job between snapshots — for a job queue
-    # holding in-flight medical-visit pipelines that's unacceptable.
-    # On startup Redis replays the AOF so any in-flight visit
-    # survives a restart and BullMQ picks it up where it left off.
+    - ALL
     command:
-      - redis-server
-      - --appendonly
-      - "yes"
-      - --appendfsync
-      - everysec
+    - redis-server
+    - --appendonly
+    - 'yes'
+    - --appendfsync
+    - everysec
     mem_limit: 128m
     cpus: '0.5'
     volumes:
-      - redis_data:/data
+    - redis_data:/data
     ports:
-      - "127.0.0.1:6379:6379"
+    - 127.0.0.1:6379:6379
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test:
+      - CMD
+      - redis-cli
+      - ping
       interval: 5s
       timeout: 3s
       retries: 5
-
-  # ── MinIO (S3-compatible object storage for audio) ──
-  # Browsers upload audio directly here via presigned PUT URLs (spec §10).
-  # The worker downloads by object key. Data lives in a docker volume.
-  # PR-M Path B: SSE-S3 server-side encryption is enabled via
-  # MINIO_KMS_SECRET_KEY (see env section below). Bucket-level default
-  # encryption is set by scripts/minio-enable-sse.sh, which is run
-  # post-deploy. KES sidecar deferred to multi-tenant scope —
-  # rationale + rotation runbook in docs/security-audits/
-  # minio-sse-bootstrap.md.
   minio:
     image: minio/minio:latest
     restart: unless-stopped
-    # Phase 8 — H4: non-root containers. MinIO writes to its data dir
-    # at runtime (object writes, leveldb metadata). Volume contents
-    # were chowned to 1000:1000 once before this user directive
-    # landed; subsequent restarts inherit ownership.
-    user: "1000:1000"
-    # Phase 19 — h16-cap-drop. MinIO binds 9000/9001 (>1024) and
-    # owns /data as uid 1000. Default caps unused.
+    user: 1000:1000
     cap_drop:
-      - ALL
+    - ALL
     mem_limit: 256m
     cpus: '0.5'
-    # T-M16.4: MinIO holds many open sockets under concurrent uploads;
-    # default 1024 FDs is tight once more than a couple doctors are
-    # streaming audio simultaneously.
     ulimits:
       nofile:
         soft: 65536
         hard: 65536
-    command: ["server", "/data", "--console-address", ":9001"]
+    command:
+    - server
+    - /data
+    - --console-address
+    - :9001
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-meddoc}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-changeme_in_production}
-      # PR-M Path B: built-in single-key KMS for SSE-S3. Format is
-      # `<key-name>:<base64-32-bytes>`. The key NAME (quillmd-master-key-1)
-      # is referenced by every bucket's encryption config, so it must
-      # not change without a re-encryption sweep. Value lives only in
-      # /opt/meddoc-pro/.env (gitignored). Rotation: add
-      # quillmd-master-key-2 alongside -1, `mc encrypt rotate`, then
-      # deprecate -1 once existing objects are re-encrypted. See
-      # docs/security-audits/minio-sse-bootstrap.md.
       MINIO_KMS_SECRET_KEY: ${MINIO_KMS_SECRET_KEY}
     volumes:
-      - minio_data:/data
+    - minio_data:/data
     ports:
-      - "127.0.0.1:9000:9000"  # S3 API
-      - "127.0.0.1:9001:9001"  # Web console
+    - 127.0.0.1:9000:9000
+    - 127.0.0.1:9001:9001
     healthcheck:
-      # Config-independent liveness probe (2026-06-13). The previous
-      # `mc ready local` probe depended on the container's mc alias
-      # config, which does not survive a recreate — it false-reported
-      # UNHEALTHY for days while the service was fine (three preflight
-      # escalations). /minio/health/live needs no credentials or config.
-      test: ["CMD", "curl", "-sf", "http://localhost:9000/minio/health/live"]
+      test:
+      - CMD
+      - curl
+      - -sf
+      - http://localhost:9000/minio/health/live
       interval: 10s
       timeout: 5s
       retries: 5
-
-  # ── Caddy Reverse Proxy ──
-  # Terminates inbound HTTP/HTTPS and forwards to `app:3000` on the
-  # internal Docker network, setting X-Forwarded-For / X-Real-IP so the
-  # app sees the real client IP.
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
-    # Phase 13 — H4: non-root containers. Caddy needs CAP_NET_BIND_
-    # SERVICE to bind 80/443 as a non-root user; cap_drop ALL +
-    # cap_add only that one is the principle-of-least-privilege
-    # posture. Both host volumes (caddy_data + caddy_config) were
-    # chowned to 1000:1000 once before this directive landed; the
-    # bind-mounted Caddyfile is mode 664 owned by uid 1000 on the
-    # host so it's already readable.
-    user: "1000:1000"
+    user: 1000:1000
     cap_add:
-      - NET_BIND_SERVICE
+    - NET_BIND_SERVICE
     cap_drop:
-      - ALL
+    - ALL
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: 10m
+        max-file: '3'
     mem_limit: 128m
     cpus: '0.5'
-    # T-M16.3 / Phase-6Z prep: hit Caddy's admin API on :2019. The
-    # previous probe wget'd port 80 and got a 308 → https://127.0.0.1/,
-    # then failed the TLS handshake because Caddy can't pick a cert
-    # from a bare-IP SNI — busybox wget has no --max-redirect, so we
-    # can't suppress the follow. The admin endpoint serves the running
-    # config over plain HTTP on localhost only and is the canonical
-    # "is Caddy alive?" signal. External traffic is unaffected.
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "--spider", "http://127.0.0.1:2019/config/"]
+      test:
+      - CMD
+      - wget
+      - -qO-
+      - --spider
+      - http://127.0.0.1:2019/config/
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 15s
     depends_on:
-      - meddoc-pro
-      - marketing
-      - transcribe-md
+    - marketing
     ports:
-      # 2026-06-03 site-down recovery: a host-level nginx now owns :80/:443 on
-      # this box (shared with LeatherERP / dealmason / dealhunter). Caddy can no
-      # longer bind the public web ports, so it is demoted to a localhost-only
-      # upstream — the host nginx terminates public TLS (Let's Encrypt, grey-
-      # cloud) and reverse-proxies the quillmd vhosts → 127.0.0.1:8443 → this
-      # Caddy, which retains per-host routing + the MODE B security headers.
-      # To restore Caddy-as-public-ingress: re-enable the two lines below AND
-      # remove the quillmd vhost from /etc/nginx (host nginx must free 80/443).
-      # - "80:80"     # disabled 2026-06-03: host nginx owns :80
-      # - "443:443"   # disabled 2026-06-03: host nginx owns :443
-      - "127.0.0.1:8443:443"
-      # Security audit P1-I (2026-05-13): the legacy MODE A plaintext
-      # ports (9010 = marketing, 9020 = TranscribeMD) are commented
-      # out IN LOCKSTEP with the matching Caddyfile MODE A blocks.
-      # Both are kept as rollback reference — but a rollback must
-      # uncomment BOTH places, ensuring the operator can't
-      # accidentally expose plaintext HTTP on a public port while
-      # MODE B's HSTS preload is still in effect.
-      # - "9010:9010"   # rollback: uncomment WITH Caddyfile MODE A :9010 block
-      # - "9020:9020"   # rollback: uncomment WITH Caddyfile MODE A :9020 block
+    - 127.0.0.1:8443:443
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data       # persistent Let's Encrypt certs (when TLS on)
-      - caddy_config:/config   # Caddy's internal config cache
-      # Temporary: serve design-review HTML at /_preview/* on app.quillmd.com.
-      # Read-only mount; remove with the matching Caddyfile block when the
-      # review window closes. Same posture as fixtures/seeded-ids.json —
-      # host-side artifact, not in the production app surface.
-
-  # ── TranscribeMD Marketing (T-M1) ──
-  # Static Next.js landing site for the new standalone product. No DB,
-  # no shared packages beyond what the Dockerfile already pulls. Caddy
-  # proxies :9010 → marketing:3010.
+    - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    - caddy_data:/data
+    - caddy_config:/config
   marketing:
-    # Phase 19 — h16-cap-drop. Static-rendered Next site; no privileged
-    # port; no host filesystem mounts. Default caps unused.
     cap_drop:
-      - ALL
+    - ALL
     build:
       context: .
       dockerfile: apps/marketing/Dockerfile
-      # T-M19.2: NEXT_PUBLIC_* must land in the BUILDER stage — Next 16
-      # inlines them into the static bundle at build time, and once an
-      # image is built, runtime env changes have no effect on the
-      # baked HTML. Defaults mirror the :-fallback pattern used by the
-      # runtime `environment:` blocks below for the non-publics.
       args:
         NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: ${TRANSCRIBE_MD_AUTH_URL:-http://5.231.107.93:9020}
         NEXT_PUBLIC_MARKETING_URL: ${MARKETING_URL:-http://5.231.107.93:9010}
@@ -347,584 +137,45 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: 10m
+        max-file: '3'
     mem_limit: 256m
     cpus: '0.5'
-    # T-M16.3: marketing has no API — hit the home page to confirm the
-    # Next server is responding. Static content so 0 cost per tick.
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "--spider", "http://127.0.0.1:3010/"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    environment:
-      NODE_ENV: production
-      NEXT_TELEMETRY_DISABLED: "1"
-    ports:
-      # Loopback only — all public traffic goes through Caddy on :9010.
-      - "127.0.0.1:3010:3010"
-
-  # ── TranscribeMD worker (T-M4 — BullMQ consumer) ──
-  # Runs the 6-layer audio → SOAP pipeline (Deepgram → speaker roles →
-  # entities → SOAP draft → self-critique → polish). Separate image
-  # from the web container; same monorepo source, different Dockerfile.
-  # No ffmpeg: Deepgram batch handles 10h files natively so we skip
-  # the chunking step scribe-worker needs.
-  transcribe-md-worker:
-    build:
-      context: .
-      dockerfile: apps/transcribe-md/Dockerfile.worker
-      args:
-        # ⚠️ ruling #181/1 — the shipped commit, readable off the image.
-        GIT_REVISION: ${GIT_REVISION:-unknown}
-    restart: unless-stopped
-    # #326 Slice D — the worker joins `converter` (internal, no-egress) so a
-    # detect-based ruled act (scripts/certify-owner-colon-detected.ts, run via
-    # run-ruled-mutation.sh --in transcribe-md-worker) can reach the form-detect
-    # sidecar. `default` is kept for postgres/redis/minio. The product worker path
-    # does not itself call the sidecar today; this is for the ruled-act + future jobs.
-    networks:
-      - default
-      - converter
-    # Phase 19 — h16-cap-drop. BullMQ worker; outbound HTTPS only;
-    # no privileged port; no host filesystem writes (logs go to
-    # docker's stdout). Default caps unused.
-    cap_drop:
-      - ALL
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    # T-M16.4: worker is the heaviest service — runs Deepgram batch
-    # transcription, Anthropic polish, and the Puppeteer-based PDF
-    # renderer concurrently. 1 GB accommodates a peak PDF render
-    # alongside a pipeline pass; bump to 1.5g if ops sees OOM-kills.
-    mem_limit: 1g
-    cpus: '1.5'
-    ulimits:
-      nofile:
-        soft: 65536
-        hard: 65536
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    env_file:
-      - .env
-    environment:
-      DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:-changeme_in_production}@postgres:5432/meddoc?schema=public
-      REDIS_URL: redis://redis:6379
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-meddoc}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-changeme_in_production}
-      TRANSCRIBE_MD_MINIO_BUCKET: ${TRANSCRIBE_MD_MINIO_BUCKET:-transcribe-md-audio}
-      MINIO_USE_SSL: "false"
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY}
-      DEEPGRAM_MODEL: ${DEEPGRAM_MODEL:-nova-3-medical}
-      # Per-call pricing rate cards (cents per million tokens / per min).
-      # See packages/ai/src/pricing.ts for defaults.
-      CLAUDE_SONNET_46_INPUT_CENTS_PER_M: ${CLAUDE_SONNET_46_INPUT_CENTS_PER_M:-300}
-      CLAUDE_SONNET_46_OUTPUT_CENTS_PER_M: ${CLAUDE_SONNET_46_OUTPUT_CENTS_PER_M:-1500}
-      DEEPGRAM_COST_PER_MIN_CENTS: ${DEEPGRAM_COST_PER_MIN_CENTS:-1.45}
-      TRANSCRIBE_MD_WORKER_CONCURRENCY: ${TRANSCRIBE_MD_WORKER_CONCURRENCY:-2}
-      # T-M10: when set to "true", every @meddoc/ai call (modelClient,
-      # deepgramBatchTranscribe) returns a canned fixture instead of
-      # hitting the provider. Used by the Playwright E2E suite so
-      # pipeline runs complete in ~1-2 sec. Default "false" — never
-      # touch this in a production deployment.
-      MOCK_AI_CALLS: ${MOCK_AI_CALLS:-false}
-      # T-M12: scheduled MinIO orphan cleanup. DISABLED by default;
-      # flip ENABLED=true in .env when ops is ready. First production
-      # run should stay in DRY_RUN mode (the default when enabled)
-      # so the delete list can be audited before anything's actually
-      # removed.
-      MINIO_ORPHAN_CLEANUP_ENABLED: ${MINIO_ORPHAN_CLEANUP_ENABLED:-false}
-      MINIO_ORPHAN_CLEANUP_DRY_RUN: ${MINIO_ORPHAN_CLEANUP_DRY_RUN:-true}
-      MINIO_ORPHAN_CLEANUP_RETENTION_DAYS: ${MINIO_ORPHAN_CLEANUP_RETENTION_DAYS:-30}
-      MINIO_ORPHAN_CLEANUP_CRON: ${MINIO_ORPHAN_CLEANUP_CRON:-0 3 * * 0}
-    # Round 3 PR-H — A11-P1 worker liveness probe.
-    # The worker writes /tmp/worker-heartbeat every 15s, but ONLY once it is
-    # genuinely ready (worker.ts gates this on BullMQ waitUntilReady), so the
-    # file's presence + freshness reflects real health.
-    # F6 (full-qa-20260604T202447Z): freshness now compares the file's MTIME to
-    # `date +%s` — BOTH in seconds. The old probe did `(date +%s%3N) - <heartbeat
-    # millis>`, but busybox/alpine `date +%s%3N` silently yields SECONDS (no %N
-    # support), so the diff was always hugely negative → `-lt 60000` always true
-    # → the probe passed for ANY existing file, stale or not (existence-only,
-    # proven). mtime-vs-`date +%s` in seconds is busybox-safe and actually
-    # rejects a >60s-stale heartbeat, so a worker that dies/disconnects after
-    # boot goes UNHEALTHY within the window. start_period: 60s covers boot
-    # (ensureBucket + waitUntilReady + scheduler register).
     healthcheck:
       test:
-        - CMD-SHELL
-        - "test -f /tmp/worker-heartbeat && [ $(( $(date +%s) - $(stat -c %Y /tmp/worker-heartbeat) )) -lt 60 ]"
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 60s
-
-  # ── TranscribeMD Solo App (T-M2) ──
-  # The real product surface — sign up, log in, create visits. Shares
-  # Postgres with meddoc-pro + scribe (same User/Practice tables via
-  # @meddoc/db). Redis is a dependency so BullMQ-based features in later
-  # milestones have somewhere to enqueue work; today's shell doesn't use
-  # it at runtime but we wire it now to avoid a compose edit later.
-  # ── DOCX → PDF converter (Gotenberg). Preview only. ──────────────────────
-  # Exists so a doctor can see THEIR OWN form, filled, before they trust it.
-  # Nothing downstream depends on it: certify, export and sign never call it,
-  # and the client falls back to rendering the true bytes in the browser when
-  # it is slow or absent. A preview that can block signing would be a worse
-  # feature than no preview.
-  #
-  # NO EGRESS. It sits on `converter`, an `internal: true` network — Docker
-  # installs no route off the host for it, so a PHI-bearing document cannot
-  # leave this box through this service even if the container were compromised.
-  # It is NOT on the default network and publishes NO port.
-  #
-  # STATELESS. /tmp is a tmpfs: conversion scratch lives in RAM and dies with
-  # the container. Nothing about a converted document touches disk, and there
-  # is no volume to retain it.
-  gotenberg:
-    # C2-b: gotenberg PLUS the fonts the PDF export embeds. The stock image has
-    # neither Charter nor Inter Tight, so LibreOffice substituted Noto Serif and
-    # the on-screen preview — which is this container's render of the DOCX —
-    # showed a different typeface from the file the doctor downloads. Proven by
-    # converting one DOCX through both images and reading /BaseFont out of each
-    # result. `image:` is kept so the tag stays stable for compose and rollback.
-    build:
-      context: apps/transcribe-md/fonts
-      dockerfile: ../../../docker/gotenberg-fonts.Dockerfile
-    image: meddoc-pro-gotenberg:fonts
-    restart: unless-stopped
-    # LibreOffice peaks well under this per conversion; the cap stops a
-    # pathological document from competing with the clinical pipeline.
-    mem_limit: 1g
-    cpus: '1.5'
-    networks:
-      - converter
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=256m
-    security_opt:
-      - no-new-privileges:true
-    command:
-      - gotenberg
-      - --api-port=3000
-      # Belt on top of the internal network: refuse any conversion that would
-      # dereference a remote resource.
-      - --chromium-deny-list=.*
-      - --api-timeout=25s
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
-
-  # ── Form-vision sidecar — FFDNet field detection + fidelity verify (#326). ──
-  # Self-hosted CommonForms/FFDNet on CPU. Internal-only (no egress; the pinned
-  # weights are baked at build and asserted by sha256 — that sha enters the
-  # certification signature). Reached by the app on `converter`, like Gotenberg.
-  # Slice A ships it ADDITIVELY — nothing calls it until the flag routes uploads.
-  form-detect:
-    build:
-      context: services/form-detect
-      dockerfile: Dockerfile
-    image: meddoc-pro-form-detect:latest
-    restart: unless-stopped
-    # FFDNet (YOLO) inference on a page peaks ~1–1.5g; the cap keeps a
-    # pathological upload from competing with the clinical pipeline.
-    mem_limit: 2g
-    cpus: '2.0'
-    networks:
-      - converter
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=256m
-    security_opt:
-      - no-new-privileges:true
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 8s
-      retries: 3
-      start_period: 40s
-
-  transcribe-md:
-    networks:
-      - default
-      - converter
-    # Phase 19 — h16-cap-drop. Next app, binds 3011 inside the
-    # container, runs as uid 1001. No default cap required.
-    cap_drop:
-      - ALL
-    build:
-      context: .
-      dockerfile: apps/transcribe-md/Dockerfile
-      # T-M19.2: mirror of the marketing build.args — see the comment
-      # on that block for the rationale.
-      args:
-        # ⚠️ ruling #181/1 — the shipped commit, readable off the image, so a
-        # judgement can verify the payload structurally instead of arguing a
-        # chain. Defaults to `unknown` so a local build never silently claims
-        # to be a commit it is not.
-        GIT_REVISION: ${GIT_REVISION:-unknown}
-        NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: ${TRANSCRIBE_MD_AUTH_URL:-http://5.231.107.93:9020}
-        NEXT_PUBLIC_MARKETING_URL: ${MARKETING_URL:-http://5.231.107.93:9010}
-        # T-M20.3: Pipeline tab gate. Build-time default is "false"
-        # (host env not set → image ships with tab hidden).
-        # ⚠️ CORRECTED 2026-08-01 — this said the `environment:` block below
-        # gives a runtime override with "no rebuild needed ... not inlined into
-        # the client bundle". The client half is true (0 client reads) and the
-        # conclusion does not follow: NEXT_PUBLIC_* is inlined into the SERVER
-        # bundle too. THIS args: LINE IS THE ONE THAT DECIDES THE VALUE, and it
-        # is frozen at build time. See the corrected note at the
-        # `environment:` entry for the measurement.
-        NEXT_PUBLIC_SHOW_PIPELINE_TAB: ${NEXT_PUBLIC_SHOW_PIPELINE_TAB:-false}
-        # PROMOTED 2026-06-15 — Stage-1 C3 calm-skin redesign is the production
-        # UI (PRs #331/#332/#333). Build-time inlined into the client bundle.
-        # Interpolated (default "true" = prod stays flag-ON) so a build can pin
-        # it without editing this file — the E2E gate builds with
-        # NEXT_PUBLIC_SKIN_BETA=false to test the stable OFF contract its specs
-        # target (C3-flag-ON E2E coverage is a tracked follow-up).
-        # ROLLBACK: NEXT_PUBLIC_SKIN_BETA=false docker compose build transcribe-md
-        #           && docker compose up -d --no-deps transcribe-md  (→ old UI).
-        NEXT_PUBLIC_SKIN_BETA: "${NEXT_PUBLIC_SKIN_BETA:-true}"
-        # NEXT_PUBLIC_SKIN_ROUNDS was REMOVED 2026-08-05 (F-ret.3) together with
-        # its flag-OFF arm. The Rounds skin is now the only skin — there is no
-        # branch left to select, so a flag here would be a lever attached to
-        # nothing. Rollback for this surface is TAGGED IMAGES ONLY; see
-        # DEPLOYMENT_RUNBOOK §3.3.
-        # Ultrasound specialty gate (build-time inlined into the frontend; the
-        # worker reads the same var at runtime via env_file: .env). Default OFF
-        # so a build with no override never offers Ultrasound; prod enables it
-        # by setting NEXT_PUBLIC_ULTRASOUND_SPECIALTY=true in .env (compose reads
-        # .env for both this interpolation AND the worker's runtime env_file).
-        # ROLLBACK: unset/false in .env, rebuild + up -d --no-deps transcribe-md.
-        NEXT_PUBLIC_ULTRASOUND_SPECIALTY: "${NEXT_PUBLIC_ULTRASOUND_SPECIALTY:-false}"
-        # Template Twin native-DOCX gate. Same build-time-inline pattern as
-        # ULTRASOUND: default OFF so a build with no override is byte-identical to
-        # the styled-export pipeline; prod enables it by setting
-        # NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX=true in .env (compose reads .env for this
-        # interpolation AND the worker's runtime env_file).
-        # ROLLBACK: unset/false in .env, rebuild + up -d --no-deps transcribe-md.
-        NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX: "${NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX:-false}"
-        # UX simplification pack (upload → one confirm card; signed visit → one
-        # document). isUxSimplify() is read from CLIENT components, so this MUST
-        # be a build arg — a runtime env would silently leave both branches OFF.
-        # Stage on QA via the separately-tagged :ux-simplify image; promote by
-        # setting NEXT_PUBLIC_UX_SIMPLIFY=true in .env (compose reads .env here).
-        # ROLLBACK: NEXT_PUBLIC_UX_SIMPLIFY=false docker compose build transcribe-md
-        NEXT_PUBLIC_UX_SIMPLIFY: "${NEXT_PUBLIC_UX_SIMPLIFY:-false}"
-        # Pre-sign review as ONE document (the unsigned half of the
-        # linearisation). isReviewDocView() is read from CLIENT components, so
-        # this must be a build arg — a runtime env would leave both branches on
-        # the OFF path with no error. Default OFF.
-        # ROLLBACK: NEXT_PUBLIC_REVIEW_DOC_VIEW=false docker compose build transcribe-md
-        NEXT_PUBLIC_REVIEW_DOC_VIEW: "${NEXT_PUBLIC_REVIEW_DOC_VIEW:-false}"
-        # Settings row simplification. ROLLBACK: unset + rebuild.
-        NEXT_PUBLIC_SETTINGS_SIMPLE_ROW: "${NEXT_PUBLIC_SETTINGS_SIMPLE_ROW:-false}"
-        NEXT_PUBLIC_DOC_PREVIEW: "${NEXT_PUBLIC_DOC_PREVIEW:-false}"
-        NEXT_PUBLIC_VISIT_DOC_PAGE: "${NEXT_PUBLIC_VISIT_DOC_PAGE:-false}"
-        NEXT_PUBLIC_CHAT_EDITOR: "${NEXT_PUBLIC_CHAT_EDITOR:-false}"
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    mem_limit: 512m
-    cpus: '1.0'
-    # T-M16.4: 500 MB upload streams + MinIO SDK + NextAuth + BullMQ
-    # keep a lot of sockets open; 1024 default FDs is tight.
-    ulimits:
-      nofile:
-        soft: 65536
-        hard: 65536
-    # T-M16.3: hits /api/health which races postgres + redis + minio
-    # checks with a 2s per-dep timeout. Returns 503 if any dependency
-    # is unreachable so the container reports unhealthy and Caddy can
-    # (eventually) route around it once we wire that up.
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "--spider", "http://127.0.0.1:3011/api/health"]
+      - CMD
+      - wget
+      - -qO-
+      - --spider
+      - http://127.0.0.1:3010/
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 30s
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    env_file:
-      - .env
     environment:
-      DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:-changeme_in_production}@postgres:5432/meddoc?schema=public
-      AUTH_URL: ${TRANSCRIBE_MD_AUTH_URL:-http://5.231.107.93:9020}
-      NEXTAUTH_URL: ${TRANSCRIBE_MD_AUTH_URL:-http://5.231.107.93:9020}
-      AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-}
-      AUTH_TRUST_HOST: "true"
-      NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: ${TRANSCRIBE_MD_AUTH_URL:-http://5.231.107.93:9020}
-      NEXT_PUBLIC_MARKETING_URL: ${MARKETING_URL:-http://5.231.107.93:9010}
-      # T-M4 — web container enqueues jobs + stores uploaded audio.
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-meddoc}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-changeme_in_production}
-      TRANSCRIBE_MD_MINIO_BUCKET: ${TRANSCRIBE_MD_MINIO_BUCKET:-transcribe-md-audio}
-      MINIO_USE_SSL: "false"
-      REDIS_URL: redis://redis:6379
       NODE_ENV: production
-      NEXT_TELEMETRY_DISABLED: "1"
-      # T-M18.3 A15: surface the deployed milestone through /api/health.
-      # Passed through from the host env so the deploy pipeline can
-      # stamp a git-sha or milestone tag without a source-tree edit.
-      # Falls back to "T-M18.3" in the route handler if unset.
-      APP_VERSION: ${APP_VERSION:-}
-      # T-M20.3: Pipeline-tab gate.
-      # ⚠️ CORRECTED 2026-08-01 — THIS ENTRY IS A KNOB WIRED TO NOTHING.
-      # It used to claim "no rebuild needed because /visits/[id]/page.tsx is a
-      # server component reading process.env at request time". The premise is
-      # true and the conclusion is false: Next 16 inlines NEXT_PUBLIC_* into the
-      # SERVER bundle as well, whenever the key is present in the builder env
-      # (next/dist/lib/static-env.js emits a define entry for every key where
-      # `value != null`; next/dist/build/define-env.js:61 spreads it BEFORE any
-      # isClient/isNodeServer branching). Dockerfile:66 declares
-      # `ARG NEXT_PUBLIC_SHOW_PIPELINE_TAB=false` + ENV, so the key is always
-      # present at build time and the value is always frozen.
-      # Measured on the shipped prod image: 0 surviving reads of
-      # process.env.NEXT_PUBLIC_SHOW_PIPELINE_TAB in 579 server chunks, and the
-      # folded constant is visible as `showPipelineTab:!1`. Positive control:
-      # `process.env` matches 90 of those 579 files.
-      # So setting this on the host and force-recreating changes NOTHING.
-      # To flip the tab you must rebuild with the build arg.
-      # Kept (not deleted) because deleting it would silently change the value
-      # compose passes; the lie was the comment, not the line.
-      NEXT_PUBLIC_SHOW_PIPELINE_TAB: ${NEXT_PUBLIC_SHOW_PIPELINE_TAB:-}
-      # feat/pdf-native-fill: runtime gate for PDF native fill. Read SERVER-SIDE
-      # in nativePdfExport (the /export/pdf route handler), so flipping it "true"
-      # on the host + force-recreating the container takes effect with NO rebuild.
-      # Default OFF (styled export byte-identical); only CERTIFIED PDF templates
-      # are affected even when ON. ROLLBACK: unset it + force-recreate.
-      NEXT_PUBLIC_TEMPLATE_NATIVE_PDF: ${NEXT_PUBLIC_TEMPLATE_NATIVE_PDF:-}
-      # Phase 7-QA: comma-separated allowlist of email domains whose
-      # signups skip the verification-email dispatch and stamp
-      # emailVerified immediately. Production should hold ONLY the
-      # RFC-6762 reserved test domain (`quillmd-test.local`) so the
-      # automated QA harness can complete the authenticated-flow
-      # sweep against a non-deliverable mailbox. Real-mail providers
-      # (gmail/outlook/yahoo/quillmd.com/etc) are hard-denylisted
-      # inside isAutoConfirmDomain() — listing them here will not
-      # bypass verification. Empty / unset ⇒ bypass never fires.
-      EMAIL_AUTO_CONFIRM_DOMAINS: ${EMAIL_AUTO_CONFIRM_DOMAINS:-}
-      # Invite-only pilot (2026-07-28). Comma-separated codes that permit
-      # registration, checked BEFORE the email lookup so a prober without one
-      # learns nothing. Server-side and runtime, so changing it needs only a
-      # container recreate — no rebuild.
-      #
-      # DEFAULT EMPTY IS FAIL-CLOSED AND INTENTIONAL: with nothing here and no
-      # rows in invite_codes, NOBODY can create an account. Existing accounts
-      # are unaffected and keep signing in. Issue codes with
-      # `npx tsx scripts/issue-invite-code.ts`, which writes a hashed row —
-      # preferred over this variable, because a code here is a code in plaintext
-      # in a file. Use this only to bootstrap or to break glass.
-      SIGNUP_INVITE_CODES: ${SIGNUP_INVITE_CODES:-}
+      NEXT_TELEMETRY_DISABLED: '1'
     ports:
-      # Loopback only — public traffic arrives via Caddy on :9020.
-      - "127.0.0.1:3011:3011"
-
-  # ── DB Migrator (one-shot) ──
-  # Targets the transcribe-md builder stage because it already runs
-  # `npm ci` + `npm run db:generate` and has the full Prisma CLI
-  # toolchain (prisma, @prisma/config, effect, c12, jiti …). Shipping
-  # those into runtime app images adds ~75MB of dead weight — here we
-  # reuse what's already built.
-  #
-  # Profile-gated so `docker compose up` ignores it. Invoke with:
-  #   docker compose run --rm db-migrate
-  # which defaults to `migrate deploy`. Override to peek:
-  #   docker compose run --rm db-migrate npx prisma migrate status
-  db-migrate:
-    build:
-      context: .
-      dockerfile: apps/transcribe-md/Dockerfile
-      target: builder
-    profiles: ["migrations"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:-changeme_in_production}@postgres:5432/meddoc?schema=public
-    working_dir: /app/packages/db
-    entrypoint: ["npx", "--no-install", "prisma"]
-    command: ["migrate", "deploy"]
-
-  # ── Postgres backup (T-M16.4) ──
-  # Sidecar container runs pg_dump on a schedule and writes rotated
-  # gzipped dumps to /opt/meddoc-pro/backups on the host. Image is
-  # prodrigestivill/postgres-backup-local — a tiny pg_dump + cron
-  # wrapper used by many teams at this scale. PITR (wal-g /
-  # pgBackRest) is out of scope for the pilot; daily logical dumps
-  # are enough.
-  #
-  # Filename pattern: <prefix>-<db>-<date>.sql.gz where <prefix> is
-  # "daily"|"weekly"|"monthly"|"last". Our pre-milestone manual
-  # dumps use a different prefix (pre_<label>) and coexist cleanly.
-  #
-  # Ops task (documented in DEPLOYMENT_RUNBOOK.md §9): configure an
-  # off-host mirror via rsync / borgbackup so a VPS loss doesn't
-  # lose the dumps too.
-  postgres-backup:
-    image: prodrigestivill/postgres-backup-local:16
-    restart: unless-stopped
-    # Phase 13 — H4: non-root containers. The backup runs pg_dump
-    # over TCP (no filesystem access to postgres's data volume) and
-    # writes gzipped dumps to /backups (bind-mounted from
-    # /opt/meddoc-pro/backups). The host backups dir was chowned
-    # to 999:999 once before this user: directive landed; subsequent
-    # runs inherit ownership. Same uid as postgres for symmetry.
-    user: "999:999"
-    # Phase 19 — h16-cap-drop. pg_dump over TCP + curl + sha256sum +
-    # mc binary execution; none need elevated caps.
-    cap_drop:
-      - ALL
-    mem_limit: 128m
-    cpus: '0.5'
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      POSTGRES_HOST: postgres
-      POSTGRES_DB: meddoc
-      POSTGRES_USER: meddoc
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme_in_production}
-      POSTGRES_EXTRA_OPTS: "-Z6 --no-owner --no-acl"
-      SCHEDULE: "@daily"
-      BACKUP_KEEP_DAYS: "7"
-      BACKUP_KEEP_WEEKS: "4"
-      BACKUP_KEEP_MONTHS: "6"
-      HEALTHCHECK_PORT: "8080"
-      # Phase 17 (h16-offsite-backup): postscript no-ops when these
-      # are unset, so it's safe to land before the bucket is
-      # provisioned. Runbook: docs/H16_OFFSITE_BACKUP_PROCEDURE.md
-      POST_BACKUP_COMMAND: "/scripts/postscript.sh"
-      REMOTE_BACKUP_S3_ENDPOINT: "${REMOTE_BACKUP_S3_ENDPOINT:-}"
-      REMOTE_BACKUP_S3_BUCKET: "${REMOTE_BACKUP_S3_BUCKET:-}"
-      REMOTE_BACKUP_S3_ACCESS_KEY: "${REMOTE_BACKUP_S3_ACCESS_KEY:-}"
-      REMOTE_BACKUP_S3_SECRET_KEY: "${REMOTE_BACKUP_S3_SECRET_KEY:-}"
-      REMOTE_BACKUP_S3_REGION: "${REMOTE_BACKUP_S3_REGION:-us-east-1}"
-      REMOTE_BACKUP_PREFIX: "${REMOTE_BACKUP_PREFIX:-}"
-      # Phase 3 Wave 1 (h16-offsite-backup, encrypted variant): credentials
-      # for the Backblaze B2 path used by infra/backup-offsite-sync.sh.
-      # Empty defaults so the container starts even before the operator
-      # populates them; the script itself exits 78 / EX_CONFIG when the
-      # values are blank, leaving the local pg_dump unaffected. See
-      # docs/RUNBOOK_OFFSITE_BACKUP.md for the BAA + key-population flow.
-      BACKBLAZE_KEY_ID: "${BACKBLAZE_KEY_ID:-}"
-      BACKBLAZE_APPLICATION_KEY: "${BACKBLAZE_APPLICATION_KEY:-}"
-      BACKBLAZE_BUCKET: "${BACKBLAZE_BUCKET:-}"
-    volumes:
-      # 2026-06-08 backup-fix: destination is a named volume, NOT the in-repo
-      # ./backups bind-mount. The bind-mount lived inside the repo tree; a
-      # host-side `chown -R` flipped its owner 999->1000, so the non-root (999)
-      # container lost write access and crash-looped (8095x: "BACKUP_DIR points
-      # to a file or folder with insufficient permissions") — never producing a
-      # single backup. A named volume lives outside the tree, is owned 999:999,
-      # and is immune to repo chown/checkout. Historical dumps stay in ./backups.
-      - pgbackups:/backups
-      - ./infra/postgres-backup/postscript.sh:/scripts/postscript.sh:ro
-      - ./infra/backup-offsite-sync.sh:/scripts/backup-offsite-sync.sh:ro
-      # h16-offsite-backup (encrypted): host-resident age keypair lives in
-      # /etc/meddoc on the VPS; mounted read-only so the script can read
-      # the public key for encryption. The private key never leaves the
-      # host filesystem (operator copies it offline for restoration).
-      - /etc/meddoc:/etc/meddoc:ro
-      # Run log destination — bind-mounted so logs survive container
-      # restarts and can be tail'd from the host without `docker logs`.
-      - /var/log/meddoc:/var/log/meddoc
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080"]
-      interval: 60s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-
+    - 127.0.0.1:3010:3010
 volumes:
-  # STRUCTURED PHI — the live cluster, on the LUKS volume, fail-closed.
-  # Device is the `pgdata` subdir (not the mountpoint) for the same reason
-  # minio_data binds `data` below: a mountpoint directory exists whether or not
-  # anything is mounted on it, so binding the mountpoint is fail-OPEN. Here it
-  # would be worse than for MinIO — the postgres image would initdb a fresh
-  # empty cluster onto the plaintext filesystem and come up healthy.
-  # Unlocked at boot by pgdata-encrypted.service (Before=docker.service).
   pgdata_encrypted:
     driver: local
     driver_opts:
       type: none
       o: bind
       device: /mnt/pgdata-encrypted/pgdata
-  # Vestigial — the pre-encryption managed volume. Kept only because removing a
-  # declared volume from compose is a separate, deliberate act.
-  pgdata:
-  # prod pg_dump destination (postgres-backup service). Named volume so it
-  # survives outside the repo tree — see the backup-fix note above (2026-06-08).
-  pgbackups:
-  redis_data:
-  # PATIENT AUDIO — bind-mounted onto the LUKS volume (2026-07-29).
-  #
-  # It used to be a plain docker-managed volume on the root filesystem, i.e.
-  # UNENCRYPTED, while Postgres sat on /mnt/pgdata-encrypted. The encrypted
-  # volume existed and nobody checked which containers were on it — so the
-  # structured PHI was covered for months and the audio was not.
-  #
-  # Its own 20 GiB volume rather than sharing the pg one: the pg volume had
-  # 828 MB free, which audio exhausts in about two days at pilot rate, and a
-  # full shared volume takes the DATABASE down with it.
-  #
-  # Unlocked at boot by miniodata-encrypted.service (Before=docker.service).
-  # ROLLBACK: copy /mnt/miniodata-encrypted/data out to a staging path, delete
-  # this driver_opts block, recreate, copy back in — then SHRED the staging
-  # copy. There is deliberately no standing plaintext backup to roll back to:
-  # one would be a permanent unencrypted replica of the thing this volume
-  # exists to encrypt. See docs/DEPLOYMENT_RUNBOOK.md §5.7.
-  #
-  # ── THE DEVICE IS THE `data` SUBDIR, AND THAT IS THE FAIL-CLOSED GUARD ──
-  #
-  # It pointed at the MOUNTPOINT itself, and that is fail-OPEN. A mountpoint
-  # directory exists whether or not anything is mounted on it, so when
-  # miniodata-encrypted.service had not run, this bind silently resolved to a
-  # plain directory on /dev/sda2 and MinIO wrote patient audio to the
-  # UNENCRYPTED root filesystem — while compose, the unit name and the runbook
-  # all said LUKS. Nothing errored. That is exactly how it shipped on
-  # 2026-07-29 and ran for four hours (see §5.7).
-  #
-  # `data` exists ONLY on the encrypted filesystem. Docker's local bind driver
-  # does NOT create a missing driver_opts device (unlike compose's short-form
-  # bind syntax, which auto-creates and would reintroduce the bug) — so:
-  #
-  #     mount present → /mnt/miniodata-encrypted/data exists → MinIO starts
-  #     mount ABSENT  → path missing → docker refuses → MinIO FAILS CLOSED
-  #
-  # Never point this back at the bare mountpoint, and never `mkdir` a `data`
-  # dir on the underlying filesystem — either one silently restores fail-open.
-  # scripts/check-minio-encrypted-mount.sh asserts both, and the negative
-  # control for this guard is: unmount, `up -d minio`, expect a start failure.
+  pgdata: null
+  pgbackups: null
+  redis_data: null
   minio_data:
     driver: local
     driver_opts:
       type: none
       o: bind
       device: /mnt/miniodata-encrypted/data
-  caddy_data:
-  caddy_config:
-
+  caddy_data: null
+  caddy_config: null
 networks:
-  default:
-  # Internal-only: no gateway, so nothing on it can reach outside the host.
+  default: null
   converter:
     internal: true

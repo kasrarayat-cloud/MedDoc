@@ -1,5 +1,0 @@
-# Chat-intelligence + surface-cleanup, flags ON. Sibling of the flagoff
-# override. Deliberately NOT :latest — prod's compose resolves :latest.
-services:
-  transcribe-md:
-    image: meddoc-pro-transcribe-md:chatintel

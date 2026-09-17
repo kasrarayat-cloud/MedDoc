@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block title %}Sign in{% endblock %}
+{% block shell %}
+<div class="auth-shell">
+  <aside class="auth-story">
+    <a class="brand" href="{% url 'login' %}"><span class="brand-mark" aria-hidden="true">Q</span>QuillMD</a>
+    <h1>Your notes.<br>Your forms.<br>Your clinical judgment.</h1>
+    <p>Bring documented information into the forms you already use, with every answer ready for your review.</p>
+    <div class="auth-principle"><strong>A clear path from source to answer.</strong><p>Keep the original form, check the evidence, and make the final decision.</p></div>
+  </aside>
+  <main class="auth-main" id="main"><div class="auth-form">
+    <div class="eyebrow">{% if is_admin_site %}Administrator access{% else %}Clinical workspace{% endif %}</div>
+    <h2>Welcome back</h2>
+    <p>{% if is_admin_site %}Sign in with your administrator account and authenticator code.{% else %}Sign in to your individual QuillMD account.{% endif %}</p>
+    {% if messages %}{% for message in messages %}<div class="notice {{ message.tags }}" role="status">{{ message }}</div>{% endfor %}{% endif %}
+    <form method="post" data-submit-once>{% csrf_token %}{{ form.as_p }}<input type="hidden" name="next" value="{{ next|default:'' }}"><button type="submit">Sign in{% if is_admin_site %} to administration{% endif %}</button></form>
+    <div class="auth-footer">
+      {% if not is_admin_site %}<p>New to QuillMD? <a href="{% url 'register' %}">Create an account</a></p>{% endif %}
+      <p class="small">Private testing environment. Use synthetic patient information.</p>
+    </div>
+  </div></main>
+</div>
+{% endblock %}

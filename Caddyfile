@@ -5,20 +5,11 @@
 # (HTTPS, domain-based). Live hostnames:
 #
 #   quillmd.com + www.quillmd.com  →  marketing  (port 3010 internal)
-#   app.quillmd.com                →  TranscribeMD (port 3011 internal)
-#   pro.quillmd.com                →  MedDoc Pro CRM (port 3000 internal)
+#   app.quillmd.com + admin.quillmd.com → maintenance (HTTP 503)
+#   pro.quillmd.com                → retired (HTTP 410)
 #
-# Caddy auto-provisions + auto-renews Let's Encrypt certs for each hostname
-# (persisted in the `caddy_data` volume). HTTP→HTTPS redirect is automatic
-# once a hostname is configured.
-#
-# The MODE A blocks are kept below as commented rollback reference. DO NOT
-# uncomment them while MODE B is active: the MODE B HSTS header
-# (max-age=31536000; includeSubDomains) tells every client that has hit us
-# to refuse plaintext for up to a year. Safe-rollback procedure is:
-#   1. Serve `Strict-Transport-Security: max-age=0` over HTTPS first
-#   2. Wait for clients to re-fetch and clear their cache
-#   3. Then flip back to MODE A
+# Public TLS stays on host nginx; the Caddy hop uses its existing internal CA.
+# Marketing keeps its existing route. The new application stays localhost-only.
 # ============================================================================
 
 # ─── Global options — trusted proxy chain (S2) ────────────────────────────
@@ -56,8 +47,7 @@
 }
 
 # ─── Shared header snippet — MODE A (plaintext-safe) ──────────────────────
-# Kept so the rollback commented block below still parses. No active block
-# currently imports it.
+# Retained as a shared configuration snippet; no active block imports it.
 (security_headers_mode_a) {
     header {
         X-Content-Type-Options "nosniff"
@@ -150,217 +140,39 @@ quillmd.com, www.quillmd.com {
     }
 }
 
-# ─── app.quillmd.com — TranscribeMD (pilot doctors log in here) ───────────
+# Retired application hostnames remain configured for existing TLS and DNS.
+# The replacement is privately tested on localhost, never proxied publicly here.
 app.quillmd.com {
     log {
         output stdout
         format console
     }
-
     tls internal
-
     import security_headers_mode_b
-
-    reverse_proxy transcribe-md:3011 {
-        header_up Host {host}
-        header_up X-Real-IP {client_ip}
-        header_up X-Forwarded-For {client_ip}
-        header_up X-Forwarded-Proto {scheme}
-    }
+    header Retry-After "3600"
+    header Cache-Control "no-store"
+    respond "QuillMD is being rebuilt. The doctor application is temporarily unavailable. Please contact your organization administrator." 503
 }
 
-# ─── admin.quillmd.com — Platform admin dashboard (SUPER_ADMIN only) ──────
-# Reverse-proxies to transcribe-md (which now owns the admin code, moved
-# from meddoc-pro). The only path rewrite is `/` → `/admin` so the
-# dashboard renders at the bare host root without forcing the user to
-# type a path. Everything else (`/login`, `/api/auth/*`, `/api/admin/*`,
-# `/_next/*`) passes through unchanged — those routes already work at
-# their natural paths on the transcribe-md upstream.
-#
-# Cookie posture: host-only. A user logged in to app.quillmd.com (a
-# clinician) does NOT auto-inherit a session here — admin requires its
-# own sign-in. AUTH_COOKIE_DOMAIN stays unset to keep the cookie
-# isolated per host. Security > UX for the admin surface.
-#
-# DNS: an A-record for admin.quillmd.com → this VPS must exist before
-# Caddy can issue the Let's Encrypt cert (HTTP-01 validation). Until
-# then this block still parses + Caddy serves on port 80 → 308 redirect
-# to HTTPS, but the HTTPS handshake will use a fallback cert (curl -k
-# tests work; browsers refuse).
 admin.quillmd.com {
     log {
         output stdout
         format console
     }
-
     tls internal
-
     import security_headers_mode_b
-
-    # ── Allowlist: only the routes a SUPER_ADMIN actually needs ──────
-    # The first version of this block proxied EVERY path to the
-    # transcribe-md upstream and only rewrote `/`. That meant a logged-
-    # in clinician on admin.quillmd.com could navigate to /dashboard,
-    # /patients, /visits, /settings, etc. and see the regular Transcribe-MD
-    # UI on the admin host — wrong, and a privacy footgun. We now match
-    # explicit allowlisted paths and 404 everything else.
-
-    # NextAuth (csrf, session, callback) — pass through verbatim. This
-    # MUST come before /api/admin/* because Caddy evaluates handle
-    # matchers in declaration order; if /api/auth/* fell into the
-    # /api/admin/* bucket it would 404.
-    @auth path /api/auth/*
-    handle @auth {
-        reverse_proxy transcribe-md:3011 {
-            header_up Host {host}
-            header_up X-Real-IP {client_ip}
-            header_up X-Forwarded-For {client_ip}
-            header_up X-Forwarded-Proto {scheme}
-        }
-    }
-
-    # Admin REST + SSE
-    @adminApi path /api/admin/*
-    handle @adminApi {
-        reverse_proxy transcribe-md:3011 {
-            header_up Host {host}
-            header_up X-Real-IP {client_ip}
-            header_up X-Forwarded-For {client_ip}
-            header_up X-Forwarded-Proto {scheme}
-        }
-    }
-
-    # Next.js asset bundles + static files (icons, fonts). Without
-    # these the admin page would render unstyled.
-    @nextStatic path /_next/* /favicon.ico /favicon.svg /robots.txt /manifest.webmanifest
-    handle @nextStatic {
-        reverse_proxy transcribe-md:3011 {
-            header_up Host {host}
-            header_up X-Real-IP {client_ip}
-            header_up X-Forwarded-For {client_ip}
-            header_up X-Forwarded-Proto {scheme}
-        }
-    }
-
-    # Auth-flow pages a SUPER_ADMIN might genuinely use (sign-in,
-    # password recovery). /signup is intentionally not allowed —
-    # super-admins are provisioned out-of-band, never via self-service.
-    @authPages path /login /forgot-password /reset-password /check-email
-    handle @authPages {
-        reverse_proxy transcribe-md:3011 {
-            header_up Host {host}
-            header_up X-Real-IP {client_ip}
-            header_up X-Forwarded-For {client_ip}
-            header_up X-Forwarded-Proto {scheme}
-        }
-    }
-
-    # Admin pages — `/admin` itself + everything under it
-    @adminPath path /admin /admin/*
-    handle @adminPath {
-        reverse_proxy transcribe-md:3011 {
-            header_up Host {host}
-            header_up X-Real-IP {client_ip}
-            header_up X-Forwarded-For {client_ip}
-            header_up X-Forwarded-Proto {scheme}
-        }
-    }
-
-    # Root → /admin (the bare host serves the dashboard).
-    @root path /
-    handle @root {
-        rewrite * /admin
-        reverse_proxy transcribe-md:3011 {
-            header_up Host {host}
-            header_up X-Real-IP {client_ip}
-            header_up X-Forwarded-For {client_ip}
-            header_up X-Forwarded-Proto {scheme}
-        }
-    }
-
-    # Anything else (e.g. /dashboard, /patients, /visits, /settings,
-    # /signup) — 404 at the edge. Belt-and-braces alongside the strict
-    # allowlist above; the catch-all guarantees that adding a new
-    # transcribe-md route doesn't accidentally surface it on the
-    # admin host.
-    handle {
-        respond "Not Found" 404
-    }
+    header Retry-After "3600"
+    header Cache-Control "no-store"
+    respond "QuillMD administration is temporarily unavailable while the new application is privately tested." 503
 }
 
-# ─── pro.quillmd.com — MedDoc Pro CRM (internal admin) ────────────────────
 pro.quillmd.com {
     log {
         output stdout
         format console
     }
-
     tls internal
-
     import security_headers_mode_b
-
-    # Defense-in-depth carried over from the MODE A :80 block. The
-    # /api/internal/* endpoints are service-to-service (scribe →
-    # meddoc-pro) authenticated by shared token + IP allowlist at the
-    # app layer; Caddy 404s the path at the edge so external probes
-    # can't even reach the handler.
-    @internal path /api/internal/*
-    respond @internal 404
-
-    reverse_proxy meddoc-pro:3000 {
-        header_up Host {host}
-        header_up X-Real-IP {client_ip}
-        header_up X-Forwarded-For {client_ip}
-        header_up X-Forwarded-Proto {scheme}
-    }
+    header Cache-Control "no-store"
+    respond "This QuillMD application has been retired." 410
 }
-
-# ==========================================================================
-# MODE A — rollback reference (inactive)
-# ==========================================================================
-# The original IP-based plaintext blocks. Kept in comment form for
-# emergency rollback. See the header warning about HSTS before uncommenting.
-#
-# :9010 {
-#     log {
-#         output stdout
-#         format console
-#     }
-#     import security_headers_mode_a
-#     reverse_proxy marketing:3010 {
-#         header_up Host {host}
-#         header_up X-Real-IP {remote_host}
-#         header_up X-Forwarded-For {remote_host}
-#         header_up X-Forwarded-Proto {scheme}
-#     }
-# }
-#
-# :9020 {
-#     log {
-#         output stdout
-#         format console
-#     }
-#     import security_headers_mode_a
-#     reverse_proxy transcribe-md:3011 {
-#         header_up Host {host}
-#         header_up X-Real-IP {remote_host}
-#         header_up X-Forwarded-For {remote_host}
-#         header_up X-Forwarded-Proto {scheme}
-#     }
-# }
-#
-# :80 {
-#     log {
-#         output stdout
-#         format console
-#     }
-#     import security_headers_mode_a
-#     @internal path /api/internal/*
-#     respond @internal 404
-#     reverse_proxy meddoc-pro:3000 {
-#         header_up Host {host}
-#         header_up X-Real-IP {remote_host}
-#         header_up X-Forwarded-For {remote_host}
-#         header_up X-Forwarded-Proto {scheme}
-#     }
-# }

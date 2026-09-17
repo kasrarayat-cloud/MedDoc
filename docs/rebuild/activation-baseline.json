@@ -1,0 +1,81 @@
+{
+  "captured_at": "2026-09-17T08:46:51.893949+00:00",
+  "containers": [
+    {
+      "name": "/meddoc-pro-marketing-1",
+      "id": "e1c4523df0403ad22280a13c64c94a9f84056134ecb22c333c4e6e47722e52ab",
+      "image": "sha256:e9568d07d057e337c84ce1c174e85dfcafdd8fb9589e9b53c0b3167a9d89f8ea",
+      "running": true,
+      "mounts": []
+    },
+    {
+      "name": "/meddoc-pro-caddy-1",
+      "id": "231087c0dbc90db8da40d8f4756304068c746ab33c08aa922793705febf71494",
+      "image": "sha256:a4ef43ffa2b91c00698ba20caced449418d1e678f50034083882969de8c45f6e",
+      "running": true,
+      "mounts": [
+        {
+          "source": "/var/lib/docker/volumes/meddoc-pro_caddy_config/_data",
+          "destination": "/config"
+        },
+        {
+          "source": "/var/lib/docker/volumes/meddoc-pro_caddy_data/_data",
+          "destination": "/data"
+        },
+        {
+          "source": "/opt/meddoc-pro/Caddyfile",
+          "destination": "/etc/caddy/Caddyfile"
+        }
+      ]
+    },
+    {
+      "name": "/meddoc-pro-postgres-1",
+      "id": "4f187aba13450e1908c2a57f32fd33c9ff3356bf49273378b9d62e358aff5fc5",
+      "image": "sha256:8ed3192326bb9d114cd5ef9acace453d5dae17425bd089d089330584c84c5a34",
+      "running": true,
+      "mounts": [
+        {
+          "source": "/var/lib/docker/volumes/meddoc-pro_pgdata_encrypted/_data",
+          "destination": "/var/lib/postgresql/data"
+        }
+      ]
+    },
+    {
+      "name": "/meddoc-pro-redis-1",
+      "id": "3a2194233ec5757a0c4e8ddeb3164d2a2643588494cf6bd5267d56bfe22cdc20",
+      "image": "sha256:9210b8dc25f122eb00e5572dcc7147c8e11fb1a08308b088e06c9d5dd2aa49d6",
+      "running": true,
+      "mounts": [
+        {
+          "source": "/var/lib/docker/volumes/meddoc-pro_redis_data/_data",
+          "destination": "/data"
+        }
+      ]
+    },
+    {
+      "name": "/meddoc-pro-minio-1",
+      "id": "d0d72439aa4bdc494798c55824fc9324731e57e16576cacfdb298aa314a4b9fb",
+      "image": "sha256:69b2ec208575b69597784255eec6fa6a2985ee9e1a47f4411a51f7f5fdd193a9",
+      "running": true,
+      "mounts": [
+        {
+          "source": "/var/lib/docker/volumes/meddoc-pro_minio_data/_data",
+          "destination": "/data"
+        }
+      ]
+    },
+    {
+      "name": "/quillmd-fresh-postgres",
+      "id": "a398ee313db5e21eaa82502442f38d9c9627a56f2d97438c3da9af37800feac9",
+      "image": "sha256:1bea307dfb3ee30541a7acf7de14b58bcd6948da98e5d31a04c627c4d35ec64b",
+      "running": true,
+      "mounts": [
+        {
+          "source": "/var/lib/docker/volumes/quillmd_fresh_pg/_data",
+          "destination": "/var/lib/postgresql/data"
+        }
+      ]
+    }
+  ],
+  "shared_caddy_sha256": "7aebf3fb47b2508a93d5320aa1331ab37d146b492836e9ca434b8ff968b9bffe"
+}

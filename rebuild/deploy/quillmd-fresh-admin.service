@@ -1,0 +1,29 @@
+[Unit]
+Description=QuillMD fresh private admin
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=claude
+Group=claude
+WorkingDirectory=/opt/meddoc-pro/rebuild
+Environment=QUILLMD_ADMIN_SITE=1
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/meddoc-pro/rebuild/.venv/bin/python -m gunicorn quillmd.wsgi:application --bind 127.0.0.1:9131 --workers 1 --timeout 120
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=150
+KillMode=mixed
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/meddoc-pro/rebuild/.runtime
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=512M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

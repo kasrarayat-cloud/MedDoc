@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block title %}Create account{% endblock %}
+{% block shell %}
+<div class="auth-shell">
+  <aside class="auth-story">
+    <a class="brand" href="{% url 'login' %}"><span class="brand-mark" aria-hidden="true">Q</span>QuillMD</a>
+    <h1>A workspace for the way you document.</h1>
+    <p>Upload a form, add your notes, and review supported answers before you export.</p>
+    <div class="auth-principle"><strong>$10 personal welcome credit</strong><p>Every newly verified user receives one welcome credit, including invited employees. Paid balances and promotional credit stay separate.</p></div>
+  </aside>
+  <main class="auth-main" id="main"><div class="auth-form">
+    <div class="eyebrow">Individual account</div><h2>{% if invitation %}Join {{ invitation.department.name }}{% else %}Create your account{% endif %}</h2>
+    <p>Each person signs in with their own credentials. Department access is assigned through your organization.</p>
+    {% if messages %}{% for message in messages %}<div class="notice {{ message.tags }}" role="status">{{ message }}</div>{% endfor %}{% endif %}
+    <form method="post" data-submit-once>{% csrf_token %}{% if invitation and user.is_authenticated %}<p>Accept this invitation as {{ user.email }}.</p>{% else %}{{ form.as_p }}{% endif %}<button type="submit">{% if invitation %}Accept invitation{% else %}Create account{% endif %}</button></form>
+    <div class="auth-footer"><p>Already registered? <a href="{% url 'login' %}">Sign in</a></p><p class="small">Private testing environment. Use synthetic patient information.</p></div>
+  </div></main>
+</div>
+{% endblock %}
