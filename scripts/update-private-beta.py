@@ -38,7 +38,11 @@ def protected():
     rows = json.loads(output(['docker', 'inspect', *[r['name'].lstrip('/') for r in baseline['containers']]]))
     for want, got in zip(baseline['containers'], rows):
         require(want['id'] == got['Id'] and want['image'] == got['Image'] and want['running'] == got['State']['Running'], 'A protected container identity/state changed.')
-        require(want['mounts'] == [{'source': m['Source'], 'destination': m['Destination']} for m in got['Mounts']], 'A protected mount changed.')
+        # Docker inspection does not guarantee mount order. Keep duplicates in
+        # the comparison so a repeated or missing mount still refuses.
+        expected_mounts = sorted((m['source'], m['destination']) for m in want['mounts'])
+        actual_mounts = sorted((m['Source'], m['Destination']) for m in got['Mounts'])
+        require(expected_mounts == actual_mounts, 'A protected mount changed.')
     return len(rows)
 
 
