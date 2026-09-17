@@ -2,7 +2,7 @@
 import json
 import hashlib
 import re
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from pydantic import BaseModel, ConfigDict
@@ -24,11 +24,38 @@ def configuration():
             'input_rate':settings.AI_INPUT_RATE,'output_rate':settings.AI_OUTPUT_RATE,'cached_rate':settings.AI_CACHED_RATE,
             'voice_rate_minute':os.getenv('QUILLMD_DEEPGRAM_RATE_PER_MINUTE',''),
             'voice_rate_second':os.getenv('QUILLMD_DEEPGRAM_RATE_PER_SECOND',''),
-            'voice_max_cost':os.getenv('QUILLMD_VOICE_MAX_COST','0.20'),'prompt_version':'extractive-v3-reviewed-context-labels'}
-    price={k:config[k] for k in ('provider','model','input_rate','output_rate','cached_rate','voice_rate_minute','voice_rate_second')}
+            'voice_max_cost':os.getenv('QUILLMD_VOICE_MAX_COST','0.20'),'prompt_version':'extractive-v3-reviewed-context-labels',
+            'discount_rate':normalized_discount(os.getenv('QUILLMD_PROVIDER_DISCOUNT_RATE','0'))}
+    # The discount fraction is part of the versioned price: changing it changes the fingerprint of every later job.
+    price={k:config[k] for k in ('provider','model','input_rate','output_rate','cached_rate','voice_rate_minute','voice_rate_second','discount_rate')}
     price.update(cost_basis='configured_usd_rates',voice_provider='deepgram:nova-3-medical',voice_cost_quantum='0.0000000001',voice_rounding='half_even',multiplier='1.5')
     config['pricing_version']='configured-v1:'+hashlib.sha256(json.dumps(price,sort_keys=True,separators=(',',':')).encode()).hexdigest()
     return config
+
+COST_QUANTUM=Decimal('0.000000000001')
+
+def normalized_discount(value):
+    """Configured provider discount fraction: a Decimal in [0, 1), stored as a canonical string."""
+    try: discount=Decimal(str(value if value not in (None,'') else '0'))
+    except (InvalidOperation,ValueError,TypeError): raise ValidationError('Provider discount rate must be a decimal fraction between 0 and 1.')
+    if not discount.is_finite() or discount<0 or discount>=1: raise ValidationError('Provider discount rate must be a decimal fraction between 0 and 1.')
+    text=format(discount.normalize(),'f')
+    return text if text else '0'
+
+def discount_rate(config=None):
+    config=config or configuration()
+    return Decimal(normalized_discount(config.get('discount_rate','0')))
+
+def discounted_cost(list_cost,discount):
+    """Attributable metered cost after the configured discount; unchanged when the discount is zero."""
+    list_cost=Decimal(str(list_cost));discount=Decimal(str(discount))
+    if discount==0: return list_cost
+    return (list_cost*(1-discount)).quantize(COST_QUANTUM,rounding=ROUND_HALF_EVEN)
+
+def cost_rates(rate_values,list_cost,discount):
+    recorded={k:str(v) for k,v in rate_values.items()}
+    recorded.update(discount_rate=format(Decimal(str(discount)).normalize(),'f') if discount else '0',list_cost_usd=str(list_cost))
+    return recorded
 
 def rates(config=None):
     config=config or configuration()
@@ -157,9 +184,10 @@ def generate(notes,fields,config=None,*,context_labels=()):
         cached=getattr(u,'cache_read_input_tokens',0) or 0
         written=getattr(u,'cache_creation_input_tokens',0) or 0
         units={'input_tokens':u.input_tokens,'cached_input_tokens':cached,'cache_creation_tokens':written,'output_tokens':u.output_tokens}
-        cost=(u.input_tokens*r['input_per_million']+cached*r['cached_per_million']+written*r['input_per_million']*Decimal('1.25')+u.output_tokens*r['output_per_million'])/1000000
+        list_cost=(u.input_tokens*r['input_per_million']+cached*r['cached_per_million']+written*r['input_per_million']*Decimal('1.25')+u.output_tokens*r['output_per_million'])/1000000
+        discount=discount_rate(config);cost=discounted_cost(list_cost,discount)
         raw={'anthropic_response':response,'notes':notes,'fields':fields,'context_labels':list(context_labels)}
-        return raw,cost,units,{k:str(v) for k,v in r.items()},f"anthropic:{config['model']}",getattr(response,'_request_id',None) or '',False
+        return raw,cost,units,cost_rates(r,list_cost,discount),f"anthropic:{config['model']}",getattr(response,'_request_id',None) or '',False
     from openai import OpenAI
     client=OpenAI(timeout=60,max_retries=0)
     r=rates(config)
@@ -170,9 +198,10 @@ def generate(notes,fields,config=None,*,context_labels=()):
     if usage is None: raise ValidationError('Provider usage unavailable; reconciliation required.')
     cached=usage.input_tokens_details.cached_tokens
     units={'input_tokens':usage.input_tokens,'cached_input_tokens':cached,'output_tokens':usage.output_tokens}
-    cost=((usage.input_tokens-cached)*r['input_per_million']+cached*r['cached_per_million']+usage.output_tokens*r['output_per_million'])/1000000
+    list_cost=((usage.input_tokens-cached)*r['input_per_million']+cached*r['cached_per_million']+usage.output_tokens*r['output_per_million'])/1000000
+    discount=discount_rate(config);cost=discounted_cost(list_cost,discount)
     raw={'response':response,'notes':notes,'fields':fields,'context_labels':list(context_labels)}
-    return raw,cost,units,{k:str(v) for k,v in r.items()},f"openai:{config['model']}",getattr(response,'_request_id',None) or '',False
+    return raw,cost,units,cost_rates(r,list_cost,discount),f"openai:{config['model']}",getattr(response,'_request_id',None) or '',False
 
 def validated(result):
     if isinstance(result,dict) and 'anthropic_response' in result:

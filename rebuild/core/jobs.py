@@ -11,7 +11,7 @@ from django.db import transaction
 from django.utils import timezone
 from .models import Job, Encounter, Usage, ProviderReceipt, CodeSuggestion
 from .security import membership,audit,private_path
-from .billing import reserve,settle,release
+from .billing import reserve,settle,release,absorb_failed_job
 from . import generation
 
 @transaction.atomic
@@ -46,8 +46,10 @@ def transcribe(job):
     config=job.config or generation.configuration()
     rate=Decimal(config['voice_rate_minute'] or str(Decimal(config['voice_rate_second'])*60))
     if not duration.is_finite() or duration<0 or not rate.is_finite() or rate<0: raise ValidationError('Invalid provider usage.')
-    cost=(duration*rate/60).quantize(Decimal('0.0000000001'))
-    return transcript,cost,{'duration_seconds':str(duration)},{'usd_per_minute':str(rate),'cost_quantum_usd':'0.0000000001','rounding':'half_even'},'deepgram:nova-3-medical',data['metadata']['request_id'],False
+    list_cost=(duration*rate/60).quantize(Decimal('0.0000000001'))
+    discount=generation.discount_rate(config);cost=generation.discounted_cost(list_cost,discount)
+    rates=generation.cost_rates({'usd_per_minute':rate,'cost_quantum_usd':'0.0000000001','rounding':'half_even'},list_cost,discount)
+    return transcript,cost,{'duration_seconds':str(duration)},rates,'deepgram:nova-3-medical',data['metadata']['request_id'],False
 
 def run_one():
     with transaction.atomic():
@@ -106,6 +108,8 @@ def run_one():
         job.error='Output could not be adopted; review required.' if known else 'Provider outcome is uncertain; reconcile before retrying.' if not fixture else 'Generation failed validation.'
         job.finished_at=timezone.now(); job.save(update_fields=['state','error','finished_at'])
         if fixture: release(job)
+        # Settled provider cost whose output was never adopted is a platform failure: QuillMD absorbs it and reverses the user's charge.
+        elif known: absorb_failed_job(job)
         audit(job.user,'job.'+job.state,job.pk,department=job.encounter.department,error_class=type(exc).__name__)
     return True
 

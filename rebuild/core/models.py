@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.db.models.functions import Lower
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 
 class User(AbstractUser):
     id=models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False)
@@ -180,7 +180,13 @@ class Usage(ProviderIdentifiers,Entity):
         if any(getattr(receipt,key)!=getattr(self,key) for key in ['provider','provider_request_id','provider_resource_id','actual_cost','units','rates','simulated']): return 'Provider evidence mismatch · reconciliation required'
         return 'Provider-metered usage × configured rates'
     @property
-    def invoice_status(self): return 'Not reconciled to a provider invoice'
+    def reconciliation(self):
+        try: return self.costreconciliation
+        except ObjectDoesNotExist: return None
+    @property
+    def invoice_status(self):
+        row=self.reconciliation
+        return f'Reconciled to provider evidence: {row.evidence_reference}' if row else 'Not reconciled to a provider invoice'
     class Meta:
         constraints=[
             models.CheckConstraint(condition=models.Q(actual_cost__gte=0,charged_cost__gte=0)&models.Q(charged_cost=models.F('actual_cost')*Decimal('1.5')),name='exact_usage_multiplier'),
@@ -272,3 +278,47 @@ class ProviderReceipt(ProviderIdentifiers,Entity):
         return 'Simulated · no provider cost' if self.simulated else 'Provider-metered usage × configured rates'
     @property
     def invoice_status(self): return 'Not reconciled to a provider invoice'
+
+class CostReconciliation(Entity):
+    """Authentic provider evidence for one usage row. The Usage row and its original ledger entries are never modified;
+    the difference is settled by appended ledger entries of kind 'reconciliation'."""
+    LEDGER_STATUSES=[('applied','Applied to the ledger'),('pending_funds','Pending available paid funds')]
+    usage=models.OneToOneField(Usage,on_delete=models.PROTECT)
+    reconciled_cost=models.DecimalField(max_digits=24,decimal_places=12)
+    provider_credit_applied=models.DecimalField(max_digits=24,decimal_places=12,default=0)
+    discount_applied=models.DecimalField(max_digits=24,decimal_places=12,default=0)
+    evidence_reference=models.CharField(max_length=240)
+    evidence_sha256=models.CharField(max_length=64,blank=True)
+    recorded_by=models.ForeignKey(User,on_delete=models.PROTECT)
+    note=models.CharField(max_length=240,blank=True)
+    charge_delta=models.DecimalField(max_digits=24,decimal_places=12)
+    ledger_status=models.CharField(max_length=16,choices=LEDGER_STATUSES)
+    def save(self,*args,**kwargs):
+        # Evidence and amounts are append-only; only the ledger status may advance once funds exist.
+        if not self._state.adding and set(kwargs.get('update_fields') or ())!={'ledger_status'}: raise ValidationError('Cost reconciliations are immutable apart from their ledger status.')
+        super().save(*args,**kwargs)
+    def delete(self,*args,**kwargs): raise ValidationError('Cost reconciliations cannot be deleted.')
+    class Meta:
+        constraints=[
+            models.CheckConstraint(condition=models.Q(reconciled_cost__gte=0,provider_credit_applied__gte=0,discount_applied__gte=0),name='reconciliation_amounts_nonnegative'),
+            models.CheckConstraint(condition=models.Q(ledger_status__in=['applied','pending_funds']),name='reconciliation_ledger_status_known'),
+            models.CheckConstraint(condition=~models.Q(evidence_reference=''),name='reconciliation_evidence_required'),
+        ]
+class PlatformCost(Entity):
+    """Costs QuillMD carries itself. Never charged to a user and never part of a wallet ledger."""
+    KINDS=[('fixed_overhead','Fixed overhead'),('absorbed_failure','Provider cost of a platform failure')]
+    kind=models.CharField(max_length=20,choices=KINDS)
+    amount=models.DecimalField(max_digits=24,decimal_places=12)
+    description=models.CharField(max_length=240)
+    period_start=models.DateField(null=True,blank=True)
+    period_end=models.DateField(null=True,blank=True)
+    evidence_reference=models.CharField(max_length=240,blank=True)
+    job=models.ForeignKey(Job,on_delete=models.PROTECT,null=True,blank=True)
+    recorded_by=models.ForeignKey(User,on_delete=models.PROTECT,null=True,blank=True)
+    class Meta:
+        constraints=[
+            models.UniqueConstraint(fields=['job'],condition=models.Q(kind='absorbed_failure'),name='one_absorbed_failure_per_job'),
+            models.CheckConstraint(condition=models.Q(amount__gte=0),name='platform_cost_nonnegative'),
+            models.CheckConstraint(condition=models.Q(kind__in=['fixed_overhead','absorbed_failure']),name='platform_cost_kind_known'),
+            models.CheckConstraint(condition=models.Q(kind='fixed_overhead')|models.Q(job__isnull=False),name='absorbed_failure_names_job'),
+        ]

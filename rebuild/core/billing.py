@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 import hashlib
 import json
 import re
@@ -6,7 +6,7 @@ from django.db import transaction
 from django.db.models import Sum
 from django.core.exceptions import ValidationError
 from django.utils import timezone
-from .models import User, Wallet, LedgerEntry, Reservation, Usage, Membership, Organization, Payment, Refund, WebhookEvent
+from .models import User, Wallet, LedgerEntry, Reservation, Usage, Membership, Organization, Payment, Refund, WebhookEvent, CostReconciliation, PlatformCost
 from .security import audit, membership
 ZERO=Decimal('0')
 MULTIPLIER=Decimal('1.5')
@@ -27,6 +27,12 @@ def checkout_form(user,data=None):
 def exact(value):
     amount=Decimal(str(value))
     if not amount.is_finite() or amount<0 or amount!=amount.quantize(Decimal('0.000000000001')): raise ValidationError('Invalid billable cost precision.')
+    return amount
+
+def signed_exact(value):
+    """Ledger precision check for adjustments that may be negative (credits back)."""
+    amount=Decimal(str(value))
+    if not amount.is_finite() or amount!=amount.quantize(Decimal('0.000000000001')): raise ValidationError('Invalid ledger adjustment precision.')
     return amount
 
 @transaction.atomic
@@ -144,6 +150,116 @@ def reconcile_refund(obj):
     LedgerEntry.objects.create(wallet=w,amount=-debit,kind='refund',key=f'refund:{obj["id"]}',description='Stripe refund',balance_after=w.balance)
     Refund.objects.update_or_create(stripe_refund=obj['id'],defaults={'payment':p,'amount_cents':amount,'status':'succeeded'})
     audit(p.user,'payment.refund',p.pk,amount=str(debit))
+
+def payer_wallet(payer):
+    """The PAID wallet of the payer recorded on a usage row ('user:<id>' or 'organization:<id>')."""
+    scope,_,identifier=(payer or '').partition(':')
+    if scope=='user' and identifier: return Wallet.objects.get_or_create(user_id=identifier,kind='paid')[0]
+    if scope=='organization' and identifier: return Wallet.objects.get_or_create(organization_id=identifier,kind='paid')[0]
+    raise ValidationError('Usage has no recorded payer; reconciliation requires manual review.')
+
+def proportional_split(entries,total):
+    """Split a positive credit across the wallets that were debited, in proportion to their debits, to exact ledger precision."""
+    debits=[(entry.wallet_id,-entry.amount) for entry in entries if entry.amount<0]
+    debited=sum((amount for _,amount in debits),ZERO)
+    if debited<=0: raise ValidationError('No original usage debits exist to credit back.')
+    shares=[];allocated=ZERO
+    for index,(wallet_id,amount) in enumerate(debits):
+        share=(total*amount/debited).quantize(Decimal('0.000000000001'),rounding=ROUND_DOWN) if index<len(debits)-1 else total-allocated
+        shares.append((wallet_id,share));allocated+=share
+    return shares
+
+def apply_additional_debit(row,wallet):
+    """Debit a positive charge delta from an already locked paid wallet when its available balance allows it."""
+    key=f'reconciliation:{row.usage_id}:{wallet.pk}'
+    if LedgerEntry.objects.filter(key=key).exists(): return True
+    if wallet.balance-wallet.reserved<row.charge_delta: return False
+    wallet.balance-=row.charge_delta; wallet.save(update_fields=['balance'])
+    LedgerEntry.objects.create(wallet=wallet,amount=-row.charge_delta,kind='reconciliation',key=key,description='Reconciled provider cost above the configured estimate × 1.5 (additional charge)',job_id=row.usage.job_id,balance_after=wallet.balance)
+    return True
+
+@transaction.atomic
+def reconcile_usage(usage,reconciled_cost,evidence_reference,actor,provider_credit_applied=ZERO,discount_applied=ZERO,evidence_sha256='',note=''):
+    """Record authentic provider evidence for one usage row and settle the difference by appended ledger entries.
+
+    The Usage row and its original 'usage' ledger entries are never modified. Credits back return to the wallets that
+    were debited, in proportion to their original debits; additional charges come from the recorded payer's paid wallet.
+    """
+    from .models import Job
+    usage=Usage.objects.select_related('job','department').get(pk=usage.pk)
+    Job.objects.select_for_update().get(pk=usage.job_id)
+    if CostReconciliation.objects.filter(usage=usage).exists(): raise ValidationError('This usage row has already been reconciled; history is append-only.')
+    if actor is None or not getattr(actor,'pk',None): raise ValidationError('A recorded administrator is required.')
+    reconciled=exact(reconciled_cost);credit=exact(provider_credit_applied or ZERO);discount=exact(discount_applied or ZERO)
+    if usage.simulated and reconciled!=0: raise ValidationError('Simulated usage has no provider cost to reconcile.')
+    evidence_reference=(evidence_reference or '').strip()
+    if not evidence_reference or len(evidence_reference)>240: raise ValidationError('An evidence reference (invoice number, export sha256 or report id) is required.')
+    evidence_sha256=(evidence_sha256 or '').strip().lower()
+    if evidence_sha256 and not re.fullmatch(r'[0-9a-f]{64}',evidence_sha256): raise ValidationError('Evidence sha256 must be 64 hexadecimal characters.')
+    note=(note or '').strip()
+    if len(note)>240: raise ValidationError('Note is limited to 240 characters.')
+    delta=signed_exact((reconciled-usage.actual_cost)*MULTIPLIER)
+    row=CostReconciliation(usage=usage,reconciled_cost=reconciled,provider_credit_applied=credit,discount_applied=discount,evidence_reference=evidence_reference,evidence_sha256=evidence_sha256,recorded_by=actor,note=note,charge_delta=delta,ledger_status='applied')
+    if delta<0:
+        entries=list(LedgerEntry.objects.filter(job_id=usage.job_id,kind='usage').order_by('wallet_id'))
+        shares=proportional_split(entries,-delta)
+        wallets={w.pk:w for w in Wallet.objects.select_for_update().filter(pk__in=[wallet_id for wallet_id,_ in shares]).order_by('pk')}
+        row.save()
+        for wallet_id,share in shares:
+            if not share: continue
+            wallet=wallets[wallet_id]
+            wallet.balance+=share; wallet.save(update_fields=['balance'])
+            LedgerEntry.objects.create(wallet=wallet,amount=share,kind='reconciliation',key=f'reconciliation:{usage.pk}:{wallet.pk}',description='Reconciled provider cost below the configured estimate × 1.5 (credit back)',job_id=usage.job_id,balance_after=wallet.balance)
+    elif delta>0:
+        payer=payer_wallet(usage.payer)
+        wallet=Wallet.objects.select_for_update().get(pk=payer.pk)
+        row.save()
+        if not apply_additional_debit(row,wallet):
+            row.ledger_status='pending_funds'; row.save(update_fields=['ledger_status'])
+    else: row.save()
+    audit(actor,'usage.reconcile',usage.job_id,department=usage.department,reconciled_cost=str(reconciled),charge_delta=str(delta),ledger_status=row.ledger_status,evidence_reference=evidence_reference)
+    return row
+
+def apply_pending_reconciliations(actor=None):
+    """Apply additional charges that were held for funds. Idempotent: the unique ledger key guards replay."""
+    from .models import Job
+    applied=[]
+    for pk in list(CostReconciliation.objects.filter(ledger_status='pending_funds').order_by('created_at').values_list('pk',flat=True)):
+        with transaction.atomic():
+            row=CostReconciliation.objects.select_for_update().select_related('usage__department').get(pk=pk)
+            if row.ledger_status!='pending_funds': continue
+            Job.objects.select_for_update().get(pk=row.usage.job_id)
+            payer=payer_wallet(row.usage.payer)
+            wallet=Wallet.objects.select_for_update().get(pk=payer.pk)
+            if not apply_additional_debit(row,wallet): continue
+            row.ledger_status='applied'; row.save(update_fields=['ledger_status'])
+            audit(actor,'usage.reconciliation_applied',row.usage.job_id,department=row.usage.department,charge_delta=str(row.charge_delta))
+            applied.append(row)
+    return applied
+
+@transaction.atomic
+def absorb_failed_job(job):
+    """QuillMD absorbs settled provider cost whose output was never adopted: reverse the usage debits and record a platform cost.
+
+    Idempotent: ledger keys and the one-absorbed-failure-per-job constraint make a repeat call a no-op.
+    """
+    from .models import Job
+    job=Job.objects.select_for_update().select_related('encounter__department','user').get(pk=job.pk)
+    usage=Usage.objects.filter(job=job).first()
+    if usage is None or usage.simulated: return None
+    entries=list(LedgerEntry.objects.filter(job=job,kind='usage').order_by('wallet_id'))
+    wallets={w.pk:w for w in Wallet.objects.select_for_update().filter(pk__in=[e.wallet_id for e in entries]).order_by('pk')}
+    reversed_total=ZERO
+    for entry in entries:
+        key=f'absorbed:{job.pk}:{entry.wallet_id}'
+        if entry.amount>=0 or LedgerEntry.objects.filter(key=key).exists(): continue
+        wallet=wallets[entry.wallet_id]; amount=-entry.amount
+        wallet.balance+=amount; wallet.save(update_fields=['balance'])
+        LedgerEntry.objects.create(wallet=wallet,amount=amount,kind='absorbed',key=key,description='Usage charge reversed: provider cost of a platform failure absorbed by QuillMD',job=job,balance_after=wallet.balance)
+        reversed_total+=amount
+    cost,created=PlatformCost.objects.get_or_create(job=job,kind='absorbed_failure',defaults={'amount':usage.actual_cost,'description':'Provider cost absorbed: output not adopted','evidence_reference':f'usage:{usage.pk}'})
+    if created or reversed_total: audit(job.user,'usage.absorbed',job.pk,department=job.encounter.department,actual_cost=str(usage.actual_cost),reversed=str(reversed_total))
+    return cost
 
 def reconciliation():
     rows=[]
