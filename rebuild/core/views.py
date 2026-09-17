@@ -23,7 +23,7 @@ from django_otp.plugins.otp_totp.models import TOTPDevice
 from .models import *
 from .forms import *
 from .security import audit,departments,scoped,membership,digest,token,store_upload,private_path,rate_limit
-from .billing import welcome_credit,credit_payment,reconcile_refund,reconciliation
+from .billing import welcome_credit,credit_payment,reconcile_refund,reconciliation,stripe_test_key_configured
 from .context import integration_status
 from .jobs import enqueue
 
@@ -400,7 +400,7 @@ def checkout(request):
     from .billing import checkout_form
     form=checkout_form(request.user,request.POST)
     if not form.is_valid():messages.error(request,'Confirm a one-time amount between $5 and $500.');return redirect('billing')
-    if not settings.STRIPE_SECRET_KEY.startswith('sk_test_'):messages.error(request,'Stripe test-mode credentials are not connected. No charge was made.');return redirect('billing')
+    if not stripe_test_key_configured(settings.STRIPE_SECRET_KEY):messages.error(request,'A Stripe test or restricted test key is required. No charge was made.');return redirect('billing')
     try:
         authorization=signing.loads(request.POST.get('checkout_token',''),salt='checkout-authorization',max_age=900)
         if authorization.get('user')!=str(request.user.pk) or not isinstance(authorization.get('nonce'),str):raise signing.BadSignature()

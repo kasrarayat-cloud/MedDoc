@@ -104,6 +104,14 @@ def safe_relative(value):
 
 def file_data(root, relative):
     safe_relative(relative)
+    if root == Path('/var/lib/quillmd/files'):
+        # The application identity owns 0600 files. The operator's bounded
+        # read-only helper has no network, keys, extra groups or capabilities.
+        try:
+            from .private_storage import read_file
+        except ImportError:
+            from private_storage import read_file
+        return read_file(root, relative)
     p = root / relative
     require(p.resolve() == p and p.is_relative_to(root), 'Symlink or out-of-root file rejected.')
     before = p.stat()
@@ -166,8 +174,15 @@ def backup(args):
     source = Path(args.source).absolute()
     require(source.resolve() == source and (source / 'core/models.py').is_file(), 'Invalid fresh source root.')
     runtime = private_dir(source / '.runtime')
-    media = runtime / 'files'
-    require(media.is_dir() and media.resolve() == media, 'Protected source media directory is invalid.')
+    try:
+        from .private_storage import state_root, inventory
+    except ImportError:
+        from private_storage import state_root, inventory
+    media = state_root(source) / 'files'
+    if media == Path('/var/lib/quillmd/files'):
+        inventory(media)  # Verify pinned ownership and the bounded mount first.
+    else:
+        require(media.is_dir() and media.resolve() == media, 'Protected source media directory is invalid.')
     parent = private_dir(args.output, create=True)
     key_path = Path(args.key_file).absolute()
     require(not key_path.is_relative_to(parent), 'Keep the encryption key outside the backup destination.')

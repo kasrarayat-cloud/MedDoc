@@ -5,12 +5,17 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=claude
-Group=claude
+User=quillmd-app
+Group=quillmd-app
+SupplementaryGroups=
+CapabilityBoundingSet=
+AmbientCapabilities=
 WorkingDirectory=/opt/meddoc-pro/rebuild
 Environment=QUILLMD_ADMIN_SITE=1
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/opt/meddoc-pro/rebuild/.venv/bin/python -m gunicorn quillmd.wsgi:application --bind 127.0.0.1:9131 --workers 1 --timeout 120
+Environment=PYTHONDONTWRITEBYTECODE=1
+EnvironmentFile=/opt/meddoc-pro/rebuild/.env
+ExecStart=/opt/meddoc-pro/rebuild/.venv/bin/python /opt/meddoc-pro/rebuild/ops/service_launcher.py --surface admin
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=150
@@ -20,13 +25,12 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-InaccessiblePaths=/run/docker.sock /opt/meddoc-pro/.env /opt/meddoc-pro/.retained-service-credentials /opt/meddoc-pro/.worktrees
-InaccessiblePaths=/opt/meddoc-pro/rebuild/.runtime/postgres.env /opt/meddoc-pro/rebuild/.runtime/private-access.json
-InaccessiblePaths=/opt/meddoc-pro/rebuild/.runtime/db-role-secrets /opt/meddoc-pro/rebuild/.runtime/backup-secrets /opt/meddoc-pro/rebuild/.runtime/new-system-backups /opt/meddoc-pro/rebuild/.runtime/restore-checks
-ReadWritePaths=/opt/meddoc-pro/rebuild/.runtime
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 MemoryMax=512M
 TasksMax=64
+
+InaccessiblePaths=/run/docker.sock /opt/meddoc-pro/.env /opt/meddoc-pro/.retained-service-credentials /opt/meddoc-pro/.worktrees /opt/meddoc-pro/rebuild/.env /opt/meddoc-pro/rebuild/.runtime
+ReadWritePaths=/var/lib/quillmd/files /var/lib/quillmd/mail /var/lib/quillmd/proofs
 
 [Install]
 WantedBy=multi-user.target

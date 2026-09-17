@@ -2,7 +2,13 @@ from pathlib import Path
 import os
 from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / '.env')
+# systemd reads the operator-owned EnvironmentFile before dropping to the
+# dedicated identity. That identity deliberately cannot open the source file.
+if os.getenv('QUILLMD_ENV_MANAGED') != '1':
+    load_dotenv(BASE_DIR / '.env')
+STATE_DIR = Path(os.getenv('QUILLMD_STATE_DIR', str(BASE_DIR / '.runtime')))
+if not STATE_DIR.is_absolute():
+    raise RuntimeError('Application state directory must be absolute.')
 SECRET_KEY = os.environ['QUILLMD_SECRET_KEY']
 DEBUG = False
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'testserver', 'app.quillmd.com', 'admin.quillmd.com']
@@ -26,7 +32,7 @@ STATIC_URL='/static/'
 STATIC_ROOT=BASE_DIR/'staticfiles'
 STATICFILES_DIRS=[BASE_DIR/'static']
 STORAGES={'default':{'BACKEND':'django.core.files.storage.FileSystemStorage'},'staticfiles':{'BACKEND':'whitenoise.storage.CompressedManifestStaticFilesStorage'}}
-MEDIA_ROOT=BASE_DIR/'.runtime'/'files'
+MEDIA_ROOT=STATE_DIR/'files'
 FILE_UPLOAD_PERMISSIONS=0o600
 FILE_UPLOAD_DIRECTORY_PERMISSIONS=0o700
 DATA_UPLOAD_MAX_MEMORY_SIZE=20*1024*1024
@@ -50,7 +56,7 @@ LOGIN_URL='/login/'
 DEFAULT_AUTO_FIELD='django.db.models.BigAutoField'
 QUILLMD_EMAIL_MODE=os.getenv('QUILLMD_EMAIL_MODE','file')
 EMAIL_BACKEND='core.email_backend.ResendEmailBackend' if QUILLMD_EMAIL_MODE=='resend' else 'core.email_backend.PrivateFileEmailBackend'
-EMAIL_FILE_PATH=BASE_DIR/'.runtime'/'mail'
+EMAIL_FILE_PATH=STATE_DIR/'mail'
 DEFAULT_FROM_EMAIL='QuillMD <no-reply@quillmd.com>'
 QUILLMD_APP_BASE_URL=os.getenv('QUILLMD_APP_BASE_URL','http://localhost:9130')
 QUILLMD_EMAIL_FROM=os.getenv('QUILLMD_EMAIL_FROM','')
