@@ -11,10 +11,8 @@ are removed because the replacement does not use the old application.
 The worktree `Caddyfile` retains public hostname blocks and internal TLS, and
 preserves the marketing route. Doctor/admin hosts return HTTP 503 with
 `Retry-After: 3600` and `Cache-Control: no-store`; the retired CRM host returns
-HTTP 410. **Editing this worktree does not deploy that configuration.** The
-running Caddy container binds `/opt/meddoc-pro/Caddyfile`. The lead must review
-the diff, record its declaration, apply it to the shared path through the
-repository process, validate it and reload Caddy there. Never recreate the
+HTTP 410. Activation completed on 2026-09-17; public app/admin now return these maintenance responses. **Editing a worktree does not deploy configuration.** The
+running Caddy container binds `/opt/meddoc-pro/Caddyfile`. Review and declare future changes before applying them through the repository process. Git can replace a file inode while a running Docker bind retains the old one: validate/load exact tracked shared-tree bytes through stdin and compare live responses. Never recreate the
 shared stack from a worktree: relative binds would point at that worktree.
 
 The fresh Django application has separate doctor/admin processes:
@@ -27,7 +25,7 @@ The fresh Django application has separate doctor/admin processes:
 Both use the fresh application datastore and private file storage. Neither uses
 the old production `meddoc` database. Administrator MFA and host-specific
 session/CSRF cookies remain enforced by the application. The worker uses the
-same fresh database and private files, with independent process supervision.
+same fresh database and private files, with independent systemd process supervision. All three `quillmd-fresh-*` units are active/enabled; see activation-judged.md.
 
 Reach the listeners through an SSH tunnel from a trusted workstation:
 

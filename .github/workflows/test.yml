@@ -48,15 +48,15 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: rebuild/requirements.lock
+          cache-dependency-path: rebuild/requirements.txt
       - name: Install locked Python dependencies
-        run: python -m pip install -r rebuild/requirements.lock
+        run: python -m pip install -r rebuild/requirements.txt
       - name: Verify kernel sandbox library
         run: ldconfig -p | grep 'libseccomp.so.2'
       - name: Fresh application and document tests
         run: bash scripts/ci/verify-fresh.sh python
       - name: Python dependency audit
-        run: python -m pip_audit -r rebuild/requirements.lock
+        run: python -m pip_audit -r rebuild/requirements.txt
 
   marketing:
     name: Marketing build
@@ -112,14 +112,14 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: rebuild/requirements.lock
+          cache-dependency-path: rebuild/requirements.txt
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
       - name: Install locked browser and application dependencies
         run: |
-          python -m pip install -r rebuild/requirements.lock
+          python -m pip install -r rebuild/requirements.txt
           npm ci --ignore-scripts --no-audit --no-fund
           npx playwright install --with-deps chromium
       - name: Verify kernel sandbox library

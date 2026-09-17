@@ -56,7 +56,7 @@ def execute():
     run(['bash','scripts/check-citation.sh',sha])
     # Dependency installation cannot access old data; credentials never enter argv.
     run(['python3','-m','venv',str(DEST/'.venv')])
-    run([str(DEST/'.venv/bin/python'),'-m','pip','install','--quiet','-r',str(DEST/'requirements.lock')])
+    run([str(DEST/'.venv/bin/python'),'-m','pip','install','--quiet','-r',str(DEST/'requirements.txt')])
     stop_preview()
     (SOURCE/'.env').rename(DEST/'.env')
     (SOURCE/'.runtime').rename(DEST/'.runtime')
@@ -70,9 +70,13 @@ def execute():
         # Root helper has no network. Host mount is read-only except the unit directory.
         # The only commands inside the host are these exact three fresh units.
         code='''import os,pathlib,shutil,subprocess\nos.chroot('/host');os.chdir('/')\nunits=['quillmd-fresh-'+n+'.service' for n in ('doctor','admin','worker')]\nfor name in units:\n dst=pathlib.Path('/etc/systemd/system')/name\n if dst.exists():raise RuntimeError('Refuse existing unit: '+name)\n shutil.copyfile(pathlib.Path('/opt/meddoc-pro/rebuild/deploy')/name,dst);dst.chmod(0o644)\ndrop=pathlib.Path('/etc/systemd/system/quillmd-postreboot-proof.service.d/fresh-private.conf')\nif drop.exists():raise RuntimeError('Refuse existing boot ordering drop-in')\ndrop.parent.mkdir(exist_ok=True)\nshutil.copyfile('/opt/meddoc-pro/rebuild/deploy/fresh-private.conf',drop);drop.chmod(0o644)\nsubprocess.run(['systemctl','daemon-reload'],check=True)\nsubprocess.run(['systemctl','enable','--now',*units],check=True)\n'''
-        run(['docker','run','--rm','-i','--network','none','--mount','type=bind,src=/,dst=/host,readonly','--mount','type=bind,src=/etc/systemd/system,dst=/host/etc/systemd/system','python:3-slim','python','-'],input=code,text=True)
-        run(['docker','exec','meddoc-pro-caddy-1','caddy','validate','--config','/etc/caddy/Caddyfile','--adapter','caddyfile'])
-        run(['docker','exec','meddoc-pro-caddy-1','caddy','reload','--config','/etc/caddy/Caddyfile','--adapter','caddyfile'])
+        run(['docker','run','--rm','-i','--network','none','--pid=host','--mount','type=bind,src=/,dst=/host,readonly','--mount','type=bind,src=/etc/systemd/system,dst=/host/etc/systemd/system','python:3-slim','python','-'],input=code,text=True)
+        # A git checkout can replace the inode while Docker's file bind retains
+        # the old one. Load the exact reviewed shared-tree bytes explicitly.
+        caddy_config=(ROOT/'Caddyfile').read_bytes()
+        require(subprocess.check_output(['git','show','HEAD:Caddyfile'])==caddy_config,'Caddy config differs from reviewed HEAD.')
+        for action in ('validate','reload'):
+            run(['docker','exec','-i','meddoc-pro-caddy-1','caddy',action,'--config','-','--adapter','caddyfile'],input=caddy_config)
         for _ in range(30):
             try:
                 if all(output(['systemctl','is-active',x])=='active' for x in UNITS):
