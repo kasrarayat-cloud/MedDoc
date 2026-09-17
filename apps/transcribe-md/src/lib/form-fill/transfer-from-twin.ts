@@ -5,27 +5,35 @@
 // The detector labels a detected form's boxes, but the CLINICAL concept for each
 // is the doctor's decision. Rather than guess, we TRANSFER the concept the doctor
 // ALREADY approved on their certified twin of the same form (S3 transfer-by-identity,
-// applied to the detect pipeline). The map is:
+// applied to the detect pipeline). The map is PURE IDENTITY — the twin's own
+// label→concept, never the shared registry:
 //   • SECTIONS  → label-match (normalized) to the twin's approved label→concept.
-//   • NUMBERED  → position-match: the Nth numbered-slot group on the detected form
-//     takes the Nth numbered-list concept the twin approved (its `Fill-in` slots,
-//     de-duped in displayOrder — e.g. FINDINGS list, then RECOMMENDATIONS list).
+//   • NUMBERED  → the Nth numbered-slot GROUP on the detected form takes the Nth
+//     numbered-list concept the twin approved (its `Fill-in` slots, de-duped by run).
+//
+// ⚠️ WHY NOT THE REGISTRY (deterministicConceptFor). An adversarial pass showed a
+// registry-FIRST lookup silently OVERRIDES the doctor's own decision: the registry
+// maps "POST-OPERATIVE FINDINGS"→procedure.findings while the twin approved
+// procedure.recommendations for that exact label, and registry-first wins. That is
+// the RULING-C class this transfer exists to defend against. So the twin's own
+// label→concept is the ONLY source; the registry is not consulted here.
+//
+// ⚠️ NUMBERED GROUPS ARE MATCHED BY ORDER WITH A COUNT GUARD. Two clinically
+// distinct lists that are ADJACENT (no non-numbered box between — a heading with no
+// blank produces no box) would otherwise collapse into one run and the second list
+// would inherit the first's concept. So when the number of detected numbered GROUPS
+// does not equal the number of twin numbered LISTS, EVERY numbered slot is REFUSED
+// (left unmapped) rather than guessed — the caller then declines.
 //
 // ⚠️ EVERY TRANSFERRED CONCEPT MUST BE ONE THE TWIN APPROVED — REFUSE OTHERWISE.
-// A concept that is not in the twin's approved set is never assigned. A box the
-// transfer cannot resolve is left UNMAPPED, and the caller decides:
-//   • a LABELED box left unmapped is a real gap → the ruled act REFUSES (never
-//     certifies past a labeled field the doctor has not mapped);
-//   • an UNLABELED box (the detector found a fillable region with no label — a
-//     signature rule, a stray) is not a doctor-mapped field → EXCLUDED from the
-//     fillable set and recorded, not guessed.
+//   • a LABELED box left unmapped is a real gap → the ruled act REFUSES;
+//   • an UNLABELED box (a signature rule, a stray) is EXCLUDED, never guessed.
 // ============================================================================
 import { classifyFieldSource } from '@/lib/template-twin/concept-registry';
 
 import type { FormField } from './types';
 import type { StoredDetectedField } from './detected-form-store';
 import { headerKeyForConcept } from './fill-from-note';
-import { deterministicConceptFor } from './map-fields';
 
 /** A field the doctor approved on their certified twin. */
 export interface TwinApprovedField {
@@ -35,20 +43,21 @@ export interface TwinApprovedField {
 }
 
 export interface TransferResult {
-  /** the mappable fields, each carrying a twin-APPROVED concept. */
   fields: StoredDetectedField[];
-  /** LABELED boxes the transfer could not resolve to an approved concept — a real
-   *  gap; the caller REFUSES rather than certify past them. */
+  /** LABELED boxes with no approved twin concept — a real gap; caller REFUSES. */
   unmappedLabeled: Array<{ id: string; label: string }>;
   /** UNLABELED boxes excluded from the fillable set (not a doctor-mapped field). */
   excludedUnlabeled: Array<{ id: string; page: number }>;
 }
 
-const NUMBERED = /^\s*\d+\.?\s*$/;
+// ⚠️ SAME numbered-slot pattern group-fields.ts uses (it decides a box is a list
+// slot); a narrower one here would send "2)"/"(3)" to the label path and refuse a
+// mappable form.
+const NUMBERED = /^\s*\(?\d+\s*[.)]?\s*$/;
 const FILL_IN = /^\s*fill-?in\s*$/i;
 
-/** Normalize a label for matching: lower, collapse spaces, strip trailing
- *  punctuation the detector varies on (`:`, `#`, `/`, `.`, `-`, `_`, `*`). */
+/** Normalize a label for identity matching: lower, collapse spaces, strip trailing
+ *  punctuation the detector varies on. */
 export function normalizeLabel(s: string): string {
   return s
     .toLowerCase()
@@ -58,8 +67,7 @@ export function normalizeLabel(s: string): string {
 }
 
 /** The twin's numbered-list concepts, in displayOrder, de-duped by run — e.g.
- *  [procedure.findings, procedure.recommendations]. Derived from the `Fill-in`
- *  (or numbered) twin slots. */
+ *  [procedure.findings, procedure.recommendations]. */
 export function numberedListConcepts(twin: ReadonlyArray<TwinApprovedField>): string[] {
   const out: string[] = [];
   for (const f of [...twin].sort((a, b) => a.displayOrder - b.displayOrder)) {
@@ -75,50 +83,66 @@ export function transferFromTwin(
   twin: ReadonlyArray<TwinApprovedField>,
 ): TransferResult {
   const approved = new Set(twin.map((t) => t.concept).filter((c): c is string => !!c));
+
+  // The doctor's OWN label→concept (identity). First-wins on a normalize collision.
   const labelMap = new Map<string, string>();
   for (const t of twin) {
     if (!t.concept) continue;
     if (FILL_IN.test(t.originalLabel) || NUMBERED.test(t.originalLabel)) continue;
-    labelMap.set(normalizeLabel(t.originalLabel), t.concept);
+    const k = normalizeLabel(t.originalLabel);
+    if (!labelMap.has(k)) labelMap.set(k, t.concept);
   }
-  const numbered = numberedListConcepts(twin);
+  const lists = numberedListConcepts(twin);
+
+  // ── PRE-PASS: count the detected numbered GROUPS (runs of consecutive slots).
+  let detectedGroups = 0;
+  {
+    let inRun = false;
+    for (const g of grouped) {
+      if (NUMBERED.test(g.label.trim())) {
+        if (!inRun) {
+          detectedGroups += 1;
+          inRun = true;
+        }
+      } else inRun = false;
+    }
+  }
+  // Numbered structure must line up with the twin's list count, or every numbered
+  // slot is refused (never guessed) — this is the count guard for the adjacency
+  // collapse. Also refuses "some numbered slots but the twin has no numbered list".
+  const numberedOk = detectedGroups > 0 && detectedGroups === lists.length;
 
   const fields: StoredDetectedField[] = [];
   const unmappedLabeled: Array<{ id: string; label: string }> = [];
   const excludedUnlabeled: Array<{ id: string; page: number }> = [];
 
   let groupIdx = -1;
-  let inNumberedRun = false;
+  let inRun = false;
 
   for (const g of grouped) {
     const label = g.label.trim();
     let concept: string | null = null;
 
     if (NUMBERED.test(label)) {
-      if (!inNumberedRun) {
+      if (!inRun) {
         groupIdx += 1;
-        inNumberedRun = true;
+        inRun = true;
       }
-      concept = numbered[groupIdx] ?? null;
+      concept = numberedOk ? (lists[groupIdx] ?? null) : null;
     } else {
-      inNumberedRun = false;
-      // Deterministic registry first (metadata + section headings), then the twin's
-      // own approved label→concept. Either way, only an APPROVED concept survives.
-      const det = deterministicConceptFor(label);
-      concept = det ?? labelMap.get(normalizeLabel(label)) ?? null;
+      inRun = false;
+      concept = labelMap.get(normalizeLabel(label)) ?? null; // twin IDENTITY only
     }
 
-    // ⚠️ REFUSE any concept the twin did not approve.
+    // Defensive — labelMap/lists are approved by construction; never transfer past it.
     if (concept && !approved.has(concept)) concept = null;
 
     if (!concept) {
       if (label === '') {
         excludedUnlabeled.push({ id: g.id, page: g.page });
-        continue; // not a doctor-mapped field — never filled, never masked
+        continue;
       }
       unmappedLabeled.push({ id: g.id, label: g.label });
-      // keep it in the field set with a null concept so the caller can see it and
-      // REFUSE (certifyDetectedForm refuses on any concept===null field).
     }
 
     fields.push({
