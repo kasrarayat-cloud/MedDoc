@@ -380,6 +380,14 @@ services:
         # ⚠️ ruling #181/1 — the shipped commit, readable off the image.
         GIT_REVISION: ${GIT_REVISION:-unknown}
     restart: unless-stopped
+    # #326 Slice D — the worker joins `converter` (internal, no-egress) so a
+    # detect-based ruled act (scripts/certify-owner-colon-detected.ts, run via
+    # run-ruled-mutation.sh --in transcribe-md-worker) can reach the form-detect
+    # sidecar. `default` is kept for postgres/redis/minio. The product worker path
+    # does not itself call the sidecar today; this is for the ruled-act + future jobs.
+    networks:
+      - default
+      - converter
     # Phase 19 — h16-cap-drop. BullMQ worker; outbound HTTPS only;
     # no privileged port; no host filesystem writes (logs go to
     # docker's stdout). Default caps unused.

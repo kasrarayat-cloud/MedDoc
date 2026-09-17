@@ -45,6 +45,13 @@ export {
 } from './fill-from-facts';
 export { deriveDetectedFormValues, type DeriveValuesResult } from './derive-values';
 export {
+  transferFromTwin,
+  numberedListConcepts,
+  normalizeLabel,
+  type TwinApprovedField,
+  type TransferResult,
+} from './transfer-from-twin';
+export {
   certifyDetectedForm,
   DetectedFormCertifyError,
   fieldExpectedToFill,
