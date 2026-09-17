@@ -1,9 +1,21 @@
 # Owner actions for the next private beta release
 
-Updated 2026-09-17. Continue the existing new application and preserve its data.
-The engineering choices below are fixed for this stage; they are not an options
-menu. Public app/admin routes stay in maintenance and real patient data remains
-disabled. A configured credential is not proof that an integration passed.
+Updated 2026-09-17 (late, after the fresh live Word run). Continue the existing
+new application and preserve its data. The engineering choices below are fixed
+for this stage; they are not an options menu. Public app/admin routes stay in
+maintenance and real patient data remains disabled. A configured credential is
+not proof that an integration passed.
+
+## 0. Review the fresh Word documents in native Microsoft Word (owner eyeball)
+
+**Blocks:** native Word appearance acceptance, which no renderer on the VPS can
+establish. Everything is prepared in `word-acceptance-checklist.md`: the
+original/export pair with SHA-256 hashes, the 90 answer locations, and the
+18-row checklist. Fetch the private `.docx` files over the SSH tunnel with SFTP,
+verify the hashes, open them in Word, mark each row ACCEPT/REJECT and report
+the Word version. The fresh export came from one live Anthropic request through
+the repaired mapper with zero clinician corrections; it contains synthetic data
+only.
 
 ## 1. Provide Stripe sandbox access securely
 
@@ -26,13 +38,16 @@ payment retry verification. Existing locally signed fixtures are simulated tests
    key. Live and publishable keys are rejected. The naming and creation steps
    follow Stripe's [API key guide](https://docs.stripe.com/keys) and
    [restricted-key guide](https://docs.stripe.com/keys/restricted-api-keys).
-4. Authorize the official Stripe CLI against that same sandbox in the operator's
-   protected session. Engineering will use secure CLI forwarding to
-   `http://127.0.0.1:9130/billing/webhook/`; no public ingress needs to open. The
-   listener's `whsec_…` signing secret must be saved securely as
-   `STRIPE_WEBHOOK_SECRET` in the same protected environment. It is distinct from
-   the API key and from a Dashboard endpoint's signing secret. Keep listener
-   output private. [Stripe local webhook testing](https://docs.stripe.com/webhooks#test-webhook)
+4. Authorize the official Stripe CLI against that same sandbox on YOUR machine
+   (the VPS has no Stripe CLI and none will be installed there). With the SSH
+   tunnel open, run `stripe listen --forward-to http://localhost:9130/billing/webhook/`
+   so signed events reach the private application through the tunnel; no public
+   ingress needs to open. The listener's `whsec_…` signing secret must be saved
+   securely as `STRIPE_WEBHOOK_SECRET` in the same protected environment. It is
+   distinct from the API key and from a Dashboard endpoint's signing secret. Keep
+   listener output private. [Stripe local webhook testing](https://docs.stripe.com/webhooks#test-webhook)
+   The prepared runner and its exact steps are in
+   `external-verification-runbook.md` once that branch merges.
 
 Forward only these events: `checkout.session.completed`,
 `checkout.session.async_payment_succeeded`,
@@ -65,9 +80,14 @@ automatic top-up is enabled.
 **Blocks:** real invitation and password-recovery delivery evidence.
 
 Provide one inbox you control and will check, with permission for the synthetic
-invitation and recovery messages. The preserved Resend credential and sender
+invitation and recovery messages. Name it explicitly (one line is enough; the
+account email you use with this coding session is an acceptable choice, but it
+must be stated by you, not inferred). The preserved Resend credential and sender
 configuration already exist; do not recreate credentials just because the
-current key cannot read the provider's domain-status endpoint.
+current key cannot read the provider's domain-status endpoint. Public DNS was
+re-checked on 2026-09-17: SPF on `quillmd.com` and `send.quillmd.com`, DKIM at
+`resend._domainkey.quillmd.com`, DMARC present, and the send subdomain's MX
+points at the provider (`rebuild/.runtime/resend-sender-dns-20260917T2359.json`).
 
 Engineering will check the configured sender against current DNS/provider
 evidence, send to the controlled inbox, record the provider message identifiers,
@@ -174,3 +194,22 @@ providers and storage, then close the documented security, storage, backup and
 independent-test gates. These are external evidence requirements, not grounds
 to pause unrelated implementation. Public maintenance and the synthetic-only
 gate remain active until the release evidence supports changing them.
+
+## 7. Approve a maintenance window for at-rest encryption of the fresh data
+
+**Blocks:** real patient data (not synthetic testing). Verified 2026-09-17: the
+fresh PostgreSQL volume `quillmd_fresh_pg` and the state directory
+`/var/lib/quillmd` live on the plain root filesystem; the existing LUKS volumes
+hold only the retired system's data (`patient-data-release-requirements.md`).
+Engineering will move both onto an encrypted volume during a declared window
+with a pre/post encrypted backup and isolated restore proof. Approve the window
+(about 30 minutes of private-service downtime) and name where the volume key's
+recovery copy will be escrowed, separate from the VPS.
+
+## 8. Independent tester access is ready to grant
+
+The tunnel-only, no-shell SSH grant is prepared
+(`scripts/ops/reviewer-tunnel-access.sh`, described in `pentest-scope.md`).
+Nothing is granted until you provide the reviewer's identity, public key, UTC
+window and emergency contact from section 6.
+
