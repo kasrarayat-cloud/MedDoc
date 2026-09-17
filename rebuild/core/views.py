@@ -3,7 +3,7 @@ import json
 import os
 import re
 import secrets
-from datetime import timedelta
+from datetime import datetime,timedelta
 from decimal import Decimal
 from pathlib import Path
 from django.conf import settings
@@ -26,10 +26,79 @@ from .security import audit,departments,scoped,membership,digest,token,store_upl
 from .billing import welcome_credit,credit_payment,reconcile_refund,reconciliation,stripe_test_key_configured
 from .context import integration_status
 from .jobs import enqueue
+from . import wm_review
 
 
 def error_message(exc):
     return '; '.join(exc.messages) if isinstance(exc,ValidationError) else str(exc)
+
+
+def document_backend(info):
+    if not info.get('backend'):return {}
+    result={key:info.get(key) for key in ('backend','source_sha256','mapping_digest')}
+    if (result['backend']!=wm_review.BACKEND or result['source_sha256']!=info.get('sha256')
+            or not isinstance(result['mapping_digest'],str) or not re.fullmatch(r'[a-f0-9]{64}',result['mapping_digest'])):
+        raise ValidationError('The qualified Word mapping identity is incomplete.')
+    return result
+
+
+def wm_resolve(encounter,actor,decisions=None):
+    from documents import resolve_template
+    version=encounter.template_version
+    original=private_path(version.template.original_path)
+    if hashlib.sha256(original.read_bytes()).hexdigest()!=version.template.sha256:
+        raise ValidationError('Original integrity check failed.')
+    decisions=decisions if decisions is not None else encounter.template_review.get('decisions',{})
+    variants={row['key']:decisions.get(row['key'],{}).get('variant',row['default_variant'])
+              for row in version.review_requirements}
+    signer=encounter.finalized_by if encounter.status=='finalized' else actor
+    context={'reviewer_id':str(signer.pk),'revision':encounter.revision,'notes':encounter.notes,
+             'signer_name':' '.join(signer.get_full_name().split()) or signer.email,
+             'finalized_at':(encounter.finalized_at or timezone.now()).isoformat()}
+    result=resolve_template(original,version.document_backend,wm_review.sdk_answers(encounter,actor),
+                            claim_variants=variants,trusted_context=context)
+    if (result.get('backend')!=version.document_backend.get('backend')
+            or result.get('mapping_digest')!=version.document_backend.get('mapping_digest')
+            or result.get('sha256')!=version.template.sha256):
+        raise ValidationError('The resolved Word statements differ from the selected mapping version.')
+    if result.get('conflicts'):
+        raise ValidationError('The chosen answers and prewritten statement alternatives conflict. Correct their documented choices before review and export.')
+    return result['review_requirements']
+
+
+def source_quote_evidence(notes,label,raw,labels):
+    """Convert submitted quotations into actual offsets; never accept posted offsets."""
+    if len(raw)>50000:raise ValidationError('Source quotations exceed the supported limit; nothing was truncated.')
+    units,_=wm_review.source_units(notes,label,labels)
+    evidence=[]
+    for submitted in raw.splitlines():
+        quote=submitted.strip()
+        if not quote:continue
+        found=next((item for item in units if item[2]==quote),None)
+        if found is None:raise ValidationError('Use a complete source line or the complete value for this exact question label.')
+        evidence.append({'quote':quote,'start':found[0],'end':found[1]})
+    wm_review.validate_evidence(notes,label,evidence,labels)
+    return evidence
+
+
+WM_BLOCKERS={
+    'clinician_review_required':'A clinician must review this value for the current source revision.',
+    'conflicting_source':'The notes contain conflicting values for this question. Correct the source first.',
+    'instruction_like_source':'Instruction-like source text needs correction before clinical review.',
+    'not_an_original_option':'This value is not one of the original Word choices.',
+    'exact_labelled_source_required':'Quote the complete source value under this exact question label.',
+    'documented_numeric_value_and_unit_required':'Document the numeric value and the original unit, such as 3.2 mm or 400 ms.',
+    'documented_value_marked_missing':'The source documents a value for this field. Correct the notes before marking it missing.',
+    'missing_dependent_choice':'An unanswered choice leaves this prewritten statement incomplete.',
+    'statement_alternative_requires_empty_choices':'This statement alternative requires the associated choices to be left unanswered.',
+    'complete_assertion_source_required':'Document the complete prewritten statement under its own exact statement label, including its side.',
+    'preprinted_identity_differs_from_actual_clinician':'The preprinted identity differs from the signed-in clinician. This template cannot be finalized by this account.',
+    'identity_must_come_from_authenticated_clinician':'Identity comes from the signed-in clinician, not source quotations.',
+    'signature_time_must_come_from_finalization':'The signature time is set during finalization, not taken from the notes.',
+    'selected_answer_conflicts_with_fixed_assertion':'The selected reflux finding contradicts this fixed negative statement. Export is blocked.',
+    'symptom_conflicts_with_asymptomatic':'This symptom conflicts with the selected asymptomatic finding.',
+    'asymptomatic_conflicts_with_documented_symptom':'Asymptomatic conflicts with another selected symptom.',
+}
 
 def health(request): return JsonResponse({'status':'ok','data_mode':'synthetic-only','surface':'admin' if settings.ADMIN_SITE else 'doctor','release':settings.RELEASE_SHA})
 
@@ -131,7 +200,7 @@ def template_upload(request):
             if len(info['fields'])>100:raise ValidationError('Templates support at most 100 answer fields. Split this template explicitly.')
             with transaction.atomic():
                 t=Template.objects.create(department=department,name=form.cleaned_data['name'],format=info['format'],original_name=Path(form.cleaned_data['file'].name).name[:200],original_path=relative,sha256=info['sha256'],warnings=info.get('warnings',[]),created_by=request.user)
-                TemplateVersion.objects.create(template=t,number=1,fields=info['fields'],created_by=request.user)
+                TemplateVersion.objects.create(template=t,number=1,fields=info['fields'],review_requirements=info.get('review_requirements',[]),document_backend=document_backend(info),created_by=request.user)
                 audit(request.user,'template.upload',t.pk,department=department,sha256=t.sha256,field_count=len(info['fields']))
             return redirect('template_detail',pk=t.pk)
         except (ValidationError,DocumentError) as exc:
@@ -152,8 +221,10 @@ def template_detail(request,pk):
             with transaction.atomic():
                 Template.objects.select_for_update().get(pk=t.pk)
                 latest=t.versions.order_by('-number').first()
+                if latest.document_backend and labels!={f['key']:f['label'] for f in latest.fields}:
+                    raise ValidationError('This qualified Word mapping uses fixed question labels so source evidence remains unambiguous. Keep the original labels.')
                 fields=[{**f,'label':labels[f['key']]} for f in latest.fields]
-                version=TemplateVersion.objects.create(template=t,number=latest.number+1,fields=fields,created_by=request.user)
+                version=TemplateVersion.objects.create(template=t,number=latest.number+1,fields=fields,review_requirements=latest.review_requirements,document_backend=latest.document_backend,created_by=request.user)
                 audit(request.user,'template.mapping_version',version.pk,department=t.department,number=version.number)
             messages.success(request,'New mapping version saved. Existing documents keep their original version.');return redirect('template_detail',pk=t.pk)
         except ValidationError as exc:form.add_error(None,error_message(exc))
@@ -179,13 +250,49 @@ def encounter_new(request):
     return render(request,'encounter_form.html',{'form':form})
 
 def encounter_detail(request,pk):
+    from documents import DocumentError
     e=get_object_or_404(scoped(Encounter,request.user).select_related('patient','template_version__template'),pk=pk)
-    rows=[{'key':f['key'],'label':f['label'],**e.answers.get(f['key'],{'text':'','status':'missing','evidence':[],'reviewed':False})} for f in e.template_version.fields]
+    is_wm=bool(e.template_version.document_backend)
+    can_finalize=Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists()
+    rows=[{**f,**e.answers.get(f['key'],{'text':'','status':'missing','evidence':[],'reviewed':False})} for f in e.template_version.fields]
+    requirements=[];review_error='';assessment=None;resolved_ok=False
+    if is_wm:
+        decisions=e.template_review.get('decisions',{})
+        try:
+            requirements=wm_resolve(e,request.user)
+            resolved_ok=True
+            if can_finalize:
+                assessment=wm_review.evaluate_review(e,request.user,decisions,resolved_requirements=requirements)
+        except (ValidationError,DocumentError) as exc:
+            review_error=error_message(exc)
+            requirements=e.template_version.review_requirements
+        for row in rows:
+            answer=e.answers.get(row['key'],{})
+            row['reviewed']=(answer.get('reviewed') is True and answer.get('reviewed_by')==str(request.user.pk)
+                             and answer.get('review_revision')==e.revision)
+            row['unsupported_choice']=bool(row.get('kind')=='choice' and row.get('text') and row['text'] not in row.get('options',[]))
+            row['source_quote']=answer.get('review_quote','\n'.join(item['quote'] for item in row.get('evidence',[])))
+            reasons=assessment['answers'][row['key']]['blockers'] if assessment else []
+            if assessment:row['status']=assessment['answers'][row['key']]['status']
+            row['review_errors']=[WM_BLOCKERS.get(reason,'Clinical review is incomplete.') for reason in reasons]
+        for row in requirements:
+            row['unresolved']=not resolved_ok
+            decision=decisions.get(row['key'],{})
+            row['reviewed']=bool(decision.get('reviewed') and e.template_review.get('reviewer_id')==str(request.user.pk)
+                                  and e.template_review.get('binding',{}).get('source_revision')==e.revision)
+            row['source_quote']='\n'.join(item['quote'] for item in decision.get('evidence',[]))
+            row['selected_variant']=decision.get('variant') or row.get('selected_variant') or row.get('default_variant')
+            if resolved_ok:
+                row['review_token']=signing.dumps({'encounter':str(e.pk),'revision':e.revision,
+                    'actor':str(request.user.pk),'key':row['key'],'text_sha256':row['text_sha256'],
+                    'variant':row['selected_variant']},salt='wm-statement-review')
+            reasons=assessment['assertions'][row['key']]['blockers'] if assessment else []
+            row['review_errors']=[WM_BLOCKERS.get(reason,'Clinical review is incomplete.') for reason in reasons]
     from .generation import maximum_cost,configuration
-    try:maximum_charge=maximum_cost(e.notes,e.template_version.fields)*Decimal('1.5')
+    try:maximum_charge=maximum_cost(e.notes,e.template_version.fields,context_labels=[row['label'] for row in e.template_version.review_requirements])*Decimal('1.5')
     except ValidationError:maximum_charge=None
     audit(request.user,'encounter.view',e.pk,department=e.department)
-    return render(request,'encounter_detail.html',{'encounter':e,'answer_rows':rows,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':Decimal(os.getenv('QUILLMD_VOICE_MAX_COST','0.20'))*Decimal('1.5'),'codes':CodeSuggestion.objects.filter(encounter=e).select_related('terminology__release','accepted_by'),'jobs':Job.objects.filter(encounter=e).order_by('-created_at'),'voice_form':VoiceForm(),'can_finalize':Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists()})
+    return render(request,'encounter_detail.html',{'encounter':e,'answer_rows':rows,'wm_template':is_wm,'wm_requirements':requirements,'wm_review_error':review_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':Decimal(os.getenv('QUILLMD_VOICE_MAX_COST','0.20'))*Decimal('1.5'),'codes':CodeSuggestion.objects.filter(encounter=e).select_related('terminology__release','accepted_by'),'jobs':Job.objects.filter(encounter=e).order_by('-created_at'),'voice_form':VoiceForm(),'can_finalize':can_finalize})
 
 @require_POST
 def generate_view(request,pk):
@@ -200,11 +307,16 @@ def generate_view(request,pk):
 @require_POST
 @transaction.atomic
 def save_answers(request,pk):
+    from documents import DocumentError
     e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
     if e.status=='finalized':return HttpResponse('Finalized documents are immutable.',status=409)
     if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():return HttpResponse('Wait until the pending job is resolved.',status=409)
     if request.POST.get('revision')!=str(e.revision):return HttpResponse('This document changed. Reload before editing.',status=409)
-    answers={}
+    is_wm=bool(e.template_version.document_backend)
+    labels=[row['label'] for row in e.template_version.fields+e.template_version.review_requirements]
+    if is_wm and any(request.POST.get('claim_reviewed_'+row['key'])=='on' for row in e.template_version.review_requirements):
+        membership(request.user,e.department,roles=['owner','clinician'])
+    answers={};review_errors=[];target_revision=e.revision+1
     for field in e.template_version.fields:
         key=field['key'];previous=e.answers.get(key,{'text':'','evidence':[],'status':'missing'})
         value=request.POST.get('answer_'+key,'')
@@ -212,9 +324,59 @@ def save_answers(request,pk):
         reviewed=request.POST.get('reviewed_'+key)=='on'
         if reviewed:membership(request.user,e.department,roles=['owner','clinician'])
         answers[key]={**previous,'text':value,'reviewed':reviewed,'status':'edited' if value!=previous.get('text','') else previous.get('status','missing'),'reviewed_by':str(request.user.pk) if reviewed else None}
-    e.answers=answers;e.revision+=1;e.status='review';e.save(update_fields=['answers','revision','status'])
+        if is_wm:
+            quote=request.POST.get('source_'+key,'')
+            if len(quote)>50000:return HttpResponse('Source quotations exceed the supported limit; nothing was saved.',status=400)
+            try:evidence=source_quote_evidence(e.notes,field['label'],quote,labels)
+            except ValidationError as exc:
+                evidence=[];reviewed=False;review_errors.append(error_message(exc))
+            answers[key].update(evidence=evidence,review_quote=quote,reviewed=reviewed,
+                                reviewed_by=str(request.user.pk) if reviewed else None,
+                                review_revision=target_revision if reviewed else None)
+            if not value:answers[key]['status']='missing'
+    decisions={}
+    if is_wm:
+        for requirement in e.template_version.review_requirements:
+            key=requirement['key'];quote=request.POST.get('claim_source_'+key,'')
+            if len(quote)>50000:return HttpResponse('Source quotations exceed the supported limit; nothing was saved.',status=400)
+            reviewed=request.POST.get('claim_reviewed_'+key)=='on'
+            try:evidence=source_quote_evidence(e.notes,requirement['label'],quote,labels)
+            except ValidationError as exc:
+                evidence=[];reviewed=False;review_errors.append(error_message(exc))
+            variant=request.POST.get('claim_variant_'+key,requirement.get('default_variant'))
+            if variant not in {item['id'] for item in requirement['variants']}:
+                return HttpResponse('Choose an approved statement alternative. No changes were saved.',status=400)
+            decisions[key]={'reviewed':reviewed,'evidence':evidence,'variant':variant}
+    e.answers=answers;e.revision=target_revision;e.status='review';wm_review.invalidate_review(e)
+    if is_wm and Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists():
+        try:
+            resolved=wm_resolve(e,request.user,decisions)
+            for requirement in resolved:
+                key=requirement['key']
+                if not decisions[key]['reviewed']:continue
+                try:
+                    visible=signing.loads(request.POST.get('claim_token_'+key,''),salt='wm-statement-review',max_age=3600)
+                    expected={'encounter':str(e.pk),'revision':target_revision-1,'actor':str(request.user.pk),
+                              'key':key,'text_sha256':requirement['text_sha256'],
+                              'variant':requirement['selected_variant']}
+                    if visible!=expected:raise ValueError()
+                except (signing.BadSignature,ValueError,TypeError):
+                    decisions[key]['reviewed']=False
+                    review_errors.append('A statement changed or its displayed review expired. Review the updated wording shown below, then save its review again.')
+            e.template_review=wm_review.build_review(e,request.user,decisions,resolved_requirements=resolved)
+        except (ValidationError,DocumentError) as exc:
+            # Retain incomplete choices for correction, visibly unqualified.
+            # Schema0 is never accepted by the finalization helper.
+            for decision in decisions.values():decision['reviewed']=False
+            e.template_review={'schema':0,'decisions':decisions,'binding':wm_review.binding(e),
+                               'reviewer_id':str(request.user.pk)}
+            review_errors.append(error_message(exc))
+    e.save(update_fields=['answers','revision','status','template_review'])
     audit(request.user,'encounter.answers_saved',e.pk,department=e.department,revision=e.revision)
-    messages.success(request,'Edits saved. Review every answer before finalizing.');return redirect('encounter_detail',pk=pk)
+    if is_wm:audit(request.user,'encounter.template_review_saved',e.pk,department=e.department,revision=e.revision,complete=e.template_review.get('assessment',{}).get('complete',False))
+    messages.success(request,'Edits saved. Review every answer before finalizing.')
+    for message in dict.fromkeys(review_errors):messages.warning(request,'Review remains incomplete: '+message)
+    return redirect('encounter_detail',pk=pk)
 
 @require_POST
 def finalize(request,pk):
@@ -234,9 +396,24 @@ def finalize(request,pk):
             relative=f'exports/{secrets.token_hex(24)}.{e.template_version.template.format.lower()}'
             out=private_path(relative);out.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
             canonical=inspect_template(original)
-            fill_template(original,canonical['fields'],{k:v['text'] for k,v in e.answers.items()},out)
+            finalized_at=timezone.now()
+            if e.template_version.document_backend:
+                version=e.template_version
+                if (document_backend(canonical)!=version.document_backend or canonical['fields']!=version.fields
+                        or canonical.get('review_requirements')!=version.review_requirements):
+                    raise ValidationError('The original Word mapping differs from this immutable mapping version.')
+                resolved=wm_resolve(e,request.user)
+                reviewed=wm_review.validate_for_finalize(e,request.user,resolved_requirements=resolved)
+                fill_template(original,version.fields,reviewed['answers'],out,
+                              document_backend=version.document_backend,
+                              reviewed_requirements=reviewed['reviewed_requirements'],
+                              claim_variants=reviewed['claim_variants'],
+                              trusted_context=reviewed['trusted_context'])
+                finalized_at=datetime.fromisoformat(reviewed['trusted_context']['finalized_at'])
+            else:
+                fill_template(original,canonical['fields'],{k:v['text'] for k,v in e.answers.items()},out)
             out.chmod(0o600)
-            e.export_path=relative;e.export_sha256=hashlib.sha256(out.read_bytes()).hexdigest();e.finalized_at=timezone.now();e.finalized_by=request.user;e.status='finalized';e.save()
+            e.export_path=relative;e.export_sha256=hashlib.sha256(out.read_bytes()).hexdigest();e.finalized_at=finalized_at;e.finalized_by=request.user;e.status='finalized';e.save()
             audit(request.user,'encounter.finalize',e.pk,department=e.department,export_sha256=e.export_sha256,mapping_version=e.template_version.number)
         messages.success(request,'Finalized. The original structure is preserved in your export.')
     except (ValidationError,DocumentError) as exc:messages.error(request,error_message(exc))
@@ -491,7 +668,7 @@ def encounter_notes(request,pk):
     if request.POST.get('revision')!=str(e.revision):return HttpResponse('Reload before editing changed notes.',status=409)
     notes=request.POST.get('notes','')
     if not notes.strip() or len(notes)>50000:return HttpResponse('Notes must contain 1–50,000 characters; nothing was truncated.',status=400)
-    e.notes=notes;e.answers={};e.revision+=1;e.status='draft';e.save(update_fields=['notes','answers','revision','status'])
+    e.notes=notes;e.answers={};e.revision+=1;e.status='draft';wm_review.invalidate_review(e);e.save(update_fields=['notes','answers','revision','status','template_review'])
     CodeSuggestion.objects.filter(encounter=e).update(accepted_by=None,accepted_at=None)
     CodeSuggestion.objects.filter(encounter=e).delete()
     audit(request.user,'coding.invalidated_by_source_edit',e.pk,department=e.department)

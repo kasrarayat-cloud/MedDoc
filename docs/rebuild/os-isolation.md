@@ -1,6 +1,21 @@
 # Private application OS boundary
 
-Prepared 2026-09-17 for the continuation from release `66acbba`.
+Activated and verified 2026-09-17 on release
+`688837471efb8b11c57a89e76d585e0ba352e937` (PR1181). Exact merge CI35262434086
+and secrets35262434087 passed before the guarded cutover. The design below is
+implemented. Private `os-identity-activation.json` records the judged result:
+all33table fingerprints,27files and2mail objects preserved,6shared containers
+unchanged, no provider requests or schema changes.
+
+Actual doctor/admin/worker processes run as UID996/GID988 with only their private
+group, no capabilities and `NoNewPrivs=1`. Each same-PID proof passed9denials
+and3state read/write/delete controls. `identity-browser-verification.json`
+passed8deployed checks including MFA/replay, session recovery, invitations,
+exactly-one welcome grant, upload/export and department/organization isolation.
+These invitation/recovery checks used the private outbox, not real email.
+
+The direct file/socket coverage gap is closed by same-PID measurements. The
+blocked namespace-entry method remains blocked; no host protection was weakened.
 
 ## Diagnosis of the previous coverage gap
 
@@ -34,7 +49,7 @@ The kernel's namespace-handle inspection uses ptrace access checks; see the
 
 ## Dedicated identity and state ownership
 
-The planned application identity is the nonlogin system user and group
+The application identity is the nonlogin system user and group
 `quillmd-app`. It must have no operator or Docker group membership. The launcher
 checks the real/effective/saved/filesystem UID and GID, supplementary groups,
 empty inherited/permitted/effective/bounding/ambient capability sets and
@@ -45,7 +60,7 @@ as `claude` inherited the operator's `users` and `docker` supplementary groups.
 An empty `SupplementaryGroups=` property alone did not remove the account's
 ordinary group memberships.
 
-Intended ownership:
+Verified ownership:
 
 | Resource | Required ownership and access |
 | --- | --- |

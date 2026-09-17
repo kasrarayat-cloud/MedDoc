@@ -25,7 +25,7 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None):
     if old: return old
     if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists(): raise ValidationError('This encounter already has a pending job.')
     job=Job.objects.create(encounter=e,user=user,kind=kind,revision=e.revision,request_key=key,input_path=input_path,config=config or generation.configuration())
-    max_cost=generation.maximum_cost(e.notes,e.template_version.fields,job.config) if kind=='generation' else Decimal(job.config['voice_max_cost'])
+    max_cost=generation.maximum_cost(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements]) if kind=='generation' else Decimal(job.config['voice_max_cost'])
     if kind=='transcription' and not (job.config['voice_rate_minute'] or job.config['voice_rate_second']): raise ValidationError('Transcription usage rates have not been configured.')
     reserve(job,max_cost)
     audit(user,'job.queued',job.pk,department=e.department,kind=kind)
@@ -60,7 +60,7 @@ def run_one():
     provider_returned=False
     try:
         e=job.encounter
-        result,cost,units,rates,provider,request_id,simulated=generation.generate(e.notes,e.template_version.fields,job.config) if job.kind=='generation' else transcribe(job)
+        result,cost,units,rates,provider,request_id,simulated=generation.generate(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements]) if job.kind=='generation' else transcribe(job)
         provider_returned=True
         response=(result.get('anthropic_response') or result.get('response')) if isinstance(result,dict) else None
         resource_id=getattr(response,'id','') or ''
@@ -94,6 +94,7 @@ def run_one():
                 e.notes+='\n\n'+result; e.answers={}; e.status='draft'; e.revision+=1
                 CodeSuggestion.objects.filter(encounter=e).delete()
                 audit(job.user,'coding.invalidated_by_transcription',e.pk,department=e.department)
+            e.template_review={}
             e.save()
             job.state='succeeded';job.provider=provider;job.provider_request_id=request_id;job.finished_at=timezone.now();job.save()
             audit(job.user,'job.succeeded',job.pk,department=e.department,kind=job.kind)

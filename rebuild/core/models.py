@@ -88,6 +88,8 @@ class TemplateVersion(Entity):
     template=models.ForeignKey(Template,on_delete=models.PROTECT,related_name='versions')
     number=models.PositiveIntegerField()
     fields=models.JSONField(default=list)
+    review_requirements=models.JSONField(default=list,blank=True)
+    document_backend=models.JSONField(default=dict,blank=True)
     created_by=models.ForeignKey(User,on_delete=models.PROTECT)
     class Meta: constraints=[models.UniqueConstraint(fields=['template','number'],name='mapping_version_unique')]
     def __str__(self): return f'{self.template.name} · mapping {self.number}'
@@ -98,6 +100,7 @@ class Encounter(Entity):
     created_by=models.ForeignKey(User,on_delete=models.PROTECT,related_name='encounters')
     notes=models.TextField()
     answers=models.JSONField(default=dict)
+    template_review=models.JSONField(default=dict,blank=True)
     status=models.CharField(max_length=16,default='draft')
     revision=models.PositiveIntegerField(default=0)
     finalized_at=models.DateTimeField(null=True)

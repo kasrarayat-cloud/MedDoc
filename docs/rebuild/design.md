@@ -142,3 +142,25 @@ this successful local run.
 ## Private beta recovery extension — 2026-09-17
 
 Reference lock: reuse the existing auth-shell, native labelled inputs, focus states, inline errors and teal action styles above. Refero MCP is unavailable; craft-details forms/focus and the existing sign-in/register screens were reviewed before implementation. Add request → private-outbox/provider-acceptance disclosure → expiring link → password reset → explicit sign-in. Administrator password recovery also requires the existing authenticator; losing it invokes a separately verified operator recovery process. Generic request responses avoid account enumeration. No new visual tokens or external assets.
+
+## WM IOV clinical review extension — 2026-09-17
+
+Direct build within the existing clinical workspace. The deployed review screen
+and the established reference lock above are the primary target. Live Refero
+tools remain unavailable. The bundled craft-details form/focus guidance and
+copywriting clarity/error guidance were read before implementation.
+
+Preserve the white document surface, teal actions, thin dividers, full source
+notes, evidence beside each answer, native labelled controls and explicit text
+statuses. Use native selects for fixed Word choices, with a visible unanswered
+option; unknown generated text remains an error requiring an explicit decision.
+Add a separate prewritten-statements review section in the same form. Show the
+actual statement, its source evidence and clinician decision together. Missing
+support and contradictions must be visible before finalization. Source edits
+clear dependent decisions. Signing identity comes from the authenticated actor.
+No new visual tokens, decorative imagery, outside assets or truncated notes.
+
+The user has already selected WM IOV and Word-first scope. No visual-option menu
+or architecture decision is needed. Validate desktop/mobile overflow, keyboard
+labels/focus, failure states and completed review against this existing target
+once the backend is integrated; this paragraph does not claim those checks ran.

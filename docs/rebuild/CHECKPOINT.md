@@ -1,16 +1,89 @@
-# Continuation pointer — private beta verification, 2026-09-17
+# Continuation pointer — Word and recovery milestone, 2026-09-17
 
-**Preserve this new implementation and all of its data. No further reset or old-application cleanup is needed.**
+**Preserve the new implementation and all new data. No reset, migration from the
+old app, broad cleanup or public promotion is authorized by this continuation.**
 
-The continuation adds expiring password recovery with administrator MFA, verification resend, invitation revocation, explicit provider HTTP/resource identifiers and configured pricing fingerprints, durable Stripe test-event state and refund safeguards, organization-owner top-ups, encrypted backup/isolated restore tooling, and separately privileged database roles with service secret isolation. See `private-beta-qualification.md`, `account-recovery.md`, `billing-provenance-verification.md`, `backup-restore.md` and `security-readiness.md` for bounded evidence and remaining gates.
+Latest owner decisions: complete Word support including WM IOV first; scanned
+forms later. Reuse preserved Resend with a verified sender and established
+owner-controlled recipient. Engineering owns routine choices; no technical
+option menus. CPT stays planned and disabled until licensing is verified.
 
-Local final verification before this PR: **112 Django/PostgreSQL tests**, **26 document/backup tests**, **19 form qualification cases**, **13 extended fixture browser checks**, **17 restored-database role assertions**. A four-case adversarial provider-deduplication counterexample was independently reproduced on the prior test schema; migration0010 repairs all four. These local results do not alone establish activation.
+Read `/opt/meddoc-pro/rebuild/.runtime/CHECKPOINT-LATEST.md` for the actual
+running release, protected evidence and next action. This operational checkpoint
+is append-only; its latest milestone supersedes historical sections. Never print
+its linked account credentials, provider payloads, secrets or recovery keys.
 
-The reviewed updater `scripts/update-private-beta.py` requires exact merge-commit CI, the committed mutation declaration, a verified new-system restore report, stopped private services, unchanged database/file hashes and unchanged shared containers/public statuses. It writes the actual release result to `rebuild/.runtime/private-beta-activation.json`. Role activation and final live synthetic tests are recorded separately.
+## Verified running baseline before this Word PR
 
-**Read `/opt/meddoc-pro/rebuild/.runtime/CHECKPOINT-LATEST.md` if present for the final running release, post-activation evidence and exact next steps.** It is a protected operational checkpoint; never publish its linked credentials or provider payloads. Health on ports9130/9131 reports the release captured when each process starts. The earlier checkpoint below is historical baseline only.
+Release `688837471efb8b11c57a89e76d585e0ba352e937` (PR1181) runs all three
+private services as dedicated `quillmd-app`, UID996/GID988, no extra groups or
+capabilities. Active new-system state is `/var/lib/quillmd/{files,mail,proofs}`.
+The original new-system operator storage remains preserved and inactive.
+Actual same-PID denial and positive controls close the former direct file/socket
+test gap without weakening AppArmor or host protections. Eight real private
+browser checks passed for authentication/MFA, recovery, invitations, upload,
+export and tenant isolation; email used the private outbox.
 
-External dependencies remain: Stripe test key/webhook secret; a controlled email inbox, current sender-domain verification and reachable authenticated HTTPS origin; provider invoice/usage exports and account discounts/credit treatment. These were requested without printing secrets. CPT remains unavailable until licensed usage rights and dated content are verified. Additional Word SDK/OCR licensing is optional pending the exact forms required; WM IOV's28 content controls are currently unsupported. Independent penetration testing and patient-data agreements/controls remain release gates. Public doctor/admin maintenance stays in force.
+The post-cutover encrypted backup restored33tables,75,248rows and22referenced
+files with matching hashes and invariants. This is a same-VPS restoration;
+it does not establish offsite recovery or independent key custody.
+
+## This milestone's implementation
+
+The qualified MIT Word SDK handles the accepted WM IOV original with28 content
+controls,90 answer locations and14 independently reviewed prewritten statements
+and identity requirements. Versioned statement alternatives cover positive,
+absent, no-prior-treatment and asymptomatic cases. The actual authenticated
+clinician replaces the preprinted signer only after review. Source evidence,
+side/row binding, conflicts, missing values and displayed-wording proofs gate
+export; a changed statement must be displayed before its review can be accepted.
+
+Local verification:262 tests pass with no skips (158application,27document/native,
+77operations);12standard browser and9WM browser checks pass. The WM browser
+exercises all five clinical scenarios, desktop/mobile accessibility, source
+correction, conflict refusal and department/organization isolation. SDKqualification
+90checks and independentclinical refutation12checks passed before release.
+The final runtime passed47 checks with identical Word package parts; three
+builds from different Git heads produced identical192-file runtimes. Five
+locked NuGet packages were positively inventoried with zero published advisory
+findings. Final manifest SHA256: `2a2ab5e1ba63e041dfd087e7f2c205999ccf8ff6bc41f9409cfd1d99e4537680`.
+These are pre-activation results; the private checkpoint records actual deployment.
+
+The runtime is pinned, reproducibly built and isolated before document parsing;
+network/process execution and outside-file access are denied. A shared bounded
+processing slot limits concurrent native helpers. Original uploads stay unchanged.
+Formatting qualification uses private evaluation rendering with watermarks and
+font substitutions; product DOCX exports use MIT FOSS editing and contain no
+evaluation watermark. Native Word acceptance is still required before promising
+identical appearance in that application. No SDK purchase is requested.
+
+The Word schema adds only three empty JSON columns to existing records. The
+one-shot `scripts/activate-word-beta.py` requires the exact merged PR citation,
+verified restore proof, exact build-input/runtime hashes, stopped services,
+unchanged old database columns/rows/files/mail, retained report hashes, and
+actual post-start identity/interface checks. Do not run an old activator again.
+Private activation evidence, not this prepared description, determines what is live.
+
+Encrypted B2 offsite transport and download-only recovery are implemented and
+fixture-tested. An approved destination/scoped key and separately held recovery
+key are still absent; no remote transfer or offsite restoration is claimed.
+See `wm-iov-qualification.md`, `sdk-boundary.md`, `offsite-backup.md`,
+`security-readiness.md` and `owner-actions.md` for exact scope and dependencies.
+
+## External release gates
+
+- Stripe sandbox restricted key and matching forwarding webhook secret, delivered
+  securely; actual checkout, retries, exactly-once credits and refunds remain unverified.
+- One established owner-controlled recipient for real Resend invitation/recovery
+  delivery and usable private links. No suitable verified inbox was found.
+- Approved offsite bucket/prefix/scoped credentials plus a separate vault key copy.
+- Authentic provider billing/invoice evidence. Configured1.5×arithmetic passes;
+  it is not provider-reconciled cost. Two historical missing receipts remain exceptions.
+- CPT rights/content, independent tester access/window, and patient-data agreements
+  and processing controls before their respective features/release stages.
+
+Public app/admin routes remain maintenance503; real patient data remains disabled.
+Private review addresses remain localhost9130/9131 through SSH forwarding.
 
 ---
 
