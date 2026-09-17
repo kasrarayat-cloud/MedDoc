@@ -14,7 +14,7 @@ Use an SSH tunnel as described in `../docs/rebuild/private-hosting.md`. Both req
 
 Python 3.12, Node 22 (browser tests), PostgreSQL 16+, Linux Landlock ABI 3+ and libseccomp are required. Parser sandbox failure refuses parsing. It does not fall back to an unsandboxed parser.
 
-1. Create `.venv` with `python3 -m venv .venv`; install `requirements.lock`.
+1. Create `.venv` with `python3 -m venv .venv`; install `requirements.txt`.
 2. Copy `.env.example` to `.env`, use fresh secrets/database credentials and `chmod 600 .env`.
 3. Provide an isolated PostgreSQL database. Never point this application at the old `meddoc` database.
 4. Run `.venv/bin/python manage.py migrate`, `collectstatic --noinput`, then `seed_private` for synthetic test accounts. These migrations create only the fresh schema.
@@ -45,7 +45,7 @@ Fixture generation is explicitly labeled and costs $0. The current VPS uses real
 ```bash
 QUILLMD_AI_MODE=fixture .venv/bin/python manage.py test core.tests --noinput
 QUILLMD_AI_MODE=fixture .venv/bin/python -m unittest documents.tests -q
-.venv/bin/python -m pip_audit -r requirements.lock
+.venv/bin/python -m pip_audit -r requirements.txt
 ```
 
 The browser gate (`node browser-tests.mjs`) requires seeded synthetic accounts and a running **fixture-mode** server/worker, refuses a live generation surface and writes a JSON report. CI provides a separate temporary database. See `../docs/rebuild/pentest-scope.md` for authorized test boundaries and `../docs/rebuild/CHECKPOINT.md` for results and remaining gates.
