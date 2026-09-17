@@ -104,7 +104,11 @@ def validate_restore_report(report_path):
 
 
 def files():
-    root = APP / '.runtime/files'
+    sys.path.insert(0, str(APP))
+    from ops.private_storage import state_root, inventory
+    root = state_root(APP) / 'files'
+    if root == Path('/var/lib/quillmd/files'):
+        return {name: row['sha256'] for name, row in inventory(root).items()}
     result = {}
     for path in sorted(root.rglob('*')):
         require(not path.is_symlink(), 'Private storage contains a symlink.')

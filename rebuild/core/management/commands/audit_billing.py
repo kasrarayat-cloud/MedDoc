@@ -27,7 +27,7 @@ def recompute_cost(provider, units, rates, simulated):
     raise ValueError('No audited cost formula for provider')
 
 
-def audit_report():
+def audit_report(file_reader=None):
     rows=[]
     for usage in Usage.objects.select_related('job__providerreceipt','job__encounter__department').order_by('created_at'):
         try:receipt=usage.job.providerreceipt
@@ -44,7 +44,10 @@ def audit_report():
         if receipt:checks['durable_receipt_matches']=all(getattr(receipt,k)==getattr(usage,k) for k in ['provider','provider_request_id','provider_resource_id','units','rates','actual_cost','simulated'])
         result_integrity='not_recorded'
         if usage.job.result_path:
-            try:result_integrity='matched' if hashlib.sha256(private_path(usage.job.result_path).read_bytes()).hexdigest()==usage.job.result_sha256 else 'mismatch'
+            try:
+                path=private_path(usage.job.result_path)
+                data=file_reader(path) if file_reader else path.read_bytes()
+                result_integrity='matched' if hashlib.sha256(data).hexdigest()==usage.job.result_sha256 else 'mismatch'
             except (OSError,ValueError):result_integrity='unavailable'
             checks['stored_result_hash_matches']=result_integrity=='matched'
         rows.append({'job_id':str(usage.job_id),'user_id':str(usage.user_id),'department_id':str(usage.department_id),'organization_id':str(usage.organization_id),'payer':usage.payer,
@@ -74,9 +77,17 @@ def audit_report():
 
 class Command(BaseCommand):
     help='Read-only audit of provider units, configured rates, result hashes, exact charges, ledgers and reservations.'
-    def add_arguments(self,parser):parser.add_argument('--output',help='Private JSON artifact inside rebuild/.runtime; omitted prints JSON.')
+    def add_arguments(self,parser):
+        parser.add_argument('--output',help='Private JSON artifact inside rebuild/.runtime; omitted prints JSON.')
+        parser.add_argument('--maintenance-storage',action='store_true',help='Use the bounded read-only helper for dedicated-identity application files.')
     def handle(self,*args,**options):
-        report=audit_report()
+        reader=None
+        if options['maintenance_storage']:
+            from ops.private_storage import read_file
+            if settings.MEDIA_ROOT != Path('/var/lib/quillmd/files'):
+                raise CommandError('Maintenance storage is only for the dedicated fresh application state.')
+            reader=lambda path: read_file(settings.MEDIA_ROOT,str(path.relative_to(settings.MEDIA_ROOT)))
+        report=audit_report(reader)
         payload=json.dumps(report,indent=2,default=str)+'\n'
         if options['output']:
             path=Path(options['output']).resolve();root=(settings.BASE_DIR/'.runtime').resolve()

@@ -1,6 +1,7 @@
 from decimal import Decimal
 import hashlib
 import json
+import re
 from django.db import transaction
 from django.db.models import Sum
 from django.core.exceptions import ValidationError
@@ -9,6 +10,10 @@ from .models import User, Wallet, LedgerEntry, Reservation, Usage, Membership, O
 from .security import audit, membership
 ZERO=Decimal('0')
 MULTIPLIER=Decimal('1.5')
+
+def stripe_test_key_configured(key):
+    """Recognize sandbox server keys; this does not validate provider access."""
+    return isinstance(key,str) and re.fullmatch(r'(?:sk|rk)_test_[A-Za-z0-9_]+',key) is not None
 
 def checkout_form(user,data=None):
     from .forms import CheckoutForm

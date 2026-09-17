@@ -30,7 +30,10 @@ def main():
         data = path.read_bytes()
         require(run(['git', '-C', str(ROOT), 'show', args.expected_commit + ':rebuild/deploy/' + unit]) == data,
                 'Unit bytes differ from reviewed commit.')
-        require(b'InaccessiblePaths=/run/docker.sock' in data and b'/db-role-secrets' in data,
+        require(b'InaccessiblePaths=/run/docker.sock' in data
+                and b'/opt/meddoc-pro/rebuild/.runtime' in data
+                and b'User=quillmd-app\n' in data and b'Group=quillmd-app\n' in data
+                and b'CapabilityBoundingSet=\n' in data and b'AmbientCapabilities=\n' in data,
                 'Required sandbox policy missing.')
         expected[unit] = hashlib.sha256(data).hexdigest()
     run(['systemd-analyze', 'verify', *[str(APP / 'deploy' / u) for u in UNITS]])
