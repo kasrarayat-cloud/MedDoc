@@ -1,39 +1,19 @@
 {
-  "name": "meddoc",
+  "name": "quillmd-marketing-workspace",
   "version": "0.1.0",
   "private": true,
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "apps/marketing",
+    "packages/shared"
   ],
   "scripts": {
-    "prepare": "git config core.hooksPath scripts/hooks 2>/dev/null || true",
-    "dev": "npm run dev -w meddoc-pro",
-    "build": "npm run build -w meddoc-pro",
-    "start": "npm run start -w meddoc-pro",
-    "lint": "npm run lint -w meddoc-pro",
-    "test:unit": "npm run test:unit -w meddoc-pro",
-    "test:unit:watch": "npm run test:unit:watch -w meddoc-pro",
-    "test:e2e": "npm run test:e2e -w meddoc-pro",
-    "test:e2e:ui": "npm run test:e2e:ui -w meddoc-pro",
-    "test:e2e:transcribe-md": "npm run test:e2e -w transcribe-md",
-    "test:e2e:transcribe-md:install": "npm run test:e2e:install -w transcribe-md",
-    "test:all": "npm run test:all -w meddoc-pro",
-    "seed:e2e": "npm run seed:e2e -w meddoc-pro",
-    "seed:e2e-admin": "npm run seed:e2e-admin -w meddoc-pro",
-    "eval:doc-editor": "npm run eval:doc-editor -w meddoc-pro",
-    "eval:clinical-notes": "npm run eval:clinical-notes -w meddoc-pro",
-    "data:icd10": "node scripts/data/build-icd10cm.mjs",
-    "data:icd10:check": "node scripts/data/build-icd10cm.mjs --check",
-    "db:generate": "npm run generate -w @meddoc/db",
-    "db:migrate:deploy": "npm run migrate:deploy -w @meddoc/db",
-    "db:migrate:status": "npm run migrate:status -w @meddoc/db",
-    "db:migrate:dev": "npm run migrate:dev -w @meddoc/db"
+    "dev": "npm run dev -w marketing",
+    "build": "npm run build -w marketing",
+    "start": "npm run start -w marketing",
+    "lint": "npm run lint -w marketing",
+    "prepare": "git config core.hooksPath scripts/hooks 2>/dev/null || true"
   },
   "devDependencies": {
-    "dotenv": "^17.4.1",
-    "prisma": "^7.7.0",
-    "tsx": "^4.22.4",
     "typescript": "^5"
   },
   "overrides": {
@@ -42,9 +22,6 @@
     "next": {
       "postcss": "^8.5.23",
       "sharp": "^0.35.0"
-    },
-    "@prisma/dev": {
-      "find-my-way": "^9.7.0"
     },
     "undici": "^7.29.0",
     "js-yaml": "^4.3.1",
