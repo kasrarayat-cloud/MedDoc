@@ -1,3 +1,19 @@
+# Continuation pointer — private beta verification, 2026-09-17
+
+**Preserve this new implementation and all of its data. No further reset or old-application cleanup is needed.**
+
+The continuation adds expiring password recovery with administrator MFA, verification resend, invitation revocation, explicit provider HTTP/resource identifiers and configured pricing fingerprints, durable Stripe test-event state and refund safeguards, organization-owner top-ups, encrypted backup/isolated restore tooling, and separately privileged database roles with service secret isolation. See `private-beta-qualification.md`, `account-recovery.md`, `billing-provenance-verification.md`, `backup-restore.md` and `security-readiness.md` for bounded evidence and remaining gates.
+
+Local final verification before this PR: **112 Django/PostgreSQL tests**, **26 document/backup tests**, **19 form qualification cases**, **13 extended fixture browser checks**, **17 restored-database role assertions**. A four-case adversarial provider-deduplication counterexample was independently reproduced on the prior test schema; migration0010 repairs all four. These local results do not alone establish activation.
+
+The reviewed updater `scripts/update-private-beta.py` requires exact merge-commit CI, the committed mutation declaration, a verified new-system restore report, stopped private services, unchanged database/file hashes and unchanged shared containers/public statuses. It writes the actual release result to `rebuild/.runtime/private-beta-activation.json`. Role activation and final live synthetic tests are recorded separately.
+
+**Read `/opt/meddoc-pro/rebuild/.runtime/CHECKPOINT-LATEST.md` if present for the final running release, post-activation evidence and exact next steps.** It is a protected operational checkpoint; never publish its linked credentials or provider payloads. Health on ports9130/9131 reports the release captured when each process starts. The earlier checkpoint below is historical baseline only.
+
+External dependencies remain: Stripe test key/webhook secret; a controlled email inbox, current sender-domain verification and reachable authenticated HTTPS origin; provider invoice/usage exports and account discounts/credit treatment. These were requested without printing secrets. CPT remains unavailable until licensed usage rights and dated content are verified. Additional Word SDK/OCR licensing is optional pending the exact forms required; WM IOV's28 content controls are currently unsupported. Independent penetration testing and patient-data agreements/controls remain release gates. Public doctor/admin maintenance stays in force.
+
+---
+
 # QuillMD fresh rebuild — durable checkpoint
 
 Updated 2026-09-17. The owner's latest decision is **NO MIGRATION**. No old users, patients, documents, templates, balances or history are imported. Do not revive old migration/backfill/compatibility plans from historical documentation.

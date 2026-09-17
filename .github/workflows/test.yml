@@ -53,7 +53,7 @@ jobs:
         run: python -m pip install -r rebuild/requirements.txt
       - name: Verify kernel sandbox library
         run: ldconfig -p | grep 'libseccomp.so.2'
-      - name: Fresh application and document tests
+      - name: Fresh application, document and operations tests
         run: bash scripts/ci/verify-fresh.sh python
       - name: Python dependency audit
         run: python -m pip_audit -r rebuild/requirements.txt

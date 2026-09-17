@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block title %}Account recovery{% endblock %}
+{% block shell %}
+<div class="auth-shell">
+  <aside class="auth-story">
+    <a class="brand" href="{% url 'login' %}"><span class="brand-mark" aria-hidden="true">Q</span>QuillMD</a>
+    <h1>Return to your workspace.</h1>
+    <p>Saved documents stay in your department. Sign in again to continue your review.</p>
+    <div class="auth-principle"><strong>Administrator access stays protected.</strong><p>Password recovery requires the enrolled authenticator. If it is unavailable, contact your verified platform operator for identity-checked recovery.</p></div>
+  </aside>
+  <main class="auth-main" id="main"><div class="auth-form">
+    <div class="eyebrow">Account access</div>
+    {% if mode == 'complete' %}
+      <h2>Password updated</h2><p>Your previous sessions have been invalidated. Sign in with your new password{% if is_admin_site %} and a fresh authenticator code{% endif %}.</p>
+    {% elif mode == 'confirm' %}
+      {% if validlink %}
+        <h2>Set a new password</h2><p>This link expires after 30 minutes and can be used once.</p>
+        <form method="post" data-submit-once>{% csrf_token %}{{ form.as_p }}<button type="submit">Update password</button></form>
+      {% else %}
+        <h2>Recovery link unavailable</h2><p>The link may have expired or already been used.</p><p><a href="{% url 'recovery_request' %}">Request a new recovery link</a></p>
+      {% endif %}
+    {% else %}
+      <h2>{% if mode == 'verification' %}Request verification{% else %}Recover your account{% endif %}</h2>
+      {% if sent %}
+        <p role="status">If this address is eligible, a link has been prepared. Requests are limited to protect your account.</p>
+        {% if email_live %}<p>Check your inbox. This page cannot confirm whether a message was submitted or delivered.</p>{% else %}<div class="notice">Private outbox only: email delivery is not live. Your platform operator can securely provide your test link.</div>{% endif %}
+      {% else %}
+        <p>Enter the email address for your individual account.</p>
+        <form method="post" data-submit-once>{% csrf_token %}{{ form.as_p }}<button type="submit">{% if mode == 'verification' %}Prepare verification link{% else %}Prepare recovery link{% endif %}</button></form>
+      {% endif %}
+    {% endif %}
+    <div class="auth-footer"><p><a href="{% url 'login' %}">Return to sign in</a></p><p class="small">Private testing environment. Use synthetic patient information.</p></div>
+  </div></main>
+</div>
+{% endblock %}

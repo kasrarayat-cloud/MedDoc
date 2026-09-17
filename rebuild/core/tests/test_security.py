@@ -181,7 +181,7 @@ class PaymentWebhookSecurity(SyntheticFixture, TestCase):
         self.scope = self.make_scope("webhook")
         self.wallet = Wallet.objects.get(user=self.scope[0], kind="paid")
         self.payment = Payment.objects.create(user=self.scope[0], wallet=self.wallet, amount_cents=1000, stripe_session="cs_test_synthetic")
-        self.session = {"id": self.payment.stripe_session, "payment_status": "paid", "currency": "usd", "amount_total": 1000, "metadata": {"payment_id": str(self.payment.pk)}, "payment_intent": "pi_test_synthetic"}
+        self.session = {"id": self.payment.stripe_session, "payment_status": "paid", "currency": "usd", "amount_total": 1000, "metadata": {"payment_id": str(self.payment.pk)}, "payment_intent": "pi_test_synthetic", "mode": "payment"}
 
     def event(self, event_id, obj=None, kind="checkout.session.completed", secret="whsec_synthetic_scope"):
         body = json.dumps({"id": event_id, "object": "event", "type": kind, "livemode": False, "data": {"object": obj or self.session}}).encode()
@@ -202,11 +202,12 @@ class PaymentWebhookSecurity(SyntheticFixture, TestCase):
         self.assertEqual(self.event("evt_bad_amount", {**self.session, "amount_total": 999}).status_code, 409)
         self.wallet.refresh_from_db()
         self.assertEqual(self.wallet.balance, 0)
-        self.assertEqual(WebhookEvent.objects.count(), 0)
+        self.assertEqual(WebhookEvent.objects.count(), 1)
+        self.assertEqual(WebhookEvent.objects.get().status, "reconciliation")
 
     def test_duplicate_refund_event_debits_once(self):
         self.assertEqual(self.event("evt_payment").status_code, 200)
-        refund = {"id": "re_test_synthetic", "payment_intent": "pi_test_synthetic", "amount": 300, "status": "succeeded"}
+        refund = {"id": "re_test_synthetic", "payment_intent": "pi_test_synthetic", "amount": 300, "currency": "usd", "status": "succeeded"}
         self.assertEqual(self.event("evt_refund_1", refund, "refund.created").status_code, 200)
         self.assertEqual(self.event("evt_refund_2", refund, "refund.updated").status_code, 200)
         self.wallet.refresh_from_db()

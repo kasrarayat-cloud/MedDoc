@@ -56,9 +56,6 @@ report is uploaded, using an exact file path; screenshots, exports, credentials,
 and provider response payloads are excluded.
 
 The old clinical app E2E/accessibility/nightly workflows have been retired.
-Required GitHub protection contexts must be changed deliberately to these four
-actual job names: `Fresh application tests`, `Marketing build`, `Private browser
+Required GitHub protection contexts were changed and re-read from the GitHub API on 2026-09-17. They now require these four actual job names: `Fresh application tests`, `Marketing build`, `Private browser
 and accessibility`, and `TruffleHog (verified-only, diff-scan)`. Otherwise GitHub
-continues waiting for obsolete old-application job names. This document records
-the required configuration; it does not assert that remote branch protection has
-already been changed.
+continues waiting for obsolete old-application job names. The exact deployed main commit has passing CI and secret-scan evidence in activation-judged.md; future releases require a fresh citation on their own merge commit.

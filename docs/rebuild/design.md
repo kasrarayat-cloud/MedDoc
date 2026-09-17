@@ -138,3 +138,7 @@ exports are local ignored scratch files and are deleted after verification.
 Passwords, OTP material, provider response payloads, and raw Playwright exceptions
 are never included in its report. Remote CI execution is a separate gate from
 this successful local run.
+
+## Private beta recovery extension — 2026-09-17
+
+Reference lock: reuse the existing auth-shell, native labelled inputs, focus states, inline errors and teal action styles above. Refero MCP is unavailable; craft-details forms/focus and the existing sign-in/register screens were reviewed before implementation. Add request → private-outbox/provider-acceptance disclosure → expiring link → password reset → explicit sign-in. Administrator password recovery also requires the existing authenticator; losing it invokes a separately verified operator recovery process. Generic request responses avoid account enumeration. No new visual tokens or external assets.
