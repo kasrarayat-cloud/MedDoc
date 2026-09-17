@@ -251,9 +251,18 @@ def encounter_new(request):
 
 def encounter_detail(request,pk):
     from documents import DocumentError
-    e=get_object_or_404(scoped(Encounter,request.user).select_related('patient','template_version__template'),pk=pk)
+    # Worker adoption and source edits lock the encounter. Capture the related
+    # display records while that same row is stable, then release before Word
+    # processing. Lazy jobs/codes could otherwise expose a later completion
+    # beside answers or source notes loaded before that completion.
+    with transaction.atomic():
+        e=get_object_or_404(scoped(Encounter,request.user).select_related(
+            'patient','department__organization','template_version__template','finalized_by'
+        ).select_for_update(of=('self',)),pk=pk)
+        jobs=list(Job.objects.filter(encounter=e).order_by('-created_at'))
+        codes=list(CodeSuggestion.objects.filter(encounter=e).select_related('terminology__release','accepted_by'))
+        can_finalize=Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists()
     is_wm=bool(e.template_version.document_backend)
-    can_finalize=Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists()
     rows=[{**f,**e.answers.get(f['key'],{'text':'','status':'missing','evidence':[],'reviewed':False})} for f in e.template_version.fields]
     requirements=[];review_error='';assessment=None;resolved_ok=False
     if is_wm:
@@ -292,7 +301,7 @@ def encounter_detail(request,pk):
     try:maximum_charge=maximum_cost(e.notes,e.template_version.fields,context_labels=[row['label'] for row in e.template_version.review_requirements])*Decimal('1.5')
     except ValidationError:maximum_charge=None
     audit(request.user,'encounter.view',e.pk,department=e.department)
-    return render(request,'encounter_detail.html',{'encounter':e,'answer_rows':rows,'wm_template':is_wm,'wm_requirements':requirements,'wm_review_error':review_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':Decimal(os.getenv('QUILLMD_VOICE_MAX_COST','0.20'))*Decimal('1.5'),'codes':CodeSuggestion.objects.filter(encounter=e).select_related('terminology__release','accepted_by'),'jobs':Job.objects.filter(encounter=e).order_by('-created_at'),'voice_form':VoiceForm(),'can_finalize':can_finalize})
+    return render(request,'encounter_detail.html',{'encounter':e,'answer_rows':rows,'wm_template':is_wm,'wm_requirements':requirements,'wm_review_error':review_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':Decimal(os.getenv('QUILLMD_VOICE_MAX_COST','0.20'))*Decimal('1.5'),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize})
 
 @require_POST
 def generate_view(request,pk):
