@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block shell %}
+<main class="auth-main" id="main"><div class="auth-form">
+  <a class="brand" href="{% url 'login' %}"><span class="brand-mark" aria-hidden="true">Q</span>QuillMD</a>
+  <div class="review-footer"><div class="eyebrow">Account verification</div><h1>{{ title }}</h1><p class="muted">{{ description }}</p></div>
+  <form method="post" data-submit-once>{% csrf_token %}{% if form %}{{ form.as_p }}{% endif %}<button type="submit">Confirm and continue</button></form>
+  <div class="auth-footer"><p class="small">Private testing environment. Use synthetic patient information.</p></div>
+</div></main>
+{% endblock %}

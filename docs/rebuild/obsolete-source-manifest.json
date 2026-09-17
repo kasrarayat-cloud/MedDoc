@@ -1,0 +1,144 @@
+{
+  "captured_at_utc": "2026-09-17T08:47:39.699484+00:00",
+  "worktree": "/opt/meddoc-pro/.worktrees/quillmd-fresh",
+  "file_count": 19,
+  "files": [
+    {
+      "path": "docker/gotenberg-fonts.Dockerfile",
+      "sha256": "0388b8b03d7d1f1540bcfbb25624a9837d81c6921d3e993734a515bbf8319e41",
+      "bytes": 1860,
+      "reason": "Retired document sidecar; absent from preserved Compose and marketing."
+    },
+    {
+      "path": "scripts/assert-migrations-applied.sh",
+      "sha256": "567524a8293d985ad34874a00ae8f8d63b7a834c686bc0e0d00f4314ff8781d8",
+      "bytes": 6498,
+      "reason": "Imports, targets or validates the removed old application/schema."
+    },
+    {
+      "path": "scripts/backfill-auto-certify.ts",
+      "sha256": "073b3203746665d714285e28694c9041bd7ad40d96dd4d8c5391dc86e7e2f25c",
+      "bytes": 4878,
+      "reason": "Imports, targets or validates the removed old application/schema."
+    },
+    {
+      "path": "scripts/data/build-icd10cm.mjs",
+      "sha256": "77ccf7cf0ccbe46d06108008ef8d386d0998f10abc9ccb43e4c90011df621176",
+      "bytes": 21861,
+      "reason": "Imports, targets or validates the removed old application/schema."
+    },
+    {
+      "path": "scripts/execute-gate0-deactivation.sql",
+      "sha256": "29a154ea6d4a3cde687ca9a23dde9412bb338df7d27439bad6226c47791b763d",
+      "bytes": 8114,
+      "reason": "Imports, targets or validates the removed old application/schema."
+    },
+    {
+      "path": "scripts/execute-r226-archive.sql",
+      "sha256": "6e7250a1ee62c45e9761a43b6ed8d962228cf5ea7c92f0c06137c818fe2a8cae",
+      "bytes": 8787,
+      "reason": "Imports, targets or validates the removed old application/schema."
+    },
+    {
+      "path": "scripts/execute-r230-practice-archived-backfill.sql",
+      "sha256": "7eec9651ca58565f96c6556f6c6a312869ff6b94dca2b4713fe1020c861e632f",
+      "bytes": 9404,
+      "reason": "Imports, targets or validates the removed old application/schema."
+    },
+    {
+      "path": "scripts/migrate-specialty-vocab.sql",
+      "sha256": "203b8fbe3d16870cea3813bd5ebc5fded3bc6232ea520448b92f883234d068e0",
+      "bytes": 4235,
+      "reason": "Imports, targets or validates the removed old application/schema."
+    },
+    {
+      "path": "scripts/prisma-generate.sh",
+      "sha256": "51397bc149d80b05d6e67425a3ff9d5e074ec422cc7b037175862046984c8e8a",
+      "bytes": 3669,
+      "reason": "Imports, targets or validates the removed old application/schema."
+    },
+    {
+      "path": "scripts/qa/b6-writer-refuses-on-qa.ts",
+      "sha256": "13c51073003acb03ccbc1c970e19c70d60875dc05b82e4f0a1013520bacd8343",
+      "bytes": 5771,
+      "reason": "Imports, targets or validates the removed old application/schema."
+    },
+    {
+      "path": "scripts/qa/b8-failure-cost-log-assert.py",
+      "sha256": "c4a5791b675c3fee89811605603940b1b71d496c1bd4daeaafc0eb4e506e6016",
+      "bytes": 14328,
+      "reason": "Imports, targets or validates the removed old application/schema."
+    },
+    {
+      "path": "scripts/qa/b8-failure-cost-log-assert.sh",
+      "sha256": "35a267d0602bf92dad600d57783695390b3bb2769e80a3dbcb21aff9e19be01c",
+      "bytes": 2842,
+      "reason": "Imports, targets or validates the removed old application/schema."
+    },
+    {
+      "path": "scripts/qa/f2-signed-vs-presign-bytes.ts",
+      "sha256": "a2ea25586f7efa8ebb4d5702f5ca13b9211bf4896e800ed5a40657a9a1e45724",
+      "bytes": 8239,
+      "reason": "Imports, targets or validates the removed old application/schema."
+    },
+    {
+      "path": "scripts/qa/rc1-assembly-on-qa.ts",
+      "sha256": "ae055136b104c0ebedb3c6df92e97a555792c2610b701085a04d40528c7d0c51",
+      "bytes": 18630,
+      "reason": "Imports, targets or validates the removed old application/schema."
+    },
+    {
+      "path": "scripts/qa/rc2-twin-door-on-qa.ts",
+      "sha256": "1107ce36dca396bb1f702f85c868bbfd964409182f2894ae631f19343b15b3d1",
+      "bytes": 12435,
+      "reason": "Imports, targets or validates the removed old application/schema."
+    },
+    {
+      "path": "scripts/qa/settle-word-numbering.ts",
+      "sha256": "80c2431724f1765578e9d63e1b64330cb4f02b96625831470f841463420bcc68",
+      "bytes": 1986,
+      "reason": "Imports, targets or validates the removed old application/schema."
+    },
+    {
+      "path": "services/form-detect/Dockerfile",
+      "sha256": "f8f9a64af34503cbc8fe14edb925d27f32fdb6f913ffa79c2c945cfd16e15c34",
+      "bytes": 2738,
+      "reason": "Retired document sidecar; absent from preserved Compose and marketing."
+    },
+    {
+      "path": "services/form-detect/app.py",
+      "sha256": "16e055e4c7cbda556656c80c2d80e951d06f2ec853294c0c4b60b6fba7282a13",
+      "bytes": 10655,
+      "reason": "Retired document sidecar; absent from preserved Compose and marketing."
+    },
+    {
+      "path": "services/form-detect/requirements.txt",
+      "sha256": "080ddcc1ea6e8d233f19984f77d730c71b9a44bdb497e2a26b33e06c06f0118a",
+      "bytes": 735,
+      "reason": "Retired document sidecar; absent from preserved Compose and marketing."
+    }
+  ],
+  "cron": {
+    "owner": "claude",
+    "schedule": "0 2 * * *",
+    "command_path": "/opt/meddoc-pro/tests/automated/run-all.sh",
+    "flags": [
+      "--smoke",
+      "--e2e"
+    ],
+    "line_sha256": "0b11c1f7adeda482058faf954a2416f9b7cbf7258cf91b0785a34859a11d6f80",
+    "original_crontab_sha256": "cab56c8bf11f7fdf5f701a60d7c40e42993d6154290ddd3770500cb0b74d5b0b",
+    "expected_crontab_sha256": "492a61ad35120e72cb63825eaf51222ffd759f87d28731bcdbf0a6db73363ab2"
+  },
+  "root_crontab_read_only_audit": {
+    "sha256": "dc82eff9e1231109512bfe211cc89d70def99c3210cf2364f0e3635a2cce94b8",
+    "active_jobs": 6,
+    "other_project_jobs": 5,
+    "preserved_ambiguous_job": {
+      "schedule": "15 3 * * *",
+      "command_path": "/opt/meddoc-pro/scripts/backup-db.sh",
+      "path_exists": false
+    },
+    "root_changes_authorized_by_this_manifest": false
+  }
+}

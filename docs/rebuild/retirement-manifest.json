@@ -1,0 +1,231 @@
+{
+  "captured_at_utc": "2026-09-17T08:10:56Z",
+  "containers": {
+    "meddoc-pro-transcribe-md-1": {
+      "id": "e0212433fc9f7bc1d7968a5684ecb41fb43cf4dcb8ea04a887c322ca96312f3a",
+      "image_id": "sha256:3ea217dc589f92ba629848952e8528ae95fc90a3b262fc0dff97004ac963819f",
+      "project": "meddoc-pro",
+      "service": "transcribe-md",
+      "working_dir": "/opt/meddoc-pro",
+      "mounts": []
+    },
+    "meddoc-pro-transcribe-md-worker-1": {
+      "id": "822157146e04612ff42f1740d88a1edaf0e2e17286810fcdd2373ef34742105b",
+      "image_id": "sha256:7475d0036ce4bab2849233065d2e9e54738148ba6956ea2e7c75cd6a0fda0da4",
+      "project": "meddoc-pro",
+      "service": "transcribe-md-worker",
+      "working_dir": "/opt/meddoc-pro",
+      "mounts": []
+    },
+    "meddoc-pro-meddoc-pro-1": {
+      "id": "2436648fe40092e6d858eec024ae2af7baccdb215e7a978918fdf17026b5588b",
+      "image_id": "sha256:5ed8f3726420189e8b4e35e912013b18035e3ce837a929438f288d33bc4681c6",
+      "project": "meddoc-pro",
+      "service": "meddoc-pro",
+      "working_dir": "/opt/meddoc-pro",
+      "mounts": []
+    },
+    "meddoc-pro-form-detect-1": {
+      "id": "c134023aa455709be9f8b22955bed5640347397c73fc2e1d0d2a0f80f9d8fd50",
+      "image_id": "sha256:be5c41f8bea319a5b3053fa8b0409ad15f97d57991a471ab6801e8cab0865cf4",
+      "project": "meddoc-pro",
+      "service": "form-detect",
+      "working_dir": "/opt/meddoc-pro",
+      "mounts": []
+    },
+    "meddoc-pro-gotenberg-1": {
+      "id": "2d6abb4736dd57015b5a70e381ceb479eb062cf07c3dc85947c4ed483d36c66d",
+      "image_id": "sha256:0dd921a9a9dbaaffbea3e62f61cf3147ee8d2e380eea00f05a63ab0fa19f5f7d",
+      "project": "meddoc-pro",
+      "service": "gotenberg",
+      "working_dir": "/opt/meddoc-pro",
+      "mounts": []
+    },
+    "meddoc-qa-transcribe-md-1": {
+      "id": "67f769e5c0065752222bf610886b8d35f5dd43bdfa78ddc89870c70e28572ed4",
+      "image_id": "sha256:208bf81a555c8d898240a08c0dbed11d3ac18c945dfa1f47198f610f3735898f",
+      "project": "meddoc-qa",
+      "service": "transcribe-md",
+      "working_dir": "/opt/meddoc-pro",
+      "mounts": []
+    },
+    "meddoc-qa-transcribe-md-worker-1": {
+      "id": "89b1f2f6877d6cf9754688742daf5ab04ae781a80926200b4a4e854520d6236d",
+      "image_id": "sha256:2262baa4646952d9f404a1306662a468e2dbe3ce505b01c15494f4ee8866ef7a",
+      "project": "meddoc-qa",
+      "service": "transcribe-md-worker",
+      "working_dir": "/opt/meddoc-pro",
+      "mounts": []
+    },
+    "meddoc-qa-postgres-1": {
+      "id": "44a62cfaa96a7f3b3682c5ed7c9177d0ba030798d8805bd0b4dbda0e7fb7e3da",
+      "image_id": "sha256:8ed3192326bb9d114cd5ef9acace453d5dae17425bd089d089330584c84c5a34",
+      "project": "meddoc-qa",
+      "service": "postgres",
+      "working_dir": "/opt/meddoc-pro",
+      "mounts": [
+        {
+          "Type": "volume",
+          "Name": "meddoc-qa_qa_pgdata",
+          "Source": "/var/lib/docker/volumes/meddoc-qa_qa_pgdata/_data",
+          "Destination": "/var/lib/postgresql/data"
+        }
+      ]
+    },
+    "meddoc-qa-minio-1": {
+      "id": "03b22f7a9084f03877da892514c0d444895edf0f4f7c128058d6fbfc82997976",
+      "image_id": "sha256:69b2ec208575b69597784255eec6fa6a2985ee9e1a47f4411a51f7f5fdd193a9",
+      "project": "meddoc-qa",
+      "service": "minio",
+      "working_dir": "/opt/meddoc-pro",
+      "mounts": [
+        {
+          "Type": "volume",
+          "Name": "meddoc-qa_qa_minio",
+          "Source": "/var/lib/docker/volumes/meddoc-qa_qa_minio/_data",
+          "Destination": "/data"
+        }
+      ]
+    },
+    "meddoc-qa-redis-1": {
+      "id": "c21a5be95585bd9bdcf212f65ffa0ec81c63c2793fd6d40917fa110994271a37",
+      "image_id": "sha256:9210b8dc25f122eb00e5572dcc7147c8e11fb1a08308b088e06c9d5dd2aa49d6",
+      "project": "meddoc-qa",
+      "service": "redis",
+      "working_dir": "/opt/meddoc-pro",
+      "mounts": [
+        {
+          "Type": "volume",
+          "Name": "d15ddbc95b32f08874fcc62affd7d1253d116a5c7283a7b53c1dab84caccf4b0",
+          "Source": "/var/lib/docker/volumes/d15ddbc95b32f08874fcc62affd7d1253d116a5c7283a7b53c1dab84caccf4b0/_data",
+          "Destination": "/data"
+        }
+      ]
+    },
+    "meddoc-pro-marketing-1": {
+      "id": "e1c4523df0403ad22280a13c64c94a9f84056134ecb22c333c4e6e47722e52ab",
+      "image_id": "sha256:e9568d07d057e337c84ce1c174e85dfcafdd8fb9589e9b53c0b3167a9d89f8ea",
+      "project": "meddoc-pro",
+      "service": "marketing",
+      "working_dir": "/opt/meddoc-pro",
+      "mounts": []
+    },
+    "meddoc-pro-caddy-1": {
+      "id": "231087c0dbc90db8da40d8f4756304068c746ab33c08aa922793705febf71494",
+      "image_id": "sha256:a4ef43ffa2b91c00698ba20caced449418d1e678f50034083882969de8c45f6e",
+      "project": "meddoc-pro",
+      "service": "caddy",
+      "working_dir": "/opt/meddoc-pro",
+      "mounts": [
+        {
+          "Type": "volume",
+          "Name": "meddoc-pro_caddy_config",
+          "Source": "/var/lib/docker/volumes/meddoc-pro_caddy_config/_data",
+          "Destination": "/config"
+        },
+        {
+          "Type": "volume",
+          "Name": "meddoc-pro_caddy_data",
+          "Source": "/var/lib/docker/volumes/meddoc-pro_caddy_data/_data",
+          "Destination": "/data"
+        },
+        {
+          "Type": "bind",
+          "Name": null,
+          "Source": "/opt/meddoc-pro/Caddyfile",
+          "Destination": "/etc/caddy/Caddyfile"
+        }
+      ]
+    },
+    "meddoc-pro-postgres-1": {
+      "id": "4f187aba13450e1908c2a57f32fd33c9ff3356bf49273378b9d62e358aff5fc5",
+      "image_id": "sha256:8ed3192326bb9d114cd5ef9acace453d5dae17425bd089d089330584c84c5a34",
+      "project": "meddoc-pro",
+      "service": "postgres",
+      "working_dir": "/opt/meddoc-pro",
+      "mounts": [
+        {
+          "Type": "volume",
+          "Name": "meddoc-pro_pgdata_encrypted",
+          "Source": "/var/lib/docker/volumes/meddoc-pro_pgdata_encrypted/_data",
+          "Destination": "/var/lib/postgresql/data"
+        }
+      ]
+    },
+    "meddoc-pro-minio-1": {
+      "id": "d0d72439aa4bdc494798c55824fc9324731e57e16576cacfdb298aa314a4b9fb",
+      "image_id": "sha256:69b2ec208575b69597784255eec6fa6a2985ee9e1a47f4411a51f7f5fdd193a9",
+      "project": "meddoc-pro",
+      "service": "minio",
+      "working_dir": "/opt/meddoc-pro",
+      "mounts": [
+        {
+          "Type": "volume",
+          "Name": "meddoc-pro_minio_data",
+          "Source": "/var/lib/docker/volumes/meddoc-pro_minio_data/_data",
+          "Destination": "/data"
+        }
+      ]
+    },
+    "meddoc-pro-redis-1": {
+      "id": "3a2194233ec5757a0c4e8ddeb3164d2a2643588494cf6bd5267d56bfe22cdc20",
+      "image_id": "sha256:9210b8dc25f122eb00e5572dcc7147c8e11fb1a08308b088e06c9d5dd2aa49d6",
+      "project": "meddoc-pro",
+      "service": "redis",
+      "working_dir": "/opt/meddoc-pro",
+      "mounts": [
+        {
+          "Type": "volume",
+          "Name": "meddoc-pro_redis_data",
+          "Source": "/var/lib/docker/volumes/meddoc-pro_redis_data/_data",
+          "Destination": "/data"
+        }
+      ]
+    },
+    "meddoc-pro-postgres-backup-1": {
+      "id": "2b92c4347ad5d43d2d8c8bd9ca03659e462041c3f6ff9af01dcd45e7d93faab8",
+      "image_id": "sha256:38221b4c7363878392b8b0dbfae44a37204ebe5e908ffc9acf26c50e8e3f486f",
+      "project": "meddoc-pro",
+      "service": "postgres-backup",
+      "working_dir": "/opt/meddoc-pro",
+      "mounts": [
+        {
+          "Type": "bind",
+          "Name": null,
+          "Source": "/var/log/meddoc",
+          "Destination": "/var/log/meddoc"
+        },
+        {
+          "Type": "volume",
+          "Name": "meddoc-pro_pgbackups",
+          "Source": "/var/lib/docker/volumes/meddoc-pro_pgbackups/_data",
+          "Destination": "/backups"
+        },
+        {
+          "Type": "bind",
+          "Name": null,
+          "Source": "/etc/meddoc",
+          "Destination": "/etc/meddoc"
+        },
+        {
+          "Type": "bind",
+          "Name": null,
+          "Source": "/opt/meddoc-pro/infra/backup-offsite-sync.sh",
+          "Destination": "/scripts/backup-offsite-sync.sh"
+        },
+        {
+          "Type": "bind",
+          "Name": null,
+          "Source": "/opt/meddoc-pro/infra/postgres-backup/postscript.sh",
+          "Destination": "/scripts/postscript.sh"
+        },
+        {
+          "Type": "volume",
+          "Name": "ad6f4e0ec7125abc9aee0eab78fc97deaf7c0946374cd7ede6cbb317fd398532",
+          "Source": "/var/lib/docker/volumes/ad6f4e0ec7125abc9aee0eab78fc97deaf7c0946374cd7ede6cbb317fd398532/_data",
+          "Destination": "/var/lib/postgresql/data"
+        }
+      ]
+    }
+  }
+}

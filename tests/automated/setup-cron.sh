@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# tests/automated/setup-cron.sh — install the recurring checks as cron.
+# tests/automated/setup-cron.sh — install recurring infrastructure monitors.
+# Fresh application verification runs separately against private staging.
 #
 # Idempotent: rewrites a single block in the user's crontab delimited
 # by # MEDDOC-TESTS-START / # MEDDOC-TESTS-END. Rerunning upgrades the
@@ -16,7 +17,6 @@
 
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 
 MODE=install
 for arg in "$@"; do
@@ -53,7 +53,6 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 */5  *   * * *   bash $HERE/monitoring/uptime-check.sh      >> $CRON_LOG 2>&1
 0    *   * * *   bash $HERE/monitoring/disk-monitor.sh      >> $CRON_LOG 2>&1
 */10 *   * * *   bash $HERE/monitoring/container-health.sh  >> $CRON_LOG 2>&1
-0    2   * * *   cd $REPO_ROOT && bash $HERE/run-all.sh --smoke --e2e >> $CRON_LOG 2>&1
 $END_MARK
 EOF
 

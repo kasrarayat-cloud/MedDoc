@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block title %}Workspace{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div><div class="eyebrow">Your clinical workspace</div><h1>From notes to completed forms.</h1><p>Start with an original form. Review every supported answer before it leaves your workspace.</p></div>
+  <div class="actions"><a class="button" href="{% url 'encounter_new' %}">New document <span aria-hidden="true">＋</span></a></div>
+</div>
+<section class="section">
+  <div class="section-heading"><h2>Recent documents</h2><span class="small muted">Visible within your authorized scope</span></div>
+  {% if encounters %}
+  <div class="table-wrap"><table><thead><tr><th scope="col">Document</th><th scope="col">Patient</th><th scope="col">Status</th><th scope="col">Created</th><th scope="col"><span class="muted">Action</span></th></tr></thead><tbody>
+    {% for encounter in encounters %}<tr><td><a href="{% url 'encounter_detail' encounter.pk %}">{{ encounter.template_version.template.name }}</a><span class="subline">Mapping v{{ encounter.template_version.number }}</span></td><td>{{ encounter.patient.display_name|default:'No patient assigned' }}{% if encounter.patient.reference %}<span class="subline">{{ encounter.patient.reference }}</span>{% endif %}</td><td><span class="badge {{ encounter.status }}">{{ encounter.get_status_display|default:encounter.status }}</span></td><td class="number">{{ encounter.created_at|date:'M j, Y' }}</td><td><a href="{% url 'encounter_detail' encounter.pk %}">{% if encounter.status == 'finalized' %}View document{% else %}Continue{% endif %}<span aria-hidden="true"> →</span></a></td></tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}
+  <div class="empty-state">
+    <svg class="empty-glyph" viewBox="0 0 30 36" aria-hidden="true"><path d="M6 2h13l6 6v26H6zM19 2v7h6M11 15h9m-9 6h9m-9 6h6"/></svg>
+    <h2>Your first document starts here</h2><p>Upload a Word or PDF form, add documented notes, then review the answers with their source evidence.</p><a class="button" href="{% url 'template_upload' %}">Upload your first form</a>
+  </div>
+  {% endif %}
+</section>
+<div class="split">
+  <section class="section" id="templates">
+    <div class="section-heading"><h2>Form library</h2><a href="{% url 'template_upload' %}">Upload form <span aria-hidden="true">＋</span></a></div>
+    {% for template in templates %}
+    <div class="template-row"><span class="file-kind">{{ template.format|upper }}</span><div><a href="{% url 'template_detail' template.pk %}">{{ template.name }}</a><p>Original retained · Added {{ template.created_at|date:'M j, Y' }}</p></div><a href="{% url 'encounter_new' %}?template={{ template.pk }}" aria-label="Use {{ template.name }}">Use form <span aria-hidden="true">→</span></a></div>
+    {% empty %}<div class="empty-state compact"><p>No forms yet. Your uploaded original and its mapping versions will appear here.</p></div>{% endfor %}
+  </section>
+  <aside class="aside"><h2>Connected services</h2>{% include 'integrations.html' %}<p class="small muted">Service status reflects this private environment. A simulated provider does not send information to a live service.</p></aside>
+</div>
+{% endblock %}

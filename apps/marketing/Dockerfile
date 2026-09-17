@@ -5,10 +5,8 @@
 # service mapping + the dev script in package.json). Build context is
 # the monorepo root — `context: .` in docker-compose.yml.
 #
-# IMPORTANT: we COPY every workspace's package.json before `npm ci` so
-# the workspace graph is complete. Omitting a sibling workspace's
-# package.json is what caused the ioredis regression (see commit
-# 1efd1b2); don't repeat that here.
+# The fresh application is independent of this marketing workspace.
+# Copy both remaining workspace manifests so npm ci resolves the full graph.
 # ============================================================================
 
 # PR-K supply-chain hardening: every external base image pinned to a
@@ -22,12 +20,8 @@ ARG NODE_BASE=node@sha256:8ea2348b068a9544dae7317b4f3aafcdc032df1647bb7d768a05a5
 FROM ${NODE_BASE} AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-COPY apps/meddoc-pro/package.json ./apps/meddoc-pro/package.json
 COPY apps/marketing/package.json ./apps/marketing/package.json
-COPY packages/db/package.json ./packages/db/package.json
-COPY packages/auth/package.json ./packages/auth/package.json
-COPY packages/types/package.json ./packages/types/package.json
-COPY packages/ai/package.json ./packages/ai/package.json
+COPY packages/shared/package.json ./packages/shared/package.json
 # ⚠️ npm's DEFAULTS ARE 2 RETRIES AND A 60s CEILING, WHICH A REGISTRY BLIP
 # OUTLASTS. On 2026-08-10, after 18 of 18 consecutive green e2e runs, THREE
 # independent image builds on three different branches all died inside twelve
@@ -48,12 +42,8 @@ RUN npm ci --omit=dev
 FROM ${NODE_BASE} AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
-COPY apps/meddoc-pro/package.json ./apps/meddoc-pro/package.json
 COPY apps/marketing/package.json ./apps/marketing/package.json
-COPY packages/db/package.json ./packages/db/package.json
-COPY packages/auth/package.json ./packages/auth/package.json
-COPY packages/types/package.json ./packages/types/package.json
-COPY packages/ai/package.json ./packages/ai/package.json
+COPY packages/shared/package.json ./packages/shared/package.json
 # Registry-blip retry budget — see the note on the first install stage above.
 ENV NPM_CONFIG_FETCH_RETRIES=5 \
     NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 \

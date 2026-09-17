@@ -2,7 +2,7 @@
 # ============================================================================
 # Post-reboot proof — the one property a hand-started unit cannot demonstrate.
 # ----------------------------------------------------------------------------
-# Both PHI stores are unlocked at boot by systemd units ordered
+# The preserved PostgreSQL and MinIO stores are unlocked by systemd units ordered
 # `Before=docker.service`, and both containers now FAIL CLOSED if their volume
 # is missing. Those two facts together mean a boot-ordering race no longer
 # corrupts anything — it just takes the stack down. That is the right trade, but
@@ -12,15 +12,12 @@
 # So this runs AFTER a real reboot and asserts the whole chain:
 #
 #   units started at boot → mappings open → mounts live on the dm devices →
-#   Postgres and MinIO healthy ON those devices → guards intact → app up →
-#   co-tenants up
+#   Postgres and MinIO healthy ON those devices → guards intact → marketing up →
+#   co-tenants up → fresh private services up → public maintenance intact
 #
-# It also checks the two KNOWN side effects of a reboot on this host, because
-# they are expected and should be handled as part of the proof rather than
-# discovered as surprises:
-#
-#   - the QA stack does NOT self-restart (prod does)
-#   - a stale `@reboot` cron dirties the working tree
+# The retired application and QA stack must not be restored. Fresh doctor/admin
+# previews stay on loopback; their public hosts deliberately return HTTP 503.
+# This also reports unexpected changes to the shared deployment working tree.
 #
 # READ-ONLY. Reports; never fixes. Fixing is a decision.
 #
@@ -43,7 +40,7 @@ REPO=$(cd "$(dirname "$0")/.." && pwd)
 # ---------------------------------------------------------------------------
 # Assert a compose stack is COMPLETE, not merely non-empty.
 #
-# THREE false greens lived in sections 4-6 until 2026-07-29, all the same shape:
+# Historical false greens in stack checks shared the same shape:
 # each asked "is anything wrong?" of a set whose size it never established.
 #
 #   §4 printed "🟢 every meddoc-pro container is up" against ZERO containers.
@@ -56,13 +53,6 @@ REPO=$(cd "$(dirname "$0")/.." && pwd)
 #   §4 also could not see an UNHEALTHY container, twice over:
 #      `grep -vi "healthy"` drops "unhealthy" as a substring, and `Up [0-9]`
 #      matches any running container whatever its health says.
-#
-#   §6 printed "🟢 QA stack: 1 container(s) up" with 5 of 6 down, because it
-#      tested `-eq 0`. Exactly one QA container is `unless-stopped`
-#      (gotenberg); the other five are `restart: "no"` and ARE the documented
-#      side effect this section exists to surface. The one survivor satisfied
-#      the test, so the section reported success on the very state it was
-#      written to report.
 #
 # The fix is the one section 1 already models: name what you expect, and
 # compare. Derive the expected service set from the compose file, resolve each
@@ -137,12 +127,12 @@ done
 rm -f /tmp/prb
 echo
 
-echo "── 4. prod stack ───────────────────────────────────────────────────"
+echo "── 4. preserved shared stack and public routing ────────────────────"
 prod_expected=$(docker compose -f "$REPO/docker-compose.yml" config --services 2>/dev/null | sort)
 if [ -z "$prod_expected" ]; then
   # Must fail loudly. An unreadable compose file means we cannot establish what
   # "complete" is, and "I could not check" must never render as "🟢".
-  bad "cannot read the prod compose service list — the stack's completeness is UNPROVEN, not fine"
+  bad "cannot read the preserved compose service list — the stack's completeness is UNPROVEN, not fine"
 else
   n_exp=$(printf '%s\n' "$prod_expected" | wc -l)
   n_ok=0; prod_bad=""
@@ -158,16 +148,19 @@ else
     fi
   done < <(stack_state "$REPO/docker-compose.yml" meddoc-pro)
   if [ -n "$prod_bad" ]; then
-    bad "prod stack incomplete — $n_ok/$n_exp services running and healthy:"
+    bad "preserved stack incomplete — $n_ok/$n_exp services running and healthy:"
     printf '%s' "$prod_bad"
     note "   (MinIO can read 'unhealthy' after losing its mc alias while serving fine —"
     note "    classify before acting, do not assume either way)"
   else
-    note "🟢 prod stack complete — $n_ok/$n_exp services running and healthy"
+    note "🟢 preserved stack complete — $n_ok/$n_exp services running and healthy"
   fi
 fi
-code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://quillmd.com || echo 000)
-[ "$code" = "200" ] && note "🟢 quillmd.com → 200" || bad "quillmd.com → $code"
+for spec in "https://quillmd.com:200" "https://app.quillmd.com:503" "https://admin.quillmd.com:503"; do
+  url="${spec%:*}"; expected="${spec##*:}"
+  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$url") || code=000
+  [ "$code" = "$expected" ] && note "🟢 $url → $code (expected $expected)" || bad "$url → $code (expected $expected)"
+done
 echo
 
 echo "── 5. co-tenants (this host is shared) ─────────────────────────────"
@@ -187,44 +180,36 @@ for spec in "leathererp:3" "voiceassistmain:6" "openclaw:1"; do
 done
 echo
 
-echo "── 6. KNOWN reboot side effects — expected, handle them ────────────"
-# A PARTIAL QA stack is the normal post-boot state, not a rare one: exactly one
-# of its services (gotenberg) is `unless-stopped` and comes back on its own,
-# while the rest are `restart: "no"`. So "some containers are up" is precisely
-# what a reboot leaves behind, and it was the passing condition. Check the whole
-# set. `db-migrate` is one-shot — it exits 0 by design and is not expected up.
-QA_ONESHOT="db-migrate"
-qa_expected=$(docker compose -f "$REPO/docker-compose.qa.yml" config --services 2>/dev/null \
-                | grep -vx "$QA_ONESHOT" | sort)
-if [ -z "$qa_expected" ]; then
-  bad "cannot read the QA compose service list — QA posture UNPROVEN"
-else
-  n_qa_exp=$(printf '%s\n' "$qa_expected" | wc -l)
-  n_qa_ok=0; qa_down=""
-  while IFS=$'\t' read -r svc st; do
-    [ -z "$svc" ] && continue
-    [ "$svc" = "$QA_ONESHOT" ] && continue
-    status="${st%%|*}"; health="${st##*|}"
-    if [ "$status" = "running" ] && { [ "$health" = "healthy" ] || [ "$health" = "none" ]; }; then
-      n_qa_ok=$((n_qa_ok + 1))
-    else
-      qa_down="${qa_down}      ${svc} → ${status}/${health}"$'\n'
-    fi
-  done < <(stack_state "$REPO/docker-compose.qa.yml" meddoc-qa)
-  if [ -n "$qa_down" ]; then
-    # Deliberately a warning, not a failure: this side effect is EXPECTED and
-    # this script reports rather than fixes. But it must report ACCURATELY —
-    # the bug was never that it warned too weakly, it was that it fell silent.
-    note "⚠️  QA stack incomplete — $n_qa_ok/$n_qa_exp up. EXPECTED, it does not self-restart:"
-    printf '%s' "$qa_down"
-    note "   Bring it back:  docker compose -f docker-compose.qa.yml up -d"
-    note "   Then re-run:    bash scripts/check-qa-mock-posture.sh"
-    note "   (the posture check reads the RUNNING containers, so it only means"
-    note "    anything once they are actually running again)"
+echo "── 6. fresh private application ────────────────────────────────────"
+for u in quillmd-fresh-doctor quillmd-fresh-admin quillmd-fresh-worker; do
+  st=$(inhost "systemctl is-active $u.service")
+  enabled=$(inhost "systemctl is-enabled $u.service")
+  if [ "$st" = "active" ] && [ "$enabled" = "enabled" ]; then
+    note "🟢 $u.service → active and enabled"
   else
-    note "🟢 QA stack complete — $n_qa_ok/$n_qa_exp services up"
+    bad "$u.service → $st / $enabled (expected active / enabled)"
   fi
-fi
+done
+fresh_db=$(docker inspect -f '{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}|{{.HostConfig.RestartPolicy.Name}}' quillmd-fresh-postgres 2>/dev/null) || fresh_db="absent|none|none"
+case "$fresh_db" in
+  'running|healthy|unless-stopped'|'running|healthy|always')
+    note "🟢 quillmd-fresh-postgres → healthy with a persistent restart policy" ;;
+  'running|none|unless-stopped'|'running|none|always')
+    if docker exec quillmd-fresh-postgres pg_isready -U quillmd_fresh -d quillmd_fresh >/dev/null 2>&1; then
+      note "🟢 quillmd-fresh-postgres → pg_isready passed; restart enabled (no Docker healthcheck)"
+    else
+      bad "quillmd-fresh-postgres → pg_isready failed (no Docker healthcheck)"
+    fi ;;
+  *) bad "quillmd-fresh-postgres → $fresh_db (expected running / ready / restart enabled)" ;;
+esac
+for spec in "doctor:9130" "admin:9131"; do
+  surface="${spec%%:*}"; port="${spec##*:}"
+  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "http://127.0.0.1:$port/health/") || code=000
+  [ "$code" = "200" ] && note "🟢 private $surface health → 200" || bad "private $surface health → $code"
+done
+echo
+
+echo "── 7. shared deployment tree ───────────────────────────────────────"
 # `git status` must be allowed to FAIL LOUDLY. Run from the boot unit this
 # executes as root against a repo owned by `claude`, and git then refuses with
 # "detected dubious ownership" — on stderr, with an empty stdout. The first
@@ -232,23 +217,22 @@ fi
 # "🟢 working tree clean" off a hard error. An unreadable tree is not a clean
 # one. `safe.directory` is passed per-invocation rather than written to a global
 # config, because a check should not mutate the host it is checking.
-if ! git_out=$(git -c safe.directory="$REPO" -C "$REPO" status --porcelain 2>&1); then
-  bad "cannot read the working tree — git said: ${git_out%%$'\n'*}"
-  git_out=""
-fi
-dirty=$(printf '%s\n' "$git_out" | grep -v '^?? ' | grep -v '^$' || true)
-if [ -n "$dirty" ]; then
-  note "⚠️  working tree dirty — a stale @reboot cron does this. Inspect, do NOT clobber:"
-  echo "$dirty" | sed 's/^/      /'
-  note "   (only 'M Caddyfile' is an expected standing modification)"
+if git_out=$(git -c safe.directory="$REPO" -C "$REPO" status --porcelain 2>&1); then
+  dirty=$(printf '%s\n' "$git_out" | grep -v '^?? ' | grep -v '^$' || true)
+  if [ -n "$dirty" ]; then
+    note "⚠️  working tree dirty — inspect the changes; do NOT clobber:"
+    echo "$dirty" | sed 's/^/      /'
+  else
+    note "🟢 working tree clean"
+  fi
 else
-  note "🟢 working tree clean"
+  bad "cannot read the working tree — git said: ${git_out%%$'\n'*}"
 fi
 echo
 
 if [ "$fail" = "0" ]; then
-  echo "🟢 POST-REBOOT PROOF PASSED — both encrypted stores came back on their"
-  echo "   own, in the right order, with both fail-closed guards intact."
+  echo "🟢 POST-REBOOT PROOF PASSED — preserved encrypted stores and shared"
+  echo "   services are healthy; fresh private services and public maintenance match."
   exit 0
 fi
 echo "🔴 POST-REBOOT PROOF FAILED — see the red lines above."

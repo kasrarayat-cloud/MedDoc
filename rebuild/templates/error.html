@@ -1,0 +1,9 @@
+{% extends 'base.html' %}
+{% block title %}{% block error_title %}Unable to open this page{% endblock %}{% endblock %}
+{% block shell %}
+<main class="auth-main" id="main"><div class="auth-form">
+  <a class="brand" href="{% url 'dashboard' %}"><span class="brand-mark" aria-hidden="true">Q</span>QuillMD</a>
+  <div class="review-footer"><div class="eyebrow">{% block error_code %}Request unavailable{% endblock %}</div><h1>{% block error_heading %}We could not complete that request.{% endblock %}</h1><p class="muted">{% block error_description %}Return to your workspace and try again. Your saved records remain available.{% endblock %}</p></div>
+  <a class="button" href="{% url 'dashboard' %}">Return to workspace</a>
+</div></main>
+{% endblock %}

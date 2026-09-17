@@ -4,7 +4,7 @@
 # ----------------------------------------------------------------------------
 # THE PREDICATE, in one sentence:
 #
-#   For the given FULL 40-character commit SHA, each of the four required
+#   For the given FULL 40-character commit SHA, each of the required
 #   workflows has EXACTLY ONE chosen run on that SHA, completed with conclusion
 #   `success`; and in AUDIT mode, every run id a ledger row CLAIMS belongs to
 #   that SHA and to a required workflow, and the claimed set is exactly the set
@@ -67,7 +67,9 @@
 # ============================================================================
 set -uo pipefail
 
-REQUIRED=(CI e2e a11y-ci secrets-scan)
+# 2026-09-17 fresh rebuild: CI contains the application, marketing, and browser
+# jobs. Retired e2e/a11y-ci targeted the deleted application. Secret scan retained.
+REQUIRED=(CI secrets-scan)
 REPO=""; SHA=""; EXPECT_RAW=""
 PROPAGATION_SECS=300      # a commit pushed seconds ago legitimately has no runs
 STALE_PENDING_SECS=10800  # 3h: past this, "in progress" is a zombie, not a wait

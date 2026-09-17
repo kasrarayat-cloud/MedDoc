@@ -1,572 +1,155 @@
-# ============================================================================
-# CI — runs the same pipeline as `npm run test:all` locally
-# ----------------------------------------------------------------------------
-# Seeds tenancy fixtures + super-admin, runs Vitest adversarial suite, then
-# Playwright E2E suite. Playwright's webServer block boots `next dev` on its
-# own — no separate server step needed.
-#
-# The tests don't call OpenAI: unit tests are pure or mock the client, E2E
-# tests stop before the voice/AI flow (see tests/e2e/assistant.spec.ts). A
-# dummy OPENAI_API_KEY is fine and avoids requiring a repo secret for PRs
-# from forks.
-# ============================================================================
-
 name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: fresh-ci-${{ github.ref }}
   cancel-in-progress: true
 
-# ⚠️ REGISTRY-BLIP RETRY BUDGET — npm defaults to 2 retries / 60s ceiling.
-# On 2026-08-10 three independent builds on three branches died inside twelve
-# minutes on `npm error code ECONNRESET` during `npm ci`, after 18 of 18 green
-# e2e runs. Zero test failures — nothing ever installed. Declared at WORKFLOW
-# level so every job and every future npm invocation inherits it, rather than as
-# flags on each command, which is a hand-kept list.
-env:
-  NPM_CONFIG_FETCH_RETRIES: "5"
-  NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "20000"
-  NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: "120000"
-
 jobs:
-  test:
-    # ⚠️ THIS JOB IS PINNED TO THE HEAVY LANE BECAUSE IT DECLARES SERVICE
-    # CONTAINERS WITH FIXED HOST PORTS (5432, 6379). Both runners live on the
-    # SAME BOX and share its network namespace, so two concurrent jobs binding
-    # 5432 collide: `failed to set up container networking: driver failed
-    # programming external connectivity`. Before the second runner existed, jobs
-    # serialised and only one ever bound the port — the split removed the
-    # accidental mutual exclusion the fixed ports had been relying on.
-    #
-    # ⚠️ THE LIGHT LANE IS THEREFORE FOR JOBS WITH NO SERVICE CONTAINERS. Both
-    # service-declaring jobs (`test` here, `axe` in a11y.yml) sit on quillmd-ci,
-    # which runs one job at a time — restoring the exclusion deliberately instead
-    # of by luck. The better fix is dynamic ports via
-    # `job.services.postgres.ports['5432']`, which would let this rejoin the light
-    # lane; it is a real change to how the job reaches its database and is filed
-    # rather than rushed into a hotfix.
-    # ⚠️ GITHUB-HOSTED — OWNER RULING 2026-09-04, REVERSING THE COST-ARC MOVE.
-    # This job ran on `[self-hosted, linux, x64, quillmd-ci]`, and the reason it
-    # was pinned to the HEAVY label has now evaporated by construction: both
-    # self-hosted runners live on ONE BOX and share its network namespace, so
-    # two concurrent jobs binding a fixed host port (5432, 6379) collided. A
-    # GitHub-hosted job gets its OWN VM, so there is no namespace to share and
-    # no exclusion to restore.
-    #
-    # WHAT IT COSTS AND WHAT IT BUYS: billable minutes, accepted by the owner,
-    # against a single heavy lane that had 10 runs queued behind 1 executing and
-    # held a ratified accessibility fix out of production for over a day.
-    #
-    # ⚠️ SPEC: this repo is PRIVATE on a User plan, so `ubuntu-latest` is
-    # 2 vCPU / 7 GB / 14 GB SSD — FEWER cores and less disk than the self-hosted
-    # box (4 vCPU / 7.8 GiB). Larger runners need Team/Enterprise and are not
-    # available here. If this job dies on memory or disk, that is the reason,
-    # and the remedy is to shrink the job, not to raise the size.
+  python:
+    name: Fresh application tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
     services:
       postgres:
-        # T-M14.1 migration runs CREATE EXTENSION "vector" — the stock
-        # postgres:16 image doesn't ship pgvector, so use the same
-        # pgvector/pgvector:pg16 image as the production compose file.
-        image: pgvector/pgvector:pg16
+        image: postgres:16-alpine
         env:
-          POSTGRES_USER: meddoc
-          POSTGRES_PASSWORD: meddoc
-          POSTGRES_DB: meddoc
+          POSTGRES_USER: quillmd_ci
+          POSTGRES_PASSWORD: synthetic-ci-database-only
+          POSTGRES_DB: quillmd_ci
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U meddoc -d meddoc"
+          --health-cmd "pg_isready -U quillmd_ci -d quillmd_ci"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-      # Phase 13 (h9-meddoc-e2e-residual): the dev server tries to
-      # connect to redis at startup (audit-log SSE pubsub singleton).
-      # Without this service the EAI_AGAIN noise pollutes the WebServer
-      # log on every CI run and removes one variable when diagnosing
-      # the residual signIn() failure.
-      redis:
-        image: redis:7-alpine
+    env:
+      QUILLMD_SECRET_KEY: synthetic-ci-only-key-with-no-external-access-20260917
+      QUILLMD_DB_NAME: quillmd_ci
+      QUILLMD_DB_USER: quillmd_ci
+      QUILLMD_DB_PASSWORD: synthetic-ci-database-only
+      QUILLMD_DB_HOST: 127.0.0.1
+      QUILLMD_DB_PORT: '5432'
+      QUILLMD_AI_MODE: fixture
+      QUILLMD_ADMIN_SITE: '0'
+      QUILLMD_HTTPS: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: rebuild/requirements.lock
+      - name: Install locked Python dependencies
+        run: python -m pip install -r rebuild/requirements.lock
+      - name: Verify kernel sandbox library
+        run: ldconfig -p | grep 'libseccomp.so.2'
+      - name: Fresh application and document tests
+        run: bash scripts/ci/verify-fresh.sh python
+      - name: Python dependency audit
+        run: python -m pip_audit -r rebuild/requirements.lock
+
+  marketing:
+    name: Marketing build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: https://app.quillmd.com
+      NEXT_PUBLIC_MARKETING_URL: https://quillmd.com
+      NPM_CONFIG_FETCH_RETRIES: '5'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked marketing dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Marketing build and dependency audit
+        run: bash scripts/ci/verify-fresh.sh marketing
+
+  private-browser:
+    name: Private browser and accessibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: quillmd_browser_ci
+          POSTGRES_PASSWORD: synthetic-browser-database-only
+          POSTGRES_DB: quillmd_browser_ci
         ports:
-          - 6379:6379
+          - 5432:5432
         options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
+          --health-cmd "pg_isready -U quillmd_browser_ci -d quillmd_browser_ci"
+          --health-interval 5s
           --health-timeout 5s
-          --health-retries 5
-
+          --health-retries 10
     env:
-      DATABASE_URL: postgresql://meddoc:meddoc@localhost:5432/meddoc?schema=public
-      REDIS_URL: redis://localhost:6379
-      AUTH_SECRET: ci-dummy-auth-secret-not-for-production
-      AUTH_USE_MOCK: "true"
-      # Phase 13 (h9-meddoc-e2e-residual): turn on the surgical deny-
-      # reason console.error in apps/meddoc-pro/src/lib/nextauth.ts
-      # so the next CI run captures the specific authorize() return-
-      # null branch that's currently swallowed under a generic
-      # CredentialsSignin.
-      AUTH_DEBUG: "true"
-      NEXTAUTH_URL: http://localhost:3000
-      OPENAI_API_KEY: ci-dummy-openai-key
-      CI: "true"
-
+      QUILLMD_SECRET_KEY: synthetic-browser-ci-only-key-no-external-access-20260917
+      QUILLMD_DB_NAME: quillmd_browser_ci
+      QUILLMD_DB_USER: quillmd_browser_ci
+      QUILLMD_DB_PASSWORD: synthetic-browser-database-only
+      QUILLMD_DB_HOST: 127.0.0.1
+      QUILLMD_DB_PORT: '5432'
+      QUILLMD_AI_MODE: fixture
+      QUILLMD_ADMIN_SITE: '0'
+      QUILLMD_HTTPS: '0'
     steps:
       - uses: actions/checkout@v4
-
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: rebuild/requirements.lock
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '22'
           cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Generate Prisma client
-        run: npm run db:generate
-
-      - name: Apply database migrations
-        run: npm run db:migrate:deploy
-
-      # ── #739 — `npx playwright install --with-deps chromium` intermittently
-      # hangs. MEASURED on this workflow 2026-08-19: the healthy step is
-      # 3m59s (run 32228240177, 07:33:21→07:37:20); the stalled one ran
-      # 08:59:40→09:18:46 = 19m06s and was killed by the 20-minute JOB ceiling,
-      # taking every other step with it.
-      #
-      # ⚠️ AND THE SINGLE STEP COULD NOT SAY WHICH HALF HUNG. Its log showed the
-      # apt INDEX fetch recovering on its own — a 38s `Ign:` storm against
-      # azure.archive.ubuntu.com, then a clean fallback to archive.ubuntu.com at
-      # 08:38:11 — followed by 18m18s of TOTAL SILENCE. Two candidates remained
-      # (the apt PACKAGE install, and the browser download) and one step with
-      # one silent log cannot distinguish them.
-      #
-      # So the step is SPLIT into the two halves `--with-deps` performs, each
-      # with its own ceiling. This is the mitigation AND the instrument: the
-      # next stall names its own phase by which step times out.
-      #
-      # ⚠️ THIS IS A MITIGATION, NOT A CURE, AND IT IS NOT KNOWN TO REMOVE THE
-      # STALL. The cache removes the browser-download reach on a HIT; nothing
-      # here removes the apt reach. What it does guarantee is that a stall costs
-      # ~5 minutes and says where it was, instead of 19 minutes and silence.
-      # Retry is deliberately NOT used: 2 attempts × either half does not fit
-      # under this job's 20-minute budget, and a retry that cannot complete is
-      # a job that always times out.
-      - name: Resolve Playwright version (for cache key)
-        id: pw-version
+      - name: Install locked browser and application dependencies
         run: |
-          ver=$(node -p "require('./apps/meddoc-pro/package.json').devDependencies['@playwright/test']")
-          echo "version=${ver}" >> "$GITHUB_OUTPUT"
-
-      # Same key namespace as a11y.yml on purpose — that workflow already
-      # populates this cache, so this one restores it rather than racing to
-      # build its own. Both apps pin the identical `@playwright/test` range.
-      - name: Cache Playwright browsers
-        id: pw-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
-          restore-keys: |
-            playwright-${{ runner.os }}-
-
-      # ⚠️ #739 — THE PHASE IS NOW NAMED, BY THE SPLIT ABOVE, ON ITS FIRST RUN.
-      # Run 32237637366's apt half failed at its ceiling and its log is the
-      # measurement the single step could never produce:
-      #
-      #     09:28:39  apt index starts; `Ign:` storm against azure.archive
-      #     09:29:17  FALLS BACK to archive.ubuntu.com, all four suites Hit/Get
-      #               ^^^ 38s — the INDEX phase completes, exactly as before
-      #     09:29:17  ......... 4m33s of SILENCE .........
-      #     09:33:50  timed out after 5 minutes
-      #
-      # So the hang is in `apt-get install` fetching PACKAGES, after the index
-      # has already recovered. That confirms #739's title and RETIRES the
-      # competing "the cache is the discriminator" reading: this run had a cache
-      # HIT (4s restore) and hung anyway, in a step the cache does not touch.
-      #
-      # THE CURE IS AT THE LAYER THAT CAN SEE THE HANG. A shell-level retry
-      # cannot tell a slow fetch from a dead one; apt can. Bounding
-      # `Acquire::*::Timeout` turns a silent indefinite wait into a 20-second
-      # failure that apt itself retries against the NEXT mirror in the list —
-      # which is the same fallback that demonstrably works for the index.
-      #
-      # ⚠️ ONE THING THIS DOES NOT KNOW: which HOST hangs. The log goes silent
-      # before naming it, so "the azure mirror is the culprit" stays an
-      # inference. This fix is deliberately host-agnostic for that reason — it
-      # bounds the wait whoever is on the other end. If the stall survives it,
-      # that is a finding and not a mystery.
-      - name: Bound apt's network waits (#739)
+          python -m pip install -r rebuild/requirements.lock
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Verify kernel sandbox library
+        run: ldconfig -p | grep 'libseccomp.so.2'
+      - name: Seed isolated synthetic database and collect assets
+        working-directory: rebuild
         run: |
-          printf 'Acquire::http::Timeout "20";\nAcquire::https::Timeout "20";\nAcquire::Retries "3";\n' \
-            | sudo tee /etc/apt/apt.conf.d/99-quillmd-timeouts > /dev/null
-          # The drop-in proves its own application: apt parses apt.conf.d at
-          # STARTUP, so a malformed file fails here, loudly — rather than being
-          # silently ignored and leaving the timeouts unset while this step
-          # reports success.
-          sudo apt-get --version > /dev/null
-
-      - name: Install Playwright system deps (apt half of --with-deps)
-        timeout-minutes: 5
-        run: npx playwright install-deps chromium
-        working-directory: apps/meddoc-pro
-
-      - name: Install Playwright Chromium (browser half of --with-deps)
-        timeout-minutes: 5
-        run: npx playwright install chromium
-        working-directory: apps/meddoc-pro
-
-      - name: Run test pipeline (seed + vitest + playwright)
-        run: npm run test:all
-
-      - name: Upload Playwright report on failure
-        if: failure()
+          python manage.py migrate --noinput
+          python manage.py collectstatic --noinput
+          python manage.py seed_private
+      - name: Exercise private workflow and accessibility
+        working-directory: rebuild
+        run: |
+          gunicorn quillmd.wsgi:application --bind 127.0.0.1:9130 --workers 1 --timeout 60 > .runtime/browser-server.log 2>&1 &
+          browser_server_pid=$!
+          python manage.py worker > .runtime/browser-worker.log 2>&1 &
+          browser_worker_pid=$!
+          trap 'kill "$browser_server_pid" "$browser_worker_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:9130/health/ > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:9130/health/ > /dev/null
+          node browser-tests.mjs
+      - name: Upload synthetic browser evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
-          path: apps/meddoc-pro/playwright-report/
+          name: private-browser-evidence
           retention-days: 7
-
-      - name: Upload Playwright traces on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-test-results
-          path: apps/meddoc-pro/test-results/
-          retention-days: 7
-
-  # ──────────────────────────────────────────────────────────────────
-  # PR-K supply-chain hardening: dependency-vulnerability gate.
-  # Fails the PR when a new high or critical vulnerability lands.
-  # Baseline at PR-K time: 0 high + 0 critical (8 moderate); see
-  # docs/security-audits/npm-audit-baseline-20260506T064154Z.md.
-  # The gate is `--audit-level=high` so the existing moderate
-  # vulnerabilities don't trip CI; only NEW high/critical findings
-  # do. Daily Dependabot rotation keeps the moderate count moving
-  # toward zero.
-  # ──────────────────────────────────────────────────────────────────
-  audit:
-    name: npm audit (high+critical gate)
-    # ⚠️ SELF-HOSTED. MEASURED 2026-08-28 on white-gorilla-87822 (Ubuntu 24.04.4):
-    # nproc=4, 7.8 GiB total / 5.7 GiB available, Docker 29.7.2 — which CONFIRMS
-    # the figures this comment carried as a purchase spec. Job `name:`
-    # is UNCHANGED so every required context is preserved byte-for-byte.
-    # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
-    runs-on: ubuntu-latest
-    # ⚠️ BOX-CALIBRATED, NOT A SPEED SETTING. A timeout is a HANG-GUARD;
-    # generous is free. quillmd-ci-1 (4 vCPU) is ~1.4-1.9x slower than a
-    # hosted runner on CPU-bound work, and every timeout in this repo was
-    # sized against hosted speed. Formula: UNMEASURED on this box; hosted ~1-2m baseline x3.
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      # ⚠️ npm 11+, AND IT IS THE WHOLE REASON THIS GATE FAILED IN CI WHILE
-      # PASSING LOCALLY. `setup-node` with node-version 22 bundles npm 10.x,
-      # which audits through the RETIRING
-      # `registry.npmjs.org/-/npm/v1/security/audits/quick` endpoint. npm 11
-      # uses `/security/advisories/bulk`. Measured both ways on the same
-      # command: CI's failing run printed npm's own "this endpoint is being
-      # retired" notice next to a 500 from `quick`; locally, npm 11.10.0 hit
-      # `bulk` and returned a usable report.
-      #
-      # ⚠️ SO THE RETRY ALONE WOULD NOT HAVE HELD. Retrying a call to an
-      # endpoint on its way out buys time, not correctness — the fix is to stop
-      # calling it. The retry stays: it covers a transient 5xx on the bulk path,
-      # which is a different failure from a retired endpoint.
-      #
-      # Scoped to THIS job deliberately. It is the only job that audits, and a
-      # global npm bump would change the resolver for every install in the repo
-      # — one variable per change.
-      - name: Pin npm 11 (the audit endpoint depends on it)
-        run: npm i -g npm@^11
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
-      - name: Assert sharp survived install
-        # HISTORY: `overrides.sharp: ^0.35.0` used to sit at ROOT level, which is
-        # a GLOBAL demand npm could not reconcile with next's own
-        # `optionalDependencies.sharp: ^0.34.5`. Because sharp is OPTIONAL, npm
-        # resolved that conflict by silently DROPPING the package rather than
-        # erroring, so any full re-resolve removed Next's native image optimiser
-        # with no warning — and the lockfile had to be hand-maintained.
-        #
-        # FIXED by scoping the override under `next`, the form npm actually
-        # supports ("when THIS parent asks for sharp, use ^0.35.0"). The lockfile
-        # is regenerable normally again. This assert is KEPT as a regression
-        # guard: if anyone reintroduces a root-level sharp override, or the
-        # ranges drift apart again, CI says so instead of shipping an image
-        # without sharp.
-        # NOTE: read package.json off the filesystem, NOT via
-        # require('sharp/package.json') — sharp's "exports" map does not expose
-        # the ./package.json subpath, so the require form throws
-        # ERR_PACKAGE_PATH_NOT_EXPORTED even when sharp is correctly installed
-        # (i.e. it would be a permanent false alarm).
-        run: |
-          node -e "
-            const fs = require('fs'), path = require('path');
-            const p = path.join(process.cwd(), 'node_modules', 'sharp', 'package.json');
-            if (!fs.existsSync(p)) {
-              console.error('::error::sharp is MISSING from node_modules after npm ci.');
-              console.error('::error::The lockfile was probably regenerated with \`npm install\`, which drops sharp');
-              console.error('::error::Check that overrides.sharp is still SCOPED under next, not root-level.');
-              console.error('::error::Fix: overrides = { next: { sharp: ^0.35.0 } }, then npm install && npm ci.');
-              process.exit(1);
-            }
-            const v = JSON.parse(fs.readFileSync(p, 'utf8')).version;
-            if (!v.startsWith('0.35.')) {
-              console.error('::error::sharp resolved to ' + v + ' — expected 0.35.x (GHSA-f88m-g3jw-g9cj).');
-              process.exit(1);
-            }
-            console.log('sharp ' + v + ' present');
-          "
-      - name: Audit (fail on high/critical only; decommissioned meddoc-pro excluded)
-        # `--audit-level=high` gates the exit code on high/critical only
-        # (moderate + low are printed but don't fail). `|| true` is
-        # intentionally NOT added — we want the gate to fail on a
-        # vulnerability above threshold.
-        #
-        # POLICY (2026-07-25): this BLOCKING gate runs `--omit=dev`, i.e. the
-        # full high+critical threshold against PRODUCTION dependencies — the
-        # code that actually ships in the image and can be reached by a request.
-        # The threshold is NOT lowered and the meddoc-pro exclusion is unchanged;
-        # only the dependency SCOPE narrows, from "everything in the repo" to
-        # "everything we ship".
-        #
-        # WHY: dev-only tooling was blocking merges on advisories that cannot
-        # reach production. Concretely, the eslint chain
-        # (eslint -> @eslint/* -> minimatch -> brace-expansion) is fixable only
-        # by eslint 10.8.0, which is ECOSYSTEM-BLOCKED: eslint-config-next@16.2.2
-        # still peer-caps its plugin set at eslint 9 (eslint-plugin-import <=^9,
-        # jsx-a11y <=^9, react <=^9.7). Holding production changes hostage to a
-        # linter's transitive dependency is the wrong trade.
-        #
-        # Dev advisories do NOT become invisible — the `audit-dev` job below runs
-        # the identical scan WITHOUT --omit=dev and reports, non-blocking.
-        # Tracking issue: adopt eslint 10 the moment eslint-config-next's plugins
-        # accept it (the same issue carries the "did next widen its sharp range?"
-        # watcher, which would let the sharp override be dropped entirely).
-        # Scope: `--workspaces` would also scan apps/meddoc-pro, which is
-        # decommissioned and slated for deletion — its dead dep tree must
-        # not gate live PRs. npm has no `--workspace-exclude`, so we
-        # enumerate every OTHER workspace dynamically (a NEW in-scope
-        # workspace is auto-covered; only meddoc-pro is dropped) and audit
-        # them plus the workspace root. The empty-list guard fail-closes so
-        # a `npm query` regression can never silently shrink the audit
-        # surface to zero. This narrows SCOPE only — it does NOT lower the
-        # threshold; high/critical coverage for every in-scope workspace
-        # (transcribe-md, marketing, @meddoc/*) is fully intact.
-        # `shell: bash` is explicit so the `mapfile`/process-substitution snippet
-        # never breaks if a future runner default changes the shell to sh/dash.
-        shell: bash
-        run: |
-          mapfile -t WS < <(npm query .workspace --json \
-            | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{for(const w of JSON.parse(s)){if(w.name!=='meddoc-pro')console.log(w.name)}})")
-          if [ "${#WS[@]}" -eq 0 ]; then
-            echo "::error::no in-scope workspaces resolved — refusing to run an empty audit"
-            exit 1
-          fi
-          args=(); for w in "${WS[@]}"; do args+=(--workspace "$w"); done
-          echo "Auditing ${#WS[@]} in-scope workspaces, PRODUCTION deps only (meddoc-pro excluded): ${WS[*]}"
-          # ⚠️ #163 B(ii) — THE GATE RUNS THROUGH `audit-gate.mjs`, NOT BARE.
-          # `npm audit` is all-or-nothing, and one advisory on a build-time
-          # CLI's bundled driver for a database engine this product does not use
-          # held EVERY merge on the repo, a security fix included. The wrapper
-          # applies exceptions that are keyed BY ADVISORY ID, each carrying a
-          # justification and a retirement condition, and it fails on anything
-          # not excepted, on a malformed exception, on a STALE one, and on
-          # cannot-tell. It is strictly stricter than the bare command in three
-          # of those four directions.
-          gate_args=(); for w in "${WS[@]}"; do gate_args+=("--workspace=$w"); done
-          node scripts/audit-gate.mjs "${gate_args[@]}"
-
-  # ──────────────────────────────────────────────────────────────────
-  # Dev-dependency advisory visibility (2026-07-25). NON-BLOCKING.
-  # ----------------------------------------------------------------------------
-  # The gate above deliberately scopes to production deps. This job runs the
-  # IDENTICAL scan without --omit=dev so a dev-tooling advisory is still
-  # surfaced on every PR — it just doesn't hold the merge. `continue-on-error`
-  # is what makes it advisory; it is NOT in the required-checks list.
-  #
-  # If this job is red and the blocking gate is green, the finding is in dev
-  # tooling. That is a real debt item to schedule, not a reason to stop a
-  # production fix. Read it, don't ignore it.
-  # ──────────────────────────────────────────────────────────────────
-  audit-dev:
-    name: dev-dependency advisories (report-only)
-    # ⚠️ SELF-HOSTED. MEASURED 2026-08-28 on white-gorilla-87822 (Ubuntu 24.04.4):
-    # nproc=4, 7.8 GiB total / 5.7 GiB available, Docker 29.7.2 — which CONFIRMS
-    # the figures this comment carried as a purchase spec. Job `name:`
-    # is UNCHANGED so every required context is preserved byte-for-byte.
-    # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
-    runs-on: ubuntu-latest
-    # ⚠️ BOX-CALIBRATED, NOT A SPEED SETTING. A timeout is a HANG-GUARD;
-    # generous is free. quillmd-ci-1 (4 vCPU) is ~1.4-1.9x slower than a
-    # hosted runner on CPU-bound work, and every timeout in this repo was
-    # sized against hosted speed. Formula: UNMEASURED on this box; hosted ~1-2m baseline x3.
-    timeout-minutes: 15
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
-      - name: Audit FULL tree incl. dev (advisory only — never blocks)
-        shell: bash
-        run: |
-          mapfile -t WS < <(npm query .workspace --json \
-            | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{for(const w of JSON.parse(s)){if(w.name!=='meddoc-pro')console.log(w.name)}})")
-          if [ "${#WS[@]}" -eq 0 ]; then
-            echo "::warning::no in-scope workspaces resolved — dev audit skipped"
-            exit 0
-          fi
-          args=(); for w in "${WS[@]}"; do args+=(--workspace "$w"); done
-          echo "Dev-inclusive audit over ${#WS[@]} workspaces (meddoc-pro excluded): ${WS[*]}"
-          npm audit --audit-level=high "${args[@]}" --include-workspace-root \
-            || echo "::warning::dev-tree high/critical advisories present — see log. Blocking gate covers production deps only."
-
-  # ──────────────────────────────────────────────────────────────────
-  # In-scope unit gate (chore/ci-unit-gate-and-marketing-copy).
-  # ----------------------------------------------------------------------------
-  # GAP this closes: the `test` job above runs `npm run test:all`, which
-  # delegates to the decommissioned meddoc-pro workspace and is now a no-op
-  # echo — so NO unit tests gated merge. The whole transcribe-md + packages/*
-  # suite (1500+ tests incl. the caution-first allergy merge, refusal
-  # categorization, admin-gate structural test, rx-warning identity, dose
-  # validator, db-guard, …) rotted unenforced (proven by the 2026-06-11
-  # hygiene sweep: 7 tests were red on main while every PR's `test` check
-  # stayed green).
-  #
-  # This job runs the ONE in-scope unit suite — `vitest run` in
-  # apps/transcribe-md, whose config folds in packages/*/src tests. It needs
-  # NO postgres/redis service and NO real API keys: the suite mocks @meddoc/db
-  # + @meddoc/ai and runs fully on a bare runner (the sweep removed the last
-  # env coupling). DATABASE_URL is deliberately left UNSET — db-guard tests
-  # assert the fail-closed "DATABASE_URL is not set" path. Runs in parallel
-  # with `test` / `audit` / the e2e workflow, so the CI critical path does
-  # not lengthen. apps/meddoc-pro (decommissioned) stays out of scope.
-  typecheck:
-    name: typecheck (tsc --noEmit)
-    # ⚠️ THIS CLOSES A GATE GAP, IT IS NOT NEW TOOLING. `tsc --noEmit` has been
-    # run locally all through this arc and cited as evidence — and there was NO
-    # tsc step anywhere in `.github/workflows/*`. An adversarial lens auditing
-    # something else measured the zero. Types reached CI only as a side effect
-    # of `next build`, which runs in a different job, on a different trigger
-    # path, and does not typecheck test files at all.
-    #
-    # ⚠️ AND VITEST CANNOT SUBSTITUTE FOR IT: it transpiles without typechecking,
-    # so a green suite says nothing about types. This exact gap let a cast error
-    # in a new gate file sit green under vitest and fail only on a local tsc.
-    #
-    # LIGHT LANE: it installs, generates the Prisma client and typechecks. No
-    # `services:` block, no database, no browser — the same condition on which
-    # `unit` moved. `quillmd-ci-light` resolves to two machines where
-    # `quillmd-ci` resolves to one.
-    runs-on: ubuntu-latest
-    # Box-calibrated like every other timeout here: a hang-guard, not a speed
-    # setting. Measured ~40-50s locally on a faster box; 15m is generous.
-    timeout-minutes: 15
-    env:
-      CI: "true"
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Generate Prisma client
-        # `@meddoc/db` imports resolve to the generated `@prisma/client`, so the
-        # typecheck cannot resolve them until this runs. Schema only — no
-        # DATABASE_URL and no connection.
-        run: npm run db:generate
-      - name: Typecheck transcribe-md
-        run: npx tsc --noEmit -p apps/transcribe-md/tsconfig.json
-
-  unit:
-    name: unit tests (transcribe-md + packages)
-    # ⚠️ SELF-HOSTED. MEASURED 2026-08-28 on white-gorilla-87822 (Ubuntu 24.04.4):
-    # nproc=4, 7.8 GiB total / 5.7 GiB available, Docker 29.7.2 — which CONFIRMS
-    # the figures this comment carried as a purchase spec. Job `name:`
-    # is UNCHANGED so every required context is preserved byte-for-byte.
-    # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
-    # ⚠️ #164 item 6 — THIS WIDENS `unit`'s ELIGIBLE RUNNER SET. It does NOT
-    # relocate the job, and the difference matters: ci-1 carries BOTH labels.
-    #
-    #   quillmd-ci-1  labels=self-hosted,Linux,X64,quillmd-ci,quillmd-ci-light
-    #   quillmd-ci-2  labels=self-hosted,Linux,X64,quillmd-ci-light
-    #
-    # So `quillmd-ci` resolves to exactly ONE machine while `quillmd-ci-light`
-    # resolves to TWO. Pinning `unit` heavy made it compete with `test` and e2e
-    # for that one machine; light makes it eligible for either. It may still
-    # land on ci-1 — that is fine, and is why the claim is "eligible for two",
-    # never "runs on ci-2".
-    #
-    # ⚠️ MEASURED LIVE, 2026-09-02T07:35Z, on PR #932's own CI run: `unit tests`
-    # in_progress on ci-1 (busy=true) with `test` QUEUED BEHIND IT, while ci-2
-    # sat busy=false because every job it could legally take had already
-    # finished. Two jobs serialised on one machine with the other idle — the
-    # exact contention this line removes.
-    #
-    # ⚠️ THE CONDITION IS SERVICE CONTAINERS, AND IT WAS CHECKED, NOT ASSUMED:
-    # this job declares NO `services:` block — it installs, generates the Prisma
-    # client and runs vitest. The `test` job DOES (`pgvector/pgvector:pg16`) and
-    # stays heavy, as do e2e and the axe sweep. A job that needs a database
-    # server does not belong on the light lane however fast it looks.
-    runs-on: ubuntu-latest
-    # ⚠️ BOX-CALIBRATED, NOT A SPEED SETTING. A timeout is a HANG-GUARD;
-    # generous is free. quillmd-ci-1 (4 vCPU) is ~1.4-1.9x slower than a
-    # hosted runner on CPU-bound work, and every timeout in this repo was
-    # sized against hosted speed. Formula: measured >15m0s on quillmd-ci-1 (hit the old 15m cap) x2.5.
-    timeout-minutes: 40
-    env:
-      CI: "true"
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Generate Prisma client
-        # @meddoc/db imports resolve to the generated @prisma/client; generate
-        # reads the schema only (no DATABASE_URL / DB connection required).
-        run: npm run db:generate
-      # ⚠️ HOSTED-RUNNER RE-AUDIT (the migration off self-hosted). Gate tests
-      # read the repo's git state that a persistent self-hosted clone carried and
-      # a fresh hosted checkout does not:
-      #   · the lens-sandbox builder + the branch-retire guard resolve
-      #     `origin/main`;
-      #   · the orphan-branch-sweep gate (F29) enumerates `git branch -r` and
-      #     REFUSES — exit 2, "enumerated N remote branches, which cannot be
-      #     right" — on fewer than 2 remote heads, because a broken enumeration
-      #     and a tidy remote both produce zero.
-      # ⚠️ AND THE FAILURE WAS PUSH-ONLY, WHICH IS THE TELL. A `pull_request`
-      # checkout happens to carry a second remote-tracking ref, so its `git
-      # branch -r` is >= 2 and the gate's positive-control arm passed on every PR
-      # (measured: #1116 unit job green on hosted). A `push`-to-`main` checkout
-      # carries `origin/main` ALONE (the single-ref fetch this step used to do),
-      # so TOTAL=1 and the arm went red on EVERY main-push run after the
-      # migration (fa3a8756, b2f4b495, 0089372b, 4f259440) — a systemic
-      # citation-blocker the migration surfaced, not a flake. The self-hosted
-      # clone had all ~179 heads and never hit it.
-      # Fetch every head as a tracking ref — a strict SUPERSET of `origin/main`,
-      # so the resolve-`origin/main` tests are unaffected and the sweep gate sees
-      # a plausible remote on both events.
-      - name: Fetch remote heads (gate tests read git state)
-        run: git fetch --no-tags origin '+refs/heads/*:refs/remotes/origin/*'
-      - name: Run in-scope unit suite (transcribe-md + packages/*)
-        run: npm run test:unit -w transcribe-md
+          if-no-files-found: ignore
+          include-hidden-files: true
+          path: rebuild/.runtime/browser-artifacts/report.json

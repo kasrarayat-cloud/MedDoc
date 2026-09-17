@@ -1,0 +1,971 @@
+{
+  "captured_at_utc": "2026-09-17T08:33:02Z",
+  "allowed_repositories": [
+    "meddoc-pro-form-detect",
+    "meddoc-pro-gotenberg",
+    "meddoc-pro-meddoc-pro",
+    "meddoc-pro-transcribe-md",
+    "meddoc-pro-transcribe-md-worker"
+  ],
+  "candidates": [
+    {
+      "image_id": "sha256:3ea217dc589f92ba629848952e8528ae95fc90a3b262fc0dff97004ac963819f",
+      "tags": [
+        "meddoc-pro-transcribe-md:latest"
+      ],
+      "other_tags": [],
+      "size_bytes": 474232591,
+      "shared_bytes": 162644304,
+      "unique_bytes": 311588287,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:7475d0036ce4bab2849233065d2e9e54738148ba6956ea2e7c75cd6a0fda0da4",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:latest"
+      ],
+      "other_tags": [],
+      "size_bytes": 1590854390,
+      "shared_bytes": 1575210652,
+      "unique_bytes": 15643738,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:be5c41f8bea319a5b3053fa8b0409ad15f97d57991a471ab6801e8cab0865cf4",
+      "tags": [
+        "meddoc-pro-form-detect:latest"
+      ],
+      "other_tags": [],
+      "size_bytes": 2547548897,
+      "shared_bytes": 127410407,
+      "unique_bytes": 2420138490,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:0dd921a9a9dbaaffbea3e62f61cf3147ee8d2e380eea00f05a63ab0fa19f5f7d",
+      "tags": [
+        "meddoc-pro-gotenberg:fonts",
+        "meddoc-pro-gotenberg:pre-a995c101-20260917"
+      ],
+      "other_tags": [],
+      "size_bytes": 1683235426,
+      "shared_bytes": 1681528931,
+      "unique_bytes": 1706495,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:ace9c8d2b247794e5ee5d141c91686948c1b35517d6c47c8f1401c13e10fcfa6",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-a995c101-20260917"
+      ],
+      "other_tags": [],
+      "size_bytes": 474232337,
+      "shared_bytes": 162644304,
+      "unique_bytes": 311588033,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:12fce98ca000f811eb1bb4ce5ba29156732d0c367a5d13a71e32841a69e6fd88",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-a995c101-20260917"
+      ],
+      "other_tags": [],
+      "size_bytes": 1590828441,
+      "shared_bytes": 1575210652,
+      "unique_bytes": 15617789,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:14cfd435403820f3e460d2bd35f2febd7f7f628e2c591d8b7fa1421d870f8cb8",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-98016202-20260916"
+      ],
+      "other_tags": [],
+      "size_bytes": 474209060,
+      "shared_bytes": 162644304,
+      "unique_bytes": 311564756,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:550bf91ab1fff77d29d9353967a3266f2c137f2da731e16cb32ecc103a6f126c",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-98016202-20260916"
+      ],
+      "other_tags": [],
+      "size_bytes": 1590753154,
+      "shared_bytes": 1575210652,
+      "unique_bytes": 15542502,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:0187a82ea1d2aa0787bf0661f2d35788acd0d6e38fe6d95d9628acac801dabbb",
+      "tags": [
+        "meddoc-pro-form-detect:slice-a"
+      ],
+      "other_tags": [],
+      "size_bytes": 2547539669,
+      "shared_bytes": 2547539669,
+      "unique_bytes": 0,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:21e88f560201870d91b4257bdd664a7abb918cd993d25ed06d25770a6fc2375c",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-6e375973-20260916"
+      ],
+      "other_tags": [],
+      "size_bytes": 474209075,
+      "shared_bytes": 162644304,
+      "unique_bytes": 311564771,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:8832a258e715f29e26ba377a1f97ccc3c05ec4795ecdbdb04a4117fb55807440",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-6e375973-20260916"
+      ],
+      "other_tags": [],
+      "size_bytes": 1590702883,
+      "shared_bytes": 1587416290,
+      "unique_bytes": 3286593,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:fe4c6e463aba1f814c4129c2943a0f8217ddc7a4ef838563568780287513c878",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-e07caca7-20260915"
+      ],
+      "other_tags": [],
+      "size_bytes": 474209059,
+      "shared_bytes": 162644304,
+      "unique_bytes": 311564755,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:b9b4521babec8faeafcb70845f61c082e9d1d228a6aa5225aa6f8058ce378cef",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-e07caca7-20260915"
+      ],
+      "other_tags": [],
+      "size_bytes": 1590702240,
+      "shared_bytes": 1587416290,
+      "unique_bytes": 3285950,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:72919cc04001b9374a07a79062bcea5d7713f4d28e72e307a4f3ffb909f2ce42",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-8a16f50c-20260915"
+      ],
+      "other_tags": [],
+      "size_bytes": 474281406,
+      "shared_bytes": 162644304,
+      "unique_bytes": 311637102,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:ce142e64aa4a1a4301c3898b907e0cefd790c2070f02dbc16080d2fd9f6fe4ac",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-8a16f50c-20260915"
+      ],
+      "other_tags": [],
+      "size_bytes": 1590680556,
+      "shared_bytes": 1575210652,
+      "unique_bytes": 15469904,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:ad59b00affbf2811e370c8387a8f86d2980bc96cd06cc8523cd4429788967dc3",
+      "tags": [
+        "meddoc-pro-gotenberg:pre-0deef5d6-20260915",
+        "meddoc-pro-gotenberg:pre-6e375973-20260916",
+        "meddoc-pro-gotenberg:pre-8a16f50c-20260915",
+        "meddoc-pro-gotenberg:pre-98016202-20260916",
+        "meddoc-pro-gotenberg:pre-e07caca7-20260915"
+      ],
+      "other_tags": [],
+      "size_bytes": 1683235426,
+      "shared_bytes": 1681528931,
+      "unique_bytes": 1706495,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:81a94ae1c8d4f7831f707f623baa25dc1a3fd14e0673a6123144e01a6fbb75b9",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-0deef5d6-20260915"
+      ],
+      "other_tags": [],
+      "size_bytes": 474271959,
+      "shared_bytes": 162644304,
+      "unique_bytes": 311627655,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:97ae6c36f6f18fb01b3810aa0bc48adb2ebdd20162b01473f557ed393cd9492d",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-0deef5d6-20260915"
+      ],
+      "other_tags": [],
+      "size_bytes": 1590633868,
+      "shared_bytes": 1575210652,
+      "unique_bytes": 15423216,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:9e47b0e010d6134f5d8f63375531c31a952da77f5558931a68210821fb77d803",
+      "tags": [
+        "meddoc-pro-gotenberg:pre-2fe075c8-20260915"
+      ],
+      "other_tags": [],
+      "size_bytes": 1683235426,
+      "shared_bytes": 1681528931,
+      "unique_bytes": 1706495,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:f4adbe0531b5e0d8ca6a31b436a0fcdb525a4f492ff11786417870ba4953fb45",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-2fe075c8-20260915"
+      ],
+      "other_tags": [],
+      "size_bytes": 473984016,
+      "shared_bytes": 162644304,
+      "unique_bytes": 311339712,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:e7f9ed11ca2f1444dd6c903a4b5f8954e2a30017f259f49ec02e24826963120c",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-2fe075c8-20260915"
+      ],
+      "other_tags": [],
+      "size_bytes": 1590581137,
+      "shared_bytes": 162644304,
+      "unique_bytes": 1427936833,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:82a043a29c6f4365bf657bd74795320922235b58197e63fbb7884ef7547bf636",
+      "tags": [
+        "meddoc-pro-gotenberg:pre-b036d272-20260914"
+      ],
+      "other_tags": [],
+      "size_bytes": 1683235426,
+      "shared_bytes": 1681528931,
+      "unique_bytes": 1706495,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:4e629d45f25a0093b847977ce8130048d497b5bed1446f653a10485dad5d7de0",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-b036d272-20260914"
+      ],
+      "other_tags": [],
+      "size_bytes": 473983233,
+      "shared_bytes": 162644304,
+      "unique_bytes": 311338929,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:c43ec4b99bba555026c3931616be9d8629f6ec9ac828f23a4cdf2bd895fdf2e5",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-b036d272-20260914"
+      ],
+      "other_tags": [],
+      "size_bytes": 1590488958,
+      "shared_bytes": 162644304,
+      "unique_bytes": 1427844654,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:208bf81a555c8d898240a08c0dbed11d3ac18c945dfa1f47198f610f3735898f",
+      "tags": [
+        "meddoc-pro-transcribe-md:qa"
+      ],
+      "other_tags": [],
+      "size_bytes": 473602890,
+      "shared_bytes": 162644304,
+      "unique_bytes": 310958586,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:2262baa4646952d9f404a1306662a468e2dbe3ce505b01c15494f4ee8866ef7a",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:qa"
+      ],
+      "other_tags": [],
+      "size_bytes": 1590450431,
+      "shared_bytes": 1590447215,
+      "unique_bytes": 3216,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:0d1d14622e76105633df29c28bde890d35fc9b4db3f8ff23ef2eedb44c2126b2",
+      "tags": [
+        "meddoc-pro-gotenberg:pre-31081f24-20260914"
+      ],
+      "other_tags": [],
+      "size_bytes": 1683235426,
+      "shared_bytes": 1681528931,
+      "unique_bytes": 1706495,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:1540cbaf337733dc936df7b6a2323312f84b32128d7ca923e14416385d8e3048",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-31081f24-20260914"
+      ],
+      "other_tags": [],
+      "size_bytes": 473602900,
+      "shared_bytes": 162644304,
+      "unique_bytes": 310958596,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:4f67c33d89ad9ef7281b54ab9addf454eb65f9e97ffd3b4ae356888e75b86a52",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-31081f24-20260914"
+      ],
+      "other_tags": [],
+      "size_bytes": 1590450431,
+      "shared_bytes": 1590447215,
+      "unique_bytes": 3216,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:e1f0861ffcb059ca9eb8ffa49a29376a9afa64461c700bc0d3abf06b217753d8",
+      "tags": [
+        "meddoc-pro-gotenberg:pre-d8b200a4-20260914"
+      ],
+      "other_tags": [],
+      "size_bytes": 1683235426,
+      "shared_bytes": 1681528931,
+      "unique_bytes": 1706495,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:c30dffba37d8c0ffe53900a98c7f3d4347ddf3d3d704a3fecd434e321ae537db",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-d8b200a4-20260914"
+      ],
+      "other_tags": [],
+      "size_bytes": 473562463,
+      "shared_bytes": 162644304,
+      "unique_bytes": 310918159,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:245ada6e758022f9b10a8a880a64d40caad8500f79096de1bc92993684e95804",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-d8b200a4-20260914"
+      ],
+      "other_tags": [],
+      "size_bytes": 1590428084,
+      "shared_bytes": 162644304,
+      "unique_bytes": 1427783780,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:41efe021a92425c69aeb20a9b5d0ad3227a31ea66b4ff3f77c33958ee210e3ef",
+      "tags": [
+        "meddoc-pro-gotenberg:pre-cf8ecc5c-20260914"
+      ],
+      "other_tags": [],
+      "size_bytes": 1683235426,
+      "shared_bytes": 1681528931,
+      "unique_bytes": 1706495,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:5ff7fbec51cb95b66a1a8d42cbff7a3963961eeb64973e7749fa698537ec70f7",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-cf8ecc5c-20260914"
+      ],
+      "other_tags": [],
+      "size_bytes": 473565170,
+      "shared_bytes": 162644304,
+      "unique_bytes": 310920866,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:5d985eed8818ea954f180f7ea7df1acfb73b2ef10c9b30db2874ba907d446200",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-cf8ecc5c-20260914"
+      ],
+      "other_tags": [],
+      "size_bytes": 1590396248,
+      "shared_bytes": 162644304,
+      "unique_bytes": 1427751944,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:db626d2b0d711b478356d4df4db91d042e9caca90217e8d7c855216478102d6c",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-df2f162d-20260913"
+      ],
+      "other_tags": [],
+      "size_bytes": 473562039,
+      "shared_bytes": 162644304,
+      "unique_bytes": 310917735,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:533e2423313e013ef6782b8781b96bc9664803ff375cf052abfa9e7c79553947",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-df2f162d-20260913"
+      ],
+      "other_tags": [],
+      "size_bytes": 1590341567,
+      "shared_bytes": 1575210652,
+      "unique_bytes": 15130915,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:569a5230f75965481cb057c081807778eb0a10e2b4219d2b8e8532ed79eeeb5d",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-ca97cb9d-20260913"
+      ],
+      "other_tags": [],
+      "size_bytes": 473560022,
+      "shared_bytes": 162644304,
+      "unique_bytes": 310915718,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:c44215ef4308f59268fc03e57c7f3c43f462bbd08af5241036e20bb541e7c56d",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-ca97cb9d-20260913"
+      ],
+      "other_tags": [],
+      "size_bytes": 1590325520,
+      "shared_bytes": 1575210652,
+      "unique_bytes": 15114868,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:6c723d51970d5a71ae14020763b68b312ca44dd5a206b6b50ea38e1e69d6bf7a",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-69a64f8e-20260913"
+      ],
+      "other_tags": [],
+      "size_bytes": 473557870,
+      "shared_bytes": 162644304,
+      "unique_bytes": 310913566,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:e472c320978dc5a4006f73601d2eaebd9551df1c4097184bf94afc3a0d6e8753",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-69a64f8e-20260913"
+      ],
+      "other_tags": [],
+      "size_bytes": 1590308934,
+      "shared_bytes": 1575210652,
+      "unique_bytes": 15098282,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:852b994279e9a242f1cfb8bd2fb7c4e0ad41eea709c7ccea500bf789f96a6fad",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-739b6d7b-20260913"
+      ],
+      "other_tags": [],
+      "size_bytes": 473555894,
+      "shared_bytes": 162644304,
+      "unique_bytes": 310911590,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:cb94c3a72264390b509967a63a9e73efb665a77af72249e73206074062592bfc",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-739b6d7b-20260913"
+      ],
+      "other_tags": [],
+      "size_bytes": 1590270194,
+      "shared_bytes": 1575210652,
+      "unique_bytes": 15059542,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:738b9fab9ffb37bac40268be2caf6fa5cb6b92210ae3b888997a629feda06a06",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-2c1b7f27-20260912"
+      ],
+      "other_tags": [],
+      "size_bytes": 473542657,
+      "shared_bytes": 162644304,
+      "unique_bytes": 310898353,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:285868832f20856c30966bba170afb8d426870b9f6ace1a8f47f80134b727000",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-2c1b7f27-20260912"
+      ],
+      "other_tags": [],
+      "size_bytes": 1590197662,
+      "shared_bytes": 1586937421,
+      "unique_bytes": 3260241,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:3068d4198879ee36195c561851f2dfb87ecd8da7fe818bd21a485f3db1bdcf97",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-3210d94a-20260912"
+      ],
+      "other_tags": [],
+      "size_bytes": 473542657,
+      "shared_bytes": 162644304,
+      "unique_bytes": 310898353,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:348c9d9d2e0846aa5e04c0a2eba0a255c6b6f42f53956b3b8709a5a29776d11e",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-3210d94a-20260912"
+      ],
+      "other_tags": [],
+      "size_bytes": 1590194314,
+      "shared_bytes": 1586937421,
+      "unique_bytes": 3256893,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:3ee3b0439929f60e39c6c98b0862f38225e7a7f8d320c116c311fbe043893893",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-83a958db-20260912"
+      ],
+      "other_tags": [],
+      "size_bytes": 473526162,
+      "shared_bytes": 162644304,
+      "unique_bytes": 310881858,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:c6c1f59014b33f438f77ab6ebf1dc5d446a60fda5a56f1e53756bb40dff3f6c2",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-83a958db-20260912"
+      ],
+      "other_tags": [],
+      "size_bytes": 1590142186,
+      "shared_bytes": 1575198283,
+      "unique_bytes": 14943903,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:417623c20c4370464b01efad62539749187c223f5a1d83394e094c915cd9d4d1",
+      "tags": [
+        "meddoc-pro-gotenberg:pre-095c5f6d-20260912",
+        "meddoc-pro-gotenberg:pre-2c1b7f27-20260912",
+        "meddoc-pro-gotenberg:pre-3210d94a-20260912",
+        "meddoc-pro-gotenberg:pre-69a64f8e-20260913",
+        "meddoc-pro-gotenberg:pre-739b6d7b-20260913",
+        "meddoc-pro-gotenberg:pre-83a958db-20260912",
+        "meddoc-pro-gotenberg:pre-ca97cb9d-20260913",
+        "meddoc-pro-gotenberg:pre-df2f162d-20260913"
+      ],
+      "other_tags": [],
+      "size_bytes": 1683235426,
+      "shared_bytes": 1681528931,
+      "unique_bytes": 1706495,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:8a8781dc28ce029004d16ddd577c6dfcbdef5956bc4603723492add21a6bb944",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-095c5f6d-20260912"
+      ],
+      "other_tags": [],
+      "size_bytes": 473516236,
+      "shared_bytes": 162644304,
+      "unique_bytes": 310871932,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:222923e148dcfb8b444a6e3952e8c28c805ac878cc447d390256c6329e7db87e",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-095c5f6d-20260912"
+      ],
+      "other_tags": [],
+      "size_bytes": 1590092265,
+      "shared_bytes": 1575198283,
+      "unique_bytes": 14893982,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:b8c144c512f675c7ae1939c3814f72b7f3f0d6d6c7b61f702546f6015b16790c",
+      "tags": [
+        "meddoc-pro-gotenberg:pre-1bc62c08-20260911"
+      ],
+      "other_tags": [],
+      "size_bytes": 1683235426,
+      "shared_bytes": 1681528931,
+      "unique_bytes": 1706495,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:ce73687a6357ddae8f049ad47ddc589ff540702e55005f216a95b3f42309659d",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-1bc62c08-20260911"
+      ],
+      "other_tags": [],
+      "size_bytes": 473516226,
+      "shared_bytes": 162644304,
+      "unique_bytes": 310871922,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:3cd25c9eff6277779bd4f044dcd7f0f68308316c241076e6f6158f35d35080fe",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-1bc62c08-20260911"
+      ],
+      "other_tags": [],
+      "size_bytes": 1590081988,
+      "shared_bytes": 162644304,
+      "unique_bytes": 1427437684,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:bb7ac40927f0c10e3d71a7248cf78997b91a04222c69f1d474631a9ba3c23caa",
+      "tags": [
+        "meddoc-pro-gotenberg:pre-fd9f7cdb-20260911"
+      ],
+      "other_tags": [],
+      "size_bytes": 1683235426,
+      "shared_bytes": 1681528931,
+      "unique_bytes": 1706495,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:1b0f6c65eec71694f14bea2485d91107afe35a6aeefcb58ad21ed792d0e02796",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-fd9f7cdb-20260911"
+      ],
+      "other_tags": [],
+      "size_bytes": 473505192,
+      "shared_bytes": 162644304,
+      "unique_bytes": 310860888,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:da90a804a122c776b889fbb81f72f5430eae9f0251a1e3f4c605cedd78014410",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-fd9f7cdb-20260911"
+      ],
+      "other_tags": [],
+      "size_bytes": 1590012550,
+      "shared_bytes": 162644304,
+      "unique_bytes": 1427368246,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:91c835e02e5e7457dfeebe3ff92b26c46fcd6251ee36460c5437c159b45f6593",
+      "tags": [
+        "meddoc-pro-transcribe-md:rscfix-daaa379d"
+      ],
+      "other_tags": [],
+      "size_bytes": 473482499,
+      "shared_bytes": 162644304,
+      "unique_bytes": 310838195,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:c0912a9e14547c1959e16d4aedc904abaec8c5c5b37131f697b6a99b8155ddf1",
+      "tags": [
+        "meddoc-pro-gotenberg:pre-b069ddbb-20260911"
+      ],
+      "other_tags": [],
+      "size_bytes": 1683235426,
+      "shared_bytes": 1681528931,
+      "unique_bytes": 1706495,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:c5e61ddad999b35844ed02df36a71361f3b1f798dd782041ad684d9e8676a002",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-b069ddbb-20260911"
+      ],
+      "other_tags": [],
+      "size_bytes": 473471475,
+      "shared_bytes": 162644304,
+      "unique_bytes": 310827171,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:725c1704e665875d5a11340fea638bf82ebebbcb77cc2b867538889531bb1c39",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-b069ddbb-20260911"
+      ],
+      "other_tags": [],
+      "size_bytes": 1589739753,
+      "shared_bytes": 162644304,
+      "unique_bytes": 1427095449,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:62df9aa046eaea5b13e909a4afe62e1eb2e8871cc641d62b0bdf5c78898d5bc4",
+      "tags": [
+        "meddoc-pro-gotenberg:pre-4e4d8e7c-20260909"
+      ],
+      "other_tags": [],
+      "size_bytes": 1683235426,
+      "shared_bytes": 1681528931,
+      "unique_bytes": 1706495,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:57db75848e2196d5505f6deb981c9b37578200a1f8c4c5ebf0d89e9883bc42ab",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-4e4d8e7c-20260909"
+      ],
+      "other_tags": [],
+      "size_bytes": 473406227,
+      "shared_bytes": 162644304,
+      "unique_bytes": 310761923,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:be07339ccc2e26a184e596ebb78977e0c669350692ee805b51760880d83bd122",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-4e4d8e7c-20260909"
+      ],
+      "other_tags": [],
+      "size_bytes": 1589706818,
+      "shared_bytes": 162644304,
+      "unique_bytes": 1427062514,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:b716a1f09be8ed414561858c7e44edd1ba3699b2bcb46bf64525e9241e517598",
+      "tags": [
+        "meddoc-pro-transcribe-md:rounds"
+      ],
+      "other_tags": [],
+      "size_bytes": 433934964,
+      "shared_bytes": 433934964,
+      "unique_bytes": 0,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:9685f5e063ab686449f577ef112e0f83d27bbd73f227e263b41b19acac1f943e",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-b21a9cdb-20260909"
+      ],
+      "other_tags": [],
+      "size_bytes": 433935079,
+      "shared_bytes": 162644304,
+      "unique_bytes": 271290775,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:6e676e45d91e9b657733b081d3c02ab16ec30253489763e22deead331f9daf90",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-b21a9cdb-20260909"
+      ],
+      "other_tags": [],
+      "size_bytes": 1627260979,
+      "shared_bytes": 1613670984,
+      "unique_bytes": 13589995,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:71a766dacd1f7cc63de716096c5b652ed409c24e71db024ab232dc5180cfe40a",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-123da094-20260907"
+      ],
+      "other_tags": [],
+      "size_bytes": 433904503,
+      "shared_bytes": 162644304,
+      "unique_bytes": 271260199,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:54054f2c79adab793f2fa1b3f18f8212011fdbb963848c1649a09769d859e7bd",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-123da094-20260907"
+      ],
+      "other_tags": [],
+      "size_bytes": 1627085519,
+      "shared_bytes": 1613670984,
+      "unique_bytes": 13414535,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:1e623e053dd8d62a7ad6f764a2b088aca059e615c1693f392b07808eb1acf8ec",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-43fcf4a6-20260907"
+      ],
+      "other_tags": [],
+      "size_bytes": 433792762,
+      "shared_bytes": 162644304,
+      "unique_bytes": 271148458,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:b4ad4e04470e841c56afbdd2ab67c121d05231b1af996cba30ef79bef0710150",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-43fcf4a6-20260907"
+      ],
+      "other_tags": [],
+      "size_bytes": 1626636691,
+      "shared_bytes": 1420303535,
+      "unique_bytes": 206333156,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:3f3b05848862681549557482ecea6d7726bd0c5c410631834f16c6336f4a9ee9",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-832f8e81-20260906"
+      ],
+      "other_tags": [],
+      "size_bytes": 433569688,
+      "shared_bytes": 162644304,
+      "unique_bytes": 270925384,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:339372d122d37e24705b35d517132ad47e94ecf22e867eedb3d0be8b7709cd20",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-832f8e81-20260906"
+      ],
+      "other_tags": [],
+      "size_bytes": 1626408202,
+      "shared_bytes": 1613033051,
+      "unique_bytes": 13375151,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:ce3f39592875a8b8b1cc8273645217542c7c25b7307cc1098bb4cea159102345",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-dcc8cabf-20260905"
+      ],
+      "other_tags": [],
+      "size_bytes": 430375046,
+      "shared_bytes": 162647520,
+      "unique_bytes": 267727526,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:34dcbe0b35339f2bc8886c015f1ff79dfb9796d236d5da2354ccad20a64a60dd",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-dcc8cabf-20260905"
+      ],
+      "other_tags": [],
+      "size_bytes": 1625364930,
+      "shared_bytes": 1613631167,
+      "unique_bytes": 11733763,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:d6b01a76b1922001b4f8adbfb113da6089307d7cf10cf0675a0254fa6720f284",
+      "tags": [
+        "meddoc-pro-transcribe-md:pre-15d7bf8e-20260904"
+      ],
+      "other_tags": [],
+      "size_bytes": 430375086,
+      "shared_bytes": 162647520,
+      "unique_bytes": 267727566,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:fc8c22d5ca0fb7202ef9bf5865aa7a1043eff001a3a56eb6cd464bcbe4d1cf93",
+      "tags": [
+        "meddoc-pro-transcribe-md-worker:pre-15d7bf8e-20260904"
+      ],
+      "other_tags": [],
+      "size_bytes": 1625351453,
+      "shared_bytes": 1613631167,
+      "unique_bytes": 11720286,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:3f922bd964a239bfd3d12c7bb703dec0ae68380f3b09bcbbaadd4f67b5f703c8",
+      "tags": [
+        "meddoc-pro-transcribe-md:ovffix2"
+      ],
+      "other_tags": [],
+      "size_bytes": 435785581,
+      "shared_bytes": 435785581,
+      "unique_bytes": 0,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:e3e2169b10228a028cd54837bd0dc92854111e6381e661dc47edec5e2a134b0c",
+      "tags": [
+        "meddoc-pro-transcribe-md:ovffix"
+      ],
+      "other_tags": [],
+      "size_bytes": 435785531,
+      "shared_bytes": 435785531,
+      "unique_bytes": 0,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:3503b2aa72540214c8248de3c6516f14e3ece6dfff779b1a3fdbbf05d91a4cc2",
+      "tags": [
+        "meddoc-pro-transcribe-md:fret3-candidate2"
+      ],
+      "other_tags": [],
+      "size_bytes": 435785182,
+      "shared_bytes": 435785182,
+      "unique_bytes": 0,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:e7e512a08e91043a530f07b41d1821defcfbdbf38c9953b058c5817eb522442a",
+      "tags": [
+        "meddoc-pro-transcribe-md:fret3-candidate"
+      ],
+      "other_tags": [],
+      "size_bytes": 435785187,
+      "shared_bytes": 435785187,
+      "unique_bytes": 0,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:b53e523d19a95648ca77002684a222e5d0173af2b606297712a722b050461cf4",
+      "tags": [
+        "meddoc-pro-transcribe-md:fret-prodshape"
+      ],
+      "other_tags": [],
+      "size_bytes": 435948177,
+      "shared_bytes": 435948177,
+      "unique_bytes": 0,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:2d05d22572ba7cc9ca93dd22063b04734355690e7810ffebcdb29987e91acd45",
+      "tags": [
+        "meddoc-pro-gotenberg:pre-123da094-20260907",
+        "meddoc-pro-gotenberg:pre-15d7bf8e-20260904",
+        "meddoc-pro-gotenberg:pre-43fcf4a6-20260907",
+        "meddoc-pro-gotenberg:pre-6e50d4ad-20260903",
+        "meddoc-pro-gotenberg:pre-832f8e81-20260906",
+        "meddoc-pro-gotenberg:pre-a71e6902-20260904",
+        "meddoc-pro-gotenberg:pre-b21a9cdb-20260909",
+        "meddoc-pro-gotenberg:pre-dcc8cabf-20260905"
+      ],
+      "other_tags": [],
+      "size_bytes": 1683235426,
+      "shared_bytes": 1681528931,
+      "unique_bytes": 1706495,
+      "containers": []
+    },
+    {
+      "image_id": "sha256:5ed8f3726420189e8b4e35e912013b18035e3ce837a929438f288d33bc4681c6",
+      "tags": [
+        "meddoc-pro-meddoc-pro:latest"
+      ],
+      "other_tags": [],
+      "size_bytes": 445224565,
+      "shared_bytes": 162644304,
+      "unique_bytes": 282580261,
+      "containers": []
+    }
+  ],
+  "excluded": [],
+  "candidate_image_count": 85,
+  "candidate_tag_count": 104,
+  "unique_bytes_sum": 24305405245,
+  "logical_size_sum": 94466514116
+}
