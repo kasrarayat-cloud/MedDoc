@@ -45,6 +45,16 @@ def maximum_cost(notes,fields,config=None,*,context_labels=()):
     # UTF-8 bytes bound text token count conservatively; include schema/instruction overhead.
     return Decimal(len(json.dumps({'notes':notes,'fields':fields,'context_labels':list(context_labels)}).encode())+12000)*r['input_per_million']/1000000+Decimal(6000)*r['output_per_million']/1000000
 
+def recognized_labels(fields, context_labels=()):
+    """Keep actual label punctuation as well as the existing canonical alias."""
+    aliases={}
+    for label in [field['label'] for field in fields]+list(context_labels):
+        canonical=label.strip().rstrip(':?').casefold()
+        aliases[canonical]=canonical
+        aliases[label.strip().casefold()]=canonical
+    return aliases
+
+
 def labelled_value(line, labels):
     """Match the complete question label, including internal colons.
 
@@ -59,14 +69,14 @@ def labelled_value(line, labels):
             remainder=line[index+1:]
             value=remainder.strip()
             start=index+1+len(remainder)-len(remainder.lstrip())
-            candidates.append((label,value,start))
+            canonical=labels[label] if isinstance(labels,dict) else label
+            candidates.append((canonical,value,start))
     return candidates[-1] if candidates else None
 
 
 def fixture(notes,fields,*,context_labels=()):
     result=[]
-    labels={f['label'].strip().rstrip(':?').casefold() for f in fields}
-    labels.update(label.strip().rstrip(':?').casefold() for label in context_labels)
+    labels=recognized_labels(fields,context_labels)
     for f in fields:
         label=f['label'].strip().rstrip(':?').casefold()
         quotes=[]
@@ -81,8 +91,7 @@ def validate_selections(notes,fields,selections,*,context_labels=()):
     if {f.key for f in selections.fields}!=known or len(selections.fields)!=len(known): raise ValidationError('Provider returned missing, duplicated or unknown fields.')
     output={}
     injection=bool(INJECTION.search(notes) or any(INJECTION.search(f['label']) for f in fields))
-    labels={f['label'].strip().rstrip(':?').casefold() for f in fields}
-    labels.update(label.strip().rstrip(':?').casefold() for label in context_labels)
+    labels=recognized_labels(fields,context_labels)
     lines=[line.strip() for line in notes.splitlines() if line.strip()]
     scoped_lines=all((parsed:=labelled_value(line,labels)) and parsed[1] for line in lines)
     inherited_context=len(lines)>1 and not scoped_lines
@@ -93,7 +102,7 @@ def validate_selections(notes,fields,selections,*,context_labels=()):
         field=next(f for f in fields if f['key']==item.key)
         label=field['label'].strip().rstrip(':?').casefold()
         allowed={}
-        explicit=[]
+        explicit={}
         offset=0
         for line in notes.splitlines(keepends=True):
             full=line.strip()
@@ -101,24 +110,30 @@ def validate_selections(notes,fields,selections,*,context_labels=()):
                 parsed=labelled_value(line,labels)
                 line_label=parsed[0] if parsed else None
                 if line_label not in labels or line_label==label:
-                    allowed.setdefault(full,offset+line.index(full))
+                    # Bind the answer value to this exact allowed occurrence.
+                    # A quote may also occur as a whole value elsewhere; never
+                    # parse or shorten it again independently of its source span.
+                    text=parsed[1] if parsed and line_label==label else full
+                    allowed.setdefault(full,(offset+line.index(full),text))
                 if parsed and line_label==label:
                     value=parsed[1]
                     if value:
-                        allowed.setdefault(value,offset+parsed[2])
-                        explicit.append(value)
+                        allowed.setdefault(value,(offset+parsed[2],value))
+                        explicit.setdefault(value,offset+parsed[2])
             offset+=len(line)
+        selected_texts=[]
         for quote in item.quotes:
             # Whole source lines or whole values for this exact question only.
             # Arbitrary substrings can delete negation ("denies chest pain" -> "chest pain").
             if not quote.strip() or quote not in allowed: raise ValidationError('Evidence must preserve a complete source line or complete labelled answer.')
-            start=allowed[quote]
+            start,text=allowed[quote]
             if notes[start:start+len(quote)]!=quote: raise ValidationError('Evidence offset mismatch.')
             evidence.append({'quote':quote,'start':start,'end':start+len(quote)})
-        texts=list(dict.fromkeys(e['quote'] for e in evidence))
-        explicit_conflict=len(set(explicit))>1
+            selected_texts.append(text)
+        texts=list(dict.fromkeys(text for text in selected_texts if text))
+        explicit_conflict=len(explicit)>1
         if explicit_conflict:
-            evidence=[{'quote':q,'start':allowed[q],'end':allowed[q]+len(q)} for q in dict.fromkeys(explicit)]
+            evidence=[{'quote':q,'start':start,'end':start+len(q)} for q,start in explicit.items()]
         status='conflict' if item.conflict or explicit_conflict or (inherited_context and texts) else 'supported' if texts else 'missing'
         if inherited_context and texts:
             evidence=[{'quote':notes,'start':0,'end':len(notes)}]

@@ -166,7 +166,11 @@ try{
     await page.waitForURL(/\/encounters\/[0-9a-f-]+\/$/);encounterURL=localURL(page.url());
     report.encounter_id=uuidFrom(encounterURL,'encounters');apiURL=base+'/api/encounters/'+report.encounter_id+'/';
     report.encounter_json_uri=apiURL;const snapshot=await api(context);
-    assert.equal(snapshot.notes,scenario.notes);assert.deepEqual(snapshot.answers,{});assert.equal(snapshot.status,'draft');
+    assert.equal(snapshot.notes.replace(/\r\n/g,'\n'),scenario.notes.replace(/\r\n/g,'\n'));
+    // Browser form submission normalizes line endings. Evidence uses the exact
+    // stored source offsets, after proving there is no other source change.
+    scenario.notes=snapshot.notes;
+    assert.deepEqual(snapshot.answers,{});assert.equal(snapshot.status,'draft');
   });
   await check('Record maximum charge below USD1 before the single paid click',async()=>{
     const form=page.locator(`form[action="/encounters/${report.encounter_id}/generate/"]`);assert.equal(await form.count(),1);
@@ -288,6 +292,7 @@ try{
   console.log('Live synthetic WM browser workflow passed. Private billing and export-structure checks remain separate.');
 }catch(error){
   report.active_check=stage;report.error_class=error?.constructor?.name||'Error';
+  report.error_line=String(error?.stack||'').split('\n').find(line=>/^\s*at\s/.test(line)&&line.includes('wm-live-browser.mjs'))?.trim()||'';
   if(output&&!wroteReport)await privateJSON(path.join(output,'report.json'),report).catch(()=>{});
   console.error('Live synthetic WM verification stopped at: '+stage+'. No automatic generation retry was attempted.');
   process.exitCode=1;
