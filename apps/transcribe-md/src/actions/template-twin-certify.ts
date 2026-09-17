@@ -476,9 +476,10 @@ export async function certifyNativeTemplateAction(
 export async function certifyDetectedFormAction(
   noteTemplateId: string,
 ): Promise<CertifyActionResult<CertifyDetectedFormResult>> {
-  if (!formDetectFillEnabled()) return { ok: false, error: DISABLED, reason: 'disabled' };
+  // Session first: the gate is PER-PRACTICE, so it needs the actor's practiceId.
   const session = await requireSession();
   const actor = actorFrom(session);
+  if (!formDetectFillEnabled(actor.practiceId)) return { ok: false, error: DISABLED, reason: 'disabled' };
   try {
     const result = await certifyDetectedForm({ templateId: noteTemplateId, actor });
     // Existing AuditAction — no new enum value, so #326 stays migration-free.

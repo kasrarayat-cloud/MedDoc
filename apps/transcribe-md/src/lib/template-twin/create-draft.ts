@@ -276,7 +276,7 @@ export async function createTemplateTwinDraft(
   // twin derivation. `source` is still the ORIGINAL PDF here (it is overwritten by
   // the reconstructed prose DOCX below). Flag OFF ⇒ the existing DOCX-twin path
   // runs unchanged, byte-identical to today.
-  if (wasPdf && formDetectFillEnabled()) {
+  if (wasPdf && formDetectFillEnabled(input.actor.practiceId)) {
     return await createDetectedFormDraft({
       pdf: source,
       actor: input.actor,
