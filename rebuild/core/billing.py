@@ -200,7 +200,11 @@ def reconcile_usage(usage,reconciled_cost,evidence_reference,actor,provider_cred
     if len(note)>240: raise ValidationError('Note is limited to 240 characters.')
     delta=signed_exact((reconciled-usage.actual_cost)*MULTIPLIER)
     row=CostReconciliation(usage=usage,reconciled_cost=reconciled,provider_credit_applied=credit,discount_applied=discount,evidence_reference=evidence_reference,evidence_sha256=evidence_sha256,recorded_by=actor,note=note,charge_delta=delta,ledger_status='applied')
-    if delta<0:
+    absorbed=LedgerEntry.objects.filter(job_id=usage.job_id,kind='absorbed').exists() or PlatformCost.objects.filter(job_id=usage.job_id,kind='absorbed_failure').exists()
+    if absorbed:
+        # The user's charge was already reversed in full; the evidence is recorded against the platform cost, never credited or debited twice.
+        row.ledger_status='absorbed'; row.save()
+    elif delta<0:
         entries=list(LedgerEntry.objects.filter(job_id=usage.job_id,kind='usage').order_by('wallet_id'))
         shares=proportional_split(entries,-delta)
         wallets={w.pk:w for w in Wallet.objects.select_for_update().filter(pk__in=[wallet_id for wallet_id,_ in shares]).order_by('pk')}

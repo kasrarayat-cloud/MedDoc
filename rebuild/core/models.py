@@ -282,7 +282,7 @@ class ProviderReceipt(ProviderIdentifiers,Entity):
 class CostReconciliation(Entity):
     """Authentic provider evidence for one usage row. The Usage row and its original ledger entries are never modified;
     the difference is settled by appended ledger entries of kind 'reconciliation'."""
-    LEDGER_STATUSES=[('applied','Applied to the ledger'),('pending_funds','Pending available paid funds')]
+    LEDGER_STATUSES=[('applied','Applied to the ledger'),('pending_funds','Pending available paid funds'),('absorbed','No user ledger movement: the charge was already reversed as an absorbed platform failure')]
     usage=models.OneToOneField(Usage,on_delete=models.PROTECT)
     reconciled_cost=models.DecimalField(max_digits=24,decimal_places=12)
     provider_credit_applied=models.DecimalField(max_digits=24,decimal_places=12,default=0)
@@ -301,7 +301,7 @@ class CostReconciliation(Entity):
     class Meta:
         constraints=[
             models.CheckConstraint(condition=models.Q(reconciled_cost__gte=0,provider_credit_applied__gte=0,discount_applied__gte=0),name='reconciliation_amounts_nonnegative'),
-            models.CheckConstraint(condition=models.Q(ledger_status__in=['applied','pending_funds']),name='reconciliation_ledger_status_known'),
+            models.CheckConstraint(condition=models.Q(ledger_status__in=['applied','pending_funds','absorbed']),name='reconciliation_ledger_status_known'),
             models.CheckConstraint(condition=~models.Q(evidence_reference=''),name='reconciliation_evidence_required'),
         ]
 class PlatformCost(Entity):

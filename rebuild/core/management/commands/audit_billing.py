@@ -55,6 +55,9 @@ def audit_report(file_reader=None):
         absorbed_cost=PlatformCost.objects.filter(job_id=usage.job_id,kind='absorbed_failure').first()
         absorbed=bool(absorbed_entries or absorbed_cost)
         absorbed_reversal=sum((entry['amount'] for entry in absorbed_entries),Decimal(0))
+        if usage.job.state=='failed' and not usage.simulated:
+            # A settled provider cost whose output was never adopted must not stay on the user's ledger.
+            checks['failed_settled_usage_absorbed']=absorbed
         if absorbed:
             checks['absorbed_reversal_matches_usage_debits']=(absorbed_reversal==-sum((entry['amount'] for entry in entries),Decimal(0))==usage.charged_cost
                 and absorbed_cost is not None and absorbed_cost.amount==usage.actual_cost
@@ -65,6 +68,7 @@ def audit_report(file_reader=None):
             applied=sum((entry['amount'] for entry in reconciliation_entries),Decimal(0))
             arithmetic=reconciliation.charge_delta==(reconciliation.reconciled_cost-usage.actual_cost)*Decimal('1.5')
             if reconciliation.ledger_status=='applied':ledger_ok=applied==-reconciliation.charge_delta
+            elif reconciliation.ledger_status=='absorbed':ledger_ok=absorbed and not reconciliation_entries
             else:ledger_ok=reconciliation.charge_delta>0 and not reconciliation_entries
             checks['reconciliation_delta_arithmetic']=arithmetic and ledger_ok
         elif reconciliation_entries:checks['reconciliation_delta_arithmetic']=False

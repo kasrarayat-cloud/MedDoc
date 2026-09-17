@@ -162,6 +162,42 @@ class AbsorbedPlatformFailure(PolicyFixture,TestCase):
         self.assertEqual(Reservation.objects.get(job=job).state,'held')
 
 
+    def _unadopted_live_result(self,request_id):
+        invalid=SimpleNamespace(stop_reason='end_turn',content=[SimpleNamespace(type='text',text='not valid provider JSON')])
+        invalid.model_dump=lambda **kwargs:{'stop_reason':'end_turn'}
+        units={'input_tokens':100,'output_tokens':10,'cached_input_tokens':0,'cache_creation_tokens':0}
+        rates={'input_per_million':'1000','output_per_million':'2500','cached_per_million':'0'}
+        return ({'anthropic_response':invalid,'notes':self.encounter.notes,'fields':[]},Decimal('0.125'),units,rates,'anthropic:synthetic-model',request_id,False)
+
+    @override_settings(AI_MODE='live')
+    def test_absorbed_usage_is_never_credited_twice_by_reconciliation(self):
+        job=Job.objects.create(encounter=self.encounter,user=self.user,request_key='policy-absorb-reconcile')
+        reserve(job,Decimal('0.2'))
+        with patch('core.jobs.generation.generate',return_value=self._unadopted_live_result('req_absorb_then_reconcile')):self.assertTrue(run_one())
+        usage=Usage.objects.get(job=job);self.assertEqual(self.balances(),(Decimal('10'),Decimal('0')))
+        row=reconcile_usage(usage,Decimal('0.05'),'INV-SYNTH-ABSORBED',self.user)
+        self.assertEqual(row.ledger_status,'absorbed');self.assertEqual(row.charge_delta,Decimal('-0.1125'))
+        self.assertFalse(LedgerEntry.objects.filter(kind='reconciliation').exists())
+        self.assertEqual(self.balances(),(Decimal('10'),Decimal('0')))
+        with self.assertRaises(ValidationError):reconcile_usage(usage,Decimal('0.05'),'INV-SYNTH-ABSORBED-2',self.user)
+        report=audit_report();reported=report['rows'][0]
+        self.assertTrue(report['all_checks_pass']);self.assertEqual(reported['reconciliation']['ledger_status'],'absorbed')
+        self.assertTrue(reported['checks']['failed_settled_usage_absorbed']);self.assertTrue(reported['checks']['reconciliation_delta_arithmetic'])
+
+    @override_settings(AI_MODE='live')
+    def test_failed_reversal_never_stops_the_worker_and_is_flagged_by_the_audit(self):
+        job=Job.objects.create(encounter=self.encounter,user=self.user,request_key='policy-absorb-error')
+        reserve(job,Decimal('0.2'))
+        with patch('core.jobs.generation.generate',return_value=self._unadopted_live_result('req_absorb_error')),patch('core.jobs.absorb_failed_job',side_effect=RuntimeError('synthetic reversal failure')):
+            self.assertTrue(run_one())
+        job.refresh_from_db();self.assertEqual(job.state,'failed')
+        self.assertTrue(AuditEvent.objects.filter(action='usage.absorb_failed',target=str(job.pk)).exists())
+        self.assertFalse(LedgerEntry.objects.filter(kind='absorbed').exists());self.assertEqual(self.balances(),(Decimal('9.8125'),Decimal('0')))
+        report=audit_report();reported=report['rows'][0]
+        self.assertFalse(reported['checks']['failed_settled_usage_absorbed']);self.assertFalse(report['all_checks_pass'])
+        absorb_failed_job(job)  # the operator repair path is the same idempotent reversal
+        self.assertTrue(audit_report()['all_checks_pass']);self.assertEqual(self.balances(),(Decimal('10'),Decimal('0')))
+
 @override_settings(ADMIN_SITE=False,STORAGES=STORAGES)
 class ReconciliationLedger(PolicyFixture,TestCase):
     def test_credit_back_returns_to_debited_wallets_in_proportion(self):

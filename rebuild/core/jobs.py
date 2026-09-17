@@ -109,7 +109,11 @@ def run_one():
         job.finished_at=timezone.now(); job.save(update_fields=['state','error','finished_at'])
         if fixture: release(job)
         # Settled provider cost whose output was never adopted is a platform failure: QuillMD absorbs it and reverses the user's charge.
-        elif known: absorb_failed_job(job)
+        elif known:
+            try: absorb_failed_job(job)
+            except Exception as absorb_error:
+                # The failed job state is already durable; a failed reversal must never stop the worker. audit_billing flags settled-but-unabsorbed failures.
+                audit(job.user,'usage.absorb_failed',job.pk,department=job.encounter.department,error_class=type(absorb_error).__name__)
         audit(job.user,'job.'+job.state,job.pk,department=job.encounter.department,error_class=type(exc).__name__)
     return True
 
