@@ -49,6 +49,18 @@ locked NuGet packages were positively inventoried with zero published advisory
 findings. Final manifest SHA256: `2a2ab5e1ba63e041dfd087e7f2c205999ccf8ff6bc41f9409cfd1d99e4537680`.
 These are pre-activation results; the private checkpoint records actual deployment.
 
+Exact merge67e632e4 subsequently failed its WM browser check before review.
+Its old failure report did not record the precise assertion, so it does not
+by itself prove the cause. A deterministic regression independently reproduced
+a real display race: a worker could commit during Word resolution, after the
+answer snapshot but before lazy job/code queries. Two tests failed before the
+repair and pass afterward for generation and voice adoption. The view now reads
+the encounter, jobs and codes under a short encounter-row lock, released before
+Word processing; the current page stays consistent and the next GET shows the
+completed result. Browser failures now record the exact stage and source line.
+The repaired descendant requires its own PR/CI citation before activation.
+
+
 The runtime is pinned, reproducibly built and isolated before document parsing;
 network/process execution and outside-file access are denied. A shared bounded
 processing slot limits concurrent native helpers. Original uploads stay unchanged.

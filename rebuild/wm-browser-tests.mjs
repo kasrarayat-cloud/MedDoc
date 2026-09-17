@@ -29,6 +29,7 @@ const exports=[];
 async function check(name,action){current=name;await action();checks.push({name,passed:true});console.log('PASS '+name);}
 async function login(account,activePage=page){await activePage.goto(new URL('/login/',base).href);await activePage.locator('[name=email]').fill(account.email);await activePage.locator('[name=password]').fill(account.password);await activePage.getByRole('button',{name:'Sign in',exact:true}).click();await activePage.waitForURL(new URL('/',base).href);}
 async function create(scenario,notes=scenario.notes){
+ stage='create encounter';
  await page.goto(new URL('/encounters/new/',base).href);
  await page.locator('[name=patient]').selectOption({label:'Synthetic Example X-ray · X-ray'});
  await page.locator('[name=template_version]').selectOption({label:templateName+' · mapping 1'});
@@ -39,8 +40,11 @@ async function create(scenario,notes=scenario.notes){
  return page.url();
 }
 async function generate(){
+ stage='generation disclosure';
  assert.equal(await page.getByText('Synthetic fixture · $0 charge. No live AI service is called.',{exact:true}).isVisible(),true);
+ stage='submit generation';
  await page.getByRole('button',{name:'Generate supported answers',exact:true}).click();
+ stage='await terminal generation';
  for(let n=0;n<40;n++){await page.waitForTimeout(500);await page.reload();if(await page.locator('.source-panel .badge').filter({hasText:/^succeeded$/}).count())return;assert.equal(await page.locator('.source-panel .badge').filter({hasText:/^(failed|reconciliation)$/}).count(),0);}
  throw new Error('Fixture generation timeout');
 }
@@ -81,9 +85,10 @@ try{
   const scenario=fixture.scenarios[name];
   await check(`WM ${name}: notes → fixture answers → reviewed export`,async()=>{
    const url=await create(scenario);await generate();
+   stage='generated field population';
    assert.equal(await page.locator('select[name^=answer_]').count(),28);
    assert.equal(await page.locator('textarea[name^=answer_]').count(),62);
-   for(const field of fixture.fields)assert.equal(await page.locator(`[name="answer_${field.key}"]`).inputValue(),scenario.answers[field.key].text);
+   for(const field of fixture.fields){stage='generated answer '+field.key;assert.equal(await page.locator(`[name="answer_${field.key}"]`).inputValue(),scenario.answers[field.key].text);}
    // Select choices first; review only after current materialized wording is visible.
    await review(scenario,false);
    await review(scenario);
@@ -123,7 +128,10 @@ try{
  await fs.writeFile(path.join(output,'report.json'),JSON.stringify({passed:true,synthetic_only:true,generation:'fixture, no provider requests',backend:fixture.backend,checks,exports},null,2),{mode:0o600});
  console.log(`WM browser gate: ${checks.length}/${checks.length} passed.`);
 }catch(error){
- await fs.writeFile(path.join(output,'report.json'),JSON.stringify({passed:false,active_check:current,error_class:error.constructor.name,stage,checks,exports},null,2),{mode:0o600});
+ const errorLine=Number(error.stack?.match(/wm-browser-tests\.mjs:(\d+):\d+/)?.[1])||null;
+ const pagePath=page?new URL(page.url()).pathname:null;
+ const visibleJobs=page?await page.locator('.source-panel .badge').allTextContents().catch(()=>[]):[];
+ await fs.writeFile(path.join(output,'report.json'),JSON.stringify({passed:false,active_check:current,error_class:error.constructor.name,error_line:errorLine,page_path:pagePath,visible_job_states:visibleJobs,stage,checks,exports},null,2),{mode:0o600});
  if(page)await page.screenshot({path:path.join(output,'failure.png')}).catch(()=>{});
  console.error('WM browser gate failed at: '+current+'; inspect private evidence.');process.exitCode=1;
 }finally{await browser?.close();}
