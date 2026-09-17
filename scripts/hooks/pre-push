@@ -108,67 +108,21 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   fi
 done
 
-# ══════════════════════════════════════════════════════════════════════════════
-# ⚠️ TYPECHECK BEFORE THE PUSH — vitest TRANSPILES WITHOUT TYPECHECKING.
-# ------------------------------------------------------------------------------
-# Owner-ruled 2026-09-08, after a commit that did not compile reached origin and
-# CI caught it:
-#
-#     gate-274-ingest.test.ts(39,3): error TS2300: Duplicate identifier 'partName'
-#
-# The suite had been run and was GREEN — 25 arms — because vitest strips types
-# rather than checking them. A runtime green says NOTHING about tsc, and the
-# author (me) read one as the other.
-#
-#   THE SLIP IS CHEAP TO MAKE AND THE HOOK IS THE ONLY PLACE THAT CANNOT FORGET.
-#
-# ⚠️ THE EXIT CODE IS THE AUTHORITY, NEVER A GREP OF THE OUTPUT. `tsc` prints
-# nothing on success, so `grep -q error` on a clean run is a false GREEN, and a
-# grep on a failed run depends on a message format nobody promised us. This
-# repository has a canon entry for exactly that shape.
-#
-# FAIL-CLOSED on cannot-tell: no npx, no tsconfig, or a runner that dies for its
-# own reasons all REFUSE. A broken instrument and a clean tree both print
-# nothing, and only the exit code tells them apart.
-#
-# SKIPPED for a delete-only push (nothing to typecheck) and overridable by the
-# same DECLARE_CANCELLATION door the in-flight check uses, because a hook that
-# cannot be got past in an emergency is a hook people uninstall.
-# ══════════════════════════════════════════════════════════════════════════════
+# Fresh application verification, replacing the deleted Next.js application's
+# tsconfig gate. Keep the independent in-flight guard and explicit skip reason.
+# Exit codes are authoritative; a missing interpreter/config/dependency refuses.
 typecheck_before_push() {
-  local root tsconfig
+  local root app_python
   root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-  [ -n "$root" ] || { echo "🔴 pre-push REFUSED — cannot find the repo root to typecheck." >&2; return 1; }
-  tsconfig="$root/apps/transcribe-md/tsconfig.json"
-  if [ ! -f "$tsconfig" ]; then
-    echo "🔴 pre-push REFUSED — no tsconfig at $tsconfig; cannot tell whether this compiles." >&2
-    return 1
-  fi
-  command -v npx >/dev/null 2>&1 || { echo "🔴 pre-push REFUSED — npx unavailable; cannot typecheck." >&2; return 1; }
-
-  echo "pre-push: typechecking…" >&2
-  local out rc
-  out="$(cd "$root" && npx tsc --noEmit -p "$tsconfig" 2>&1)"
-  rc=$?
-  if [ "$rc" -ne 0 ]; then
-    {
-      echo ""
-      echo "🔴 pre-push REFUSED — this tree does not typecheck (tsc exit $rc)."
-      echo ""
-      printf '%s
-' "$out" | head -20 | sed 's/^/    /'
-      echo ""
-      echo "  ⚠️ THE TEST SUITE PASSING DOES NOT MEAN THIS COMPILES. vitest strips"
-      echo "     types; it does not check them. That is how a duplicate identifier"
-      echo "     reached origin with 25 green arms behind it."
-      echo ""
-      echo "  Fix it, or state the override:"
-      echo "      DECLARE_CANCELLATION=\"...why this must go out uncompiled...\" git push …"
-      echo ""
-    } >&2
-    return 1
-  fi
-  return 0
+  [ -n "$root" ] || { echo "pre-push: cannot find repository root" >&2; return 1; }
+  app_python="$root/rebuild/.venv/bin/python"
+  [ -x "$app_python" ] || { echo "pre-push: initialize rebuild/.venv before pushing" >&2; return 1; }
+  [ -f "$root/apps/marketing/tsconfig.json" ] || { echo "pre-push: marketing tsconfig missing" >&2; return 1; }
+  command -v npx >/dev/null 2>&1 || { echo "pre-push: npx unavailable" >&2; return 1; }
+  echo "pre-push: Python syntax, Django checks, and marketing TypeScript…" >&2
+  "$app_python" -m compileall -q "$root/rebuild/core" "$root/rebuild/quillmd" "$root/rebuild/documents" || return 1
+  (cd "$root/rebuild" && QUILLMD_AI_MODE=fixture "$app_python" manage.py check) || return 1
+  (cd "$root" && npx --no-install tsc --noEmit -p apps/marketing/tsconfig.json) || return 1
 }
 
 # ⚠️ ITS OWN DOOR, NOT THE CANCELLATION ONE. The first draft of this block
