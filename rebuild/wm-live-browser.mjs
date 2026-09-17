@@ -86,9 +86,20 @@ async function api(context){
 function evidenceSupports(notes,field,answer){
   if(!Array.isArray(answer.evidence) || answer.evidence.length===0)return false;
   const points=Array.from(notes);const full=field.label+': '+answer.text;
+  const ownSpans=new Set();let offset=0;
+  for(const match of notes.matchAll(/[^\r\n]*(?:\r\n|\r|\n|$)/g)){
+    const raw=match[0];if(!raw)continue;
+    const line=raw.replace(/(?:\r\n|\r|\n)$/,'');
+    if(line===full){
+      const end=offset+Array.from(line).length;
+      ownSpans.add(offset+':'+end);
+      ownSpans.add((offset+Array.from(field.label+': ').length)+':'+end);
+    }
+    offset+=Array.from(raw).length;
+  }
   return answer.evidence.every(e=>Number.isInteger(e.start)&&Number.isInteger(e.end)&&e.start>=0&&e.end>e.start&&e.end<=points.length
     && points.slice(e.start,e.end).join('')===e.quote && (e.quote===full||e.quote===answer.text)
-    && notes.split(/\r?\n/).some(line=>line===full));
+    && ownSpans.has(e.start+':'+e.end));
 }
 
 try{
