@@ -1,5 +1,6 @@
 """Extractive clinical mapping: providers select source quotations, never compose facts."""
 import json
+import hashlib
 import re
 from decimal import Decimal
 from django.conf import settings
@@ -19,11 +20,15 @@ INJECTION=re.compile(r'ignore\s+(?:all\s+)?(?:previous|prior|system)|system\s*pr
 
 def configuration():
     import os
-    return {'mode':settings.AI_MODE,'provider':settings.AI_PROVIDER,'model':settings.AI_MODEL,
+    config={'mode':settings.AI_MODE,'provider':settings.AI_PROVIDER,'model':settings.AI_MODEL,
             'input_rate':settings.AI_INPUT_RATE,'output_rate':settings.AI_OUTPUT_RATE,'cached_rate':settings.AI_CACHED_RATE,
             'voice_rate_minute':os.getenv('QUILLMD_DEEPGRAM_RATE_PER_MINUTE',''),
             'voice_rate_second':os.getenv('QUILLMD_DEEPGRAM_RATE_PER_SECOND',''),
             'voice_max_cost':os.getenv('QUILLMD_VOICE_MAX_COST','0.20'),'prompt_version':'extractive-v1'}
+    price={k:config[k] for k in ('provider','model','input_rate','output_rate','cached_rate','voice_rate_minute','voice_rate_second')}
+    price.update(cost_basis='configured_usd_rates',voice_provider='deepgram:nova-3-medical',voice_cost_quantum='0.0000000001',voice_rounding='half_even',multiplier='1.5')
+    config['pricing_version']='configured-v1:'+hashlib.sha256(json.dumps(price,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    return config
 
 def rates(config=None):
     config=config or configuration()
@@ -118,7 +123,7 @@ def generate(notes,fields,config=None):
         units={'input_tokens':u.input_tokens,'cached_input_tokens':cached,'cache_creation_tokens':written,'output_tokens':u.output_tokens}
         cost=(u.input_tokens*r['input_per_million']+cached*r['cached_per_million']+written*r['input_per_million']*Decimal('1.25')+u.output_tokens*r['output_per_million'])/1000000
         raw={'anthropic_response':response,'notes':notes,'fields':fields}
-        return raw,cost,units,{k:str(v) for k,v in r.items()},f"anthropic:{config['model']}",response.id,False
+        return raw,cost,units,{k:str(v) for k,v in r.items()},f"anthropic:{config['model']}",getattr(response,'_request_id',None) or '',False
     from openai import OpenAI
     client=OpenAI(timeout=60,max_retries=0)
     r=rates(config)
@@ -131,7 +136,7 @@ def generate(notes,fields,config=None):
     units={'input_tokens':usage.input_tokens,'cached_input_tokens':cached,'output_tokens':usage.output_tokens}
     cost=((usage.input_tokens-cached)*r['input_per_million']+cached*r['cached_per_million']+usage.output_tokens*r['output_per_million'])/1000000
     raw={'response':response,'notes':notes,'fields':fields}
-    return raw,cost,units,{k:str(v) for k,v in r.items()},f"openai:{config['model']}",response.id,False
+    return raw,cost,units,{k:str(v) for k,v in r.items()},f"openai:{config['model']}",getattr(response,'_request_id',None) or '',False
 
 def validated(result):
     if isinstance(result,dict) and 'anthropic_response' in result:

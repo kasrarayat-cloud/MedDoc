@@ -62,11 +62,13 @@ def run_one():
         e=job.encounter
         result,cost,units,rates,provider,request_id,simulated=generation.generate(e.notes,e.template_version.fields,job.config) if job.kind=='generation' else transcribe(job)
         provider_returned=True
+        response=(result.get('anthropic_response') or result.get('response')) if isinstance(result,dict) else None
+        resource_id=getattr(response,'id','') or ''
         # Financial evidence commits before any clinical serialization or file IO.
         with transaction.atomic():
-            ProviderReceipt.objects.get_or_create(job=job,defaults={'provider':provider,'provider_request_id':request_id,'actual_cost':cost,'units':units,'rates':rates,'simulated':simulated})
-            job.provider=provider;job.provider_request_id=request_id;job.save(update_fields=['provider','provider_request_id'])
-            audit(job.user,'provider.receipt',job.pk,department=e.department,provider=provider,request_id=request_id,actual_cost=str(cost))
+            ProviderReceipt.objects.get_or_create(job=job,defaults={'provider':provider,'provider_request_id':request_id,'provider_resource_id':resource_id,'actual_cost':cost,'units':units,'rates':rates,'simulated':simulated})
+            job.provider=provider;job.provider_request_id=request_id;job.provider_resource_id=resource_id;job.save(update_fields=['provider','provider_request_id','provider_resource_id'])
+            audit(job.user,'provider.receipt',job.pk,department=e.department,provider=provider,request_id=request_id,resource_id=resource_id,actual_cost=str(cost))
         if job.kind=='transcription': saved={'transcript':result}
         elif isinstance(result,dict) and 'anthropic_response' in result:
             saved={'provider_output':result['anthropic_response'].model_dump(mode='json')}
@@ -79,7 +81,7 @@ def run_one():
         with path.open('xb') as file:path.chmod(0o600);file.write(payload)
         job.result_path=result_path;job.result_sha256=hashlib.sha256(payload).hexdigest();job.save(update_fields=['result_path','result_sha256'])
         # Settling provider cost is independent of clinical acceptance: invalid answers are never adopted.
-        settle(job,cost,units,rates,provider,request_id,simulated)
+        settle(job,cost,units,rates,provider,request_id,simulated,provider_resource_id=resource_id)
         with transaction.atomic():
             e=Encounter.objects.select_for_update().get(pk=e.pk)
             membership(job.user,e.department)

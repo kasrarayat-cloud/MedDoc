@@ -8,6 +8,7 @@ DEBUG = False
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'testserver', 'app.quillmd.com', 'admin.quillmd.com']
 ADMIN_SITE = os.getenv('QUILLMD_ADMIN_SITE', '0') == '1'
 SYNTHETIC_ONLY = True  # Deliberate release gate; requires verified processing controls to change.
+RELEASE_SHA = os.getenv('QUILLMD_RELEASE_SHA', 'development-unrecorded')
 INSTALLED_APPS = ['django.contrib.auth','django.contrib.contenttypes','django.contrib.sessions','django.contrib.messages','django.contrib.staticfiles','django_otp','django_otp.plugins.otp_totp','core']
 MIDDLEWARE = ['django.middleware.security.SecurityMiddleware','django.middleware.clickjacking.XFrameOptionsMiddleware','whitenoise.middleware.WhiteNoiseMiddleware','django.contrib.sessions.middleware.SessionMiddleware','django.middleware.common.CommonMiddleware','django.middleware.csrf.CsrfViewMiddleware','django.contrib.auth.middleware.AuthenticationMiddleware','django_otp.middleware.OTPMiddleware','django.contrib.messages.middleware.MessageMiddleware','core.middleware.AccessMiddleware']
 ROOT_URLCONF = 'quillmd.urls'
@@ -40,6 +41,7 @@ SESSION_COOKIE_SECURE=os.getenv('QUILLMD_HTTPS','0')=='1'
 CSRF_COOKIE_SECURE=SESSION_COOKIE_SECURE
 SECURE_SSL_REDIRECT=SESSION_COOKIE_SECURE
 SESSION_COOKIE_AGE=1800
+PASSWORD_RESET_TIMEOUT=1800
 SESSION_SAVE_EVERY_REQUEST=True
 SECURE_CONTENT_TYPE_NOSNIFF=True
 SECURE_REFERRER_POLICY='same-origin'

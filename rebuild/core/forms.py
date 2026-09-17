@@ -4,9 +4,9 @@ from .models import User, Department, Patient, TemplateVersion, Membership
 from .security import departments
 
 class LoginForm(forms.Form):
-    email=forms.EmailField()
-    password=forms.CharField(widget=forms.PasswordInput)
-    otp=forms.CharField(label='Authenticator code (administrators)',required=False,max_length=6)
+    email=forms.EmailField(widget=forms.EmailInput(attrs={'autocomplete':'email'}))
+    password=forms.CharField(widget=forms.PasswordInput(attrs={'autocomplete':'current-password'}))
+    otp=forms.CharField(label='Authenticator code (administrators)',required=False,max_length=6,widget=forms.TextInput(attrs={'autocomplete':'one-time-code','inputmode':'numeric'}))
 class RegisterForm(UserCreationForm):
     synthetic_only=forms.BooleanField(label='I will use synthetic test data only.')
     class Meta: model=User; fields=['email','first_name','last_name']
@@ -53,6 +53,7 @@ class DepartmentForm(forms.Form):
     name=forms.CharField(max_length=120)
     organization_pays=forms.BooleanField(required=False,label='Charge this organization after each user’s personal promotional credit')
 class CheckoutForm(forms.Form):
+    payer=forms.ChoiceField(choices=[('personal','My personal paid balance')],required=False,initial='personal',label='Balance to fund')
     amount=forms.DecimalField(min_value=5,max_value=500,decimal_places=2,label='One-time top-up (USD)')
     consent=forms.BooleanField(label='I authorize this one-time payment. There are no automatic top-ups.')
 class VoiceForm(forms.Form):

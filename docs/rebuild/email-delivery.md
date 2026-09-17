@@ -1,15 +1,13 @@
 # Optional account email delivery
 
 Current state: the private file outbox remains the default. The Resend adapter
-is implemented and tested with mocked HTTP only. No email was sent and no
-provider/domain verification request was made during this implementation.
+is implemented and tested with mocked HTTP only. No email was sent. A read-only domain-list request recognized the existing key as send-only and refused the requested read permission; that is not sender-verification evidence.
 Successful API acceptance does not establish inbox delivery.
 
 The preserved `/opt/meddoc-pro/.env` contains the variable names
 `RESEND_API_KEY`, `RESEND_FROM`, and `RESEND_FROM_VERIFIED`. Values were not
 printed. The fresh application does not import old account data or application
-settings. Provider key validity, sending permissions, sender domain status,
-and delivery remain unverified.
+settings. Sending acceptance, sender domain status and inbox delivery remain unverified. The key was recognized by the provider as restricted to sending; no send was attempted.
 
 ## Explicit activation
 
@@ -45,7 +43,7 @@ explicitly `resend`. No configuration or credentials are changed by tests.
 
 ## Behavior and recovery
 
-Verification and invitation messages use Django's backend interface with
+Verification, invitation and recovery messages use Django's backend interface with
 HTTPX and Resend's documented `POST https://api.resend.com/emails` API. Only
 one-recipient plain-text account emails are accepted by this adapter; attachments,
 CC/BCC, HTML alternatives and oversized messages are rejected explicitly. The
@@ -77,3 +75,7 @@ records are those issued for the chosen domain by Resend, not assumed values.
 
 Tests: `core.tests.test_email` plus the existing registration/invitation workflow
 tests. They use synthetic addresses and mock every provider HTTP request.
+
+## Private beta sandbox restriction
+
+The hardened app units hide the preserved root environment and operational credentials. Before enabling Resend, copy only the chosen provider key/sender into the fresh protected environment; do not broaden service filesystem access to old/shared credentials. The existing protected-file adapter remains useful to an authorized operator during configuration, but its legacy file path is unavailable inside the hardened app service. Public app/admin remain in maintenance, so a recipient-accessible authenticated HTTPS origin is also needed before live account-email links are usable outside the SSH-tunnel preview.

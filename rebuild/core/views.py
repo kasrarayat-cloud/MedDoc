@@ -15,6 +15,7 @@ from django.db import transaction,IntegrityError
 from django.http import FileResponse,HttpResponse,JsonResponse,Http404
 from django.shortcuts import render,redirect,get_object_or_404
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST,require_http_methods
 from django_otp import login as otp_login
@@ -30,11 +31,13 @@ from .jobs import enqueue
 def error_message(exc):
     return '; '.join(exc.messages) if isinstance(exc,ValidationError) else str(exc)
 
-def health(request): return JsonResponse({'status':'ok','data_mode':'synthetic-only','surface':'admin' if settings.ADMIN_SITE else 'doctor'})
+def health(request): return JsonResponse({'status':'ok','data_mode':'synthetic-only','surface':'admin' if settings.ADMIN_SITE else 'doctor','release':settings.RELEASE_SHA})
 
 @require_http_methods(['GET','POST'])
 def login_view(request):
     form=LoginForm(request.POST or None)
+    next_url=request.POST.get('next',request.GET.get('next',''))
+    if not next_url.startswith('/') or not url_has_allowed_host_and_scheme(next_url,allowed_hosts=set()):next_url=''
     if request.method=='POST' and form.is_valid():
         email=form.cleaned_data['email'].lower()
         if not rate_limit('login-ip:'+request.META.get('REMOTE_ADDR',''),limit=40) or not rate_limit('login-email:'+email):
@@ -51,10 +54,10 @@ def login_view(request):
                 auth_login(request,user)
                 if device: otp_login(request,device)
                 audit(user,'auth.login')
-                return redirect('admin_dashboard' if settings.ADMIN_SITE else 'dashboard')
+                return redirect(next_url or ('admin_dashboard' if settings.ADMIN_SITE else 'dashboard'))
             audit(None,'auth.login_failed',details='No credentials recorded')
             form.add_error(None,'Sign-in failed. Check your credentials, verification, and authenticator code.')
-    return render(request,'login.html',{'form':form})
+    return render(request,'login.html',{'form':form,'next':next_url})
 
 @require_POST
 def logout_view(request):
@@ -86,9 +89,9 @@ def verify(request,raw):
     v=get_object_or_404(Verification,token_hash=digest(raw),expires_at__gt=timezone.now(),used_at__isnull=True)
     if request.method=='GET':return render(request,'confirm.html',{'title':'Verify your test account','description':'Confirm ownership of this email to activate your personal $10 welcome credit.'})
     with transaction.atomic():
-        v=Verification.objects.select_for_update().get(pk=v.pk)
-        if v.used_at: raise Http404
         user=User.objects.select_for_update().get(pk=v.user_id)
+        v=Verification.objects.select_for_update().get(pk=v.pk)
+        if v.used_at or v.expires_at<=timezone.now() or user.verified_at or not user.is_active: raise Http404
         user.verified_at=timezone.now();user.save(update_fields=['verified_at'])
         v.used_at=timezone.now();v.save(update_fields=['used_at'])
         org=Organization.objects.create(name=f'{user.first_name or "Personal"} workspace')
@@ -286,6 +289,7 @@ def team(request):
     form=InvitationForm(request.POST or None,user=request.user)
     if request.method=='POST' and form.is_valid():
         d=form.cleaned_data['department'];membership(request.user,d,roles=['owner','manager'])
+        if not rate_limit('invite:'+str(request.user.pk),limit=30):return HttpResponse('Invitation limit reached. Try again later.',status=429)
         raw=token()
         invitation=Invitation.objects.create(email=form.cleaned_data['email'].lower(),department=d,role=form.cleaned_data['role'],token_hash=digest(raw),expires_at=timezone.now()+timedelta(days=7),invited_by=request.user)
         from .email_delivery import deliver_account_email
@@ -296,7 +300,18 @@ def team(request):
         else:messages.warning(request,'Invitation saved, but email delivery could not be confirmed. Ask your administrator to recover the private invitation link or send a new invitation after delivery is repaired.')
         return redirect('team')
     ds=departments(request.user)
-    return render(request,'team.html',{'form':form,'department_form':DepartmentForm(),'memberships':Membership.objects.filter(department__in=ds).select_related('user','department'),'invitations':Invitation.objects.filter(department__in=ds).select_related('department'),'departments':ds})
+    return render(request,'team.html',{'form':form,'department_form':DepartmentForm(),'memberships':Membership.objects.filter(department__in=ds).select_related('user','department'),'invitations':Invitation.objects.filter(department__in=ds).select_related('department'),'departments':ds,'now':timezone.now()})
+
+@require_POST
+@transaction.atomic
+def invitation_revoke(request,pk):
+    invite=get_object_or_404(Invitation.objects.select_for_update().filter(department__in=departments(request.user)),pk=pk)
+    membership(request.user,invite.department,roles=['owner','manager'])
+    if invite.accepted_at:return HttpResponse('Invitation already accepted. Change department membership to revoke access.',status=409)
+    invite.expires_at=timezone.now();invite.save(update_fields=['expires_at'])
+    audit(request.user,'department.invitation_revoked',invite.pk,department=invite.department)
+    messages.success(request,'Invitation revoked. The link no longer grants access.')
+    return redirect('team')
 
 @require_POST
 @transaction.atomic
@@ -327,6 +342,7 @@ def membership_update(request,pk):
 @require_http_methods(['GET','POST'])
 def invite_accept(request,raw):
     invite=get_object_or_404(Invitation,token_hash=digest(raw),expires_at__gt=timezone.now(),accepted_at__isnull=True)
+    existing_account=User.objects.filter(email__iexact=invite.email).exists()
     form=RegisterForm(request.POST or None,initial={'email':invite.email})
     if request.method=='POST':
         existing=request.user if request.user.is_authenticated else None
@@ -336,7 +352,9 @@ def invite_accept(request,raw):
             else:
                 with transaction.atomic():
                     invite=Invitation.objects.select_for_update().get(pk=invite.pk)
-                    if invite.accepted_at:raise Http404
+                    if invite.accepted_at or invite.expires_at<=timezone.now():raise Http404
+                    # An outstanding invitation cannot outlive its issuer's authority.
+                    membership(invite.invited_by,invite.department,roles=['owner','manager'])
                     if existing:user=existing
                     else:user=form.save(commit=False);user.username=invite.email;user.verified_at=timezone.now();user.save()
                     # Possession of the emailed high-entropy invitation verifies this mailbox.
@@ -345,7 +363,7 @@ def invite_accept(request,raw):
                     welcome_credit(user);invite.accepted_at=timezone.now();invite.save(update_fields=['accepted_at'])
                     audit(user,'department.invitation_accepted',invite.pk,department=invite.department)
                 messages.success(request,'Invitation accepted; your personal welcome credit is available.');return redirect('login')
-    return render(request,'register.html',{'form':form,'invitation':invite})
+    return render(request,'register.html',{'form':form,'invitation':invite,'existing_invited_account':existing_account})
 
 @require_POST
 def coding(request,pk):
@@ -370,58 +388,75 @@ def accept_code(request,pk,code_pk):
     return redirect('/encounters/'+str(pk)+'/?tab=coding')
 
 def billing(request):
+    from .billing import checkout_form
     personal=Wallet.objects.filter(user=request.user)
     owned_orgs=Membership.objects.filter(user=request.user,active=True,role='owner').values_list('department__organization_id',flat=True)
     wallets=Wallet.objects.filter(models.Q(user=request.user)|models.Q(organization_id__in=owned_orgs))
-    return render(request,'billing.html',{'wallets':wallets,'ledger':LedgerEntry.objects.filter(wallet__in=wallets).select_related('wallet').order_by('-created_at')[:100],'usage':Usage.objects.filter(user=request.user).select_related('user','department').order_by('-created_at')[:100],'payments':Payment.objects.filter(user=request.user).order_by('-created_at')[:30],'form':CheckoutForm()})
+    return render(request,'billing.html',{'wallets':wallets,'ledger':LedgerEntry.objects.filter(wallet__in=wallets).select_related('wallet').order_by('-created_at')[:100],'usage':Usage.objects.filter(user=request.user).select_related('user','department','job__providerreceipt').order_by('-created_at')[:100],'payments':Payment.objects.filter(user=request.user).select_related('wallet__organization').order_by('-created_at')[:30],'form':checkout_form(request.user),'checkout_token':signing.dumps({'user':str(request.user.pk),'nonce':secrets.token_hex(24)},salt='checkout-authorization')})
 
 @require_POST
 def checkout(request):
     import stripe
-    form=CheckoutForm(request.POST)
+    from .billing import checkout_form
+    form=checkout_form(request.user,request.POST)
     if not form.is_valid():messages.error(request,'Confirm a one-time amount between $5 and $500.');return redirect('billing')
     if not settings.STRIPE_SECRET_KEY.startswith('sk_test_'):messages.error(request,'Stripe test-mode credentials are not connected. No charge was made.');return redirect('billing')
+    try:
+        authorization=signing.loads(request.POST.get('checkout_token',''),salt='checkout-authorization',max_age=900)
+        if authorization.get('user')!=str(request.user.pk) or not isinstance(authorization.get('nonce'),str):raise signing.BadSignature()
+    except (signing.BadSignature,ValueError,TypeError):
+        messages.error(request,'Reload billing to authorize this one-time checkout.');return redirect('billing')
     if not rate_limit('checkout:'+str(request.user.pk),limit=10):return HttpResponse('Try again later.',status=429)
-    wallet=Wallet.objects.get(user=request.user,kind='paid')
-    p=Payment.objects.create(user=request.user,wallet=wallet,amount_cents=int(form.cleaned_data['amount']*100))
+    payer=form.cleaned_data.get('payer') or 'personal'
+    request_key=hashlib.sha256((str(request.user.pk)+':'+authorization['nonce']).encode()).hexdigest()
+    amount_cents=int(form.cleaned_data['amount']*100)
+    with transaction.atomic():
+        if payer=='personal':wallet=Wallet.objects.get(user=request.user,kind='paid')
+        else:
+            organization_id=payer.split(':',1)[1]
+            if not Membership.objects.select_for_update().filter(user=request.user,user__is_active=True,user__verified_at__isnull=False,active=True,role='owner',department__organization_id=organization_id).exists():raise PermissionDenied
+            wallet,_=Wallet.objects.get_or_create(organization_id=organization_id,kind='paid')
+        p,created=Payment.objects.get_or_create(request_key=request_key,defaults={'user':request.user,'wallet':wallet,'amount_cents':amount_cents,'status':'creating'})
+        if p.user_id!=request.user.pk or p.amount_cents!=amount_cents or p.wallet_id!=wallet.pk:raise ValidationError('A repeated checkout must use the original authorized balance and amount.')
+        if not created:
+            if p.checkout_url and p.status in ['pending','processing']:return redirect(p.checkout_url)
+            messages.info(request,'This checkout was already submitted. Its payment status remains visible in billing.');return redirect('billing')
     try:
         session=stripe.checkout.Session.create(api_key=settings.STRIPE_SECRET_KEY,mode='payment',line_items=[{'price_data':{'currency':'usd','unit_amount':p.amount_cents,'product_data':{'name':'QuillMD one-time wallet credit (test)'}},'quantity':1}],metadata={'payment_id':str(p.pk)},success_url='http://localhost:9130/billing/?payment=processing',cancel_url='http://localhost:9130/billing/',idempotency_key=f'checkout:{p.pk}')
-        p.stripe_session=session.id;p.save(update_fields=['stripe_session']);audit(request.user,'payment.checkout',p.pk,amount_cents=p.amount_cents)
+        with transaction.atomic():
+            p=Payment.objects.select_for_update().get(pk=p.pk)
+            if p.stripe_session and p.stripe_session!=session.id:raise ValidationError('Checkout session requires reconciliation.')
+            p.stripe_session=session.id;p.checkout_url=session.url
+            if p.status=='creating':p.status='pending'
+            p.save(update_fields=['stripe_session','checkout_url','status'])
+        audit(request.user,'payment.checkout',p.pk,amount_cents=p.amount_cents)
         return redirect(session.url)
     except Exception:
-        p.status='uncertain';p.save(update_fields=['status']);audit(request.user,'payment.checkout_uncertain',p.pk)
-        messages.error(request,'Checkout could not be confirmed. No paid balance was granted.');return redirect('billing')
+        Payment.objects.filter(pk=p.pk,status='creating').update(status='uncertain')
+        audit(request.user,'payment.checkout_uncertain',p.pk)
+        messages.error(request,'Checkout could not be confirmed. No paid balance was granted by this request.');return redirect('billing')
 
 @csrf_exempt
 @require_POST
 def webhook(request):
     import stripe
+    from .billing import record_stripe_event,process_stripe_event
     if not settings.STRIPE_WEBHOOK_SECRET:return HttpResponse(status=503)
     if len(request.body)>1024*1024:return HttpResponse(status=413)
     try:event=stripe.Webhook.construct_event(request.body,request.headers.get('Stripe-Signature',''),settings.STRIPE_WEBHOOK_SECRET)
     except (ValueError,stripe.SignatureVerificationError):return HttpResponse(status=400)
-    if event.get('livemode'):return HttpResponse('Live payments are disabled in private staging.',status=400)
-    payload_hash=hashlib.sha256(request.body).hexdigest()
+    if event.get('livemode') is not False:return HttpResponse('Only explicit test-mode payment events are accepted.',status=400)
     try:
-        with transaction.atomic():
-            row,created=WebhookEvent.objects.get_or_create(event_id=event['id'],defaults={'kind':event['type'],'payload_hash':payload_hash})
-            if not created:return HttpResponse(status=200)
-            obj=event['data']['object']
-            if event['type'] in ['checkout.session.completed','checkout.session.async_payment_succeeded']:
-                if obj.get('payment_status')=='paid':
-                    p=Payment.objects.filter(stripe_session=obj['id']).first()
-                    if not p:raise ValidationError('Checkout is not registered locally.')
-                    credit_payment(p,obj)
-            elif event['type'] in ['refund.created','refund.updated']:reconcile_refund(obj)
-            audit(None,'stripe.event',event['id'],kind=event['type'])
-    except (ValidationError,IntegrityError):return HttpResponse('Payment requires reconciliation.',status=409)
+        row=record_stripe_event(event,hashlib.sha256(request.body).hexdigest())
+        if not process_stripe_event(row.pk):return HttpResponse('Payment requires reconciliation.',status=409)
+    except (ValidationError,IntegrityError,TypeError,KeyError):return HttpResponse('Payment requires reconciliation.',status=409)
     return HttpResponse(status=200)
 
 def admin_dashboard(request):
     if not request.user.is_staff or not request.user.is_verified():raise Http404
     counts={'accounts':User.objects.count(),'organizations':Organization.objects.count(),'departments':Department.objects.count(),'jobs':Job.objects.count(),'welcome_credits':LedgerEntry.objects.filter(kind='welcome').count()}
     audit(request.user,'admin.dashboard')
-    return render(request,'admin_dashboard.html',{'counts':counts,'users':User.objects.order_by('-date_joined')[:100],'memberships':Membership.objects.select_related('user','department__organization')[:100],'jobs':Job.objects.select_related('user','encounter').order_by('-created_at')[:100],'usage':Usage.objects.select_related('user','department','organization').order_by('-created_at')[:100],'payments':Payment.objects.select_related('user').order_by('-created_at')[:100],'refunds':Refund.objects.select_related('payment').order_by('-created_at')[:100],'wallets':Wallet.objects.select_related('user','organization')[:100],'ledger':LedgerEntry.objects.select_related('wallet').order_by('-created_at')[:100],'reconciliation':reconciliation(),'receipts':ProviderReceipt.objects.select_related('job').order_by('-created_at')[:100],'audit_events':AuditEvent.objects.select_related('actor').order_by('-created_at')[:100]})
+    return render(request,'admin_dashboard.html',{'counts':counts,'users':User.objects.order_by('-date_joined')[:100],'memberships':Membership.objects.select_related('user','department__organization')[:100],'jobs':Job.objects.select_related('user','encounter').order_by('-created_at')[:100],'usage':Usage.objects.select_related('user','department','organization','job__providerreceipt').order_by('-created_at')[:100],'payments':Payment.objects.select_related('user').order_by('-created_at')[:100],'refunds':Refund.objects.select_related('payment').order_by('-created_at')[:100],'stripe_events':WebhookEvent.objects.order_by('-created_at')[:100],'wallets':Wallet.objects.select_related('user','organization')[:100],'ledger':LedgerEntry.objects.select_related('wallet').order_by('-created_at')[:100],'reconciliation':reconciliation(),'receipts':ProviderReceipt.objects.select_related('job').order_by('-created_at')[:100],'audit_events':AuditEvent.objects.select_related('actor').order_by('-created_at')[:100]})
 
 def audit_view(request):
     if not request.user.is_staff or not request.user.is_verified():raise Http404

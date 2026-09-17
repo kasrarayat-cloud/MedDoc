@@ -177,10 +177,11 @@ class AuthorizationAndPayerRefutation(TestCase):
         from core.jobs import run_one
         audio = Path(self.directory.name) / "synthetic.wav"
         audio.write_bytes(b"RIFF synthetic test audio only")
-        self.job.kind = "transcription"
-        self.job.input_path = "synthetic.wav"
-        self.job.config = {"mode": "live", "voice_rate_minute": "0.01", "voice_rate_second": ""}
-        self.job.save(update_fields=["kind", "input_path", "config"])
+        self.job.state = "failed"
+        self.job.save(update_fields=["state"])
+        self.job = Job.objects.create(encounter=self.job.encounter, user=self.user,
+            request_key="refute:transcription", kind="transcription", input_path="synthetic.wav",
+            config={"mode": "live", "voice_rate_minute": "0.01", "voice_rate_second": ""})
         reserve(self.job, Decimal("0.2"))
         response = SimpleNamespace(raise_for_status=lambda: None, json=lambda: {"metadata": {"duration": 60, "request_id": "known_transcription_missing_text"}, "results": {"channels": []}})
         with patch.dict(os.environ, {"DEEPGRAM_API_KEY": "synthetic-not-a-live-key"}), patch("core.jobs.httpx.post", return_value=response):

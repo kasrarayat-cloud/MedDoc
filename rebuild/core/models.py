@@ -18,6 +18,27 @@ class Entity(models.Model):
     created_at=models.DateTimeField(auto_now_add=True)
     class Meta: abstract=True
 
+class ProviderIdentifiers:
+    @property
+    def legacy_resource_identifier(self):
+        return ((self.provider.startswith('anthropic:') and self.provider_request_id.startswith('msg_'))
+                or (self.provider.startswith('openai:') and self.provider_request_id.startswith('resp_')))
+    @property
+    def http_request_id(self):
+        return '' if self.legacy_resource_identifier else self.provider_request_id
+    @property
+    def resource_id(self):
+        return self.provider_resource_id or (self.provider_request_id if self.legacy_resource_identifier else '')
+
+def provider_family_expression():
+    return models.Func(models.F('provider'),models.Value(':'),models.Value(1),function='split_part',output_field=models.CharField())
+
+def provider_resource_expression():
+    return models.Case(
+        models.When(~models.Q(provider_resource_id=''),then=models.F('provider_resource_id')),
+        models.When(models.Q(provider__startswith='anthropic:',provider_request_id__startswith='msg_')|models.Q(provider__startswith='openai:',provider_request_id__startswith='resp_'),then=models.F('provider_request_id')),
+        default=models.Value(''),output_field=models.CharField())
+
 class Organization(Entity):
     name=models.CharField(max_length=140)
     def __str__(self): return self.name
@@ -85,7 +106,7 @@ class Encounter(Entity):
     export_sha256=models.CharField(max_length=64,blank=True)
     def clean(self):
         if self.patient.department_id!=self.department_id or self.template_version.template.department_id!=self.department_id: raise ValidationError('Patient, template and encounter must share a department.')
-class Job(Entity):
+class Job(ProviderIdentifiers,Entity):
     encounter=models.ForeignKey(Encounter,on_delete=models.PROTECT)
     user=models.ForeignKey(User,on_delete=models.PROTECT)
     kind=models.CharField(max_length=20,default='generation')
@@ -98,10 +119,14 @@ class Job(Entity):
     result_path=models.CharField(max_length=100,blank=True)
     result_sha256=models.CharField(max_length=64,blank=True)
     provider_request_id=models.CharField(max_length=140,blank=True)
+    provider_resource_id=models.CharField(max_length=140,blank=True)
     error=models.CharField(max_length=250,blank=True)
     input_path=models.CharField(max_length=100,blank=True)
     started_at=models.DateTimeField(null=True)
     finished_at=models.DateTimeField(null=True)
+    @property
+    def pricing_snapshot(self):
+        return self.config.get('pricing_version','Not captured for this historical job')
 class Wallet(Entity):
     user=models.ForeignKey(User,on_delete=models.PROTECT,null=True)
     organization=models.ForeignKey(Organization,on_delete=models.PROTECT,null=True)
@@ -130,7 +155,7 @@ class Reservation(Entity):
     amount=models.DecimalField(max_digits=24,decimal_places=12)
     state=models.CharField(max_length=12,default='held')
     class Meta: constraints=[models.UniqueConstraint(fields=['job','wallet'],name='reservation_unique')]
-class Usage(Entity):
+class Usage(ProviderIdentifiers,Entity):
     job=models.OneToOneField(Job,on_delete=models.PROTECT)
     user=models.ForeignKey(User,on_delete=models.PROTECT)
     department=models.ForeignKey(Department,on_delete=models.PROTECT)
@@ -138,12 +163,27 @@ class Usage(Entity):
     payer=models.CharField(max_length=100)
     provider=models.CharField(max_length=80)
     provider_request_id=models.CharField(max_length=140,blank=True)
+    provider_resource_id=models.CharField(max_length=140,blank=True)
     units=models.JSONField(default=dict)
     rates=models.JSONField(default=dict)
     actual_cost=models.DecimalField(max_digits=24,decimal_places=12)
     charged_cost=models.DecimalField(max_digits=24,decimal_places=12)
     simulated=models.BooleanField(default=False)
-    class Meta: constraints=[models.CheckConstraint(condition=models.Q(actual_cost__gte=0,charged_cost__gte=0)&models.Q(charged_cost=models.F('actual_cost')*Decimal('1.5')),name='exact_usage_multiplier')]
+    @property
+    def cost_evidence(self):
+        if self.simulated: return 'Simulated · no provider cost'
+        try: receipt=self.job.providerreceipt
+        except ProviderReceipt.DoesNotExist: return 'Recorded provider units · durable receipt unavailable'
+        if any(getattr(receipt,key)!=getattr(self,key) for key in ['provider','provider_request_id','provider_resource_id','actual_cost','units','rates','simulated']): return 'Provider evidence mismatch · reconciliation required'
+        return 'Provider-metered usage × configured rates'
+    @property
+    def invoice_status(self): return 'Not reconciled to a provider invoice'
+    class Meta:
+        constraints=[
+            models.CheckConstraint(condition=models.Q(actual_cost__gte=0,charged_cost__gte=0)&models.Q(charged_cost=models.F('actual_cost')*Decimal('1.5')),name='exact_usage_multiplier'),
+            models.UniqueConstraint(provider_family_expression(),models.F('provider_request_id'),condition=~models.Q(provider_request_id='')&models.Q(simulated=False),name='usage_provider_request_once'),
+            models.UniqueConstraint(provider_family_expression(),provider_resource_expression(),condition=(~models.Q(provider_resource_id='')|models.Q(provider__startswith='anthropic:',provider_request_id__startswith='msg_')|models.Q(provider__startswith='openai:',provider_request_id__startswith='resp_'))&models.Q(simulated=False),name='usage_provider_resource_once'),
+        ]
 class Payment(Entity):
     user=models.ForeignKey(User,on_delete=models.PROTECT)
     wallet=models.ForeignKey(Wallet,on_delete=models.PROTECT)
@@ -151,10 +191,19 @@ class Payment(Entity):
     stripe_session=models.CharField(max_length=200,unique=True,null=True)
     stripe_intent=models.CharField(max_length=200,unique=True,null=True)
     status=models.CharField(max_length=20,default='pending')
+    request_key=models.CharField(max_length=64,unique=True,null=True)
+    checkout_url=models.URLField(max_length=1000,blank=True)
 class WebhookEvent(Entity):
     event_id=models.CharField(max_length=180,unique=True)
     kind=models.CharField(max_length=80)
     payload_hash=models.CharField(max_length=64)
+    # Retain only billing identifiers/amounts: never customer email or raw payloads.
+    object_data=models.JSONField(default=dict)
+    semantic_hash=models.CharField(max_length=64,blank=True)
+    status=models.CharField(max_length=20,default='processed')
+    attempts=models.PositiveIntegerField(default=0)
+    error=models.CharField(max_length=160,blank=True)
+    processed_at=models.DateTimeField(null=True)
 class Refund(Entity):
     payment=models.ForeignKey(Payment,on_delete=models.PROTECT)
     stripe_refund=models.CharField(max_length=200,unique=True)
@@ -204,13 +253,19 @@ class LoginAttempt(Entity):
     count=models.PositiveIntegerField(default=0)
     window_start=models.DateTimeField()
 
-class ProviderReceipt(Entity):
+class ProviderReceipt(ProviderIdentifiers,Entity):
     job=models.OneToOneField(Job,on_delete=models.PROTECT)
     provider=models.CharField(max_length=80)
     provider_request_id=models.CharField(max_length=140,blank=True)
+    provider_resource_id=models.CharField(max_length=140,blank=True)
     actual_cost=models.DecimalField(max_digits=24,decimal_places=12)
     units=models.JSONField(default=dict)
     rates=models.JSONField(default=dict)
     simulated=models.BooleanField(default=False)
     result_path=models.CharField(max_length=100,blank=True)
     result_sha256=models.CharField(max_length=64,blank=True)
+    @property
+    def cost_evidence(self):
+        return 'Simulated · no provider cost' if self.simulated else 'Provider-metered usage × configured rates'
+    @property
+    def invoice_status(self): return 'Not reconciled to a provider invoice'
