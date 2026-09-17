@@ -26,7 +26,7 @@ class Command(BaseCommand):
         assert first.charged_cost==first.actual_cost*__import__('decimal').Decimal('1.5')
         assert second.charged_cost==second.actual_cost*__import__('decimal').Decimal('1.5')
         result={'verified_at':__import__('django.utils.timezone',fromlist=['now']).now().isoformat(),'generation':{'state':generation.state,'provider':first.provider,'actual_cost':str(first.actual_cost),'charge':str(first.charged_cost),'units':first.units},'transcription':{'state':transcription.state,'provider':second.provider,'actual_cost':str(second.actual_cost),'charge':str(second.charged_cost),'units':second.units},'limits':'Transcription smoke uses 1-second generated silence; speech accuracy is not assessed.'}
-        (settings.BASE_DIR.parent/'docs/rebuild/live-provider-verification.json').write_text(json.dumps(result,indent=2)+'\n')
+        (settings.BASE_DIR/'.runtime/live-provider-verification.json').write_text(json.dumps(result,indent=2)+'\n')
         self.stdout.write(json.dumps(result))
     def wait(self,job):
         for _ in range(60):
