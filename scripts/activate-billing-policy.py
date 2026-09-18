@@ -92,6 +92,19 @@ def validate_migration(source):
     require(len(classes) == 1 and classes[0].name == 'Migration'
             and all(isinstance(node, (ast.Import, ast.ImportFrom, ast.ClassDef)) for node in tree.body),
             'Migration module contains statements beyond imports and the Migration class.')
+    # Pin the names, not just the identifiers: 'migrations' and 'models' must be django.db's, with no aliases.
+    imports = []
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            imports.extend((alias.name, None, alias.asname) for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            imports.extend((node.module, alias.name, alias.asname) for alias in node.names)
+    require(all(asname is None for _, _, asname in imports) and set(imports) == {
+        ('django.db.models.deletion', None, None), ('uuid', None, None), ('django.conf', 'settings', None),
+        ('django.db', 'migrations', None), ('django.db', 'models', None)}, 'Migration imports differ from the reviewed generated form.')
+    require(len(classes[0].bases) == 1 and isinstance(classes[0].bases[0], ast.Attribute)
+            and isinstance(classes[0].bases[0].value, ast.Name) and classes[0].bases[0].value.id == 'migrations'
+            and classes[0].bases[0].attr == 'Migration', 'Migration class must derive from django.db.migrations.Migration.')
     assigns = {node.targets[0].id: node.value for node in classes[0].body
                if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)}
     require(set(assigns) == {'dependencies', 'operations'}, 'Migration declares unexpected attributes.')

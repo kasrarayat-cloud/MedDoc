@@ -58,17 +58,30 @@ def audit_report(file_reader=None):
         if usage.job.state=='failed' and not usage.simulated:
             # A settled provider cost whose output was never adopted must not stay on the user's ledger.
             checks['failed_settled_usage_absorbed']=absorbed
-        if absorbed:
-            checks['absorbed_reversal_matches_usage_debits']=(absorbed_reversal==-sum((entry['amount'] for entry in entries),Decimal(0))==usage.charged_cost
-                and absorbed_cost is not None and absorbed_cost.amount==usage.actual_cost
-                and {entry['wallet_id'] for entry in absorbed_entries}=={entry['wallet_id'] for entry in entries if entry['amount']})
         reconciliation=CostReconciliation.objects.filter(usage=usage).first()
         reconciliation_entries=list(LedgerEntry.objects.filter(job_id=usage.job_id,kind='reconciliation').values('amount','wallet_id','wallet__kind','balance_after'))
+        if absorbed:
+            # The reversal must return exactly the user's NET charge for the job (usage debits plus any reconciliation movement), per wallet.
+            net={}
+            for entry in entries+reconciliation_entries:net[entry['wallet_id']]=net.get(entry['wallet_id'],Decimal(0))+entry['amount']
+            owed={wallet_id:-amount for wallet_id,amount in net.items() if amount<0}
+            reversed_by_wallet={entry['wallet_id']:entry['amount'] for entry in absorbed_entries}
+            # Evidence recorded before the absorption sets the platform cost; a later reconciliation leaves the immutable row at the estimate.
+            expected_platform_cost=reconciliation.reconciled_cost if reconciliation and absorbed_cost is not None and reconciliation.created_at<absorbed_cost.created_at else usage.actual_cost
+            checks['absorbed_reversal_matches_usage_debits']=(reversed_by_wallet==owed and absorbed_reversal==sum(owed.values(),Decimal(0))
+                and absorbed_cost is not None and absorbed_cost.amount==expected_platform_cost and usage.job.state=='failed')
+            checks['no_reconciliation_pending_after_absorption']=not (reconciliation and reconciliation.ledger_status=='pending_funds')
+        if reconciliation_entries:
+            # Credits may land only on wallets the usage debited; additional debits only on the recorded payer's paid wallet.
+            debited_wallets={entry['wallet_id'] for entry in entries if entry['amount']<0}
+            scope,_,identifier=(usage.payer or '').partition(':')
+            payer_wallet=Wallet.objects.filter(kind='paid',**({'user_id':identifier} if scope=='user' else {'organization_id':identifier})).values_list('pk',flat=True).first() if identifier and scope in ('user','organization') else None
+            checks['reconciliation_wallets_valid']=all((entry['amount']>0 and entry['wallet_id'] in debited_wallets) or (entry['amount']<0 and entry['wallet_id']==payer_wallet) for entry in reconciliation_entries)
         if reconciliation:
             applied=sum((entry['amount'] for entry in reconciliation_entries),Decimal(0))
             arithmetic=reconciliation.charge_delta==(reconciliation.reconciled_cost-usage.actual_cost)*Decimal('1.5')
             if reconciliation.ledger_status=='applied':ledger_ok=applied==-reconciliation.charge_delta
-            elif reconciliation.ledger_status=='absorbed':ledger_ok=absorbed and not reconciliation_entries
+            elif reconciliation.ledger_status=='absorbed':ledger_ok=absorbed and (not reconciliation_entries or reconciliation.charge_delta<=0)
             else:ledger_ok=reconciliation.charge_delta>0 and not reconciliation_entries
             checks['reconciliation_delta_arithmetic']=arithmetic and ledger_ok
         elif reconciliation_entries:checks['reconciliation_delta_arithmetic']=False

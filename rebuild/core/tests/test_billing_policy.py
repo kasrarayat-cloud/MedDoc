@@ -17,6 +17,10 @@ from django.test import RequestFactory, SimpleTestCase, TestCase, override_setti
 from django.utils import timezone
 from django_otp.oath import totp
 from django_otp.plugins.otp_totp.models import TOTPDevice
+from datetime import timedelta
+from core.jobs import mark_stale
+from core.security import private_path
+from core.models import ProviderReceipt
 
 from core import views
 from core.billing import absorb_failed_job, apply_pending_reconciliations, reconcile_usage, reserve, settle
@@ -53,7 +57,11 @@ class DiscountConfiguration(SimpleTestCase):
     def test_discounted_cost_is_unchanged_at_zero_and_rounded_once_to_ledger_precision(self):
         self.assertEqual(discounted_cost(Decimal('0.00045'),Decimal('0')),Decimal('0.00045'))
         self.assertEqual(discounted_cost(Decimal('0.00045'),Decimal('0.2')),Decimal('0.00036'))
-        self.assertEqual(discounted_cost(Decimal('0.1'),Decimal('0.3333333333333')),Decimal('0.066666666667'))
+        # Eleven decimals, so the exact 1.5× charge always fits the twelve-decimal ledger (refutation F2).
+        self.assertEqual(discounted_cost(Decimal('0.1'),Decimal('0.3333333333333')),Decimal('0.06666666667'))
+        # 0.001049382545 is a tie at the eleventh decimal: half-even keeps ...254, and 1.5x still fits twelve decimals.
+        self.assertEqual(discounted_cost(Decimal('0.0012345677'),Decimal('0.15')),Decimal('0.00104938254'))
+        self.assertEqual(Decimal('0.00104938254')*Decimal('1.5'),Decimal('0.00157407381'))
 
 
 class PolicyFixture(SyntheticFixture):
@@ -383,3 +391,124 @@ class AdminConsolePolicy(PolicyFixture,TestCase):
         self.assertEqual(page.status_code,200)
         for text in ['Cost reconciliation','Platform costs (never charged to users)','INV-SYNTH-0007','Synthetic VPS hosting','Resolved by administrator']:
             self.assertContains(page,text)
+
+
+def unadopted_live_result(notes,request_id):
+    invalid=SimpleNamespace(stop_reason='end_turn',content=[SimpleNamespace(type='text',text='not valid provider JSON')])
+    invalid.model_dump=lambda **kwargs:{'stop_reason':'end_turn'}
+    units={'input_tokens':100,'output_tokens':10,'cached_input_tokens':0,'cache_creation_tokens':0}
+    rates={'input_per_million':'1000','output_per_million':'2500','cached_per_million':'0'}
+    return ({'anthropic_response':invalid,'notes':notes,'fields':[]},Decimal('0.125'),units,rates,'anthropic:synthetic-model',request_id,False)
+
+
+@override_settings(ADMIN_SITE=False,STORAGES=STORAGES,AI_MODE='live')
+class RefutationRegressions(PolicyFixture,TestCase):
+    """Counterexamples found by the independent refutation pass, now asserting the corrected behaviour."""
+    password='Synthetic-console-proof-52831!'
+
+    def failed_unabsorbed_job(self,key):
+        job=Job.objects.create(encounter=self.encounter,user=self.user,request_key=key)
+        reserve(job,Decimal('0.2'))
+        with patch('core.jobs.generation.generate',return_value=unadopted_live_result(self.encounter.notes,f'req_{key}')),patch('core.jobs.absorb_failed_job',side_effect=RuntimeError('synthetic transient reversal failure')):
+            self.assertTrue(run_one())
+        job.refresh_from_db();self.assertEqual(job.state,'failed');self.assertEqual(self.balances(),(Decimal('9.8125'),Decimal('0')))
+        return job,Usage.objects.get(job=job)
+
+    def admin_login(self):
+        admin=User.objects.create_user(username='console-admin',email='console-admin@synthetic.invalid',password=self.password,verified_at=timezone.now(),is_staff=True)
+        device=TOTPDevice.objects.create(user=admin,confirmed=True,name='Synthetic authenticator')
+        code=str(totp(device.bin_key,step=device.step,t0=device.t0,digits=device.digits)).zfill(6)
+        self.assertEqual(self.client.post('/login/',{'email':admin.email,'password':self.password,'otp':code}).status_code,302)
+        return admin
+
+    def test_credit_back_then_absorb_reverses_only_the_net_charge(self):
+        job,usage=self.failed_unabsorbed_job('regress-credit-then-absorb')
+        row=reconcile_usage(usage,Decimal('0.05'),'INV-SYNTH-R1',self.user)
+        self.assertEqual(row.ledger_status,'applied');self.assertEqual(self.balances(),(Decimal('9.925'),Decimal('0')))
+        absorb_failed_job(job);absorb_failed_job(job)
+        self.assertEqual(self.balances(),(Decimal('10'),Decimal('0')))
+        self.assertEqual(LedgerEntry.objects.get(job=job,kind='absorbed').amount,Decimal('0.075'))
+        self.assertEqual(PlatformCost.objects.get(job=job).amount,Decimal('0.05'))
+        report=audit_report();checks=report['rows'][0]['checks']
+        self.assertTrue(report['all_checks_pass']);self.assertTrue(checks['absorbed_reversal_matches_usage_debits']);self.assertTrue(checks['reconciliation_wallets_valid'])
+
+    def test_pending_additional_charge_is_never_applied_after_absorption(self):
+        job,usage=self.failed_unabsorbed_job('regress-pending-then-absorb')
+        row=reconcile_usage(usage,Decimal('0.5'),'INV-SYNTH-R2',self.user)
+        self.assertEqual(row.ledger_status,'pending_funds')
+        absorb_failed_job(job)
+        row.refresh_from_db();self.assertEqual(row.ledger_status,'absorbed');self.assertEqual(self.balances(),(Decimal('10'),Decimal('0')))
+        fund(self.paid,Decimal('5'),'payment:regress-topup')
+        self.assertEqual(apply_pending_reconciliations(),[]);self.assertEqual(self.balances(),(Decimal('10'),Decimal('5')))
+        self.assertFalse(LedgerEntry.objects.filter(kind='reconciliation').exists())
+        report=audit_report();self.assertTrue(report['all_checks_pass']);self.assertTrue(report['rows'][0]['checks']['no_reconciliation_pending_after_absorption'])
+
+    def test_pending_charge_held_then_absorbed_is_marked_when_applied_later(self):
+        job,usage=self.failed_unabsorbed_job('regress-pending-later')
+        row=reconcile_usage(usage,Decimal('0.5'),'INV-SYNTH-R2b',self.user)
+        LedgerEntry.objects.create(wallet=self.promo,amount=Decimal('0.1875'),kind='absorbed',key=f'absorbed:{job.pk}:{self.promo.pk}',description='synthetic prior reversal',job=job,balance_after=Decimal('10'))
+        Wallet.objects.filter(pk=self.promo.pk).update(balance=Decimal('10'))
+        fund(self.paid,Decimal('5'),'payment:regress-topup-2')
+        self.assertEqual(apply_pending_reconciliations(),[])
+        row.refresh_from_db();self.assertEqual(row.ledger_status,'absorbed');self.assertEqual(self.balances(),(Decimal('10'),Decimal('5')))
+
+    def test_absorb_refuses_a_job_that_is_not_failed(self):
+        usage=self.settled(Decimal('0.5'),key='regress-succeeded')
+        with self.assertRaises(ValidationError):absorb_failed_job(usage.job)
+        self.assertFalse(LedgerEntry.objects.filter(kind='absorbed').exists());self.assertFalse(PlatformCost.objects.exists())
+        self.assertEqual(self.balances(),(Decimal('9.25'),Decimal('0')))
+
+    def test_discounted_transcription_settles_exactly(self):
+        recording=private_path('uploads/regress.wav');recording.parent.mkdir(parents=True,exist_ok=True);recording.write_bytes(b'RIFF synthetic')
+        env={'QUILLMD_PROVIDER_DISCOUNT_RATE':'0.125','QUILLMD_DEEPGRAM_RATE_PER_MINUTE':'0.006','QUILLMD_DEEPGRAM_RATE_PER_SECOND':'','DEEPGRAM_API_KEY':'synthetic-placeholder-not-a-key'}
+        data={'results':{'channels':[{'alternatives':[{'transcript':'synthetic transcript'}]}]},'metadata':{'duration':12.345678,'request_id':'dg_regress'}}
+        response=SimpleNamespace(raise_for_status=lambda:None,json=lambda:data)
+        with patch.dict(os.environ,env):
+            job=enqueue(self.encounter,self.user,kind='transcription',input_path='uploads/regress.wav')
+            with patch('core.jobs.httpx.post',return_value=response):self.assertTrue(run_one())
+        job.refresh_from_db();self.assertEqual(job.state,'succeeded')
+        usage=Usage.objects.get(job=job);receipt=ProviderReceipt.objects.get(job=job)
+        # 12.345678 s x 0.006/min = 0.0012345678 list; x 0.875 = 0.0010802468250 -> half-even tie keeps ...682.
+        self.assertEqual(usage.actual_cost,Decimal('0.00108024682'));self.assertEqual(receipt.actual_cost,usage.actual_cost)
+        self.assertEqual(usage.charged_cost,usage.actual_cost*Decimal('1.5'));self.assertEqual(usage.rates['discount_rate'],'0.125')
+        self.assertEqual(Reservation.objects.filter(job=job,state='held').count(),0)
+        report=audit_report();self.assertTrue(report['all_checks_pass']);self.assertEqual(report['unresolved_jobs'],[])
+
+    def test_resolving_an_uncertain_job_that_already_settled_reverses_the_charge(self):
+        job=Job.objects.create(encounter=self.encounter,user=self.user,request_key='regress-stranded')
+        reserve(job,Decimal('0.2'))
+        Job.objects.filter(pk=job.pk).update(state='running',started_at=timezone.now()-timedelta(minutes=6))
+        units={'input_tokens':125,'output_tokens':0,'cached_input_tokens':0,'cache_creation_tokens':0}
+        settle(job,Decimal('0.125'),units,AUDITABLE_RATES,'anthropic:synthetic-model','req_regress-stranded',provider_resource_id='msg_regress-stranded')
+        mark_stale();job.refresh_from_db();self.assertEqual(job.state,'reconciliation');self.assertEqual(self.balances(),(Decimal('9.8125'),Decimal('0')))
+        self.admin_login()
+        with override_settings(ADMIN_SITE=True):
+            response=self.client.post(f'/console/jobs/{job.pk}/resolve/',{'outcome':'absorb_platform_failure','evidence_note':'Provider console shows one billed request','actual_cost':'9'})
+        self.assertEqual(response.status_code,302)
+        job.refresh_from_db();self.assertEqual(job.state,'failed');self.assertIn('settled provider cost absorbed',job.error)
+        self.assertEqual(self.balances(),(Decimal('10'),Decimal('0')))
+        self.assertEqual(PlatformCost.objects.get(job=job).amount,Decimal('0.125'))  # the settled amount, never the typed one
+        report=audit_report();self.assertTrue(report['all_checks_pass']);self.assertEqual(report['unresolved_jobs'],[])
+
+    def test_audit_rejects_a_reconciliation_credit_on_a_foreign_wallet(self):
+        usage=self.settled(Decimal('0.5'),key='regress-foreign')
+        other=self.make_scope('policy-other')[0];foreign=Wallet.objects.get(user=other,kind='promo')
+        CostReconciliation.objects.create(usage=usage,reconciled_cost=Decimal('0.3'),evidence_reference='INV-SYNTH-FOREIGN',recorded_by=self.user,charge_delta=Decimal('-0.3'),ledger_status='applied')
+        foreign.balance+=Decimal('0.3');foreign.save(update_fields=['balance'])
+        LedgerEntry.objects.create(wallet=foreign,amount=Decimal('0.3'),kind='reconciliation',key=f'reconciliation:{usage.pk}:{foreign.pk}',description='misdirected credit',job_id=usage.job_id,balance_after=foreign.balance)
+        report=audit_report();row=[r for r in report['rows'] if r['job_id']==str(usage.job_id)][0]
+        self.assertFalse(row['checks']['reconciliation_wallets_valid']);self.assertFalse(report['all_checks_pass'])
+
+    def test_negative_zero_discount_is_plain_zero(self):
+        with patch.dict(os.environ,{'QUILLMD_PROVIDER_DISCOUNT_RATE':'-0'}):
+            config=configuration()
+        with patch.dict(os.environ,{'QUILLMD_PROVIDER_DISCOUNT_RATE':'0'}):
+            plain=configuration()
+        self.assertEqual(config['discount_rate'],'0');self.assertEqual(config['pricing_version'],plain['pricing_version'])
+
+    def test_reconciled_cost_precision_is_eleven_decimals(self):
+        usage=self.settled(Decimal('0.4'),key='regress-precision')
+        with self.assertRaises(ValidationError):reconcile_usage(usage,Decimal('0.400000000001'),'INV-SYNTH-P12',self.user)
+        row=reconcile_usage(usage,Decimal('0.40000000001'),'INV-SYNTH-P11',self.user)
+        self.assertEqual(row.charge_delta,Decimal('0.000000000015'));self.assertEqual(row.ledger_status,'pending_funds')
+

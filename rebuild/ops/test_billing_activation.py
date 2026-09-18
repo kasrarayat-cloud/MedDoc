@@ -41,6 +41,15 @@ class MigrationValidation(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.activator.validate_migration(mutated)
 
+    def test_import_alias_that_rebinds_migrations_is_refused(self):
+        mutated = self.source.replace('from django.db import migrations, models', 'from django.db import models\nfrom core import models as migrations')
+        self.assertNotEqual(mutated, self.source)
+        with self.assertRaises(RuntimeError):
+            self.activator.validate_migration(mutated)
+        mutated = self.source.replace('import uuid', 'import uuid\nimport core.billing as extra')
+        with self.assertRaises(RuntimeError):
+            self.activator.validate_migration(mutated)
+
     def test_new_table_columns_match_the_model_definitions(self):
         import ast
         tree = ast.parse(self.source)

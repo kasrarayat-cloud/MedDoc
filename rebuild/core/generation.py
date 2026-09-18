@@ -32,15 +32,16 @@ def configuration():
     config['pricing_version']='configured-v1:'+hashlib.sha256(json.dumps(price,sort_keys=True,separators=(',',':')).encode()).hexdigest()
     return config
 
-COST_QUANTUM=Decimal('0.000000000001')
+# Settlement-safe precision: eleven decimals, so the exact 1.5× charge always fits the twelve-decimal ledger.
+COST_QUANTUM=Decimal('0.00000000001')
 
 def normalized_discount(value):
     """Configured provider discount fraction: a Decimal in [0, 1), stored as a canonical string."""
     try: discount=Decimal(str(value if value not in (None,'') else '0'))
     except (InvalidOperation,ValueError,TypeError): raise ValidationError('Provider discount rate must be a decimal fraction between 0 and 1.')
     if not discount.is_finite() or discount<0 or discount>=1: raise ValidationError('Provider discount rate must be a decimal fraction between 0 and 1.')
-    text=format(discount.normalize(),'f')
-    return text if text else '0'
+    if discount==0: return '0'
+    return format(discount.normalize(),'f')
 
 def discount_rate(config=None):
     config=config or configuration()

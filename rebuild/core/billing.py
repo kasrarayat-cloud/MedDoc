@@ -191,6 +191,7 @@ def reconcile_usage(usage,reconciled_cost,evidence_reference,actor,provider_cred
     if CostReconciliation.objects.filter(usage=usage).exists(): raise ValidationError('This usage row has already been reconciled; history is append-only.')
     if actor is None or not getattr(actor,'pk',None): raise ValidationError('A recorded administrator is required.')
     reconciled=exact(reconciled_cost);credit=exact(provider_credit_applied or ZERO);discount=exact(discount_applied or ZERO)
+    if reconciled!=reconciled.quantize(Decimal('0.00000000001')): raise ValidationError('Reconciled cost is limited to 11 decimal places so its exact 1.5× delta fits the 12-decimal ledger.')
     if usage.simulated and reconciled!=0: raise ValidationError('Simulated usage has no provider cost to reconcile.')
     evidence_reference=(evidence_reference or '').strip()
     if not evidence_reference or len(evidence_reference)>240: raise ValidationError('An evidence reference (invoice number, export sha256 or report id) is required.')
@@ -233,6 +234,10 @@ def apply_pending_reconciliations(actor=None):
             row=CostReconciliation.objects.select_for_update().select_related('usage__department').get(pk=pk)
             if row.ledger_status!='pending_funds': continue
             Job.objects.select_for_update().get(pk=row.usage.job_id)
+            if LedgerEntry.objects.filter(job_id=row.usage.job_id,kind='absorbed').exists() or PlatformCost.objects.filter(job_id=row.usage.job_id,kind='absorbed_failure').exists():
+                # The job was absorbed after this reconciliation was held: the user owes nothing further for it.
+                row.ledger_status='absorbed'; row.save(update_fields=['ledger_status'])
+                audit(actor,'usage.reconciliation_absorbed',row.usage.job_id,department=row.usage.department,charge_delta=str(row.charge_delta)); continue
             payer=payer_wallet(row.usage.payer)
             wallet=Wallet.objects.select_for_update().get(pk=payer.pk)
             if not apply_additional_debit(row,wallet): continue
@@ -243,26 +248,36 @@ def apply_pending_reconciliations(actor=None):
 
 @transaction.atomic
 def absorb_failed_job(job):
-    """QuillMD absorbs settled provider cost whose output was never adopted: reverse the usage debits and record a platform cost.
+    """QuillMD absorbs settled provider cost whose output was never adopted: reverse the user's NET charge for the job and record one platform cost.
 
-    Idempotent: ledger keys and the one-absorbed-failure-per-job constraint make a repeat call a no-op.
+    The net charge is every 'usage' and 'reconciliation' ledger movement for the job, per wallet, so a reconciliation applied
+    before the absorption is neither credited twice nor left charged. A pending additional charge is marked absorbed and never
+    applied. Only a failed job can be absorbed. Idempotent: ledger keys and the one-absorbed-failure-per-job constraint.
     """
     from .models import Job
     job=Job.objects.select_for_update().select_related('encounter__department','user').get(pk=job.pk)
     usage=Usage.objects.filter(job=job).first()
     if usage is None or usage.simulated: return None
-    entries=list(LedgerEntry.objects.filter(job=job,kind='usage').order_by('wallet_id'))
-    wallets={w.pk:w for w in Wallet.objects.select_for_update().filter(pk__in=[e.wallet_id for e in entries]).order_by('pk')}
+    if job.state!='failed': raise ValidationError('Only a failed job can be absorbed; a succeeded or pending job keeps its charge.')
+    reconciliation=CostReconciliation.objects.select_for_update().filter(usage=usage).first()
+    net={}
+    for entry in LedgerEntry.objects.filter(job=job,kind__in=['usage','reconciliation']).order_by('wallet_id'):
+        net[entry.wallet_id]=net.get(entry.wallet_id,ZERO)+entry.amount
+    wallets={w.pk:w for w in Wallet.objects.select_for_update().filter(pk__in=list(net)).order_by('pk')}
     reversed_total=ZERO
-    for entry in entries:
-        key=f'absorbed:{job.pk}:{entry.wallet_id}'
-        if entry.amount>=0 or LedgerEntry.objects.filter(key=key).exists(): continue
-        wallet=wallets[entry.wallet_id]; amount=-entry.amount
-        wallet.balance+=amount; wallet.save(update_fields=['balance'])
-        LedgerEntry.objects.create(wallet=wallet,amount=amount,kind='absorbed',key=key,description='Usage charge reversed: provider cost of a platform failure absorbed by QuillMD',job=job,balance_after=wallet.balance)
-        reversed_total+=amount
-    cost,created=PlatformCost.objects.get_or_create(job=job,kind='absorbed_failure',defaults={'amount':usage.actual_cost,'description':'Provider cost absorbed: output not adopted','evidence_reference':f'usage:{usage.pk}'})
-    if created or reversed_total: audit(job.user,'usage.absorbed',job.pk,department=job.encounter.department,actual_cost=str(usage.actual_cost),reversed=str(reversed_total))
+    for wallet_id in sorted(net,key=str):
+        owed=-net[wallet_id]
+        key=f'absorbed:{job.pk}:{wallet_id}'
+        if owed<=0 or LedgerEntry.objects.filter(key=key).exists(): continue
+        wallet=wallets[wallet_id]; wallet.balance+=owed; wallet.save(update_fields=['balance'])
+        LedgerEntry.objects.create(wallet=wallet,amount=owed,kind='absorbed',key=key,description='Usage charge reversed: provider cost of a platform failure absorbed by QuillMD',job=job,balance_after=wallet.balance)
+        reversed_total+=owed
+    if reconciliation and reconciliation.ledger_status=='pending_funds':
+        reconciliation.ledger_status='absorbed'; reconciliation.save(update_fields=['ledger_status'])
+    amount=reconciliation.reconciled_cost if reconciliation else usage.actual_cost
+    evidence=f'usage:{usage.pk}'+(f' reconciliation:{reconciliation.evidence_reference}' if reconciliation else '')
+    cost,created=PlatformCost.objects.get_or_create(job=job,kind='absorbed_failure',defaults={'amount':amount,'description':'Provider cost absorbed: output not adopted','evidence_reference':evidence[:240]})
+    if created or reversed_total: audit(job.user,'usage.absorbed',job.pk,department=job.encounter.department,actual_cost=str(usage.actual_cost),platform_cost=str(cost.amount),reversed=str(reversed_total))
     return cost
 
 def reconciliation():
