@@ -162,7 +162,8 @@ def cancel(job,user):
     """Cancel a queued request before any provider request. The row lock is the same one run_one takes with skip_locked, so a job
     being picked up is never cancelled and a job being cancelled is never picked up. Held reservations are released; nothing is charged."""
     job=Job.objects.select_for_update().select_related('encounter__department').get(pk=job.pk)
-    membership(user,job.encounter.department)
+    # The requester may cancel their own queued request; anyone else needs a clinician or owner role in the department.
+    membership(user,job.encounter.department,roles=None if job.user_id==user.pk else ['owner','clinician'])
     if job.state!='queued': raise CancellationRefused(CANCEL_REFUSALS.get(job.state,'This request can no longer be cancelled.'))
     job.state='cancelled';job.error=CANCELLED_ERROR;job.finished_at=timezone.now()
     # Free the request key for a fresh request on the same revision; the cancelled row keeps its history under a key only it can hold.

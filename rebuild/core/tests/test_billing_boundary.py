@@ -23,7 +23,7 @@ from django.utils import timezone
 from core.billing import absorb_failed_job, reserve, settle
 from core.jobs import CANCEL_REFUSALS, CANCELLED_ERROR, cancel, enqueue, run_one
 from core.management.commands.audit_billing import audit_report
-from core.models import AuditEvent, Encounter, Job, LedgerEntry, Membership, PlatformCost, Reservation, Usage, Wallet
+from core.models import AuditEvent, Encounter, Job, LedgerEntry, Membership, PlatformCost, Reservation, Usage, User, Wallet
 from core.security import private_path
 from core.tests.test_billing_policy import AUDITABLE_RATES, STORAGES, PolicyFixture, unadopted_live_result
 from core.tests.test_security import SyntheticFixture
@@ -250,6 +250,23 @@ class QueuedRequestCancellation(BoundaryFixture,TestCase):
         self.client.force_login(self.make_scope('boundary-other')[0])
         self.assertEqual(self.client.post(self.cancel_url(queued)).status_code,404)
         queued.refresh_from_db();self.assertEqual(queued.state,'queued')
+
+
+    def test_only_the_requester_or_a_clinician_may_cancel(self):
+        from core.models import Membership
+        job=enqueue(self.encounter,self.user)
+        employee=User.objects.create_user(username='boundary-employee',email='boundary-employee@synthetic.invalid',verified_at=timezone.now())
+        Membership.objects.create(user=employee,department=self.encounter.department,role='employee')
+        colleague=User.objects.create_user(username='boundary-colleague',email='boundary-colleague@synthetic.invalid',verified_at=timezone.now())
+        Membership.objects.create(user=colleague,department=self.encounter.department,role='clinician')
+        url=f'/encounters/{self.encounter.pk}/jobs/{job.pk}/cancel/'
+        self.client.force_login(employee)
+        self.assertEqual(self.client.post(url).status_code,403)
+        job.refresh_from_db();self.assertEqual(job.state,'queued')
+        self.client.force_login(colleague)
+        self.assertEqual(self.client.post(url).status_code,302)
+        job.refresh_from_db();self.assertEqual(job.state,'cancelled')
+        self.assertTrue(AuditEvent.objects.filter(action='job.cancelled',actor=colleague,target=str(job.pk)).exists())
 
 
 @override_settings(ADMIN_SITE=False,STORAGES=STORAGES,**LIVE)
