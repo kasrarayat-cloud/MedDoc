@@ -11,7 +11,6 @@ import re
 import secrets
 import stat
 import subprocess
-import tempfile
 import time
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -238,19 +237,17 @@ def backup(args):
                 manifest['files'].append({'path': relative, 'size': len(data), 'sha256': h,
                                           'object': object_name, 'cipher_sha256': digest(payload),
                                           'kinds': reference['kinds']})
-            with tempfile.TemporaryFile() as dump:
-                os.fchmod(dump.fileno(), 0o600)
-                env = dict(os.environ, PGPASSWORD=opts['password'])
-                run(['docker', 'exec', '-e', 'PGPASSWORD', SOURCE_CONTAINER, 'pg_dump',
-                     '-h', '127.0.0.1', '-U', opts['user'], '-d', SOURCE_DATABASE,
-                     '--format=custom', '--no-owner', '--no-privileges', '--snapshot=' + snapshot],
-                    output=dump, env=env)
-                require(dump.tell() <= MAX_OBJECT_BYTES, 'Database dump exceeds bounded encrypted-object size.')
-                dump.seek(0)
-                plain = dump.read()
-                encrypted = cipher.encrypt(plain)
-                write_private(destination / 'database.dump.fernet', encrypted)
-                manifest['dump'] = {'sha256': digest(plain), 'size': len(plain), 'cipher_sha256': digest(encrypted)}
+            # The dump is captured in memory and encrypted there. A temporary file would put an unencrypted copy of every row
+            # on the plain root filesystem (/tmp), outside the encrypted volume.
+            env = dict(os.environ, PGPASSWORD=opts['password'])
+            plain = run(['docker', 'exec', '-e', 'PGPASSWORD', SOURCE_CONTAINER, 'pg_dump',
+                         '-h', '127.0.0.1', '-U', opts['user'], '-d', SOURCE_DATABASE,
+                         '--format=custom', '--no-owner', '--no-privileges', '--snapshot=' + snapshot], env=env)
+            require(len(plain) <= MAX_OBJECT_BYTES, 'Database dump exceeds bounded encrypted-object size.')
+            encrypted = cipher.encrypt(plain)
+            write_private(destination / 'database.dump.fernet', encrypted)
+            manifest['dump'] = {'sha256': digest(plain), 'size': len(plain), 'cipher_sha256': digest(encrypted)}
+            del plain
             for row in manifest['files']:
                 require(digest(file_data(media, row['path'])) == row['sha256'],
                         'Referenced file changed during snapshot; backup is incomplete.')
@@ -317,7 +314,6 @@ def restore(args):
     run_id = secrets.token_hex(8)
     restored = output / ('restore-' + run_id)
     restored.mkdir(mode=0o700)
-    (restored / 'files').mkdir(mode=0o700)
     name = 'quillmd-restore-' + run_id
     result = {'run_id': run_id, 'container': name, 'complete': False,
               'started_at_utc': datetime.now(timezone.utc).isoformat(), 'provider_actions': 0}
@@ -330,13 +326,16 @@ def restore(args):
         require(image_id == manifest['image_id'], 'Reviewed PostgreSQL restore image is unavailable locally.')
         # Authenticate and verify every object before starting the isolated DB.
         dump = decrypt_checked(backup_path / 'database.dump.fernet', manifest['dump'], cipher)
+        # decrypt_checked verifies size and SHA-256 of every decrypted document in memory.
+        # Nothing decrypted is written to disk: the restore host's root filesystem is not
+        # the encrypted volume, and a proof must not leave plaintext copies behind.
+        verified_files = 0
         for row in manifest['files']:
-            data = decrypt_checked(backup_path / row['object'], row, cipher)
-            target = restored / 'files' / row['path']
-            target.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
-            write_private(target, data)
+            decrypt_checked(backup_path / row['object'], row, cipher)
+            verified_files += 1
+        require(verified_files == len(manifest['files']), 'Not every backed-up document was verified.')
         run(['docker', 'run', '--pull=never', '--detach', '--name', name, '--label', LABEL + '=' + run_id,
-             '--network', 'none', '--read-only', '--memory', '768m', '--cpus', '1',
+             '--network', 'none', '--read-only', '--memory', '768m', '--memory-swap', '768m', '--cpus', '1',
              '--tmpfs', '/var/lib/postgresql/data:rw,size=512m,mode=0700',
              '--tmpfs', '/var/run/postgresql:rw,mode=0777', '--tmpfs', '/tmp:rw,mode=1777',
              '--env', 'POSTGRES_USER=restore_owner', '--env', 'POSTGRES_DB=quillmd_restore',
@@ -362,13 +361,17 @@ def restore(args):
         require(invariants == manifest['invariants'], 'Restored invariants differ.')
         triggers = query("SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgenabled='O'")[0][0]
         require(triggers >= 6, 'Fresh immutable-record/scope triggers are missing.')
-        for row in manifest['files']:
-            require(digest(file_data(restored / 'files', row['path'])) == row['sha256'], 'Restored file differs.')
         metadata = inspect_container(name)
-        require(metadata['HostConfig']['NetworkMode'] == 'none' and not metadata['HostConfig']['PortBindings']
-                and all(m['Type'] == 'tmpfs' for m in metadata['Mounts']), 'Restore isolation was not maintained.')
+        host_config = metadata['HostConfig']
+        # --tmpfs mounts are listed under HostConfig.Tmpfs, not Mounts: check both, so this cannot pass on an empty list.
+        on_tmpfs_without_swap = ('/var/lib/postgresql/data' in (host_config.get('Tmpfs') or {}) and not metadata['Mounts']
+                                 and host_config.get('ReadonlyRootfs') is True and host_config.get('Memory', 0) > 0
+                                 and host_config.get('MemorySwap') == host_config.get('Memory'))
+        require(host_config['NetworkMode'] == 'none' and not host_config['PortBindings'] and on_tmpfs_without_swap,
+                'Restore isolation was not maintained.')
         result.update(complete=True, table_count=len(tables), row_count=sum(t['rows'] for t in tables.values()),
                       file_count=len(manifest['files']), all_table_hashes_match=True, all_file_hashes_match=True,
+                      decrypted_files_written=0, restore_database_on_tmpfs_without_swap=on_tmpfs_without_swap,
                       invariants=invariants, enabled_custom_triggers=triggers, network='none', published_ports=0,
                       workers_started=0, provider_credentials_copied=False, backup_run_id=manifest['run_id'])
     finally:

@@ -92,6 +92,27 @@ class BackupSecurityTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             b.load_backup(self.root, self.cipher)
 
+    def test_restore_check_writes_no_decrypted_documents_and_never_swaps(self):
+        import inspect
+        source = inspect.getsource(b.restore)
+        self.assertNotIn("/ 'files'", source)
+        self.assertEqual(source.count('write_private('), 1)
+        self.assertIn("write_private(restored / 'verification.json'", source)
+        self.assertIn("'--memory', '768m', '--memory-swap', '768m'", source)
+        self.assertIn("'--tmpfs', '/var/lib/postgresql/data:", source)
+        self.assertIn('decrypted_files_written=0', source)
+        # The tmpfs/no-swap evidence is measured from HostConfig, where docker lists --tmpfs mounts, not written as a literal.
+        self.assertIn("host_config.get('Tmpfs')", source)
+        self.assertIn("host_config.get('MemorySwap') == host_config.get('Memory')", source)
+        self.assertIn('restore_database_on_tmpfs_without_swap=on_tmpfs_without_swap', source)
+
+    def test_backup_never_writes_the_database_dump_to_a_temporary_file(self):
+        import inspect
+        source = inspect.getsource(b.backup)
+        self.assertNotIn('tempfile', source)
+        self.assertNotIn('TemporaryFile', source)
+        self.assertIn('plain = run([', source)
+
     def test_restore_cleanup_rejects_other_container(self):
         metadata = {'Config': {'Labels': {b.LABEL: 'another-run'}},
                     'HostConfig': {'NetworkMode': 'none', 'PortBindings': {}}}

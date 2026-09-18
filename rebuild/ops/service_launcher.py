@@ -140,6 +140,11 @@ def prepare_environment(surface):
     os.environ['QUILLMD_ENV_MANAGED'] = '1'
     os.environ['QUILLMD_STATE_DIR'] = str(STATE)
     os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
+    # Parser and SDK workspaces hold uploaded and filled documents. They live on the
+    # encrypted state volume, never the service's private /tmp on the root disk; the
+    # unit's TMPDIR can be overridden by the environment file, so it is enforced here.
+    os.environ['TMPDIR'] = str(STATE / 'tmp')
+    tempfile.tempdir = None
     os.umask(0o077)
 
 
@@ -163,8 +168,10 @@ def probe(surface):
     ):
         checks[label] = denied_open(path, flags, label)
     checks['docker_socket'] = denied_docker_socket()
-    for name in ('files', 'mail', 'proofs'):
+    for name in ('files', 'mail', 'proofs', 'tmp'):
         checks['state_' + name] = writable_canary(STATE / name, uid, gid)
+    require(tempfile.gettempdir() == str(STATE / 'tmp'), 'temporary_directory')
+    checks['temporary_directory'] = {'path': str(STATE / 'tmp'), 'on_state_volume': True}
     namespace = os.readlink('/proc/self/ns/mnt')
     require(re.fullmatch(r'mnt:\[\d+\]', namespace) is not None, 'mount_namespace_identity')
     return {'format': 1, 'event': 'quillmd_service_boundary', 'passed': True, 'surface': surface,

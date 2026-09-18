@@ -1,7 +1,8 @@
 [Unit]
 Description=QuillMD fresh private worker
-After=docker.service network-online.target
+After=docker.service network-online.target quillmd-fresh-database.service
 Wants=network-online.target
+Requires=quillmd-fresh-database.service
 
 [Service]
 Type=simple
@@ -14,6 +15,7 @@ WorkingDirectory=/opt/meddoc-pro/rebuild
 Environment=QUILLMD_ADMIN_SITE=0
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=TMPDIR=/var/lib/quillmd/tmp
 EnvironmentFile=/opt/meddoc-pro/rebuild/.env
 ExecStart=/opt/meddoc-pro/rebuild/.venv/bin/python /opt/meddoc-pro/rebuild/ops/service_launcher.py --surface worker
 Restart=on-failure
@@ -22,6 +24,10 @@ TimeoutStopSec=150
 KillMode=mixed
 UMask=0077
 NoNewPrivileges=true
+# No core dumps and no swap: a crash image or a swapped page would carry documents
+# and credentials onto the unencrypted root disk.
+LimitCORE=0
+MemorySwapMax=0
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
@@ -30,7 +36,7 @@ MemoryMax=1024M
 TasksMax=64
 
 InaccessiblePaths=/run/docker.sock /opt/meddoc-pro/.env /opt/meddoc-pro/.retained-service-credentials /opt/meddoc-pro/.worktrees /opt/meddoc-pro/rebuild/.env /opt/meddoc-pro/rebuild/.runtime
-ReadWritePaths=/var/lib/quillmd/files /var/lib/quillmd/mail /var/lib/quillmd/proofs
+ReadWritePaths=/var/lib/quillmd/files /var/lib/quillmd/mail /var/lib/quillmd/proofs /var/lib/quillmd/tmp
 
 [Install]
 WantedBy=multi-user.target

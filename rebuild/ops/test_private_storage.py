@@ -193,6 +193,64 @@ class PrivateStorageTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 storage._installation(Path('/var/lib/quillmd/files'))
 
+    def encrypted_fixture(self, document_changes=None):
+        account = SimpleNamespace(pw_uid=2345, pw_gid=2346)
+        document = {'version': 2, 'account': {'name': storage.APP_ACCOUNT, 'uid': 2345, 'gid': 2346},
+                    'device_source': storage.DEVICE_SOURCE,
+                    'roots': {str(root): {'inode': index + 10} for index, root in enumerate(sorted(storage.APPROVED_ROOTS))}}
+        document.update(document_changes or {})
+        identity = self.file('state-identity.json', json.dumps(document).encode())
+        _, _, lstat = self.installation_fixture()
+        identity.write_text(json.dumps(document))
+        identity.chmod(0o600)
+        return account, identity, lstat
+
+    def test_encrypted_identity_resolves_the_current_device_of_the_open_volume(self):
+        account, identity, lstat = self.encrypted_fixture()
+        real_stat = storage.os.stat
+        def stat(path, *args, **kwargs):
+            if path == storage.DEVICE_SOURCE:
+                return SimpleNamespace(st_mode=0o060600, st_rdev=64514)
+            return real_stat(path, *args, **kwargs)
+        with patch.object(storage, 'IDENTITY_FILE', identity), patch.object(Path, 'lstat', lstat), \
+                patch.object(storage.pwd, 'getpwnam', return_value=account), \
+                patch.object(storage.os, 'getgrouplist', return_value=[2346]), patch.object(storage.os, 'stat', stat):
+            self.assertEqual(storage._installation(Path('/var/lib/quillmd/files')),
+                             {'uid': 2345, 'gid': 2346, 'device': 64514, 'inode': 10})
+        # A different minor after the next boot is followed, because the pin names the device, not its number.
+        def stat_after_reboot(path, *args, **kwargs):
+            if path == storage.DEVICE_SOURCE:
+                return SimpleNamespace(st_mode=0o060600, st_rdev=64512)
+            return real_stat(path, *args, **kwargs)
+        with patch.object(storage, 'IDENTITY_FILE', identity), patch.object(Path, 'lstat', lstat), \
+                patch.object(storage.pwd, 'getpwnam', return_value=account), \
+                patch.object(storage.os, 'getgrouplist', return_value=[2346]), patch.object(storage.os, 'stat', stat_after_reboot):
+            self.assertEqual(storage._installation(Path('/var/lib/quillmd/mail'))['device'], 64512)
+
+    def test_encrypted_identity_refuses_closed_volume_and_malformed_documents(self):
+        real_stat = storage.os.stat
+        def closed(path, *args, **kwargs):
+            if path == storage.DEVICE_SOURCE:
+                raise FileNotFoundError(path)
+            return real_stat(path, *args, **kwargs)
+        def not_a_block_device(path, *args, **kwargs):
+            if path == storage.DEVICE_SOURCE:
+                return SimpleNamespace(st_mode=0o100600, st_rdev=0)
+            return real_stat(path, *args, **kwargs)
+        for label, changes, stat in (
+                ('closed', None, closed),
+                ('regular file', None, not_a_block_device),
+                ('other source', {'device_source': '/dev/mapper/pg-encrypted'}, closed),
+                ('numeric device', {'roots': {str(root): {'inode': 10, 'device': 8} for root in storage.APPROVED_ROOTS}}, closed),
+                ('extra key', {'extra': True}, closed)):
+            account, identity, lstat = self.encrypted_fixture(changes)
+            with self.subTest(label), patch.object(storage, 'IDENTITY_FILE', identity), patch.object(Path, 'lstat', lstat), \
+                    patch.object(storage.pwd, 'getpwnam', return_value=account), \
+                    patch.object(storage.os, 'getgrouplist', return_value=[2346]), patch.object(storage.os, 'stat', stat), \
+                    self.assertRaises(RuntimeError):
+                storage._installation(Path('/var/lib/quillmd/files'))
+            identity.unlink()
+
     def test_extra_application_group_or_nonprivate_proof_refuses(self):
         account, identity, lstat = self.installation_fixture()
         with patch.object(storage, 'IDENTITY_FILE', identity), patch.object(Path, 'lstat', lstat), \
