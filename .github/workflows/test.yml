@@ -51,6 +51,12 @@ jobs:
           cache-dependency-path: rebuild/requirements.txt
       - name: Install locked Python dependencies
         run: python -m pip install -r rebuild/requirements.txt
+      # ffprobe measures the payload actually submitted to the transcription provider. Without it the
+      # application degrades to 'coverage UNKNOWN' on every recording — honest, but it means CI would
+      # exercise the DEGRADED path and never the real one, which is how a clinical disclosure rule
+      # goes untested. The production host has it; CI must too, or the suite proves the wrong thing.
+      - name: Install the media probe the submission check depends on
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: rebuild/documents/sdk_word/global.json
