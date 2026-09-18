@@ -36,6 +36,60 @@ References: [PostgreSQL snapshot synchronization](https://www.postgresql.org/doc
 [pg_dump snapshot option](https://www.postgresql.org/docs/17/app-pgdump.html),
 [Fernet authenticated encryption and memory limit](https://cryptography.io/en/latest/fernet/).
 
+## The restore that failed first, diagnosed rather than retried
+
+**2026-09-18.** A restore of backup `20260918T110842Z-cd2a7006` failed and an
+identical retry succeeded. A retry that works is not a diagnosis, so the failure
+was traced through the records that still exist:
+
+| record | evidence |
+| --- | --- |
+| `.runtime/restore-checks/restore-417021bdffeac74f/verification.json` | `complete: false`, started `11:09:06.970867Z`, finished `11:09:09.218215Z` — **2.25 seconds**, `container_retained: false` |
+| `.runtime/restore-checks/restore-a2b12ce681fc4aa0/verification.json` | `complete: true`, same backup, started `11:09:29.589447Z`, finished `11:09:41.348696Z` — **11.76 seconds** |
+
+The successful run needed 11.76 s. The failed one ended after 2.25 s, which is
+long enough to start a container and far too short to restore the dump, so the
+failure was inside `pg_restore` rather than in starting the database.
+
+⚠️ **What follows is an inference consistent with that evidence, not a log
+reading — and the difference is stated because it matters.** The restore
+container is removed by the tool's own cleanup (`container_retained: false`), so
+its PostgreSQL log no longer exists, and the docker daemon's event buffer has
+since rolled past the window. An earlier draft of this section quoted event
+timestamps and the wrong backup id; both are corrected above against files that
+can still be opened.
+
+**The mechanism, which is checkable in the image:** `docker-entrypoint.sh`
+starts a *temporary* server for initialisation with `-c listen_addresses=''`,
+then stops it and execs the real `postgres`. `pg_isready` cannot tell the two
+apart. A restore that connects during that handover meets a shutdown mid-dump,
+and a connection that closes mid-restore surfaces as an ordinary restore error
+with nothing naming the race.
+
+**To settle it rather than infer it**, re-run the restore with the container
+retained and read the PostgreSQL log directly. That has not been done, because
+the repair below removes the race in either case.
+
+**Repair.** `ops/backup_restore.py` gained `restore_ready()`, which treats the
+database as ready only when all three hold:
+
+1. the container log contains `PostgreSQL init process complete; ready for start up.`
+   — the marker the entrypoint prints *after* the temporary server is gone;
+2. `pg_isready` succeeds;
+3. `SELECT 1` returns `1` over the real connection.
+
+The wait is bounded (120 polls) and `restore()` now records `stage`,
+`failed_stage` and `error_class` on every path, so the next failure names where
+it stopped instead of requiring a journal reading. Raw stderr is deliberately
+**not** stored: a failing `pg_restore` can quote row values.
+
+A regression test simulates the race — `pg_isready` succeeding before the marker
+appears — and asserts that readiness is reached before `pg_restore` is invoked,
+that the failed stage is recorded, and that no raw stderr is kept
+(`ops/test_backup_restore.py`, `RestoreReadinessSurvivesThePostgresInitRace`).
+**This test does not depend on the diagnosis being right**: it pins the ordering
+that makes the race impossible, whatever caused this particular failure.
+
 ## Verified exercise and preserved evidence
 
 Backup `20260917T165751Z-eccb5538` captured source commit
@@ -51,7 +105,7 @@ Backup `20260917T165751Z-eccb5538` captured source commit
 - The second restore explicitly initialized host SCRAM authentication. A first
   role-authentication probe exposed PostgreSQL initdb's localhost trust default;
   that restore-test setup was repaired, recreated and retested successfully.
-- 12 focused tool tests cover ciphertext tampering, wrong keys, wrong object
+- 12 focused tool tests (18 as of 2026-09-18) cover ciphertext tampering, wrong keys, wrong object
   substitution, traversal/symlinks, key modes, incomplete backups, duplicate paths
   and refusal to delete unrelated restore containers.
 

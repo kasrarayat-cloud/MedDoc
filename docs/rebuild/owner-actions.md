@@ -15,49 +15,115 @@ The commands below are for Windows PowerShell, which includes OpenSSH.
 
 ## 1. Review the Word documents in native Microsoft Word
 
-This blocks native Word appearance acceptance. No renderer on the VPS can establish it, and none is substituted for it.
+This blocks native Word appearance acceptance. No renderer on the VPS can establish it, and none is substituted for it. **Nothing about
+native Word appearance is accepted until you have actually done this.**
 
-1. Copy the archive to your Downloads folder:
+Run the four lines below in Windows PowerShell exactly as written. The first creates the destination, the second retrieves the archive, the
+third decides whether it arrived intact, and the fourth unpacks it only if it did.
 
-       scp root@147.189.172.8:/opt/meddoc-pro/rebuild/.runtime/word-review-package/quillmd-word-review-20260918.zip "$env:USERPROFILE\Downloads\quillmd-word-review-20260918.zip"
+    $dest = "$env:USERPROFILE\Downloads\quillmd-word-review"
+    New-Item -ItemType Directory -Force -Path $dest | Out-Null
 
-2. Check its hash. The expected value is `B270C982864CB42D0BDB13AC64265B29E53F36BD5EFD3CE45D45B7B862F03A72` (227,269 bytes).
+    scp root@147.189.172.8:/opt/meddoc-pro/rebuild/.runtime/word-review-package/quillmd-word-review-20260918.zip "$dest\quillmd-word-review-20260918.zip"
 
-       Get-FileHash "$env:USERPROFILE\Downloads\quillmd-word-review-20260918.zip" -Algorithm SHA256
+    $expected = 'B270C982864CB42D0BDB13AC64265B29E53F36BD5EFD3CE45D45B7B862F03A72'
+    $actual = (Get-FileHash "$dest\quillmd-word-review-20260918.zip" -Algorithm SHA256).Hash
+    $size = (Get-Item "$dest\quillmd-word-review-20260918.zip").Length
+    if ($actual -eq $expected -and $size -eq 227269) {
+        Expand-Archive "$dest\quillmd-word-review-20260918.zip" -DestinationPath "$dest\quillmd-word-review-20260918"
+        "ARCHIVE VERIFIED AND UNPACKED"
+    } else { "MISMATCH - do not open; tell engineering. actual=$actual size=$size" }
 
-3. Unpack it:
+Expected: `ARCHIVE VERIFIED AND UNPACKED`, from **227,269 bytes** hashing to that value. ⚠️ The unpack is **inside** the check on purpose — an earlier draft left it outside, so a mismatched archive printed the warning and then unpacked anyway. The checksum was re-verified on the host on 2026-09-18
+(`sha256sum` on `rebuild/.runtime/word-review-package/quillmd-word-review-20260918.zip`). If the comparison fails, the file was altered or
+truncated in transit — do not open it.
 
-       Expand-Archive "$env:USERPROFILE\Downloads\quillmd-word-review-20260918.zip" -DestinationPath "$env:USERPROFILE\Downloads\quillmd-word-review-20260918"
-
-   `SHA256SUMS.txt` inside lists every review file with its hash.
-4. Open each `.docx` in desktop Microsoft Word and work through `word-acceptance-checklist.md`. Mark each row ACCEPT or REJECT, and report
-   your Word version and build (File > Account > About Word).
+Then open each `.docx` in desktop Microsoft Word and work through `word-acceptance-checklist.md` inside the archive. Mark each row ACCEPT or
+REJECT and report your Word version and build (File > Account > About Word). `SHA256SUMS.txt` inside lists every review file with its own hash.
 
 The archive holds the blank WM IOV original, the fresh and previous live exports, two fixture exports, the checklist and the hash list. All
 content is synthetic. It holds no credentials and no runtime files.
 
 ## 2. Take custody of the storage and backup encryption keys
 
-The fresh database and private files are on a LUKS2 volume (`storage-encryption.md`). Both of its keys are on the host, root-only. No vault is
-connected to this service, so independent custody waits for you. Each command below copies one secret straight to your clipboard; nothing is
-displayed or stored on your computer.
+The fresh database and private files are on a LUKS2 volume (`storage-encryption.md`). Both of its keys are on the host, root-only, and no vault
+is connected to this service — so independent custody waits for you.
 
-1. The volume's recovery passphrase (LUKS slot 1):
+**How this procedure protects the values.** Each secret goes from the host to your clipboard and into your vault without ever being displayed,
+written to a file, or entering a shell history. You then confirm the copy is correct by hashing what is on the clipboard and comparing it to a
+checksum published here. A SHA-256 checksum does not reveal the value it summarises, which is why it can be written down in a document that is
+not itself secret.
 
-       ssh root@147.189.172.8 "cat /etc/quillmd/quillmd-fresh-luks.recovery-passphrase" | Set-Clipboard
+**Verified before publication.** The whole procedure — `cat` over ssh, `.Trim()`, SHA-256 — was exercised on dummy values on 2026-09-18,
+including a value with a trailing newline, one without, and one padded with spaces. In all three the transport preserved the bytes exactly and
+trimming reproduced the intended value. The two checksums below were then computed from the real files without printing them.
 
-   Paste it into a new item in your password vault, then clear the clipboard with `Set-Clipboard -Value $null`.
-2. The backup encryption key:
+### 2a. The volume recovery passphrase (LUKS slot 1)
 
-       ssh root@147.189.172.8 "cat /opt/meddoc-pro/rebuild/.runtime/backup-secrets/fresh-backup-current-20260917.key" | Set-Clipboard
+    ssh root@147.189.172.8 "cat /etc/quillmd/quillmd-fresh-luks.recovery-passphrase" | Set-Clipboard
 
-   Store it in the same way, as a separate vault item.
-3. Tell engineering the custodian's name and the two vault item names, never the values. The host copies stay in place: the key file (slot 0)
-   keeps restarts unattended.
-4. Decide whether disk-level protection is needed before real patient data. Today, anyone with root on the host, or a copy of the whole disk,
-   can open the volume, because the key file is on the same disk. To protect against that, engineering removes slot 0, re-encrypts the volume
-   and removes the key file in one maintenance window. Every reboot would then need someone to run `bash scripts/ops/unlock-fresh-volume.sh`
-   and type the passphrase.
+    $v = (Get-Clipboard -Raw).Trim()
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $h = -join ($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($v)) | ForEach-Object { $_.ToString('x2') })
+    if ($h -eq '46cee981df24625792ac99c542aa53f0a9853eaf5cecb9c0075e4d1e1c041400') {
+        Set-Clipboard -Value $v
+        "PASSPHRASE VERIFIED - $($v.Length) characters - clipboard now holds exactly the checked value"
+    } else { Set-Clipboard -Value ' '; "MISMATCH - do not store; tell engineering" }
+
+Expected: `PASSPHRASE VERIFIED - 48 characters - clipboard now holds exactly the checked value`. Paste into a new vault item,
+then clear the clipboard with `Set-Clipboard -Value ' '`.
+
+⚠️ **The re-set is the point.** The checksum is computed over the TRIMMED value, so the clipboard must be put back to that
+same trimmed value before you paste — otherwise you verify one string and store another.
+
+### 2b. The backup encryption key
+
+    ssh root@147.189.172.8 "cat /opt/meddoc-pro/rebuild/.runtime/backup-secrets/fresh-backup-current-20260917.key" | Set-Clipboard
+
+    $v = (Get-Clipboard -Raw).Trim()
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $h = -join ($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($v)) | ForEach-Object { $_.ToString('x2') })
+    if ($h -eq 'cf69c55e4c288499e6c54c010b726bb9c7241be823bc8c15694a73740f53cff6') {
+        Set-Clipboard -Value $v
+        "BACKUP KEY VERIFIED - $($v.Length) characters - clipboard now holds exactly the checked value"
+    } else { Set-Clipboard -Value ' '; "MISMATCH - do not store; tell engineering" }
+
+Expected: `BACKUP KEY VERIFIED - 44 characters - clipboard now holds exactly the checked value`. Store it as a **separate**
+vault item, then clear the clipboard the same way.
+
+⚠️ **There are TWO keys in that directory.** `fresh-backup-current-20260917.key` is the live one and the command above names
+it. `fresh-backup-20260917T165751Z-eccb5538.key` is its superseded predecessor, still present because the backups it opens
+are still on disk; take custody of it as a third vault item if you want those older backups to remain restorable.
+
+⚠️ **The trim is not cosmetic.** The key file on disk is 45 bytes: a 44-character Fernet key followed by a newline, which the backup tool
+strips when it loads it. A value stored with that newline attached will not open a backup. The published checksum is of the trimmed
+44-character value, which is exactly what the tool uses.
+
+### 2c. Afterwards
+
+1. Tell engineering the custodian's name and the two vault item names — **never the values, and never a screenshot of the vault**.
+2. The host copies stay in place for now. Slot 0 (`/etc/quillmd/quillmd-fresh-luks.key`) is what lets the service come back unattended after a
+   restart; deleting it would mean every boot waits for someone to type the passphrase.
+3. **Decide whether disk-level protection is needed before real patient data.** Today, anyone with root on this host, or a copy of the whole
+   disk, can open the volume — the unlock key is a file on the same unencrypted disk, and so is the backup key beside the backups it opens.
+   `storage-encryption.md`, "What the configuration protects against", states scenario by scenario what is and is not covered. Closing those
+   rows takes one maintenance window: remove slot 0, re-encrypt the volume, remove the key file — after which every boot needs
+   `bash scripts/ops/unlock-fresh-volume.sh` and your passphrase.
+
+### 2d. What engineering does NOT do
+
+Nothing in this programme reads `/opt/meddoc-pro/rebuild/.env`, and reading it indirectly — `grep`, a script that prints a value, a diff that
+includes it — is the same act with an extra step. To answer *is this credential configured*, run the application's own report, which is built
+so that no branch of it can emit a value:
+
+    cd /opt/meddoc-pro/rebuild && .venv/bin/python manage.py configuration_status
+
+⚠️ **Available from the release that carries this document, not before.** On the release running today it answers
+`Unknown command: 'configuration_status'`; it ships with the activation declared in
+`docs/foundation/mutations/20260918-quillmd-service-date.md`.
+
+It prints, per setting, `absent`, `present`, `present, recognised shape` or `present, UNRECOGNISED shape`, plus the release gates. Its tests
+assert that a configured secret never appears in the output (`core/tests/test_configuration_status.py`).
 
 ## 3. Approve a maintenance window to prove recovery after a host reboot
 

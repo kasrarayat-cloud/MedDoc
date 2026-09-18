@@ -65,7 +65,7 @@ class ProviderDedupRefutation(SyntheticFixture, TestCase):
     def test_duplicate_worker_response_keeps_receipt_without_adopting_or_charging(self):
         second_encounter = Encounter.objects.create(department=self.scope[2], patient=self.scope[3],
             template_version=self.scope[5].template_version, created_by=self.scope[0],
-            notes=self.scope[5].notes)
+            service_date=self.scope[5].service_date, notes=self.scope[5].notes)
         first = self.job("worker-first")
         second = self.job("worker-second", second_encounter)
         response = SimpleNamespace(id="msg_same", stop_reason="end_turn",

@@ -150,7 +150,7 @@ class AbsorbedPlatformFailure(PolicyFixture,TestCase):
     @override_settings(AI_MODE='fixture')
     def test_fixture_job_failure_is_unchanged_and_records_no_platform_cost(self):
         original=self.encounter
-        draft=Encounter.objects.create(department=original.department,patient=original.patient,template_version=original.template_version,created_by=original.created_by,notes=original.notes)
+        draft=Encounter.objects.create(department=original.department,patient=original.patient,template_version=original.template_version,created_by=original.created_by,service_date=original.service_date,notes=original.notes)
         job=enqueue(draft,self.user)
         def result(*args,**kwargs):
             User.objects.filter(pk=self.user.pk).update(is_active=False)
@@ -542,7 +542,7 @@ class RefutationRegressions(PolicyFixture,TestCase):
     @override_settings(AI_MODE='fixture')
     def test_resolving_a_stale_fixture_job_records_no_platform_cost(self):
         original=self.encounter
-        draft=Encounter.objects.create(department=original.department,patient=original.patient,template_version=original.template_version,created_by=original.created_by,notes=original.notes)
+        draft=Encounter.objects.create(department=original.department,patient=original.patient,template_version=original.template_version,created_by=original.created_by,service_date=original.service_date,notes=original.notes)
         job=enqueue(draft,self.user)
         Job.objects.filter(pk=job.pk).update(state='running',started_at=timezone.now()-timedelta(minutes=6))
         mark_stale();job.refresh_from_db();self.assertEqual(job.state,'reconciliation')

@@ -73,14 +73,91 @@ audit event. Repeating an identical import verifies all stored code/descriptions
 without a second write or audit event. Modified or overlapping releases are
 refused; existing releases are never overwritten.
 
-Before October 1, download and verify the official FY2027 full code file, then
-import it with its own version, dates, count and hash. The application filters
-release effective dates when suggesting codes; an expired set stops qualifying.
+FY2027 is prepared and declared, **not yet imported** — see the section below
+for its state and the act that will run it. The application selects the release whose effective period contains the **encounter's date of
+service or discharge** — not today's date. A release whose fiscal year has
+ended keeps answering for encounters inside it, and a release that has not
+started yet is not applied to earlier visits.
 This command provides controlled maintenance, not an automatic feed service.
 The present release is a code/description dictionary; April tabular instructions,
 exclusions and sequencing rules are **not** implemented as a coding engine.
 Suggestions remain limited to codes explicitly present in documented notes,
 with source evidence and clinician acceptance. No diagnosis inference is added.
+
+## FY2027 — the October 1, 2026 release (VERIFIED AND DECLARED, NOT YET IMPORTED)
+
+⚠️ **State, so this section cannot be read as an act that happened.** The file
+below has been downloaded, hashed and parsed with the production parser, and the
+import is declared at
+`docs/foundation/mutations/20260918-quillmd-icd10cm-fy2027.md`. It has **not**
+run: the live database holds one release (`FY2026-April`) and 74,719 codes. Until
+it runs, the standing instruction remains — import the verified FY2027 file
+before 1 October 2026, or from that date coding returns nothing for every new
+encounter, with a warning rather than an error.
+
+[CDC's release page](https://www.cdc.gov/nchs/icd/icd-10-cm/files.html) states,
+for this release: *"FY27 ICD-10-CM codes should be used for healthcare services
+provided from October 1, 2026, through September 30, 2027"*, and *"This release
+replaces the FY26, April 1, 2026, release"* — replaces it **prospectively**.
+September services keep FY2026-April, which is why both releases are stored and
+neither is overwritten.
+
+| Public artifact | SHA-256 | Finding |
+| --- | --- | --- |
+| [CDC FY2027 code-description archive](https://ftp.cdc.gov/pub/Health_Statistics/NCHS/Publications/ICD10CM/2027/icd10cm-code-descriptions-2027.zip) | `93e3ad6004badf470c55bfe679b748ae88fd9b2b421851e409eec382c7713b9a` | 2,192,779 bytes; contains the code file, the order file, both addenda and two format guides. ⚠️ **Measured at download; the archive itself is not retained**, so this row is re-checkable only by downloading it again. The extracted code file below IS retained, and its hash is what the importer enforces |
+
+The imported member is `icd10cm-code-descriptions-2027/icd10cm-codes-2027.txt`,
+cached at the ignored path `.runtime/terminology/icd10cm-codes-2027.txt`:
+
+- Exactly **74,879** unique codes (FY2026-April had 74,719); 6,425,201 bytes;
+  strict UTF-8; CRLF line endings, which `splitlines()` handles.
+- Text SHA-256: `3c0583a38ee0e848f7dc0ac8ce88e8f001bbba8c6385ed825d44d46f6e5297c9`.
+- Parsed with the production parser before any import: every row satisfied the
+  codes-file format, first `A00.0`, last `U09.9`, longest description 228
+  characters, 74,664 of the codes carrying a decimal.
+- Release to be stored: `ICD-10-CM`, `FY2027`, inclusive dates `2026-10-01`
+  through `2027-09-30`.
+
+### Reproduce it
+
+```bash
+cd /opt/meddoc-pro/rebuild
+.venv/bin/python manage.py import_terminology \
+  --system ICD-10-CM \
+  --path .runtime/terminology/icd10cm-codes-2027.txt \
+  --sha256 3c0583a38ee0e848f7dc0ac8ce88e8f001bbba8c6385ed825d44d46f6e5297c9 \
+  --release-version FY2027 \
+  --effective-from 2026-10-01 --effective-until 2027-09-30 \
+  --expected-count 74879 \
+  --source-url https://ftp.cdc.gov/pub/Health_Statistics/NCHS/Publications/ICD10CM/2027/icd10cm-code-descriptions-2027.zip
+```
+
+The importer refuses an effective period that overlaps an existing release of
+the same system, so a mistyped start date is rejected rather than silently
+shadowing FY2026. It never rewrites an existing release: re-running an
+identical import re-verifies every stored code and writes nothing.
+
+Because this adds 74,879 irreversible rows to the private database, it runs
+through `scripts/run-ruled-mutation.sh` with the committed declaration
+`docs/foundation/mutations/20260918-quillmd-icd10cm-fy2027.md`.
+
+### How the applicable release is chosen
+
+`core/coding.applicable_releases(encounter)` is the only implementation:
+
+    effective_from <= encounter.service_date <= effective_until
+
+Both readers use it — `suggest()` when proposing codes and the acceptance view
+when a clinician accepts one — so the two cannot disagree at a fiscal-year
+boundary. The stored suggestion names the release and the date of service it
+was validated for, and the audit row records the service date, the releases
+consulted and whether any ICD-10-CM release covered that date at all. A date no
+release covers produces a visible refusal, not an empty list.
+
+Boundary behaviour is tested directly in
+`rebuild/core/tests/test_code_release_dates.py`: 30 September 2026 selects
+FY2026-April, 1 October 2026 selects FY2027, and a September encounter coded
+the following December still selects FY2026-April.
 
 ## CPT remains blocked pending a suitable license and feed
 

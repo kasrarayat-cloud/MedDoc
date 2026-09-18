@@ -79,7 +79,7 @@ class DocumentWorkflow(TestCase):
         return template, template.versions.get(number=1)
 
     def create_encounter(self, version, notes):
-        response = self.client.post("/encounters/new/", {"patient": self.patient.pk, "template_version": version.pk, "notes": notes, "synthetic_only": "on"})
+        response = self.client.post("/encounters/new/", {"patient": self.patient.pk, "template_version": version.pk, "notes": notes, "service_date": timezone.localdate().isoformat(), "synthetic_only": "on"})
         self.assertEqual(response.status_code, 302, getattr(response, "context", None))
         encounter = Encounter.objects.get(template_version=version)
         self.assertEqual(encounter.status, "draft")

@@ -17,7 +17,8 @@ understate the length and so the charge limit):
 
 Anything else raises UnmeasurableRecording: without a duration the charge limit cannot be confirmed, so nothing is sent.
 """
-from decimal import Decimal
+from collections import namedtuple
+from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 import struct
 
 from django.core.exceptions import ValidationError
@@ -26,6 +27,12 @@ MAX_BYTES = 15 * 1024 * 1024
 MAX_ITEMS = 400000
 MAX_SECONDS = Decimal(24 * 3600)
 LOWEST_SECONDS_PER_BYTE = Decimal('0.001')  # 8 kbps, the lowest MPEG audio bitrate
+STRAY_FRAMES_IN_TAGS = 8  # headers of other layouts inside tags: counted, and beyond this the file is refused
+
+# Two numbers, because they answer different questions. `measured` is the conservative length: never less than what a
+# decoder plays, so the charge limit holds enough. `confirmed` is the length this file certainly holds, so a statement
+# that part of a recording was not transcribed can never be made about audio that was never there.
+Bounds = namedtuple('Bounds', 'confirmed measured')
 MP3_STEPS = 1500000  # frames plus resynchronised bytes; a 60-minute recording at the lowest bitrate is about 100,000 frames
 
 
@@ -40,27 +47,37 @@ def refuse(detail):
 
 
 def measure(data):
-    """Duration in seconds (Decimal) of an uploaded recording's bytes."""
+    """The conservative duration in seconds (Decimal): never less than what a decoder plays."""
+    return measure_bounds(data).measured
+
+
+def measure_bounds(data):
+    """(confirmed, measured) seconds of an uploaded recording's bytes."""
     if not data:
         refuse('empty file')
     if len(data) > MAX_BYTES:
         refuse('larger than 15 MB')
     try:
         if data[:4] == b'RIFF' and data[8:12] == b'WAVE':
-            seconds = wav(data)
+            bounds = wav(data)
         elif data[:4] == b'\x1aE\xdf\xa3':
-            seconds = matroska(data)
+            bounds = matroska(data)
         elif data[4:8] == b'ftyp':
-            seconds = mp4(data)
+            bounds = mp4(data)
         elif data[:3] == b'ID3' or (len(data) > 1 and data[0] == 0xFF and data[1] & 0xE0 == 0xE0):
-            seconds = mp3(data)
+            bounds = mp3(data)
         else:
             refuse('unsupported format')
-        if not seconds or seconds <= 0:
+        if not bounds.measured or bounds.measured <= 0:
             refuse('no audio found')
-        if seconds > MAX_SECONDS:
+        if bounds.measured > MAX_SECONDS:
             refuse('implausible length')
-        return seconds.quantize(Decimal('0.001'))
+        if bounds.confirmed > bounds.measured:
+            refuse('inconsistent length bounds')
+        # Opposite directions on purpose: the priced bound may never round below what a decoder plays, and the
+        # certified bound may never round above it. Nearest-rounding broke both by up to half a millisecond.
+        return Bounds(max(bounds.confirmed, Decimal(0)).quantize(Decimal('0.001'), rounding=ROUND_FLOOR),
+                      bounds.measured.quantize(Decimal('0.001'), rounding=ROUND_CEILING))
     except UnmeasurableRecording:
         raise
     except (struct.error, IndexError, KeyError, ValueError, OverflowError, ArithmeticError, RecursionError):
@@ -91,36 +108,51 @@ def wav(data):
     # A decoder plays the declared data and then looks for further 'data' chunks (ffmpeg does: 29 s hidden in a second data
     # chunk after a LIST chunk decodes), so those count; other chunks (LIST, id3, cue…) are metadata. An absent or oversized
     # declared size means the samples run to the end of the file.
-    size = len(data) - start
+    size = confirmed = len(data) - start
     if declared not in (0, 0xFFFFFFFF) and declared <= size:
-        later, unparsed = trailing_chunks(data, start + declared)
-        size = declared + later + unparsed  # bytes that are not chunk headers could be samples a decoder reads on
+        later, unparsed, smallest = trailing_chunks(data, start + declared, len(data))
+        # Measured stays the SUM: a decoder may read on through every data chunk, and the price may not be below that.
+        # Confirmed becomes the SMALLEST chunk, because a decoder plays ONE of them and we do not know which.
+        # Measured against ffmpeg: 9 s + 1 s decodes to 1 s, 1 s + 9 s to 9 s, 5 s + 5 s to 5 s — the LAST chunk in each
+        # case. Summing them claimed 10 s of certain audio in all three and produced a false incompleteness marker.
+        confirmed = declared if smallest is None else min(declared, smallest)
+        size = declared + later + unparsed
     tag, channels, rate, byte_rate, block, bits = fmt
     # A decoder plays the samples at rate x block bytes per second whatever the byte-rate field says, and may read past a
     # declared data size, so both come from the samples: every byte after the data header, at rate x block.
     if (tag not in (1, 3, 0xFFFE) or not 1 <= channels <= 8 or not 4000 <= rate <= 384000 or bits not in (8, 16, 24, 32, 64)
             or block != channels * (bits // 8) or byte_rate != rate * block):
         refuse('compressed, inconsistent or invalid WAV encoding')
-    return Decimal(size) / Decimal(rate * block)
+    return Bounds(Decimal(confirmed) / Decimal(rate * block), Decimal(size) / Decimal(rate * block))
 
 
-def trailing_chunks(data, position):
-    """After the first data chunk ends at position: (bytes of later 'data' chunks, bytes that are not chunk headers). A decoder
-    plays later data chunks (ffmpeg does); other chunks (LIST, id3, cue…) are metadata. Writers disagree on the pad byte after
-    an odd-length chunk, so each header is looked for at both alignments."""
-    later = 0
+def trailing_chunks(data, position, total):
+    """After the first data chunk ends at position: (bytes of later 'data' chunks, bytes that are not chunk headers, the
+    smallest later data chunk or None). A decoder plays later data chunks (ffmpeg does); other chunks (LIST, id3, cue…) are
+    metadata. Writers disagree on the pad byte after an odd-length chunk, so each header is looked for at both alignments.
+    A later chunk declaring zero runs to the end of the file, exactly as a first chunk declaring zero does — the asymmetry
+    made a zero-length trailing chunk contribute nothing and drove the confirmed length to 0 on a file that decodes whole."""
+    later, smallest = 0, None
     for _ in range(4096):
         for at in (position, position + 1):
             if at + 8 <= len(data) and all(32 <= c <= 126 for c in data[at:at + 4]):
                 break
         else:
-            return later, max(0, len(data) - position)
+            return later, max(0, len(data) - position), smallest
         tag, length = data[at:at + 4], struct.unpack('<I', data[at + 4:at + 8])[0]
         if tag == b'data':
-            later += min(length, len(data) - at - 8)
+            available = max(0, len(data) - at - 8)
+            if length in (0, 0xFFFFFFFF):
+                # It runs to the end of the file, so there is nothing after it to scan and nothing left unparsed.
+                # Counting it here AND as unparsed bytes would price the same samples twice.
+                later += available
+                return later, 0, available if smallest is None else min(smallest, available)
+            size = min(length, available)
+            later += size
+            smallest = size if smallest is None else min(smallest, size)
         position = at + 8 + length
         if position >= len(data):
-            return later, 0
+            return later, 0, smallest
     refuse('WAV with too many chunks')
 
 
@@ -168,7 +200,9 @@ def mp3(data):
         position += 10 + size + (10 if header[5] & 0x10 else 0)
     start = position
     end = tags_start(data, start)
-    seconds, frames, before_tags, steps, slowest, strays_in_tags = Decimal(0), 0, 0, 0, Decimal(0), 0
+    seconds, frames, steps, slowest, strays_in_tags = Decimal(0), 0, 0, Decimal(0), 0
+    stray_seconds = Decimal(0)
+    covered = []  # byte ranges frames account for, as ranges: overlapping headers must not be credited twice
     current, pending = None, []
     # The walk follows a decoder: frames of the stream's layout (samples per frame, sample rate) count wherever they are, junk
     # between them and trailing tags included (ffmpeg plays frames hidden in an APE tag, one frame at a time). A header of
@@ -176,13 +210,13 @@ def mp3(data):
     # of three adjacent frames, or once three such headers agree, and is otherwise a stray (a PNG cover holds many).
 
     def count(frame, at):
-        nonlocal seconds, frames, before_tags, slowest
+        nonlocal seconds, frames, slowest
         length, samples, rate = frame
         seconds += Decimal(samples) / Decimal(rate)
         frames += 1
         if at < end:
             slowest = max(slowest, Decimal(samples) / Decimal(rate) / Decimal(length))
-            before_tags += max(0, min(at + length, end) - at)
+            covered.append((at, min(at + length, end)))
 
     while position < len(data):
         steps += 1
@@ -199,7 +233,10 @@ def mp3(data):
             # A decoder's parser starts over whenever a header disagrees with the previous one, so agreement must be consecutive.
             pending = (pending if pending and pending[0][0][1:] == layout else []) + [(frame, position)]
             if position >= end:
+                # Inside the tags the bytes are excused from the non-frame allowance, so a header of another layout is
+                # counted here instead: a decoder plays any real frame it finds, and these bytes are charged to nothing else.
                 strays_in_tags += 1
+                stray_seconds += Decimal(frame[1]) / Decimal(frame[2])
             if len(pending) >= 3:
                 current = layout
                 for f, at in pending:
@@ -209,19 +246,28 @@ def mp3(data):
     if current is None:
         for f, at in pending:  # a recording too short to establish a layout: its frames still count
             count(f, at)
-    # A decoder plays any real frame it finds, whatever its layout; stray syncs in cover art only fail at the payload, which
-    # is not decoded here. So headers of other layouts inside tags are bounded (a 400 KB PNG cover holds about 55): beyond
-    # that the tags could be hiding audio, and the file is refused.
-    if strays_in_tags > 64:
-        refuse('MP3 whose tags contain audio frames')
+    # Stray syncs in cover art only fail at the payload, which is not decoded here, so a few are tolerated and counted.
+    # Beyond the allowance the tags could be hiding real audio (measured: alternating layouts hid 4.3 s under the old bound
+    # of 64), and the file is refused rather than under-measured.
+    if strays_in_tags > STRAY_FRAMES_IN_TAGS:
+        refuse('MP3 whose tags contain audio frames; re-export it without embedded artwork')
     # Recognised trailing tags excuse only their own non-frame bytes. Other bytes before them that are not standard frames
     # (free-format frames, unknown data) could still be decoded, so they are bounded and counted at the lowest bitrate seen.
+    # The UNION of the ranges frames cover, not the sum of their declared lengths. Three headers three bytes apart each
+    # declaring 1440 bytes overlap almost completely; summing them credited 4320 bytes of allowance for 1446 bytes of file,
+    # so ten planted bytes could cancel thousands of bytes of junk and ADDING bytes lowered the priced length.
+    before_tags, reach = 0, start
+    for at, stop in sorted(covered):
+        if stop <= reach:
+            continue
+        before_tags += stop - max(at, reach)
+        reach = stop
     uncounted = end - start - before_tags
     if frames < 2 or uncounted > max(16384, (end - start) // 50):
         refuse('MP3 that is not made of standard audio frames')
     # Costed at the lowest bitrate MP3 allows (8 kbps: 1 ms per byte), not the slowest seen: an attacker chooses the frames
     # that are seen, so bytes a decoder might still play can never be priced below what they could hold.
-    return seconds + Decimal(max(uncounted, 0)) * max(slowest, LOWEST_SECONDS_PER_BYTE)
+    return Bounds(seconds, seconds + stray_seconds + Decimal(max(uncounted, 0)) * max(slowest, LOWEST_SECONDS_PER_BYTE))
 
 
 def adjacent_run(data, position, layout):
@@ -373,7 +419,7 @@ def mp4(data):
     audio = [t for t in tracks.values() if t['handler'] == b'soun']
     if not audio:
         refuse('MP4 without an audio track')
-    best = Decimal(0)
+    best, confirmed = Decimal(0), None  # None until a track sets it: the floor is a MIN across tracks, not a MAX
     for track in audio:
         # Only AAC is measured: its access units decode to a fixed frame length at the rate its own configuration states,
         # which a decoder uses whatever the container's timescale or sample table claims.
@@ -386,15 +432,22 @@ def mp4(data):
             units += fragments[track['id']][0]
             samples += fragments[track['id']][1]
         seconds = Decimal(samples * frame) / Decimal(rate)
+        floor = seconds  # access units are certain; the container's claims below may exceed them
         if track['timescale']:
             seconds = max(seconds, Decimal(units) / Decimal(track['timescale']))
         if track['edit_units']:
             if not movie['timescale']:
                 refuse('MP4 edit list without a movie timescale')
             # Each edit decodes whole access units, so allow one frame per edit (measured: ffmpeg plays 0.0155 s more per edit).
-            seconds = max(seconds, Decimal(track['edit_units']) / Decimal(movie['timescale']) + Decimal(track['edits'] * frame) / Decimal(rate))
+            edited = Decimal(track['edit_units']) / Decimal(movie['timescale']) + Decimal(track['edits'] * frame) / Decimal(rate)
+            seconds = max(seconds, edited)
+            # And an edit list that TRIMS is audio the decoder never plays: a passthrough trim leaves the whole media in
+            # place behind a short edit. Measured: a 10 s file edited to 1 s decodes 1.02 s while its access units still
+            # say 10.031 — certifying 10 s there marks a complete transcript incomplete by nine seconds.
+            floor = min(floor, edited)
+        confirmed = floor if confirmed is None else min(confirmed, floor)
         best = max(best, seconds)
-    return best
+    return Bounds(confirmed or Decimal(0), best)
 
 
 AAC_RATES = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350]
@@ -523,7 +576,7 @@ def opus_packet_seconds(packet):
 
 def matroska(data):
     state = {'scale': 1000000, 'audio': set(), 'opus': set(), 'track': {}, 'cluster': 0, 'first': None, 'last': None,
-             'deltas': [], 'opus_seconds': Decimal(0), 'blocks': 0, 'laced': False, 'tracks_seen': False}
+             'deltas': [], 'opus_seconds': Decimal(0), 'per_track': {}, 'blocks': 0, 'laced': False, 'tracks_seen': False}
     counter = [0]
 
     def block(payload):
@@ -545,7 +598,9 @@ def matroska(data):
         if flags & 0x06:
             state['laced'] = True
         elif track in state['opus']:
-            state['opus_seconds'] += opus_packet_seconds(payload[at + 3:])
+            length = opus_packet_seconds(payload[at + 3:])
+            state['opus_seconds'] += length
+            state['per_track'][track] = state['per_track'].get(track, Decimal(0)) + length
 
     def walk(start, end, parent):
         position = start
@@ -605,4 +660,10 @@ def matroska(data):
         refuse('WebM without audio blocks')
     tail = sorted(state['deltas'])[len(state['deltas']) // 2] if state['deltas'] else 0
     by_time = Decimal(state['last'] - state['first'] + tail) * Decimal(state['scale']) / Decimal(1000000000)
-    return max(by_time, state['opus_seconds'])
+    # A decoder plays ONE audio track, and nothing here says which. The priced bound takes the longest track, because any
+    # of them may be the one; the certified bound takes the SHORTEST, because only that much is certain whichever is
+    # chosen. Summing them claimed 20.040 s of certain audio for a two-track 10 s WebM — which both marked a complete
+    # transcript incomplete and refused a 31-minute recording as 62 minutes.
+    longest = max(state['per_track'].values())
+    shortest = min(state['per_track'].values())
+    return Bounds(shortest, max(by_time, longest))

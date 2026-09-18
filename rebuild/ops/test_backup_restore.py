@@ -130,5 +130,56 @@ class BackupSecurityTests(unittest.TestCase):
             execute.assert_not_called()
 
 
+class RestoreReadinessSurvivesThePostgresInitRace(unittest.TestCase):
+    """The postgres entrypoint answers pg_isready from a TEMPORARY server while it runs initdb, then stops it. A restore that
+    trusts that answer meets the handover: exactly how the 2026-09-18T11:09Z restore failed (container up 11:09:07, gone
+    11:09:09), with no reason recorded."""
+
+    class Runner:
+        def __init__(self, marker_after=0):
+            self.calls, self.marker_after = 0, marker_after
+
+        def __call__(self, args, **kwargs):
+            import subprocess as sp
+            self.calls += 1
+            if args[1] == 'logs':
+                seen = self.calls > self.marker_after
+                return sp.CompletedProcess(args, 0, b'ready to accept connections\n' + (b.READY_MARKER if seen else b''), b'')
+            if 'pg_isready' in args:
+                return sp.CompletedProcess(args, 0, b'', b'')          # the temporary init server answers too
+            return sp.CompletedProcess(args, 0, b'1\n', b'')
+
+    def test_a_ready_answer_without_the_completion_marker_is_not_ready(self):
+        runner = self.Runner(marker_after=10**6)
+        self.assertFalse(b.restore_ready('quillmd-restore-test', runner=runner))
+
+    def test_ready_once_the_entrypoint_reports_init_complete_and_a_statement_answers(self):
+        self.assertTrue(b.restore_ready('quillmd-restore-test', runner=self.Runner(marker_after=0)))
+
+    def test_not_ready_when_the_server_cannot_answer_a_statement(self):
+        import subprocess as sp
+
+        def runner(args, **kwargs):
+            if args[1] == 'logs':
+                return sp.CompletedProcess(args, 0, b.READY_MARKER, b'')
+            if 'pg_isready' in args:
+                return sp.CompletedProcess(args, 0, b'', b'')
+            return sp.CompletedProcess(args, 1, b'', b'FATAL: the database system is shutting down')
+
+        self.assertFalse(b.restore_ready('quillmd-restore-test', runner=runner))
+
+    def test_the_restore_waits_for_readiness_before_it_restores_and_records_the_failing_stage(self):
+        import ast
+        source = Path(b.__file__).read_text()
+        body = source[source.index('def restore('):source.index('def main(')]
+        self.assertLess(body.index('restore_ready('), body.index("'restoring_the_dump'"))
+        self.assertLess(body.index("'restoring_the_dump'"), body.index("'pg_restore'"))
+        self.assertIn("result['failed_stage'] = result.get('stage')", body)
+        self.assertIn("result['error_class'] = type(failure).__name__", body)
+        # The failing command's own output is never recorded: a database error can quote row data.
+        self.assertNotIn('stderr.decode', body)
+        ast.parse(source)
+
+
 if __name__ == '__main__':
     unittest.main()

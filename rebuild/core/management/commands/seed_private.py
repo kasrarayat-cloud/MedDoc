@@ -47,6 +47,6 @@ class Command(BaseCommand):
         info=inspect_template(path)
         template=Template.objects.create(department=xray,name='Clinical assessment',format=info['format'],original_name='synthetic-assessment.docx',original_path=relative,sha256=info['sha256'],warnings=info['warnings'],created_by=doctor)
         version=TemplateVersion.objects.create(template=template,number=1,fields=info['fields'],created_by=doctor)
-        Encounter.objects.create(department=xray,patient=Patient.objects.get(department=xray),template_version=version,created_by=doctor,notes='History: Synthetic patient reports left wrist discomfort after a fall.\nFindings: No deformity documented.\nPlan: Follow-up assessment documented.')
+        Encounter.objects.create(department=xray,patient=Patient.objects.get(department=xray),template_version=version,created_by=doctor,service_date=timezone.localdate(),notes='History: Synthetic patient reports left wrist discomfort after a fall.\nFindings: No deformity documented.\nPlan: Follow-up assessment documented.')
         dest.parent.mkdir(exist_ok=True,mode=0o700);dest.write_text(json.dumps(accounts,indent=2));dest.chmod(0o600)
         self.stdout.write(f'Synthetic accounts and blank template ready. Private credentials: {dest}')

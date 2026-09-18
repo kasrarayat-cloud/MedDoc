@@ -1,9 +1,11 @@
 import uuid
+from datetime import timedelta
 from decimal import Decimal
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.db.models.functions import Lower
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from django.utils import timezone
 
 class User(AbstractUser):
     id=models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False)
@@ -93,12 +95,26 @@ class TemplateVersion(Entity):
     created_by=models.ForeignKey(User,on_delete=models.PROTECT)
     class Meta: constraints=[models.UniqueConstraint(fields=['template','number'],name='mapping_version_unique')]
     def __str__(self): return f'{self.template.name} · mapping {self.number}'
+def latest_service_date():
+    """The furthest ahead a real date of service can legitimately be.
+
+    The application stores UTC (TIME_ZONE='UTC'), and real zone offsets span UTC-12 to UTC+14, so a
+    clinic's local date can lead the UTC date by one day and never by more. Refusing 'today+1' would
+    reject a visit that has already happened for the first hours of every day east of UTC.
+    """
+    return timezone.localdate()+timedelta(days=1)
+
+
 class Encounter(Entity):
     department=models.ForeignKey(Department,on_delete=models.PROTECT)
     patient=models.ForeignKey(Patient,on_delete=models.PROTECT)
     template_version=models.ForeignKey(TemplateVersion,on_delete=models.PROTECT)
     created_by=models.ForeignKey(User,on_delete=models.PROTECT,related_name='encounters')
     notes=models.TextField()
+    # ICD-10-CM releases are fiscal-year scoped, so the applicable version is the
+    # one in effect on the date of service or discharge, never the date the note
+    # happens to be coded on.
+    service_date=models.DateField()
     answers=models.JSONField(default=dict)
     template_review=models.JSONField(default=dict,blank=True)
     status=models.CharField(max_length=16,default='draft')
@@ -109,6 +125,7 @@ class Encounter(Entity):
     export_sha256=models.CharField(max_length=64,blank=True)
     def clean(self):
         if self.patient.department_id!=self.department_id or self.template_version.template.department_id!=self.department_id: raise ValidationError('Patient, template and encounter must share a department.')
+        if self.service_date and self.service_date>latest_service_date(): raise ValidationError('The date of service or discharge cannot be in the future.')
 class Job(ProviderIdentifiers,Entity):
     encounter=models.ForeignKey(Encounter,on_delete=models.PROTECT)
     user=models.ForeignKey(User,on_delete=models.PROTECT)

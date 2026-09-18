@@ -128,6 +128,46 @@ stack's data and are not touched.
   was judged 20/20; the private record is
   `rebuild/.runtime/plaintext-recovery-reap-20260918.json`.
 
+## Where every secret and every copy of the data actually is (measured 2026-09-18)
+
+Read this table before describing the protection to anyone. Every path was
+listed on the running host; sizes are as measured that day.
+
+| What | Exact location | Filesystem | Encrypted at rest? |
+| --- | --- | --- | --- |
+| LUKS2 container for the live system | `/var/lib/quillmd-encrypted/quillmd-fresh.luks` (16 GiB sparse, `-rw-------`, root) | `/dev/sda2` | the contents are; the file sits on plaintext |
+| Unlock key, slot 0 | `/etc/quillmd/quillmd-fresh-luks.key` (64 bytes, `-r--------`, root) | `/dev/sda2` | **no** |
+| Recovery passphrase, slot 1 | `/etc/quillmd/quillmd-fresh-luks.recovery-passphrase` (48 bytes, `-r--------`, root) | `/dev/sda2` | **no** |
+| Retired stack's LUKS keys | `/etc/quillmd/pg-luks.key`, `/etc/quillmd/minio-luks.key` (512 bytes each, root) | `/dev/sda2` | **no** |
+| Database data and WAL | `/mnt/quillmd-fresh-encrypted/postgres`, bound over the docker volume | `/dev/mapper/quillmd-fresh-encrypted` | yes, while closed |
+| Originals, exports, receipts, mail, proofs | `/var/lib/quillmd/{files,mail,proofs}` | `/dev/mapper/quillmd-fresh-encrypted` | yes, while closed |
+| Encrypted backups | `rebuild/.runtime/new-system-backups/` (12 runs, 62 MB) | **`/dev/sda2`** | Fernet ciphertext on plaintext storage |
+| The keys that decrypt those backups | `rebuild/.runtime/backup-secrets/` — **two** 45-byte keys, `-rw-------`, owner `claude`: `fresh-backup-current-20260917.key` and the superseded `fresh-backup-20260917T165751Z-eccb5538.key` | **`/dev/sda2`** | **no — and they are two directories from the ciphertext they open** |
+| The original application's waitlist data | database `meddoc` in `meddoc-pro-postgres-1`, 7 rows of real names and email addresses | **`/dev/sda2`**, via `meddoc-pro_pgdata_encrypted` → `/mnt/pgdata-encrypted` | the retired stack's own LUKS volume; see `legacy-inventory.md` |
+| The retired stack's LUKS images | `/opt/meddoc-pro/secrets/pgdata.luks`, `/opt/meddoc-pro/secrets/miniodata.luks` (loop0, loop1) | `/dev/sda2` | contents are; their keys are in `/etc/quillmd`, unencrypted |
+| Host swap | `/swap.img`, 4,194,300 KB, **4,190,184 KB in use** | `/dev/sda2` | **no** |
+| System journal | `/var/log/journal`, 3.22 GB | `/dev/sda2` | **no** |
+
+## What the configuration protects against, and what it does not
+
+| Scenario | Protected? | Why |
+| --- | --- | --- |
+| A stolen or RMA'd physical disk from the hypervisor, with the guest powered off | **Yes, for the volume's contents** | the LUKS2 container is closed; the database and private files are unreadable without a key slot |
+| A provider snapshot restored while the guest is off, **with `/etc/quillmd` included** | **No** | the image carries the slot-0 key file beside the container it opens. One `cryptsetup luksOpen --key-file` reads everything |
+| A whole-host image taken while the service runs | **No** | as above, plus the mapper is already open and the plaintext is live |
+| Another tenant on this shared VPS reading QuillMD files directly | **Partly** | the mount is `nosuid,nodev`, the keys are root-only and `/var/lib/quillmd-encrypted` is root-only — but membership of the `docker` group on this host is equivalent to root, so any tenant with docker access defeats it |
+| An attacker who reaches the **operator** account (`claude`) | **No, for the backups** | the backup ciphertext and its Fernet keys are both readable by that account. ⚠️ Note this is NOT the application user: the six service processes run as `quillmd-app`, which can read neither |
+| An attacker who reaches the **application** user (`quillmd-app`) | **Partly** | it holds the live data through the open mount, but not the backups, not the backup keys and not the LUKS keys |
+| Exfiltration of the backup archive alone, without the host | **Yes** | Fernet ciphertext without the key file is not usable |
+| Recovery of deleted plaintext from freed blocks on `/dev/sda2` | **Partly** | the nine plaintext copies removed on 2026-09-18 were `shred -u -n 3 -z`'d, every exit code 0 — but shredding is best effort on a virtual disk, and ordinary deletions elsewhere are not overwritten at all. The data was synthetic |
+| Data resident in host swap or the journal | **No** | both are host-level, unencrypted, and swap is 99.9% full |
+
+**Do not describe this as encryption at rest for a stolen host image.** It is
+encryption at rest for the *volume*, with the unlock key stored beside it. The
+only configuration that changes those three `No` rows is the one the owner has
+to approve: remove slot 0, re-encrypt, remove the key file, and accept that
+every boot then waits for a typed passphrase (`owner-actions.md` §2, step 4).
+
 ## Limits and remaining dependencies
 
 - Host swap, journald and the shared root filesystem are host-level. Encrypting
@@ -138,15 +178,15 @@ stack's data and are not touched.
   written. That reveals volume and growth, not content. Its space is not reserved
   in advance: the migration requires 24 GiB free, and disk usage stays on the
   owner's host checklist.
-- Plaintext copies of QuillMD data remain on the root disk and must be
-  destroyed before any real patient data is admitted. All of them are
-  synthetic.
-  - `/var/lib/quillmd-rollback-20260918`, the pre-migration snapshot.
-  - `rebuild/.runtime/files` (27 originals, exports, receipts and audio files)
-    and `rebuild/.runtime/mail` (2 items), the application state from before the
-    2026-09-17 service-identity cutover.
-  - `rebuild/.runtime/restore-checks/restore-*/files`, decrypted copies written
-    by earlier restore checks.
+- **Plaintext copies of QuillMD data are GONE, and this bullet used to say they
+  remained.** All nine directories — `/var/lib/quillmd-rollback-20260918`,
+  `rebuild/.runtime/{files,mail}` and the `restore-checks/restore-*/files`
+  copies — were removed on 2026-09-18 at 11:11–11:13Z (2,722 files, judged
+  20/20, `rebuild/.runtime/plaintext-recovery-reap-20260918.json`). Re-measured
+  2026-09-18: none of the three paths exists. The gate this bullet described is
+  closed, and leaving the old wording standing would have had the next session
+  hunting for files that are not there — or, worse, believing the gate was still
+  open when deciding about real patient data.
 - After a rollback, `scripts/verify-post-reboot.sh` still expects the encrypted
   layout and reports failure. That report is correct: the data is plaintext
   again.

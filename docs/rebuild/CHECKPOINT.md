@@ -265,3 +265,87 @@ maintenance.
 
 Private evidence paths: `rebuild/.runtime/CHECKPOINT-LATEST.md`.
 
+
+## 2026-09-18 — verification and repair pass: legacy inventory, length bounds, restore cause, key custody, ICD-10-CM FY2027
+
+A focused pass over five named items. The rebuild was not restarted, no broad
+review campaign was run, and no historical record was deleted to make an earlier
+report read consistently.
+
+**The running release and revisions were verified first**, not assumed: HEAD and
+both HTTP surfaces reported `5f673a3b2cc5c99d68f08f34fba43b4883403583`, and
+`origin/main` was `1ed50b93` (PR #1198, documentation only).
+
+- **Legacy inventory, with the correction** —
+  `docs/rebuild/legacy-inventory.md`. The 2026-09-17 sentence claiming the
+  rebuild kept "all of the original application's remnants" is **wrong**, and so
+  is reading the earlier reports as "the old system is gone". The original
+  application's source, images and cron entry are verified absent; three of its
+  data services still run; and one of them holds **7 real waitlist rows
+  (email and name, 2026-08-02 to 2026-09-05)** that are business records, not
+  remnants. No cleanup was executed: the previously authorized source/cron
+  cleanup is already complete, and everything still on disk is either preserved
+  deliberately or an owner decision about data deletion.
+- **Recording length: charging and disclosure separated.** An MP3 fixture
+  measured 2.412 s against ffmpeg's 6.717 s because frames hidden in trailing
+  tags were bounded but never counted. Measurement now returns
+  `Bounds(confirmed, measured)`; the charge limit is held against `measured`
+  and the incomplete-output marker reads `confirmed`, so no number rounded up
+  for billing can describe a transcript as complete. Tag-resident frames are
+  counted, and beyond eight stray headers the file is refused with a re-export
+  instruction. **Residual, stated rather than claimed away:** up to eight stray
+  headers remain bounded but unconfirmed, which `confirmed` excludes.
+- **The first failed restore was diagnosed, not retried.** The docker journal
+  showed the isolated container created at `11:09:07.24Z` and removed at
+  `11:09:09.31Z` — too fast for the dump, so the failure was inside
+  `pg_restore`. Cause: the PostgreSQL entrypoint's temporary initialisation
+  server answers `pg_isready` before the real server exists.
+  `restore_ready()` now requires the init-complete marker, `pg_isready` and a
+  `SELECT 1` returning 1; failures record the stage and exception class, never
+  raw stderr.
+- **Encryption mapped scenario by scenario** —
+  `docs/rebuild/storage-encryption.md`. Every key, backup, swap and log
+  location is listed with its filesystem. The honest statement is now explicit:
+  **a whole-host image containing `/etc/quillmd` is not protected**, the backup
+  key sits two directories from the ciphertext it opens, and swap
+  (4,190,184 KB of 4,194,300 KB in use) and the 3.22 GB journal are
+  unencrypted host-level storage.
+- **Key custody and Word retrieval rewritten** — `owner-actions.md` §1 and §2.
+  The procedure was verified on dummy values first (trailing newline, no
+  newline, padded), and the two secrets are published as SHA-256 checksums of
+  their trimmed values so the owner can confirm a correct copy without either
+  value being displayed. The Word archive command names its destination and
+  compares the checksum and byte count before unpacking; the archive was
+  re-verified on the host. **A correction:** the backup key file is 45 bytes —
+  a 44-character Fernet key plus a newline the tool strips — so a value stored
+  with that newline attached will not open a backup. An earlier note saying it
+  had no trailing newline was wrong.
+- **`.env` is not read, and now does not need to be.**
+  `manage.py configuration_status` reports each credential as absent, present,
+  or present with a recognised or unrecognised shape, and its tests assert that
+  no configured secret can appear in its output.
+- **ICD-10-CM FY2027, and the defect that made it urgent.** The release was
+  selected by `timezone.localdate()` — the date the note is coded on, not the
+  date of the visit. With only FY2026-April loaded (effective to 2026-09-30),
+  coding would have returned **zero suggestions with no error from 1 October**,
+  twelve days out. `Encounter.service_date` now carries the date of service or
+  discharge, migration 0014 backfills existing encounters from the date they
+  were recorded, and `applicable_releases(encounter)` is the single rule both
+  the suggestion and acceptance paths read. FY2027 (74,879 codes) is verified and
+  declared for import beside FY2026-April (74,719), neither replacing nor
+  rewriting it. CPT stays disabled.
+
+⚠️ **NOTHING IN THIS SECTION HAS REACHED THE RUNNING SYSTEM YET.** Every repair
+above is built, tested and declared on a branch. The live release is still
+`5f673a3b`: one code release, 74,719 codes, schema through 0013, no
+`service_date` column, and `manage.py configuration_status` answers
+`Unknown command`. Two declared acts are pending —
+`docs/foundation/mutations/20260918-quillmd-service-date.md` (migration 0014 and
+the release advance) and
+`docs/foundation/mutations/20260918-quillmd-icd10cm-fy2027.md` (the import) —
+and **the 1 October defect stays live until the second one runs.** This
+paragraph is replaced with the judged result, not before.
+
+**Still open, unchanged by this pass:** recovery after a host reboot, independent
+key custody, native Word acceptance, the external integrations, and the owner
+decision on the legacy data services holding the seven waitlist rows.

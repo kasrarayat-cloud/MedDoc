@@ -162,7 +162,8 @@ def recording_charge_limit(e,input_path,config,approved_limit=None):
     length cannot be measured, the recording is too long, or its limit exceeds the displayed standard limit without an
     explicitly approved higher one."""
     raw=private_path(input_path).read_bytes()
-    seconds=audio.measure(raw)
+    bounds=audio.measure_bounds(raw)
+    seconds=bounds.measured
     quote=transcription_quote(seconds,config)
     if quote['too_long']:
         raise ValidationError(f'This recording is {seconds_text(seconds)} long; the longest recording accepted is {seconds_text(max_recording_seconds())}. '
@@ -177,7 +178,7 @@ def recording_charge_limit(e,input_path,config,approved_limit=None):
         if limit>approved_limit:
             raise RecordingOverLimit(f'This recording needs a limit of ${limit}, above the ${approved_limit} you approved. Nothing was sent.',quote)
         limit=approved_limit
-    return seconds,limit,quote
+    return bounds,limit,quote
 
 
 @transaction.atomic
@@ -195,8 +196,11 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
         if not (config['voice_rate_minute'] or config['voice_rate_second']): raise ValidationError('Transcription usage rates have not been configured.')
         # Exact, not an estimate: notes with no room for even one character can take no transcript, so nothing is sent or charged.
         if notes_full(e.notes): raise ValidationError(NOTES_FULL)
-        seconds,charge_limit,quote=recording_charge_limit(e,input_path,config,approved_limit)
-        config.update(recording_seconds=str(seconds),charge_limit=str(charge_limit),limit_basis='approved' if approved_limit is not None else 'standard')
+        bounds,charge_limit,quote=recording_charge_limit(e,input_path,config,approved_limit)
+        # Two lengths: the conservative one the limit was priced from, and the one this recording certainly holds. Only the
+        # confirmed length may support a statement that part of the recording was not transcribed.
+        config.update(recording_seconds=str(bounds.measured),recording_seconds_confirmed=str(bounds.confirmed),
+                      charge_limit=str(charge_limit),limit_basis='approved' if approved_limit is not None else 'standard')
     job=Job.objects.create(encounter=e,user=user,kind=kind,revision=e.revision,request_key=key,input_path=input_path,config=config)
     if kind=='transcription':
         reserve(job,charge_limit=charge_limit)
@@ -208,12 +212,26 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     return job
 
 def coverage_note(job,units):
-    """A visible marker when the provider processed clearly less audio than the recording holds; never a silent truncation."""
+    """A visible marker when the provider processed clearly less audio than the recording certainly holds; never a silent
+    truncation, and never a claim about audio the file may not contain: it reads the CONFIRMED length, not the conservative
+    one the charge limit was priced from."""
     try:
-        recorded=Decimal(job.config.get('recording_seconds') or '0'); processed=Decimal((units or {}).get('duration_seconds') or '0')
+        config=job.config or {}
+        recorded=Decimal(config.get('recording_seconds_confirmed') or config.get('recording_seconds') or '0')
+        priced=Decimal(config.get('recording_seconds') or '0')
+        processed=Decimal((units or {}).get('duration_seconds') or '0')
     except Exception:
         return ''
-    if recorded<=0 or processed>=recorded-COVERAGE_TOLERANCE_SECONDS: return ''
+    if recorded<=0:
+        # No certain length. Returning '' here delivered a transcript as whole on a recording whose confirmed length was
+        # 0.000 and whose priced length was ten seconds — a silent claim of completeness on exactly the file that cannot
+        # support one. An unknown coverage is disclosed as unknown.
+        if priced>COVERAGE_TOLERANCE_SECONDS and processed<priced-COVERAGE_TOLERANCE_SECONDS:
+            return (f'\n[Transcription coverage unconfirmed: the provider processed {seconds_text(processed)} and this '
+                    f'recording may hold up to {seconds_text(priced)}. Its structure does not establish how much audio a '
+                    f'player would reach, so completeness cannot be certified. Re-export the recording to confirm it.]')
+        return ''
+    if processed>=recorded-COVERAGE_TOLERANCE_SECONDS: return ''
     return (f'\n[Transcription incomplete: the provider processed {seconds_text(processed)} of this {seconds_text(recorded)} recording; '
             f'the final {seconds_text(recorded-processed)} was not transcribed.]')
 

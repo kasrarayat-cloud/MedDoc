@@ -327,7 +327,7 @@ class CancellationNeverDeadlocks(SyntheticFixture,TransactionTestCase):
 
     def test_cancel_and_a_request_on_another_encounter_of_the_same_wallet_both_complete(self):
         other=Encounter.objects.create(department=self.encounter.department,patient=self.encounter.patient,
-            template_version=self.encounter.template_version,created_by=self.user,notes='Symptoms: no chest pain')
+            template_version=self.encounter.template_version,created_by=self.user,service_date=self.encounter.service_date,notes='Symptoms: no chest pain')
         job=enqueue(self.encounter,self.user)
         original_release=jobs_module.release
         holding=threading.Event()

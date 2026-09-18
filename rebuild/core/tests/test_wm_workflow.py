@@ -93,7 +93,7 @@ class WMDocumentWorkflow(TestCase):
         lines += [row['label'] + ': ' + row['text'] for row in resolved if row['kind'] == 'assertion']
         notes = '\n'.join(lines)
         response = self.client.post('/encounters/new/', {'patient': self.patient.pk,
-            'template_version': self.version.pk, 'notes': notes, 'synthetic_only': 'on'})
+            'template_version': self.version.pk, 'notes': notes, 'service_date': timezone.localdate().isoformat(), 'synthetic_only': 'on'})
         self.assertEqual(response.status_code, 302)
         encounter = Encounter.objects.get(template_version=self.version)
         self.client.post(f'/encounters/{encounter.pk}/generate/')
