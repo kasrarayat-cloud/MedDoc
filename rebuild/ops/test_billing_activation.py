@@ -116,12 +116,16 @@ class MigrationValidation(unittest.TestCase):
 
 
 class AllowedPaths(unittest.TestCase):
+    # The target the completed billing-policy activation migrated (billing-policy-activation-20260918.json, resumed and completed
+    # by billing-policy-resume-20260918.json). The set constrains that target, not every later main.
+    MIGRATED = 'd2e45b533396390c36d1ffa681c188126be556ce'
+
     def test_every_changed_path_since_the_running_release_is_declared(self):
         activator = load_activator()
-        probe = subprocess.run(['git', '-C', str(ROOT), 'cat-file', '-e', activator.BASELINE + '^{commit}'], capture_output=True)
-        if probe.returncode != 0:
-            self.skipTest('Running-release commit is not available in this checkout (shallow clone).')
-        changed = set(subprocess.check_output(['git', '-C', str(ROOT), 'diff', '--name-only', activator.BASELINE, 'HEAD'], text=True).split())
+        commits = (activator.BASELINE, self.MIGRATED)
+        if any(subprocess.run(['git', '-C', str(ROOT), 'cat-file', '-e', c + '^{commit}'], capture_output=True).returncode for c in commits):
+            self.skipTest('Release commits are not available in this checkout (shallow clone).')
+        changed = set(subprocess.check_output(['git', '-C', str(ROOT), 'diff', '--name-only', *commits], text=True).split())
         self.assertEqual(sorted(changed - activator.ALLOWED), [])
         self.assertIn(activator.MIGRATION_PATH, activator.ALLOWED)
         self.assertIn(activator.DECL, activator.ALLOWED)

@@ -62,7 +62,13 @@ DOCUMENTATION_PATHS = {'docs/rebuild/CHECKPOINT.md', 'docs/rebuild/owner-actions
 BILLING_BOUNDARY_PATHS = {'rebuild/core/jobs.py', 'rebuild/core/billing.py', 'rebuild/core/views.py', 'rebuild/quillmd/urls.py',
                           'rebuild/core/management/commands/audit_billing.py', 'rebuild/templates/encounter_detail.html',
                           'rebuild/core/tests/test_billing_boundary.py', 'rebuild/core/tests/test_billing_boundary_regressions.py'}
-ALLOWED = STORAGE_PATHS | DOCUMENTATION_PATHS | BILLING_BOUNDARY_PATHS
+# The plaintext reap (2026-09-18) removed the pre-migration snapshot after proving it redundant. Its merge is the rollback
+# target from then on: rollback copies the current data back from the encrypted volume and never needed the snapshot.
+REAP_PATHS = {'scripts/verify-and-reap-fresh-plaintext.py', 'rebuild/ops/test_plaintext_reap.py',
+              'docs/foundation/mutations/20260918-quillmd-plaintext-recovery-reap.md', 'rebuild/ops/test_billing_activation.py'}
+ALLOWED = STORAGE_PATHS | DOCUMENTATION_PATHS | BILLING_BOUNDARY_PATHS | REAP_PATHS
+# The target the completed act migrated (fresh-storage-migrate-20260918b.json).
+MIGRATED = '3eac783a55b6b771016da258ab2b57e0a06bdb38'
 # Helpers the target changes are materialised from the target commit; the rest must equal the tree.
 TARGET_HELPERS = {'storage': 'rebuild/ops/private_storage.py'}
 TREE_HELPERS = {'billing': 'scripts/activate-billing-policy.py', 'word': 'scripts/activate-word-beta.py',
@@ -580,6 +586,17 @@ def retained_unchanged(before):
     return True
 
 
+def rollback_source_ok(source, target, contains):
+    """The source is a migrate result whose application ran on the encrypted volume, and the rollback target is that
+    migration's own target or, for the completed migration, a later reviewed commit that contains it (the reap merge: its
+    script no longer needs the removed snapshot, and main may have moved on)."""
+    if source.get('mode') != 'migrate' or source.get('stage') not in POST_START_STAGES:
+        return False
+    if source.get('target') == target:
+        return True
+    return source.get('target') == MIGRATED and source.get('complete') is True and contains(MIGRATED, target)
+
+
 def params_common():
     return {'pg_data': PG_DATA, 'state': str(STATE), 'image_dir': IMAGE_DIR, 'image': IMAGE, 'key': KEY, 'recovery': RECOVERY,
             'mount': MOUNT, 'mapper': MAPPER, 'rollback': ROLLBACK, 'volume_script_target': VOLUME_SCRIPT_TARGET,
@@ -696,8 +713,9 @@ def main():
     else:
         require(args.from_result, 'Rollback needs --from-result naming the migrate result.')
         source = json.loads(word.checked_file(Path(args.from_result), private=True))
-        require(source.get('target') == args.target and source.get('stage') in POST_START_STAGES, 'Rollback applies only after the application ran on the encrypted volume.')
-        require(probe['image'] and probe['rollback'] and all(probe['units_installed'].values()) and probe['volume_script_installed'], 'Encrypted-volume installation is incomplete.')
+        contains = lambda ancestor, commit: subprocess.run(['git', 'merge-base', '--is-ancestor', ancestor, commit], timeout=60).returncode == 0
+        require(rollback_source_ok(source, args.target, contains), 'Rollback applies only after the application ran on the encrypted volume.')
+        require(probe['image'] and all(probe['units_installed'].values()) and probe['volume_script_installed'], 'Encrypted-volume installation is incomplete.')
     installed = APP / '.word-sdk' / billing.SDK_RELEASE
     inputs = word.expected_inputs(args.target)
     artifact = word.verify_artifact(installed / 'runtime', installed / 'runtime-manifest.json', installed / 'build-proof.json', billing.PIN, inputs)
@@ -998,7 +1016,7 @@ def execute_rollback(args, result, lock, result_path, image, common, units, bill
         result['health'] = health(release)
         result['proofs'] = identity.verify_live(release, target_storage)
         run(['bash', 'scripts/check-cotenants.sh'])
-        result['retained'] = {'encrypted_image': IMAGE, 'key': KEY, 'recovery': RECOVERY, 'pre_migration_snapshot': ROLLBACK}
+        result['retained'] = {'encrypted_image': IMAGE, 'key': KEY, 'recovery': RECOVERY}
         result.update(complete=True)
         stage(result, 'complete')
     except BaseException as error:
