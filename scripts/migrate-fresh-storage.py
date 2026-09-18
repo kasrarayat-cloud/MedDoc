@@ -65,7 +65,7 @@ BILLING_BOUNDARY_PATHS = {'rebuild/core/jobs.py', 'rebuild/core/billing.py', 're
 # The plaintext reap (2026-09-18) removed the pre-migration snapshot after proving it redundant. Its merge is the rollback
 # target from then on: rollback copies the current data back from the encrypted volume and never needed the snapshot.
 REAP_PATHS = {'scripts/verify-and-reap-fresh-plaintext.py', 'rebuild/ops/test_plaintext_reap.py',
-              'docs/foundation/mutations/20260918-quillmd-plaintext-recovery-reap.md'}
+              'docs/foundation/mutations/20260918-quillmd-plaintext-recovery-reap.md', 'rebuild/ops/test_billing_activation.py'}
 ALLOWED = STORAGE_PATHS | DOCUMENTATION_PATHS | BILLING_BOUNDARY_PATHS | REAP_PATHS
 # The target the completed act migrated (fresh-storage-migrate-20260918b.json).
 MIGRATED = '3eac783a55b6b771016da258ab2b57e0a06bdb38'

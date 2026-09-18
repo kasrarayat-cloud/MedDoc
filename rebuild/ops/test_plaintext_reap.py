@@ -71,6 +71,10 @@ class DeletionList(unittest.TestCase):
 
     def test_the_storage_act_allows_this_act_as_a_later_rollback_target(self):
         migrate = load('migrate_for_reap', MIGRATE)
+        # The reap merge is the rollback target from now on, so everything it changes since the baseline must be allowed.
+        if not subprocess.run(['git', '-C', str(ROOT), 'cat-file', '-e', migrate.BASELINE + '^{commit}'], capture_output=True).returncode:
+            changed = set(subprocess.check_output(['git', '-C', str(ROOT), 'diff', '--name-only', migrate.BASELINE, 'HEAD'], text=True).split())
+            self.assertEqual(sorted(changed - migrate.ALLOWED), [])
         self.assertEqual(migrate.ROLLBACK, self.reap.ROLLBACK)
         self.assertIn(self.reap.DECL, migrate.REAP_PATHS)
         self.assertIn(self.reap.SELF, migrate.REAP_PATHS)
