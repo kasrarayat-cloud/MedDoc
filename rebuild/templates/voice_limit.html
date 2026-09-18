@@ -9,9 +9,9 @@
     <dt>Recording length</dt><dd data-recording-length>{{ length }}</dd>
     <dt>Displayed limit</dt><dd>${{ standard_limit }}, which fits recordings up to {{ fits }}</dd>
     <dt>Limit for this recording</dt><dd data-quoted-limit>${{ quote.charge_limit }}</dd>
-    <dt>Available balance</dt><dd>${{ available }}</dd>
+    <dt>Your available balance</dt><dd data-balance-covers>{% if affordable %}Covers this limit{% else %}Does not cover this limit{% endif %}</dd>
   </dl>
-  <p class="small">You are charged exactly provider usage × 1.5 and never more than the limit you approve. If our estimate is ever short, QuillMD absorbs the difference.</p>
+  <p class="small">You are charged provider usage × 1.5 and never more than the limit you approve. If our estimate is ever short, QuillMD absorbs the difference.</p>
   {% if affordable %}
   <form method="post" action="{% url 'voice_approve' encounter.pk %}" data-submit-once>{% csrf_token %}
     <input type="hidden" name="approval" value="{{ approval }}"><input type="hidden" name="decision" value="approve">

@@ -15,7 +15,7 @@ from live activation. The application remains synthetic-only.
 | Upload/parser safety | Existing isolated parser and synthetic rejection tests; bounded Word SDK qualification in progress | Finished clinical/SDK refutation and deployed WM workflow; scanned forms deferred |
 | Tenant permissions | Existing API/file/export/job isolation tests | Independent tests across every fresh route and background authorization race |
 | Administrator MFA | Existing TOTP gate and internal tests | Recovery/enrollment/revocation procedures and independent bypass attempts |
-| Billing controls | Existing exact multiplier, locking, idempotency tests | Real Stripe test-mode exercise when keys available; account invoice reconciliation |
+| Billing controls | 1.5× multiplier capped at the binding limit held before the request, locking, idempotency tests | Real Stripe test-mode exercise when keys available; account invoice reconciliation |
 | External services | Synthetic provider use only | Required patient-data agreements, processing regions/retention and provider controls |
 | Penetration test | Internal scope/evidence exists; independent handoff prepared | Independent reviewer, approved access/window and resulting report + repaired-findings retest |
 

@@ -102,22 +102,25 @@ class UnusableOutputIsAPlatformFailureWhateverTheUserDid(RegressionFixture,TestC
 
 @override_settings(ADMIN_SITE=False,STORAGES=STORAGES,**LIVE)
 class OutputIsDeliveredOnlyForChargedRequests(RegressionFixture,TestCase):
-    def test_notes_already_full_refuse_before_any_request(self):
+    def test_a_recording_is_never_refused_on_an_estimate_of_its_transcript_length(self):
+        """The notes check happens on the real transcript: a short one fits nearly full notes and is added."""
         self.client.force_login(self.user)
-        base='Symptoms: no chest pain\n';padded=base+'P'*(50000-len(base))
+        base='Symptoms: no chest pain\n';padded=base+'P'*(49000-len(base))
         self.assertEqual(self.client.post(f'/encounters/{self.encounter.pk}/notes/',{'revision':self.encounter.revision,'notes':padded}).status_code,302)
-        with patch.dict(os.environ,VOICE_ENV),patch('core.jobs.httpx.post') as post,self.assertRaisesMessage(ValidationError,'too close to the 50,000-character limit'):
-            enqueue(self.encounter,self.user,kind='transcription',input_path=self.recording('full-notes'))
-        self.assertEqual(post.call_count,0);self.assertFalse(Job.objects.filter(kind='transcription').exists())
-        self.assertEqual(self.balances(),(Decimal('10'),Decimal('0')))
+        job,post=self.run_transcription('near-full',deepgram(TRANSCRIPT,'dg_regression_near_full'))
+        self.assertEqual(post.call_count,1);self.assertEqual(job.state,'succeeded')
+        self.encounter.refresh_from_db();self.assertIn(TRANSCRIPT,self.encounter.notes)
 
-    def test_an_unexpected_overflow_is_absorbed_and_its_transcript_is_still_delivered(self):
-        """The estimate lets the request through but the real transcript does not fit: absorbed, never discarded."""
+    def test_an_overflowing_transcript_is_delivered_and_stays_charged_never_free(self):
+        """The real transcript does not fit the notes: it is not discarded and not free; it is charged within the limit and downloadable."""
         self.client.force_login(self.user)
         base='Symptoms: no chest pain\n';padded=base+'P'*(49960-len(base))
         self.assertEqual(self.client.post(f'/encounters/{self.encounter.pk}/notes/',{'revision':self.encounter.revision,'notes':padded}).status_code,302)
         job,post=self.run_transcription('overflow',deepgram(TRANSCRIPT,'dg_regression_overflow'))
-        self.assertEqual(post.call_count,1);self.assert_absorbed_platform_failure(job)
+        self.assertEqual(post.call_count,1);self.assertEqual(job.state,'failed');self.assertTrue(job.error.startswith('not_adopted: '),job.error)
+        charged=Usage.objects.get(job=job).charged_cost;self.assertGreater(charged,0)
+        self.assertFalse(LedgerEntry.objects.filter(job=job,kind='absorbed').exists());self.assertFalse(PlatformCost.objects.filter(job=job).exists())
+        self.assertEqual(self.balances(),(Decimal('10')-charged,Decimal('0')));self.assertTrue(audit_report()['all_checks_pass'])
         self.encounter.refresh_from_db();self.assertNotIn(TRANSCRIPT,self.encounter.notes)
         page=self.client.get(f'/encounters/{self.encounter.pk}/')
         self.assertContains(page,f'/jobs/{job.pk}/result/');self.assertContains(page,'download it from the document record')

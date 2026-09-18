@@ -3,8 +3,11 @@ over-limit recordings are explained first, estimates that prove short are absorb
 
 All data is synthetic. No provider, payment or console request leaves the test database.
 """
+import importlib.util
 import json
 import os
+import time
+from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
@@ -16,7 +19,7 @@ from django.utils import timezone
 
 from core import audio
 from core.billing import reconcile_usage
-from core.jobs import cancel, enqueue, run_one, transcription_quote
+from core.jobs import cancel, enqueue, reap_abandoned_voice_uploads, run_one, transcription_quote
 from core.management.commands.audit_billing import audit_report
 from core.models import AuditEvent, Job, LedgerEntry, Membership, PlatformCost, Reservation, Usage, User, Wallet
 from core.security import private_path
@@ -61,6 +64,98 @@ class DurationIsMeasuredFromTheAudio(SimpleTestCase):
         self.assertGreaterEqual(audio.measure(bytes(data)), Decimal('2.9'))
 
 
+def chunk_at(data, name):
+    """Offset of the named box's payload (after size and type) in an MP4 file."""
+    at = data.find(name)
+    assert at >= 4, name
+    return at + 4
+
+
+class HeadersCannotUnderstateALength(SimpleTestCase):
+    """A duration is what a decoder plays. A header a decoder ignores must never shorten it; a header that disagrees is refused."""
+
+    def test_a_wav_byte_rate_that_disagrees_with_its_samples_is_refused(self):
+        wav = bytearray(wav_bytes(seconds=30, tag='forged-rate'))
+        self.assertEqual(audio.measure(bytes(wav)), Decimal('30.000'))
+        wav[28:32] = (8000 * 1000).to_bytes(4, 'little')  # byte-rate field x1000: the decoder still plays 30 s
+        with self.assertRaises(audio.UnmeasurableRecording):
+            audio.measure(bytes(wav))
+
+    def test_a_wav_data_size_smaller_than_its_samples_cannot_shorten_it(self):
+        wav = bytearray(wav_bytes(seconds=30, tag='short-size'))
+        at = wav.find(b'data') + 4
+        wav[at:at + 4] = (80).to_bytes(4, 'little')
+        self.assertEqual(audio.measure(bytes(wav)), Decimal('30.000'))
+
+    def test_malformed_structures_are_refusals_not_errors(self):
+        import struct
+        truncated_fmt = b'RIFF' + struct.pack('<I', 100) + b'WAVE' + b'fmt ' + struct.pack('<I', 16) + b'\x01\x00\x02\x00\x44\xac\x00\x00\x10\xb1'
+        for data in (truncated_fmt, wav_bytes(seconds=1, tag='cut')[:30], (FIXTURES / 'tone-3s.m4a').read_bytes()[:400],
+                     (FIXTURES / 'tone-3s.webm').read_bytes()[:90]):
+            with self.subTest(size=len(data)), self.assertRaises(audio.UnmeasurableRecording):
+                audio.measure(data)
+        with patch('core.audio.matroska', return_value=Decimal('1e40')), self.assertRaises(audio.UnmeasurableRecording):
+            audio.measure(b'\x1aE\xdf\xa3' + b'\x00' * 16)
+
+    def test_an_mp4_timescale_or_sample_table_cannot_shorten_an_aac_recording(self):
+        for name in ('tone-3s.m4a', 'tone-3s-fragmented.m4a'):
+            original = (FIXTURES / name).read_bytes()
+            data = bytearray(original)
+            at = chunk_at(data, b'mdhd') + 12  # version 0: flags, creation, modification, then the timescale
+            data[at:at + 4] = (int.from_bytes(data[at:at + 4], 'big') * 10).to_bytes(4, 'big')
+            with self.subTest(name=name, forged='timescale x10'):
+                self.assertGreaterEqual(audio.measure(bytes(data)), audio.measure(original))
+        data = bytearray((FIXTURES / 'tone-3s.m4a').read_bytes())
+        at = chunk_at(data, b'stts') + 8
+        data[at:at + 4] = (1).to_bytes(4, 'big')  # the sample table claims one access unit; stsz still lists them all
+        self.assertGreaterEqual(audio.measure(bytes(data)), Decimal('3.0'))
+
+    def test_mp4_audio_that_is_not_plain_aac_is_refused(self):
+        original = (FIXTURES / 'tone-3s.m4a').read_bytes()
+        renamed = original.replace(b'mp4a', b'Opus', 1)
+        data = bytearray(original)
+        esds = data.find(b'esds')
+        end = esds - 4 + int.from_bytes(data[esds - 4:esds], 'big')
+        es = audio.descriptor(data, esds + 8, end)
+        config = audio.descriptor(data, es[1] + 3, es[2])
+        specific = audio.descriptor(data, config[1] + 13, config[2])
+        data[specific[1]] = (23 << 3) | (data[specific[1]] & 7)  # AAC-LD: 480/512 samples per frame
+        for forged in (renamed, bytes(data)):
+            with self.subTest(size=len(forged)), self.assertRaises(audio.UnmeasurableRecording):
+                audio.measure(forged)
+
+    def test_webm_opus_is_measured_from_its_packets_whatever_the_timestamp_scale(self):
+        original = (FIXTURES / 'tone-3s.webm').read_bytes()
+        at = original.find(b'\x2a\xd7\xb1')
+        size, _, value = audio.vint(original, at + 3, False)
+        tiny = bytearray(original); tiny[value:value + size] = (1).to_bytes(size, 'big')
+        self.assertGreaterEqual(audio.measure(bytes(tiny)), Decimal('3.0'))
+        zero = bytearray(original); zero[value:value + size] = bytes(size)
+        with self.assertRaises(audio.UnmeasurableRecording):
+            audio.measure(bytes(zero))
+
+    def test_webm_audio_that_is_not_unlaced_opus_is_refused(self):
+        original = (FIXTURES / 'tone-3s.webm').read_bytes()
+        vorbis = original.replace(b'A_OPUS', b'A_OPUX', 1)
+        laced = bytearray(original)
+        block = laced.find(b'\xa3', laced.find(b'\x1f\x43\xb6\x75'))
+        size, _, body = audio.vint(laced, block + 1, False)
+        _, _, after_track = audio.vint(laced, body, False)
+        laced[after_track + 2] |= 0x02  # Xiph lacing on the first block
+        for forged, reason in ((vorbis, 'WebM audio that is not Opus'), (bytes(laced), 'laced WebM audio')):
+            with self.subTest(reason=reason), self.assertRaisesMessage(audio.UnmeasurableRecording, reason):
+                audio.measure(forged)
+
+    def test_mp3_bytes_that_are_not_standard_frames_cannot_shorten_it(self):
+        original = (FIXTURES / 'tone-3s.mp3').read_bytes()
+        middle = len(original) // 2
+        # An early 'TAG' used to end the walk; only a real trailing ID3v1 tag does now.
+        planted = original[:middle] + b'TAG' + bytes(125) + original[middle:]
+        self.assertGreaterEqual(audio.measure(planted), audio.measure(original))
+        with self.assertRaises(audio.UnmeasurableRecording):
+            audio.measure(original + bytes(range(256)) * 80)  # 20 KB that is not audio frames
+
+
 class QuoteArithmetic(SimpleTestCase):
     def config(self, **values):
         base = {'voice_rate_minute': '0.006', 'voice_rate_second': '', 'voice_max_cost': '0.20', 'discount_rate': '0', 'pricing_version': 'test'}
@@ -71,7 +166,7 @@ class QuoteArithmetic(SimpleTestCase):
         quote = transcription_quote(Decimal('60'), self.config())
         # (60 × 1.02 + 2) s × $0.0001/s = $0.00632 cost → × 1.5 = $0.00948 → rounded up to $0.01.
         self.assertEqual(quote['charge_limit'], '0.01'); self.assertTrue(quote['within_standard'])
-        self.assertEqual(quote['standard_limit'], '0.300')
+        self.assertEqual(quote['standard_limit'], '0.30')
 
     def test_the_length_that_fits_the_displayed_limit_is_consistent_with_the_quote(self):
         quote = transcription_quote(Decimal('0'), self.config())
@@ -81,6 +176,24 @@ class QuoteArithmetic(SimpleTestCase):
 
     def test_a_zero_rate_costs_and_holds_nothing(self):
         self.assertEqual(transcription_quote(Decimal('30'), self.config(voice_rate_minute='0'))['charge_limit'], '0')
+
+    def test_the_quote_reads_the_same_rate_rule_settlement_does(self):
+        """With both rates configured, settlement prices by the per-minute rate; the quote must too, or its check is not the charge."""
+        both = self.config(voice_rate_minute='0.0077', voice_rate_second='0.00001')
+        self.assertEqual(transcription_quote(Decimal('1800'), both), transcription_quote(Decimal('1800'), self.config(voice_rate_minute='0.0077')))
+        self.assertFalse(transcription_quote(Decimal('1800'), both)['within_standard'])
+        seconds_only = self.config(voice_rate_minute='', voice_rate_second='0.0001')
+        self.assertEqual(transcription_quote(Decimal('60'), seconds_only)['charge_limit'], '0.01')
+
+    def test_the_displayed_limit_is_the_enforced_one_to_the_cent(self):
+        """$0.25 x 1.5 = $0.375 is shown and enforced as $0.37: never a displayed amount above the enforced one."""
+        config = self.config(voice_max_cost='0.25', voice_rate_minute='0.0043')
+        quote = transcription_quote(Decimal('0'), config)
+        self.assertEqual(quote['standard_limit'], '0.37')
+        fits = Decimal(quote['fits_seconds'])
+        self.assertTrue(transcription_quote(fits, config)['within_standard'])
+        self.assertLessEqual(Decimal(transcription_quote(fits, config)['charge_limit']), Decimal('0.37'))
+        self.assertFalse(transcription_quote(fits + 60, config)['within_standard'])
 
 
 @override_settings(ADMIN_SITE=False, STORAGES=STORAGES, **LIVE)
@@ -271,3 +384,91 @@ class RecordingChargeLimit(BoundaryFixture, TestCase):
     def test_welcome_credit_is_unchanged_by_the_limit(self):
         self.assertEqual(self.balances(), (Decimal('10'), Decimal('0')))
         self.assertEqual(LedgerEntry.objects.filter(wallet=self.promo, kind='welcome').count(), 1)
+
+    def test_any_missing_audio_beyond_two_seconds_is_marked_in_the_notes_and_the_download(self):
+        # Five minutes: the old 3% + 1 s tolerance let 10 s go unmarked here.
+        for tag, duration, marked in (('miss-3s', 297, True), ('miss-1s', 299, False)):
+            with self.subTest(tag=tag):
+                self.upload(STANDARD_ENV, seconds=300, tag=tag)
+                job, _ = self.process(Job.objects.get(encounter=self.encounter, state='queued'),
+                                      return_value=deepgram(TRANSCRIPT, 'dg_' + tag, duration=duration))
+                self.encounter.refresh_from_db()
+                stored = json.loads(private_path(job.result_path).read_text())['transcript']
+                marker = '[Transcription incomplete: the provider processed 4:57 of this 5:00 recording; the final 0:03 was not transcribed.]'
+                self.assertEqual(marker in stored, marked); self.assertTrue(stored.startswith(TRANSCRIPT))
+                self.assertEqual(self.encounter.notes.count('[Transcription incomplete'), 1)  # the 3 s run's marker; none for 1 s
+
+    def test_the_limit_page_says_whether_the_balance_covers_it_never_the_amount(self):
+        response = self.upload(EXPENSIVE_ENV, tag='covers')
+        self.assertContains(response, 'Covers this limit', status_code=409)
+        self.assertNotContains(response, '$10', status_code=409); self.assertNotContains(response, 'Available balance $', status_code=409)
+        Wallet.objects.filter(pk=self.promo.pk).update(balance=Decimal('1'))
+        response = self.upload(EXPENSIVE_ENV, tag='does-not-cover')
+        self.assertContains(response, 'Does not cover this limit', status_code=409)
+        Wallet.objects.filter(pk=self.promo.pk).update(balance=Decimal('0.001'))
+        self.upload(STANDARD_ENV, tag='refused')
+        messages = [str(m) for m in self.client.get(f'/encounters/{self.encounter.pk}/').context['messages']]
+        refusal = [m for m in messages if 'needs up to $0.01 held' in m]
+        self.assertTrue(refusal, messages); self.assertNotIn('0.001', refusal[0]); self.assertNotIn('is available', refusal[0])
+
+    def test_a_shorter_segment_never_removes_a_recording_an_approval_queued(self):
+        response = self.upload(EXPENSIVE_ENV, tag='approved-then-shorter')
+        self.approve(response)
+        job = Job.objects.get(encounter=self.encounter, kind='transcription')
+        self.approve(response, decision='shorter')
+        self.assertTrue(private_path(job.input_path).is_file())
+        messages = [str(m) for m in self.client.get(f'/encounters/{self.encounter.pk}/').context['messages']]
+        self.assertTrue(any('already approved and queued' in m for m in messages), messages)
+        self.assertFalse(any('Nothing was sent' in m for m in messages), messages)
+
+    def test_an_expired_quote_cannot_be_approved_but_its_upload_can_still_be_removed(self):
+        response = self.upload(EXPENSIVE_ENV, tag='expired')
+        later = time.time() + 1801
+        with patch('django.core.signing.time.time', return_value=later):
+            self.approve(response)
+            self.assertFalse(Job.objects.filter(kind='transcription').exists())
+            self.assertEqual(len(list(private_path('audio').iterdir())), 1)
+            self.approve(response, decision='shorter')
+        self.assertEqual(list(private_path('audio').iterdir()), [])
+
+    def test_an_approval_whose_recording_vanished_is_refused_not_an_error(self):
+        response = self.upload(EXPENSIVE_ENV, tag='vanishing')
+        # The file disappears after the view's hash check and before enqueue reads it (a concurrent "shorter" decision).
+        with patch('core.jobs.private_path', return_value=Path('/nonexistent/quillmd-vanished.wav')):
+            answer = self.approve(response)
+        self.assertEqual(answer.status_code, 302); self.assertFalse(Job.objects.filter(kind='transcription').exists())
+        self.assertFalse(Reservation.objects.exists())
+        messages = [str(m) for m in self.client.get(f'/encounters/{self.encounter.pk}/').context['messages']]
+        self.assertTrue(any('no longer available' in m for m in messages), messages)
+
+    def test_uploads_nobody_approved_are_removed_after_the_approval_window(self):
+        abandoned = self.upload(EXPENSIVE_ENV, tag='abandoned')
+        approved = self.upload(EXPENSIVE_ENV, tag='approved-and-kept')
+        self.approve(approved)
+        kept_by_job = Job.objects.get(encounter=self.encounter, kind='transcription').input_path
+        self.assertEqual(len(list(private_path('audio').iterdir())), 2)
+        self.assertEqual(reap_abandoned_voice_uploads(), 0)  # still inside the window
+        with patch('core.jobs.timezone.now', return_value=timezone.now() + timedelta(minutes=41)):
+            self.assertEqual(reap_abandoned_voice_uploads(), 1)
+            self.assertEqual(reap_abandoned_voice_uploads(), 0)
+        self.assertEqual([p.name for p in private_path('audio').iterdir()], [Path(kept_by_job).name])
+        self.assertEqual(AuditEvent.objects.filter(action='voice.over_limit_upload_removed').count(), 1)
+        self.assertIsNotNone(abandoned.context['approval'])
+
+    def test_the_backup_invariant_accepts_a_capped_charge_and_refuses_an_unexplained_one(self):
+        from django.db import connection
+        spec = importlib.util.spec_from_file_location('backup_restore', Path(__file__).resolve().parents[2] / 'ops' / 'backup_restore.py')
+        backup = importlib.util.module_from_spec(spec); spec.loader.exec_module(backup)
+        self.upload(STANDARD_ENV, tag='capped')
+        job, _ = self.process(Job.objects.get(encounter=self.encounter, state='queued'),
+                              return_value=deepgram(TRANSCRIPT, 'dg_limit_capped_invariant', duration=6000))
+        self.assertTrue(PlatformCost.objects.filter(job=job, kind='absorbed_over_limit').exists())
+        with connection.cursor() as cursor:
+            cursor.execute(backup.INVARIANTS['usage_multiplier']); self.assertEqual(cursor.fetchone()[0], 0)
+        stray = Job.objects.create(encounter=self.encounter, user=self.user, kind='transcription', revision=self.encounter.revision,
+                                   request_key='synthetic-invariant-stray', config={})
+        Usage.objects.create(job=stray, user=self.user, department=self.encounter.department, organization=self.encounter.department.organization,
+                             payer=f'user:{self.user.pk}', provider='deepgram:nova-3-medical', units={}, rates={},
+                             actual_cost=Decimal('1'), charged_cost=Decimal('0.5'), simulated=False)
+        with connection.cursor() as cursor:
+            cursor.execute(backup.INVARIANTS['usage_multiplier']); self.assertEqual(cursor.fetchone()[0], 1)

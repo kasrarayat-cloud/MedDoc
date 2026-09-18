@@ -1,13 +1,16 @@
 """Recording duration measured before any paid transcription request.
 
 Pure Python, bounded by the 15 MB upload limit and explicit iteration caps; no media library or subprocess touches
-the untrusted file. Durations come from the audio itself where the container allows it, not from a header that
-could understate it:
+the untrusted file. A duration is what a decoder would play, never a header field a decoder ignores (a header could
+understate the length and so the charge limit):
 
-  WAV (PCM or float)  data bytes / byte rate
-  MP3                 the sum of every MPEG audio frame's samples
-  MP4 / M4A           sample tables (stts) and movie fragments (trun), plus 1024 samples per AAC frame
-  WebM / Matroska     block timestamps and, for Opus, the sum of every packet's duration (the larger wins)
+  WAV (PCM or float)  every byte after the data header / (sample rate x block size); an inconsistent byte-rate field is refused
+  MP3                 the sum of every MPEG audio frame's samples; bytes that are not standard frames count at the lowest
+                      bitrate seen, and a file that is mostly not standard frames is refused
+  MP4 / M4A           AAC only: every access unit (the larger of stts and stsz, plus fragments) x its frame length, at the
+                      sample rate of the stream's own AudioSpecificConfig, never the container timescale alone
+  WebM / Matroska     Opus only: the sum of every packet's duration from its table of contents (and the block timestamps,
+                      if larger); laced blocks, non-Opus audio and blocks before the track list are refused
 
 Anything else raises UnmeasurableRecording: without a duration the charge limit cannot be confirmed, so nothing is sent.
 """
@@ -18,6 +21,7 @@ from django.core.exceptions import ValidationError
 
 MAX_BYTES = 15 * 1024 * 1024
 MAX_ITEMS = 400000
+MAX_SECONDS = Decimal(24 * 3600)
 
 
 class UnmeasurableRecording(ValidationError):
@@ -35,42 +39,54 @@ def measure(data):
         refuse('empty file')
     if len(data) > MAX_BYTES:
         refuse('larger than 15 MB')
-    if data[:4] == b'RIFF' and data[8:12] == b'WAVE':
-        seconds = wav(data)
-    elif data[:4] == b'\x1aE\xdf\xa3':
-        seconds = matroska(data)
-    elif data[4:8] == b'ftyp':
-        seconds = mp4(data)
-    elif data[:3] == b'ID3' or (len(data) > 1 and data[0] == 0xFF and data[1] & 0xE0 == 0xE0):
-        seconds = mp3(data)
-    else:
-        refuse('unsupported format')
-    if not seconds or seconds <= 0:
-        refuse('no audio found')
-    return seconds.quantize(Decimal('0.001'))
+    try:
+        if data[:4] == b'RIFF' and data[8:12] == b'WAVE':
+            seconds = wav(data)
+        elif data[:4] == b'\x1aE\xdf\xa3':
+            seconds = matroska(data)
+        elif data[4:8] == b'ftyp':
+            seconds = mp4(data)
+        elif data[:3] == b'ID3' or (len(data) > 1 and data[0] == 0xFF and data[1] & 0xE0 == 0xE0):
+            seconds = mp3(data)
+        else:
+            refuse('unsupported format')
+        if not seconds or seconds <= 0:
+            refuse('no audio found')
+        if seconds > MAX_SECONDS:
+            refuse('implausible length')
+        return seconds.quantize(Decimal('0.001'))
+    except UnmeasurableRecording:
+        raise
+    except (struct.error, IndexError, KeyError, ValueError, OverflowError, ArithmeticError, RecursionError):
+        # A malformed or truncated structure is a refusal like any other, never an unhandled error.
+        refuse('unreadable structure')
 
 
 # ── WAV ────────────────────────────────────────────────────────────────────
 def wav(data):
-    position, fmt, size = 12, None, None
+    position, fmt, start = 12, None, None
     for _ in range(64):
         if position + 8 > len(data):
             break
         chunk, length = data[position:position + 4], struct.unpack('<I', data[position + 4:position + 8])[0]
         body = position + 8
-        if chunk == b'fmt ' and length >= 16:
+        if chunk == b'fmt ':
+            if length < 16 or body + 16 > len(data):
+                refuse('WAV format chunk truncated')
             fmt = struct.unpack('<HHIIHH', data[body:body + 16])
         elif chunk == b'data':
-            available = len(data) - body
-            size = available if length in (0, 0xFFFFFFFF) else min(length, available)
+            start = body
             break
         position = body + length + (length & 1)
-    if fmt is None or size is None:
+    if fmt is None or start is None:
         refuse('WAV without format or audio data')
     tag, channels, rate, byte_rate, block, bits = fmt
-    if tag not in (1, 3, 0xFFFE) or not channels or not rate or not byte_rate:
-        refuse('compressed or invalid WAV encoding')
-    return Decimal(size) / Decimal(byte_rate)
+    # A decoder plays the samples at rate x block bytes per second whatever the byte-rate field says, and may read past a
+    # declared data size, so both come from the samples: every byte after the data header, at rate x block.
+    if (tag not in (1, 3, 0xFFFE) or not 1 <= channels <= 8 or not 4000 <= rate <= 384000 or bits not in (8, 16, 24, 32, 64)
+            or block != channels * (bits // 8) or byte_rate != rate * block):
+        refuse('compressed, inconsistent or invalid WAV encoding')
+    return Decimal(len(data) - start) / Decimal(rate * block)
 
 
 # ── MP3 ────────────────────────────────────────────────────────────────────
@@ -111,23 +127,28 @@ def mp3(data):
         size = (data[6] & 0x7F) << 21 | (data[7] & 0x7F) << 14 | (data[8] & 0x7F) << 7 | (data[9] & 0x7F)
         position = 10 + size + (10 if data[5] & 0x10 else 0)
     start = position
-    seconds, frames, audio_bytes, steps = Decimal(0), 0, 0, 0
+    seconds, frames, audio_bytes, steps, trailer, slowest = Decimal(0), 0, 0, 0, 0, Decimal(0)
     while position < len(data) and steps < MAX_ITEMS:
         steps += 1
         frame = mp3_frame(data, position)
         if frame and frame[0] >= 4:
             length, samples, rate = frame
             seconds += Decimal(samples) / Decimal(rate)
+            slowest = max(slowest, Decimal(samples) / Decimal(rate) / Decimal(length))
             frames += 1
             audio_bytes += length
             position += length
             continue
-        if data[position:position + 3] == b'TAG':
+        if data[position:position + 3] == b'TAG' and len(data) - position == 128:
+            trailer = 128  # an ID3v1 tag, only as the file's last 128 bytes
             break
         position += 1  # resynchronise byte by byte; garbage is bounded by the file size and the step cap
-    if frames < 2 or audio_bytes < (len(data) - start) // 2:
-        refuse('MP3 without enough valid audio frames')
-    return seconds
+    # Bytes that are not standard frames (free-format frames, unknown data, anything past the step cap) could still be decoded,
+    # so they are bounded and counted as audio at the lowest bitrate seen: they can only lengthen the measurement.
+    uncounted = len(data) - start - trailer - audio_bytes
+    if frames < 2 or uncounted > max(16384, (len(data) - start) // 50):
+        refuse('MP3 that is not made of standard audio frames')
+    return seconds + Decimal(max(uncounted, 0)) * slowest
 
 
 # ── MP4 / M4A ──────────────────────────────────────────────────────────────
@@ -165,7 +186,8 @@ def mp4(data):
         start, end = body
         payload = data[start:end]
         if kind == b'trak':
-            current['track'] = {'id': None, 'handler': None, 'timescale': 0, 'stts_seconds_units': 0, 'samples': 0, 'codec': None, 'end': end}
+            current['track'] = {'id': None, 'handler': None, 'timescale': 0, 'stts_seconds_units': 0, 'samples': 0, 'stsz_samples': 0,
+                                'codec': None, 'aac': None, 'end': end}
             tracks[start] = current['track']
             return
         track = current.get('track')
@@ -179,6 +201,10 @@ def mp4(data):
             track['timescale'] = struct.unpack('>I', payload[20:24] if payload[0] == 1 else payload[12:16])[0]
         elif kind == b'stsd' and track is not None and len(payload) >= 16:
             track['codec'] = payload[12:16]
+            if track['codec'] == b'mp4a':
+                track['aac'] = aac_parameters(payload[8:])
+        elif kind == b'stsz' and track is not None and len(payload) >= 12:
+            track['stsz_samples'] = struct.unpack('>I', payload[8:12])[0]
         elif kind == b'stts' and track is not None and len(payload) >= 8:
             count = struct.unpack('>I', payload[4:8])[0]
             if count > MAX_ITEMS or 8 + count * 8 > len(payload):
@@ -218,21 +244,115 @@ def mp4(data):
             entry[1] += count
 
     boxes(data, 0, len(data), 0, sink, [0])
-    audio = [t for t in tracks.values() if t['handler'] == b'soun' and t['timescale']]
+    audio = [t for t in tracks.values() if t['handler'] == b'soun']
     if not audio:
         refuse('MP4 without an audio track')
     best = Decimal(0)
     for track in audio:
-        units, samples = track['stts_seconds_units'], track['samples']
+        # Only AAC is measured: its access units decode to a fixed frame length at the rate its own configuration states,
+        # which a decoder uses whatever the container's timescale or sample table claims.
+        if track['codec'] != b'mp4a' or track['aac'] is None:
+            refuse('MP4 audio that is not AAC')
+        rate, frame = track['aac']
+        units = track['stts_seconds_units']
+        samples = max(track['samples'], track['stsz_samples'])
         if track['id'] in fragments:
             units += fragments[track['id']][0]
             samples += fragments[track['id']][1]
-        seconds = Decimal(units) / Decimal(track['timescale'])
-        if track['codec'] == b'mp4a':
-            # An AAC access unit always decodes to 1024 samples; a sample table that claims less cannot shorten it.
-            seconds = max(seconds, Decimal(samples * 1024) / Decimal(track['timescale']))
+        seconds = Decimal(samples * frame) / Decimal(rate)
+        if track['timescale']:
+            seconds = max(seconds, Decimal(units) / Decimal(track['timescale']))
         best = max(best, seconds)
     return best
+
+
+AAC_RATES = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350]
+
+
+def descriptor(data, position, end):
+    """(tag, body start, body end) of an MPEG-4 descriptor, or None."""
+    if position >= end:
+        return None
+    tag, position, size = data[position], position + 1, 0
+    for _ in range(4):
+        if position >= end:
+            return None
+        byte = data[position]
+        position += 1
+        size = size << 7 | byte & 0x7F
+        if not byte & 0x80:
+            break
+    return (tag, position, position + size) if position + size <= end else None
+
+
+def aac_parameters(entries):
+    """(core sample rate, samples per access unit) from the first sample entry's esds, or None when it is not MPEG-4 AAC."""
+    if len(entries) < 36:
+        return None
+    size = struct.unpack('>I', entries[0:4])[0]
+    entry = entries[:min(size, len(entries))]
+    version = struct.unpack('>H', entry[16:18])[0]
+    children = 36 + {0: 0, 1: 16, 2: 36}.get(version, 0)
+    found = []
+
+    def find(kind, body, depth):
+        if kind == b'esds' and not found:
+            found.append(entry[body[0]:body[1]])
+
+    boxes(entry, children, len(entry), 0, find, [0])
+    if not found:
+        wave = entry.find(b'wave', children)  # QuickTime v1 keeps esds inside a 'wave' box
+        if wave >= 4:
+            boxes(entry, wave + 4, len(entry), 0, find, [0])
+    if not found or len(found[0]) < 5:
+        return None
+    esds = found[0]
+    es = descriptor(esds, 4, len(esds))
+    if not es or es[0] != 0x03:
+        return None
+    flags, position = esds[es[1] + 2], es[1] + 3
+    if flags & 0x80:  # depends-on stream id
+        position += 2
+    if flags & 0x40:  # URL: length byte, then the URL
+        position += 1 + esds[position]
+    if flags & 0x20:  # OCR stream id
+        position += 2
+    config = descriptor(esds, position, es[2])
+    if not config or config[0] != 0x04 or esds[config[1]] != 0x40:  # 0x40: MPEG-4 audio
+        return None
+    specific = descriptor(esds, config[1] + 13, config[2])
+    if not specific or specific[0] != 0x05:
+        return None
+    bits = BitReader(esds[specific[1]:specific[2]])
+
+    def object_type():
+        value = bits.read(5)
+        return 32 + bits.read(6) if value == 31 else value
+
+    def frequency():
+        index = bits.read(4)
+        return bits.read(24) if index == 15 else AAC_RATES[index]
+
+    kind, rate = object_type(), frequency()
+    bits.read(4)  # channel configuration
+    if kind in (5, 29):  # SBR / parametric stereo wrap an AAC core; the frame length follows the core rate
+        frequency()
+        kind = object_type()
+    if kind not in (1, 2, 4) or not 7350 <= rate <= 96000:
+        return None  # AAC-LD/ELD and other object types use other frame lengths; they are not measured
+    return rate, 960 if bits.read(1) else 1024
+
+
+class BitReader:
+    def __init__(self, data):
+        self.data, self.position = data, 0
+
+    def read(self, count):
+        value = 0
+        for _ in range(count):
+            value = value << 1 | self.data[self.position >> 3] >> (7 - (self.position & 7)) & 1
+            self.position += 1
+        return value
 
 
 # ── WebM / Matroska ────────────────────────────────────────────────────────
@@ -272,14 +392,16 @@ def opus_packet_seconds(packet):
 
 def matroska(data):
     state = {'scale': 1000000, 'audio': set(), 'opus': set(), 'track': {}, 'cluster': 0, 'first': None, 'last': None,
-             'deltas': [], 'opus_seconds': Decimal(0), 'blocks': 0, 'laced': False}
+             'deltas': [], 'opus_seconds': Decimal(0), 'blocks': 0, 'laced': False, 'tracks_seen': False}
     counter = [0]
 
     def block(payload):
         track, _, at = vint(payload, 0, False)
         if track is None or at + 3 > len(payload):
             return
-        if state['audio'] and track not in state['audio']:
+        if not state['tracks_seen']:
+            refuse('WebM audio before its track list')
+        if track not in state['audio']:
             return
         relative = struct.unpack('>h', payload[at:at + 2])[0]
         flags = payload[at + 2]
@@ -308,6 +430,8 @@ def matroska(data):
                 return position  # an unknown-size cluster ends where the next top-level element begins
             stop = end if unknown else min(body + size, end)
             if element in MASTERS:
+                if element == TRACKS:
+                    state['tracks_seen'] = True
                 if element == 0xAE:
                     state['track'] = {}
                 if element == CLUSTER:
@@ -323,7 +447,9 @@ def matroska(data):
                 continue
             value = data[body:stop]
             if element == 0x2AD7B1:
-                state['scale'] = int.from_bytes(value, 'big') or 1000000
+                state['scale'] = int.from_bytes(value, 'big')
+                if not 1 <= state['scale'] <= 1000000000:
+                    refuse('WebM timestamp scale out of range')
             elif element == 0xE7:
                 state['cluster'] = int.from_bytes(value, 'big')
             elif element == 0xD7:
@@ -338,9 +464,14 @@ def matroska(data):
         return position
 
     walk(0, len(data), None)
-    if not state['blocks']:
+    # Only unlaced Opus is measured: each packet's table of contents states exactly what a decoder plays, whatever the
+    # timestamps or the timestamp scale claim. Browser recordings are unlaced Opus.
+    if not state['audio'] or state['audio'] - state['opus']:
+        refuse('WebM audio that is not Opus')
+    if state['laced']:
+        refuse('laced WebM audio')
+    if not state['blocks'] or state['opus_seconds'] <= 0:
         refuse('WebM without audio blocks')
     tail = sorted(state['deltas'])[len(state['deltas']) // 2] if state['deltas'] else 0
     by_time = Decimal(state['last'] - state['first'] + tail) * Decimal(state['scale']) / Decimal(1000000000)
-    by_packets = state['opus_seconds'] if not state['laced'] else Decimal(0)
-    return max(by_time, by_packets)
+    return max(by_time, state['opus_seconds'])

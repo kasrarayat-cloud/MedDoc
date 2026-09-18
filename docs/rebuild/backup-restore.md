@@ -16,6 +16,10 @@ Unreferenced scratch files, logs, file-mail outbox and provider/service credenti
 are excluded. This is a database snapshot with matching referenced files, not an
 atomic filesystem snapshot. Avoid schema deployments during capture.
 
+Since migration 0013 (2026-09-18) the `usage_multiplier` invariant is the capped charge rule `audit_billing` checks: each
+usage row's charge equals 1.5 × its cost, capped at the settled hold for its request, and any excess appears exactly as one
+`absorbed_over_limit` platform cost. Exercises recorded below from before that date checked the exact 1.5 × multiplier.
+
 Every dump/file and the manifest are encrypted and authenticated with the
 established `cryptography.Fernet` implementation. File paths and document hashes
 exist only inside the encrypted manifest. A nonclinical summary records totals

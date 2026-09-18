@@ -78,8 +78,9 @@ def reserve(job,maximum_cost=None,*,charge_limit=None):
     locked={w.pk:w for w in Wallet.objects.select_for_update().filter(pk__in=[promo.pk,payer.pk]).order_by('pk')}
     available=sum((w.balance-w.reserved for w in locked.values()),ZERO)
     if available<maximum_charge:
-        raise ValidationError(f'Insufficient available balance: this request needs up to ${maximum_charge.normalize():f} held and '
-                              f'${max(available,ZERO).normalize():f} is available. No provider request was made.')
+        # The requester sees what the request needs, never the payer's balance: an organization's paid funds are shown to owners only.
+        raise ValidationError(f'Insufficient available balance: this request needs up to ${maximum_charge.normalize():f} held, '
+                              'more than the available balance. No provider request was made.')
     remaining=maximum_charge
     for wallet in [locked[promo.pk],locked[payer.pk]]:
         amount=min(wallet.balance-wallet.reserved,remaining)

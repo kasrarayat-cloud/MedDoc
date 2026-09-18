@@ -181,11 +181,13 @@ class PlatformFailuresAreAbsorbed(BoundaryFixture,TestCase):
         self.encounter.refresh_from_db();self.assertEqual(self.encounter.notes,'Symptoms: no chest pain')
         checks=self.assert_absorbed(job);self.assertTrue(checks['failed_settled_usage_absorbed'])
 
-    def test_transcript_over_the_note_limit_is_a_platform_failure(self):
+    def test_transcript_over_the_note_limit_is_delivered_and_stays_charged(self):
+        """Usable output the notes cannot take is never discarded and never free: charged within the limit, downloadable."""
         job=self.transcription_job('overflow',deepgram('x'*50000,'dg_boundary_overflow'))
-        self.assertEqual(job.state,'failed');self.assertEqual(job.error,'platform_failure: '+OVERFLOW_ERROR)
+        self.assertEqual(job.state,'failed');self.assertEqual(job.error,'not_adopted: '+OVERFLOW_ERROR)
         self.encounter.refresh_from_db();self.assertEqual(self.encounter.notes,'Symptoms: no chest pain')
-        checks=self.assert_absorbed(job);self.assertTrue(checks['failed_settled_usage_absorbed'])
+        checks=self.assert_charged_never_absorbed(job,Usage.objects.get(job=job).charged_cost)
+        self.assertTrue(checks['user_declined_output_remains_charged'])
 
 
 @override_settings(ADMIN_SITE=False,STORAGES=STORAGES,**LIVE)
