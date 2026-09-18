@@ -1,0 +1,15 @@
+[Unit]
+Description=Open + bind QuillMD fresh encrypted volume (database, state, temp)
+DefaultDependencies=no
+Before=docker.service
+After=local-fs.target
+RequiresMountsFor=/opt/meddoc-pro/secrets /var/lib/docker /var/lib
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/quillmd-fresh-volume open
+ExecStop=/usr/local/bin/quillmd-fresh-volume close
+
+[Install]
+WantedBy=multi-user.target

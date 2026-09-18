@@ -87,7 +87,7 @@ echo "── 1. the units started AT BOOT, not by hand ────────�
 # window was started by a human and proves nothing about ordering.
 BOOT_GRACE=120
 boot_epoch=$(inhost "date -d \"\$(uptime -s)\" +%s")
-for u in pgdata-encrypted miniodata-encrypted; do
+for u in pgdata-encrypted miniodata-encrypted quillmd-fresh-volume; do
   st=$(inhost "systemctl is-active $u.service")
   since=$(inhost "systemctl show -p ActiveEnterTimestamp --value $u.service")
   if [ "$st" != "active" ]; then
@@ -110,9 +110,18 @@ echo
 
 echo "── 2. mappings + mounts ────────────────────────────────────────────"
 inhost "lsblk -o NAME,TYPE,FSTYPE,MOUNTPOINT | grep -E 'loop|crypt' || echo '(no crypt devices!)'"
-for m in /mnt/pgdata-encrypted /mnt/miniodata-encrypted; do
+for m in /mnt/pgdata-encrypted /mnt/miniodata-encrypted /mnt/quillmd-fresh-encrypted; do
   s=$(inhost "findmnt -no SOURCE $m")
   [ -n "$s" ] && note "🟢 $m ← $s" || bad "$m is NOT mounted"
+done
+# The fresh database directory and state directory must be BINDS of the encrypted
+# volume, never the plain root filesystem: a missing bind is the plaintext case.
+for b in /var/lib/docker/volumes/quillmd_fresh_pg/_data /var/lib/quillmd; do
+  src=$(inhost "findmnt -no SOURCE $b")
+  case "$src" in
+    /dev/mapper/quillmd-fresh-encrypted*) note "🟢 $b ← $src (encrypted bind)" ;;
+    *) bad "$b is NOT bound to the encrypted volume (source: '${src:-none}')" ;;
+  esac
 done
 echo
 
@@ -191,16 +200,19 @@ for u in quillmd-fresh-doctor quillmd-fresh-admin quillmd-fresh-worker; do
   fi
 done
 fresh_db=$(docker inspect -f '{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}|{{.HostConfig.RestartPolicy.Name}}' quillmd-fresh-postgres 2>/dev/null) || fresh_db="absent|none|none"
+# Since the storage migration the container is started ONLY by
+# quillmd-fresh-database.service (restart policy 'no'), so a persistent docker
+# restart policy would itself be a finding: it could start the database on a
+# closed volume.
+db_unit=$(inhost "systemctl is-active quillmd-fresh-database.service")
 case "$fresh_db" in
-  'running|healthy|unless-stopped'|'running|healthy|always')
-    note "🟢 quillmd-fresh-postgres → healthy with a persistent restart policy" ;;
-  'running|none|unless-stopped'|'running|none|always')
-    if docker exec quillmd-fresh-postgres pg_isready -U quillmd_fresh -d quillmd_fresh >/dev/null 2>&1; then
-      note "🟢 quillmd-fresh-postgres → pg_isready passed; restart enabled (no Docker healthcheck)"
+  'running|none|no'|'running|healthy|no')
+    if [ "$db_unit" = "active" ] && docker exec quillmd-fresh-postgres pg_isready -U quillmd_fresh -d quillmd_fresh >/dev/null 2>&1; then
+      note "🟢 quillmd-fresh-postgres → ready, started by quillmd-fresh-database.service (restart policy no)"
     else
-      bad "quillmd-fresh-postgres → pg_isready failed (no Docker healthcheck)"
+      bad "quillmd-fresh-postgres → running but database unit is '$db_unit' or pg_isready failed"
     fi ;;
-  *) bad "quillmd-fresh-postgres → $fresh_db (expected running / ready / restart enabled)" ;;
+  *) bad "quillmd-fresh-postgres → $fresh_db (expected running / ready / restart policy no, under quillmd-fresh-database.service='$db_unit')" ;;
 esac
 for spec in "doctor:9130" "admin:9131"; do
   surface="${spec%%:*}"; port="${spec##*:}"
