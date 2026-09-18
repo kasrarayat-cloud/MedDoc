@@ -178,6 +178,25 @@ def check_schema(before, after):
     require([row for row in after if (row['table_name'], row['column_name']) != key] == before, 'Existing columns changed beyond the declared one.')
 
 
+def answer_acceptable(answer, running_release):
+    """A surface may be DOWN (the refused act stops them) or up as the recorded running release.
+
+    Anything else — a different release, or real patient data — is unexplained and must refuse.
+    """
+    return answer is None or (answer.get('release') == running_release
+                              and answer.get('data_mode') == 'synthetic-only')
+
+
+def surfaces_agree(health):
+    """Both up, or both down. Never one of each.
+
+    ⚠️ This was first written `any(answer is None) or all(answer is not None)`, which is TRUE FOR
+    EVERY POSSIBLE INPUT, including the one-up-one-down case it was written to catch. It is a
+    function now so its test exercises this code rather than a copy of it that can drift.
+    """
+    return all(answer is None for answer in health) or all(answer is not None for answer in health)
+
+
 def guard_enabled():
     """'O' = enabled. The migration suspends `encounter_scope` for the backfill statement; if it ever failed to restore
     it, every finalized clinical document on this system would silently become editable."""
@@ -245,13 +264,9 @@ def main():
                                              f'http://127.0.0.1:{port}/health/'])))
         except (subprocess.CalledProcessError, json.JSONDecodeError):
             health.append(None)
-    require(all(answer is None or (answer.get('release') == RUNNING_RELEASE
-                                   and answer.get('data_mode') == 'synthetic-only') for answer in health),
+    require(all(answer_acceptable(answer, RUNNING_RELEASE) for answer in health),
             'A private service is answering as something other than the recorded running release.')
-    # Both up, or both down. `any(is None) or all(is not None)` — which is what this said first — is true for every
-    # possible input, including the one it was meant to catch.
-    require(all(answer is None for answer in health) or all(answer is not None for answer in health),
-            'The two surfaces disagree about whether they are running.')
+    require(surfaces_agree(health), 'The two surfaces disagree about whether they are running.')
     backup = previous.validate_restore_report(args.backup_report)
     require(backup.get('decrypted_files_written') == 0 and backup.get('restore_database_on_tmpfs_without_swap') is True,
             'The restore proof must come from the plaintext-free restore check.')

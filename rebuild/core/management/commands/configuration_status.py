@@ -48,6 +48,14 @@ class Command(BaseCommand):
         self.stdout.write('Private credentials (status only):')
         for name, value, recogniser in secrets:
             self.stdout.write(f'  {name}: {shape(value, recogniser)}')
+        # ffprobe measures the payload submitted to the transcription provider. Without it every
+        # recording degrades to 'coverage UNKNOWN' — correct, but it belongs on an operator's screen
+        # rather than being discovered in a doctor's note.
+        import shutil
+        probe = shutil.which('ffprobe')
+        self.stdout.write('Media probe:')
+        self.stdout.write('  ffprobe: %s' % (probe if probe else
+                          'NOT INSTALLED — transcription coverage will report UNKNOWN for every recording'))
         self.stdout.write('Release gates:')
         self.stdout.write(f'  SYNTHETIC_ONLY: {settings.SYNTHETIC_ONLY}')
         self.stdout.write(f'  STRIPE_LIVE_ENABLED: {settings.STRIPE_LIVE_ENABLED}')

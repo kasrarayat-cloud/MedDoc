@@ -399,3 +399,87 @@ by starting the services on a release whose schema was not there yet.
 independent key custody, native Word acceptance, the external integrations, the
 owner's provider cost evidence, and the owner decision on the legacy data
 services holding the seven waitlist rows.
+
+## 2026-09-18 — integrity and cleanup milestone
+
+**Running release `5f8050df5e79c0d7948185850914f1c161fcbc1f` on all three surfaces**, synthetic-only,
+public routes in maintenance. Verified, not assumed: the doctor and admin surfaces answer that release
+over HTTP, and the **worker** — which has no HTTP surface — is covered by the activation's own identity
+proof bound to pid 322901, still the live process. Repository `23c05d4f`, two documentation commits
+ahead of the running release, no runtime file differing.
+
+### The four checks that passed without exercising their conditions
+
+Recorded in full at `docs/rebuild/checks-that-passed-without-looking.md`: each check, its intended
+guarantee, the missing input, and whether a release shipped on it. One did — the migration proof, whose
+every fixture encounter was a draft, so `encounter_scope` was never reached; PR #1199 merged as
+`475a5925` on the strength of it and the activation then failed against the live database.
+
+`rebuild/exercised.py` turns the precondition into a declared, failing assertion. Every repair is
+proved twice: remove the required input and the check reports MISSING COVERAGE; restore the original
+defect and it FAILS. A fifth was found in passing — eight live document tests skipped on a predicate
+naming two of three required variables, which meant they RAN and FAILED on a partly-configured host.
+
+### Finalized documents: unchanged, proved against pre-change evidence
+
+Backup `20260918T114002Z-bba650ad` (11:40Z, commit `5f673a3b`, before the migration) was restored into
+an isolated networkless container and compared with live:
+
+- **11 encounters both sides**, none added or removed, and **0 rows whose content differs** once the
+  declared `service_date` column is excluded;
+- across the **6 finalized** encounters, all **14 clinical fields identical** — notes, answers,
+  template_review, status, revision, finalized_at/by, export_path, **export_sha256**, and the scope keys;
+- exported-document hash set identical;
+- the only audit action that moved is `terminology.import`, 1 → 3: the two declared imports. No logins,
+  no views, no coding, no encounter mutations.
+
+The declared metadata change is the only difference. **This distinguishes metadata from content:** a
+column was added and filled; nothing a clinician wrote was touched.
+
+### The migration exercised on real draft AND finalized data
+
+In a second isolated database loaded from the same pre-change backup, the **actual** migration was run:
+5 draft + 6 finalized all filled, 0 nulls, 0 disagreeing with their own `created_at`. Then:
+
+- legitimate draft edits (notes, answers, service_date) **succeed**;
+- all six prohibited changes to a finalized document **fail**, including the new `service_date` — so
+  the added metadata is immutable there too;
+- **the counterexample on real data:** with the guard active the backfill aborts entirely, **0 rows
+  filled**, which is exactly why the production migration died.
+
+The guard is not weakened: `encounter_scope` reads `O` before and after, and a live probe still raises
+*"Finalized document is immutable"*.
+
+### Legacy working copies
+
+Ten removed (2.2 GB), nine kept, each with a named reason —
+`docs/rebuild/legacy-inventory.md`. Every removed worktree was clean, inactive, and held only commits
+reachable from a named `origin` branch; `git worktree remove` deleted no commits and no branches, which
+was verified branch by branch afterwards. **No running service uses original application code or
+data.** The seven marketing waitlist records and their storage are untouched.
+
+⚠️ `find -newermt '-24 hours'` is rejected by this host's **bfs** and returns a vacuous zero for every
+directory. Every activity figure was re-taken with an absolute cutoff; one worktree that looked dormant
+had thousands of files written that day.
+
+### Audio judged against what is actually submitted
+
+`docs/rebuild/audio-submission.md`. The recording is POSTed verbatim, so the submitted payload is the
+file, and `core/media.py` probes it with ffprobe under explicit stream selection and bounded resources.
+The charge ceiling, the duration estimate and the completeness assessment are three separate numbers.
+Coverage is judged against the submission; where the payload does not determine what a decoder
+processes, the answer is **UNKNOWN**, disclosed with its reason.
+
+A matching duration is **not** proof that every spoken word was transcribed, and the silent case is the
+absence of a claim rather than a statement of completeness.
+
+### Session hygiene
+
+The two shells were identified and stopped, both mine, both waiting on conditions that could never
+occur: one polling for a marker in a file that had already exited, one an `until ! pgrep -f …` whose
+own command line matched the pattern. The agent session, the three application services and other
+sessions' work were left alone.
+
+**Still pending, unchanged by this milestone:** the documented encryption limitations (a whole-host
+image containing `/etc/quillmd` is not protected), independent key custody, native Word acceptance, and
+the unavailable external integrations. No host reboot and no shared-host security change was made.

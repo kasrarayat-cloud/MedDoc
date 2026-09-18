@@ -30,8 +30,40 @@ from .test_workflow import TEST_SETTINGS
 from core.tests.audio_fixtures import wav_bytes
 
 
-@skipUnless(os.getenv('QUILLMD_WORD_RUNTIME') and os.getenv('QUILLMD_WORD_MANIFEST'),
-            'Qualified real Word runtime is unavailable; no live document workflow is claimed.')
+def word_runtime_is_usable():
+    """Every condition sdk_service.configuration() needs, so a partly-configured host SKIPS rather than fails.
+
+    This predicate named two of the THREE variables the service requires, and said nothing about
+    ownership. With two of three set, these eight tests ran and failed for an environment reason —
+    reporting a defect in the document workflow when the only thing wrong was the host. A skip that
+    is narrower than the thing it guards is a check that cries wolf; this one now lists exactly what
+    is missing, so whoever meets it can fix it or accept it knowingly.
+    """
+    missing = [name for name in ('QUILLMD_WORD_RUNTIME', 'QUILLMD_WORD_MANIFEST',
+                                 'QUILLMD_WORD_MANIFEST_SHA256') if not os.getenv(name)]
+    if missing:
+        return False, 'not configured here: ' + ', '.join(missing)
+    runtime = Path(os.getenv('QUILLMD_WORD_RUNTIME'))
+    if not runtime.exists():
+        return False, 'the configured runtime does not exist: %s' % runtime
+    # The service refuses a processor the running account can modify, which is the point of the
+    # separate service identity. Running these as the owner proves nothing about the shipped path.
+    try:
+        owned_by_us = runtime.stat().st_uid == os.getuid()
+    except OSError as error:
+        return False, 'the runtime cannot be stat()ed: %s' % error
+    if owned_by_us:
+        return False, ('this account owns the Word processor, and the service refuses a processor it '
+                       'can modify — run these where the runtime belongs to another identity')
+    return True, ''
+
+
+WORD_RUNTIME_USABLE, WORD_RUNTIME_REASON = word_runtime_is_usable()
+
+
+@skipUnless(WORD_RUNTIME_USABLE,
+            'Live Word document workflow NOT EXERCISED — ' + (WORD_RUNTIME_REASON or 'unknown reason') +
+            '. No claim is made about this path from this run.')
 @override_settings(**TEST_SETTINGS)
 class WMDocumentWorkflow(TestCase):
     def setUp(self):

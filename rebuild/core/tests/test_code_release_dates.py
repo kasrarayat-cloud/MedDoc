@@ -15,6 +15,12 @@ from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
 from core.coding import applicable_releases, cpt_licensed, suggest
+from django.db import connection
+from exercised import requires_input
+import re
+
+# The token regex `suggest` uses, quoted here so the coverage guard asks the same question the code does.
+TOKEN_PATTERN = r'\b(?:[A-Z][0-9A-Z]{2}(?:\.[0-9A-Z]{1,4})?|[0-9]{5}|[0-9]{4}[FTU])\b'
 from core.context import integration_status
 from core.forms import EncounterForm
 from core.management.commands.import_terminology import save_release
@@ -204,13 +210,61 @@ class WhatTheRefutationPassFound(SyntheticFixture, TestCase):
         every following dot instead, as the code did before this pass, drops BOTH codes silently,
         because each ends its sentence.
         """
-        result = self.code_with_notes('Assessment: synthetic right wrist finding documented as M25.532.\n'
-                                      'Assessment: synthetic general joint finding documented as M25.')
+        notes = ('Assessment: synthetic right wrist finding documented as M25.532.\n'
+                 'Assessment: synthetic general joint finding documented as M25.')
+        # THE INPUT THESE ASSERTIONS DEPEND ON, and the reason two earlier versions of this test were
+        # empty: the evidence lookahead only ever runs on codes the TOKEN regex extracted. Neither
+        # earlier version checked that, and in both the shorter code was never a token — so the
+        # lookahead under test was never applied to it and the test passed under the broken form too.
+        tokens = set(re.findall(TOKEN_PATTERN, notes.upper()))
+        requires_input({'M25', 'M25.532'} <= tokens,
+                       'BOTH the category code M25 and its child M25.532 extracted as tokens from '
+                       'these notes (extracted: %s), or the lookahead under test never runs on the '
+                       'shorter code and this test is about nothing' % sorted(tokens))
+        requires_input(Code.objects.filter(code__in=['M25', 'M25.532'], release__version='FY2026-April').count() == 2,
+                       'both codes present in the release being searched, or one of them can never '
+                       'be suggested whatever the lookahead does')
+        result = self.code_with_notes(notes)
         self.assertEqual(result.count, 2)
         evidence = {s.code: s.evidence for s in CodeSuggestion.objects.filter(encounter=self.encounter)}
         self.assertIn('right wrist', evidence['M25.532'])
         self.assertIn('general joint', evidence['M25'])
         self.assertNotIn('right wrist', evidence['M25'])
+
+    def test_why_both_earlier_versions_of_the_prefix_check_were_empty(self):
+        """Pin the two dead ends, so the prefix check is never rewritten back into either.
+
+        Two versions of this test passed under BOTH the correct and the broken lookahead. Neither
+        was a careless assertion; each was aimed at a case that cannot discriminate, and nothing
+        said so. This test states why, in terms of the code's own token regex.
+        """
+        # DEAD END 1 — the shorter code is never extracted as a token, so the lookahead under test
+        # never runs on it. `re.findall` does not produce overlapping matches: 'M25.532' consumes
+        # the text, and 'M25.53' is never a candidate however the evidence search is written.
+        notes = 'Assessment: synthetic right wrist finding documented as M25.532.'
+        tokens = set(re.findall(TOKEN_PATTERN, notes.upper()))
+        self.assertIn('M25.532', tokens)
+        self.assertNotIn('M25.53', tokens,
+                         'if this ever becomes a token, dead end 1 is gone and the first version of '
+                         'the test would have been meaningful after all')
+
+        # DEAD END 2 — even when both ARE tokens, a digit following the prefix makes the two
+        # lookaheads agree: `(?!\w)` already rejects 'M25.53' inside 'M25.532' because '2' is a word
+        # character. The broken form and the correct form give the same answer, so the case is blind.
+        both = 'Line one documents M25.532.\nLine two documents M25.53.'
+        for pattern, label in ((r'(?!\w)(?!\.[0-9A-Za-z])', 'shipped'), (r'(?!\w)', 'broken')):
+            with self.subTest(lookahead=label):
+                hit = bool(re.search(r'(?<![\w.])' + re.escape('M25.53') + pattern, both.splitlines()[0]))
+                self.assertFalse(hit, 'neither lookahead matches the prefix here — which is exactly '
+                                      'why the second version of the test could not tell them apart')
+
+        # THE CASE THAT DOES DISCRIMINATE — a three-character parent, where the next character is a
+        # dot rather than a digit. Only here do the two lookaheads disagree.
+        parent_line = 'Line one documents M25.532.'
+        shipped = bool(re.search(r'(?<![\w.])M25(?!\w)(?!\.[0-9A-Za-z])', parent_line))
+        broken = bool(re.search(r'(?<![\w.])M25(?!\w)', parent_line))
+        self.assertFalse(shipped, 'the shipped lookahead must not match M25 inside M25.532')
+        self.assertTrue(broken, 'the broken lookahead does match it — this is the discriminating case')
 
     @override_settings(CPT_LICENSE_ID='synthetic-license', CPT_LICENSE_EXPIRY='2099-01-01')
     def test_a_date_only_a_licensed_cpt_release_covers_is_not_reported_as_nothing_recorded(self):
@@ -277,6 +331,20 @@ class TheBackfillMustReachAFinalizedDocument(SyntheticFixture, TransactionTestCa
     def setUp(self):
         self.user, _org, _dept, _patient, _template, self.encounter, _blob = self.make_scope('finalized')
         Encounter.objects.filter(pk=self.encounter.pk).update(status='finalized')
+        # THE INPUT THIS WHOLE CLASS DEPENDS ON. Every fixture encounter used to be a draft, so the
+        # immutability guard was never reached and the migration proof passed without exercising the
+        # case that failed in production. If make_scope ever stops producing a row this can finalize,
+        # these tests must say so rather than pass.
+        requires_input(Encounter.objects.filter(status='finalized').exists(),
+                       'a FINALIZED encounter, or encounter_scope is never reached and every '
+                       'assertion in this class is about a draft')
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT tgenabled FROM pg_trigger WHERE tgrelid='core_encounter'::regclass "
+                           "AND tgname='encounter_scope'")
+            row = cursor.fetchone()
+        requires_input(row is not None and row[0] == 'O',
+                       'the encounter_scope trigger present and ENABLED in the test database, or a '
+                       'refusal here would prove nothing about a guard that is not running')
 
     def test_the_guard_still_refuses_an_ordinary_update_to_a_finalized_document(self):
         from django.db import IntegrityError, InternalError, ProgrammingError, transaction

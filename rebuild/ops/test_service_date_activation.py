@@ -6,6 +6,8 @@ import subprocess
 import sys
 import unittest
 
+from exercised import requires_distinct, requires_input
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -108,26 +110,26 @@ class OneRuleForBothReaders(unittest.TestCase):
         self.assertEqual(len(uses), 2, 'The effective-period filter must exist exactly once, as one pair of bounds.')
 
 
-# This activation's allow-list describes the tree it ships, which is only meaningful while 0014 is the newest
-# migration. Once later work lands, pin the range to the merge that activated this one, as the recording-limit
-# test does, rather than comparing against a moving HEAD.
-class AllowedPaths(unittest.TestCase):
-    def newest_migration(self):
-        return sorted(p.name for p in (ROOT / 'rebuild/core/migrations').glob('0*.py'))[-1]
+# The activation happened and shipped as this merge, so its range is now a historical fact.
+# ⚠️ THE SELF-MAINTAINING CONDITION THIS CLASS FIRST CARRIED DID NOT FIRE. It skipped only when a migration later
+# than 0014 existed — but main moved on while 0014 stayed the newest, so the guard kept comparing a fixed BASELINE
+# against a MOVING HEAD and began failing on work that had nothing to do with this activation. A guard keyed on the
+# wrong signal is a guard that goes off at the wrong time, which is how people learn to ignore it.
+ACTIVATED = '5f8050df5e79c0d7948185850914f1c161fcbc1f'
 
-    def test_every_changed_path_since_the_running_release_is_declared(self):
+
+class AllowedPaths(unittest.TestCase):
+    def test_every_path_this_activation_shipped_was_declared(self):
         activator = load_activator()
-        if not self.newest_migration().startswith('0014_'):
-            self.skipTest('A later migration exists; pin this activation to the merge that shipped it.')
-        if subprocess.run(['git', '-C', str(ROOT), 'cat-file', '-e', activator.BASELINE + '^{commit}'], capture_output=True).returncode:
-            self.skipTest('Running-release commit is not available in this checkout (shallow clone).')
-        changed = set(subprocess.check_output(['git', '-C', str(ROOT), 'diff', '--name-only', activator.BASELINE, 'HEAD'], text=True).split())
-        # Scoped to the directories this activation adds files to. A bare 'docs' also sweeps up
-        # docs/preflight-reports/, which is untracked by design and which the act's own
-        # retained_reports() sanctions — two guards in one act must not disagree about the same files.
-        changed |= set(subprocess.check_output(['git', '-C', str(ROOT), 'ls-files', '--others', '--exclude-standard',
-                                                '--', 'scripts', 'rebuild/ops', 'rebuild/core',
-                                                'docs/foundation/mutations', 'docs/rebuild'], text=True).split())
+        for commit in (activator.BASELINE, ACTIVATED):
+            if subprocess.run(['git', '-C', str(ROOT), 'cat-file', '-e', commit + '^{commit}'],
+                              capture_output=True).returncode:
+                self.skipTest('The activation range is not available in this checkout (shallow clone).')
+        changed = set(subprocess.check_output(
+            ['git', '-C', str(ROOT), 'diff', '--name-only', activator.BASELINE, ACTIVATED], text=True).split())
+        requires_input(changed != set(),
+                       'a non-empty diff between the baseline and the activated merge — an empty range would '
+                       'make this comparison pass while proving nothing about what shipped')
         self.assertEqual(sorted(changed - activator.ALLOWED), [])
 
     def test_the_activation_declares_its_own_parts(self):
@@ -205,20 +207,31 @@ class TheTreeHeadAndTheRunningReleaseAreDifferentFacts(unittest.TestCase):
         self.assertNotIn("old_line = ('QUILLMD_RELEASE_SHA=' + BASELINE)", self.source)
 
     def test_both_surfaces_must_agree_about_being_up(self):
-        """The first version of this check was `any(is None) or all(is not None)` — true for every input."""
-        def agree(health):
-            return all(a is None for a in health) or all(a is not None for a in health)
-        self.assertTrue(agree([None, None]))
-        self.assertTrue(agree([{'release': 'x'}, {'release': 'x'}]))
-        self.assertFalse(agree([None, {'release': 'x'}]), 'one surface up and one down must be refused')
-        self.assertIn('all(answer is None for answer in health) or all(answer is not None for answer in health)',
-                      self.source)
+        """The first version of this check was `any(is None) or all(is not None)` — true for every input.
+
+        It passed because it was only ever fed UNIFORM inputs: both up, or both down. The
+        discriminating case — one of each — is the whole point of the check and was never tried.
+        This test now calls the activator's OWN predicate rather than a copy that can drift from it.
+        """
+        up = {'release': self.activator.RUNNING_RELEASE, 'data_mode': 'synthetic-only'}
+        cases = [([None, None], True), ([up, up], True), ([None, up], False), ([up, None], False)]
+        requires_distinct([sorted(map(repr, health)) for health, _ in cases],
+                          'health inputs that actually differ in shape — uniform inputs cannot tell a '
+                          'working agreement check from a tautology')
+        requires_input(any(expected is False for _, expected in cases),
+                       'at least one input the check must REFUSE, or it is only ever asked to say yes')
+        for health, expected in cases:
+            with self.subTest(health=[type(a).__name__ for a in health]):
+                self.assertEqual(self.activator.surfaces_agree(health), expected)
 
     def test_a_service_answering_an_unexplained_release_is_refused(self):
-        def acceptable(answer, running):
-            return answer is None or (answer.get('release') == running and answer.get('data_mode') == 'synthetic-only')
         running = self.activator.RUNNING_RELEASE
-        self.assertTrue(acceptable(None, running))
-        self.assertTrue(acceptable({'release': running, 'data_mode': 'synthetic-only'}, running))
-        self.assertFalse(acceptable({'release': 'something-else', 'data_mode': 'synthetic-only'}, running))
-        self.assertFalse(acceptable({'release': running, 'data_mode': 'real'}, running))
+        cases = [(None, True),
+                 ({'release': running, 'data_mode': 'synthetic-only'}, True),
+                 ({'release': 'something-else', 'data_mode': 'synthetic-only'}, False),
+                 ({'release': running, 'data_mode': 'real'}, False)]
+        requires_input(any(expected is False for _, expected in cases),
+                       'at least one answer the check must REFUSE')
+        for answer, expected in cases:
+            with self.subTest(answer=answer):
+                self.assertEqual(self.activator.answer_acceptable(answer, running), expected)

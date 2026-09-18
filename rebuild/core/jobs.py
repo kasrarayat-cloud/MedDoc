@@ -12,6 +12,7 @@ from django.db import transaction
 from django.utils import timezone
 from .models import AuditEvent, Job, Encounter, Usage, ProviderReceipt, CodeSuggestion
 from .security import membership,audit,private_path
+from .media import SubmissionUnprobeable,probe_submission
 from .billing import reserve,settle,release,absorb_failed_job,MULTIPLIER
 from . import generation
 from . import audio
@@ -199,8 +200,17 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
         bounds,charge_limit,quote=recording_charge_limit(e,input_path,config,approved_limit)
         # Two lengths: the conservative one the limit was priced from, and the one this recording certainly holds. Only the
         # confirmed length may support a statement that part of the recording was not transcribed.
+        # THREE SEPARATE NUMBERS, because they answer three different questions and conflating any two produces a claim
+        # nobody can support:
+        #   recording_seconds           — the CONSERVATIVE CEILING the customer charge is held against. Priced, not promised.
+        #   recording_seconds_confirmed — the handwritten FLOOR over decoder ambiguity. Kept for continuity, and NOT evidence
+        #                                 about what the provider received: measured, a 1 s + 9 s WAV submits 9 s and floors
+        #                                 at 1 s, so judging completeness by the floor hides real truncation.
+        #   submitted_seconds           — what ffprobe, with explicit stream selection, says is in the payload actually POSTed
+        #                                 to the provider. A completeness statement may rest on this and on nothing else.
         config.update(recording_seconds=str(bounds.measured),recording_seconds_confirmed=str(bounds.confirmed),
                       charge_limit=str(charge_limit),limit_basis='approved' if approved_limit is not None else 'standard')
+        config.update(describe_submission(input_path,ceiling_seconds=bounds.measured))
     job=Job.objects.create(encounter=e,user=user,kind=kind,revision=e.revision,request_key=key,input_path=input_path,config=config)
     if kind=='transcription':
         reserve(job,charge_limit=charge_limit)
@@ -211,29 +221,64 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     audit(user,'job.queued',job.pk,department=e.department,kind=kind,charge_limit=str(charge_limit))
     return job
 
+def describe_submission(input_path,ceiling_seconds=None):
+    """What ffprobe says is in the payload that will be submitted. Unknown is recorded as unknown.
+
+    The ceiling is passed in so the probe can refuse a declared duration the bytes cannot support: a
+    container header is not a measurement, and an inflated one would otherwise accuse a complete
+    transcription of losing an hour of audio.
+    """
+    try:
+        submission=probe_submission(private_path(input_path),ceiling_seconds=ceiling_seconds)
+    except (SubmissionUnprobeable,OSError,ValueError) as error:
+        return {'submitted_seconds':'','submission_status':'unprobeable','submission_streams':'',
+                'submission_detail':str(error)[:200]}
+    return {'submitted_seconds':'' if submission.selected_seconds is None else str(submission.selected_seconds),
+            'submission_status':'ambiguous' if submission.ambiguous else 'determined',
+            'submission_detail':'; '.join(submission.reasons)[:400],
+            'submission_streams':str(submission.audio_streams),
+            'submission_container':submission.container[:60]}
+
+
 def coverage_note(job,units):
-    """A visible marker when the provider processed clearly less audio than the recording certainly holds; never a silent
-    truncation, and never a claim about audio the file may not contain: it reads the CONFIRMED length, not the conservative
-    one the charge limit was priced from."""
+    """State what is known about coverage, and nothing more.
+
+    A MATCHING DURATION IS NOT PROOF THAT EVERY SPOKEN WORD WAS TRANSCRIBED. It shows the provider processed about as much
+    audio as was submitted. It says nothing about words inside that audio the model missed, mis-heard or dropped. The silent
+    case below is therefore the ABSENCE OF A CLAIM, not a statement of completeness, and no caller may render it as one.
+
+    Three outcomes, and the difference between the last two is the whole point:
+      · INCOMPLETE — the provider processed materially less than was SUBMITTED. Disclosed with both numbers.
+      · UNKNOWN    — the payload does not determine what a decoder would process (several audio streams), or it could not be
+                     probed at all. Disclosed as unknown rather than resolved in our favour.
+      · no claim   — the durations agree. Nothing is asserted.
+    """
     try:
         config=job.config or {}
-        recorded=Decimal(config.get('recording_seconds_confirmed') or config.get('recording_seconds') or '0')
+        submitted=config.get('submitted_seconds') or ''
+        status=config.get('submission_status') or ''
         priced=Decimal(config.get('recording_seconds') or '0')
         processed=Decimal((units or {}).get('duration_seconds') or '0')
     except Exception:
         return ''
-    if recorded<=0:
-        # No certain length. Returning '' here delivered a transcript as whole on a recording whose confirmed length was
-        # 0.000 and whose priced length was ten seconds — a silent claim of completeness on exactly the file that cannot
-        # support one. An unknown coverage is disclosed as unknown.
-        if priced>COVERAGE_TOLERANCE_SECONDS and processed<priced-COVERAGE_TOLERANCE_SECONDS:
-            return (f'\n[Transcription coverage unconfirmed: the provider processed {seconds_text(processed)} and this '
-                    f'recording may hold up to {seconds_text(priced)}. Its structure does not establish how much audio a '
-                    f'player would reach, so completeness cannot be certified. Re-export the recording to confirm it.]')
+    detail=(config.get('submission_detail') or '').strip()
+    if status!='determined' or not submitted:
+        # This arm used to compare against the handwritten FLOOR, a lower bound over decoder ambiguity. On a recording that
+        # submits 9 s and floors at 1 s, that reported 'complete' while eight seconds were missing.
+        if priced<=COVERAGE_TOLERANCE_SECONDS: return ''
+        because=(' (%s)'%detail) if detail else ''
+        return (f'\n[Transcription coverage UNKNOWN: the provider reported {seconds_text(processed)}, and this recording may '
+                f'hold up to {seconds_text(priced)}. The submitted audio could not be determined{because}, so no statement is '
+                f'made about how much of it was transcribed.]')
+    try:
+        submitted_seconds=Decimal(submitted)
+    except Exception:
         return ''
-    if processed>=recorded-COVERAGE_TOLERANCE_SECONDS: return ''
-    return (f'\n[Transcription incomplete: the provider processed {seconds_text(processed)} of this {seconds_text(recorded)} recording; '
-            f'the final {seconds_text(recorded-processed)} was not transcribed.]')
+    if processed<submitted_seconds-COVERAGE_TOLERANCE_SECONDS:
+        return (f'\n[Transcription incomplete: the provider processed {seconds_text(processed)} of the '
+                f'{seconds_text(submitted_seconds)} of audio submitted; {seconds_text(submitted_seconds-processed)} was not '
+                f'transcribed.]')
+    return ''  # the durations agree — no claim is made here, and none may be inferred from the silence
 
 
 def transcribe(job):
