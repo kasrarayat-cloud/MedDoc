@@ -2,6 +2,7 @@
 import ast
 import importlib.util
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -77,7 +78,9 @@ class UnitPolicy(unittest.TestCase):
         self.assertEqual(text.count('mount --bind'), text.count('|| fail_closed "could not bind'))
         self.assertIn('"$MOUNT" || fail_closed "could not mount', text)
         self.assertIn('[ -f "$KEY" ] || refuse "key file absent', text)
-        self.assertIn('cryptsetup open --key-slot 1 "$IMAGE" "$NAME"', text)
+        # Unlock pins no key slot: after a rotation the recovery passphrase lives in whichever slot luksAddKey chose.
+        self.assertIn('      cryptsetup open "$IMAGE" "$NAME"\n', text)
+        self.assertNotIn('--key-slot', text)
         self.assertIn('mount -o nodev,nosuid', text)
         for word in ('open)', 'unlock)', 'close)', 'status)', 'wait-database)'):
             self.assertIn(word, text)
@@ -238,6 +241,94 @@ class MigrationInvariants(unittest.TestCase):
         for phrase in ('quillmd-fresh.luks', 'unless-stopped to no', 'immutable', 'rollback', 'swap', 'key custody', 'recovery passphrase',
                        'billing boundary', 'decrypted_files_written'):
             self.assertIn(phrase, text.lower() if phrase.islower() else text)
+
+
+class FailurePathsSurviveTheWatchdog(unittest.TestCase):
+    """The ruled-mutation watchdog sends SIGTERM and then SIGKILL 15 s later, so the act must fail on its own well before the
+    ceiling, record its progress as it goes, and leave a mode that finishes an interrupted revert."""
+
+    def setUp(self):
+        self.migration = load_migration()
+        self.source = SCRIPT.read_text()
+
+    def test_every_external_command_is_bounded(self):
+        m = self.migration
+        self.assertLessEqual(m.COMMAND_TIMEOUT, 600)
+        self.assertIn("kwargs.setdefault('timeout', COMMAND_TIMEOUT)", function_source('output'))
+        self.assertIn("kwargs.setdefault('timeout', COMMAND_TIMEOUT)", function_source('run'))
+        self.assertIn('timeout=900', function_source('root').splitlines()[0])
+        self.assertIn('timeout=600', m.ROOT_LIBRARY.split('def host(')[1].splitlines()[0])
+        self.assertIn('timeout=15', function_source('wait_database'))
+        self.assertNotIn("'docker', 'stop', '-t', '90', CONTAINER], stdout=subprocess.DEVNULL)", self.source)
+
+    def test_phase_one_stops_on_its_own_budget_and_the_revert_is_exempt(self):
+        m = self.migration
+        stages = re.findall(r"stage\(result, '([a-z_]+)'\)", function_source('execute_migrate'))
+        cut = stages.index('advancing_reviewed_main')
+        self.assertEqual(set(stages[1:cut + 1]), set(m.PHASE_ONE_STAGES))
+        self.assertNotIn('automatic_revert_to_plaintext', m.PHASE_ONE_STAGES)
+        result = {}
+        m.ACT['started'] = 0.0
+        try:
+            with self.assertRaises(RuntimeError):
+                m.stage(result, 'formatting_encrypted_volume')
+            m.stage(result, 'automatic_revert_to_plaintext')
+            self.assertEqual(result['stage'], 'automatic_revert_to_plaintext')
+        finally:
+            m.ACT['started'] = None
+
+    def test_progress_is_written_at_every_stage(self):
+        import tempfile
+        m = self.migration
+        with tempfile.TemporaryDirectory() as directory:
+            m.ACT['progress'] = Path(directory) / 'fresh-storage-migrate-test-progress.json'
+            try:
+                m.stage({'mode': 'migrate'}, 'stopping_private_services')
+                written = json.loads(m.ACT['progress'].read_text())
+                self.assertEqual(written['stage'], 'stopping_private_services')
+                self.assertEqual(oct(m.ACT['progress'].stat().st_mode & 0o777), '0o600')
+            finally:
+                m.ACT['progress'] = None
+
+    def test_an_in_flight_root_step_is_settled_before_any_revert_or_rollback(self):
+        self.assertIn("'--name', name", function_source('root'))
+        revert = function_source('automatic_revert')
+        self.assertLess(revert.index('settle_root_step(result)'), revert.index('systemctl('))
+        migrate = function_source('execute_migrate')
+        end = migrate.index("result['failure_services_stopped'] = True")
+        failure = migrate[migrate.rindex('except BaseException as error:', 0, end):end]
+        self.assertLess(failure.index('settle_root_step(result)'), failure.index("systemctl('stop', APP_UNITS, image)"))
+        rollback = function_source('execute_rollback')
+        failure = rollback[rollback.index('except BaseException as error:'):]
+        self.assertLess(failure.index('settle_root_step(result)'), failure.index("systemctl('stop'"))
+
+    def test_an_interrupted_migrate_has_a_revert_mode(self):
+        main = function_source('main')
+        self.assertIn("'revert-interrupted'", main)
+        self.assertIn("locks['migrate'].exists()", main)
+        self.assertIn("source.get('stage') not in POST_START_STAGES", main)
+        self.assertIn("elif args.mode in ('discard-failed-attempt', 'revert-interrupted'):", main)
+        self.assertIn("locks['migrate'].unlink()", main)
+
+    def test_retained_reports_allow_additions_but_not_changes(self):
+        import tempfile
+        m = self.migration
+        with tempfile.TemporaryDirectory() as directory:
+            original = m.ROOT
+            m.ROOT = Path(directory)
+            try:
+                (m.ROOT / 'a.md').write_bytes(b'kept')
+                os.chmod(m.ROOT / 'a.md', 0o644)
+                before = {'a.md': {'sha256': m.sha(b'kept'), 'size': 4, 'mode': 0o644}}
+                (m.ROOT / 'b.md').write_bytes(b'added by another session')
+                self.assertTrue(m.retained_unchanged(before))
+                (m.ROOT / 'a.md').write_bytes(b'KEPT')
+                self.assertFalse(m.retained_unchanged(before))
+                (m.ROOT / 'a.md').unlink()
+                self.assertFalse(m.retained_unchanged(before))
+            finally:
+                m.ROOT = original
+        self.assertNotIn('word.retained_reports() == retained', self.source)
 
 
 class RootHelperTransport(unittest.TestCase):

@@ -12,7 +12,7 @@
 # When the volume is closed, both bind targets are empty, root-owned, immutable
 # directories: nothing can write plaintext into them by mistake.
 #
-# Key slots: 0 = key file (unattended boot); 1 = recovery passphrase (typed).
+# Key slots at creation: 0 = key file (unattended boot); 1 = recovery passphrase (typed).
 # If the key file is absent (kept off the host by the owner), `open` refuses and
 # the volume stays closed until `unlock` is run with the passphrase on stdin.
 set -euo pipefail
@@ -69,10 +69,12 @@ case "${1:-}" in
     ;;
   unlock)
     # Passphrase arrives on stdin (typed through the operator script); cryptsetup
-    # reads until the first newline and strips it, exactly as at a terminal.
+    # reads until the first newline and strips it, exactly as at a terminal. No slot
+    # is pinned: after a passphrase rotation the recovery passphrase lives in
+    # whichever slot luksAddKey chose.
     preconditions
     if [ ! -e "/dev/mapper/$NAME" ]; then
-      cryptsetup open --key-slot 1 "$IMAGE" "$NAME"
+      cryptsetup open "$IMAGE" "$NAME"
     fi
     mount_and_bind
     ;;

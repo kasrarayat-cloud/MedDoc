@@ -14,7 +14,7 @@ remains outside QuillMD's control. The declared act is
 | Temporary files created through Python `tempfile` | services' private `/tmp` | `/dev/sda2` ext4, plain | `/var/lib/quillmd/tmp` on the encrypted state; the launcher refuses to start otherwise |
 | Database container log | `/var/lib/docker/containers/<id>/<id>-json.log` | plain; held logged statement text | archived to the encrypted volume, truncated; statement logging suppressed |
 | Restore checks | `rebuild/.runtime/restore-checks/` | wrote decrypted file copies | decrypt and verify in memory; restore database on tmpfs with swap disabled |
-| Encrypted backups | `rebuild/.runtime/new-system-backups` | ciphertext on `/dev/sda2` | unchanged |
+| Encrypted backups | `rebuild/.runtime/new-system-backups` | ciphertext on `/dev/sda2`; the dump passed through a temporary file in `/tmp` | ciphertext; the dump is captured and encrypted in memory |
 | Host swap `/swap.img` | `/dev/sda2` | plain, in use | unchanged, host-level; QuillMD services and the database container are barred from swap |
 | journald | `/var/log/journal` | plain | unchanged, host-level |
 
@@ -57,10 +57,16 @@ stack's data and are not touched.
   copies it into the owner-controlled vault and records the custodian. After
   that the host copy is shredded.
 - **Protection level.** While the key file is on the host, anyone with a full
-  disk copy or root on the running host can open the volume. For protection
-  against disk-level access, the owner removes the key file from the host
-  after vaulting it. Every boot then needs the unlock script and the
-  passphrase, so the service is down until someone types it.
+  disk copy or root on the running host can open the volume. Deleting the key
+  file is not enough to change that. Slot 0 stays valid, and the key file's
+  blocks may survive on the virtual disk. Protection against disk-level access
+  needs three steps in one maintenance window, after the passphrase is vaulted:
+  1. remove slot 0 (`cryptsetup luksKillSlot <image> 0`);
+  2. re-encrypt the volume (`cryptsetup reencrypt`), so that a recovered key
+     file together with an older header copy opens nothing;
+  3. remove the key file.
+  Every boot then needs the unlock script and the passphrase, so the service is
+  down until someone types it.
 - **Crypto-erase.** `cryptsetup luksErase` on the image destroys every key slot
   in the header, so no key or passphrase opens the volume again. Shredding the
   key file alone is best effort on a virtual disk. Neither step protects against
@@ -76,6 +82,9 @@ stack's data and are not touched.
 - Before main advances, any failure reverts automatically to the untouched
   plaintext originals and the running release. Then run
   `discard-failed-attempt` under the same declaration.
+- If the run was killed outright before main advanced, run
+  `revert-interrupted --from-result <result>-progress.json` first. It finishes
+  the revert from any partial state.
 - After main advances, run `rollback --from-result <migrate result>` under the
   same declaration. It copies the current data back to plaintext, restores
   plaintext units, re-enables the container restart policy and keeps the image,
@@ -95,7 +104,16 @@ stack's data and are not touched.
   written. That reveals volume and growth, not content. Its space is not reserved
   in advance: the migration requires 24 GiB free, and disk usage stays on the
   owner's host checklist.
-- Earlier restore checks left decrypted synthetic copies under
-  `rebuild/.runtime/restore-checks/restore-*/files`. They must be shredded
-  before real data.
+- Plaintext copies of QuillMD data remain on the root disk and must be
+  destroyed before any real patient data is admitted. All of them are
+  synthetic.
+  - `/var/lib/quillmd-rollback-20260918`, the pre-migration snapshot.
+  - `rebuild/.runtime/files` (27 originals, exports, receipts and audio files)
+    and `rebuild/.runtime/mail` (2 items), the application state from before the
+    2026-09-17 service-identity cutover.
+  - `rebuild/.runtime/restore-checks/restore-*/files`, decrypted copies written
+    by earlier restore checks.
+- After a rollback, `scripts/verify-post-reboot.sh` still expects the encrypted
+  layout and reports failure. That report is correct: the data is plaintext
+  again.
 - Backups stay on this VPS until the offsite destination is approved.

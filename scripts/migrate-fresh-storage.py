@@ -98,11 +98,24 @@ def require(condition, message):
         raise RuntimeError(message)
 
 
+# Every external command is bounded well inside the watchdog ceiling, so a hang surfaces as an ordinary exception that the
+# revert handles with time to spare, instead of as the watchdog's SIGTERM followed 15 s later by SIGKILL.
+COMMAND_TIMEOUT = 600
+PHASE_ONE_BUDGET = 1800
+PHASE_ONE_STAGES = ('stopping_private_services', 'capturing_baseline', 'stopping_database_container', 'formatting_encrypted_volume',
+                    'copying_and_verifying_data', 'switching_to_immutable_bind_targets', 'installing_units_and_helper',
+                    'repinning_state_identity', 'opening_volume_and_database', 'suppressing_statement_logging',
+                    'verifying_data_on_encrypted_volume', 'advancing_reviewed_main')
+ACT = {'started': None, 'progress': None, 'step': None, 'steps': 0}
+
+
 def output(command, **kwargs):
+    kwargs.setdefault('timeout', COMMAND_TIMEOUT)
     return subprocess.check_output(command, text=True, **kwargs).strip()
 
 
 def run(command, **kwargs):
+    kwargs.setdefault('timeout', COMMAND_TIMEOUT)
     return subprocess.run(command, check=True, **kwargs)
 
 
@@ -111,9 +124,44 @@ def sha(data):
 
 
 def stage(result, name):
+    if name in PHASE_ONE_STAGES and ACT['started'] is not None and time.monotonic() - ACT['started'] > PHASE_ONE_BUDGET:
+        raise RuntimeError(f'Phase-one budget of {PHASE_ONE_BUDGET}s exhausted before {name}; reverting while time remains.')
     result['stage'] = name
     result.setdefault('stages', []).append({'stage': name, 'at': datetime.now(timezone.utc).isoformat()})
     print(f"[fresh-storage] {datetime.now(timezone.utc).strftime('%H:%M:%SZ')} stage={name}", flush=True)
+    write_progress(result)
+
+
+def write_progress(result):
+    """Record every stage as it starts, so a run killed outright (SIGKILL) still says how far it got."""
+    path = ACT['progress']
+    if path is None:
+        return
+    pending = path.with_name(path.name + '.pending')
+    fd = os.open(pending, os.O_CREAT | os.O_TRUNC | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'w') as stream:
+        json.dump(result, stream, indent=1, sort_keys=True); stream.flush(); os.fsync(stream.fileno())
+    os.replace(pending, path)
+
+
+def settle_root_step(result):
+    """A root step's container keeps running when its docker client is killed. Before any revert or rollback touches the host,
+    wait for the in-flight step to end, and stop it only if it will not."""
+    name = ACT['step']
+    if not name:
+        return
+    state = subprocess.run(['docker', 'inspect', '--format', '{{.State.Running}}', name], capture_output=True, text=True, timeout=60)
+    if state.returncode != 0 or state.stdout.strip() != 'true':
+        ACT['step'] = None
+        return
+    try:
+        subprocess.run(['docker', 'wait', name], capture_output=True, timeout=300)
+        outcome = 'finished'
+    except subprocess.TimeoutExpired:
+        subprocess.run(['docker', 'kill', name], capture_output=True, timeout=60)
+        outcome = 'killed'
+    result.setdefault('settled_root_steps', []).append({'container': name, 'outcome': outcome})
+    ACT['step'] = None
 
 
 def load_file(name, path):
@@ -150,7 +198,7 @@ ROOT_LIBRARY = r'''
 import os,sys,json,subprocess,stat,hashlib,time
 P=json.loads(sys.stdin.readline())
 os.chroot('/host');os.chdir('/');os.umask(0o077)
-def host(*cmd, stdin=None, check=True, timeout=1800):
+def host(*cmd, stdin=None, check=True, timeout=600):
     r=subprocess.run(['systemd-run','--wait','--pipe','--collect','--quiet','--property=Type=oneshot',*cmd],input=stdin,capture_output=True,text=True,timeout=timeout)
     if check and r.returncode!=0: raise RuntimeError('host command failed: '+' '.join(cmd[:4])+' :: '+r.stderr[-600:])
     return r
@@ -399,18 +447,22 @@ emit({'switched_back':True,'identity':ino})
 '''
 
 
-def root(code, params, image, *, writable=(), timeout=3000):
+def root(code, params, image, *, writable=(), timeout=900):
     """Run one root step: host root bound read-only plus explicit writable binds; its result is the last JSON line."""
     # The program travels as an argument and the parameters on stdin: with `python -` CPython would read ALL of stdin as the
     # program. Every bind is rslave so a host unmount reaches this container's copy; a private copy would keep the
     # encrypted filesystem mounted here and make the host's `cryptsetup close` fail with "device in use".
-    args = ['docker', 'run', '--rm', '-i', '--pull=never', '--network=none', '--pid=host',
+    ACT['steps'] += 1
+    name = f'quillmd-fresh-storage-step-{os.getpid()}-{ACT["steps"]}'
+    args = ['docker', 'run', '--rm', '-i', '--name', name, '--pull=never', '--network=none', '--pid=host',
             '--security-opt', 'apparmor=unconfined', '--mount', 'type=bind,src=/,dst=/host,readonly,bind-propagation=rslave']
     for path in writable:
         args += ['--mount', f'type=bind,src={path},dst=/host{path},bind-propagation=rslave']
     args += [image, 'python', '-B', '-c', ROOT_LIBRARY + code]
+    ACT['step'] = name
     result = subprocess.run(args, input=json.dumps(params) + '\n', text=True, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, timeout=timeout)
+    ACT['step'] = None
     lines = [line for line in result.stdout.splitlines() if line.strip()]
     require(result.returncode == 0 and lines, 'Root step failed: ' + result.stderr[-1500:])
     return json.loads(lines[-1])
@@ -432,7 +484,7 @@ def container_running():
 
 def wait_database():
     for _ in range(120):
-        if subprocess.run(['docker', 'exec', CONTAINER, 'pg_isready', '-U', 'quillmd_fresh', '-d', 'quillmd_fresh'], capture_output=True).returncode == 0:
+        if subprocess.run(['docker', 'exec', CONTAINER, 'pg_isready', '-U', 'quillmd_fresh', '-d', 'quillmd_fresh'], capture_output=True, timeout=15).returncode == 0:
             return
         time.sleep(1)
     raise RuntimeError('Database did not become ready.')
@@ -490,6 +542,21 @@ def write_pin(identity, document):
     require(stat.S_IMODE(path.stat().st_mode) == 0o600, 'Identity pin must stay private.')
 
 
+def retained_unchanged(before):
+    """Every report retained before the act is still present and byte-identical. Reports that other sessions add during the
+    act (for example a preflight report) are allowed: they cannot have been changed by the act, and must not stop it."""
+    for name, row in before.items():
+        path = ROOT / name
+        try:
+            info = path.lstat()
+            data = path.read_bytes()
+        except OSError:
+            return False
+        if not stat.S_ISREG(info.st_mode) or sha(data) != row['sha256'] or len(data) != row['size'] or stat.S_IMODE(info.st_mode) != row['mode']:
+            return False
+    return True
+
+
 def params_common():
     return {'pg_data': PG_DATA, 'state': str(STATE), 'image_dir': IMAGE_DIR, 'image': IMAGE, 'key': KEY, 'recovery': RECOVERY,
             'mount': MOUNT, 'mapper': MAPPER, 'rollback': ROLLBACK, 'volume_script_target': VOLUME_SCRIPT_TARGET,
@@ -499,7 +566,7 @@ def params_common():
 def main():
     signal.signal(signal.SIGTERM, _terminate)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('mode', choices=['migrate', 'discard-failed-attempt', 'rollback'])
+    parser.add_argument('mode', choices=['migrate', 'revert-interrupted', 'discard-failed-attempt', 'rollback'])
     parser.add_argument('--target', required=True)
     parser.add_argument('--result', required=True)
     parser.add_argument('--backup-report')
@@ -514,8 +581,8 @@ def main():
     run(['git', 'merge-base', '--is-ancestor', BASELINE, args.target])
     if args.mode == 'migrate':
         require(head == BASELINE and output(['git', 'rev-parse', 'origin/main']) == args.target, 'Migrate runs from the running release toward the cited origin target.')
-    elif args.mode == 'discard-failed-attempt':
-        require(head == BASELINE, 'An automatically reverted attempt leaves main at the running release.')
+    elif args.mode in ('discard-failed-attempt', 'revert-interrupted'):
+        require(head == BASELINE, 'An automatically reverted or interrupted attempt leaves main at the running release.')
     else:
         require(subprocess.run(['git', 'merge-base', '--is-ancestor', args.target, head]).returncode == 0, 'Rollback needs main to contain the target.')
     changed = set(output(['git', 'diff', '--name-only', BASELINE, args.target]).splitlines())
@@ -551,10 +618,10 @@ def main():
     require(re.fullmatch(r'/var/lib/docker/containers/[a-f0-9]{64}/[a-f0-9]{64}-json\.log', log_path), 'Unexpected container log path.')
     result_path = Path(args.result)
     locks = {'migrate': PRIVATE / '.fresh-storage-migration.lock', 'discard-failed-attempt': PRIVATE / '.fresh-storage-discard.lock',
-             'rollback': PRIVATE / '.fresh-storage-rollback.lock'}
+             'rollback': PRIVATE / '.fresh-storage-rollback.lock', 'revert-interrupted': PRIVATE / '.fresh-storage-revert.lock'}
     lock = locks[args.mode]
     require(result_path.is_absolute() and result_path.parent == PRIVATE and result_path.resolve() == result_path
-            and re.fullmatch(r'fresh-storage-(migrate|discard|rollback)-[a-zA-Z0-9_-]+\.json', result_path.name)
+            and re.fullmatch(r'fresh-storage-(migrate|revert|discard|rollback)-[a-zA-Z0-9_-]+\.json', result_path.name)
             and not result_path.exists() and not result_path.is_symlink() and not lock.exists() and not lock.is_symlink(),
             'Choose unused private evidence; a prior lock for this mode needs inspection.')
     common = params_common()
@@ -583,6 +650,13 @@ def main():
         release_line = ('QUILLMD_RELEASE_SHA=' + BASELINE).encode()
         require(env_before.splitlines().count(release_line) == 1, 'Expected the environment to name the running release.')
         identity.verify_live(BASELINE, target_storage)
+    elif args.mode == 'revert-interrupted':
+        # A migrate killed outright (the watchdog's SIGKILL) before main advanced: its lock remains and its progress file names
+        # a phase-one stage. ROOT_REVERT is written to finish a half-done revert from any such state.
+        require(args.from_result and locks['migrate'].exists(), 'Revert needs the interrupted migrate lock and --from-result naming its progress file.')
+        source = json.loads(word.checked_file(Path(args.from_result), private=True))
+        require(source.get('mode') == 'migrate' and source.get('target') == args.target and source.get('stage') not in POST_START_STAGES
+                and not source.get('complete'), 'Revert applies only to a migrate interrupted before main advanced.')
     elif args.mode == 'discard-failed-attempt':
         require(probe['rollback'] is None and not probe['pg_data_mounted'] and not probe['state_mounted'] and not probe['volume_script_installed']
                 and not any(probe['units_installed'].values()) and (probe['image'] or probe['key'] or probe['mount']),
@@ -609,8 +683,23 @@ def main():
     run(['git', 'merge-base', '--is-ancestor', commit, args.target])
     identity.private_write(lock, {'target': args.target, 'mode': args.mode, 'pid': os.getpid()})
     now = datetime.now(timezone.utc)
+    ACT['started'] = time.monotonic()
+    ACT['progress'] = result_path.with_name(result_path.stem + '-progress.json')
     result = {'complete': False, 'mode': args.mode, 'previous_head': head, 'target': args.target, 'started_at': now.isoformat(),
               'provider_calls': 0, 'schema_migrations': 0, 'helper_image': image, 'maintenance_window_start': now.isoformat()}
+    if args.mode == 'revert-interrupted':
+        source = json.loads(word.checked_file(Path(args.from_result), private=True))
+        if 'database_before' in source:
+            result['database_before'] = source['database_before']
+        result['interrupted_stage'] = source.get('stage')
+        units_installed = any(probe['units_installed'].values()) or probe['volume_script_installed']
+        automatic_revert(result, image, common, baseline_units, units_installed, billing, word, identity)
+        if result.get('reverted_to_plaintext_service'):
+            locks['migrate'].unlink()
+            result.update(complete=True, next_step='Run discard-failed-attempt under the same declaration before any new attempt.')
+            stage(result, 'complete')
+        finish(result, result_path, lock, identity)
+        return
     if args.mode == 'migrate':
         execute_migrate(args, result, lock, result_path, image, common, units, baseline_units, volume_script, log_path,
                         billing, word, identity, previous, target_storage, env_before, installed, inputs, artifact, now)
@@ -640,6 +729,7 @@ def finish(result, result_path, lock, identity):
 def automatic_revert(result, image, common, baseline_units, units_installed, billing, word, identity):
     """Before the application ever served from the encrypted volume: put the untouched originals back and restart on plaintext."""
     try:
+        settle_root_step(result)
         stage(result, 'automatic_revert_to_plaintext')
         if units_installed:
             for unit in ('quillmd-fresh-database.service', 'quillmd-fresh-volume.service'):
@@ -648,7 +738,7 @@ def automatic_revert(result, image, common, baseline_units, units_installed, bil
                 except BaseException:
                     pass
         if container_running():
-            run(['docker', 'stop', '-t', '90', CONTAINER], stdout=subprocess.DEVNULL)
+            run(['docker', 'stop', '-t', '90', CONTAINER], stdout=subprocess.DEVNULL, timeout=150)
         result['revert'] = root(ROOT_REVERT, dict(common, units_installed=units_installed, baseline_units={u: b.hex() for u, b in baseline_units.items()}), image,
                                writable=['/var/lib', '/etc/systemd/system', '/usr/local/bin'])
         pre = PRIVATE / 'state-identity.pre-encryption-20260918.json'
@@ -694,7 +784,7 @@ def execute_migrate(args, result, lock, result_path, image, common, units, basel
         result['schema_before'], result['constraints_before'], result['indexes_before'] = billing.schema(), billing.constraints(), billing.indexes()
         result['storage_before'] = {name: target_storage.inventory(STATE / name) for name in ('files', 'mail')}
         stage(result, 'stopping_database_container')
-        run(['docker', 'stop', '-t', '90', CONTAINER], stdout=subprocess.DEVNULL)
+        run(['docker', 'stop', '-t', '90', CONTAINER], stdout=subprocess.DEVNULL, timeout=150)
         require(not container_running(), 'Database container did not stop.')
         stage(result, 'formatting_encrypted_volume')
         result['prepare'] = root(ROOT_PREPARE, dict(common, image_bytes=IMAGE_BYTES, luks_format=LUKS_FORMAT), image,
@@ -800,7 +890,7 @@ def execute_migrate(args, result, lock, result_path, image, common, units, basel
         after_manual = root(ROOT_STATE, common, image)
         running_after = container_running()
         if running_after:
-            subprocess.run(['docker', 'stop', '-t', '30', CONTAINER], capture_output=True)
+            subprocess.run(['docker', 'stop', '-t', '30', CONTAINER], capture_output=True, timeout=90)
         result['manual_container_start_while_closed'] = {'docker_start_exit': manual.returncode, 'running_after_8s': running_after,
                                                          'pg_data_listing': after_manual['pg_data_listing']}
         require(after_manual['pg_data_listing'] == [], 'A manual container start wrote into the closed database directory.')
@@ -816,7 +906,7 @@ def execute_migrate(args, result, lock, result_path, image, common, units, basel
         result['proofs_after_recovery'] = identity.verify_live(args.target, target_storage)
         require(word.verify_artifact(installed / 'runtime', installed / 'runtime-manifest.json', installed / 'build-proof.json', billing.PIN, inputs) == artifact, 'Word runtime changed.')
         require(protected_identity(previous) == protected and previous.protected() == protected, 'Protected population changed.')
-        require(word.retained_reports() == retained, 'Retained reports changed.')
+        require(retained_unchanged(retained), 'A report retained before the act changed or disappeared.')
         run(['bash', 'scripts/check-cotenants.sh'])
         result.update(complete=True, all_rows_identical=True, all_private_files_and_mail_identical=True, protected_containers=protected,
                       environment_before_sha256=sha(env_before), environment_after_sha256=sha(env_after),
@@ -826,6 +916,10 @@ def execute_migrate(args, result, lock, result_path, image, common, units, basel
         stage(result, 'complete')
     except BaseException as error:
         result.update(complete=False, failure_kind=type(error).__name__, failure_message=str(error)[:400])
+        try:
+            settle_root_step(result)
+        except BaseException:
+            pass
         try:
             systemctl('stop', APP_UNITS, image)
             result['failure_services_stopped'] = True
@@ -878,6 +972,7 @@ def execute_rollback(args, result, lock, result_path, image, common, units, bill
     except BaseException as error:
         result.update(complete=False, failure_kind=type(error).__name__, failure_message=str(error)[:400])
         try:
+            settle_root_step(result)
             systemctl('stop', APP_UNITS, image)
         except BaseException:
             pass

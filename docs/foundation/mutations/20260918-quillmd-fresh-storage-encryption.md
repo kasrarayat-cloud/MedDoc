@@ -17,12 +17,19 @@ cited target and restarts the private services on it. The target contains three
 changes, and this declaration covers all of them:
 
 1. documentation merged since the running release (PR #1191);
-2. the billing boundary: `jobs.cancel` and the `job_cancel` route (a queued
-   request cancels free, before any provider request), the additional-generation
-   disclosures, `not_adopted:` / `platform_failure:` failure classes, the refusal
-   to absorb a `not_adopted:` row and the matching `audit_billing` check. No
-   schema change (`makemigrations --check`: no changes). No existing row carries
-   either prefix, so the billing audit's verdict on existing rows is unchanged;
+2. the billing boundary (PR #1192): `jobs.cancel` and the `job_cancel` route (a
+   queued request cancels free, before any provider request); the
+   additional-request disclosures; the `not_adopted:` / `platform_failure:`
+   failure classes, with output validity checked before the user-state checks;
+   `Not processed` failures before any provider request, which release the hold;
+   provider output delivered only for requests that stand charged; failed jobs
+   freeing their request key for a retry; `cancel`, `settle` and
+   `absorb_failed_job` locking only the job row; and the matching
+   `audit_billing` checks, including cancelled jobs. No schema change
+   (`makemigrations --check`: no changes). Measured before the act, the live
+   database holds 12 jobs, all `succeeded`, none carrying either prefix. The
+   billing audit's verdict on existing rows is therefore unchanged, and every
+   stored result stays downloadable;
 3. the storage change below.
 
 ## Expected delta, declared before the act
@@ -68,7 +75,10 @@ Moved, never deleted: the plaintext originals go to
 empty, root-owned, immutable directories.
 
 Must not change: every PostgreSQL row fingerprint, the schema, constraints and
-indexes; every private file and mail item; the Word runtime; retained reports;
+indexes; every private file and mail item (the service proofs in `proofs/` are
+rewritten by each service start, as on every restart); the Word runtime; the
+reports retained before the act (reports other sessions add meanwhile are
+allowed);
 the six protected shared containers; public statuses. Zero provider calls, zero
 migration commands.
 
@@ -83,10 +93,22 @@ rows, files, identity proofs and health are verified a second time.
 
 ## Preconditions and failure handling
 
-Before this act: exact merge CI on the target, the read-only preflight from
-permanent main, and a validated encrypted backup whose isolated restore check
-reports `decrypted_files_written = 0` and covers the current row count. The act
-runs once through `run-ruled-mutation.sh` with this committed declaration.
+Before this act, three things hold:
+
+- exact merge CI on the target;
+- the read-only preflight from permanent main;
+- a validated encrypted backup taken with the target's backup tool, which encrypts
+  the dump in memory. Its isolated restore check reports
+  `decrypted_files_written = 0` and covers the current row count.
+
+The act runs once through `run-ruled-mutation.sh` with this committed
+declaration and `RULED_ACT_MAX_SECS=7200`. Every external command has its own
+timeout of at most 15 minutes. Phase one stops itself after 30 minutes, and the
+revert then has well over an hour inside the ceiling.
+
+Each stage is written to `<result>-progress.json` as it starts, so even a run
+killed outright says how far it got. A root step whose container outlives its
+client is waited for, or stopped, before any revert or rollback touches the host.
 
 - Any failure before main advances reverts automatically: the untouched
   originals return, baseline units are restored, the container's restart policy
@@ -97,22 +119,42 @@ runs once through `run-ruled-mutation.sh` with this committed declaration.
   (with `--from-result`, under this same declaration) copies the current data
   back to plaintext, restores plaintext units and keeps the encrypted image, key
   and pre-migration snapshot for inspection.
+- If the run is killed outright before main advances, its lock and progress
+  file remain. `revert-interrupted --from-result <progress file>` finishes the
+  revert from whatever state the kill left, then `discard-failed-attempt`
+  removes the partial artifacts.
 - Never rerun blindly; the lock and evidence stay until inspected.
 
 ## Key custody and what this act does not establish
 
 While the slot-0 key file is on this host, anyone with a full copy of the
 virtual disk or root on the running host can open the volume. What the act does
-establish: new database, WAL, file, mail, proof and temporary writes no longer
-reach the plain root filesystem; the whole volume becomes cryptographically
-erasable by destroying two small key artifacts; and full at-rest protection
-becomes one owner decision, which is to remove the key file from the host and
-unlock with the recovery passphrase after each boot.
+establish:
 
-Not established: encryption of the host swap file, journald or the shared root
-filesystem (host-level); overwriting of freed plaintext blocks on the virtual
-disk; temporary files written to hard-coded paths rather than through `TMPDIR`;
-off-host custody of the recovery passphrase (owner action). The rollback
-snapshot holds a plaintext copy until the owner accepts the migration and
-approves its destruction. No claim about Stripe, Resend, offsite restoration,
-invoice reconciliation or independent testing follows from this act.
+- new database, WAL, file, mail, proof and service temporary writes no longer
+  reach the plain root filesystem;
+- the whole volume becomes cryptographically erasable (`luksErase`);
+- the path to protection against disk-level access is written down: vault the
+  passphrase, remove slot 0, re-encrypt, remove the key file. After that, every
+  boot needs the typed passphrase. Deleting the key file alone establishes
+  nothing, because slot 0 stays valid and the file's blocks may survive.
+
+Not established:
+
+- encryption of the host swap file, journald or the shared root filesystem
+  (host-level);
+- overwriting of freed plaintext blocks on the virtual disk;
+- temporary files written to hard-coded paths rather than through `TMPDIR`;
+- off-host custody of the recovery passphrase (owner action).
+
+Plaintext copies remain on the root disk until the owner approves their
+destruction:
+
+- the rollback snapshot;
+- `rebuild/.runtime/files` and `rebuild/.runtime/mail`, from before the
+  service-identity cutover;
+- the decrypted files left by earlier restore checks.
+
+All of them are synthetic, and all must go before real patient data. No claim
+about Stripe, Resend, offsite restoration, invoice reconciliation or
+independent testing follows from this act.

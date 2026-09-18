@@ -11,7 +11,6 @@ import re
 import secrets
 import stat
 import subprocess
-import tempfile
 import time
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -238,19 +237,17 @@ def backup(args):
                 manifest['files'].append({'path': relative, 'size': len(data), 'sha256': h,
                                           'object': object_name, 'cipher_sha256': digest(payload),
                                           'kinds': reference['kinds']})
-            with tempfile.TemporaryFile() as dump:
-                os.fchmod(dump.fileno(), 0o600)
-                env = dict(os.environ, PGPASSWORD=opts['password'])
-                run(['docker', 'exec', '-e', 'PGPASSWORD', SOURCE_CONTAINER, 'pg_dump',
-                     '-h', '127.0.0.1', '-U', opts['user'], '-d', SOURCE_DATABASE,
-                     '--format=custom', '--no-owner', '--no-privileges', '--snapshot=' + snapshot],
-                    output=dump, env=env)
-                require(dump.tell() <= MAX_OBJECT_BYTES, 'Database dump exceeds bounded encrypted-object size.')
-                dump.seek(0)
-                plain = dump.read()
-                encrypted = cipher.encrypt(plain)
-                write_private(destination / 'database.dump.fernet', encrypted)
-                manifest['dump'] = {'sha256': digest(plain), 'size': len(plain), 'cipher_sha256': digest(encrypted)}
+            # The dump is captured in memory and encrypted there. A temporary file would put an unencrypted copy of every row
+            # on the plain root filesystem (/tmp), outside the encrypted volume.
+            env = dict(os.environ, PGPASSWORD=opts['password'])
+            plain = run(['docker', 'exec', '-e', 'PGPASSWORD', SOURCE_CONTAINER, 'pg_dump',
+                         '-h', '127.0.0.1', '-U', opts['user'], '-d', SOURCE_DATABASE,
+                         '--format=custom', '--no-owner', '--no-privileges', '--snapshot=' + snapshot], env=env)
+            require(len(plain) <= MAX_OBJECT_BYTES, 'Database dump exceeds bounded encrypted-object size.')
+            encrypted = cipher.encrypt(plain)
+            write_private(destination / 'database.dump.fernet', encrypted)
+            manifest['dump'] = {'sha256': digest(plain), 'size': len(plain), 'cipher_sha256': digest(encrypted)}
+            del plain
             for row in manifest['files']:
                 require(digest(file_data(media, row['path'])) == row['sha256'],
                         'Referenced file changed during snapshot; backup is incomplete.')
@@ -365,11 +362,16 @@ def restore(args):
         triggers = query("SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgenabled='O'")[0][0]
         require(triggers >= 6, 'Fresh immutable-record/scope triggers are missing.')
         metadata = inspect_container(name)
-        require(metadata['HostConfig']['NetworkMode'] == 'none' and not metadata['HostConfig']['PortBindings']
-                and all(m['Type'] == 'tmpfs' for m in metadata['Mounts']), 'Restore isolation was not maintained.')
+        host_config = metadata['HostConfig']
+        # --tmpfs mounts are listed under HostConfig.Tmpfs, not Mounts: check both, so this cannot pass on an empty list.
+        on_tmpfs_without_swap = ('/var/lib/postgresql/data' in (host_config.get('Tmpfs') or {}) and not metadata['Mounts']
+                                 and host_config.get('ReadonlyRootfs') is True and host_config.get('Memory', 0) > 0
+                                 and host_config.get('MemorySwap') == host_config.get('Memory'))
+        require(host_config['NetworkMode'] == 'none' and not host_config['PortBindings'] and on_tmpfs_without_swap,
+                'Restore isolation was not maintained.')
         result.update(complete=True, table_count=len(tables), row_count=sum(t['rows'] for t in tables.values()),
                       file_count=len(manifest['files']), all_table_hashes_match=True, all_file_hashes_match=True,
-                      decrypted_files_written=0, restore_database_on_tmpfs_without_swap=True,
+                      decrypted_files_written=0, restore_database_on_tmpfs_without_swap=on_tmpfs_without_swap,
                       invariants=invariants, enabled_custom_triggers=triggers, network='none', published_ports=0,
                       workers_started=0, provider_credentials_copied=False, backup_run_id=manifest['run_id'])
     finally:
