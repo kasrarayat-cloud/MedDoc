@@ -38,7 +38,8 @@ def audit_report(file_reader=None):
     for usage in Usage.objects.select_related('job__providerreceipt','job__encounter__department').order_by('created_at'):
         try:receipt=usage.job.providerreceipt
         except ProviderReceipt.DoesNotExist:receipt=None
-        entries=list(LedgerEntry.objects.filter(job_id=usage.job_id,kind='usage').values('amount','wallet_id','wallet__kind','balance_after'))
+        # Wallet-id order: the same order the writer's proportional split uses, so the audit recomputes the split it wrote.
+        entries=list(LedgerEntry.objects.filter(job_id=usage.job_id,kind='usage').order_by('wallet_id').values('amount','wallet_id','wallet__kind','balance_after'))
         try:calculated=recompute_cost(usage.provider,usage.units,usage.rates,usage.simulated)
         except (KeyError,ValueError,ArithmeticError):calculated=None
         checks={'recomputed_defined_cost_matches':calculated==usage.actual_cost,

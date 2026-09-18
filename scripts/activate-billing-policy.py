@@ -85,22 +85,46 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
-ALLOWED_ROOTS = {'migrations', 'models', 'django', 'uuid', 'settings'}
-ALLOWED_NODES = (ast.Call, ast.keyword, ast.Attribute, ast.Name, ast.Constant, ast.List, ast.Tuple, ast.Dict, ast.Load)
+# Exactly the constructs Django's writer emits for these two models: no other callable is reachable.
+ALLOWED_CALLS = {('migrations', 'CreateModel'), ('models', 'UUIDField'), ('models', 'DateTimeField'), ('models', 'DecimalField'),
+                 ('models', 'CharField'), ('models', 'DateField'), ('models', 'ForeignKey'), ('models', 'OneToOneField'),
+                 ('models', 'CheckConstraint'), ('models', 'UniqueConstraint'), ('models', 'Q')}
+ALLOWED_CHAINS = {('django', 'db', 'models', 'deletion', 'PROTECT'), ('uuid', 'uuid4'), ('settings', 'AUTH_USER_MODEL')}
+
+
+def attribute_chain(node):
+    parts = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    require(isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load), 'Migration attribute chain must start at an imported name.')
+    return (node.id, *reversed(parts))
 
 
 def check_expression(node):
-    """Only literal data and attribute calls rooted in the generated imports: no names, lambdas, subscripts or comprehensions."""
-    for child in ast.walk(node):
-        require(isinstance(child, ALLOWED_NODES), 'Migration expression uses a construct outside the generated form: ' + type(child).__name__)
-        if isinstance(child, ast.Call):
-            require(isinstance(child.func, ast.Attribute), 'Migration may only call attributes of the generated imports.')
-            root = child.func
-            while isinstance(root, ast.Attribute):
-                root = root.value
-            require(isinstance(root, ast.Name) and root.id in ALLOWED_ROOTS, 'Migration calls a name outside the generated imports.')
-        if isinstance(child, ast.Name):
-            require(child.id in ALLOWED_ROOTS and isinstance(child.ctx, ast.Load), 'Migration references a name outside the generated imports: ' + child.id)
+    """Literal data, the exact reference chains and the exact field/constraint constructors the generated migration uses; nothing else."""
+    if isinstance(node, ast.Constant):
+        require(node.value is None or isinstance(node.value, (str, int, bool)), 'Migration literal of an unexpected type.')
+    elif isinstance(node, (ast.List, ast.Tuple)):
+        for element in node.elts:
+            check_expression(element)
+    elif isinstance(node, ast.Dict):
+        for key, value in zip(node.keys, node.values):
+            require(isinstance(key, ast.Constant) and isinstance(key.value, str), 'Migration dict keys must be string literals.')
+            check_expression(value)
+    elif isinstance(node, ast.Call):
+        require(not node.args or all(isinstance(argument, (ast.Constant, ast.List, ast.Tuple)) for argument in node.args), 'Migration positional arguments must be literals.')
+        chain = attribute_chain(node.func)
+        require(chain in ALLOWED_CALLS, 'Migration calls a constructor outside the generated form: ' + '.'.join(chain))
+        for argument in node.args:
+            check_expression(argument)
+        for keyword in node.keywords:
+            require(keyword.arg is not None and keyword.arg.isidentifier(), 'Migration keyword splat is not permitted.')
+            check_expression(keyword.value)
+    elif isinstance(node, (ast.Attribute, ast.Name)):
+        require(attribute_chain(node) in ALLOWED_CHAINS, 'Migration references a name outside the generated form.')
+    else:
+        require(False, 'Migration expression uses a construct outside the generated form: ' + type(node).__name__)
 
 
 def validate_migration(source):

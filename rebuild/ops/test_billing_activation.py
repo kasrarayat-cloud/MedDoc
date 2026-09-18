@@ -67,6 +67,21 @@ class MigrationValidation(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 self.activator.validate_migration(mutated)
 
+    def test_reachable_callables_under_allowed_roots_are_refused(self):
+        vectors = [
+            self.source.replace("default=uuid.uuid4", "default=django.core.management.call_command('shell', command='print(1)')", 1),
+            self.source.replace("default=uuid.uuid4", "default=django.db.connection.ops.execute_sql_flush(['SELECT 1'])", 1),
+            self.source.replace("default=uuid.uuid4", "default=models.signals.post_migrate.connect", 1),
+            self.source.replace("default=uuid.uuid4", "default=settings.configure", 1),
+            self.source.replace("default=uuid.uuid4", "default=uuid.uuid1", 1),
+            self.source.replace("on_delete=django.db.models.deletion.PROTECT", "on_delete=django.db.models.deletion.CASCADE", 1),
+            self.source.replace("models.CheckConstraint(", "models.Index(", 1),
+        ]
+        for mutated in vectors:
+            self.assertNotEqual(mutated, self.source)
+            with self.assertRaises(RuntimeError):
+                self.activator.validate_migration(mutated)
+
     def test_new_table_columns_match_the_model_definitions(self):
         import ast
         tree = ast.parse(self.source)

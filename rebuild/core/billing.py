@@ -125,8 +125,8 @@ def credit_payment(payment,session):
     LedgerEntry.objects.create(wallet=w,amount=amount,kind='payment',key=f'payment:{intent}',description='Explicit Stripe wallet top-up',balance_after=w.balance)
     p.status='paid'; p.stripe_intent=intent; p.save(update_fields=['status','stripe_intent'])
     audit(p.user,'payment.settle',p.pk,amount=str(amount))
-    # New paid funds are the trigger for reconciliation charges that were held for funds.
-    apply_pending_reconciliations(actor=p.user)
+    # New paid funds are the trigger for reconciliation charges that this payer holds; other payers' rows are untouched.
+    apply_pending_reconciliations(actor=p.user,wallet=w)
 
 @transaction.atomic
 def reconcile_refund(obj):
@@ -227,7 +227,7 @@ def reconcile_usage(usage,reconciled_cost,evidence_reference,actor,provider_cred
     audit(actor,'usage.reconcile',usage.job_id,department=usage.department,reconciled_cost=str(reconciled),charge_delta=str(delta),ledger_status=row.ledger_status,evidence_reference=evidence_reference)
     return row
 
-def apply_pending_reconciliations(actor=None):
+def apply_pending_reconciliations(actor=None,wallet=None):
     """Apply additional charges that were held for funds. Idempotent: the unique ledger key guards replay.
 
     Locks the job before the reconciliation row (the same order as absorb_failed_job) so the two never deadlock, and
@@ -236,7 +236,11 @@ def apply_pending_reconciliations(actor=None):
     from django.db import DatabaseError
     from .models import Job
     applied=[]
-    for pk,job_id in list(CostReconciliation.objects.filter(ledger_status='pending_funds').order_by('created_at').values_list('pk','usage__job_id')):
+    pending=CostReconciliation.objects.filter(ledger_status='pending_funds')
+    if wallet is not None:
+        # A top-up applies only the charges its own payer holds; other tenants' rows wait for their own funds.
+        pending=pending.filter(usage__payer=(f'user:{wallet.user_id}' if wallet.user_id else f'organization:{wallet.organization_id}'))
+    for pk,job_id in list(pending.order_by('created_at').values_list('pk','usage__job_id')):
         try:
             with transaction.atomic():
                 Job.objects.select_for_update().get(pk=job_id)

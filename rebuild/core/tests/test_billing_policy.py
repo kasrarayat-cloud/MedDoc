@@ -578,3 +578,44 @@ class RefutationRegressions(PolicyFixture,TestCase):
         usage=settle(job,cost,units,rates,'anthropic:synthetic-model','req_regress-12dp',provider_resource_id='msg_regress-12dp')
         self.assertEqual(usage.charged_cost,cost*Decimal('1.5'))
 
+    def test_audit_accepts_the_split_the_writer_produced_in_either_wallet_order(self):
+        seen=set()
+        for attempt in range(12):
+            scope=self.make_scope(f'policy-order-{attempt}');user=scope[0];encounter=scope[5]
+            promo=Wallet.objects.get(user=user,kind='promo');paid=Wallet.objects.get(user=user,kind='paid')
+            fund(paid,Decimal('6.5'),f'payment:policy-order-{attempt}')
+            job=Job.objects.create(encounter=encounter,user=user,request_key=f'policy-order-{attempt}')
+            reserve(job,Decimal('11'))
+            units={'input_tokens':11000,'output_tokens':0,'cached_input_tokens':0,'cache_creation_tokens':0}
+            usage=settle(job,Decimal('11'),units,AUDITABLE_RATES,'anthropic:synthetic-model',f'req_order_{attempt}',provider_resource_id=f'msg_order_{attempt}')
+            job.state='succeeded';job.finished_at=timezone.now();job.save(update_fields=['state','finished_at'])
+            row=reconcile_usage(usage,Decimal('10'),f'INV-SYNTH-ORDER-{attempt}',user)
+            self.assertEqual(row.charge_delta,Decimal('-1.5'))
+            seen.add(str(promo.pk)<str(paid.pk))
+            report=audit_report();reported=[r for r in report['rows'] if r['job_id']==str(job.pk)][0]
+            self.assertTrue(reported['checks']['reconciliation_credit_split_proportional'],reported['checks'])
+            self.assertTrue(report['all_checks_pass'])
+            if len(seen)==2:break
+        self.assertEqual(seen,{True,False},'Both wallet-id orders must be exercised.')
+
+    def test_a_top_up_applies_only_its_own_payer_held_charges_and_records_that_payer(self):
+        from core.billing import credit_payment
+        from core.models import Payment
+        other=self.make_scope('policy-tenant-b');other_user=other[0];other_encounter=other[5]
+        other_paid=Wallet.objects.get(user=other_user,kind='paid')
+        job=Job.objects.create(encounter=other_encounter,user=other_user,request_key='policy-tenant-b-job');reserve(job,Decimal('0.5'))
+        units={'input_tokens':500,'output_tokens':0,'cached_input_tokens':0,'cache_creation_tokens':0}
+        usage=settle(job,Decimal('0.5'),units,AUDITABLE_RATES,'anthropic:synthetic-model','req_tenant_b',provider_resource_id='msg_tenant_b')
+        job.state='succeeded';job.finished_at=timezone.now();job.save(update_fields=['state','finished_at'])
+        row=reconcile_usage(usage,Decimal('0.9'),'INV-SYNTH-TENANT-B',other_user);self.assertEqual(row.ledger_status,'pending_funds')
+        payment=Payment.objects.create(user=self.user,wallet=self.paid,amount_cents=500,stripe_session='cs_test_tenant_a')
+        credit_payment(payment,{'id':payment.stripe_session,'payment_status':'paid','currency':'usd','amount_total':500,'metadata':{'payment_id':str(payment.pk)},'payment_intent':'pi_test_tenant_a','mode':'payment'})
+        row.refresh_from_db();self.assertEqual(row.ledger_status,'pending_funds')
+        self.assertFalse(AuditEvent.objects.filter(action='usage.reconciliation_applied').exists())
+        payment_b=Payment.objects.create(user=other_user,wallet=other_paid,amount_cents=500,stripe_session='cs_test_tenant_b')
+        credit_payment(payment_b,{'id':payment_b.stripe_session,'payment_status':'paid','currency':'usd','amount_total':500,'metadata':{'payment_id':str(payment_b.pk)},'payment_intent':'pi_test_tenant_b','mode':'payment'})
+        row.refresh_from_db();self.assertEqual(row.ledger_status,'applied')
+        event=AuditEvent.objects.get(action='usage.reconciliation_applied',target=str(job.pk));self.assertEqual(event.actor_id,other_user.pk)
+        other_paid.refresh_from_db();self.assertEqual(other_paid.balance,Decimal('5')-Decimal('0.6'))
+        self.assertTrue(audit_report()['all_checks_pass'])
+
