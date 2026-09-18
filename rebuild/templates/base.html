@@ -21,6 +21,8 @@
       <a href="{% url 'admin_dashboard' %}" {% if request.resolver_match.url_name == 'admin_dashboard' %}aria-current="page"{% endif %}><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Overview</a>
       <a href="{% url 'admin_dashboard' %}#accounts"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3m2-15a3 3 0 0 1 0 6m2 3a6 6 0 0 1 2 5"/></svg>Accounts & permissions</a>
       <a href="{% url 'admin_dashboard' %}#jobs"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4H4v16h16V4h-4M9 2h6v4H9zM8 11h8m-8 4h6"/></svg>Jobs & activity</a>
+      <a href="{% url 'admin_dashboard' %}#cost-reconciliation"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h7m5-3 2 2 4-4"/></svg>Cost reconciliation</a>
+      <a href="{% url 'admin_dashboard' %}#platform-costs"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18M5 20V9l7-5 7 5v11M10 20v-6h4v6"/></svg>Platform costs</a>
       <a href="{% url 'admin_dashboard' %}#payments"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/></svg>Payments & ledger</a>
       <a href="{% url 'audit' %}" {% if request.resolver_match.url_name == 'audit' %}aria-current="page"{% endif %}><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7zM8 12l3 3 5-6"/></svg>Audit history</a>
     {% else %}

@@ -59,3 +59,29 @@ class CheckoutForm(forms.Form):
 class VoiceForm(forms.Form):
     audio=forms.FileField(label='Recorded audio (.wav, .webm, .mp3, .m4a)')
     consent=forms.BooleanField(label='Send this synthetic recording for transcription; charge provider usage × 1.5.')
+class ReconciliationForm(forms.Form):
+    reconciled_cost=forms.DecimalField(min_value=0,max_digits=24,decimal_places=11,label='Reconciled actual provider cost (USD, up to 11 decimals)')
+    evidence_reference=forms.CharField(max_length=240,label='Evidence reference (invoice number, export sha256 or report id)')
+    evidence_sha256=forms.CharField(max_length=64,required=False,label='Evidence file sha256 (optional)')
+    provider_credit_applied=forms.DecimalField(min_value=0,max_digits=24,decimal_places=12,required=False,label='Allocated provider credit (USD, informational)')
+    discount_applied=forms.DecimalField(min_value=0,max_digits=24,decimal_places=12,required=False,label='Discount applied (USD, informational)')
+    note=forms.CharField(max_length=240,required=False)
+class PlatformCostForm(forms.Form):
+    amount=forms.DecimalField(min_value=0,max_digits=24,decimal_places=12,label='Amount (USD)')
+    description=forms.CharField(max_length=240)
+    period_start=forms.DateField(required=False)
+    period_end=forms.DateField(required=False)
+    evidence_reference=forms.CharField(max_length=240,required=False)
+    def clean(self):
+        data=super().clean()
+        if data.get('period_start') and data.get('period_end') and data['period_start']>data['period_end']: raise forms.ValidationError('Period start must not be after period end.')
+        return data
+class JobResolutionForm(forms.Form):
+    OUTCOMES=[('release_no_cost','Release held funds: no provider cost evidenced'),('absorb_platform_failure','Absorb evidenced provider cost as a platform failure')]
+    outcome=forms.ChoiceField(choices=OUTCOMES)
+    evidence_note=forms.CharField(min_length=12,max_length=240,label='Evidence note (provider console reference)')
+    actual_cost=forms.DecimalField(min_value=0,max_digits=24,decimal_places=12,required=False,label='Evidenced provider cost (USD)')
+    def clean(self):
+        data=super().clean()
+        if data.get('outcome')=='absorb_platform_failure' and data.get('actual_cost') is None: raise forms.ValidationError('Absorbing a platform failure requires the evidenced provider cost.')
+        return data

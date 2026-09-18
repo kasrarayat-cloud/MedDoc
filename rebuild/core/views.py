@@ -23,7 +23,7 @@ from django_otp.plugins.otp_totp.models import TOTPDevice
 from .models import *
 from .forms import *
 from .security import audit,departments,scoped,membership,digest,token,store_upload,private_path,rate_limit
-from .billing import welcome_credit,credit_payment,reconcile_refund,reconciliation,stripe_test_key_configured
+from .billing import welcome_credit,credit_payment,reconcile_refund,reconciliation,stripe_test_key_configured,reconcile_usage,release
 from .context import integration_status
 from .jobs import enqueue
 from . import wm_review
@@ -578,7 +578,13 @@ def billing(request):
     personal=Wallet.objects.filter(user=request.user)
     owned_orgs=Membership.objects.filter(user=request.user,active=True,role='owner').values_list('department__organization_id',flat=True)
     wallets=Wallet.objects.filter(models.Q(user=request.user)|models.Q(organization_id__in=owned_orgs))
-    return render(request,'billing.html',{'wallets':wallets,'ledger':LedgerEntry.objects.filter(wallet__in=wallets).select_related('wallet').order_by('-created_at')[:100],'usage':Usage.objects.filter(user=request.user).select_related('user','department','job__providerreceipt').order_by('-created_at')[:100],'payments':Payment.objects.filter(user=request.user).select_related('wallet__organization').order_by('-created_at')[:30],'form':checkout_form(request.user),'checkout_token':signing.dumps({'user':str(request.user.pk),'nonce':secrets.token_hex(24)},salt='checkout-authorization')})
+    usage=list(Usage.objects.filter(user=request.user).select_related('user','department','job__providerreceipt','costreconciliation__recorded_by').order_by('-created_at')[:100])
+    return render(request,'billing.html',{'wallets':wallets,'ledger':LedgerEntry.objects.filter(wallet__in=wallets).select_related('wallet').order_by('-created_at')[:100],'usage':usage_rows(usage),'payments':Payment.objects.filter(user=request.user).select_related('wallet__organization').order_by('-created_at')[:30],'form':checkout_form(request.user),'checkout_token':signing.dumps({'user':str(request.user.pk),'nonce':secrets.token_hex(24)},salt='checkout-authorization')})
+
+def usage_rows(usage):
+    # Reconciled and absorbed evidence is read from the append-only ledger; the usage rows themselves are never edited.
+    absorbed={entry['job_id']:entry['total'] for entry in LedgerEntry.objects.filter(kind='absorbed',job_id__in=[item.job_id for item in usage]).values('job_id').annotate(total=models.Sum('amount'))}
+    return [{'usage':item,'reconciliation':item.reconciliation,'absorbed':absorbed.get(item.job_id)} for item in usage]
 
 @require_POST
 def checkout(request):
@@ -642,7 +648,60 @@ def admin_dashboard(request):
     if not request.user.is_staff or not request.user.is_verified():raise Http404
     counts={'accounts':User.objects.count(),'organizations':Organization.objects.count(),'departments':Department.objects.count(),'jobs':Job.objects.count(),'welcome_credits':LedgerEntry.objects.filter(kind='welcome').count()}
     audit(request.user,'admin.dashboard')
-    return render(request,'admin_dashboard.html',{'counts':counts,'users':User.objects.order_by('-date_joined')[:100],'memberships':Membership.objects.select_related('user','department__organization')[:100],'jobs':Job.objects.select_related('user','encounter').order_by('-created_at')[:100],'usage':Usage.objects.select_related('user','department','organization','job__providerreceipt').order_by('-created_at')[:100],'payments':Payment.objects.select_related('user').order_by('-created_at')[:100],'refunds':Refund.objects.select_related('payment').order_by('-created_at')[:100],'stripe_events':WebhookEvent.objects.order_by('-created_at')[:100],'wallets':Wallet.objects.select_related('user','organization')[:100],'ledger':LedgerEntry.objects.select_related('wallet').order_by('-created_at')[:100],'reconciliation':reconciliation(),'receipts':ProviderReceipt.objects.select_related('job').order_by('-created_at')[:100],'audit_events':AuditEvent.objects.select_related('actor').order_by('-created_at')[:100]})
+    usage=list(Usage.objects.select_related('user','department','organization','job__providerreceipt','costreconciliation__recorded_by').order_by('-created_at')[:100])
+    platform_costs=list(PlatformCost.objects.select_related('job','recorded_by').order_by('-created_at')[:100])
+    platform_totals={label:PlatformCost.objects.filter(kind=kind).aggregate(total=models.Sum('amount'))['total'] or Decimal('0') for kind,label in PlatformCost.KINDS}
+    return render(request,'admin_dashboard.html',{'counts':counts,'users':User.objects.order_by('-date_joined')[:100],'memberships':Membership.objects.select_related('user','department__organization')[:100],'jobs':Job.objects.select_related('user','encounter').order_by('-created_at')[:100],'usage':usage,'usage_rows':usage_rows(usage),'platform_costs':platform_costs,'platform_totals':platform_totals,'resolution_form':JobResolutionForm(),'platform_cost_form':PlatformCostForm(),'reconciliation_form':ReconciliationForm(),'payments':Payment.objects.select_related('user').order_by('-created_at')[:100],'refunds':Refund.objects.select_related('payment').order_by('-created_at')[:100],'stripe_events':WebhookEvent.objects.order_by('-created_at')[:100],'wallets':Wallet.objects.select_related('user','organization')[:100],'ledger':LedgerEntry.objects.select_related('wallet').order_by('-created_at')[:100],'reconciliation':reconciliation(),'receipts':ProviderReceipt.objects.select_related('job').order_by('-created_at')[:100],'audit_events':AuditEvent.objects.select_related('actor').order_by('-created_at')[:100]})
+
+@require_POST
+def admin_reconcile_usage(request,pk):
+    if not request.user.is_staff or not request.user.is_verified():raise Http404
+    usage=get_object_or_404(Usage,pk=pk)
+    form=ReconciliationForm(request.POST)
+    if not form.is_valid():raise ValidationError('; '.join(f'{field}: {" ".join(errors)}' for field,errors in form.errors.items()))
+    data=form.cleaned_data
+    row=reconcile_usage(usage,data['reconciled_cost'],data['evidence_reference'],request.user,provider_credit_applied=data.get('provider_credit_applied') or Decimal('0'),discount_applied=data.get('discount_applied') or Decimal('0'),evidence_sha256=data.get('evidence_sha256') or '',note=data.get('note') or '')
+    messages.success(request,f'Reconciliation recorded. Charge delta ${row.charge_delta}; ledger status {row.ledger_status}.')
+    return redirect('/console/#cost-reconciliation')
+
+@require_POST
+@transaction.atomic
+def admin_platform_cost(request):
+    if not request.user.is_staff or not request.user.is_verified():raise Http404
+    form=PlatformCostForm(request.POST)
+    if not form.is_valid():raise ValidationError('; '.join(f'{field}: {" ".join(errors)}' for field,errors in form.errors.items()))
+    data=form.cleaned_data
+    row=PlatformCost.objects.create(kind='fixed_overhead',amount=data['amount'],description=data['description'],period_start=data.get('period_start'),period_end=data.get('period_end'),evidence_reference=data.get('evidence_reference') or '',recorded_by=request.user)
+    audit(request.user,'platform_cost.recorded',row.pk,kind=row.kind,amount=str(row.amount))
+    messages.success(request,'Fixed overhead recorded. It is tracked separately and never charged to users.')
+    return redirect('/console/#platform-costs')
+
+@require_POST
+@transaction.atomic
+def admin_resolve_job(request,pk):
+    if not request.user.is_staff or not request.user.is_verified():raise Http404
+    job=get_object_or_404(Job.objects.select_for_update().select_related('encounter__department'),pk=pk)
+    if job.state!='reconciliation':return HttpResponse('Only jobs held for reconciliation can be resolved.',status=409)
+    form=JobResolutionForm(request.POST)
+    if not form.is_valid():raise ValidationError('; '.join(f'{field}: {" ".join(errors)}' for field,errors in form.errors.items()))
+    data=form.cleaned_data;note=data['evidence_note'].strip()
+    from .billing import absorb_failed_job
+    settled=Usage.objects.filter(job=job,simulated=False).first()
+    simulated=Usage.objects.filter(job=job,simulated=True).exists() or (job.kind=='generation' and job.config.get('mode',settings.AI_MODE)!='live')
+    release(job)
+    job.state='failed';job.finished_at=timezone.now()
+    job.error='Resolved by administrator: settled provider cost absorbed by QuillMD.' if settled else 'Resolved by administrator: synthetic fixture job carries no provider cost.' if simulated else 'Resolved by administrator: no provider cost evidenced.' if data['outcome']=='release_no_cost' else 'Resolved by administrator: provider cost absorbed by QuillMD.'
+    job.save(update_fields=['state','error','finished_at'])
+    if settled:
+        # The worker settled the charge before the outcome became uncertain: reverse it, whatever amount the form carried.
+        absorbed=absorb_failed_job(job,actor=request.user,note=note)
+    elif simulated: absorbed=None
+    elif data['outcome']=='absorb_platform_failure':
+        absorbed,_=PlatformCost.objects.get_or_create(job=job,kind='absorbed_failure',defaults={'amount':data['actual_cost'],'description':'Provider cost absorbed: uncertain outcome resolved by administrator','evidence_reference':note,'recorded_by':request.user})
+    else: absorbed=None
+    audit(request.user,'job.resolved',job.pk,department=job.encounter.department,outcome=data['outcome'],evidence_note=note,settled_usage=bool(settled),simulated=simulated,actual_cost=str(absorbed.amount) if absorbed else None)
+    messages.success(request,'Job resolved. Held funds were released and the settled charge was reversed.' if settled else 'Job resolved. Held funds were released and the user was not charged.')
+    return redirect('/console/#jobs')
 
 def audit_view(request):
     if not request.user.is_staff or not request.user.is_verified():raise Http404
