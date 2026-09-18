@@ -113,12 +113,25 @@ class MigrationInvariants(unittest.TestCase):
                      'rebuild/ops/test_storage_migration.py', 'docs/rebuild/storage-encryption.md', self.migration.DECL):
             self.assertIn(path, self.migration.ALLOWED)
             self.assertTrue((ROOT / path).is_file(), path)
-        probe = subprocess.run(['git', '-C', str(ROOT), 'cat-file', '-e', self.migration.BASELINE + '^{commit}'], capture_output=True)
-        if probe.returncode != 0:
-            # A shallow CI checkout lacks the running release; the migration preflight enforces the same set at run time.
-            self.skipTest('running release not fetched; the preflight enforces ALLOWED against the target')
-        changed = set(subprocess.check_output(['git', '-C', str(ROOT), 'diff', '--name-only', self.migration.BASELINE, 'HEAD'], text=True).split())
+        commits = (self.migration.BASELINE, self.migration.MIGRATED)
+        probe = [subprocess.run(['git', '-C', str(ROOT), 'cat-file', '-e', c + '^{commit}'], capture_output=True).returncode for c in commits]
+        if any(probe):
+            # A shallow CI checkout lacks both commits; the migration preflight enforces the same set at run time.
+            self.skipTest('release commits not fetched; the preflight enforces ALLOWED against the target')
+        # The act is complete, so the set constrains the target it migrated (and any later rollback target), not every later main.
+        changed = set(subprocess.check_output(['git', '-C', str(ROOT), 'diff', '--name-only', *commits], text=True).split())
         self.assertEqual(sorted(changed - self.migration.ALLOWED), [])
+        self.assertLessEqual(self.migration.REAP_PATHS, self.migration.ALLOWED)
+
+    def test_rollback_does_not_need_the_removed_plaintext_snapshot(self):
+        main = function_source('main')
+        rollback_branch = main.split("        require(args.from_result, 'Rollback needs --from-result naming the migrate result.')")[1].split('    installed = ')[0]
+        self.assertIn("probe['image']", rollback_branch)
+        self.assertNotIn("probe['rollback']", rollback_branch)
+        rollback = function_source('execute_rollback')
+        self.assertNotIn('ROLLBACK', rollback)
+        self.assertIn('ROOT_COPY_BACK', rollback)
+        self.assertIn("M+'/postgres'", self.migration.ROOT_COPY_BACK)
 
     def test_root_steps_compile(self):
         for name in ('ROOT_PROBE', 'ROOT_PREPARE', 'ROOT_COPY', 'ROOT_ARCHIVE_LOG', 'ROOT_SWITCH', 'ROOT_INSTALL', 'ROOT_STATE',
