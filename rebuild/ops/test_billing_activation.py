@@ -50,6 +50,23 @@ class MigrationValidation(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.activator.validate_migration(mutated)
 
+    def test_import_time_code_is_refused_everywhere(self):
+        anchor = "class Migration(migrations.Migration):"
+        self.assertEqual(self.source.count(anchor), 1)
+        vectors = [
+            self.source.replace(anchor, "@print\n" + anchor),
+            self.source.replace(anchor, anchor + "\n    print('side effect')"),
+            self.source.replace(anchor, anchor + "\n    marker: int = __import__('os').getpid()"),
+            self.source.replace("default=uuid.uuid4", "default=__import__('os').getpid", 1),
+            self.source.replace("default=uuid.uuid4", "default=(lambda: 1)", 1),
+            self.source.replace("default=uuid.uuid4", "default=uuid.uuid4()", 1).replace("import uuid", "import uuid\nimport os"),
+            self.source.replace("'evidence_reference', ''", "'evidence_reference', [x for x in ()]", 1),
+        ]
+        for mutated in vectors:
+            self.assertNotEqual(mutated, self.source)
+            with self.assertRaises(RuntimeError):
+                self.activator.validate_migration(mutated)
+
     def test_new_table_columns_match_the_model_definitions(self):
         import ast
         tree = ast.parse(self.source)

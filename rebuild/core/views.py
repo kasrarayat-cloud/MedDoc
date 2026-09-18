@@ -687,17 +687,19 @@ def admin_resolve_job(request,pk):
     data=form.cleaned_data;note=data['evidence_note'].strip()
     from .billing import absorb_failed_job
     settled=Usage.objects.filter(job=job,simulated=False).first()
+    simulated=Usage.objects.filter(job=job,simulated=True).exists() or (job.kind=='generation' and job.config.get('mode',settings.AI_MODE)!='live')
     release(job)
     job.state='failed';job.finished_at=timezone.now()
-    job.error='Resolved by administrator: settled provider cost absorbed by QuillMD.' if settled else 'Resolved by administrator: no provider cost evidenced.' if data['outcome']=='release_no_cost' else 'Resolved by administrator: provider cost absorbed by QuillMD.'
+    job.error='Resolved by administrator: settled provider cost absorbed by QuillMD.' if settled else 'Resolved by administrator: synthetic fixture job carries no provider cost.' if simulated else 'Resolved by administrator: no provider cost evidenced.' if data['outcome']=='release_no_cost' else 'Resolved by administrator: provider cost absorbed by QuillMD.'
     job.save(update_fields=['state','error','finished_at'])
     if settled:
         # The worker settled the charge before the outcome became uncertain: reverse it, whatever amount the form carried.
-        absorbed=absorb_failed_job(job)
+        absorbed=absorb_failed_job(job,actor=request.user,note=note)
+    elif simulated: absorbed=None
     elif data['outcome']=='absorb_platform_failure':
         absorbed,_=PlatformCost.objects.get_or_create(job=job,kind='absorbed_failure',defaults={'amount':data['actual_cost'],'description':'Provider cost absorbed: uncertain outcome resolved by administrator','evidence_reference':note,'recorded_by':request.user})
     else: absorbed=None
-    audit(request.user,'job.resolved',job.pk,department=job.encounter.department,outcome=data['outcome'],evidence_note=note,settled_usage=bool(settled),actual_cost=str(absorbed.amount) if absorbed else None)
+    audit(request.user,'job.resolved',job.pk,department=job.encounter.department,outcome=data['outcome'],evidence_note=note,settled_usage=bool(settled),simulated=simulated,actual_cost=str(absorbed.amount) if absorbed else None)
     messages.success(request,'Job resolved. Held funds were released and the settled charge was reversed.' if settled else 'Job resolved. Held funds were released and the user was not charged.')
     return redirect('/console/#jobs')
 

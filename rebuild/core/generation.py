@@ -2,7 +2,7 @@
 import json
 import hashlib
 import re
-from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN
+from decimal import Decimal, InvalidOperation, ROUND_DOWN, ROUND_HALF_EVEN
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from pydantic import BaseModel, ConfigDict
@@ -50,8 +50,11 @@ def discount_rate(config=None):
 def discounted_cost(list_cost,discount):
     """Attributable metered cost after the configured discount; unchanged when the discount is zero."""
     list_cost=Decimal(str(list_cost));discount=Decimal(str(discount))
-    if discount==0: return list_cost
-    return (list_cost*(1-discount)).quantize(COST_QUANTUM,rounding=ROUND_HALF_EVEN)
+    if discount==0 and list_cost==list_cost.quantize(COST_QUANTUM): return list_cost
+    # Always settlement-safe (eleven decimals) and never above the list cost, whatever the rounding direction.
+    result=(list_cost*(1-discount)).quantize(COST_QUANTUM,rounding=ROUND_HALF_EVEN)
+    if result>list_cost: result=list_cost.quantize(COST_QUANTUM,rounding=ROUND_DOWN)
+    return result
 
 def cost_rates(rate_values,list_cost,discount):
     recorded={k:str(v) for k,v in rate_values.items()}

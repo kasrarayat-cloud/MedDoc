@@ -306,7 +306,8 @@ class AdminConsolePolicy(PolicyFixture,TestCase):
         return admin
 
     def uncertain_job(self,key):
-        job=Job.objects.create(encounter=self.encounter,user=self.user,request_key=key)
+        # A live job records its mode at enqueue; the resolver treats a fixture-mode job as costless (round-2 F-5).
+        job=Job.objects.create(encounter=self.encounter,user=self.user,request_key=key,config={'mode':'live'})
         reserve(job,Decimal('0.2'))
         with override_settings(AI_MODE='live'),patch('core.jobs.generation.generate',side_effect=TimeoutError('synthetic uncertain provider outcome')):run_one()
         job.refresh_from_db();self.assertEqual(job.state,'reconciliation')
@@ -511,4 +512,69 @@ class RefutationRegressions(PolicyFixture,TestCase):
         with self.assertRaises(ValidationError):reconcile_usage(usage,Decimal('0.400000000001'),'INV-SYNTH-P12',self.user)
         row=reconcile_usage(usage,Decimal('0.40000000001'),'INV-SYNTH-P11',self.user)
         self.assertEqual(row.charge_delta,Decimal('0.000000000015'));self.assertEqual(row.ledger_status,'pending_funds')
+
+    def test_absorbed_status_admits_no_reconciliation_entries(self):
+        job,usage=self.failed_unabsorbed_job('regress-r2-absorbed-entries')
+        absorb_failed_job(job)
+        row=reconcile_usage(usage,Decimal('0.05'),'INV-SYNTH-R2A',self.user);self.assertEqual(row.ledger_status,'absorbed')
+        self.promo.refresh_from_db();self.promo.balance+=Decimal('0.5');self.promo.save(update_fields=['balance'])
+        LedgerEntry.objects.create(wallet=self.promo,amount=Decimal('0.5'),kind='reconciliation',key=f'reconciliation:{usage.pk}:{self.promo.pk}',description='illegitimate credit',job=job,balance_after=self.promo.balance)
+        report=audit_report();reported=[r for r in report['rows'] if r['job_id']==str(job.pk)][0]
+        self.assertFalse(reported['checks']['reconciliation_delta_arithmetic']);self.assertFalse(report['all_checks_pass'])
+
+    def test_audit_requires_the_proportional_credit_split(self):
+        fund(self.paid,Decimal('5'),'payment:regress-r2-split')
+        usage=self.settled(Decimal('8'),key='regress-r2-split')
+        CostReconciliation.objects.create(usage=usage,reconciled_cost=Decimal('4'),evidence_reference='INV-SYNTH-SPLIT',recorded_by=self.user,charge_delta=Decimal('-6'),ledger_status='applied')
+        self.paid.refresh_from_db();self.paid.balance+=Decimal('6');self.paid.save(update_fields=['balance'])
+        LedgerEntry.objects.create(wallet=self.paid,amount=Decimal('6'),kind='reconciliation',key=f'reconciliation:{usage.pk}:{self.paid.pk}',description='whole credit to the paid wallet',job=usage.job,balance_after=self.paid.balance)
+        report=audit_report();reported=[r for r in report['rows'] if r['job_id']==str(usage.job_id)][0]
+        self.assertTrue(reported['checks']['reconciliation_wallets_valid']);self.assertFalse(reported['checks']['reconciliation_credit_split_proportional']);self.assertFalse(report['all_checks_pass'])
+
+    def test_audit_rejects_policy_entries_without_a_job(self):
+        self.settled(Decimal('0.5'),key='regress-r2-orphan')
+        self.promo.refresh_from_db();self.promo.balance+=Decimal('5');self.promo.save(update_fields=['balance'])
+        LedgerEntry.objects.create(wallet=self.promo,amount=Decimal('5'),kind='absorbed',key='absorbed:orphan',description='orphan',job=None,balance_after=self.promo.balance)
+        report=audit_report()
+        self.assertEqual(report['ledger_policy']['orphan_policy_entries'],1);self.assertFalse(report['ledger_policy']['checks']['policy_ledger_entries_bound_to_jobs']);self.assertFalse(report['all_checks_pass'])
+
+    @override_settings(AI_MODE='fixture')
+    def test_resolving_a_stale_fixture_job_records_no_platform_cost(self):
+        original=self.encounter
+        draft=Encounter.objects.create(department=original.department,patient=original.patient,template_version=original.template_version,created_by=original.created_by,notes=original.notes)
+        job=enqueue(draft,self.user)
+        Job.objects.filter(pk=job.pk).update(state='running',started_at=timezone.now()-timedelta(minutes=6))
+        mark_stale();job.refresh_from_db();self.assertEqual(job.state,'reconciliation')
+        self.admin_login()
+        with override_settings(ADMIN_SITE=True):
+            response=self.client.post(f'/console/jobs/{job.pk}/resolve/',{'outcome':'absorb_platform_failure','evidence_note':'Fixture job stalled in a synthetic test','actual_cost':'0.05'})
+        self.assertEqual(response.status_code,302)
+        job.refresh_from_db();self.assertEqual(job.state,'failed');self.assertIn('fixture',job.error)
+        self.assertFalse(PlatformCost.objects.exists());self.assertEqual(self.balances(),(Decimal('10'),Decimal('0')))
+        self.assertTrue(audit_report()['all_checks_pass'])
+
+    def test_stripe_top_up_applies_a_reconciliation_held_for_funds(self):
+        from core.billing import credit_payment
+        from core.models import Payment
+        usage=self.settled(Decimal('0.5'),key='regress-r2-topup')
+        row=reconcile_usage(usage,Decimal('0.9'),'INV-SYNTH-TOPUP',self.user);self.assertEqual(row.ledger_status,'pending_funds')
+        payment=Payment.objects.create(user=self.user,wallet=self.paid,amount_cents=500,stripe_session='cs_test_regress_topup')
+        session={'id':payment.stripe_session,'payment_status':'paid','currency':'usd','amount_total':500,'metadata':{'payment_id':str(payment.pk)},'payment_intent':'pi_test_regress_topup','mode':'payment'}
+        credit_payment(payment,session)
+        row.refresh_from_db();self.assertEqual(row.ledger_status,'applied')
+        self.assertEqual(self.balances(),(Decimal('9.25'),Decimal('5')-Decimal('0.6')))
+        self.assertTrue(AuditEvent.objects.filter(action='usage.reconciliation_applied',target=str(usage.job_id)).exists())
+        self.assertTrue(audit_report()['all_checks_pass'])
+
+    def test_twelve_decimal_list_cost_settles_at_zero_discount_and_never_exceeds_list(self):
+        self.assertEqual(discounted_cost(Decimal('0.000000000019'),Decimal('0')),Decimal('0.00000000001'))
+        self.assertEqual(discounted_cost(Decimal('0.000000000019'),Decimal('0.01')),Decimal('0.00000000001'))
+        self.assertLessEqual(discounted_cost(Decimal('0.000000000019'),Decimal('0.01')),Decimal('0.000000000019'))
+        job=Job.objects.create(encounter=self.encounter,user=self.user,request_key='regress-r2-12dp')
+        reserve(job,Decimal('0.2'))
+        units={'input_tokens':1,'output_tokens':0,'cached_input_tokens':0,'cache_creation_tokens':0}
+        rates={'input_per_million':'0.000019','output_per_million':'0','cached_per_million':'0'}
+        cost=discounted_cost(Decimal('0.000000000019'),Decimal('0'))
+        usage=settle(job,cost,units,rates,'anthropic:synthetic-model','req_regress-12dp',provider_resource_id='msg_regress-12dp')
+        self.assertEqual(usage.charged_cost,cost*Decimal('1.5'))
 

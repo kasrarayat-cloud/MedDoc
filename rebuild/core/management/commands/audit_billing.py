@@ -77,11 +77,19 @@ def audit_report(file_reader=None):
             scope,_,identifier=(usage.payer or '').partition(':')
             payer_wallet=Wallet.objects.filter(kind='paid',**({'user_id':identifier} if scope=='user' else {'organization_id':identifier})).values_list('pk',flat=True).first() if identifier and scope in ('user','organization') else None
             checks['reconciliation_wallets_valid']=all((entry['amount']>0 and entry['wallet_id'] in debited_wallets) or (entry['amount']<0 and entry['wallet_id']==payer_wallet) for entry in reconciliation_entries)
+            if reconciliation and reconciliation.charge_delta<0 and any(entry['amount']>0 for entry in reconciliation_entries):
+                # Credits must follow the proportional split of the original debits, not merely land on a debited wallet.
+                from core.billing import proportional_split
+                from types import SimpleNamespace
+                try:
+                    expected={wallet_id:share for wallet_id,share in proportional_split([SimpleNamespace(wallet_id=entry['wallet_id'],amount=entry['amount']) for entry in entries],-reconciliation.charge_delta) if share}
+                except Exception:expected=None
+                checks['reconciliation_credit_split_proportional']=expected is not None and {entry['wallet_id']:entry['amount'] for entry in reconciliation_entries if entry['amount']>0}==expected
         if reconciliation:
             applied=sum((entry['amount'] for entry in reconciliation_entries),Decimal(0))
             arithmetic=reconciliation.charge_delta==(reconciliation.reconciled_cost-usage.actual_cost)*Decimal('1.5')
             if reconciliation.ledger_status=='applied':ledger_ok=applied==-reconciliation.charge_delta
-            elif reconciliation.ledger_status=='absorbed':ledger_ok=absorbed and (not reconciliation_entries or reconciliation.charge_delta<=0)
+            elif reconciliation.ledger_status=='absorbed':ledger_ok=absorbed and not reconciliation_entries
             else:ledger_ok=reconciliation.charge_delta>0 and not reconciliation_entries
             checks['reconciliation_delta_arithmetic']=arithmetic and ledger_ok
         elif reconciliation_entries:checks['reconciliation_delta_arithmetic']=False
@@ -104,6 +112,8 @@ def audit_report(file_reader=None):
             'configured_pricing_fingerprint_at_enqueue':usage.job.config.get('pricing_version'),
             'audit_rate_digest_sha256':hashlib.sha256(json.dumps(usage.rates,sort_keys=True,separators=(',',':')).encode()).hexdigest(),
             'durable_receipt_present':bool(receipt),'stored_result_integrity':result_integrity,'ledger':entries,'checks':checks})
+    orphan=LedgerEntry.objects.filter(kind__in=['absorbed','reconciliation'],job__isnull=True).count()
+    ledger_policy={'orphan_policy_entries':orphan,'checks':{'policy_ledger_entries_bound_to_jobs':orphan==0}}
     wallets=[]
     for wallet in Wallet.objects.all().order_by('id'):
         total=LedgerEntry.objects.filter(wallet=wallet).aggregate(total=Sum('amount'))['total'] or Decimal(0)
@@ -123,7 +133,8 @@ def audit_report(file_reader=None):
         'fingerprint_limit':'A configured pricing fingerprint identifies the application configuration, not a provider contract, tariff version, invoice, or verified account discount.',
         'rate_reference_reviewed_on':'2026-09-17','rate_references':['https://platform.claude.com/docs/en/about-claude/pricing','https://deepgram.com/pricing'],
         'rows':rows,'wallets':wallets,'unsettled_provider_receipts':unsettled,'unresolved_jobs':unresolved,
-        'all_checks_pass':all(all(row['checks'].values()) for row in rows+wallets),
+        'ledger_policy':ledger_policy,
+        'all_checks_pass':all(all(row['checks'].values()) for row in rows+wallets) and all(ledger_policy['checks'].values()),
         'durable_receipt_gaps':sum(not row['durable_receipt_present'] and not row['simulated'] for row in rows),
         'invoice_reconciliation':'Not performed; account invoices, discounts and promotional provider credits remain unverified.'}
 

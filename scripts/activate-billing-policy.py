@@ -85,8 +85,26 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
+ALLOWED_ROOTS = {'migrations', 'models', 'django', 'uuid', 'settings'}
+ALLOWED_NODES = (ast.Call, ast.keyword, ast.Attribute, ast.Name, ast.Constant, ast.List, ast.Tuple, ast.Dict, ast.Load)
+
+
+def check_expression(node):
+    """Only literal data and attribute calls rooted in the generated imports: no names, lambdas, subscripts or comprehensions."""
+    for child in ast.walk(node):
+        require(isinstance(child, ALLOWED_NODES), 'Migration expression uses a construct outside the generated form: ' + type(child).__name__)
+        if isinstance(child, ast.Call):
+            require(isinstance(child.func, ast.Attribute), 'Migration may only call attributes of the generated imports.')
+            root = child.func
+            while isinstance(root, ast.Attribute):
+                root = root.value
+            require(isinstance(root, ast.Name) and root.id in ALLOWED_ROOTS, 'Migration calls a name outside the generated imports.')
+        if isinstance(child, ast.Name):
+            require(child.id in ALLOWED_ROOTS and isinstance(child.ctx, ast.Load), 'Migration references a name outside the generated imports: ' + child.id)
+
+
 def validate_migration(source):
-    """Exactly two CreateModel operations for the declared tables, depending on core0011; nothing else."""
+    """Exactly two CreateModel operations for the declared tables, depending on core0011; no other code can run on import."""
     tree = ast.parse(source)
     classes = [node for node in tree.body if isinstance(node, ast.ClassDef)]
     require(len(classes) == 1 and classes[0].name == 'Migration'
@@ -102,15 +120,18 @@ def validate_migration(source):
     require(all(asname is None for _, _, asname in imports) and set(imports) == {
         ('django.db.models.deletion', None, None), ('uuid', None, None), ('django.conf', 'settings', None),
         ('django.db', 'migrations', None), ('django.db', 'models', None)}, 'Migration imports differ from the reviewed generated form.')
-    require(len(classes[0].bases) == 1 and isinstance(classes[0].bases[0], ast.Attribute)
-            and isinstance(classes[0].bases[0].value, ast.Name) and classes[0].bases[0].value.id == 'migrations'
-            and classes[0].bases[0].attr == 'Migration', 'Migration class must derive from django.db.migrations.Migration.')
-    assigns = {node.targets[0].id: node.value for node in classes[0].body
-               if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)}
-    require(set(assigns) == {'dependencies', 'operations'}, 'Migration declares unexpected attributes.')
+    klass = classes[0]
+    require(not klass.decorator_list and not klass.keywords and len(klass.bases) == 1 and isinstance(klass.bases[0], ast.Attribute)
+            and isinstance(klass.bases[0].value, ast.Name) and klass.bases[0].value.id == 'migrations'
+            and klass.bases[0].attr == 'Migration', 'Migration class must be an undecorated subclass of django.db.migrations.Migration.')
+    require(len(klass.body) == 2 and all(isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                                         for node in klass.body), 'Migration class body must be exactly the two generated assignments.')
+    assigns = {node.targets[0].id: node.value for node in klass.body}
+    require(list(assigns) == ['dependencies', 'operations'], 'Migration declares unexpected attributes.')
     require(ast.literal_eval(assigns['dependencies']) == [('core', '0011_template_clinical_review')],
             'Migration must depend on core0011 only.')
     operations = assigns['operations']
+    check_expression(operations)
     require(isinstance(operations, ast.List) and len(operations.elts) == 2, 'Exactly two migration operations are declared.')
     names = []
     for call in operations.elts:
@@ -123,7 +144,7 @@ def validate_migration(source):
         for source_node in ast.walk(call):
             require(not (isinstance(source_node, ast.Call) and isinstance(source_node.func, ast.Attribute)
                          and source_node.func.attr in ('RunSQL', 'RunPython', 'AlterField', 'RemoveField', 'DeleteModel',
-                                                       'AddField', 'RenameModel', 'RenameField', 'AlterModelTable')),
+                                                       'AddField', 'RenameModel', 'RenameField', 'AlterModelTable', 'SeparateDatabaseAndState')),
                     'Migration must not touch existing tables.')
     require(names == ['CostReconciliation', 'PlatformCost'], 'Migration creates unexpected models.')
 

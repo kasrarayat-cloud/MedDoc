@@ -125,6 +125,8 @@ def credit_payment(payment,session):
     LedgerEntry.objects.create(wallet=w,amount=amount,kind='payment',key=f'payment:{intent}',description='Explicit Stripe wallet top-up',balance_after=w.balance)
     p.status='paid'; p.stripe_intent=intent; p.save(update_fields=['status','stripe_intent'])
     audit(p.user,'payment.settle',p.pk,amount=str(amount))
+    # New paid funds are the trigger for reconciliation charges that were held for funds.
+    apply_pending_reconciliations(actor=p.user)
 
 @transaction.atomic
 def reconcile_refund(obj):
@@ -226,28 +228,36 @@ def reconcile_usage(usage,reconciled_cost,evidence_reference,actor,provider_cred
     return row
 
 def apply_pending_reconciliations(actor=None):
-    """Apply additional charges that were held for funds. Idempotent: the unique ledger key guards replay."""
+    """Apply additional charges that were held for funds. Idempotent: the unique ledger key guards replay.
+
+    Locks the job before the reconciliation row (the same order as absorb_failed_job) so the two never deadlock, and
+    isolates each row so one failure cannot block the others or the payment that triggered the attempt.
+    """
+    from django.db import DatabaseError
     from .models import Job
     applied=[]
-    for pk in list(CostReconciliation.objects.filter(ledger_status='pending_funds').order_by('created_at').values_list('pk',flat=True)):
-        with transaction.atomic():
-            row=CostReconciliation.objects.select_for_update().select_related('usage__department').get(pk=pk)
-            if row.ledger_status!='pending_funds': continue
-            Job.objects.select_for_update().get(pk=row.usage.job_id)
-            if LedgerEntry.objects.filter(job_id=row.usage.job_id,kind='absorbed').exists() or PlatformCost.objects.filter(job_id=row.usage.job_id,kind='absorbed_failure').exists():
-                # The job was absorbed after this reconciliation was held: the user owes nothing further for it.
-                row.ledger_status='absorbed'; row.save(update_fields=['ledger_status'])
-                audit(actor,'usage.reconciliation_absorbed',row.usage.job_id,department=row.usage.department,charge_delta=str(row.charge_delta)); continue
-            payer=payer_wallet(row.usage.payer)
-            wallet=Wallet.objects.select_for_update().get(pk=payer.pk)
-            if not apply_additional_debit(row,wallet): continue
-            row.ledger_status='applied'; row.save(update_fields=['ledger_status'])
-            audit(actor,'usage.reconciliation_applied',row.usage.job_id,department=row.usage.department,charge_delta=str(row.charge_delta))
-            applied.append(row)
+    for pk,job_id in list(CostReconciliation.objects.filter(ledger_status='pending_funds').order_by('created_at').values_list('pk','usage__job_id')):
+        try:
+            with transaction.atomic():
+                Job.objects.select_for_update().get(pk=job_id)
+                row=CostReconciliation.objects.select_for_update().select_related('usage__department').get(pk=pk)
+                if row.ledger_status!='pending_funds': continue
+                if LedgerEntry.objects.filter(job_id=row.usage.job_id,kind='absorbed').exists() or PlatformCost.objects.filter(job_id=row.usage.job_id,kind='absorbed_failure').exists():
+                    # The job was absorbed after this reconciliation was held: the user owes nothing further for it.
+                    row.ledger_status='absorbed'; row.save(update_fields=['ledger_status'])
+                    audit(actor,'usage.reconciliation_absorbed',row.usage.job_id,department=row.usage.department,charge_delta=str(row.charge_delta)); continue
+                payer=payer_wallet(row.usage.payer)
+                wallet=Wallet.objects.select_for_update().get(pk=payer.pk)
+                if not apply_additional_debit(row,wallet): continue
+                row.ledger_status='applied'; row.save(update_fields=['ledger_status'])
+                audit(actor,'usage.reconciliation_applied',row.usage.job_id,department=row.usage.department,charge_delta=str(row.charge_delta))
+                applied.append(row)
+        except (DatabaseError,ValidationError) as error:
+            audit(actor,'usage.reconciliation_apply_failed',job_id,error_class=type(error).__name__)
     return applied
 
 @transaction.atomic
-def absorb_failed_job(job):
+def absorb_failed_job(job,actor=None,note=''):
     """QuillMD absorbs settled provider cost whose output was never adopted: reverse the user's NET charge for the job and record one platform cost.
 
     The net charge is every 'usage' and 'reconciliation' ledger movement for the job, per wallet, so a reconciliation applied
@@ -275,8 +285,8 @@ def absorb_failed_job(job):
     if reconciliation and reconciliation.ledger_status=='pending_funds':
         reconciliation.ledger_status='absorbed'; reconciliation.save(update_fields=['ledger_status'])
     amount=reconciliation.reconciled_cost if reconciliation else usage.actual_cost
-    evidence=f'usage:{usage.pk}'+(f' reconciliation:{reconciliation.evidence_reference}' if reconciliation else '')
-    cost,created=PlatformCost.objects.get_or_create(job=job,kind='absorbed_failure',defaults={'amount':amount,'description':'Provider cost absorbed: output not adopted','evidence_reference':evidence[:240]})
+    evidence=f'usage:{usage.pk}'+(f' reconciliation:{reconciliation.evidence_reference}' if reconciliation else '')+(f' note:{note.strip()}' if note and note.strip() else '')
+    cost,created=PlatformCost.objects.get_or_create(job=job,kind='absorbed_failure',defaults={'amount':amount,'description':'Provider cost absorbed: output not adopted','evidence_reference':evidence[:240],'recorded_by':actor if getattr(actor,'pk',None) else None})
     if created or reversed_total: audit(job.user,'usage.absorbed',job.pk,department=job.encounter.department,actual_cost=str(usage.actual_cost),platform_cost=str(cost.amount),reversed=str(reversed_total))
     return cost
 
