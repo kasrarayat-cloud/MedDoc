@@ -57,7 +57,7 @@ ALLOWED = {
     'rebuild/core/tests/test_encounter_snapshot.py', 'rebuild/core/tests/test_recording_limit.py',
     'rebuild/core/tests/test_refutation.py', 'rebuild/core/tests/test_wm_workflow.py',
     *('rebuild/core/tests/fixtures/audio/' + name for name in ('tone-3s.wav', 'tone-3s.mp3', 'tone-3s.m4a', 'tone-3s-fragmented.m4a',
-                                                              'tone-3s.webm', 'tone-3s-live.webm')),
+                                                              'tone-3s-quicktime.m4a', 'tone-3s.webm', 'tone-3s-live.webm')),
     # its refutation fixes: every reader of the old exact-1.5x rule, the worker's upload reaper and the consent wording
     'rebuild/ops/backup_restore.py', 'rebuild/core/management/commands/worker.py', 'rebuild/core/forms.py', 'rebuild/README.md',
     'docs/rebuild/backup-restore.md', 'docs/rebuild/security-readiness.md',

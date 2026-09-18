@@ -54,8 +54,14 @@ NOTE_LIMIT=50000
 OVERFLOW_ERROR='The transcript was not added because the notes would exceed the 50,000-character limit; download it from the document record. Its recorded usage stays billed.'
 # An over-limit upload is kept for the doctor's decision; the approval is valid 30 minutes, so after 40 an unapproved upload
 # can never be sent and is removed.
+NOTES_FULL='The notes are at the 50,000-character limit, so no transcript could be added. Shorten the notes first. Nothing was sent for transcription.'
 ABANDONED_UPLOAD_SECONDS=2400
 UPLOAD_NAME=re.compile(r'audio/[a-f0-9]{48}\.(wav|webm|mp3|m4a)')
+
+
+def notes_full(notes):
+    """No transcript of any length fits: adoption needs the notes, a blank line and at least one character."""
+    return len(notes)+2+1>NOTE_LIMIT
 
 
 def seconds_text(seconds):
@@ -187,6 +193,8 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     config=dict(config or generation.configuration())
     if kind=='transcription':
         if not (config['voice_rate_minute'] or config['voice_rate_second']): raise ValidationError('Transcription usage rates have not been configured.')
+        # Exact, not an estimate: notes with no room for even one character can take no transcript, so nothing is sent or charged.
+        if notes_full(e.notes): raise ValidationError(NOTES_FULL)
         seconds,charge_limit,quote=recording_charge_limit(e,input_path,config,approved_limit)
         config.update(recording_seconds=str(seconds),charge_limit=str(charge_limit),limit_basis='approved' if approved_limit is not None else 'standard')
     job=Job.objects.create(encounter=e,user=user,kind=kind,revision=e.revision,request_key=key,input_path=input_path,config=config)

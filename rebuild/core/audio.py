@@ -4,9 +4,11 @@ Pure Python, bounded by the 15 MB upload limit and explicit iteration caps; no m
 the untrusted file. A duration is what a decoder would play, never a header field a decoder ignores (a header could
 understate the length and so the charge limit):
 
-  WAV (PCM or float)  every byte after the data header / (sample rate x block size); an inconsistent byte-rate field is refused
-  MP3                 the sum of every MPEG audio frame's samples; bytes that are not standard frames count at the lowest
-                      bitrate seen, and a file that is mostly not standard frames is refused
+  WAV (PCM or float)  the samples / (sample rate x block size): every byte after the data header, unless the declared data
+                      size is followed by well-formed chunks to the end of the file; an inconsistent byte-rate field is refused
+  MP3                 the sum of every MPEG audio frame's samples anywhere after a leading ID3v2 tag (a decoder plays frames
+                      inside trailing tags too); trailing ID3v1, APEv2 and ID3v2 tags excuse only their own non-frame bytes;
+                      other non-frame bytes count at the lowest bitrate seen, and a file that is mostly not frames is refused
   MP4 / M4A           AAC only: every access unit (the larger of stts and stsz, plus fragments) x its frame length, at the
                       sample rate of the stream's own AudioSpecificConfig, never the container timescale alone
   WebM / Matroska     Opus only: the sum of every packet's duration from its table of contents (and the block timestamps,
@@ -22,6 +24,7 @@ from django.core.exceptions import ValidationError
 MAX_BYTES = 15 * 1024 * 1024
 MAX_ITEMS = 400000
 MAX_SECONDS = Decimal(24 * 3600)
+MP3_STEPS = 1500000  # frames plus resynchronised bytes; a 60-minute recording at the lowest bitrate is about 100,000 frames
 
 
 class UnmeasurableRecording(ValidationError):
@@ -30,7 +33,8 @@ class UnmeasurableRecording(ValidationError):
 
 def refuse(detail):
     raise UnmeasurableRecording('The length of this recording could not be determined (' + detail + '), so its charge '
-                                'cannot be confirmed. Nothing was sent for transcription. Record in the browser or upload WAV, MP3, M4A or WebM audio.')
+                                'cannot be confirmed. Nothing was sent for transcription. Record in the browser, or upload PCM WAV, MP3, '
+                                'AAC M4A (not Apple Lossless) or Opus WebM audio.')
 
 
 def measure(data):
@@ -75,18 +79,35 @@ def wav(data):
                 refuse('WAV format chunk truncated')
             fmt = struct.unpack('<HHIIHH', data[body:body + 16])
         elif chunk == b'data':
-            start = body
+            start, declared = body, length
             break
         position = body + length + (length & 1)
     if fmt is None or start is None:
         refuse('WAV without format or audio data')
+    # Samples run to the end of the file, unless the declared data size is followed by well-formed chunks (LIST, id3, cue…)
+    # that tile the rest of the file exactly: only then are those bytes metadata a decoder skips too.
+    size = len(data) - start
+    if declared not in (0, 0xFFFFFFFF) and declared <= size and riff_chunks_to_end(data, start + declared + (declared & 1)):
+        size = declared
     tag, channels, rate, byte_rate, block, bits = fmt
     # A decoder plays the samples at rate x block bytes per second whatever the byte-rate field says, and may read past a
     # declared data size, so both come from the samples: every byte after the data header, at rate x block.
     if (tag not in (1, 3, 0xFFFE) or not 1 <= channels <= 8 or not 4000 <= rate <= 384000 or bits not in (8, 16, 24, 32, 64)
             or block != channels * (bits // 8) or byte_rate != rate * block):
         refuse('compressed, inconsistent or invalid WAV encoding')
-    return Decimal(len(data) - start) / Decimal(rate * block)
+    return Decimal(size) / Decimal(rate * block)
+
+
+def riff_chunks_to_end(data, position):
+    """True when the bytes from position are zero or more well-formed RIFF chunks ending exactly at the end of the file."""
+    for _ in range(64):
+        if position >= len(data):
+            return position <= len(data) + 1  # a final pad byte may be missing
+        if position + 8 > len(data) or not all(32 <= c <= 126 for c in data[position:position + 4]):
+            return False
+        length = struct.unpack('<I', data[position + 4:position + 8])[0]
+        position += 8 + length + (length & 1)
+    return False
 
 
 # ── MP3 ────────────────────────────────────────────────────────────────────
@@ -127,28 +148,51 @@ def mp3(data):
         size = (data[6] & 0x7F) << 21 | (data[7] & 0x7F) << 14 | (data[8] & 0x7F) << 7 | (data[9] & 0x7F)
         position = 10 + size + (10 if data[5] & 0x10 else 0)
     start = position
-    seconds, frames, audio_bytes, steps, trailer, slowest = Decimal(0), 0, 0, 0, 0, Decimal(0)
-    while position < len(data) and steps < MAX_ITEMS:
+    end = tags_start(data, start)
+    seconds, frames, before_tags, steps, slowest = Decimal(0), 0, 0, 0, Decimal(0)
+    # Frames are counted everywhere, trailing tags included: a decoder plays frames it finds inside an APE or ID3 tag.
+    while position < len(data):
         steps += 1
+        if steps > MP3_STEPS:
+            refuse('MP3 too complex to measure')  # an unscanned remainder could hold frames a decoder plays
         frame = mp3_frame(data, position)
         if frame and frame[0] >= 4:
             length, samples, rate = frame
             seconds += Decimal(samples) / Decimal(rate)
             slowest = max(slowest, Decimal(samples) / Decimal(rate) / Decimal(length))
             frames += 1
-            audio_bytes += length
+            before_tags += max(0, min(position + length, end) - position)
             position += length
             continue
-        if data[position:position + 3] == b'TAG' and len(data) - position == 128:
-            trailer = 128  # an ID3v1 tag, only as the file's last 128 bytes
-            break
-        position += 1  # resynchronise byte by byte; garbage is bounded by the file size and the step cap
-    # Bytes that are not standard frames (free-format frames, unknown data, anything past the step cap) could still be decoded,
-    # so they are bounded and counted as audio at the lowest bitrate seen: they can only lengthen the measurement.
-    uncounted = len(data) - start - trailer - audio_bytes
-    if frames < 2 or uncounted > max(16384, (len(data) - start) // 50):
+        position += 1  # resynchronise byte by byte
+    # Recognised trailing tags excuse only their own non-frame bytes. Other bytes before them that are not standard frames
+    # (free-format frames, unknown data) could still be decoded, so they are bounded and counted at the lowest bitrate seen.
+    uncounted = end - start - before_tags
+    if frames < 2 or uncounted > max(16384, (end - start) // 50):
         refuse('MP3 that is not made of standard audio frames')
     return seconds + Decimal(max(uncounted, 0)) * slowest
+
+
+def tags_start(data, start):
+    """Where the audio ends: ID3v1, APEv2 and footer-marked ID3v2 tags are stripped from the end of the file."""
+    end = len(data)
+    for _ in range(4):
+        if end - start >= 128 and data[end - 128:end - 125] == b'TAG':
+            end -= 128
+        elif end - start >= 32 and data[end - 32:end - 24] == b'APETAGEX':
+            size, _, flags = struct.unpack('<III', data[end - 20:end - 8])
+            total = size + (32 if flags & 0x80000000 else 0)
+            if size < 32 or total > end - start:
+                break
+            end -= total
+        elif end - start >= 10 and data[end - 10:end - 7] == b'3DI':
+            size = (data[end - 4] & 0x7F) << 21 | (data[end - 3] & 0x7F) << 14 | (data[end - 2] & 0x7F) << 7 | (data[end - 1] & 0x7F)
+            if size + 20 > end - start:
+                break
+            end -= size + 20
+        else:
+            break
+    return end
 
 
 # ── MP4 / M4A ──────────────────────────────────────────────────────────────
@@ -195,7 +239,9 @@ def mp4(data):
             track = current['track'] = None
         if kind == b'tkhd' and track is not None and len(payload) >= 24:
             track['id'] = struct.unpack('>I', payload[20:24] if payload[0] == 1 else payload[12:16])[0]
-        elif kind == b'hdlr' and track is not None and len(payload) >= 12:
+        elif kind == b'hdlr' and track is not None and len(payload) >= 12 and track['handler'] is None:
+            # The media handler (mdia/hdlr) precedes minf; QuickTime files also carry a data handler inside minf, which must
+            # not overwrite it.
             track['handler'] = payload[8:12]
         elif kind == b'mdhd' and track is not None and len(payload) >= 24:
             track['timescale'] = struct.unpack('>I', payload[20:24] if payload[0] == 1 else payload[12:16])[0]

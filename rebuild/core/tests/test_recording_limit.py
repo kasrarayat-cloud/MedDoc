@@ -156,6 +156,65 @@ class HeadersCannotUnderstateALength(SimpleTestCase):
             audio.measure(original + bytes(range(256)) * 80)  # 20 KB that is not audio frames
 
 
+def ape_tag(items, header=True):
+    """A standard APEv2 tag (optional header, items, footer)."""
+    import struct
+    body = b''.join(struct.pack('<II', len(value), 0) + key + b'\x00' + value for key, value in items)
+    size = len(body) + 32
+    footer = b'APETAGEX' + struct.pack('<IIII', 2000, size, len(items), 0x80000000 if header else 0) + bytes(8)
+    head = b'APETAGEX' + struct.pack('<IIII', 2000, size, len(items), 0xA0000000) + bytes(8)
+    return (head if header else b'') + body + footer
+
+
+class LegitimateTaggedRecordingsMeasureTheirAudio(SimpleTestCase):
+    """Real files carry metadata; it must neither be refused nor lengthen the measurement (a false incomplete marker)."""
+
+    def test_quicktime_layout_aac_is_measured(self):
+        self.assertEqual(audio.measure((FIXTURES / 'tone-3s-quicktime.m4a').read_bytes()), Decimal('3.072'))
+
+    def test_mp3_trailing_tags_are_metadata_not_audio(self):
+        original = (FIXTURES / 'tone-3s.mp3').read_bytes()
+        plain = audio.measure(original)
+        cover = bytes(range(256)) * 80  # 20 KB of 'cover art' that is not audio frames
+        id3v1 = b'TAG' + bytes(125)
+        id3v2_footer = b'ID3\x04\x00\x10\x00\x00\x00\x0a' + b'X' * 10 + b'3DI\x04\x00\x10\x00\x00\x00\x0a'
+        for name, tagged in (('ape comment', original + ape_tag([(b'Comment', b'dictation ' * 200)]) + id3v1),
+                             ('ape cover', original + ape_tag([(b'Cover Art (Front)', cover)], header=False)),
+                             ('appended id3v2', original + id3v2_footer + id3v1)):
+            with self.subTest(name=name):
+                self.assertEqual(audio.measure(tagged), plain)
+
+    def test_audio_hidden_inside_a_tag_still_counts(self):
+        """A decoder plays frames it finds inside a trailing tag (ffmpeg decodes all 60 s of audio hidden in an APE tag, even
+        as single frames separated by junk), so every frame there counts."""
+        original = (FIXTURES / 'tone-3s.mp3').read_bytes()
+        frames, position = [], 0
+        while position < len(original):
+            frame = audio.mp3_frame(original, position)
+            if frame and frame[0] >= 4:
+                frames.append(original[position:position + frame[0]]); position += frame[0]
+            else:
+                position += 1
+        head = b''.join(frames[:2])
+        for chain in (1, 3, len(frames)):
+            body = b''.join(b''.join(frames[i:i + chain]) + b'\x00' for i in range(2, len(frames), chain))
+            with self.subTest(chain=chain):
+                self.assertGreaterEqual(audio.measure(head + ape_tag([(b'Comment', body)])), audio.measure(original) - Decimal('0.1'))
+
+    def test_wav_metadata_chunks_after_the_samples_are_not_audio(self):
+        import struct
+        wav = wav_bytes(seconds=30, tag='tagged-wav')
+        tag = b'ID3\x03\x00\x00' + bytes(4) + bytes(80000)
+        tagged = bytearray(wav + b'id3 ' + struct.pack('<I', len(tag)) + tag)
+        tagged[4:8] = struct.pack('<I', len(tagged) - 8)
+        self.assertEqual(audio.measure(bytes(tagged)), Decimal('30.000'))
+
+    def test_apple_lossless_is_refused_with_a_message_that_names_it(self):
+        renamed = (FIXTURES / 'tone-3s.m4a').read_bytes().replace(b'mp4a', b'alac', 1)
+        with self.assertRaisesMessage(audio.UnmeasurableRecording, 'not Apple Lossless'):
+            audio.measure(renamed)
+
+
 class QuoteArithmetic(SimpleTestCase):
     def config(self, **values):
         base = {'voice_rate_minute': '0.006', 'voice_rate_second': '', 'voice_max_cost': '0.20', 'discount_rate': '0', 'pricing_version': 'test'}
@@ -380,6 +439,20 @@ class RecordingChargeLimit(BoundaryFixture, TestCase):
         self.assertFalse(LedgerEntry.objects.filter(kind='reconciliation').exists())
         self.assertEqual(self.balances(), (Decimal('9.99'), Decimal('0')))
         report = audit_report(); self.assertTrue(report['all_checks_pass'])
+
+    def test_notes_with_no_room_refuse_before_anything_is_sent_and_hide_the_recorder(self):
+        full = 'N' * (50000 - 2)  # the notes plus a blank line leave no room for a single character
+        type(self.encounter).objects.filter(pk=self.encounter.pk).update(notes=full)
+        with patch.dict(os.environ, STANDARD_ENV):
+            page = self.client.get(f'/encounters/{self.encounter.pk}/')
+        self.assertContains(page, 'data-voice-notes-full'); self.assertNotContains(page, 'data-voice-form')
+        with patch('core.jobs.httpx.post') as post:
+            self.upload(STANDARD_ENV, tag='full-notes')
+        self.assertEqual(post.call_count, 0); self.assertFalse(Job.objects.filter(kind='transcription').exists())
+        self.assertFalse(Reservation.objects.exists())
+        type(self.encounter).objects.filter(pk=self.encounter.pk).update(notes=full[:-1])  # one character of room: accepted
+        self.upload(STANDARD_ENV, tag='one-char-room')
+        self.assertTrue(Job.objects.filter(kind='transcription').exists())
 
     def test_welcome_credit_is_unchanged_by_the_limit(self):
         self.assertEqual(self.balances(), (Decimal('10'), Decimal('0')))
