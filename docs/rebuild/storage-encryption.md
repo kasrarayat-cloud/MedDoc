@@ -84,7 +84,9 @@ stack's data and are not touched.
   `discard-failed-attempt` under the same declaration.
 - If the run was killed outright before main advanced, run
   `revert-interrupted --from-result <result>-progress.json` first. It finishes
-  the revert from any partial state.
+  the revert from any partial state. It refuses while the interrupted process
+  or one of its root steps is still running. Ctrl-C at the runner does not stop
+  the act, so wait for its result file first.
 - After main advances, run `rollback --from-result <migrate result>` under the
   same declaration. It copies the current data back to plaintext, restores
   plaintext units, re-enables the container restart policy and keeps the image,

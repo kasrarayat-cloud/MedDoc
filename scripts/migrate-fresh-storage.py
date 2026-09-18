@@ -144,6 +144,25 @@ def write_progress(result):
     os.replace(pending, path)
 
 
+def migrate_alive(pid):
+    """True when the pid recorded in the migrate lock is still this migration (a reused pid running something else is not)."""
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        cmdline = Path(f'/proc/{pid}/cmdline').read_bytes()
+    except OSError:
+        return False
+    return b'migrate-fresh-storage.py' in cmdline
+
+
+def running_root_steps():
+    """Names of root-step containers still running, whichever process started them."""
+    listing = subprocess.run(['docker', 'ps', '--filter', 'name=quillmd-fresh-storage-step-', '--format', '{{.Names}}'],
+                             capture_output=True, text=True, timeout=60)
+    require(listing.returncode == 0, 'Could not list running root-step containers.')
+    return [name for name in listing.stdout.split() if name.startswith('quillmd-fresh-storage-step-')]
+
+
 def settle_root_step(result):
     """A root step's container keeps running when its docker client is killed. Before any revert or rollback touches the host,
     wait for the in-flight step to end, and stop it only if it will not."""
@@ -484,8 +503,11 @@ def container_running():
 
 def wait_database():
     for _ in range(120):
-        if subprocess.run(['docker', 'exec', CONTAINER, 'pg_isready', '-U', 'quillmd_fresh', '-d', 'quillmd_fresh'], capture_output=True, timeout=15).returncode == 0:
-            return
+        try:
+            if subprocess.run(['docker', 'exec', CONTAINER, 'pg_isready', '-U', 'quillmd_fresh', '-d', 'quillmd_fresh'], capture_output=True, timeout=15).returncode == 0:
+                return
+        except subprocess.TimeoutExpired:
+            pass  # One slow probe on a loaded host is not a failure; keep polling within the loop's bound.
         time.sleep(1)
     raise RuntimeError('Database did not become ready.')
 
@@ -655,8 +677,16 @@ def main():
         # a phase-one stage. ROOT_REVERT is written to finish a half-done revert from any such state.
         require(args.from_result and locks['migrate'].exists(), 'Revert needs the interrupted migrate lock and --from-result naming its progress file.')
         source = json.loads(word.checked_file(Path(args.from_result), private=True))
-        require(source.get('mode') == 'migrate' and source.get('target') == args.target and source.get('stage') not in POST_START_STAGES
-                and not source.get('complete'), 'Revert applies only to a migrate interrupted before main advanced.')
+        # HEAD == BASELINE is already required above, so a run killed after recording 'advancing_reviewed_main' but before the
+        # ref moved is still a phase-one state and is accepted here.
+        require(source.get('mode') == 'migrate' and source.get('target') == args.target and not source.get('complete')
+                and (source.get('stage') not in POST_START_STAGES or source.get('stage') == 'advancing_reviewed_main'),
+                'Revert applies only to a migrate interrupted before main advanced.')
+        # Ctrl-C or a hangup at the runner does not stop the act (timeout runs it in its own process group), so the interrupted
+        # run may still be alive. Refuse while it or any of its root steps is running.
+        owner = json.loads(word.checked_file(locks['migrate'], private=True))
+        require(not migrate_alive(owner.get('pid')), 'The interrupted migrate is still running; wait for its result file instead.')
+        require(not running_root_steps(), 'A root step container of the interrupted migrate is still running; wait for it to end.')
     elif args.mode == 'discard-failed-attempt':
         require(probe['rollback'] is None and not probe['pg_data_mounted'] and not probe['state_mounted'] and not probe['volume_script_installed']
                 and not any(probe['units_installed'].values()) and (probe['image'] or probe['key'] or probe['mount']),
@@ -699,6 +729,7 @@ def main():
             result.update(complete=True, next_step='Run discard-failed-attempt under the same declaration before any new attempt.')
             stage(result, 'complete')
         finish(result, result_path, lock, identity)
+        require(result.get('complete'), 'The interrupted revert did not complete; services may be down. Inspect the result before anything else.')
         return
     if args.mode == 'migrate':
         execute_migrate(args, result, lock, result_path, image, common, units, baseline_units, volume_script, log_path,
@@ -885,7 +916,7 @@ def execute_migrate(args, result, lock, result_path, image, common, units, basel
         result['closed_state'] = closed
         result['closed_write_probe'] = root(ROOT_WRITE_PROBE, common, image)
         require(all(v == 'refused' for v in result['closed_write_probe'].values()), 'Plaintext write probe succeeded while closed.')
-        manual = subprocess.run(['docker', 'start', CONTAINER], capture_output=True, text=True)
+        manual = subprocess.run(['docker', 'start', CONTAINER], capture_output=True, text=True, timeout=120)
         time.sleep(8)
         after_manual = root(ROOT_STATE, common, image)
         running_after = container_running()

@@ -310,6 +310,27 @@ class FailurePathsSurviveTheWatchdog(unittest.TestCase):
         self.assertIn("elif args.mode in ('discard-failed-attempt', 'revert-interrupted'):", main)
         self.assertIn("locks['migrate'].unlink()", main)
 
+    def test_interrupted_revert_refuses_a_live_migrate_and_fails_loudly(self):
+        main = function_source('main')
+        self.assertIn("require(not migrate_alive(owner.get('pid'))", main)
+        self.assertIn('require(not running_root_steps()', main)
+        self.assertIn("source.get('stage') == 'advancing_reviewed_main'", main)
+        self.assertIn("require(result.get('complete'), 'The interrupted revert did not complete", main)
+        m = self.migration
+        self.assertTrue(m.migrate_alive(os.getpid()) is False or b'migrate-fresh-storage.py' in Path(f'/proc/{os.getpid()}/cmdline').read_bytes())
+        self.assertFalse(m.migrate_alive(None)); self.assertFalse(m.migrate_alive(0)); self.assertFalse(m.migrate_alive(2 ** 22 + 7))
+        child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)', 'migrate-fresh-storage.py'])
+        try:
+            self.assertTrue(m.migrate_alive(child.pid))
+        finally:
+            child.kill(); child.wait()
+        self.assertFalse(m.migrate_alive(child.pid))
+
+    def test_a_slow_readiness_probe_is_retried(self):
+        source = function_source('wait_database')
+        self.assertIn('except subprocess.TimeoutExpired:', source)
+        self.assertLess(source.index('for _ in range(120):'), source.index('except subprocess.TimeoutExpired:'))
+
     def test_retained_reports_allow_additions_but_not_changes(self):
         import tempfile
         m = self.migration

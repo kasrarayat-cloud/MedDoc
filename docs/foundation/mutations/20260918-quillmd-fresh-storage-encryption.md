@@ -102,9 +102,16 @@ Before this act, three things hold:
   `decrypted_files_written = 0` and covers the current row count.
 
 The act runs once through `run-ruled-mutation.sh` with this committed
-declaration and `RULED_ACT_MAX_SECS=7200`. Every external command has its own
-timeout of at most 15 minutes. Phase one stops itself after 30 minutes, and the
-revert then has well over an hour inside the ceiling.
+declaration and `RULED_ACT_MAX_SECS=10800`. A normal run takes minutes. Every
+command the act issues itself has a timeout of at most 15 minutes, and phase one
+checks a 30-minute budget at each stage boundary. So an ordinary hang becomes an
+ordinary failure, and the automatic revert follows well inside the ceiling.
+
+Two limits remain. The billing helper's database reads have no timeout of their
+own. The client of a `systemd-run --wait` host command can be stopped without
+stopping the command itself. A hang there can still reach the watchdog, which
+sends SIGTERM and then SIGKILL 15 seconds later. That case is what the progress
+file and `revert-interrupted` are for.
 
 Each stage is written to `<result>-progress.json` as it starts, so even a run
 killed outright says how far it got. A root step whose container outlives its
@@ -123,6 +130,10 @@ client is waited for, or stopped, before any revert or rollback touches the host
   file remain. `revert-interrupted --from-result <progress file>` finishes the
   revert from whatever state the kill left, then `discard-failed-attempt`
   removes the partial artifacts.
+- Ctrl-C or a lost SSH session at the runner does not stop the act: the
+  watchdog runs it in its own process group. `revert-interrupted` refuses while
+  the recorded migrate process or any of its root-step containers is still
+  running. It exits non-zero if the revert does not complete.
 - Never rerun blindly; the lock and evidence stay until inspected.
 
 ## Key custody and what this act does not establish
