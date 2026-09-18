@@ -170,15 +170,24 @@ class StorageAndBackupChecks(unittest.TestCase):
         main = function_source('main')
         handler = main.split('except BaseException as error:')[1]
         self.assertLess(handler.index('stop_reaping(m, image)'), handler.index('private_write(result_path'))
-        self.assertIn("result.get('stage') not in ('removing_redundant_plaintext', 'final_checks')", handler)
+        # Keyed to whether removal ever began, not to a stage name a later step overwrites.
+        self.assertIn("if not result.get('removal_started') and result['services_restarted']:", handler)
+        execute = main.split('if not args.execute:')[1]
+        self.assertLess(execute.index("result['removal_started'] = True"), execute.index('m.root(ROOT_REAP'))
         self.assertLess(handler.index('private_write(result_path'), handler.index('lock.unlink()'))
         stop = function_source('stop_reaping')
         self.assertLess(stop.index("inflight = REAPING['unit'], m.ACT['step']"), stop.index('m.root(ROOT_STOP_REAP'))
         self.assertLess(stop.index("m.ACT['step'] = inflight"), stop.index('m.settle_root_step('))
         loop = main.split("result['stage'] = 'removing_redundant_plaintext'")[1].split("result['stage'] = 'final_checks'")[0]
         self.assertLess(loop.index("result['reaped'].append(record)"), loop.index("require(record['removed']"))
-        self.assertIn('timeout=REAP_MAX_SECONDS + 120', loop)
-        self.assertIn("'--property=RuntimeMaxSec='+str(P['max_seconds'])", self.reap.ROOT_REAP)
+        self.assertIn('timeout=REAP_MAX_SECONDS + 30 + 2 * 120 + 60', loop)  # the unit's bound, both deletes, and slack
+        # systemd ignores RuntimeMaxSec on Type=oneshot units; TimeoutStartSec is the bound that applies to them.
+        self.assertIn("'--property=Type=oneshot'", self.reap.ROOT_REAP)
+        self.assertIn("'--property=TimeoutStartSec='+str(P['max_seconds'])", self.reap.ROOT_REAP)
+        self.assertNotIn("'--property=RuntimeMaxSec=", self.reap.ROOT_REAP)
+        stop = function_source('stop_reaping')
+        order = ['m.root(ROOT_STOP_REAP', "m.ACT['step'] = inflight", 'm.settle_root_step(', 'm.root(ROOT_COUNT_LEFT']
+        self.assertEqual([stop.index(x) for x in order], sorted(stop.index(x) for x in order))
         self.assertIn("'systemctl','stop',P['unit']+'.service'", self.reap.ROOT_STOP_REAP)
 
 
@@ -195,7 +204,7 @@ class RootPrograms(unittest.TestCase):
         assert library.count(chroot) == 1 and library.count(prefix) == 1
         cls.library = library.replace(chroot, '').replace(prefix, 'list(cmd)')
 
-    UNIT_PREFIX = "'systemd-run','--wait','--pipe','--collect','--quiet','--property=Type=oneshot','--unit='+P['unit'],'--property=RuntimeMaxSec='+str(P['max_seconds']),"
+    UNIT_PREFIX = "'systemd-run','--wait','--pipe','--collect','--quiet','--property=Type=oneshot','--unit='+P['unit'],'--property=TimeoutStartSec='+str(P['max_seconds']),"
 
     def run_program(self, name, params):
         code = self.library + getattr(self.reap, name)
@@ -220,7 +229,7 @@ class RootPrograms(unittest.TestCase):
     def test_every_root_program_compiles_and_imports_nothing_after_the_chroot(self):
         library = load('migrate_imports', MIGRATE).ROOT_LIBRARY
         imported = set(re.search(r'^import ([\w,]+)$', library.split("os.chroot('/host')")[0], re.M).group(1).split(','))
-        for name in ('ROOT_VERIFY_STORAGE', 'ROOT_KEYS', 'ROOT_ACCOUNT', 'ROOT_REAP', 'ROOT_STOP_REAP'):
+        for name in ('ROOT_VERIFY_STORAGE', 'ROOT_KEYS', 'ROOT_ACCOUNT', 'ROOT_REAP', 'ROOT_STOP_REAP', 'ROOT_COUNT_LEFT'):
             code = getattr(self.reap, name)
             compile(library + code, name, 'exec')
             tree = ast.parse(code)

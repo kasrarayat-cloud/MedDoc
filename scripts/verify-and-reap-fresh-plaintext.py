@@ -179,19 +179,25 @@ else:
     if os.path.islink(path) or os.path.realpath(path)!=path: raise RuntimeError('refusing unresolved path: '+path)
     def files(): return [os.path.join(d,f) for d,_,fs in os.walk(path) for f in fs if not os.path.islink(os.path.join(d,f))]
     before=len(files())
-    shred=subprocess.run(['systemd-run','--wait','--pipe','--collect','--quiet','--property=Type=oneshot','--unit='+P['unit'],'--property=RuntimeMaxSec='+str(P['max_seconds']),'/usr/bin/find',path,'-xdev','-type','f','-exec','/usr/bin/shred','-u','-n','3','-z','{}','+'],capture_output=True,text=True,timeout=P['max_seconds']+60)
+    # Type=oneshot ignores RuntimeMaxSec; TimeoutStartSec bounds the whole run of a oneshot unit, and systemd kills it then.
+    shred=subprocess.run(['systemd-run','--wait','--pipe','--collect','--quiet','--property=Type=oneshot','--unit='+P['unit'],'--property=TimeoutStartSec='+str(P['max_seconds']),'/usr/bin/find',path,'-xdev','-type','f','-exec','/usr/bin/shred','-u','-n','3','-z','{}','+'],capture_output=True,text=True,timeout=P['max_seconds']+30)
     left=len(files())
     if shred.returncode==0 and left==0:
-        host('/usr/bin/find',path,'-xdev','-type','l','-delete')
-        host('/usr/bin/find',path,'-xdev','-depth','-type','d','-empty','-delete')
+        host('/usr/bin/find',path,'-xdev','-type','l','-delete',timeout=120)
+        host('/usr/bin/find',path,'-xdev','-depth','-type','d','-empty','-delete',timeout=120)
     emit({'path':path,'files_before':before,'shred_exit':shred.returncode,'files_left':left,'removed':not os.path.lexists(path)})
 '''
 
 ROOT_STOP_REAP = r'''
 subprocess.run(['systemctl','stop',P['unit']+'.service'],capture_output=True,timeout=60)
-state=subprocess.run(['systemctl','is-active',P['unit']+'.service'],capture_output=True,text=True).stdout.strip()
-left={p:sum(len(fs) for _,_,fs in os.walk(p)) for p in P['paths'] if os.path.isdir(p)}
-emit({'unit':P['unit'],'unit_state_after_stop':state,'files_left':left})
+state=subprocess.run(['systemctl','is-active',P['unit']+'.service'],capture_output=True,text=True,timeout=60).stdout.strip()
+emit({'unit':P['unit'],'unit_state_after_stop':state})
+'''
+
+# Counted only after the interrupted step has ended, so the record describes the host as it was left.
+ROOT_COUNT_LEFT = r'''
+emit({'files_left':{p:sum(len(fs) for _,_,fs in os.walk(p)) for p in P['paths'] if os.path.lexists(p)},
+      'absent':[p for p in P['paths'] if not os.path.lexists(p)]})
 '''
 
 
@@ -278,11 +284,12 @@ def main():
         accounting = account(m, image, act['copy'])
         result['removal_manifest'] = accounting
         result['stage'] = 'removing_redundant_plaintext'
+        result['removal_started'] = True
         result['reaped'] = []
         for index, target in enumerate(TARGETS):
             REAPING['unit'] = f'quillmd-plaintext-reap-{os.getpid()}-{index}'
             record = m.root(ROOT_REAP, {'path': target['path'], 'unit': REAPING['unit'], 'max_seconds': REAP_MAX_SECONDS}, image,
-                            timeout=REAP_MAX_SECONDS + 120)
+                            timeout=REAP_MAX_SECONDS + 30 + 2 * 120 + 60)
             REAPING['unit'] = None
             result['reaped'].append(record)
             write_progress(progress_path, result)
@@ -306,7 +313,7 @@ def main():
         result['interrupted_removal'] = stop_reaping(m, image)
         result['services_restarted'] = restart_best_effort(m, image)
         identity.private_write(result_path if not result_path.exists() else result_path.with_name(result_path.stem + '-failure.json'), result)
-        if result.get('stage') not in ('removing_redundant_plaintext', 'final_checks') and result['services_restarted']:
+        if not result.get('removal_started') and result['services_restarted']:
             lock.unlink()  # nothing was removed and the services are back: a clean re-run needs no inspection
         raise
     print('Plaintext recovery-and-reap completed: ' + str(result_path), flush=True)
@@ -437,12 +444,14 @@ def stop_reaping(m, image):
     if not unit:
         return None
     try:
-        # root() records its own step name; keep the interrupted one so it is waited for once its unit is stopped.
+        # Stop the unit so the interrupted step can finish, wait for that step, and only then count what is left. root()
+        # records its own step name, so the interrupted one is restored before settling.
         m.ACT['step'] = None
-        record = m.root(ROOT_STOP_REAP, {'unit': unit, 'paths': [t['path'] for t in TARGETS]}, image, timeout=120)
+        record = m.root(ROOT_STOP_REAP, {'unit': unit}, image, timeout=150)
         m.ACT['step'] = inflight
         settled = {}
         m.settle_root_step(settled)
+        record.update(m.root(ROOT_COUNT_LEFT, {'paths': [t['path'] for t in TARGETS]}, image, timeout=300))
         return dict(record, root_step=settled)
     except BaseException as error:
         return {'unit': unit, 'stop_failed': type(error).__name__}
