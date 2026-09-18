@@ -13,6 +13,17 @@ expected'. Here the expected delta is EMPTY: every table, column, constraint, in
 fingerprint must be byte-identical before and after, and so must every private file. A difference of any kind is the
 finding, because nothing in this change is entitled to produce one.
 
+⚠️ THE TREE IS ADVANCED TO THE TARGET BEFORE THIS RUNS, AND THE FIRST VERSION ADVANCED IT ITSELF. That was wrong,
+and the ruled-mutation gate caught it by refusing: the gate checks that the declaration is TRACKED and COMMITTED in
+the tree the act runs in, and this activation's declaration ships in the very commit it is activating. So while the
+tree still sat at the previous head, the declaration existed only in a worktree the gate cannot see, and it reported
+`tracked: no`. **An activation whose declaration is invisible to its own gate is a gate that cannot fire.**
+
+The fix is the honest ordering rather than a louder path: `main` carries the declaration, the shared tree is
+fast-forwarded to it, and only then does the act run. Advancing the tree is reversible bookkeeping and is not part of
+the act; the act is the release line and the restart. Doing it first is what makes the declaration's commit
+timestamp — provably before the act — visible to the thing that has to check it.
+
 ⚠️ AND THE TREE'S HEAD IS NOT THE RUNNING RELEASE. The reviewed integrity-and-cleanup work merged to main as BASELINE
 without being deployed, so main is one release ahead of what the services answer. Three facts, not one: the tree's HEAD,
 the release the services report, and the target. An activator that assumes they move together cannot describe this.
@@ -39,7 +50,7 @@ APP = ROOT / 'rebuild'
 PRIVATE = APP / '.runtime'
 STATE = Path('/var/lib/quillmd')
 HERE = Path(__file__).resolve().parent
-BASELINE = '8de5dd491de78b4e628364096c50ed68b161ef19'          # the tree's HEAD
+BASELINE = '8de5dd491de78b4e628364096c50ed68b161ef19'          # the tree's HEAD BEFORE it was fast-forwarded
 RUNNING_RELEASE = '5f8050df5e79c0d7948185850914f1c161fcbc1f'    # what the services answer
 DECL = 'docs/foundation/mutations/20260918-quillmd-audio-submission.md'
 SELF = 'scripts/activate-audio-submission.py'
@@ -196,12 +207,17 @@ def main():
     args = parser.parse_args()
     require(Path.cwd() == ROOT and ROOT.resolve() == ROOT, 'Use permanent shared main.')
     require(re.fullmatch('[a-f0-9]{40}', args.target), 'Use the full merge SHA.')
+    # HEAD IS THE TARGET, not the previous head: the tree is fast-forwarded before this runs, so the declaration the
+    # ruled-mutation gate must find is tracked and committed in this tree. BASELINE is still asserted — as the commit
+    # the tree came FROM — because the range being judged runs from the RUNNING RELEASE and must contain both.
     require(output(['git', 'branch', '--show-current']) == 'main'
-            and output(['git', 'rev-parse', 'HEAD']) == BASELINE
+            and output(['git', 'rev-parse', 'HEAD']) == args.target
             and output(['git', 'rev-parse', 'origin/main']) == args.target, 'Unexpected source release.')
     run(['git', 'diff', '--exit-code', 'HEAD', '--', '.'])
     run(['git', 'merge-base', '--is-ancestor', BASELINE, args.target])
     run(['git', 'merge-base', '--is-ancestor', RUNNING_RELEASE, BASELINE])
+    # The declaration must be visible HERE, in this tree, or the gate that reads it cannot fire.
+    run(['git', 'ls-files', '--error-unmatch', DECL], stdout=subprocess.DEVNULL)
     changed = set(output(['git', 'diff', '--name-only', RUNNING_RELEASE, args.target]).splitlines())
     require(changed <= ALLOWED and DECL in changed and 'rebuild/core/media.py' in changed,
             'Target changes paths outside the declared set: ' + ', '.join(sorted(changed - ALLOWED)))
@@ -309,8 +325,6 @@ def main():
         result['clinical_before'] = clinical_counts()
         result['storage_before'] = {name: storage.inventory(STATE / name) for name in ('files', 'mail')}
         require(word.checked_file(APP / '.env', private=True) == env_before, 'Environment changed.')
-        result['stage'] = 'advancing_reviewed_main'
-        run(['git', 'merge', '--ff-only', args.target])
         result['stage'] = 'verifying_no_schema_work_is_pending'
         # A code-only activation must find NOTHING to migrate. `showmigrations --plan` listing an unapplied entry, or
         # `makemigrations --check` wanting one, means the reviewed code and the live schema disagree — and the right

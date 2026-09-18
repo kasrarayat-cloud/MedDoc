@@ -55,6 +55,41 @@ class ThreeRevisionsAreThreeFacts(unittest.TestCase):
                           'a path already merged but never deployed is part of what this activation ships')
 
 
+class TheDeclarationMustBeVISIBLEToItsOwnGate(unittest.TestCase):
+    """The ruled-mutation gate refused this activation, and it was right to.
+
+    It checks that the declaration is TRACKED and COMMITTED in the tree the act runs in. This activation's declaration
+    ships in the very commit it activates, so while the activator advanced `main` ITSELF the declaration existed only
+    in a worktree the gate cannot see, and it reported `tracked: no`. **An activation whose declaration is invisible
+    to its own gate is a gate that cannot fire** — and nothing would have said so except the refusal.
+
+    The tree is fast-forwarded first now. Advancing it is reversible bookkeeping, not part of the act; the act is the
+    release line and the restart.
+    """
+
+    def test_the_act_does_not_advance_the_tree_itself(self):
+        self.assertNotIn("run(['git', 'merge', '--ff-only'", source(),
+            'advancing the tree inside the act puts the declaration out of the gate\'s sight again')
+
+    def test_it_requires_the_tree_to_be_at_the_target_already(self):
+        body = source()
+        self.assertIn("output(['git', 'rev-parse', 'HEAD']) == args.target", body)
+        self.assertNotIn("output(['git', 'rev-parse', 'HEAD']) == BASELINE", body)
+
+    def test_it_asserts_the_declaration_is_tracked_in_this_tree(self):
+        self.assertIn("run(['git', 'ls-files', '--error-unmatch', DECL]", source(),
+            'the preflight must fail on the same condition the gate would, rather than leaving it to the gate after '
+            'the services are already stopped')
+
+    def test_the_previous_tree_head_is_still_recorded(self):
+        """BASELINE stops being the required HEAD and does not stop being a fact: the range judged runs from the
+        RUNNING RELEASE and must contain the commit the tree came from."""
+        activator = load_activator()
+        self.assertRegex(activator.BASELINE, r'^[a-f0-9]{40}$')
+        self.assertIn('BASELINE, args.target', source())
+        self.assertIn('RUNNING_RELEASE, BASELINE', source())
+
+
 class TheDeclaredDeltaIsEmpty(unittest.TestCase):
     def test_no_migration_may_appear_in_the_range(self):
         self.assertIn("'rebuild/core/migrations']) == ''", source())
