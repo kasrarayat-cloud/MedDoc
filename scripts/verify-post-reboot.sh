@@ -200,6 +200,22 @@ for u in quillmd-fresh-doctor quillmd-fresh-admin quillmd-fresh-worker; do
   fi
 done
 fresh_db=$(docker inspect -f '{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}|{{.HostConfig.RestartPolicy.Name}}' quillmd-fresh-postgres 2>/dev/null) || fresh_db="absent|none|none"
+# The database unit and the application units must also have started AT BOOT,
+# in order: a hand-started chain proves nothing about ordering.
+db_since=$(inhost "systemctl show -p ActiveEnterTimestamp --value quillmd-fresh-database.service")
+db_epoch=$(inhost "date -d '$db_since' +%s" 2>/dev/null)
+if [ -z "$db_epoch" ] || [ -z "$boot_epoch" ] || [ $(( db_epoch - boot_epoch )) -lt 0 ] || [ $(( db_epoch - boot_epoch )) -gt 300 ]; then
+  bad "quillmd-fresh-database.service did not start within 300s of boot ('$db_since') — hand start or failed unlock"
+else
+  note "🟢 quillmd-fresh-database.service started $(( db_epoch - boot_epoch ))s after boot"
+fi
+for u in quillmd-fresh-doctor quillmd-fresh-admin quillmd-fresh-worker; do
+  since=$(inhost "systemctl show -p ActiveEnterTimestamp --value $u.service")
+  epoch=$(inhost "date -d '$since' +%s" 2>/dev/null)
+  if [ -z "$epoch" ] || [ -z "$db_epoch" ] || [ "$epoch" -lt "$db_epoch" ]; then
+    bad "$u.service started before the encrypted database ('$since')"
+  fi
+done
 # Since the storage migration the container is started ONLY by
 # quillmd-fresh-database.service (restart policy 'no'), so a persistent docker
 # restart policy would itself be a finding: it could start the database on a

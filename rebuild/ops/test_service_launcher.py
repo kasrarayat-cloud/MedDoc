@@ -114,7 +114,12 @@ class ServiceBoundaryTests(unittest.TestCase):
             self.assertEqual(os.environ['QUILLMD_ADMIN_SITE'], '0')
             self.assertEqual(os.environ['QUILLMD_ENV_MANAGED'], '1')
             self.assertEqual(os.environ['QUILLMD_STATE_DIR'], '/var/lib/quillmd')
+            # The environment file cannot move parser workspaces off the encrypted state volume.
+            self.assertEqual(os.environ['TMPDIR'], '/var/lib/quillmd/tmp')
+            self.assertIsNone(launcher.tempfile.tempdir)
+            os.environ['TMPDIR'] = '/tmp'
             launcher.prepare_environment('admin')
+            self.assertEqual(os.environ['TMPDIR'], '/var/lib/quillmd/tmp')
             self.assertEqual(os.environ['QUILLMD_ADMIN_SITE'], '1')
             os.environ['QUILLMD_DB_USER'] = 'quillmd_fresh'
             with self.assertRaises(launcher.BoundaryFailure):

@@ -317,7 +317,6 @@ def restore(args):
     run_id = secrets.token_hex(8)
     restored = output / ('restore-' + run_id)
     restored.mkdir(mode=0o700)
-    (restored / 'files').mkdir(mode=0o700)
     name = 'quillmd-restore-' + run_id
     result = {'run_id': run_id, 'container': name, 'complete': False,
               'started_at_utc': datetime.now(timezone.utc).isoformat(), 'provider_actions': 0}
@@ -330,13 +329,16 @@ def restore(args):
         require(image_id == manifest['image_id'], 'Reviewed PostgreSQL restore image is unavailable locally.')
         # Authenticate and verify every object before starting the isolated DB.
         dump = decrypt_checked(backup_path / 'database.dump.fernet', manifest['dump'], cipher)
+        # decrypt_checked verifies size and SHA-256 of every decrypted document in memory.
+        # Nothing decrypted is written to disk: the restore host's root filesystem is not
+        # the encrypted volume, and a proof must not leave plaintext copies behind.
+        verified_files = 0
         for row in manifest['files']:
-            data = decrypt_checked(backup_path / row['object'], row, cipher)
-            target = restored / 'files' / row['path']
-            target.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
-            write_private(target, data)
+            decrypt_checked(backup_path / row['object'], row, cipher)
+            verified_files += 1
+        require(verified_files == len(manifest['files']), 'Not every backed-up document was verified.')
         run(['docker', 'run', '--pull=never', '--detach', '--name', name, '--label', LABEL + '=' + run_id,
-             '--network', 'none', '--read-only', '--memory', '768m', '--cpus', '1',
+             '--network', 'none', '--read-only', '--memory', '768m', '--memory-swap', '768m', '--cpus', '1',
              '--tmpfs', '/var/lib/postgresql/data:rw,size=512m,mode=0700',
              '--tmpfs', '/var/run/postgresql:rw,mode=0777', '--tmpfs', '/tmp:rw,mode=1777',
              '--env', 'POSTGRES_USER=restore_owner', '--env', 'POSTGRES_DB=quillmd_restore',
@@ -362,13 +364,12 @@ def restore(args):
         require(invariants == manifest['invariants'], 'Restored invariants differ.')
         triggers = query("SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgenabled='O'")[0][0]
         require(triggers >= 6, 'Fresh immutable-record/scope triggers are missing.')
-        for row in manifest['files']:
-            require(digest(file_data(restored / 'files', row['path'])) == row['sha256'], 'Restored file differs.')
         metadata = inspect_container(name)
         require(metadata['HostConfig']['NetworkMode'] == 'none' and not metadata['HostConfig']['PortBindings']
                 and all(m['Type'] == 'tmpfs' for m in metadata['Mounts']), 'Restore isolation was not maintained.')
         result.update(complete=True, table_count=len(tables), row_count=sum(t['rows'] for t in tables.values()),
                       file_count=len(manifest['files']), all_table_hashes_match=True, all_file_hashes_match=True,
+                      decrypted_files_written=0, restore_database_on_tmpfs_without_swap=True,
                       invariants=invariants, enabled_custom_triggers=triggers, network='none', published_ports=0,
                       workers_started=0, provider_credentials_copied=False, backup_run_id=manifest['run_id'])
     finally:

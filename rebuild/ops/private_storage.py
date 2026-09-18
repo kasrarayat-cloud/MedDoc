@@ -18,6 +18,9 @@ import subprocess
 from dotenv import dotenv_values
 
 STATE_DIR = Path('/var/lib/quillmd')
+# Version 2 identities live on the encrypted volume. A device-mapper minor is assigned
+# when the volume opens, so the device number is resolved from this node at check time.
+DEVICE_SOURCE = '/dev/mapper/quillmd-fresh-encrypted'
 APP_ACCOUNT = 'quillmd-app'
 IDENTITY_FILE = Path('/opt/meddoc-pro/rebuild/.runtime/state-identity.json')
 APPROVED_ROOTS = frozenset(STATE_DIR / name for name in ('files', 'mail', 'proofs'))
@@ -221,18 +224,38 @@ def _installation(root):
             document = json.loads(stream.read(16385))
     finally:
         os.close(fd)
-    _require(type(document) is dict and document.get('version') == 1
+    _require(type(document) is dict and document.get('version') in (1, 2)
              and document.get('account') == {'name': APP_ACCOUNT, 'uid': account.pw_uid,
                                              'gid': account.pw_gid}
              and type(document.get('roots')) is dict
              and set(document['roots']) == {str(p) for p in APPROVED_ROOTS},
              'Private storage installation identity differs.')
     identity = document['roots'][str(root)]
-    _require(type(identity) is dict and set(identity) == {'device', 'inode'}
-             and type(identity['device']) is int and identity['device'] >= 0
+    if document['version'] == 1:
+        _require(set(document) == {'version', 'account', 'roots'}
+                 and type(identity) is dict and set(identity) == {'device', 'inode'}
+                 and type(identity['device']) is int and identity['device'] >= 0
+                 and type(identity['inode']) is int and identity['inode'] > 0,
+                 'Private storage directory identity is invalid.')
+        return dict(identity, uid=account.pw_uid, gid=account.pw_gid)
+    _require(set(document) == {'version', 'account', 'roots', 'device_source'}
+             and document['device_source'] == DEVICE_SOURCE
+             and type(identity) is dict and set(identity) == {'inode'}
              and type(identity['inode']) is int and identity['inode'] > 0,
              'Private storage directory identity is invalid.')
-    return dict(identity, uid=account.pw_uid, gid=account.pw_gid)
+    return {'device': _encrypted_device(), 'inode': identity['inode'],
+            'uid': account.pw_uid, 'gid': account.pw_gid}
+
+
+def _encrypted_device():
+    """Current device number of the open encrypted volume; refuses when it is closed."""
+    _require(Path(DEVICE_SOURCE).parent == Path('/dev/mapper'), 'Unexpected encrypted device source.')
+    try:
+        info = os.stat(DEVICE_SOURCE)
+    except OSError:
+        raise RuntimeError('The encrypted volume is not open.') from None
+    _require(stat.S_ISBLK(info.st_mode) and info.st_rdev > 0, 'The encrypted volume is not open.')
+    return info.st_rdev
 
 
 def _helper_source():

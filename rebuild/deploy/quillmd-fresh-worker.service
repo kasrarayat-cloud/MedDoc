@@ -24,6 +24,10 @@ TimeoutStopSec=150
 KillMode=mixed
 UMask=0077
 NoNewPrivileges=true
+# No core dumps and no swap: a crash image or a swapped page would carry documents
+# and credentials onto the unencrypted root disk.
+LimitCORE=0
+MemorySwapMax=0
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true

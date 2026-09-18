@@ -1,18 +1,23 @@
 #!/usr/bin/env bash
 # /usr/local/bin/quillmd-fresh-volume — open, bind, verify and close the QuillMD
 # fresh encrypted volume. Installed root:root 0755 from rebuild/deploy by the
-# declared storage migration; invoked only by quillmd-fresh-volume.service and
-# quillmd-fresh-database.service.
+# declared storage migration; invoked by quillmd-fresh-volume.service,
+# quillmd-fresh-database.service and, for manual unlock, by an operator through
+# scripts/ops/unlock-fresh-volume.sh.
 #
-# The LUKS2 container is a sparse loop file; its filesystem carries three roots:
+# The LUKS2 container is a sparse loop file; its filesystem carries two roots:
 #   postgres/  bound over the docker named-volume directory of quillmd-fresh-postgres
 #   state/     bound over /var/lib/quillmd (originals, exports, receipts, mail, proofs, tmp)
 # A marker file proves the filesystem is the migrated one before anything is bound.
 # When the volume is closed, both bind targets are empty, root-owned, immutable
 # directories: nothing can write plaintext into them by mistake.
+#
+# Key slots: 0 = key file (unattended boot); 1 = recovery passphrase (typed).
+# If the key file is absent (kept off the host by the owner), `open` refuses and
+# the volume stays closed until `unlock` is run with the passphrase on stdin.
 set -euo pipefail
 
-IMAGE=/opt/meddoc-pro/secrets/quillmd-fresh.luks
+IMAGE=/var/lib/quillmd-encrypted/quillmd-fresh.luks
 KEY=/etc/quillmd/quillmd-fresh-luks.key
 NAME=quillmd-fresh-encrypted
 MOUNT=/mnt/quillmd-fresh-encrypted
@@ -24,29 +29,46 @@ refuse() { echo "quillmd-fresh-volume: $1" >&2; exit 1; }
 
 is_mounted() { mountpoint -q "$1"; }
 
+mount_and_bind() {
+  if ! is_mounted "$MOUNT"; then
+    mount -o nodev,nosuid "/dev/mapper/$NAME" "$MOUNT"
+  fi
+  if [ ! -f "$MARKER" ]; then
+    umount "$MOUNT" || true
+    cryptsetup close "$NAME" || true
+    refuse "volume marker missing; refusing to bind an unrecognised filesystem"
+  fi
+  [ -d "$MOUNT/postgres" ] && [ -d "$MOUNT/state" ] || refuse "migrated roots missing on the volume"
+  if ! is_mounted "$PG_BIND"; then
+    mount --bind "$MOUNT/postgres" "$PG_BIND"
+  fi
+  if ! is_mounted "$STATE_BIND"; then
+    mount --bind "$MOUNT/state" "$STATE_BIND"
+  fi
+}
+
+preconditions() {
+  [ -f "$IMAGE" ] || refuse "encrypted image missing: $IMAGE"
+  [ -d "$MOUNT" ] || refuse "mount point missing: $MOUNT"
+}
+
 case "${1:-}" in
   open)
-    [ -f "$KEY" ] || refuse "key file missing: $KEY"
-    [ -f "$IMAGE" ] || refuse "encrypted image missing: $IMAGE"
-    [ -d "$MOUNT" ] || refuse "mount point missing: $MOUNT"
+    preconditions
     if [ ! -e "/dev/mapper/$NAME" ]; then
+      [ -f "$KEY" ] || refuse "key file absent ($KEY); the volume stays closed. Unlock manually with the recovery passphrase: scripts/ops/unlock-fresh-volume.sh"
       cryptsetup open --key-file "$KEY" "$IMAGE" "$NAME"
     fi
-    if ! is_mounted "$MOUNT"; then
-      mount -o nodev,nosuid "/dev/mapper/$NAME" "$MOUNT"
+    mount_and_bind
+    ;;
+  unlock)
+    # Passphrase arrives on stdin (typed through the operator script); cryptsetup
+    # reads until the first newline and strips it, exactly as at a terminal.
+    preconditions
+    if [ ! -e "/dev/mapper/$NAME" ]; then
+      cryptsetup open --key-slot 1 "$IMAGE" "$NAME"
     fi
-    if [ ! -f "$MARKER" ]; then
-      umount "$MOUNT" || true
-      cryptsetup close "$NAME" || true
-      refuse "volume marker missing; refusing to bind an unrecognised filesystem"
-    fi
-    [ -d "$MOUNT/postgres" ] && [ -d "$MOUNT/state" ] || refuse "migrated roots missing on the volume"
-    if ! is_mounted "$PG_BIND"; then
-      mount --bind "$MOUNT/postgres" "$PG_BIND"
-    fi
-    if ! is_mounted "$STATE_BIND"; then
-      mount --bind "$MOUNT/state" "$STATE_BIND"
-    fi
+    mount_and_bind
     ;;
   close)
     if is_mounted "$STATE_BIND"; then umount "$STATE_BIND"; fi
@@ -59,22 +81,24 @@ case "${1:-}" in
     [ -f "$MARKER" ] || refuse "volume marker missing"
     is_mounted "$PG_BIND" || refuse "database directory is not bound to the encrypted volume"
     is_mounted "$STATE_BIND" || refuse "state directory is not bound to the encrypted volume"
-    src=$(findmnt -no SOURCE "$MOUNT")
-    case "$src" in /dev/mapper/$NAME*) ;; *) refuse "unexpected mount source: $src" ;; esac
+    for target in "$MOUNT" "$PG_BIND" "$STATE_BIND"; do
+      src=$(findmnt -no SOURCE "$target")
+      case "$src" in /dev/mapper/$NAME*) ;; *) refuse "unexpected mount source for $target: $src" ;; esac
+    done
     echo "quillmd-fresh-volume: open, marker present, database and state bound"
     ;;
   wait-database)
-    for i in $(seq 1 90); do
+    for i in $(seq 1 120); do
       if docker exec quillmd-fresh-postgres pg_isready -U quillmd_fresh -d quillmd_fresh >/dev/null 2>&1; then
         echo "quillmd-fresh-volume: database ready"
         exit 0
       fi
       sleep 1
     done
-    refuse "database did not become ready within 90s"
+    refuse "database did not become ready within 120s"
     ;;
   *)
-    echo "usage: quillmd-fresh-volume open|close|status|wait-database" >&2
+    echo "usage: quillmd-fresh-volume open|unlock|close|status|wait-database" >&2
     exit 2
     ;;
 esac
