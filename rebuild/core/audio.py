@@ -25,6 +25,7 @@ from django.core.exceptions import ValidationError
 MAX_BYTES = 15 * 1024 * 1024
 MAX_ITEMS = 400000
 MAX_SECONDS = Decimal(24 * 3600)
+LOWEST_SECONDS_PER_BYTE = Decimal('0.001')  # 8 kbps, the lowest MPEG audio bitrate
 MP3_STEPS = 1500000  # frames plus resynchronised bytes; a 60-minute recording at the lowest bitrate is about 100,000 frames
 
 
@@ -218,7 +219,9 @@ def mp3(data):
     uncounted = end - start - before_tags
     if frames < 2 or uncounted > max(16384, (end - start) // 50):
         refuse('MP3 that is not made of standard audio frames')
-    return seconds + Decimal(max(uncounted, 0)) * slowest
+    # Costed at the lowest bitrate MP3 allows (8 kbps: 1 ms per byte), not the slowest seen: an attacker chooses the frames
+    # that are seen, so bytes a decoder might still play can never be priced below what they could hold.
+    return seconds + Decimal(max(uncounted, 0)) * max(slowest, LOWEST_SECONDS_PER_BYTE)
 
 
 def adjacent_run(data, position, layout):

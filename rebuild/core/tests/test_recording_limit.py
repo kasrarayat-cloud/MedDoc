@@ -299,6 +299,17 @@ class LegitimateTaggedRecordingsMeasureTheirAudio(SimpleTestCase):
         with self.assertRaisesMessage(audio.UnmeasurableRecording, 'tags contain audio frames'):
             audio.measure(original + ape_tag([(b'Comment', hidden)]))
 
+    def test_bytes_that_are_not_stream_frames_are_costed_at_the_lowest_bitrate(self):
+        """Frames of alternating layouts are never established, so their bytes are non-frame bytes: costed at 8 kbps (1 ms per
+        byte), not at the stream's own higher rate, they can never be priced below the audio they could hold."""
+        # A high-bitrate stream (MPEG-1 Layer III, 44.1 kHz, 320 kbps: 1,044 bytes, 0.026 s per frame), so its own rate would
+        # price the hidden bytes about 40 times too low.
+        original = (bytes([0xFF, 0xFB, 0xE0, 0xC0]) + bytes(1040)) * 100
+        low = bytes([0xFF, 0xE3, 0x18, 0xC0]) + bytes(68)   # MPEG-2.5 8 kHz, 72 bytes, 0.072 s
+        high = bytes([0xFF, 0xF3, 0x18, 0xC0]) + bytes(32)  # MPEG-2 16 kHz, 36 bytes, 0.036 s
+        hidden = (low + b'\x00' + high + b'\x00') * 100    # 11,000 bytes, 10.8 s a decoder could play
+        self.assertGreaterEqual(audio.measure(original + hidden), audio.measure(original) + Decimal('10.8') - Decimal('0.1'))
+
     def test_apple_lossless_is_refused_with_a_message_that_names_it(self):
         renamed = (FIXTURES / 'tone-3s.m4a').read_bytes().replace(b'mp4a', b'alac', 1)
         with self.assertRaisesMessage(audio.UnmeasurableRecording, 'not Apple Lossless'):
