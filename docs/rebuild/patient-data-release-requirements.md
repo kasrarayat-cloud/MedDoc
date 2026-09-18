@@ -41,7 +41,7 @@ data earlier would make that representation false.
 | Database runtime role without DDL/superuser; immutable financial rows (8 triggers) | DONE | `docs/rebuild/database-role-policy.md`, restore checks |
 | Administrator MFA (TOTP) and separate admin listener | DONE | `.runtime/admin-current-release-verification-after-backoff.json` |
 | Organization/department isolation on every route, file and export | DONE (internal tests) | Fresh live check 2026-09-17 (`review-report-attempt2.json`, cross-org 404s); independent retest PENDING |
-| Encryption at rest for the fresh PostgreSQL volume and `/var/lib/quillmd` | **GAP — verified absent 2026-09-17** | `docker inspect quillmd-fresh-postgres` shows volume `quillmd_fresh_pg` under `/var/lib/docker/volumes` on `/dev/sda2` (ext4); `findmnt -T /var/lib/quillmd` is also `/dev/sda2`. The existing LUKS mappers (`pg-encrypted`, `minio-encrypted`) hold only the retired system's data. Required before real data: move the fresh volume and state directory onto an encrypted volume during a declared maintenance window (root via the documented docker path), with a pre/post backup-restore proof; key custody recorded like the backup key |
+| Encryption at rest for the fresh PostgreSQL volume and `/var/lib/quillmd` | **PARTIAL — encrypted 2026-09-18, key on host** | Declared act (attempt 2, target `3eac783a`) judged 29/29: database, WAL, files, mail, proofs and service temp on a LUKS2 volume (aes-xts-plain64, 512-bit, argon2id); closed-volume drill passed; pre- and post-act encrypted backups restored with no decrypted files written (`storage-encryption.md`). Before real data: vault the recovery passphrase; decide key custody (protection against disk-level access needs slot 0 removed, re-encryption and the key file removed); destroy the plaintext rollback snapshot, pre-cutover `rebuild/.runtime/files`/`mail` and old restore-check copies (`owner-actions.md` §5). Host swap and journald stay host-level |
 | Encrypted backups with isolated restore | DONE on the same VPS | `.runtime/restore-checks/backup-restore-*.json` |
 | Offsite backup, separately escrowed key, measured RPO/RTO | **OWNER + PENDING** | Destination, scoped key, custodian; then round trip via `rebuild/ops/offsite_backup.py` |
 | Public ingress with TLS, security headers, rate limits | PENDING | Public routes are 503 maintenance by design until release |
@@ -54,8 +54,9 @@ data earlier would make that representation false.
 
 1. Close the OWNER rows in sections 1 and 2 and file the executed agreements
    under owner-controlled storage (never in git).
-2. Verify at-rest encryption for the fresh data paths and the offsite round
-   trip with key escrow.
+2. Complete key custody and destroy the plaintext copies for the encrypted fresh
+   data paths (`owner-actions.md` §5), and verify the offsite round trip with key
+   escrow.
 3. Complete the independent penetration test and retest every finding.
 4. Complete native Word acceptance (`word-acceptance-checklist.md`).
 5. Only then lift maintenance on public routes and enable real patient data,
