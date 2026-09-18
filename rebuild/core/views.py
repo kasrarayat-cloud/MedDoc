@@ -25,7 +25,7 @@ from .forms import *
 from .security import audit,departments,scoped,membership,digest,token,store_upload,private_path,rate_limit
 from .billing import welcome_credit,credit_payment,reconcile_refund,reconciliation,stripe_test_key_configured,reconcile_usage,release
 from .context import integration_status
-from .jobs import enqueue
+from .jobs import enqueue,cancel,CancellationRefused
 from . import wm_review
 
 
@@ -301,7 +301,10 @@ def encounter_detail(request,pk):
     try:maximum_charge=maximum_cost(e.notes,e.template_version.fields,context_labels=[row['label'] for row in e.template_version.review_requirements])*Decimal('1.5')
     except ValidationError:maximum_charge=None
     audit(request.user,'encounter.view',e.pk,department=e.department)
-    return render(request,'encounter_detail.html',{'encounter':e,'answer_rows':rows,'wm_template':is_wm,'wm_requirements':requirements,'wm_review_error':review_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':Decimal(os.getenv('QUILLMD_VOICE_MAX_COST','0.20'))*Decimal('1.5'),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize})
+    # Billing boundary: earlier successful requests stay charged, so a further request is disclosed as separately billable.
+    prior_generations=sum(1 for job in jobs if job.kind=='generation' and job.state=='succeeded')
+    prior_transcriptions=sum(1 for job in jobs if job.kind=='transcription' and job.state=='succeeded')
+    return render(request,'encounter_detail.html',{'encounter':e,'answer_rows':rows,'wm_template':is_wm,'wm_requirements':requirements,'wm_review_error':review_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':Decimal(os.getenv('QUILLMD_VOICE_MAX_COST','0.20'))*Decimal('1.5'),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions})
 
 @require_POST
 def generate_view(request,pk):
@@ -311,6 +314,16 @@ def generate_view(request,pk):
         quoted=usage_quote(request,e)
         enqueue(e,request.user,config=quoted);messages.success(request,'Generation queued. Refresh this page to view the result.')
     except ValidationError as exc:messages.error(request,error_message(exc))
+    return redirect('encounter_detail',pk=pk)
+
+@require_POST
+def job_cancel(request,pk,job_pk):
+    """Cancel a queued request before any provider request; anything later is billed by result (409 with the reason)."""
+    e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
+    job=get_object_or_404(Job,pk=job_pk,encounter=e)
+    try:cancel(job,request.user)
+    except CancellationRefused as exc:return HttpResponse(error_message(exc),status=409)
+    messages.success(request,'Queued request cancelled before any provider request. Held funds were released; nothing was charged.')
     return redirect('encounter_detail',pk=pk)
 
 @require_POST

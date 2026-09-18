@@ -276,6 +276,7 @@ def absorb_failed_job(job,actor=None,note=''):
     usage=Usage.objects.filter(job=job).first()
     if usage is None or usage.simulated: return None
     if job.state!='failed': raise ValidationError('Only a failed job can be absorbed; a succeeded or pending job keeps its charge.')
+    if job.error.startswith('not_adopted:'): raise ValidationError('A successful generation the user did not adopt remains charged; there is no platform failure to absorb.')
     reconciliation=CostReconciliation.objects.select_for_update().filter(usage=usage).first()
     net={}
     for entry in LedgerEntry.objects.filter(job=job,kind__in=['usage','reconciliation']).order_by('wallet_id'):

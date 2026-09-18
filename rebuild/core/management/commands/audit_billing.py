@@ -57,8 +57,10 @@ def audit_report(file_reader=None):
         absorbed=bool(absorbed_entries or absorbed_cost)
         absorbed_reversal=sum((entry['amount'] for entry in absorbed_entries),Decimal(0))
         if usage.job.state=='failed' and not usage.simulated:
-            # A settled provider cost whose output was never adopted must not stay on the user's ledger.
-            checks['failed_settled_usage_absorbed']=absorbed
+            # Billing boundary: a successful generation the user declined ('not_adopted:') stays charged and must NOT be absorbed;
+            # every other settled failure is a platform failure ('platform_failure:', administrator resolutions, older rows) and must be.
+            if usage.job.error.startswith('not_adopted:'):checks['user_declined_output_remains_charged']=not absorbed
+            else:checks['failed_settled_usage_absorbed']=absorbed
         reconciliation=CostReconciliation.objects.filter(usage=usage).first()
         reconciliation_entries=list(LedgerEntry.objects.filter(job_id=usage.job_id,kind='reconciliation').values('amount','wallet_id','wallet__kind','balance_after'))
         if absorbed:
