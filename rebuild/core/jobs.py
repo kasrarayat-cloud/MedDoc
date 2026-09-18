@@ -5,6 +5,7 @@ import json
 import re
 import secrets
 import os
+import time
 import httpx
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -12,7 +13,7 @@ from django.db import transaction
 from django.utils import timezone
 from .models import AuditEvent, Job, Encounter, Usage, ProviderReceipt, CodeSuggestion
 from .security import membership,audit,private_path
-from .media import SubmissionUnprobeable,probe_submission
+from .media import SUBMISSION_BUDGET_SECONDS,NotNormalised,SubmissionUnprobeable,normalise_submission,plan_normalisation,probe_submission
 from .billing import reserve,settle,release,absorb_failed_job,MULTIPLIER
 from . import generation
 from . import audio
@@ -58,6 +59,18 @@ OVERFLOW_ERROR='The transcript was not added because the notes would exceed the 
 NOTES_FULL='The notes are at the 50,000-character limit, so no transcript could be added. Shorten the notes first. Nothing was sent for transcription.'
 ABANDONED_UPLOAD_SECONDS=2400
 UPLOAD_NAME=re.compile(r'audio/[a-f0-9]{48}\.(wav|webm|mp3|m4a)')
+# The normalised artifact is TRANSIENT: written under the same protected storage as the upload, at 0600, submitted, and
+# removed in a finally. It is never a second copy of a recording sitting around — what survives is its sha256, byte count
+# and measured duration on the job, which is what ties the upload, the consent, the provider request and the billing row
+# together. A crash between writing and removing leaves a stray, so the reaper sweeps this directory too.
+# The suffixes core/media.py CONTAINERS can actually produce. No flac: measure_bounds refuses FLAC input, so no flac
+# artifact can exist — and a pattern matching one it can never see is a reaper arm nothing proves.
+SUBMISSION_NAME=re.compile(r'submissions/[a-f0-9]{48}\.(wav|webm|mp3|m4a)')
+SUBMISSION_LIMIT_BYTES=15*1024*1024
+AMBIGUOUS_STREAMS=('This recording holds {count} separate audio tracks, so which one would be transcribed is not decided by '
+                   'the file. Export it as a single audio track and upload that. Nothing was sent for transcription.')
+NO_AUDIO_TRACK=('No audio track could be found in this recording, so there is nothing to transcribe. Export it again as an '
+                'audio file and upload that. Nothing was sent for transcription.')
 
 
 def notes_full(notes):
@@ -210,7 +223,18 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
         #                                 to the provider. A completeness statement may rest on this and on nothing else.
         config.update(recording_seconds=str(bounds.measured),recording_seconds_confirmed=str(bounds.confirmed),
                       charge_limit=str(charge_limit),limit_basis='approved' if approved_limit is not None else 'standard')
+        # REFUSED HERE, BEFORE Job.objects.create AND BEFORE reserve(): a recording whose payload does not decide which
+        # audio a decoder would process never reaches the provider, is never held against, and is never charged for. The
+        # provider picking one silently is exactly what this prevents — measured: ffmpeg given a two-stream Matroska and no
+        # explicit map emits one stream and reports nothing.
         config.update(describe_submission(input_path,ceiling_seconds=bounds.measured))
+        # ⚠️ A POSITIVE TEST ON A STRING THE FAILURE PATH SETS TO EMPTY IS A GUARD THAT FAILS OPEN, and this one did.
+        # Every probe failure produced submission_streams='', ''.isdigit() is False, so the refusal was skipped —
+        # strongest on a two-track file and ABSENT on a sixty-five-track one, because an implausible count used to
+        # raise rather than be reported. media.py now returns the count; this reads it, and anything above one refuses.
+        streams=config.get('submission_streams') or ''
+        if streams.isdigit() and int(streams)>1: raise ValidationError(AMBIGUOUS_STREAMS.format(count=int(streams)))
+        if streams.isdigit() and int(streams)==0: raise ValidationError(NO_AUDIO_TRACK)
     job=Job.objects.create(encounter=e,user=user,kind=kind,revision=e.revision,request_key=key,input_path=input_path,config=config)
     if kind=='transcription':
         reserve(job,charge_limit=charge_limit)
@@ -251,17 +275,25 @@ def coverage_note(job,units):
       · INCOMPLETE — the provider processed materially less than was SUBMITTED. Disclosed with both numbers.
       · UNKNOWN    — the payload does not determine what a decoder would process (several audio streams), or it could not be
                      probed at all. Disclosed as unknown rather than resolved in our favour.
+      · SHORT      — the payload holds materially less audio than the recording we measured and priced. Both numbers are
+                     stated and no reason is offered, because the reason is not knowable from the file.
       · no claim   — the durations agree. Nothing is asserted.
     """
     try:
         config=job.config or {}
-        submitted=config.get('submitted_seconds') or ''
-        status=config.get('submission_status') or ''
+        units=units or {}
+        # THE MEASUREMENT OF RECORD IS THE ONE TAKEN OF THE ARTIFACT THAT WAS ACTUALLY POSTED, and it arrives in `units`
+        # beside the provider's own number. job.config carries the measurement of the UPLOAD, taken at enqueue before the
+        # remux existed; it is the fallback for a job whose submission was never described, and it is never preferred over
+        # a measurement of the bytes that went out.
+        source=units if 'submission_status' in units else config
+        submitted=source.get('submitted_seconds') or ''
+        status=source.get('submission_status') or ''
         priced=Decimal(config.get('recording_seconds') or '0')
-        processed=Decimal((units or {}).get('duration_seconds') or '0')
+        processed=Decimal(units.get('duration_seconds') or '0')
     except Exception:
         return ''
-    detail=(config.get('submission_detail') or '').strip()
+    detail=(source.get('submission_detail') or '').strip()
     if status!='determined' or not submitted:
         # This arm used to compare against the handwritten FLOOR, a lower bound over decoder ambiguity. On a recording that
         # submits 9 s and floors at 1 s, that reported 'complete' while eight seconds were missing.
@@ -274,20 +306,140 @@ def coverage_note(job,units):
         submitted_seconds=Decimal(submitted)
     except Exception:
         return ''
+    notes=''
+    # ⚠️ THE FOURTH OUTCOME, AND ITS ABSENCE WAS A STRUCTURAL SILENCE, NOT AN OVERSIGHT IN ONE BRANCH. Every arm above
+    # compares the PROVIDER against what we submitted. Nothing asked whether what we submitted is materially less than
+    # the recording we measured and priced — so any loss BEFORE the request was invisible by construction, and the
+    # transcript said nothing at all. Demonstrated on an M4A carrying a trimming edit list: the file's mdat holds
+    # 10.4 s, the priced ceiling is 10.027 s, 2.0 s was submitted, the provider returned 2.0 s, and the note was empty.
+    # This says nothing about WHY the payload is shorter — it may be a trimming edit list, a second data chunk no
+    # decoder reaches, or bytes after the audio that were never audio at all. Distinguishing those from the file alone
+    # is not something this code can do, so it states the two measurements and makes no claim about the difference.
+    if priced-submitted_seconds>COVERAGE_TOLERANCE_SECONDS:
+        notes+=(f'\n[Only {seconds_text(submitted_seconds)} of this recording could be read as audio, although the file '
+                f'could hold up to {seconds_text(priced)}. That {seconds_text(submitted_seconds)} is what was sent for '
+                f'transcription; nothing is claimed about the rest.]')
     if processed<submitted_seconds-COVERAGE_TOLERANCE_SECONDS:
-        return (f'\n[Transcription incomplete: the provider processed {seconds_text(processed)} of the '
+        notes+=(f'\n[Transcription incomplete: the provider processed {seconds_text(processed)} of the '
                 f'{seconds_text(submitted_seconds)} of audio submitted; {seconds_text(submitted_seconds-processed)} was not '
                 f'transcribed.]')
-    return ''  # the durations agree — no claim is made here, and none may be inferred from the silence
+    # An empty string here means the durations agree AND the payload holds what the recording measured. No claim is made,
+    # and none may be inferred from the silence.
+    return notes
+
+
+def prepare_submission(job):
+    """Produce the exact bytes that will be POSTed, describe them durably, and return them with the artifact to reap.
+
+    Normalisation is BEST EFFORT AND VERIFIED, never assumed. A lossless remux is attempted; the result is measured by the
+    same instrument that measured the source, and it is submitted only if it holds the same audio. Every other path —
+    ffmpeg absent, a codec with no lossless remux, a refusal, a timeout, an output too large, a measurement that disagrees —
+    submits the ORIGINAL unchanged and records why. That is deliberately the pre-existing behaviour: a recording a doctor
+    made is never re-encoded into something smaller to make this code path succeed.
+
+    WHERE THE DESCRIPTION GOES, and it is not the obvious place. `Job.config` is write-once: a database trigger
+    (`quillmd_job_financial_guard`, migration 0008) refuses ANY update to it, because it carries the authorized pricing and
+    payer. That guard is right and is not weakened here. So what was submitted is recorded in the two places that are
+    designed to accumulate — an audit row, and the `units` of the provider receipt and billing row, which is also what ties
+    the artifact to the provider request and the charge.
+    """
+    try: source=private_path(job.input_path)
+    except (OSError,ValueError): raise NoProviderRequest('The recording is not available.') from None
+    config=job.config or {}
+    # The two hand measurements enqueue already made of this upload: the length it certainly holds, and the most it
+    # could hold. They bracket the artifact the remux produces; neither is re-derived here, so there is one measurement
+    # of this recording and not two that can disagree.
+    try: ceiling=Decimal(config.get('recording_seconds') or '0')
+    except Exception: ceiling=None
+    if ceiling is not None and ceiling<=0: ceiling=None
+    try: floor=Decimal(config.get('recording_seconds_confirmed') or '0')
+    except Exception: floor=None
+    if floor is not None and floor<=0: floor=None
+    # ⚠️ ONE OWNER FOR THE ARTIFACT, FROM THE MOMENT THE FILE EXISTS TO THE MOMENT IT IS HANDED BACK. The first version
+    # unlinked at three individual failure points and missed the others: an audit() write failing on a stale database
+    # connection — likely, since the worker holds one connection and this INSERT follows up to 25 s of subprocess work —
+    # left the whole artifact on the encrypted volume, and a host without ffmpeg left a zero-byte file per job. Both
+    # were reachable without any crash. `destination` is what gets cleaned up; `artifact` is only what gets submitted.
+    started=time.monotonic(); destination=artifact=produced=None; refusal=''
+    try:
+        try: upload=probe_submission(source,ceiling_seconds=ceiling,timeout=SUBMISSION_BUDGET_SECONDS)
+        except (SubmissionUnprobeable,OSError,ValueError) as error:
+            upload=None; refusal='the upload could not be measured: %s'%str(error)[:150]
+        if upload is not None:
+            try:
+                _,suffix=plan_normalisation(upload)
+                relative=f'submissions/{secrets.token_hex(24)}{suffix}'
+                destination=private_path(relative)
+                destination.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+                # Created at 0600 BEFORE ffmpeg opens it: ffmpeg truncates an existing file rather than creating one, so
+                # the artifact is never briefly readable at the process umask.
+                destination.touch(mode=0o600,exist_ok=False)
+                produced=normalise_submission(source,destination,upload,floor_seconds=floor,ceiling_seconds=ceiling,
+                                              deadline=SUBMISSION_BUDGET_SECONDS-(time.monotonic()-started))
+                artifact=destination
+            except NotNormalised as error: refusal=str(error)[:200]
+            # Anything else out of the remux is a reason to submit the original, never a reason to fail the job: the
+            # alternative is a doctor's complete recording refused because our own optional step went wrong.
+            except Exception as error: refusal='the remux could not be completed: %s'%type(error).__name__
+        # ⚠️ THE SUCCESS PATH NEEDS THIS AS MUCH AS THE FAILURE PATH DOES, and the first version only had the failure
+        # one. A remux that fails AFTER the destination exists returns normally — the original is submitted, which is
+        # correct — and the touched file was simply left there. Every arm inside normalise_submission cleans up after
+        # itself, so this only catches what it does not handle, which is precisely the class that goes unnoticed.
+        if artifact is None and destination is not None:
+            destination.unlink(missing_ok=True); destination=None
+        try: raw=(artifact or source).read_bytes()
+        except (OSError,ValueError): raise NoProviderRequest('The recording is not available.') from None
+        # ⚠️ AN OVERSIZED ARTIFACT FALLS BACK; IT DOES NOT REFUSE THE RECORDING. Measured: an MP3 at exactly the
+        # 15,728,640-byte upload limit, with no Xing header and no ID3 tag, remuxes to 15,729,077 bytes because the
+        # muxer adds both. Raising here told the doctor 'Recording too large.' about a recording that was inside the
+        # limit and had been transcribed fine before this change — deterministically, so re-uploading never helped.
+        # The recording is only too large when the ORIGINAL is too large, which is the test that existed before.
+        if artifact is not None and len(raw)>SUBMISSION_LIMIT_BYTES:
+            refusal='the remuxed payload is %d bytes, above the %d-byte submission limit'%(len(raw),SUBMISSION_LIMIT_BYTES)
+            artifact=produced=None
+            destination.unlink(missing_ok=True); destination=None
+            try: raw=source.read_bytes()
+            except (OSError,ValueError): raise NoProviderRequest('The recording is not available.') from None
+        if len(raw)>SUBMISSION_LIMIT_BYTES: raise NoProviderRequest('Recording too large.')
+        described=produced if artifact is not None else upload
+        submitted={'submission_source':'normalised' if artifact is not None else 'original',
+                   'submission_bytes':str(len(raw)),'submission_sha256':hashlib.sha256(raw).hexdigest(),
+                   'upload_path':str(job.input_path),
+                   'normalisation_detail':refusal if artifact is None else ''}
+        if described is not None:
+            submitted.update(submitted_seconds='' if described.selected_seconds is None else str(described.selected_seconds),
+                             submission_status='ambiguous' if described.ambiguous else 'determined',
+                             submission_detail='; '.join(described.reasons)[:400],
+                             submission_streams=str(described.audio_streams),submission_container=described.container[:60])
+        else:
+            submitted.update(submitted_seconds='',submission_status='unprobeable',submission_detail=refusal[:400],
+                             submission_streams='',submission_container='')
+        # Written BEFORE the request, so a provider call that never returns still leaves a record of what was sent.
+        audit(job.user,'voice.submission_prepared',job.pk,department=job.encounter.department,
+              source=submitted['submission_source'],container=submitted['submission_container'],
+              seconds=submitted['submitted_seconds'],submitted_bytes=submitted['submission_bytes'],
+              sha256=submitted['submission_sha256'],detail=submitted['normalisation_detail'])
+        return raw,artifact,submitted
+    except BaseException:
+        if destination is not None: destination.unlink(missing_ok=True)
+        raise
 
 
 def transcribe(job):
     # Everything before httpx.post raises NoProviderRequest: no provider request was made, so nothing is billable.
-    try: raw=private_path(job.input_path).read_bytes()
-    except (OSError,ValueError): raise NoProviderRequest('The recording is not available.') from None
-    if len(raw)>15*1024*1024: raise NoProviderRequest('Recording too large.')
+    # The key is read FIRST: preparing a payload — and recording that we prepared one — for a request that could never have
+    # been made would put a submission row in the audit trail with no provider request behind it.
     key=os.getenv('DEEPGRAM_API_KEY')
     if not key: raise NoProviderRequest('Transcription provider is not connected.')
+    raw,artifact,submitted=prepare_submission(job)
+    try:
+        return submit_transcription(job,raw,key,submitted)
+    finally:
+        # The artifact is transient by design; its sha256 and measured duration on the job are what survive.
+        if artifact is not None: artifact.unlink(missing_ok=True)
+
+
+def submit_transcription(job,raw,key,submitted):
     response=httpx.post('https://api.deepgram.com/v1/listen',params={'model':'nova-3-medical','smart_format':'false'},headers={'Authorization':f'Token {key}','Content-Type':'application/octet-stream'},content=raw,timeout=90)
     response.raise_for_status()
     data=response.json()
@@ -300,7 +452,10 @@ def transcribe(job):
     list_cost=(duration*rate/60).quantize(Decimal('0.0000000001'))
     discount=generation.discount_rate(config);cost=generation.discounted_cost(list_cost,discount)
     rates=generation.cost_rates({'usd_per_minute':rate,'cost_quantum_usd':'0.0000000001','rounding':'half_even'},list_cost,discount)
-    return transcript,cost,{'duration_seconds':str(duration)},rates,'deepgram:nova-3-medical',data['metadata']['request_id'],False
+    # The units carry what was SUBMITTED beside what the provider PROCESSED. They are two different measurements of two
+    # different things, they are stored together on the receipt and the usage row, and the coverage statement is the
+    # comparison between them — which is why neither may be inferred from the other.
+    return transcript,cost,dict(submitted,duration_seconds=str(duration)),rates,'deepgram:nova-3-medical',data['metadata']['request_id'],False
 
 def run_one():
     with transaction.atomic():
@@ -425,6 +580,29 @@ def reap_abandoned_voice_uploads():
         if path.is_file():
             path.unlink(missing_ok=True); removed+=1
             audit(None,'voice.over_limit_upload_removed',event.target,department=event.department,path=relative)
+    return removed+reap_stray_submissions()
+
+
+def reap_stray_submissions():
+    """Remove normalised artifacts a crash left behind.
+
+    An artifact lives for one provider request — normalisation is capped at 120 s and the request at 90 s — and is removed in
+    a finally. Anything still here after the approval window is residue from a process that died between the two, so there is
+    no live job it could belong to. The name is checked against the same pattern that generates it, and nothing outside the
+    submissions directory is a candidate: a reaper that deletes by age alone is one bad path away from eating a recording."""
+    cutoff=(timezone.now()-timedelta(seconds=ABANDONED_UPLOAD_SECONDS)).timestamp()
+    try: entries=sorted(private_path('submissions').iterdir())[:500]
+    except (OSError,ValueError): return 0
+    removed=0
+    for path in entries:
+        relative='submissions/'+path.name
+        if not SUBMISSION_NAME.fullmatch(relative) or not path.is_file(): continue
+        try:
+            if path.stat().st_mtime>=cutoff: continue
+            path.unlink(missing_ok=True)
+        except OSError: continue
+        removed+=1
+        audit(None,'voice.stray_submission_removed','',path=relative)
     return removed
 
 
