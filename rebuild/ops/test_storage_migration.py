@@ -359,6 +359,24 @@ class FailurePathsSurviveTheWatchdog(unittest.TestCase):
         self.assertNotIn('word.retained_reports() == retained', self.source)
 
 
+class RootStepsImportBeforeChroot(unittest.TestCase):
+    """After os.chroot('/host') the helper image's standard library is gone; a root step may use only modules imported before it."""
+
+    def test_no_root_step_imports_after_the_chroot(self):
+        migration = load_migration()
+        preamble = migration.ROOT_LIBRARY.split("os.chroot('/host')")[0]
+        imported = set(re.search(r'^import ([\w,]+)$', preamble, re.M).group(1).split(','))
+        for name in [n for n in dir(migration) if n.startswith('ROOT_') and n != 'ROOT_LIBRARY']:
+            code = getattr(migration, name)
+            tree = ast.parse(code)
+            self.assertFalse([n for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom))], name)
+            used = {n.value.id for n in ast.walk(tree) if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name)}
+            modules = used & {'os', 'sys', 'json', 'subprocess', 'stat', 'hashlib', 'time', 'secrets', 'shutil', 're', 'base64', 'random', 'tempfile', 'datetime'}
+            self.assertLessEqual(modules, imported, name)
+        library_after = migration.ROOT_LIBRARY.split("os.chroot('/host')")[1]
+        self.assertFalse([n for n in ast.walk(ast.parse(library_after.split('\n', 1)[1])) if isinstance(n, (ast.Import, ast.ImportFrom))])
+
+
 class RootHelperTransport(unittest.TestCase):
     """The helper program travels as an argument and only the parameters on stdin; CPython reads ALL of stdin as the program
     for `python -`, which made every root step fail in the first design."""

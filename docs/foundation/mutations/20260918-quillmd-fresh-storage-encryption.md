@@ -169,3 +169,25 @@ destruction:
 All of them are synthetic, and all must go before real patient data. No claim
 about Stripe, Resend, offsite restoration, invoice reconciliation or
 independent testing follows from this act.
+
+## Attempt 1 (2026-09-18 04:45Z) and attempt 2
+
+Attempt 1 ran from target `69f39be4` and stopped at its first host step, formatting.
+The step imported `secrets` after changing root into the host filesystem, where the
+helper image's standard library does not exist. It stopped at that first line,
+before creating any file, key, image or mount point.
+
+The declared automatic revert then ran. Every row fingerprint compared identical.
+Both private services returned on the running release (`19d46ad3`,
+synthetic-only), and the container's restart and memory policy were restored.
+Main never moved, no lock remained, and the private outage lasted 17 seconds.
+Evidence: `rebuild/.runtime/fresh-storage-migrate-20260918.json`, its progress
+file and `fresh-storage-act-20260918.log`. Nothing needed discarding, because
+the probe finds no attempt artifacts.
+
+The fix imports every module before the change of root. A test now fails if a
+root step imports afterwards, and it fails against the attempt-1 script. A
+non-mutating live step exercised every post-chroot path the act uses.
+
+Attempt 2 runs once from the fixed target, under this same declaration and
+with the same expected delta. It writes a new result file.

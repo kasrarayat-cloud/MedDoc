@@ -213,8 +213,10 @@ def helper_image():
     return image
 
 
+# Every module a root step uses is imported HERE, before the chroot: afterwards the helper image's standard library is no
+# longer on the filesystem, so a late import fails (attempt 1 of the act stopped on exactly that, `import secrets`).
 ROOT_LIBRARY = r'''
-import os,sys,json,subprocess,stat,hashlib,time
+import os,sys,json,subprocess,stat,hashlib,time,secrets
 P=json.loads(sys.stdin.readline())
 os.chroot('/host');os.chdir('/');os.umask(0o077)
 def host(*cmd, stdin=None, check=True, timeout=600):
@@ -266,7 +268,6 @@ emit({'systemd_run_root':r.returncode==0 and r.stdout.strip()=='0','pg_data':st(
 '''
 
 ROOT_PREPARE = r'''
-import secrets
 for p in (P['key'],P['recovery'],P['image'],P['image_dir'],P['mount']):
     if os.path.lexists(p): raise RuntimeError('already exists: '+p)
 os.mkdir(P['image_dir'],0o700)
