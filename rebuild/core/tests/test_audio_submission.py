@@ -26,7 +26,7 @@ from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from core import media
 from core.jobs import enqueue, reap_stray_submissions, run_one
@@ -35,6 +35,7 @@ from core.models import Job, Reservation, Usage
 from core.security import private_path
 from core.tests.audio_fixtures import wav_bytes, wav_with_two_data_chunks
 from core.tests.test_billing_boundary import BoundaryFixture, deepgram
+from core.tests.test_billing_policy import STORAGES
 from exercised import requires_distinct, requires_input
 
 STANDARD_ENV = {'QUILLMD_DEEPGRAM_RATE_PER_MINUTE': '0.006', 'QUILLMD_DEEPGRAM_RATE_PER_SECOND': '',
@@ -341,6 +342,7 @@ class NormalisationIsLosslessAndBounded(MediaFixtures, SimpleTestCase):
         self.assertFalse(destination.exists())
 
 
+@override_settings(ADMIN_SITE=False, STORAGES=STORAGES)
 class AmbiguousInputIsRefusedBeforeAnythingIsPaidFor(MediaFixtures, BoundaryFixture, TestCase):
     def setUp(self):
         super().setUp()
@@ -377,6 +379,7 @@ class AmbiguousInputIsRefusedBeforeAnythingIsPaidFor(MediaFixtures, BoundaryFixt
         self.assertEqual(job.state, 'succeeded')
 
 
+@override_settings(ADMIN_SITE=False, STORAGES=STORAGES)
 class WhatWasSubmittedIsWhatWasMeasured(MediaFixtures, BoundaryFixture, TestCase):
     """The recorded description must describe the bytes that went out — checked against the bytes that went out."""
 
@@ -473,6 +476,7 @@ class WhatWasSubmittedIsWhatWasMeasured(MediaFixtures, BoundaryFixture, TestCase
         self.assertEqual(sorted(private_path('submissions').glob('*')), [], 'a failed request left its payload on disk')
 
 
+@override_settings(ADMIN_SITE=False, STORAGES=STORAGES)
 class StrayArtifactsAreReapedAndNothingElseIs(BoundaryFixture, TestCase):
     def write(self, name, age_seconds):
         path = private_path('submissions/' + name)
@@ -492,6 +496,7 @@ class StrayArtifactsAreReapedAndNothingElseIs(BoundaryFixture, TestCase):
         self.assertTrue(foreign.exists(), 'the reaper deleted a file it does not own')
 
 
+@override_settings(ADMIN_SITE=False, STORAGES=STORAGES)
 class ConsentAndDeduplicationAreUnchanged(MediaFixtures, BoundaryFixture, TestCase):
     def setUp(self):
         super().setUp()
@@ -587,6 +592,7 @@ class AMalformedRecordingIsRefusedBeforeNormalisationIsReached(SimpleTestCase):
         self.assertGreaterEqual(bounds.measured, described.selected_seconds)
 
 
+@override_settings(ADMIN_SITE=False, STORAGES=STORAGES)
 class WhatTheRefutationPassFound(MediaFixtures, BoundaryFixture, TestCase):
     """Six defects the adversarial pass demonstrated, each pinned by the input that demonstrated it.
 
