@@ -128,6 +128,44 @@ stack's data and are not touched.
   was judged 20/20; the private record is
   `rebuild/.runtime/plaintext-recovery-reap-20260918.json`.
 
+## Where every secret and every copy of the data actually is (measured 2026-09-18)
+
+Read this table before describing the protection to anyone. Every path was
+listed on the running host; sizes are as measured that day.
+
+| What | Exact location | Filesystem | Encrypted at rest? |
+| --- | --- | --- | --- |
+| LUKS2 container for the live system | `/var/lib/quillmd-encrypted/quillmd-fresh.luks` (16 GiB sparse, `-rw-------`, root) | `/dev/sda2` | the contents are; the file sits on plaintext |
+| Unlock key, slot 0 | `/etc/quillmd/quillmd-fresh-luks.key` (64 bytes, `-r--------`, root) | `/dev/sda2` | **no** |
+| Recovery passphrase, slot 1 | `/etc/quillmd/quillmd-fresh-luks.recovery-passphrase` (48 bytes, `-r--------`, root) | `/dev/sda2` | **no** |
+| Retired stack's LUKS keys | `/etc/quillmd/pg-luks.key`, `/etc/quillmd/minio-luks.key` (512 bytes each, root) | `/dev/sda2` | **no** |
+| Database data and WAL | `/mnt/quillmd-fresh-encrypted/postgres`, bound over the docker volume | `/dev/mapper/quillmd-fresh-encrypted` | yes, while closed |
+| Originals, exports, receipts, mail, proofs | `/var/lib/quillmd/{files,mail,proofs}` | `/dev/mapper/quillmd-fresh-encrypted` | yes, while closed |
+| Encrypted backups | `rebuild/.runtime/new-system-backups/` (12 runs, 62 MB) | **`/dev/sda2`** | Fernet ciphertext on plaintext storage |
+| The key that decrypts those backups | `rebuild/.runtime/backup-secrets/fresh-backup-current-20260917.key` (45 bytes, `-rw-------`, `claude`) | **`/dev/sda2`** | **no — and it is two directories from the ciphertext it opens** |
+| Host swap | `/swap.img`, 4,194,300 KB, **4,190,184 KB in use** | `/dev/sda2` | **no** |
+| System journal | `/var/log/journal`, 3.22 GB | `/dev/sda2` | **no** |
+| Application state from before the 2026-09-17 cutover | `rebuild/.runtime/files`, `rebuild/.runtime/mail` | `/dev/sda2` | **no**, synthetic |
+
+## What the configuration protects against, and what it does not
+
+| Scenario | Protected? | Why |
+| --- | --- | --- |
+| A stolen or RMA'd physical disk from the hypervisor, with the guest powered off | **Yes, for the volume's contents** | the LUKS2 container is closed; the database and private files are unreadable without a key slot |
+| A provider snapshot restored while the guest is off, **with `/etc/quillmd` included** | **No** | the image carries the slot-0 key file beside the container it opens. One `cryptsetup luksOpen --key-file` reads everything |
+| A whole-host image taken while the service runs | **No** | as above, plus the mapper is already open and the plaintext is live |
+| Another tenant on this shared VPS reading QuillMD files directly | **Partly** | the mount is `nosuid,nodev`, the keys are root-only and `/var/lib/quillmd-encrypted` is root-only — but membership of the `docker` group on this host is equivalent to root, so any tenant with docker access defeats it |
+| An attacker who reaches the application user (`claude`) | **No, for the backups** | the backup ciphertext and its Fernet key are both readable by that account |
+| Exfiltration of the backup archive alone, without the host | **Yes** | Fernet ciphertext without the key file is not usable |
+| Recovery of deleted plaintext from freed blocks on `/dev/sda2` | **No** | freed blocks are not overwritten on this virtual disk; the data they held is synthetic |
+| Data resident in host swap or the journal | **No** | both are host-level, unencrypted, and swap is 99.9% full |
+
+**Do not describe this as encryption at rest for a stolen host image.** It is
+encryption at rest for the *volume*, with the unlock key stored beside it. The
+only configuration that changes those three `No` rows is the one the owner has
+to approve: remove slot 0, re-encrypt, remove the key file, and accept that
+every boot then waits for a typed passphrase (`owner-actions.md` §2, step 4).
+
 ## Limits and remaining dependencies
 
 - Host swap, journald and the shared root filesystem are host-level. Encrypting

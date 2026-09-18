@@ -36,6 +36,46 @@ References: [PostgreSQL snapshot synchronization](https://www.postgresql.org/doc
 [pg_dump snapshot option](https://www.postgresql.org/docs/17/app-pgdump.html),
 [Fernet authenticated encryption and memory limit](https://cryptography.io/en/latest/fernet/).
 
+## The restore that failed first, diagnosed rather than retried
+
+**2026-09-18.** The first restore attempt of `20260917T174418Z-220e52ba` failed
+and an identical retry succeeded. A retry that works is not a diagnosis, so the
+docker journal for the isolated restore container was read instead:
+
+| event | time |
+| --- | --- |
+| restore container created and started | `11:09:07.24Z` |
+| container removed by the tool's own cleanup | `11:09:09.31Z` |
+
+Two seconds is long enough for the container to start and far too short for the
+dump, so the failure was inside `pg_restore`, not in starting the database.
+
+**Cause: the PostgreSQL entrypoint's initialisation server answers before the
+real server exists.** `docker-entrypoint.sh` starts a temporary server bound to
+the unix socket to run initialisation, then stops it and execs the real
+`postgres`. `pg_isready` cannot tell the two apart. The restore raced that
+handover: it connected to the temporary server, and the shutdown arrived while
+`pg_restore` was running. Nothing in the tool's output said so, because a
+connection that closes mid-restore surfaces as an ordinary restore error.
+
+**Repair.** `ops/backup_restore.py` gained `restore_ready()`, which treats the
+database as ready only when all three hold:
+
+1. the container log contains `PostgreSQL init process complete; ready for start up.`
+   — the marker the entrypoint prints *after* the temporary server is gone;
+2. `pg_isready` succeeds;
+3. `SELECT 1` returns `1` over the real connection.
+
+The wait is bounded (120 polls) and `restore()` now records `stage`,
+`failed_stage` and `error_class` on every path, so the next failure names where
+it stopped instead of requiring a journal reading. Raw stderr is deliberately
+**not** stored: a failing `pg_restore` can quote row values.
+
+A regression test simulates the race — `pg_isready` succeeding before the marker
+appears — and asserts that readiness is reached before `pg_restore` is invoked,
+that the failed stage is recorded, and that no raw stderr is kept
+(`ops/test_backup_restore.py`, `RestoreReadinessSurvivesThePostgresInitRace`).
+
 ## Verified exercise and preserved evidence
 
 Backup `20260917T165751Z-eccb5538` captured source commit

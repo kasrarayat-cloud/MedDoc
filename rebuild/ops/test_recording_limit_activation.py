@@ -74,13 +74,20 @@ class CatalogPins(unittest.TestCase):
                 a.check_schema(before, bad)
 
 
+# The activation happened and shipped as this merge, so its range is now a historical fact. Comparing against a
+# moving HEAD would turn this guard into a test that fails on the next unrelated commit — which says nothing about
+# whether this activation declared what it shipped.
+ACTIVATED = '5f673a3b2cc5c99d68f08f34fba43b4883403583'
+
+
 class AllowedPaths(unittest.TestCase):
-    def test_every_changed_path_since_the_running_release_is_declared(self):
+    def test_every_path_this_activation_shipped_was_declared(self):
         activator = load_activator()
-        if subprocess.run(['git', '-C', str(ROOT), 'cat-file', '-e', activator.BASELINE + '^{commit}'], capture_output=True).returncode:
-            self.skipTest('Running-release commit is not available in this checkout (shallow clone).')
-        changed = set(subprocess.check_output(['git', '-C', str(ROOT), 'diff', '--name-only', activator.BASELINE, 'HEAD'], text=True).split())
-        changed |= set(subprocess.check_output(['git', '-C', str(ROOT), 'ls-files', '--others', '--exclude-standard', '--', 'scripts', 'rebuild/ops', 'docs/foundation/mutations'], text=True).split())
+        for commit in (activator.BASELINE, ACTIVATED):
+            if subprocess.run(['git', '-C', str(ROOT), 'cat-file', '-e', commit + '^{commit}'], capture_output=True).returncode:
+                self.skipTest('The activation range is not available in this checkout (shallow clone).')
+        changed = set(subprocess.check_output(['git', '-C', str(ROOT), 'diff', '--name-only', activator.BASELINE, ACTIVATED], text=True).split())
+        self.assertNotEqual(changed, set())
         self.assertEqual(sorted(changed - activator.ALLOWED), [])
         for path in (activator.MIGRATION_PATH, activator.DECL, activator.SELF, 'rebuild/ops/test_recording_limit_activation.py'):
             self.assertIn(path, activator.ALLOWED)
