@@ -209,6 +209,69 @@ class LegitimateTaggedRecordingsMeasureTheirAudio(SimpleTestCase):
         tagged[4:8] = struct.pack('<I', len(tagged) - 8)
         self.assertEqual(audio.measure(bytes(tagged)), Decimal('30.000'))
 
+    def test_a_header_a_decoder_rejects_as_id3_hides_nothing(self):
+        """ffmpeg treats 'ID3' with a 0xFF version, a 0xFF revision or a non-syncsafe size as junk and decodes what follows."""
+        original = (FIXTURES / 'tone-3s.mp3').read_bytes()
+        size = len(original) - 200
+        syncsafe = bytes([(size >> 21) & 0x7F, (size >> 14) & 0x7F, (size >> 7) & 0x7F, size & 0x7F])
+        for header in (b'ID3\xff\x00\x00' + syncsafe, b'ID3\x03\xff\x00' + syncsafe, b'ID3\x03\x00\x00' + bytes([syncsafe[0] | 0x80]) + syncsafe[1:]):
+            with self.subTest(header=header[:6]):
+                self.assertGreaterEqual(audio.measure(header + original), audio.measure(original) - Decimal('0.1'))
+
+    def test_consecutive_leading_id3_tags_and_lyrics3_are_metadata(self):
+        original = (FIXTURES / 'tone-3s.mp3').read_bytes()
+        plain = audio.measure(original)
+
+        def id3(payload):
+            n = len(payload)
+            return b'ID3\x03\x00\x00' + bytes([(n >> 21) & 0x7F, (n >> 14) & 0x7F, (n >> 7) & 0x7F, n & 0x7F]) + payload
+
+        self.assertEqual(audio.measure(id3(b'TIT2' + bytes(20)) + id3(bytes(40000)) + original), plain)
+        lyrics = b'LYRICSBEGIN' + b'LYR00300' + b'la ' * 100
+        self.assertEqual(audio.measure(original + lyrics + b'%06d' % len(lyrics) + b'LYRICS200' + b'TAG' + bytes(125)), plain)
+
+    def test_stray_headers_of_other_layouts_neither_count_nor_hide_frames(self):
+        """A cover can hold frame-sync patterns of other layouts; a decoder rejects them, and so must the walk, without jumping
+        over frames a decoder would still play."""
+        original = (FIXTURES / 'tone-3s.mp3').read_bytes()
+        stray = bytes([0xFF, 0xFB, 0xE8, 0x00])  # MPEG-1 Layer III, 32 kHz, 320 kbps: claims 1,440 bytes
+        # Image noise: sync patterns whose sample rates keep changing (44.1, 48 and 32 kHz), as in a real PNG cover.
+        noise = [bytes([0xFF, 0xFB, 0x90 | (rate << 2), 0x00]) for rate in (0, 1, 2)]
+        cover = b''.join(noise[i % 3] + bytes(range(97)) for i in range(60))
+        self.assertLessEqual(audio.measure(original + ape_tag([(b'Cover Art (Front)', cover)])), audio.measure(original) + Decimal('0.1'))
+        # A stream of MPEG-2.5 8 kHz frames (72 bytes, 0.072 s each) with a stray header before every 19 frames.
+        frame = bytes([0xFF, 0xE3, 0x18, 0xC0]) + bytes(68)
+        stream = b''.join((stray if i % 19 == 0 else b'') + frame for i in range(400))
+        self.assertGreaterEqual(audio.measure(frame * 3 + stream), Decimal('0.072') * 403 - Decimal('0.1'))
+
+    def test_a_layout_a_decoder_switches_to_still_counts(self):
+        """Frames of a second layout separated by junk: a decoder follows the new layout once several agree."""
+        original = (FIXTURES / 'tone-3s.mp3').read_bytes()
+        frame = bytes([0xFF, 0xE3, 0x18, 0xC0]) + bytes(68)
+        head = original[:original.find(b'\xff', 10) + 2000]
+        self.assertGreaterEqual(audio.measure(head + (frame + b'\x00') * 200), Decimal('0.072') * 200)
+
+    def test_wav_audio_in_a_later_data_chunk_counts_and_other_chunks_do_not(self):
+        import struct
+        wav = wav_bytes(seconds=30, tag='later-data')
+        at = wav.find(b'data')
+        fmt, body = wav[12:at], wav[at + 8:]
+
+        def riff(*chunks):
+            inner = b'WAVE' + fmt + b''.join(chunks)
+            return b'RIFF' + struct.pack('<I', len(inner)) + inner
+
+        def chunk(tag, payload, pad=True):
+            return tag + struct.pack('<I', len(payload)) + payload + (b'\x00' if pad and len(payload) & 1 else b'')
+
+        cover = chunk(b'id3 ', bytes(100000))
+        self.assertGreaterEqual(audio.measure(riff(chunk(b'data', body[:8000]), chunk(b'LIST', b'INFO'), chunk(b'data', body[8000:]))), Decimal('30.000'))
+        for pad in (False, True):  # writers disagree on the pad byte after an odd-length chunk
+            with self.subTest(pad=pad):
+                self.assertEqual(audio.measure(riff(chunk(b'data', body), chunk(b'LIST', b'INFOISFT\x07\x00\x00\x00ffmpeg\x00', pad=pad), cover)), Decimal('30.000'))
+        self.assertEqual(audio.measure(riff(chunk(b'data', body[:-1], pad=False), cover)), Decimal('30.000'))  # 29.999875 s, not +12.5 s of cover
+        self.assertLessEqual(audio.measure(riff(chunk(b'data', body), cover) + b'TAG' + bytes(125)), Decimal('30.100'))
+
     def test_apple_lossless_is_refused_with_a_message_that_names_it(self):
         renamed = (FIXTURES / 'tone-3s.m4a').read_bytes().replace(b'mp4a', b'alac', 1)
         with self.assertRaisesMessage(audio.UnmeasurableRecording, 'not Apple Lossless'):

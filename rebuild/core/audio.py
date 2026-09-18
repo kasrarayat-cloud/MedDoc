@@ -84,11 +84,13 @@ def wav(data):
         position = body + length + (length & 1)
     if fmt is None or start is None:
         refuse('WAV without format or audio data')
-    # Samples run to the end of the file, unless the declared data size is followed by well-formed chunks (LIST, id3, cue…)
-    # that tile the rest of the file exactly: only then are those bytes metadata a decoder skips too.
+    # A decoder plays the declared data and then looks for further 'data' chunks (ffmpeg does: 29 s hidden in a second data
+    # chunk after a LIST chunk decodes), so those count; other chunks (LIST, id3, cue…) are metadata. An absent or oversized
+    # declared size means the samples run to the end of the file.
     size = len(data) - start
-    if declared not in (0, 0xFFFFFFFF) and declared <= size and riff_chunks_to_end(data, start + declared + (declared & 1)):
-        size = declared
+    if declared not in (0, 0xFFFFFFFF) and declared <= size:
+        later, unparsed = trailing_chunks(data, start + declared)
+        size = declared + later + unparsed  # bytes that are not chunk headers could be samples a decoder reads on
     tag, channels, rate, byte_rate, block, bits = fmt
     # A decoder plays the samples at rate x block bytes per second whatever the byte-rate field says, and may read past a
     # declared data size, so both come from the samples: every byte after the data header, at rate x block.
@@ -98,16 +100,24 @@ def wav(data):
     return Decimal(size) / Decimal(rate * block)
 
 
-def riff_chunks_to_end(data, position):
-    """True when the bytes from position are zero or more well-formed RIFF chunks ending exactly at the end of the file."""
-    for _ in range(64):
+def trailing_chunks(data, position):
+    """After the first data chunk ends at position: (bytes of later 'data' chunks, bytes that are not chunk headers). A decoder
+    plays later data chunks (ffmpeg does); other chunks (LIST, id3, cue…) are metadata. Writers disagree on the pad byte after
+    an odd-length chunk, so each header is looked for at both alignments."""
+    later = 0
+    for _ in range(4096):
+        for at in (position, position + 1):
+            if at + 8 <= len(data) and all(32 <= c <= 126 for c in data[at:at + 4]):
+                break
+        else:
+            return later, max(0, len(data) - position)
+        tag, length = data[at:at + 4], struct.unpack('<I', data[at + 4:at + 8])[0]
+        if tag == b'data':
+            later += min(length, len(data) - at - 8)
+        position = at + 8 + length
         if position >= len(data):
-            return position <= len(data) + 1  # a final pad byte may be missing
-        if position + 8 > len(data) or not all(32 <= c <= 126 for c in data[position:position + 4]):
-            return False
-        length = struct.unpack('<I', data[position + 4:position + 8])[0]
-        position += 8 + length + (length & 1)
-    return False
+            return later, 0
+    refuse('WAV with too many chunks')
 
 
 # ── MP3 ────────────────────────────────────────────────────────────────────
@@ -144,33 +154,73 @@ def mp3_frame(data, position):
 
 def mp3(data):
     position = 0
-    if data[:3] == b'ID3' and len(data) >= 10:
-        size = (data[6] & 0x7F) << 21 | (data[7] & 0x7F) << 14 | (data[8] & 0x7F) << 7 | (data[9] & 0x7F)
-        position = 10 + size + (10 if data[5] & 0x10 else 0)
+    # Only a header a decoder accepts as ID3v2 is skipped (ffmpeg's ff_id3v2_match: version and revision not 0xFF, a syncsafe
+    # size); otherwise the bytes are walked like any other, so a fake tag cannot hide frames. Consecutive tags are all skipped.
+    for _ in range(8):
+        header = data[position:position + 10]
+        if not (len(header) == 10 and header[:3] == b'ID3' and header[3] != 0xFF and header[4] != 0xFF and not any(b & 0x80 for b in header[6:10])):
+            break
+        size = header[6] << 21 | header[7] << 14 | header[8] << 7 | header[9]
+        position += 10 + size + (10 if header[5] & 0x10 else 0)
     start = position
     end = tags_start(data, start)
     seconds, frames, before_tags, steps, slowest = Decimal(0), 0, 0, 0, Decimal(0)
-    # Frames are counted everywhere, trailing tags included: a decoder plays frames it finds inside an APE or ID3 tag.
+    current, pending = None, []
+    # The walk follows a decoder: frames of the stream's layout (samples per frame, sample rate) count wherever they are, junk
+    # between them and trailing tags included (ffmpeg plays frames hidden in an APE tag, one frame at a time). A header of
+    # another layout never makes the walk jump over bytes a decoder would still read: it establishes a new layout only as a run
+    # of three adjacent frames, or once three such headers agree, and is otherwise a stray (a PNG cover holds many).
+
+    def count(frame, at):
+        nonlocal seconds, frames, before_tags, slowest
+        length, samples, rate = frame
+        seconds += Decimal(samples) / Decimal(rate)
+        frames += 1
+        if at < end:
+            slowest = max(slowest, Decimal(samples) / Decimal(rate) / Decimal(length))
+            before_tags += max(0, min(at + length, end) - at)
+
     while position < len(data):
         steps += 1
         if steps > MP3_STEPS:
             refuse('MP3 too complex to measure')  # an unscanned remainder could hold frames a decoder plays
         frame = mp3_frame(data, position)
         if frame and frame[0] >= 4:
-            length, samples, rate = frame
-            seconds += Decimal(samples) / Decimal(rate)
-            slowest = max(slowest, Decimal(samples) / Decimal(rate) / Decimal(length))
-            frames += 1
-            before_tags += max(0, min(position + length, end) - position)
-            position += length
-            continue
+            layout = frame[1:]
+            if layout == current or adjacent_run(data, position, layout) >= 3:
+                current, pending = layout, []
+                count(frame, position)
+                position += frame[0]
+                continue
+            # A decoder's parser starts over whenever a header disagrees with the previous one, so agreement must be consecutive.
+            pending = (pending if pending and pending[0][0][1:] == layout else []) + [(frame, position)]
+            if len(pending) >= 3:
+                current = layout
+                for f, at in pending:
+                    count(f, at)
+                pending = []
         position += 1  # resynchronise byte by byte
+    if current is None:
+        for f, at in pending:  # a recording too short to establish a layout: its frames still count
+            count(f, at)
     # Recognised trailing tags excuse only their own non-frame bytes. Other bytes before them that are not standard frames
     # (free-format frames, unknown data) could still be decoded, so they are bounded and counted at the lowest bitrate seen.
     uncounted = end - start - before_tags
     if frames < 2 or uncounted > max(16384, (end - start) // 50):
         refuse('MP3 that is not made of standard audio frames')
     return seconds + Decimal(max(uncounted, 0)) * slowest
+
+
+def adjacent_run(data, position, layout):
+    """How many frames of this layout follow one another from position, up to three."""
+    run = 0
+    while run < 3:
+        frame = mp3_frame(data, position)
+        if not frame or frame[0] < 4 or frame[1:] != layout:
+            break
+        run += 1
+        position += frame[0]
+    return run
 
 
 def tags_start(data, start):
@@ -185,6 +235,11 @@ def tags_start(data, start):
             if size < 32 or total > end - start:
                 break
             end -= total
+        elif end - start >= 15 and data[end - 9:end] == b'LYRICS200' and data[end - 15:end - 9].isdigit():
+            size = int(data[end - 15:end - 9]) + 15
+            if size > end - start:
+                break
+            end -= size
         elif end - start >= 10 and data[end - 10:end - 7] == b'3DI':
             size = (data[end - 4] & 0x7F) << 21 | (data[end - 3] & 0x7F) << 14 | (data[end - 2] & 0x7F) << 7 | (data[end - 1] & 0x7F)
             if size + 20 > end - start:
