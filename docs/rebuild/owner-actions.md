@@ -1,226 +1,106 @@
-# Owner actions for the next private beta release
+# Owner actions
 
-Updated 2026-09-18 (after the fresh live Word run and the billing-policy activation; running release 19d46ad3). Continue the existing
-new application and preserve its data. The engineering choices below are fixed
-for this stage; they are not an options menu. Public app/admin routes stay in
-maintenance and real patient data remains disabled. A configured credential is
-not proof that an integration passed.
+Updated 2026-09-18 (running release `3eac783a`, storage encrypted at rest). This is the single list of what only the owner can do. Everything else is engineering's and proceeds without asking. The private
+service stays synthetic-only and the public routes stay in maintenance until the release evidence supports changing them. Never paste a secret into
+chat, a shell command line, Git, a ticket or a screenshot. Every secret location below is a file readable only by its owner account.
 
-## 0. Review the fresh Word documents in native Microsoft Word (owner eyeball)
+## 1. Review the Word documents in native Microsoft Word
 
-**Blocks:** native Word appearance acceptance, which no renderer on the VPS can
-establish. Everything is prepared in `word-acceptance-checklist.md`: the
-original/export pair with SHA-256 hashes, the 90 answer locations, and the
-18-row checklist. Fetch the private `.docx` files over the SSH tunnel with SFTP,
-verify the hashes, open them in Word, mark each row ACCEPT/REJECT and report
-the Word version. The fresh export came from one live Anthropic request through
-the repaired mapper with zero clinician corrections; it contains synthetic data
-only.
+Blocks native Word appearance acceptance. No renderer on the VPS can establish it.
 
-## 1. Provide Stripe sandbox access securely
+1. Copy the archive to your computer over SSH. The file is readable only by the `claude` account (directory mode 0700), so use that account's SSH access:
 
-**Blocks:** actual Stripe-hosted checkout, signed event delivery, refund and
-payment retry verification. Existing locally signed fixtures are simulated tests.
+       scp claude@147.189.172.8:/opt/meddoc-pro/rebuild/.runtime/word-review-package/quillmd-word-review-20260918.zip .
 
-1. In the Stripe Dashboard, select a dedicated **sandbox** for QuillMD. Use its
-   API keys page, choose **Create restricted key**, name it
-   `QuillMD private beta checkout`, and start with no permissions.
-2. Set **Checkout Sessions → Write**. Leave every other resource and connected
-   account permission at **None**. This matches the application's sole outbound
-   Stripe operation, `POST /v1/checkout/sessions`. Receiving signed payment and
-   refund events does not require an API permission. Stripe documents the
-   Checkout permission in its [resource permission reference](https://docs.stripe.com/stripe-apps/reference/permissions#object).
-3. Store the resulting `rk_test_…` value as `STRIPE_SECRET_KEY` in the protected
-   `/opt/meddoc-pro/rebuild/.env` using an SSH/SFTP editor or the existing secure
-   secret-management channel. Preserve owner `claude` and mode `0600`; do not put
-   the value into chat, a shell command, a Git file, or a screenshot. Existing
-   `sk_test_…` credentials are accepted, but the selected setup uses a restricted
-   key. Live and publishable keys are rejected. The naming and creation steps
-   follow Stripe's [API key guide](https://docs.stripe.com/keys) and
-   [restricted-key guide](https://docs.stripe.com/keys/restricted-api-keys).
-4. Authorize the official Stripe CLI against that same sandbox on YOUR machine
-   (the VPS has no Stripe CLI and none will be installed there). With the SSH
-   tunnel open, run `stripe listen --forward-to http://localhost:9130/billing/webhook/`
-   so signed events reach the private application through the tunnel; no public
-   ingress needs to open. The listener's `whsec_…` signing secret must be saved
-   securely as `STRIPE_WEBHOOK_SECRET` in the same protected environment. It is
-   distinct from the API key and from a Dashboard endpoint's signing secret. Keep
-   listener output private. [Stripe local webhook testing](https://docs.stripe.com/webhooks#test-webhook)
-   The prepared runner and its exact steps are in
-   `external-verification-runbook.md` once that branch merges.
+2. Check the archive hash. The expected value is `b270c982864cb42d0bdb13ac64265b29e53f36bd5efd3ce45d45b7b862f03a72` (227,269 bytes).
 
-Forward only these events: `checkout.session.completed`,
-`checkout.session.async_payment_succeeded`,
-`checkout.session.async_payment_failed`, `checkout.session.expired`,
-`refund.created`, `refund.updated`, and `refund.failed`.
+       shasum -a 256 quillmd-word-review-20260918.zip                         # macOS
+       sha256sum quillmd-word-review-20260918.zip                             # Linux
+       certutil -hashfile quillmd-word-review-20260918.zip SHA256             # Windows
 
-Engineering will validate the restricted key with the actual Checkout request
-before treating its permissions as proven for this account. The current request
-uses inline price/product data. If Stripe identifies an additional required
-permission, record the exact denied operation and grant only that requirement;
-do not silently substitute an unrestricted key or claim the minimum was tested.
+3. Unzip it. `SHA256SUMS.txt` inside lists every review file with its hash.
+4. Open the files in desktop Microsoft Word and work through `word-acceptance-checklist.md`. Mark each row ACCEPT or REJECT and report the Word
+   version and build.
 
-During the controlled sandbox exercise, issue the specified refund in the
-**sandbox Dashboard**. The application currently receives refund events; it has
-no refund-creation API. An operator performing the equivalent API operation
-would need **Charges and Refunds → Write**; retrieving recorded events needs
-**Events → Read**. Those are separate operator capabilities, not required
-permissions for the application key. The relevant resources are defined in
-Stripe's [permissions reference](https://docs.stripe.com/stripe-apps/reference/permissions#object),
-and refunds use the [Refund API](https://docs.stripe.com/api/refunds/create).
+The archive holds the blank WM IOV original, the fresh and previous live exports, and two fixture exports. All content is synthetic. It holds no
+credentials and no runtime files.
 
-The verification record must cover payment success, one credit despite duplicate
-delivery, failed payment, retry after temporary receiver failure, out-of-order
-delivery, refund and concurrent spending. Record Stripe IDs and QuillMD ledger
-links. Test mode does not process real card payments. No subscription or
-automatic top-up is enabled.
+## 2. Pair the Stripe CLI with the QuillMD sandbox and supply the application key
 
-## 2. Supply one controlled email recipient
+Blocks hosted checkout, signed event delivery, refund and retry verification.
 
-**Blocks:** real invitation and password-recovery delivery evidence.
+1. Pair the CLI already installed on the VPS (`/home/claude/.local/bin/stripe`, v1.51.0). In this Claude Code session type:
 
-Provide one inbox you control and will check, with permission for the synthetic
-invitation and recovery messages. Name it explicitly (one line is enough; the
-account email you use with this coding session is an acceptable choice, but it
-must be stated by you, not inferred). The preserved Resend credential and sender
-configuration already exist; do not recreate credentials just because the
-current key cannot read the provider's domain-status endpoint. Public DNS was
-re-checked on 2026-09-17: SPF on `quillmd.com` and `send.quillmd.com`, DKIM at
-`resend._domainkey.quillmd.com`, DMARC present, and the send subdomain's MX
-points at the provider (`rebuild/.runtime/resend-sender-dns-20260917T2359.json`).
+       ! /home/claude/.local/bin/stripe login
 
-Engineering will check the configured sender against current DNS/provider
-evidence, send to the controlled inbox, record the provider message identifiers,
-and verify usable, expiring invitation/recovery links. A successful API response
-alone is not inbox delivery. The recipient must confirm receipt and follow the
-test links through the private access arrangement. Until then, the private
-outbox remains clearly labelled. A link sent to someone without working private
-access is not a completed recovery workflow.
+   Open the printed URL, sign in, select the dedicated QuillMD **sandbox**, check the pairing code and approve. The CLI stores its own test-mode
+   keys in `/home/claude/.config/stripe/config.toml` (0600). No key passes through chat.
+2. In the same sandbox, create a restricted key named `QuillMD private beta checkout` with **Checkout Sessions: Write** and nothing else. Store it
+   as `STRIPE_SECRET_KEY=rk_test_…` in `/opt/meddoc-pro/rebuild/.env`, keeping owner `claude` and mode 0600. Edit it over SSH/SFTP.
+3. Tell engineering it is done. Engineering then runs `stripe listen` on the VPS against the private service, stores the listener's own signing
+   secret as `STRIPE_WEBHOOK_SECRET` in the same file, and runs the prepared sandbox verification.
 
-## 3. Approve the existing Backblaze B2 destination and provide scoped access
+A later public HTTPS webhook endpoint gets its own, different signing secret from the Dashboard. The listener's secret never serves both.
 
-**Blocks:** encrypted offsite upload/download and an offsite restoration proof.
-No approved destination or usable backup credentials were found in the inspected
-secure configuration. The legacy backup scripts do not back up the new system.
+## 3. Name one controlled email recipient
 
-The selected transport is **Backblaze B2's S3-compatible API**, consistent with
-the recorded project direction. Use an owner-approved private bucket dedicated
-to the **new** QuillMD system, with prefix `quillmd-fresh/synthetic/`. Provide its
-S3 endpoint, region and bucket name. If no approved bucket exists, its creation
-and any account spending are owner actions; the agent will not purchase or
-provision them automatically. [Backblaze S3 API](https://www.backblaze.com/docs/cloud-storage-s3-compatible-api)
+Blocks real invitation and password-recovery delivery evidence. Reply with one inbox address you control and will check. The sender, DNS and
+provider credential already exist.
 
-Create a standard application key restricted to that bucket and prefix, with
-`listFiles`, `readFiles` and `writeFiles` capabilities. Keep `deleteFiles`, bucket
-administration and key administration absent. Use Backblaze's Native API/CLI
-custom capabilities if the Dashboard's broad Read and Write preset includes
-delete permission. The scoped S3 workflow will address the known bucket directly
-and does not need permission to list all bucket names. Backblaze supports bucket
-and filename-prefix restrictions; use a standard key, not the master key.
-[Application keys](https://www.backblaze.com/docs/cloud-storage-application-keys)
+## 4. Approve the Backblaze B2 destination and supply a scoped key
 
-Transfer the key ID and application key through the same protected SSH/SFTP or
-secret-manager channel into an operator-only file under
-`/opt/meddoc-pro/rebuild/.runtime/backup-secrets/`. The application service must
-not receive these credentials. Engineering will provide the exact adapter
-configuration template before activation, validate the scope, and never print
-the values.
+Blocks the offsite backup round trip and restore proof. Bucket creation and any spending are yours.
 
-Engineering defaults for this synthetic beta are one encrypted backup daily at
-04:30 UTC, a 24-hour recovery-point target, a two-hour recovery-time target and
-30 days of recoverable daily snapshots. These are targets until measured.
-Retention deletion stays disabled until the first remote round trip and restore
-pass, then uses a reviewed rule restricted to the dedicated prefix. The uploader
-retains no delete capability. A Backblaze lifecycle rule must account for both
-hiding and deletion; merely deleting old versions does not expire unique backup
-names. [Lifecycle rules](https://www.backblaze.com/docs/cloud-storage-lifecycle-rules)
+1. Use a private bucket dedicated to the new system, with prefix `quillmd-fresh/synthetic/`.
+2. Create a standard application key restricted to that bucket and prefix, with `listFiles`, `readFiles` and `writeFiles` only. Do not grant
+   `deleteFiles` or any administration capability.
+3. Write `/opt/meddoc-pro/rebuild/.runtime/backup-secrets/b2-offsite.json` (owner `claude`, mode 0600) in the shape given in
+   `external-verification-runbook.md` §3: key id, application key, bucket, prefix, region and endpoint.
+4. Put a copy of the backup encryption key (`rebuild/.runtime/backup-secrets/fresh-backup-current-20260917.key`) in your password vault. Record
+   the custodian and the vault item name, never the key.
 
-Place a recovery copy of the encryption key in your existing owner-controlled
-encrypted password vault, separate from both the VPS and the backup bucket.
-Record the responsible custodian and vault item reference, not the key itself.
-The restore exercise must demonstrate recovery using that separately held copy.
-Use the designated controlled owner inbox for backup-failure alerts once delivery
-is verified. No backup is called offsite-restorable until downloaded ciphertext,
-authenticated manifest, every file hash, restored table hashes and invariants
-have passed. Patient-data agreements and processing controls must be verified
-before this destination receives anything beyond synthetic data.
+## 5. Take custody of the storage encryption keys
 
-## 4. Supply authentic provider cost evidence
+The fresh database and private files now sit on a LUKS2 volume (`storage-encryption.md`).
 
-**Blocks:** provider-cost reconciliation, not further synthetic implementation.
+1. Copy the recovery passphrase into your password vault. Read it in your own SSH terminal, not through this session:
 
-Securely supply Anthropic and Deepgram usage/cost exports or authorized
-billing-report access covering the recorded synthetic jobs, together with the
-applicable account rates, discounts and promotional-credit treatment. Invoice
-evidence should cover the same billing period. No general administrator key is
-requested when an authentic export can answer the question.
+       ssh claude@147.189.172.8 'docker run --rm --pull=never --network=none -v /etc/quillmd:/k:ro python:3-slim cat /k/quillmd-fresh-luks.recovery-passphrase'
 
-The application now records reconciliations itself: in the MFA-protected
-console, section "Cost reconciliation" lists every usage row with its
-configured estimate and an inline form for the reconciled actual cost (up to
-eleven decimals), the evidence reference (invoice number, export sha256 or
-report id), optional allocated credit/discount and a note. Recording one
-appends ledger entries of kind `reconciliation` (credit back in proportion, or
-an additional charge from the payer's paid wallet, held as `pending_funds`
-until a top-up or released reservation frees funds); the usage row and its
-original entries are never edited. "Platform costs" records fixed overhead
-that is never charged to users, and the provider cost of platform failures is
-absorbed automatically. Rows stay labelled "configured estimate" until you
-record authentic evidence. Engineering will match a small batch by provider
-request/resource ID, timestamps, usage quantities and charged amount. Configured-rate arithmetic, provider-reported
-cost and invoice reconciliation remain separate evidence levels. The two early
-missing receipts remain unreconciled exceptions unless authentic provider
-evidence can recover them; no replacement history will be invented. Confirm the
-business definition of billable provider cost before paid use, including how
-account credits/discounts, refunds and taxes affect disclosures.
+   Record the custodian and the vault item name. Then tell engineering to shred the host copy.
+2. Decide the key-file custody.
+   - **Keep the key file on the host** (today's state). Restarts stay unattended, but anyone with a full disk copy or root can open the volume.
+   - **Protect against disk-level access.** Engineering removes slot 0, re-encrypts the volume and removes the key file in one maintenance
+     window (`storage-encryption.md`). Deleting the key file alone is not enough. After that, every reboot needs someone to run
+     `bash scripts/ops/unlock-fresh-volume.sh` and type the passphrase before the service returns.
+3. After you accept the migration, approve destroying these plaintext synthetic copies. All must go before any real patient data:
+   - the pre-migration snapshot `/var/lib/quillmd-rollback-20260918`;
+   - the pre-cutover state in `rebuild/.runtime/files` (27 files) and `rebuild/.runtime/mail` (2 items);
+   - the decrypted files left by earlier restore checks in `rebuild/.runtime/restore-checks/restore-*/files`.
 
-## 5. Supply only launch-specific content rights or blank forms
+## 6. Supply provider cost evidence
 
-**CPT stays unavailable.** To enable it, provide the licensed dataset or licensed
-terminology API access and the contract granting QuillMD's actual use, display,
-distribution and user scope. A license identifier alone is insufficient. No CPT
-license is being purchased automatically.
+Blocks provider-cost reconciliation. Supply Anthropic and Deepgram usage or cost exports for the synthetic jobs, with the account rates, discounts
+and credits that apply, through SFTP into a new directory `/opt/meddoc-pro/rebuild/.runtime/provider-evidence/` (create it with mode 0700). The console's "Cost reconciliation"
+section records each reconciliation as ledger entries. Rows stay labelled "configured estimate" until then.
 
-Word templates, including all 28 WM IOV content controls and completed-document
-formatting, are already required for the first release. Scanned forms are
-deferred. The qualified Word implementation covers the accepted WM IOV original with
-28 content controls, 90 answer locations and 14 evidence-bound review
-requirements, alongside the existing DOCX subset and visible text-field AcroForm
-PDFs. Check the latest private checkpoint for activation status. Native Word
-appearance acceptance remains a release check; evaluation rendering uses
-substituted fonts and is recorded with that limit. No further template-scope decision
-or SDK purchase is currently requested; any purchase recommendation must name
-the specific required case that cannot be met by the qualified implementation.
+## 7. Decide what happens when a recording costs more than the disclosed maximum
 
-## 6. Arrange the independent test and patient-data release evidence
+A recording whose provider cost × 1.5 exceeds the disclosed maximum (about 26 minutes at list price) cannot settle within its hold. Today it is held
+for reconciliation, its transcript is not delivered, and the user is not charged. Choose one of three rules:
 
-Provide the independent tester's name, SSH public key, UTC test window and
-emergency contact for the prepared [private scope](pentest-scope.md). Testing
-uses fresh synthetic accounts on the exact deployed release. Internal automated
-checks do not substitute for an independent test or finding retest.
+- refuse long recordings before the request;
+- cap the charge at the disclosed maximum, with QuillMD absorbing the rest;
+- raise the disclosed maximum.
 
-Before real patient data or public release, supply the signed patient-data
-agreements and approved processing-region/retention controls for the actual
-providers and storage, then close the documented security, storage, backup and
-independent-test gates. These are external evidence requirements, not grounds
-to pause unrelated implementation. Public maintenance and the synthetic-only
-gate remain active until the release evidence supports changing them.
+## 8. CPT content rights
 
-## 7. Approve a maintenance window for at-rest encryption of the fresh data
+CPT stays built and disabled. To enable it, supply the licensed dataset or terminology API access and the contract that covers QuillMD's use,
+display, distribution and user scope. Nothing is purchased automatically.
 
-**Blocks:** real patient data (not synthetic testing). Verified 2026-09-17: the
-fresh PostgreSQL volume `quillmd_fresh_pg` and the state directory
-`/var/lib/quillmd` live on the plain root filesystem; the existing LUKS volumes
-hold only the retired system's data (`patient-data-release-requirements.md`).
-Engineering will move both onto an encrypted volume during a declared window
-with a pre/post encrypted backup and isolated restore proof. Approve the window
-(about 30 minutes of private-service downtime) and name where the volume key's
-recovery copy will be escrowed, separate from the VPS.
+## 9. Independent test and patient-data release evidence
 
-## 8. Independent tester access is ready to grant
-
-The tunnel-only, no-shell SSH grant is prepared
-(`scripts/ops/reviewer-tunnel-access.sh`, described in `pentest-scope.md`).
-Nothing is granted until you provide the reviewer's identity, public key, UTC
-window and emergency contact from section 6.
-
+- **Independent tester.** Supply the tester's name, SSH public key, UTC window and emergency contact. The tunnel-only access grant is prepared
+  (`pentest-scope.md`).
+- **Patient-data agreements.** Supply signed agreements (BAAs) and approved processing regions and retention for every provider and storage
+  location. Real patient data stays disabled until these and the gates in `patient-data-release-requirements.md` are closed.

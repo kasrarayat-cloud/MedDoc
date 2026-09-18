@@ -5,6 +5,27 @@ volume protects, how it unlocks, who holds the keys, how to roll back, and what
 remains outside QuillMD's control. The declared act is
 `docs/foundation/mutations/20260918-quillmd-fresh-storage-encryption.md`.
 
+## Applied 2026-09-18
+
+The declared act ran twice from `/opt/meddoc-pro`.
+
+- **Attempt 1** (target `69f39be4`) stopped at its first host step. A module was imported after the change of root. The automatic revert restored the running release with every row identical in 17 seconds, and nothing had been created.
+- **Attempt 2** (target `3eac783a`) completed between 04:58:28Z and 04:59:57Z and was judged against all 29 declared quantities. Permanent main and the three services now run `3eac783a`, synthetic-only.
+
+Independent checks after the act:
+
+- `findmnt` shows `/var/lib/quillmd` and the database directory on `/dev/mapper/quillmd-fresh-encrypted`, mounted `nosuid,nodev`.
+- The billing audit passes, reading files through the version-2 identity pin.
+- A post-act encrypted backup restores with no decrypted files written: 35 tables, 75,457 rows and 28 files, identical to the pre-act backup.
+- The administrator console check passes.
+
+Not exercised live:
+
+- a reboot, because this is a shared host (`scripts/verify-post-reboot.sh` checks the boot order next time);
+- the keyless unlock with a typed passphrase, which needs the owner (slot 1 was proven with a typed passphrase at format time).
+
+Private evidence: `rebuild/.runtime/CHECKPOINT-LATEST.md`.
+
 ## Storage trace (verified 2026-09-17/18)
 
 | Data | Location | Before | After the act |

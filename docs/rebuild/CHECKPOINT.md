@@ -207,3 +207,29 @@ offsite restoration, CPT, independent testing and at-rest encryption of the fres
 data paths remain open gates (`owner-actions.md`,
 `patient-data-release-requirements.md`).
 
+
+## 2026-09-18 — billing boundary and storage encryption live, running release 3eac783a
+
+**Permanent main and the three private services run
+`3eac783a55b6b771016da258ab2b57e0a06bdb38`**, synthetic-only, public routes in
+maintenance.
+
+- **Billing boundary (PR #1192).** Declined output stays charged, and unusable
+  output is absorbed. A queued request cancels free, and a request failing before
+  any provider call releases its hold. Additional requests are disclosed.
+  Output is delivered only for charged requests. Retries are charged once, and
+  the audit covers cancelled and ended jobs. Three refutation rounds
+  confirmed 21 findings (17, 4, then none). All are fixed, and every code finding
+  has a regression test. No schema change.
+- **Storage encryption (PRs #1193, #1194, declared act).** The fresh database,
+  WAL, files, mail, proofs and service temp files now sit on a LUKS2 volume.
+  Attempt 1 stopped safely at its first host step and reverted in 17 seconds.
+  Attempt 2 completed and was judged 29 of 29. The key file is still on the host,
+  so protection against disk-level access needs the owner steps in
+  `owner-actions.md` §5.
+- **After the act.** The billing audit passes (12 usage rows), the post-act
+  encrypted backup restores with no decrypted files written (75,457 rows,
+  identical to before), and the console check passes 4 of 4.
+
+Remaining owner actions, stated once with exact locations: `owner-actions.md`.
+Private evidence paths: `rebuild/.runtime/CHECKPOINT-LATEST.md`.

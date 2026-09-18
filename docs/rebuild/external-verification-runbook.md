@@ -1,7 +1,7 @@
 # External integration verification runbook
 
 Prepared 2026-09-17 for the three credential-gated checks in
-[owner-actions.md](owner-actions.md) §1–§3. **Nothing here has been executed
+[owner-actions.md](owner-actions.md) §2–§4. **Nothing here has been executed
 against live Stripe, Resend or Backblaze.** Each runner refuses until the
 owner-supplied inputs are present in the protected environment, and none of
 them prints, stores or transmits a credential.
@@ -25,19 +25,24 @@ Common rules for every step below:
 
 ### Owner supplies
 
-Per owner-actions §1: a sandbox restricted key (`rk_test_…`, Checkout Sessions →
-Write only; an `sk_test_…` is accepted) stored as `STRIPE_SECRET_KEY`, and the
-`stripe listen` signing secret stored as `STRIPE_WEBHOOK_SECRET`, both in the
-protected `rebuild/.env` (owner `claude`, mode `0600`). The service must be
+Per owner-actions §2: the Stripe CLI on the VPS (`/home/claude/.local/bin/stripe`,
+v1.51.0) paired with the QuillMD sandbox by the owner (`stripe login`; its
+test-mode keys live in `/home/claude/.config/stripe/config.toml`, 0600), and a
+sandbox restricted key (`rk_test_…`, Checkout Sessions → Write only; an
+`sk_test_…` is accepted) stored as `STRIPE_SECRET_KEY` in the protected
+`rebuild/.env` (owner `claude`, mode `0600`). Engineering stores the listener's
+own signing secret as `STRIPE_WEBHOOK_SECRET` in the same file. The service must be
 restarted through the checkpoint's documented procedure so the running process
 loads them; a value in the file is not a value in the process.
 
 ### Operator steps
 
-1. Authorize the official Stripe CLI against the same sandbox in your own
-   protected session (`stripe login`). This is an operator capability: listing
-   events needs Events → Read and creating the refund needs Charges and
-   Refunds → Write on *your* CLI login, not on the application key.
+1. Confirm the VPS CLI is paired with the same sandbox with a read that prints no
+   key material, for example `stripe balance retrieve`, which shows only the
+   sandbox balance. Never print the CLI configuration: it holds its keys. Its pairing key is an
+   operator capability: listing events needs Events → Read and creating the
+   refund needs Charges and Refunds → Write on the CLI login, not on the
+   application key.
 2. In a dedicated terminal that stays open for the whole exercise, start
    forwarding with exactly this command and keep its output private:
 
@@ -46,8 +51,9 @@ loads them; a value in the file is not a value in the process.
      --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,checkout.session.expired,refund.created,refund.updated,refund.failed
    ```
 
-   The `whsec_…` it prints is the value the owner stores as
-   `STRIPE_WEBHOOK_SECRET`. It changes when `stripe listen` is restarted; the
+   The `whsec_…` it prints is stored as `STRIPE_WEBHOOK_SECRET` without echoing
+   it. A later public HTTPS endpoint gets its own, different secret from the
+   Dashboard. It changes when `stripe listen` is restarted; the
    service must then be updated and restarted again.
 3. Dry run. This proves the preconditions without submitting anything:
 
@@ -66,7 +72,7 @@ loads them; a value in the file is not a value in the process.
 4. Execute, with the CLI path supplied so the duplicate and refund cases run:
 
    ```bash
-   STRIPE_CLI=/usr/local/bin/stripe node stripe-sandbox-verify.mjs --release FULL_SHA --execute
+   STRIPE_CLI=/home/claude/.local/bin/stripe node stripe-sandbox-verify.mjs --release FULL_SHA --execute
    ```
 
    `STRIPE_CLI` must be the absolute real path of the binary. Set
@@ -130,7 +136,7 @@ account; leave it, and cite the report path when the balance is later audited.
 
 ### Owner supplies
 
-Per owner-actions §2: one inbox the owner controls and will check, with
+Per owner-actions §3: one inbox the owner controls and will check, with
 permission to receive synthetic invitation and recovery messages; the preserved
 Resend credential and verified sender activated as described in
 [email-delivery.md](email-delivery.md) (`QUILLMD_EMAIL_MODE=resend`,
@@ -228,7 +234,7 @@ provisions or widens permissions. Its full design is in
 
 ### Owner supplies
 
-Per owner-actions §3: an owner-approved private B2 bucket dedicated to the new
+Per owner-actions §4: an owner-approved private B2 bucket dedicated to the new
 system, its S3 endpoint, region, name and 24-character bucket id, and a standard
 application key restricted to that bucket and to the prefix
 `quillmd-fresh/synthetic/` with exactly `listFiles`, `readFiles` and
