@@ -108,6 +108,9 @@ def release(job):
         w=wallets[r.wallet_id]; w.reserved-=r.amount; w.save(update_fields=['reserved'])
         r.state='released'; r.save(update_fields=['state'])
         audit(job.user,'usage.release',job.pk,wallet=str(w.pk),amount=str(r.amount))
+    # Freed paid funds are also a trigger for this payer's reconciliation charges that were held for funds.
+    for w in wallets.values():
+        if w.kind=='paid': apply_pending_reconciliations(actor=None,wallet=w)
 
 @transaction.atomic
 def credit_payment(payment,session):

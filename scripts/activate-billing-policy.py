@@ -56,6 +56,21 @@ ALLOWED = {
     'rebuild/templates/admin_dashboard.html', 'rebuild/templates/base.html', 'rebuild/templates/billing.html',
     'rebuild/ops/test_billing_activation.py', 'scripts/activate-billing-policy.py', DECL,
 }
+# Catalog-level identity of the two new tables (Django derives the hashed suffixes from the identifiers, so they are
+# stable): constraint names, kinds and foreign-key targets plus index names. A migration that passes the text validator
+# with a retargeted relation, a renamed constraint or an extra index still cannot activate.
+EXPECTED_CONSTRAINTS = {
+    'core_costreconciliation': {('core_costreconciliation_pkey', 'p', '-'), ('core_costreconciliation_usage_id_key', 'u', '-'),
+                                ('reconciliation_amounts_nonnegative', 'c', '-'), ('reconciliation_ledger_status_known', 'c', '-'),
+                                ('reconciliation_evidence_required', 'c', '-'),
+                                ('core_costreconciliation_recorded_by_id_32417117_fk_core_user_id', 'f', 'core_user'),
+                                ('core_costreconciliation_usage_id_1b3e7fb5_fk_core_usage_id', 'f', 'core_usage')},
+    'core_platformcost': {('core_platformcost_pkey', 'p', '-'), ('platform_cost_nonnegative', 'c', '-'), ('platform_cost_kind_known', 'c', '-'),
+                          ('absorbed_failure_names_job', 'c', '-'), ('core_platformcost_job_id_c6d30e2e_fk_core_job_id', 'f', 'core_job'),
+                          ('core_platformcost_recorded_by_id_40124ae9_fk_core_user_id', 'f', 'core_user')},
+}
+EXPECTED_INDEXES = {'core_costreconciliation': {'core_costreconciliation_pkey', 'core_costreconciliation_usage_id_key', 'core_costreconciliation_recorded_by_id_32417117'},
+                    'core_platformcost': {'core_platformcost_pkey', 'one_absorbed_failure_per_job', 'core_platformcost_job_id_c6d30e2e', 'core_platformcost_recorded_by_id_40124ae9'}}
 UNITS = ['quillmd-fresh-' + surface + '.service' for surface in ('doctor', 'admin', 'worker')]
 PSQL = ['docker', 'exec', 'quillmd-fresh-postgres', 'psql', '-U', 'quillmd_fresh',
         '-d', 'quillmd_fresh', '-X', '-At', '-v', 'ON_ERROR_STOP=1', '-c']
@@ -195,6 +210,27 @@ def fingerprints(names, *, exclude_new_migration):
     return rows
 
 
+def constraints():
+    sql = """SELECT coalesce(jsonb_agg(jsonb_build_array(c.conrelid::regclass::text, c.conname, c.contype::text, c.confrelid::regclass::text)
+                 ORDER BY c.conrelid::regclass::text, c.conname),'[]')
+             FROM pg_constraint c JOIN pg_namespace n ON n.oid=c.connamespace WHERE n.nspname='public'"""
+    return [tuple(row) for row in json.loads(output(PSQL + [sql]))]
+
+
+def indexes():
+    return json.loads(output(PSQL + ["SELECT coalesce(jsonb_agg(jsonb_build_array(tablename,indexname) ORDER BY tablename,indexname),'[]') FROM pg_indexes WHERE schemaname='public'"]))
+
+
+def check_catalog(constraints_before, constraints_after, indexes_before, indexes_after):
+    require([row for row in constraints_after if row[0] not in NEW_TABLES] == constraints_before, 'Constraints of existing tables changed.')
+    require([row for row in indexes_after if row[0] not in NEW_TABLES] == indexes_before, 'Indexes of existing tables changed.')
+    for table, expected in EXPECTED_CONSTRAINTS.items():
+        actual = {(name, kind, target) for t, name, kind, target in constraints_after if t == table}
+        require(actual == expected, 'New table constraints or foreign-key targets differ from the reviewed migration: ' + table)
+    for table, expected in EXPECTED_INDEXES.items():
+        require({name for t, name in indexes_after if t == table} == expected, 'New table indexes differ from the reviewed migration: ' + table)
+
+
 def check_schema(before, after):
     old_tables = {row['table_name'] for row in before}
     require(not old_tables & set(NEW_TABLES), 'Declared tables already exist; do not reapply this activation.')
@@ -301,6 +337,7 @@ def main():
         old_tables = tables()
         require(len(old_tables) == 33, 'Expected all33 current tables.')
         result['schema_before'] = schema()
+        result['constraints_before'], result['indexes_before'] = constraints(), indexes()
         result['database_before'] = fingerprints(old_tables, exclude_new_migration=True)
         result['storage_before'] = {name: storage.inventory(STATE / name) for name in ('files', 'mail')}
         require(word.checked_file(APP / '.env', private=True) == env_before, 'Environment changed.')
@@ -315,6 +352,8 @@ def main():
         run(migrate + ['--noinput'], cwd=APP)
         result['schema_after'] = schema()
         check_schema(result['schema_before'], result['schema_after'])
+        result['constraints_after'], result['indexes_after'] = constraints(), indexes()
+        check_catalog(result['constraints_before'], result['constraints_after'], result['indexes_before'], result['indexes_after'])
         require(fingerprints(old_tables, exclude_new_migration=True) == result['database_before'], 'Existing rows changed during schema addition.')
         require(output(PSQL + ["SELECT count(*) FROM django_migrations WHERE app='core' AND name='" + MIGRATION + "'"]) == '1', 'Exactly one schema-history row is required.')
         for table in NEW_TABLES:
@@ -348,7 +387,7 @@ def main():
         result['interfaces'] = identity.verify_interfaces()
         require(fingerprints(old_tables, exclude_new_migration=True) == result['database_before'], 'Startup changed existing application data.')
         require(fingerprints(tables(), exclude_new_migration=False) == result['database_after_all_rows'], 'Startup changed new tables or migration history.')
-        require(schema() == result['schema_after'], 'Schema changed after startup.')
+        require(schema() == result['schema_after'] and constraints() == result['constraints_after'] and indexes() == result['indexes_after'], 'Schema, constraints or indexes changed after startup.')
         require({name: storage.inventory(STATE / name) for name in ('files', 'mail')} == result['storage_before'], 'Private bytes changed.')
         require(word.verify_artifact(installed / 'runtime', installed / 'runtime-manifest.json', installed / 'build-proof.json', PIN, inputs) == artifact, 'Word runtime changed.')
         require(word.retained_reports() == retained and previous.protected() == protected, 'Retained or shared resources changed.')

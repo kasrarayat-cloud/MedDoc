@@ -82,6 +82,21 @@ class MigrationValidation(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 self.activator.validate_migration(mutated)
 
+    def test_expected_catalog_names_match_the_migration_constraints(self):
+        import ast
+        tree = ast.parse(self.source)
+        declared = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and getattr(node.func, 'attr', '') in ('CheckConstraint', 'UniqueConstraint'):
+                declared.add(ast.literal_eval({k.arg: k.value for k in node.keywords}['name']))
+        expected = {name for rows in self.activator.EXPECTED_CONSTRAINTS.values() for name, kind, _ in rows if kind == 'c'}
+        expected |= {name for rows in self.activator.EXPECTED_INDEXES.values() for name in rows if name == 'one_absorbed_failure_per_job'}
+        self.assertEqual(declared, expected)
+        targets = {target for rows in self.activator.EXPECTED_CONSTRAINTS.values() for _, kind, target in rows if kind == 'f'}
+        self.assertEqual(targets, {'core_user', 'core_usage', 'core_job'})
+        self.assertEqual(set(self.activator.EXPECTED_CONSTRAINTS), set(self.activator.NEW_TABLES))
+        self.assertEqual(set(self.activator.EXPECTED_INDEXES), set(self.activator.NEW_TABLES))
+
     def test_new_table_columns_match_the_model_definitions(self):
         import ast
         tree = ast.parse(self.source)

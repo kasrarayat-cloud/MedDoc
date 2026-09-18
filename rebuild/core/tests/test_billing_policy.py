@@ -619,3 +619,18 @@ class RefutationRegressions(PolicyFixture,TestCase):
         other_paid.refresh_from_db();self.assertEqual(other_paid.balance,Decimal('5')-Decimal('0.6'))
         self.assertTrue(audit_report()['all_checks_pass'])
 
+    def test_funds_freed_by_a_released_reservation_apply_a_held_charge(self):
+        from core.billing import release
+        fund(self.paid,Decimal('1.4'),'payment:policy-release-funds')
+        usage=self.settled(Decimal('0.5'),key='policy-release-usage')   # promo 10 -> 9.25
+        self.settled(Decimal('6'),key='policy-release-drain')             # promo 9.25 -> 0.25, so the next reservation reaches the paid wallet
+        blocker=Job.objects.create(encounter=self.encounter,user=self.user,request_key='policy-release-blocker',config={'mode':'live'})
+        reserve(blocker,Decimal('1.0'))   # 1.5 reserved: 0.25 promo + 1.25 paid; paid available becomes 0.15
+        self.paid.refresh_from_db();available=self.paid.balance-self.paid.reserved;self.assertEqual(available,Decimal('0.15'))
+        row=reconcile_usage(usage,Decimal('0.9'),'INV-SYNTH-RELEASE',self.user)
+        self.assertEqual(row.charge_delta,Decimal('0.6'));self.assertGreater(row.charge_delta,available);self.assertEqual(row.ledger_status,'pending_funds')
+        release(blocker)
+        row.refresh_from_db();self.assertEqual(row.ledger_status,'applied')
+        self.paid.refresh_from_db();self.assertEqual(self.paid.reserved,0);self.assertEqual(self.paid.balance,Decimal('1.4')-Decimal('0.6'))
+        self.assertTrue(audit_report()['all_checks_pass'])
+
