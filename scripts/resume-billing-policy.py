@@ -148,7 +148,8 @@ def main():
     require(len(tables) == 35 and set(billing.NEW_TABLES) <= set(tables), 'Expected the 33 original tables plus the two new ones.')
     require(billing.schema() == failed['schema_after'], 'Schema differs from the recorded post-migration schema.')
     billing.check_schema(failed['schema_before'], failed['schema_after'])
-    require(billing.constraints() == failed['constraints_after'] and billing.indexes() == failed['indexes_after'], 'Constraints or indexes differ from the recorded post-migration catalog.')
+    # The recorded result is JSON: its constraint rows are lists, the live query returns tuples.
+    require([list(row) for row in billing.constraints()] == failed['constraints_after'] and billing.indexes() == failed['indexes_after'], 'Constraints or indexes differ from the recorded post-migration catalog.')
     billing.check_catalog(failed['constraints_before'], failed['constraints_after'], failed['indexes_before'], failed['indexes_after'])
     old_tables = [t for t in tables if t not in billing.NEW_TABLES]
     require(fingerprints_excluding_bookkeeping(old_tables) == failed['database_before'], 'Existing rows differ beyond the ten expected bookkeeping rows.')
