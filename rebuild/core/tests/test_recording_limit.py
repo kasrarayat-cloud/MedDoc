@@ -370,8 +370,17 @@ class LengthBoundsSeparateChargingFromDisclosure(SimpleTestCase):
         from types import SimpleNamespace
         submitted = lambda seconds, **rest: SimpleNamespace(config={
             'recording_seconds': '60', 'submitted_seconds': seconds, 'submission_status': 'determined', **rest})
-        # Transcribed in full against the submitted audio: no claim either way.
-        self.assertEqual(coverage_note(submitted('30'), {'duration_seconds': '30.1'}), '')
+        # Transcribed in full against the submitted audio, and the payload holds what the recording measured: no claim.
+        self.assertEqual(coverage_note(submitted('60'), {'duration_seconds': '60.1'}), '')
+        # ⚠️ THIS CASE USED TO ASSERT SILENCE AND NOW ASSERTS A DISCLOSURE, and the change is the point. A payload of
+        # 30 s taken from a recording measured at 60 s is transcribed in full BY THE PROVIDER and still has half the
+        # recording missing before the request was made. The old assertion was true about the provider and silent
+        # about the loss, which is exactly the structural gap this arm closes.
+        pre_submission_loss = coverage_note(submitted('30'), {'duration_seconds': '30.1'})
+        self.assertIn('could be read as audio', pre_submission_loss)
+        self.assertIn('0:30', pre_submission_loss)
+        self.assertIn('1:00', pre_submission_loss)
+        self.assertNotIn('was not transcribed', pre_submission_loss, 'the provider must not be blamed for our own loss')
         # Materially short of the submitted audio: disclosed, naming the submitted length.
         short = coverage_note(submitted('60'), {'duration_seconds': '30.1'})
         self.assertIn('was not', short)

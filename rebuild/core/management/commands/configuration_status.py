@@ -48,14 +48,17 @@ class Command(BaseCommand):
         self.stdout.write('Private credentials (status only):')
         for name, value, recogniser in secrets:
             self.stdout.write(f'  {name}: {shape(value, recogniser)}')
-        # ffprobe measures the payload submitted to the transcription provider. Without it every
-        # recording degrades to 'coverage UNKNOWN' — correct, but it belongs on an operator's screen
-        # rather than being discovered in a doctor's note.
+        # ffprobe measures the payload submitted to the transcription provider and ffmpeg produces it. Without either,
+        # the application degrades honestly — coverage reports UNKNOWN, and the upload is submitted unchanged as it was
+        # before normalisation existed — but a DEGRADED path that works is the hardest kind of absence to notice, so it
+        # belongs on an operator's screen rather than being discovered in a doctor's note.
         import shutil
-        probe = shutil.which('ffprobe')
-        self.stdout.write('Media probe:')
+        probe, remuxer = shutil.which('ffprobe'), shutil.which('ffmpeg')
+        self.stdout.write('Media tools:')
         self.stdout.write('  ffprobe: %s' % (probe if probe else
                           'NOT INSTALLED — transcription coverage will report UNKNOWN for every recording'))
+        self.stdout.write('  ffmpeg: %s' % (remuxer if remuxer else
+                          'NOT INSTALLED — every recording is submitted exactly as uploaded, unnormalised'))
         self.stdout.write('Release gates:')
         self.stdout.write(f'  SYNTHETIC_ONLY: {settings.SYNTHETIC_ONLY}')
         self.stdout.write(f'  STRIPE_LIVE_ENABLED: {settings.STRIPE_LIVE_ENABLED}')

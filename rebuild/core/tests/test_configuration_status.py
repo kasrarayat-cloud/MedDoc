@@ -38,3 +38,20 @@ class ConfigurationStatusDisclosesNothing(SimpleTestCase):
         report = self.report()
         self.assertIn('SYNTHETIC_ONLY: True', report)
         self.assertIn('STRIPE_LIVE_ENABLED: False', report)
+
+    def test_both_media_tools_are_named_whether_present_or_missing(self):
+        """The degraded path works, which is why its cause has to be on an operator's screen.
+
+        Without ffprobe every recording reports coverage UNKNOWN; without ffmpeg every recording is submitted exactly as
+        uploaded. Both are correct behaviour and neither raises anything, so the only way anyone learns which one is in
+        effect is by being told here.
+        """
+        import shutil
+        from unittest.mock import patch
+        report = self.report()
+        self.assertIn('ffprobe:', report)
+        self.assertIn('ffmpeg:', report)
+        with patch.object(shutil, 'which', return_value=None):
+            missing = self.report()
+        self.assertIn('coverage will report UNKNOWN', missing.replace('transcription ', ''))
+        self.assertIn('submitted exactly as uploaded, unnormalised', missing)
