@@ -1,9 +1,11 @@
 """Guards of the fresh-storage migration: reviewed units, helper scripts, root steps and stage ordering."""
 import ast
 import importlib.util
+import json
 from pathlib import Path
 import re
 import subprocess
+import sys
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -53,7 +55,9 @@ class UnitPolicy(unittest.TestCase):
         self.assertIn('ExecStartPre=/usr/local/bin/quillmd-fresh-volume status\n', database)
         self.assertIn('ExecStart=/usr/bin/docker start quillmd-fresh-postgres\n', database)
         self.assertIn('ExecStartPost=/usr/local/bin/quillmd-fresh-volume wait-database\n', database)
-        self.assertIn('ExecStop=/usr/bin/docker stop -t 90 quillmd-fresh-postgres\n', database)
+        # ExecStopPost, not ExecStop: it also runs after a failed start, so a never-ready container is not left running.
+        self.assertIn('ExecStopPost=/usr/bin/docker stop -t 90 quillmd-fresh-postgres\n', database)
+        self.assertNotIn('\nExecStop=', database)
         stop = int(re.search(r'TimeoutStopSec=(\d+)', database).group(1))
         self.assertGreater(stop, 90)
         for text in (volume, database):
@@ -67,8 +71,11 @@ class UnitPolicy(unittest.TestCase):
         self.assertTrue(text.startswith('#!/usr/bin/env bash'))
         self.assertIn('set -euo pipefail', text)
         self.assertIn('IMAGE=/var/lib/quillmd-encrypted/quillmd-fresh.luks\n', text)
-        self.assertLess(text.index('[ ! -f "$MARKER" ]'), text.index('mount --bind'))
-        self.assertIn('refuse "volume marker missing', text)
+        self.assertLess(text.index('[ -f "$MARKER" ] || fail_closed'), text.index('mount --bind'))
+        self.assertIn('fail_closed "volume marker missing', text)
+        # Every step after the mapper opens cleans up on failure: no decrypted mount or open mapper is left behind.
+        self.assertEqual(text.count('mount --bind'), text.count('|| fail_closed "could not bind'))
+        self.assertIn('"$MOUNT" || fail_closed "could not mount', text)
         self.assertIn('[ -f "$KEY" ] || refuse "key file absent', text)
         self.assertIn('cryptsetup open --key-slot 1 "$IMAGE" "$NAME"', text)
         self.assertIn('mount -o nodev,nosuid', text)
@@ -104,9 +111,11 @@ class MigrationInvariants(unittest.TestCase):
             self.assertIn(path, self.migration.ALLOWED)
             self.assertTrue((ROOT / path).is_file(), path)
         probe = subprocess.run(['git', '-C', str(ROOT), 'cat-file', '-e', self.migration.BASELINE + '^{commit}'], capture_output=True)
-        if probe.returncode == 0:
-            changed = set(subprocess.check_output(['git', '-C', str(ROOT), 'diff', '--name-only', self.migration.BASELINE, 'HEAD'], text=True).split())
-            self.assertEqual(sorted(changed - self.migration.ALLOWED), [])
+        if probe.returncode != 0:
+            # A shallow CI checkout lacks the running release; the migration preflight enforces the same set at run time.
+            self.skipTest('running release not fetched; the preflight enforces ALLOWED against the target')
+        changed = set(subprocess.check_output(['git', '-C', str(ROOT), 'diff', '--name-only', self.migration.BASELINE, 'HEAD'], text=True).split())
+        self.assertEqual(sorted(changed - self.migration.ALLOWED), [])
 
     def test_root_steps_compile(self):
         for name in ('ROOT_PROBE', 'ROOT_PREPARE', 'ROOT_COPY', 'ROOT_ARCHIVE_LOG', 'ROOT_SWITCH', 'ROOT_INSTALL', 'ROOT_STATE',
@@ -135,15 +144,19 @@ class MigrationInvariants(unittest.TestCase):
 
     def test_host_commands_are_the_reviewed_set(self):
         allowed = ('/usr/sbin/cryptsetup', '/usr/sbin/mkfs.ext4', '/bin/mount', '/bin/umount', '/usr/bin/rsync', '/usr/bin/chattr', '/usr/bin/lsattr',
-                   '/usr/bin/id', '/usr/bin/touch', '/usr/bin/rm', '/usr/bin/shred', '/usr/bin/truncate')
+                   '/usr/bin/id', '/usr/bin/touch', '/usr/bin/rm', '/usr/bin/shred', '/usr/bin/truncate', '/usr/bin/systemd-analyze')
         found = re.findall(r"host\('(/[^']+)'", self.source)
         self.assertTrue(found)
         for command in found:
             self.assertIn(command, allowed)
         self.assertIn("host('/usr/bin/rm','-f',p+'/.plaintext-probe'", self.source)
         self.assertEqual(len(re.findall(r"host\('/usr/bin/rm'", self.source)), 1)
-        self.assertIn("'type=bind,src=/,dst=/host,readonly'", self.source)
+        self.assertIn("'type=bind,src=/,dst=/host,readonly,bind-propagation=rslave'", self.source)
+        self.assertIn("f'type=bind,src={path},dst=/host{path},bind-propagation=rslave'", self.source)
+        self.assertEqual(self.source.count('type=bind,'), 2)
         self.assertNotIn("'type=bind,src=/,dst=/host'", self.source)
+        self.assertIn("host('/usr/bin/systemd-analyze','verify'", self.migration.ROOT_INSTALL)
+        self.assertNotIn("subprocess.run(['systemd-analyze'", self.migration.ROOT_INSTALL)
         self.assertIn("'systemd-run','--wait','--pipe','--collect','--quiet','--property=Type=oneshot'", self.migration.ROOT_LIBRARY)
 
     def test_luks_parameters_keys_and_paths_are_fixed(self):
@@ -164,9 +177,10 @@ class MigrationInvariants(unittest.TestCase):
         self.assertIn("stdin=phrase+'x\\n'", prepare)
         self.assertIn("if typed!=0 or wrong==0 or slot0!=0", prepare)
         migrate = function_source('execute_migrate')
-        self.assertIn("['Cipher:     aes-xts-plain64']", migrate)
-        self.assertIn("['Cipher key: 512 bits']", migrate)
-        self.assertIn("['PBKDF:      argon2id']", migrate)
+        # 'cipher:' (lower case) is the data segment and 'Key:' the volume key; 'Cipher:' names only the key-slot area.
+        for expected in ("['cipher: aes-xts-plain64']", "['Key: 512 bits']", "['Cipher: aes-xts-plain64']", "['Cipher key: 512 bits']",
+                         "['PBKDF: argon2id']", "['Version: 2']"):
+            self.assertIn(expected, migrate)
 
     def test_main_advances_only_after_verification_and_revert_only_from_the_baseline(self):
         migrate = function_source('execute_migrate')
@@ -178,8 +192,11 @@ class MigrationInvariants(unittest.TestCase):
         self.assertEqual(order, sorted(order))
         self.assertLess(migrate.index("run(['git', 'merge', '--ff-only', args.target])"), migrate.index("stage(result, 'starting_private_services_on_encrypted_volume')"))
         self.assertIn("if output(['git', 'rev-parse', 'HEAD']) == BASELINE:\n            automatic_revert(", migrate)
-        # The baseline capture fails without touching services.
-        self.assertLess(migrate.index("stage(result, 'capturing_baseline')"), migrate.index('units_installed = False'))
+        # Only the protected population is read before anything changes; the data baseline is taken once the services are down.
+        self.assertLess(migrate.index("stage(result, 'capturing_protected_population')"), migrate.index('units_installed = False'))
+        self.assertLess(migrate.index("stage(result, 'stopping_private_services')"), migrate.index("stage(result, 'capturing_baseline')"))
+        self.assertLess(migrate.index("stage(result, 'capturing_baseline')"), migrate.index("stage(result, 'stopping_database_container')"))
+        self.assertIn("if 'database_before' in result:", function_source('automatic_revert'))
 
     def test_every_stage_after_main_advances_is_eligible_for_rollback(self):
         stages = re.findall(r"stage\(result, '([a-z_]+)'\)", function_source('execute_migrate'))
@@ -221,6 +238,36 @@ class MigrationInvariants(unittest.TestCase):
         for phrase in ('quillmd-fresh.luks', 'unless-stopped to no', 'immutable', 'rollback', 'swap', 'key custody', 'recovery passphrase',
                        'billing boundary', 'decrypted_files_written'):
             self.assertIn(phrase, text.lower() if phrase.islower() else text)
+
+
+class RootHelperTransport(unittest.TestCase):
+    """The helper program travels as an argument and only the parameters on stdin; CPython reads ALL of stdin as the program
+    for `python -`, which made every root step fail in the first design."""
+
+    def test_parameters_are_the_only_stdin_and_are_read_before_chroot(self):
+        migration = load_migration()
+        library = migration.ROOT_LIBRARY
+        self.assertLess(library.index('P=json.loads(sys.stdin.readline())'), library.index("os.chroot('/host')"))
+        captured = {}
+        def fake_run(args, input=None, **kwargs):
+            captured.update(args=args, input=input)
+            return subprocess.CompletedProcess(args, 0, stdout='{"ok": true}\n', stderr='')
+        original = migration.subprocess.run
+        migration.subprocess.run = fake_run
+        try:
+            self.assertEqual(migration.root("emit({'ok':True})", {'k': True}, 'sha256:' + '0' * 64, writable=['/mnt']), {'ok': True})
+        finally:
+            migration.subprocess.run = original
+        args = captured['args']
+        self.assertEqual(args[-4:-1], ['python', '-B', '-c'])
+        self.assertTrue(args[-1].startswith(library))
+        self.assertEqual(captured['input'], '{"k": true}\n')
+        self.assertIn('type=bind,src=/mnt,dst=/host/mnt,bind-propagation=rslave', args)
+
+    def test_the_transport_pattern_round_trips_through_a_real_interpreter(self):
+        program = 'import sys,json\nP=json.loads(sys.stdin.readline())\nprint(json.dumps({"got": P["value"]}))\n'
+        result = subprocess.run([sys.executable, '-B', '-c', program], input='{"value": true}\n', capture_output=True, text=True, check=True)
+        self.assertEqual(json.loads(result.stdout), {'got': True})
 
 
 if __name__ == '__main__':

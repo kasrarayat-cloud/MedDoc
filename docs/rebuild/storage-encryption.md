@@ -61,12 +61,15 @@ stack's data and are not touched.
   against disk-level access, the owner removes the key file from the host
   after vaulting it. Every boot then needs the unlock script and the
   passphrase, so the service is down until someone types it.
-- **Crypto-erase.** Shredding the key file and destroying every passphrase copy
-  makes the whole volume unreadable. No block-level wipe of the virtual disk is
-  needed.
-- **Rotation.** Add a new key with `cryptsetup luksAddKey`, test it, then remove
-  the old slot only after the new key is vaulted. Record the date in the
-  checkpoint.
+- **Crypto-erase.** `cryptsetup luksErase` on the image destroys every key slot
+  in the header, so no key or passphrase opens the volume again. Shredding the
+  key file alone is best effort on a virtual disk. Neither step protects against
+  anyone who already copied the key material together with the header.
+- **Rotation.** Adding a key slot and removing the old one changes how the volume
+  key is wrapped, not the volume key itself. That is enough when a passphrase
+  holder changes. If the key file or a header copy may have been exposed, the
+  volume must be re-encrypted (`cryptsetup reencrypt`) in a maintenance window.
+  Record the date in the checkpoint.
 
 ## Rollback
 
@@ -88,6 +91,10 @@ stack's data and are not touched.
   them is a host or provider decision outside QuillMD's scope.
 - Freed plaintext blocks on the virtual disk are not overwritten. The data they
   held is synthetic.
+- The image is sparse, so its allocation map shows which regions have ever been
+  written. That reveals volume and growth, not content. Its space is not reserved
+  in advance: the migration requires 24 GiB free, and disk usage stays on the
+  owner's host checklist.
 - Earlier restore checks left decrypted synthetic copies under
   `rebuild/.runtime/restore-checks/restore-*/files`. They must be shredded
   before real data.

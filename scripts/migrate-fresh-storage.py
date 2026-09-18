@@ -61,7 +61,7 @@ DOCUMENTATION_PATHS = {'docs/rebuild/CHECKPOINT.md', 'docs/rebuild/owner-actions
                        'docs/rebuild/security-readiness.md', 'docs/rebuild/cost-definition.md', 'docs/rebuild/external-verification-runbook.md'}
 BILLING_BOUNDARY_PATHS = {'rebuild/core/jobs.py', 'rebuild/core/billing.py', 'rebuild/core/views.py', 'rebuild/quillmd/urls.py',
                           'rebuild/core/management/commands/audit_billing.py', 'rebuild/templates/encounter_detail.html',
-                          'rebuild/core/tests/test_billing_boundary.py'}
+                          'rebuild/core/tests/test_billing_boundary.py', 'rebuild/core/tests/test_billing_boundary_regressions.py'}
 ALLOWED = STORAGE_PATHS | DOCUMENTATION_PATHS | BILLING_BOUNDARY_PATHS
 # Helpers the target changes are materialised from the target commit; the rest must equal the tree.
 TARGET_HELPERS = {'storage': 'rebuild/ops/private_storage.py'}
@@ -148,8 +148,8 @@ def helper_image():
 
 ROOT_LIBRARY = r'''
 import os,sys,json,subprocess,stat,hashlib,time
-os.chroot('/host');os.chdir('/');os.umask(0o077)
 P=json.loads(sys.stdin.readline())
+os.chroot('/host');os.chdir('/');os.umask(0o077)
 def host(*cmd, stdin=None, check=True, timeout=1800):
     r=subprocess.run(['systemd-run','--wait','--pipe','--collect','--quiet','--property=Type=oneshot',*cmd],input=stdin,capture_output=True,text=True,timeout=timeout)
     if check and r.returncode!=0: raise RuntimeError('host command failed: '+' '.join(cmd[:4])+' :: '+r.stderr[-600:])
@@ -223,10 +223,12 @@ host('/usr/sbin/cryptsetup','open','--key-file',P['key'],P['image'],P['mapper'])
 host('/usr/sbin/mkfs.ext4','-q','-L','quillmd-fresh','/dev/mapper/'+P['mapper'])
 host('/bin/mount','-o','nodev,nosuid','/dev/mapper/'+P['mapper'],P['mount'])
 os.chmod(P['mount'],0o700)
-lines=[l.strip() for l in dump.splitlines()]
+lines=[' '.join(l.split()) for l in dump.splitlines()]
+def picked(prefix): return sorted({l for l in lines if l.startswith(prefix)})
+# 'cipher:' (lower case) is the data segment; 'Key:' is the volume key; 'Cipher:'/'Cipher key:' belong to the key slots.
 emit({'formatted':True,'slots':[l for l in lines if l in ('0: luks2','1: luks2')],'typed_passphrase_opens_slot1':typed==0,'wrong_passphrase_refused':wrong!=0,
-      'keyfile_opens_slot0':slot0==0,'cipher':sorted({l for l in lines if l.startswith('Cipher:')}),'key_size':sorted({l for l in lines if l.startswith('Cipher key:')}),
-      'pbkdf':sorted({l for l in lines if l.startswith('PBKDF:')}),'version':[l for l in lines if l.startswith('Version:')]})
+      'keyfile_opens_slot0':slot0==0,'segment_cipher':picked('cipher:'),'volume_key':picked('Key:'),'keyslot_cipher':picked('Cipher:'),
+      'keyslot_key':picked('Cipher key:'),'pbkdf':picked('PBKDF:'),'version':picked('Version:')})
 '''
 
 ROOT_COPY = r'''
@@ -265,7 +267,7 @@ if os.path.lexists(P['rollback']): raise RuntimeError('rollback directory alread
 if P['pg_data'] in mounts() or P['state'] in mounts(): raise RuntimeError('a target is already mounted')
 os.mkdir(P['rollback'],0o700)
 os.rename(P['pg_data'],P['rollback']+'/pg_data'); os.mkdir(P['pg_data'],0o700)
-os.rename(P['state'],P['rollback']+'/state'); os.mkdir(P['state'],0o710); os.chown(P['state'],0,P['gid'])
+os.rename(P['state'],P['rollback']+'/state'); os.mkdir(P['state'],0o710); os.chown(P['state'],0,P['gid']); os.chmod(P['state'],0o710)
 host('/usr/bin/chattr','+i',P['pg_data']); host('/usr/bin/chattr','+i',P['state'])
 emit({'switched':True,'pg_data_attrs':attrs(P['pg_data']),'state_attrs':attrs(P['state']),'pg_data_empty':os.listdir(P['pg_data'])==[],'state_empty':os.listdir(P['state'])==[]})
 '''
@@ -280,7 +282,8 @@ def install(data, target, mode):
     if open(target,'rb').read()!=data: raise RuntimeError('install readback differs: '+target)
 install(bytes.fromhex(P['volume_script_hex']),P['volume_script_target'],0o755)
 for unit,hexdata in P['units'].items(): install(bytes.fromhex(hexdata),'/etc/systemd/system/'+unit,0o644)
-r=subprocess.run(['systemd-analyze','verify',*['/etc/systemd/system/'+u for u in P['units']]],capture_output=True,text=True)
+# On the host: inside this chroot / is read-only and systemd-analyze cannot set up its working directory.
+r=host('/usr/bin/systemd-analyze','verify',*['/etc/systemd/system/'+u for u in P['units']],check=False)
 if r.returncode!=0: raise RuntimeError('systemd-analyze verify failed: '+r.stderr[-600:])
 subprocess.run(['systemctl','daemon-reload'],check=True)
 subprocess.run(['systemctl','enable',*P['new_units']],check=True,capture_output=True)
@@ -336,6 +339,7 @@ if P['units_installed']:
     for unit,hexdata in P['baseline_units'].items():
         t='/etc/systemd/system/'+unit; tmp=t+'.quillmd-pending'
         fd=os.open(tmp,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o644)
+        os.fchmod(fd,0o644)
         with os.fdopen(fd,'wb') as f: f.write(bytes.fromhex(hexdata)); f.flush(); os.fsync(f.fileno())
         os.rename(tmp,t)
     subprocess.run(['systemctl','disable',*P['new_units']],capture_output=True)
@@ -382,6 +386,7 @@ os.rmdir(S)
 for unit,hexdata in P['plaintext_units'].items():
     t='/etc/systemd/system/'+unit; tmp=t+'.quillmd-pending'
     fd=os.open(tmp,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o644)
+    os.fchmod(fd,0o644)
     with os.fdopen(fd,'wb') as f: f.write(bytes.fromhex(hexdata)); f.flush(); os.fsync(f.fileno())
     os.rename(tmp,t)
 subprocess.run(['systemctl','disable',*P['new_units']],capture_output=True)
@@ -396,12 +401,15 @@ emit({'switched_back':True,'identity':ino})
 
 def root(code, params, image, *, writable=(), timeout=3000):
     """Run one root step: host root bound read-only plus explicit writable binds; its result is the last JSON line."""
+    # The program travels as an argument and the parameters on stdin: with `python -` CPython would read ALL of stdin as the
+    # program. Every bind is rslave so a host unmount reaches this container's copy; a private copy would keep the
+    # encrypted filesystem mounted here and make the host's `cryptsetup close` fail with "device in use".
     args = ['docker', 'run', '--rm', '-i', '--pull=never', '--network=none', '--pid=host',
-            '--security-opt', 'apparmor=unconfined', '--mount', 'type=bind,src=/,dst=/host,readonly']
+            '--security-opt', 'apparmor=unconfined', '--mount', 'type=bind,src=/,dst=/host,readonly,bind-propagation=rslave']
     for path in writable:
-        args += ['--mount', f'type=bind,src={path},dst=/host{path}']
-    args += [image, 'python', '-B', '-']
-    result = subprocess.run(args, input=json.dumps(params) + '\n' + ROOT_LIBRARY + code, text=True, stdout=subprocess.PIPE,
+        args += ['--mount', f'type=bind,src={path},dst=/host{path},bind-propagation=rslave']
+    args += [image, 'python', '-B', '-c', ROOT_LIBRARY + code]
+    result = subprocess.run(args, input=json.dumps(params) + '\n', text=True, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, timeout=timeout)
     lines = [line for line in result.stdout.splitlines() if line.strip()]
     require(result.returncode == 0 and lines, 'Root step failed: ' + result.stderr[-1500:])
@@ -649,7 +657,8 @@ def automatic_revert(result, image, common, baseline_units, units_installed, bil
         run(['docker', 'update', '--restart=unless-stopped', '--memory', str(ORIGINAL_MEMORY[0]), '--memory-swap', str(ORIGINAL_MEMORY[1]), CONTAINER], stdout=subprocess.DEVNULL)
         run(['docker', 'start', CONTAINER], stdout=subprocess.DEVNULL)
         wait_database()
-        require(billing.fingerprints(billing.tables(), exclude_new_migration=False) == result['database_before'], 'Rows differ after the automatic revert.')
+        if 'database_before' in result:
+            require(billing.fingerprints(billing.tables(), exclude_new_migration=False) == result['database_before'], 'Rows differ after the automatic revert.')
         systemctl('start', APP_UNITS, image)
         result['health_after_revert'] = health(BASELINE)
         result['reverted_to_plaintext_service'] = True
@@ -663,10 +672,7 @@ def automatic_revert(result, image, common, baseline_units, units_installed, bil
 def execute_migrate(args, result, lock, result_path, image, common, units, baseline_units, volume_script, log_path,
                     billing, word, identity, previous, target_storage, env_before, installed, inputs, artifact, now):
     try:
-        stage(result, 'capturing_baseline')
-        result['database_before'] = billing.fingerprints(billing.tables(), exclude_new_migration=False)
-        result['schema_before'], result['constraints_before'], result['indexes_before'] = billing.schema(), billing.constraints(), billing.indexes()
-        result['storage_before'] = {name: target_storage.inventory(STATE / name) for name in ('files', 'mail')}
+        stage(result, 'capturing_protected_population')
         protected = protected_identity(previous)
         retained = word.retained_reports()
     except BaseException as error:
@@ -680,16 +686,25 @@ def execute_migrate(args, result, lock, result_path, image, common, units, basel
         stage(result, 'stopping_private_services')
         systemctl('stop', APP_UNITS, image)
         require(all(v == 'inactive' for v in unit_states(APP_UNITS).values()), 'Private services did not stop.')
+        # The baseline is taken only once nothing but this act can write, so a late request cannot fail a correct copy.
+        stage(result, 'capturing_baseline')
+        require(output(PSQL + ["SELECT count(*) FROM core_job WHERE state IN ('queued','running','reconciliation')"]) == '0',
+                'A job became pending before the services stopped.')
+        result['database_before'] = billing.fingerprints(billing.tables(), exclude_new_migration=False)
+        result['schema_before'], result['constraints_before'], result['indexes_before'] = billing.schema(), billing.constraints(), billing.indexes()
+        result['storage_before'] = {name: target_storage.inventory(STATE / name) for name in ('files', 'mail')}
         stage(result, 'stopping_database_container')
         run(['docker', 'stop', '-t', '90', CONTAINER], stdout=subprocess.DEVNULL)
         require(not container_running(), 'Database container did not stop.')
         stage(result, 'formatting_encrypted_volume')
         result['prepare'] = root(ROOT_PREPARE, dict(common, image_bytes=IMAGE_BYTES, luks_format=LUKS_FORMAT), image,
                                 writable=['/var/lib', '/etc/quillmd', '/mnt'])
-        require(result['prepare']['slots'] == ['0: luks2', '1: luks2'] and result['prepare']['cipher'] == ['Cipher:     aes-xts-plain64']
-                and result['prepare']['key_size'] == ['Cipher key: 512 bits'] and result['prepare']['pbkdf'] == ['PBKDF:      argon2id']
-                and result['prepare']['typed_passphrase_opens_slot1'] and result['prepare']['wrong_passphrase_refused']
-                and result['prepare']['keyfile_opens_slot0'], 'LUKS parameters or key slots differ from the declaration.')
+        prepared = result['prepare']
+        require(prepared['slots'] == ['0: luks2', '1: luks2'] and prepared['version'] == ['Version: 2']
+                and prepared['segment_cipher'] == ['cipher: aes-xts-plain64'] and prepared['volume_key'] == ['Key: 512 bits']
+                and prepared['keyslot_cipher'] == ['Cipher: aes-xts-plain64'] and prepared['keyslot_key'] == ['Cipher key: 512 bits']
+                and prepared['pbkdf'] == ['PBKDF: argon2id'] and prepared['typed_passphrase_opens_slot1'] and prepared['wrong_passphrase_refused']
+                and prepared['keyfile_opens_slot0'], 'LUKS parameters or key slots differ from the declaration.')
         stage(result, 'copying_and_verifying_data')
         result['copy'] = root(ROOT_COPY, dict(common, uid=APP_UID, gid=APP_GID, now=now.isoformat(), target=args.target), image, writable=['/mnt'])
         stage(result, 'switching_to_immutable_bind_targets')

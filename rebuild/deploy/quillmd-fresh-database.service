@@ -12,7 +12,9 @@ TimeoutStopSec=150
 ExecStartPre=/usr/local/bin/quillmd-fresh-volume status
 ExecStart=/usr/bin/docker start quillmd-fresh-postgres
 ExecStartPost=/usr/local/bin/quillmd-fresh-volume wait-database
-ExecStop=/usr/bin/docker stop -t 90 quillmd-fresh-postgres
+# ExecStopPost also runs after a FAILED start (for example wait-database timing out), so a container that started
+# but never became ready is stopped rather than left running with no unit tracking it.
+ExecStopPost=/usr/bin/docker stop -t 90 quillmd-fresh-postgres
 
 [Install]
 WantedBy=multi-user.target

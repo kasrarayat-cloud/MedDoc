@@ -123,6 +123,10 @@ for b in /var/lib/docker/volumes/quillmd_fresh_pg/_data /var/lib/quillmd; do
     *) bad "$b is NOT bound to the encrypted volume (source: '${src:-none}')" ;;
   esac
 done
+# The pre-migration plaintext snapshot is kept only until the owner approves its destruction. Report it every time.
+if inhost "test -e /var/lib/quillmd-rollback-20260918"; then
+  note "🟡 plaintext rollback snapshot /var/lib/quillmd-rollback-20260918 still present (owner approval to destroy it pending)"
+fi
 echo
 
 echo "── 3. the stores are on those devices (the real check) ─────────────"

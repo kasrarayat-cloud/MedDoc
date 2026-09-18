@@ -29,21 +29,27 @@ refuse() { echo "quillmd-fresh-volume: $1" >&2; exit 1; }
 
 is_mounted() { mountpoint -q "$1"; }
 
+close_all() {
+  if is_mounted "$STATE_BIND"; then umount "$STATE_BIND"; fi
+  if is_mounted "$PG_BIND"; then umount "$PG_BIND"; fi
+  if is_mounted "$MOUNT"; then umount "$MOUNT"; fi
+  if [ -e "/dev/mapper/$NAME" ]; then cryptsetup close "$NAME"; fi
+}
+
+# A failed open leaves nothing half-done: no decrypted mount, no bind, no open mapper.
+fail_closed() { close_all || true; refuse "$1"; }
+
 mount_and_bind() {
   if ! is_mounted "$MOUNT"; then
-    mount -o nodev,nosuid "/dev/mapper/$NAME" "$MOUNT"
+    mount -o nodev,nosuid "/dev/mapper/$NAME" "$MOUNT" || fail_closed "could not mount the encrypted filesystem"
   fi
-  if [ ! -f "$MARKER" ]; then
-    umount "$MOUNT" || true
-    cryptsetup close "$NAME" || true
-    refuse "volume marker missing; refusing to bind an unrecognised filesystem"
-  fi
-  [ -d "$MOUNT/postgres" ] && [ -d "$MOUNT/state" ] || refuse "migrated roots missing on the volume"
+  [ -f "$MARKER" ] || fail_closed "volume marker missing; refusing to bind an unrecognised filesystem"
+  { [ -d "$MOUNT/postgres" ] && [ -d "$MOUNT/state" ]; } || fail_closed "migrated roots missing on the volume"
   if ! is_mounted "$PG_BIND"; then
-    mount --bind "$MOUNT/postgres" "$PG_BIND"
+    mount --bind "$MOUNT/postgres" "$PG_BIND" || fail_closed "could not bind the database directory"
   fi
   if ! is_mounted "$STATE_BIND"; then
-    mount --bind "$MOUNT/state" "$STATE_BIND"
+    mount --bind "$MOUNT/state" "$STATE_BIND" || fail_closed "could not bind the state directory"
   fi
 }
 
@@ -71,10 +77,7 @@ case "${1:-}" in
     mount_and_bind
     ;;
   close)
-    if is_mounted "$STATE_BIND"; then umount "$STATE_BIND"; fi
-    if is_mounted "$PG_BIND"; then umount "$PG_BIND"; fi
-    if is_mounted "$MOUNT"; then umount "$MOUNT"; fi
-    if [ -e "/dev/mapper/$NAME" ]; then cryptsetup close "$NAME"; fi
+    close_all
     ;;
   status)
     is_mounted "$MOUNT" || refuse "encrypted volume is not mounted"
