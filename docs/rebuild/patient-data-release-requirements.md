@@ -54,9 +54,10 @@ data earlier would make that representation false.
 
 1. Close the OWNER rows in sections 1 and 2 and file the executed agreements
    under owner-controlled storage (never in git).
-2. Complete key custody and destroy the plaintext copies for the encrypted fresh
-   data paths (`owner-actions.md` §5), and verify the offsite round trip with key
-   escrow.
+2. Complete independent key custody for the encrypted fresh data paths
+   (`owner-actions.md` §2), and decide on disk-level protection. The plaintext
+   copies were destroyed on 2026-09-18 (`storage-encryption.md`). Then verify
+   the offsite round trip with key escrow.
 3. Complete the independent penetration test and retest every finding.
 4. Complete native Word acceptance (`word-acceptance-checklist.md`).
 5. Only then lift maintenance on public routes and enable real patient data,
