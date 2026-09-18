@@ -318,3 +318,50 @@ class CancellationNeverDeadlocks(SyntheticFixture,TransactionTestCase):
             canceller.join(timeout=60);requester.join(timeout=60)
         self.assertNotIn('error',cancel_outcome,cancel_outcome.get('error'));self.assertNotIn('error',request_outcome,request_outcome.get('error'))
         job.refresh_from_db();self.assertEqual(job.state,'cancelled');self.assertEqual(request_outcome['value'].state,'queued')
+
+
+@override_settings(ADMIN_SITE=False,STORAGES=STORAGES,**LIVE)
+class RoundTwoRegressions(RegressionFixture,TestCase):
+    password='Synthetic-console-regression-5521!'
+
+    def admin_client(self):
+        from django_otp.oath import totp
+        from django_otp.plugins.otp_totp.models import TOTPDevice
+        admin=User.objects.create_user(username='regression-admin',email='regression-admin@synthetic.invalid',password=self.password,verified_at=timezone.now(),is_staff=True)
+        device=TOTPDevice.objects.create(user=admin,confirmed=True,name='Synthetic authenticator')
+        code=str(totp(device.bin_key,step=device.step,t0=device.t0,digits=device.digits)).zfill(6)
+        client=Client()
+        self.assertEqual(client.post('/login/',{'email':admin.email,'password':self.password,'otp':code}).status_code,302)
+        return client
+
+    def test_a_failed_release_never_leaves_a_job_claiming_its_hold_was_released(self):
+        with patch.dict(os.environ,{**VOICE_ENV,'DEEPGRAM_API_KEY':''}):
+            job=enqueue(self.encounter,self.user,kind='transcription',input_path=self.recording('release-fails'))
+            with patch('core.jobs.release',side_effect=RuntimeError('synthetic release failure')),self.assertRaises(RuntimeError):
+                run_one()
+        job.refresh_from_db()
+        self.assertEqual(job.state,'running');self.assertNotIn('released',job.error)
+        self.assertEqual(Reservation.objects.get(job=job).state,'held')
+        self.assertIn(str(job.pk),[str(row['id']) for row in audit_report()['unresolved_jobs']])
+
+    def test_an_ended_job_that_still_holds_funds_fails_the_audit(self):
+        job=Job.objects.create(encounter=self.encounter,user=self.user,request_key='regression-ended-holding')
+        reserve(job,Decimal('0.1'))
+        self.assertTrue(audit_report()['hold_policy']['checks']['ended_jobs_hold_no_funds'])
+        Job.objects.filter(pk=job.pk).update(state='failed',error='Not processed: synthetic')
+        report=audit_report()
+        self.assertEqual(report['hold_policy']['ended_jobs_holding_funds'],[str(job.pk)]);self.assertFalse(report['all_checks_pass'])
+
+    def test_an_administrator_resolution_frees_the_key_for_a_new_request(self):
+        path=self.recording('resolved')
+        with patch.dict(os.environ,VOICE_ENV):
+            job=enqueue(self.encounter,self.user,kind='transcription',input_path=path)
+            with patch('core.jobs.httpx.post',return_value=deepgram(TRANSCRIPT,'dg_regression_resolved',duration=6000)):self.assertTrue(run_one())
+        job.refresh_from_db();self.assertEqual(job.state,'reconciliation');key=job.request_key
+        resolved=self.admin_client().post(f'/console/jobs/{job.pk}/resolve/',{'outcome':'release_no_cost','evidence_note':'Synthetic resolution for the regression test'})
+        self.assertEqual(resolved.status_code,302)
+        job.refresh_from_db();self.assertEqual(job.state,'failed');self.assertEqual(job.request_key,f'{key}:failed:{job.pk.hex}')
+        with patch.dict(os.environ,VOICE_ENV):
+            again=enqueue(self.encounter,self.user,kind='transcription',input_path=path)
+        self.assertNotEqual(again.pk,job.pk);self.assertEqual(again.state,'queued');self.assertEqual(again.request_key,key)
+        self.assertTrue(audit_report()['all_checks_pass'])

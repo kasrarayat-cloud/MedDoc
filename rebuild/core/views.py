@@ -25,7 +25,7 @@ from .forms import *
 from .security import audit,departments,scoped,membership,digest,token,store_upload,private_path,rate_limit
 from .billing import welcome_credit,credit_payment,reconcile_refund,reconciliation,stripe_test_key_configured,reconcile_usage,release
 from .context import integration_status
-from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outcome,may_cancel
+from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outcome,may_cancel,ended_key
 from . import wm_review
 
 
@@ -697,7 +697,8 @@ def admin_platform_cost(request):
 @transaction.atomic
 def admin_resolve_job(request,pk):
     if not request.user.is_staff or not request.user.is_verified():raise Http404
-    job=get_object_or_404(Job.objects.select_for_update().select_related('encounter__department'),pk=pk)
+    # Lock only the job row, as settle, cancel and absorb do: locking the encounter and department before the wallets deadlocks a wallet holder that audits.
+    job=get_object_or_404(Job.objects.select_for_update(of=('self',)).select_related('encounter__department'),pk=pk)
     if job.state!='reconciliation':return HttpResponse('Only jobs held for reconciliation can be resolved.',status=409)
     form=JobResolutionForm(request.POST)
     if not form.is_valid():raise ValidationError('; '.join(f'{field}: {" ".join(errors)}' for field,errors in form.errors.items()))
@@ -708,7 +709,9 @@ def admin_resolve_job(request,pk):
     release(job)
     job.state='failed';job.finished_at=timezone.now()
     job.error='Resolved by administrator: settled provider cost absorbed by QuillMD.' if settled else 'Resolved by administrator: synthetic fixture job carries no provider cost.' if simulated else 'Resolved by administrator: no provider cost evidenced.' if data['outcome']=='release_no_cost' else 'Resolved by administrator: provider cost absorbed by QuillMD.'
-    job.save(update_fields=['state','error','finished_at'])
+    # A resolved job ended without success: free its request key so the same revision or recording can be requested again.
+    job.request_key=ended_key(job,'failed')
+    job.save(update_fields=['state','error','finished_at','request_key'])
     if settled:
         # The worker settled the charge before the outcome became uncertain: reverse it, whatever amount the form carried.
         absorbed=absorb_failed_job(job,actor=request.user,note=note)

@@ -188,9 +188,15 @@ def run_one():
         job.finished_at=timezone.now()
         fields=['state','error','finished_at']
         if job.state=='failed': job.request_key=ended_key(job,'failed'); fields.append('request_key')
-        job.save(update_fields=fields)
-        if fixture or unsent: release(job)
-        elif declined: pass  # A successful generation the user did not adopt remains billable: no reversal, no platform cost.
+        if fixture or unsent:
+            # One transaction: a job never reads 'held funds were released' while its hold is still held. If the release
+            # fails, the job stays 'running', mark_stale moves it to reconciliation and the audit lists it as unresolved.
+            with transaction.atomic():
+                job.save(update_fields=fields); release(job)
+        else: job.save(update_fields=fields)
+        # Released above (fixture, not processed), or a successful generation the user did not adopt: it remains billable,
+        # with no reversal and no platform cost.
+        if fixture or unsent or declined: pass
         # Settled provider cost whose output was never adopted is a platform failure: QuillMD absorbs it and reverses the user's charge.
         elif known:
             try: absorb_failed_job(job)
