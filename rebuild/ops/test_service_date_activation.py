@@ -186,3 +186,39 @@ class TheNarrowRoleWrapperAdmitsTheImportAndNothingElse(unittest.TestCase):
     def test_the_allow_list_is_exactly_these_four(self):
         source = (ROOT / 'rebuild/ops/with_db_role.py').read_text()
         self.assertIn("('migrate', 'showmigrations', 'check', 'import_terminology')", source)
+
+
+class TheTreeHeadAndTheRunningReleaseAreDifferentFacts(unittest.TestCase):
+    """The refused act advanced main and died before rewriting the release line, so the two diverged."""
+
+    def setUp(self):
+        self.activator = load_activator()
+        self.source = (ROOT / 'scripts/activate-service-date.py').read_text()
+
+    def test_the_two_are_separate_constants(self):
+        self.assertNotEqual(self.activator.BASELINE, self.activator.RUNNING_RELEASE)
+        self.assertEqual(self.activator.BASELINE, '475a59259203b04072e35cb9270f39a3b0005906')
+        self.assertEqual(self.activator.RUNNING_RELEASE, '5f673a3b2cc5c99d68f08f34fba43b4883403583')
+
+    def test_the_release_line_it_replaces_is_the_running_one_not_the_tree_head(self):
+        self.assertIn("old_line = ('QUILLMD_RELEASE_SHA=' + RUNNING_RELEASE)", self.source)
+        self.assertNotIn("old_line = ('QUILLMD_RELEASE_SHA=' + BASELINE)", self.source)
+
+    def test_both_surfaces_must_agree_about_being_up(self):
+        """The first version of this check was `any(is None) or all(is not None)` — true for every input."""
+        def agree(health):
+            return all(a is None for a in health) or all(a is not None for a in health)
+        self.assertTrue(agree([None, None]))
+        self.assertTrue(agree([{'release': 'x'}, {'release': 'x'}]))
+        self.assertFalse(agree([None, {'release': 'x'}]), 'one surface up and one down must be refused')
+        self.assertIn('all(answer is None for answer in health) or all(answer is not None for answer in health)',
+                      self.source)
+
+    def test_a_service_answering_an_unexplained_release_is_refused(self):
+        def acceptable(answer, running):
+            return answer is None or (answer.get('release') == running and answer.get('data_mode') == 'synthetic-only')
+        running = self.activator.RUNNING_RELEASE
+        self.assertTrue(acceptable(None, running))
+        self.assertTrue(acceptable({'release': running, 'data_mode': 'synthetic-only'}, running))
+        self.assertFalse(acceptable({'release': 'something-else', 'data_mode': 'synthetic-only'}, running))
+        self.assertFalse(acceptable({'release': running, 'data_mode': 'real'}, running))

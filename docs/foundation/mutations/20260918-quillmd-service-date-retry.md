@@ -88,3 +88,38 @@ services stay stopped and the recorded state is inspected before anything else r
 `15:37:47Z`, and why this retry exists rather than a repair of a half-applied schema.
 
 No provider request is made. No clinical content is read, written or exported.
+
+---
+
+## CORRECTION, appended 2026-09-18 after the retry was itself refused in preflight
+
+The retry above was refused before it touched anything, twice over, and both refusals were the activator
+describing a state it could not represent. Nothing was changed either time.
+
+**1 · A leftover assertion.** The preflight still required `rebuild/core/coding.py` to be in the range. That was
+true of the first attempt and is false of this one — main already carries it. Replaced with a requirement that the
+range contains this declaration, which is true of any act that declares itself.
+
+**2 · THE TREE'S HEAD AND THE RUNNING RELEASE ARE DIFFERENT FACTS.** The refused act advanced permanent main to
+`475a5925` and then died inside the migration — **before** the line that rewrites `QUILLMD_RELEASE_SHA` in the
+environment file. So three things that had always moved together came apart:
+
+| fact | value after the refusal |
+| --- | --- |
+| permanent main / the tree's HEAD | `475a5925` |
+| the release line the services would report | `5f673a3b` |
+| the services themselves | **stopped** |
+
+The activator assumed all three were the same and so refused its own repair: it required the services to be running
+and answering `475a5925`, which they can never do. It now carries `BASELINE` (the tree) and `RUNNING_RELEASE` (the
+environment line) as separate constants, accepts the services being down — which is what its own fail-closed path
+produces — and refuses only if a surface answers something *unexplained*, or if the two surfaces disagree about
+whether they are up at all.
+
+⚠️ **The first version of that agreement check was `any(answer is None) or all(answer is not None)`, which is true
+for every possible input including the one it was written to catch.** It is now `all(... is None) or all(... is not
+None)`, and a test asserts the refused case is refused.
+
+**Preconditions for this act, restated as they actually are:** tree at `475a5925`, release line at `5f673a3b`,
+services stopped, database at `0013` with no `service_date` column, `encounter_scope` enabled, 11 encounters of
+which 6 are finalized, 74,719 codes. Every expected quantity above is unchanged.
