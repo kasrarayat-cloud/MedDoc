@@ -16,6 +16,7 @@ from core.security import private_path
 from documents import DocumentError
 from .test_security import SyntheticFixture
 from .test_workflow import TEST_SETTINGS
+from core.tests.audio_fixtures import wav_bytes
 
 
 @override_settings(**TEST_SETTINGS)
@@ -75,7 +76,7 @@ class EncounterSnapshotTests(SyntheticFixture, TransactionTestCase):
         suggestion = CodeSuggestion.objects.create(encounter=self.encounter, terminology=code,
             explanation='Synthetic explanation', evidence='no chest pain')
         audio = private_path('audio/synthetic.wav'); audio.parent.mkdir(mode=0o700)
-        audio.write_bytes(b'SYNTHETIC AUDIO'); audio.chmod(0o600)
+        audio.write_bytes(wav_bytes(tag='snapshot')); audio.chmod(0o600)
         job = enqueue(self.encounter, self.user, kind='transcription', input_path='audio/synthetic.wav',
             config={**configuration(), 'voice_rate_second': '0', 'voice_max_cost': '0'})
         old_notes, old_revision = self.encounter.notes, self.encounter.revision

@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block title %}Recording above the limit{% endblock %}
+{% block breadcrumb %}Voice input{% endblock %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow">Nothing was sent</div><h1>This recording is above the displayed limit.</h1>
+<p data-over-limit-message>{{ message }}</p></div></div>
+<section class="source-panel" data-over-limit>
+  <dl class="metadata">
+    <dt>Recording length</dt><dd data-recording-length>{{ length }}</dd>
+    <dt>Displayed limit</dt><dd>${{ standard_limit }}, which fits recordings up to {{ fits }}</dd>
+    <dt>Limit for this recording</dt><dd data-quoted-limit>${{ quote.charge_limit }}</dd>
+    <dt>Your available balance</dt><dd data-balance-covers>{% if affordable %}Covers this limit{% else %}Does not cover this limit{% endif %}</dd>
+  </dl>
+  <p class="small">You are charged provider usage × 1.5 and never more than the limit you approve. If our estimate is ever short, QuillMD absorbs the difference.</p>
+  {% if affordable %}
+  <form method="post" action="{% url 'voice_approve' encounter.pk %}" data-submit-once>{% csrf_token %}
+    <input type="hidden" name="approval" value="{{ approval }}"><input type="hidden" name="decision" value="approve">
+    <button type="submit" data-pending-label="Queuing transcription…">Approve a limit of ${{ quote.charge_limit }} and transcribe</button>
+  </form>
+  {% else %}
+  <p class="small" data-insufficient-for-limit>Your available balance is below this limit. Add funds on the billing page, or upload a shorter segment.</p>
+  {% endif %}
+  <form method="post" action="{% url 'voice_approve' encounter.pk %}">{% csrf_token %}
+    <input type="hidden" name="approval" value="{{ approval }}"><input type="hidden" name="decision" value="shorter">
+    <button type="submit" class="secondary">Upload a shorter segment instead</button>
+  </form>
+  <p class="small muted">This quote is valid for 30 minutes and only for this recording and this version of the document.</p>
+  <p><a href="{% url 'encounter_detail' encounter.pk %}">Back to the document</a></p>
+</section>
+{% endblock %}

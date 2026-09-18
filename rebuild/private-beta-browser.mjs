@@ -37,7 +37,7 @@ async function status(page,url){return (await page.request.get(url,{maxRedirects
 async function reserve(form){
  const text=await form.innerText();
  if(!live){assert(text.includes('Synthetic fixture'));return;}
- const amount=Number(text.match(/Reserve up to \$([0-9]+(?:\.[0-9]+)?)/)?.[1]);assert(Number.isFinite(amount)&&amount>0);
+ const amount=Number(text.match(/(?:Reserve up to|Limit) \$([0-9]+(?:\.[0-9]+)?)/)?.[1]);assert(Number.isFinite(amount)&&amount>0);
  assert(report.maximumReservedUsd+amount<=1,'Total displayed live reservation exceeds USD 1.');
  assert((await form.locator('[name=usage_quote]').inputValue()).length>20);report.maximumReservedUsd+=amount;
 }
@@ -160,7 +160,7 @@ try{
   });
  }
  await check('Exact provider settlement and original storage remain auditable',async()=>{
-  report.usage=python("from core.models import Job,Usage,ProviderReceipt\nfrom decimal import Decimal\nids=payload['ids'];rows=[]\nfor j in Job.objects.filter(encounter_id__in=ids):\n u=Usage.objects.get(job=j);r=ProviderReceipt.objects.get(job=j)\n assert j.state=='succeeded' and u.charged_cost==u.actual_cost*Decimal('1.5') and u.simulated==r.simulated\n assert u.simulated != payload['live']\n rows.append({'job':str(j.pk),'provider':u.provider,'actual_cost':str(u.actual_cost),'user_charge':str(u.charged_cost),'simulated':u.simulated})\nassert sum(Decimal(r['user_charge']) for r in rows)<=1\nprint(json.dumps(rows))",{ids:[docId,pdfId,...(report.voiceEncounter?[report.voiceEncounter]:[])],live});
+  report.usage=python("from core.models import Job,Usage,ProviderReceipt\nfrom core.management.commands.audit_billing import audit_report\nfrom decimal import Decimal\nids=payload['ids'];rows=[]\naudit={x['job_id']:x['checks'] for x in audit_report()['rows']}\nfor j in Job.objects.filter(encounter_id__in=ids):\n u=Usage.objects.get(job=j);r=ProviderReceipt.objects.get(job=j);c=audit[str(j.pk)]\n assert j.state=='succeeded' and c['exact_1_5_multiplier'] and c['over_limit_absorbed_exactly'] and u.simulated==r.simulated\n assert u.simulated != payload['live']\n rows.append({'job':str(j.pk),'provider':u.provider,'actual_cost':str(u.actual_cost),'user_charge':str(u.charged_cost),'simulated':u.simulated})\nassert sum(Decimal(r['user_charge']) for r in rows)<=1\nprint(json.dumps(rows))",{ids:[docId,pdfId,...(report.voiceEncounter?[report.voiceEncounter]:[])],live});
  });
  report.complete=true;
 }catch(error){

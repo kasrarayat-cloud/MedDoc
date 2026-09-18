@@ -18,6 +18,7 @@ from core.billing import reserve, settle, welcome_credit
 from core.generation import Selection, Selections, validate_selections
 from core.models import Department, Encounter, Job, Membership, Organization, Patient, Template, TemplateVersion, User, Usage, Wallet, Reservation, CodeSet, Code, CodeSuggestion, ProviderReceipt
 from core.security import membership
+from core.tests.audio_fixtures import wav_bytes
 
 
 class ClinicalRefutation(SimpleTestCase):
@@ -106,7 +107,7 @@ class AuthorizationAndPayerRefutation(TestCase):
         with tempfile.TemporaryDirectory() as directory, override_settings(MEDIA_ROOT=Path(directory)), patch.dict(os.environ, {"QUILLMD_DEEPGRAM_RATE_PER_SECOND": "0.01"}):
             audio = Path(directory) / "audio" / "same-submitted-recording.webm"
             audio.parent.mkdir()
-            audio.write_bytes(b"synthetic recording bytes for hashing")
+            audio.write_bytes(wav_bytes(tag="same-submitted-recording"))
             first = enqueue(encounter, self.user, "transcription", "audio/same-submitted-recording.webm")
             result = ("Synthetic transcript", Decimal("0.125"), {}, {}, "synthetic-test", "synthetic-transcription-1", False)
             with patch("core.jobs.transcribe", return_value=result):
@@ -153,8 +154,13 @@ class AuthorizationAndPayerRefutation(TestCase):
         with patch("core.jobs.generation.generate", return_value=result):
             run_one()
         self.job.refresh_from_db()
-        self.assertEqual(self.job.state, "reconciliation")
-        self.assertFalse(Usage.objects.filter(job=self.job).exists())
+        # The held limit binds: the charge is capped at it and the rest is absorbed as a platform cost (charge limit policy).
+        # The request identity and receipt survive exactly as before.
+        from core.models import PlatformCost
+        usage = Usage.objects.get(job=self.job)
+        self.assertEqual(usage.actual_cost, Decimal("1")); self.assertEqual(usage.charged_cost, Decimal("0.15"))
+        self.assertEqual(PlatformCost.objects.get(job=self.job, kind="absorbed_over_limit").amount, Decimal("1.35"))
+        self.assertEqual(self.job.state, "succeeded")
         self.assertEqual(self.job.provider_request_id, "known_over_reservation")
         receipt = ProviderReceipt.objects.get(job=self.job)
         self.assertEqual(receipt.actual_cost, Decimal("1"))
@@ -176,7 +182,7 @@ class AuthorizationAndPayerRefutation(TestCase):
     def test_transcription_missing_text_preserves_valid_provider_usage_metadata(self):
         from core.jobs import run_one
         audio = Path(self.directory.name) / "synthetic.wav"
-        audio.write_bytes(b"RIFF synthetic test audio only")
+        audio.write_bytes(wav_bytes(tag="missing-text"))
         self.job.state = "failed"
         self.job.save(update_fields=["state"])
         self.job = Job.objects.create(encounter=self.job.encounter, user=self.user,

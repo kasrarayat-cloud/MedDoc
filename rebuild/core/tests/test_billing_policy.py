@@ -29,6 +29,7 @@ from core.jobs import enqueue, run_one
 from core.management.commands.audit_billing import audit_report
 from core.models import AuditEvent, CostReconciliation, Encounter, Job, LedgerEntry, PlatformCost, Reservation, Usage, User, Wallet
 from core.tests.test_security import SyntheticFixture
+from core.tests.audio_fixtures import wav_bytes
 
 STORAGES={'default':{'BACKEND':'django.core.files.storage.FileSystemStorage'},'staticfiles':{'BACKEND':'django.contrib.staticfiles.storage.StaticFilesStorage'}}
 # One thousand synthetic input tokens cost one synthetic dollar, so audits can recompute every estimate exactly.
@@ -234,7 +235,7 @@ class ReconciliationLedger(PolicyFixture,TestCase):
 
     def test_additional_charge_is_debited_from_the_payer_paid_wallet(self):
         fund(self.paid,Decimal('5'),'payment:policy-debit')
-        usage=self.settled(Decimal('0.5'))
+        usage=self.settled(Decimal('0.5'),maximum=Decimal('1'))  # approved limit 1.5 leaves headroom for the reconciled 1.5
         self.assertEqual(usage.payer,f'user:{self.user.pk}')
         row=reconcile_usage(usage,Decimal('1'),'export-sha256',self.user,evidence_sha256='B'*64)
         self.assertEqual(row.charge_delta,Decimal('0.75'));self.assertEqual(row.ledger_status,'applied');self.assertEqual(row.evidence_sha256,'b'*64)
@@ -245,7 +246,7 @@ class ReconciliationLedger(PolicyFixture,TestCase):
         self.assertTrue(report['all_checks_pass']);self.assertTrue(report['rows'][0]['checks']['reconciliation_delta_arithmetic'])
 
     def test_insufficient_paid_funds_hold_the_additional_charge_until_topped_up(self):
-        usage=self.settled(Decimal('0.5'))
+        usage=self.settled(Decimal('0.5'),maximum=Decimal('1'))
         row=reconcile_usage(usage,Decimal('1'),'INV-SYNTH-0002',self.user)
         self.assertEqual(row.ledger_status,'pending_funds');self.assertEqual(row.charge_delta,Decimal('0.75'))
         self.assertFalse(LedgerEntry.objects.filter(kind='reconciliation').exists())
@@ -285,7 +286,7 @@ class ReconciliationLedger(PolicyFixture,TestCase):
         report=audit_report()
         for key in ['checked_at','scope','cost_basis','fingerprint_limit','rows','wallets','unsettled_provider_receipts','unresolved_jobs','all_checks_pass','durable_receipt_gaps','invoice_reconciliation','charge_policy','platform_costs','reconciliation_summary']:
             self.assertIn(key,report)
-        self.assertEqual(set(report['platform_costs']['totals_by_kind']),{'fixed_overhead','absorbed_failure'})
+        self.assertEqual(set(report['platform_costs']['totals_by_kind']),{'fixed_overhead','absorbed_failure','absorbed_over_limit'})
         row=report['rows'][0]
         for key in ['defined_cost_usd','user_charge_usd','cost_evidence','invoice_reconciled','ledger','checks','discount_rate','configured_list_cost_usd','reconciliation','reconciliation_ledger','absorbed','absorbed_reversal_usd','absorbed_platform_cost_usd','absorbed_ledger']:
             self.assertIn(key,row)
@@ -460,7 +461,7 @@ class RefutationRegressions(PolicyFixture,TestCase):
         self.assertEqual(self.balances(),(Decimal('9.25'),Decimal('0')))
 
     def test_discounted_transcription_settles_exactly(self):
-        recording=private_path('uploads/regress.wav');recording.parent.mkdir(parents=True,exist_ok=True);recording.write_bytes(b'RIFF synthetic')
+        recording=private_path('uploads/regress.wav');recording.parent.mkdir(parents=True,exist_ok=True);recording.write_bytes(wav_bytes(tag='regress'))
         env={'QUILLMD_PROVIDER_DISCOUNT_RATE':'0.125','QUILLMD_DEEPGRAM_RATE_PER_MINUTE':'0.006','QUILLMD_DEEPGRAM_RATE_PER_SECOND':'','DEEPGRAM_API_KEY':'synthetic-placeholder-not-a-key'}
         data={'results':{'channels':[{'alternatives':[{'transcript':'synthetic transcript'}]}]},'metadata':{'duration':12.345678,'request_id':'dg_regress'}}
         response=SimpleNamespace(raise_for_status=lambda:None,json=lambda:data)
@@ -508,7 +509,7 @@ class RefutationRegressions(PolicyFixture,TestCase):
         self.assertEqual(config['discount_rate'],'0');self.assertEqual(config['pricing_version'],plain['pricing_version'])
 
     def test_reconciled_cost_precision_is_eleven_decimals(self):
-        usage=self.settled(Decimal('0.4'),key='regress-precision')
+        usage=self.settled(Decimal('0.4'),maximum=Decimal('0.5'),key='regress-precision')
         with self.assertRaises(ValidationError):reconcile_usage(usage,Decimal('0.400000000001'),'INV-SYNTH-P12',self.user)
         row=reconcile_usage(usage,Decimal('0.40000000001'),'INV-SYNTH-P11',self.user)
         self.assertEqual(row.charge_delta,Decimal('0.000000000015'));self.assertEqual(row.ledger_status,'pending_funds')
@@ -556,7 +557,7 @@ class RefutationRegressions(PolicyFixture,TestCase):
     def test_stripe_top_up_applies_a_reconciliation_held_for_funds(self):
         from core.billing import credit_payment
         from core.models import Payment
-        usage=self.settled(Decimal('0.5'),key='regress-r2-topup')
+        usage=self.settled(Decimal('0.5'),maximum=Decimal('1'),key='regress-r2-topup')
         row=reconcile_usage(usage,Decimal('0.9'),'INV-SYNTH-TOPUP',self.user);self.assertEqual(row.ledger_status,'pending_funds')
         payment=Payment.objects.create(user=self.user,wallet=self.paid,amount_cents=500,stripe_session='cs_test_regress_topup')
         session={'id':payment.stripe_session,'payment_status':'paid','currency':'usd','amount_total':500,'metadata':{'payment_id':str(payment.pk)},'payment_intent':'pi_test_regress_topup','mode':'payment'}
@@ -603,7 +604,7 @@ class RefutationRegressions(PolicyFixture,TestCase):
         from core.models import Payment
         other=self.make_scope('policy-tenant-b');other_user=other[0];other_encounter=other[5]
         other_paid=Wallet.objects.get(user=other_user,kind='paid')
-        job=Job.objects.create(encounter=other_encounter,user=other_user,request_key='policy-tenant-b-job');reserve(job,Decimal('0.5'))
+        job=Job.objects.create(encounter=other_encounter,user=other_user,request_key='policy-tenant-b-job');reserve(job,Decimal('1'))
         units={'input_tokens':500,'output_tokens':0,'cached_input_tokens':0,'cache_creation_tokens':0}
         usage=settle(job,Decimal('0.5'),units,AUDITABLE_RATES,'anthropic:synthetic-model','req_tenant_b',provider_resource_id='msg_tenant_b')
         job.state='succeeded';job.finished_at=timezone.now();job.save(update_fields=['state','finished_at'])
@@ -622,7 +623,7 @@ class RefutationRegressions(PolicyFixture,TestCase):
     def test_funds_freed_by_a_released_reservation_apply_a_held_charge(self):
         from core.billing import release
         fund(self.paid,Decimal('1.4'),'payment:policy-release-funds')
-        usage=self.settled(Decimal('0.5'),key='policy-release-usage')   # promo 10 -> 9.25
+        usage=self.settled(Decimal('0.5'),maximum=Decimal('1'),key='policy-release-usage')   # promo 10 -> 9.25
         self.settled(Decimal('6'),key='policy-release-drain')             # promo 9.25 -> 0.25, so the next reservation reaches the paid wallet
         blocker=Job.objects.create(encounter=self.encounter,user=self.user,request_key='policy-release-blocker',config={'mode':'live'})
         reserve(blocker,Decimal('1.0'))   # 1.5 reserved: 0.25 promo + 1.25 paid; paid available becomes 0.15

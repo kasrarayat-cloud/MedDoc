@@ -27,6 +27,7 @@ from core.security import private_path
 from core.wm_review import BACKEND, ORIGINAL_SHA256
 from documents import DocumentError, resolve_template
 from .test_workflow import TEST_SETTINGS
+from core.tests.audio_fixtures import wav_bytes
 
 
 @skipUnless(os.getenv('QUILLMD_WORD_RUNTIME') and os.getenv('QUILLMD_WORD_MANIFEST'),
@@ -229,7 +230,7 @@ class WMDocumentWorkflow(TestCase):
         # Explicitly simulated transcription: this verifies adoption/invalidation,
         # not microphone capture or a live transcription provider.
         audio = private_path('audio/synthetic.wav'); audio.parent.mkdir(parents=True)
-        audio.write_bytes(b'SYNTHETIC audio placeholder'); audio.chmod(0o600)
+        audio.write_bytes(wav_bytes(tag='wm-voice')); audio.chmod(0o600)
         config = {**configuration(), 'voice_rate_minute': '0', 'voice_rate_second': '', 'voice_max_cost': '0'}
         encounter.template_review = {'schema': 0, 'synthetic_test_marker': True}
         encounter.save(update_fields=['template_review'])

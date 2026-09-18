@@ -25,7 +25,8 @@ from .forms import *
 from .security import audit,departments,scoped,membership,digest,token,store_upload,private_path,rate_limit
 from .billing import welcome_credit,credit_payment,reconcile_refund,reconciliation,stripe_test_key_configured,reconcile_usage,release
 from .context import integration_status
-from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outcome,may_cancel,ended_key
+from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outcome,may_cancel,ended_key,deliverable,RecordingOverLimit,transcription_quote,seconds_text,standard_voice_limit,UPLOAD_NAME,notes_full
+from .billing import available_balance
 from . import wm_review
 
 
@@ -307,8 +308,8 @@ def encounter_detail(request,pk):
     prior_generations=sum(1 for job in jobs if job.kind=='generation' and billable_outcome(job))
     prior_transcriptions=sum(1 for job in jobs if job.kind=='transcription' and billable_outcome(job))
     for job in jobs:
-        job.display_error=public_error(job); job.can_cancel=may_cancel(job,request.user); job.deliverable=bool(job.result_path) and billable_outcome(job)
-    return render(request,'encounter_detail.html',{'encounter':e,'answer_rows':rows,'wm_template':is_wm,'wm_requirements':requirements,'wm_review_error':review_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':Decimal(os.getenv('QUILLMD_VOICE_MAX_COST','0.20'))*Decimal('1.5'),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions})
+        job.display_error=public_error(job); job.can_cancel=may_cancel(job,request.user); job.deliverable=bool(job.result_path) and deliverable(job)
+    return render(request,'encounter_detail.html',{'encounter':e,'answer_rows':rows,'wm_template':is_wm,'wm_requirements':requirements,'wm_review_error':review_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions})
 
 @require_POST
 def generate_view(request,pk):
@@ -452,6 +453,16 @@ def export(request,pk):
     audit(request.user,'encounter.export',e.pk,department=e.department)
     return FileResponse(path.open('rb'),as_attachment=True,filename=f'quillmd-{str(e.pk)[:8]}.{e.template_version.template.format.lower()}')
 
+def voice_standard():
+    """The displayed per-recording limit and the length that fits it, from the same quote an upload is checked against."""
+    from .generation import configuration
+    try:
+        quote=transcription_quote(0,configuration())
+        return Decimal(quote['standard_limit']),seconds_text(quote['fits_seconds'])
+    except (ValidationError,ArithmeticError,KeyError):
+        return standard_voice_limit(os.getenv('QUILLMD_VOICE_MAX_COST','0.20')),None
+
+
 @require_POST
 def voice(request,pk):
     e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
@@ -464,12 +475,73 @@ def voice(request,pk):
         raw=private_path(relative).read_bytes()[:16]
         if not (raw.startswith((b'RIFF',b'ID3',b'\x1aE\xdf\xa3',b'\xff\xfb',b'\xff\xf3',b'\xff\xf2')) or raw[4:8]==b'ftyp'):raise ValidationError('Audio file signature does not match a supported recording.')
         quoted=usage_quote(request,e)
-        job=enqueue(e,request.user,'transcription',relative,config=quoted)
+        try:
+            job=enqueue(e,request.user,'transcription',relative,config=quoted)
+        except RecordingOverLimit as over:
+            # Nothing was sent and the upload is kept: the doctor chooses a shorter segment or a clearly priced higher limit.
+            approval=signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'path':relative,
+                                    'sha256':hashlib.sha256(private_path(relative).read_bytes()).hexdigest(),
+                                    'charge_limit':over.quote['charge_limit'],'config':quoted},salt='voice-limit')
+            # The path lets the worker remove the upload if nobody approves it within the approval window.
+            audit(request.user,'voice.over_limit_quoted',e.pk,department=e.department,seconds=over.quote['seconds'],
+                  charge_limit=over.quote['charge_limit'],standard_limit=over.quote['standard_limit'],path=relative)
+            # Whether the balance covers the limit, never the amount: an organization's paid balance is shown to its owners only.
+            return render(request,'voice_limit.html',{'encounter':e,'message':error_message(over),'quote':over.quote,'approval':approval,
+                'length':seconds_text(over.quote['seconds']),'fits':seconds_text(over.quote['fits_seconds']),
+                'standard_limit':Decimal(over.quote['standard_limit']),
+                'affordable':available_balance(request.user,e.department)>=Decimal(over.quote['charge_limit'])},status=409)
         if job.input_path!=relative:private_path(relative).unlink(missing_ok=True)
-        messages.success(request,'Transcription queued. Review the transcript before generating answers.')
+        messages.success(request,f"Transcription queued with a limit of ${Decimal(job.config.get('charge_limit','0'))}. Review the transcript before generating answers.")
     except ValidationError as exc:
         if relative:private_path(relative).unlink(missing_ok=True)
         messages.error(request,error_message(exc))
+    return redirect('encounter_detail',pk=pk)
+
+@require_POST
+def voice_approve(request,pk):
+    """The doctor's explicit decision on an over-limit recording: approve its quoted higher limit, or take a shorter segment."""
+    e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
+    shorter=request.POST.get('decision')=='shorter'
+    token=request.POST.get('approval','')
+    try:
+        data=signing.loads(token,salt='voice-limit',max_age=1800)
+    except signing.SignatureExpired:
+        # An expired approval can no longer queue anything, but choosing a shorter segment still removes its upload.
+        if not shorter:
+            messages.error(request,'This limit approval has expired. Upload the recording again; nothing was sent.')
+            return redirect('encounter_detail',pk=pk)
+        data=signing.loads(token,salt='voice-limit')
+    except signing.BadSignature:
+        messages.error(request,'This limit approval is invalid. Upload the recording again; nothing was sent.')
+        return redirect('encounter_detail',pk=pk)
+    relative=str(data.get('path',''))
+    if (data.get('user')!=str(request.user.pk) or data.get('encounter')!=str(e.pk)
+            or not UPLOAD_NAME.fullmatch(relative)):
+        raise PermissionDenied
+    path=private_path(relative)
+    if shorter:
+        # Under the encounter lock enqueue takes: a recording an approval already queued is never removed.
+        with transaction.atomic():
+            Encounter.objects.select_for_update().get(pk=e.pk)
+            if Job.objects.filter(input_path=relative).exists():
+                messages.info(request,'This recording was already approved and queued; its request is listed below.')
+                return redirect('encounter_detail',pk=pk)
+            path.unlink(missing_ok=True)
+        messages.info(request,'Nothing was sent. Upload a shorter segment: recordings that fit the displayed limit are processed straight away.')
+        return redirect('encounter_detail',pk=pk)
+    try:
+        if data.get('revision')!=e.revision:
+            raise ValidationError('The document changed after the quote. Upload the recording again; nothing was sent.')
+        if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=data.get('sha256'):
+            raise ValidationError('The quoted recording is no longer available. Upload it again; nothing was sent.')
+        job=enqueue(e,request.user,'transcription',relative,config=data['config'],approved_limit=data['charge_limit'])
+        if job.input_path!=relative:path.unlink(missing_ok=True)
+        audit(request.user,'voice.limit_approved',job.pk,department=e.department,charge_limit=str(data['charge_limit']))
+        messages.success(request,f"Transcription queued with your approved limit of ${data['charge_limit']}.")
+    except ValidationError as exc:
+        messages.error(request,error_message(exc))
+    except OSError:
+        messages.error(request,'The quoted recording is no longer available. Upload it again; nothing was sent.')
     return redirect('encounter_detail',pk=pk)
 
 @require_http_methods(['GET','POST'])
@@ -768,7 +840,7 @@ def job_result(request,pk):
     receipt=get_object_or_404(ProviderReceipt,job=job)
     if not job.result_path:raise Http404('Provider output was not stored; financial receipt is retained.')
     # Output of a request that is not charged (absorbed platform failure, pending reconciliation) is not delivered.
-    if not billable_outcome(job):raise Http404('Provider output is delivered only for requests that stand charged.')
+    if not deliverable(job):raise Http404('Provider output is delivered only for charged requests and usable transcripts.')
     path=private_path(job.result_path)
     if hashlib.sha256(path.read_bytes()).hexdigest()!=job.result_sha256:raise ValidationError('Provider output integrity check failed.')
     audit(request.user,'job.result_download',job.pk,department=job.encounter.department)

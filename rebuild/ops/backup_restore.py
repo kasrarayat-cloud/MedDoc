@@ -31,7 +31,11 @@ FILE_QUERIES = [
 ]
 INVARIANTS = {
     'wallet_bounds': 'SELECT count(*) FROM core_wallet WHERE balance<0 OR reserved<0 OR reserved>balance',
-    'usage_multiplier': 'SELECT count(*) FROM core_usage WHERE charged_cost<>actual_cost*1.5',
+    # The charge rule audit_billing checks: 1.5 x cost, capped at the approved limit the settled holds record, and anything above
+    # the cap present, exactly, as one absorbed_over_limit platform cost. Rows without a hold keep the plain 1.5 x cost.
+    'usage_multiplier': '''SELECT count(*) FROM core_usage u WHERE u.charged_cost < 0 OR u.charged_cost <> LEAST(u.actual_cost*1.5,
+        COALESCE((SELECT sum(r.amount) FROM core_reservation r WHERE r.job_id=u.job_id AND r.state='settled' HAVING sum(r.amount)>0), u.actual_cost*1.5))
+        OR COALESCE((SELECT sum(p.amount) FROM core_platformcost p WHERE p.job_id=u.job_id AND p.kind='absorbed_over_limit'),0) <> u.actual_cost*1.5-u.charged_cost''',
     'encounter_scope': '''SELECT count(*) FROM core_encounter e JOIN core_patient p ON p.id=e.patient_id
         JOIN core_templateversion v ON v.id=e.template_version_id JOIN core_template t ON t.id=v.template_id
         WHERE e.department_id<>p.department_id OR e.department_id<>t.department_id''',

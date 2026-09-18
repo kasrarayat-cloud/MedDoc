@@ -34,7 +34,7 @@ The Coding tab recognizes documented ICD-10-CM/CPT tokens against an effective d
 
 ## Billing and integrations
 
-Every verified new user, including invitees, receives exactly one personal $10 promotional grant. Promotional credit stays separate from paid funds; an organization's payer policy does not move the individual's grant. Reservations and settlement are transactional. A charge is exactly `1.5 × defined actual billable provider cost`, in decimal precision, with provider units/rates and user/department/organization/payer recorded. No automatic top-up is implemented. Read `../docs/rebuild/cost-definition.md` for rounding and cost scope.
+Every verified new user, including invitees, receives exactly one personal $10 promotional grant. Promotional credit stays separate from paid funds; an organization's payer policy does not move the individual's grant. Reservations and settlement are transactional. A charge is `1.5 × defined actual billable provider cost`, in decimal precision, never more than the binding limit shown and held before the request (anything above it is absorbed as a platform cost), with provider units/rates and user/department/organization/payer recorded. No automatic top-up is implemented. Read `../docs/rebuild/cost-definition.md` for rounding and cost scope.
 
 Provider receipts are persisted before output file storage. Unknown provider completion or an over-reservation cost enters reconciliation; workers never automatically repeat a possibly billed request. An output validation failure can still carry an actually incurred provider cost. The MFA-protected console exposes receipts, jobs, credits, paid balances, ledger, payments/refunds, reconciliation, account permissions and audit history.
 

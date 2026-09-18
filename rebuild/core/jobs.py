@@ -1,7 +1,8 @@
 from datetime import timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 import hashlib
 import json
+import re
 import secrets
 import os
 import httpx
@@ -9,10 +10,11 @@ from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
-from .models import Job, Encounter, Usage, ProviderReceipt, CodeSuggestion
+from .models import AuditEvent, Job, Encounter, Usage, ProviderReceipt, CodeSuggestion
 from .security import membership,audit,private_path
-from .billing import reserve,settle,release,absorb_failed_job
+from .billing import reserve,settle,release,absorb_failed_job,MULTIPLIER
 from . import generation
+from . import audio
 
 
 class NotAdoptedByUser(ValidationError):
@@ -29,6 +31,77 @@ class CancellationRefused(ValidationError):
 
 class NoProviderRequest(ValidationError):
     """Raised before any provider request is made: nothing billable happened, so the held funds are released."""
+
+
+class RecordingOverLimit(ValidationError):
+    """The recording's charge limit exceeds the displayed limit. Nothing was sent; the quote says what a shorter segment or a
+    higher, explicitly approved limit would be."""
+    def __init__(self,message,quote):
+        super().__init__(message)
+        self.quote=quote
+
+
+# Recording charge limit (docs/rebuild/cost-definition.md, "Recording charge limit"). The quote adds a margin for the provider
+# measuring a slightly longer duration than we do; the limit is rounded UP to a cent and is binding: the charge never exceeds it.
+DURATION_MARGIN_FACTOR=Decimal('1.02')
+DURATION_MARGIN_SECONDS=Decimal('2')
+# Our measurement is what a decoder plays (core/audio.py); a provider that reports more than this much less audio did not
+# process all of it, and the transcript says so.
+COVERAGE_TOLERANCE_SECONDS=Decimal('2')
+NOTE_LIMIT=50000
+# Usable output the notes cannot take is delivered for download and stays charged within the approved limit: never discarded,
+# never free (an absorbed failure never hands over usable output).
+OVERFLOW_ERROR='The transcript was not added because the notes would exceed the 50,000-character limit; download it from the document record. Its recorded usage stays billed.'
+# An over-limit upload is kept for the doctor's decision; the approval is valid 30 minutes, so after 40 an unapproved upload
+# can never be sent and is removed.
+NOTES_FULL='The notes are at the 50,000-character limit, so no transcript could be added. Shorten the notes first. Nothing was sent for transcription.'
+ABANDONED_UPLOAD_SECONDS=2400
+UPLOAD_NAME=re.compile(r'audio/[a-f0-9]{48}\.(wav|webm|mp3|m4a)')
+
+
+def notes_full(notes):
+    """No transcript of any length fits: adoption needs the notes, a blank line and at least one character."""
+    return len(notes)+2+1>NOTE_LIMIT
+
+
+def seconds_text(seconds):
+    seconds=int(Decimal(seconds).to_integral_value(rounding=ROUND_CEILING))
+    return f'{seconds//60}:{seconds%60:02d}'
+
+
+def voice_rate_per_minute(config):
+    """The one transcription rate rule, read by both the quote and settlement: the per-minute rate when set, else per-second x 60."""
+    if config.get('voice_rate_minute'): return Decimal(config['voice_rate_minute'])
+    if config.get('voice_rate_second'): return Decimal(config['voice_rate_second'])*60
+    raise ValidationError('Transcription usage rates have not been configured.')
+
+
+def standard_voice_limit(voice_max_cost):
+    """The displayed per-recording limit: the configured maximum cost x 1.5, rounded DOWN to a cent so the amount shown is never
+    above the amount enforced."""
+    return (Decimal(voice_max_cost)*MULTIPLIER).quantize(Decimal('0.01'),rounding=ROUND_FLOOR)
+
+
+def max_recording_seconds():
+    return Decimal(os.getenv('QUILLMD_VOICE_MAX_MINUTES','60'))*60
+
+
+def transcription_quote(seconds,config):
+    """The binding charge limit for a recording of this measured length, and how it compares with the displayed standard limit."""
+    rate=voice_rate_per_minute(config)
+    if not rate.is_finite() or rate<0: raise ValidationError('Transcription usage rates are invalid.')
+    discount=generation.discount_rate(config)
+    billed=Decimal(seconds)*DURATION_MARGIN_FACTOR+DURATION_MARGIN_SECONDS
+    # The same formula transcribe() prices the provider's duration with, applied to the measured length plus the margin.
+    cost=generation.discounted_cost((billed*rate/60).quantize(Decimal('0.0000000001')),discount)
+    # Rounded UP to a cent; a zero-rate (simulated) configuration costs nothing and holds nothing.
+    limit=(cost*MULTIPLIER*100).to_integral_value(rounding=ROUND_CEILING)/100 if cost>0 else Decimal(0)
+    standard=standard_voice_limit(config['voice_max_cost'])
+    per_second=rate/60*(1-discount)*MULTIPLIER
+    fits=((standard/per_second)-DURATION_MARGIN_SECONDS)/DURATION_MARGIN_FACTOR if per_second>0 else max_recording_seconds()
+    fits=max(Decimal(0),min(fits,max_recording_seconds())).to_integral_value(rounding=ROUND_FLOOR)
+    return {'seconds':str(Decimal(seconds)),'charge_limit':str(limit),'standard_limit':str(standard),'within_standard':limit<=standard,
+            'fits_seconds':str(fits),'too_long':Decimal(seconds)>max_recording_seconds(),'pricing_version':config.get('pricing_version','')}
 
 
 # Billing boundary (docs/rebuild/cost-definition.md, "Billing boundary"): a job.error prefix is the billing classification.
@@ -63,6 +136,12 @@ def billable_outcome(job):
     return job.state=='succeeded' or (job.state=='failed' and (job.error or '').startswith(NOT_ADOPTED))
 
 
+def deliverable(job):
+    """Provider output the requester may download: exactly the charged outcomes, including a transcript the notes could not take.
+    An absorbed failure is never delivered. Department scoping still decides who can see the job at all."""
+    return billable_outcome(job)
+
+
 def may_cancel(job,user):
     """Same rule jobs.cancel enforces: the requester, or an owner or clinician of the department."""
     if job.state!='queued': return False
@@ -78,8 +157,31 @@ def failure_reason(exc):
     return f'Output could not be adopted ({type(exc).__name__}); review required.'
 
 
+def recording_charge_limit(e,input_path,config,approved_limit=None):
+    """Measure the recording and fix its binding charge limit BEFORE any provider request. Refuses (nothing sent) when the
+    length cannot be measured, the recording is too long, or its limit exceeds the displayed standard limit without an
+    explicitly approved higher one."""
+    raw=private_path(input_path).read_bytes()
+    seconds=audio.measure(raw)
+    quote=transcription_quote(seconds,config)
+    if quote['too_long']:
+        raise ValidationError(f'This recording is {seconds_text(seconds)} long; the longest recording accepted is {seconds_text(max_recording_seconds())}. '
+                              'Upload a shorter segment. Nothing was sent for transcription.')
+    limit=Decimal(quote['charge_limit'])
+    if approved_limit is None:
+        if not quote['within_standard']:
+            raise RecordingOverLimit(f'This recording is {seconds_text(seconds)} long. Transcribing it could cost up to ${limit}, above the '
+                                     f'${Decimal(quote["standard_limit"]).quantize(Decimal("0.01"))} limit shown. Nothing was sent.',quote)
+    else:
+        approved_limit=Decimal(approved_limit)
+        if limit>approved_limit:
+            raise RecordingOverLimit(f'This recording needs a limit of ${limit}, above the ${approved_limit} you approved. Nothing was sent.',quote)
+        limit=approved_limit
+    return seconds,limit,quote
+
+
 @transaction.atomic
-def enqueue(encounter,user,kind='generation',input_path='',config=None):
+def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_limit=None):
     e=Encounter.objects.select_for_update().get(pk=encounter.pk)
     membership(user,e.department)
     if e.status=='finalized': raise ValidationError('Finalized documents are immutable.')
@@ -88,12 +190,33 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None):
     old=Job.objects.filter(request_key=key).first()
     if old: return old
     if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists(): raise ValidationError('This encounter already has a pending job.')
-    job=Job.objects.create(encounter=e,user=user,kind=kind,revision=e.revision,request_key=key,input_path=input_path,config=config or generation.configuration())
-    max_cost=generation.maximum_cost(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements]) if kind=='generation' else Decimal(job.config['voice_max_cost'])
-    if kind=='transcription' and not (job.config['voice_rate_minute'] or job.config['voice_rate_second']): raise ValidationError('Transcription usage rates have not been configured.')
-    reserve(job,max_cost)
-    audit(user,'job.queued',job.pk,department=e.department,kind=kind)
+    config=dict(config or generation.configuration())
+    if kind=='transcription':
+        if not (config['voice_rate_minute'] or config['voice_rate_second']): raise ValidationError('Transcription usage rates have not been configured.')
+        # Exact, not an estimate: notes with no room for even one character can take no transcript, so nothing is sent or charged.
+        if notes_full(e.notes): raise ValidationError(NOTES_FULL)
+        seconds,charge_limit,quote=recording_charge_limit(e,input_path,config,approved_limit)
+        config.update(recording_seconds=str(seconds),charge_limit=str(charge_limit),limit_basis='approved' if approved_limit is not None else 'standard')
+    job=Job.objects.create(encounter=e,user=user,kind=kind,revision=e.revision,request_key=key,input_path=input_path,config=config)
+    if kind=='transcription':
+        reserve(job,charge_limit=charge_limit)
+    else:
+        max_cost=generation.maximum_cost(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements])
+        reserve(job,max_cost)
+        charge_limit=max_cost*MULTIPLIER
+    audit(user,'job.queued',job.pk,department=e.department,kind=kind,charge_limit=str(charge_limit))
     return job
+
+def coverage_note(job,units):
+    """A visible marker when the provider processed clearly less audio than the recording holds; never a silent truncation."""
+    try:
+        recorded=Decimal(job.config.get('recording_seconds') or '0'); processed=Decimal((units or {}).get('duration_seconds') or '0')
+    except Exception:
+        return ''
+    if recorded<=0 or processed>=recorded-COVERAGE_TOLERANCE_SECONDS: return ''
+    return (f'\n[Transcription incomplete: the provider processed {seconds_text(processed)} of this {seconds_text(recorded)} recording; '
+            f'the final {seconds_text(recorded-processed)} was not transcribed.]')
+
 
 def transcribe(job):
     # Everything before httpx.post raises NoProviderRequest: no provider request was made, so nothing is billable.
@@ -109,7 +232,7 @@ def transcribe(job):
     except (KeyError,IndexError,TypeError):transcript=None
     duration=Decimal(str(data['metadata']['duration']))
     config=job.config or generation.configuration()
-    rate=Decimal(config['voice_rate_minute'] or str(Decimal(config['voice_rate_second'])*60))
+    rate=voice_rate_per_minute(config)
     if not duration.is_finite() or duration<0 or not rate.is_finite() or rate<0: raise ValidationError('Invalid provider usage.')
     list_cost=(duration*rate/60).quantize(Decimal('0.0000000001'))
     discount=generation.discount_rate(config);cost=generation.discounted_cost(list_cost,discount)
@@ -136,7 +259,9 @@ def run_one():
             ProviderReceipt.objects.get_or_create(job=job,defaults={'provider':provider,'provider_request_id':request_id,'provider_resource_id':resource_id,'actual_cost':cost,'units':units,'rates':rates,'simulated':simulated})
             job.provider=provider;job.provider_request_id=request_id;job.provider_resource_id=resource_id;job.save(update_fields=['provider','provider_request_id','provider_resource_id'])
             audit(job.user,'provider.receipt',job.pk,department=e.department,provider=provider,request_id=request_id,resource_id=resource_id,actual_cost=str(cost))
-        if job.kind=='transcription': saved={'transcript':result}
+        # The delivered transcript, stored and downloaded, carries the same incomplete-portion marker the notes would.
+        note=coverage_note(job,units) if job.kind=='transcription' and isinstance(result,str) else ''
+        if job.kind=='transcription': saved={'transcript':result+note if isinstance(result,str) else result}
         elif isinstance(result,dict) and 'anthropic_response' in result:
             saved={'provider_output':result['anthropic_response'].model_dump(mode='json')}
         elif isinstance(result,dict) and 'response' in result:
@@ -162,8 +287,9 @@ def run_one():
             if job.kind=='generation':
                 e.answers=answers; e.status='review'
             else:
-                if len(e.notes)+len(result)+2>50000: raise PlatformFailure('Transcription exceeds the note limit; nothing was truncated.')
-                e.notes+='\n\n'+result; e.answers={}; e.status='draft'; e.revision+=1
+                text=result+note
+                if len(e.notes)+len(text)+2>NOTE_LIMIT: raise NotAdoptedByUser(OVERFLOW_ERROR)
+                e.notes+='\n\n'+text; e.answers={}; e.status='draft'; e.revision+=1
                 CodeSuggestion.objects.filter(encounter=e).delete()
                 audit(job.user,'coding.invalidated_by_transcription',e.pk,department=e.department)
             e.template_review={}
@@ -223,6 +349,21 @@ def cancel(job,user):
     release(job)
     audit(user,'job.cancelled',job.pk,department=job.encounter.department,kind=job.kind)
     return job
+
+def reap_abandoned_voice_uploads():
+    """Remove over-limit uploads nobody approved within the approval window. Only files an over-limit quote recorded are
+    candidates, and never one a job references."""
+    cutoff=timezone.now()-timedelta(seconds=ABANDONED_UPLOAD_SECONDS)
+    removed=0
+    for event in AuditEvent.objects.filter(action='voice.over_limit_quoted',created_at__lt=cutoff,created_at__gte=cutoff-timedelta(days=7)).order_by('created_at')[:500]:
+        relative=str((event.details or {}).get('path',''))
+        if not UPLOAD_NAME.fullmatch(relative) or Job.objects.filter(input_path=relative).exists(): continue
+        path=private_path(relative)
+        if path.is_file():
+            path.unlink(missing_ok=True); removed+=1
+            audit(None,'voice.over_limit_upload_removed',event.target,department=event.department,path=relative)
+    return removed
+
 
 def mark_stale():
     for job in Job.objects.filter(state='running',started_at__lt=timezone.now()-timedelta(minutes=5)):
