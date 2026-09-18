@@ -245,7 +245,7 @@ def encounter_new(request):
         data=form.cleaned_data
         with transaction.atomic():
             membership(request.user,data['patient'].department)
-            e=Encounter(department=data['patient'].department,patient=data['patient'],template_version=data['template_version'],created_by=request.user,notes=data['notes']);e.full_clean(exclude=['answers','finalized_at','finalized_by','export_path','export_sha256']);e.save()
+            e=Encounter(department=data['patient'].department,patient=data['patient'],template_version=data['template_version'],created_by=request.user,notes=data['notes'],service_date=data['service_date']);e.full_clean(exclude=['answers','finalized_at','finalized_by','export_path','export_sha256']);e.save()
             audit(request.user,'encounter.create',e.pk,department=e.department)
         return redirect('encounter_detail',pk=e.pk)
     return render(request,'encounter_form.html',{'form':form})
@@ -645,8 +645,11 @@ def coding(request,pk):
     from .coding import suggest
     e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
     membership(request.user,e.department)
-    count=suggest(e,request.user)
-    messages.info(request,f'{count} new suggestions from explicitly documented codes. Diagnosis inference is not enabled. CPT requires a licensed current feed.')
+    result=suggest(e,request.user)
+    if result.covered:
+        messages.info(request,f'{result.count} new suggestions from explicitly documented codes, validated against {", ".join(result.versions)} for the {e.service_date:%d %B %Y} date of service. Diagnosis inference is not enabled. CPT requires a licensed current feed.')
+    else:
+        messages.warning(request,f'No ICD-10-CM release covers the {e.service_date:%d %B %Y} date of service, so nothing was validated and no suggestion was recorded. Import the release in effect for that date.')
     return redirect('/encounters/'+str(pk)+'/?tab=coding')
 
 @require_POST
@@ -654,10 +657,11 @@ def coding(request,pk):
 def accept_code(request,pk,code_pk):
     e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
     membership(request.user,e.department,roles=['owner','clinician'])
+    from .coding import applicable_releases,cpt_licensed
     item=get_object_or_404(CodeSuggestion.objects.select_for_update(),pk=code_pk,encounter=e)
-    if item.terminology.release.effective_until<timezone.localdate():raise ValidationError('This code release is no longer current.')
+    if not applicable_releases(e).filter(pk=item.terminology.release_id).exists():raise ValidationError('This release is not the one in effect for the encounter date of service; generate new coding suggestions.')
     if item.evidence not in e.notes:raise ValidationError('Source documentation changed; generate new coding suggestions.')
-    if item.system=='CPT' and (not settings.CPT_LICENSE_ID or item.terminology.release.license_reference!=settings.CPT_LICENSE_ID or settings.CPT_LICENSE_EXPIRY<timezone.localdate().isoformat()):raise PermissionDenied
+    if item.system=='CPT' and (not cpt_licensed() or item.terminology.release.license_reference!=settings.CPT_LICENSE_ID):raise PermissionDenied
     item.accepted_by=request.user;item.accepted_at=timezone.now();item.save(update_fields=['accepted_by','accepted_at'])
     audit(request.user,'coding.accept',item.pk,department=e.department,code=item.code,release=item.terminology.release.version)
     return redirect('/encounters/'+str(pk)+'/?tab=coding')

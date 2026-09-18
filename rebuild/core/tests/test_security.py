@@ -36,7 +36,7 @@ class SyntheticFixture:
         blob = f"synthetic {label} original".encode()
         template = Template.objects.create(department=department, name=label, format="docx", original_name="synthetic.docx", original_path=f"originals/{label}.docx", sha256=hashlib.sha256(blob).hexdigest(), created_by=user)
         version = TemplateVersion.objects.create(template=template, number=1, fields=[{"key": "symptoms", "label": "Symptoms", "kind": "text", "locator": {"cell": 0}}], created_by=user)
-        encounter = Encounter.objects.create(department=department, patient=patient, template_version=version, created_by=user, notes="Symptoms: no chest pain", answers={"symptoms": {"text": "no chest pain", "status": "supported", "reviewed": True, "evidence": []}})
+        encounter = Encounter.objects.create(department=department, patient=patient, template_version=version, created_by=user, service_date=timezone.localdate(), notes="Symptoms: no chest pain", answers={"symptoms": {"text": "no chest pain", "status": "supported", "reviewed": True, "evidence": []}})
         welcome_credit(user)
         return user, org, department, patient, template, encounter, blob
 
@@ -68,7 +68,7 @@ class IsolationAndJobs(SyntheticFixture, TestCase):
 
     def draft_encounter(self):
         original = self.xray[5]
-        return Encounter.objects.create(department=original.department, patient=original.patient, template_version=original.template_version, created_by=original.created_by, notes=original.notes)
+        return Encounter.objects.create(department=original.department, patient=original.patient, template_version=original.template_version, created_by=original.created_by, service_date=original.service_date, notes=original.notes)
 
     def test_department_and_organization_api_isolation(self):
         response = self.client.get("/api/patients/")

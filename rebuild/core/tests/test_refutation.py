@@ -82,7 +82,7 @@ class AuthorizationAndPayerRefutation(TestCase):
         template = Template.objects.create(department=self.department, name="Synthetic", format="docx", original_name="synthetic.docx", original_path="unused.docx", sha256="0" * 64, created_by=self.user)
         mapping = TemplateVersion.objects.create(template=template, number=1, fields=[], created_by=self.user)
         patient = Patient.objects.create(department=self.department, display_name="Synthetic patient", reference="refute", created_by=self.user)
-        encounter = Encounter.objects.create(department=self.department, patient=patient, template_version=mapping, created_by=self.user, notes="Synthetic notes")
+        encounter = Encounter.objects.create(department=self.department, patient=patient, template_version=mapping, created_by=self.user, service_date=timezone.localdate(), notes="Synthetic notes")
         self.job = Job.objects.create(encounter=encounter, user=self.user, request_key="refute:1")
         welcome_credit(self.user)
 

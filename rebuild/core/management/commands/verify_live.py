@@ -6,13 +6,14 @@ from django.core.management.base import BaseCommand,CommandError
 from core.models import User,Encounter,TemplateVersion,Patient,Job,Usage
 from core.jobs import enqueue
 from core.security import private_path
+from django.utils import timezone
 class Command(BaseCommand):
     def handle(self,*args,**options):
         if not settings.SYNTHETIC_ONLY or settings.AI_MODE!='live':raise CommandError('Live synthetic-only mode required.')
         user=User.objects.get(email='doctor@synthetic.quillmd.invalid')
         version=TemplateVersion.objects.filter(created_by=user,template__name='Clinical assessment').first()
         patient=Patient.objects.filter(department=version.template.department).first()
-        e=Encounter.objects.create(department=patient.department,patient=patient,template_version=version,created_by=user,notes='History: Synthetic patient reports left wrist discomfort.\nFindings: No deformity documented.\nPlan: Follow-up assessment documented.')
+        e=Encounter.objects.create(department=patient.department,patient=patient,template_version=version,created_by=user,service_date=timezone.localdate(),notes='History: Synthetic patient reports left wrist discomfort.\nFindings: No deformity documented.\nPlan: Follow-up assessment documented.')
         generation=enqueue(e,user)
         self.wait(generation)
         e.refresh_from_db()
