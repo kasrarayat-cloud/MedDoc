@@ -125,7 +125,7 @@ class SuccessfulGenerationStaysBillable(BoundaryFixture,TestCase):
         original=Encounter.objects.get(pk=self.encounter.pk).answers
         job=self.live_job('req_boundary_revision',side_effect=lambda:Encounter.objects.filter(pk=self.encounter.pk).update(revision=F('revision')+1))
         self.assertEqual(job.state,'failed');self.assertTrue(job.error.startswith('not_adopted: '),job.error);self.assertLessEqual(len(job.error),250)
-        self.assertIn('remains charged',job.error)
+        self.assertIn('stays billed',job.error)
         self.encounter.refresh_from_db();self.assertEqual(self.encounter.answers,original)
         checks=self.assert_charged_never_absorbed(job,Decimal('0.15'))
         self.assertTrue(checks['user_declined_output_remains_charged']);self.assertNotIn('failed_settled_usage_absorbed',checks)
@@ -208,7 +208,8 @@ class QueuedRequestCancellation(BoundaryFixture,TestCase):
         with patch('core.jobs.generation.generate') as provider:self.assertFalse(run_one())
         self.assertEqual(provider.call_count,0)
         report=audit_report();self.assertTrue(report['all_checks_pass']);self.assertEqual(report['unresolved_jobs'],[]);self.assertEqual(report['rows'],[])
-        page=self.client.get(f'/encounters/{self.encounter.pk}/');self.assertNotContains(page,CANCEL_BUTTON);self.assertContains(page,CANCELLED_ERROR)
+        page=self.client.get(f'/encounters/{self.encounter.pk}/');self.assertNotContains(page,CANCEL_BUTTON)
+        self.assertContains(page,'Cancelled before any provider request; nothing was charged.');self.assertNotContains(page,CANCELLED_ERROR)
         self.assertEqual(self.client.post(self.cancel_url(job)).status_code,409)
         # The cancelled row no longer holds the key: a fresh request for the same revision reserves again.
         again=enqueue(self.encounter,self.user)

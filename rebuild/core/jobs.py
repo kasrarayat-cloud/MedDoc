@@ -27,9 +27,14 @@ class CancellationRefused(ValidationError):
     """The job is past the point where cancellation is free; the message is the one-line reason."""
 
 
+class NoProviderRequest(ValidationError):
+    """Raised before any provider request is made: nothing billable happened, so the held funds are released."""
+
+
 # Billing boundary (docs/rebuild/cost-definition.md, "Billing boundary"): a job.error prefix is the billing classification.
 NOT_ADOPTED='not_adopted: '
 PLATFORM_FAILURE='platform_failure: '
+NOT_PROCESSED='Not processed: '
 CANCELLED_ERROR='cancelled: before any provider request'
 CANCEL_REFUSALS={'running':'Processing already started; the outcome will be billed by result.',
     'succeeded':'This request already completed; its successful generation remains charged.',
@@ -38,10 +43,38 @@ CANCEL_REFUSALS={'running':'Processing already started; the outcome will be bill
     'cancelled':'This request was already cancelled.'}
 
 
+def ended_key(job,label):
+    """Free the request key of a job that ended without success so a fresh request for the same revision is accepted; the ended
+    row keeps its history under a key only it can hold. Longest key today is transcription (115 chars) + 43 = 158 of 160."""
+    return f'{job.request_key}:{label}:{job.pk.hex}'
+
+
+def public_error(job):
+    """What the doctor reads about a job: the billing classification in words, never the internal prefix."""
+    error=job.error or ''
+    if error.startswith(NOT_ADOPTED): return error[len(NOT_ADOPTED):]
+    if error.startswith(PLATFORM_FAILURE): return error[len(PLATFORM_FAILURE):]+' This was a platform failure; it is not charged to you.'
+    if error==CANCELLED_ERROR: return 'Cancelled before any provider request; nothing was charged.'
+    return error
+
+
+def billable_outcome(job):
+    """A job whose provider usage stands charged: a success, or a success the user's own state kept from adoption."""
+    return job.state=='succeeded' or (job.state=='failed' and (job.error or '').startswith(NOT_ADOPTED))
+
+
+def may_cancel(job,user):
+    """Same rule jobs.cancel enforces: the requester, or an owner or clinician of the department."""
+    if job.state!='queued': return False
+    try: membership(user,job.encounter.department,roles=None if job.user_id==user.pk else ['owner','clinician'])
+    except PermissionDenied: return False
+    return True
+
+
 def failure_reason(exc):
     """Display text for a post-settlement failure. Only QuillMD's own fixed messages are shown; any other exception is named by class,
     because provider or validation messages can quote the source text."""
-    if isinstance(exc,(NotAdoptedByUser,PlatformFailure)): return '; '.join(exc.messages)
+    if isinstance(exc,(NotAdoptedByUser,PlatformFailure,NoProviderRequest)): return '; '.join(exc.messages)
     return f'Output could not be adopted ({type(exc).__name__}); review required.'
 
 
@@ -63,11 +96,12 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None):
     return job
 
 def transcribe(job):
-    path=private_path(job.input_path)
-    raw=path.read_bytes()
-    if len(raw)>15*1024*1024: raise ValidationError('Recording too large.')
+    # Everything before httpx.post raises NoProviderRequest: no provider request was made, so nothing is billable.
+    try: raw=private_path(job.input_path).read_bytes()
+    except (OSError,ValueError): raise NoProviderRequest('The recording is not available.') from None
+    if len(raw)>15*1024*1024: raise NoProviderRequest('Recording too large.')
     key=os.getenv('DEEPGRAM_API_KEY')
-    if not key: raise ValidationError('Transcription provider is not connected.')
+    if not key: raise NoProviderRequest('Transcription provider is not connected.')
     response=httpx.post('https://api.deepgram.com/v1/listen',params={'model':'nova-3-medical','smart_format':'false'},headers={'Authorization':f'Token {key}','Content-Type':'application/octet-stream'},content=raw,timeout=90)
     response.raise_for_status()
     data=response.json()
@@ -88,7 +122,7 @@ def run_one():
         if not job: return False
         try: membership(job.user,job.encounter.department)
         except Exception:
-            job.state='failed'; job.error='Access was revoked before processing.'; job.finished_at=timezone.now(); job.save();release(job); return True
+            job.state='failed'; job.error='Access was revoked before processing.'; job.finished_at=timezone.now(); job.request_key=ended_key(job,'failed'); job.save();release(job); return True
         job.state='running';job.started_at=timezone.now();job.save(update_fields=['state','started_at'])
     provider_returned=False
     try:
@@ -117,15 +151,17 @@ def run_one():
         settle(job,cost,units,rates,provider,request_id,simulated,provider_resource_id=resource_id)
         with transaction.atomic():
             e=Encounter.objects.select_for_update().get(pk=e.pk)
-            # The generation succeeded and was paid for. The user's own state (finalized, edited, access revoked) can decline its
-            # output, but that is not a platform failure: NotAdoptedByUser keeps the settled charge.
+            # Output QuillMD cannot use is a platform failure whatever the user did meanwhile, so it is checked first and absorbed.
+            if job.kind=='generation': answers=generation.validated(result)
+            elif not isinstance(result,str): raise PlatformFailure('Provider supplied no usable transcript.')
+            # Usable output that the user's own state (finalized, edited, access revoked) declines is not a platform failure:
+            # NotAdoptedByUser keeps the settled charge.
             try: membership(job.user,e.department)
-            except PermissionDenied: raise NotAdoptedByUser('Access was revoked before the output could be adopted; the completed generation remains charged.')
-            if e.status=='finalized' or e.revision!=job.revision: raise NotAdoptedByUser('Source changed while this job ran; output was not adopted. The completed generation remains charged.')
+            except PermissionDenied: raise NotAdoptedByUser('Access was revoked before the output could be adopted; its recorded usage stays billed.')
+            if e.status=='finalized' or e.revision!=job.revision: raise NotAdoptedByUser('Source changed while this job ran; output was not adopted. Its recorded usage stays billed.')
             if job.kind=='generation':
-                e.answers=generation.validated(result); e.status='review'
+                e.answers=answers; e.status='review'
             else:
-                if not isinstance(result,str):raise PlatformFailure('Provider supplied no usable transcript.')
                 if len(e.notes)+len(result)+2>50000: raise PlatformFailure('Transcription exceeds the note limit; nothing was truncated.')
                 e.notes+='\n\n'+result; e.answers={}; e.status='draft'; e.revision+=1
                 CodeSuggestion.objects.filter(encounter=e).delete()
@@ -139,12 +175,21 @@ def run_one():
         known=Usage.objects.filter(job=job).exists()
         fixture=job.kind=='generation' and job.config.get('mode',settings.AI_MODE)!='live'
         declined=known and isinstance(exc,NotAdoptedByUser)
-        job.state='failed' if known or fixture else 'reconciliation'
+        unsent=not known and not provider_returned and isinstance(exc,NoProviderRequest)
+        job.state='failed' if known or fixture or unsent else 'reconciliation'
         # After settlement the error prefix is the billing classification audit_billing reads: not_adopted stays charged, platform_failure is absorbed.
         if known: job.error=((NOT_ADOPTED if declined else PLATFORM_FAILURE)+failure_reason(exc))[:250]
-        else: job.error='Provider outcome is uncertain; reconcile before retrying.' if not fixture else 'Generation failed validation.'
-        job.finished_at=timezone.now(); job.save(update_fields=['state','error','finished_at'])
-        if fixture: release(job)
+        elif unsent: job.error=(NOT_PROCESSED+failure_reason(exc)+' No provider request was made; nothing was charged and the held funds were released.')[:250]
+        elif fixture: job.error='Generation failed validation.'
+        elif ProviderReceipt.objects.filter(job=job).exists():
+            # The provider completed and its receipt is durable; only settlement failed (for example cost above the held maximum).
+            job.error='Provider completed, but settlement needs administrator reconciliation; nothing is charged until it is resolved.'
+        else: job.error='Provider outcome is uncertain; reconcile before retrying.'
+        job.finished_at=timezone.now()
+        fields=['state','error','finished_at']
+        if job.state=='failed': job.request_key=ended_key(job,'failed'); fields.append('request_key')
+        job.save(update_fields=fields)
+        if fixture or unsent: release(job)
         elif declined: pass  # A successful generation the user did not adopt remains billable: no reversal, no platform cost.
         # Settled provider cost whose output was never adopted is a platform failure: QuillMD absorbs it and reverses the user's charge.
         elif known:
@@ -153,7 +198,7 @@ def run_one():
                 # The failed job state is already durable; a failed reversal must never stop the worker. audit_billing flags settled-but-unabsorbed failures.
                 audit(job.user,'usage.absorb_failed',job.pk,department=job.encounter.department,error_class=type(absorb_error).__name__)
         audit(job.user,'job.'+job.state,job.pk,department=job.encounter.department,error_class=type(exc).__name__,
-              billing='not_adopted' if declined else 'platform_failure' if known and not fixture else 'fixture' if fixture else 'uncertain')
+              billing='not_adopted' if declined else 'platform_failure' if known and not fixture else 'fixture' if fixture else 'not_processed' if unsent else 'uncertain')
     return True
 
 
@@ -161,14 +206,13 @@ def run_one():
 def cancel(job,user):
     """Cancel a queued request before any provider request. The row lock is the same one run_one takes with skip_locked, so a job
     being picked up is never cancelled and a job being cancelled is never picked up. Held reservations are released; nothing is charged."""
-    job=Job.objects.select_for_update().select_related('encounter__department').get(pk=job.pk)
+    # Lock the job row only: locking the encounter or department too would invert run_one's encounter-then-job order and deadlock.
+    job=Job.objects.select_for_update(of=('self',)).select_related('encounter__department').get(pk=job.pk)
     # The requester may cancel their own queued request; anyone else needs a clinician or owner role in the department.
     membership(user,job.encounter.department,roles=None if job.user_id==user.pk else ['owner','clinician'])
     if job.state!='queued': raise CancellationRefused(CANCEL_REFUSALS.get(job.state,'This request can no longer be cancelled.'))
     job.state='cancelled';job.error=CANCELLED_ERROR;job.finished_at=timezone.now()
-    # Free the request key for a fresh request on the same revision; the cancelled row keeps its history under a key only it can hold.
-    # Longest key today is transcription (115 chars) + 43 = 158, inside the 160-character column.
-    job.request_key=f'{job.request_key}:cancelled:{job.pk.hex}'
+    job.request_key=ended_key(job,'cancelled')
     job.save(update_fields=['state','error','finished_at','request_key'])
     release(job)
     audit(user,'job.cancelled',job.pk,department=job.encounter.department,kind=job.kind)

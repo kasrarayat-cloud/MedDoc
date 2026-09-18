@@ -25,7 +25,7 @@ from .forms import *
 from .security import audit,departments,scoped,membership,digest,token,store_upload,private_path,rate_limit
 from .billing import welcome_credit,credit_payment,reconcile_refund,reconciliation,stripe_test_key_configured,reconcile_usage,release
 from .context import integration_status
-from .jobs import enqueue,cancel,CancellationRefused
+from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outcome,may_cancel
 from . import wm_review
 
 
@@ -301,9 +301,13 @@ def encounter_detail(request,pk):
     try:maximum_charge=maximum_cost(e.notes,e.template_version.fields,context_labels=[row['label'] for row in e.template_version.review_requirements])*Decimal('1.5')
     except ValidationError:maximum_charge=None
     audit(request.user,'encounter.view',e.pk,department=e.department)
-    # Billing boundary: earlier successful requests stay charged, so a further request is disclosed as separately billable.
-    prior_generations=sum(1 for job in jobs if job.kind=='generation' and job.state=='succeeded')
-    prior_transcriptions=sum(1 for job in jobs if job.kind=='transcription' and job.state=='succeeded')
+    # Billing boundary: earlier charged requests (successes, and successes the user's own state declined) stay charged, so a
+    # further request is disclosed as separately billable. The doctor reads the classification in words, is offered cancel only
+    # where the server allows it, and receives provider output only for requests that stand charged.
+    prior_generations=sum(1 for job in jobs if job.kind=='generation' and billable_outcome(job))
+    prior_transcriptions=sum(1 for job in jobs if job.kind=='transcription' and billable_outcome(job))
+    for job in jobs:
+        job.display_error=public_error(job); job.can_cancel=may_cancel(job,request.user); job.deliverable=bool(job.result_path) and billable_outcome(job)
     return render(request,'encounter_detail.html',{'encounter':e,'answer_rows':rows,'wm_template':is_wm,'wm_requirements':requirements,'wm_review_error':review_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':Decimal(os.getenv('QUILLMD_VOICE_MAX_COST','0.20'))*Decimal('1.5'),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions})
 
 @require_POST
@@ -760,6 +764,8 @@ def job_result(request,pk):
     job=get_object_or_404(Job.objects.filter(encounter__department__in=departments(request.user)),pk=pk)
     receipt=get_object_or_404(ProviderReceipt,job=job)
     if not job.result_path:raise Http404('Provider output was not stored; financial receipt is retained.')
+    # Output of a request that is not charged (absorbed platform failure, pending reconciliation) is not delivered.
+    if not billable_outcome(job):raise Http404('Provider output is delivered only for requests that stand charged.')
     path=private_path(job.result_path)
     if hashlib.sha256(path.read_bytes()).hexdigest()!=job.result_sha256:raise ValidationError('Provider output integrity check failed.')
     audit(request.user,'job.result_download',job.pk,department=job.encounter.department)

@@ -76,7 +76,8 @@ def reserve(job,maximum_cost):
 def settle(job,actual_cost,units,rates,provider,provider_request_id='',simulated=False,provider_resource_id=''):
     # Lock the job first so replay cannot release/spend twice.
     from .models import Job
-    job=Job.objects.select_for_update().select_related('encounter__department__organization','user').get(pk=job.pk)
+    # Lock only the job row: the related rows are read, not written, and locking them deadlocks a wallet holder that audits.
+    job=Job.objects.select_for_update(of=('self',)).select_related('encounter__department__organization','user').get(pk=job.pk)
     existing=Usage.objects.filter(job=job).first()
     if existing: return existing
     actual=exact(actual_cost)
@@ -272,7 +273,7 @@ def absorb_failed_job(job,actor=None,note=''):
     applied. Only a failed job can be absorbed. Idempotent: ledger keys and the one-absorbed-failure-per-job constraint.
     """
     from .models import Job
-    job=Job.objects.select_for_update().select_related('encounter__department','user').get(pk=job.pk)
+    job=Job.objects.select_for_update(of=('self',)).select_related('encounter__department','user').get(pk=job.pk)
     usage=Usage.objects.filter(job=job).first()
     if usage is None or usage.simulated: return None
     if job.state!='failed': raise ValidationError('Only a failed job can be absorbed; a succeeded or pending job keeps its charge.')
