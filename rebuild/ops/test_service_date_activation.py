@@ -3,6 +3,7 @@ import ast
 import importlib.util
 from pathlib import Path
 import subprocess
+import sys
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -121,8 +122,12 @@ class AllowedPaths(unittest.TestCase):
         if subprocess.run(['git', '-C', str(ROOT), 'cat-file', '-e', activator.BASELINE + '^{commit}'], capture_output=True).returncode:
             self.skipTest('Running-release commit is not available in this checkout (shallow clone).')
         changed = set(subprocess.check_output(['git', '-C', str(ROOT), 'diff', '--name-only', activator.BASELINE, 'HEAD'], text=True).split())
+        # Scoped to the directories this activation adds files to. A bare 'docs' also sweeps up
+        # docs/preflight-reports/, which is untracked by design and which the act's own
+        # retained_reports() sanctions — two guards in one act must not disagree about the same files.
         changed |= set(subprocess.check_output(['git', '-C', str(ROOT), 'ls-files', '--others', '--exclude-standard',
-                                                '--', 'scripts', 'rebuild/ops', 'docs'], text=True).split())
+                                                '--', 'scripts', 'rebuild/ops', 'rebuild/core',
+                                                'docs/foundation/mutations', 'docs/rebuild'], text=True).split())
         self.assertEqual(sorted(changed - activator.ALLOWED), [])
 
     def test_the_activation_declares_its_own_parts(self):
@@ -134,3 +139,45 @@ class AllowedPaths(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TheNarrowRoleWrapperAdmitsTheImportAndNothingElse(unittest.TestCase):
+    """The FY2027 import runs through with_db_role.py so it is not the one write using the superuser."""
+
+    def run_wrapper(self, command):
+        import json as json_module
+        import os
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            credentials = root / 'roles.json'
+            credentials.write_text(json_module.dumps({'database': 'quillmd_fresh', 'roles': {
+                'migrator': {'name': 'synthetic_migrator', 'password': 'synthetic'},
+                'backup': {'name': 'synthetic_backup', 'password': 'synthetic'}}}))
+            credentials.chmod(0o600)
+            source = root / 'source'
+            source.mkdir()
+            (source / 'manage.py').write_text('import sys\nprint("REACHED", *sys.argv[1:])\n')
+            return subprocess.run([sys.executable, str(ROOT / 'rebuild/ops/with_db_role.py'),
+                                   '--credentials', str(credentials), '--source', str(source),
+                                   '--role', 'migrator', '--', *command],
+                                  capture_output=True, text=True, timeout=60, env=dict(os.environ))
+
+    def test_the_verified_terminology_import_is_admitted(self):
+        result = self.run_wrapper(['import_terminology', '--system', 'ICD-10-CM'])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('REACHED import_terminology --system ICD-10-CM', result.stdout)
+
+    def test_the_migration_commands_still_work(self):
+        self.assertIn('REACHED migrate', self.run_wrapper(['migrate', 'core']).stdout)
+
+    def test_a_worker_or_provider_command_is_still_refused(self):
+        for command in (['worker'], ['shell'], ['seed_private'], ['verify_live'], ['runserver']):
+            with self.subTest(command=command[0]):
+                result = self.run_wrapper(command)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotIn('REACHED', result.stdout)
+
+    def test_the_allow_list_is_exactly_these_four(self):
+        source = (ROOT / 'rebuild/ops/with_db_role.py').read_text()
+        self.assertIn("('migrate', 'showmigrations', 'check', 'import_terminology')", source)

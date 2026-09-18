@@ -36,6 +36,9 @@ Database. Migration 0014 creates no model, so Django's post-migrate bookkeeping 
 The whole delta:
 
 - `core_encounter.service_date`, `date`, NOT NULL, **no default**, added at the end of the table.
+- The backfill derives each date from that row's own `created_at` in **UTC, spelled out in the
+  migration** rather than read from `TIME_ZONE`, so eleven irreversible clinical dates do not depend
+  on a setting a later change could move.
 - Exactly **11** encounter rows gain a value. Every one of them was recorded on **2026-09-17 UTC**, so after the act
   `SELECT service_date, count(*) FROM core_encounter GROUP BY 1` must read exactly `2026-09-17=11`, and
   `service_date <> (created_at AT TIME ZONE 'UTC')::date` must match **0** rows.
@@ -72,7 +75,7 @@ the release line, byte-compared before and after, and the act refuses if anythin
 Preconditions the activator refuses without: a merged PR whose merge commit is the target, a full citation on that
 commit, the services running the baseline synthetic-only, a plaintext-free restore proof covering the current row
 count, no queued or running job, schema history through 0013 only, and the pinned migration bytes
-(`198da2a8ee94d5c4e2ee392b3bd98ccd7f08dacb10b5ba730c2b2e84e27befa4`) carrying exactly three operations in order:
+(`c582e46c97fad3f3b9f9b3264782c5977c0ab853c3b6915f7ca08a586f9d11d2`) carrying exactly three operations in order:
 `AddField`, `RunPython(adopt_recorded_date)`, `AlterField`.
 
 **Reversibility.** Reversing the migration drops the column, so the backfilled dates are not recoverable by re-running

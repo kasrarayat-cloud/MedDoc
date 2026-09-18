@@ -5,15 +5,23 @@ one in effect on the date of service or discharge. Existing encounters keep the
 date they were recorded on, which is the only service date this system has ever
 held for them; nothing is invented and no encounter row is removed.
 """
+from datetime import timezone as utc_only
+
 from django.db import migrations, models
-from django.utils import timezone
 
 
 def adopt_recorded_date(apps, schema_editor):
+    """UTC deliberately, and spelled out rather than taken from settings.
+
+    Reading TIME_ZONE here would bind eleven irreversible clinical dates to a setting that can be
+    changed later by someone with no idea this migration existed. The stored timestamps are UTC;
+    the date that is derived from them is the UTC date, whatever the project is configured to
+    display.
+    """
     Encounter = apps.get_model('core', 'Encounter')
     for encounter in Encounter.objects.filter(service_date__isnull=True).only('id', 'created_at').iterator():
         Encounter.objects.filter(pk=encounter.pk).update(
-            service_date=timezone.localtime(encounter.created_at).date())
+            service_date=encounter.created_at.astimezone(utc_only.utc).date())
 
 
 def keep_the_dates(apps, schema_editor):

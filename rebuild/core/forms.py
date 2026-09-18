@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.utils import timezone
-from .models import User, Department, Patient, TemplateVersion, Membership
+from .models import User, Department, Patient, TemplateVersion, Membership, latest_service_date
 from .security import departments
 
 class LoginForm(forms.Form):
@@ -34,7 +34,7 @@ class EncounterForm(ScopedForm):
     patient=forms.ModelChoiceField(queryset=Patient.objects.none())
     template_version=forms.ModelChoiceField(queryset=TemplateVersion.objects.none(),label='Template and mapping version')
     notes=forms.CharField(widget=forms.Textarea(attrs={'rows':9}),max_length=50000,help_text='Record documented facts only. All answers remain subject to clinician review.')
-    service_date=forms.DateField(label='Date of service or discharge',widget=forms.DateInput(attrs={'type':'date'}),help_text='Diagnosis codes are validated against the ICD-10-CM release in effect on this date, not the date you write the note. It cannot be changed afterwards.')
+    service_date=forms.DateField(label='Date of service or discharge',widget=forms.DateInput(attrs={'type':'date'}),help_text='The date the service was provided, in your local time. Diagnosis codes are validated against the ICD-10-CM release in effect on that date, not the date you write the note. Check it if your clinic is not on UTC; it cannot be changed afterwards.')
     synthetic_only=forms.BooleanField(label='These are synthetic clinical notes.')
     def __init__(self,*args,user,**kwargs):
         super().__init__(*args,user=user,**kwargs)
@@ -43,7 +43,7 @@ class EncounterForm(ScopedForm):
         self.fields['service_date'].initial=timezone.localdate()
     def clean_service_date(self):
         service_date=self.cleaned_data['service_date']
-        if service_date>timezone.localdate(): raise forms.ValidationError('The date of service or discharge cannot be in the future.')
+        if service_date>latest_service_date(): raise forms.ValidationError('The date of service or discharge cannot be in the future.')
         return service_date
     def clean(self):
         data=super().clean()

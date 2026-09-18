@@ -6,15 +6,18 @@ written, coded and corrected after the visit, so selecting by today's date
 silently applies the wrong fiscal year to any encounter coded across a
 boundary — and, once the last loaded release expires, silently returns nothing.
 """
-from datetime import date
+from datetime import date, timedelta
 from unittest.mock import patch
 
+from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from core.coding import applicable_releases, suggest
+from core.coding import applicable_releases, cpt_licensed, suggest
+from core.context import integration_status
+from core.forms import EncounterForm
 from core.management.commands.import_terminology import save_release
-from core.models import AuditEvent, Code, CodeSet, CodeSuggestion, Encounter
+from core.models import AuditEvent, Code, CodeSet, CodeSuggestion, Encounter, latest_service_date
 from core.tests.test_security import SyntheticFixture
 
 FY26 = dict(system='ICD-10-CM', version='FY2026-April', effective_from=date(2026, 4, 1),
@@ -159,3 +162,99 @@ class ANewFiscalYearIsAddedBesideItsPredecessor(TestCase):
         self.assertEqual(first.effective_until, date(2026, 9, 30))
         self.assertEqual(second.effective_from, date(2026, 10, 1))
         self.assertEqual(AuditEvent.objects.filter(action='terminology.import').count(), 2)
+
+
+@override_settings(AI_MODE='fixture', CPT_LICENSE_ID='', CPT_LICENSE_EXPIRY='',
+                   STORAGES={'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+                             'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
+class WhatTheRefutationPassFound(SyntheticFixture, TestCase):
+    """Each test here is a defect a refutation lens demonstrated on the finished diff."""
+
+    def setUp(self):
+        self.user, _org, self.department, _patient, _template, self.encounter, _blob = self.make_scope('refuted')
+        save_release({'M25.532': 'Synthetic wrist description, FY2026 wording',
+                      'M25.53': 'Synthetic wrist description, shorter code',
+                      'M25': 'Synthetic joint disorder, category code'}, dict(FY26))
+        self.client.force_login(self.user)
+
+    def code_with_notes(self, notes, service_date=date(2026, 9, 30)):
+        Encounter.objects.filter(pk=self.encounter.pk).update(notes=notes, service_date=service_date)
+        CodeSuggestion.objects.filter(encounter=self.encounter).delete()
+        self.encounter.refresh_from_db()
+        return suggest(self.encounter, self.user)
+
+    def test_a_code_that_ends_a_sentence_is_still_documented(self):
+        """The trailing dot of a sentence is punctuation, not part of the code."""
+        for notes in ('Assessment: synthetic finding documented as M25.532.',
+                      'Assessment: synthetic finding documented as M25.532',
+                      'Assessment: synthetic finding documented as M25.532, and more.'):
+            with self.subTest(notes=notes):
+                result = self.code_with_notes(notes)
+                self.assertEqual(result.count, 1)
+                self.assertEqual(CodeSuggestion.objects.get(encounter=self.encounter).code, 'M25.532')
+
+    def test_a_category_code_quotes_its_own_line_and_not_the_one_documenting_its_child(self):
+        """The three-character parent is the case that separates the two lookaheads.
+
+        Both 'M25' and 'M25.532' are documented, and the CHILD appears first. A lookahead that only
+        rejects word characters lets the search for 'M25' match inside 'M25.532' — the dot is not a
+        word character — so the category code's suggestion would quote the line documenting the
+        wrist finding: evidence for something the clinician never wrote about that code. Rejecting
+        every following dot instead, as the code did before this pass, drops BOTH codes silently,
+        because each ends its sentence.
+        """
+        result = self.code_with_notes('Assessment: synthetic right wrist finding documented as M25.532.\n'
+                                      'Assessment: synthetic general joint finding documented as M25.')
+        self.assertEqual(result.count, 2)
+        evidence = {s.code: s.evidence for s in CodeSuggestion.objects.filter(encounter=self.encounter)}
+        self.assertIn('right wrist', evidence['M25.532'])
+        self.assertIn('general joint', evidence['M25'])
+        self.assertNotIn('right wrist', evidence['M25'])
+
+    @override_settings(CPT_LICENSE_ID='synthetic-license', CPT_LICENSE_EXPIRY='2099-01-01')
+    def test_a_date_only_a_licensed_cpt_release_covers_is_not_reported_as_nothing_recorded(self):
+        """A message that denies a suggestion sitting on the same page is worse than no message."""
+        save_release({'99213': 'Synthetic office visit'},
+                     dict(system='CPT', version='CPT-2026', effective_from=date(2026, 1, 1),
+                          effective_until=date(2026, 3, 31), source_url='https://example.com/licensed',
+                          sha256='d' * 64, license_reference='synthetic-license'))
+        result = self.code_with_notes('Assessment: synthetic visit documented as 99213 in the record.',
+                                      service_date=date(2026, 3, 31))
+        self.assertEqual((result.count, result.covered, result.versions), (1, False, ['CPT CPT-2026']))
+        response = self.client.post(f'/encounters/{self.encounter.pk}/coding/', follow=True)
+        text = ' '.join(str(m) for m in response.context['messages'])
+        self.assertIn('No ICD-10-CM release covers', text)
+        self.assertNotIn('no suggestion was recorded', text)
+        self.assertIn('CPT CPT-2026', text)
+        self.assertEqual(CodeSuggestion.objects.filter(encounter=self.encounter).count(), 1)
+
+    def test_a_date_no_release_at_all_covers_still_says_nothing_was_recorded(self):
+        self.code_with_notes('Assessment: synthetic finding documented as M25.532.', service_date=date(2026, 3, 31))
+        response = self.client.post(f'/encounters/{self.encounter.pk}/coding/', follow=True)
+        text = ' '.join(str(m) for m in response.context['messages'])
+        self.assertIn('No terminology release covers', text)
+        self.assertIn('nothing was validated and no suggestion was recorded', text)
+
+    def test_a_clinic_one_day_ahead_of_utc_can_record_the_visit_it_just_finished(self):
+        """UTC is the stored zone; real offsets reach UTC+14, so the local date can lead by a day."""
+        form = EncounterForm(user=self.user, data={})
+        self.assertEqual(latest_service_date(), timezone.localdate() + timedelta(days=1))
+        encounter = Encounter(department=self.encounter.department, patient=self.encounter.patient,
+                              template_version=self.encounter.template_version, created_by=self.user,
+                              notes='Synthetic', service_date=timezone.localdate() + timedelta(days=1))
+        encounter.clean()
+        encounter.service_date = timezone.localdate() + timedelta(days=2)
+        with self.assertRaises(ValidationError):
+            encounter.clean()
+        self.assertIn('local time', form.fields['service_date'].help_text)
+
+    @override_settings(CPT_LICENSE_ID='synthetic-license', CPT_LICENSE_EXPIRY='2020-01-01')
+    def test_an_expired_cpt_licence_is_not_reported_as_configured(self):
+        status = {row['name']: row['status'] for row in integration_status()}
+        self.assertEqual(status['CPT terminology'], 'License expired')
+        self.assertFalse(cpt_licensed())
+
+    @override_settings(CPT_LICENSE_ID='', CPT_LICENSE_EXPIRY='')
+    def test_an_absent_cpt_licence_still_reports_license_required(self):
+        self.assertEqual({row['name']: row['status'] for row in integration_status()}['CPT terminology'],
+                         'License required')

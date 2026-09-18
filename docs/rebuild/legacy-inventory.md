@@ -15,9 +15,14 @@ contact details.
 
 What is actually true, and the distinction the sentence missed:
 
-- **The original application — its source, its build images and its
-  scheduled job — is gone.** It does not run, and no current service loads a
-  line of it.
+- **The original application's source is gone from the shared tree and from
+  `main`, along with its build images and its scheduled job.** It does not run,
+  and no current service loads a line of it. ⚠️ **It is NOT gone from this
+  disk:** nineteen other git worktrees under `/opt/meddoc-pro` still carry a
+  full `apps/transcribe-md` checkout — other sessions' working trees, not this
+  session's to reap. The distinction matters, because "the source is gone" and
+  "the source is in nineteen places" lead to different answers about what a disk
+  image of this host would contain.
 - **Three data services it used are still running, and one of them holds
   genuine business records.** They are not remnants of code; they are where the
   original data lives.
@@ -28,8 +33,8 @@ What is actually true, and the distinction the sentence missed:
 
 | What | State | Evidence |
 | --- | --- | --- |
-| Application source `apps/transcribe-md`, `packages/{ai,auth,db,types}` | **absent** | `ls apps/` returns `marketing` only; `ls packages/` returns `shared` only |
-| 19 pinned obsolete source paths | **all absent** | `docs/rebuild/obsolete-source-manifest.json`, re-checked path by path |
+| Application source `apps/transcribe-md`, `packages/{ai,auth,db,types}` | **absent from the shared tree and from `main`** | `ls apps/` returns `marketing` only; `ls packages/` returns `shared` only. **Present in 19 other worktrees**, counted with `git worktree list` + a test for `apps/transcribe-md` |
+| 19 pinned obsolete source paths | **all absent from the shared tree** | `docs/rebuild/obsolete-source-manifest.json`, re-checked path by path. They survive inside the 19 worktrees above |
 | Nightly 02:00 cron entry for the old stack | **absent** | crontab read; the line is gone |
 | 85 obsolete images across 104 tags | **removed 2026-09-17**, ~28.27 GiB freed | `docs/rebuild/obsolete-image-cleanup-result.json` |
 | Application containers `transcribe-md`, `transcribe-md-worker`, `meddoc-pro` | **not running** | `docker ps` lists neither; `pro.quillmd.com` answers 410 by design |
@@ -72,14 +77,19 @@ rebuild's own document store is separate and current:
 mail items, 4 proofs**, all synthetic.
 
 **No original user template was deleted by any cleanup in this programme**, and
-none is recoverable from MinIO because none was there to begin with.
+none is recoverable from MinIO because none was there to begin with. The
+committed E2E fixtures under `apps/transcribe-md/tests/e2e/fixtures/` left the
+shared tree with the source and, like the source, still exist in the 19 other
+worktrees.
 
 ## 5. Current rebuild files
 
 `/opt/meddoc-pro/rebuild` — Django 5.2, three services on 127.0.0.1:9130/9131,
 database `quillmd_fresh` in `quillmd-fresh-postgres`, private state on the LUKS2
-volume. Verified: all three live processes run from `/opt/meddoc-pro/rebuild`
-(`ps -eo args`), and both HTTP surfaces answer.
+volume. Verified: the **three services** — six processes, all owned by `quillmd-app`
+rather than by the operator account — run from `/opt/meddoc-pro/rebuild`
+(`ps -eo user,args`: two gunicorn masters with three workers between them, plus
+`manage.py worker`), and both HTTP surfaces answer.
 
 ## 6. Historical evidence — keep
 
@@ -94,7 +104,7 @@ volume. Verified: all three live processes run from `/opt/meddoc-pro/rebuild`
 | Question | Answer | How it was checked |
 | --- | --- | --- |
 | Does any running service execute original application code? | **No** | the three live processes are `gunicorn quillmd.wsgi` ×2 and `manage.py worker`, all from `/opt/meddoc-pro/rebuild` |
-| Does the rebuild read the `meddoc` database? | **No** | it connects to `quillmd_fresh` on port 55438; `import_terminology` and the settings both refuse a database whose name does not start with `quillmd_` |
+| Does the rebuild read the `meddoc` database? | **No** | it connects to `quillmd_fresh` on port 55438 — a different server from the legacy stack's. ⚠️ The guard that refuses a non-`quillmd_` database name is in `import_terminology` **only**; `settings.py` reads `QUILLMD_DB_NAME` without validating it, so the separation rests on configuration and on the port, not on a settings-level assertion |
 | Does the rebuild use MinIO or the legacy Redis? | **No** | private storage is a filesystem path on the encrypted volume; the job queue is in PostgreSQL |
 | Does marketing depend on the legacy database? | **No** | no DB env, no connection; the waitlist is a link to the app URL |
 | Does the ingress route anything to the old app? | **No** | `pro.quillmd.com` answers **410 Gone** deliberately; the app hosts answer the maintenance surface |
@@ -113,7 +123,7 @@ cleanup, which covered source and images only.
 | `meddoc-b017-segment-live1_qa_pgdata`, `meddoc-durable-admission-qa_qa_minio` | 72.23 MB, 22.44 kB | unlinked QA leftovers |
 | `meddoc-pro-db-migrate:{latest,qa}`, `meddoc-override-probe:audit-2026-08-17`, `meddoc-pro-e2echeck-transcribe-md:latest` | ~13.8 GB | images not covered by the image cleanup manifest |
 | `node_modules`, `.local` | 1.6 GB, 3.9 GB | build artefacts of the retired stack |
-| 22 additional git worktrees under `.worktrees` and the repo root | 4.8 GB | other sessions' working trees; not this session's to reap |
+| 22 additional git worktrees under `.worktrees` and the repo root | **9.0 GB** (`.worktrees` alone is 4.8 GB; the 19 at the repo root add ~4.2 GB) | other sessions' working trees; not this session's to reap. These are also where the original application's source still lives |
 
 Disk at the time of writing: **236 GB used of 296 GB, 48 GB free (84%)**. None
 of the above is urgent, and none of it is removable without an owner decision on

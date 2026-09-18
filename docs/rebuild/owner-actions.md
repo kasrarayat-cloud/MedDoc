@@ -29,11 +29,12 @@ third decides whether it arrived intact, and the fourth unpacks it only if it di
     $expected = 'B270C982864CB42D0BDB13AC64265B29E53F36BD5EFD3CE45D45B7B862F03A72'
     $actual = (Get-FileHash "$dest\quillmd-word-review-20260918.zip" -Algorithm SHA256).Hash
     $size = (Get-Item "$dest\quillmd-word-review-20260918.zip").Length
-    if ($actual -eq $expected -and $size -eq 227269) { "ARCHIVE VERIFIED" } else { "MISMATCH - do not open; tell engineering. actual=$actual size=$size" }
+    if ($actual -eq $expected -and $size -eq 227269) {
+        Expand-Archive "$dest\quillmd-word-review-20260918.zip" -DestinationPath "$dest\quillmd-word-review-20260918"
+        "ARCHIVE VERIFIED AND UNPACKED"
+    } else { "MISMATCH - do not open; tell engineering. actual=$actual size=$size" }
 
-    Expand-Archive "$dest\quillmd-word-review-20260918.zip" -DestinationPath "$dest\quillmd-word-review-20260918"
-
-Expected: `ARCHIVE VERIFIED`, from **227,269 bytes** hashing to that value. The checksum was re-verified on the host on 2026-09-18
+Expected: `ARCHIVE VERIFIED AND UNPACKED`, from **227,269 bytes** hashing to that value. ⚠️ The unpack is **inside** the check on purpose — an earlier draft left it outside, so a mismatched archive printed the warning and then unpacked anyway. The checksum was re-verified on the host on 2026-09-18
 (`sha256sum` on `rebuild/.runtime/word-review-package/quillmd-word-review-20260918.zip`). If the comparison fails, the file was altered or
 truncated in transit — do not open it.
 
@@ -64,9 +65,16 @@ trimming reproduced the intended value. The two checksums below were then comput
     $v = (Get-Clipboard -Raw).Trim()
     $sha = [System.Security.Cryptography.SHA256]::Create()
     $h = -join ($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($v)) | ForEach-Object { $_.ToString('x2') })
-    if ($h -eq '46cee981df24625792ac99c542aa53f0a9853eaf5cecb9c0075e4d1e1c041400') { "PASSPHRASE VERIFIED - $($v.Length) characters" } else { "MISMATCH - do not store; tell engineering" }
+    if ($h -eq '46cee981df24625792ac99c542aa53f0a9853eaf5cecb9c0075e4d1e1c041400') {
+        Set-Clipboard -Value $v
+        "PASSPHRASE VERIFIED - $($v.Length) characters - clipboard now holds exactly the checked value"
+    } else { Set-Clipboard -Value ' '; "MISMATCH - do not store; tell engineering" }
 
-Expected: `PASSPHRASE VERIFIED - 48 characters`. Paste the clipboard into a new vault item, then clear it with `Set-Clipboard -Value $null`.
+Expected: `PASSPHRASE VERIFIED - 48 characters - clipboard now holds exactly the checked value`. Paste into a new vault item,
+then clear the clipboard with `Set-Clipboard -Value ' '`.
+
+⚠️ **The re-set is the point.** The checksum is computed over the TRIMMED value, so the clipboard must be put back to that
+same trimmed value before you paste — otherwise you verify one string and store another.
 
 ### 2b. The backup encryption key
 
@@ -75,9 +83,17 @@ Expected: `PASSPHRASE VERIFIED - 48 characters`. Paste the clipboard into a new 
     $v = (Get-Clipboard -Raw).Trim()
     $sha = [System.Security.Cryptography.SHA256]::Create()
     $h = -join ($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($v)) | ForEach-Object { $_.ToString('x2') })
-    if ($h -eq 'cf69c55e4c288499e6c54c010b726bb9c7241be823bc8c15694a73740f53cff6') { "BACKUP KEY VERIFIED - $($v.Length) characters" } else { "MISMATCH - do not store; tell engineering" }
+    if ($h -eq 'cf69c55e4c288499e6c54c010b726bb9c7241be823bc8c15694a73740f53cff6') {
+        Set-Clipboard -Value $v
+        "BACKUP KEY VERIFIED - $($v.Length) characters - clipboard now holds exactly the checked value"
+    } else { Set-Clipboard -Value ' '; "MISMATCH - do not store; tell engineering" }
 
-Expected: `BACKUP KEY VERIFIED - 44 characters`. Store it as a **separate** vault item, then clear the clipboard the same way.
+Expected: `BACKUP KEY VERIFIED - 44 characters - clipboard now holds exactly the checked value`. Store it as a **separate**
+vault item, then clear the clipboard the same way.
+
+⚠️ **There are TWO keys in that directory.** `fresh-backup-current-20260917.key` is the live one and the command above names
+it. `fresh-backup-20260917T165751Z-eccb5538.key` is its superseded predecessor, still present because the backups it opens
+are still on disk; take custody of it as a third vault item if you want those older backups to remain restorable.
 
 ⚠️ **The trim is not cosmetic.** The key file on disk is 45 bytes: a 44-character Fernet key followed by a newline, which the backup tool
 strips when it loads it. A value stored with that newline attached will not open a backup. The published checksum is of the trimmed
@@ -101,6 +117,10 @@ includes it — is the same act with an extra step. To answer *is this credentia
 so that no branch of it can emit a value:
 
     cd /opt/meddoc-pro/rebuild && .venv/bin/python manage.py configuration_status
+
+⚠️ **Available from the release that carries this document, not before.** On the release running today it answers
+`Unknown command: 'configuration_status'`; it ships with the activation declared in
+`docs/foundation/mutations/20260918-quillmd-service-date.md`.
 
 It prints, per setting, `absent`, `present`, `present, recognised shape` or `present, UNRECOGNISED shape`, plus the release gates. Its tests
 assert that a configured secret never appears in the output (`core/tests/test_configuration_status.py`).

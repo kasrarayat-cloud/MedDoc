@@ -24,8 +24,11 @@ def main():
     source = Path(args.source).absolute()
     require(source.resolve() == source and (source / 'manage.py').is_file(), 'Verified source root required.')
     command = args.command[1:] if args.command[:1] == ['--'] else args.command
-    require(command and command[0] in ('migrate', 'showmigrations', 'check'),
-            'Only migration/check management commands are allowed; no worker or provider action.')
+    # import_terminology writes tens of thousands of rows and makes no provider call: it reads a
+    # local file whose hash it verifies. Without it here, the largest write in the programme would
+    # be the only one running as the database superuser.
+    require(command and command[0] in ('migrate', 'showmigrations', 'check', 'import_terminology'),
+            'Only migration, check and verified terminology import commands are allowed; no worker or provider action.')
     role = data['roles'][args.role]
     env = dict(os.environ, QUILLMD_DB_NAME='quillmd_fresh', QUILLMD_DB_USER=role['name'],
                QUILLMD_DB_PASSWORD=role['password'], QUILLMD_DB_HOST='127.0.0.1', QUILLMD_DB_PORT='55438')

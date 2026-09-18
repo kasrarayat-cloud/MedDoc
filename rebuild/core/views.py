@@ -646,10 +646,15 @@ def coding(request,pk):
     e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
     membership(request.user,e.department)
     result=suggest(e,request.user)
+    served=e.service_date.strftime('%d %B %Y')
     if result.covered:
-        messages.info(request,f'{result.count} new suggestions from explicitly documented codes, validated against {", ".join(result.versions)} for the {e.service_date:%d %B %Y} date of service. Diagnosis inference is not enabled. CPT requires a licensed current feed.')
+        messages.info(request,f'{result.count} new suggestions from explicitly documented codes, validated against {", ".join(result.versions)} for the {served} date of service. Diagnosis inference is not enabled. CPT requires a licensed current feed.')
+    elif result.versions:
+        # A licensed CPT release can answer for a date no diagnosis release covers. Saying "nothing
+        # was recorded" here would deny suggestions sitting on the page underneath the message.
+        messages.warning(request,f'No ICD-10-CM release covers the {served} date of service, so no diagnosis code was validated. {result.count} new suggestions came from {", ".join(result.versions)}. Import the diagnosis release in effect for that date.')
     else:
-        messages.warning(request,f'No ICD-10-CM release covers the {e.service_date:%d %B %Y} date of service, so nothing was validated and no suggestion was recorded. Import the release in effect for that date.')
+        messages.warning(request,f'No terminology release covers the {served} date of service, so nothing was validated and no suggestion was recorded. Import the release in effect for that date.')
     return redirect('/encounters/'+str(pk)+'/?tab=coding')
 
 @require_POST

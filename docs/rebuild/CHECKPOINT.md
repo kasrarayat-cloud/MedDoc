@@ -331,13 +331,20 @@ both HTTP surfaces reported `5f673a3b2cc5c99d68f08f34fba43b4883403583`, and
   twelve days out. `Encounter.service_date` now carries the date of service or
   discharge, migration 0014 backfills existing encounters from the date they
   were recorded, and `applicable_releases(encounter)` is the single rule both
-  the suggestion and acceptance paths read. FY2027 (74,879 codes) is imported
-  beside FY2026-April (74,719), neither replacing nor rewriting it. CPT stays
-  disabled.
+  the suggestion and acceptance paths read. FY2027 (74,879 codes) is verified and
+  declared for import beside FY2026-April (74,719), neither replacing nor
+  rewriting it. CPT stays disabled.
 
-Declared acts: `docs/foundation/mutations/20260918-quillmd-service-date.md`
-(migration 0014 and the release advance) and
-`docs/foundation/mutations/20260918-quillmd-icd10cm-fy2027.md` (the import).
+⚠️ **NOTHING IN THIS SECTION HAS REACHED THE RUNNING SYSTEM YET.** Every repair
+above is built, tested and declared on a branch. The live release is still
+`5f673a3b`: one code release, 74,719 codes, schema through 0013, no
+`service_date` column, and `manage.py configuration_status` answers
+`Unknown command`. Two declared acts are pending —
+`docs/foundation/mutations/20260918-quillmd-service-date.md` (migration 0014 and
+the release advance) and
+`docs/foundation/mutations/20260918-quillmd-icd10cm-fy2027.md` (the import) —
+and **the 1 October defect stays live until the second one runs.** This
+paragraph is replaced with the judged result, not before.
 
 **Still open, unchanged by this pass:** recovery after a host reboot, independent
 key custody, native Word acceptance, the external integrations, and the owner

@@ -7,7 +7,7 @@
 
 The executing form runs only through scripts/run-ruled-mutation.sh with the committed declaration.
 
-Migration 0014 adds one NOT NULL date column to core_encounter, backfills it from each row's own created_at in UTC,
+Migration 0014 adds one NOT NULL date column to core_encounter, backfills it from each row's own created_at in UTC (the migration spells UTC out rather than reading TIME_ZONE),
 and adds one migration-history row. It creates no model, so Django's post-migrate bookkeeping has nothing to add. No
 constraint and no index changes. Every other row, column, constraint and index must be identical, and every encounter
 must end with a service date equal to the UTC date it was recorded on.
@@ -37,7 +37,7 @@ SELF = 'scripts/activate-service-date.py'
 PREVIOUS_MIGRATION = '0013_recording_charge_limit'
 MIGRATION = '0014_encounter_service_date'
 MIGRATION_PATH = 'rebuild/core/migrations/' + MIGRATION + '.py'
-MIGRATION_SHA256 = '198da2a8ee94d5c4e2ee392b3bd98ccd7f08dacb10b5ba730c2b2e84e27befa4'
+MIGRATION_SHA256 = 'c582e46c97fad3f3b9f9b3264782c5977c0ab853c3b6915f7ca08a586f9d11d2'
 TABLE_COUNT = 35
 EXPECTED_ENCOUNTERS = 11
 # Every tracked path that may differ between the running release and the target, so the activation judges the whole tree.
@@ -60,7 +60,8 @@ ALLOWED = {
     'docs/rebuild/CHECKPOINT.md', 'docs/rebuild/backup-restore.md', 'docs/rebuild/legacy-inventory.md',
     'docs/rebuild/owner-actions.md', 'docs/rebuild/patient-data-release-requirements.md',
     'docs/rebuild/storage-encryption.md', 'docs/rebuild/terminology.md',
-    'docs/foundation/mutations/20260918-quillmd-icd10cm-fy2027.md', SELF, DECL,
+    'docs/foundation/mutations/20260918-quillmd-icd10cm-fy2027.md',
+    'docs/foundation/mutations/20260918-quillmd-icd10cm-fy2026-october.md', SELF, DECL,
 }
 # The operations Django generated, in order. The file itself is pinned by SHA-256 above.
 OPERATIONS = [('AddField', 'encounter', 'service_date'), ('RunPython', None, 'adopt_recorded_date'),
@@ -111,7 +112,13 @@ def operation_name(call):
 
 
 def validate_migration(source):
-    """The reviewed migration exactly: pinned bytes, a docstring, the two backfill functions, three operations in order."""
+    """The reviewed migration exactly: pinned bytes, a docstring, the two backfill functions, three operations in order.
+
+    ⚠️ The STRUCTURE is checked independently of the byte pin; what the backfill WRITES is not. A
+    mutated body that writes today's date, or a fixed date, parses to the same three operations and
+    is caught only by the pin and afterwards by check_backfill(). Do not read this function as
+    proof that the values are right — that proof is check_backfill's.
+    """
     data = source if isinstance(source, bytes) else source.encode()
     require(sha(data) == MIGRATION_SHA256, 'Migration differs from the reviewed bytes.')
     tree = ast.parse(data)
@@ -248,10 +255,10 @@ def main():
     require(len(names) == TABLE_COUNT, 'Expected the current tables.')
     live_rows = sum(int(output(PSQL + [f'SELECT count(*) FROM "{t}"'])) for t in names)
     require(live_rows == backup.get('row_count'), 'The restore proof does not cover the current rows; take a fresh backup first.')
-    # The column is NOT NULL with no default, so every existing row must be reachable by the backfill.
+    # The column is NOT NULL with no default, so a row the backfill misses fails the ALTER and rolls
+    # the whole migration back. `created_at` is auto_now_add and NOT NULL, so a check for nulls there
+    # could not fail and is deliberately not written: a control that cannot fail proves nothing.
     require(output(PSQL + ['SELECT count(*) FROM core_encounter']) == str(EXPECTED_ENCOUNTERS), 'Unexpected encounter count.')
-    require(output(PSQL + ['SELECT count(*) FROM core_encounter WHERE created_at IS NULL']) == '0',
-            'An encounter has no recorded time to take its service date from.')
     protected = previous.protected()
     retained = word.retained_reports()
     env_before = word.checked_file(APP / '.env', private=True)

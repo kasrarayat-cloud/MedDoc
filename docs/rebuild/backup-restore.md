@@ -38,25 +38,37 @@ References: [PostgreSQL snapshot synchronization](https://www.postgresql.org/doc
 
 ## The restore that failed first, diagnosed rather than retried
 
-**2026-09-18.** The first restore attempt of `20260917T174418Z-220e52ba` failed
-and an identical retry succeeded. A retry that works is not a diagnosis, so the
-docker journal for the isolated restore container was read instead:
+**2026-09-18.** A restore of backup `20260918T110842Z-cd2a7006` failed and an
+identical retry succeeded. A retry that works is not a diagnosis, so the failure
+was traced through the records that still exist:
 
-| event | time |
+| record | evidence |
 | --- | --- |
-| restore container created and started | `11:09:07.24Z` |
-| container removed by the tool's own cleanup | `11:09:09.31Z` |
+| `.runtime/restore-checks/restore-417021bdffeac74f/verification.json` | `complete: false`, started `11:09:06.970867Z`, finished `11:09:09.218215Z` — **2.25 seconds**, `container_retained: false` |
+| `.runtime/restore-checks/restore-a2b12ce681fc4aa0/verification.json` | `complete: true`, same backup, started `11:09:29.589447Z`, finished `11:09:41.348696Z` — **11.76 seconds** |
 
-Two seconds is long enough for the container to start and far too short for the
-dump, so the failure was inside `pg_restore`, not in starting the database.
+The successful run needed 11.76 s. The failed one ended after 2.25 s, which is
+long enough to start a container and far too short to restore the dump, so the
+failure was inside `pg_restore` rather than in starting the database.
 
-**Cause: the PostgreSQL entrypoint's initialisation server answers before the
-real server exists.** `docker-entrypoint.sh` starts a temporary server bound to
-the unix socket to run initialisation, then stops it and execs the real
-`postgres`. `pg_isready` cannot tell the two apart. The restore raced that
-handover: it connected to the temporary server, and the shutdown arrived while
-`pg_restore` was running. Nothing in the tool's output said so, because a
-connection that closes mid-restore surfaces as an ordinary restore error.
+⚠️ **What follows is an inference consistent with that evidence, not a log
+reading — and the difference is stated because it matters.** The restore
+container is removed by the tool's own cleanup (`container_retained: false`), so
+its PostgreSQL log no longer exists, and the docker daemon's event buffer has
+since rolled past the window. An earlier draft of this section quoted event
+timestamps and the wrong backup id; both are corrected above against files that
+can still be opened.
+
+**The mechanism, which is checkable in the image:** `docker-entrypoint.sh`
+starts a *temporary* server for initialisation with `-c listen_addresses=''`,
+then stops it and execs the real `postgres`. `pg_isready` cannot tell the two
+apart. A restore that connects during that handover meets a shutdown mid-dump,
+and a connection that closes mid-restore surfaces as an ordinary restore error
+with nothing naming the race.
+
+**To settle it rather than infer it**, re-run the restore with the container
+retained and read the PostgreSQL log directly. That has not been done, because
+the repair below removes the race in either case.
 
 **Repair.** `ops/backup_restore.py` gained `restore_ready()`, which treats the
 database as ready only when all three hold:
@@ -75,6 +87,8 @@ A regression test simulates the race — `pg_isready` succeeding before the mark
 appears — and asserts that readiness is reached before `pg_restore` is invoked,
 that the failed stage is recorded, and that no raw stderr is kept
 (`ops/test_backup_restore.py`, `RestoreReadinessSurvivesThePostgresInitRace`).
+**This test does not depend on the diagnosis being right**: it pins the ordering
+that makes the race impossible, whatever caused this particular failure.
 
 ## Verified exercise and preserved evidence
 
@@ -91,7 +105,7 @@ Backup `20260917T165751Z-eccb5538` captured source commit
 - The second restore explicitly initialized host SCRAM authentication. A first
   role-authentication probe exposed PostgreSQL initdb's localhost trust default;
   that restore-test setup was repaired, recreated and retested successfully.
-- 12 focused tool tests cover ciphertext tampering, wrong keys, wrong object
+- 12 focused tool tests (18 as of 2026-09-18) cover ciphertext tampering, wrong keys, wrong object
   substitution, traversal/symlinks, key modes, incomplete backups, duplicate paths
   and refusal to delete unrelated restore containers.
 
