@@ -335,6 +335,20 @@ both HTTP surfaces reported `5f673a3b2cc5c99d68f08f34fba43b4883403583`, and
   declared for import beside FY2026-April (74,719), neither replacing nor
   rewriting it. CPT stays disabled.
 
+### The first activation attempt was REFUSED by the database, 2026-09-18T15:37:47Z
+
+PR #1199 merged as `475a5925` with a full citation, and the declared activation then failed inside migration 0014:
+`encounter_scope`, a trigger on `core_encounter`, refuses **any** update to a finalized document, and six of the
+eleven encounters are finalized. The migration rolled back whole — no column, no history row, 11 encounters
+unchanged — and the activator failed closed with the three services stopped.
+
+**No test had a finalized encounter in it.** Every fixture was a draft, so the migration was proved against a
+universe the guard had no reason to refuse. That is the same shape as a control that passes vacuously, and it is
+why the retry ships a `TransactionTestCase` carrying a finalized document.
+
+Permanent main was advanced to `475a5925` before the migration ran and stays there; the retry is declared at
+`docs/foundation/mutations/20260918-quillmd-service-date-retry.md` and re-baselines onto it.
+
 ⚠️ **NOTHING IN THIS SECTION HAS REACHED THE RUNNING SYSTEM YET.** Every repair
 above is built, tested and declared on a branch. The live release is still
 `5f673a3b`: one code release, 74,719 codes, schema through 0013, no

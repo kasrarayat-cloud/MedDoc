@@ -7,10 +7,11 @@ silently applies the wrong fiscal year to any encounter coded across a
 boundary — and, once the last loaded release expires, silently returns nothing.
 """
 from datetime import date, timedelta
+from pathlib import Path
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
-from django.test import TestCase, override_settings
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
 from core.coding import applicable_releases, cpt_licensed, suggest
@@ -258,3 +259,57 @@ class WhatTheRefutationPassFound(SyntheticFixture, TestCase):
     def test_an_absent_cpt_licence_still_reports_license_required(self):
         self.assertEqual({row['name']: row['status'] for row in integration_status()}['CPT terminology'],
                          'License required')
+
+
+@override_settings(AI_MODE='fixture')
+class TheBackfillMustReachAFinalizedDocument(SyntheticFixture, TransactionTestCase):
+    # TransactionTestCase, not TestCase, and that is load-bearing: a row written earlier in the SAME transaction leaves
+    # pending trigger events and PostgreSQL then refuses `ALTER TABLE ... DISABLE TRIGGER` outright. The migration writes
+    # no rows before it suspends the guard, so this class must not either, or the test would exercise a shape the
+    # migration never meets and fail for a reason production would not have.
+    """The first attempt at migration 0014 died here, and no test had a finalized encounter in it.
+
+    `encounter_scope` refuses every update to a finalized document. Six of the eleven production encounters are
+    finalized, so the backfill could not reach them — while every test fixture was a draft, and the migration test
+    therefore passed without exercising the case that mattered.
+    """
+
+    def setUp(self):
+        self.user, _org, _dept, _patient, _template, self.encounter, _blob = self.make_scope('finalized')
+        Encounter.objects.filter(pk=self.encounter.pk).update(status='finalized')
+
+    def test_the_guard_still_refuses_an_ordinary_update_to_a_finalized_document(self):
+        from django.db import IntegrityError, InternalError, ProgrammingError, transaction
+        with self.assertRaises((IntegrityError, InternalError, ProgrammingError, Exception)) as caught:
+            with transaction.atomic():
+                Encounter.objects.filter(pk=self.encounter.pk).update(notes='edited after finalization')
+        self.assertIn('immutable', str(caught.exception).lower())
+        self.encounter.refresh_from_db()
+        self.assertNotEqual(self.encounter.notes, 'edited after finalization')
+
+    def test_suspending_the_guard_for_one_statement_lets_the_backfill_reach_it_and_restores_it(self):
+        """This is exactly what the migration does, and it is the shape that failed in production when it did not."""
+        from django.db import connection, transaction
+        target = date(2026, 5, 4)
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute('ALTER TABLE core_encounter DISABLE TRIGGER encounter_scope')
+            try:
+                Encounter.objects.filter(pk=self.encounter.pk).update(service_date=target)
+            finally:
+                with connection.cursor() as cursor:
+                    cursor.execute('ALTER TABLE core_encounter ENABLE TRIGGER encounter_scope')
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.service_date, target)
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT tgenabled FROM pg_trigger WHERE tgrelid='core_encounter'::regclass "
+                           "AND tgname='encounter_scope'")
+            self.assertEqual(cursor.fetchone()[0], 'O', 'the guard must be enabled again')
+
+    def test_the_migration_suspends_and_restores_the_guard_around_the_backfill(self):
+        source = (Path(__file__).resolve().parents[1] / 'migrations' / '0014_encounter_service_date.py').read_text()
+        self.assertIn('DISABLE TRIGGER encounter_scope', source)
+        self.assertIn('ENABLE TRIGGER encounter_scope', source)
+        self.assertLess(source.index('DISABLE TRIGGER'), source.index('Encounter.objects.filter(pk=encounter.pk)'))
+        self.assertGreater(source.index('ENABLE TRIGGER'), source.index('Encounter.objects.filter(pk=encounter.pk)'))
+        self.assertIn('finally:', source)

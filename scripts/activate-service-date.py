@@ -31,39 +31,20 @@ APP = ROOT / 'rebuild'
 PRIVATE = APP / '.runtime'
 STATE = Path('/var/lib/quillmd')
 HERE = Path(__file__).resolve().parent
-BASELINE = '5f673a3b2cc5c99d68f08f34fba43b4883403583'
-DECL = 'docs/foundation/mutations/20260918-quillmd-service-date.md'
+BASELINE = '475a59259203b04072e35cb9270f39a3b0005906'  # the first attempt advanced main and then failed closed
+DECL = 'docs/foundation/mutations/20260918-quillmd-service-date-retry.md'
 SELF = 'scripts/activate-service-date.py'
 PREVIOUS_MIGRATION = '0013_recording_charge_limit'
 MIGRATION = '0014_encounter_service_date'
 MIGRATION_PATH = 'rebuild/core/migrations/' + MIGRATION + '.py'
-MIGRATION_SHA256 = 'c582e46c97fad3f3b9f9b3264782c5977c0ab853c3b6915f7ca08a586f9d11d2'
+MIGRATION_SHA256 = '2119a159682ea0da03523f80e6dd38f7ac0aab16733101ea6d2a60eb3deda01c'
 TABLE_COUNT = 35
 EXPECTED_ENCOUNTERS = 11
 # Every tracked path that may differ between the running release and the target, so the activation judges the whole tree.
 ALLOWED = {
-    # length bounds: what a recording is charged for, separated from what it is certified to contain
-    'rebuild/core/audio.py', 'rebuild/core/jobs.py', 'rebuild/core/tests/test_recording_limit.py',
-    'rebuild/core/tests/audio_fixtures.py',
-    # the restore readiness repair
-    'rebuild/ops/backup_restore.py', 'rebuild/ops/test_backup_restore.py',
-    # date-of-service release selection
-    'rebuild/core/coding.py', 'rebuild/core/context.py', 'rebuild/core/forms.py', 'rebuild/core/models.py',
-    'rebuild/core/views.py', 'rebuild/ops/with_db_role.py', MIGRATION_PATH,
-    'rebuild/core/management/commands/seed_private.py', 'rebuild/core/management/commands/verify_live.py',
-    'rebuild/templates/encounter_detail.html', 'rebuild/core/tests/test_code_release_dates.py',
-    'rebuild/core/tests/test_billing_boundary_regressions.py', 'rebuild/core/tests/test_billing_policy.py',
-    'rebuild/core/tests/test_provider_dedup_refutation.py', 'rebuild/core/tests/test_refutation.py',
-    'rebuild/core/tests/test_security.py', 'rebuild/core/tests/test_wm_workflow.py', 'rebuild/core/tests/test_workflow.py',
-    'rebuild/ops/test_service_date_activation.py', 'rebuild/ops/test_recording_limit_activation.py',
-    # the non-secret configuration report
-    'rebuild/core/management/commands/configuration_status.py', 'rebuild/core/tests/test_configuration_status.py',
-    # documentation and declarations, including PR #1198's milestone close-out, which merged after the running release
-    'docs/rebuild/CHECKPOINT.md', 'docs/rebuild/backup-restore.md', 'docs/rebuild/legacy-inventory.md',
-    'docs/rebuild/owner-actions.md', 'docs/rebuild/patient-data-release-requirements.md',
-    'docs/rebuild/storage-encryption.md', 'docs/rebuild/terminology.md',
-    'docs/foundation/mutations/20260918-quillmd-icd10cm-fy2027.md',
-    'docs/foundation/mutations/20260918-quillmd-icd10cm-fy2026-october.md', SELF, DECL,
+    # main already carries the rest of this work: the first attempt advanced it before the migration refused.
+    MIGRATION_PATH, 'rebuild/core/tests/test_code_release_dates.py', 'rebuild/ops/test_service_date_activation.py',
+    'docs/rebuild/CHECKPOINT.md', 'docs/rebuild/terminology.md', SELF, DECL,
 }
 # The operations Django generated, in order. The file itself is pinned by SHA-256 above.
 OPERATIONS = [('AddField', 'encounter', 'service_date'), ('RunPython', None, 'adopt_recorded_date'),
@@ -192,12 +173,20 @@ def check_schema(before, after):
     require([row for row in after if (row['table_name'], row['column_name']) != key] == before, 'Existing columns changed beyond the declared one.')
 
 
+def guard_enabled():
+    """'O' = enabled. The migration suspends `encounter_scope` for the backfill statement; if it ever failed to restore
+    it, every finalized clinical document on this system would silently become editable."""
+    return output(PSQL + ["SELECT tgenabled FROM pg_trigger WHERE tgrelid='core_encounter'::regclass "
+                          "AND tgname='encounter_scope'"])
+
+
 def check_backfill():
     """Every encounter keeps the date it was recorded on, in UTC, and none is left without one."""
     require(output(PSQL + ['SELECT count(*) FROM core_encounter']) == str(EXPECTED_ENCOUNTERS), 'The encounter count changed.')
     require(output(PSQL + ['SELECT count(*) FROM core_encounter WHERE service_date IS NULL']) == '0', 'An encounter has no service date.')
     require(output(PSQL + ["SELECT count(*) FROM core_encounter WHERE service_date <> (created_at AT TIME ZONE 'UTC')::date"]) == '0',
             'A service date differs from the UTC date the encounter was recorded on.')
+    require(guard_enabled() == 'O', 'The finalized-document guard was not restored after the backfill.')
 
 
 def retained_unchanged(before, now):
@@ -316,6 +305,8 @@ def main():
                 'Job appeared before stop.')
         old_tables = tables()
         require(old_tables == names, 'Tables changed before the migration.')
+        result['guard_before'] = guard_enabled()
+        require(result['guard_before'] == 'O', 'The finalized-document guard is not enabled before the act.')
         result['schema_before'] = schema()
         result['constraints_before'], result['indexes_before'] = constraints(), indexes()
         result['database_before'] = fingerprints(old_tables, comparable=True)
@@ -344,6 +335,8 @@ def main():
         require(output(PSQL + ["SELECT count(*) FROM django_migrations WHERE app='core' AND name='" + MIGRATION + "'"]) == '1',
                 'Exactly one schema-history row is required.')
         check_backfill()
+        result['guard_after'] = guard_enabled()
+        require(result['guard_after'] == result['guard_before'], 'The finalized-document guard changed state.')
         result['service_dates'] = output(PSQL + [
             "SELECT string_agg(d||'='||n,',' ORDER BY d) FROM (SELECT service_date::text d, count(*)::text n "
             "FROM core_encounter GROUP BY 1) s"])

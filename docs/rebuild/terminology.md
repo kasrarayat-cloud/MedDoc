@@ -90,7 +90,8 @@ with source evidence and clinician acceptance. No diagnosis inference is added.
 below has been downloaded, hashed and parsed with the production parser, and the
 import is declared at
 `docs/foundation/mutations/20260918-quillmd-icd10cm-fy2027.md`. It has **not**
-run: the live database holds one release (`FY2026-April`) and 74,719 codes. Until
+run: the live database holds one release (`FY2026-April`) and 74,719 codes. The activation that must precede it was
+refused by a database guard on its first attempt (see `CHECKPOINT.md`) and is being retried. Until
 it runs, the standing instruction remains — import the verified FY2027 file
 before 1 October 2026, or from that date coding returns nothing for every new
 encounter, with a warning rather than an error.
