@@ -14,6 +14,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / 'scripts/verify-and-reap-fresh-plaintext.py'
 MIGRATE = ROOT / 'scripts/migrate-fresh-storage.py'
+REAP_MERGE = '407720868c9688aa8545d06b94d92fb98d764242'  # PR #1196
 
 
 def load(name, path):
@@ -71,9 +72,11 @@ class DeletionList(unittest.TestCase):
 
     def test_the_storage_act_allows_this_act_as_a_later_rollback_target(self):
         migrate = load('migrate_for_reap', MIGRATE)
-        # The reap merge is the rollback target from now on, so everything it changes since the baseline must be allowed.
-        if not subprocess.run(['git', '-C', str(ROOT), 'cat-file', '-e', migrate.BASELINE + '^{commit}'], capture_output=True).returncode:
-            changed = set(subprocess.check_output(['git', '-C', str(ROOT), 'diff', '--name-only', migrate.BASELINE, 'HEAD'], text=True).split())
+        # The reap merge (PR #1196) is the rollback target from now on, so everything it changes since the baseline must be
+        # allowed. Pinned to that merge: later commits on main carry other changes and are not rollback targets.
+        commits = (migrate.BASELINE, REAP_MERGE)
+        if not any(subprocess.run(['git', '-C', str(ROOT), 'cat-file', '-e', c + '^{commit}'], capture_output=True).returncode for c in commits):
+            changed = set(subprocess.check_output(['git', '-C', str(ROOT), 'diff', '--name-only', *commits], text=True).split())
             self.assertEqual(sorted(changed - migrate.ALLOWED), [])
         self.assertEqual(migrate.ROLLBACK, self.reap.ROLLBACK)
         self.assertIn(self.reap.DECL, migrate.REAP_PATHS)
