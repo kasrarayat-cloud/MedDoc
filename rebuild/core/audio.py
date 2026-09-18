@@ -10,7 +10,8 @@ understate the length and so the charge limit):
                       inside trailing tags too); trailing ID3v1, APEv2 and ID3v2 tags excuse only their own non-frame bytes;
                       other non-frame bytes count at the lowest bitrate seen, and a file that is mostly not frames is refused
   MP4 / M4A           AAC only: every access unit (the larger of stts and stsz, plus fragments) x its frame length, at the
-                      sample rate of the stream's own AudioSpecificConfig, never the container timescale alone
+                      sample rate of the stream's own AudioSpecificConfig, never the container timescale alone; an edit
+                      list that plays longer (repeated or extended edits) counts in full, plus one frame per edit
   WebM / Matroska     Opus only: the sum of every packet's duration from its table of contents (and the block timestamps,
                       if larger); laced blocks, non-Opus audio and blocks before the track list are refused
 
@@ -77,6 +78,8 @@ def wav(data):
         if chunk == b'fmt ':
             if length < 16 or body + 16 > len(data):
                 refuse('WAV format chunk truncated')
+            if fmt is not None:
+                refuse('WAV with more than one format chunk')  # decoders disagree on which one applies
             fmt = struct.unpack('<HHIIHH', data[body:body + 16])
         elif chunk == b'data':
             start, declared = body, length
@@ -164,7 +167,7 @@ def mp3(data):
         position += 10 + size + (10 if header[5] & 0x10 else 0)
     start = position
     end = tags_start(data, start)
-    seconds, frames, before_tags, steps, slowest = Decimal(0), 0, 0, 0, Decimal(0)
+    seconds, frames, before_tags, steps, slowest, strays_in_tags = Decimal(0), 0, 0, 0, Decimal(0), 0
     current, pending = None, []
     # The walk follows a decoder: frames of the stream's layout (samples per frame, sample rate) count wherever they are, junk
     # between them and trailing tags included (ffmpeg plays frames hidden in an APE tag, one frame at a time). A header of
@@ -194,6 +197,8 @@ def mp3(data):
                 continue
             # A decoder's parser starts over whenever a header disagrees with the previous one, so agreement must be consecutive.
             pending = (pending if pending and pending[0][0][1:] == layout else []) + [(frame, position)]
+            if position >= end:
+                strays_in_tags += 1
             if len(pending) >= 3:
                 current = layout
                 for f, at in pending:
@@ -203,6 +208,11 @@ def mp3(data):
     if current is None:
         for f, at in pending:  # a recording too short to establish a layout: its frames still count
             count(f, at)
+    # A decoder plays any real frame it finds, whatever its layout; stray syncs in cover art only fail at the payload, which
+    # is not decoded here. So headers of other layouts inside tags are bounded (a 400 KB PNG cover holds about 55): beyond
+    # that the tags could be hiding audio, and the file is refused.
+    if strays_in_tags > 64:
+        refuse('MP3 whose tags contain audio frames')
     # Recognised trailing tags excuse only their own non-frame bytes. Other bytes before them that are not standard frames
     # (free-format frames, unknown data) could still be decoded, so they are bounded and counted at the lowest bitrate seen.
     uncounted = end - start - before_tags
@@ -279,14 +289,14 @@ def boxes(data, start, end, depth, sink, counter):
 
 
 def mp4(data):
-    tracks, fragments, trex, current = {}, {}, {}, {}
+    tracks, fragments, trex, current, movie = {}, {}, {}, {}, {'timescale': 0}
 
     def sink(kind, body, depth):
         start, end = body
         payload = data[start:end]
         if kind == b'trak':
             current['track'] = {'id': None, 'handler': None, 'timescale': 0, 'stts_seconds_units': 0, 'samples': 0, 'stsz_samples': 0,
-                                'codec': None, 'aac': None, 'end': end}
+                                'codec': None, 'aac': None, 'edit_units': 0, 'edits': 0, 'end': end}
             tracks[start] = current['track']
             return
         track = current.get('track')
@@ -298,6 +308,18 @@ def mp4(data):
             # The media handler (mdia/hdlr) precedes minf; QuickTime files also carry a data handler inside minf, which must
             # not overwrite it.
             track['handler'] = payload[8:12]
+        elif kind == b'mvhd' and len(payload) >= 24:
+            movie['timescale'] = struct.unpack('>I', payload[20:24] if payload[0] == 1 else payload[12:16])[0]
+        elif kind == b'elst' and track is not None and len(payload) >= 8:
+            # A decoder plays each edit in turn and can repeat media, so the edits' total can exceed the samples.
+            count, wide = struct.unpack('>I', payload[4:8])[0], payload[0] == 1
+            size = 20 if wide else 12
+            if count > MAX_ITEMS or 8 + count * size > len(payload):
+                refuse('MP4 edit list invalid')
+            for index in range(count):
+                at = 8 + index * size
+                track['edit_units'] += struct.unpack('>Q' if wide else '>I', payload[at:at + (8 if wide else 4)])[0]
+            track['edits'] += count
         elif kind == b'mdhd' and track is not None and len(payload) >= 24:
             track['timescale'] = struct.unpack('>I', payload[20:24] if payload[0] == 1 else payload[12:16])[0]
         elif kind == b'stsd' and track is not None and len(payload) >= 16:
@@ -363,6 +385,11 @@ def mp4(data):
         seconds = Decimal(samples * frame) / Decimal(rate)
         if track['timescale']:
             seconds = max(seconds, Decimal(units) / Decimal(track['timescale']))
+        if track['edit_units']:
+            if not movie['timescale']:
+                refuse('MP4 edit list without a movie timescale')
+            # Each edit decodes whole access units, so allow one frame per edit (measured: ffmpeg plays 0.0155 s more per edit).
+            seconds = max(seconds, Decimal(track['edit_units']) / Decimal(movie['timescale']) + Decimal(track['edits'] * frame) / Decimal(rate))
         best = max(best, seconds)
     return best
 

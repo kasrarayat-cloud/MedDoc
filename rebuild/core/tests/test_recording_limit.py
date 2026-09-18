@@ -272,6 +272,33 @@ class LegitimateTaggedRecordingsMeasureTheirAudio(SimpleTestCase):
         self.assertEqual(audio.measure(riff(chunk(b'data', body[:-1], pad=False), cover)), Decimal('30.000'))  # 29.999875 s, not +12.5 s of cover
         self.assertLessEqual(audio.measure(riff(chunk(b'data', body), cover) + b'TAG' + bytes(125)), Decimal('30.100'))
 
+    def test_a_wav_with_two_format_chunks_is_refused(self):
+        """ffmpeg follows the first format chunk; a second one could make the samples look 12 times shorter."""
+        import struct
+        wav = wav_bytes(seconds=10, tag='two-fmt')
+        at = wav.find(b'data')
+        second = b'fmt ' + struct.pack('<IHHIIHH', 16, 1, 1, 48000, 96000, 2, 16)
+        inner = b'WAVE' + wav[12:at] + second + wav[at:]
+        with self.assertRaisesMessage(audio.UnmeasurableRecording, 'more than one format chunk'):
+            audio.measure(b'RIFF' + struct.pack('<I', len(inner)) + inner)
+
+    def test_an_mp4_edit_list_that_plays_longer_than_the_samples_counts(self):
+        """A decoder plays every edit, so repeated or extended edits lengthen what it plays."""
+        data = bytearray((FIXTURES / 'tone-3s.m4a').read_bytes())
+        at = data.find(b'elst') + 4 + 8  # version/flags, entry count, then the first segment duration (movie timescale)
+        duration = int.from_bytes(data[at:at + 4], 'big')
+        data[at:at + 4] = (duration * 24).to_bytes(4, 'big')
+        self.assertGreaterEqual(audio.measure(bytes(data)), Decimal(duration * 24) / 1000)
+
+    def test_frames_of_alternating_layouts_hidden_in_tags_are_refused(self):
+        """A decoder plays real frames of any layout; many headers of other layouts inside a tag are refused, not excused."""
+        original = (FIXTURES / 'tone-3s.mp3').read_bytes()
+        low = bytes([0xFF, 0xE3, 0x18, 0xC0]) + bytes(68)  # MPEG-2.5, 8 kHz
+        high = bytes([0xFF, 0xF3, 0x18, 0xC0]) + bytes(68)  # MPEG-2, 16 kHz... another layout
+        hidden = b''.join(low + b'\x00' + high + b'\x00' for _ in range(100))
+        with self.assertRaisesMessage(audio.UnmeasurableRecording, 'tags contain audio frames'):
+            audio.measure(original + ape_tag([(b'Comment', hidden)]))
+
     def test_apple_lossless_is_refused_with_a_message_that_names_it(self):
         renamed = (FIXTURES / 'tone-3s.m4a').read_bytes().replace(b'mp4a', b'alac', 1)
         with self.assertRaisesMessage(audio.UnmeasurableRecording, 'not Apple Lossless'):
