@@ -268,7 +268,9 @@ class FailurePathsSurviveTheWatchdog(unittest.TestCase):
         self.assertEqual(set(stages[1:cut + 1]), set(m.PHASE_ONE_STAGES))
         self.assertNotIn('automatic_revert_to_plaintext', m.PHASE_ONE_STAGES)
         result = {}
-        m.ACT['started'] = 0.0
+        # Relative to now: the monotonic clock counts from boot, so a fresh CI runner may be younger than the budget.
+        import time
+        m.ACT['started'] = time.monotonic() - m.PHASE_ONE_BUDGET - 5
         try:
             with self.assertRaises(RuntimeError):
                 m.stage(result, 'formatting_encrypted_volume')
@@ -319,8 +321,13 @@ class FailurePathsSurviveTheWatchdog(unittest.TestCase):
         m = self.migration
         self.assertTrue(m.migrate_alive(os.getpid()) is False or b'migrate-fresh-storage.py' in Path(f'/proc/{os.getpid()}/cmdline').read_bytes())
         self.assertFalse(m.migrate_alive(None)); self.assertFalse(m.migrate_alive(0)); self.assertFalse(m.migrate_alive(2 ** 22 + 7))
+        import time
         child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)', 'migrate-fresh-storage.py'])
         try:
+            # Between fork and exec /proc/<pid>/cmdline still shows the parent; wait for the exec to land.
+            deadline = time.monotonic() + 10
+            while not m.migrate_alive(child.pid) and time.monotonic() < deadline:
+                time.sleep(0.05)
             self.assertTrue(m.migrate_alive(child.pid))
         finally:
             child.kill(); child.wait()
