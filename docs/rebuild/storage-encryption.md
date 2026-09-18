@@ -122,7 +122,11 @@ stack's data and are not touched.
   admitted. The owner's instruction of 2026-09-18 authorizes removing it, and
   the other plaintext copies, once their contents are accounted for, encrypted
   recovery is verified and usable recovery keys are retained. The plaintext
-  reap act checks each condition before it removes anything.
+  reap act checks each condition before it removes anything. **Done
+  2026-09-18 11:11–11:13Z**: the snapshot and eight other plaintext copies
+  (2,722 files) were removed after a close-and-reopen recovery drill. The act
+  was judged 20/20; the private record is
+  `rebuild/.runtime/plaintext-recovery-reap-20260918.json`.
 
 ## Limits and remaining dependencies
 

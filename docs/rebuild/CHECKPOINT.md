@@ -233,3 +233,35 @@ maintenance.
 
 Remaining owner actions, stated once with exact locations: `owner-actions.md`.
 Private evidence paths: `rebuild/.runtime/CHECKPOINT-LATEST.md`.
+
+
+## 2026-09-18 — binding recording limit live, plaintext copies removed, running release 5f673a3b
+
+**Permanent main and the three private services run
+`5f673a3b2cc5c99d68f08f34fba43b4883403583`**, synthetic-only, public routes in
+maintenance.
+
+- **Binding recording charge limit (PR #1197, declared activation of
+  migration 0013).** Before any paid request, a recording is measured the way a
+  decoder plays it, and its exact limit is held. Above the displayed limit
+  ($0.30, which fits 45:34 at the configured rate), nothing is sent until the
+  doctor picks a shorter segment or approves a priced higher limit. The charge
+  never exceeds the limit; anything above is absorbed and recorded separately.
+  A missing portion of more than 2 s is marked in the notes and the download.
+  Four refutation rounds confirmed 20, 6, 6 and 3 findings, all fixed. The
+  activation was judged 18/18: only the pinned schema changed and no row moved.
+  The billing audit passes, the console check passes 4/4, and the post-act
+  backup restores with the capped invariant at zero.
+- **Plaintext copies removed (PR #1196, declared act).** Removal came after
+  proof that every active path is on the encrypted volume, both key slots
+  open, a fresh encrypted backup equals the live database table for table, and
+  closing and reopening the volume is fail-closed and recovers. Nine
+  directories (2,722 files) were shredded, judged 20/20. The storage act's
+  rollback now targets the reap merge.
+- **Not done here:** recovery after a host reboot (a shared host), independent
+  custody of the recovery keys (no vault is connected), native Word acceptance
+  (Windows), and the external integrations. See `owner-actions.md` for exact
+  locations.
+
+Private evidence paths: `rebuild/.runtime/CHECKPOINT-LATEST.md`.
+
