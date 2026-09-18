@@ -90,6 +90,20 @@ that the failed stage is recorded, and that no raw stderr is kept
 **This test does not depend on the diagnosis being right**: it pins the ordering
 that makes the race impossible, whatever caused this particular failure.
 
+### Exercised after the 2026-09-18 activation
+
+Backup `20260918T161229Z-2ee211a0` (35 tables, **225,079 rows**, 28 files,
+source commit `5f8050df`) restored **on the first attempt** — no retry — with
+every ordered table hash and every file hash matching, `decrypted_files_written`
+0, and the restore database on tmpfs with swap disabled. `stage` reached
+`complete`, and neither `failed_stage` nor `cleanup_failed` appears.
+
+⚠️ **What that does and does not show.** One clean restore does not prove the
+init-server race is gone; a race not hit is not a race removed. What removes it
+is the readiness gate — the marker, `pg_isready` and a `SELECT 1` that returns 1
+— and the test that pins readiness before `pg_restore`. This run is evidence the
+gate does not break an ordinary restore, which is the other thing worth knowing.
+
 ## Verified exercise and preserved evidence
 
 Backup `20260917T165751Z-eccb5538` captured source commit

@@ -349,17 +349,53 @@ why the retry ships a `TransactionTestCase` carrying a finalized document.
 Permanent main was advanced to `475a5925` before the migration ran and stays there; the retry is declared at
 `docs/foundation/mutations/20260918-quillmd-service-date-retry.md` and re-baselines onto it.
 
-⚠️ **NOTHING IN THIS SECTION HAS REACHED THE RUNNING SYSTEM YET.** Every repair
-above is built, tested and declared on a branch. The live release is still
-`5f673a3b`: one code release, 74,719 codes, schema through 0013, no
-`service_date` column, and `manage.py configuration_status` answers
-`Unknown command`. Two declared acts are pending —
-`docs/foundation/mutations/20260918-quillmd-service-date.md` (migration 0014 and
-the release advance) and
-`docs/foundation/mutations/20260918-quillmd-icd10cm-fy2027.md` (the import) —
-and **the 1 October defect stays live until the second one runs.** This
-paragraph is replaced with the judged result, not before.
+### What reached the running system, 2026-09-18
 
-**Still open, unchanged by this pass:** recovery after a host reboot, independent
-key custody, native Word acceptance, the external integrations, and the owner
-decision on the legacy data services holding the seven waitlist rows.
+**Running release `5f8050df5e79c0d7948185850914f1c161fcbc1f`**, both surfaces
+synthetic-only, public routes in maintenance.
+
+Three declared acts ran, each judged row by row against numbers written down
+before it:
+
+| act | declaration | judged |
+| --- | --- | --- |
+| migration 0014 and the release advance | `20260918-quillmd-service-date-retry.md` | **14 of 14** |
+| ICD-10-CM FY2027 | `20260918-quillmd-icd10cm-fy2027.md` | jointly **31 of 31** |
+| ICD-10-CM FY2026-October | `20260918-quillmd-icd10cm-fy2026-october.md` | with the above |
+
+- **The date of service is recorded and it selects the release.** All 11
+  encounters carry a `service_date`, each the UTC date of its own `created_at`
+  (`2026-09-17=11`), the six finalized ones included. Nothing else moved: 35
+  tables, 3 patients, 12 jobs, 0 suggestions, 361 audit events, and every row
+  fingerprint identical with the new column removed.
+- **`encounter_scope` is back on and still refuses.** The migration suspends it
+  for its backfill statement only. Recorded `O` before and after, and a live
+  probe still raises *"Finalized document is immutable"* on a finalized row.
+- **Three contiguous ICD-10-CM releases, 224,317 codes.** FY2026-October
+  (2025-10-01→2026-03-31, 74,719), FY2026-April (2026-04-01→2026-09-30, 74,719,
+  byte-identical and untouched) and FY2027 (2026-10-01→2027-09-30, 74,879).
+  Boundary read-back: 30 September selects FY2026-April, 1 October selects
+  FY2027, and dates before 2025-10-01 or after 2027-09-30 select nothing and say
+  so. **The 1 October defect is closed.** CPT remains disabled — 0 releases, no
+  licence.
+- **Post-checks.** `audit_billing --maintenance-storage` passes every check; its
+  two `durable_receipt_gaps` are the pre-existing live Anthropic and Deepgram
+  calls awaiting the owner's cost evidence (`owner-actions.md` §7), and are not
+  gated. A fresh encrypted backup (`20260918T161229Z-2ee211a0`, 35 tables,
+  225,079 rows, 28 files) restored **first time** — no retry — with every table
+  and file hash matching, zero decrypted files written, on tmpfs without swap.
+  `manage.py configuration_status` answers on the live release.
+
+⚠️ **It took four attempts, and the refusals are the record worth keeping.** The
+first was refused by the database (the finalized-document guard); the second and
+third by the activator's own preflight (a leftover assertion, then the tree HEAD
+and the running release having come apart when the first attempt died between
+them); the fourth by a dead process's lock, which was inspected and set aside
+rather than deleted. **None of them touched data.** The private service was down
+for about 35 minutes across that sequence, and no attempt was made to shorten it
+by starting the services on a release whose schema was not there yet.
+
+**Still open, unchanged by this pass:** recovery after a host reboot,
+independent key custody, native Word acceptance, the external integrations, the
+owner's provider cost evidence, and the owner decision on the legacy data
+services holding the seven waitlist rows.

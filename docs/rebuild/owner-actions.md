@@ -118,9 +118,8 @@ so that no branch of it can emit a value:
 
     cd /opt/meddoc-pro/rebuild && .venv/bin/python manage.py configuration_status
 
-⚠️ **Available from the release that carries this document, not before.** On the release running today it answers
-`Unknown command: 'configuration_status'`; it ships with the activation declared in
-`docs/foundation/mutations/20260918-quillmd-service-date.md`.
+**Live since release `5f8050df` (2026-09-18).** Verified on the running system that day: it reports the two release
+gates, the email and AI modes, and `absent` for every private credential that is not set.
 
 It prints, per setting, `absent`, `present`, `present, recognised shape` or `present, UNRECOGNISED shape`, plus the release gates. Its tests
 assert that a configured secret never appears in the output (`core/tests/test_configuration_status.py`).
