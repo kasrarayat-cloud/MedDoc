@@ -123,9 +123,67 @@ cleanup, which covered source and images only.
 | `meddoc-b017-segment-live1_qa_pgdata`, `meddoc-durable-admission-qa_qa_minio` | 72.23 MB, 22.44 kB | unlinked QA leftovers |
 | `meddoc-pro-db-migrate:{latest,qa}`, `meddoc-override-probe:audit-2026-08-17`, `meddoc-pro-e2echeck-transcribe-md:latest` | ~13.8 GB | images not covered by the image cleanup manifest |
 | `node_modules`, `.local` | 1.6 GB, 3.9 GB | build artefacts of the retired stack |
-| 22 additional git worktrees under `.worktrees` and the repo root | **9.0 GB** (`.worktrees` alone is 4.8 GB; the 19 at the repo root add ~4.2 GB) | other sessions' working trees; not this session's to reap. These are also where the original application's source still lives |
+| 9 remaining git worktrees carrying the retired source | ~2.2 GB | **see the cleanup below** — each is held back for a named reason |
 
 Disk at the time of writing: **236 GB used of 296 GB, 48 GB free (84%)**. None
 of the above is urgent, and none of it is removable without an owner decision on
 the `waitlist_entries` rows first, because the postgres volume that holds them
 is in the same cleanup conversation.
+
+
+## The worktree cleanup, 2026-09-18
+
+The retired application's source is gone from `main` and from the shared tree, and it survived in
+nineteen other working copies. Ten were removed; nine were not, each for a reason that is stated
+rather than implied.
+
+**Removed — 10 worktrees, 2.2 GB.** Every one was clean (no uncommitted changes), inactive (no process
+with its cwd inside, no lock file, nothing written in 24 hours) and obsolete, and — the condition that
+matters — **every commit it held is reachable from a named `origin` branch**, so removing the working
+copy destroyed no work:
+
+| worktree | branch | survives on |
+| --- | --- | --- |
+| `.cdev` | `scratch/cdev-certify-live-template` | origin |
+| `.r162` | `fix/ruling-162-blank-proof` | origin |
+| `.wt-a2` | `feat/admin2-host-resolution` | origin |
+| `.wt-a2a` | `feat/admin2a-slug-claim` | origin |
+| `.wt-a6` | `feat/admin6-practice-archive` | origin |
+| `.wt-keep` | `fix/ruling-297-keep-policy` | origin |
+| `.wt-mfa` | `fix/admin-api-mfa-parity` | origin |
+| `.wt-port` | `feat/admin-console-port` | origin |
+| `.wt-r230j` | `docs/r230-judgement` | origin |
+| `.wt-r2` | `docs/judged-s3-f00956ef` | merged into `main` (PR #1145); its remote branch was deleted, the local branch is kept |
+
+Removal used `git worktree remove`, which deletes the working directory and the administrative files
+and **no commits and no branches**. All ten branches remain checkoutable; this was verified after the
+fact, branch by branch.
+
+**Kept — 9 worktrees, each with its reason.**
+
+| worktree | why it stays |
+| --- | --- |
+| `.wt-307` | 13 commits on **no** origin ref |
+| `.wt-b2` | 11 commits on no origin ref |
+| `.wt-a3` | 6 commits on no origin ref |
+| `.wt-admin5` | 3 commits on no origin ref |
+| `.wt-a5` | 2 commits on no origin ref, plus 5 uncommitted files |
+| `.wt-admin4` | 2 commits on no origin ref, plus 7 uncommitted files |
+| `.wt-dmp` | 2 commits on no origin ref |
+| `.f24s5-build` | 4 uncommitted files |
+| `.wt-fl` | a live process has its cwd inside it — another session's orphaned keep-alive loop, running since 2026-09-16. Clean and fully merged otherwise; removable once its owner stops it |
+
+⚠️ **A measurement trap that would have produced a confident wrong answer.** The activity check was
+first run as `find <path> -type f -newermt '-24 hours'`. The `find` on this host is **bfs**, which
+rejects that relative timestamp, exits non-zero and prints nothing — so with stderr discarded it
+returns a **vacuous zero for every directory**, and every worktree looks dormant. Re-run with an
+absolute timestamp, one worktree showed thousands of files written in the last day. Every figure
+above was taken with an absolute cutoff.
+
+**Not claimed:** that every historical copy or git object of the retired application has been erased.
+Objects remain in `.git`, in packfiles, in the reflog, on `origin`, and in the nine kept worktrees.
+This was a cleanup of redundant working copies, not a history rewrite.
+
+**Preserved deliberately:** the legacy `meddoc` database and its seven waitlist rows, the MinIO and
+Redis volumes, the marketing site and its container, the shared ingress, and every backup and
+evidence path. Marketing was outside the deletion scope and needed no further decision.

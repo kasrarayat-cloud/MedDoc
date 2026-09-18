@@ -10,3 +10,7 @@ staticfiles/
 .word-sdk/
 documents/sdk_word/**/bin/
 documents/sdk_word/**/obj/
+
+# Local convenience links a worktree makes to the shared tree: never content.
+staticfiles
+.word-sdk

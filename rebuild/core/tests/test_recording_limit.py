@@ -23,6 +23,7 @@ from core.jobs import cancel, coverage_note, enqueue, reap_abandoned_voice_uploa
 from core.management.commands.audit_billing import audit_report
 from core.models import AuditEvent, Job, LedgerEntry, Membership, PlatformCost, Reservation, Usage, User, Wallet
 from core.security import private_path
+from exercised import requires_input
 from core.tests.audio_fixtures import wav_bytes, wav_with_two_data_chunks
 from core.tests.test_billing_boundary import LIVE, BoundaryFixture, deepgram
 from core.tests.test_billing_policy import STORAGES
@@ -359,16 +360,42 @@ class LengthBoundsSeparateChargingFromDisclosure(SimpleTestCase):
         with self.assertRaisesMessage(audio.UnmeasurableRecording, 'tags contain audio frames'):
             audio.measure(head + ape_tag([(b'Comment', (low + b'\x00' + high + b'\x00') * 32)]))
 
-    def test_the_incomplete_marker_reads_the_confirmed_length(self):
-        """A recording priced as 60 s whose audio is certainly 30 s, transcribed in full, must not be called incomplete."""
+    def test_the_marker_reads_the_SUBMITTED_length_not_a_floor_over_decoder_ambiguity(self):
+        """The floor is a lower bound over what some decoder might play; it is not evidence about the submission.
+
+        Measured on real files: a WAV whose chunks are 1 s then 9 s SUBMITTS 9 s and floors at 1 s. Judging coverage by
+        the floor called that recording complete when the provider returned 1 s — eight seconds silently lost. Coverage
+        is now judged against what ffprobe says is in the payload that was actually POSTed.
+        """
         from types import SimpleNamespace
-        priced_long = SimpleNamespace(config={'recording_seconds': '60', 'recording_seconds_confirmed': '30'})
-        self.assertEqual(coverage_note(priced_long, {'duration_seconds': '30.1'}), '')
-        certain_long = SimpleNamespace(config={'recording_seconds': '60', 'recording_seconds_confirmed': '60'})
-        self.assertIn('was not transcribed', coverage_note(certain_long, {'duration_seconds': '30.1'}))
-        # Older jobs, recorded before the confirmed length existed, keep the previous behaviour.
+        submitted = lambda seconds, **rest: SimpleNamespace(config={
+            'recording_seconds': '60', 'submitted_seconds': seconds, 'submission_status': 'determined', **rest})
+        # Transcribed in full against the submitted audio: no claim either way.
+        self.assertEqual(coverage_note(submitted('30'), {'duration_seconds': '30.1'}), '')
+        # Materially short of the submitted audio: disclosed, naming the submitted length.
+        short = coverage_note(submitted('60'), {'duration_seconds': '30.1'})
+        self.assertIn('was not', short)
+        self.assertIn('of audio submitted', short)
+        # THE CASE THE FLOOR GOT WRONG: floor 1 s, submitted 9 s, provider returned 1 s.
+        floored = SimpleNamespace(config={'recording_seconds': '10', 'recording_seconds_confirmed': '1',
+                                          'submitted_seconds': '9', 'submission_status': 'determined'})
+        note = coverage_note(floored, {'duration_seconds': '1.0'})
+        self.assertIn('was not', note, 'eight missing seconds must not be hidden by a 1 s floor')
+
+    def test_an_undetermined_submission_is_reported_as_unknown_never_as_complete(self):
+        """Several audio streams, or a payload ffprobe cannot describe: coverage is UNKNOWN, not complete."""
+        from types import SimpleNamespace
+        for status, detail in (('ambiguous', '2 audio streams'), ('unprobeable', 'ffprobe is not installed')):
+            with self.subTest(status=status):
+                job = SimpleNamespace(config={'recording_seconds': '60', 'submitted_seconds': '',
+                                              'submission_status': status, 'submission_detail': detail})
+                note = coverage_note(job, {'duration_seconds': '30'})
+                self.assertIn('UNKNOWN', note)
+                self.assertIn(detail, note)
+                self.assertNotIn('incomplete', note)
+        # Older jobs recorded before the submission was measured also report unknown rather than a false claim.
         legacy = SimpleNamespace(config={'recording_seconds': '60'})
-        self.assertIn('was not transcribed', coverage_note(legacy, {'duration_seconds': '30.1'}))
+        self.assertIn('UNKNOWN', coverage_note(legacy, {'duration_seconds': '30.1'}))
 
 
 class QuoteArithmetic(SimpleTestCase):
@@ -577,7 +604,9 @@ class RecordingChargeLimit(BoundaryFixture, TestCase):
         self.assertEqual(job.state, 'succeeded')
         self.encounter.refresh_from_db()
         self.assertIn(TRANSCRIPT, self.encounter.notes)
-        self.assertIn('[Transcription incomplete: the provider processed 0:20 of this 1:00 recording; the final 0:40 was not transcribed.]', self.encounter.notes)
+        # The marker names what was SUBMITTED, not the priced ceiling: ffprobe measures the payload that is POSTed.
+        self.assertIn('[Transcription incomplete: the provider processed 0:20 of the 1:00 of audio submitted; 0:40 was not '
+                      'transcribed.]', self.encounter.notes)
 
     def test_a_duplicate_submission_is_one_job_and_one_hold(self):
         self.upload(STANDARD_ENV, tag='same')
@@ -623,7 +652,8 @@ class RecordingChargeLimit(BoundaryFixture, TestCase):
                                       return_value=deepgram(TRANSCRIPT, 'dg_' + tag, duration=duration))
                 self.encounter.refresh_from_db()
                 stored = json.loads(private_path(job.result_path).read_text())['transcript']
-                marker = '[Transcription incomplete: the provider processed 4:57 of this 5:00 recording; the final 0:03 was not transcribed.]'
+                marker = ('[Transcription incomplete: the provider processed 4:57 of the 5:00 of audio submitted; 0:03 was '
+                          'not transcribed.]')
                 self.assertEqual(marker in stored, marked); self.assertTrue(stored.startswith(TRANSCRIPT))
                 self.assertEqual(self.encounter.notes.count('[Transcription incomplete'), 1)  # the 3 s run's marker; none for 1 s
 
@@ -742,3 +772,83 @@ class BoundsAfterTheSecondRefutationPass(SimpleTestCase):
                 bounds = audio.measure_bounds((FIXTURES / name).read_bytes())
                 self.assertLessEqual(bounds.confirmed, bounds.measured)
                 self.assertGreater(bounds.confirmed, Decimal(0))
+
+
+class CoverageIsJudgedAgainstWhatWasActuallySubmitted(SimpleTestCase):
+    """The fixtures every earlier pass found awkward, measured by ffprobe against the submitted payload.
+
+    ⚠️ These assert a relationship between three numbers, not that any one of them is 'the' duration:
+    the priced ceiling is never below the submission, and the completeness judgement uses the
+    submission. Where the payload does not determine what a decoder processes, the answer is UNKNOWN.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        import shutil
+        cls.have_ffprobe = shutil.which('ffprobe') is not None
+
+    def setUp(self):
+        requires_input(self.have_ffprobe, 'ffprobe on PATH, or nothing here measures a submission at all')
+
+    def probe(self, data, suffix):
+        import tempfile
+        from core.media import probe_submission
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as handle:
+            handle.write(data); path = handle.name
+        self.addCleanup(lambda: __import__('os').unlink(path))
+        return probe_submission(path)
+
+    def test_a_split_wav_reports_the_chunk_a_decoder_reaches_not_their_sum_and_not_the_smallest(self):
+        for first, second, expected in ((9, 1, 1), (1, 9, 9), (5, 5, 5)):
+            with self.subTest(first=first, second=second):
+                submission = self.probe(wav_with_two_data_chunks(first, second), '.wav')
+                bounds = audio.measure_bounds(wav_with_two_data_chunks(first, second))
+                self.assertEqual(submission.audio_streams, 1)
+                self.assertFalse(submission.ambiguous, submission.reasons)
+                self.assertAlmostEqual(float(submission.selected_seconds), expected, places=1)
+                # The priced ceiling is never below what was submitted. That is the invariant that matters for money.
+                self.assertGreaterEqual(bounds.measured, submission.selected_seconds)
+
+    def test_the_floor_can_sit_below_the_submitted_audio_which_is_why_it_cannot_judge_coverage(self):
+        data = wav_with_two_data_chunks(1, 9)
+        submission = self.probe(data, '.wav')
+        bounds = audio.measure_bounds(data)
+        self.assertAlmostEqual(float(submission.selected_seconds), 9, places=1)
+        self.assertLess(bounds.confirmed, submission.selected_seconds,
+                        'this is the exact shape that made a floor-based completeness claim wrong')
+
+    def test_a_zero_length_trailing_chunk_is_still_measurable_as_a_submission(self):
+        submission = self.probe(wav_with_two_data_chunks(1, 9, second_declares_zero=True), '.wav')
+        self.assertEqual(submission.audio_streams, 1)
+        self.assertGreater(submission.selected_seconds, 0)
+
+    def test_a_truncated_payload_is_measured_or_refused_but_never_silently_assumed_whole(self):
+        whole = wav_bytes(6, 'truncation')
+        submission = self.probe(whole[:len(whole) // 2], '.wav')
+        self.assertLess(submission.selected_seconds, 6)
+
+    def test_provider_truncation_is_disclosed_against_the_submission(self):
+        from types import SimpleNamespace
+        job = SimpleNamespace(config={'recording_seconds': '600', 'submitted_seconds': '600',
+                                      'submission_status': 'determined'})
+        note = coverage_note(job, {'duration_seconds': '120'})
+        self.assertIn('of audio submitted', note)
+        self.assertIn('8:00 was not', note)
+
+    def test_a_retry_that_finally_succeeds_is_judged_on_its_own_returned_duration(self):
+        """Each attempt is judged against the same submission; a short first answer does not taint a full second one."""
+        from types import SimpleNamespace
+        job = SimpleNamespace(config={'recording_seconds': '60', 'submitted_seconds': '60',
+                                      'submission_status': 'determined'})
+        self.assertIn('was not', coverage_note(job, {'duration_seconds': '10'}))
+        self.assertEqual(coverage_note(job, {'duration_seconds': '60'}), '')
+
+    def test_matching_durations_produce_no_claim_at_all(self):
+        """Silence here is the absence of a claim. It is not, and must never be rendered as, proof of completeness."""
+        from types import SimpleNamespace
+        job = SimpleNamespace(config={'recording_seconds': '60', 'submitted_seconds': '60',
+                                      'submission_status': 'determined'})
+        self.assertEqual(coverage_note(job, {'duration_seconds': '60'}), '')
+        source = (Path(__file__).resolve().parents[1] / 'jobs.py').read_text()
+        self.assertIn('NOT PROOF THAT EVERY SPOKEN WORD WAS TRANSCRIBED', source.upper())
