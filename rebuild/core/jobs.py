@@ -210,7 +210,7 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
         #                                 to the provider. A completeness statement may rest on this and on nothing else.
         config.update(recording_seconds=str(bounds.measured),recording_seconds_confirmed=str(bounds.confirmed),
                       charge_limit=str(charge_limit),limit_basis='approved' if approved_limit is not None else 'standard')
-        config.update(describe_submission(input_path))
+        config.update(describe_submission(input_path,ceiling_seconds=bounds.measured))
     job=Job.objects.create(encounter=e,user=user,kind=kind,revision=e.revision,request_key=key,input_path=input_path,config=config)
     if kind=='transcription':
         reserve(job,charge_limit=charge_limit)
@@ -221,10 +221,15 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     audit(user,'job.queued',job.pk,department=e.department,kind=kind,charge_limit=str(charge_limit))
     return job
 
-def describe_submission(input_path):
-    """What ffprobe says is in the payload that will be submitted. Unknown is recorded as unknown."""
+def describe_submission(input_path,ceiling_seconds=None):
+    """What ffprobe says is in the payload that will be submitted. Unknown is recorded as unknown.
+
+    The ceiling is passed in so the probe can refuse a declared duration the bytes cannot support: a
+    container header is not a measurement, and an inflated one would otherwise accuse a complete
+    transcription of losing an hour of audio.
+    """
     try:
-        submission=probe_submission(private_path(input_path))
+        submission=probe_submission(private_path(input_path),ceiling_seconds=ceiling_seconds)
     except (SubmissionUnprobeable,OSError,ValueError) as error:
         return {'submitted_seconds':'','submission_status':'unprobeable','submission_streams':'',
                 'submission_detail':str(error)[:200]}
@@ -264,7 +269,7 @@ def coverage_note(job,units):
         because=(' (%s)'%detail) if detail else ''
         return (f'\n[Transcription coverage UNKNOWN: the provider reported {seconds_text(processed)}, and this recording may '
                 f'hold up to {seconds_text(priced)}. The submitted audio could not be determined{because}, so no statement is '
-                f'made about how much of it was transcribed. Re-export the recording as a single track to resolve this.]')
+                f'made about how much of it was transcribed.]')
     try:
         submitted_seconds=Decimal(submitted)
     except Exception:

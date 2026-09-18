@@ -852,3 +852,80 @@ class CoverageIsJudgedAgainstWhatWasActuallySubmitted(SimpleTestCase):
         self.assertEqual(coverage_note(job, {'duration_seconds': '60'}), '')
         source = (Path(__file__).resolve().parents[1] / 'jobs.py').read_text()
         self.assertIn('NOT PROOF THAT EVERY SPOKEN WORD WAS TRANSCRIBED', source.upper())
+
+
+class WhatTheSubmissionRefutationFound(SimpleTestCase):
+    """Three defects the refutation pass demonstrated on the finished diff, each reproduced here."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        import shutil
+        cls.tools = shutil.which('ffprobe') and shutil.which('ffmpeg')
+
+    def setUp(self):
+        requires_input(bool(self.tools), 'ffmpeg and ffprobe, or none of these fixtures can be built or read')
+
+    def build(self, *args):
+        import subprocess, tempfile, os
+        handle = tempfile.NamedTemporaryFile(suffix=args[-1], delete=False); handle.close()
+        self.addCleanup(lambda p=handle.name: os.path.exists(p) and os.unlink(p))
+        subprocess.run(['ffmpeg', '-v', 'error', '-y', *args[:-1], handle.name], check=True, timeout=120)
+        return handle.name
+
+    def test_a_single_track_webm_is_determined_not_unknown(self):
+        """THE PRIMARY PATH. The browser records audio/webm;codecs=opus and no Matroska variant emits a
+        per-stream duration — so treating that as ambiguity put a false 'coverage UNKNOWN' on every
+        ordinary recording, advising a re-export that could not help because it was already one track."""
+        from core.media import probe_submission
+        path = self.build('-f', 'lavfi', '-i', 'sine=frequency=440:duration=6', '-c:a', 'libopus', '-b:a', '24k', '.webm')
+        submission = probe_submission(path, ceiling_seconds=Decimal('7'))
+        self.assertEqual(submission.audio_streams, 1)
+        self.assertFalse(submission.ambiguous, submission.reasons)
+        self.assertGreater(submission.selected_seconds, Decimal('5'))
+
+    def test_two_tracks_are_still_ambiguous_and_for_the_stated_reason(self):
+        from core.media import probe_submission
+        source = self.build('-f', 'lavfi', '-i', 'sine=frequency=440:duration=6', '.wav')
+        path = self.build('-i', source, '-map', '0:a', '-map', '0:a', '-c:a', 'libopus', '-b:a', '24k', '.webm')
+        submission = probe_submission(path, ceiling_seconds=Decimal('99'))
+        self.assertTrue(submission.ambiguous)
+        self.assertIn('2 audio streams', ' '.join(submission.reasons))
+
+    def test_a_declared_duration_the_bytes_cannot_support_is_refused_not_believed(self):
+        """An inflated Xing/Info frame count made a COMPLETE transcription report an hour of data loss.
+
+        ffprobe reads the container's DECLARED duration; for MP3 that is the header field core/audio.py
+        refuses to trust because a decoder ignores it. The conservative ceiling is the cross-check.
+        """
+        from core.media import probe_submission
+        self.assertFalse(probe_submission(
+            self.build('-f', 'lavfi', '-i', 'sine=frequency=440:duration=6', '-c:a', 'libmp3lame', '.mp3'),
+            ceiling_seconds=Decimal('7')).ambiguous)
+        honest = self.build('-f', 'lavfi', '-i', 'sine=frequency=440:duration=6', '-c:a', 'libmp3lame', '.mp3')
+        submission = probe_submission(honest, ceiling_seconds=Decimal('1'))  # a ceiling the payload exceeds
+        self.assertTrue(submission.ambiguous)
+        self.assertIn('not trustworthy', ' '.join(submission.reasons))
+
+    def test_an_untrustworthy_declaration_reports_unknown_rather_than_accusing_the_provider(self):
+        from types import SimpleNamespace
+        job = SimpleNamespace(config={'recording_seconds': '10', 'submitted_seconds': '3600',
+                                      'submission_status': 'ambiguous',
+                                      'submission_detail': 'declared duration is not trustworthy'})
+        note = coverage_note(job, {'duration_seconds': '10'})
+        self.assertIn('UNKNOWN', note)
+        self.assertNotIn('was not transcribed', note)
+
+    def test_the_probe_child_is_given_an_address_space_ceiling(self):
+        """MAX_AUDIO_STREAMS is only checkable after the parse, so a hand-built container declaring a
+        thousand tracks costs hundreds of MB before it is rejected — on the doctor's request path."""
+        from core import media
+        self.assertTrue(callable(media._bound_child))
+        self.assertGreater(media.PROBE_ADDRESS_SPACE_BYTES, 0)
+        source = (Path(__file__).resolve().parents[1] / 'media.py').read_text()
+        self.assertIn('preexec_fn=_bound_child', source)
+        self.assertIn('RLIMIT_AS', source)
+
+    def test_the_unknown_note_no_longer_prescribes_a_fix_that_cannot_be_applied(self):
+        source = (Path(__file__).resolve().parents[1] / 'jobs.py').read_text()
+        self.assertNotIn('Re-export the recording as a single track', source)

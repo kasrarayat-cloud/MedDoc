@@ -76,6 +76,37 @@ such flag — it parsed it as an option expecting a value, failed, and made **ev
 unprobeable, including plainly valid ones. It was caught only because a known-good fixture was in the
 comparison. A probe with no positive control cannot tell "this file is bad" from "I am broken".
 
+## Three defects a refutation pass found in this very design
+
+Each was demonstrated on the finished diff, reproduced, and is now pinned by a test that fails if the
+defect returns.
+
+**1 · A missing per-stream duration is not ambiguity — and treating it as such broke the PRIMARY
+path.** No Matroska variant emits a per-stream duration; measured across opus, vorbis and
+live-recorded WebM, ffprobe reports `N/A` for the stream and a good number for the container. The
+browser recorder produces exactly that container (`static/app.js`: `audio/webm;codecs=opus`). So
+**every ordinary recording** was told its coverage could not be determined — and the advice given,
+*re-export as a single track*, was unfollowable, because the file already was one track. The container
+total answers the question whenever there is one audio stream; ambiguity is now reserved for payloads
+that genuinely do not determine what a decoder would process.
+
+**2 · A declared duration is not a measurement.** ffprobe reads the container's DECLARED duration, and
+for MP3 that is the Xing/Info header — precisely the class of field `core/audio.py` refuses to trust,
+because a decoder ignores it. An edited frame count claiming an hour for a ten-second file produced
+*"the provider processed 0:11 of the 60:12 of audio submitted; 60:02 was not transcribed"* on a
+**complete** transcription, and violated this design's own stated invariant that the priced ceiling is
+never below the submission. The conservative ceiling computed from the bytes is now the cross-check:
+when the declaration exceeds what the bytes can hold, the payload is not describing itself honestly
+and the answer is UNKNOWN — never an accusation of data loss.
+
+**3 · The bound was on the wrong process.** `MAX_AUDIO_STREAMS` can only be checked after the parse,
+so a hand-built container declaring ~1000 tracks costs ffprobe hundreds of megabytes before it is
+rejected — and this code runs on the **request path**, not in the worker: `enqueue()` is called from
+the upload view, so the process is a gunicorn worker of the doctor surface, `MemoryMax=768M` shared by
+two workers. The earlier docstring cited the worker unit's 1024M, which is not where it runs. The
+child now gets an explicit `RLIMIT_AS`, so the cost of a hostile upload is paid by ffprobe dying
+rather than by the surface a doctor is using.
+
 ## What remains unresolved
 
 - Where the payload carries several audio streams, which one the provider decodes is **not knowable
