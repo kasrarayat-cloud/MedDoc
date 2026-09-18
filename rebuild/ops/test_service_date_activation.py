@@ -131,10 +131,15 @@ class AllowedPaths(unittest.TestCase):
         self.assertEqual(sorted(changed - activator.ALLOWED), [])
 
     def test_the_activation_declares_its_own_parts(self):
+        """Its own migration, declaration, activator and this file. The rest of the range is whatever it ships."""
         activator = load_activator()
         for path in (activator.MIGRATION_PATH, activator.DECL, activator.SELF,
-                     'rebuild/ops/test_service_date_activation.py', 'rebuild/core/coding.py'):
+                     'rebuild/ops/test_service_date_activation.py'):
             self.assertIn(path, activator.ALLOWED)
+
+    def test_the_declaration_it_names_exists(self):
+        activator = load_activator()
+        self.assertTrue((ROOT / activator.DECL).is_file(), activator.DECL)
 
 
 if __name__ == '__main__':
