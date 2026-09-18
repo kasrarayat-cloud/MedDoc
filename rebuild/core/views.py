@@ -25,7 +25,7 @@ from .forms import *
 from .security import audit,departments,scoped,membership,digest,token,store_upload,private_path,rate_limit
 from .billing import welcome_credit,credit_payment,reconcile_refund,reconciliation,stripe_test_key_configured,reconcile_usage,release
 from .context import integration_status
-from .jobs import enqueue
+from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outcome,may_cancel,ended_key
 from . import wm_review
 
 
@@ -301,7 +301,14 @@ def encounter_detail(request,pk):
     try:maximum_charge=maximum_cost(e.notes,e.template_version.fields,context_labels=[row['label'] for row in e.template_version.review_requirements])*Decimal('1.5')
     except ValidationError:maximum_charge=None
     audit(request.user,'encounter.view',e.pk,department=e.department)
-    return render(request,'encounter_detail.html',{'encounter':e,'answer_rows':rows,'wm_template':is_wm,'wm_requirements':requirements,'wm_review_error':review_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':Decimal(os.getenv('QUILLMD_VOICE_MAX_COST','0.20'))*Decimal('1.5'),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize})
+    # Billing boundary: earlier charged requests (successes, and successes the user's own state declined) stay charged, so a
+    # further request is disclosed as separately billable. The doctor reads the classification in words, is offered cancel only
+    # where the server allows it, and receives provider output only for requests that stand charged.
+    prior_generations=sum(1 for job in jobs if job.kind=='generation' and billable_outcome(job))
+    prior_transcriptions=sum(1 for job in jobs if job.kind=='transcription' and billable_outcome(job))
+    for job in jobs:
+        job.display_error=public_error(job); job.can_cancel=may_cancel(job,request.user); job.deliverable=bool(job.result_path) and billable_outcome(job)
+    return render(request,'encounter_detail.html',{'encounter':e,'answer_rows':rows,'wm_template':is_wm,'wm_requirements':requirements,'wm_review_error':review_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':Decimal(os.getenv('QUILLMD_VOICE_MAX_COST','0.20'))*Decimal('1.5'),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions})
 
 @require_POST
 def generate_view(request,pk):
@@ -311,6 +318,16 @@ def generate_view(request,pk):
         quoted=usage_quote(request,e)
         enqueue(e,request.user,config=quoted);messages.success(request,'Generation queued. Refresh this page to view the result.')
     except ValidationError as exc:messages.error(request,error_message(exc))
+    return redirect('encounter_detail',pk=pk)
+
+@require_POST
+def job_cancel(request,pk,job_pk):
+    """Cancel a queued request before any provider request; anything later is billed by result (409 with the reason)."""
+    e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
+    job=get_object_or_404(Job,pk=job_pk,encounter=e)
+    try:cancel(job,request.user)
+    except CancellationRefused as exc:return HttpResponse(error_message(exc),status=409)
+    messages.success(request,'Queued request cancelled before any provider request. Held funds were released; nothing was charged.')
     return redirect('encounter_detail',pk=pk)
 
 @require_POST
@@ -680,7 +697,8 @@ def admin_platform_cost(request):
 @transaction.atomic
 def admin_resolve_job(request,pk):
     if not request.user.is_staff or not request.user.is_verified():raise Http404
-    job=get_object_or_404(Job.objects.select_for_update().select_related('encounter__department'),pk=pk)
+    # Lock only the job row, as settle, cancel and absorb do: locking the encounter and department before the wallets deadlocks a wallet holder that audits.
+    job=get_object_or_404(Job.objects.select_for_update(of=('self',)).select_related('encounter__department'),pk=pk)
     if job.state!='reconciliation':return HttpResponse('Only jobs held for reconciliation can be resolved.',status=409)
     form=JobResolutionForm(request.POST)
     if not form.is_valid():raise ValidationError('; '.join(f'{field}: {" ".join(errors)}' for field,errors in form.errors.items()))
@@ -691,7 +709,9 @@ def admin_resolve_job(request,pk):
     release(job)
     job.state='failed';job.finished_at=timezone.now()
     job.error='Resolved by administrator: settled provider cost absorbed by QuillMD.' if settled else 'Resolved by administrator: synthetic fixture job carries no provider cost.' if simulated else 'Resolved by administrator: no provider cost evidenced.' if data['outcome']=='release_no_cost' else 'Resolved by administrator: provider cost absorbed by QuillMD.'
-    job.save(update_fields=['state','error','finished_at'])
+    # A resolved job ended without success: free its request key so the same revision or recording can be requested again.
+    job.request_key=ended_key(job,'failed')
+    job.save(update_fields=['state','error','finished_at','request_key'])
     if settled:
         # The worker settled the charge before the outcome became uncertain: reverse it, whatever amount the form carried.
         absorbed=absorb_failed_job(job,actor=request.user,note=note)
@@ -747,6 +767,8 @@ def job_result(request,pk):
     job=get_object_or_404(Job.objects.filter(encounter__department__in=departments(request.user)),pk=pk)
     receipt=get_object_or_404(ProviderReceipt,job=job)
     if not job.result_path:raise Http404('Provider output was not stored; financial receipt is retained.')
+    # Output of a request that is not charged (absorbed platform failure, pending reconciliation) is not delivered.
+    if not billable_outcome(job):raise Http404('Provider output is delivered only for requests that stand charged.')
     path=private_path(job.result_path)
     if hashlib.sha256(path.read_bytes()).hexdigest()!=job.result_sha256:raise ValidationError('Provider output integrity check failed.')
     audit(request.user,'job.result_download',job.pk,department=job.encounter.department)

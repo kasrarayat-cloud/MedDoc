@@ -57,8 +57,10 @@ def audit_report(file_reader=None):
         absorbed=bool(absorbed_entries or absorbed_cost)
         absorbed_reversal=sum((entry['amount'] for entry in absorbed_entries),Decimal(0))
         if usage.job.state=='failed' and not usage.simulated:
-            # A settled provider cost whose output was never adopted must not stay on the user's ledger.
-            checks['failed_settled_usage_absorbed']=absorbed
+            # Billing boundary: a successful generation the user declined ('not_adopted:') stays charged and must NOT be absorbed;
+            # every other settled failure is a platform failure ('platform_failure:', administrator resolutions, older rows) and must be.
+            if usage.job.error.startswith('not_adopted:'):checks['user_declined_output_remains_charged']=not absorbed
+            else:checks['failed_settled_usage_absorbed']=absorbed
         reconciliation=CostReconciliation.objects.filter(usage=usage).first()
         reconciliation_entries=list(LedgerEntry.objects.filter(job_id=usage.job_id,kind='reconciliation').values('amount','wallet_id','wallet__kind','balance_after'))
         if absorbed:
@@ -114,6 +116,16 @@ def audit_report(file_reader=None):
             'audit_rate_digest_sha256':hashlib.sha256(json.dumps(usage.rates,sort_keys=True,separators=(',',':')).encode()).hexdigest(),
             'durable_receipt_present':bool(receipt),'stored_result_integrity':result_integrity,'ledger':entries,'checks':checks})
     orphan=LedgerEntry.objects.filter(kind__in=['absorbed','reconciliation'],job__isnull=True).count()
+    # A cancelled job ended before any provider request: it may hold no usage, receipt, ledger movement or held funds.
+    cancelled=Job.objects.filter(state='cancelled')
+    cancellation_policy={'cancelled_jobs':cancelled.count(),'checks':{
+        'cancelled_jobs_have_no_usage':not Usage.objects.filter(job__in=cancelled).exists(),
+        'cancelled_jobs_have_no_provider_receipt':not ProviderReceipt.objects.filter(job__in=cancelled).exists(),
+        'cancelled_jobs_have_no_ledger_entries':not LedgerEntry.objects.filter(job__in=cancelled).exists(),
+        'cancelled_jobs_hold_no_funds':not Reservation.objects.filter(job__in=cancelled,state='held').exists()}}
+    # A job that has ended (succeeded, failed or cancelled) holds nothing: every reservation was settled or released.
+    ended_holding=Reservation.objects.filter(job__state__in=['succeeded','failed','cancelled'],state='held').values_list('job_id',flat=True).distinct()
+    hold_policy={'ended_jobs_holding_funds':[str(job_id) for job_id in ended_holding],'checks':{'ended_jobs_hold_no_funds':not ended_holding.exists()}}
     ledger_policy={'orphan_policy_entries':orphan,'checks':{'policy_ledger_entries_bound_to_jobs':orphan==0}}
     wallets=[]
     for wallet in Wallet.objects.all().order_by('id'):
@@ -134,8 +146,8 @@ def audit_report(file_reader=None):
         'fingerprint_limit':'A configured pricing fingerprint identifies the application configuration, not a provider contract, tariff version, invoice, or verified account discount.',
         'rate_reference_reviewed_on':'2026-09-17','rate_references':['https://platform.claude.com/docs/en/about-claude/pricing','https://deepgram.com/pricing'],
         'rows':rows,'wallets':wallets,'unsettled_provider_receipts':unsettled,'unresolved_jobs':unresolved,
-        'ledger_policy':ledger_policy,
-        'all_checks_pass':all(all(row['checks'].values()) for row in rows+wallets) and all(ledger_policy['checks'].values()),
+        'ledger_policy':ledger_policy,'cancellation_policy':cancellation_policy,'hold_policy':hold_policy,
+        'all_checks_pass':all(all(row['checks'].values()) for row in rows+wallets) and all(ledger_policy['checks'].values()) and all(cancellation_policy['checks'].values()) and all(hold_policy['checks'].values()),
         'durable_receipt_gaps':sum(not row['durable_receipt_present'] and not row['simulated'] for row in rows),
         'invoice_reconciliation':'Not performed; account invoices, discounts and promotional provider credits remain unverified.'}
 
