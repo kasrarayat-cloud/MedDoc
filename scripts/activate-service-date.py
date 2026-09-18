@@ -31,7 +31,12 @@ APP = ROOT / 'rebuild'
 PRIVATE = APP / '.runtime'
 STATE = Path('/var/lib/quillmd')
 HERE = Path(__file__).resolve().parent
-BASELINE = '475a59259203b04072e35cb9270f39a3b0005906'  # the first attempt advanced main and then failed closed
+BASELINE = '475a59259203b04072e35cb9270f39a3b0005906'   # the tree's HEAD
+# ⚠️ THE TREE'S HEAD AND THE RUNNING RELEASE ARE DIFFERENT FACTS, and the refused attempt proved it. It advanced
+# permanent main to BASELINE and then died in the migration, BEFORE it reached the line that rewrites the release in
+# the environment file. So the tree says 475a5925, the services' release line still says 5f673a3b, and they are
+# stopped. An activator that assumes those three move together cannot describe the state it is asked to repair.
+RUNNING_RELEASE = '5f673a3b2cc5c99d68f08f34fba43b4883403583'
 DECL = 'docs/foundation/mutations/20260918-quillmd-service-date-retry.md'
 SELF = 'scripts/activate-service-date.py'
 PREVIOUS_MIGRATION = '0013_recording_charge_limit'
@@ -209,7 +214,7 @@ def main():
     run(['git', 'diff', '--exit-code', 'HEAD', '--', '.'])
     run(['git', 'merge-base', '--is-ancestor', BASELINE, args.target])
     changed = set(output(['git', 'diff', '--name-only', BASELINE, args.target]).splitlines())
-    require(changed <= ALLOWED and MIGRATION_PATH in changed and 'rebuild/core/coding.py' in changed,
+    require(changed <= ALLOWED and MIGRATION_PATH in changed and DECL in changed,
             'Target changes paths outside the declared set: ' + ', '.join(sorted(changed - ALLOWED)))
     require(output(['git', 'diff', '--name-only', BASELINE, args.target, '--', 'rebuild/core/migrations']) == MIGRATION_PATH,
             'Exactly one new migration is declared.')
@@ -231,9 +236,22 @@ def main():
     pulls = json.loads(output(['gh', 'api', f'repos/kasrarayat-cloud/MedDoc/commits/{args.target}/pulls']))
     require(any(p.get('merged_at') and p.get('merge_commit_sha') == args.target
                 and p.get('base', {}).get('ref') == 'main' for p in pulls), 'A merged PR is required.')
-    health = [json.loads(output(['curl', '--fail', '--silent', '--max-time', '5', f'http://127.0.0.1:{p}/health/'])) for p in (9130, 9131)]
-    require(all(h.get('release') == BASELINE and h.get('data_mode') == 'synthetic-only' for h in health),
-            'The private services must run the baseline, synthetic-only.')
+    # The services are expected to be DOWN here: the refused act stopped them and fails closed by design. If they are
+    # up, they must be the release the environment file still names — never something unexplained.
+    health = []
+    for port in (9130, 9131):
+        try:
+            health.append(json.loads(output(['curl', '--fail', '--silent', '--max-time', '5',
+                                             f'http://127.0.0.1:{port}/health/'])))
+        except (subprocess.CalledProcessError, json.JSONDecodeError):
+            health.append(None)
+    require(all(answer is None or (answer.get('release') == RUNNING_RELEASE
+                                   and answer.get('data_mode') == 'synthetic-only') for answer in health),
+            'A private service is answering as something other than the recorded running release.')
+    # Both up, or both down. `any(is None) or all(is not None)` — which is what this said first — is true for every
+    # possible input, including the one it was meant to catch.
+    require(all(answer is None for answer in health) or all(answer is not None for answer in health),
+            'The two surfaces disagree about whether they are running.')
     backup = previous.validate_restore_report(args.backup_report)
     require(backup.get('decrypted_files_written') == 0 and backup.get('restore_database_on_tmpfs_without_swap') is True,
             'The restore proof must come from the plaintext-free restore check.')
@@ -253,13 +271,14 @@ def main():
     protected = previous.protected()
     retained = word.retained_reports()
     env_before = word.checked_file(APP / '.env', private=True)
-    old_line = ('QUILLMD_RELEASE_SHA=' + BASELINE).encode()
+    old_line = ('QUILLMD_RELEASE_SHA=' + RUNNING_RELEASE).encode()
     require(env_before.splitlines().count(old_line) == 1, 'Expected current private release setting.')
     env_after = re.sub(rb'(?m)^' + re.escape(old_line) + rb'$', ('QUILLMD_RELEASE_SHA=' + args.target).encode(), env_before)
     require(env_after != env_before and env_after.count(b'\n') == env_before.count(b'\n'), 'Release replacement did not apply cleanly.')
     installed = APP / '.word-sdk' / billing.SDK_RELEASE
     inputs = word.expected_inputs(args.target)
-    require(inputs == word.expected_inputs(BASELINE), 'Compiled Word inputs must not change.')
+    require(inputs == word.expected_inputs(BASELINE) == word.expected_inputs(RUNNING_RELEASE),
+            'Compiled Word inputs must not change.')
     artifact = word.verify_artifact(installed / 'runtime', installed / 'runtime-manifest.json', installed / 'build-proof.json',
                                     billing.PIN, inputs)
     helper = json.loads(word.checked_file(PRIVATE / 'word-beta-recovery-20260917-final.json', private=True))['helper_image']
@@ -272,7 +291,8 @@ def main():
     for unit in UNITS:
         require((APP / 'deploy' / unit).read_bytes() == (Path('/etc/systemd/system') / unit).read_bytes(),
                 'Installed service policy differs from reviewed source.')
-    identity.verify_live(BASELINE, storage)
+    if all(answer is not None for answer in health):
+        identity.verify_live(RUNNING_RELEASE, storage)
     result_path = Path(args.result)
     lock = PRIVATE / '.service-date-activation.lock'
     require(result_path.is_absolute() and result_path.parent == PRIVATE and result_path.resolve() == result_path
@@ -292,12 +312,13 @@ def main():
             == subprocess.check_output(['git', 'show', commit + ':' + DECL]), 'Committed absolute declaration required.')
     run(['git', 'merge-base', '--is-ancestor', commit, args.target])
     identity.private_write(lock, {'target': args.target, 'pid': os.getpid()})
-    result = {'complete': False, 'previous_head': BASELINE, 'target': args.target,
+    result = {'complete': False, 'previous_head': BASELINE, 'running_release_before': RUNNING_RELEASE,
+              'services_up_before': [answer is not None for answer in health], 'target': args.target,
               'started_at': datetime.now(timezone.utc).isoformat(), 'provider_calls': 0, 'migration': MIGRATION,
               'backup_report': args.backup_report, 'backup_run_id': backup.get('backup_run_id'), 'artifact': artifact,
               'helper_image': helper, 'retained_reports_before': retained, 'stage': 'stopping_private_services'}
     try:
-        word.systemd('stop', helper)
+        word.systemd('stop', helper)   # idempotent: they are already stopped after the refused act
         for unit in UNITS:
             require(output(['systemctl', 'show', unit, '--property=ActiveState', '--value']) == 'inactive'
                     and output(['systemctl', 'show', unit, '--property=MainPID', '--value']) == '0', 'Service did not stop.')
