@@ -19,7 +19,7 @@ from django.utils import timezone
 
 from core import audio
 from core.billing import reconcile_usage
-from core.jobs import cancel, enqueue, reap_abandoned_voice_uploads, run_one, transcription_quote
+from core.jobs import cancel, coverage_note, enqueue, reap_abandoned_voice_uploads, run_one, transcription_quote
 from core.management.commands.audit_billing import audit_report
 from core.models import AuditEvent, Job, LedgerEntry, Membership, PlatformCost, Reservation, Usage, User, Wallet
 from core.security import private_path
@@ -94,7 +94,7 @@ class HeadersCannotUnderstateALength(SimpleTestCase):
                      (FIXTURES / 'tone-3s.webm').read_bytes()[:90]):
             with self.subTest(size=len(data)), self.assertRaises(audio.UnmeasurableRecording):
                 audio.measure(data)
-        with patch('core.audio.matroska', return_value=Decimal('1e40')), self.assertRaises(audio.UnmeasurableRecording):
+        with patch('core.audio.matroska', return_value=audio.Bounds(Decimal('1e40'), Decimal('1e40'))), self.assertRaises(audio.UnmeasurableRecording):
             audio.measure(b'\x1aE\xdf\xa3' + b'\x00' * 16)
 
     def test_an_mp4_timescale_or_sample_table_cannot_shorten_an_aac_recording(self):
@@ -237,8 +237,13 @@ class LegitimateTaggedRecordingsMeasureTheirAudio(SimpleTestCase):
         stray = bytes([0xFF, 0xFB, 0xE8, 0x00])  # MPEG-1 Layer III, 32 kHz, 320 kbps: claims 1,440 bytes
         # Image noise: sync patterns whose sample rates keep changing (44.1, 48 and 32 kHz), as in a real PNG cover.
         noise = [bytes([0xFF, 0xFB, 0x90 | (rate << 2), 0x00]) for rate in (0, 1, 2)]
-        cover = b''.join(noise[i % 3] + bytes(range(97)) for i in range(60))
-        self.assertLessEqual(audio.measure(original + ape_tag([(b'Cover Art (Front)', cover)])), audio.measure(original) + Decimal('0.1'))
+        # A few stray syncs (a small cover) are counted, so they can never hide audio; the measurement only grows.
+        few = b''.join(noise[i % 3] + bytes(range(97)) for i in range(audio.STRAY_FRAMES_IN_TAGS))
+        self.assertGreaterEqual(audio.measure(original + ape_tag([(b'Cover Art (Front)', few)])), audio.measure(original))
+        # Beyond the allowance the tags could hold real audio, so the file is refused rather than under-measured.
+        many = b''.join(noise[i % 3] + bytes(range(97)) for i in range(audio.STRAY_FRAMES_IN_TAGS + 1))
+        with self.assertRaisesMessage(audio.UnmeasurableRecording, 'tags contain audio frames'):
+            audio.measure(original + ape_tag([(b'Cover Art (Front)', many)]))
         # A stream of MPEG-2.5 8 kHz frames (72 bytes, 0.072 s each) with a stray header before every 19 frames.
         frame = bytes([0xFF, 0xE3, 0x18, 0xC0]) + bytes(68)
         stream = b''.join((stray if i % 19 == 0 else b'') + frame for i in range(400))
@@ -314,6 +319,56 @@ class LegitimateTaggedRecordingsMeasureTheirAudio(SimpleTestCase):
         renamed = (FIXTURES / 'tone-3s.m4a').read_bytes().replace(b'mp4a', b'alac', 1)
         with self.assertRaisesMessage(audio.UnmeasurableRecording, 'not Apple Lossless'):
             audio.measure(renamed)
+
+
+class LengthBoundsSeparateChargingFromDisclosure(SimpleTestCase):
+    """Two numbers: the conservative length the charge limit is priced from, and the length the file certainly holds. A
+    statement that part of a recording was not transcribed may only rest on the second."""
+
+    def test_every_fixture_reports_consistent_bounds(self):
+        for name in ('tone-3s.wav', 'tone-3s.mp3', 'tone-3s.m4a', 'tone-3s-fragmented.m4a', 'tone-3s-quicktime.m4a',
+                     'tone-3s.webm', 'tone-3s-live.webm'):
+            with self.subTest(name=name):
+                bounds = audio.measure_bounds((FIXTURES / name).read_bytes())
+                self.assertLessEqual(bounds.confirmed, bounds.measured)
+                self.assertLessEqual(bounds.measured - bounds.confirmed, Decimal('0.1'))
+                self.assertEqual(audio.measure((FIXTURES / name).read_bytes()), bounds.measured)
+
+    def test_bytes_that_might_be_audio_raise_the_priced_length_but_not_the_confirmed_one(self):
+        import struct
+        wav = wav_bytes(seconds=30, tag='bounds')
+        at = wav.find(b'data') + 4
+        declared = int.from_bytes(wav[at:at + 4], 'little')
+        tail = bytearray(wav + bytes(8000))  # 1 s of bytes that are not chunk headers
+        tail[4:8] = struct.pack('<I', len(tail) - 8)
+        bounds = audio.measure_bounds(bytes(tail))
+        self.assertEqual(bounds.confirmed, Decimal('30.000'))   # the declared samples
+        self.assertEqual(bounds.measured, Decimal('31.000'))    # plus what a decoder might read on
+        self.assertEqual(declared, 240000)
+
+    def test_frames_of_alternating_layouts_in_tags_cannot_shorten_a_recording(self):
+        """Measured against ffmpeg: 64 such pairs decoded 6.717 s while the old rule measured 2.412 s."""
+        original = (FIXTURES / 'tone-3s.mp3').read_bytes()
+        low = bytes([0xFF, 0xE3, 0x18, 0xC0]) + bytes(68)   # MPEG-2.5 8 kHz, 0.072 s
+        high = bytes([0xFF, 0xF3, 0x18, 0xC0]) + bytes(32)  # MPEG-2 16 kHz, 0.036 s
+        head = original[:original.find(b'\xff', 10) + 400]
+        pairs = 4
+        hidden = (low + b'\x00' + high + b'\x00') * pairs
+        # Within the allowance every hidden frame counts, so the measurement cannot fall below what they hold.
+        self.assertGreaterEqual(audio.measure(head + ape_tag([(b'Comment', hidden)])), Decimal('0.108') * pairs)
+        with self.assertRaisesMessage(audio.UnmeasurableRecording, 'tags contain audio frames'):
+            audio.measure(head + ape_tag([(b'Comment', (low + b'\x00' + high + b'\x00') * 32)]))
+
+    def test_the_incomplete_marker_reads_the_confirmed_length(self):
+        """A recording priced as 60 s whose audio is certainly 30 s, transcribed in full, must not be called incomplete."""
+        from types import SimpleNamespace
+        priced_long = SimpleNamespace(config={'recording_seconds': '60', 'recording_seconds_confirmed': '30'})
+        self.assertEqual(coverage_note(priced_long, {'duration_seconds': '30.1'}), '')
+        certain_long = SimpleNamespace(config={'recording_seconds': '60', 'recording_seconds_confirmed': '60'})
+        self.assertIn('was not transcribed', coverage_note(certain_long, {'duration_seconds': '30.1'}))
+        # Older jobs, recorded before the confirmed length existed, keep the previous behaviour.
+        legacy = SimpleNamespace(config={'recording_seconds': '60'})
+        self.assertIn('was not transcribed', coverage_note(legacy, {'duration_seconds': '30.1'}))
 
 
 class QuoteArithmetic(SimpleTestCase):

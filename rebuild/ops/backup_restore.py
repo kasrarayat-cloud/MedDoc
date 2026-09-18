@@ -270,6 +270,27 @@ def backup(args):
         raise
 
 
+READY_MARKER = b'PostgreSQL init process complete; ready for start up.'
+
+
+def restore_ready(container, runner=subprocess.run):
+    """True only once the real server is up.
+
+    The postgres entrypoint runs a TEMPORARY server on the socket while it applies initdb, and `pg_isready` answers for it.
+    A restore that starts then meets the shutdown between the temporary server and the real one. That is exactly how the
+    2026-09-18T11:09Z restore failed: the container started, pg_isready answered, and pg_restore hit the handover 2 s later.
+    So readiness needs the entrypoint's own completion marker, and then a statement the real server answers."""
+    logs = runner(['docker', 'logs', container], capture_output=True)
+    if READY_MARKER not in (logs.stdout or b'') + (logs.stderr or b''):
+        return False
+    if runner(['docker', 'exec', container, 'pg_isready', '-U', 'restore_owner', '-d', 'quillmd_restore'],
+              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
+        return False
+    probe = runner(['docker', 'exec', container, 'psql', '-X', '-q', '-t', '-A', '-U', 'restore_owner',
+                    '-d', 'quillmd_restore', '-c', 'SELECT 1'], capture_output=True)
+    return probe.returncode == 0 and (probe.stdout or b'').strip() == b'1'
+
+
 def psql(container, statement, binary=False):
     out = run(['docker', 'exec', '-i', container, 'psql', '-X', '-q', '-A', '-t',
                '-v', 'ON_ERROR_STOP=1', '-U', 'restore_owner', '-d', 'quillmd_restore'],
@@ -322,6 +343,7 @@ def restore(args):
     result = {'run_id': run_id, 'container': name, 'complete': False,
               'started_at_utc': datetime.now(timezone.utc).isoformat(), 'provider_actions': 0}
     created = False
+    result['stage'] = 'authenticating_the_backup'
     try:
         # Recovery uses the reviewed local image recorded in the manifest.
         # Inspect never pulls; --pull=never also closes removal races before run.
@@ -346,15 +368,16 @@ def restore(args):
              '--env', 'POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256 --auth-local=trust',
              '--env', 'POSTGRES_PASSWORD', manifest['image_id']],
             env=dict(os.environ, POSTGRES_PASSWORD=secrets.token_urlsafe(48)))
+        result['stage'] = 'starting_the_isolated_database'
         created = True
-        for _ in range(60):
-            ready = subprocess.run(['docker', 'exec', name, 'pg_isready', '-U', 'restore_owner',
-                                    '-d', 'quillmd_restore'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            if ready.returncode == 0:
+        result['stage'] = 'waiting_for_the_restored_database'
+        for _ in range(120):
+            if restore_ready(name):
                 break
             time.sleep(0.5)
         else:
             raise RuntimeError('Isolated restore database did not become ready.')
+        result['stage'] = 'restoring_the_dump'
         run(['docker', 'exec', '-i', name, 'pg_restore', '--exit-on-error', '--single-transaction',
              '--no-owner', '--no-privileges', '-U', 'restore_owner', '-d', 'quillmd_restore'], data=dump)
         def query(statement):
@@ -373,11 +396,17 @@ def restore(args):
                                  and host_config.get('MemorySwap') == host_config.get('Memory'))
         require(host_config['NetworkMode'] == 'none' and not host_config['PortBindings'] and on_tmpfs_without_swap,
                 'Restore isolation was not maintained.')
+        result['stage'] = 'complete'
         result.update(complete=True, table_count=len(tables), row_count=sum(t['rows'] for t in tables.values()),
                       file_count=len(manifest['files']), all_table_hashes_match=True, all_file_hashes_match=True,
                       decrypted_files_written=0, restore_database_on_tmpfs_without_swap=on_tmpfs_without_swap,
                       invariants=invariants, enabled_custom_triggers=triggers, network='none', published_ports=0,
                       workers_started=0, provider_credentials_copied=False, backup_run_id=manifest['run_id'])
+    except BaseException as failure:
+        # The stage and the failure's class, never the failing command's output: a database error can quote row data.
+        result['failed_stage'] = result.get('stage')
+        result['error_class'] = type(failure).__name__
+        raise
     finally:
         result['finished_at_utc'] = datetime.now(timezone.utc).isoformat()
         result['container_retained'] = created and args.keep_container

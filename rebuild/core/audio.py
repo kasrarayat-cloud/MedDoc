@@ -17,6 +17,7 @@ understate the length and so the charge limit):
 
 Anything else raises UnmeasurableRecording: without a duration the charge limit cannot be confirmed, so nothing is sent.
 """
+from collections import namedtuple
 from decimal import Decimal
 import struct
 
@@ -26,6 +27,12 @@ MAX_BYTES = 15 * 1024 * 1024
 MAX_ITEMS = 400000
 MAX_SECONDS = Decimal(24 * 3600)
 LOWEST_SECONDS_PER_BYTE = Decimal('0.001')  # 8 kbps, the lowest MPEG audio bitrate
+STRAY_FRAMES_IN_TAGS = 8  # headers of other layouts inside tags: counted, and beyond this the file is refused
+
+# Two numbers, because they answer different questions. `measured` is the conservative length: never less than what a
+# decoder plays, so the charge limit holds enough. `confirmed` is the length this file certainly holds, so a statement
+# that part of a recording was not transcribed can never be made about audio that was never there.
+Bounds = namedtuple('Bounds', 'confirmed measured')
 MP3_STEPS = 1500000  # frames plus resynchronised bytes; a 60-minute recording at the lowest bitrate is about 100,000 frames
 
 
@@ -40,27 +47,34 @@ def refuse(detail):
 
 
 def measure(data):
-    """Duration in seconds (Decimal) of an uploaded recording's bytes."""
+    """The conservative duration in seconds (Decimal): never less than what a decoder plays."""
+    return measure_bounds(data).measured
+
+
+def measure_bounds(data):
+    """(confirmed, measured) seconds of an uploaded recording's bytes."""
     if not data:
         refuse('empty file')
     if len(data) > MAX_BYTES:
         refuse('larger than 15 MB')
     try:
         if data[:4] == b'RIFF' and data[8:12] == b'WAVE':
-            seconds = wav(data)
+            bounds = wav(data)
         elif data[:4] == b'\x1aE\xdf\xa3':
-            seconds = matroska(data)
+            bounds = matroska(data)
         elif data[4:8] == b'ftyp':
-            seconds = mp4(data)
+            bounds = mp4(data)
         elif data[:3] == b'ID3' or (len(data) > 1 and data[0] == 0xFF and data[1] & 0xE0 == 0xE0):
-            seconds = mp3(data)
+            bounds = mp3(data)
         else:
             refuse('unsupported format')
-        if not seconds or seconds <= 0:
+        if not bounds.measured or bounds.measured <= 0:
             refuse('no audio found')
-        if seconds > MAX_SECONDS:
+        if bounds.measured > MAX_SECONDS:
             refuse('implausible length')
-        return seconds.quantize(Decimal('0.001'))
+        if bounds.confirmed > bounds.measured:
+            refuse('inconsistent length bounds')
+        return Bounds(max(bounds.confirmed, Decimal(0)).quantize(Decimal('0.001')), bounds.measured.quantize(Decimal('0.001')))
     except UnmeasurableRecording:
         raise
     except (struct.error, IndexError, KeyError, ValueError, OverflowError, ArithmeticError, RecursionError):
@@ -91,17 +105,18 @@ def wav(data):
     # A decoder plays the declared data and then looks for further 'data' chunks (ffmpeg does: 29 s hidden in a second data
     # chunk after a LIST chunk decodes), so those count; other chunks (LIST, id3, cue…) are metadata. An absent or oversized
     # declared size means the samples run to the end of the file.
-    size = len(data) - start
+    size = confirmed = len(data) - start
     if declared not in (0, 0xFFFFFFFF) and declared <= size:
         later, unparsed = trailing_chunks(data, start + declared)
-        size = declared + later + unparsed  # bytes that are not chunk headers could be samples a decoder reads on
+        confirmed = declared + later  # the declared samples and any further data chunks
+        size = confirmed + unparsed  # bytes that are not chunk headers could be samples a decoder reads on
     tag, channels, rate, byte_rate, block, bits = fmt
     # A decoder plays the samples at rate x block bytes per second whatever the byte-rate field says, and may read past a
     # declared data size, so both come from the samples: every byte after the data header, at rate x block.
     if (tag not in (1, 3, 0xFFFE) or not 1 <= channels <= 8 or not 4000 <= rate <= 384000 or bits not in (8, 16, 24, 32, 64)
             or block != channels * (bits // 8) or byte_rate != rate * block):
         refuse('compressed, inconsistent or invalid WAV encoding')
-    return Decimal(size) / Decimal(rate * block)
+    return Bounds(Decimal(confirmed) / Decimal(rate * block), Decimal(size) / Decimal(rate * block))
 
 
 def trailing_chunks(data, position):
@@ -169,6 +184,7 @@ def mp3(data):
     start = position
     end = tags_start(data, start)
     seconds, frames, before_tags, steps, slowest, strays_in_tags = Decimal(0), 0, 0, 0, Decimal(0), 0
+    stray_seconds = Decimal(0)
     current, pending = None, []
     # The walk follows a decoder: frames of the stream's layout (samples per frame, sample rate) count wherever they are, junk
     # between them and trailing tags included (ffmpeg plays frames hidden in an APE tag, one frame at a time). A header of
@@ -199,7 +215,10 @@ def mp3(data):
             # A decoder's parser starts over whenever a header disagrees with the previous one, so agreement must be consecutive.
             pending = (pending if pending and pending[0][0][1:] == layout else []) + [(frame, position)]
             if position >= end:
+                # Inside the tags the bytes are excused from the non-frame allowance, so a header of another layout is
+                # counted here instead: a decoder plays any real frame it finds, and these bytes are charged to nothing else.
                 strays_in_tags += 1
+                stray_seconds += Decimal(frame[1]) / Decimal(frame[2])
             if len(pending) >= 3:
                 current = layout
                 for f, at in pending:
@@ -209,11 +228,11 @@ def mp3(data):
     if current is None:
         for f, at in pending:  # a recording too short to establish a layout: its frames still count
             count(f, at)
-    # A decoder plays any real frame it finds, whatever its layout; stray syncs in cover art only fail at the payload, which
-    # is not decoded here. So headers of other layouts inside tags are bounded (a 400 KB PNG cover holds about 55): beyond
-    # that the tags could be hiding audio, and the file is refused.
-    if strays_in_tags > 64:
-        refuse('MP3 whose tags contain audio frames')
+    # Stray syncs in cover art only fail at the payload, which is not decoded here, so a few are tolerated and counted.
+    # Beyond the allowance the tags could be hiding real audio (measured: alternating layouts hid 4.3 s under the old bound
+    # of 64), and the file is refused rather than under-measured.
+    if strays_in_tags > STRAY_FRAMES_IN_TAGS:
+        refuse('MP3 whose tags contain audio frames; re-export it without embedded artwork')
     # Recognised trailing tags excuse only their own non-frame bytes. Other bytes before them that are not standard frames
     # (free-format frames, unknown data) could still be decoded, so they are bounded and counted at the lowest bitrate seen.
     uncounted = end - start - before_tags
@@ -221,7 +240,7 @@ def mp3(data):
         refuse('MP3 that is not made of standard audio frames')
     # Costed at the lowest bitrate MP3 allows (8 kbps: 1 ms per byte), not the slowest seen: an attacker chooses the frames
     # that are seen, so bytes a decoder might still play can never be priced below what they could hold.
-    return seconds + Decimal(max(uncounted, 0)) * max(slowest, LOWEST_SECONDS_PER_BYTE)
+    return Bounds(seconds, seconds + stray_seconds + Decimal(max(uncounted, 0)) * max(slowest, LOWEST_SECONDS_PER_BYTE))
 
 
 def adjacent_run(data, position, layout):
@@ -373,7 +392,7 @@ def mp4(data):
     audio = [t for t in tracks.values() if t['handler'] == b'soun']
     if not audio:
         refuse('MP4 without an audio track')
-    best = Decimal(0)
+    best = confirmed = Decimal(0)
     for track in audio:
         # Only AAC is measured: its access units decode to a fixed frame length at the rate its own configuration states,
         # which a decoder uses whatever the container's timescale or sample table claims.
@@ -386,6 +405,7 @@ def mp4(data):
             units += fragments[track['id']][0]
             samples += fragments[track['id']][1]
         seconds = Decimal(samples * frame) / Decimal(rate)
+        confirmed = max(confirmed, seconds)  # access units are certain; the container's claims below may exceed them
         if track['timescale']:
             seconds = max(seconds, Decimal(units) / Decimal(track['timescale']))
         if track['edit_units']:
@@ -394,7 +414,7 @@ def mp4(data):
             # Each edit decodes whole access units, so allow one frame per edit (measured: ffmpeg plays 0.0155 s more per edit).
             seconds = max(seconds, Decimal(track['edit_units']) / Decimal(movie['timescale']) + Decimal(track['edits'] * frame) / Decimal(rate))
         best = max(best, seconds)
-    return best
+    return Bounds(confirmed, best)
 
 
 AAC_RATES = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350]
@@ -605,4 +625,4 @@ def matroska(data):
         refuse('WebM without audio blocks')
     tail = sorted(state['deltas'])[len(state['deltas']) // 2] if state['deltas'] else 0
     by_time = Decimal(state['last'] - state['first'] + tail) * Decimal(state['scale']) / Decimal(1000000000)
-    return max(by_time, state['opus_seconds'])
+    return Bounds(state['opus_seconds'], max(by_time, state['opus_seconds']))
