@@ -37,7 +37,7 @@ async function status(page,url){return (await page.request.get(url,{maxRedirects
 async function reserve(form){
  const text=await form.innerText();
  if(!live){assert(text.includes('Synthetic fixture'));return;}
- const amount=Number(text.match(/Reserve up to \$([0-9]+(?:\.[0-9]+)?)/)?.[1]);assert(Number.isFinite(amount)&&amount>0);
+ const amount=Number(text.match(/(?:Reserve up to|Limit) \$([0-9]+(?:\.[0-9]+)?)/)?.[1]);assert(Number.isFinite(amount)&&amount>0);
  assert(report.maximumReservedUsd+amount<=1,'Total displayed live reservation exceeds USD 1.');
  assert((await form.locator('[name=usage_quote]').inputValue()).length>20);report.maximumReservedUsd+=amount;
 }

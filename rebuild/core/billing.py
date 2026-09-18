@@ -49,20 +49,37 @@ def welcome_credit(user):
     audit(user,'credit.welcome',wallet.pk)
     return wallet
 
+def payer_wallets(user,department):
+    """The personal promotional wallet and the paid wallet that pays for this user's requests in this department."""
+    promo=Wallet.objects.get(user=user,kind='promo')
+    payer,_=Wallet.objects.get_or_create(organization=department.organization,kind='paid') if department.organization_pays else Wallet.objects.get_or_create(user=user,kind='paid')
+    return promo,payer
+
+
+def available_balance(user,department):
+    """Unreserved funds a new request could hold (display only; reserve() re-checks under row locks)."""
+    return sum((w.balance-w.reserved for w in payer_wallets(user,department)),ZERO)
+
+
 @transaction.atomic
-def reserve(job,maximum_cost):
+def reserve(job,maximum_cost=None,*,charge_limit=None):
+    """Hold the customer's binding charge limit before any provider request. Either the maximum provider cost (held × 1.5)
+    or an exact charge limit the customer saw and approved."""
     membership(job.user,job.encounter.department)
     from .models import Job
     job=Job.objects.select_for_update().get(pk=job.pk)
-    maximum_charge=exact(maximum_cost)*MULTIPLIER
+    maximum_charge=exact(charge_limit) if charge_limit is not None else exact(maximum_cost)*MULTIPLIER
+    if maximum_charge<0: raise ValidationError('A charge limit cannot be negative.')
     if Reservation.objects.filter(job=job).exists(): return
-    promo=Wallet.objects.get(user=job.user,kind='promo')
     department=job.encounter.department
+    promo,payer=payer_wallets(job.user,department)
     job.payer=f'organization:{department.organization_id}' if department.organization_pays else f'user:{job.user_id}'
     job.save(update_fields=['payer'])
-    payer,_=Wallet.objects.get_or_create(organization=department.organization,kind='paid') if department.organization_pays else Wallet.objects.get_or_create(user=job.user,kind='paid')
     locked={w.pk:w for w in Wallet.objects.select_for_update().filter(pk__in=[promo.pk,payer.pk]).order_by('pk')}
-    if sum((w.balance-w.reserved for w in locked.values()),ZERO)<maximum_charge: raise ValidationError('Insufficient available balance. No provider request was made.')
+    available=sum((w.balance-w.reserved for w in locked.values()),ZERO)
+    if available<maximum_charge:
+        raise ValidationError(f'Insufficient available balance: this request needs up to ${maximum_charge.normalize():f} held and '
+                              f'${max(available,ZERO).normalize():f} is available. No provider request was made.')
     remaining=maximum_charge
     for wallet in [locked[promo.pk],locked[payer.pk]]:
         amount=min(wallet.balance-wallet.reserved,remaining)
@@ -82,9 +99,13 @@ def settle(job,actual_cost,units,rates,provider,provider_request_id='',simulated
     if existing: return existing
     actual=exact(actual_cost)
     if simulated and actual!=0: raise ValidationError('Simulated integrations cannot create billable cost.')
-    charged=exact(actual*MULTIPLIER)
+    uncapped=exact(actual*MULTIPLIER)
     reservations=list(Reservation.objects.select_for_update().filter(job=job,state='held').select_related('wallet').order_by('wallet_id'))
-    if sum((r.amount for r in reservations),ZERO)<charged: raise ValidationError('Actual usage exceeds the authorized reservation; settlement held for reconciliation.')
+    held=sum((r.amount for r in reservations),ZERO)
+    if uncapped>0 and held<=0: raise ValidationError('No authorized charge limit is held for this job; settlement held for reconciliation.')
+    # The held amount is the customer's binding limit: charge 1.5 × cost up to it, and absorb anything above it (below).
+    charged=min(uncapped,held)
+    over_limit=uncapped-charged
     wallets={w.pk:w for w in Wallet.objects.select_for_update().filter(pk__in=[r.wallet_id for r in reservations]).order_by('pk')}
     remaining=charged
     # Personal promotional credit is always used before paid funds.
@@ -96,6 +117,13 @@ def settle(job,actual_cost,units,rates,provider,provider_request_id='',simulated
         r.state='settled'; r.save(update_fields=['state']); remaining-=debit
     d=job.encounter.department
     result=Usage.objects.create(job=job,user=job.user,department=d,organization=d.organization,payer=job.payer or f'user:{job.user_id}',provider=provider,provider_request_id=provider_request_id,provider_resource_id=provider_resource_id,units=units,rates=rates,actual_cost=actual,charged_cost=charged,simulated=simulated)
+    if over_limit>0:
+        # Provider cost, customer charge and the absorbed difference stay separate: Usage.actual_cost, the usage ledger debits,
+        # and this platform cost. The customer is never charged above the limit they approved.
+        PlatformCost.objects.create(job=job,kind='absorbed_over_limit',amount=over_limit,
+            description='Charge above the approved customer limit, absorbed by QuillMD',
+            evidence_reference=f'usage:{result.pk} provider_cost:{actual} uncapped_charge:{uncapped} customer_limit:{held}')
+        audit(job.user,'usage.over_limit_absorbed',job.pk,department=d,uncapped=str(uncapped),charged=str(charged),absorbed=str(over_limit))
     audit(job.user,'usage.settle',job.pk,department=d,actual=str(actual),charged=str(charged),simulated=simulated)
     return result
 
@@ -157,6 +185,11 @@ def reconcile_refund(obj):
     Refund.objects.update_or_create(stripe_refund=obj['id'],defaults={'payment':p,'amount_cents':amount,'status':'succeeded'})
     audit(p.user,'payment.refund',p.pk,amount=str(debit))
 
+def customer_limit(usage):
+    """The binding charge limit for a usage row: the holds that settled for its job (None when nothing was ever held)."""
+    held=sum((r.amount for r in Reservation.objects.filter(job_id=usage.job_id,state='settled')),ZERO)
+    return held if held>0 else None
+
 def payer_wallet(payer):
     """The PAID wallet of the payer recorded on a usage row ('user:<id>' or 'organization:<id>')."""
     scope,_,identifier=(payer or '').partition(':')
@@ -205,8 +238,14 @@ def reconcile_usage(usage,reconciled_cost,evidence_reference,actor,provider_cred
     if evidence_sha256 and not re.fullmatch(r'[0-9a-f]{64}',evidence_sha256): raise ValidationError('Evidence sha256 must be 64 hexadecimal characters.')
     note=(note or '').strip()
     if len(note)>240: raise ValidationError('Note is limited to 240 characters.')
-    delta=signed_exact((reconciled-usage.actual_cost)*MULTIPLIER)
-    row=CostReconciliation(usage=usage,reconciled_cost=reconciled,provider_credit_applied=credit,discount_applied=discount,evidence_reference=evidence_reference,evidence_sha256=evidence_sha256,recorded_by=actor,note=note,charge_delta=delta,ledger_status='applied')
+    # The customer's total never exceeds the limit they approved (the settled holds): evidence of a higher provider cost raises the
+    # customer charge only up to that limit, and moves the absorbed amount for the rest. Rows without a hold keep plain 1.5×.
+    limit=customer_limit(usage)
+    uncapped_before=signed_exact(usage.actual_cost*MULTIPLIER); uncapped_after=signed_exact(reconciled*MULTIPLIER)
+    customer_after=min(uncapped_after,limit) if limit is not None else uncapped_after
+    delta=customer_after-usage.charged_cost
+    over_limit_delta=(uncapped_after-customer_after)-(uncapped_before-usage.charged_cost)
+    row=CostReconciliation(usage=usage,reconciled_cost=reconciled,provider_credit_applied=credit,discount_applied=discount,evidence_reference=evidence_reference,evidence_sha256=evidence_sha256,recorded_by=actor,note=note,charge_delta=delta,over_limit_delta=over_limit_delta,ledger_status='applied')
     absorbed=LedgerEntry.objects.filter(job_id=usage.job_id,kind='absorbed').exists() or PlatformCost.objects.filter(job_id=usage.job_id,kind='absorbed_failure').exists()
     if absorbed:
         # The user's charge was already reversed in full; the evidence is recorded against the platform cost, never credited or debited twice.

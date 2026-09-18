@@ -189,7 +189,9 @@ class Usage(ProviderIdentifiers,Entity):
         return f'Reconciled to provider evidence: {row.evidence_reference}' if row else 'Not reconciled to a provider invoice'
     class Meta:
         constraints=[
-            models.CheckConstraint(condition=models.Q(actual_cost__gte=0,charged_cost__gte=0)&models.Q(charged_cost=models.F('actual_cost')*Decimal('1.5')),name='exact_usage_multiplier'),
+            # Never above 1.5 × cost. Below it only when the approved customer limit capped the charge; the audit requires the
+            # difference to exist, exactly, as one 'absorbed_over_limit' platform cost.
+            models.CheckConstraint(condition=models.Q(actual_cost__gte=0,charged_cost__gte=0)&models.Q(charged_cost__lte=models.F('actual_cost')*Decimal('1.5')),name='usage_charge_at_most_multiplier'),
             models.UniqueConstraint(provider_family_expression(),models.F('provider_request_id'),condition=~models.Q(provider_request_id='')&models.Q(simulated=False),name='usage_provider_request_once'),
             models.UniqueConstraint(provider_family_expression(),provider_resource_expression(),condition=(~models.Q(provider_resource_id='')|models.Q(provider__startswith='anthropic:',provider_request_id__startswith='msg_')|models.Q(provider__startswith='openai:',provider_request_id__startswith='resp_'))&models.Q(simulated=False),name='usage_provider_resource_once'),
         ]
@@ -292,6 +294,9 @@ class CostReconciliation(Entity):
     recorded_by=models.ForeignKey(User,on_delete=models.PROTECT)
     note=models.CharField(max_length=240,blank=True)
     charge_delta=models.DecimalField(max_digits=24,decimal_places=12)
+    # Change in the amount QuillMD absorbs above the approved customer limit (signed): the customer charge never exceeds the
+    # limit the customer approved, so evidence of a higher provider cost moves this, not the customer's ledger.
+    over_limit_delta=models.DecimalField(max_digits=24,decimal_places=12,default=0)
     ledger_status=models.CharField(max_length=16,choices=LEDGER_STATUSES)
     def save(self,*args,**kwargs):
         # Evidence and amounts are append-only; only the ledger status may advance once funds exist.
@@ -306,7 +311,8 @@ class CostReconciliation(Entity):
         ]
 class PlatformCost(Entity):
     """Costs QuillMD carries itself. Never charged to a user and never part of a wallet ledger."""
-    KINDS=[('fixed_overhead','Fixed overhead'),('absorbed_failure','Provider cost of a platform failure')]
+    KINDS=[('fixed_overhead','Fixed overhead'),('absorbed_failure','Provider cost of a platform failure'),
+           ('absorbed_over_limit','Charge above the approved customer limit')]
     kind=models.CharField(max_length=20,choices=KINDS)
     amount=models.DecimalField(max_digits=24,decimal_places=12)
     description=models.CharField(max_length=240)
@@ -318,7 +324,8 @@ class PlatformCost(Entity):
     class Meta:
         constraints=[
             models.UniqueConstraint(fields=['job'],condition=models.Q(kind='absorbed_failure'),name='one_absorbed_failure_per_job'),
+            models.UniqueConstraint(fields=['job'],condition=models.Q(kind='absorbed_over_limit'),name='one_over_limit_absorption_per_job'),
             models.CheckConstraint(condition=models.Q(amount__gte=0),name='platform_cost_nonnegative'),
-            models.CheckConstraint(condition=models.Q(kind__in=['fixed_overhead','absorbed_failure']),name='platform_cost_kind_known'),
+            models.CheckConstraint(condition=models.Q(kind__in=['fixed_overhead','absorbed_failure','absorbed_over_limit']),name='platform_cost_kind_known'),
             models.CheckConstraint(condition=models.Q(kind='fixed_overhead')|models.Q(job__isnull=False),name='absorbed_failure_names_job'),
         ]

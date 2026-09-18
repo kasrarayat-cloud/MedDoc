@@ -21,12 +21,13 @@ from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
 from core.billing import absorb_failed_job, reserve, settle
-from core.jobs import CANCEL_REFUSALS, CANCELLED_ERROR, cancel, enqueue, run_one
+from core.jobs import CANCEL_REFUSALS, CANCELLED_ERROR, OVERFLOW_ERROR, cancel, enqueue, run_one
 from core.management.commands.audit_billing import audit_report
 from core.models import AuditEvent, Encounter, Job, LedgerEntry, Membership, PlatformCost, Reservation, Usage, User, Wallet
 from core.security import private_path
 from core.tests.test_billing_policy import AUDITABLE_RATES, STORAGES, PolicyFixture, unadopted_live_result
 from core.tests.test_security import SyntheticFixture
+from core.tests.audio_fixtures import wav_bytes
 
 LIVE={'AI_MODE':'live','AI_PROVIDER':'anthropic','AI_MODEL':'synthetic-model','AI_INPUT_RATE':'3','AI_OUTPUT_RATE':'15','AI_CACHED_RATE':'.3'}
 GENERATION_DISCLOSURE='This is an additional generation for this document. Earlier generations remain charged; this request is charged separately at provider usage × 1.5.'
@@ -66,7 +67,7 @@ class BoundaryFixture(PolicyFixture):
         job.refresh_from_db();return job
 
     def transcription_job(self,key,response):
-        recording=private_path(f'uploads/{key}.wav');recording.parent.mkdir(parents=True,exist_ok=True);recording.write_bytes(b'RIFF synthetic '+key.encode())
+        recording=private_path(f'uploads/{key}.wav');recording.parent.mkdir(parents=True,exist_ok=True);recording.write_bytes(wav_bytes(tag=key))
         with patch.dict(os.environ,self.VOICE_ENV):
             job=enqueue(self.encounter,self.user,kind='transcription',input_path=f'uploads/{key}.wav')
             with patch('core.jobs.httpx.post',return_value=response):self.assertTrue(run_one())
@@ -182,7 +183,7 @@ class PlatformFailuresAreAbsorbed(BoundaryFixture,TestCase):
 
     def test_transcript_over_the_note_limit_is_a_platform_failure(self):
         job=self.transcription_job('overflow',deepgram('x'*50000,'dg_boundary_overflow'))
-        self.assertEqual(job.state,'failed');self.assertEqual(job.error,'platform_failure: Transcription exceeds the note limit; nothing was truncated.')
+        self.assertEqual(job.state,'failed');self.assertEqual(job.error,'platform_failure: '+OVERFLOW_ERROR)
         self.encounter.refresh_from_db();self.assertEqual(self.encounter.notes,'Symptoms: no chest pain')
         checks=self.assert_absorbed(job);self.assertTrue(checks['failed_settled_usage_absorbed'])
 
@@ -223,7 +224,7 @@ class QueuedRequestCancellation(BoundaryFixture,TestCase):
         self.promo.refresh_from_db();self.assertEqual(self.promo.reserved,0);self.assertTrue(audit_report()['all_checks_pass'])
 
     def test_cancelled_transcription_key_fits_the_column(self):
-        recording=private_path('uploads/cancel.wav');recording.parent.mkdir(parents=True,exist_ok=True);recording.write_bytes(b'RIFF synthetic cancel')
+        recording=private_path('uploads/cancel.wav');recording.parent.mkdir(parents=True,exist_ok=True);recording.write_bytes(wav_bytes(tag='cancel'))
         with patch.dict(os.environ,self.VOICE_ENV):job=enqueue(self.encounter,self.user,kind='transcription',input_path='uploads/cancel.wav')
         self.assertEqual(len(job.request_key),115)
         cancel(job,self.user);job.refresh_from_db()

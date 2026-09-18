@@ -16,6 +16,7 @@ from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
 
+from django.core.exceptions import ValidationError
 from django.db import close_old_connections, connection, connections
 from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
@@ -31,6 +32,7 @@ from core.tests.test_billing_boundary import (CANCEL_BUTTON, GENERATION_DISCLOSU
                                               adopted_live_result, deepgram)
 from core.tests.test_billing_policy import STORAGES, unadopted_live_result
 from core.tests.test_security import SyntheticFixture
+from core.tests.audio_fixtures import wav_bytes
 
 VOICE_ENV={'QUILLMD_DEEPGRAM_RATE_PER_MINUTE':'0.006','QUILLMD_DEEPGRAM_RATE_PER_SECOND':'','QUILLMD_VOICE_MAX_COST':'0.20',
            'QUILLMD_PROVIDER_DISCOUNT_RATE':'0','DEEPGRAM_API_KEY':'synthetic-placeholder-not-a-key'}
@@ -42,7 +44,7 @@ class RegressionFixture(BoundaryFixture):
         Membership.objects.filter(user=self.user,department=self.encounter.department).update(active=active)
 
     def recording(self,key):
-        path=private_path(f'uploads/{key}.wav');path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(b'RIFF synthetic '+key.encode())
+        path=private_path(f'uploads/{key}.wav');path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(wav_bytes(tag=key))
         return f'uploads/{key}.wav'
 
     def run_transcription(self,key,response=None,env=None,side_effect=None):
@@ -100,24 +102,41 @@ class UnusableOutputIsAPlatformFailureWhateverTheUserDid(RegressionFixture,TestC
 
 @override_settings(ADMIN_SITE=False,STORAGES=STORAGES,**LIVE)
 class OutputIsDeliveredOnlyForChargedRequests(RegressionFixture,TestCase):
-    def test_note_overflow_is_absorbed_and_its_transcript_is_not_delivered(self):
+    def test_notes_already_full_refuse_before_any_request(self):
         self.client.force_login(self.user)
         base='Symptoms: no chest pain\n';padded=base+'P'*(50000-len(base))
         self.assertEqual(self.client.post(f'/encounters/{self.encounter.pk}/notes/',{'revision':self.encounter.revision,'notes':padded}).status_code,302)
+        with patch.dict(os.environ,VOICE_ENV),patch('core.jobs.httpx.post') as post,self.assertRaisesMessage(ValidationError,'too close to the 50,000-character limit'):
+            enqueue(self.encounter,self.user,kind='transcription',input_path=self.recording('full-notes'))
+        self.assertEqual(post.call_count,0);self.assertFalse(Job.objects.filter(kind='transcription').exists())
+        self.assertEqual(self.balances(),(Decimal('10'),Decimal('0')))
+
+    def test_an_unexpected_overflow_is_absorbed_and_its_transcript_is_still_delivered(self):
+        """The estimate lets the request through but the real transcript does not fit: absorbed, never discarded."""
+        self.client.force_login(self.user)
+        base='Symptoms: no chest pain\n';padded=base+'P'*(49960-len(base))
+        self.assertEqual(self.client.post(f'/encounters/{self.encounter.pk}/notes/',{'revision':self.encounter.revision,'notes':padded}).status_code,302)
         job,post=self.run_transcription('overflow',deepgram(TRANSCRIPT,'dg_regression_overflow'))
         self.assertEqual(post.call_count,1);self.assert_absorbed_platform_failure(job)
+        self.encounter.refresh_from_db();self.assertNotIn(TRANSCRIPT,self.encounter.notes)
         page=self.client.get(f'/encounters/{self.encounter.pk}/')
-        self.assertNotContains(page,f'/jobs/{job.pk}/result/');self.assertNotContains(page,TRANSCRIPT)
-        self.assertEqual(self.download_status(job),404)
+        self.assertContains(page,f'/jobs/{job.pk}/result/');self.assertContains(page,'download it from the document record')
+        response=self.client.get(f'/jobs/{job.pk}/result/');self.assertEqual(response.status_code,200)
+        self.assertEqual(json.loads(b''.join(response.streaming_content))['transcript'],TRANSCRIPT)
 
-    def test_cost_above_the_held_maximum_is_labelled_honestly_and_not_delivered(self):
+    def test_cost_above_the_approved_limit_is_capped_absorbed_and_delivered(self):
+        """The provider bills far more audio than we measured: the customer pays the limit, QuillMD absorbs the rest."""
         self.client.force_login(self.user)
         job,post=self.run_transcription('long',deepgram(TRANSCRIPT,'dg_regression_long',duration=6000))
-        self.assertEqual(post.call_count,1);self.assertTrue(ProviderReceipt.objects.filter(job=job).exists())
-        self.assertEqual(job.state,'reconciliation')
-        self.assertEqual(job.error,'Provider completed, but settlement needs administrator reconciliation; nothing is charged until it is resolved.')
-        self.assertEqual(self.download_status(job),404)
-        self.assertNotContains(self.client.get(f'/encounters/{self.encounter.pk}/'),f'/jobs/{job.pk}/result/')
+        self.assertEqual(post.call_count,1);self.assertEqual(job.state,'succeeded')
+        limit=Decimal(job.config['charge_limit']);usage=Usage.objects.get(job=job)
+        self.assertEqual(usage.actual_cost,Decimal('0.6'));self.assertEqual(usage.charged_cost,limit)
+        self.assertEqual(PlatformCost.objects.get(job=job,kind='absorbed_over_limit').amount,Decimal('0.9')-limit)
+        self.assertEqual(self.balances(),(Decimal('10')-limit,Decimal('0')))
+        self.encounter.refresh_from_db();self.assertIn(TRANSCRIPT,self.encounter.notes)
+        self.assertEqual(self.download_status(job),200)
+        report=audit_report();row=[r for r in report['rows'] if r['job_id']==str(job.pk)][0]
+        self.assertTrue(report['all_checks_pass'],row['checks']);self.assertTrue(row['checks']['over_limit_absorbed_exactly'])
 
     def test_succeeded_and_declined_outputs_remain_downloadable(self):
         self.client.force_login(self.user)
@@ -356,7 +375,7 @@ class RoundTwoRegressions(RegressionFixture,TestCase):
         path=self.recording('resolved')
         with patch.dict(os.environ,VOICE_ENV):
             job=enqueue(self.encounter,self.user,kind='transcription',input_path=path)
-            with patch('core.jobs.httpx.post',return_value=deepgram(TRANSCRIPT,'dg_regression_resolved',duration=6000)):self.assertTrue(run_one())
+            with patch('core.jobs.httpx.post',side_effect=TimeoutError('synthetic provider timeout')):self.assertTrue(run_one())
         job.refresh_from_db();self.assertEqual(job.state,'reconciliation');key=job.request_key
         resolved=self.admin_client().post(f'/console/jobs/{job.pk}/resolve/',{'outcome':'release_no_cost','evidence_note':'Synthetic resolution for the regression test'})
         self.assertEqual(resolved.status_code,302)
