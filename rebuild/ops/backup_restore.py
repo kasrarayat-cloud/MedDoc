@@ -333,15 +333,28 @@ def remove_owned_restore(name, run_id):
 
 
 def restore(args):
-    cipher = key_at(args.key_file)
-    backup_path, manifest = load_backup(args.backup, cipher)
-    output = private_dir(args.output, create=True)
+    # The record is opened BEFORE the first step that can fail. Reading the key, loading the backup and creating the
+    # output directory all used to run before `result` existed, so a refusal there wrote no verification.json at all and
+    # surfaced only as the generic "refused or failed" message — the operator was left with nothing that named the stage.
     run_id = secrets.token_hex(8)
-    restored = output / ('restore-' + run_id)
-    restored.mkdir(mode=0o700)
     name = 'quillmd-restore-' + run_id
     result = {'run_id': run_id, 'container': name, 'complete': False,
-              'started_at_utc': datetime.now(timezone.utc).isoformat(), 'provider_actions': 0}
+              'started_at_utc': datetime.now(timezone.utc).isoformat(), 'provider_actions': 0,
+              'stage': 'opening_the_backup'}
+    restored = None
+    try:
+        cipher = key_at(args.key_file)
+        backup_path, manifest = load_backup(args.backup, cipher)
+        output = private_dir(args.output, create=True)
+        restored = output / ('restore-' + run_id)
+        restored.mkdir(mode=0o700)
+    except BaseException as failure:
+        result['failed_stage'] = result['stage']
+        result['error_class'] = type(failure).__name__
+        result['finished_at_utc'] = datetime.now(timezone.utc).isoformat()
+        # There may be no directory to write into yet; say what happened on the way out rather than swallow it.
+        print(json.dumps({'restore_directory': None, **result}))
+        raise
     created = False
     result['stage'] = 'authenticating_the_backup'
     try:
@@ -360,6 +373,9 @@ def restore(args):
             decrypt_checked(backup_path / row['object'], row, cipher)
             verified_files += 1
         require(verified_files == len(manifest['files']), 'Not every backed-up document was verified.')
+        # Set before the step it names: it used to be set after, so a container that would not start was recorded as an
+        # authentication failure and this label could never appear at all.
+        result['stage'] = 'starting_the_isolated_database'
         run(['docker', 'run', '--pull=never', '--detach', '--name', name, '--label', LABEL + '=' + run_id,
              '--network', 'none', '--read-only', '--memory', '768m', '--memory-swap', '768m', '--cpus', '1',
              '--tmpfs', '/var/lib/postgresql/data:rw,size=512m,mode=0700',
@@ -368,7 +384,6 @@ def restore(args):
              '--env', 'POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256 --auth-local=trust',
              '--env', 'POSTGRES_PASSWORD', manifest['image_id']],
             env=dict(os.environ, POSTGRES_PASSWORD=secrets.token_urlsafe(48)))
-        result['stage'] = 'starting_the_isolated_database'
         created = True
         result['stage'] = 'waiting_for_the_restored_database'
         for _ in range(120):
@@ -410,8 +425,15 @@ def restore(args):
     finally:
         result['finished_at_utc'] = datetime.now(timezone.utc).isoformat()
         result['container_retained'] = created and args.keep_container
+        # Cleanup runs first but may not destroy the record: a failure here used to replace the original exception AND
+        # discard the whole result, so the reason the restore failed was lost exactly when something else also went wrong.
         if created and not args.keep_container:
-            remove_owned_restore(name, run_id)
+            try:
+                remove_owned_restore(name, run_id)
+            except BaseException as cleanup_failure:
+                result['cleanup_failed'] = True
+                result['cleanup_error_class'] = type(cleanup_failure).__name__
+                result['container_retained'] = True  # it may still be running; say so rather than imply it was removed
         write_private(restored / 'verification.json', json.dumps(result, indent=2).encode() + b'\n')
     print(json.dumps({'restore_directory': str(restored), **result}))
 

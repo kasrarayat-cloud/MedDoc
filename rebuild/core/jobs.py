@@ -218,10 +218,20 @@ def coverage_note(job,units):
     try:
         config=job.config or {}
         recorded=Decimal(config.get('recording_seconds_confirmed') or config.get('recording_seconds') or '0')
+        priced=Decimal(config.get('recording_seconds') or '0')
         processed=Decimal((units or {}).get('duration_seconds') or '0')
     except Exception:
         return ''
-    if recorded<=0 or processed>=recorded-COVERAGE_TOLERANCE_SECONDS: return ''
+    if recorded<=0:
+        # No certain length. Returning '' here delivered a transcript as whole on a recording whose confirmed length was
+        # 0.000 and whose priced length was ten seconds — a silent claim of completeness on exactly the file that cannot
+        # support one. An unknown coverage is disclosed as unknown.
+        if priced>COVERAGE_TOLERANCE_SECONDS and processed<priced-COVERAGE_TOLERANCE_SECONDS:
+            return (f'\n[Transcription coverage unconfirmed: the provider processed {seconds_text(processed)} and this '
+                    f'recording may hold up to {seconds_text(priced)}. Its structure does not establish how much audio a '
+                    f'player would reach, so completeness cannot be certified. Re-export the recording to confirm it.]')
+        return ''
+    if processed>=recorded-COVERAGE_TOLERANCE_SECONDS: return ''
     return (f'\n[Transcription incomplete: the provider processed {seconds_text(processed)} of this {seconds_text(recorded)} recording; '
             f'the final {seconds_text(recorded-processed)} was not transcribed.]')
 

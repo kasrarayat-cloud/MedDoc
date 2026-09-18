@@ -44,10 +44,12 @@ EXPECTED_ENCOUNTERS = 11
 ALLOWED = {
     # length bounds: what a recording is charged for, separated from what it is certified to contain
     'rebuild/core/audio.py', 'rebuild/core/jobs.py', 'rebuild/core/tests/test_recording_limit.py',
+    'rebuild/core/tests/audio_fixtures.py',
     # the restore readiness repair
     'rebuild/ops/backup_restore.py', 'rebuild/ops/test_backup_restore.py',
     # date-of-service release selection
-    'rebuild/core/coding.py', 'rebuild/core/forms.py', 'rebuild/core/models.py', 'rebuild/core/views.py', MIGRATION_PATH,
+    'rebuild/core/coding.py', 'rebuild/core/context.py', 'rebuild/core/forms.py', 'rebuild/core/models.py',
+    'rebuild/core/views.py', 'rebuild/ops/with_db_role.py', MIGRATION_PATH,
     'rebuild/core/management/commands/seed_private.py', 'rebuild/core/management/commands/verify_live.py',
     'rebuild/templates/encounter_detail.html', 'rebuild/core/tests/test_code_release_dates.py',
     'rebuild/core/tests/test_billing_boundary_regressions.py', 'rebuild/core/tests/test_billing_policy.py',

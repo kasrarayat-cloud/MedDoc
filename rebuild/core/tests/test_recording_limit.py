@@ -23,7 +23,7 @@ from core.jobs import cancel, coverage_note, enqueue, reap_abandoned_voice_uploa
 from core.management.commands.audit_billing import audit_report
 from core.models import AuditEvent, Job, LedgerEntry, Membership, PlatformCost, Reservation, Usage, User, Wallet
 from core.security import private_path
-from core.tests.audio_fixtures import wav_bytes
+from core.tests.audio_fixtures import wav_bytes, wav_with_two_data_chunks
 from core.tests.test_billing_boundary import LIVE, BoundaryFixture, deepgram
 from core.tests.test_billing_policy import STORAGES
 
@@ -701,3 +701,44 @@ class RecordingChargeLimit(BoundaryFixture, TestCase):
                              actual_cost=Decimal('1'), charged_cost=Decimal('0.5'), simulated=False)
         with connection.cursor() as cursor:
             cursor.execute(backup.INVARIANTS['usage_multiplier']); self.assertEqual(cursor.fetchone()[0], 1)
+
+
+class BoundsAfterTheSecondRefutationPass(SimpleTestCase):
+    """Every case here is one a refutation lens demonstrated against ffmpeg as the decoder of record."""
+
+    def test_a_wav_split_across_two_data_chunks_certifies_only_the_smaller_one(self):
+        """ffmpeg plays ONE data chunk: 9 s + 1 s decodes to 1 s, 1 s + 9 s to 9 s, 5 s + 5 s to 5 s.
+
+        Summing them certified 10 s in all three, which marked a complete transcript incomplete.
+        """
+        for first, second, floor in ((9, 1, 1), (1, 9, 1), (5, 5, 5)):
+            with self.subTest(first=first, second=second):
+                bounds = audio.measure_bounds(wav_with_two_data_chunks(first, second))
+                self.assertEqual(bounds.confirmed, Decimal(floor))
+                self.assertEqual(bounds.measured, Decimal(first + second))
+
+    def test_a_zero_length_trailing_data_chunk_is_not_priced_twice(self):
+        """It runs to the end of the file, so counting it AND the bytes after it charged the same samples twice."""
+        bounds = audio.measure_bounds(wav_with_two_data_chunks(1, 9, second_declares_zero=True))
+        self.assertEqual(bounds.measured, Decimal(10))
+
+    def test_an_ordinary_single_chunk_wav_is_unchanged(self):
+        bounds = audio.measure_bounds(wav_bytes(3, 'unchanged'))
+        self.assertEqual((bounds.confirmed, bounds.measured), (Decimal(3), Decimal(3)))
+
+    def test_the_two_bounds_round_away_from_each_other(self):
+        """The priced bound may never round below a decoder, and the certified bound never above it."""
+        from decimal import ROUND_CEILING, ROUND_FLOOR
+        source = (Path(__file__).resolve().parents[1] / 'audio.py').read_text()
+        self.assertIn("rounding=ROUND_FLOOR", source)
+        self.assertIn("rounding=ROUND_CEILING", source)
+        self.assertEqual(Decimal('10.0004').quantize(Decimal('0.001'), rounding=ROUND_CEILING), Decimal('10.001'))
+        self.assertEqual(Decimal('10.0006').quantize(Decimal('0.001'), rounding=ROUND_FLOOR), Decimal('10.000'))
+
+    def test_the_certified_length_never_exceeds_the_priced_one(self):
+        for name in ('tone-3s.wav', 'tone-3s.mp3', 'tone-3s.m4a', 'tone-3s.webm', 'tone-3s-fragmented.m4a',
+                     'tone-3s-quicktime.m4a', 'tone-3s-live.webm'):
+            with self.subTest(fixture=name):
+                bounds = audio.measure_bounds((FIXTURES / name).read_bytes())
+                self.assertLessEqual(bounds.confirmed, bounds.measured)
+                self.assertGreater(bounds.confirmed, Decimal(0))
