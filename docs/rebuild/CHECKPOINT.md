@@ -483,3 +483,110 @@ sessions' work were left alone.
 **Still pending, unchanged by this milestone:** the documented encryption limitations (a whole-host
 image containing `/etc/quillmd` is not protected), independent key custody, native Word acceptance, and
 the unavailable external integrations. No host reboot and no shared-host security change was made.
+
+## 2026-09-18 — deterministic audio submission, running release cd428f70
+
+**Running release `cd428f7062d3d624787d927c41130692017d5a84` on all three surfaces**, synthetic-only,
+public routes in maintenance.
+
+**Three revisions, and they are three different facts:**
+
+| | |
+| --- | --- |
+| running revision before | `5f8050df5e79c0d7948185850914f1c161fcbc1f` |
+| code revision merged and never deployed | `8de5dd491de78b4e628364096c50ed68b161ef19` |
+| running revision after | `cd428f7062d3d624787d927c41130692017d5a84` |
+| documentation-only ahead of the running revision | this entry's own commit, and nothing else |
+
+Two changes shipped together and **both were judged**: the integrity-and-cleanup milestone that merged
+as `8de5dd49` and was never activated, and deterministic audio submission. The declaration named the
+full range from the RUNNING release rather than from the tree, because *"I deployed `main`" is not the
+same claim as "I judged what I deployed"*.
+
+Verified, not assumed: the doctor and admin surfaces answer `cd428f70` over HTTP, and the **worker** —
+which has no HTTP surface — was identified by **four** facts, because a PID is reused and one read in
+one place and checked in another describes whatever holds it now:
+
+| | |
+| --- | --- |
+| systemd's record of the start | `Fri 2026-09-18 21:26:38 UTC` (was `16:09:21`) |
+| the kernel's record of that PID's start | `2026-09-18T21:26:37.34Z` |
+| the command | `/opt/meddoc-pro/rebuild/.venv/bin/python /opt/meddoc-pro/rebuild/manage.py worker` |
+| the service cgroup | `0::/system.slice/quillmd-fresh-worker.service` |
+
+⚠️ **The first version of that check asserted the wrong command** — `service_launcher.py --surface
+worker` — because the launcher EXECS the surface and replaces itself. It was caught by running the
+check against the live host rather than only reading it, and by narrowing a too-wide `except` that had
+reported the mismatch as NOT EXERCISED.
+
+### The declared delta was EMPTY, which is stricter than a migration's
+
+No migration ships here, so nothing had an excuse available. Judged and matched: 35 tables, every
+column, constraint and index, **every table's row fingerprint**, the private files and mail
+inventories, the compiled Word runtime, the retained reports and the protected containers — all
+byte-identical across the act. `provider_calls: 0`. The only things that changed are the release line
+(one occurrence, line count unchanged, recorded by sha256 of the file before and after) and the three
+process identities.
+
+### Post-checks
+
+`audit_billing --maintenance-storage` → `all_checks_pass: true`, exit 0. Its two `durable_receipt_gaps`
+are the same pre-existing live Anthropic and Deepgram calls awaiting the owner's cost evidence
+(`owner-actions.md` §7) recorded in the previous milestone — and provably untouched here, since every
+row fingerprint is identical across the act and the act made no provider call. Doctor and admin
+surfaces gated (302, not 500); `/admin/` gated. Co-tenants at their expected statuses, three distinct
+codes so the probe discriminates. `configuration_status` on the live release reports both media tools
+resolved, `SYNTHETIC_ONLY: True`, `STRIPE_LIVE_ENABLED: False`.
+
+**The deployed modules were exercised directly** — imported from `/opt/meddoc-pro/rebuild`, the tree
+the services load — with no database write and no provider call: a one-track WebM remuxed 27,776 →
+27,686 bytes, and a two-track WebM was refused before any remux. The live constants read back as
+budget 25 s, address space 768 MB, tolerance 0.1 s.
+
+⚠️ **What was NOT exercised, named rather than implied:** the HTTP upload → worker → provider path end
+to end. That needs an authenticated synthetic account and a paid provider call, and the full clinical
+walk belongs on QA against a byte-identical build. No real clinical record was touched.
+
+### A new runtime dependency, and it fails silently
+
+`ffmpeg` joins `ffprobe`. Without either the application still works and degrades honestly — every
+recording is submitted exactly as uploaded, unnormalised — which is the hardest kind of absence to
+notice. The activation refuses without both, and `configuration_status` names each.
+
+### Ten defects, seven in the same direction
+
+Four refutation lenses over the finished diff found nine; the checks written for them found a tenth.
+Seven refused, charged for, or silently narrowed a recording that was made correctly — including a
+multi-track refusal that **failed open above 64 tracks** (a 65-track file created a job, held $0.06,
+made a provider request and charged $0.0525), an in-limit MP3 refused as "Recording too large" because
+our own remux crossed a limit the upload sat on, and loss before the request that was invisible by
+construction. Full account: `docs/rebuild/audio-submission.md`.
+
+**The most serious finding was about the evidence, not the code.** With ffmpeg removed from `PATH`, 32
+of 34 submission tests skipped and the suite reported `OK` — and the one test written to assert the
+dependency skipped itself on exactly that condition. Absent is now a skip on a machine that never
+promised the tool and a **failure** where something installed it on purpose.
+
+### Two gates refused, and both were right
+
+⚠️ **CI refused the first push.** Three tests rendered a page and resolved a static asset through the
+manifest storage; they passed locally only because this worktree's `staticfiles` is a symlink into the
+shared tree. Reproduced by moving the symlink aside — 393 tests, the same count CI ran.
+
+⚠️ **The ruled-mutation gate refused the activation outright**, reporting `tracked: no`. The
+declaration ships in the very commit it activates, and the activator advanced `main` **itself**, after
+the gate had already run — so the declaration existed only in a worktree the gate cannot see. *An
+activation whose declaration is invisible to its own gate is a gate that cannot fire, and nothing would
+have said so except the refusal.* Fixed by ordering (PR #1205): `main` carries the declaration, the
+tree is fast-forwarded, and the preflight now fails on the same condition rather than leaving it to
+surface with the act already staged. The declaration's commit stands at `2026-09-18T20:50:35Z` and the
+act started at `21:26:11Z` — a bracket the gate printed itself.
+
+**Still pending, unchanged by this milestone:** native Word acceptance (the package is unchanged at
+227,269 bytes, `B270C982…F03A72` — re-verified on the host, not regenerated), independent key custody,
+the documented encryption limitations (a whole-host image containing `/etc/quillmd` is not protected),
+and the unavailable external integrations. No host reboot and no shared-host security change was made.
+The seven marketing waitlist records are untouched — counted at 7, values not read. They live in the
+LEGACY `meddoc` database, a different container from the one this act fingerprinted, so they were never
+in this deploy's blast radius; the count is reported because it was asked for, not because anything
+here could have moved it.
