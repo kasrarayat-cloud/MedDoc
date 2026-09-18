@@ -73,8 +73,8 @@ audit event. Repeating an identical import verifies all stored code/descriptions
 without a second write or audit event. Modified or overlapping releases are
 refused; existing releases are never overwritten.
 
-FY2027 is prepared and declared, **not yet imported** — see the section below
-for its state and the act that will run it. The application selects the release whose effective period contains the **encounter's date of
+FY2027 and FY2026-October were imported on 2026-09-18 and judged 31 of 31; the
+database now carries three contiguous releases. The application selects the release whose effective period contains the **encounter's date of
 service or discharge** — not today's date. A release whose fiscal year has
 ended keeps answering for encounters inside it, and a release that has not
 started yet is not applied to earlier visits.
@@ -84,17 +84,13 @@ exclusions and sequencing rules are **not** implemented as a coding engine.
 Suggestions remain limited to codes explicitly present in documented notes,
 with source evidence and clinician acceptance. No diagnosis inference is added.
 
-## FY2027 — the October 1, 2026 release (VERIFIED AND DECLARED, NOT YET IMPORTED)
+## FY2027 — the October 1, 2026 release (IMPORTED 2026-09-18)
 
-⚠️ **State, so this section cannot be read as an act that happened.** The file
-below has been downloaded, hashed and parsed with the production parser, and the
-import is declared at
-`docs/foundation/mutations/20260918-quillmd-icd10cm-fy2027.md`. It has **not**
-run: the live database holds one release (`FY2026-April`) and 74,719 codes. The activation that must precede it was
-refused by a database guard on its first attempt (see `CHECKPOINT.md`) and is being retried. Until
-it runs, the standing instruction remains — import the verified FY2027 file
-before 1 October 2026, or from that date coding returns nothing for every new
-encounter, with a warning rather than an error.
+Imported under `docs/foundation/mutations/20260918-quillmd-icd10cm-fy2027.md`
+and judged with its sibling: **3 releases, 224,317 codes, 3 import audit rows**,
+`FY2026-April` byte-identical and untouched, 0 CPT releases, and the clinical
+counts unmoved. Boundary read-back through `applicable_releases`: 30 September
+2026 selects FY2026-April, 1 October 2026 selects FY2027.
 
 [CDC's release page](https://www.cdc.gov/nchs/icd/icd-10-cm/files.html) states,
 for this release: *"FY27 ICD-10-CM codes should be used for healthcare services
@@ -116,8 +112,8 @@ cached at the ignored path `.runtime/terminology/icd10cm-codes-2027.txt`:
 - Parsed with the production parser before any import: every row satisfied the
   codes-file format, first `A00.0`, last `U09.9`, longest description 228
   characters, 74,664 of the codes carrying a decimal.
-- Release to be stored: `ICD-10-CM`, `FY2027`, inclusive dates `2026-10-01`
-  through `2027-09-30`.
+- Stored release: `ICD-10-CM`, `FY2027`, inclusive dates `2026-10-01` through
+  `2027-09-30`, no licence reference.
 
 ### Reproduce it
 
@@ -195,3 +191,24 @@ Repeating the same full import returned `Already verified` and preserved the
 single audit event. Sentinels `M25.532`, `QA0.0101`, and `U07.1` were read back
 with the official descriptors. No old-system database was accessed during this
 terminology import.
+
+## FY2026-October — the first half of FY2026, imported 2026-09-18
+
+Selecting by date of service is more correct **and** it removed a working case:
+ICD-10-CM FY2026 begins 2025-10-01, while the only loaded release was the April
+mid-year update effective from 2026-04-01. Under the old today-based rule a
+February 2026 visit was validated against April's codes; under the new rule it
+matched nothing. Measured on the live database before the fix, `2025-10-01`,
+`2026-03-31` and `2026-10-01` all resolved to **nothing**.
+
+The loss is removed rather than accepted. The CDC FY2026 base code file and the
+CMS April file are **byte-identical** — both `sha256
+a7e2a77e4627ed55c8afe2b8a7ae22efcbab6b6b162d96cf145213772c1246ba`, and the April
+addendum reports zero additions, deletions and descriptor revisions — so the same
+74,719 codes are stored again under the period during which they were the current
+release: `2025-10-01` through `2026-03-31`. Declared at
+`docs/foundation/mutations/20260918-quillmd-icd10cm-fy2026-october.md`.
+
+**Residual, named rather than closed:** a date of service before 2025-10-01 still
+matches no release and is refused visibly. Closing it means importing FY2025 and
+earlier; no encounter in this system is dated before 2026-09-17.
