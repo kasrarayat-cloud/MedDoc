@@ -586,6 +586,17 @@ def retained_unchanged(before):
     return True
 
 
+def rollback_source_ok(source, target, contains):
+    """The source is a migrate result whose application ran on the encrypted volume, and the rollback target is that
+    migration's own target or, for the completed migration, a later reviewed commit that contains it (the reap merge: its
+    script no longer needs the removed snapshot, and main may have moved on)."""
+    if source.get('mode') != 'migrate' or source.get('stage') not in POST_START_STAGES:
+        return False
+    if source.get('target') == target:
+        return True
+    return source.get('target') == MIGRATED and source.get('complete') is True and contains(MIGRATED, target)
+
+
 def params_common():
     return {'pg_data': PG_DATA, 'state': str(STATE), 'image_dir': IMAGE_DIR, 'image': IMAGE, 'key': KEY, 'recovery': RECOVERY,
             'mount': MOUNT, 'mapper': MAPPER, 'rollback': ROLLBACK, 'volume_script_target': VOLUME_SCRIPT_TARGET,
@@ -702,7 +713,8 @@ def main():
     else:
         require(args.from_result, 'Rollback needs --from-result naming the migrate result.')
         source = json.loads(word.checked_file(Path(args.from_result), private=True))
-        require(source.get('target') == args.target and source.get('stage') in POST_START_STAGES, 'Rollback applies only after the application ran on the encrypted volume.')
+        contains = lambda ancestor, commit: subprocess.run(['git', 'merge-base', '--is-ancestor', ancestor, commit], timeout=60).returncode == 0
+        require(rollback_source_ok(source, args.target, contains), 'Rollback applies only after the application ran on the encrypted volume.')
         require(probe['image'] and all(probe['units_installed'].values()) and probe['volume_script_installed'], 'Encrypted-volume installation is incomplete.')
     installed = APP / '.word-sdk' / billing.SDK_RELEASE
     inputs = word.expected_inputs(args.target)

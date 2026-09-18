@@ -110,12 +110,19 @@ stack's data and are not touched.
   the act, so wait for its result file first.
 - After main advances, run `rollback --from-result <migrate result>` under the
   same declaration. It copies the current data back to plaintext, restores
-  plaintext units, re-enables the container restart policy and keeps the image,
-  key and pre-migration snapshot.
+  plaintext units, re-enables the container restart policy and keeps the image
+  and key. It never needed the pre-migration snapshot: it copies back from the
+  encrypted volume. Since the plaintext reap
+  (`20260918-quillmd-plaintext-recovery-reap.md`) removed that snapshot, the
+  completed migration (`fresh-storage-migrate-20260918b.json`) rolls back with
+  `--target <the reap merge>`, running that commit's script, which no longer
+  requires the snapshot.
 - `/var/lib/quillmd-rollback-20260918` holds a plaintext copy of the data as it
-  was before the act. It stays until the owner accepts the migration and
-  approves its destruction. It must be shredded before any real patient data
-  is admitted.
+  was before the act. It must be shredded before any real patient data is
+  admitted. The owner's instruction of 2026-09-18 authorizes removing it, and
+  the other plaintext copies, once their contents are accounted for, encrypted
+  recovery is verified and usable recovery keys are retained. The plaintext
+  reap act checks each condition before it removes anything.
 
 ## Limits and remaining dependencies
 
