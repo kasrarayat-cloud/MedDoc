@@ -186,3 +186,24 @@ Private evidence and the exact paths are listed in `rebuild/.runtime/CHECKPOINT-
 and `/var/lib/quillmd` are not on an encrypted volume. The phased live runner is
 tracked as `rebuild/wm-live-fresh.mjs`; the tunnel-only reviewer access script is
 `scripts/ops/reviewer-tunnel-access.sh`.
+
+## 2026-09-18 — billing policy activated, running release 19d46ad3
+
+PR #1188 (billing policy: discount basis in the pricing fingerprint,
+`CostReconciliation`/`PlatformCost`, appended ledger kinds `reconciliation` and
+`absorbed`, automatic absorption of unadopted provider cost, administrator
+console actions, migration `0012_billing_policy`, guarded activator) passed four
+independent refutation rounds. The declared activation of `d2e45b53` stopped, by
+design, after the migration because Django's post-migrate bookkeeping (two
+content-type rows, eight permission rows) was not in the guard's expectation; the
+scoped, declared resume (PRs #1189/#1190) proved that partial state and finished
+the code-only steps. **Permanent main and the three private services run
+`19d46ad3d51a3d8b548b4b53073f91664ca30946`**, synthetic-only. Console check,
+billing audit (12 rows, all checks pass, 0 reconciled, 0 platform costs) and a
+fresh encrypted backup with isolated restore were taken afterwards. Exact
+private evidence paths: `rebuild/.runtime/CHECKPOINT-LATEST.md`. Provider cost
+reconciliation still needs authentic provider evidence; Stripe, Resend delivery,
+offsite restoration, CPT, independent testing and at-rest encryption of the fresh
+data paths remain open gates (`owner-actions.md`,
+`patient-data-release-requirements.md`).
+
