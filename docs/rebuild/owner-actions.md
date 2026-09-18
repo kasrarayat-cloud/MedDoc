@@ -1,6 +1,6 @@
 # Owner actions for the next private beta release
 
-Updated 2026-09-17 (late, after the fresh live Word run). Continue the existing
+Updated 2026-09-18 (after the fresh live Word run and the billing-policy activation; running release 19d46ad3). Continue the existing
 new application and preserve its data. The engineering choices below are fixed
 for this stage; they are not an options menu. Public app/admin routes stay in
 maintenance and real patient data remains disabled. A configured credential is
@@ -155,8 +155,19 @@ applicable account rates, discounts and promotional-credit treatment. Invoice
 evidence should cover the same billing period. No general administrator key is
 requested when an authentic export can answer the question.
 
-Engineering will match a small batch by provider request/resource ID, timestamps,
-usage quantities and charged amount. Configured-rate arithmetic, provider-reported
+The application now records reconciliations itself: in the MFA-protected
+console, section "Cost reconciliation" lists every usage row with its
+configured estimate and an inline form for the reconciled actual cost (up to
+eleven decimals), the evidence reference (invoice number, export sha256 or
+report id), optional allocated credit/discount and a note. Recording one
+appends ledger entries of kind `reconciliation` (credit back in proportion, or
+an additional charge from the payer's paid wallet, held as `pending_funds`
+until a top-up or released reservation frees funds); the usage row and its
+original entries are never edited. "Platform costs" records fixed overhead
+that is never charged to users, and the provider cost of platform failures is
+absorbed automatically. Rows stay labelled "configured estimate" until you
+record authentic evidence. Engineering will match a small batch by provider
+request/resource ID, timestamps, usage quantities and charged amount. Configured-rate arithmetic, provider-reported
 cost and invoice reconciliation remain separate evidence levels. The two early
 missing receipts remain unreconciled exceptions unless authentic provider
 evidence can recover them; no replacement history will be invented. Confirm the
