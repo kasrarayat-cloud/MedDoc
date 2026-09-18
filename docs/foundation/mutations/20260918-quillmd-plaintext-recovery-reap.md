@@ -33,9 +33,13 @@ deploy code, does not advance main, and makes no provider request.
    and the merge is a merged PR into main that contains the running release.
 2. The services run the permanent release, synthetic-only.
 3. A fresh encrypted backup, restored in isolation with no decrypted file
-   written, covers exactly the current row count. No job is queued, running or
-   in reconciliation.
-4. Every active path resolves to `/dev/mapper/quillmd-fresh-encrypted`:
+   written, equals the live database in every table. Each table's row count and
+   content hash, computed by the backup tool's own fingerprint function (the
+   one its restore check uses), matches the backup's authenticated manifest. A
+   matching total row count is not enough. No job is queued, running or in
+   reconciliation.
+4. Every active path resolves to exactly one mount, and that mount is
+   `/dev/mapper/quillmd-fresh-encrypted`, so nothing is mounted over it:
    `/var/lib/quillmd` and its `files`, `mail`, `proofs` and `tmp`; the
    database directory and `pg_wal`. The WAL is a directory, not a link.
    PostgreSQL reports its data directory as `/var/lib/postgresql/data` and has
@@ -67,10 +71,15 @@ reboot, and reboot recovery stays untested.
 
 ## Removal, declared before the act
 
-The accounting is repeated immediately before removal. Each directory's files
-are shredded in place (`shred -u -n 3 -z`, via `find -xdev`) and every exit code
-is checked. Only then are its empty directories removed. A failure stops the act
-and leaves the directory and all later ones in place.
+The accounting is repeated immediately before removal. Directories are removed
+one at a time, in the order below. Each directory's files are shredded in place
+(`shred -u -n 3 -z`, via `find -xdev`) in its own named host unit. systemd stops
+that unit after 900 seconds; measured on this disk, the 143 MB snapshot takes
+24 seconds. The act waits slightly longer than the unit can run, so no shred can
+outlive it. Each directory is recorded: files before, the shred's exit, files
+left, and whether it is gone. Its empty directories are removed only when no
+file is left. Otherwise the act stops: that directory is kept with whatever
+files remain (the record gives the count), and no later directory is touched.
 
 | path | origin | files | bytes |
 |---|---|---|---|
@@ -120,16 +129,22 @@ difference in any of them is the finding, whatever it seems to mean afterwards.
   removed.
 - A drill failure stops the act with nothing removed, and the volume, database
   and services are started again.
-- A shred failure stops the act at that directory. Earlier directories are
-  already removed and recorded; that directory and every later one are left in
-  place.
+- A shred failure, a timeout or the watchdog's signal stops the act at that
+  directory. Earlier directories are removed and recorded. That directory may
+  be partly shredded, and its record or the failure record gives the files
+  left. Every later directory is untouched. The running shred unit is stopped
+  and its root step settled before the result is written.
+- When nothing was removed and the services were restarted, the act's lock is
+  released, so it can be run again. Once removal has begun, the lock stays for
+  inspection.
 
 The result file names the stage in every case.
 
 ## How it runs
 
-Only through `scripts/run-ruled-mutation.sh`, with this committed declaration,
-from permanent main at `/opt/meddoc-pro` running the reviewed script:
+Only through `scripts/run-ruled-mutation.sh`, with this committed declaration and
+`RULED_ACT_MAX_SECS=3600`, from permanent main at `/opt/meddoc-pro`, running the
+reviewed script:
 
     verify-and-reap-fresh-plaintext.py --target <merge sha> \
         --backup-report rebuild/.runtime/restore-checks/backup-restore-<run>.json \

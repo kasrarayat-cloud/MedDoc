@@ -21,6 +21,7 @@ It never touches live storage, backups, credentials, evidence, the Word review p
 """
 import argparse
 from datetime import datetime, timezone
+import hashlib
 import importlib.util
 import json
 import os
@@ -66,7 +67,11 @@ PROTECTED = ['/var/lib/quillmd', '/var/lib/docker', '/var/lib/quillmd-encrypted'
              str(PRIVATE / 'new-system-backups'), str(PRIVATE / 'backup-secrets'), str(PRIVATE / 'db-role-secrets'),
              str(PRIVATE / 'word-review-package'), str(PRIVATE / 'terminology')]
 TREE_HELPERS = {'billing': 'scripts/activate-billing-policy.py', 'word': 'scripts/activate-word-beta.py',
-                'identity': 'scripts/activate-os-identity.py', 'previous': 'scripts/update-private-beta.py'}
+                'identity': 'scripts/activate-os-identity.py', 'previous': 'scripts/update-private-beta.py',
+                'backup': 'rebuild/ops/backup_restore.py'}
+# One directory's shred runs in its own named host unit that systemd stops at this bound (measured: 24 s for the 143 MB snapshot
+# on this disk). The act waits a little longer, so the unit always ends first and nothing keeps deleting unrecorded.
+REAP_MAX_SECONDS = 900
 ACTIVE_PATHS = ['/var/lib/quillmd', '/var/lib/quillmd/files', '/var/lib/quillmd/mail', '/var/lib/quillmd/proofs', '/var/lib/quillmd/tmp',
                 '/var/lib/docker/volumes/quillmd_fresh_pg/_data', '/var/lib/docker/volumes/quillmd_fresh_pg/_data/pg_wal']
 
@@ -163,20 +168,30 @@ for t in P['targets']:
 emit({'live_counts':{k:len(v) for k,v in live.items()},'targets':report})
 '''
 
+# One directory per step, always answered with a record: files before, the shred's exit, files left and whether the
+# directory is gone. Directories are removed only when every file was shredded. The shred runs in a named unit that systemd
+# stops at max_seconds, so it can never outlive the act.
 ROOT_REAP = r'''
-done=[]
-for path in P['paths']:
-    if not os.path.lexists(path): done.append({'path':path,'removed':False,'reason':'absent'}); continue
+path=P['path']
+if not os.path.lexists(path):
+    emit({'path':path,'files_before':0,'shred_exit':None,'files_left':0,'removed':False,'reason':'absent'})
+else:
     if os.path.islink(path) or os.path.realpath(path)!=path: raise RuntimeError('refusing unresolved path: '+path)
-    shredded=host('/usr/bin/find',path,'-xdev','-type','f','-exec','/usr/bin/shred','-u','-n','3','-z','{}','+',check=False,timeout=1800)
-    left=[os.path.join(d,f) for d,_,fs in os.walk(path) for f in fs if not os.path.islink(os.path.join(d,f))]
-    if shredded.returncode!=0 or left:
-        raise RuntimeError('shred did not complete for '+path+' ('+str(len(left))+' files left); nothing further removed')
-    host('/usr/bin/find',path,'-xdev','-type','l','-delete')
-    host('/usr/bin/find',path,'-xdev','-depth','-type','d','-empty','-delete')
-    if os.path.lexists(path): raise RuntimeError('directory remains after shredding: '+path)
-    done.append({'path':path,'removed':True})
-emit({'reaped':done})
+    def files(): return [os.path.join(d,f) for d,_,fs in os.walk(path) for f in fs if not os.path.islink(os.path.join(d,f))]
+    before=len(files())
+    shred=subprocess.run(['systemd-run','--wait','--pipe','--collect','--quiet','--property=Type=oneshot','--unit='+P['unit'],'--property=RuntimeMaxSec='+str(P['max_seconds']),'/usr/bin/find',path,'-xdev','-type','f','-exec','/usr/bin/shred','-u','-n','3','-z','{}','+'],capture_output=True,text=True,timeout=P['max_seconds']+60)
+    left=len(files())
+    if shred.returncode==0 and left==0:
+        host('/usr/bin/find',path,'-xdev','-type','l','-delete')
+        host('/usr/bin/find',path,'-xdev','-depth','-type','d','-empty','-delete')
+    emit({'path':path,'files_before':before,'shred_exit':shred.returncode,'files_left':left,'removed':not os.path.lexists(path)})
+'''
+
+ROOT_STOP_REAP = r'''
+subprocess.run(['systemctl','stop',P['unit']+'.service'],capture_output=True,timeout=60)
+state=subprocess.run(['systemctl','is-active',P['unit']+'.service'],capture_output=True,text=True).stdout.strip()
+left={p:sum(len(fs) for _,_,fs in os.walk(p)) for p in P['paths'] if os.path.isdir(p)}
+emit({'unit':P['unit'],'unit_state_after_stop':state,'files_left':left})
 '''
 
 
@@ -205,7 +220,7 @@ def main():
     for name, relative in TREE_HELPERS.items():
         require(subprocess.check_output(['git', 'show', args.target + ':' + relative]) == (ROOT / relative).read_bytes(), 'Reviewed helper changed: ' + relative)
         modules[name] = load('reap_' + name, ROOT / relative)
-    billing, word, identity, previous = (modules[k] for k in ('billing', 'word', 'identity', 'previous'))
+    billing, word, identity, previous, backup_tool = (modules[k] for k in ('billing', 'word', 'identity', 'previous', 'backup'))
     storage = load('reap_storage', ROOT / 'rebuild/ops/private_storage.py')
     image = m.helper_image()
     common = m.params_common()
@@ -228,6 +243,8 @@ def main():
             'The restore proof must come from the plaintext-free restore check.')
     live_rows = sum(int(output(m.PSQL + [f'SELECT count(*) FROM "{t}"'])) for t in billing.tables())
     require(live_rows == backup.get('row_count'), 'The restore proof does not cover the current rows; take a fresh backup first.')
+    # Not only the count: every table's content equals what the encrypted backup holds, by the backup tool's own fingerprint.
+    require(live_tables(backup_tool) == backup_tables(backup_tool, backup), 'The encrypted backup differs from the live database; take a fresh backup first.')
     require(output(m.PSQL + ["SELECT count(*) FROM core_job WHERE state IN ('queued','running','reconciliation')"]) == '0', 'Unresolved jobs require inspection.')
     verified = verify(m, image, common, release, identity, storage)
     accounting = account(m, image, act['copy'])
@@ -246,6 +263,7 @@ def main():
     require(result_path.is_absolute() and result_path.parent == PRIVATE and re.fullmatch(r'plaintext-recovery-reap-[a-zA-Z0-9_-]+\.json', result_path.name)
             and not result_path.exists() and not lock.exists(), 'Choose unused private evidence; a prior lock needs inspection.')
     identity.private_write(lock, {'target': args.target, 'pid': os.getpid()})
+    progress_path = result_path.with_name(result_path.stem + '-progress.json')
     result = {'complete': False, 'target': args.target, 'release': release, 'started_at': datetime.now(timezone.utc).isoformat(),
               'backup_report': args.backup_report, 'backup_run_id': backup.get('backup_run_id'), 'preflight': verified}
     try:
@@ -260,7 +278,16 @@ def main():
         accounting = account(m, image, act['copy'])
         result['removal_manifest'] = accounting
         result['stage'] = 'removing_redundant_plaintext'
-        result['reaped'] = m.root(ROOT_REAP, {'paths': [t['path'] for t in TARGETS]}, image, timeout=2400)
+        result['reaped'] = []
+        for index, target in enumerate(TARGETS):
+            REAPING['unit'] = f'quillmd-plaintext-reap-{os.getpid()}-{index}'
+            record = m.root(ROOT_REAP, {'path': target['path'], 'unit': REAPING['unit'], 'max_seconds': REAP_MAX_SECONDS}, image,
+                            timeout=REAP_MAX_SECONDS + 120)
+            REAPING['unit'] = None
+            result['reaped'].append(record)
+            write_progress(progress_path, result)
+            require(record['removed'] and record['files_left'] == 0,
+                    'Removal did not complete for ' + target['path'] + '; it and every later directory are left in place.')
         result['stage'] = 'final_checks'
         after = m.root(ROOT_ACCOUNT, {'targets': TARGETS, 'live': LIVE}, image)
         require(all(not entry['present'] for entry in after['targets']), 'A declared plaintext copy is still present.')
@@ -274,8 +301,13 @@ def main():
         lock.unlink()
     except BaseException as error:
         result.update(complete=False, failure_kind=type(error).__name__, failure_message=str(error)[:400], finished_at=datetime.now(timezone.utc).isoformat())
+        # Nothing keeps deleting after the act stops: the running shred unit is stopped, its root step settled, and what is
+        # left of that directory is counted before the result is written.
+        result['interrupted_removal'] = stop_reaping(m, image)
         result['services_restarted'] = restart_best_effort(m, image)
         identity.private_write(result_path if not result_path.exists() else result_path.with_name(result_path.stem + '-failure.json'), result)
+        if result.get('stage') not in ('removing_redundant_plaintext', 'final_checks') and result['services_restarted']:
+            lock.unlink()  # nothing was removed and the services are back: a clean re-run needs no inspection
         raise
     print('Plaintext recovery-and-reap completed: ' + str(result_path), flush=True)
 
@@ -286,8 +318,7 @@ def verify(m, image, common, release, identity, storage):
     require(state['mount_mounted'] and state['pg_bound'] and state['state_bound'] and state['marker'] and state['device_matches_mapper'],
             'Encrypted volume is not fully open and bound.')
     storage_view = m.root(ROOT_VERIFY_STORAGE, dict(common, paths=ACTIVE_PATHS), image)
-    require(all(source.startswith('/dev/mapper/' + m.MAPPER) for source in storage_view['sources'].values()),
-            'An active path is not on the encrypted mapper: ' + json.dumps(storage_view['sources']))
+    require(on_encrypted_mapper(storage_view['sources'], m.MAPPER), 'An active path is not on the encrypted mapper: ' + json.dumps(storage_view['sources']))
     require(storage_view['pg_wal_is_directory'], 'WAL must be a directory inside the encrypted data directory, not a link elsewhere.')
     require(all(count == 0 for count in storage_view['private_tmp_files'].values()), 'Service private /tmp holds files: ' + json.dumps(storage_view['private_tmp_files']))
     require(output(m.PSQL + ['SHOW data_directory']) == '/var/lib/postgresql/data', 'Unexpected PostgreSQL data directory.')
@@ -301,6 +332,36 @@ def verify(m, image, common, release, identity, storage):
             and keys['key'] == {'mode': '0o400', 'uid': 0} and keys['recovery'] == {'mode': '0o400', 'uid': 0}, 'Key slots are not both usable: ' + json.dumps(keys))
     return {'sources': storage_view['sources'], 'private_tmp_files': storage_view['private_tmp_files'], 'keys': keys,
             'service_temporary_directory': {s: p['checks']['temporary_directory'] for s, p in proofs.items()}}
+
+
+def on_encrypted_mapper(sources, mapper):
+    """Every path resolves to exactly one mount, and that mount is the mapper. findmnt -T lists every mount stacked on a path,
+    lowest first, so a second line means something is mounted over the encrypted one."""
+    return bool(sources) and all('\n' not in source and source.startswith('/dev/mapper/' + mapper + '[') for source in sources.values())
+
+
+def live_tables(backup):
+    """Per-table row counts and content hashes of the live database, computed by the backup tool's own fingerprint function
+    exactly as its restore check computes them."""
+    def psql(statement, binary=False):
+        result = subprocess.run(['docker', 'exec', '-i', 'quillmd-fresh-postgres', 'psql', '-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1',
+                                 '-U', 'quillmd_fresh', '-d', 'quillmd_fresh'],
+                                input=("SET timezone='UTC'; SET datestyle='ISO, MDY';\n" + statement + ';\n').encode(),
+                                capture_output=True, timeout=600)
+        require(result.returncode == 0, 'Live fingerprint query failed.')
+        return result.stdout if binary else json.loads(result.stdout)
+
+    def query(statement):
+        return [tuple(row.values()) for row in psql("SELECT COALESCE(json_agg(row_to_json(r)),'[]'::json) FROM (" + statement + ') r')]
+
+    return backup.fingerprint(query, lambda statement: hashlib.sha256(psql(statement, binary=True)).hexdigest())
+
+
+def backup_tables(backup, report):
+    """The authenticated per-table fingerprints the backup recorded at capture."""
+    root, manifest = backup.load_backup(Path(report['backup_directory']), backup.key_at(Path(report['key_file'])))
+    require(manifest.get('run_id') == report.get('backup_run_id'), 'Backup manifest does not belong to the restore report.')
+    return manifest['tables']
 
 
 def account(m, image, copied):
@@ -358,6 +419,33 @@ def drill(m, image, common, release):
     return {'closed': closed, 'write_probe': probe, 'reopened_units': reopened['units_active'], 'health': m.health(release),
             'manual_container_start_while_closed': {'docker_start_exit': manual.returncode, 'running_after_8s': running_after,
                                                     'pg_data_listing': after_manual['pg_data_listing']}}
+
+
+REAPING = {'unit': None, 'path': None}
+
+
+def write_progress(path, result):
+    pending = path.with_name(path.name + '.pending')
+    fd = os.open(pending, os.O_CREAT | os.O_TRUNC | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'w') as stream:
+        json.dump(result, stream, indent=1, sort_keys=True); stream.flush(); os.fsync(stream.fileno())
+    os.replace(pending, path)
+
+
+def stop_reaping(m, image):
+    unit, inflight = REAPING['unit'], m.ACT['step']
+    if not unit:
+        return None
+    try:
+        # root() records its own step name; keep the interrupted one so it is waited for once its unit is stopped.
+        m.ACT['step'] = None
+        record = m.root(ROOT_STOP_REAP, {'unit': unit, 'paths': [t['path'] for t in TARGETS]}, image, timeout=120)
+        m.ACT['step'] = inflight
+        settled = {}
+        m.settle_root_step(settled)
+        return dict(record, root_step=settled)
+    except BaseException as error:
+        return {'unit': unit, 'stop_failed': type(error).__name__}
 
 
 def restart_best_effort(m, image):

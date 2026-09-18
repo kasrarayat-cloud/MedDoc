@@ -142,6 +142,46 @@ class ActOrdering(unittest.TestCase):
             self.assertIn(flag, verify)
 
 
+class StorageAndBackupChecks(unittest.TestCase):
+    def setUp(self):
+        self.reap = load('reap_checks', SCRIPT)
+
+    def test_a_mount_stacked_over_the_encrypted_one_is_not_encrypted_storage(self):
+        mapper = 'quillmd-fresh-encrypted'
+        good = {'/var/lib/quillmd': '/dev/mapper/quillmd-fresh-encrypted[/state]'}
+        self.assertTrue(self.reap.on_encrypted_mapper(good, mapper))
+        for sources in ({'/var/lib/quillmd': '/dev/mapper/quillmd-fresh-encrypted[/state]\n/dev/sda2[/var/lib/plain]'},
+                        {'/var/lib/quillmd': '/dev/sda2[/var/lib/quillmd]'}, {'/var/lib/quillmd': 'ERROR'},
+                        {'/var/lib/quillmd': '/dev/mapper/quillmd-fresh-encrypted-other[/state]'}, {}):
+            with self.subTest(sources=sources):
+                self.assertFalse(self.reap.on_encrypted_mapper(sources, mapper))
+
+    def test_the_backup_must_match_every_live_table_not_just_the_total_count(self):
+        main = function_source('main')
+        read_only = main.split('if not args.execute:')[0]
+        self.assertIn('live_tables(backup_tool) == backup_tables(backup_tool, backup)', read_only)
+        self.assertIn("'backup': 'rebuild/ops/backup_restore.py'", SCRIPT.read_text())
+        # The same fingerprint function and session settings the restore check uses.
+        live = function_source('live_tables')
+        self.assertIn('backup.fingerprint(query,', live)
+        self.assertIn("SET timezone='UTC'; SET datestyle='ISO, MDY';", live)
+
+    def test_a_failure_stops_the_running_shred_and_records_before_it_exits(self):
+        main = function_source('main')
+        handler = main.split('except BaseException as error:')[1]
+        self.assertLess(handler.index('stop_reaping(m, image)'), handler.index('private_write(result_path'))
+        self.assertIn("result.get('stage') not in ('removing_redundant_plaintext', 'final_checks')", handler)
+        self.assertLess(handler.index('private_write(result_path'), handler.index('lock.unlink()'))
+        stop = function_source('stop_reaping')
+        self.assertLess(stop.index("inflight = REAPING['unit'], m.ACT['step']"), stop.index('m.root(ROOT_STOP_REAP'))
+        self.assertLess(stop.index("m.ACT['step'] = inflight"), stop.index('m.settle_root_step('))
+        loop = main.split("result['stage'] = 'removing_redundant_plaintext'")[1].split("result['stage'] = 'final_checks'")[0]
+        self.assertLess(loop.index("result['reaped'].append(record)"), loop.index("require(record['removed']"))
+        self.assertIn('timeout=REAP_MAX_SECONDS + 120', loop)
+        self.assertIn("'--property=RuntimeMaxSec='+str(P['max_seconds'])", self.reap.ROOT_REAP)
+        self.assertIn("'systemctl','stop',P['unit']+'.service'", self.reap.ROOT_STOP_REAP)
+
+
 class RootPrograms(unittest.TestCase):
     """The root programs themselves, run by a real interpreter against temporary trees. Only the chroot and the systemd-run
     prefix are removed, each by an asserted one-occurrence replacement, so every line the act runs is the line tested."""
@@ -155,8 +195,13 @@ class RootPrograms(unittest.TestCase):
         assert library.count(chroot) == 1 and library.count(prefix) == 1
         cls.library = library.replace(chroot, '').replace(prefix, 'list(cmd)')
 
+    UNIT_PREFIX = "'systemd-run','--wait','--pipe','--collect','--quiet','--property=Type=oneshot','--unit='+P['unit'],'--property=RuntimeMaxSec='+str(P['max_seconds']),"
+
     def run_program(self, name, params):
         code = self.library + getattr(self.reap, name)
+        if name == 'ROOT_REAP':
+            assert code.count(self.UNIT_PREFIX) == 1
+            code = code.replace(self.UNIT_PREFIX, '')
         result = subprocess.run([sys.executable, '-B', '-c', code], input=json.dumps(params) + '\n', capture_output=True, text=True, timeout=120)
         return result
 
@@ -175,7 +220,7 @@ class RootPrograms(unittest.TestCase):
     def test_every_root_program_compiles_and_imports_nothing_after_the_chroot(self):
         library = load('migrate_imports', MIGRATE).ROOT_LIBRARY
         imported = set(re.search(r'^import ([\w,]+)$', library.split("os.chroot('/host')")[0], re.M).group(1).split(','))
-        for name in ('ROOT_VERIFY_STORAGE', 'ROOT_KEYS', 'ROOT_ACCOUNT', 'ROOT_REAP'):
+        for name in ('ROOT_VERIFY_STORAGE', 'ROOT_KEYS', 'ROOT_ACCOUNT', 'ROOT_REAP', 'ROOT_STOP_REAP'):
             code = getattr(self.reap, name)
             compile(library + code, name, 'exec')
             tree = ast.parse(code)
@@ -232,6 +277,9 @@ class RootPrograms(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0, path)
                 self.assertIn('target is not a resolved directory', result.stderr)
 
+    def reap_one(self, path):
+        return self.emit('ROOT_REAP', {'path': str(path), 'unit': 'quillmd-plaintext-reap-test', 'max_seconds': 60})
+
     def test_reap_shreds_every_file_then_removes_only_the_named_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
@@ -239,14 +287,14 @@ class RootPrograms(unittest.TestCase):
             self.tree(restore, {'verification.json': b'{}', 'files/audio/a.wav': b'a' * 5000, 'files/exports/e.docx': b'e'})
             (restore / 'files/exports/link').symlink_to(base / 'outside')
             outside = self.tree(base / 'outside', {'keep': b'keep'})
-            view = self.emit('ROOT_REAP', {'paths': [str(restore / 'files'), str(base / 'never-existed')]})
-            self.assertEqual(view['reaped'], [{'path': str(restore / 'files'), 'removed': True},
-                                              {'path': str(base / 'never-existed'), 'removed': False, 'reason': 'absent'}])
+            self.assertEqual(self.reap_one(restore / 'files'), {'path': str(restore / 'files'), 'files_before': 2, 'shred_exit': 0, 'files_left': 0, 'removed': True})
+            self.assertEqual(self.reap_one(base / 'never-existed'),
+                             {'path': str(base / 'never-existed'), 'files_before': 0, 'shred_exit': None, 'files_left': 0, 'removed': False, 'reason': 'absent'})
             self.assertFalse((restore / 'files').exists())
             self.assertEqual(sorted(p.name for p in restore.iterdir()), ['verification.json'])
             self.assertEqual((outside / 'keep').read_bytes(), b'keep')
 
-    def test_reap_stops_before_removing_directories_when_a_file_survives(self):
+    def test_a_directory_with_a_surviving_file_is_recorded_and_kept(self):
         if os.geteuid() == 0:
             self.skipTest('root can unlink from a read-only directory')
         with tempfile.TemporaryDirectory() as tmp:
@@ -254,13 +302,11 @@ class RootPrograms(unittest.TestCase):
             target = self.tree(base / 'files', {'locked/a': b'a', 'open/b': b'b'})
             os.chmod(target / 'locked', 0o500)
             try:
-                result = self.run_program('ROOT_REAP', {'paths': [str(target), str(self.tree(base / 'second', {'c': b'c'}))]})
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn('shred did not complete', result.stderr)
-                self.assertTrue((target / 'locked/a').exists())
-                self.assertTrue((target / 'locked').is_dir())
-                # Nothing after the failure is touched.
-                self.assertEqual((base / 'second/c').read_bytes(), b'c')
+                record = self.reap_one(target)
+                # The record says exactly what happened, and no directory is removed while a file survives.
+                self.assertEqual((record['files_before'], record['files_left'], record['removed']), (2, 1, False))
+                self.assertNotEqual(record['shred_exit'], 0)
+                self.assertTrue((target / 'locked/a').exists()); self.assertTrue((target / 'open').is_dir())
             finally:
                 os.chmod(target / 'locked', 0o700)
 
@@ -269,7 +315,7 @@ class RootPrograms(unittest.TestCase):
             base = Path(tmp)
             real = self.tree(base / 'real', {'a': b'a'})
             (base / 'link').symlink_to(real)
-            result = self.run_program('ROOT_REAP', {'paths': [str(base / 'link')]})
+            result = self.run_program('ROOT_REAP', {'path': str(base / 'link'), 'unit': 'quillmd-plaintext-reap-test', 'max_seconds': 60})
             self.assertNotEqual(result.returncode, 0)
             self.assertIn('refusing unresolved path', result.stderr)
             self.assertEqual((real / 'a').read_bytes(), b'a')
