@@ -1,10 +1,13 @@
 """Focused counterexamples for the preserving Word export activation. No host acts."""
 import ast
+import gzip
 import hashlib
+import json
 import os
 from pathlib import Path
 import subprocess
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -110,6 +113,128 @@ class WordExportActivationTests(unittest.TestCase):
             self.assertNotIn('--ff-only', arguments)
         self.assertNotIn('install_artifact', [node.func.attr for node in ast.walk(tree)
                          if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)])
+
+
+class RetainedStaticInventoryTests(unittest.TestCase):
+    """Synthetic disk fixtures exercise acceptance and concrete refused changes."""
+
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        self.app = self.root / 'app'
+        self.static = self.app / 'staticfiles'
+        self.static.mkdir(parents=True)
+        self.current = self.app / 'static/app.css'
+        self.current.parent.mkdir()
+        self.current.write_bytes(b'current synthetic CSS\n')
+        (self.static / 'app.css').write_bytes(self.current.read_bytes())
+        self.compiled = 'app.0123456789ab.css'
+        (self.static / self.compiled).write_bytes(self.current.read_bytes())
+        (self.static / 'staticfiles.json').write_text(json.dumps({'paths': {'app.css': self.compiled}}))
+        self.css_name = 'app.39d54d0ccd1a.css'
+        self.legacy_css = b'prior synthetic CSS\n'
+        payloads = {self.css_name: self.legacy_css, self.css_name + '.gz': gzip.compress(self.legacy_css, mtime=0)}
+        expected = {}
+        for name, payload in payloads.items():
+            path = self.static / name
+            path.write_bytes(payload)
+            path.chmod(0o644)
+            expected[name] = {'directory': False, 'mode': 0o644, 'size': len(payload),
+                              'sha256': hashlib.sha256(payload).hexdigest()}
+        self.proof = {'complete': True, 'static_before': expected, 'static_after': expected}
+        self.proof_bytes = json.dumps(self.proof).encode()
+        self.identity = SimpleNamespace(static_sources=lambda: {'app.css': self.current})
+        self.word = SimpleNamespace(checked_file=lambda path, *, private: self.proof_bytes)
+        for name, value in (('APP', self.app), ('ROOT', self.root), ('PRIVATE', self.app / '.runtime'),
+                            ('RETAINED_STATIC', expected),
+                            ('RETAINED_STATIC_REPORT_SHA256', hashlib.sha256(self.proof_bytes).hexdigest())):
+            context = patch.object(activation, name, value)
+            context.start()
+            self.addCleanup(context.stop)
+        context = patch.object(activation.subprocess, 'check_output', return_value=self.legacy_css)
+        self.git = context.start()
+        self.addCleanup(context.stop)
+
+    def inventory(self):
+        return activation.static_inventory(self.identity, self.word)
+
+    def test_current_assets_and_exact_retained_pair_remain_in_inventory(self):
+        before = self.inventory()
+        self.assertEqual(set(before), {'.', 'app.css', self.compiled, 'staticfiles.json',
+                                      self.css_name, self.css_name + '.gz'})
+        self.assertEqual(before, self.inventory())
+        self.git.assert_called_with(['git', 'show', activation.RETAINED_STATIC_SOURCE], cwd=self.root)
+
+    def test_unknown_third_historical_hash_is_not_authorized(self):
+        (self.static / 'app.111111111111.css').write_bytes(self.legacy_css)
+        with self.assertRaisesRegex(RuntimeError, 'outside the reviewed public asset set'):
+            self.inventory()
+
+    def test_changed_retained_bytes_and_mode_are_refused(self):
+        path = self.static / self.css_name
+        for replacement in (b'alter synthetic CSS\n', self.legacy_css + b'changed'):
+            path.write_bytes(replacement)
+            with self.assertRaisesRegex(RuntimeError, 'exact historical bytes or mode'):
+                self.inventory()
+        path.write_bytes(self.legacy_css)
+        path.chmod(0o664)
+        with self.assertRaisesRegex(RuntimeError, 'exact historical bytes or mode'):
+            self.inventory()
+
+    def test_gzip_is_pinned_even_when_it_decompresses_to_same_css(self):
+        path = self.static / (self.css_name + '.gz')
+        path.write_bytes(gzip.compress(self.legacy_css, mtime=1))
+        self.assertEqual(gzip.decompress(path.read_bytes()), self.legacy_css)
+        with self.assertRaisesRegex(RuntimeError, 'exact historical bytes or mode'):
+            self.inventory()
+
+    def test_report_hash_and_both_historical_inventory_entries_are_required(self):
+        original = self.proof_bytes
+        self.proof_bytes = original + b' '
+        with self.assertRaisesRegex(RuntimeError, 'provenance report changed'):
+            self.inventory()
+        changed = json.loads(original)
+        del changed['static_before'][self.css_name]
+        self.proof_bytes = json.dumps(changed).encode()
+        with patch.object(activation, 'RETAINED_STATIC_REPORT_SHA256', hashlib.sha256(self.proof_bytes).hexdigest()):
+            with self.assertRaisesRegex(RuntimeError, 'not preserved by the historical recovery'):
+                self.inventory()
+        changed = json.loads(original)
+        changed['static_after'][self.css_name]['mode'] = 0o666
+        self.proof_bytes = json.dumps(changed).encode()
+        with patch.object(activation, 'RETAINED_STATIC_REPORT_SHA256', hashlib.sha256(self.proof_bytes).hexdigest()):
+            with self.assertRaisesRegex(RuntimeError, 'not preserved by the historical recovery'):
+                self.inventory()
+
+    def test_historical_git_source_is_an_independent_required_match(self):
+        self.git.return_value = b'a different historical source\n'
+        with self.assertRaisesRegex(RuntimeError, 'initial fresh implementation'):
+            self.inventory()
+
+    def test_unknown_symlink_and_hardlink_still_refuse(self):
+        link = self.static / 'unreviewed.css'
+        link.symlink_to(self.current)
+        with self.assertRaisesRegex(RuntimeError, 'free of symlinks'):
+            self.inventory()
+        link.unlink()
+        os.link(self.static / self.css_name, link)
+        with self.assertRaisesRegex(RuntimeError, 'linked or oversized'):
+            self.inventory()
+
+    def test_current_manifest_and_source_guards_remain(self):
+        original = self.current.read_bytes()
+        self.current.write_bytes(b'changed source\n')
+        with self.assertRaisesRegex(RuntimeError, 'current application source'):
+            self.inventory()
+        self.current.write_bytes(original)
+        manifest = self.static / 'staticfiles.json'
+        manifest.write_text(json.dumps({'paths': {'app.css': self.compiled, 'unexpected.js': 'extra.js'}}))
+        with self.assertRaisesRegex(RuntimeError, 'installed OTP assets'):
+            self.inventory()
+        manifest.write_text(json.dumps({'paths': {'app.css': '../wrong.css'}}))
+        with self.assertRaisesRegex(RuntimeError, 'unexpected path'):
+            self.inventory()
 
 
 if __name__ == '__main__':

@@ -9,12 +9,14 @@ Actual Word fill/review/export evidence follows as a separately declared act.
 """
 import argparse
 from datetime import datetime, timezone
+import gzip
 import hashlib
 import types
 import json
 import os
 from pathlib import Path
 import re
+import stat
 import subprocess
 import sys
 import time
@@ -32,6 +34,19 @@ SELF = 'scripts/activate-word-export.py'
 CURRENT_MIGRATION = '0014_encounter_service_date'
 TABLE_COUNT = 35
 MEDIA_TOOLS = ('ffmpeg', 'ffprobe')
+# These assets were deliberately retained by the completed Word recovery. They
+# remain in place and are included in the complete before/after inventory.
+RETAINED_STATIC_REPORT = 'word-beta-recovery-20260917-final.json'
+RETAINED_STATIC_REPORT_SHA256 = 'af24751df9721d98cdbd84415247f806cd5fc0274717b945e2b4c8609f227fef'
+RETAINED_STATIC_SOURCE = 'f2012ea0030b3e5b9ca59ea7023f4da1263a3c69:rebuild/static/app.css'
+RETAINED_STATIC = {
+    'app.39d54d0ccd1a.css': {
+        'directory': False, 'mode': 0o644, 'size': 20621,
+        'sha256': '210b3ed9b890243501546ddd98aa82b530cf39af2e1f076199e1c5e288649c63'},
+    'app.39d54d0ccd1a.css.gz': {
+        'directory': False, 'mode': 0o644, 'size': 4708,
+        'sha256': 'faa32aff2ce6b7034f07110112c42e4a3f00307ce8f5a55f3d0d0c7dd54ba022'},
+}
 # Complete served-to-base payload, including earlier account/mail helper repairs.
 PREMERGED_PATHS = {
     'docs/foundation/mutations/20260919-quillmd-account-checks-run2.md',
@@ -161,6 +176,70 @@ def verify_migration_plan(plan):
                          for row in rows)
             and '[X] core.' + CURRENT_MIGRATION in rows,
             'The migration plan is empty, incomplete or contains unapplied operations.')
+
+
+def static_inventory(identity, word):
+    """Keep the first-install inventory guards and authenticate two retained assets.
+
+    The identity activator predates the Word recovery and only recognizes the
+    current manifest. Reusing it hid two deliberately preserved old hashes from
+    its allowed set. This local checker adds exactly those authenticated files;
+    unknown files, ownership/link defects and manifest changes still refuse.
+    """
+    root = APP / 'staticfiles'
+    require(root.resolve() == root, 'Static output path must be canonical.')
+    rows = {}
+    for path in [root, *sorted(root.rglob('*'))]:
+        info = path.lstat()
+        require(info.st_uid == os.getuid() and not stat.S_ISLNK(info.st_mode),
+                'Static output must be operator-owned and free of symlinks.')
+        relative = '.' if path == root else str(path.relative_to(root))
+        row = {'mode': stat.S_IMODE(info.st_mode), 'device': info.st_dev, 'inode': info.st_ino}
+        if stat.S_ISDIR(info.st_mode):
+            row['kind'] = 'directory'
+        else:
+            require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and info.st_size <= 16 * 1024 * 1024,
+                    'Static output contains a nonregular, linked or oversized object.')
+            row.update(kind='file', size=info.st_size, sha256=sha(path.read_bytes()))
+        rows[relative] = row
+        require(len(rows) <= 10000, 'Static output inventory exceeds the bounded scope.')
+    manifest = json.loads((root / 'staticfiles.json').read_bytes())
+    inputs = identity.static_sources()
+    require(isinstance(manifest.get('paths'), dict) and set(manifest['paths']) == set(inputs),
+            'Static manifest differs from reviewed application and installed OTP assets.')
+    allowed = {'staticfiles.json'}
+    allowed_dirs = {'.'}
+    for source, compiled in manifest['paths'].items():
+        original = Path(source)
+        pattern = re.escape(str(original.with_suffix(''))) + r'\.[a-f0-9]{12}' + re.escape(original.suffix)
+        require(isinstance(compiled, str) and re.fullmatch(pattern, compiled),
+                'Static manifest includes an unexpected path.')
+        require((root / source).read_bytes() == inputs[source].read_bytes(),
+                'Collected static input differs from current application source.')
+        require(compiled in rows and rows[compiled]['kind'] == 'file', 'Compiled static asset is missing.')
+        for path in (source, compiled):
+            allowed.update((path, path + '.gz', path + '.br'))
+            allowed_dirs.update(str(parent) for parent in Path(path).parents)
+    proof_bytes = word.checked_file(PRIVATE / RETAINED_STATIC_REPORT, private=True)
+    require(sha(proof_bytes) == RETAINED_STATIC_REPORT_SHA256, 'Retained static provenance report changed.')
+    proof = json.loads(proof_bytes)
+    require(proof.get('complete') is True, 'Retained static provenance did not complete.')
+    for name, expected in RETAINED_STATIC.items():
+        require(proof.get('static_before', {}).get(name) == expected
+                and proof.get('static_after', {}).get(name) == expected,
+                'Retained static asset was not preserved by the historical recovery.')
+        found = rows.get(name, {})
+        require(found.get('kind') == 'file'
+                and all(found.get(key) == expected[key] for key in ('mode', 'size', 'sha256')),
+                'Retained static asset differs from its exact historical bytes or mode.')
+        allowed.add(name)
+    original_css = subprocess.check_output(['git', 'show', RETAINED_STATIC_SOURCE], cwd=ROOT)
+    require((root / 'app.39d54d0ccd1a.css').read_bytes() == original_css
+            and gzip.decompress((root / 'app.39d54d0ccd1a.css.gz').read_bytes()) == original_css,
+            'Retained static assets differ from the initial fresh implementation.')
+    require(all(name in (allowed_dirs if row['kind'] == 'directory' else allowed) for name, row in rows.items()),
+            'Static output contains an object outside the reviewed public asset set.')
+    return rows
 
 
 def sha(data):
@@ -340,7 +419,7 @@ def main():
         require((APP / 'deploy' / unit).read_bytes() == (Path('/etc/systemd/system') / unit).read_bytes(),
                 'Installed service policy differs from reviewed source.')
     identity.verify_live(RUNNING_RELEASE, storage)
-    static_before = identity.static_inventory()
+    static_before = static_inventory(identity, word)
     result_path = Path(args.result)
     lock = PRIVATE / '.word-export-activation.lock'
     require(result_path.is_absolute() and result_path.parent == PRIVATE and result_path.resolve() == result_path
@@ -395,7 +474,7 @@ def main():
         verify_migration_plan(plan)
         run([str(APP / '.venv/bin/python'), '-B', 'manage.py', 'makemigrations', '--check', '--dry-run'], cwd=APP)
         run([str(APP / '.venv/bin/python'), '-B', 'manage.py', 'check'], cwd=APP)
-        require(identity.static_inventory() == static_before, 'Static files changed before restart.')
+        require(static_inventory(identity, word) == static_before, 'Static files changed before restart.')
         result['source_readability'] = identity.source_readability(helper)
         result['stage'] = 'replacing_release_line'
         pending = PRIVATE / ('word-export-env-' + args.target + '.pending')
@@ -439,7 +518,7 @@ def main():
         require(word.verify_artifact(installed / 'runtime', installed / 'runtime-manifest.json',
                                      installed / 'build-proof.json', billing.PIN, inputs) == artifact,
                 'Word runtime changed.')
-        require(identity.static_inventory() == static_before, 'Static files changed during activation.')
+        require(static_inventory(identity, word) == static_before, 'Static files changed during activation.')
         require(retained_unchanged(retained, word.retained_reports()) and previous.protected() == protected,
                 'Retained or shared resources changed.')
         for unit in UNITS:

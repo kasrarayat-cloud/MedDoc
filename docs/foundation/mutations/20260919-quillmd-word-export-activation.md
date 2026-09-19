@@ -113,3 +113,38 @@ rebuild/.venv/bin/python -B scripts/activate-word-export.py --target FULL_MERGE_
 The executing form is the same command with `--execute`, invoked only through
 `bash scripts/run-ruled-mutation.sh --declaration` with this committed file. The
 tree must already be fast-forwarded to the target so the gate can verify it.
+
+## Amendment — the read-only static inventory refusal, 2026-09-19
+
+The exact merge `bba1fb31dba5ce6a3b1045abc46aa6ff34a3b477` passed CI and the
+permanent tree advanced to it. The **read-only** activation gate then refused in
+the older OS identity helper's static inventory: two generated CSS files were
+outside its current-manifest-only set. No service stop, environment replacement,
+database action or static file mutation had occurred. The refusal is preserved at
+`.runtime/word-export-static-gate-refusal-20260919.json`.
+
+The files are deliberately retained artifacts of the new application, not unknown
+resources. The completed Word recovery report already records both unchanged in
+its before and after inventories:
+
+| Filename | Bytes | Mode | SHA-256 |
+| --- | ---: | --- | --- |
+| `app.39d54d0ccd1a.css` | 20621 | 0644 | `210b3ed9b890243501546ddd98aa82b530cf39af2e1f076199e1c5e288649c63` |
+| `app.39d54d0ccd1a.css.gz` | 4708 | 0644 | `faa32aff2ce6b7034f07110112c42e4a3f00307ce8f5a55f3d0d0c7dd54ba022` |
+
+The activator now owns a bounded inventory checker that retains every original
+ownership, symlink, hardlink, file type, size, population, current manifest,
+compiled filename and source-byte guard. It adds **only these two exact filenames,
+hashes, sizes and modes**. It authenticates the existing recovery report's SHA-256
+`af24751df9721d98cdbd84415247f806cd5fc0274717b945e2b4c8609f227fef`, requires both
+historical inventory entries to agree, verifies the CSS against
+`f2012ea0030b3e5b9ca59ea7023f4da1263a3c69:rebuild/static/app.css`, and verifies that
+the exact pinned gzip decompresses to those same bytes.
+
+Both files remain in place and in the complete before/after fingerprint comparison.
+No asset relocation, deletion, regeneration or permission change is authorized or
+needed. An unknown third file or any altered retained file still refuses. This
+amendment changes only the activator, its focused tests and this declaration;
+it requires its own reviewed PR and exact merge citation before activation. The
+all-row database, clinical, SDK, environment and service preservation gates above
+remain unchanged.
