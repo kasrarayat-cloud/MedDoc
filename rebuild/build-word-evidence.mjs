@@ -40,11 +40,24 @@ function python(code, payload = {}) {
   return result.stdout.trim() ? JSON.parse(result.stdout.trim().split('\n').pop()) : {};
 }
 
-/** Django rejects a cross-site POST without its token; `page.request` does not add one. */
+/** Django rejects a cross-site POST without its token; `page.request` does not add one.
+ *
+ * ⚠️ READ IT FROM THE RENDERED FORM, NOT FROM A COOKIE NAMED `csrftoken`. This deployment renames the
+ * cookie per surface — `CSRF_COOKIE_NAME` is `quillmd_doctor_csrf` on the doctor service and
+ * `quillmd_admin_csrf` on the admin one — so looking for the Django default finds nothing and reports it
+ * as "the session is not established", which is a true sentence about the wrong thing. The hidden input
+ * that `{% csrf_token %}` renders is correct whatever the cookie is called, and correct under
+ * `CSRF_USE_SESSIONS` too, where no cookie exists at all.
+ */
 async function csrf(page) {
+  const field = page.locator('input[name=csrfmiddlewaretoken]').first();
+  if (await field.count()) {
+    const value = await field.inputValue();
+    if (value) return value;
+  }
   const cookies = await page.context().cookies(base);
-  const token = cookies.find(c => c.name === 'csrftoken');
-  assert(token && token.value, 'no csrftoken cookie; the session is not established');
+  const token = cookies.find(c => /csrf/i.test(c.name) && c.value);
+  assert(token, 'no CSRF token in the page or the cookie jar; the session is not established');
   return token.value;
 }
 
