@@ -1,3 +1,52 @@
+# Current owner dependencies — additive update, 2026-09-19
+
+**Native Word appearance acceptance is complete** for the verified 20260919
+package: Word365 Version2608 Build20326.20144, five documents /43 rendered pages.
+See [the acceptance addendum](native-word-acceptance-20260919.md). The older Word
+instructions below are historical and must not trigger another review, regeneration,
+or download of the superseded archive. Actual served doctor/admin release is
+`dc4eb42ce021e436a3b717eb40edb10ace8e662c`, synthetic-only; both public routes remain
+in maintenance. Repository/tooling changes are recorded separately.
+
+The prior blanket statement that all engineering is complete is superseded.
+Engineering is qualifying the independent-reviewer access controls and owns all
+routine configuration, execution, repairs and retesting after required inputs arrive.
+The source/review check demonstrates two answered mapped inputs plus88 missing,
+with separate approved statement/signature replacements; no clinical defect was
+shown. No Word SDK purchase is justified by this accepted WM IOV package; scanned
+forms remain deferred.
+
+## Inputs unavailable after authorized configuration inspection
+
+| Owner input | Exact handoff and blocked verification |
+| --- | --- |
+| Stripe sandbox access | Pair the installed CLI with QuillMD's sandbox and put a restricted test key with Checkout Sessions Write into the protected fresh application configuration. Engineering obtains the forwarding webhook secret and verifies checkout, duplicate/retried events, failure and refunds. No live payment key is required. |
+| One controlled recipient | Supply one real inbox you control and will check. Current application accounts are all reserved synthetic inboxes; authorized configuration identifies no established owner recipient. Engineering reuses the preserved Resend sender/key, verifies provider sender capability, configures the private link path and tests invitations/recovery. DNS plus a send-only credential is not yet proof of provider verification or delivery. No replacement Resend subscription/key is requested. |
+| Approved offsite destination and independent key custody | Supply the dedicated private B2 bucket/prefix and scoped list/read/write key in `.runtime/backup-secrets/b2-offsite.json` (0600), plus confirmation of separately held backup/recovery keys. Engineering performs encrypted upload/download/restore. Existing successful same-VPS restores are not offsite evidence. |
+| Authentic provider cost evidence | Supply account usage/cost/invoice exports with applicable rates, discounts and credits in `.runtime/provider-evidence/` (0700) through the secure channel. Ordinary Anthropic/Deepgram request credentials do not provide the missing billing access. Configured-rate arithmetic is not invoice reconciliation; historical missing receipts stay documented exceptions. |
+| Independent reviewer engagement | Supply reviewer identity, public key, UTC window and emergency contact. Engineering records the exact release/scope and prepares restricted access. Shared-account grants are disabled; dedicated-account access requires verified effective SSH restrictions and review-window controls. The security handoff records prepared versus active controls. |
+| Licensed content and patient-data agreements | For CPT: legitimate dataset/API entitlement and usage/display/distribution rights. For real patient data: executed provider/storage agreements and verified processing/retention controls. CPT and real patient data remain disabled until their respective gates pass. These are contractual actions, not assumed spending authority. |
+
+No secrets should be sent in ordinary chat, tickets, command arguments or Git.
+Use protected SSH/SFTP or the approved secret store. The older key-custody steps
+are retained below as historical instructions; engineering rechecks exact key
+identity before any recovery act. A shared-host reboot still needs an agreed
+maintenance window if that additional recovery proof is to be performed; it is
+not silently authorized by this update.
+
+Private evidence: `release-access-status-20260919T184415Z.json` and its
+`release-access-status-health-20260919T184441Z.json` addendum under
+`rebuild/.runtime/`. The latter clarifies that current sender verification is
+engineering follow-up; the missing owner email input is the recipient address.
+
+---
+
+## Historical owner-action record (preserved verbatim below)
+
+The record below predates the genuine verified exports and workstation acceptance.
+Its superseded status/recipient-verification/SSH-scope claims must be read with the
+current update above and the later scope addendum in `pentest-scope.md`.
+
 # Owner actions
 
 Updated 2026-09-19 (application release `6d73c5e9026d974053365468101c2f7921544c6c`, verified from `/health/` on both surfaces; repository/harness

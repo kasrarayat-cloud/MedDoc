@@ -1359,3 +1359,66 @@ or manufactures them. Native Microsoft Word acceptance remains pending; Linux
 rendering is separately labelled evaluation evidence. The final deployed revision,
 served exports, archive and all evidence paths will be recorded in the append-only
 private `.runtime/CHECKPOINT-LATEST.md` after the declared acts actually complete.
+
+## 2026-09-19 — owner workstation native Word acceptance (additive)
+
+The owner completed native Microsoft Word appearance acceptance of
+`quillmd-word-review-20260919-verified.zip` (220764 bytes,
+SHA256 `2bd478ee88c1dc26f96171bcef22de9c1680c9ef279f985c1a828c7827405b01`):
+Word365 Version2608 Build20326.20144, five documents,43 rendered pages,
+preserved long answers and controls, no demonstrated rendering defect, unchanged
+original hashes. See `native-word-acceptance-20260919.md` for per-file hashes and
+precise evidence scope. This owner attestation closes native appearance acceptance;
+it is not an agent-operated Word test or public-launch approval.
+
+Independent read-only checks confirm ZIP integrity, all5 document sizes/hashes,
+and all8 checksum-list members. Candidate7f3b5313 and actual served dc4eb42c
+remain distinct execution records. Historical archive/manifest/checklist, failed
+attempts, milestone report and evidence index were preserved without rewriting.
+Their old “pending” status is superseded by this dated addendum.
+
+Partial exports have exactly2 answered mapped inputs (patient name and exam side)
+and88 missing inputs, plus14 separate reviewed statement/identity replacements.
+The additional exam-type text has an exact recorded source quotation and
+claim_9/exam_choice approval. Clinician text uses the authenticated synthetic
+finalizer through reviewed trusted identity claims; the signed timestamp is server
+metadata. No unsupported additional answer was demonstrated; no clinical output
+or finalization record was changed. Private provenance/acceptance evidence is
+linked from the append-only `.runtime/CHECKPOINT-LATEST.md`.
+
+Authorized configuration inspection identified no Stripe sandbox pairing/test key,
+controlled owner recipient, approved B2 destination/key, or authentic provider
+billing evidence. Reusable Resend sender/key exist, but DNS and credential presence
+alone do not prove current provider sender verification. The sole currently needed
+owner email input is a controlled recipient; engineering owns sender verification
+and delivery tests. `owner-actions.md` now starts with the current dependency
+list while preserving the historical body verbatim.
+
+Next supported engineering work is isolated qualification/repair of the prepared
+independent-reviewer SSH access. No reviewer grant, shared SSH configuration change,
+provider call, app restart, data reset, or public activation is part of this update.
+Doctor/admin continue to report dc4eb42c, synthetic-only; public app/admin remain
+maintenance503. CPT, provider reconciliation, offsite recovery, independent testing
+and patient-data agreements remain separately gated.
+
+### Reviewer access qualification completed (same update)
+
+The actual isolated OpenSSH fixture reproduced reverse TCP forwarding despite the
+old key's permitopen restrictions. Shared-account grant now refuses; prepare emits
+a dedicated-account Match policy and SSH expiry without granting access. Repairs
+also cover sole-key removal, concurrent removals, audit availability before
+mutation, exactly-one-key validation and unreadable status. Lead independently
+reproduced audit-order/concurrent/status counterexamples and reran all20 focused
+checks successfully with no skips. CI now explicitly runs this SSH qualification.
+
+Evidence: `.runtime/reviewer-access-qualification-20260919/report.json`, SHA256
+`1c0cb2b1181e313ca91d8a7cc3b646b27ed3e2947a656363547e33b5eb253278`,
+and its test log. The original helper and failed harness/refutation evidence are
+preserved. No host SSH policy, actual reviewer key or application data changed.
+
+The isolated fixture is unprivileged; it cannot establish a Unix-forwarding
+positive control, because the legacy setup also refuses it. Actual dedicated
+account/effective-host-policy testing and scheduled termination of established
+connections remain activation prerequisites. Key removal and expiry alone do not
+terminate existing tunnels. This is internal preparation, not independent testing.
+`pentest-scope.md` has the additive correction and exact activation steps.
