@@ -102,6 +102,15 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
             export = workspace / ("output" + suffix)
             if not export.is_file() or export.is_symlink() or not 0 < export.stat().st_size <= MAX_OUTPUT:
                 raise DocumentError("The document export is invalid.", "invalid_export")
+            if suffix == ".docx":
+                # Output-layout safeguards only: heading rows keep with the measurements they label, and
+                # no row splits across a page. Applied HERE, on the way out, so the customer's uploaded
+                # original is never rewritten — and before the caller hashes the file, so the recorded
+                # export_sha256 describes the bytes that are actually stored.
+                from .layout import repair_export
+                response["layout"] = repair_export(export)
+                if not 0 < export.stat().st_size <= MAX_OUTPUT:
+                    raise DocumentError("The document export is invalid.", "invalid_export")
             # O_EXCL also protects against a concurrent export or symlink swap.
             try:
                 out_fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
