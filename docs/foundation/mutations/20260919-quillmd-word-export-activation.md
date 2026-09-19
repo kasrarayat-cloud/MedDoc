@@ -148,3 +148,83 @@ amendment changes only the activator, its focused tests and this declaration;
 it requires its own reviewed PR and exact merge citation before activation. The
 all-row database, clinical, SDK, environment and service preservation gates above
 remain unchanged.
+
+## Amendment — bounded recovery from migration-plan formatting, 2026-09-19
+
+Activation of `e0e92703847cbaf6035e130e512baa886c602eca` passed its read-only
+gates, stopped the three private services and captured the full preservation
+baseline. It then refused at `verifying_no_schema_work_is_pending`: Django's
+actual `showmigrations --plan` prints **two spaces** after `[X]`, while the parser
+accepted one. All 32 migrations were applied; this was a parser failure, not an
+unapplied migration. The environment still names the old served release
+`6d73c5e9026d974053365468101c2f7921544c6c`; no release replacement or restart
+occurred. The three services remain inactive with MainPID 0 until this recovery.
+
+The failed result and lock are retained, not discarded:
+
+- `.runtime/word-export-activation-20260919.json`, SHA-256
+  `60f7438e07cdbdac1ed7aad9b48e87f47d2ca0204f602af5f54ffe13c85e627d`.
+- `.runtime/.word-export-activation.lock`, SHA-256
+  `ddfcae0f7b4c1c18a031b9e1ab2ea8b257643927cf6d2b415aaec2b4b1060b1a`.
+- `.runtime/word-export-failed-activation-inspection-20260919.json` records the
+  independent comparison: every database row/schema/constraint/index, clinical
+  count, private file/mail object, static asset, SDK artifact, unit and retained
+  report matches the captured failure baseline. JSON arrays are compared with
+  live SQL tuples through a full JSON round-trip; no fields are removed. The
+  earlier tuple/list diagnostic mismatch remains recorded as a representation
+  difference, not a data change.
+- `.runtime/word-export-actual-migration-plan-20260919.txt`, SHA-256
+  `1a4068355d3e930ce872f8320dfe3f7a317b912f4dc819fccc62eb843b3b9666`, records the
+  actual 32-line plan. The corrected parser permits normal spaces/tabs between
+  `[X]` and the identifier, requires every line to be applied and still requires
+  `core.0014_encounter_service_date`. Pending entries, junk and missing core0014
+  remain failures.
+
+This recovery changes only the activator, its tests and this declaration. The
+target must descend from `e0e92703` with **exactly those three changed paths**, be
+merged through a reviewed PR and pass its own exact merge CI citation. It does
+not restart the new source under an old release stamp.
+
+### Recovery preconditions and act
+
+The opt-in argument `--resume-report` accepts only the exact failed report above,
+authenticated by its pinned hash. It requires complete=false, the exact failure
+stage and RuntimeError, successful failure-stop evidence, the old target/release,
+zero provider calls and no migration. The private environment is additionally
+bound to the inspected stopped-state SHA-256
+`5e113f4253c109faa9054611ed35d346be12b2e7a654dbc6ea8423662df4fe23`.
+The same authenticated backup `20260919T153814Z-42c9c0a2` remains required.
+
+Both read-only preflight and executing recovery require all three private services
+inactive with MainPID 0, no unresolved jobs, the exact old lock, no previously saved
+lock at the destination, and equality with the failed report's **complete** database,
+schema, constraints, indexes, clinical, private-file/mail, static, SDK, helper and
+media-tool baseline. Historical reports must remain unchanged. The recorded old
+worker's identity/start time is retained as the before-restart evidence.
+
+Only after the executing form passes citation, declaration and a repeated complete
+inspection may it preserve the old lock at
+`.runtime/.word-export-activation.lock-preserved-20260919-plan`. An exclusive
+same-directory link followed by unlink preserves the exact inode, bytes and mode
+and refuses an existing destination. The original failed report remains byte-for-byte
+unchanged. A new activation lock and unused result file record this recovery.
+
+The normal preserving sequence then runs: stop/assert stopped, recapture and compare
+the full baseline again, verify the corrected applied-migration plan and source
+checks, replace **only** the release line, and start all three services on the new
+cited target. The original failure report and saved failed lock are authenticated
+again before success. All existing post-restart preservation and same-process
+boundary checks remain required. A further failure keeps its new evidence and
+stops the private services; it does not automatically retry.
+
+Use the earlier invocation with these additional arguments, first without execute:
+
+```text
+--resume-report /opt/meddoc-pro/rebuild/.runtime/word-export-activation-20260919.json
+--result /opt/meddoc-pro/rebuild/.runtime/word-export-activation-20260919-recovered.json
+```
+
+The executing invocation remains behind the committed declaration wrapper. Public
+maintenance, synthetic-only operation and the separate clinical-export declaration
+are unchanged. There is no provider call, database repair, schema application,
+asset move, SDK installation or data deletion in this recovery.
