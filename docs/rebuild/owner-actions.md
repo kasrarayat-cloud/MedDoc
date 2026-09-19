@@ -1,3 +1,39 @@
+# Current owner inputs — 2026-09-19, after host access qualification
+
+[Reviewer access mechanisms passed actual-host qualification](reviewer-host-qualification-20260919.md).
+No external access is active. Engineering owns configuration, scheduling, source
+restrictions, delivery, integration testing and repairs once these inputs arrive.
+Native Word appearance acceptance remains complete. Current missing inputs are:
+
+1. **Reviewer engagement:** identity, public key, approved source, UTC window and
+   emergency contact. Blocks external reviewer activation and the independent test.
+2. **Stripe sandbox access:** pair the installed CLI and securely install the
+   restricted Checkout Sessions Write test key. Blocks real sandbox payment,
+   webhook/retry/refund verification; engineering obtains the signing secret.
+3. **One real inbox you control:** blocks invitation/recovery delivery tests.
+   Existing Resend sender/key will be reused; engineering verifies sender capability.
+4. **Approved offsite destination/key custody:** dedicated B2 bucket/prefix and scoped
+   key in the protected configuration, plus independent recovery-key custody.
+   Blocks encrypted offsite upload/download/restore proof.
+5. **Authentic provider billing evidence:** usage/cost/invoice exports with applicable
+   rates/discounts/credits via the secure evidence directory. Blocks provider/invoice
+   reconciliation; configured-cost arithmetic and historical exceptions stay distinct.
+6. **Content and patient-data contracts:** legitimate CPT content/usage rights for CPT;
+   executed processing agreements and verified controls before real patient data.
+   Both features remain gated separately from the synthetic reviewer exercise.
+
+No secret belongs in ordinary chat or Git. Use protected SSH/SFTP or the approved
+secret store; the paths/instructions in the dated record below remain available.
+Configuration inspection this turn found no new Stripe test/webhook key, approved
+B2 configuration or provider billing export. The application remains in private
+email-outbox mode, and no controlled recipient was established. No purchase is
+required for the accepted Word milestone; scanned forms remain deferred.
+
+Earlier entries below are retained as dated history; this current status supersedes
+statements that reviewer host qualification is still outstanding.
+
+---
+
 # Current owner dependencies — additive update, 2026-09-19
 
 **Native Word appearance acceptance is complete** for the verified 20260919
