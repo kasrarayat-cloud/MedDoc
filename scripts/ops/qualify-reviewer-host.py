@@ -74,6 +74,9 @@ def shared_state():
         item['process'] = process_identity(int(item.get('MainPID', '0')))
         services[unit] = item
     ssh_processes = []
+    ssh_contexts = []
+    preauth_pids = set()
+    privsep_uid = pwd.getpwnam('sshd').pw_uid
     for directory in Path('/proc').iterdir():
         if directory.name.isdigit():
             try:
@@ -81,9 +84,16 @@ def shared_state():
                     identity = process_identity(int(directory.name))
                     if identity:
                         ssh_processes.append(identity)
+                        raw = (directory / 'stat').read_text()
+                        parent = int(raw[raw.rfind(')') + 2:].split()[1])
+                        ssh_contexts.append({'pid': identity['pid'], 'parent_pid': parent,
+                                             'command': (directory / 'cmdline').read_bytes().replace(b'\0', b' ').decode(errors='replace')})
+                        if identity['uid'] == privsep_uid:
+                            preauth_pids.update((identity['pid'], parent))
             except OSError:
                 pass
-    return {'services': services, 'sshd_processes': ssh_processes}
+    return {'services': services, 'sshd_processes': ssh_processes,
+            'sshd_contexts': ssh_contexts, 'sshd_preauth_pids': sorted(preauth_pids)}
 
 
 def config_hashes():
@@ -237,9 +247,14 @@ class Harness:
         self.subject_auth.write_text(self.subject_key)
         self.subject_auth.chmod(0o644)
         control_key = (self.runtime / 'private/control.pub').read_text().split()
-        (self.runtime / 'control-authorized_keys').write_text(f'restrict,port-forwarding,expiry-time="{expiry}",permitopen="127.0.0.1:9130",command="/bin/false" {control_key[0]} {control_key[1]} quillmd-control-{self.run_id}\n')
+        # Streamlocal checks also consult PermitOpen/key permitopen lists in
+        # OpenSSH9.6. The positive control initially allows Unix forwarding with
+        # TCP forwarding disabled, then narrows to TCP9130 before revocation.
+        self.control_key = f'restrict,port-forwarding,expiry-time="{expiry}",command="/bin/false" {control_key[0]} {control_key[1]} quillmd-control-{self.run_id}\n'
+        (self.runtime / 'control-authorized_keys').write_text(self.control_key)
         (self.runtime / 'control-authorized_keys').chmod(0o644)
         self.save('subject-authorized-key-public.txt', self.subject_key)
+        self.save('control-unix-positive-key-public.txt', self.control_key)
         self.report['account_records'] = dict(self.accounts)
         self.ports = {'subject': free_port(), 'control': free_port()}
         while self.ports['control'] == self.ports['subject']:
@@ -257,9 +272,9 @@ class Harness:
     AuthenticationMethods publickey
     PasswordAuthentication no
     KbdInteractiveAuthentication no
-    AllowTcpForwarding local
+    AllowTcpForwarding no
     AllowStreamLocalForwarding yes
-    PermitOpen 127.0.0.1:9130
+    PermitOpen any
     PermitListen none
     AllowAgentForwarding no
     X11Forwarding no
@@ -300,6 +315,8 @@ AllowUsers {username}
                 auth_expected = {'authorizedkeysfile': str(self.subject_auth), 'authorizedkeyscommand': 'none', 'authorizedprincipalsfile': 'none', 'authorizedprincipalscommand': 'none', 'trustedusercakeys': 'none'}
                 self.event('subject effective authorization sources restricted', all(effective.get(name) == value for name, value in auth_expected.items()), {name: effective.get(name) for name in auth_expected})
                 self.event('subject authorization root owned and home has no keys', self.subject_auth.stat().st_uid == 0 and stat.S_IMODE(self.subject_auth.stat().st_mode) == 0o644 and not (Path(self.accounts[SUBJECT]['home']) / '.ssh').exists())
+            else:
+                self.event('control Unix positive fixture has TCP forwarding disabled', effective['allowtcpforwarding'] == 'no' and effective['permitopen'] == 'any' and effective['allowstreamlocalforwarding'] == 'yes')
             self.start_service(role)
         tcp = socketserver.ThreadingTCPServer(('127.0.0.1', 0), Echo)
         unix_path = self.runtime / 'owned-target.sock'
@@ -483,7 +500,32 @@ AllowUsers {username}
         self.subject_auth.write_text(re.sub(r'expiry-time="[^"]+"', 'expiry-time="200001010000Z"', self.subject_key))
         self.denied(self.ssh('subject', '-W', '127.0.0.1:9130', data=b'synthetic'), 'expired key denied by actual project sshd', b'Permission denied (publickey)')
         self.subject_auth.write_text(self.subject_key)
+        self.prepare_control_revocation()
         self.revocation()
+
+    def prepare_control_revocation(self):
+        """Retire permissive Unix positive control before the live TCP control."""
+        command(['systemctl', 'stop', self.unit('control')], timeout=10)
+        path = self.runtime / 'control-sshd.conf'
+        original = path.read_text()
+        changes = {
+            '    AllowTcpForwarding no\n': '    AllowTcpForwarding local\n',
+            '    AllowStreamLocalForwarding yes\n': '    AllowStreamLocalForwarding no\n',
+            '    PermitOpen any\n': '    PermitOpen 127.0.0.1:9130\n',
+        }
+        for before, after in changes.items():
+            if original.count(before) != 1:
+                raise RuntimeError('control positive policy changed unexpectedly')
+            original = original.replace(before, after)
+        path.write_text(original)
+        narrowed_key = self.control_key.replace(',command=', ',permitopen="127.0.0.1:9130",command=')
+        (self.runtime / 'control-authorized_keys').write_text(narrowed_key)
+        self.save('control-revocation-sshd.conf', original)
+        self.save('control-revocation-key-public.txt', narrowed_key)
+        command(['/usr/sbin/sshd', '-t', '-f', path])
+        effective = self.effective(path, CONTROL, self.ports['control'], '127.0.0.1', 'control-revocation-effective-loopback')
+        self.event('control narrowed to TCP9130 with Unix forwarding disabled', effective['allowtcpforwarding'] == 'local' and effective['permitopen'] == '127.0.0.1:9130' and effective['allowstreamlocalforwarding'] == 'no')
+        self.start_service('control')
 
     def revocation(self):
         subject_port, control_port = free_port(), free_port()
@@ -641,11 +683,13 @@ AllowUsers {username}
             baseline = self.report.get('shared_before', {}).get('sshd_processes', [])
             self.report['shared_prior_sshd_processes_survive'] = all(process_identity(item['pid']) == item for item in baseline)
             self.report['shared_prior_sshd_processes_ended'] = [item for item in baseline if process_identity(item['pid']) != item]
+            preauth = set(self.report.get('shared_before', {}).get('sshd_preauth_pids', []))
+            self.report['shared_prior_nonpreauth_processes_survive'] = all(process_identity(item['pid']) == item for item in baseline if item['pid'] not in preauth)
         except Exception as error:
             errors.append(f'final preservation check: {error}')
         self.report['completed_at'] = utc()
         self.report['elapsed_seconds'] = round(time.monotonic() - self.started, 3)
-        self.report['passed'] = not self.report['failures'] and not errors and bool(self.report['checks']) and self.report.get('shared_config_unchanged', False) and self.report.get('shared_service_identities_unchanged', False) and self.report.get('shared_prior_sshd_processes_survive', False) and self.report['cleanup']['runtime_absent'] and self.report['cleanup']['temporary_account_names_absent'] and all(groups_absent.values()) and all(listener_absent.values())
+        self.report['passed'] = not self.report['failures'] and not errors and bool(self.report['checks']) and self.report.get('shared_config_unchanged', False) and self.report.get('shared_service_identities_unchanged', False) and self.report.get('shared_prior_nonpreauth_processes_survive', False) and self.report['cleanup']['runtime_absent'] and self.report['cleanup']['temporary_account_names_absent'] and all(groups_absent.values()) and all(listener_absent.values())
         self.save('report.json', self.report)
         manifest = {str(path.relative_to(self.evidence)): {'sha256': digest(path), 'size': path.stat().st_size} for path in self.evidence.iterdir() if path.is_file() and not path.is_symlink()}
         self.save('SHA256-MANIFEST.json', manifest)
