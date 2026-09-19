@@ -114,7 +114,7 @@ Synthetic generation explicitly shows a $0 charge and no live AI call. Missing
 quote context disables submission until the application supplies a quote.
 
 Administration includes a provider receipt table with provider, request identifier,
-full-precision actual cost, job identifier, and job status even while settlement is
+full-precision configured-rate cost (the `actual_cost` column), job identifier, and job status even while settlement is
 held. It does not expose raw clinical provider responses. A departmental document
 job offers an authenticated result download only when its stored result path exists. The
 backend remains responsible for authorization of that download.

@@ -8,13 +8,16 @@ from email.message import Message
 from pathlib import Path
 import tempfile
 import unittest
+
+try:
+    from . import source_module
+except ImportError:
+    import source_module
 from unittest.mock import patch
 
 
 SCRIPT = Path(__file__).resolve().parents[2] / 'scripts/activate-os-identity.py'
-SPEC = importlib.util.spec_from_file_location('os_identity_static_under_test', SCRIPT)
-activation = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(activation)
+activation = source_module.load('os_identity_static_under_test', SCRIPT)
 
 
 class StaticIdentityTests(unittest.TestCase):

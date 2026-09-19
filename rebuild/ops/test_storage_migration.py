@@ -9,15 +9,17 @@ import subprocess
 import sys
 import unittest
 
+try:
+    from . import source_module
+except ImportError:
+    import source_module
+
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / 'scripts/migrate-fresh-storage.py'
 
 
 def load_migration():
-    spec = importlib.util.spec_from_file_location('migrate_fresh_storage', SCRIPT)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return source_module.load('migrate_fresh_storage', SCRIPT)
 
 
 def function_source(name):

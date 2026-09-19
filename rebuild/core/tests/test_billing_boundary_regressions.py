@@ -167,6 +167,36 @@ class NothingBillableMeansNothingHeld(RegressionFixture,TestCase):
         self.assertEqual(edited.status_code,302)
         report=audit_report();self.assertTrue(report['all_checks_pass']);self.assertEqual(report['unresolved_jobs'],[])
 
+    def test_access_revoked_between_enqueue_and_processing_releases_the_hold(self):
+        """core/jobs.py's opening membership guard — the one release path in run_one with no coverage.
+
+        ⚠️ IT IS NOT THE SAME BRANCH AS THE OTHER REVOCATION TESTS, AND THEY DO THE OPPOSITE. Every
+        existing test revokes access DURING or AFTER the provider call, which lands in `not_adopted` and
+        deliberately KEEPS the charge, because the provider was really used. This one revokes before the
+        worker picks the job up: nothing is sent, so the money must come back. A regression that swapped
+        these two branches would be invisible to the rest of the suite.
+        """
+        with patch.dict(os.environ,VOICE_ENV):
+            job=enqueue(self.encounter,self.user,kind='transcription',input_path=self.recording('revoked-before-start'))
+            # Not vacuous: something really is held before access is taken away.
+            self.assertEqual(Reservation.objects.get(job=job).state,'held')
+            self.set_active(False)
+            with patch('core.jobs.httpx.post') as post:self.assertTrue(run_one())
+        self.set_active(True)
+        job.refresh_from_db()
+        self.assertEqual(post.call_count,0);self.assertEqual(job.state,'failed')
+        self.assertEqual(job.error,'Access was revoked before processing.')
+        self.assertEqual(Usage.objects.filter(job=job).count(),0)
+        self.assertFalse(ProviderReceipt.objects.filter(job=job).exists())
+        # EXACTLY ONCE: every reservation ended released, with one release row each — not two.
+        reservations=Reservation.objects.filter(job=job)
+        self.assertEqual([r.state for r in reservations],['released']*reservations.count())
+        self.assertEqual(AuditEvent.objects.filter(action='usage.release',target=str(job.pk)).count(),
+                         reservations.count())
+        self.promo.refresh_from_db();self.assertEqual(self.promo.reserved,0)
+        self.assertEqual(self.balances(),(Decimal('10'),Decimal('0')))
+        report=audit_report();self.assertTrue(report['all_checks_pass']);self.assertEqual(report['unresolved_jobs'],[])
+
     def test_missing_recording_fails_before_any_request_and_releases_the_hold(self):
         with patch.dict(os.environ,VOICE_ENV):
             job=enqueue(self.encounter,self.user,kind='transcription',input_path=self.recording('vanished'))
