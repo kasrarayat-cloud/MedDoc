@@ -247,9 +247,10 @@ class Harness:
         self.subject_auth.write_text(self.subject_key)
         self.subject_auth.chmod(0o644)
         control_key = (self.runtime / 'private/control.pub').read_text().split()
-        # Streamlocal checks also consult PermitOpen/key permitopen lists in
-        # OpenSSH9.6. The positive control initially allows Unix forwarding with
-        # TCP forwarding disabled, then narrows to TCP9130 before revocation.
+        # OpenSSH9.6 initializes shared Unix/TCP permission sets from the TCP
+        # forwarding setting. This root-only, timeboxed positive fixture must
+        # initialize both directions; probes use only owned synthetic targets.
+        # It is not reviewer policy and narrows to TCP9130 before revocation.
         self.control_key = f'restrict,port-forwarding,expiry-time="{expiry}",command="/bin/false" {control_key[0]} {control_key[1]} quillmd-control-{self.run_id}\n'
         (self.runtime / 'control-authorized_keys').write_text(self.control_key)
         (self.runtime / 'control-authorized_keys').chmod(0o644)
@@ -272,7 +273,7 @@ class Harness:
     AuthenticationMethods publickey
     PasswordAuthentication no
     KbdInteractiveAuthentication no
-    AllowTcpForwarding no
+    AllowTcpForwarding yes
     AllowStreamLocalForwarding yes
     PermitOpen any
     PermitListen none
@@ -316,7 +317,7 @@ AllowUsers {username}
                 self.event('subject effective authorization sources restricted', all(effective.get(name) == value for name, value in auth_expected.items()), {name: effective.get(name) for name in auth_expected})
                 self.event('subject authorization root owned and home has no keys', self.subject_auth.stat().st_uid == 0 and stat.S_IMODE(self.subject_auth.stat().st_mode) == 0o644 and not (Path(self.accounts[SUBJECT]['home']) / '.ssh').exists())
             else:
-                self.event('control Unix positive fixture has TCP forwarding disabled', effective['allowtcpforwarding'] == 'no' and effective['permitopen'] == 'any' and effective['allowstreamlocalforwarding'] == 'yes')
+                self.event('root-only timeboxed positive fixture initializes both forwarding directions', effective['allowtcpforwarding'] == 'yes' and effective['permitopen'] == 'any' and effective['allowstreamlocalforwarding'] == 'yes' and effective['permitlisten'] == 'none', {'reviewer_policy': False, 'private_key_root_only': stat.S_IMODE((self.runtime / 'private/control').stat().st_mode) == 0o600, 'probe_targets': 'owned synthetic Unix sockets and owned echo listener only; narrowed before application control tunnel'})
             self.start_service(role)
         tcp = socketserver.ThreadingTCPServer(('127.0.0.1', 0), Echo)
         unix_path = self.runtime / 'owned-target.sock'
@@ -509,7 +510,7 @@ AllowUsers {username}
         path = self.runtime / 'control-sshd.conf'
         original = path.read_text()
         changes = {
-            '    AllowTcpForwarding no\n': '    AllowTcpForwarding local\n',
+            '    AllowTcpForwarding yes\n': '    AllowTcpForwarding local\n',
             '    AllowStreamLocalForwarding yes\n': '    AllowStreamLocalForwarding no\n',
             '    PermitOpen any\n': '    PermitOpen 127.0.0.1:9130\n',
         }
