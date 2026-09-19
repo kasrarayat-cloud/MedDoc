@@ -109,5 +109,36 @@ encounter count past what this declaration says, and a delta that overshoots bec
 indistinguishable in the record from one nobody predicted. The declared end state is unchanged:
 **encounters 14, finalized 9, exports 9.**
 
+## Amendment 2, 2026-09-19 — four attempts, what they left, and the corrected end state
+
+Attempts at `09:15`, `09:22`, `09:28` and `09:37` each failed on a different detail and each is recorded
+in the commit that fixed it: a missing CSRF token; a CSRF cookie whose name this deployment changes per
+surface; a revision read from the first of three `[name=revision]` inputs, plus the 14 `claim_reviewed_*`
+boxes omitted; and finally the real one —
+
+> ⚠️ **`encounter.template_review_saved complete=False`.** `save_answers` runs each prewritten statement
+> through `source_quote_evidence`, which demands a COMPLETE SOURCE LINE from the notes for that exact
+> label. A claim it cannot evidence is forced back to `reviewed=false`, the review is recorded incomplete,
+> and the finalization helper refuses it. **That is the application being right**, and reading it as a form
+> problem three times was mine: a statement nobody can point at in the notes has not been reviewed.
+
+The resolution carries the truth in the VARIANT rather than inventing a quotation. These synthetic notes
+document none of the prewritten findings and most claims offer exactly that answer — `not_documented` or
+`not_assessed` — which assert nothing and therefore need no evidence. The `trusted` claims (signer
+identity, signature timestamp, interpreting physician) are server-supplied and left as rendered.
+
+**Judged against the tables above.** Encounters reached the declared **14**, but as TWO
+missing-answer drafts rather than one of each kind: the reuse predicate matched only `status='draft'`, and
+the first encounter had already moved to `review`. **Finalized stayed 7 and exports stayed 7 — none of the
+declared finalizations happened.** Every MUST-NOT-CHANGE row held exactly: jobs 14, usage 14, receipts 11,
+charged `0.217724101050`, cost `0.145149400700`, reservations 12/0, patients 3, templates 11, users 10,
+promotional balance `99.782275898950`, **provider calls 0**. Audit rose 426 → 456, all encounter and
+authentication actions.
+
+⚠️ **THE CORRECTED END STATE, AND WHY IT IS NOT A LARGER BUDGET.** The two existing encounters are REUSED —
+the predicate now matches `draft` or `review` — so one becomes the missing-answer document and the second
+is re-purposed rather than a third being created. **Encounters stay at 14. Finalized becomes 9, exports 9.**
+Nothing else in the MUST-NOT-CHANGE table moves.
+
 A difference outside these tables is the finding. Public maintenance, synthetic-only operation and every
 prior finalization and evidence file are preserved.
