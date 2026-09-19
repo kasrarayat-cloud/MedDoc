@@ -16,6 +16,7 @@ test database: httpx.post is patched in every case that reaches it, and the case
 it assert the call count is zero.
 """
 import hashlib
+import io
 import os
 import shutil
 import subprocess
@@ -31,7 +32,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from core import media
 from core.jobs import enqueue, reap_stray_submissions, run_one
 from core.media import NotNormalised, normalise_submission, plan_normalisation, probe_submission
-from core.models import Job, Reservation, Usage
+from core.models import AuditEvent, Job, Reservation, Usage, Wallet
 from core.security import private_path
 from core.tests.audio_fixtures import wav_bytes, wav_with_two_data_chunks
 from core.tests.test_billing_boundary import BoundaryFixture, deepgram
@@ -654,27 +655,86 @@ class WhatTheRefutationPassFound(MediaFixtures, BoundaryFixture, TestCase):
         self.assertEqual(Job.objects.filter(encounter=self.encounter).count(), 0)
         self.assertEqual(Reservation.objects.count(), 0)
 
-    def test_a_recording_at_the_upload_limit_whose_remux_grows_is_sent_not_refused(self):
+    def test_a_host_without_ffprobe_is_reported_as_the_host_not_the_recording(self):
+        """⚠️ HALF THE TOOLCHAIN MISSING USED TO BLAME THE DOCTOR'S FILE, AND ONLY HALF THE TIME.
+
+        ffmpeg absent gave `unavailable` / retryable — correct. ffprobe absent gave `unreadable` / NOT retryable, and
+        told the doctor to re-export a recording that was fine, because the caller flattened every
+        SubmissionUnprobeable to UNREADABLE. Four unrelated causes arrive that way and only one is about the file.
+        On a host where ffprobe is missing, EVERY recording is refused and every doctor is pointed at their own
+        upload — while `kind`/`retryable`, the one structured signal an operator has, points away from the host.
+        """
+        real_which = shutil.which
+        for tool in ('ffmpeg', 'ffprobe'):
+            with self.subTest(missing=tool):
+                relative = self.enqueue_file('tone.webm', '.webm', 'uploads/no-%s.webm' % tool)
+                with patch.dict(os.environ, STANDARD_ENV):
+                    job = enqueue(self.encounter, self.user, kind='transcription', input_path=relative)
+                    with patch('core.media.shutil.which',
+                               lambda name, tool=tool: None if name == tool else real_which(name)):
+                        with patch('core.jobs.httpx.post') as post:
+                            self.assertTrue(run_one())
+                # Both halves of the same toolchain, the same host fault, the same answer.
+                self.assert_stopped_cleanly(job, post, media.UNAVAILABLE, retryable=True)
+
+    def test_a_refusal_survives_a_database_that_cannot_record_it(self):
+        """⚠️ THE AUDIT WRITE USED TO BE ABLE TO STRAND THE MONEY IT EXISTS TO RETURN.
+
+        refuse() added a SELECT and an INSERT to every failure path — paths that previously touched no database — and
+        that INSERT lands right after up to 45 s of subprocess work, which is when the worker's single long-held
+        connection is most likely to be stale. When it raised, the escaping exception was no longer a
+        NoProviderRequest, so run_one classified the job `reconciliation` rather than `unsent`: the hold was never
+        released, mark_stale could not help, `request_key` was never freed so the encounter refused every later
+        recording, and audit_billing's hold policy only inspects succeeded/failed/cancelled jobs — so
+        `all_checks_pass` stayed True over stranded funds.
+        """
+        from core import jobs as jobs_module
+        relative = self.enqueue_file('tone.webm', '.webm', 'uploads/audit-down.webm')
+        real_audit = jobs_module.audit
+
+        def audit_fails_only_for_the_refusal(actor, action, target='', **details):
+            if action == 'voice.submission_refused':
+                raise RuntimeError('server closed the connection unexpectedly')
+            return real_audit(actor, action, target, **details)
+
+        real_which = shutil.which
+        with patch.dict(os.environ, STANDARD_ENV):
+            job = enqueue(self.encounter, self.user, kind='transcription', input_path=relative)
+            with patch.object(jobs_module, 'audit', audit_fails_only_for_the_refusal), \
+                 patch('core.media.shutil.which', lambda name: None if name == 'ffmpeg' else real_which(name)):
+                with patch('core.jobs.httpx.post') as post:
+                    self.assertTrue(run_one())
+        job.refresh_from_db()
+        self.assertEqual(post.call_count, 0)
+        # The refusal still happened, which is the whole point: the money comes back even when the record does not.
+        self.assertEqual(job.state, 'failed', 'a failed audit write pushed the job into reconciliation')
+        self.assertIn('nothing was charged and the held funds were released', job.error)
+        self.assertEqual([r.state for r in Reservation.objects.filter(job=job)], ['released'])
+        self.assertEqual(Usage.objects.filter(job=job).count(), 0)
+        # The evidence row is the thing that was lost, and losing it is the accepted cost.
+        self.assertEqual(AuditEvent.objects.filter(action='voice.submission_refused', target=str(job.pk)).count(), 0)
+
+    def test_a_recording_whose_prepared_payload_is_too_large_stops_and_says_which_is_too_large(self):
         """The muxer adds an ID3v2 header and a Xing frame to a tagless MP3, so the artifact crosses the limit the
         upload sat exactly on. Raising there told the doctor 'Recording too large.' about a recording that was inside
         the limit and had transcribed fine before — deterministically, so re-uploading never helped."""
+        """The muxer adds an ID3v2 header and a Xing frame a tagless MP3 lacks, so the artifact crosses a limit the
+        upload sat exactly on. This used to fall back to the original; it now stops.
+
+        ⚠️ AND THE MESSAGE IS THE POINT. The pre-normalisation code said 'Recording too large.' about a recording that
+        was INSIDE the limit, which is false and sends the doctor looking for a problem in the wrong place. What is
+        too large is the prepared payload, and the remedy — a shorter segment — is the same either way, so the
+        sentence says that instead."""
         relative = self.enqueue_file('at-the-limit.mp3', '.mp3')
         original = private_path(relative).read_bytes()
         requires_input(len(original) == 15 * 1024 * 1024, 'an upload sitting exactly on the submission limit')
         with patch.dict(os.environ, STANDARD_ENV):
             job = enqueue(self.encounter, self.user, kind='transcription', input_path=relative)
-            with patch('core.jobs.httpx.post',
-                       return_value=deepgram(TRANSCRIPT, 'dg_limit', duration=983)) as post:
+            with patch('core.jobs.httpx.post') as post:
                 self.assertTrue(run_one())
-        job.refresh_from_db()
-        self.assertEqual(job.state, 'succeeded', job.error)
-        self.assertEqual(post.call_count, 1)
-        # The ORIGINAL is what went, because the remux would not fit — and that is recorded, not silent.
-        self.assertEqual(post.call_args.kwargs['content'], original)
-        units = Usage.objects.get(job=job).units
-        self.assertEqual(units['submission_source'], 'original')
-        self.assertIn('above the', units['normalisation_detail'])
-        self.assertEqual(sorted(private_path('submissions').glob('*')), [])
+        self.assert_stopped_cleanly(job, post, media.TOO_LARGE, retryable=False)
+        self.assertNotIn('Recording too large', job.error,
+                         'the upload was inside the limit; only the prepared payload was not')
 
     def test_a_failing_audit_write_leaves_no_artifact_on_the_encrypted_volume(self):
         """The artifact was created, then the audit row was written outside any guard that could clean it up.
@@ -692,23 +752,55 @@ class WhatTheRefutationPassFound(MediaFixtures, BoundaryFixture, TestCase):
         self.assertEqual(sorted(private_path('submissions').glob('*')), [],
                          'the artifact survived a failure between writing it and handing it back')
 
-    def test_a_host_without_ffmpeg_submits_the_original_and_leaves_no_zero_byte_file(self):
+
+    def assert_stopped_cleanly(self, job, post, kind, retryable):
+        """Nothing sent, nothing charged, the hold released EXACTLY once, and the doctor told something actionable."""
+        from core.media import REFUSAL_TEXT
+        job.refresh_from_db()
+        self.assertEqual(post.call_count, 0, 'the provider was contacted despite a processing failure')
+        self.assertEqual(job.state, 'failed', job.error)
+        self.assertEqual(Usage.objects.filter(job=job).count(), 0, 'a failure that never reached the provider was charged')
+        self.assertIn(REFUSAL_TEXT[kind], job.error)
+        self.assertIn('nothing was charged and the held funds were released', job.error)
+        if retryable:
+            self.assertIn('Try again', job.error)
+        else:
+            self.assertNotIn('Try again', job.error,
+                             'a cause that re-sending the same bytes cannot fix must not invite a retry')
+        # EXACTLY ONCE: every reservation ended released, and there is one release row per reservation — not two.
+        reservations = Reservation.objects.filter(job=job)
+        self.assertTrue(reservations.exists(), 'the fixture never held anything, so releasing it proves nothing')
+        self.assertEqual([r.state for r in reservations], ['released'] * reservations.count())
+        releases = AuditEvent.objects.filter(action='usage.release', target=str(job.pk)).count()
+        self.assertEqual(releases, reservations.count(),
+                         'the hold was released %d times for %d reservations' % (releases, reservations.count()))
+        # And the wallet is back where it started, which is what a double release would break.
+        for wallet in Wallet.objects.all():
+            self.assertGreaterEqual(wallet.reserved, Decimal(0), 'a wallet was decremented more than it was incremented')
+        # The refusal is on the record, with its cause, and without a storage path.
+        refusals = AuditEvent.objects.filter(action='voice.submission_refused', target=str(job.pk))
+        self.assertEqual(refusals.count(), 1)
+        details = refusals.first().details
+        self.assertEqual(details['kind'], kind)
+        self.assertEqual(details['retryable'], retryable)
+        self.assertNotIn('/', details['detail'], 'a filesystem path reached the audit row')
+        self.assertEqual(sorted(private_path('submissions').glob('*')), [], 'a failed preparation left its artifact')
+
+    def test_a_host_without_ffmpeg_stops_and_sends_nothing(self):
+        """⚠️ THIS TEST ASSERTED THE OPPOSITE AND THE OPPOSITE WAS THE DEFECT. It required the original upload to be
+        submitted when ffmpeg was missing, on the reasoning that a fallback is never worse than the behaviour before
+        normalisation existed. It is worse: the provider decides for itself what to decode, the doctor is charged for
+        the result, and the only trace that the processing step stopped running is a string on a usage row."""
         relative = self.enqueue_file('tone.webm', '.webm', 'uploads/no-ffmpeg.webm')
-        original = private_path(relative).read_bytes()
         real_which = shutil.which
         with patch.dict(os.environ, STANDARD_ENV):
             job = enqueue(self.encounter, self.user, kind='transcription', input_path=relative)
             with patch('core.media.shutil.which', lambda name: None if name == 'ffmpeg' else real_which(name)):
-                with patch('core.jobs.httpx.post',
-                           return_value=deepgram(TRANSCRIPT, 'dg_noffmpeg', duration=SECONDS)) as post:
+                with patch('core.jobs.httpx.post') as post:
                     self.assertTrue(run_one())
-        job.refresh_from_db()
-        self.assertEqual(job.state, 'succeeded')
-        self.assertEqual(post.call_args.kwargs['content'], original)
-        self.assertEqual(Usage.objects.get(job=job).units['normalisation_detail'], 'ffmpeg is not installed')
-        self.assertEqual(sorted(private_path('submissions').glob('*')), [])
+        self.assert_stopped_cleanly(job, post, media.UNAVAILABLE, retryable=True)
 
-    def test_a_remux_that_raises_something_unexpected_falls_back_instead_of_holding_the_funds(self):
+    def test_a_remux_that_raises_something_unexpected_stops_and_releases_the_hold(self):
         """A preexec_fn that raises surfaces as a bare SubprocessError. Uncaught, it escaped media.py's handler AND
         jobs.py's, left a stray artifact, and put the job in reconciliation with the doctor's money held — for what
         should have been a silent fallback to the original.
@@ -740,31 +832,24 @@ class WhatTheRefutationPassFound(MediaFixtures, BoundaryFixture, TestCase):
                 with patch.dict(os.environ, STANDARD_ENV):
                     job = enqueue(self.encounter, self.user, kind='transcription', input_path=relative)
                     with patch(target, side_effect=failure):
-                        with patch('core.jobs.httpx.post',
-                                   return_value=deepgram(TRANSCRIPT, 'dg_preexec_%s' % len(where), duration=SECONDS)) as post:
+                        with patch('core.jobs.httpx.post') as post:
                             self.assertTrue(run_one())
-                job.refresh_from_db()
-                self.assertEqual(job.state, 'succeeded', job.error)
-                self.assertEqual(post.call_args.kwargs['content'], original)
-                self.assertEqual(sorted(private_path('submissions').glob('*')), [])
+                # An unexpected exception class is exactly where least is known about the artifact, so it is the last
+                # case that should ever be submitted anyway. Both layers stop, and both release the hold once.
+                self.assert_stopped_cleanly(job, post, media.UNAVAILABLE, retryable=True)
 
-    def test_the_preparation_budget_falls_back_rather_than_running_past_the_worker_kill_deadline(self):
+    def test_overrunning_the_preparation_budget_stops_rather_than_submitting_anything(self):
         """The unit SIGKILLs the whole cgroup 150 s after SIGTERM. Summing the sub-step ceilings reached 250 s, so a
         routine restart could kill a worker mid-remux. Exceeding the budget must cost normalisation, never the job."""
         relative = self.enqueue_file('tone.webm', '.webm', 'uploads/budget.webm')
-        original = private_path(relative).read_bytes()
         with patch.dict(os.environ, STANDARD_ENV):
             job = enqueue(self.encounter, self.user, kind='transcription', input_path=relative)
             with patch.object(media, 'SUBMISSION_BUDGET_SECONDS', 0.05), \
                  patch('core.jobs.SUBMISSION_BUDGET_SECONDS', 0.05):
-                with patch('core.jobs.httpx.post',
-                           return_value=deepgram(TRANSCRIPT, 'dg_budget', duration=SECONDS)) as post:
+                with patch('core.jobs.httpx.post') as post:
                     self.assertTrue(run_one())
-        job.refresh_from_db()
-        self.assertEqual(job.state, 'succeeded', job.error)
-        self.assertEqual(post.call_args.kwargs['content'], original)
-        self.assertEqual(Usage.objects.get(job=job).units['submission_source'], 'original')
-        self.assertEqual(sorted(private_path('submissions').glob('*')), [])
+        # Overrunning the budget is a busy host, not a broken recording: the same bytes can succeed next time.
+        self.assert_stopped_cleanly(job, post, media.TOO_SLOW, retryable=True)
 
     def test_a_payload_shorter_than_the_recording_that_was_priced_is_disclosed_in_the_transcript(self):
         """The structural silence: every other arm compares the PROVIDER against what we submitted, so loss that
@@ -783,3 +868,226 @@ class WhatTheRefutationPassFound(MediaFixtures, BoundaryFixture, TestCase):
         stored = private_path(job.result_path).read_text()
         self.assertIn('could be read as audio', stored)
         self.assertNotIn('was not transcribed', stored, 'the provider must not be blamed for loss before the request')
+
+
+@override_settings(ADMIN_SITE=False, STORAGES=STORAGES)
+class AStructurallyAmbiguousRecordingIsRefusedBeforeAnyCharge(BoundaryFixture, TestCase):
+    """A WAV whose samples are split across more than one `data` chunk, refused where multi-track inputs are refused.
+
+    ⚠️ THE FILE GIVES THREE ANSWERS AND NOTHING DECIDES BETWEEN THEM. On a 1 s + 9 s file: core/audio.py's floor says
+    1 s, its ceiling says 10 s, and ffmpeg — the decoder of record — plays 9 s, because it reaches the LAST chunk.
+    Reverse the chunks and ffmpeg plays 1 s instead. No statement about what was transcribed can rest on that, so it
+    is refused before a job exists, exactly like a payload holding several audio tracks.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.user)
+
+    def store(self, raw, name):
+        relative = 'uploads/%s.wav' % name
+        path = private_path(relative)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(raw)
+        return relative
+
+    def test_two_data_chunks_create_no_job_no_hold_and_no_provider_request(self):
+        from core import audio
+        for first, second in ((9, 1), (1, 9), (5, 5)):
+            with self.subTest(chunks='%d+%d' % (first, second)):
+                raw = wav_with_two_data_chunks(first, second)
+                bounds = audio.measure_bounds(raw)
+                requires_input(bool(bounds.ambiguity), 'a fixture the parser actually reports as ambiguous')
+                relative = self.store(raw, 'split-%d-%d' % (first, second))
+                with patch.dict(os.environ, STANDARD_ENV), patch('core.jobs.httpx.post') as post:
+                    with self.assertRaises(ValidationError) as refusal:
+                        enqueue(self.encounter, self.user, kind='transcription', input_path=relative)
+                self.assertIn('more than one audio data chunk', str(refusal.exception))
+                self.assertIn('single continuous audio track', str(refusal.exception))
+                self.assertEqual(post.call_count, 0, 'a payload nobody could interpret reached the provider')
+                self.assertEqual(Job.objects.filter(encounter=self.encounter).count(), 0)
+                self.assertEqual(Reservation.objects.count(), 0, 'a refused upload left a reservation outstanding')
+                self.assertEqual(Usage.objects.count(), 0)
+
+    def test_an_ordinary_wav_is_not_refused_by_the_same_check(self):
+        """The positive control. A refusal that fires on every WAV would pass the test above and break uploads."""
+        relative = self.store(wav_bytes(seconds=2, tag='ordinary'), 'ordinary')
+        with patch.dict(os.environ, STANDARD_ENV):
+            job = enqueue(self.encounter, self.user, kind='transcription', input_path=relative)
+            with patch('core.jobs.httpx.post', return_value=deepgram(TRANSCRIPT, 'dg_ordinary', duration=2)) as post:
+                self.assertTrue(run_one())
+        job.refresh_from_db()
+        self.assertEqual(job.state, 'succeeded', job.error)
+        self.assertEqual(post.call_count, 1)
+
+    def test_trailing_metadata_chunks_are_not_mistaken_for_audio(self):
+        """`LIST`/`INFO` and `id3 ` after the audio are metadata, and a writer that emits them is not ambiguous.
+
+        Measured: both carry `ambiguity=''` and their ceiling equals their floor, so nothing here can fire on them.
+        """
+        import struct
+        from core import audio
+        base = wav_bytes(seconds=2, tag='meta')
+        for label, chunk, body in (('LIST/INFO', b'LIST', b'INFOIART' + struct.pack('<I', 4) + b'anon'),
+                                   ('id3', b'id3 ', b'ID3\x03\x00\x00\x00\x00\x00\x00')):
+            with self.subTest(trailing=label):
+                raw = (base[:4] + struct.pack('<I', struct.unpack('<I', base[4:8])[0] + 8 + len(body))
+                       + base[8:] + chunk + struct.pack('<I', len(body)) + body)
+                bounds = audio.measure_bounds(raw)
+                self.assertEqual(bounds.ambiguity, '', '%s metadata was read as a second audio chunk' % label)
+                self.assertEqual(bounds.confirmed, bounds.measured)
+
+
+class TheArtifactMustDECODE(MediaFixtures, SimpleTestCase):
+    """A successful remux is not valid audio, and the two were treated as the same thing.
+
+    `-c:a copy` moves frames without decoding them and exits 0 on a container whose frames no decoder can use;
+    ffprobe then reports the duration the CONTAINER DECLARES, which is a header field. So the artifact is now decoded
+    and the decoded length compared with the declared one.
+    """
+
+    def test_the_decoded_length_is_measured_and_is_not_the_declared_one(self):
+        """⚠️ The first version of `decodes()` ended `return probe_submission(path).selected_seconds` — comparing the
+        declared duration with itself, a check that could never disagree. These two numbers must genuinely differ."""
+        source, destination, _, produced = self.normalise('tone.webm')
+        self.assertIsNotNone(produced.decoded_seconds)
+        self.assertNotEqual(produced.decoded_seconds, produced.selected_seconds,
+                            'declared and decoded are the same number, so one of them is not being measured')
+        self.assertAlmostEqual(float(produced.decoded_seconds), SECONDS, places=2)
+
+    def test_every_accepted_format_decodes_to_about_what_it_declares(self):
+        for name in ('tone.webm', 'tone.wav', 'tone.mp3', 'tone.m4a'):
+            with self.subTest(name=name):
+                _, _, _, produced = self.normalise(name)
+                drift = abs(produced.decoded_seconds - produced.selected_seconds)
+                self.assertLess(drift, media.DECODE_TOLERANCE_SECONDS, name)
+                # Measured worst case across five durations and four formats is 0.040 s. A literal, not the constant
+                # under test — see MEASURED_WORST_DEVIATION above for why that distinction is load-bearing.
+                self.assertLess(drift, Decimal('0.05'), '%s drifted further than any measured recording' % name)
+
+    def test_an_artifact_that_declares_more_than_it_decodes_is_refused(self):
+        """⚠️ EXERCISED BY PATCHING, AND THE REASON IS STATED RATHER THAN HIDDEN. I could not build a payload that
+        remuxes cleanly, probes cleanly, and still fails to decode: every corruption I attempted damaged the container
+        instead, and was caught earlier by ffprobe refusing it or by the loss check. That is a real limit on this
+        test, not an argument that the guard is unnecessary — the guard exists for the case where a container's
+        declared duration and its contents disagree, and what is proved here is that the comparison fires when they
+        do."""
+        source = self.media / 'tone.wav'
+        upload = probe_submission(source)
+        destination = Path(tempfile.mkdtemp(prefix='undecodable-')) / 'out.wav'
+        self.addCleanup(shutil.rmtree, destination.parent, True)
+        with patch.object(media, 'decodes', lambda path, deadline=None: Decimal('0.5')):
+            with self.assertRaises(NotNormalised) as refusal:
+                normalise_submission(source, destination, upload)
+        self.assertEqual(refusal.exception.kind, media.UNREADABLE)
+        self.assertIn('decodes to', refusal.exception.detail)
+        self.assertFalse(destination.exists(), 'an artifact that fails verification was left where it could be sent')
+
+    @staticmethod
+    def fake_decoder(payload, stderr_line=b''):
+        """A decoder whose stdout is a REAL pipe, because the production loop selects on its file descriptor.
+
+        ⚠️ The first version of these used io.BytesIO, which has no fileno(), so adding the `select` deadline broke
+        all three at once. A fake that cannot be selected on was never exercising the read path it claimed to.
+        """
+        def spawn(argv, stdout=None, stderr=None, **kwargs):
+            if stderr_line:
+                stderr.write(stderr_line)
+            read_fd, write_fd = os.pipe()
+            with os.fdopen(write_fd, 'wb') as sink:
+                sink.write(payload)
+
+            class Decoder:
+                returncode = 0
+
+                def __init__(self):
+                    self.stdout = os.fdopen(read_fd, 'rb')
+
+                def poll(self):
+                    return 0
+
+                def wait(self, timeout=None):
+                    return 0
+
+            return Decoder()
+        return spawn
+
+    def test_a_decoder_that_reports_anything_at_all_is_a_refusal(self):
+        """At `-v error` a clean decode is silent, so any line is a finding — ffmpeg exits 0 on many damaged inputs,
+        reporting the damage on stderr and returning success. A returncode check alone would accept a payload that
+        lost frames to the decoder while still claiming their duration."""
+        spawn = self.fake_decoder(b'\x00' * (media.DECODE_RATE * 2),
+                                  b'[opus @ 0x0] Could not update timestamps for skipped samples\n')
+        with patch('core.media.subprocess.Popen', spawn):
+            with self.assertRaises(NotNormalised) as refusal:
+                media.decodes(self.media / 'tone.wav')
+        self.assertEqual(refusal.exception.kind, media.UNREADABLE)
+        self.assertIn('Could not update timestamps', refusal.exception.detail)
+
+    def test_a_silent_decoder_returning_audio_is_accepted(self):
+        """The positive control for the check above: the same path, one second of samples, nothing on stderr."""
+        with patch('core.media.subprocess.Popen', self.fake_decoder(b'\x00' * (media.DECODE_RATE * 2))):
+            self.assertEqual(media.decodes(self.media / 'tone.wav'), Decimal('1.000'))
+
+    def test_a_decode_that_produces_nothing_is_a_refusal(self):
+        """Exit 0, silent stderr, and no samples at all — a container that declares audio and delivers none."""
+        with patch('core.media.subprocess.Popen', self.fake_decoder(b'')):
+            with self.assertRaises(NotNormalised) as refusal:
+                media.decodes(self.media / 'tone.wav')
+        self.assertEqual(refusal.exception.kind, media.UNREADABLE)
+        self.assertIn('no audio at all', refusal.exception.detail)
+
+    def test_a_decoder_that_produces_nothing_and_never_exits_is_bounded(self):
+        """⚠️ THE DEADLINE USED TO BE CHECKED ONLY AFTER A NON-EMPTY READ, so a silent child was never timed out —
+        it blocked in read() indefinitely and only the outer watchdog stopped it. This holds a pipe open and writes
+        nothing, which is exactly that shape, and it must now return in about the budget rather than never."""
+        import time as clock
+
+        def spawn(argv, stdout=None, stderr=None, **kwargs):
+            read_fd, write_fd = os.pipe()
+            keep = os.fdopen(write_fd, 'wb')            # deliberately never written to and never closed
+
+            class Decoder:
+                returncode = 0
+
+                def __init__(self):
+                    self.stdout = os.fdopen(read_fd, 'rb')
+                    self._keep = keep
+
+                def poll(self):
+                    return None
+
+                def kill(self):
+                    self._keep.close()
+
+                def wait(self, timeout=None):
+                    return 0
+
+            return Decoder()
+
+        # ⚠️ RUN IN A THREAD WITH A JOIN TIMEOUT, because without the guard this call does not return SLOWLY — it
+        # does not return AT ALL, and a test that hangs is a worse guard than one that fails. Proved by mutation: with
+        # the select removed the read blocks on a pipe that is never written and never closed, and the whole run had
+        # to be killed by an outer timeout. This way the assertion is 'it came back', which is the real claim.
+        import threading
+        outcome = {}
+
+        def attempt():
+            try:
+                media.decodes(self.media / 'tone.wav', deadline=1.0)
+                outcome['kind'] = None
+            except NotNormalised as refusal:
+                outcome['kind'] = refusal.kind
+            except BaseException as error:                       # noqa: BLE001 - recorded, not swallowed
+                outcome['kind'] = type(error).__name__
+
+        worker = threading.Thread(target=attempt, daemon=True)
+        started = clock.monotonic()
+        with patch('core.media.subprocess.Popen', spawn):
+            worker.start()
+            worker.join(timeout=15)
+        elapsed = clock.monotonic() - started
+        self.assertFalse(worker.is_alive(),
+                         'decodes() never returned on a silent child — the deadline is not enforced')
+        self.assertEqual(outcome.get('kind'), media.TOO_SLOW)
+        self.assertLess(elapsed, 10, 'the silent-child deadline fired late, after %.1f s' % elapsed)

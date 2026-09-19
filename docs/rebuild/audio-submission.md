@@ -19,8 +19,9 @@ what the code did, and because the paragraph it ends with is the instruction the
 
 **What is true now:** the payload is usually a losslessly remuxed artifact built from the upload, and
 the measurement is taken of that artifact — the bytes POSTed — exactly as the last sentence above
-required. When no lossless remux is available the original is submitted unchanged, as before, and
-the record says which of the two happened. See *Deterministic submission*, below.
+required. ⚠️ **The sentence that stood here — "when no lossless remux is available the original is
+submitted unchanged" — is SUPERSEDED as of 2026-09-18.** That fallback is removed; a failure now stops
+before the provider. See *The fallback is removed*, at the end. See *Deterministic submission*, below.
 
 ## Three numbers, three questions
 
@@ -141,7 +142,9 @@ rather than by the surface a doctor is using.
   choosing for the provider are the same act; neither is ours to make silently.
 - ffprobe's reading and the provider's decoder are two different implementations. They agree on every
   fixture exercised here, and that agreement is evidence, not a guarantee.
-- **A WAV carrying more than one `data` chunk is still not resolved, and is not made worse.** A
+- ~~**A WAV carrying more than one `data` chunk is still not resolved, and is not made worse.**~~
+  **CLOSED 2026-09-18 — it is refused before any charge.** The paragraph below stood while the file was
+  still accepted, and its reasoning is what made refusing the right answer rather than guessing. A
   decoder reaches one of them; the priced ceiling covers all of them, so the charge is safe; the
   submitted measurement describes what actually went; and no completeness claim is made about the
   part no decoder reaches. Normalisation neither creates this nor fixes it — the chunk is already
@@ -160,10 +163,12 @@ output is probed, and *that* measurement is what `submitted_seconds` records.
 
 **Why a remux and not a transcode.** Re-encoding to PCM would inflate a 47 KB WebM past the 15 MB
 submission limit somewhere around two and a half minutes; re-encoding to another lossy codec would
-discard audio to save bytes. So when a lossless remux is not available — an unrecognised codec,
-ffmpeg absent, a refusal, a timeout, an output too large, a measurement that disagrees — **the
-original is submitted unchanged, exactly as before, and the reason is recorded.** A recording a
-doctor made is never re-encoded into something smaller to make this code path succeed.
+discard audio to save bytes. A recording a doctor made is never re-encoded into something smaller to
+make this code path succeed.
+
+⚠️ **SUPERSEDED 2026-09-18.** This paragraph continued: *"when a lossless remux is not available … the
+original is submitted unchanged, exactly as before, and the reason is recorded."* That fallback is
+removed. The answer to "we cannot prepare this" is now to say so and charge nothing.
 
 **Measured, not asserted.** Each accepted format was decoded to raw s16le before and after the
 remux and compared byte for byte:
@@ -381,3 +386,89 @@ recordings in every format.
 
 Two inputs never reach the new refusals because a pre-existing one fires first, and neither is new behaviour: FLAC,
 and a 600-second 48 kHz stereo WAV at 57.6 MB, refused by the 15 MB upload limit.
+
+
+## The fallback is removed — 2026-09-18, second repair
+
+Everything above describes a design in which a failure to process a recording meant **submitting the original upload
+unchanged**. That fallback is gone. It was reasoned as "never worse than the behaviour before normalisation existed",
+and that reasoning was wrong in a way worth recording, because it sounds conservative:
+
+> **A step that silently stops running is worse than one that fails.** With the fallback, a missing ffmpeg, a timeout
+> or a corrupt artifact all ended the same way — the provider received bytes nobody had measured, decided for itself
+> what to decode, and the doctor was charged for whatever came back. The only trace was a detail string on a usage
+> row. Nothing told the doctor, nothing told an operator, and nothing distinguished "we processed this and it was
+> fine" from "we gave up and sent it raw".
+
+**Now every failure stops before the provider.** `NoProviderRequest` is the stop: `run_one` classifies it `unsent`,
+writes the failure and releases the hold in ONE transaction, so nothing is charged and the reservation is released
+exactly once.
+
+### Five classes, five fixed sentences
+
+⚠️ **The message a doctor sees is a FIXED string per class, never the technical reason.** `failure_reason()` renders a
+`NoProviderRequest`'s message verbatim into the doctor's error *and* into `audit_billing`'s export, and ffmpeg quotes
+the path it was handed — which is inside protected storage. The technical detail is recorded once, scrubbed of paths,
+on a `voice.submission_refused` audit row.
+
+| class | cause | retryable |
+| --- | --- | --- |
+| `unavailable` | ffmpeg missing or unrunnable, an unexpected error | **yes** — the same bytes can succeed later |
+| `too_slow` | the 25 s preparation budget or a decode deadline was spent | **yes** |
+| `unreadable` | unmeasurable, ambiguous, or a length that does not decode | no — re-export |
+| `ambiguous` | more than one audio track | no — export a single track |
+| `too_large` | the prepared payload exceeds the submission limit | no — shorter segment |
+
+**Retryable is a property of the cause, not a tone of voice.** Re-sending the same bytes fixes a busy host; it can
+never fix a file that does not decide what it contains, and telling a doctor to "try again" about the second class
+trains them to retry something that will fail identically forever.
+
+## A WAV with more than one `data` chunk is refused before any charge
+
+The limitation named as unresolved above is now closed, and closed by refusal rather than by guessing. Such a file
+gives **three different answers about its own length**: on a 1 s + 9 s file `core/audio.py`'s floor says 1 s, its
+ceiling says 10 s, and ffmpeg — the decoder of record — plays 9 s because it reaches the LAST chunk. Reverse the
+chunks and ffmpeg plays 1 s instead. No statement about what was transcribed can rest on that.
+
+It is refused in `enqueue`, before `Job.objects.create` and before `reserve()`, exactly where a multi-track payload is
+refused. The signal comes from `core/audio.py`'s own walk — one extra field on `Bounds` — and not from a second
+parser, because a second reader of the same bytes is a second answer waiting to drift.
+
+⚠️ **It cannot fire on an ordinary recording.** A normal WAV declares its data size exactly, so the walk starts at
+end-of-file and finds nothing. Measured across 8 kHz mono, 44.1 kHz stereo 16-bit, and files carrying trailing
+`LIST`/`INFO` and `id3 ` metadata: `ambiguity` is empty for every one, and the ceiling equals the floor.
+
+## A successful remux is not valid audio
+
+`-c:a copy` moves frames **without decoding them** and exits 0 on a container whose frames no decoder can use;
+ffprobe then reports the duration the container DECLARES, which is a header field, not a measurement. So an artifact
+could be produced, measured, submitted and charged for while holding nothing a transcriber could read.
+
+The artifact is now decoded and the decoded length compared with the declared one.
+
+⚠️ **AND THE ANSWER CANNOT COME FROM ffprobe AGAIN.** The first version of this ended `return probe_submission(path)
+.selected_seconds` — comparing the declared duration with itself, a check that could never disagree. It counts
+decoded SAMPLES instead, forced to 16 kHz mono s16le so the byte count converts exactly. That changes nothing about
+the payload, because the decoded output is thrown away; resampling preserves duration, and it is the sample rate that
+is normalised for counting, never the audio that is submitted.
+
+Exit 0 is not enough either: ffmpeg reports a corrupt packet on stderr and still exits 0 for many inputs. At
+`-v error` a clean decode is silent, so **any line at all is a finding**.
+
+### Its tolerance is its own, and measured
+
+`DECODE_TOLERANCE_SECONDS = 0.25`, separate from the remux tolerance because it measures a different disagreement —
+two views of the SAME artifact, rather than the artifact against the source. Measured across every accepted format at
+0.3, 1, 5, 60 and 600 seconds:
+
+| | worst \|decoded − declared\| |
+| --- | --- |
+| WAV | 0.000 s |
+| WebM/Opus | 0.028 s (constant at every length) |
+| MP3 | 0.040 s |
+| M4A/AAC | 0.020 s |
+
+Worst overall **0.040 s**, so 0.25 s is about six times the worst real case — and still catches every failure it
+exists for, because an artifact that declares a minute and decodes to nothing is out by tens of seconds, not tenths.
+Sharing the remux's 0.1 s would have left 2.5x of margin on the product's primary path, where a false stop costs a
+doctor a recording. **Nothing in the measured matrix was stopped.**

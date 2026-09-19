@@ -22,9 +22,12 @@ worker unit's 1024M. A per-child RLIMIT_AS is therefore not a belt-and-braces ex
 thing standing between a hostile upload and the surface a doctor is using.
 """
 import json
+import re
 import resource
+import select
 import shutil
 import subprocess
+import tempfile
 import time
 from collections import namedtuple
 from decimal import Decimal, InvalidOperation
@@ -37,13 +40,19 @@ PROBE_TIMEOUT_SECONDS = 20
 # uninterruptible stretch inside transcribe() was the 90 s provider POST, leaving 60 s of margin. Summing the
 # sub-step ceilings instead (20 probe + 120 remux + 20 probe + 90 POST = 250 s) puts a routine `systemctl restart`
 # past that deadline, which kills a worker mid-remux and leaves a job in reconciliation.
-# Measured at the 15 MB upload limit — the real bound, since it caps the work far below the duration cap:
-#   WebM/Opus 39:40  2.64 s   ·   WAV 2:35  0.37 s   ·   MP3 30:00  1.92 s   ·   M4A 30:00  2.06 s
-# A deliberately adversarial 720,001-packet Opus file reached 14.45 s. So 25 s is roughly ten times the realistic
-# worst case and still covers the adversarial one, and total in-flight becomes 25 + 90 = 115 s against 150.
-# Exceeding it is a graceful fallback to the original, not a failure — so a tight budget costs normalisation on
-# pathological inputs and costs a doctor nothing.
-SUBMISSION_BUDGET_SECONDS = 25
+# ⚠️ RAISED FROM 25 s TO 45 s WHEN THE DECODE VERIFICATION WAS ADDED, because 25 s was sized for a remux alone and
+# the decode is the expensive half. Re-measured at the 15 MB upload limit — probe + remux + decode:
+#   WebM/Opus 39:40  14.24 s (decode 13.67)  ·  WAV 2:35  0.83 s  ·  MP3 30:00  8.67 s  ·  M4A 30:00  9.56 s
+# At 25 s that left 1.8x of headroom where the remux alone had 9.5x. The decode cannot be made cheaper: measured at
+# 1, 2, 4 and auto threads the 40-minute Opus takes 12.1-12.8 s either way (an Opus stream decodes serially), and
+# dropping the resample saves 0.4 s of 12.
+#
+# ⚠️ AND EXCEEDING IT IS NO LONGER A FALLBACK — IT IS A REFUSED RECORDING, which makes this sizing a real trade
+# rather than a tuning knob. Total in-flight becomes 45 + 90 = 135 s against the worker unit's TimeoutStopSec=150,
+# so the margin there falls from 35 s to 15 s. That is the right way round: overrunning the unit deadline costs a
+# SIGKILL on a restart that happens to land inside the window — recoverable through reconciliation, and only on a
+# restart — while too small a budget refuses a doctor's forty-minute recording on a loaded host.
+SUBMISSION_BUDGET_SECONDS = 45
 PROBE_BUDGET = '10M'          # analyseduration and probesize: enough for real recordings, bounded for hostile ones
 MAX_AUDIO_STREAMS = 64
 # A hand-built Matroska declaring ~1000 TrackEntry elements costs ffprobe ~264 MB of RSS before a
@@ -62,11 +71,27 @@ def _bound_child():
 #   most likely processed. longest_seconds: the longest audio stream, for the honest upper end.
 # ambiguous: the payload does not determine what a decoder would process. reasons: why, in words.
 # codec: the selected stream's codec, which decides whether a lossless remux is available at all.
-Submission = namedtuple('Submission', 'container codec audio_streams selected_seconds longest_seconds ambiguous reasons')
+# decoded_seconds: what a decoder actually produced from the artifact, as distinct from what its container declares.
+# '' until the artifact has been decoded; only a submitted artifact ever carries one.
+Submission = namedtuple('Submission', 'container codec audio_streams selected_seconds longest_seconds ambiguous reasons '
+                                      'decoded_seconds', defaults=(None,))
 
 
 class SubmissionUnprobeable(Exception):
-    """ffprobe could not describe the payload. The caller must treat coverage as UNKNOWN, never complete."""
+    """ffprobe could not describe the payload.
+
+    ⚠️ IT CARRIES A KIND FOR THE SAME REASON NotNormalised DOES, AND THE FIRST VERSION DID NOT. The caller mapped every
+    one of these to UNREADABLE — 'this recording could not be read as audio, re-export it' — and four unrelated causes
+    arrive here: ffprobe is not installed; ffprobe timed out or could not be forked; ffprobe returned something that is
+    not JSON; and ffprobe read the file and refused it. **Only the last is about the file.** On a host where ffprobe is
+    missing or cannot fork, every doctor was told their own recording was broken and not to retry — attributing a
+    platform outage to the one place it certainly was not, in the one record an operator would use to localise it.
+    """
+
+    def __init__(self, kind, detail=''):
+        super().__init__(detail or kind)
+        self.kind = kind
+        self.detail = detail or kind
 
 
 def _seconds(value):
@@ -91,7 +116,7 @@ def probe_submission(path, ceiling_seconds=None, timeout=None):
     """
     binary = shutil.which('ffprobe')
     if not binary:
-        raise SubmissionUnprobeable('ffprobe is not installed, so the submitted audio cannot be measured.')
+        raise SubmissionUnprobeable(UNAVAILABLE, 'ffprobe is not installed')
     # No -nostdin: ffprobe (unlike ffmpeg) has no such flag and parses it as an option expecting a
     # value, so the whole invocation fails and EVERY payload looks unprobeable. stdin is closed below
     # instead, which is stronger than the flag would have been.
@@ -108,16 +133,19 @@ def probe_submission(path, ceiling_seconds=None, timeout=None):
     # hard limit is lower than the value asked for — surfaces as a bare SubprocessError, and letting that escape
     # turned a benign fallback into a job stuck in reconciliation with the doctor's funds still held.
     except (subprocess.SubprocessError, OSError) as error:
-        raise SubmissionUnprobeable('ffprobe did not complete: %s' % type(error).__name__) from None
+        # A timeout or a failed fork is the host being unable to run the tool. Re-sending the same bytes can work.
+        kind = TOO_SLOW if isinstance(error, subprocess.TimeoutExpired) else UNAVAILABLE
+        raise SubmissionUnprobeable(kind, 'ffprobe did not complete: %s' % type(error).__name__) from None
     if finished.returncode != 0:
         # Carry ffprobe's own first line: 'refused the payload' alone hides an invocation error, which
         # is how a broken probe can look like a file problem for every file including valid ones.
         detail = (finished.stderr or b'').decode('utf-8', 'replace').strip().splitlines()
-        raise SubmissionUnprobeable('ffprobe refused the payload: %s' % (detail[0] if detail else 'no detail'))
+        # THIS one is about the file: ffprobe read it and would not describe it.
+        raise SubmissionUnprobeable(UNREADABLE, 'ffprobe refused the payload: %s' % (detail[0] if detail else 'no detail'))
     try:
         described = json.loads(finished.stdout or b'{}')
     except ValueError:
-        raise SubmissionUnprobeable('ffprobe returned output that is not JSON.') from None
+        raise SubmissionUnprobeable(UNAVAILABLE, 'ffprobe returned output that is not JSON') from None
 
     streams = described.get('streams') or []
     container = (described.get('format') or {}).get('format_name') or 'unknown'
@@ -225,23 +253,99 @@ NORMALISE_MAX_OUTPUT_BYTES = 16 * 1024 * 1024
 # 0.1 s keeps every measured case with 4x margin on the loss side and 14x on the gain side, and cuts the
 # undetectable-loss window by more than half.
 NORMALISE_TOLERANCE_SECONDS = Decimal('0.1')
+# The decode verification resamples to a known rate purely so the byte count converts to seconds exactly. It touches
+# nothing that is submitted. 16 kHz mono s16le is 32 kB per second, so the cap below is about two hours of audio —
+# far above the upload limit, and a bound rather than a budget.
+# ⚠️ ITS OWN TOLERANCE, NOT THE REMUX ONE, because it measures a different disagreement. The remux tolerance compares
+# the artifact against core/audio.py's hand measurement of the SOURCE (worst observed 0.024 s). This compares two
+# views of the SAME artifact — what its container declares against what a decoder produces — and encoder padding and
+# container framing pull those apart further: measured across every accepted format at 0.3, 1, 5, 60 and 600 seconds,
+# worst |decoded − declared| is 0.040 s (MP3 at 0.3 s), with WebM constant at −0.028 and M4A up to +0.020.
+# Sharing one constant would have left 2.5x of margin on the product's primary path, where a false stop costs a
+# doctor a recording. 0.25 s is about six times the worst real case and still catches every failure this exists for —
+# an artifact that declares a minute and decodes to nothing is out by tens of seconds, not tenths.
+DECODE_TOLERANCE_SECONDS = Decimal('0.25')
+DECODE_RATE = 16000
+DECODE_MAX_BYTES = 256 * 1024 * 1024
 
 # Codec -> (muxer, suffix). Same container FAMILY as the input on purpose, so both instruments that
 # measure a recording — ffprobe and core/audio.py's own parser — can read the output as well as the
 # input. Routing Opus to Ogg would have left core/audio.py unable to parse what we submitted.
+# ⚠️ NO flac AND NO vorbis ROW, DELIBERATELY — both were written and both were unreachable. core/audio.py's
+# Matroska reader is Opus-only and says so in its own docstring, so a Vorbis WebM is refused at measurement long
+# before it could reach this table; measured, it stops with 'WebM audio that is not Opus'. The flac row had the same
+# shape, and this is the second time the same mistake was made in the same dictionary.
 # ⚠️ NO flac ROW, DELIBERATELY. One was written and it was unreachable: core/audio.py measure_bounds() refuses FLAC
 # as an unsupported format long before enqueue reaches plan_normalisation, so no FLAC input can ever arrive here. A
 # row that cannot be reached is worse than a missing one — the next reader believes FLAC is a supported input path
 # because this table says so. If measure_bounds ever accepts FLAC, this table and jobs.py's SUBMISSION_NAME both
 # need the row, and that coupling is the reason it is written down here rather than left as an absence.
-CONTAINERS = {'opus': ('webm', '.webm'), 'vorbis': ('webm', '.webm'),
+CONTAINERS = {'opus': ('webm', '.webm'),
               'mp3': ('mp3', '.mp3'), 'mp3float': ('mp3', '.mp3'),
               'aac': ('ipod', '.m4a'), 'alac': ('ipod', '.m4a')}
 PCM_CONTAINER = ('wav', '.wav')
 
 
 class NotNormalised(Exception):
-    """Normalisation did not happen. The caller submits the original unchanged and records this reason."""
+    """Processing did not complete. NOTHING IS SUBMITTED — the caller stops before the provider.
+
+    ⚠️ THIS USED TO MEAN 'submit the original unchanged', and that fallback is now removed as unsafe. It made every
+    processing failure invisible: the provider received bytes we had not measured, decided for itself what to decode,
+    and the doctor was charged for whatever came back. A step that silently stops running is worse than one that
+    fails, because nothing anywhere says which of the two happened.
+
+    `kind` selects the FIXED, user-safe sentence shown to the doctor. It is a key, never free text: ffmpeg's stderr
+    carries private storage paths, and `failure_reason()` shows a NoProviderRequest's message verbatim.
+    `detail` is the technical reason, for the audit row only, and it is scrubbed before it is recorded.
+    """
+
+    def __init__(self, kind, detail=''):
+        super().__init__(detail or kind)
+        self.kind = kind
+        self.detail = detail or kind
+
+
+# What the doctor is told, per failure class. Fixed strings: nothing from a subprocess reaches a user or a ledger.
+# `run_one` wraps these in 'Not processed: … No provider request was made; nothing was charged and the held funds
+# were released.', so each one reads as the middle of that sentence.
+MISSING = 'missing'
+UNAVAILABLE = 'unavailable'
+TOO_SLOW = 'too_slow'
+UNREADABLE = 'unreadable'
+AMBIGUOUS = 'ambiguous'
+TOO_LARGE = 'too_large'
+REFUSAL_TEXT = {
+    # ⚠️ ITS WORDING IS FIXED BY AN EXISTING REGRESSION TEST AND BY WHAT IS TRUE: the upload is gone from storage. That
+    # is the platform's failure, not a fault in the doctor's file, and telling them to re-export would send them
+    # looking in the one place the problem certainly is not.
+    MISSING: 'The recording is not available.',
+    UNAVAILABLE: ('Recording processing is temporarily unavailable, so this recording was not sent. '
+                  'Try again in a few minutes.'),
+    TOO_SLOW: ('This recording took too long to prepare, so it was not sent. Try again, or upload a shorter '
+               'segment.'),
+    UNREADABLE: ('This recording could not be read as audio, so it was not sent. Re-export it as a single audio '
+                 'track and upload that.'),
+    AMBIGUOUS: ('This recording does not decide which audio a transcriber would process, so it was not sent. '
+                'Export it as a single audio track and upload that.'),
+    TOO_LARGE: ('This recording is too large to send once prepared. Upload a shorter segment.'),
+}
+# ⚠️ RETRYABLE IS A PROPERTY OF THE CAUSE, NOT A TONE OF VOICE. Re-sending the same bytes fixes a busy host or a
+# missing tool; it can never fix a file that does not decide what it contains. Saying 'try again' about the second
+# class trains a doctor to retry something that will fail identically forever.
+RETRYABLE = {UNAVAILABLE, TOO_SLOW}
+
+
+def refusal_text(kind):
+    return REFUSAL_TEXT.get(kind, REFUSAL_TEXT[UNREADABLE])
+
+
+def scrubbed(detail):
+    """The technical reason with filesystem paths removed, for the audit row.
+
+    ffmpeg and ffprobe quote the path they were given, and that path is inside protected storage. It reached the
+    audit row, `Usage.units` and the billing page's usage-evidence block in the previous version.
+    """
+    return re.sub(r'(/[^\s:,()\']+)+', '<path>', str(detail))[:200]
 
 
 def _bound_normaliser():
@@ -264,13 +368,13 @@ def _bound_normaliser():
 def plan_normalisation(submission):
     """(muxer, suffix) for a submission that can be losslessly remuxed, or raise NotNormalised."""
     if submission.audio_streams != 1:
-        raise NotNormalised('the payload does not hold exactly one audio stream')
+        raise NotNormalised(AMBIGUOUS, 'the payload holds %d audio streams' % submission.audio_streams)
     codec = (submission.codec or '').lower()
     if codec.startswith('pcm_'):
         return PCM_CONTAINER
     if codec in CONTAINERS:
         return CONTAINERS[codec]
-    raise NotNormalised('no lossless remux is defined for %s audio' % (codec or 'unrecognised'))
+    raise NotNormalised(UNREADABLE, 'no lossless remux is defined for %s audio' % (codec or 'unrecognised'))
 
 
 def normalise_submission(source, destination, submission, floor_seconds=None, ceiling_seconds=None, deadline=None):
@@ -304,7 +408,7 @@ def _remux(source, destination, submission, floor_seconds, ceiling_seconds, dead
         # host without ffmpeg leaked one zero-byte file into private storage per transcription — no crash involved,
         # which is what the stray reaper's comment assumed. The function's contract is that nothing survives a failure;
         # every arm now honours it, including this one, and the caller has its own guard behind it.
-        raise NotNormalised('ffmpeg is not installed')
+        raise NotNormalised(UNAVAILABLE, 'ffmpeg is not installed')
     argv = [binary, '-nostdin', '-v', 'error', '-hide_banner', '-nostats', '-threads', '1',
             '-analyzeduration', PROBE_BUDGET, '-probesize', PROBE_BUDGET,
             '-i', str(source),
@@ -314,22 +418,25 @@ def _remux(source, destination, submission, floor_seconds, ceiling_seconds, dead
             '-f', muxer, '-y', str(destination)]
     allowed = NORMALISE_TIMEOUT_SECONDS if deadline is None else min(NORMALISE_TIMEOUT_SECONDS, deadline)
     if allowed <= 0:
-        raise NotNormalised('the submission budget was spent before the remux could start')
+        raise NotNormalised(TOO_SLOW, 'the submission budget was spent before the remux could start')
     try:
         finished = subprocess.run(argv, capture_output=True, timeout=allowed,
                                   stdin=subprocess.DEVNULL, preexec_fn=_bound_normaliser)
     except subprocess.TimeoutExpired:
-        raise NotNormalised('ffmpeg did not finish within %g s' % allowed) from None
+        raise NotNormalised(TOO_SLOW, 'ffmpeg did not finish within %g s' % allowed) from None
     # SubprocessError covers a preexec_fn that raises — setrlimit does, when a hard limit is below the value asked for,
     # which is what a unit gaining LimitFSIZE would produce. Uncaught, it escaped prepare_submission AND transcribe's
     # try/finally, leaving a stray artifact and a job in reconciliation with funds held, for what should have been a
     # silent fallback to the original.
     except (subprocess.SubprocessError, OSError) as error:
-        raise NotNormalised('ffmpeg could not be run: %s' % type(error).__name__) from None
+        raise NotNormalised(UNAVAILABLE, 'ffmpeg could not be run: %s' % type(error).__name__) from None
     if finished.returncode != 0:
         detail = (finished.stderr or b'').decode('utf-8', 'replace').strip().splitlines()
-        raise NotNormalised('ffmpeg refused the payload: %s' % (detail[0][:160] if detail else
-                                                                'exit %d' % finished.returncode))
+        # ⚠️ SIGXFSZ IS A SIZE FAILURE, NOT A BROKEN FILE, and telling a doctor to re-export would be a dead end.
+        # RLIMIT_FSIZE kills with signal 25, which surfaces as returncode -25.
+        kind = TOO_LARGE if finished.returncode == -25 else UNREADABLE
+        raise NotNormalised(kind, 'ffmpeg exited %d: %s' % (finished.returncode,
+                                                            detail[0][:160] if detail else 'no detail'))
     # ⚠️ THE OUTPUT IS NOT PROBED AGAINST THE SOURCE'S CEILING, AND THE FIRST VERSION OF THIS WAS.
     # `ceiling_seconds` comes from core/audio.py's hand measurement of the SOURCE, and it exists to catch a container
     # header claiming more audio than the bytes could hold. An artifact we produced ourselves is not that risk — but it
@@ -341,10 +448,10 @@ def _remux(source, destination, submission, floor_seconds, ceiling_seconds, dead
         produced = probe_submission(destination,
                                      timeout=None if deadline is None else deadline - (time.monotonic() - started))
     except SubmissionUnprobeable as error:
-        raise NotNormalised('the remuxed payload could not be measured: %s' % error) from None
+        raise NotNormalised(UNREADABLE, 'the remuxed payload could not be measured: %s' % error) from None
     # A payload we cannot describe exactly is not an improvement on one we could not describe at all.
     if produced.ambiguous or produced.audio_streams != 1 or produced.selected_seconds is None:
-        raise NotNormalised('the remuxed payload is not unambiguous: %s'
+        raise NotNormalised(UNREADABLE, 'the remuxed payload is not unambiguous: %s'
                             % ('; '.join(produced.reasons)[:160] or 'no duration'))
     # THE LOSS AND GAIN CHECKS, bracketed by core/audio.py's two hand measurements of the source.
     #
@@ -362,9 +469,86 @@ def _remux(source, destination, submission, floor_seconds, ceiling_seconds, dead
     # audio that never existed. Only container rounding is tolerated — a copy-remuxed WebM declares about 7 ms more
     # than the hand measurement of its source, with byte-identical decoded samples.
     if floor_seconds is not None and produced.selected_seconds < floor_seconds - NORMALISE_TOLERANCE_SECONDS:
-        raise NotNormalised('the remux holds %s s against the source\'s certain %s s'
+        raise NotNormalised(UNREADABLE, 'the remux holds %s s against the source\'s certain %s s'
                             % (produced.selected_seconds, floor_seconds))
     if ceiling_seconds is not None and produced.selected_seconds > ceiling_seconds + NORMALISE_TOLERANCE_SECONDS:
-        raise NotNormalised('the remux declares %s s against the source\'s utmost %s s'
+        raise NotNormalised(UNREADABLE, 'the remux declares %s s against the source\'s utmost %s s'
                             % (produced.selected_seconds, ceiling_seconds))
-    return produced
+    decoded_seconds = decodes(destination, deadline=None if deadline is None else deadline - (time.monotonic() - started))
+    # The decoder and the container must agree about how much audio is there. A container can declare a length it
+    # cannot deliver; the tolerance is the same container rounding measured everywhere else.
+    if abs(decoded_seconds - produced.selected_seconds) > DECODE_TOLERANCE_SECONDS:
+        raise NotNormalised(UNREADABLE, 'the artifact declares %s s and decodes to %s s'
+                            % (produced.selected_seconds, decoded_seconds))
+    return produced._replace(decoded_seconds=decoded_seconds)
+
+
+def decodes(path, deadline=None):
+    """Decode the artifact and return the seconds that actually came out, or raise NotNormalised.
+
+    ⚠️ A SUCCESSFUL REMUX IS NOT VALID AUDIO, AND THE TWO WERE TREATED AS THE SAME THING. `ffmpeg -c:a copy` moves
+    frames without decoding them and exits 0 on a container whose frames no decoder can use; ffprobe then reports the
+    duration the CONTAINER DECLARES, which is a header field, not a measurement. So an artifact could be produced,
+    measured, submitted and charged for while holding nothing a transcriber could read.
+
+    ⚠️ AND THE ANSWER CANNOT COME FROM ffprobe AGAIN — the first version of this ended `return probe_submission(path)
+    .selected_seconds`, which compares the declared duration with itself and can never disagree. The count here is of
+    decoded SAMPLES: the decode is forced to 16 kHz mono s16le so the byte count converts exactly, which changes
+    nothing about the payload because this output is thrown away. Resampling preserves duration; it is the sample
+    RATE that is normalised for counting, never the audio that is submitted.
+
+    The bytes are counted as they stream and never held: a 60-minute recording moves 115 MB through this and occupies
+    a 64 KB buffer. `-map 0:a:0` names the same stream the remux selected, so what is verified is what is submitted.
+    """
+    binary = shutil.which('ffmpeg')
+    if not binary:
+        raise NotNormalised(UNAVAILABLE, 'ffmpeg is not installed')
+    allowed = NORMALISE_TIMEOUT_SECONDS if deadline is None else min(NORMALISE_TIMEOUT_SECONDS, deadline)
+    if allowed <= 0:
+        raise NotNormalised(TOO_SLOW, 'the submission budget was spent before the artifact could be decoded')
+    argv = [binary, '-nostdin', '-v', 'error', '-hide_banner', '-nostats', '-threads', '1',
+            '-i', str(path), '-map', '0:a:0', '-ac', '1', '-ar', str(DECODE_RATE), '-f', 's16le', '-']
+    counted = 0
+    deadline_at = time.monotonic() + allowed
+    # stderr goes to a file rather than a pipe: at -v error it is nearly always empty, and a pipe nobody drains while
+    # stdout is being read is the classic way to deadlock a subprocess.
+    with tempfile.TemporaryFile() as errors:
+        try:
+            child = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=errors, stdin=subprocess.DEVNULL,
+                                     preexec_fn=_bound_normaliser)
+        except (subprocess.SubprocessError, OSError) as error:
+            raise NotNormalised(UNAVAILABLE, 'the decoder could not be run: %s' % type(error).__name__) from None
+        try:
+            # ⚠️ THE DEADLINE IS CHECKED BEFORE EACH READ, NOT AFTER ONE. The first version tested the clock only
+            # after a non-empty read returned, so a child that produced nothing and never exited was never timed out:
+            # it blocked in read() indefinitely and only the outer watchdog stopped it. `select` waits for data OR for
+            # the remaining budget, whichever comes first, so a silent child is bounded by the same number as a slow
+            # one. read1() returns what one read syscall gives rather than blocking for a full buffer.
+            while True:
+                remaining = deadline_at - time.monotonic()
+                if remaining <= 0:
+                    raise NotNormalised(TOO_SLOW, 'decoding did not finish within %g s' % allowed)
+                if not select.select([child.stdout], [], [], remaining)[0]:
+                    raise NotNormalised(TOO_SLOW, 'the decoder produced nothing for %g s' % allowed)
+                block = child.stdout.read1(65536)
+                if not block:
+                    break
+                counted += len(block)
+                if counted > DECODE_MAX_BYTES:
+                    raise NotNormalised(TOO_LARGE, 'decoding produced more than %d bytes' % DECODE_MAX_BYTES)
+        finally:
+            child.stdout.close()
+            if child.poll() is None:
+                child.kill()
+            child.wait(timeout=10)
+        errors.seek(0)
+        noise = errors.read().decode('utf-8', 'replace').strip().splitlines()
+    # ⚠️ EXIT 0 IS NOT ENOUGH. ffmpeg reports a corrupt or undecodable packet on stderr and still exits 0 for many
+    # inputs, so a payload that loses frames to the decoder would pass a returncode check while holding less audio
+    # than it claims. At -v error the stream is silent on a clean decode, so any line at all is a finding.
+    if child.returncode != 0 or noise:
+        raise NotNormalised(UNREADABLE, 'decoding reported %s' % (noise[0][:160] if noise
+                                                                  else 'exit %d' % child.returncode))
+    if counted <= 0:
+        raise NotNormalised(UNREADABLE, 'decoding produced no audio at all')
+    return (Decimal(counted) / Decimal(DECODE_RATE * 2)).quantize(Decimal('0.001'))

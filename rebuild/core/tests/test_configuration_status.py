@@ -53,5 +53,7 @@ class ConfigurationStatusDisclosesNothing(SimpleTestCase):
         self.assertIn('ffmpeg:', report)
         with patch.object(shutil, 'which', return_value=None):
             missing = self.report()
-        self.assertIn('coverage will report UNKNOWN', missing.replace('transcription ', ''))
-        self.assertIn('submitted exactly as uploaded, unnormalised', missing)
+        # ⚠️ The sentences these assertions pinned became FALSE when the fallback was removed, and the assertions
+        # happily kept pinning them. A test that locks in a screen's wording is only ever as true as the wording.
+        self.assertEqual(missing.count('EVERY recording is refused before the provider'), 2)
+        self.assertNotIn('submitted exactly as uploaded', missing)

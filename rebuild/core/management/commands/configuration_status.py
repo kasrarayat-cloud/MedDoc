@@ -8,6 +8,8 @@ application already holds, and it is constructed so that no branch can emit a
 secret. Values are never returned, never logged and never compared to a literal
 that would reveal them.
 """
+import os
+
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
@@ -37,6 +39,12 @@ class Command(BaseCommand):
             ('CPT_LICENSE_EXPIRY', settings.CPT_LICENSE_EXPIRY, None),
         ]
         secrets = [
+            # ⚠️ THE TWO PROVIDER KEYS WERE MISSING FROM THIS SCREEN, and they are the ones that decide whether a
+            # recording can be transcribed or a document generated at all. Without the first, every transcription
+            # stops with 'Transcription provider is not connected' — correct, and impossible to diagnose from the
+            # operator's side, which is the only side that can fix it. Status only: `shape()` never reads a value back.
+            ('DEEPGRAM_API_KEY', os.getenv('DEEPGRAM_API_KEY'), None),
+            ('ANTHROPIC_API_KEY', os.getenv('ANTHROPIC_API_KEY'), None),
             ('RESEND_API_KEY', settings.RESEND_API_KEY, None),
             ('STRIPE_SECRET_KEY', settings.STRIPE_SECRET_KEY, stripe_test_key_configured),
             ('STRIPE_WEBHOOK_SECRET', settings.STRIPE_WEBHOOK_SECRET, None),
@@ -48,17 +56,19 @@ class Command(BaseCommand):
         self.stdout.write('Private credentials (status only):')
         for name, value, recogniser in secrets:
             self.stdout.write(f'  {name}: {shape(value, recogniser)}')
-        # ffprobe measures the payload submitted to the transcription provider and ffmpeg produces it. Without either,
-        # the application degrades honestly — coverage reports UNKNOWN, and the upload is submitted unchanged as it was
-        # before normalisation existed — but a DEGRADED path that works is the hardest kind of absence to notice, so it
-        # belongs on an operator's screen rather than being discovered in a doctor's note.
+        # ⚠️ THESE TWO SENTENCES SAID THE OPPOSITE OF WHAT THE CODE DOES, in the same change that removed the
+        # fallback they described. They promised a degraded-but-working submission path; there is no such path now.
+        # During an incident where every recording is failing, this is the one screen built to localise it — and it
+        # was telling the operator the submission path still worked, which is exactly the sentence that stops someone
+        # looking at ffmpeg. Without either tool NOTHING is submitted: every recording is refused, nothing is charged,
+        # and the reason is on each job.
         import shutil
         probe, remuxer = shutil.which('ffprobe'), shutil.which('ffmpeg')
         self.stdout.write('Media tools:')
         self.stdout.write('  ffprobe: %s' % (probe if probe else
-                          'NOT INSTALLED — transcription coverage will report UNKNOWN for every recording'))
+                          'NOT INSTALLED — EVERY recording is refused before the provider; nothing is charged'))
         self.stdout.write('  ffmpeg: %s' % (remuxer if remuxer else
-                          'NOT INSTALLED — every recording is submitted exactly as uploaded, unnormalised'))
+                          'NOT INSTALLED — EVERY recording is refused before the provider; nothing is charged'))
         self.stdout.write('Release gates:')
         self.stdout.write(f'  SYNTHETIC_ONLY: {settings.SYNTHETIC_ONLY}')
         self.stdout.write(f'  STRIPE_LIVE_ENABLED: {settings.STRIPE_LIVE_ENABLED}')
