@@ -24,9 +24,14 @@ The commands below are for Windows PowerShell, which includes OpenSSH.
 This blocks native Word appearance acceptance. No renderer on the VPS can establish it, and none is substituted for it. **Nothing about
 native Word appearance is accepted until you have actually done this.**
 
-The package is the one already built and verified — it is **not** regenerated, because regenerating it would change the checksum below for
-no reason. Re-verified on 2026-09-19 on the host: **227,269 bytes**, sha256 **b270c982864cb42d0bdb13ac64265b29e53f36bd5efd3ce45d45b7b862f03a72**,
-8 files, all synthetic (one blank original, four generated exports, a README, a checksum list and the acceptance checklist).
+**USE THE 2026-09-19 PACKAGE. The 2026-09-18 one is superseded** — your inspection found three things and all three reproduced, two of them
+about that package's own labels. The new archive ships each real export TWICE, before and after the table-pagination repair, because the repair
+changes no visible character and only Word can show the difference. It also renames the two SDK fixtures to what they actually are and corrects
+three checklist claims, including the font one: **there is no font defect and none should be raised.**
+
+⚠️ The layout repair is merged and tested but **NOT YET DEPLOYED**, so files 03 and 05 are what the exporter *will* emit, not what the running
+service would hand a doctor today. And a genuine missing-answer document and a genuine long-mapped-answer document are **not in this package** —
+see `CHECKPOINT.md`; six attempts hit the clinical review model rather than the exporter, and none finalized.
 
 Run the four lines below in Windows PowerShell exactly as written. The first creates the destination, the second retrieves the archive, the
 third decides whether it arrived intact, and the fourth unpacks it only if it did.
@@ -34,17 +39,18 @@ third decides whether it arrived intact, and the fourth unpacks it only if it di
     $dest = "$env:USERPROFILE\Downloads\quillmd-word-review"
     New-Item -ItemType Directory -Force -Path $dest | Out-Null
 
-    scp root@147.189.172.8:/opt/meddoc-pro/rebuild/.runtime/word-review-package/quillmd-word-review-20260918.zip "$dest\quillmd-word-review-20260918.zip"
+    scp root@147.189.172.8:/opt/meddoc-pro/rebuild/.runtime/word-review-package/quillmd-word-review-20260919.zip "$dest\quillmd-word-review-20260919.zip"
 
-    $expected = 'B270C982864CB42D0BDB13AC64265B29E53F36BD5EFD3CE45D45B7B862F03A72'
-    $actual = (Get-FileHash "$dest\quillmd-word-review-20260918.zip" -Algorithm SHA256).Hash
-    $size = (Get-Item "$dest\quillmd-word-review-20260918.zip").Length
-    if ($actual -eq $expected -and $size -eq 227269) {
-        Expand-Archive "$dest\quillmd-word-review-20260918.zip" -DestinationPath "$dest\quillmd-word-review-20260918"
+    $expected = 'D88B397D8468453C5B3C406635A2538ABA0A0819EEC60C6909CF0AA798CFC66C'
+    $actual = (Get-FileHash "$dest\quillmd-word-review-20260919.zip" -Algorithm SHA256).Hash
+    $size = (Get-Item "$dest\quillmd-word-review-20260919.zip").Length
+    if ($actual -eq $expected -and $size -eq 315232) {
+        Expand-Archive "$dest\quillmd-word-review-20260919.zip" -DestinationPath "$dest\quillmd-word-review-20260919"
         "ARCHIVE VERIFIED AND UNPACKED"
     } else { "MISMATCH - do not open; tell engineering. actual=$actual size=$size" }
 
-Expected: `ARCHIVE VERIFIED AND UNPACKED`, from **227,269 bytes** hashing to that value. ⚠️ The unpack is **inside** the check on purpose — an earlier draft left it outside, so a mismatched archive printed the warning and then unpacked anyway. The checksum was re-verified on the host on 2026-09-18
+Expected: `ARCHIVE VERIFIED AND UNPACKED`, from **315,232 bytes** hashing to that value. Open `01` beside the BEFORE/AFTER pairs
+(`02`/`03` and `04`/`05`) and complete the checklist, section **F2** included. ⚠️ The unpack is **inside** the check on purpose — an earlier draft left it outside, so a mismatched archive printed the warning and then unpacked anyway. The checksum was re-verified on the host on 2026-09-18
 (`sha256sum` on `rebuild/.runtime/word-review-package/quillmd-word-review-20260918.zip`). If the comparison fails, the file was altered or
 truncated in transit — do not open it.
 
