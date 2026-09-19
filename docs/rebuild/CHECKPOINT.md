@@ -944,3 +944,130 @@ recovery.
   for this run, 0 for anybody else, 0 addressed outside the synthetic domain**; invitation tokens 43
   characters (`secrets.token_urlsafe(32)`), recovery token 88. No token appears in the report, the log or
   any assertion.
+
+## 2026-09-19 — the three named engineering gaps, closed
+
+**Application revision under test: `6d73c5e9026d974053365468101c2f7921544c6c`**, read from `/health/` on
+both surfaces. **Harness revision: `58a8dc37` and later** — the two are deliberately reported separately,
+because the harnesses have been ahead of the deployed application since `cb39b6a2`. Nothing in this work
+is deployed and nothing needed to be: only tests, operations modules and harnesses changed.
+
+### 1 · The outbox readers: which remained affected, and what was added
+
+**Measured, not assumed: none remained affected.** Every file that reads the outbox or matches an account
+link — `verify-private-accounts.mjs`, `verify-private-release.mjs`, `identity-browser.mjs`,
+`private-beta-browser.mjs` — routes through `ops/private_mail`. No file globs the outbox, reads it with
+`read_text()`, or takes a first regex match. `email-delivery-verify.py` matches only rendered page text
+and is not an outbox reader.
+
+**What was still missing was the message IDENTIFIER, and it is now bound.** Selection and binding answer
+different questions:
+
+- selection — `ops/private_mail` — asks *was this written TO me, in a file this run changed*;
+- binding — `ops/account_mail`, new — asks *is this the message this run CAUSED*.
+
+A stale invitation to the same address, a superseded record, or a token lifted from another account's
+message and delivered to ours all answer the FIRST question correctly. Only the second refuses them, and
+a failed binding is a refusal, never a fallback to the next candidate.
+
+The bindings are exact and leak nothing. An invitation token is bound by `sha256(token) ==
+Invitation.token_hash` — the application already stores `digest(raw)` on the row, so it is an identity
+check against the record and a hash is not a credential. A recovery token is bound by its `uidb64`
+segment decoding to the user's own primary key AND `default_token_generator.check_token`, which is the
+application's own verifier.
+
+⚠️ **THE BINDING IS ONE MODULE BECAUSE THE ORIGINAL DEFECT WAS ONE READER, COPIED.** Pasting the
+application-side predicate into four inline Python snippets would have rebuilt the same trap one layer up.
+All four harnesses call `account_mail.locate`, and each asserts `token_bound` is exactly `true` — a run
+with no binding records `null`, which must not read as bound.
+
+Proved by thirteen new tests and a read-only control against the live database: five of the six invited
+addresses on this host would REFUSE a binding because every invitation they hold is accepted, and the one
+open invitation binds — so the check discriminates rather than always refusing.
+
+### 2 · UNREADABLE and AMBIGUOUS, exercised where the money is
+
+Both kinds previously had unit-level evidence only. Every test called `probe_submission`,
+`plan_normalisation` or `normalise_submission` directly; none called `run_one()`, so no reservation was
+created and no release was exercised. The assertions proved the classifier and said nothing about the
+money.
+
+⚠️ **AND MEASURING CORRECTED THE PLAN TWICE, WHICH IS WHY IT IS WORTH RECORDING.** The first version of
+these tests assumed an unreadable upload reaches the worker holding a reservation. It does not. Two shapes
+were tried and both are refused at the HTTP entry point, before anything is held:
+
+- an unprobeable payload — *"The length of this recording could not be determined (unsupported format),
+  so its charge cannot be confirmed. Nothing was sent."*
+- a `.webm` carrying Vorbis rather than Opus — *"(WebM audio that is not Opus)"*.
+
+`core/audio.py` parses the container itself, and a recording it cannot measure cannot have a charge limit
+confirmed. That is the stronger outcome and it is now proved for both, with no job, no reservation, no
+charge and no provider call.
+
+⚠️ **THE PAIRING IS ITSELF A FINDING, AND IT IS NOW ASSERTED RATHER THAN IMPLIED.** Two readers answer
+"what audio can this product carry": the pricing gate in `core/audio.py` and the remux table in
+`core/media.plan_normalisation`. Today the pricing gate is the STRICTER of the two, which makes the remux
+table's "no lossless remux is defined" branch defence in depth rather than a path an upload reaches. That
+can stop being true in either direction — a codec added to the table that pricing still refuses becomes
+dead code; a codec pricing starts accepting that the table lacks makes the table the only guard, holding a
+reservation when it fires. A test now pins the pair so a change to either side has to face it.
+
+**What genuinely reaches the worker with a hold outstanding** is a recording that was fine when priced and
+is not fine when read — the stored bytes change between enqueue and processing. That is the same
+operational class the `MISSING` kind exists for, whose own regression test uses exactly that device. Both
+kinds are now exercised through `run_one()` with the full proof set:
+
+- no provider request, and no provider receipt;
+- the reservation released EXACTLY once — one `usage.release` audit row per reservation, never two;
+- nothing charged, nothing still reserved, balances back to their starting values, `audit_report()`
+  green with no unresolved jobs;
+- the job in its terminal `failed` state, naming the cause to the doctor, and not inviting a retry for a
+  cause re-sending the same bytes cannot fix;
+- **the encounter still usable** — the notes still edit and a new recording still queues afterwards;
+- **replaying the failure handling cannot release twice** — `release()` is called twice more and no
+  reservation, audit row or balance moves.
+
+`AMBIGUOUS` past the hold keeps its reachability condition written into the test: `enqueue` refuses a
+multi-track payload before any hold, so this branch is reached only when the stream count is unknown at
+enqueue and known at processing, which a probe timeout on a loaded shared host produces. It is exercised
+because the branch releases money, not to raise a number.
+
+### 3 · ⚠️ AND THE GREEN AUDIT IS NOW PROVED NON-VACUOUS
+
+Every test above ends by asserting `all_checks_pass`. That means something only if a red audit is
+reachable, so a stranded reservation is planted deliberately in an isolated fixture — a job that ended
+while its hold is still held, which is exactly what a half-applied refusal leaves behind. The audit finds
+it: `ended_jobs_hold_no_funds` goes false, the job id is named, and `audit_billing` exits non-zero so a
+scheduled run cannot pass over it. Releasing the hold turns it green again, and a wallet counter that
+drifts from its held rows — the shape a double release leaves — is caught by a second, independent
+invariant.
+
+### 4 · The activator range test and the stale import cache
+
+**Both were already repaired; both are now confirmed against the exact current source, with the bytecode
+caches deleted first so a stale one cannot be what makes them pass.** 46 tests green.
+
+The falsifiability proofs were re-run in a **disposable `git worktree`, one writer, reaped immediately** —
+not in the working tree, which is the shape that let a stale cache answer for a restored file. Each
+mutation asserted its application by reading the file back, its restoration by sha256, and the sandbox's
+cleanliness by `git status` rather than by the script's own bookkeeping. All six wrong-constant shapes are
+caught, including the one an earlier refutation pass measured as passing — a `SHIPPED` naming a later merge
+— which the checkpoint cross-reference now closes.
+
+**The stale-cache repair was proved under its exact trigger**: a mutation of the same byte length with the
+mtime restored. The standard loader read `6d73c5e9026d` — the value from BEFORE the mutation, the defect —
+while `ops/source_module.load` read `000000000000`, the file as it actually stood. Restoration verified by
+sha256 and by git.
+
+### Verification
+
+`bash scripts/ci/verify-fresh.sh python` against a disposable database: **417** application tests
+(8 skipped — the Word runtime helper is not built locally; CI builds it), **27** document tests, **260**
+operations tests. Exit 0.
+
+### Nothing here is deployed
+
+Only tests, operations modules and harnesses changed; no runtime application file was touched, so no
+deployment was warranted and none was performed. The served revision remains
+`6d73c5e9026d974053365468101c2f7921544c6c`, and `main` continues to carry one non-runtime application
+change ahead of it — `verify_live`'s `cost_basis` field, a management command.

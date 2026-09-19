@@ -149,9 +149,11 @@ class Reader(unittest.TestCase):
                                 record(MINE, 'TOKEN-BELONGING-TO-THIS-RUN'))})
         notes = {}
         private_mail.route('invite', MINE, before={}, notes=notes)
+        # An EXACT comparison on purpose: a new key appearing in something a report publishes is a change
+        # that has to be looked at, not absorbed silently.
         self.assertEqual(notes, {'changed_paths': 1, 'records_for_this_run': 1, 'records_for_others': 1,
-                                 'records_outside_synthetic': 0, 'files_unreadable': 0})
-        self.assertTrue(all(isinstance(value, int) for value in notes.values()))
+                                 'records_outside_synthetic': 0, 'files_unreadable': 0, 'token_bound': None})
+        self.assertTrue(all(value is None or isinstance(value, (int, bool)) for value in notes.values()))
 
     def test_a_message_for_a_real_address_in_the_same_file_stops_the_run(self):
         """read_file is all-or-nothing, so the stranger's bytes are already here by the time this fires.
@@ -186,6 +188,60 @@ class Reader(unittest.TestCase):
                                 record(MINE, 'TOKEN-BELONGING-TO-THIS-RUN'))})
         with self.assertRaises(private_mail.MailUnavailable):
             private_mail.route('invite', MINE, before={})
+
+    # ---- the message is bound to a RECORD, not only to an address --------------------------------
+
+    def test_a_stranger_s_token_delivered_to_our_address_is_refused(self):
+        """The case record-level selection alone cannot catch, and the reason `verify` exists.
+
+        Selection asks "was this written TO me". Binding asks "is this the message I CAUSED". A stale
+        invitation to the same address, a superseded record, or a token copied from another account's
+        message all answer the first question correctly. Only the second refuses them.
+        """
+        self.use({'a.log': blob(record(MINE, 'TOKEN-BELONGING-TO-ANOTHER'))})
+        notes = {}
+        ours = 'TOKEN-BELONGING-TO-THIS-RUN'
+        with self.assertRaises(private_mail.MailUnavailable) as refusal:
+            private_mail.route('invite', MINE, before={}, notes=notes, verify=lambda t: t == ours)
+        self.assertIn('does not belong to the record this run created', str(refusal.exception))
+        self.assertIs(notes['token_bound'], False)
+        # The refusal names no token, on either side of the comparison.
+        self.assertNotIn('TOKEN-BELONGING', str(refusal.exception))
+
+    def test_a_failed_binding_is_never_retried_against_another_candidate(self):
+        """A refusal, not a fallback. Taking the next record on a binding failure is exactly how a
+        first-match reader behaves, one layer up."""
+        self.use({'a.log': blob(record(MINE, 'TOKEN-BELONGING-TO-ANOTHER'),
+                                record(MINE, 'TOKEN-BELONGING-TO-THIS-RUN'))})
+        with self.assertRaises(private_mail.MailUnavailable) as refusal:
+            private_mail.route('invite', MINE, before={}, verify=lambda t: t == 'TOKEN-BELONGING-TO-THIS-RUN')
+        # Two records for one address is already ambiguous; it stops there rather than picking either.
+        self.assertIn('more than one message', str(refusal.exception))
+
+    def test_the_run_s_own_token_binds_and_is_recorded_as_bound(self):
+        self.use({'a.log': blob(record(MINE, 'TOKEN-BELONGING-TO-THIS-RUN'))})
+        notes = {}
+        found = private_mail.route('invite', MINE, before={}, notes=notes,
+                                   verify=lambda t: t == 'TOKEN-BELONGING-TO-THIS-RUN')
+        self.assertEqual('mine' if found.endswith('/TOKEN-BELONGING-TO-THIS-RUN/') else 'stranger', 'mine')
+        self.assertIs(notes['token_bound'], True)
+
+    def test_a_predicate_that_raises_refuses_rather_than_admitting_the_token(self):
+        """Fail-closed: a binding that could not be evaluated has not said yes."""
+        def explode(_token):
+            raise RuntimeError('the record lookup failed')
+        self.use({'a.log': blob(record(MINE, 'TOKEN-BELONGING-TO-THIS-RUN'))})
+        notes = {}
+        with self.assertRaises(private_mail.MailUnavailable):
+            private_mail.route('invite', MINE, before={}, notes=notes, verify=explode)
+        self.assertIs(notes['token_bound'], False)
+
+    def test_without_a_predicate_the_notes_say_unbound_rather_than_true(self):
+        """A caller that passes no `verify` must not read as one whose token bound."""
+        self.use({'a.log': blob(record(MINE, 'TOKEN-BELONGING-TO-THIS-RUN'))})
+        notes = {}
+        private_mail.route('invite', MINE, before={}, notes=notes)
+        self.assertIsNone(notes['token_bound'])
 
     def test_describe_records_that_a_route_was_found_without_recording_it(self):
         described = private_mail.describe('/invite/SUPERSECRETTOKENVALUE/')

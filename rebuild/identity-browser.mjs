@@ -39,10 +39,12 @@ function otp(key){const n=Buffer.alloc(8);n.writeBigUInt64BE(BigInt(Math.floor(D
 function mailSnapshot(){return python("from ops import private_mail\nfrom django.conf import settings\n"
  +"assert settings.QUILLMD_EMAIL_MODE=='file' and str(settings.EMAIL_FILE_PATH)==str(private_mail.OUTBOX)\n"
  +"print(json.dumps({'files':private_mail.snapshot()}))\n").files;}
-function outbox(email,kind,before){return python("from ops import private_mail\n"
- +"route=private_mail.route(payload['kind'],payload['email'],payload['before'])\n"
- +"print(json.dumps({'route':route,'described':private_mail.describe(route)}))\n",
- {email,kind:kind==='recovery'?'recovery/confirm':kind,before}).route;}
+function outbox(email,kind,before){const found=python("from ops import account_mail, private_mail\nnotes={}\n"
+ +"route=account_mail.locate(payload['kind'],payload['email'],payload['before'],notes=notes)\n"
+ +"print(json.dumps({'route':route,'described':private_mail.describe(route),'notes':notes}))\n",
+ {email,kind:kind==='recovery'?'recovery/confirm':kind,before});
+ assert.equal(found.notes.token_bound,true,'the located token is not bound to this run\'s own record');
+ return found.route;}
 try{
  assert.equal(app,'/opt/meddoc-pro/rebuild');
  const credentials=JSON.parse(await fs.readFile(path.join(runtime,'private-access.json'),'utf8'));

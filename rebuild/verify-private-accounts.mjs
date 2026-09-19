@@ -66,8 +66,8 @@ function mailSnapshot() {
 /** The invitation or recovery route for THIS run. Returns a secret: navigate to it, record nothing. */
 function mailRoute(kind, email, before) {
   const found = python(
-    "from ops import private_mail\nnotes={}\n"
-    + "route=private_mail.route(payload['kind'],payload['email'],payload['before'],notes=notes)\n"
+    "from ops import account_mail, private_mail\nnotes={}\n"
+    + "route=account_mail.locate(payload['kind'],payload['email'],payload['before'],notes=notes)\n"
     + "print(json.dumps({'route':route,'described':private_mail.describe(route),'notes':notes}))\n",
     { kind, email, before });
   // describe() and the counts only. `found.route` never reaches the report, a log line or an assertion.
@@ -77,6 +77,11 @@ function mailRoute(kind, email, before) {
   // it claimed to catch is already a MailUnavailable inside route(). These are measured facts instead.
   assert.equal(found.notes.records_for_this_run, 1, 'the run did not own exactly one message');
   assert.equal(found.notes.records_outside_synthetic, 0, 'a non-synthetic message shared the outbox file');
+  // ⚠️ THE BINDING, NOT ONLY THE SELECTION. Matching the addressee proves the message was written TO this
+  // run; only this proves it is the message this run CAUSED — sha256(token) against the invitation row,
+  // or Django's own check_token against this user. A stale or foreign token satisfies the first and fails
+  // this. `true` specifically: a run with no binding records null, which must not read as bound.
+  assert.equal(found.notes.token_bound, true, 'the located token is not bound to this run\'s own record');
   assert.equal(found.described.kind, kind, 'the extracted route is a different kind than was asked for');
   assert(found.described.token_characters >= 16, 'the extracted token is implausibly short');
   return found.route;

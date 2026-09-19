@@ -62,9 +62,11 @@ async function download(page,extension){const pending=page.waitForEvent('downloa
 function mailSnapshot(){return python("from ops import private_mail\nfrom django.conf import settings\n"
  +"assert settings.QUILLMD_EMAIL_MODE=='file' and str(settings.EMAIL_FILE_PATH)==str(private_mail.OUTBOX)\n"
  +"print(json.dumps({'files':private_mail.snapshot()}))\n").files;}
-function mailRoute(kind,address,before){return python("from ops import private_mail\n"
- +"print(json.dumps({'route':private_mail.route(payload['kind'],payload['address'],payload['before'])}))\n",
- {kind,address,before}).route;}
+function mailRoute(kind,address,before){const found=python("from ops import account_mail\nnotes={}\n"
+ +"route=account_mail.locate(payload['kind'],payload['address'],payload['before'],notes=notes)\n"
+ +"print(json.dumps({'route':route,'notes':notes}))\n",{kind,address,before});
+ assert.equal(found.notes.token_bound,true,'the located token is not bound to this run\'s own record');
+ return found.route;}
 try{
  const credentials=JSON.parse(await fs.readFile(process.env.QUILLMD_BROWSER_CREDENTIALS||path.join(runtime,'private-access.json'),'utf8'));
  for(const key of ['doctor','xray_employee','ultrasound','other_org','admin'])assert(credentials[key].email.endsWith('@synthetic.quillmd.invalid'));
