@@ -1,6 +1,10 @@
 # Owner actions
 
-Updated 2026-09-19 (running release `6d73c5e9026d974053365468101c2f7921544c6c`, verified from `/health/` on both surfaces). This is the single list of what only the owner can do. Engineering does everything else
+Updated 2026-09-19 (application release `6d73c5e9026d974053365468101c2f7921544c6c`, verified from `/health/` on both surfaces; repository/harness
+revision is separate and ahead — see `CHECKPOINT.md`). **Private engineering is complete. Everything below is an owner action; nothing on this
+list can be done for you.** The two items that gate the most are **1 (native Word review)** and **5 (one controlled email recipient)**.
+
+This is the single list of what only the owner can do. Engineering does everything else
 without asking. The private service stays synthetic-only, and the public routes stay in maintenance, until the release evidence supports a
 change. Never paste a secret into chat, a shell command line, Git, a ticket or a screenshot. Every secret location below is a file readable only
 by its owner account.
@@ -15,8 +19,14 @@ The commands below are for Windows PowerShell, which includes OpenSSH.
 
 ## 1. Review the Word documents in native Microsoft Word
 
+**STATUS: PENDING. It has not been performed, and nothing in the record claims otherwise.**
+
 This blocks native Word appearance acceptance. No renderer on the VPS can establish it, and none is substituted for it. **Nothing about
 native Word appearance is accepted until you have actually done this.**
+
+The package is the one already built and verified — it is **not** regenerated, because regenerating it would change the checksum below for
+no reason. Re-verified on 2026-09-19 on the host: **227,269 bytes**, sha256 **b270c982864cb42d0bdb13ac64265b29e53f36bd5efd3ce45d45b7b862f03a72**,
+8 files, all synthetic (one blank original, four generated exports, a README, a checksum list and the acceptance checklist).
 
 Run the four lines below in Windows PowerShell exactly as written. The first creates the destination, the second retrieves the archive, the
 third decides whether it arrived intact, and the fourth unpacks it only if it did.

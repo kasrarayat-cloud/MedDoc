@@ -1071,3 +1071,124 @@ Only tests, operations modules and harnesses changed; no runtime application fil
 deployment was warranted and none was performed. The served revision remains
 `6d73c5e9026d974053365468101c2f7921544c6c`, and `main` continues to carry one non-runtime application
 change ahead of it — `verify_live`'s `cost_basis` field, a management command.
+
+## 2026-09-19 — the confined mail helper: the logging claim was WRONG, and the helper is hardened
+
+**Application revision: `6d73c5e9026d974053365468101c2f7921544c6c`**, read from `/health/` on both
+surfaces. **Repository/harness revision: `56b02381` before this change.** Nothing is deployed: only the
+operations helper, tests and documentation changed.
+
+### ⚠️ THE EARLIER REPORT WAS WRONG, AND MEASURING IS WHAT SHOWED IT
+
+That report said raw file bytes on container stdout were *"harmless under `json-file` with `--rm`"*. They
+were not. Measured on this host:
+
+    docker info --format '{{.LoggingDriver}}'        -> json-file
+    attached `docker run --rm`, default driver:
+      docker logs <running container>                -> the canary, 1 occurrence
+      docker inspect --format '{{.LogPath}}'         -> /var/lib/docker/containers/<id>/<id>-json.log
+      the client's own pipe                          -> the canary, 1 occurrence
+
+**Attachment does not bypass the logging driver, and `--rm` does not prevent the recording** — it deletes
+the file when the container exits. The reasoning in that report confused *the log is removed afterwards*
+with *the log is never written*, which are different facts.
+
+**And the helper really did write sensitive content there.** `_helper_main`'s `read` branch writes the
+complete file to stdout, so every mail read put an outbox file — tokens included — into that container's
+json log for the container's lifetime.
+
+### Scope of the actual exposure, assessed rather than assumed
+
+- **What:** complete outbox file bytes, including raw invitation and recovery tokens, for the lifetime of
+  each helper container (sub-second).
+- **Where:** `/var/lib/docker/containers/<id>/<id>-json.log`, root-owned. No network exposure.
+- **Now:** every helper ran with `--rm`, so each log was deleted with its container. No `python:3-slim`
+  container remains on this host, and the operator account cannot read `/var/lib/docker/containers`
+  directly (`Permission denied`).
+- **Who could have read it:** root, or a holder of the Docker socket — which is the operator account, and
+  that account already has strictly greater access by the same socket (`docker run -u 0:0` reads the whole
+  host, the outbox included). ⚠️ **That bounds the harm; it does not make the recording acceptable.**
+- **Which tokens:** the eleven `email.outbox` events on record. Every invitation among them is
+  **accepted**, so its link is already refused by `invite_accept`'s `accepted_at__isnull=True` filter —
+  demonstrated live on 2026-09-19 when a consumed link answered 404. Every recovery token among them is
+  spent by its own completed password change, because Django derives the token from the password hash.
+  **No affected token is still redeemable.**
+- **One live invitation exists and is NOT in the affected set.** `release-1789778057188`, created
+  `09-19 00:34`, unaccepted, expires `09-26`. Its message was written at `00:34:17` by
+  `verify-private-release.mjs`, which at that revision still used the **operator-account** glob reader —
+  the one that fails with `PermissionError` on the outbox, which is exactly why that check failed and is
+  recorded as failed in `beta-deployed-browser-verification.json`. Its token therefore never entered a
+  helper container. It is left intact rather than revoked, because revoking data that is not demonstrated
+  affected is a mutation nobody asked for; it is flagged here so the decision is visible.
+
+### The hardening: two narrow changes
+
+**1 · Selection and binding moved INSIDE the helper.** A new `select` action reads the named files with
+the same verified per-file read as `read` — same ownership, mode and stat re-checks — then splits records
+on Django's 79-dash separator, matches the exact recipient, applies the purpose pattern, and checks the
+record binding. It returns **one route plus counts**. Unrelated records are counted and dropped on the
+service side.
+
+⚠️ **THE PREVIOUS ARRANGEMENT REJECTED THEM ONE ADDRESS SPACE TOO LATE.** `read_file` is all-or-nothing by
+construction, so finding one message meant exporting every message sharing the file into the operator
+process and rejecting the unrelated ones afterwards. Under the append-collision the callers exist to
+handle, that exported file can hold somebody else's live token.
+
+The binding crosses as a **value, not a callable**: `sha256(token)` against `Invitation.token_hash` for an
+invitation, and the `uidb64` prefix for a recovery token. A digest is not a credential and identifies the
+record exactly. `check_token` is the one check that cannot go in — it needs the secret key and the user's
+password hash, and the helper has no database and no network — so it runs last, on a token that has
+**already** satisfied the in-container binding.
+
+**2 · Every invocation passes `--log-driver=none`.** Measured, both arms, with a token-shaped canary:
+
+    default driver   LogPath present   canary in `docker logs` = 1   client pipe = 1
+    --log-driver=none  LogPath EMPTY   canary in `docker logs` = 0   client pipe = 1
+
+The functional channel is unaffected; the logged copy is gone. **The shared Docker daemon is not
+reconfigured**, no unrelated service restarts, outbox permissions are unchanged, no token endpoint is
+added and no sudo is granted. Every prior control is retained and asserted by test: `--rm`,
+`--pull=never`, `--network=none`, `--read-only`, `--cap-drop=ALL`, `no-new-privileges`, the read-only
+bind, and the service `uid:gid` (996:988). Criteria travel on **stdin**, never argv.
+
+### The matcher is no longer duplicated
+
+`private_mail` had its own copy of the record matcher; it now delegates, and re-exports the record
+separator and synthetic domain from `private_storage` rather than restating them. The selection tests
+moved with the matcher into `ops/test_confined_select.py` — one implementation, one test home.
+
+### Verified, success and failure paths, with dummy tokens and an unrelated-message canary
+
+All tokens below are dummies. Every path returns counts and a reason; **no unrelated value appears in any
+returned result**:
+
+    our own record alone, bound                 found=True   leaked=none
+    our record sharing a file with another      found=True   leaked=none
+    a stranger token delivered to our address   found=False  reason=token_not_bound
+    two records for our address                 found=False  reason=more_than_one_record
+    no record for us                            found=False  reason=no_record_for_this_run
+    a NON-synthetic canary shares the file      found=False  reason=outside_synthetic
+
+⚠️ **The canary is the one that matters**: a live-shaped token for a non-synthetic address. The previous
+design exported its complete bytes into the operator process; the hardened design counts it and stops,
+and the result carries no trace of it — asserted by rendering the whole result and searching it.
+
+**Live, through the real container:** `select_message` read the three newest real outbox files and
+returned `{records_for_this_run: 0, records_for_others: 3, records_outside_synthetic: 0, found: False,
+reason: 'no_record_for_this_run', route: ''}` — counts and a reason, no content, no token. The real argv
+was captured and carries `--log-driver=none` with every other control intact.
+
+**Falsifiability, proved in a disposable worktree, one writer, reaped immediately** — each mutation
+asserted its application by reading back, its restoration by `sha256`, and cleanliness by `git status`:
+
+    the logging control removed                    caught
+    the matcher dropped from the shipped helper    caught
+    the invitation binding disabled                caught
+    the non-synthetic canary guard disabled        caught
+    token_bound always reported true               caught
+
+### Verification
+
+`bash scripts/ci/verify-fresh.sh python`: **417** application tests (8 skipped — the Word runtime helper is
+not built locally; CI builds it), **27** document tests, **270** operations tests. Exit 0. Only checks
+affected by this change were re-run beyond that gate; no broad audit and no real-provider campaign.

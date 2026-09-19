@@ -64,15 +64,24 @@ class InvitationBinding(unittest.TestCase):
         self.addCleanup(lambda: [sys.modules.__setitem__(k, v) if v else sys.modules.pop(k, None)
                                  for k, v in saved.items()])
 
-    def test_our_own_token_binds_and_a_stranger_s_does_not(self):
+    def test_the_expectation_handed_to_the_helper_identifies_our_record_exactly(self):
+        """⚠️ THE BINDING IS NOW A VALUE, NOT A CALLABLE, BECAUSE IT HAS TO CROSS INTO THE CONTAINER.
+
+        The helper compares sha256(token) against this. That is an exact identity check on the record, and
+        the value handed over is a DIGEST — so the operator process never holds a credential in order to
+        recognise one, and the comparison happens on the service side of the boundary.
+        """
         self.use(Invitation('run@synthetic.quillmd.invalid', sha256(OURS)))
-        predicate = account_mail.binding('invite', 'run@synthetic.quillmd.invalid')
-        self.assertIs(predicate(OURS), True)
-        self.assertIs(predicate(THEIRS), False)
+        expectations, final = account_mail.binding('invite', 'run@synthetic.quillmd.invalid')
+        self.assertEqual(expectations, {'expect_sha256': sha256(OURS)})
+        self.assertIsNone(final, 'an invitation needs no host-side check; it is fully bound in the helper')
+        # The expectation is the digest of OUR token and of nothing else.
+        self.assertNotEqual(expectations['expect_sha256'], sha256(THEIRS))
 
     def test_the_address_is_matched_case_insensitively_like_the_application_stores_it(self):
         self.use(Invitation('run@synthetic.quillmd.invalid', sha256(OURS)))
-        self.assertIs(account_mail.binding('invite', 'RUN@Synthetic.QuillMD.invalid')(OURS), True)
+        expectations, _ = account_mail.binding('invite', 'RUN@Synthetic.QuillMD.invalid')
+        self.assertEqual(expectations, {'expect_sha256': sha256(OURS)})
 
     def test_an_accepted_invitation_is_not_a_record_this_run_is_expecting(self):
         """A consumed row is stale by definition; binding to it would accept a spent link."""
@@ -111,8 +120,8 @@ class LocateWiresTheBindingIn(unittest.TestCase):
         """Without this, `locate` would be `route` with extra steps and no binding at all."""
         seen = {}
 
-        def fake_route(purpose, address, before, notes=None, verify=None):
-            seen.update({'purpose': purpose, 'address': address, 'verify': verify})
+        def fake_route(purpose, address, before, notes=None, verify=None, **expectations):
+            seen.update({'purpose': purpose, 'address': address, 'verify': verify, **expectations})
             return '/%s/x/' % purpose
         saved_route, account_mail.private_mail.route = account_mail.private_mail.route, fake_route
         saved = install(invitations=[Invitation('run@synthetic.quillmd.invalid', sha256(OURS))])
@@ -120,9 +129,9 @@ class LocateWiresTheBindingIn(unittest.TestCase):
         self.addCleanup(lambda: [sys.modules.__setitem__(k, v) if v else sys.modules.pop(k, None)
                                  for k, v in saved.items()])
         account_mail.locate('invite', 'run@synthetic.quillmd.invalid', before={})
-        self.assertTrue(callable(seen['verify']), 'locate passed no binding, so nothing was bound')
-        self.assertIs(seen['verify'](OURS), True)
-        self.assertIs(seen['verify'](THEIRS), False)
+        self.assertEqual(seen.get('expect_sha256'), sha256(OURS),
+                         'locate passed no expectation, so the helper would bind nothing')
+        self.assertIsNone(seen['verify'])
 
 
 if __name__ == '__main__':

@@ -101,9 +101,12 @@ except ImportError:                     # pragma: no cover - import shape, not b
     import private_storage
 
 OUTBOX = Path('/var/lib/quillmd/mail')
-# Django's own record separator: write_message() emits the message, then 79 dashes, then a newline.
-SEPARATOR = b'\n' + b'-' * 79 + b'\n'
-SYNTHETIC_DOMAIN = '@synthetic.quillmd.invalid'
+# ⚠️ THE RECORD SEPARATOR AND THE SYNTHETIC DOMAIN NOW LIVE IN `private_storage`, WITH THE MATCHER THAT
+# USES THEM, AND ARE RE-EXPORTED HERE RATHER THAN RESTATED. A second copy of a matcher is what produced
+# the defect this module exists for; a second copy of the constants it matches on is the same mistake one
+# size smaller.
+SEPARATOR = private_storage.RECORD_SEPARATOR
+SYNTHETIC_DOMAIN = private_storage.SYNTHETIC_DOMAIN
 # Routes a test may extract, each anchored to the shape the application actually emits. Anything else is
 # refused rather than pattern-matched loosely.
 #
@@ -114,8 +117,15 @@ SYNTHETIC_DOMAIN = '@synthetic.quillmd.invalid'
 # invitation and silently never matches the recovery link at all.
 KINDS = {'invite': r'/invite/(?P<token>[A-Za-z0-9_-]{16,512})/',
          'recovery/confirm': r'/recovery/confirm/(?P<token>[A-Za-z0-9_-]{2,512}/[0-9a-z]{4,12}-[0-9a-z]{16,128})/'}
-MAX_CHANGED_PATHS = 8
-MAX_RECORDS = 256
+MAX_CHANGED_PATHS = private_storage.MAX_SELECT_NAMES
+# What the helper's refusal codes mean to a caller. The helper returns a fixed code and never a quotation,
+# so these strings are the only prose either side produces about a failed selection.
+REASONS = {'outside_synthetic': 'a changed outbox file also holds a message addressed outside the '
+                                'synthetic test domain; stopping rather than continuing',
+           'no_record_for_this_run': 'no message for this run was found among the changed files',
+           'more_than_one_record': 'more than one message is addressed to this run',
+           'no_link_of_this_purpose': "the run's message carries no link of the requested purpose",
+           'token_not_bound': 'the located token does not belong to the record this run created'}
 
 
 class MailUnavailable(Exception):
@@ -140,32 +150,14 @@ def _changed(root, before):
     return names
 
 
-def _records(blob):
-    """Split one outbox file into the messages it holds. A file routinely holds more than one."""
-    chunks = [chunk for chunk in blob.split(SEPARATOR) if chunk.strip()]
-    if len(chunks) > MAX_RECORDS:
-        raise MailUnavailable('more messages in one file than a single test run can explain')
-    return chunks
+def route(kind, address, before, root=OUTBOX, notes=None, expect_sha256='', expect_prefix='', verify=None):
+    """The `/<kind>/<token>/` path for THIS run, selected and bound INSIDE the confined helper.
 
-
-def _recipients(chunk):
-    """This one record's To: addresses, lowercased. Never raises with content attached."""
-    try:
-        parsed = email.message_from_bytes(chunk)
-        return [found.lower() for _, found in getaddresses(parsed.get_all('To') or []) if found]
-    except Exception:
-        return []
-
-
-def route(kind, address, before, root=OUTBOX, notes=None, verify=None):
-    """The `/<kind>/<token>/` path from THIS run's message to `address`, or raise MailUnavailable.
-
-    `before` is a `snapshot()` taken before the action that sends the message. `verify`, if given, is a
-    predicate over the extracted token that binds the message to the RECORD this run created; a token that
-    does not satisfy it is refused, never swapped for another candidate. `notes`, if given, is filled with
-    counts a report MAY publish: how many paths changed, how many records this run owned, how many belonged
-    to somebody else, how many files could not be read, and whether the token bound. Counts and booleans
-    only — never a name, never content, never the token.
+    `before` is a `snapshot()` taken before the action that sends the message. `expect_sha256` and
+    `expect_prefix` are the record binding, applied by the helper before anything is returned.
+    `verify` is an optional FINAL host-side check for a binding the container cannot compute — Django's
+    `check_token` needs the secret key and the user's password hash, and the helper has neither a database
+    nor a network. `notes`, if given, receives counts and booleans a report MAY publish.
 
     ⚠️ THE RETURNED STRING IS THE SECRET ITSELF. Navigate to it. Do not log it, store it, assert on it,
     put it in a report, or pass it to a subprocess.
@@ -175,69 +167,33 @@ def route(kind, address, before, root=OUTBOX, notes=None, verify=None):
     address = address.lower()
     if not address.endswith(SYNTHETIC_DOMAIN):
         raise MailUnavailable('only a synthetic test address may be located')
-    pattern = re.compile(KINDS[kind])
     changed = _changed(root, before)
-    mine, foreign, outside, unreadable = [], 0, 0, 0
-    for name in changed:
-        try:
-            blob = private_storage.read_file(Path(root), name)
-        except Exception:
-            # A file that cannot be read is counted, not quoted: its content is not ours to report.
-            unreadable += 1
-            continue
-        try:
-            for chunk in _records(blob):
-                recipients = _recipients(chunk)
-                if address in recipients:
-                    mine.append(chunk)
-                    continue
-                # Somebody else's message, sharing this file because the filenames collided. It is never
-                # matched against a route pattern and never described beyond a count — but it HAS been
-                # read, because read_file is all-or-nothing. See the module docstring.
-                foreign += 1
-                if any(not found.endswith(SYNTHETIC_DOMAIN) for found in recipients) or not recipients:
-                    outside += 1
-        finally:
-            del blob
     if notes is not None:
-        notes.update({'changed_paths': len(changed), 'records_for_this_run': len(mine),
-                      'records_for_others': foreign, 'records_outside_synthetic': outside,
-                      'files_unreadable': unreadable})
-    if outside:
-        # A message for an address this harness is not entitled to touch shared a file with the run's own.
-        # The bytes are already here; stopping is what is left, and it is better than continuing quietly.
-        mine.clear()
-        raise MailUnavailable('a changed outbox file also holds %d message(s) addressed outside the '
-                              'synthetic test domain; stopping rather than continuing' % outside)
-    if not mine:
-        raise MailUnavailable('no message for this run was found among %d changed file(s), %d of which '
-                              'could not be read' % (len(changed), unreadable))
-    if len(mine) > 1:
-        # Two records for one unique per-run address means the run is not the only writer, or the address
-        # is not unique. Either way the next line would be a guess.
-        raise MailUnavailable('more than one message is addressed to this run')
-    try:
-        match = pattern.search(mine[0].decode('utf-8', 'replace'))
-    finally:
-        mine.clear()
-    if not match:
-        raise MailUnavailable("the run's message carries no %s link" % kind)
-    token = match.group('token')
+        notes.update({'changed_paths': len(changed), 'records_for_this_run': 0, 'records_for_others': 0,
+                      'records_outside_synthetic': 0, 'token_bound': None})
+    if not changed:
+        raise MailUnavailable('no outbox file changed during this run')
+    result = private_storage.select_message(Path(root), changed, address, kind, KINDS[kind],
+                                            expect_sha256=expect_sha256, expect_prefix=expect_prefix)
+    if notes is not None:
+        notes.update({k: result[k] for k in
+                      ('records_for_this_run', 'records_for_others', 'records_outside_synthetic')})
+        notes['token_bound'] = bool(result['found']) if (expect_sha256 or expect_prefix) else None
+    if not result['found']:
+        raise MailUnavailable(REASONS.get(result['reason'], 'the run\'s message could not be located'))
+    found = result['route']
     if verify is not None:
         try:
-            bound = bool(verify(token))
+            bound = bool(verify(found[len('/%s/' % kind):].rstrip('/')))
         except Exception:
-            # A predicate that raises is a predicate that did not say yes. Never quoted: it was handed the
-            # token, so its message could carry one.
+            # A predicate that raises has not said yes. Never quoted: it was handed the token.
             bound = False
         if notes is not None:
             notes['token_bound'] = bound
         if not bound:
-            del token
+            del found
             raise MailUnavailable('the located %s token does not belong to the record this run created' % kind)
-    elif notes is not None:
-        notes['token_bound'] = None
-    return '/%s/%s/' % (kind, token)
+    return found
 
 
 def describe(found):
