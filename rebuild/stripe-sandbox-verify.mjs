@@ -9,7 +9,7 @@
  * --dry-run validates every precondition, records the wallet baseline and
  * writes a report with executed:false. It never submits a checkout.
  *
- * Optional STRIPE_CLI=/absolute/path/to/stripe enables the event lookup,
+ * Required for --execute: STRIPE_CLI=/absolute/path/to/stripe enables event lookup,
  * duplicate delivery and refund cases through the OPERATOR's own CLI login
  * (a separate capability; the application key never leaves the service).
  * PLAYWRIGHT_MODULE_DIR may locate existing installed browser dependencies.
@@ -33,6 +33,7 @@ import path from 'node:path';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
+import {requireExecutionCLI, verificationOutcome} from './ops/stripe_verification_outcome.mjs';
 
 const app=path.dirname(fileURLToPath(import.meta.url));
 const permanent='/opt/meddoc-pro/rebuild';
@@ -71,7 +72,7 @@ const dryRun=args.includes('--dry-run');
 const mode=execute?'execute':'dry-run';
 const stripeCli=process.env.STRIPE_CLI||'';
 
-const report={passed:false,executed:false,mode,release,synthetic_only:true,app_origins:[base,alias],
+const report={passed:false,executed:false,execution_completed:false,sandbox_acceptance:'not attempted',mode,release,synthetic_only:true,app_origins:[base,alias],
   checks:[],checkout_submissions:0,refused_checkout_posts:0,refused_provider_posts:0,
   blocked_requests:{count:0,hosts:{}},stripe_hosts_contacted:{},
   card_data_stored:false,checkout_url_stored:false,webhook_secret_read:false,api_key_read:false,
@@ -85,9 +86,9 @@ const report={passed:false,executed:false,mode,release,synthetic_only:true,app_o
     refund:{status:'not run'},
     failed_payment:{status:'not run'},
     retry_after_receiver_failure:{status:'manual',
-      how:'Stop the doctor service, resend the recorded checkout.session.completed event with the CLI, observe the non-2xx line in the stripe listen terminal, start the service, resend again, then confirm on the billing page that the paid balance did not change and no second payment ledger entry exists.'},
+      how:'Engineering must record a controlled failed forwarding attempt followed by receipt of the same authentic event, then confirm wallet and ledger invariants. Use the runbook; do not interrupt the application service.'},
     out_of_order_delivery:{status:'manual',
-      how:'Not reproducible with the CLI: it cannot deliver a refund event for a payment before that payment\'s own completed event. Covered by the locally signed suite (core.tests.test_billing_lifecycle early-refund cases); sandbox evidence would need a receiver outage timed between the two events.'},
+      how:'Not automated by this runner. Engineering must control delivery order of authentic sandbox events and record receiver attempts plus wallet/ledger results. Locally signed lifecycle tests are isolated evidence only.'},
     concurrent_spending:{status:'not covered by this runner',
       how:'Requires a live generation reservation racing a refund; use the isolated test suite\'s concurrent refund cases and a supervised session.'},
   }};
@@ -125,7 +126,8 @@ async function guardedContext(){
           // Exactly the armed submissions, never a repeat: an uncertain checkout is
           // inspected by a person, not retried by a script.
           if(!checkoutArmed||report.checkout_submissions>=MAX_CHECKOUTS){report.refused_checkout_posts++;await route.abort('blockedbyclient');return;}
-          checkoutArmed=false;report.checkout_submissions++;
+          checkoutArmed=false;report.checkout_submissions++;report.executed=true;
+          report.sandbox_acceptance='incomplete';
         }else if(/^\/encounters\/[0-9a-f-]+\/(generate|voice)\/$/.test(url.pathname)){report.refused_provider_posts++;await route.abort('blockedbyclient');return;}
       }
       await route.continue();return;
@@ -273,6 +275,8 @@ try{
   // request is inspected by a person before any new attempt is possible.
   reportPath=path.join(runtime,'stripe-sandbox-verification-'+release.slice(0,12)+(execute?'':'-dry-run')+'.json');
   assert(!(await fs.lstat(reportPath).then(()=>true,()=>false)),'Existing verification evidence requires inspection before another attempt.');
+  stage='Operator CLI required for sandbox execution';
+  requireExecutionCLI(execute,stripeCli);
   if(stripeCli){
     assert(path.isAbsolute(stripeCli)&&await fs.realpath(stripeCli)===stripeCli,'STRIPE_CLI must be the absolute real path of the Stripe CLI binary.');
     const meta=await fs.stat(stripeCli);assert(meta.isFile()&&(meta.mode&0o111),'STRIPE_CLI is not an executable file.');
@@ -341,7 +345,7 @@ try{
         paid_wallet_before:usd(paidBefore),paid_wallet_after:usd(wallet(afterPayment,'Paid')),credited:usd(TOP_UP_MICRO),
         note:'The doctor UI shows the application payment id; the Stripe session id was read from the hosted checkout URL path.'};
     });
-    if(stripeCli){
+    {
       let completed;
       await check('Case 2: CLI lists the completed session event and its payment intent',async()=>{
         report.cases.duplicate_delivery.status='running';
@@ -352,7 +356,7 @@ try{
         assert(completed.payment_intent,'The session carries no payment intent identifier.');
         report.stripe_ids.completed_event_id=completed.event_id;report.stripe_ids.payment_intent_id=completed.payment_intent;
       });
-      await check('Case 2: duplicate delivery of the completed event does not credit again',async()=>{
+      await check('Case 2: request duplicate resend and compare balances (arrival needs receiver evidence)',async()=>{
         const resend=cli(['events','resend',completed.event_id]);
         assert(resend.ok,'stripe events resend failed; see stripe_cli.invocations.');
         await page.waitForTimeout(12000);
@@ -360,7 +364,7 @@ try{
         assert.equal(wallet(after,'Paid'),wallet(afterPayment,'Paid'),'Paid balance changed after a duplicate delivery.');
         assert.equal(ledgerCount(after,'payment',TOP_UP_MICRO),ledgerCount(afterPayment,'payment',TOP_UP_MICRO),'A second payment ledger entry appeared.');
         assert.equal(after.payments.length,afterPayment.payments.length,'A new payment row appeared after a duplicate delivery.');
-        report.cases.duplicate_delivery={status:'passed with a stated limit',event_id:completed.event_id,paid_wallet_unchanged:true,payment_ledger_entries:ledgerCount(after,'payment',TOP_UP_MICRO),
+        report.cases.duplicate_delivery={status:'unverified delivery',event_id:completed.event_id,paid_wallet_unchanged:true,payment_ledger_entries:ledgerCount(after,'payment',TOP_UP_MICRO),
           arrival_confirmed_by_runner:false,
           limit:'The doctor UI cannot show receiver attempts. Confirm the resent event id produced a [200] POST line in the stripe listen terminal; without that line the unchanged balance is not evidence of idempotency.'};
       });
@@ -379,8 +383,6 @@ try{
           paid_wallet_before:usd(paidBefore),paid_wallet_after:usd(wallet(afterRefund,'Paid'))};
       });
       afterPayment=afterRefund;
-    }else{
-      for(const name of ['duplicate_delivery','refund'])report.cases[name]={status:'skipped',reason:'STRIPE_CLI not provided; needs the operator CLI login.'};
     }
     await check('Case 4: a declined test card leaves the payment unpaid and the balance unchanged',async()=>{
       report.cases.failed_payment.status='running';
@@ -394,19 +396,21 @@ try{
       assert.equal(created.length,1,'Expected exactly one new payment row for the declined attempt.');
       assert(['pending','processing'].includes(created[0].status),'Declined checkout is not pending: '+created[0].status);
       assert.equal(wallet(after,'Paid'),wallet(before,'Paid'),'Paid balance changed after a declined card.');
+      assert.equal(wallet(after,'Promotional'),wallet(before,'Promotional'),'Promotional balance changed after a declined card.');
       assert.equal(ledgerCount(after,'payment',TOP_UP_MICRO),ledgerCount(before,'payment',TOP_UP_MICRO));
       report.cases.failed_payment={status:'passed',local_payment_id:created[0].id,stripe_checkout_session_id:declinedSession,payment_status_after_decline:created[0].status,
         paid_wallet_unchanged:true,decline_message_observed:true,
         follow_up:'The open session expires at Stripe within 24h and its checkout.session.expired event should move this payment row to expired; re-read the billing page then.'};
     });
     report.final=balances(await snapshot(page));
-    report.executed=true;
+    report.execution_completed=true;
   }
   assert.equal(report.refused_checkout_posts,0);assert.equal(report.refused_provider_posts,0);
   assert.equal(report.checkout_submissions,execute?(MAX_CHECKOUTS):0);
-  report.passed=true;report.completed_at=new Date().toISOString();
+  Object.assign(report,verificationOutcome(report));report.completed_at=new Date().toISOString();
   await privateJSON(reportPath,report);wroteReport=true;
-  console.log((execute?'Stripe sandbox verification passed.':'Stripe sandbox dry run passed; nothing was submitted.')+' Evidence: '+reportPath);
+  if(execute&&!report.passed)process.exitCode=2;
+  console.log((execute?(report.passed?'Stripe sandbox verification passed.':'Stripe sandbox checks completed; acceptance INCOMPLETE.'): 'Stripe sandbox dry run passed; nothing was submitted.')+' Evidence: '+reportPath);
 }catch(error){
   report.active_check=stage;report.error_class=error?.constructor?.name||'Error';
   report.error_line=String(error?.stack||'').split('\n').find(line=>/^\s*at\s/.test(line)&&line.includes('stripe-sandbox-verify.mjs'))?.trim()||'';

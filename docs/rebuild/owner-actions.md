@@ -1,3 +1,34 @@
+# Current action — Stripe sandbox, 2026-09-19
+
+Owner action: On the VPS as claude, run /home/claude/.local/bin/stripe login and
+approve pairing with the QuillMD sandbox in your browser. In that sandbox create
+a restricted test key with Checkout Sessions: Write only, then use protected
+SSH/SFTP or the approved secret store to set STRIPE_SECRET_KEY in
+/opt/meddoc-pro/rebuild/.env (owner claude, mode 0600). Do not send the key in chat.
+Engineering obtains the matching listener signing secret, installs it securely,
+loads the configuration and verifies funding, declines, event delivery and refunds.
+This single setup action blocks real Stripe sandbox verification. No live key or
+purchase is needed. CLI pairing is stored privately at
+/home/claude/.config/stripe/config.toml; do not copy its operator key into the app.
+
+[Measured readiness and runner repair](stripe-readiness-20260919.md).
+
+## Deferred checklist — no new action requested this milestone
+
+- Controlled owner email recipient for retained Resend invitation/recovery tests.
+- Approved B2 destination/scoped credentials and independent recovery-key custody.
+- Authentic provider billing exports/rates/invoices; two missing historical receipts
+  remain unreconciled exceptions.
+- Reviewer engagement details before external access activation and independent test.
+- Legitimate CPT rights and patient-data processing agreements/controls before their
+  separately gated features are enabled.
+
+Native Word acceptance and reviewer-host qualification are complete. Reviewer access
+remains inactive, patient data disabled, and public app/admin routes in maintenance.
+The dated lists below are historical records, not another current question queue.
+
+---
+
 # Current owner inputs — 2026-09-19, after host access qualification
 
 [Reviewer access mechanisms passed actual-host qualification](reviewer-host-qualification-20260919.md).
