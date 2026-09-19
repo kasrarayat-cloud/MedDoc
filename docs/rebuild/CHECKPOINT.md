@@ -1303,3 +1303,59 @@ new layout tests, **270** operations tests. Exit 0.
 
 ⚠️ **THESE ARE STRUCTURAL TESTS. They prove what the file says, not what Word draws.** Native Word
 acceptance is **OPEN** and stays open until the pairs in the new package are opened in Microsoft Word.
+
+## 2026-09-19 — genuine Word candidate execution, private activation pending
+
+This entry supersedes the earlier claim that matching exporter source was execution
+proof. At the start of this milestone, repository main was
+`ae6c48bf493a5232ae5016e1086c8e3c6d1e396e`; actual doctor/admin health independently
+reported `6d73c5e9026d974053365468101c2f7921544c6c`, synthetic-only. Public app/admin
+still answered maintenance503. No application provider configuration changed.
+
+The processor prerequisite was resolved using trusted UID996/GID988 against the
+existing operator-owned installed SDK, with default AppArmor, no application
+capabilities, NoNewPrivs/seccomp and ordinary ownership checks. Eight actual Word
+integration tests ran twice (baseline and finished runtime candidate): **8/8,
+zero skips**. Final candidate execution was at
+`7f3b5313e775c1f43bc7ac0b7998ac86ef256e0e`; evidence is
+`.runtime/word-identity-verification-20260919/final-eight-tests-7f3b5313.json` in
+the permanent rebuild. CI now requires these tests and installs the processor
+outside runner-writable ancestors; missing prerequisites fail instead of skip.
+
+The previous pagination repair protected only the first row after a heading.
+A concrete long mapped-location diagnostic lost limb/unit context on continuation
+pages. The repair now partitions the qualified28-row table into original Right
+and Left14-row sections, with each section's own repeating heading and units.
+Only six long free-text location rows may flow; numeric rows remain together.
+One empty separator paragraph is added. All original visible text, questions,
+rows, cells and controls remain in order; unrelated tables are left unchanged.
+18 focused layout checks and15 independent preservation/counterexample checks passed.
+
+An isolated localhost9142 candidate with its own synthetic DB/state completed the
+actual browser workflow on its first attempt: upload unchanged original, create
+synthetic drafts, demonstrate all90-answers-missing finalization refusal, edit source,
+review every field and statement, finalize and download. The valid partial case
+has88 empty mapped answers; the long case has90 supported answers, a14,444-character
+mapped patient name and six mapped location answers each over4,400characters.
+Every assertion, INCLUDING not-documented variants, has its complete explicit
+synthetic source line; no clinical gate was bypassed. Neither case needed a provider
+request or direct database mutation. Both downloaded hashes match recorded hashes.
+
+Candidate artifacts:
+`.worktrees/word-export-verification/rebuild/.runtime/word-export-verification/candidate-attempt1/`.
+Actual downloads independently passed all90 mapped-answer checks,28 original
+controls/options,28 rows,2 correct limb tables and missing-value preservation.
+Packager checks initially misread the original placeholder option and assumed a
+missing control contained placeholder text; actual XML proved empty content with
+original options intact. Those verifier errors were repaired. Positive checks and
+six deliberate in-memory wrong-limb/unit/answer counterexamples passed without
+changing the genuine files.
+
+This is candidate evidence, not deployment. Follow the new committed activation
+and subsequent two-draft verification declarations. Preserve both previous failed
+live review drafts and reuse them; do not replay AI generation. The new archive
+builder only copies independently verified genuine downloads and never repairs
+or manufactures them. Native Microsoft Word acceptance remains pending; Linux
+rendering is separately labelled evaluation evidence. The final deployed revision,
+served exports, archive and all evidence paths will be recorded in the append-only
+private `.runtime/CHECKPOINT-LATEST.md` after the declared acts actually complete.

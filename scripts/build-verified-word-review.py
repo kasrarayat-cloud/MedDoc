@@ -18,10 +18,14 @@ def text(node): return ''.join(n.text or '' for n in node.iter(W+'t'))
 def require(value, message):
     if not value: raise ValueError(message)
 
-def verify_document(payload, evidence, mapping):
+def verify_document(payload, evidence, mapping, original_payload):
     with zipfile.ZipFile(__import__('io').BytesIO(payload)) as archive:
         document = ET.fromstring(archive.read('word/document.xml'))
     controls = {n.find(W+'sdtPr/'+W+'id').get(W+'val'): n for n in document.iter(W+'sdt')}
+    with zipfile.ZipFile(__import__('io').BytesIO(original_payload)) as original_archive:
+        original_document = ET.fromstring(original_archive.read('word/document.xml'))
+    original_controls = {n.find(W+'sdtPr/'+W+'id').get(W+'val'): n for n in original_document.iter(W+'sdt')}
+    original_paragraphs = original_document.find(W+'body').findall(W+'p')
     require(len(controls) == 28, 'Expected 28 original content controls.')
     body = document.find(W+'body')
     paragraphs = body.findall(W+'p')
@@ -42,10 +46,15 @@ def verify_document(payload, evidence, mapping):
         value = answers[field['key']]['text']; locator = field['locator']
         if field['kind'] == 'choice':
             control = controls[locator['sdt_id']]
-            options = [n.get(W+'displayText') for n in control.findall('.//'+W+'listItem')]
+            items = control.findall('.//'+W+'listItem')
+            original_items = original_controls[locator['sdt_id']].findall('.//'+W+'listItem')
+            require([dict(n.attrib) for n in items] == [dict(n.attrib) for n in original_items],
+                    'Original dropdown option attributes changed: '+field['key'])
+            options = [n.get(W+'displayText', n.get(W+'val', n.get(W+'value'))) for n in items]
+            options = [value for value in options if value != 'Choose an item.']
             require(options == field['options'], 'Original dropdown options changed: '+field['key'])
             actual = text(control.find(W+'sdtContent'))
-            require(actual == (value or 'Choose an item.'), 'Dropdown answer differs: '+field['key'])
+            require(actual == value, 'Dropdown answer differs: '+field['key'])
         elif 'row' in locator:
             cell = rows[locator['row']].findall(W+'tc')[locator['column']]
             actual = text(cell)
@@ -57,7 +66,9 @@ def verify_document(payload, evidence, mapping):
                         'Mapped location missing, truncated or silently filled: '+field['key'])
         else:
             actual = text(paragraphs[locator['body_paragraph']])
-            require(not value or value in actual, 'Mapped demographic answer is missing or truncated: '+field['key'])
+            original_text = text(original_paragraphs[locator['body_paragraph']])
+            require(actual.startswith(original_text) and actual[len(original_text):].strip() == value,
+                    'Mapped demographic answer is filled, missing or truncated: '+field['key'])
     missing = sum(not a['text'] for a in answers.values())
     require(missing == evidence['detail']['missingAnswers'], 'Missing count differs from reviewed answers.')
     require(evidence['review']['assessment']['complete'], 'Export lacks completed clinical review.')
@@ -94,7 +105,7 @@ def build(candidate, served, destination):
                     'Downloaded export no longer matches its recorded hash/size.')
             evidence=json.loads((folder/(mode+'-review-evidence.json')).read_text())
             require(evidence['detail']==detail, 'Detailed evidence belongs to another export.')
-            checks=verify_document(data,evidence,mapping)
+            checks=verify_document(data,evidence,mapping,original)
             target=f'{label}-{mode}-genuine-application-export.docx';(staging/target).write_bytes(data)
             manifest['files'].append({'file':target,'bytes':len(data),'sha256':digest(data),'encounter':detail['encounter'],
                 'release':detail['servedRelease'],'kind':f'{label} authenticated application download',
