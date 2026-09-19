@@ -141,7 +141,7 @@ Open the ORIGINAL beside both candidate and served pairs; do not resave evidence
 [ ] Fonts match the original's SELECTED dropdown result. The original may use
     Aptos12 for a selected answer; that alone is not a font defect.
 [ ] PARTIAL: only patient name and exam side are answered. All52 measurements,
-    all6 locations and the other26 controls remain genuinely unanswered.
+    all6 locations and the other27 controls remain genuinely unanswered.
     No blank has silently become zero, normal, negative or a clinical finding.
 [ ] LONG: patient name ends END-PATIENT-NAME. Each location contains its entire
     text and ends END-LOCATION_11/12/13/25/26/27. No clipping or hidden overflow.
