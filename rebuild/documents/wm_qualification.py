@@ -131,17 +131,39 @@ def qualify(original, output, dotnet, assembly):
         for c in filled["parts"]["word/document.xml"]["controls"])
     checks["all_embedded_media_hashes_preserved"] = sorted(source["media"].values()) == sorted(filled["media"].values())
     checks["no_foss_watermark"] = "aspose" not in "".join(p["non_control_text"] for p in filled["parts"].values()).lower()
+    # ⚠️ `all-blanks.docx` IS NOT AN ALL-BLANKS DOCUMENT AND NEVER WAS. The name means "every blank in the
+    # template filled" and the checks below say so: all 52 measurements, all 6 locations, all 4
+    # demographics. It was carried into the 2026-09-18 review package labelled "every answer reviewed as
+    # missing", which is its exact opposite, and the owner found all 90 locations populated. The fixture is
+    # correct; the NAME and the package label were wrong. Renaming the SDK output would break the pinned
+    # assembly, so the truthful name travels with the evidence instead.
     full = inspect(output / "all-blanks.docx")["parts"]["word/document.xml"]
     checks["all_52_measurements"] = all(full["table_cells"][0][v["row"]][v["column"]] == v["value"] for v in sdk["measurements"])
     checks["all_6_locations"] = all(v["value"] in full["table_cells"][0][v["row"]][v["column"]] for v in sdk["locations"])
     checks["all_4_demographics"] = all(value in full["non_control_text"] for value in sdk["demographics"].values())
     checks["synthetic_signature_marker"] = "2026-09-17T12:00:00Z (SYNTHETIC)" in full["non_control_text"]
     long = inspect(output / "long-answer.docx")["parts"]["word/document.xml"]
+    # ⚠️ AND `non_control_text` IS THE TELL, IN THIS LINE, ALL ALONG. The long string is asserted to be in
+    # the text OUTSIDE the content controls, because the SDK inserts it as a NEW BODY PARAGRAPH rather
+    # than into any mapped answer (Program.cs: `review.ParentNode.InsertBefore(answer, review)`). So this
+    # fixture proves the processor can carry a 19,931-character paragraph through a round trip; it proves
+    # nothing about a long answer in a mapped field, where the longest is 89 characters. Genuine
+    # long-answer coverage of mapped fields belongs to the export path, not to this qualification.
     checks["full_19931_character_answer"] = sdk["long_answer"] in long["non_control_text"]
+    checks["long_answer_is_outside_every_mapped_control"] = all(
+        sdk["long_answer"] not in c["text"] for c in long["controls"])
+    checks["longest_mapped_answer_characters"] = max(
+        (len(c["text"]) for c in long["controls"]), default=0) < 200
     checks["original_unchanged"] = hashlib.sha256(original.read_bytes()).hexdigest() == ORIGINAL_SHA256
     report = {"sdk": "Aspose.Words.FOSS26.3.0", "license": "MIT; no commercial SDK license used",
               "checks": checks, "all_structural_checks_pass": all(checks.values()),
               "long_answer_characters": sdk["long_answer_characters"],
+              "fixture_names_are_misleading": {
+                  "all-blanks.docx": "Every template blank FILLED — all 52 measurements, 6 locations and 4 "
+                                     "demographics. It is not a missing-answer document and must never be "
+                                     "labelled one.",
+                  "long-answer.docx": "A 19,931-character BODY PARAGRAPH, not a mapped answer. The longest "
+                                      "mapped answer in it is 89 characters."},
               "visual_qualification": "Separate renderer evidence required; FOSS does not render pages.",
               "clinical_integration": "Not integrated; default assertions, identity, missing and contradictory choices remain explicit release gates."}
     (output / "qualification.json").write_text(json.dumps(report, indent=2))
