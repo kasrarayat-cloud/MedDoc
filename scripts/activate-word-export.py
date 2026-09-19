@@ -34,6 +34,14 @@ SELF = 'scripts/activate-word-export.py'
 CURRENT_MIGRATION = '0014_encounter_service_date'
 TABLE_COUNT = 35
 MEDIA_TOOLS = ('ffmpeg', 'ffprobe')
+RESUME_REPORT = 'word-export-activation-20260919.json'
+RESUME_REPORT_SHA256 = '60f7438e07cdbdac1ed7aad9b48e87f47d2ca0204f602af5f54ffe13c85e627d'
+RESUME_TARGET = 'e0e92703847cbaf6035e130e512baa886c602eca'
+RESUME_LOCK_SHA256 = 'ddfcae0f7b4c1c18a031b9e1ab2ea8b257643927cf6d2b415aaec2b4b1060b1a'
+RESUME_ENV_SHA256 = '5e113f4253c109faa9054611ed35d346be12b2e7a654dbc6ea8423662df4fe23'
+RESUME_BACKUP = '20260919T153814Z-42c9c0a2'
+RESUME_LOCK_SAVED = '.word-export-activation.lock-preserved-20260919-plan'
+RECOVERY_PATHS = frozenset((SELF, DECL, 'rebuild/ops/test_word_export_activation.py'))
 # These assets were deliberately retained by the completed Word recovery. They
 # remain in place and are included in the complete before/after inventory.
 RETAINED_STATIC_REPORT = 'word-beta-recovery-20260917-final.json'
@@ -172,10 +180,94 @@ def updated_environment(original, target):
 
 def verify_migration_plan(plan):
     rows = [line.strip() for line in plan.splitlines() if line.strip()]
-    require(rows and all(re.fullmatch(r'\[X\] [a-z_][a-z_0-9]*\.[a-z_0-9]+', row)
-                         for row in rows)
-            and '[X] core.' + CURRENT_MIGRATION in rows,
+    parsed = [re.fullmatch(r'\[X\][ \t]+([a-z_][a-z_0-9]*\.[a-z_0-9]+)', row) for row in rows]
+    require(rows and all(parsed) and 'core.' + CURRENT_MIGRATION in [match.group(1) for match in parsed if match],
             'The migration plan is empty, incomplete or contains unapplied operations.')
+
+
+def stopped_services():
+    for unit in UNITS:
+        require(output(['systemctl', 'show', unit, '--property=ActiveState', '--value']) == 'inactive'
+                and output(['systemctl', 'show', unit, '--property=MainPID', '--value']) == '0',
+                'Recovery requires all three private services stopped with no main process.')
+
+
+def load_resume_report(path, word):
+    require(Path(path) == PRIVATE / RESUME_REPORT and Path(path).resolve() == Path(path),
+            'Only the recorded failed Word activation can be resumed.')
+    payload = word.checked_file(Path(path), private=True)
+    require(sha(payload) == RESUME_REPORT_SHA256, 'Failed activation evidence changed.')
+    report = json.loads(payload)
+    require(report.get('complete') is False and report.get('failure_kind') == 'RuntimeError'
+            and report.get('stage') == 'verifying_no_schema_work_is_pending'
+            and report.get('failure_services_stopped') is True
+            and report.get('target') == RESUME_TARGET
+            and report.get('running_release_before') == RUNNING_RELEASE
+            and report.get('previous_head') == BASELINE
+            and report.get('provider_calls') == 0 and report.get('migration') is None
+            and report.get('backup_run_id') == RESUME_BACKUP,
+            'The failed activation is outside this bounded pre-environment recovery.')
+    required = ('schema_before', 'constraints_before', 'indexes_before', 'database_before',
+                'clinical_before', 'storage_before', 'static_before', 'artifact', 'worker_before',
+                'helper_image', 'media_tools', 'retained_reports_before', 'backup_report')
+    require(all(report.get(name) for name in required)
+            and len(report['database_before']) == TABLE_COUNT,
+            'Failed activation lacks the complete preservation baseline.')
+    return report
+
+
+def compare_resume_state(report, observed):
+    # JSON round-trip normalizes SQL tuples to their original report arrays;
+    # no key, column, row or value is removed from either side.
+    require(set(observed) == {'schema_before', 'constraints_before', 'indexes_before', 'database_before',
+                             'clinical_before', 'storage_before', 'static_before', 'artifact',
+                             'helper_image', 'media_tools'}, 'Recovery inspection is incomplete.')
+    for name, value in observed.items():
+        require(json.loads(json.dumps(value)) == report[name], 'Recovery state changed: ' + name)
+
+
+def verify_resume_state(report, word, storage, identity, artifact, helper, tools, env_before, backup_report):
+    stopped_services()
+    require(sha(env_before) == RESUME_ENV_SHA256, 'Recovery environment differs from the verified stopped state.')
+    require(str(Path(backup_report).absolute()) == report['backup_report'], 'Recovery must use the same backup proof.')
+    lock = PRIVATE / '.word-export-activation.lock'
+    require(sha(word.checked_file(lock, private=True)) == RESUME_LOCK_SHA256,
+            'The failed activation lock changed.')
+    saved = PRIVATE / RESUME_LOCK_SAVED
+    require(not saved.exists() and not saved.is_symlink(), 'Preserved failed lock destination already exists.')
+    require(output(PSQL + ["SELECT count(*) FROM core_job WHERE state IN ('queued','running','reconciliation')"]) == '0',
+            'Recovery cannot replay pending provider work.')
+    names = tables()
+    require(set(names) == set(report['database_before']), 'Recovery table population changed.')
+    observed = {'schema_before': schema(), 'constraints_before': constraints(), 'indexes_before': indexes(),
+                'database_before': fingerprints(names), 'clinical_before': clinical_counts(),
+                'storage_before': {name: storage.inventory(STATE / name) for name in ('files', 'mail')},
+                'static_before': static_inventory(identity, word), 'artifact': artifact,
+                'helper_image': helper, 'media_tools': tools}
+    compare_resume_state(report, observed)
+    require(retained_unchanged(report['retained_reports_before'], word.retained_reports()),
+            'Retained evidence changed after the failed activation.')
+    stopped_services()
+    return observed
+
+
+def preserve_failed_lock(word):
+    """Exclusive same-directory relocation, retaining the original lock inode/bytes."""
+    lock, saved = PRIVATE / '.word-export-activation.lock', PRIVATE / RESUME_LOCK_SAVED
+    payload = word.checked_file(lock, private=True)
+    require(sha(payload) == RESUME_LOCK_SHA256, 'Failed lock changed before preservation.')
+    before = lock.lstat()
+    # link() refuses an existing destination. A transient second link remains
+    # wholly inside operator-private evidence, followed immediately by unlink.
+    os.link(lock, saved, follow_symlinks=False)
+    preserved, current = saved.lstat(), lock.lstat()
+    require((preserved.st_dev, preserved.st_ino) == (current.st_dev, current.st_ino)
+            == (before.st_dev, before.st_ino) and saved.read_bytes() == payload,
+            'Failed lock identity changed during preservation.')
+    lock.unlink()
+    require(sha(word.checked_file(saved, private=True)) == RESUME_LOCK_SHA256,
+            'Preserved failed lock differs from its authenticated bytes.')
+    return {'path': str(saved), 'sha256': RESUME_LOCK_SHA256}
 
 
 def static_inventory(identity, word):
@@ -345,6 +437,7 @@ def main():
     parser.add_argument('--target', required=True)
     parser.add_argument('--backup-report', required=True)
     parser.add_argument('--result', required=True)
+    parser.add_argument('--resume-report', help='Only the pinned pre-environment failure may resume while stopped.')
     parser.add_argument('--execute', action='store_true')
     args = parser.parse_args()
     require(Path.cwd() == ROOT and ROOT.resolve() == ROOT, 'Use permanent shared main.')
@@ -377,15 +470,25 @@ def main():
                 'Existing qualified helper changed.')
         modules[name] = load('word_export_activation_' + name, relative)
     word, identity, previous, storage, billing = (modules[k] for k in ('word', 'identity', 'previous', 'storage', 'billing'))
+    resume = load_resume_report(args.resume_report, word) if args.resume_report else None
+    if resume:
+        run(['git', 'merge-base', '--is-ancestor', RESUME_TARGET, args.target])
+        recovery_changed = set(output(['git', 'diff', '--name-only', RESUME_TARGET, args.target]).splitlines())
+        require(recovery_changed == RECOVERY_PATHS,
+                'Recovery target must contain only the reviewed parser, guards, tests and declaration repair.')
     pulls = json.loads(output(['gh', 'api', f'repos/kasrarayat-cloud/MedDoc/commits/{args.target}/pulls']))
     require(any(p.get('merged_at') and p.get('merge_commit_sha') == args.target
                 and p.get('base', {}).get('ref') == 'main' for p in pulls), 'A merged PR is required.')
-    health = [json.loads(output(['curl', '--fail', '--silent', '--max-time', '5', f'http://127.0.0.1:{p}/health/']))
-              for p in (9130, 9131)]
-    require(all(h.get('release') == RUNNING_RELEASE and h.get('data_mode') == 'synthetic-only' for h in health),
-            'The private services must be up on the recorded running release, synthetic-only.')
+    if resume:
+        stopped_services()
+        worker_before = resume['worker_before']
+    else:
+        health = [json.loads(output(['curl', '--fail', '--silent', '--max-time', '5', f'http://127.0.0.1:{p}/health/']))
+                  for p in (9130, 9131)]
+        require(all(h.get('release') == RUNNING_RELEASE and h.get('data_mode') == 'synthetic-only' for h in health),
+                'The private services must be up on the recorded running release, synthetic-only.')
+        worker_before = worker_process()
     tools = media_tools()
-    worker_before = worker_process()
     backup = previous.validate_restore_report(args.backup_report)
     require(backup.get('decrypted_files_written') == 0 and backup.get('restore_database_on_tmpfs_without_swap') is True,
             'The restore proof must come from the plaintext-free restore check.')
@@ -418,14 +521,17 @@ def main():
     for unit in UNITS:
         require((APP / 'deploy' / unit).read_bytes() == (Path('/etc/systemd/system') / unit).read_bytes(),
                 'Installed service policy differs from reviewed source.')
-    identity.verify_live(RUNNING_RELEASE, storage)
+    if resume:
+        verify_resume_state(resume, word, storage, identity, artifact, helper, tools, env_before, args.backup_report)
+    else:
+        identity.verify_live(RUNNING_RELEASE, storage)
     static_before = static_inventory(identity, word)
     result_path = Path(args.result)
     lock = PRIVATE / '.word-export-activation.lock'
     require(result_path.is_absolute() and result_path.parent == PRIVATE and result_path.resolve() == result_path
             and re.fullmatch(r'word-export-activation-[a-zA-Z0-9_-]+\.json', result_path.name)
             and not result_path.exists() and not result_path.is_symlink()
-            and not lock.exists() and not lock.is_symlink(),
+            and (resume is not None or (not lock.exists() and not lock.is_symlink())),
             'Choose unused private operation evidence; a prior lock needs inspection.')
     run(['bash', 'scripts/check-citation.sh', args.target])
     run(['bash', 'scripts/check-cotenants.sh'])
@@ -440,7 +546,6 @@ def main():
             and declaration.read_bytes() == subprocess.check_output(['git', 'show', args.target + ':' + DECL])
             == subprocess.check_output(['git', 'show', commit + ':' + DECL]), 'Committed absolute declaration required.')
     run(['git', 'merge-base', '--is-ancestor', commit, args.target])
-    identity.private_write(lock, {'target': args.target, 'pid': os.getpid()})
     result = {'complete': False, 'previous_head': BASELINE, 'running_release_before': RUNNING_RELEASE,
               'target': args.target, 'started_at': datetime.now(timezone.utc).isoformat(), 'provider_calls': 0,
               'migration': None, 'media_tools': tools, 'worker_before': worker_before,
@@ -449,6 +554,15 @@ def main():
               'changed_paths': sorted(changed), 'static_before': static_before,
               'stage': 'stopping_private_services'}
     try:
+        if resume:
+            result.update(stage='authenticating_recovery_before_lock_preservation',
+                          resumed_report=str(PRIVATE / RESUME_REPORT), resumed_report_sha256=RESUME_REPORT_SHA256)
+            require(load_resume_report(args.resume_report, word) == resume, 'Failed report changed before recovery.')
+            verify_resume_state(resume, word, storage, identity, artifact, helper, tools,
+                                word.checked_file(APP / '.env', private=True), args.backup_report)
+            result['preserved_failed_lock'] = preserve_failed_lock(word)
+        identity.private_write(lock, {'target': args.target, 'pid': os.getpid()})
+        result['stage'] = 'stopping_private_services'
         word.systemd('stop', helper)
         for unit in UNITS:
             require(output(['systemctl', 'show', unit, '--property=ActiveState', '--value']) == 'inactive'
@@ -462,6 +576,10 @@ def main():
         result['database_before'] = fingerprints(old_tables)
         result['clinical_before'] = clinical_counts()
         result['storage_before'] = {name: storage.inventory(STATE / name) for name in ('files', 'mail')}
+        if resume:
+            compare_resume_state(resume, {name: result[name] for name in (
+                'schema_before', 'constraints_before', 'indexes_before', 'database_before', 'clinical_before',
+                'storage_before', 'static_before', 'artifact', 'helper_image', 'media_tools')})
         require(word.checked_file(APP / '.env', private=True) == env_before, 'Environment changed.')
         result['stage'] = 'verifying_no_schema_work_is_pending'
         # A code-only activation must find NOTHING to migrate. `showmigrations --plan` listing an unapplied entry, or
@@ -524,6 +642,11 @@ def main():
         for unit in UNITS:
             require((APP / 'deploy' / unit).read_bytes() == (Path('/etc/systemd/system') / unit).read_bytes(),
                     'Unit policy changed.')
+        if resume:
+            require(load_resume_report(args.resume_report, word) == resume,
+                    'Original failure evidence changed during recovery.')
+            require(sha(word.checked_file(PRIVATE / RESUME_LOCK_SAVED, private=True)) == RESUME_LOCK_SHA256,
+                    'Original failed lock changed during recovery.')
         run(['bash', 'scripts/check-cotenants.sh'])
         result.update(complete=True, stage='complete', health=health, all_existing_rows_identical=True,
                       no_schema_delta=True, all_private_files_and_mail_identical=True, protected_containers=protected,

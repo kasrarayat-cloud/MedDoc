@@ -81,6 +81,18 @@ class WordExportActivationTests(unittest.TestCase):
             with self.subTest(plan=invalid), self.assertRaises(RuntimeError):
                 activation.verify_migration_plan(invalid)
 
+    def test_real_django_plan_spacing_is_accepted_without_accepting_pending_or_junk(self):
+        for gap in (' ', '  ', '\t', ' \t '):
+            with self.subTest(gap=gap):
+                activation.verify_migration_plan('[X]' + gap + 'contenttypes.0001_initial\n[X]'
+                    + gap + 'core.' + activation.CURRENT_MIGRATION + '\n')
+        for invalid in ('[ ]  core.' + activation.CURRENT_MIGRATION,
+                        '[X]core.' + activation.CURRENT_MIGRATION,
+                        '[X]  core.' + activation.CURRENT_MIGRATION + ' unexpected',
+                        '[X]  core.' + activation.CURRENT_MIGRATION + '\n[ ]  core.0015_pending'):
+            with self.subTest(plan=invalid), self.assertRaises(RuntimeError):
+                activation.verify_migration_plan(invalid)
+
     def test_prior_report_change_or_deletion_refuses_new_report_does_not(self):
         before = {'first': {'sha256': 'a' * 64, 'bytes': 100}}
         self.assertTrue(activation.retained_unchanged(before, {**before, 'second': {'sha256': 'b' * 64}}))
@@ -235,6 +247,109 @@ class RetainedStaticInventoryTests(unittest.TestCase):
         manifest.write_text(json.dumps({'paths': {'app.css': '../wrong.css'}}))
         with self.assertRaisesRegex(RuntimeError, 'unexpected path'):
             self.inventory()
+
+
+class BoundedStoppedRecoveryTests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.private = Path(directory.name)
+        context = patch.object(activation, 'PRIVATE', self.private)
+        context.start(); self.addCleanup(context.stop)
+
+    def report(self):
+        return {'complete': False, 'failure_kind': 'RuntimeError',
+            'stage': 'verifying_no_schema_work_is_pending', 'failure_services_stopped': True,
+            'target': activation.RESUME_TARGET, 'running_release_before': activation.RUNNING_RELEASE,
+            'previous_head': activation.BASELINE, 'provider_calls': 0, 'migration': None,
+            'backup_run_id': activation.RESUME_BACKUP, 'backup_report': '/private/same-backup.json',
+            'schema_before': [{'column': 'unchanged'}], 'constraints_before': [['table', 'constraint']],
+            'indexes_before': [['table', 'index']],
+            'database_before': {'table_' + str(n): {'rows': 1, 'sha256': 'a' * 64} for n in range(35)},
+            'clinical_before': {'encounters': 14}, 'storage_before': {'files': {'old': 'hash'}, 'mail': {}},
+            'static_before': {'old.css': {'sha256': 'b' * 64}}, 'artifact': {'hash': 'c' * 64},
+            'worker_before': {'pid': 123, 'kernel_start_utc': '2026-09-19T12:00:00+00:00'},
+            'helper_image': 'sha256:' + 'd' * 64, 'media_tools': {'ffmpeg': 'unchanged'},
+            'retained_reports_before': {'existing': 'hash'}}
+
+    def load_report_fixture(self, report):
+        payload = json.dumps(report).encode()
+        word = SimpleNamespace(checked_file=lambda path, *, private: payload)
+        with patch.object(activation, 'RESUME_REPORT_SHA256', hashlib.sha256(payload).hexdigest()):
+            return activation.load_resume_report(self.private / activation.RESUME_REPORT, word)
+
+    def test_only_the_exact_stopped_pre_environment_failure_is_accepted(self):
+        original = self.report()
+        self.assertEqual(self.load_report_fixture(original), original)
+        for field, value in (('complete', True), ('failure_services_stopped', False),
+                             ('stage', 'replacing_release_line'), ('failure_kind', 'OtherFailure'),
+                             ('target', 'f' * 40), ('running_release_before', 'f' * 40),
+                             ('provider_calls', 1), ('migration', '0015'),
+                             ('backup_run_id', 'another-run'), ('database_before', {})):
+            with self.subTest(field=field), self.assertRaises(RuntimeError):
+                self.load_report_fixture({**original, field: value})
+
+    def test_failed_report_hash_and_exact_path_cannot_be_substituted(self):
+        word = SimpleNamespace(checked_file=lambda path, *, private: json.dumps(self.report()).encode())
+        with self.assertRaisesRegex(RuntimeError, 'evidence changed'):
+            activation.load_resume_report(self.private / activation.RESUME_REPORT, word)
+        with self.assertRaisesRegex(RuntimeError, 'Only the recorded failed'):
+            activation.load_resume_report(self.private / 'different.json', word)
+
+    def test_json_tuple_normalization_preserves_and_compares_every_field(self):
+        report = self.report()
+        keys = ('schema_before', 'constraints_before', 'indexes_before', 'database_before',
+                'clinical_before', 'storage_before', 'static_before', 'artifact', 'helper_image', 'media_tools')
+        current = {key: report[key] for key in keys}
+        current['constraints_before'] = [('table', 'constraint')]
+        current['indexes_before'] = [('table', 'index')]
+        activation.compare_resume_state(report, current)
+        for key in keys:
+            with self.subTest(field=key), self.assertRaisesRegex(RuntimeError, 'Recovery state changed'):
+                activation.compare_resume_state(report, {**current, key: 'different'})
+        with self.assertRaisesRegex(RuntimeError, 'inspection is incomplete'):
+            activation.compare_resume_state(report, {key: value for key, value in current.items() if key != 'database_before'})
+
+    def test_inactive_with_zero_pid_is_required_for_every_service(self):
+        with patch.object(activation, 'output', side_effect=['inactive', '0'] * 3) as query:
+            activation.stopped_services()
+            self.assertEqual(query.call_count, 6)
+        for answers in (['active'], ['inactive', '4'], ['inactive', '0', 'failed']):
+            with self.subTest(answers=answers), patch.object(activation, 'output', side_effect=answers):
+                with self.assertRaisesRegex(RuntimeError, 'all three private services stopped'):
+                    activation.stopped_services()
+
+    def lock_fixture(self):
+        path = self.private / '.word-export-activation.lock'
+        payload = b'{"target":"synthetic-only","pid":123}\n'
+        path.write_bytes(payload); path.chmod(0o600)
+        word = SimpleNamespace(checked_file=lambda path, *, private: Path(path).read_bytes())
+        return path, payload, word
+
+    def test_failed_lock_is_preserved_with_exact_inode_bytes_and_mode(self):
+        lock, payload, word = self.lock_fixture()
+        before = lock.stat()
+        with patch.object(activation, 'RESUME_LOCK_SHA256', hashlib.sha256(payload).hexdigest()):
+            saved = activation.preserve_failed_lock(word)
+        destination = Path(saved['path'])
+        self.assertFalse(lock.exists())
+        self.assertEqual(destination.read_bytes(), payload)
+        self.assertEqual((destination.stat().st_dev, destination.stat().st_ino), (before.st_dev, before.st_ino))
+        self.assertEqual(destination.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(destination.stat().st_nlink, 1)
+
+    def test_existing_saved_lock_or_changed_input_is_never_overwritten(self):
+        lock, payload, word = self.lock_fixture()
+        with self.assertRaisesRegex(RuntimeError, 'Failed lock changed'):
+            activation.preserve_failed_lock(word)
+        self.assertEqual(lock.read_bytes(), payload)
+        saved = self.private / activation.RESUME_LOCK_SAVED
+        saved.write_bytes(b'previous evidence')
+        with patch.object(activation, 'RESUME_LOCK_SHA256', hashlib.sha256(payload).hexdigest()):
+            with self.assertRaises(FileExistsError):
+                activation.preserve_failed_lock(word)
+        self.assertEqual(saved.read_bytes(), b'previous evidence')
+        self.assertEqual(lock.read_bytes(), payload)
 
 
 if __name__ == '__main__':
