@@ -26,6 +26,7 @@ def verify_document(payload, evidence, mapping, original_payload):
         original_document = ET.fromstring(original_archive.read('word/document.xml'))
     original_controls = {n.find(W+'sdtPr/'+W+'id').get(W+'val'): n for n in original_document.iter(W+'sdt')}
     original_paragraphs = original_document.find(W+'body').findall(W+'p')
+    original_rows = original_document.findall('.//'+W+'tr')
     require(len(controls) == 28, 'Expected 28 original content controls.')
     body = document.find(W+'body')
     paragraphs = body.findall(W+'p')
@@ -42,6 +43,16 @@ def verify_document(payload, evidence, mapping, original_payload):
         require([i for i,r in enumerate(section) if r.find(W+'trPr/'+W+'tblHeader') is not None] == [0],
                 'Only the correct own limb header may repeat.')
     answers = evidence['answers']
+    location_fields = {f['locator']['row']: f for f in mapping['fields'] if 'marker' in f['locator']}
+    for index, row in enumerate(rows):
+        expected_label = text(original_rows[index].findall(W+'tc')[0])
+        if index in location_fields:
+            field = location_fields[index]
+            value = answers[field['key']]['text']
+            if value:
+                expected_label = expected_label.replace(field['locator']['marker'], value)
+        require(text(row.findall(W+'tc')[0]) == expected_label,
+                'Original anatomical question or exact mapped location changed: row '+str(index))
     for field in mapping['fields']:
         value = answers[field['key']]['text']; locator = field['locator']
         if field['kind'] == 'choice':
@@ -62,7 +73,8 @@ def verify_document(payload, evidence, mapping, original_payload):
                 require(actual.strip() == value.removesuffix(' '+locator['unit']).strip(),
                         'Numeric answer differs or an unanswered measurement was filled: '+field['key'])
             else:
-                require((value in actual and '<<insert location>>' not in actual) if value else '<<insert location>>' in actual,
+                original_label = text(original_rows[locator['row']].findall(W+'tc')[0])
+                require(actual == original_label.replace(locator['marker'], value) if value else actual == original_label,
                         'Mapped location missing, truncated or silently filled: '+field['key'])
         else:
             actual = text(paragraphs[locator['body_paragraph']])
