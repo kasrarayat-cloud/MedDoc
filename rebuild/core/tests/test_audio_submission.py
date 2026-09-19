@@ -107,6 +107,10 @@ class MediaFixtures:
         # Two audio tracks in one container: which one a decoder reaches is not decided by the file.
         build(['-i', source, '-i', source, '-map', '0:a', '-map', '1:a', '-c:a', 'libopus', '-b:a', '24k',
                str(cls.media / 'two-tracks.webm')])
+        # A .webm carrying VORBIS rather than Opus: one track, a measurable length — so it prices, queues and
+        # holds — and no lossless remux defined for it, so the refusal lands in the WORKER with a reservation
+        # outstanding. That is the reachable shape `UNREADABLE` had no money evidence for.
+        build(['-i', source, '-c:a', 'libvorbis', str(cls.media / 'vorbis.webm')])
         # An MP4 whose edit list delays the start — the shape that used to move a recording's start time.
         build(['-i', str(cls.media / 'tone.m4a'), '-c:a', 'copy', '-output_ts_offset', '1.5',
                str(cls.media / 'edited.m4a')])
@@ -1091,3 +1095,331 @@ class TheArtifactMustDECODE(MediaFixtures, SimpleTestCase):
                          'decodes() never returned on a silent child — the deadline is not enforced')
         self.assertEqual(outcome.get('kind'), media.TOO_SLOW)
         self.assertLess(elapsed, 10, 'the silent-child deadline fired late, after %.1f s' % elapsed)
+
+
+@override_settings(ADMIN_SITE=False, STORAGES=STORAGES)
+class UnreadableAndAmbiguousReachTheWorkerAndReleaseExactlyOnce(MediaFixtures, BoundaryFixture, TestCase):
+    """The two refusal kinds that had NO evidence past the unit level, exercised where the money is.
+
+    ⚠️ WHAT WAS MISSING, STATED SO THE GAP IS NOT RE-OPENED QUIETLY. `UNREADABLE` is the widest kind in
+    `core/media.py` — nine raise sites — and `AMBIGUOUS` is a sixth kind the refusal list did not name.
+    Every test either kind had called `probe_submission`, `plan_normalisation` or `normalise_submission`
+    DIRECTLY. None called `run_one()`, so no reservation was ever created and no release was ever
+    exercised: the assertions proved the CLASSIFIER and said nothing about the MONEY.
+
+    ⚠️ AND THE FIRST VERSION OF THIS CLASS WAS BUILT ON A WRONG ASSUMPTION, WHICH MEASURING CAUGHT. It
+    assumed an unreadable upload reaches the worker holding a reservation. It does not: an unprobeable
+    payload cannot be priced, so the recording-limit gate refuses it at the HTTP entry point with
+    *"The length of this recording could not be determined … Nothing was sent."* — no job, no hold. Both
+    outcomes are proved below, each against the path that actually produces it, because a test that
+    exercises a path the product does not take is a number rather than evidence.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.user)
+
+    def upload(self, name, payload, content_type):
+        """Through the real HTTP entry point the doctor uses, quote and consent included."""
+        with patch.dict(os.environ, STANDARD_ENV):
+            page = self.client.get(f'/encounters/{self.encounter.pk}/')
+            return self.client.post(f'/encounters/{self.encounter.pk}/voice/', {
+                'audio': SimpleUploadedFile(name, payload, content_type=content_type),
+                'consent': 'on', 'usage_quote': page.context['usage_quote']}, follow=True)
+
+    def enqueue_file(self, name, suffix, relative=None):
+        relative = relative or f'uploads/reservation-{name.replace(".", "-")}{suffix}'
+        path = private_path(relative)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes((self.media / name).read_bytes())
+        return relative
+
+    # ---- the proofs the money paths have to satisfy ----------------------------------------------
+
+    def assert_nothing_was_created_or_charged(self, post):
+        """For a failure BEFORE enqueue: no job, no reservation, no customer charge, no provider call."""
+        from core.models import LedgerEntry, ProviderReceipt
+        self.assertEqual(post.call_count, 0, 'the provider was contacted for a refused upload')
+        self.assertEqual(Job.objects.filter(encounter=self.encounter).count(), 0)
+        self.assertEqual(Reservation.objects.count(), 0)
+        self.assertEqual(Usage.objects.count(), 0)
+        self.assertEqual(ProviderReceipt.objects.count(), 0)
+        self.assertEqual(LedgerEntry.objects.filter(kind='usage').count(), 0)
+        self.promo.refresh_from_db()
+        self.assertEqual(self.promo.reserved, 0)
+        self.assertEqual(self.balances(), (Decimal('10'), Decimal('0')))
+
+    def assert_money_came_back_exactly_once(self, job, post, kind):
+        """For a failure AFTER a reservation exists: every proof the item names, in order."""
+        from core.management.commands.audit_billing import audit_report
+        from core.media import REFUSAL_TEXT
+        from core.models import LedgerEntry, ProviderReceipt
+        job.refresh_from_db()
+        # 1 · no provider request happened
+        self.assertEqual(post.call_count, 0, 'the provider was contacted despite a processing failure')
+        self.assertFalse(ProviderReceipt.objects.filter(job=job).exists())
+        # 2 · the job reached the appropriate terminal state, naming the cause to the doctor
+        self.assertEqual(job.state, 'failed', job.error)
+        self.assertIn(REFUSAL_TEXT[kind], job.error)
+        self.assertIn('nothing was charged and the held funds were released', job.error)
+        self.assertNotIn('Try again', job.error, 'a cause re-sending the same bytes cannot fix invited a retry')
+        # 3 · the reservation was released EXACTLY once — one release row per reservation, never two
+        reservations = Reservation.objects.filter(job=job)
+        self.assertTrue(reservations.exists(), 'the fixture never held anything, so releasing it proves nothing')
+        self.assertEqual([r.state for r in reservations], ['released'] * reservations.count())
+        releases = AuditEvent.objects.filter(action='usage.release', target=str(job.pk)).count()
+        self.assertEqual(releases, reservations.count(),
+                         'the hold was released %d times for %d reservations' % (releases, reservations.count()))
+        # 4 · balances and charges are correct: nothing charged, nothing still reserved, nothing moved
+        self.assertEqual(Usage.objects.filter(job=job).count(), 0, 'a failure that never reached the provider was charged')
+        self.assertEqual(LedgerEntry.objects.filter(job=job).count(), 0)
+        self.promo.refresh_from_db()
+        self.assertEqual(self.promo.reserved, 0)
+        self.assertEqual(self.balances(), (Decimal('10'), Decimal('0')))
+        report = audit_report()
+        self.assertTrue(report['all_checks_pass'], report['rows'])
+        self.assertEqual(report['unresolved_jobs'], [])
+
+    def assert_repeating_the_failure_handling_cannot_release_twice(self, job):
+        """⚠️ THE REPLAY IS THE CHECK. One release says nothing about a second call, and a retried worker,
+        a crash between the write and the commit, or an administrator resolving an already-failed job all
+        reach this path again. `release()` filters on state='held', so a second call is a structural no-op
+        — but that is a claim about the code until something actually replays it."""
+        from core.billing import release
+        before = (Reservation.objects.filter(job=job, state='released').count(),
+                  AuditEvent.objects.filter(action='usage.release', target=str(job.pk)).count(),
+                  self.balances())
+        release(job)
+        release(job)
+        self.promo.refresh_from_db()
+        after = (Reservation.objects.filter(job=job, state='released').count(),
+                 AuditEvent.objects.filter(action='usage.release', target=str(job.pk)).count(),
+                 self.balances())
+        self.assertEqual(after, before, 'replaying the release moved a reservation, an audit row or a balance')
+        self.assertEqual(self.promo.reserved, 0)
+
+    def assert_the_encounter_is_still_usable(self):
+        """A stopped recording must not strand the visit: the notes still edit and a new job still queues."""
+        self.encounter.refresh_from_db()
+        edited = self.client.post(f'/encounters/{self.encounter.pk}/notes/',
+                                  {'revision': self.encounter.revision, 'notes': 'Symptoms: edited after the refusal'})
+        self.assertEqual(edited.status_code, 302, 'the encounter could not be edited after a refused recording')
+        self.encounter.refresh_from_db()
+        relative = self.enqueue_file('tone.wav', '.wav', f'uploads/after-refusal-{self.encounter.revision}.wav')
+        with patch.dict(os.environ, STANDARD_ENV):
+            again = enqueue(self.encounter, self.user, kind='transcription', input_path=relative)
+        self.assertEqual(again.state, 'queued', 'a new recording could not be queued after a refused one')
+
+    # ---- UNREADABLE, before enqueue: the path a real unreadable upload actually takes -------------
+
+    def test_an_unreadable_upload_is_refused_before_anything_is_held(self):
+        """MEASURED, and it corrected this class's first assumption.
+
+        A `RIFF` header followed by bytes that are not audio passes the view's signature check, so it gets
+        as far as pricing — and there it stops, because a recording whose length cannot be determined
+        cannot have a charge limit confirmed. Nothing is queued and nothing is held, which is the stronger
+        of the two outcomes.
+        """
+        with patch('core.jobs.httpx.post') as post:
+            response = self.upload('unreadable.wav', b'RIFF' + b'\xff' * 40 + b'GARBAGE' * 400, 'audio/wav')
+        self.assertContains(response, 'length of this recording could not be determined')
+        self.assertContains(response, 'Nothing was sent')
+        self.assert_nothing_was_created_or_charged(post)
+        # The refused upload is not kept: bytes nobody can read are not evidence of anything.
+        self.assertEqual(sorted(private_path('audio').glob('*')) if private_path('audio').is_dir() else [], [])
+
+    # ---- UNREADABLE, after a reservation exists: the reachable shape that holds money -------------
+
+    def test_a_recording_that_becomes_unreadable_after_the_hold_is_released_by_the_worker(self):
+        """REACHABILITY, MEASURED — AND THE MEASURING IS WHY THIS TEST LOOKS LIKE IT DOES.
+
+        Two shapes were tried first and BOTH turned out to be refused before any hold, which is the
+        stronger outcome and is proved above: an unprobeable payload, and a `.webm` carrying Vorbis
+        instead of Opus. The entry gate refuses them while pricing — *"the length of this recording could
+        not be determined (unsupported format)"* and *"(WebM audio that is not Opus)"* — because
+        `core/audio.py` parses the container itself and a recording it cannot measure cannot have a charge
+        limit confirmed.
+
+        What genuinely reaches the worker holding a reservation is a recording that was fine when it was
+        priced and is not fine when it is read: the stored bytes change between enqueue and processing.
+        That is the same operational class the `MISSING` kind exists for — its own regression test unlinks
+        the file at exactly this point — and it is a storage fault, not a constructed branch.
+        """
+        relative = self.enqueue_file('tone.wav', '.wav', 'uploads/becomes-unreadable.wav')
+        with patch.dict(os.environ, STANDARD_ENV):
+            job = enqueue(self.encounter, self.user, kind='transcription', input_path=relative)
+            # Priced and held on bytes that were readable at the time — otherwise there is no release to prove.
+            self.assertEqual(job.config['submission_streams'], '1')
+            self.assertEqual(Reservation.objects.filter(job=job, state='held').count(), 1)
+            # The stored recording is damaged after the hold and before the worker reads it.
+            private_path(relative).write_bytes(b'RIFF' + b'\xff' * 40 + b'GARBAGE' * 400)
+            with patch('core.jobs.httpx.post') as post:
+                self.assertTrue(run_one())
+        self.assert_money_came_back_exactly_once(job, post, media.UNREADABLE)
+        self.assert_repeating_the_failure_handling_cannot_release_twice(job)
+        self.assert_the_encounter_is_still_usable()
+
+    def test_the_entry_gate_is_stricter_than_the_remux_table_and_that_is_recorded_not_assumed(self):
+        """⚠️ TWO READERS OF ONE QUESTION — "what audio can this product carry" — and today they disagree.
+
+        `core/audio.py` decides what can be PRICED; `core/media.plan_normalisation` decides what can be
+        SUBMITTED. Measured on this host, the pricing gate is the stricter of the two: a `.webm` holding
+        Vorbis is refused while pricing, so `plan_normalisation`'s "no lossless remux is defined" branch is
+        defence in depth and is not reachable from an upload. That is a fine state to be in — and it is
+        recorded here rather than left implicit, because it can stop being true in either direction: a
+        codec added to the remux table that pricing still refuses becomes dead code, and a codec pricing
+        starts accepting that the table lacks makes this the ONLY guard, holding a reservation when it
+        fires. The pairing is the finding; this asserts it so a change to either side has to face it.
+        """
+        from core.media import CONTAINERS
+        self.assertNotIn('vorbis', CONTAINERS, 'the remux table gained vorbis; check the pricing gate accepts it too')
+        with patch('core.jobs.httpx.post') as post:
+            response = self.upload('vorbis.webm', (self.media / 'vorbis.webm').read_bytes(), 'audio/webm')
+        self.assertContains(response, 'length of this recording could not be determined')
+        self.assertContains(response, 'WebM audio that is not Opus')
+        self.assert_nothing_was_created_or_charged(post)
+
+    def test_the_same_journey_with_a_supported_codec_is_not_refused(self):
+        """The positive control. A worker that refused every recording would pass the test above."""
+        relative = self.enqueue_file('tone.webm', '.webm', 'uploads/opus-control.webm')
+        response = deepgram(TRANSCRIPT, 'dg_opus_control', duration=SECONDS)
+        with patch.dict(os.environ, STANDARD_ENV):
+            job = enqueue(self.encounter, self.user, kind='transcription', input_path=relative)
+            with patch('core.jobs.httpx.post', return_value=response) as post:
+                self.assertTrue(run_one())
+        job.refresh_from_db()
+        self.assertEqual(post.call_count, 1, 'the control never reached the provider, so the refusal proves nothing')
+        self.assertEqual(job.state, 'succeeded', job.error)
+
+    # ---- AMBIGUOUS, past the enqueue guard, in the worker ----------------------------------------
+
+    def test_a_payload_that_becomes_ambiguous_after_the_hold_releases_it(self):
+        """REACHABILITY, AND ITS CONDITION, STATED PLAINLY RATHER THAN IMPLIED.
+
+        `enqueue` refuses a multi-track payload before any hold, and
+        `AmbiguousInputIsRefusedBeforeAnythingIsPaidFor` proves that through the same HTTP entry point —
+        that is the path a doctor meets. `plan_normalisation`'s `AMBIGUOUS` is therefore DEFENCE IN DEPTH,
+        reachable only when the stream count is unknown at enqueue and known at processing:
+        `describe_submission` records `unprobeable` and skips the count guard when the probe does not
+        answer, and a probe timeout on a loaded shared host is how that happens. That is the sequence
+        below — the probe fails once, at enqueue, and the real one runs in the worker.
+
+        It is exercised because the branch RELEASES MONEY, not to raise a number: if the two guards ever
+        disagree about what is ambiguous, this is the one holding a reservation when it fires.
+        """
+        relative = self.enqueue_file('two-tracks.webm', '.webm', 'uploads/late-ambiguous.webm')
+        real_probe = media.probe_submission
+        calls = {'n': 0}
+
+        def probe_fails_only_at_enqueue(*args, **kwargs):
+            calls['n'] += 1
+            if calls['n'] == 1:
+                raise media.SubmissionUnprobeable(media.UNAVAILABLE, 'the probe did not answer in time')
+            return real_probe(*args, **kwargs)
+        with patch.dict(os.environ, STANDARD_ENV):
+            with patch('core.jobs.probe_submission', side_effect=probe_fails_only_at_enqueue):
+                job = enqueue(self.encounter, self.user, kind='transcription', input_path=relative)
+                # The enqueue guard was skipped because the count was unknown — which is why a hold exists.
+                self.assertEqual(job.config['submission_status'], 'unprobeable')
+                self.assertEqual(job.config['submission_streams'], '')
+                self.assertEqual(Reservation.objects.filter(job=job, state='held').count(), 1)
+                with patch('core.jobs.httpx.post') as post:
+                    self.assertTrue(run_one())
+        requires_input(calls['n'] >= 2, 'the worker to have probed as well, or the refusal came from the wrong call')
+        self.assert_money_came_back_exactly_once(job, post, media.AMBIGUOUS)
+        self.assert_repeating_the_failure_handling_cannot_release_twice(job)
+        self.assert_the_encounter_is_still_usable()
+
+    def test_the_worker_names_ambiguous_rather_than_borrowing_another_kind(self):
+        """`AMBIGUOUS` and `UNREADABLE` say different things to a doctor: one recording has two answers,
+        the other has none. A refusal reporting the wrong one would still release the money and still pass
+        every assertion above, so the distinction is asserted rather than assumed."""
+        from core.media import REFUSAL_TEXT
+        self.assertNotEqual(REFUSAL_TEXT[media.AMBIGUOUS], REFUSAL_TEXT[media.UNREADABLE])
+        self.assertNotIn(media.AMBIGUOUS, media.RETRYABLE, 'a second identical upload cannot fix two tracks')
+        self.assertNotIn(media.UNREADABLE, media.RETRYABLE)
+
+
+@override_settings(ADMIN_SITE=False, STORAGES=STORAGES)
+class TheBillingAuditActuallyDETECTSStrandedFunds(BoundaryFixture, TestCase):
+    """⚠️ EVERY TEST ABOVE ENDS BY ASSERTING `all_checks_pass`. THIS IS WHAT MAKES THAT MEAN SOMETHING.
+
+    A green audit is evidence only if a red one is reachable. If `audit_report()` could not see a hold
+    that outlived its job, then every `assertTrue(report['all_checks_pass'])` in this file would be a
+    control from a different era — true, cheap, and blind to the one failure the release path exists to
+    prevent. So the stranded reservation is planted deliberately, in an isolated fixture, and the audit
+    has to find it.
+
+    The plant is the exact shape a half-applied refusal leaves behind: the job ends, the money does not
+    come back. It is created by writing the rows directly rather than by breaking `release()`, because the
+    subject here is the AUDIT, not the release path — and a mutation of `release()` would prove the audit
+    catches one specific bug rather than the state itself.
+    """
+
+    def strand_a_reservation(self):
+        """A job that ended while its reservation is still held — funds nobody can see from the outside."""
+        from core.billing import reserve
+        relative = f'uploads/stranded-{self.encounter.revision}.wav'
+        path = private_path(relative)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(wav_bytes(tag='stranded'))
+        with patch.dict(os.environ, self.VOICE_ENV):
+            job = enqueue(self.encounter, self.user, kind='transcription', input_path=relative)
+        # The job ends. The hold does not — which is precisely the state that must not pass unnoticed.
+        Job.objects.filter(pk=job.pk).update(state='failed')
+        job.refresh_from_db()
+        return job
+
+    def test_a_green_audit_is_reachable_before_the_plant(self):
+        """The other half of the control: the fixture is green to start with, so the red below is caused
+        by the plant and not by the fixture being broken all along."""
+        from core.management.commands.audit_billing import audit_report
+        report = audit_report()
+        self.assertTrue(report['all_checks_pass'], report['wallets'])
+        self.assertEqual(report['hold_policy']['ended_jobs_holding_funds'], [])
+
+    def test_an_ended_job_still_holding_funds_turns_the_audit_red(self):
+        from core.management.commands.audit_billing import audit_report
+        job = self.strand_a_reservation()
+        held = Reservation.objects.get(job=job)
+        self.assertEqual(held.state, 'held', 'the plant did not actually leave a hold outstanding')
+        report = audit_report()
+        self.assertFalse(report['all_checks_pass'], 'a green audit concealed a hold that outlived its job')
+        self.assertFalse(report['hold_policy']['checks']['ended_jobs_hold_no_funds'])
+        self.assertIn(str(job.pk), report['hold_policy']['ended_jobs_holding_funds'])
+
+    def test_the_command_exits_non_zero_so_a_scheduled_run_cannot_pass_over_it(self):
+        """A report nobody reads is not a control. The command has to FAIL, not merely print red."""
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+        self.strand_a_reservation()
+        with self.assertRaises(CommandError) as refusal:
+            call_command('audit_billing')
+        self.assertIn('Billing evidence mismatch', str(refusal.exception))
+
+    def test_releasing_the_stranded_hold_turns_the_audit_green_again(self):
+        """The repair closes it. Without this, the test above could be passing because the audit is red
+        for some unrelated standing reason rather than because of the plant."""
+        from core.billing import release
+        from core.management.commands.audit_billing import audit_report
+        job = self.strand_a_reservation()
+        self.assertFalse(audit_report()['all_checks_pass'])
+        release(job)
+        report = audit_report()
+        self.assertTrue(report['all_checks_pass'], report['wallets'])
+        self.assertEqual(report['hold_policy']['ended_jobs_holding_funds'], [])
+        self.promo.refresh_from_db()
+        self.assertEqual(self.promo.reserved, 0)
+        self.assertEqual(self.balances(), (Decimal('10'), Decimal('0')))
+
+    def test_the_wallet_invariant_sees_it_too_when_the_counter_is_the_thing_that_drifts(self):
+        """A second, independent reader of the same fact. `reserved_equals_holds` compares the wallet's
+        counter against the sum of its held rows, so a counter that drifts from the rows — the shape a
+        double release leaves — is caught even when no job has ended."""
+        from core.management.commands.audit_billing import audit_report
+        self.assertTrue(audit_report()['all_checks_pass'])
+        Wallet.objects.filter(pk=self.promo.pk).update(reserved=Decimal('0.25'))
+        report = audit_report()
+        self.assertFalse(report['all_checks_pass'], 'a wallet reserving funds no reservation explains passed')
+        drifted = [w for w in report['wallets'] if w['wallet_id'] == str(self.promo.pk)][0]
+        self.assertFalse(drifted['checks']['reserved_equals_holds'])

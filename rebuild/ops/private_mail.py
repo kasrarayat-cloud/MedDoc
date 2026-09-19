@@ -63,6 +63,21 @@ application: every outbox write goes through `deliver_account_email`, whose thre
 carry no caller-controlled substring. It is recorded because the day a body becomes variable, this stops
 being structural and becomes live.
 
+**AND THE MESSAGE IS BOUND TO A RECORD, NOT ONLY TO AN ADDRESS.** Matching the addressee proves the
+message was written TO this run; it does not prove the message is the one this run CAUSED. A stale
+invitation to the same address, a superseded record, or a message this run did not ask for all pass an
+address match. So `route(..., verify=...)` takes a predicate the CALLER supplies — run in this same
+process, over the extracted token, before the route is returned — and the caller binds it to the record
+it created:
+
+  · an invitation token is bound by `sha256(token) == Invitation.token_hash` (`core/security.py` hashes
+    the raw token into the row, so the comparison is exact and leaks nothing);
+  · a recovery token is bound by `default_token_generator.check_token(user, …)` plus the `uidb64` segment
+    decoding to that user's own primary key.
+
+A token that does not bind is a REFUSAL, never a fallback to the next candidate. `verify` stays a callable
+rather than a value so this module keeps no knowledge of the application's models.
+
 **THE ROUTE IS THE TOKEN — they are the same string.** `core/email_delivery.py` builds
 `{origin}/{route}/{raw_token}/`, so "log the extracted route" means "log the secret". `route()` returns it
 because visiting it is the test. It is never logged, never written to a report, never passed as a process
@@ -142,12 +157,15 @@ def _recipients(chunk):
         return []
 
 
-def route(kind, address, before, root=OUTBOX, notes=None):
+def route(kind, address, before, root=OUTBOX, notes=None, verify=None):
     """The `/<kind>/<token>/` path from THIS run's message to `address`, or raise MailUnavailable.
 
-    `before` is a `snapshot()` taken before the action that sends the message. `notes`, if given, is filled
-    with counts a report MAY publish: how many paths changed, how many records this run owned, how many
-    belonged to somebody else, how many files could not be read. Counts only — never a name, never content.
+    `before` is a `snapshot()` taken before the action that sends the message. `verify`, if given, is a
+    predicate over the extracted token that binds the message to the RECORD this run created; a token that
+    does not satisfy it is refused, never swapped for another candidate. `notes`, if given, is filled with
+    counts a report MAY publish: how many paths changed, how many records this run owned, how many belonged
+    to somebody else, how many files could not be read, and whether the token bound. Counts and booleans
+    only — never a name, never content, never the token.
 
     ⚠️ THE RETURNED STRING IS THE SECRET ITSELF. Navigate to it. Do not log it, store it, assert on it,
     put it in a report, or pass it to a subprocess.
@@ -204,7 +222,22 @@ def route(kind, address, before, root=OUTBOX, notes=None):
         mine.clear()
     if not match:
         raise MailUnavailable("the run's message carries no %s link" % kind)
-    return '/%s/%s/' % (kind, match.group('token'))
+    token = match.group('token')
+    if verify is not None:
+        try:
+            bound = bool(verify(token))
+        except Exception:
+            # A predicate that raises is a predicate that did not say yes. Never quoted: it was handed the
+            # token, so its message could carry one.
+            bound = False
+        if notes is not None:
+            notes['token_bound'] = bound
+        if not bound:
+            del token
+            raise MailUnavailable('the located %s token does not belong to the record this run created' % kind)
+    elif notes is not None:
+        notes['token_bound'] = None
+    return '/%s/%s/' % (kind, token)
 
 
 def describe(found):
