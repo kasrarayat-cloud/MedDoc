@@ -590,3 +590,132 @@ The seven marketing waitlist records are untouched — counted at 7, values not 
 LEGACY `meddoc` database, a different container from the one this act fingerprinted, so they were never
 in this deploy's blast radius; the count is reported because it was asked for, not because anything
 here could have moved it.
+
+## 2026-09-19 — recording stops safely when processing fails, running release 6d73c5e9026d974053365468101c2f7921544c6c
+
+**Running release `6d73c5e9026d974053365468101c2f7921544c6c` on all three surfaces**, synthetic-only, public routes in maintenance.
+
+| | |
+| --- | --- |
+| running revision before | `cd428f7062d3d624787d927c41130692017d5a84` |
+| code revision before the fast-forward | `d45d9f72216132934b99e0c1fa426d1bc4fb532f` |
+| running revision after | `6d73c5e9026d974053365468101c2f7921544c6c` |
+| documentation-only ahead | this entry's own commit |
+
+### The repaired failure paths
+
+The audio path used to **fall back to submitting the original upload** whenever ffmpeg processing
+failed. That is removed. It had been reasoned as *"never worse than the behaviour before normalisation
+existed"*, and the reasoning was wrong in a way that sounds conservative: **a step that silently stops
+running is worse than one that fails.** The provider received bytes nobody had measured, decided for
+itself what to decode, and the doctor was charged for the result — with the only trace a detail string
+on a usage row.
+
+Every failure now stops before the provider. `NoProviderRequest` is the stop: `run_one` classifies it
+`unsent`, writes the failure and **releases the hold in one transaction**, so nothing is charged and
+the reservation is released exactly once.
+
+| class | cause | retryable |
+| --- | --- | --- |
+| `missing` | the upload is gone from storage — the platform's failure, not the file's | no |
+| `unavailable` | ffmpeg or ffprobe missing or unrunnable | yes |
+| `too_slow` | the 45 s preparation budget or a decode deadline was spent | yes |
+| `unreadable` | unmeasurable, ambiguous, or a length that does not decode | no |
+| `too_large` | the prepared payload exceeds the submission limit | no |
+
+The doctor sees a fixed sentence per class, never the technical reason: `failure_reason()` renders a
+`NoProviderRequest`'s message verbatim into the doctor's error *and* into `audit_billing`'s export, and
+ffmpeg quotes the storage path it was handed. The detail is recorded once, scrubbed of paths, on a
+`voice.submission_refused` row.
+
+### Two new refusals, both before any charge
+
+- **A WAV holding more than one `data` chunk.** It gives three answers about its own length: the
+  parser's floor says 1 s, its ceiling says 10 s, and ffmpeg plays 9 s because it reaches the *last*
+  chunk — reverse them and it plays 1 s. Refused in `enqueue`, before the job row and the hold.
+- **An artifact that does not decode.** `-c:a copy` moves frames without decoding them and exits 0 on a
+  container no decoder can use, after which ffprobe reports what the container *declares*. The artifact
+  is decoded and the decoded length compared with the declared one, tolerance 0.25 s against a measured
+  worst real divergence of 0.040 s.
+
+### Six defects the refutation pass found, all in this change
+
+The most serious: **a failed audit write could strand the money it exists to return.** `refuse()` put a
+`SELECT` and an `INSERT` on every failure path, landing right after up to 45 s of subprocess work. If it
+raised, the job went to `reconciliation` rather than `unsent` — hold never released, `request_key` never
+freed so the encounter refused every later recording, and `audit_billing`'s hold policy only inspects
+succeeded/failed/cancelled jobs, so `all_checks_pass` stayed **true over stranded funds**. The audit
+write is now best-effort.
+
+Also: ffprobe missing was reported as the doctor's file being broken and marked non-retryable; a
+recording the platform had *lost* was reported as one to re-export (an existing regression test pinned
+that and was red — suites had been picked by name rather than by what the change touched); the decode
+deadline could not fire on a child that produced nothing; the 25 s budget had been sized for a remux
+alone; and `configuration_status` — edited in this very change — still promised a degraded-but-working
+submission path that no longer exists.
+
+**No false rejection introduced:** 16 of 17 legitimate recordings pass unrefused, across stereo, VBR,
+ID3, 8 kHz, 24-bit, float, u8, silence, 0.2 s, 2 min, live-shaped WebM and espeak output. The
+seventeenth is Vorbis, refused by the *pre-existing* Opus-only parser.
+
+### Repository integrity after the scratch cleanup
+
+Read-only: `git fsck --strict` exits 0 with 558 lines, **all `dangling`** — zero missing, broken,
+corrupt, unreadable or invalid — and all 466 refs resolve. The objects shredded in the previous
+session's close-out were under `/tmp/.../scratchpad/`, in three throwaway clones, never under
+`/opt/meddoc-pro`. No further cleanup was performed and the dangling objects were left alone.
+
+### A process failure worth keeping
+
+Both refutation lenses were authorised to mutate repository files and restore them **while the same
+files were being edited**. Their restore is to a snapshot, so concurrent edits were reverted silently —
+twice, with no error, surfacing only as an `ImportError`. One lens was stopped mid-run. Recorded in
+`AGENTS.md`: *a mutation proof asserts its own restoration as well as its own application*, and no agent
+gets write access to a file its author is editing.
+
+**Still pending, unchanged:** native Word acceptance (package unchanged at 227,269 bytes,
+`B270C982…F03A72`), independent key custody, the documented encryption limitations, and the unavailable
+external integrations. No host reboot and no shared-host security change.
+
+### The end-to-end demonstration, through the application
+
+One locally synthesized six-second sample (`espeak-ng`), uploaded over authenticated HTTP by a synthetic
+account, transcribed by the real provider, displayed and downloadable. **Its expected records and
+charges were declared and committed before it ran**
+(`docs/foundation/mutations/20260918-quillmd-endtoend-demonstration.md`).
+
+| | |
+| --- | --- |
+| release under test | `6d73c5e9026d974053365468101c2f7921544c6c`, confirmed by the harness itself |
+| job | `00959751-1eb5-486c-9f71-4b079f6a5cc4`, `succeeded` |
+| provider | `deepgram:nova-3-medical`, **`simulated=false`** |
+| provider request id | `01a0b715-ae33-7473-83b5-6410239d98f4`, identical on Job, Usage and ProviderReceipt |
+| submitted artifact | 280,414 bytes, sha256 `c577f95c…a8a20d2d5`, 1 audio stream, container `wav` |
+| **`submission_source`** | **`normalised`** — the repaired path ran; nothing fell back |
+| declared vs decoded | 6.357596 s vs **6.358 s** — the new decode verification ran and agreed |
+| provider-reported | 6.3575625 s |
+| actual → charged | $0.000455625300 → $0.000683437950, exactly 1.5× |
+| reservations | **1, `settled`** — settled exactly once |
+
+The same run also exercised a real Anthropic generation ($0.00291 → $0.004365, paid from personal
+promotional credit), finalization and the Word export. Reservations peaked at **$0.49098** against the
+harness's USD 1 ceiling; this run charged **$0.0050484380** in total and no row was simulated.
+
+Every declared quantity matched with one exception, stated rather than smoothed: **`users` did not
+grow.** The invitation check is the one that failed, so the user it would have created was never made.
+
+⚠️ **THE ONE FAILING CHECK, AND ITS DEPENDENCY NAMED.** *"Private invitation, single welcome grant, and
+password recovery work after deployment"* failed after 11 passing checks. Diagnosed: the harness's
+helper runs as the operator account, and the check reads the service's private email outbox
+(`/var/lib/quillmd/mail`) to extract the invitation and recovery links. That directory is owned by
+`quillmd-app` and the operator account cannot read it — `PermissionError [Errno 13]`, reproduced
+directly. **This is the OS isolation working as designed, not a defect in the release**: the activation
+proved the mail inventory and the installed unit files byte-identical across the act, and nothing in
+this change touches email or storage permissions. It is unrelated to the recording path, and it is left
+as a known limit of running that particular check against the live services rather than a fixture.
+
+**Post-checks on the new release.** `audit_billing --maintenance-storage` → `all_checks_pass: true`,
+exit 0, the same two pre-existing owner-pending receipt gaps. Doctor, admin and `/console/` gated
+(302). Co-tenants at expected statuses across three distinct codes. The operator screen now answers the
+question that used to be unanswerable from the operator's side: **`DEEPGRAM_API_KEY: present`,
+`ANTHROPIC_API_KEY: present`**, both media tools resolved, `SYNTHETIC_ONLY: True`.
