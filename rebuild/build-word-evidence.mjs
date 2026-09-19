@@ -69,35 +69,52 @@ async function login(page, account) {
   await page.waitForURL(base + '/');
 }
 
-/** Fill every mapped field according to its KIND, and review all of them. */
+/** Fill every mapped field according to its KIND, review everything, save and finalize.
+ *
+ * ⚠️ THIS DRIVES THE RENDERED FORM RATHER THAN POSTING A HAND-BUILT BODY, and the first two attempts are
+ * why. A hand-built POST missed the CSRF token, then read it from a cookie whose name this deployment
+ * changes per surface, and then posted a revision taken from the FIRST of three `[name=revision]` inputs
+ * on the page — a different form's. It also omitted the 14 `claim_reviewed_*` boxes entirely, so finalize
+ * refused with "cannot authorize signing" and the encounter sat at `review`. Every one of those is a
+ * detail of the page that the page already knows. `private-beta-browser.mjs` has driven this form
+ * correctly for months; this follows it.
+ */
 async function completeAndFinalize(page, encounterId, mode, mapping) {
   await page.goto(`${base}/encounters/${encounterId}/`);
-  const revision = await page.locator('[name=revision]').first().inputValue();
-  const form = {};
   for (const field of mapping.fields) {
-    const key = field.key;
-    let value = '';
-    if (mode === 'long') {
-      if (field.kind === 'choice') value = field.options[0];
-      else if (field.kind === 'measurement') value = '4.25';
-      else if (key.startsWith('location_') || key === 'patient_name') value = LONG;
-      else value = 'SYNTHETIC';
+    const control = page.locator(`[name="answer_${field.key}"]`).first();
+    if (!(await control.count())) continue;
+    const isSelect = await control.evaluate(node => node.tagName === 'SELECT');
+    if (mode === 'missing') {
+      // Every answer left empty, and every one of them still reviewed: "reviewed as missing".
+      if (isSelect) await control.selectOption('');
+      else await control.fill('');
+      continue;
     }
-    form['answer_' + key] = value;                  // '' for the missing-answer document
-    form['reviewed_' + key] = 'on';                 // every field reviewed, including the missing ones
+    if (isSelect) {
+      // ⚠️ A DROPDOWN GETS A VALID ORIGINAL OPTION. One that accepted arbitrary text would be the defect,
+      // not the demonstration.
+      const options = await control.locator('option').evaluateAll(nodes =>
+        nodes.map(o => o.value).filter(v => v));
+      assert(options.length, `no options offered for ${field.key}`);
+      await control.selectOption(options[0]);
+    } else if (field.kind === 'measurement') {
+      await control.fill('4.25');            // numeric field: a valid number, not long text
+    } else if (field.key.startsWith('location_') || field.key === 'patient_name') {
+      await control.fill(LONG);              // the supported free-text and table-location cells
+    } else {
+      await control.fill('SYNTHETIC');
+    }
   }
-  form.revision = revision;
-  form.csrfmiddlewaretoken = await csrf(page);
-  const headers = { 'X-CSRFToken': form.csrfmiddlewaretoken, Referer: base + '/' };
-  const saved = await page.request.post(`${base}/encounters/${encounterId}/save/`, { form, headers });
-  assert(saved.status() < 400, `saving answers failed with ${saved.status()}`);
-  await page.goto(`${base}/encounters/${encounterId}/`);
-  const next = await page.locator('[name=revision]').first().inputValue();
-  const token = await csrf(page);
-  const finalized = await page.request.post(`${base}/encounters/${encounterId}/finalize/`,
-    { form: { reviewed: 'on', revision: next, csrfmiddlewaretoken: token },
-      headers: { 'X-CSRFToken': token, Referer: base + '/' } });
-  assert(finalized.status() < 400, `finalizing failed with ${finalized.status()}`);
+  for (const box of await page.locator('input[name^=reviewed_]').all()) await box.check();
+  // The 14 prewritten assertions are reviewed separately from the 90 answers, and finalize refuses
+  // without them.
+  for (const box of await page.locator('input[name^=claim_reviewed_]').all()) await box.check();
+  await page.getByRole('button', { name: 'Save answers and review decisions', exact: true }).click();
+  await page.waitForLoadState();
+  await page.locator('[name=reviewed]').check();
+  await page.getByRole('button', { name: 'Finalize document', exact: true }).click();
+  await page.waitForLoadState();
 }
 
 try {
