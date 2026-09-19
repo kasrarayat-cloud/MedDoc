@@ -826,9 +826,53 @@ test red (`['held'] != ['released']`), and the file was restored with a matching
 is created and no release is exercised for either. `AMBIGUOUS` is mitigated — enqueue refuses multi-track
 payloads before any hold — and `UNREADABLE` is not.
 
+### One residual, measured rather than assumed
+
+`private_storage._execute` streams the file's raw bytes on the confined container's STDOUT, so the
+token exists on the daemon's logging path for the life of that container. Measured here:
+`docker info --format '{{.LoggingDriver}}'` is **`json-file`** and there is no `/etc/docker/daemon.json`,
+and the helper runs `docker run --rm`, so the container's log file is removed with the container and
+nothing persists in a system log. ⚠️ **A daemon switched to `journald` or `syslog` would reopen this**,
+and the remedy is one flag — `--log-driver=none` on that `docker run`. Not changed here: `private_storage`
+is the sanctioned reader and altering it is a larger decision than a harness repair. Recorded so the next
+reader does not have to re-derive it, and so a logging-driver change is understood to be a security
+change.
+
 ### `main` is ahead of the deployed release, and by what
 
 Nothing here is deployed and nothing needed to be: the changes are a test harness, tests and documentation.
 `main` will carry one non-runtime application change the deployed release does not — `verify_live`'s
 `cost_basis` field, a management command — plus the corrected documents, the new `ops/` modules and the test
 repairs. Recorded here so the next deploy's §2.5 declaration names its full payload rather than only its own.
+
+### The first run of the repaired checks, and the assertion that stopped it
+
+**`05:01:54Z → 05:02:06Z`, release `6d73c5e9026d974053365468101c2f7921544c6c`.** Four checks passed —
+including *"Invitation acceptance creates the user and its department membership"*, **the one that failed
+on 2026-09-19 with `PermissionError`**. The repaired mail access did its job: the reader answered before
+anything was sent (7 files), the invitation was located from **1 changed path, 1 record for this run, 0
+for anybody else, 0 outside the synthetic domain**, and the token was **43 characters** — exactly
+`secrets.token_urlsafe(32)`.
+
+The fifth check stopped on an `AssertionError`. ⚠️ **THE APPLICATION DID NOTHING WRONG; THE ASSERTION WAS
+WRONG, AND IT IS WORTH RECORDING BECAUSE OF *WHERE* IT FAILS:**
+
+> `str()` on a `Decimal` uses SCIENTIFIC notation once the exponent is negative and the value is zero. A
+> promotional wallet with nothing reserved stringifies as **`0E-12`**, not `0.000000000000`. Measured:
+> `str(Decimal('0.000000000000')) == '0E-12'`; `format(…, 'f') == '0.000000000000'`.
+
+**It fails ONLY at zero — which is the value a money assertion most needs to check**: nothing reserved,
+nothing charged, nothing outstanding. Every non-zero amount compares correctly, which is exactly why it
+read fine in review and survived three refutation passes. Fixed at the source, `format(value, 'f')` on the
+Python side of every money field, in all three harnesses that emit one — not by loosening the comparison,
+which would have removed the check instead of repairing it.
+
+**The partial act is judged row by row, before anything else ran**, at
+`docs/foundation/mutations/20260919-quillmd-account-checks-run2.md`. Every MUST-NOT-CHANGE row held —
+jobs 14, usage 14, receipts 11, reservations 12/0, charge and cost totals identical to the digit,
+departments 3, patients 3, encounters 12, **provider calls 0**. Every MUST-CHANGE row the completed checks
+were responsible for matched exactly: users 8→9, promotional wallets 8→9, welcome entries 8→9, memberships
+7→8 in the inviting doctor's own department, promotional balance **+10 exactly**, and five new audit rows
+that are all account/auth/email actions with no billing action among them. Three rows are short, and all
+three are the same fact — the run stopped — recorded against the check that never executed rather than
+explained away.

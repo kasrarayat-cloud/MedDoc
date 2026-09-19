@@ -212,8 +212,14 @@ try {
     const before = python(
       "from core.models import User,Wallet,LedgerEntry\nu=User.objects.get(email=payload['email'])\n"
       + "w=Wallet.objects.get(user=u,kind='promo')\n"
-      + "print(json.dumps({'balance':str(w.balance),'reserved':str(w.reserved),'welcome_entries':LedgerEntry.objects.filter(wallet=w,kind='welcome').count()}))\n",
+      + "print(json.dumps({'balance':format(w.balance,'f'),'reserved':format(w.reserved,'f'),'welcome_entries':LedgerEntry.objects.filter(wallet=w,kind='welcome').count()}))\n",
       { email });
+    // ⚠️ THE DECIMAL IS FORMATTED FIXED-POINT ON THE PYTHON SIDE, AND THAT IS NOT COSMETIC. `str()` on a
+    // Decimal uses SCIENTIFIC notation once the exponent is negative and the value is zero: a wallet with
+    // nothing reserved stringifies as `0E-12`, not `0.000000000000`. So a string comparison against a zero
+    // literal fails for exactly the value a money assertion most needs to check — nothing reserved,
+    // nothing charged — and it fails ONLY there, which is why it survived review. Measured on this host:
+    // str(Decimal('0.000000000000')) == '0E-12'; format(..., 'f') == '0.000000000000'.
     assert.equal(before.balance, '10.000000000000');
     assert.equal(before.reserved, '0.000000000000');
     assert.equal(before.welcome_entries, 1);
@@ -246,7 +252,7 @@ try {
     const after = python(
       "from core.models import User,Wallet,LedgerEntry,Membership\nu=User.objects.get(email=payload['email'])\n"
       + "w=Wallet.objects.get(user=u,kind='promo')\n"
-      + "print(json.dumps({'balance':str(w.balance),'welcome_entries':LedgerEntry.objects.filter(wallet=w,kind='welcome').count(),"
+      + "print(json.dumps({'balance':format(w.balance,'f'),'welcome_entries':LedgerEntry.objects.filter(wallet=w,kind='welcome').count(),"
       + "'wallets':Wallet.objects.filter(user=u,kind='promo').count(),"
       + "'memberships':Membership.objects.filter(user=u,active=True).count()}))\n",
       { email });
