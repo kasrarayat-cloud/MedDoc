@@ -107,8 +107,22 @@ async function completeAndFinalize(page, encounterId, mode, mapping) {
     }
   }
   for (const box of await page.locator('input[name^=reviewed_]').all()) await box.check();
-  // The 14 prewritten assertions are reviewed separately from the 90 answers, and finalize refuses
-  // without them.
+  // ⚠️ THE 14 PREWRITTEN ASSERTIONS ARE A SEPARATE REVIEW, AND CHECKING THE BOX IS NOT ENOUGH.
+  // `save_answers` runs each one through `source_quote_evidence`, which demands a COMPLETE SOURCE LINE
+  // from the notes for that exact label; a claim it cannot evidence is forced back to reviewed=false and
+  // the whole review is recorded `complete=False`, which the finalization helper then refuses. Four
+  // attempts read that refusal as a form problem. It is the application being right: a statement nobody
+  // can point at in the notes has not been reviewed.
+  //
+  // So the variant carries the truth instead of a quotation. These synthetic notes document none of the
+  // prewritten findings, and most claims offer exactly that answer — `not_documented` or `not_assessed`.
+  // Those need no evidence because they assert none. `trusted` claims (signer identity, signature
+  // timestamp, interpreting physician) are server-supplied and are left as rendered.
+  for (const select of await page.locator('select[name^=claim_variant_]').all()) {
+    const options = await select.locator('option').evaluateAll(nodes => nodes.map(o => o.value));
+    const honest = ['not_documented', 'not_assessed', 'none'].find(v => options.includes(v));
+    if (honest) await select.selectOption(honest);
+  }
   for (const box of await page.locator('input[name^=claim_reviewed_]').all()) await box.check();
   await page.getByRole('button', { name: 'Save answers and review decisions', exact: true }).click();
   await page.waitForLoadState();
@@ -163,7 +177,7 @@ try {
         + "from django.utils import timezone\n"
         + "u=User.objects.get(email=payload['email'])\n"
         + "tv=TemplateVersion.objects.get(pk=payload['version'])\n"
-        + "existing=Encounter.objects.filter(template_version=tv,status='draft',notes=payload['notes']).order_by('created_at').first()\n"
+        + "existing=Encounter.objects.filter(template_version=tv,status__in=['draft','review'],notes=payload['notes']).order_by('created_at').first()\n"
         + "if existing is None:\n"
         + "    p=Patient.objects.filter(department__membership__user=u,department__membership__active=True).first()\n"
         + "    existing=Encounter.objects.create(department=p.department,patient=p,template_version=tv,created_by=u,\n"
