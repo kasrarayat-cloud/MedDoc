@@ -48,36 +48,46 @@ class NoBinding(Exception):
 
 
 def binding(purpose, address):
-    """A predicate over an extracted token, tying it to the record this run created."""
+    """What the confined helper must be told so it can bind a token to the record this run created.
+
+    Returns `(expectations, final)`. `expectations` are the checks the HELPER applies inside the container,
+    before anything is returned; `final` is an optional host-side predicate for a check the container
+    cannot compute.
+
+    ⚠️ THE SPLIT IS NOT ARBITRARY, AND IT IS THE WHOLE DESIGN. Everything decidable from bytes plus a
+    constant is decided on the SERVICE side of the boundary, so an unrelated record is discarded where it
+    lives rather than exported to the operator and rejected afterwards. `check_token` is the one check that
+    cannot go in: it needs the secret key and the user's password hash, and the helper has no database and
+    no network. It therefore runs last, on a token that has ALREADY satisfied the in-container binding.
+    """
     if purpose not in PURPOSES:
         raise NoBinding('no binding is defined for this message purpose')
     address = address.lower()
     if purpose == 'invite':
         from core.models import Invitation
-        from core.security import digest
         open_rows = list(Invitation.objects.filter(email=address, accepted_at__isnull=True))
         # Exactly one, or the run cannot say which record it is expecting — and guessing here would put
         # the first-match behaviour back, one layer up from where it was removed.
         if len(open_rows) != 1:
             raise NoBinding('expected exactly one open invitation for this address, found %d' % len(open_rows))
-        expected = open_rows[0].token_hash
-        return lambda token: digest(token) == expected
+        # `token_hash` IS sha256 of the raw token, so the helper compares without ever holding a
+        # credential: a digest is not one, and it identifies the record exactly.
+        return {'expect_sha256': open_rows[0].token_hash}, None
     from django.contrib.auth.tokens import default_token_generator
-    from django.utils.http import urlsafe_base64_decode
+    from django.utils.encoding import force_bytes
+    from django.utils.http import urlsafe_base64_encode
     from core.models import User
     user = User.objects.get(email=address)
+    identifier = urlsafe_base64_encode(force_bytes(user.pk))
 
-    def bound(token):
-        identifier, separator, secret = token.partition('/')
-        if not separator:
-            return False
-        try:
-            if urlsafe_base64_decode(identifier).decode() != str(user.pk):
-                return False
-        except Exception:
+    def final(token):
+        prefix, separator, secret = token.partition('/')
+        if not separator or prefix != identifier:
             return False
         return default_token_generator.check_token(user, secret)
-    return bound
+    # The helper rejects any token whose first segment is not this user's own identifier; `check_token`
+    # then confirms it against the live user, on the host.
+    return {'expect_prefix': identifier}, final
 
 
 def locate(purpose, address, before, notes=None):
@@ -86,4 +96,5 @@ def locate(purpose, address, before, notes=None):
     ⚠️ THE RETURNED STRING IS THE SECRET ITSELF — the route and the token are one string. Navigate to it.
     Do not log it, store it, assert on it, put it in a report, or pass it to a subprocess.
     """
-    return private_mail.route(purpose, address, before, notes=notes, verify=binding(purpose, address))
+    expectations, final = binding(purpose, address)
+    return private_mail.route(purpose, address, before, notes=notes, verify=final, **expectations)
