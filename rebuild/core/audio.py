@@ -32,7 +32,10 @@ STRAY_FRAMES_IN_TAGS = 8  # headers of other layouts inside tags: counted, and b
 # Two numbers, because they answer different questions. `measured` is the conservative length: never less than what a
 # decoder plays, so the charge limit holds enough. `confirmed` is the length this file certainly holds, so a statement
 # that part of a recording was not transcribed can never be made about audio that was never there.
-Bounds = namedtuple('Bounds', 'confirmed measured')
+# `ambiguity` names a STRUCTURAL disagreement inside the file itself — '' when there is none. It rides here rather
+# than in a second parser because the walk that finds it is this one, and a second reader of the same bytes is a
+# second answer waiting to drift. Only the WAV reader sets it today; every other format defaults to ''.
+Bounds = namedtuple('Bounds', 'confirmed measured ambiguity', defaults=('',))
 MP3_STEPS = 1500000  # frames plus resynchronised bytes; a 60-minute recording at the lowest bitrate is about 100,000 frames
 
 
@@ -77,7 +80,8 @@ def measure_bounds(data):
         # Opposite directions on purpose: the priced bound may never round below what a decoder plays, and the
         # certified bound may never round above it. Nearest-rounding broke both by up to half a millisecond.
         return Bounds(max(bounds.confirmed, Decimal(0)).quantize(Decimal('0.001'), rounding=ROUND_FLOOR),
-                      bounds.measured.quantize(Decimal('0.001'), rounding=ROUND_CEILING))
+                      bounds.measured.quantize(Decimal('0.001'), rounding=ROUND_CEILING),
+                      bounds.ambiguity)
     except UnmeasurableRecording:
         raise
     except (struct.error, IndexError, KeyError, ValueError, OverflowError, ArithmeticError, RecursionError):
@@ -87,7 +91,7 @@ def measure_bounds(data):
 
 # ── WAV ────────────────────────────────────────────────────────────────────
 def wav(data):
-    position, fmt, start = 12, None, None
+    position, fmt, start, ambiguity = 12, None, None, ''
     for _ in range(64):
         if position + 8 > len(data):
             break
@@ -117,13 +121,22 @@ def wav(data):
         # case. Summing them claimed 10 s of certain audio in all three and produced a false incompleteness marker.
         confirmed = declared if smallest is None else min(declared, smallest)
         size = declared + later + unparsed
+        # ⚠️ MORE THAN ONE `data` CHUNK IS THE FILE DISAGREEING WITH ITSELF, and three readers give three answers to
+        # the same bytes. Measured on a 1 s + 9 s file: this parser's floor says 1 s, its ceiling says 10 s, and
+        # ffmpeg — the decoder of record — plays 9 s, because it reaches the LAST chunk. On 9 s + 1 s ffmpeg plays 1 s.
+        # Nothing in the file decides which is right, so nothing downstream can honestly say what was transcribed.
+        # ⚠️ AND IT CANNOT FIRE ON AN ORDINARY RECORDING: a normal WAV declares its data size exactly, so the walk
+        # below starts at end-of-file and returns zero. Measured across 8 kHz mono, 44.1 kHz stereo 16-bit, and files
+        # carrying trailing LIST/INFO and id3 metadata — `later` is 0 for every one of them.
+        if later > 0:
+            ambiguity = 'more than one audio data chunk'
     tag, channels, rate, byte_rate, block, bits = fmt
     # A decoder plays the samples at rate x block bytes per second whatever the byte-rate field says, and may read past a
     # declared data size, so both come from the samples: every byte after the data header, at rate x block.
     if (tag not in (1, 3, 0xFFFE) or not 1 <= channels <= 8 or not 4000 <= rate <= 384000 or bits not in (8, 16, 24, 32, 64)
             or block != channels * (bits // 8) or byte_rate != rate * block):
         refuse('compressed, inconsistent or invalid WAV encoding')
-    return Bounds(Decimal(confirmed) / Decimal(rate * block), Decimal(size) / Decimal(rate * block))
+    return Bounds(Decimal(confirmed) / Decimal(rate * block), Decimal(size) / Decimal(rate * block), ambiguity)
 
 
 def trailing_chunks(data, position, total):

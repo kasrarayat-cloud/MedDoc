@@ -964,6 +964,41 @@ Then re-run, and treat a `False` there as terminating the proof.
   anyway. If a mutation step can fail without stopping the run, it will
   eventually.
 
+### ⚠️ AND IT ASSERTS ITS OWN **RESTORATION**, WHICH IS A SEPARATE FACT
+
+**Standing 2026-09-19.** The rule above is about a mutation that never applied.
+This is the mirror: a mutation that applied and never came back.
+
+> **A mutation proof leaves the tree wrong far more quietly than it leaves it
+> unproven.** An unapplied mutation produces a green that proves nothing — loud,
+> once you look. An unrestored one produces a tree that no longer matches what
+> anybody reviewed, and the next command you run reports on that tree.
+
+**REFERENCE CASE, 2026-09-19.** Two refutation lenses were authorised to mutate
+repository code and restore it — the standing permission — while the author was
+editing the same files. Their restore is to a SNAPSHOT, so every edit made in
+parallel was reverted: silently, with no error, because the author's writes DID
+succeed and were overwritten afterwards. It happened **twice** and surfaced only
+as an `ImportError` in an unrelated suite. One lens had to be stopped mid-run,
+costing its measurement work.
+
+Separately, a grep taken while a mutation batch was mid-flight showed the tree
+mutated; a "repair" was applied to a file the batch then restored over. Both
+batches had in fact restored correctly — but for several minutes there was no
+way to tell the difference from inside.
+
+**Two things follow, and the second is the one that generalises:**
+
+1. **Verify the restore, not just the application.** `sha256` before, `sha256`
+   after, printed. `restored: True` from a script that never compared them is a
+   claim, not a check.
+2. ⚠️ **NEVER GIVE AN AGENT WRITE ACCESS TO A FILE YOU ARE EDITING.** The
+   permission and the hazard are the same sentence: "you may mutate and restore"
+   means "I will overwrite this file with a copy I took earlier". Give lenses
+   read-only work, or stop editing while they run. A lens doing pure measurement
+   — building fixtures in scratch, calling functions — needs no write access at
+   all, and that is most of what a lens is for.
+
 ## PROSE IS NEVER A SHELL ARGUMENT
 
 **Any command carrying human prose — a PR body, a review comment, a commit
