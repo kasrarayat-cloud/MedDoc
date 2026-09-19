@@ -1422,3 +1422,27 @@ account/effective-host-policy testing and scheduled termination of established
 connections remain activation prerequisites. Key removal and expiry alone do not
 terminate existing tunnels. This is internal preparation, not independent testing.
 `pentest-scope.md` has the additive correction and exact activation steps.
+
+## 2026-09-19 — Stripe sandbox readiness and reporting repair
+
+Read stripe-readiness-20260919.md and the updated external-verification-runbook.md.
+Protected application Stripe key/signing secret remain absent; CLI1.51.0 is
+unpaired. The unchanged runner executed its dry run against served dc4eb42c:
+both doctor loopback names passed, actual receiver503, exit1 before login/checkout;
+0checkouts and0Stripe calls. Preserve the original private attempt JSON.
+
+Two offline counterexamples demonstrated full-success reporting with required
+cases skipped or unverified. The repaired runner requires CLI before checkout,
+tracks attempted submission, and returns incomplete/exit2 until real delivery,
+retry and order evidence exists.8 focused outcome tests and5 credential tests
+passed without database/provider access; actual changed final block independently
+returned incomplete for the original counterexample. No application billing policy
+or welcome-credit change. These are isolated tests, not sandbox event evidence.
+
+The sole current owner action is sandbox pairing plus a restricted Checkout
+Sessions Write key in protected rebuild/.env; engineering obtains the listener
+secret and performs integration verification. All other inputs are deferred in
+one checklist. Word acceptance and reviewer-host qualification remain complete.
+No external reviewer access, public activation, app restart or real patient data.
+Repository/tooling and served revision are distinct; final exact CI/merge and
+private evidence paths will be appended to .runtime/CHECKPOINT-LATEST.md.

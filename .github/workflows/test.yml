@@ -152,6 +152,8 @@ jobs:
           python manage.py migrate --noinput
           python manage.py collectstatic --noinput
           python manage.py seed_private
+      - name: Stripe verification outcome guards (no provider access)
+        run: node --test rebuild/ops/test_stripe_verification_outcome.mjs
       - name: Exercise private workflow and accessibility
         working-directory: rebuild
         run: |

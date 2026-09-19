@@ -9,9 +9,11 @@ them prints, stores or transmits a credential.
 Common rules for every step below:
 
 - Run from the permanent reviewed release, `/opt/meddoc-pro/rebuild`, after the
-  runner's branch is merged and that release is active. The runners refuse to
-  run from a worktree and refuse a `--release` that the `/health/` endpoint does
-  not report.
+  runner's branch is merged. The application must be on a reviewed active release;
+  `--release` names the actual `/health/` revision. Record the runner Git revision
+  separately when only operational tooling changed. Do not restart the application
+  for a runner/documentation change. The runners refuse to run from a worktree or
+  against a different served revision.
 - Evidence is a private, owner-only `0600` JSON file created exclusively under
   `/opt/meddoc-pro/rebuild/.runtime/`. An existing evidence file blocks a new
   attempt until a person has read it: an uncertain paid or emailed action is
@@ -23,9 +25,26 @@ Common rules for every step below:
 
 ## 1. Stripe sandbox — `rebuild/stripe-sandbox-verify.mjs`
 
+### 2026-09-19 verification correction
+
+Real sandbox execution remains blocked: the protected application has no Stripe
+key/signing secret and the installed CLI is unpaired. The existing dry run reached
+the actual receiver and correctly stopped on HTTP503 before login or checkout.
+See [the readiness evidence](stripe-readiness-20260919.md). Earlier reports remain
+unchanged. This runbook describes future execution, not completed evidence.
+
+The runner now requires `STRIPE_CLI` for `--execute`. Completing the automated
+checks with unverified/manual cases gives `passed:false`, `sandbox_acceptance:
+"incomplete"`, exit2. Exit1 is a stopped/failed attempt. A successful dry run is
+only readiness (`sandbox_acceptance:"not attempted"`). `executed` means a checkout
+submission was attempted; `execution_completed` means the automated sequence ended.
+No partial failure may be assumed to have made no payment. Never overwrite an
+attempt report or rerun an uncertain checkout; record later evidence in an additive
+close-out after inspecting the existing attempt and payment identifiers.
+
 ### Owner supplies
 
-Per owner-actions §2: the Stripe CLI on the VPS (`/home/claude/.local/bin/stripe`,
+Current sole Stripe action in owner-actions.md: the Stripe CLI on the VPS (`/home/claude/.local/bin/stripe`,
 v1.51.0) paired with the QuillMD sandbox by the owner (`stripe login`; its
 test-mode keys live in `/home/claude/.config/stripe/config.toml`, 0600), and a
 sandbox restricted key (`rk_test_…`, Checkout Sessions → Write only; an
@@ -53,8 +72,10 @@ loads them; a value in the file is not a value in the process.
 
    The `whsec_…` it prints is stored as `STRIPE_WEBHOOK_SECRET` without echoing
    it. A later public HTTPS endpoint gets its own, different secret from the
-   Dashboard. It changes when `stripe listen` is restarted; the
-   service must then be updated and restarted again.
+   Dashboard. Stripe documents that the CLI signing secret stays the same across
+   listener restarts. Verify the current listener/configuration match after setup
+   or account/key changes; reload the application only if configuration changes.
+   [Official listen reference](https://docs.stripe.com/cli/listen).
 3. Dry run. This proves the preconditions without submitting anything:
 
    ```bash
@@ -78,10 +99,12 @@ loads them; a value in the file is not a value in the process.
    `STRIPE_CLI` must be the absolute real path of the binary. Set
    `PLAYWRIGHT_MODULE_DIR` if Playwright is installed outside the default
    module resolution, as for the other browser runners.
-5. While it runs, watch the `stripe listen` terminal. Note by hand the
-   `[200] POST` lines for the completed event and, later, for the resent event
-   id the report names. That line is the only evidence the duplicate reached
-   the receiver; the doctor UI cannot show receiver attempts.
+5. Retain a protected, secret-redacted transcript of the listener's event IDs,
+   delivery timestamps and HTTP statuses. Correlate the original and duplicate
+   receipt with the application's stored event ID, attempts, status and unchanged
+   ledger. A successful resend command or unchanged wallet alone proves no receipt.
+   Bare `stripe events resend <evt_id>` targets the CLI listener; a registered
+   public endpoint is not required. [Official resend reference](https://docs.stripe.com/cli/events/resend).
 6. Read `.runtime/stripe-sandbox-verification-<release12>.json`. Then, without
    MFA-free shortcuts, an administrator confirms the same identifiers in the
    console's payments, refunds and Stripe events tables (attempts and status).
@@ -91,8 +114,8 @@ loads them; a value in the file is not a value in the process.
 | case | action | assertion |
 | --- | --- | --- |
 | payment success | one $5.00 personal checkout through the real form; Stripe-hosted Checkout filled with test card `4242 4242 4242 4242`, a future expiry and `stripe-sandbox@synthetic.quillmd.invalid` | Stripe redirects to `/billing/?payment=processing`; polled on `127.0.0.1` until the new payment row reads `paid`, the personal paid wallet rose by exactly `5.000000`, exactly one new `payment` ledger entry exists, promotional balance unchanged |
-| duplicate delivery (needs `STRIPE_CLI`) | `stripe events list --type checkout.session.completed --limit 20` to find the event and payment intent; `stripe events resend <evt_id>` | paid wallet, payment ledger count and payment rows unchanged after 12 s |
-| refund (needs `STRIPE_CLI`) | `stripe refunds create --payment-intent <pi_id> --amount 200` | a `refund` ledger entry of `-2.000000` appears and the paid wallet falls by exactly `2.000000` |
+| duplicate delivery | `stripe events list --type checkout.session.completed --limit 20` to find the event and payment intent; `stripe events resend <evt_id>` | paid wallet, payment ledger count and payment rows unchanged after 12 s; **receipt unverified by runner, acceptance incomplete** |
+| refund | `stripe refunds create --payment-intent <pi_id> --amount 200` | a `refund` ledger entry of `-2.000000` appears and the paid wallet falls by exactly `2.000000` |
 | failed payment | second $5.00 checkout with test card `4000 0000 0000 0002` | Stripe shows a decline; the new payment row stays `pending`, no balance or ledger change |
 
 Guard rails that hold throughout: the browser context aborts every request that
@@ -113,14 +136,19 @@ session lives. The health check on both names proves they are one listener.
 
 ### What remains manual
 
-- **Retry after a temporary receiver failure.** Stop the doctor service, resend
-  the recorded completed event with the CLI, observe the non-2xx line in the
-  listen terminal, start the service, resend once more, then confirm on the
-  billing page that the paid balance and the payment ledger did not change.
-- **Out-of-order delivery.** The CLI cannot deliver a refund event before its
-  payment's completed event. The locally signed suite covers it
-  (`core.tests.test_billing_lifecycle`); sandbox evidence would need a receiver
-  outage timed between the two events.
+- **Retry after a temporary forwarding failure.** Engineering records one failed
+  forwarding attempt at a temporary closed project loopback port, then forwards
+  and resends the same authentic event to the application. Preserve the non-2xx
+  and successful receipt plus attempts/status/wallet/ledger invariants. Do not
+  stop the doctor service. This demonstrates controlled resend after a failure;
+  it does not prove Stripe's automatic retry schedule.
+- **Out-of-order delivery.** Not automated here. Engineering will filter delivery
+  so an authentic successful refund reaches the application before its completion
+  event, then enable/resend that authentic completion and inspect the early-refund
+  reconciliation, retry, final balance and exactly-one ledger rows. Use a separately
+  declared synthetic checkout with a recorded spending bound; do not repeat this
+  runner's checkout. This is an unexecuted engineering procedure, not sandbox proof.
+  Existing locally signed lifecycle tests remain isolated evidence only.
 - **Concurrent spending against a refund.** Not exercised by this runner.
 - **Receiver attempts and reconciliation rows** are administrator-console facts
   under MFA; the runner records only what the doctor UI shows.
