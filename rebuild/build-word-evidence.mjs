@@ -118,10 +118,31 @@ async function completeAndFinalize(page, encounterId, mode, mapping) {
   // prewritten findings, and most claims offer exactly that answer — `not_documented` or `not_assessed`.
   // Those need no evidence because they assert none. `trusted` claims (signer identity, signature
   // timestamp, interpreting physician) are server-supplied and are left as rendered.
+  //
+  // ⚠️ AND THE VARIANT IS COMPUTED FROM THE MAPPING, NOT PREFERRED BY NAME. A first attempt picked
+  // `not_documented` wherever it was offered, which left `claim_9` and `claim_39` on their rendered
+  // defaults because neither offers it — and `claim_9`'s default, `exam_choice`, REQUIRES control
+  // `sdt_1475334564` to carry a value. Against an all-empty document that is a contradiction, and the
+  // resolver said so: "The chosen answers and prewritten statement alternatives conflict."
+  //
+  // Each variant declares `required_control_keys` (controls that must be FILLED) and
+  // `empty_control_keys` (controls that must be EMPTY). So the choice follows the answers:
+  //   · every answer empty  -> a variant that requires nothing;
+  //   · every answer filled -> a variant that requires nothing to be empty.
+  // Both are the resolver's own rule, applied to the document actually being built.
+  const byKey = Object.fromEntries(mapping.requirements.map(r => [r.key, r]));
   for (const select of await page.locator('select[name^=claim_variant_]').all()) {
+    const name = await select.getAttribute('name');
+    const requirement = byKey[name.replace('claim_variant_', '')];
+    assert(requirement, `no mapping requirement for ${name}`);
+    const usable = requirement.variants.filter(v => mode === 'missing'
+      ? !(v.required_control_keys || []).length
+      : !(v.empty_control_keys || []).length);
+    assert(usable.length, `no variant of ${requirement.key} fits an all-${mode} document`);
     const options = await select.locator('option').evaluateAll(nodes => nodes.map(o => o.value));
-    const honest = ['not_documented', 'not_assessed', 'none'].find(v => options.includes(v));
-    if (honest) await select.selectOption(honest);
+    const chosen = usable.map(v => v.id).find(id => options.includes(id));
+    assert(chosen, `${requirement.key} offers none of its usable variants on the page`);
+    await select.selectOption(chosen);
   }
   for (const box of await page.locator('input[name^=claim_reviewed_]').all()) await box.check();
   await page.getByRole('button', { name: 'Save answers and review decisions', exact: true }).click();
@@ -156,11 +177,14 @@ try {
     const found = python(
       "from core.models import TemplateVersion\n"
       + "tv=TemplateVersion.objects.filter(document_backend__isnull=False).exclude(document_backend={}).order_by('-number').first()\n"
-      + "print(json.dumps({'id':str(tv.pk),'template':tv.template.name,'fields':tv.fields}))\n");
+      + "print(json.dumps({'id':str(tv.pk),'template':tv.template.name,'fields':tv.fields,\n"
+      + "  'requirements':tv.review_requirements}))\n");
     const kinds = {};
     for (const f of found.fields) kinds[f.kind] = (kinds[f.kind] || 0) + 1;
     assert.deepEqual(kinds, { choice: 28, text: 10, measurement: 52 }, 'the mapping is not the 90-field WM IOV shape');
-    report.mapping = { template: found.template, fields: found.fields.length, kinds };
+    assert.equal(found.requirements.length, 14, 'the mapping does not carry the 14 prewritten statements');
+    report.mapping = { template: found.template, fields: found.fields.length, kinds,
+                       requirements: found.requirements.length };
     return found;
   });
 
