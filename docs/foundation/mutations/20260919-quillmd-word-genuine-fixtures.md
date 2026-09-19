@@ -92,5 +92,22 @@ OPTION — a dropdown that accepted arbitrary text would be the defect, not the 
 measurement cells receive VALID NUMBERS — they are numeric fields and long text there is not a supported
 case. Verified afterwards: the complete long text is present, character for character.
 
+## Amendment, 2026-09-19 — the first attempt failed at the save step, and what it left
+
+The run of `09:15:20Z → 09:15:26Z` passed two checks and stopped with **HTTP 403 saving answers**: Django
+rejects a POST without its CSRF token, and Playwright's `page.request` does not add one. It is a harness
+defect, not application behaviour — the 403 is the protection working.
+
+**Judged against the table above before anything else ran.** It left exactly ONE draft encounter
+(`2a22f21f`) and nothing else: encounters 12 → 13, audit 426 → 428 (one `encounter.create`, one
+`auth.login`). **Every MUST-NOT-CHANGE row held** — finalized 7, exports 7, jobs 14, usage 14, receipts
+11, charged and cost identical to the digit, reservations 12/0, patients 3, templates 11, users 10,
+promotional balance unchanged, provider calls 0.
+
+⚠️ **THE RETRY REUSES THAT DRAFT RATHER THAN CREATING A SECOND.** Creating another would take the
+encounter count past what this declaration says, and a delta that overshoots because of a retry is
+indistinguishable in the record from one nobody predicted. The declared end state is unchanged:
+**encounters 14, finalized 9, exports 9.**
+
 A difference outside these tables is the finding. Public maintenance, synthetic-only operation and every
 prior finalization and evidence file are preserved.

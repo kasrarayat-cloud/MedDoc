@@ -40,6 +40,14 @@ function python(code, payload = {}) {
   return result.stdout.trim() ? JSON.parse(result.stdout.trim().split('\n').pop()) : {};
 }
 
+/** Django rejects a cross-site POST without its token; `page.request` does not add one. */
+async function csrf(page) {
+  const cookies = await page.context().cookies(base);
+  const token = cookies.find(c => c.name === 'csrftoken');
+  assert(token && token.value, 'no csrftoken cookie; the session is not established');
+  return token.value;
+}
+
 async function login(page, account) {
   await page.goto(base + '/login/');
   await page.locator('[name=email]').fill(account.email);
@@ -66,12 +74,16 @@ async function completeAndFinalize(page, encounterId, mode, mapping) {
     form['reviewed_' + key] = 'on';                 // every field reviewed, including the missing ones
   }
   form.revision = revision;
-  const saved = await page.request.post(`${base}/encounters/${encounterId}/save/`, { form });
+  form.csrfmiddlewaretoken = await csrf(page);
+  const headers = { 'X-CSRFToken': form.csrfmiddlewaretoken, Referer: base + '/' };
+  const saved = await page.request.post(`${base}/encounters/${encounterId}/save/`, { form, headers });
   assert(saved.status() < 400, `saving answers failed with ${saved.status()}`);
   await page.goto(`${base}/encounters/${encounterId}/`);
   const next = await page.locator('[name=revision]').first().inputValue();
+  const token = await csrf(page);
   const finalized = await page.request.post(`${base}/encounters/${encounterId}/finalize/`,
-    { form: { reviewed: 'on', revision: next } });
+    { form: { reviewed: 'on', revision: next, csrfmiddlewaretoken: token },
+      headers: { 'X-CSRFToken': token, Referer: base + '/' } });
   assert(finalized.status() < 400, `finalizing failed with ${finalized.status()}`);
 }
 
@@ -112,15 +124,24 @@ try {
 
   for (const mode of ['missing', 'long']) {
     await check(`A genuine ${mode}-answer document through the real export path`, async () => {
+      // ⚠️ REUSE AN EXISTING DRAFT FOR THIS MODE BEFORE CREATING ONE. A first attempt failed at the save
+      // step and left a draft behind; creating a second would put the encounter count past what the
+      // declaration says, and a delta that overshoots because of a retry is indistinguishable in the
+      // record from one nobody predicted.
       const created = python(
         "from core.models import Encounter, Patient, TemplateVersion, User\n"
         + "from django.utils import timezone\n"
         + "u=User.objects.get(email=payload['email'])\n"
         + "tv=TemplateVersion.objects.get(pk=payload['version'])\n"
-        + "p=Patient.objects.filter(department__membership__user=u,department__membership__active=True).first()\n"
-        + "e=Encounter.objects.create(department=p.department,patient=p,template_version=tv,created_by=u,\n"
-        + "  notes=payload['notes'],service_date=timezone.now().date())\n"
-        + "print(json.dumps({'id':str(e.pk),'department':str(e.department_id)}))\n",
+        + "existing=Encounter.objects.filter(template_version=tv,status='draft',notes=payload['notes']).order_by('created_at').first()\n"
+        + "if existing is None:\n"
+        + "    p=Patient.objects.filter(department__membership__user=u,department__membership__active=True).first()\n"
+        + "    existing=Encounter.objects.create(department=p.department,patient=p,template_version=tv,created_by=u,\n"
+        + "      notes=payload['notes'],service_date=timezone.now().date())\n"
+        + "    reused=False\n"
+        + "else:\n"
+        + "    reused=True\n"
+        + "print(json.dumps({'id':str(existing.pk),'department':str(existing.department_id),'reused':reused}))\n",
         { email: credentials.doctor.email, version: mapping.id,
           notes: mode === 'missing'
             ? 'SYNTHETIC: the note documents nothing the mapping can support.'
