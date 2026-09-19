@@ -89,11 +89,13 @@ class TheMeasurementTableKeepsItsHeadingsWithItsValues(unittest.TestCase):
                     if [layout._text(c) for c in layout.CELL.findall(row)][1:] == captions]
         self.assertEqual(matching, [0, 14])
 
-    def test_no_row_may_split_across_a_page(self):
+    def test_numeric_rows_and_headers_stay_together_while_long_location_rows_can_flow(self):
         target, _ = self.repaired(ORIGINAL)
         xml = document(target)
-        self.assertEqual(len(ROW.findall(xml)), xml.count('<w:cantSplit/>'),
-                         'some rows can still break across a page boundary')
+        rows = ROW.findall(xml)
+        self.assertEqual(len(rows), 28)
+        for index, row in enumerate(rows):
+            self.assertEqual('<w:cantSplit' in row, index % 14 not in (11, 12, 13))
 
     def test_the_table_title_travels_with_the_table(self):
         target, _ = self.repaired(ORIGINAL)
@@ -115,13 +117,18 @@ class TheMeasurementTableKeepsItsHeadingsWithItsValues(unittest.TestCase):
 
     # ---- what the repair must NOT do ------------------------------------------------------------
 
-    def test_no_repeating_header_row_is_added(self):
-        """⚠️ THE OBVIOUS FIX IS THE WRONG ONE HERE, AND THIS PINS THAT DECISION. Word repeats a
-        `<w:tblHeader/>` row verbatim, and this table holds TWO sections. Repeating row 0 would print
-        `** Right Leg **` above the LEFT leg's measurements — a caption that is wrong about which limb the
-        numbers describe."""
+    def test_each_limb_has_its_own_table_with_its_own_repeated_units(self):
         target, _ = self.repaired(ORIGINAL)
-        self.assertNotIn('<w:tblHeader', document(target))
+        tables = layout.TABLE.findall(document(target))
+        self.assertEqual(len(tables), 2)
+        for table, limb in zip(tables, layout.WM_LIMBS):
+            rows = ROW.findall(table)
+            self.assertEqual(len(rows), 14)
+            self.assertEqual(layout._columns(rows[0]), [limb, *layout.WM_CAPTIONS])
+            self.assertEqual([i for i, row in enumerate(rows) if '<w:tblHeader' in row], [0])
+            other_limb = next(value for value in layout.WM_LIMBS if value != limb)
+            self.assertNotIn(other_limb, ''.join(rows[1:]))
+        self.assertIn('</w:tbl>' + layout.TABLE_SEPARATOR + '<w:tbl>', document(target))
 
     def test_not_one_visible_character_changes(self):
         for source in self.documents_under_test():
@@ -133,7 +140,10 @@ class TheMeasurementTableKeepsItsHeadingsWithItsValues(unittest.TestCase):
         for source in self.documents_under_test():
             target, _ = self.repaired(source)
             before, after = document(source), document(target)
-            for pattern in (r'<w:p(?:\s[^>]*)?>', r'<w:sdt>', r'<w:tr(?:\s[^>]*)?>', r'<w:tc>'):
+            self.assertEqual(len(re.findall(r'<w:p(?:\s[^>]*)?>', after)),
+                             len(re.findall(r'<w:p(?:\s[^>]*)?>', before)) + 1,
+                             'exactly one empty separator paragraph is required')
+            for pattern in (r'<w:sdt>', r'<w:tr(?:\s[^>]*)?>', r'<w:tc>'):
                 self.assertEqual(len(re.findall(pattern, before)), len(re.findall(pattern, after)),
                                  '%s changed %s' % (source.name, pattern))
 
@@ -175,6 +185,44 @@ class TheMeasurementTableKeepsItsHeadingsWithItsValues(unittest.TestCase):
         summary = layout.repair_export(plain)
         self.assertEqual(summary, {'tables': 0, 'heading_rows': 0})
         self.assertEqual(plain.read_bytes(), before, 'a table-free document was rewritten')
+
+    def test_an_unrelated_table_with_similar_captions_is_not_modified(self):
+        xml = document(ORIGINAL)
+        for old, new in [('** Right Leg **', '** Right Arm **'),
+                         ('REFLUX TIME (ms)', 'REFLUX TIME (seconds)'),
+                         ('GSV at the SFJ', 'A different numeric question')]:
+            other = xml.replace(old, new)
+            repaired, summary = layout.apply_table_continuation(other)
+            self.assertEqual(repaired, other)
+            self.assertEqual(summary, {'tables': 0, 'heading_rows': 0})
+
+    def test_inter_row_markup_is_preserved_by_refusing_to_restructure_it(self):
+        original = document(ORIGINAL)
+        rows = ROW.findall(original)
+        other = original.replace(rows[0], rows[0] + '<w:bookmarkStart w:id="900" w:name="x"/>', 1)
+        repaired, summary = layout.apply_table_continuation(other)
+        self.assertEqual(repaired, other)
+        self.assertEqual(summary, {'tables': 0, 'heading_rows': 0})
+
+    def test_the_split_does_not_bind_a_previous_tables_last_cells_on_reentry(self):
+        target, _ = self.repaired(ORIGINAL)
+        xml = document(target)
+        first = layout.TABLE.findall(xml)[0]
+        self.assertNotIn('<w:keepNext', ROW.findall(first)[-1])
+        fixed, _ = layout.apply_table_continuation(xml)
+        self.assertEqual(fixed, xml)
+
+    def test_long_location_text_and_numeric_cells_are_unchanged(self):
+        original = document(ORIGINAL)
+        rows = ROW.findall(original)
+        long_row = rows[11].replace('Saphenous Tributary Vein',
+                                  'Saphenous Tributary Vein ' + 'mapped location; ' * 1200)
+        stressed = original.replace(rows[11], long_row, 1)
+        result, _ = layout.apply_table_continuation(stressed)
+        self.assertEqual(visible(stressed), visible(result))
+        self.assertNotIn('<w:cantSplit', ROW.findall(result)[11])
+        self.assertEqual(len(ROW.findall(result)), 28)
+
 
 
 class TheExportSeamAppliesIt(unittest.TestCase):

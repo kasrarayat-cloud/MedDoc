@@ -59,6 +59,11 @@ def word_runtime_is_usable():
 
 
 WORD_RUNTIME_USABLE, WORD_RUNTIME_REASON = word_runtime_is_usable()
+if os.getenv('QUILLMD_REQUIRE_WORD_TESTS') == '1':
+    if not WORD_RUNTIME_USABLE:
+        raise RuntimeError('Required Word integration tests cannot run: ' + WORD_RUNTIME_REASON)
+    if os.getenv('QUILLMD_WORD_QUALIFICATION') == '1':
+        raise RuntimeError('Required Word integration tests must use the ordinary ownership boundary.')
 
 
 @skipUnless(WORD_RUNTIME_USABLE,

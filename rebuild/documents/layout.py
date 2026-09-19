@@ -1,33 +1,17 @@
-"""Output-layout safeguards applied to an exported DOCX, and nothing else.
+"""Output-only DOCX pagination safeguards; originals are never rewritten.
 
-⚠️ THE ORIGINAL TEMPLATE IS NEVER TOUCHED. These properties are added to the EXPORT on its way out. The
-customer's uploaded original keeps its own bytes and its own sha256; that is what makes it the original.
+The qualified WM IOV table contains two limbs. Keep-with-next protects a heading's
+first row only; it cannot label later continuation pages. Split that exact table
+at its existing Left Leg heading and repeat each table's own heading, including
+its original units. Every original row and visible character remains in order.
+A one-point empty paragraph keeps Word from merging the two tables again.
+The six mapped free-text location rows may span pages, with the same limb/unit
+header repeated. Their answers can exceed one page; forbidding a split cannot
+keep such a row together and caused missing headers in the evaluation renderer.
+Numeric rows and headings remain indivisible. Unrelated tables are untouched.
 
-⚠️ WHY THIS IS NOT A REPEATING HEADER ROW, WHICH IS THE OBVIOUS FIX AND IS WRONG HERE. Word repeats a row
-marked `<w:tblHeader/>` at the top of every page a table continues onto — but only rows at the TOP of the
-table, and it repeats them VERBATIM. The WM IOV measurement table carries TWO section headings in one
-table: `** Right Leg **` at row 0 and `** Left Leg **` at row 14, each followed by its own measurements.
-Marking row 0 as a repeating header would therefore print `** Right Leg **` above the LEFT leg's
-measurements on any page the table reaches that far — a caption that is not merely unhelpful but actively
-wrong about which limb the numbers describe. On a vascular report that is the one mistake worth avoiding
-above all others, so the repeating header is deliberately NOT used.
-
-What is used instead keeps every heading on the same page as the values it labels:
-
-  · `<w:cantSplit/>` on every row, so a row never breaks across a page boundary mid-height;
-  · `<w:keepNext/>` on every paragraph of a SECTION HEADING row, which binds that row to the row after it,
-    so a heading can never be the last thing on a page with its measurements overleaf;
-  · `<w:keepNext/>` on the non-empty paragraphs immediately preceding the table, so the table's title
-    travels with the table.
-
-⚠️ AND THE HONEST LIMIT, STATED RATHER THAN IMPLIED: OOXML has no way to make a repeated heading read
-"(continued)" on later pages only — a repeated row is the same row. So continuation pages are labelled the
-only way that is both possible and correct: each section heading is guaranteed to appear on the page where
-its own measurements begin. A page never shows measurements whose heading is on a different page.
-
-A heading row is identified by CONTENT, not by index: the columns beyond the first repeat the table's own
-first-row column captions. In the WM IOV table that matches row 0 and row 14 and no measurement row,
-because a filled measurement cell holds a number. A document with no such table is returned unchanged.
+These properties express layout intent. Native Microsoft Word appearance still
+requires opening the real application exports; XML checks are not that evidence.
 """
 import re
 import shutil
@@ -42,6 +26,16 @@ TABLE = re.compile(r'<w:tbl>.*?</w:tbl>', re.S)
 # How many paragraphs before a table are treated as its title. The WM IOV title sits directly above it;
 # a larger window would start binding unrelated body text to the table.
 TITLE_PARAGRAPHS = 2
+WM_CAPTIONS = ['DIAMETER (mm)', 'REFLUX TIME (ms)']
+WM_LIMBS = ('** Right Leg **', '** Left Leg **')
+WM_NUMERIC_ROWS = ['GSV at the SFJ', 'GSV at the Proximal Thigh', 'GSV at the Knee',
+                   'GSV Below Knee', 'SSV at the SPJ', 'SSV at the Proximal Calf',
+                   'AAGSV at the SFJ', 'AAGSV at the Proximal Thigh', 'PAGSV at the SFJ',
+                   'PAGSV at the Proximal Thigh']
+# Adjacent OOXML tables merge without an intervening paragraph. No clinical text
+# is inserted; one point of spacing is the only new document body paragraph.
+TABLE_SEPARATOR = ('<w:p><w:pPr><w:spacing w:before="0" w:after="0" '
+                   'w:line="20" w:lineRule="exact"/></w:pPr></w:p>')
 
 
 def _text(fragment):
@@ -77,35 +71,88 @@ def _keep_paragraphs_together(fragment):
     return PARAGRAPH.sub(lambda m: _with_keep_next(m.group(0)), fragment)
 
 
+def _wm_sections(rows):
+    """Return only the exact WM limb sections, never guess from a generic table."""
+    columns = [_columns(row) for row in rows]
+    if (len(rows) not in (14, 28) or not all(len(value) == 3 for value in columns)
+            or any([columns[start + i][0] for i in range(1, 11)] != WM_NUMERIC_ROWS
+                   for start in range(0, len(rows), 14))
+            or any(not columns[start + i][0].startswith('Saphenous Tributary Vein ')
+                   for start in range(0, len(rows), 14) for i in (11, 12, 13))):
+        return None
+    if len(rows) == 28 and all(len(value) == 3 for value in columns):
+        if (columns[0] == [WM_LIMBS[0], *WM_CAPTIONS]
+                and columns[14] == [WM_LIMBS[1], *WM_CAPTIONS]
+                and [i for i, value in enumerate(columns)
+                     if value[1:] == WM_CAPTIONS] == [0, 14]):
+            return [rows[:14], rows[14:]]
+    # Re-entry over an already split export must not change it again.
+    if (len(rows) == 14 and all(len(value) == 3 for value in columns)
+            and columns[0][0] in WM_LIMBS and columns[0][1:] == WM_CAPTIONS
+            and not any(value[1:] == WM_CAPTIONS for value in columns[1:])):
+        return [rows]
+    return None
+
+
 def _repair_table(table):
     rows = ROW.findall(table)
     if len(rows) < 2:
         return table, 0
-    captions = _columns(rows[0])[1:]
-    # A table whose first row has no column captions has no heading shape to preserve.
-    if not captions or not any(captions):
+    sections = _wm_sections(rows)
+    if not sections:
         return table, 0
+    first = table.index(rows[0])
+    last = table.rindex(rows[-1]) + len(rows[-1])
+    if table[first:last] != ''.join(rows):
+        # Do not drop inter-row bookmarks/ranges in an unqualified table shape.
+        return table, 0
+    captions = WM_CAPTIONS
     headings = 0
-    for row in rows:
-        repaired = _with_row_property(row, '<w:cantSplit/>')
+    replacements = []
+    for index, row in enumerate(rows):
+        if index % 14 in (11, 12, 13):
+            # Original free-text location answers have no one-page length bound.
+            # On an over-height cantSplit row some renderers omit the header at
+            # the forced break. Let these rows flow beneath their limb header.
+            repaired = re.sub(r'<w:cantSplit(?:\s[^>]*)?\s*/>', '', row)
+        else:
+            repaired = _with_row_property(row, '<w:cantSplit/>')
         if _columns(row)[1:] == captions:
             repaired = _keep_paragraphs_together(repaired)
             headings += 1
-        if repaired != row:
-            table = table.replace(row, repaired, 1)
+            if sections:
+                repaired = _with_row_property(repaired, '<w:tblHeader/>')
+        replacements.append(repaired)
+    if sections and len(sections) == 2:
+        # Copy the processor's table properties/grid exactly to both sections.
+        # All original rows are partitioned once, in the same order.
+        prefix, suffix = table[:first], table[last:]
+        right = prefix + ''.join(replacements[:14]) + suffix
+        left = prefix + ''.join(replacements[14:]) + suffix
+        return right + TABLE_SEPARATOR + left, headings
+    for row, replacement in zip(rows, replacements):
+        table = table.replace(row, replacement, 1)
     return table, headings
 
 
 def _repair_title(document, table):
-    """Bind the paragraphs immediately above a table to it, so the title cannot orphan."""
+    """Bind only contiguous body paragraphs, never cells of a preceding table."""
     start = document.index(table)
     before = document[:start]
-    paragraphs = PARAGRAPH.findall(before)[-TITLE_PARAGRAPHS:]
-    for paragraph in paragraphs:
-        if not _text(paragraph):
-            continue                                  # a spacer paragraph is not a title
-        document = document.replace(paragraph, _with_keep_next(paragraph), 1)
-    return document
+    end = len(before)
+    replacements = []
+    for match in reversed(list(PARAGRAPH.finditer(before))):
+        if before[match.end():end].strip():
+            break
+        replacements.append(match)
+        end = match.start()
+        if len(replacements) == TITLE_PARAGRAPHS:
+            break
+    for match in replacements:  # reverse positions preserve earlier offsets
+        paragraph = match.group(0)
+        if _text(paragraph):
+            before = before[:match.start()] + _with_keep_next(paragraph) + before[match.end():]
+    return before + document[start:]
 
 
 def apply_table_continuation(document_xml):
