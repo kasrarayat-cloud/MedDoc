@@ -147,6 +147,13 @@ This blocks hosted checkout, signed event delivery, refund and retry verificatio
 
 ## 5. Name one controlled email recipient
 
+⚠️ **THIS IS NOW THE ONLY THING STANDING BETWEEN THE ACCOUNT FLOWS AND REAL DELIVERY.** As of 2026-09-19 the
+private invitation, welcome-credit, cross-department, password-recovery and administrator-MFA checks all pass
+(8 of 8) against the deployed release — but they read the application's **private file outbox**, which
+demonstrates that the application composed and handed off each message. **It demonstrates nothing about
+delivery.** No transport is exercised, and no message has ever reached a real mailbox. Naming one controlled
+recipient is what converts that from an untested claim into evidence.
+
 This blocks real invitation and password-recovery delivery evidence. Reply with one inbox address you control and will check. The sender, DNS
 and provider credential already exist.
 

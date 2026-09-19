@@ -876,3 +876,71 @@ were responsible for matched exactly: users 8→9, promotional wallets 8→9, we
 that are all account/auth/email actions with no billing action among them. Three rows are short, and all
 three are the same fact — the run stopped — recorded against the check that never executed rather than
 explained away.
+
+## 2026-09-19 — the private invitation and password-recovery checks PASS
+
+**8 of 8, `complete: true`, `05:12:48Z → 05:13:34Z`, against release
+`6d73c5e9026d974053365468101c2f7921544c6c`** — read from `/health/` on both surfaces and recorded as the
+measured value, not as the argument that was passed in. Evidence:
+`rebuild/.runtime/private-accounts-verification-run2.json` (0600). The earlier failed run's file is
+retained unmodified beside it.
+
+| check | result |
+|---|---|
+| Both permanent services serve the exact revision under test | ✅ |
+| The confined outbox reader answers before anything is sent | ✅ 8 files |
+| Doctor signs in and creates a departmental invitation | ✅ department selected by id, not by the label two departments share |
+| Invitation acceptance creates the user and its department membership | ✅ — **the check that failed with `PermissionError`** |
+| Exactly one $10 welcome credit, and a retried acceptance does not issue a second | ✅ |
+| Cross-department access remains denied to the invited employee | ✅ |
+| Password recovery succeeds, invalidates the existing session, and its link is one-time | ✅ |
+| Administrator MFA remains enforced and a replayed code is refused | ✅ |
+
+### Judged against the declaration, every row
+
+`docs/foundation/mutations/20260919-quillmd-account-checks-run2.md`, committed `05:06:36Z` — provably
+before the act started at `05:12:48Z`.
+
+**MUST CHANGE — all matched:** users 9 → **10**; promotional wallets 9 → **10**; welcome ledger entries
+9 → **10**; active memberships 8 → **9**, in the inviting doctor's own department; invitations / accepted
+5 / 4 → **7 / 6**; promotional balance 89.782275898950 → **99.782275898950**, exactly +10; TOTP `last_t`
+59657718 → **59659827**; outbox files 8 → **11**, exactly the two invitations and one recovery message
+declared; sessions 55 → **61**; the new account's password replaced by recovery.
+
+**MUST NOT CHANGE — all held:** jobs **14**, usage rows **14**, provider receipts **11**, reservations
+**12 / 0 held**, total charged **0.217724101050**, total configured-rate cost **0.145149400700**, paid
+balance **0**, departments **3**, patients **3**, encounters **12**, provider calls **0**. The first run's
+account is untouched — balance 10, reserved 0, one welcome entry, one invitation, one membership.
+
+**The audit rows were read, not assumed.** 22 rows since the act began: `auth.login` ×7,
+`auth.login_failed` ×3, `email.outbox` ×3, `department.invite` ×2, `department.invitation_accepted` ×2,
+`auth.recovery_requested`, `auth.password_recovered`, `credit.welcome`, `api.encounter_read`,
+`admin.dashboard`. **The only billing-family action in the whole set is the single `credit.welcome`** — no
+`usage.*`, no `job.*`, no payment, refund or reconciliation. The three `auth.login_failed` rows are the
+negative evidence: the administrator's empty second factor, the replayed code, and the old password after
+recovery.
+
+### What the checks actually proved, and what they do not
+
+- **Exactly one welcome credit, proved against a real second grant attempt.** The account holds **two
+  invitations, both accepted**, and **one** welcome ledger entry of `$10.000000000000` in **one** wallet,
+  with **one** membership. A GET on the spent link is also refused (404) — but that is the LINK, not the
+  grant, and on its own it would pass against a build that funded the wallet twice.
+- **Cross-department denial, proved over HTTP by a real foreign reader.** The Ultrasound clinician is
+  refused an X-ray encounter (**404**) on the exact URL the invited employee reads successfully (**200**),
+  so the denial cannot be a broken route. The employee sees 1 of 3 patients and 0 departments outside
+  their own.
+- **Recovery is complete**: the pre-existing session was bounced to `/login/`, the old password stopped
+  working, the new one worked, and the link was refused on reuse.
+- **Administrator MFA is enforced and single-use**: a correct password with no second factor does not sign
+  in, and the same code replayed in a second context is refused. ⚠️ The check also asserts the refusal was
+  NOT a rate-limit page, because a sign-in refused before the authenticator is consulted would otherwise be
+  recorded as a replay refusal it never earned.
+- ⚠️ **What this does NOT show.** `QUILLMD_EMAIL_MODE` is `file`. Reading the private outbox demonstrates
+  that the APPLICATION composed and handed off the message. It says nothing about whether a message would
+  arrive in a real mailbox, and nothing here may be reported as if it did. **A controlled real recipient is
+  still an owner action.**
+- The mail access recorded itself at each step: three routes located, each from **1 changed path, 1 record
+  for this run, 0 for anybody else, 0 addressed outside the synthetic domain**; invitation tokens 43
+  characters (`secrets.token_urlsafe(32)`), recovery token 88. No token appears in the report, the log or
+  any assertion.
