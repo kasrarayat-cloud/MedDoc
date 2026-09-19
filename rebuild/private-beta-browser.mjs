@@ -59,6 +59,12 @@ async function encounter(page,label,notes){
 async function review(page){for(const box of await page.locator('input[name^=reviewed_]').all())await box.check();await page.getByRole('button',{name:'Save answers and review decisions',exact:true}).click();await page.waitForLoadState();}
 async function finalize(page){await page.locator('[name=reviewed]').check();await page.getByRole('button',{name:'Finalize document',exact:true}).click();await page.waitForLoadState();}
 async function download(page,extension){const pending=page.waitForEvent('download');await page.getByRole('link',{name:'Export original format'}).click();const item=await pending;const dest=path.join(scratch,'result.'+extension);await item.saveAs(dest);return dest;}
+function mailSnapshot(){return python("from ops import private_mail\nfrom django.conf import settings\n"
+ +"assert settings.QUILLMD_EMAIL_MODE=='file' and str(settings.EMAIL_FILE_PATH)==str(private_mail.OUTBOX)\n"
+ +"print(json.dumps({'files':private_mail.snapshot()}))\n").files;}
+function mailRoute(kind,address,before){return python("from ops import private_mail\n"
+ +"print(json.dumps({'route':private_mail.route(payload['kind'],payload['address'],payload['before'])}))\n",
+ {kind,address,before}).route;}
 try{
  const credentials=JSON.parse(await fs.readFile(process.env.QUILLMD_BROWSER_CREDENTIALS||path.join(runtime,'private-access.json'),'utf8'));
  for(const key of ['doctor','xray_employee','ultrasound','other_org','admin'])assert(credentials[key].email.endsWith('@synthetic.quillmd.invalid'));
@@ -123,11 +129,18 @@ try{
  });
  await check('Invitation acceptance is single use and grants exactly one personal welcome credit',async()=>{
   const email='beta-'+suffix+'@synthetic.quillmd.invalid',password=crypto.randomBytes(24).toString('base64url');invitedAccount={email,password};
+  const invitationOutbox=mailSnapshot();
   await page.goto(doctorBase+'/team/');const invitationForm=page.locator('form').filter({has:page.getByRole('button',{name:'Create invitation',exact:true})});await invitationForm.locator('[name=email]').fill(email);await invitationForm.locator('[name=department]').selectOption({label:'X-ray'});await invitationForm.locator('[name=role]').selectOption('employee');await page.getByRole('button',{name:'Create invitation',exact:true}).click();await page.waitForLoadState();
-  const invitation=python("from pathlib import Path\nfrom django.conf import settings\nimport re\nassert settings.QUILLMD_EMAIL_MODE=='file'\nfound=[]\nfor p in Path(settings.EMAIL_FILE_PATH).glob('*'):\n text=p.read_text()\n if payload['email'] in text:\n  match=re.search(r'/invite/([A-Za-z0-9_-]+)/',text)\n  if match:found.append(match.group(1))\nassert len(found)==1\nprint(json.dumps({'token':found[0]}))",{email});
-  const invitedContext=await browser.newContext();const invited=await invitedContext.newPage();await invited.goto(doctorBase+'/invite/'+invitation.token+'/');
+  // ⚠️ THE OUTBOX IS READ THROUGH ops/private_mail. The local reader that used to be here globbed
+  // EMAIL_FILE_PATH as the OPERATOR account — which the service identity now refuses, correctly — and,
+  // where it could read, matched the address against a whole FILE and took the first link in it. Django
+  // gives outbox filenames one second of entropy and the application opens them O_APPEND, so two sends in
+  // one second share a file; a refutation pass ran that shape and watched it return another account's raw
+  // invitation token, which this harness then navigates to. One reader, record-level, exact addressee.
+  const invitation={route:mailRoute('invite',email,invitationOutbox)};
+  const invitedContext=await browser.newContext();const invited=await invitedContext.newPage();await invited.goto(doctorBase+invitation.route);
   await invited.locator('[name=email]').fill(email);await invited.locator('[name=first_name]').fill('Synthetic');await invited.locator('[name=last_name]').fill('Invited Beta');await invited.locator('[name=password1]').fill(password);await invited.locator('[name=password2]').fill(password);await invited.locator('[name=synthetic_only]').check();await invited.getByRole('button',{name:'Accept invitation',exact:true}).click();await invited.waitForURL(doctorBase+'/login/');
-  assert.equal(await status(invited,doctorBase+'/invite/'+invitation.token+'/'),404);await login(invited,{email,password});await invited.waitForURL(doctorBase+'/');assert.deepEqual(await (await invited.request.get(doctorBase+'/api/patients/')).json(),allAccounts.doctor);
+  assert.equal(await status(invited,doctorBase+invitation.route),404);await login(invited,{email,password});await invited.waitForURL(doctorBase+'/');assert.deepEqual(await (await invited.request.get(doctorBase+'/api/patients/')).json(),allAccounts.doctor);
   python("from core.models import User,Wallet,LedgerEntry,Membership\nfrom decimal import Decimal\nu=User.objects.get(email=payload['email']);w=Wallet.objects.get(user=u,kind='promo')\nassert u.verified_at and w.balance==Decimal('10') and w.reserved==0\nassert LedgerEntry.objects.filter(wallet=w,kind='welcome').count()==1\nassert Membership.objects.filter(user=u,active=True).count()==1",{email});await invitedContext.close();
  });
  if(live)await check('Live voice transcript can be corrected without retaining stale answers',async()=>{
@@ -147,8 +160,9 @@ try{
  if(!live||process.env.QUILLMD_BETA_RECOVERY==='1'){
   await check('Password recovery invalidates old sessions and one-time reset links',async()=>{
    const oldContext=await browser.newContext(),oldPage=await oldContext.newPage();await login(oldPage,invitedAccount);await oldPage.waitForURL(doctorBase+'/');
+   const recoveryOutbox=mailSnapshot();
    const recoveryContext=await browser.newContext(),recovery=await recoveryContext.newPage();await recovery.goto(doctorBase+'/recovery/');await recovery.locator('[name=email]').fill(invitedAccount.email);await recovery.getByRole('button',{name:'Prepare recovery link',exact:true}).click();assert((await recovery.locator('[role=status]').innerText()).includes('If this address is eligible'));
-   const reset=python("from pathlib import Path\nfrom django.conf import settings\nimport re\nfound=[]\nfor p in Path(settings.EMAIL_FILE_PATH).glob('*'):\n text=p.read_text()\n if payload['email'] in text:\n  match=re.search(r'/recovery/confirm/([A-Za-z0-9_-]+/[A-Za-z0-9_-]+)/',text)\n  if match:found.append(match.group(1))\nassert len(found)==1\nprint(json.dumps({'route':'/recovery/confirm/'+found[0]+'/'}))",{email:invitedAccount.email});
+   const reset={route:mailRoute('recovery/confirm',invitedAccount.email,recoveryOutbox)};
    await recovery.goto(doctorBase+reset.route);assert(new URL(recovery.url()).pathname.endsWith('/set-password/'));
    const replacement=crypto.randomBytes(24).toString('base64url');await recovery.locator('[name=new_password1]').fill(replacement);await recovery.locator('[name=new_password2]').fill(replacement);await recovery.getByRole('button',{name:'Update password',exact:true}).click();await recovery.waitForURL(doctorBase+'/recovery/complete/');assert.equal(await status(recovery,doctorBase+'/'),302);
    await oldPage.goto(doctorBase+'/patients/');await oldPage.waitForURL(/\/login\//);await login(recovery,invitedAccount);assert.equal(new URL(recovery.url()).pathname,'/login/');invitedAccount.password=replacement;await login(recovery,invitedAccount);await recovery.waitForURL(doctorBase+'/');
@@ -160,7 +174,7 @@ try{
   });
  }
  await check('Exact provider settlement and original storage remain auditable',async()=>{
-  report.usage=python("from core.models import Job,Usage,ProviderReceipt\nfrom core.management.commands.audit_billing import audit_report\nfrom decimal import Decimal\nids=payload['ids'];rows=[]\naudit={x['job_id']:x['checks'] for x in audit_report()['rows']}\nfor j in Job.objects.filter(encounter_id__in=ids):\n u=Usage.objects.get(job=j);r=ProviderReceipt.objects.get(job=j);c=audit[str(j.pk)]\n assert j.state=='succeeded' and c['exact_1_5_multiplier'] and c['over_limit_absorbed_exactly'] and u.simulated==r.simulated\n assert u.simulated != payload['live']\n rows.append({'job':str(j.pk),'provider':u.provider,'actual_cost':str(u.actual_cost),'user_charge':str(u.charged_cost),'simulated':u.simulated})\nassert sum(Decimal(r['user_charge']) for r in rows)<=1\nprint(json.dumps(rows))",{ids:[docId,pdfId,...(report.voiceEncounter?[report.voiceEncounter]:[])],live});
+  report.usage=python("from core.models import Job,Usage,ProviderReceipt\nfrom core.management.commands.audit_billing import audit_report\nfrom decimal import Decimal\nids=payload['ids'];rows=[]\naudit={x['job_id']:x['checks'] for x in audit_report()['rows']}\nfor j in Job.objects.filter(encounter_id__in=ids):\n u=Usage.objects.get(job=j);r=ProviderReceipt.objects.get(job=j);c=audit[str(j.pk)]\n assert j.state=='succeeded' and c['exact_1_5_multiplier'] and c['over_limit_absorbed_exactly'] and u.simulated==r.simulated\n assert u.simulated != payload['live']\n rows.append({'job':str(j.pk),'provider':u.provider,'actual_cost':str(u.actual_cost),'cost_basis':'Provider-reported units priced at the configured rates; not reconciled to a provider invoice.','user_charge':str(u.charged_cost),'simulated':u.simulated})\nassert sum(Decimal(r['user_charge']) for r in rows)<=1\nprint(json.dumps(rows))",{ids:[docId,pdfId,...(report.voiceEncounter?[report.voiceEncounter]:[])],live});
  });
  report.complete=true;
 }catch(error){

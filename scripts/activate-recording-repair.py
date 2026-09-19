@@ -57,6 +57,7 @@ STATE = Path('/var/lib/quillmd')
 HERE = Path(__file__).resolve().parent
 BASELINE = 'd45d9f72216132934b99e0c1fa426d1bc4fb532f'          # the tree's HEAD BEFORE it was fast-forwarded
 RUNNING_RELEASE = 'cd428f7062d3d624787d927c41130692017d5a84'    # what the services answer
+SHIPPED = '6d73c5e9026d974053365468101c2f7921544c6c'            # the target this act actually ran on
 DECL = 'docs/foundation/mutations/20260918-quillmd-recording-repair.md'
 SELF = 'scripts/activate-recording-repair.py'
 CURRENT_MIGRATION = '0014_encounter_service_date'

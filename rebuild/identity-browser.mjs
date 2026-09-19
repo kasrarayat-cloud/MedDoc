@@ -29,7 +29,20 @@ async function login(page,account,base=doctor,otp=''){
 }
 async function status(page,base,route){return(await page.request.get(base+route,{maxRedirects:0})).status();}
 function otp(key){const n=Buffer.alloc(8);n.writeBigUInt64BE(BigInt(Math.floor(Date.now()/30000)));const h=crypto.createHmac('sha1',Buffer.from(key,'hex')).update(n).digest();return String((h.readUInt32BE(h.at(-1)&15)&0x7fffffff)%1000000).padStart(6,'0');}
-function outbox(email,kind){return python("from django.conf import settings\nfrom pathlib import Path\nfrom ops.private_storage import inventory,read_file\nimport re\nassert settings.QUILLMD_EMAIL_MODE=='file' and settings.STATE_DIR==Path('/var/lib/quillmd')\nroot=Path(settings.EMAIL_FILE_PATH);matches=[]\npattern=r'/invite/([A-Za-z0-9_-]+)/' if payload['kind']=='invite' else r'/recovery/confirm/([A-Za-z0-9_-]+/[A-Za-z0-9_-]+)/'\nfor name in inventory(root):\n text=read_file(root,name).decode()\n if payload['email'] in text:\n  m=re.search(pattern,text)\n  if m:matches.append(m.group(0))\nassert len(matches)==1\nprint(json.dumps({'route':matches[0]}))",{email,kind}).route;}
+// ⚠️ THE OUTBOX IS READ THROUGH ops/private_mail, NOT BY A LOCAL REGEX. The helper that used to live here
+// selected at FILE level and took the first match in the file, and `assert len(matches)==1` counted FILES,
+// not records. Django names outbox files with one second of entropy and the application opens them
+// O_APPEND, so two sends in one second share a file — and a refutation pass ran this exact code against
+// such a file and watched it return ANOTHER ACCOUNT'S invitation token, which this harness then navigates
+// to. That consumes a stranger's invitation or resets a stranger's password. Record-level selection by
+// exact addressee lives in one module now, so there is one reader to fix rather than four.
+function mailSnapshot(){return python("from ops import private_mail\nfrom django.conf import settings\n"
+ +"assert settings.QUILLMD_EMAIL_MODE=='file' and str(settings.EMAIL_FILE_PATH)==str(private_mail.OUTBOX)\n"
+ +"print(json.dumps({'files':private_mail.snapshot()}))\n").files;}
+function outbox(email,kind,before){return python("from ops import private_mail\n"
+ +"route=private_mail.route(payload['kind'],payload['email'],payload['before'])\n"
+ +"print(json.dumps({'route':route,'described':private_mail.describe(route)}))\n",
+ {email,kind:kind==='recovery'?'recovery/confirm':kind,before}).route;}
 try{
  assert.equal(app,'/opt/meddoc-pro/rebuild');
  const credentials=JSON.parse(await fs.readFile(path.join(runtime,'private-access.json'),'utf8'));
@@ -69,14 +82,16 @@ try{
  let invited;
  await check('Invitation uses app-owned private outbox, one-use acceptance and one welcome credit',async()=>{
   invited={email:'identity-'+Date.now()+'@synthetic.quillmd.invalid',password:crypto.randomBytes(24).toString('base64url')};
+  const before=mailSnapshot();
   await page.goto(doctor+'/team/');const form=page.locator('form').filter({has:page.getByRole('button',{name:'Create invitation',exact:true})});await form.locator('[name=email]').fill(invited.email);await form.locator('[name=department]').selectOption({label:'X-ray'});await form.locator('[name=role]').selectOption('employee');await form.getByRole('button',{name:'Create invitation',exact:true}).click();await page.waitForLoadState();
-  const route=outbox(invited.email,'invite');const c=await browser.newContext(),p=await c.newPage();await p.goto(doctor+route);await p.locator('[name=email]').fill(invited.email);await p.locator('[name=first_name]').fill('Synthetic');await p.locator('[name=last_name]').fill('Identity Test');await p.locator('[name=password1]').fill(invited.password);await p.locator('[name=password2]').fill(invited.password);await p.locator('[name=synthetic_only]').check();await p.getByRole('button',{name:'Accept invitation',exact:true}).click();await p.waitForURL(doctor+'/login/');assert.equal(await status(p,doctor,route),404);
+  const route=outbox(invited.email,'invite',before);const c=await browser.newContext(),p=await c.newPage();await p.goto(doctor+route);await p.locator('[name=email]').fill(invited.email);await p.locator('[name=first_name]').fill('Synthetic');await p.locator('[name=last_name]').fill('Identity Test');await p.locator('[name=password1]').fill(invited.password);await p.locator('[name=password2]').fill(invited.password);await p.locator('[name=synthetic_only]').check();await p.getByRole('button',{name:'Accept invitation',exact:true}).click();await p.waitForURL(doctor+'/login/');assert.equal(await status(p,doctor,route),404);
   python("from core.models import User,Wallet,LedgerEntry\nfrom decimal import Decimal\nu=User.objects.get(email=payload['email']);w=Wallet.objects.get(user=u,kind='promo');assert u.verified_at and w.balance==Decimal('10') and w.reserved==0;assert LedgerEntry.objects.filter(wallet=w,kind='welcome').count()==1",{email:invited.email});await c.close();
  });
  await check('Private recovery delivery, old-session revocation and reset-token replay denial',async()=>{
   const old=await browser.newContext(),op=await old.newPage();await login(op,invited);await op.waitForURL(doctor+'/');
+  const recoveryBefore=mailSnapshot();
   const c=await browser.newContext(),p=await c.newPage();await p.goto(doctor+'/recovery/');await p.locator('[name=email]').fill(invited.email);await p.getByRole('button',{name:'Prepare recovery link',exact:true}).click();assert((await p.locator('[role=status]').innerText()).includes('If this address is eligible'));
-  const route=outbox(invited.email,'recovery');await p.goto(doctor+route);assert(new URL(p.url()).pathname.endsWith('/set-password/'));const replacement=crypto.randomBytes(24).toString('base64url');await p.locator('[name=new_password1]').fill(replacement);await p.locator('[name=new_password2]').fill(replacement);await p.getByRole('button',{name:'Update password',exact:true}).click();await p.waitForURL(doctor+'/recovery/complete/');await op.goto(doctor+'/patients/');await op.waitForURL(/\/login\//);await login(p,invited);assert.equal(new URL(p.url()).pathname,'/login/');invited.password=replacement;await login(p,invited);await p.waitForURL(doctor+'/');await p.goto(doctor+route);assert.equal(await p.getByRole('heading',{name:'Recovery link unavailable',exact:true}).count(),1);await old.close();await c.close();
+  const route=outbox(invited.email,'recovery',recoveryBefore);await p.goto(doctor+route);assert(new URL(p.url()).pathname.endsWith('/set-password/'));const replacement=crypto.randomBytes(24).toString('base64url');await p.locator('[name=new_password1]').fill(replacement);await p.locator('[name=new_password2]').fill(replacement);await p.getByRole('button',{name:'Update password',exact:true}).click();await p.waitForURL(doctor+'/recovery/complete/');await op.goto(doctor+'/patients/');await op.waitForURL(/\/login\//);await login(p,invited);assert.equal(new URL(p.url()).pathname,'/login/');invited.password=replacement;await login(p,invited);await p.waitForURL(doctor+'/');await p.goto(doctor+route);assert.equal(await p.getByRole('heading',{name:'Recovery link unavailable',exact:true}).count(),1);await old.close();await c.close();
  });
  await check('Administrator requires MFA and rejects a reused code in another session',async()=>{
   const c=await browser.newContext(),p=await c.newPage();await login(p,credentials.admin,admin);assert.equal(new URL(p.url()).pathname,'/login/');await p.waitForTimeout(31000-Date.now()%30000);const code=otp(credentials.admin.totp_key_hex);await login(p,credentials.admin,admin,code);await p.waitForURL(admin+'/console/');const cookies=await c.cookies();assert(cookies.some(c=>c.name==='quillmd_admin_session'&&c.httpOnly&&c.sameSite==='Strict'));assert(!cookies.some(c=>c.name==='quillmd_doctor_session'));

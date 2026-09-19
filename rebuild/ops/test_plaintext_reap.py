@@ -11,6 +11,11 @@ import sys
 import tempfile
 import unittest
 
+try:
+    from . import source_module
+except ImportError:
+    import source_module
+
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / 'scripts/verify-and-reap-fresh-plaintext.py'
 MIGRATE = ROOT / 'scripts/migrate-fresh-storage.py'
@@ -18,10 +23,7 @@ REAP_MERGE = '407720868c9688aa8545d06b94d92fb98d764242'  # PR #1196
 
 
 def load(name, path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return source_module.load(name, path)
 
 
 def function_source(name):

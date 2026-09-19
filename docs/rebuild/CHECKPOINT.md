@@ -143,7 +143,7 @@ Activation completed at **09:13:12 UTC**, with auditable repairs for the host sy
 
 ## Verification and repaired findings
 
-At this checkpoint, **70 Django/PostgreSQL tests**, **14 document tests**, and **12 browser checks** passed. Browser checks include create→generate→source review→finalize→DOCX download, responsive layouts, access exclusion and Axe accessibility. After activation, **11 additional real browser checks** passed: upload a new original under systemd sandboxing, mapping v2, live Anthropic evidence generation, review/finalization/export, original questions and complete answers, and separate administrator MFA/receipt visibility. Actual cost $0.003270 × 1.5 = $0.004905; the disclosed reservation was $0.1912635. This includes12 mocked optional-email checks; no real account email was sent.
+At this checkpoint, **70 Django/PostgreSQL tests**, **14 document tests**, and **12 browser checks** passed. Browser checks include create→generate→source review→finalize→DOCX download, responsive layouts, access exclusion and Axe accessibility. After activation, **11 additional real browser checks** passed: upload a new original under systemd sandboxing, mapping v2, live Anthropic evidence generation, review/finalization/export, original questions and complete answers, and separate administrator MFA/receipt visibility. Configured-rate cost $0.003270 × 1.5 = $0.004905; the disclosed reservation was $0.1912635. (Configured-rate cost means provider-reported units priced at the recorded rates. No provider invoice has been reconciled, so it is not an actual billed amount.) This includes12 mocked optional-email checks; no real account email was sent.
 
 The clinical refutation pass found and repaired negation/uncertainty/family-history substring loss, repeated-label conflict omission, inherited multiline scope, revoked-user cached permission, payer drift, duplicate transcription charges, missing receipt on output-storage failure, coding acceptance stale after voice changes, and quote/rate drift. Concrete regressions cover concurrent reservation/settlement, duplicate grants, repeated jobs/payment events, cross-department/org APIs/search/files/exports/jobs, malicious uploads/prompt injection, administrator MFA and finalization immutability.
 
@@ -694,7 +694,7 @@ charges were declared and committed before it ran**
 | **`submission_source`** | **`normalised`** — the repaired path ran; nothing fell back |
 | declared vs decoded | 6.357596 s vs **6.358 s** — the new decode verification ran and agreed |
 | provider-reported | 6.3575625 s |
-| actual → charged | $0.000455625300 → $0.000683437950, exactly 1.5× |
+| configured-rate cost (`actual_cost`) → charged | $0.000455625300 → $0.000683437950, exactly 1.5× |
 | reservations | **1, `settled`** — settled exactly once |
 
 The same run also exercised a real Anthropic generation ($0.00291 → $0.004365, paid from personal
@@ -719,3 +719,116 @@ exit 0, the same two pre-existing owner-pending receipt gaps. Doctor, admin and 
 (302). Co-tenants at expected statuses across three distinct codes. The operator screen now answers the
 question that used to be unanswerable from the operator's side: **`DEEPGRAM_API_KEY: present`,
 `ANTHROPIC_API_KEY: present`**, both media tools resolved, `SYNTHETIC_ONLY: True`.
+
+## 2026-09-19 — the account checks' access method, repaired rather than worked around
+
+**The revision under test is `6d73c5e9026d974053365468101c2f7921544c6c`**, read from `/health/` on both
+surfaces (doctor `9130`, admin `9131`) rather than taken from the brief. The recording milestone is
+accepted as complete on its retained evidence and was not re-run: no recording, no generation, no
+provider contact of any kind in this work.
+
+### What was failing, and what the repair is
+
+The twelfth check of the release harness failed with `PermissionError` because its helper ran as the
+OPERATOR account against `/var/lib/quillmd/mail`. **That was the OS isolation working**, and it is
+preserved exactly: nothing here changes a directory mode, a group, an ACL or a unit file, nothing takes
+sudo, nothing exposes a token endpoint, and MFA is exercised rather than relaxed.
+
+`rebuild/ops/private_mail.py` reads the outbox through the existing confined reader in
+`ops/private_storage` — a container running as the SERVICE identity, no network, read-only bind of one
+approved root, all capabilities dropped. It is a NARROWING of the docker-socket privilege the operator
+account already holds, not a new boundary around it, and it is described that way.
+
+### ⚠️ THE FIRST DESIGN WAS WRONG, AND A REFUTATION PASS PROVED IT WITH REAL BYTES
+
+It selected messages by FILENAME TIMESTAMP and regexed the whole file. Two library facts break that, and
+neither is this application's choice:
+
+- `django/core/mail/backends/filebased.py` names each file `%Y%m%d-%H%M%S-<abs(id(self))>.log`, and
+  `abs(id(self))` is a recycled CPython address — **measured constant across 4000 sequential backend
+  instances**. The only real entropy in that name is one second.
+- `core/email_backend.py` opens it `O_APPEND|O_CREAT`, so a name collision APPENDS.
+
+Three sends in one second produced ONE file holding THREE records for THREE recipients, and a first-match
+regex over those bytes **returned a different account's raw token**. Selection is now at RECORD level —
+split on Django's 79-dash separator, parse each record's `To:`, take the single record addressed to this
+run's unique synthetic address, refuse on two — and the run is identified by a before/after `inventory()`
+diff rather than by a clock, because a changed sha256 catches the append-collision that a timestamp window
+cannot see at all.
+
+⚠️ **AND THE SAME BROKEN READER WAS LIVE IN THREE OTHER HARNESSES.** The repair had landed in a new module
+while `verify-private-release.mjs`, `identity-browser.mjs` and `private-beta-browser.mjs` kept their own
+copies — including the one whose check had already failed. Each navigates to what it returns, so a wrong
+token means consuming a stranger's invitation or resetting a stranger's password. All four now call the
+one reader.
+
+### What is true about the confinement, said plainly
+
+`private_storage.read_file` is all-or-nothing: there is no predicate and no partial read. So the narrowing
+is at MATCHING level, and READING is narrowed only to the files this run changed. A file the run changed
+can hold somebody else's record, and that record's bytes reach this process. The module says so in its own
+docstring rather than claiming otherwise, and the mitigation is named as a DETECTION, not a prevention: a
+record addressed outside `@synthetic.quillmd.invalid` makes the read refuse, so the run stops instead of
+continuing quietly. On this synthetic-only host no such address exists; the guard is for the day one does.
+
+The route and the token are the same string (`core/email_delivery.py` builds `{origin}/{route}/{token}/`),
+so it is navigated to and never logged, never written to a report, never passed in argv, and never an
+operand of an assertion. Reports carry `describe()` — found, kind, token length — plus counts.
+
+### Two gates that had quietly stopped measuring anything
+
+- **A spent activator's range test was pinned to `HEAD`.** `test_every_path_this_branch_changes_was_declared`
+  compared `RUNNING_RELEASE..HEAD` against the activator's `ALLOWED` set. That is the right question only
+  while the branch is unshipped; once it lands, `HEAD` keeps moving and the test starts asking whether
+  everything since the last deploy is in a spent activator's allow-list. It had been **red on `main`** since
+  the recording repair merged, and CI never said so because `actions/checkout` is shallow and the
+  range-availability guard turns that into a skip. Both activators now record `SHIPPED` and the range is
+  measured to it. The pin itself is cross-checked three ways — trunk first-parent merge commit, the previous
+  activation's `SHIPPED` matching this one's `RUNNING_RELEASE`, and the deploy checkpoint's own
+  `running revision before`/`after` rows — because a refutation pass measured that an unconstrained pin
+  admits a later merge and stays green.
+- **⚠️ `load_activator()` COULD EXECUTE A STALE COMPILED COPY, AND IT DID.** `spec_from_file_location` +
+  `exec_module` is a SourceFileLoader, which serves `__pycache__` whenever the cached source mtime AND size
+  still match. A mutation proof restores both — same size, same one-second mtime — so the run AFTER the
+  restore can execute the version from BEFORE it. Measured here: `after mutate, default: ORIGINAL` while the
+  file on disk said `MUTATED`, and `sys.dont_write_bytecode = True` does not help because it only stops
+  WRITING. **It cost a wrong answer in this session**: a proof that a wrong `SHIPPED` fails its test reported
+  a failure produced by a stale activator. All twelve loaders in `ops/` now go through
+  `ops/source_module.load`, which compiles the text and takes no cache; its positive control demonstrates the
+  standard loader still going stale, and pins `sys.dont_write_bytecode` because every activator sets it at
+  import and would otherwise silently disarm the control depending on test order.
+
+### Cost language, corrected
+
+Provider-reported usage priced at the configured rates is **configured-rate cost** throughout. It is not
+invoice-reconciled actual cost, and no provider invoice has been reconciled. `docs/rebuild/cost-definition.md`
+already framed it correctly; `CHECKPOINT.md`, `activation-judged.md`, `design.md` and `verification.md` did
+not, and the evidence GENERATORS (`verify_live`, `verify-private-release.mjs`, `private-beta-browser.mjs`)
+now emit a `cost_basis` field so a corrected document cannot be silently overwritten by the next run.
+Existing evidence files are retained as produced and are NOT amended. The database column keeps its name.
+
+### Money-return coverage, confirmed and one gap closed
+
+Nineteen money-return / reservation-release paths were enumerated against the deployed code and sixteen were
+already covered — the strongest being `assert_stopped_cleanly` in `test_audio_submission.py`, a literal
+exactly-once assertion that counts `usage.release` audit rows against reservation count and refuses to pass
+vacuously. The deployed release's `core/jobs.py`, `core/billing.py`, `audit_billing.py` and the billing/audio
+test files are byte-identical to what is running, so those results are reused rather than re-run.
+
+**One real gap is now closed**: `core/jobs.py`'s opening membership guard — access revoked BETWEEN enqueue
+and processing — had no test anywhere. Every existing revocation test revokes during or after the provider
+call, which is the `not_adopted` branch and deliberately KEEPS the charge. A regression that swapped the two
+was invisible to the whole suite. Proved by mutation: removing `release(job)` from that branch turns the new
+test red (`['held'] != ['released']`), and the file was restored with a matching sha256.
+
+**Two gaps remain open and are named rather than closed**: the `UNREADABLE` refusal kind (nine raise sites in
+`core/media.py`) and `AMBIGUOUS` are covered only by unit tests that never call `run_one()`, so no reservation
+is created and no release is exercised for either. `AMBIGUOUS` is mitigated — enqueue refuses multi-track
+payloads before any hold — and `UNREADABLE` is not.
+
+### `main` is ahead of the deployed release, and by what
+
+Nothing here is deployed and nothing needed to be: the changes are a test harness, tests and documentation.
+`main` will carry one non-runtime application change the deployed release does not — `verify_live`'s
+`cost_basis` field, a management command — plus the corrected documents, the new `ops/` modules and the test
+repairs. Recorded here so the next deploy's §2.5 declaration names its full payload rather than only its own.

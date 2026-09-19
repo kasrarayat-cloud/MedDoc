@@ -7,12 +7,15 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+
+try:
+    from . import source_module
+except ImportError:
+    import source_module
 from unittest.mock import patch
 
 SOURCE = Path(__file__).resolve().parents[2] / 'scripts/activate-word-beta.py'
-spec = importlib.util.spec_from_file_location('word_activation_tested', SOURCE)
-activation = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(activation)
+activation = source_module.load('word_activation_tested', SOURCE)
 
 
 class WordActivationTests(unittest.TestCase):

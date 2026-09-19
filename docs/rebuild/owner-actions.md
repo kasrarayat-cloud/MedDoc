@@ -1,6 +1,6 @@
 # Owner actions
 
-Updated 2026-09-18 (running release `5f673a3b`). This is the single list of what only the owner can do. Engineering does everything else
+Updated 2026-09-19 (running release `6d73c5e9026d974053365468101c2f7921544c6c`, verified from `/health/` on both surfaces). This is the single list of what only the owner can do. Engineering does everything else
 without asking. The private service stays synthetic-only, and the public routes stay in maintenance, until the release evidence supports a
 change. Never paste a secret into chat, a shell command line, Git, a ticket or a screenshot. Every secret location below is a file readable only
 by its owner account.
@@ -165,6 +165,11 @@ This blocks the offsite backup round trip and restore proof. Bucket creation and
 This blocks provider-cost reconciliation. Supply Anthropic and Deepgram usage or cost exports for the synthetic jobs, with the account rates,
 discounts and credits that apply. Copy them over SFTP into a new directory, `/opt/meddoc-pro/rebuild/.runtime/provider-evidence/` (mode 0700).
 The console's "Cost reconciliation" section records each reconciliation as ledger entries. Rows stay labelled "configured estimate" until then.
+
+⚠️ **UNTIL THAT ARRIVES, EVERY COST FIGURE ANYWHERE IN THIS PROJECT IS A *CONFIGURED-RATE* COST** — provider-reported units priced at the rates
+recorded with the row — and it is **not** an invoice-reconciled actual amount. The documents that had drifted into calling it "actual cost" were
+corrected on 2026-09-19, and the three evidence GENERATORS now emit a `cost_basis` field so the next run cannot quietly reintroduce the claim.
+The database column is still named `actual_cost`; that is a schema name, not an assertion about a bill.
 
 ## 8. CPT content rights
 

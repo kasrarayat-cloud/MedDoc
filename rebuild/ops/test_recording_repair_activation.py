@@ -13,17 +13,18 @@ import subprocess
 import sys
 import unittest
 
+try:
+    from . import source_module
+except ImportError:
+    import source_module
+
 from exercised import requires_input
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def load_activator():
-    spec = importlib.util.spec_from_file_location('activate_recording_repair',
-                                                  ROOT / 'scripts/activate-recording-repair.py')
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return source_module.load('activate_recording_repair', ROOT / 'scripts/activate-recording-repair.py')
 
 
 def source():
@@ -186,18 +187,107 @@ class AllowedPaths(unittest.TestCase):
                      'rebuild/core/media.py', 'rebuild/core/jobs.py'):
             self.assertIn(path, activator.ALLOWED, path)
 
-    def test_every_path_this_branch_changes_was_declared(self):
+    def test_every_path_this_activation_shipped_was_declared(self):
+        """The range this act judged, measured against what it declared it would judge.
+
+        ⚠️ THE UPPER END IS `SHIPPED`, NOT `HEAD`, AND THAT IS THE WHOLE POINT. `HEAD` is the right stand-in
+        for the target only while the branch is unshipped; the moment the activation lands, `HEAD` keeps
+        moving and this assertion starts asking whether everything that has happened SINCE the last deploy
+        appears in a spent activator's ALLOWED set — a question nobody asked, which must eventually answer
+        no. It did: this test was red on `main` from the moment the next milestone merged, and CI never said
+        so because actions/checkout is shallow and the range-availability guard below turns that into a skip.
+        Pinning to the recorded target keeps the assertion falsifiable — it still measures the real shipped
+        set, file by file — and makes it stable, because a historical range does not move.
+
+        An activator that has not run yet has no SHIPPED and is still compared against the tree.
+        """
         activator = load_activator()
-        for commit in (activator.RUNNING_RELEASE,):
+        target = getattr(activator, 'SHIPPED', None) or 'HEAD'
+        for commit in (activator.RUNNING_RELEASE, target):
             if subprocess.run(['git', '-C', str(ROOT), 'cat-file', '-e', commit + '^{commit}'],
                               capture_output=True).returncode:
                 self.skipTest('The activation range is not available in this checkout (shallow clone).')
         changed = set(subprocess.check_output(
-            ['git', '-C', str(ROOT), 'diff', '--name-only', activator.RUNNING_RELEASE, 'HEAD'], text=True).split())
+            ['git', '-C', str(ROOT), 'diff', '--name-only', activator.RUNNING_RELEASE, target], text=True).split())
         requires_input(changed != set(),
-                       'a non-empty diff between the running release and this tree — an empty range would make this '
-                       'comparison pass while proving nothing about what ships')
+                       'a non-empty diff between the running release and what shipped — an empty range would make '
+                       'this comparison pass while proving nothing about what shipped')
         self.assertEqual(sorted(changed - activator.ALLOWED), [])
+
+    def test_what_shipped_is_a_descendant_of_the_release_it_replaced(self):
+        activator = load_activator()
+        shipped = getattr(activator, 'SHIPPED', None)
+        requires_input(bool(shipped), 'a recorded target; an activation that has not run cannot be checked')
+        self.assertNotEqual(shipped, activator.RUNNING_RELEASE)
+        for commit in (activator.RUNNING_RELEASE, shipped):
+            if subprocess.run(['git', '-C', str(ROOT), 'cat-file', '-e', commit + '^{commit}'],
+                              capture_output=True).returncode:
+                self.skipTest('The activation range is not available in this checkout (shallow clone).')
+        self.assertEqual(subprocess.run(['git', '-C', str(ROOT), 'merge-base', '--is-ancestor',
+                                         activator.RUNNING_RELEASE, shipped]).returncode, 0)
+
+    def test_the_shipped_sha_is_a_merge_commit_on_the_trunk(self):
+        """⚠️ A PIN THAT NOTHING CHECKS IS A PIN THAT CAN NAME THE WRONG COMMIT AND STAY GREEN.
+
+        A refutation pass measured it: for this activator, EVERY commit in the range produces a diff that
+        is a subset of ALLOWED, so `SHIPPED` could name a commit two merges after the real target — or,
+        for its sibling, a commit on the feature branch BEFORE the merge — and the range test would not
+        notice. An activation ships what `main` carries, and what `main` carries arrives as a merge commit
+        on the first-parent line. That is not a proof the sha is the right one; it is the cheapest
+        constraint that rules out the wrong SHAPES the measurement actually found.
+        """
+        activator = load_activator()
+        shipped = getattr(activator, 'SHIPPED', None)
+        requires_input(shipped is not None, 'a recorded target; an activation that has not run has none')
+        # Empty is a mistake, not an absence: `SHIPPED or 'HEAD'` would silently restore the moving upper
+        # end this pin exists to remove.
+        self.assertTrue(shipped, 'SHIPPED is set but empty, which silently reverts the range to HEAD')
+        if subprocess.run(['git', '-C', str(ROOT), 'cat-file', '-e', shipped + '^{commit}'],
+                          capture_output=True).returncode:
+            self.skipTest('The activation range is not available in this checkout (shallow clone).')
+        trunk = subprocess.run(['git', '-C', str(ROOT), 'rev-list', '--first-parent', 'main'],
+                               capture_output=True, text=True)
+        if trunk.returncode:
+            self.skipTest('No local `main` ref in this checkout.')
+        self.assertIn(shipped, trunk.stdout.split(), 'what shipped is not on the trunk first-parent line')
+        parents = subprocess.check_output(['git', '-C', str(ROOT), 'rev-list', '--parents', '-n', '1', shipped],
+                                          text=True).split()
+        self.assertEqual(len(parents) - 1, 2, 'what shipped is not a merge commit')
+
+    def test_the_running_release_is_the_previous_activation_s_recorded_target(self):
+        """The one cross-check either pin has: two independently written files must agree on one sha.
+
+        The previous activation recorded what it shipped; this one recorded what the services answered
+        when it started. If those differ, one of the two constants is wrong and neither file can tell on
+        its own.
+        """
+        previous = source_module.load('activate_audio_submission',
+                                      ROOT / 'scripts/activate-audio-submission.py')
+        self.assertEqual(load_activator().RUNNING_RELEASE, previous.SHIPPED)
+
+    def test_the_checkpoint_records_the_same_two_revisions(self):
+        """The only OTHER tracked file that names both shas, so the two must agree or one is wrong.
+
+        ⚠️ MEASURED LIMIT, STATED SO IT IS NOT READ AS MORE. Pinning the range to `SHIPPED` is falsifiable
+        — dropping a path from ALLOWED fails it, and a feature-branch or empty sha fails the shape test —
+        but a LATER merge on the trunk whose extra paths happen to fall inside ALLOWED still passes
+        everything above. A refutation pass measured exactly that. This closes it the only way the
+        repository can: the deploy checkpoint records `running revision before` and `running revision
+        after` for the same act, written by a different hand at a different time, and a wrong constant now
+        requires the checkpoint to be wrong in the same direction.
+        """
+        activator = load_activator()
+        shipped = getattr(activator, 'SHIPPED', None)
+        requires_input(bool(shipped), 'a recorded target; an activation that has not run has none')
+        lines = (ROOT / 'docs/rebuild/CHECKPOINT.md').read_text().splitlines()
+        after = [i for i, line in enumerate(lines)
+                 if line.startswith('| running revision after') and shipped in line]
+        self.assertEqual(len(after), 1, 'the checkpoint does not record this sha as a running revision')
+        window = lines[max(0, after[0] - 12):after[0]]
+        before = [line for line in window if line.startswith('| running revision before')]
+        self.assertEqual(len(before), 1, 'that checkpoint entry records no previous revision')
+        self.assertIn(activator.RUNNING_RELEASE, before[0],
+                      'the checkpoint and the activator disagree about what was running')
 
     def test_the_declaration_it_names_exists(self):
         activator = load_activator()

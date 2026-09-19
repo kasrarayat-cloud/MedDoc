@@ -6,13 +6,16 @@ from pathlib import Path
 import re
 import tempfile
 import unittest
+
+try:
+    from . import source_module
+except ImportError:
+    import source_module
 from unittest.mock import patch
 
 
 SCRIPT = Path(__file__).resolve().parents[2] / 'scripts/update-private-beta.py'
-SPEC = importlib.util.spec_from_file_location('private_beta_updater_under_test', SCRIPT)
-updater = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(updater)
+updater = source_module.load('private_beta_updater_under_test', SCRIPT)
 
 
 class UpdateGuardTests(unittest.TestCase):

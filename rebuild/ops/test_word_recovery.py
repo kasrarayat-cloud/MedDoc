@@ -7,12 +7,15 @@ from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import unittest
+
+try:
+    from . import source_module
+except ImportError:
+    import source_module
 from unittest.mock import Mock, patch
 
 SOURCE = Path(__file__).resolve().parents[2] / 'scripts/resume-word-beta.py'
-spec = importlib.util.spec_from_file_location('word_recovery_tested', SOURCE)
-recovery = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(recovery)
+recovery = source_module.load('word_recovery_tested', SOURCE)
 
 
 class WordRecoveryTests(unittest.TestCase):

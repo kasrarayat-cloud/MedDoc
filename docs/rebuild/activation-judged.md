@@ -8,9 +8,9 @@ Private activation completed **09:13:12 UTC**. Shared main advanced by fast-forw
 
 All six declared preserved container IDs, image IDs and mount source/destination lists compare unchanged. Marketing/www respond200; app/admin503; retired pro410. The old PostgreSQL database still contains exactly7 preserved marketing waitlist entries. Fresh environment/seed credentials are0600, runtime0700. DNS, certificates, nginx and shared service configurations were not repointed.
 
-The post-activation browser proof passed **11 checks**,09:13:32–09:14:01UTC: new synthetic DOCX upload, real kernel-isolated parser under systemd restrictions, mappingv2, live Anthropic source evidence, clinician review/finalization/export, original question/full-answer checks, separate admin MFA and receipt visibility. Actual provider cost **$0.003270**, exact charge **$0.004905**, disclosed reservation **$0.1912635**, paid entirely from the synthetic user's personal promotional balance. Download/scratch files were removed; only sanitized JSON remains.
+The post-activation browser proof passed **11 checks**,09:13:32–09:14:01UTC: new synthetic DOCX upload, real kernel-isolated parser under systemd restrictions, mappingv2, live Anthropic source evidence, clinician review/finalization/export, original question/full-answer checks, separate admin MFA and receipt visibility. Configured-rate provider cost **$0.003270**, exact charge **$0.004905**, disclosed reservation **$0.1912635**, paid entirely from the synthetic user's personal promotional balance. Download/scratch files were removed; only sanitized JSON remains.
 
-A separate real Deepgram test used6.43seconds of locally synthesized speech. Wrist pain, no-fracture negation and follow-up were retained. Eleven receipt/adoption/ledger assertions passed: actual cost **$0.000460816700**, exact charge **$0.000691225050**. One sample is not a clinical accuracy validation.
+A separate real Deepgram test used6.43seconds of locally synthesized speech. Wrist pain, no-fracture negation and follow-up were retained. Eleven receipt/adoption/ledger assertions passed: configured-rate cost **$0.000460816700**, exact charge **$0.000691225050**. One sample is not a clinical accuracy validation.
 
 ## Failures repaired and retested
 

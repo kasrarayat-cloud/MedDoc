@@ -4,14 +4,16 @@ from pathlib import Path
 import subprocess
 import unittest
 
+try:
+    from . import source_module
+except ImportError:
+    import source_module
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def load_activator():
-    spec = importlib.util.spec_from_file_location('activate_recording_limit', ROOT / 'scripts/activate-recording-limit.py')
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return source_module.load('activate_recording_limit', ROOT / 'scripts/activate-recording-limit.py')
 
 
 class MigrationValidation(unittest.TestCase):

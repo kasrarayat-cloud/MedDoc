@@ -52,6 +52,7 @@ STATE = Path('/var/lib/quillmd')
 HERE = Path(__file__).resolve().parent
 BASELINE = '8de5dd491de78b4e628364096c50ed68b161ef19'          # the tree's HEAD BEFORE it was fast-forwarded
 RUNNING_RELEASE = '5f8050df5e79c0d7948185850914f1c161fcbc1f'    # what the services answer
+SHIPPED = 'cd428f7062d3d624787d927c41130692017d5a84'            # the target this act actually ran on
 DECL = 'docs/foundation/mutations/20260918-quillmd-audio-submission.md'
 SELF = 'scripts/activate-audio-submission.py'
 CURRENT_MIGRATION = '0014_encounter_service_date'
