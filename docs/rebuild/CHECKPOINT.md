@@ -1192,3 +1192,114 @@ asserted its application by reading back, its restoration by `sha256`, and clean
 `bash scripts/ci/verify-fresh.sh python`: **417** application tests (8 skipped — the Word runtime helper is
 not built locally; CI builds it), **27** document tests, **270** operations tests. Exit 0. Only checks
 affected by this change were re-run beyond that gate; no broad audit and no real-provider campaign.
+
+## 2026-09-19 — the three Word findings: reproduced, two repaired, one honestly unfinished
+
+**Application revision: `6d73c5e9026d974053365468101c2f7921544c6c`** (unchanged; nothing was deployed).
+**Repository revision: `3f50bb82` and later.** The review package's artifacts are from release `8f8a6763`,
+and `rebuild/documents/` is **byte-identical** between `8f8a6763` and `HEAD` — so the exporter that
+produced them is the exporter running today, and all three findings reproduce by code identity rather than
+by re-running an unchanged path.
+
+### 1 · Table pagination — CONFIRMED and REPAIRED
+
+Measured on the original and on both real exports: the measurement table carries **no `tblHeader`, no
+`cantSplit`, no `keepNext`**, and the title paragraph above it has none either. The safeguards were absent
+in the template and the exporter faithfully preserved that absence.
+
+`rebuild/documents/layout.py` adds them to the EXPORT on its way out, at the single seam every DOCX export
+passes through, **before** the caller hashes the file — so the uploaded original keeps its own bytes and
+`export_sha256` describes what is actually stored.
+
+⚠️ **A REPEATING HEADER ROW IS DELIBERATELY NOT USED, AND A TEST PINS THAT DECISION.** Word repeats a
+`<w:tblHeader/>` row *verbatim*, and this table holds TWO sections — `** Right Leg **` at row 0 and
+`** Left Leg **` at row 14. Repeating row 0 would print `** Right Leg **` above the LEFT leg's
+measurements: a caption that is wrong about which limb the numbers describe. OOXML also cannot make a
+repeated heading read "(continued)" on later pages only. Continuation is handled by keeping each heading on
+the page where its own measurements begin, which is checkable on the page.
+
+Heading rows are found **by content** — the columns beyond the first repeat the table's own captions —
+matching rows 0 and 14 and no measurement row, because a filled measurement cell holds a number. Measured:
+2 heading rows, `cantSplit` on all 28 rows, `keepNext` 1 → 8, **not one visible character changed**,
+paragraph/control/row/cell counts unchanged, every other zip member byte-identical.
+
+### 2 and 3 · The two fixtures are misnamed at their SOURCE — generation, not packaging
+
+- **`all-blanks.docx` fills every template blank** — all 52 measurements, 6 locations, 4 demographics, and
+  the qualification's own checks say exactly that. It was shipped labelled *"every answer reviewed as
+  missing"*, its precise opposite. Re-measured with a corrected `w:t` regex: **28 of 28 controls filled**.
+- **`long-answer.docx` inserts a 19,931-character BODY PARAGRAPH** via `review.ParentNode.InsertBefore`,
+  and the check asserts it in `non_control_text` — outside every mapped control. Longest mapped answer:
+  **89 characters**. Two new checks assert both facts so the fixture cannot be mistaken again.
+
+⚠️ **THE REGEX I FIRST MEASURED WITH WAS WRONG AND I CAUGHT IT MID-TASK.** `<w:t[^>]*>` also matches
+`<w:tcW>`, so the first pass reported "27 filled, 1 placeholder" and inflated paragraph lengths. Every
+number in this entry was re-taken with `<w:t(?:\s[^>]*)?>`.
+
+### Checklist corrections, each verified before editing
+
+- **No font defect, and none should be raised.** The owner confirmed the ORIGINAL Word dropdown yields the
+  same Aptos 12-point answer as the export. The Liberation Serif / DejaVu Sans note applied only to a Linux
+  evaluation render with no Aptos installed.
+- **"headers and media byte-identical" was false for headers.** `header1.xml` 4,188 → 3,435 bytes,
+  `header2.xml` 4,205 → 3,451, both `.rels` differ. The media half is true and kept.
+- **All 52 measurement rows** claimed the unit was *"printed by the original cell"*. Cells hold bare
+  numbers (`2.25`, `501`); the unit is printed **once in the column heading**.
+
+A new section **F2** covers the pagination rows and states what is deliberately not done.
+
+### ⚠️ A CLAIM I MADE AND WITHDREW
+
+PR #1214 asserted that CI exercises the real WM IOV export path. **It does not.** `ops/sdk_sandbox` refuses
+a Word processor owned by the calling account, and on the engineering host **and** on the CI runner the
+account running the tests owns the runtime — all 8 `test_wm_workflow` tests skip in both, and the CI log of
+that very run says so. **The layout repair is verified STRUCTURALLY** — against the real original and real
+exports, byte for byte — **and has not been through a live `fill_template` call anywhere.**
+
+### The genuine missing-answer and long-answer documents are NOT delivered
+
+Six attempts through the deployed application, each judged against the declaration before the next. The
+first three were harness defects and are recorded in the commits that fixed them: a missing CSRF token; a
+CSRF cookie whose name this deployment changes per surface (`quillmd_doctor_csrf`); a revision read from
+the first of three `[name=revision]` inputs, with the 14 `claim_reviewed_*` boxes omitted.
+
+⚠️ **THE REMAINING THREE WERE NOT THE HARNESS. THEY WERE THE CLINICAL REVIEW MODEL, BEHAVING CORRECTLY.**
+
+- `save_answers` runs each prewritten statement through `source_quote_evidence`, which demands a COMPLETE
+  SOURCE LINE from the notes for that exact label. A statement nobody can point at in the notes has not
+  been reviewed, the review is recorded `complete=False`, and the finalization helper refuses it.
+- Each statement variant declares `required_control_keys` and `empty_control_keys`. Choosing
+  `not_documented` by name left `claim_9` and `claim_39` — which do not offer it — on defaults that
+  REQUIRE a filled control, and the resolver said so: *"The chosen answers and prewritten statement
+  alternatives conflict."*
+
+Reading the second of those as a form problem three times was mine, not the application's. **Zero documents
+were finalized.** Judged against the declaration: encounters 12 → **14**, which is the declared end state
+but reached as two missing-answer drafts rather than one of each kind; **finalized stayed 7 and exports
+stayed 7**. Every MUST-NOT-CHANGE row held exactly — jobs 14, usage 14, receipts 11, charged
+`0.217724101050`, cost `0.145149400700`, reservations 12/0, patients 3, templates 11, users 10,
+promotional balance `99.782275898950`, **provider calls 0**. The two encounters are left in `review`, not
+deleted, and are flagged here.
+
+### The new package
+
+`rebuild/.runtime/word-review-package/quillmd-word-review-20260919.zip` — **315,232 bytes**, sha256
+`d88b397d8468453c5b3c406635a2538aba0a0819eec60c6909cf0aa798cfc66c`, 10 files, built by the tracked
+`scripts/build-word-review-package.py`, which GENERATES nothing and refuses if a BEFORE/AFTER pair comes
+out identical or carries no safeguards.
+
+It ships each real export **twice — before and after the repair** — because the repair changes no visible
+character and only Word can show the difference. Independently verified on the archive: `cantSplit` 0 → 28,
+`keepNext` 1 → 8, `tblHeader` 0, visible text identical, no other zip member changed. The two SDK fixtures
+travel under names that say what they are.
+
+⚠️ **The repair is MERGED AND TESTED BUT NOT DEPLOYED**, so files 03 and 05 are what the exporter *will*
+emit, not what the running service would hand a doctor today.
+
+### Verification, and what kind it is
+
+417 application tests (8 skipped — the Word runtime ownership above), **41** document tests including 14
+new layout tests, **270** operations tests. Exit 0.
+
+⚠️ **THESE ARE STRUCTURAL TESTS. They prove what the file says, not what Word draws.** Native Word
+acceptance is **OPEN** and stays open until the pairs in the new package are opened in Microsoft Word.
