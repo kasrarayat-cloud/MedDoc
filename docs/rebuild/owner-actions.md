@@ -1,3 +1,31 @@
+# Current continuation — renewable evidence and failure visibility, 2026-09-20
+
+Automatic encrypted offsite execution is active; the first daily05:00UTC firing
+on September21 is still future until its actual journal/attempt proves otherwise.
+Current account evidence expires September21 at20:16:35.867379UTC; September22
+cannot pass without a fresh audit. The installed process is **operator-assisted
+renewal, not unattended account auditing**. Follow [the bounded renewal runbook](offsite-renewal-operations-20260920.md)
+and the protected `offsite-renewal-20260920/FINAL-REPORT.md` for exact installed
+revisions, prepaid ticket path/window and live versus fixture proof.
+
+One minimal access dependency remains for renewal: separate account-wide read-only
+audit access on the owner's desktop, then return its nonsecret bounded collector
+result. The existing restricted backup key and vault-returned restore need no
+replacement or repeated transfer. Do not repeat a full restore/readback today.
+The future-day ticket shares the durable500-request/100MB reservation allowance;
+all old actuals and uncertainty remain charged. The source rebind does not refresh
+the original observation.
+
+An authorized outside-host check endpoint is still needed for host-loss detection.
+Existing incident provider acceptance remains distinct from delivery/inbox receipt;
+a single delivery-record query returned401 and no duplicate was sent. Authentic
+provider reconciliation, independent security review, deferred human dictation/new
+SOAP Word review, CPT rights and patient-data permissions are separate release
+gates, not unfinished backup implementation. No public-launch approval.
+
+Earlier entries below are retained history; this current continuation supersedes
+older disabled-timer or incomplete-inventory handoff instructions.
+
 # Current offsite continuation — complete account evidence received, 2026-09-20
 
 The desktop account audit closes the previous inventory gap over its recorded

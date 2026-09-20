@@ -153,3 +153,64 @@ After actual successful resume, one bounded shared-operator scoped metadata
 inventory may verify retained versions and unfinished-upload absence, provided
 its complete reservation still fits the unchanged allowance. Record those
 requests separately; it does not refresh the desktop account-wide observation.
+
+## 2026-09-20 — Finite renewal and honest continuing readiness
+
+The next connected milestone starts from activated operations
+`a9be859888f88b08396227f99ea42717ffa1e95b`; application97597c and its original
+three PIDs remain. Preserve the controlled44-object/14,423,108-byte result,
+88-version scoped inventory, both complete remote sets, independent-key restore,
+and every historical failed attempt. Do not repeat full readback or restore.
+September20 shared reservations are422 requests/98,474,544 response bytes;
+remaining78/1,525,456 is inadequate for another account audit or full readback.
+No B2 request is planned during this repair/installation milestone.
+
+Repair the demonstrated slow-response wall-deadline gap without refunds. Add
+portable read-only account collection and separately prepaid ticket/import
+controls. An account-wide read-only credential is not available on the VPS; do
+not install one, broaden the worker or pretend human renewal is unattended.
+Collection requires two complete matching inventories; any unfinished upload or
+start marker refuses, because listing its parts requires write permission.
+Keep scope/account distinctions, original scan times and exact returned bytes.
+Each ticket reserves20 requests/8,388,608 response bytes in one explicit UTC day
+before export, including failed/uncertain work. One designated desktop/user must
+use its durable spent-ticket registry; a ticket is not authority to copy/reuse
+it on another machine. Administrative calls outside that collector require
+separate reservations. No unused reservation is refunded.
+
+After reviewed branch and merge CI, fast-forward the permanent deployment tree.
+Rebind the existing September20 evidence to the reviewed controls using the
+existing policy installer; its20:16:35.867379 observation and September21 expiry
+must stay byte-identical. Source rebind is not fresh account observation.
+The policy source pins refuse safely during the brief source/publication gap.
+A reviewed `refresh` action may adopt the already active timer without changing
+unit bytes, restarting any service, starting another backup or calling B2. Check
+actual identity, lock/inode, current policy and next05:00 calendar through full
+1110-second timer/start/stop bound. Preserve all state hashes and original receipt.
+
+Issue one prepaid renewal ticket for September21, preferably00:00–18:00UTC if
+still future, under the shared lock. Preserve September20 counters exactly and
+precharge the September21 journal. Do not run the collector without the separate
+account-wide access. Install the code and exercise full publication only with
+isolated synthetic fixtures until a real valid returned result exists. On
+invalid/expired/failed/concurrent import, retain the last valid policy and expose
+failure. Partial publication retains the existing fail-closed marker/history.
+
+Repair monitor status to retain actual evidence age after expiry, distinguish
+warnings/current backup health/admission failure, show per-day headroom and
+renewal state, and avoid claiming a scheduled success from a controlled run or
+systemd persistent stamp. Capacity forecast is an estimate from retained bytes
+and recent ciphertext size, not a pruning promise. One existing alert delivery
+record may be queried read-only; never send a duplicate merely to prove inbox
+receipt. Existing outside-host integration remains prepared unless its authorized
+individual endpoint becomes available. No subscription or new integration.
+
+Validate affected source and full required CI; capture before/after unit,
+configuration, application PID, backup history and restore proof invariants.
+Record installed status through the actual local monitor cycle, avoiding repeated
+email. Clean only this work's temporary files/worktree/branch. Keep original
+source/receipts for rollback and use fail-closed timer disable if installation
+cannot validate; never roll back journal or policy timestamps. No public launch,
+provider generation call, remote deletion, clinical/billing mutation or desktop
+secret deletion. Final detailed report/checkpoint goes in the protected
+`offsite-renewal-20260920` evidence directory.

@@ -26,9 +26,10 @@ RETIRED_HELPER_STUB = (b'#!/usr/bin/env python3\n'
                       b'raise SystemExit("Historical unbudgeted inventory is retired. Use the reviewed '
                       b'rebuild/ops/offsite_operator.py inventory command with shared accounting.")\n')
 SOURCES = tuple('rebuild/ops/' + name + '.py' for name in
-                ('automatic_offsite', 'offsite_backup', 'offsite_operator', 'offsite_allocation', 'install_offsite_policy'))
+                ('automatic_offsite', 'offsite_backup', 'offsite_operator', 'offsite_allocation',
+                 'install_offsite_policy', 'offsite_renewal', 'offsite_account_audit'))
 CONSUMERS = ['scheduled_upload', 'manual_upload', 'verification_readback',
-             'isolated_restore', 'metadata_inspection', 'operator_external_reservation']
+             'isolated_restore', 'metadata_inspection', 'operator_external_reservation', 'prepaid_account_audit']
 CONSTRAINTS = [
     'all_known_quillmd_consumers_use_canonical_lock_policy_and_ledger',
     'no_unregistered_prefix_writer_during_validity',
@@ -77,7 +78,7 @@ def validate(limits, policy_path, at, *, contract_path=None):
               'administrative_constraints', 'non_scope_observed_bytes',
               'account_reserved_bound_bytes', 'renewal_requires_desktop',
               'key_inventory_complete', 'future_budget_guarantee'}
-    require(type(item) is dict and set(item) == fields and item['version'] == 1
+    require(type(item) is dict and set(item) == fields and item['version'] in (1, 2)
             and item['status'] == 'active')
     ledger = json.loads(offsite.read_private(LEDGER, 4 * 1024 * 1024))
     require(type(ledger) is dict and ledger.get('version') in (1, 2))
@@ -103,6 +104,8 @@ def validate(limits, policy_path, at, *, contract_path=None):
     require(item['audit']['name'] == 'account-audit.json'
             and item['operating_evidence']['name'] == 'operating-evidence.json'
             and item['provenance']['name'] == 'provenance.json')
+    if item['version'] == 2:
+        return validate_renewed(item, audit, updated, provenance, limits, directory, ledger, at)
     require(audit['status'] == 'verified_over_observed_interval'
             and audit['stable_over_two_scans'] is True and audit['complete_account_total'] is True
             and audit['future_budget_guarantee'] is False and len(audit['scans']) == 2)
@@ -171,6 +174,46 @@ def validate(limits, policy_path, at, *, contract_path=None):
             and provenance['local_artifact_hashes'] == {
                 item['audit']['name']: item['audit']['local_sha256'],
                 item['operating_evidence']['name']: item['operating_evidence']['local_sha256']})
+    return {'account_reserved_bound_bytes': bound, 'non_scope_observed_bytes': non_scope,
+            'observed_at': item['observed_at'], 'valid_until': item['valid_until'],
+            'renewal_requires_desktop': True, 'assumptions': list(CONSTRAINTS)}
+
+
+def validate_renewed(item, audit, updated, provenance, limits, directory, ledger, at):
+    """Portable collector evidence has its own provenance, never invented Windows/revocation claims."""
+    try:
+        from . import offsite_account_audit as collector, offsite_renewal as renewal
+    except ImportError:
+        import offsite_account_audit as collector
+        import offsite_renewal as renewal
+    ticket_bytes = offsite.read_private(directory / 'ticket.json', 16384)
+    ticket = json.loads(ticket_bytes)
+    collector.validate_result(audit, ticket, max(at, stamp(audit['completed_at'])))
+    require(audit['ticket_sha256'] == digest(ticket_bytes))
+    renewal.reservation_binding(ticket, ticket_bytes, ledger)
+    total, scope = audit['account_total_bytes'], audit['quillmd_scope_bytes']
+    require(limits['account_storage_used_bytes_at_observation'] == total
+            and limits['scope_storage_bytes_at_observation'] == scope
+            and stamp(limits['observed_at']) == stamp(audit['scans'][-1]['completed_at']))
+    non_scope, bound = total - scope, total - scope + limits['scope_storage_ceiling_bytes']
+    require(item['windows_source_sha256'] is None and item['non_scope_observed_bytes'] == non_scope
+            and item['account_reserved_bound_bytes'] == bound <= limits['account_storage_limit_bytes'])
+    require(limits['account_storage_limit_bytes'] <= 10_000_000_000
+            and limits['scope_storage_ceiling_bytes'] <= 1_000_000_000
+            and limits['daily_download_budget_bytes'] <= 100_000_000
+            and limits['daily_request_budget'] <= 500 and limits['max_run_seconds'] <= 900
+            and limits['max_local_age_hours'] <= 30)
+    require(updated['caps_are_historical'] is True
+            and updated['administrative_caps_unchanged_assumption'] is True)
+    caps = updated['provider_caps_observation']
+    require(caps['storage_cap_display'] == '10 GB' and caps['storage_spend_cap_display'] == '$0.00'
+            and caps['download_cap_display'] == '1 GB' and caps['download_spend_cap_display'] == '$0.00'
+            and min(caps['class_b_daily_cap'], caps['class_c_daily_cap']) >= limits['daily_request_budget'])
+    require(provenance == {
+        'source': 'operator_imported_portable_collector', 'vps_performed_account_scans': False,
+        'semantic_consistency_verified': True, 'source_artifact_sha256': item['audit']['local_sha256'],
+        'ticket_sha256': digest(ticket_bytes), 'original_bytes_preserved': True,
+        'local_artifact_hashes': {item[k]['name']: item[k]['local_sha256'] for k in ('audit', 'operating_evidence')}})
     return {'account_reserved_bound_bytes': bound, 'non_scope_observed_bytes': non_scope,
             'observed_at': item['observed_at'], 'valid_until': item['valid_until'],
             'renewal_requires_desktop': True, 'assumptions': list(CONSTRAINTS)}
