@@ -1,3 +1,22 @@
+# Offsite update — 2026-09-20, after desktop replacement verification
+
+The owner approved private bucket `quillmd-private-backups-20260920`, ID
+`e5d31ce87af3b0f0a00a0916`, endpoint `https://s3.us-west-004.backblazeb2.com`.
+The desktop created and independently verified the replacement with exact prefix
+`quillmd-fresh/synthetic/` and `listFiles`, `readFiles`, `writeFiles` only.
+The broad candidate and temporary desktop provisioner were revoked; the master
+key was unchanged. **No provisioning credential or repeated setup is requested.**
+
+Engineering has prepared the protected replacement transfer, installation and
+one bounded encrypted round trip. Actual outcomes belong in the append-only
+runtime checkpoint. The16:35UTC owner account observation reports0stored/10GBcap
+and0downloaded/1GBdailycap; retain this as owner-desktop evidence. Independent
+recovery-key custody remains unverified. The other release dependencies below
+are unchanged; the earlier requested bucket name and provisioning actions are
+historical and superseded by this update.
+
+---
+
 # Current owner actions — operational recovery, 2026-09-20
 
 This list supersedes earlier question queues; historical entries below remain
