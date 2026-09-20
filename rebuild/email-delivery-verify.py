@@ -23,6 +23,7 @@ stores credentials, API keys, tokens, links, message bodies, provider responses
 or the unmasked recipient. Standard library plus httpx only.
 """
 import argparse
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 import json
@@ -35,6 +36,7 @@ import sys
 from uuid import UUID
 
 import httpx
+from ops import preview_http
 
 PERMANENT = Path('/opt/meddoc-pro/rebuild')
 BASE = 'https://app.quillmd.com:9443'
@@ -251,7 +253,7 @@ def private_access(runtime):
             or not isinstance(password, str) or not password
             or any(ord(c) < 32 or ord(c) > 126 for c in username + password)):
         refuse('Protected private access credentials are invalid.')
-    return httpx.BasicAuth(username, password)
+    return {'username': username, 'password': password}
 
 
 def execution_authorization(runtime, recipient, department, release, stage):
@@ -286,18 +288,30 @@ def execution_authorization(runtime, recipient, department, release, stage):
                               'stage': stage, 'matched': True}}
 
 
+@contextmanager
 def private_client(auth=None):
     # Fixed origin and relative application paths only; never follow a Location
     # header or disable certificate verification to get through a failed gate.
-    return httpx.Client(base_url=BASE, auth=auth, timeout=httpx.Timeout(30, connect=5),
-                        trust_env=False, follow_redirects=False, verify=True)
+    with httpx.Client(base_url=BASE, timeout=httpx.Timeout(30, connect=5),
+                      trust_env=False, follow_redirects=False, verify=True) as client:
+        authenticated = False
+        try:
+            if auth is not None:
+                preview_http.authenticate(client, auth)
+                authenticated = True
+            yield client
+        finally:
+            if authenticated:
+                preview_http.sign_out(client)
 
 
 def private_https_health(auth, release):
     with private_client() as public:
         response = public.get('/health/')
-        if response.status_code != 401 or not response.headers.get('www-authenticate', '').lower().startswith('basic '):
-            refuse('The private HTTPS origin must challenge unauthenticated access with HTTP Basic Auth.')
+        try:
+            preview_http.sign_in_path(response)
+        except preview_http.PreviewAccessError:
+            refuse('The private HTTPS origin must require its normal preview sign-in page.')
     with private_client(auth) as client:
         health(client, release)
 
@@ -557,7 +571,7 @@ def main():
         check('Protected owner browser confirmation and independent account evidence match this stage')
         auth = private_access(runtime)
         private_https_health(auth, args.release)
-        check('TLS-verified HTTPS rejects unauthenticated access and serves the exact synthetic-only doctor release with private authentication')
+        check('TLS-verified HTTPS requires the preview sign-in form and serves the exact synthetic-only doctor release with a separate secure session')
         with private_client(auth) as client:
             health(client, args.release)
             check('Running service is the exact synthetic-only doctor release')

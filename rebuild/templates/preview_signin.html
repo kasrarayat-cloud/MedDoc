@@ -1,0 +1,9 @@
+{% load static %}
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow"><title>Private preview · QuillMD</title><link rel="stylesheet" href="{% static 'app.css' %}"></head>
+<body><a class="skip-link" href="#main">Skip to main content</a><div class="auth-shell">
+  <aside class="auth-story"><a class="brand" href="{% url 'preview_sign_in' %}"><span class="brand-mark" aria-hidden="true">Q</span>QuillMD</a><h1>A private space to try QuillMD.</h1><p>Use the preview access details provided to you. Your individual account sign-in comes next.</p><div class="auth-principle"><strong>Synthetic information only.</strong><p>This preview is for controlled testing. Do not enter real patient information.</p></div></aside>
+  <main class="auth-main" id="main"><div class="auth-form"><div class="eyebrow">Private preview access</div><h2>Enter the private preview</h2><p>{% if resuming %}After access is confirmed, your original link will continue automatically.{% else %}Enter your preview username and password to continue to QuillMD.{% endif %}</p>
+  <form method="post">{% csrf_token %}{{ form.as_p }}<button type="submit">Continue securely</button></form>
+  <div class="auth-footer"><p>The preview password is separate from your QuillMD account password. If you need the access details, contact your platform operator.</p><p class="small">Access expires after 30 minutes without activity or two hours after signing in.</p></div></div></main>
+</div></body></html>

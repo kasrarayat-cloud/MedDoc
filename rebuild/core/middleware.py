@@ -7,7 +7,7 @@ class AccessMiddleware:
     def __init__(self,get_response): self.get_response=get_response
     def __call__(self,request):
         path=request.path
-        public=path in ('/login/','/register/','/health/','/billing/webhook/','/verification/resend/') or path.startswith(('/verify/','/invite/','/static/','/recovery/'))
+        public=path in ('/preview/sign-in/','/preview/sign-out/','/login/','/register/','/health/','/billing/webhook/','/verification/resend/') or path.startswith(('/verify/','/invite/','/static/','/recovery/'))
         if not public:
             if not request.user.is_authenticated:
                 # Restore only the page location. Never replay an expired form submission.
