@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from django.conf import settings
 from django.core.mail import EmailMessage
-from .email_backend import PrivateFileEmailBackend, application_origin
+from .email_backend import PrivateFileEmailBackend, application_origin, private_access_instructions
 from .security import audit
 
 
@@ -20,12 +20,14 @@ def deliver_account_email(actor, target, recipient, purpose, raw_token, departme
         'invitation': ('invite', 'QuillMD department invitation'),
         'recovery': ('recovery/confirm', 'Recover your QuillMD test account'),
     }[purpose]
-    message = None
+    recovery_body = f"Delivery configuration requires repair. Private recovery route: /{route}/{raw_token}/"
     try:
         link = f"{application_origin()}/{route}/{raw_token}/"
         body = {'verification': f'Open {link} to verify your synthetic test account.',
                 'invitation': f'Accept your QuillMD department invitation at {link}',
                 'recovery': f'Recover your QuillMD test account at {link}. This link expires in 30 minutes. Administrators also need their enrolled authenticator.'}[purpose]
+        recovery_body = body
+        body += private_access_instructions(recipient, purpose)
         message = EmailMessage(subject, body, settings.DEFAULT_FROM_EMAIL, [recipient])
         if message.send(fail_silently=False) != 1:
             raise RuntimeError("Email transport did not acknowledge the message")
@@ -37,11 +39,10 @@ def deliver_account_email(actor, target, recipient, purpose, raw_token, departme
         # Store no recipient, body, raw token, error text, or provider response in audit.
         staged = False
         try:
-            if message is None:
-                # Configuration may fail before the URL is usable. An administrator
-                # can recover this one token from the protected local outbox.
-                message = EmailMessage(subject, f"Delivery configuration requires repair. Private recovery route: /{route}/{raw_token}/", settings.DEFAULT_FROM_EMAIL, [recipient])
-            staged = PrivateFileEmailBackend(fail_silently=False).send_messages([message]) == 1
+            # Keep the original token recoverable, but never stage private gate
+            # credentials locally, even when a Resend request failed after assembly.
+            recovery_message = EmailMessage(subject, recovery_body, settings.DEFAULT_FROM_EMAIL, [recipient])
+            staged = PrivateFileEmailBackend(fail_silently=False).send_messages([recovery_message]) == 1
         except Exception:
             pass
         audit(actor, "email.failed", target, department=department, purpose=purpose,

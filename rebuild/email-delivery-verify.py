@@ -5,16 +5,17 @@ Run from the permanent reviewed release, as the operator:
 
   rebuild/.venv/bin/python rebuild/email-delivery-verify.py --release FULL_SHA \\
       --recipient ADDRESS --recipient-confirmation "I control this inbox" \\
-      --stage invitation --execute
+      --department UUID --attempt LABEL --stage invitation --execute
 
 Modes: --dry-run checks public sender DNS and configuration PRESENCE only (no
 login, no provider request, nothing sent). --execute additionally drives the
 real HTTP flow as the synthetic owner: an invitation to the recipient and/or a
 password-recovery request for that address.
 
-Stages: invitation | recovery | both. The application only produces a recovery
-message for an existing verified account, so run "invitation" first, let the
-recipient accept it through the SSH tunnel, then run "recovery".
+Stages: invitation | recovery, always separately. Protected operator evidence
+must establish browser reachability and the intended account state before a send.
+The recipient uses the original HTTPS link, with the private access credentials
+supplied separately. This runner proves submission, never inbox receipt or link use.
 
 Refuses unless the confirmation phrase is exact and the recipient is an
 explicitly supplied, non-synthetic, non-placeholder address. Never prints or
@@ -31,11 +32,12 @@ import re
 import stat
 import subprocess
 import sys
+from uuid import UUID
 
 import httpx
 
 PERMANENT = Path('/opt/meddoc-pro/rebuild')
-BASE = 'http://127.0.0.1:9130'
+BASE = 'https://app.quillmd.com:9443'
 CONFIRMATION = 'I control this inbox'
 # Public DNS over HTTPS (Cloudflare JSON API). Chosen over dig/nslookup so the
 # answer does not depend on the VPS resolver configuration or on parsing tool
@@ -46,7 +48,7 @@ RESERVED_TLDS = {'invalid', 'test', 'example', 'localhost', 'local', 'internal',
 PLACEHOLDER_DOMAINS = {'example.com', 'example.org', 'example.net', 'quillmd.invalid'}
 PLACEHOLDER_LOCALS = {'test', 'example', 'someone', 'user', 'recipient', 'address', 'email'}
 SESSION_COOKIE = 'quillmd_doctor_session'
-STAGES = ('invitation', 'recovery', 'both')
+STAGES = ('invitation', 'recovery')
 DNS_TYPES = {'TXT': 16, 'MX': 15}
 
 # Runs inside the application's own environment so that key presence and the
@@ -62,6 +64,7 @@ from django.core.exceptions import ImproperlyConfigured
 payload = json.loads(sys.stdin.read())
 out = {'email_mode': str(settings.QUILLMD_EMAIL_MODE), 'resend_mode': settings.QUILLMD_EMAIL_MODE == 'resend',
        'configured': False, 'sender_domain': '',
+       'app_base_url_matches_private_https': str(settings.QUILLMD_APP_BASE_URL) == payload.get('expected_origin'),
        'app_base_url_https': str(settings.QUILLMD_APP_BASE_URL).startswith('https://'),
        'provider_domain_status': {'attempted': False, 'readable': False, 'http_status': None,
                                   'domain_listed': None, 'status': None, 'region': None}}
@@ -211,6 +214,94 @@ def now():
     return datetime.now(timezone.utc).isoformat()
 
 
+def canonical_uuid(value, label):
+    try:
+        if not isinstance(value, str) or str(UUID(value)) != value:
+            raise ValueError
+    except (ValueError, AttributeError):
+        refuse(label + ' must be a canonical UUID.')
+    return value
+
+
+def recent_evidence(value, field):
+    try:
+        timestamp = datetime.fromisoformat(value)
+        if timestamp.tzinfo is None:
+            raise ValueError
+        age = (datetime.now(timezone.utc) - timestamp).total_seconds()
+        if not 0 <= age <= 86400:
+            raise ValueError
+    except (TypeError, ValueError, OverflowError):
+        refuse(field + ' must be a timezone-qualified timestamp within the past 24 hours.')
+
+
+def evidence_reference(value):
+    # References identify an operator report, not a URL, credential or message.
+    if not isinstance(value, str) or not re.fullmatch(r'[A-Za-z0-9_. /:-]{3,240}', value) or '://' in value:
+        refuse('Use a short nonsecret evidence reference, not an email link.')
+    return value
+
+
+def private_access(runtime):
+    access = private_read(runtime / 'email-private-access.json')
+    if not isinstance(access, dict) or access.get('origin') != BASE:
+        refuse('Private access must name exactly the approved HTTPS origin.')
+    username, password = access.get('username'), access.get('password')
+    if (not isinstance(username, str) or not username or ':' in username
+            or not isinstance(password, str) or not password
+            or any(ord(c) < 32 or ord(c) > 126 for c in username + password)):
+        refuse('Protected private access credentials are invalid.')
+    return httpx.BasicAuth(username, password)
+
+
+def execution_authorization(runtime, recipient, department, release, stage):
+    browser = private_read(runtime / 'email-owner-browser-readiness.json')
+    if (not isinstance(browser, dict) or browser.get('origin') != BASE
+            or browser.get('reachable') is not True or browser.get('confirmed_by') != 'owner'):
+        refuse('Owner browser reachability on the exact private HTTPS origin must be recorded first.')
+    recent_evidence(browser.get('confirmed_at'), 'Browser confirmation time')
+    browser_reference = evidence_reference(browser.get('evidence_reference'))
+    authorization = private_read(runtime / 'email-flow-authorization.json')
+    if (not isinstance(authorization, dict) or authorization.get('origin') != BASE
+            or authorization.get('recipient') != recipient or authorization.get('department_id') != department
+            or authorization.get('release') != release):
+        refuse('Protected account evidence does not match this recipient, department, origin and release.')
+    recent_evidence(authorization.get('checked_at'), 'Account evidence time')
+    account_reference = evidence_reference(authorization.get('evidence_reference'))
+    account = authorization.get(stage)
+    if not isinstance(account, dict):
+        refuse('Protected account evidence is missing this stage.')
+    if stage == 'invitation':
+        if account.get('recipient_absent') is not True:
+            refuse('Invitation requires independent evidence that the recipient has no existing account.')
+    else:
+        canonical_uuid(account.get('account_id'), 'Verified invitee account ID')
+        if (account.get('verified') is not True or account.get('is_staff') is not False
+                or account.get('department_id') != department or account.get('role') != 'employee'
+                or account.get('invitation_accepted') is not True):
+            refuse('Recovery requires independent evidence of the accepted, verified Employee test account.')
+    return {'owner_browser_reachability': {'confirmed': True, 'confirmed_at': browser['confirmed_at'],
+                                         'evidence_reference': browser_reference},
+            'account_state': {'checked_at': authorization['checked_at'], 'evidence_reference': account_reference,
+                              'stage': stage, 'matched': True}}
+
+
+def private_client(auth=None):
+    # Fixed origin and relative application paths only; never follow a Location
+    # header or disable certificate verification to get through a failed gate.
+    return httpx.Client(base_url=BASE, auth=auth, timeout=httpx.Timeout(30, connect=5),
+                        trust_env=False, follow_redirects=False, verify=True)
+
+
+def private_https_health(auth, release):
+    with private_client() as public:
+        response = public.get('/health/')
+        if response.status_code != 401 or not response.headers.get('www-authenticate', '').lower().startswith('basic '):
+            refuse('The private HTTPS origin must challenge unauthenticated access with HTTP Basic Auth.')
+    with private_client(auth) as client:
+        health(client, release)
+
+
 def doh(client, name, rtype):
     result = {'name': name, 'type': rtype, 'records': []}
     try:
@@ -258,7 +349,7 @@ def settings_probe(probe_provider):
     env = {'PATH': os.environ.get('PATH', '/usr/local/bin:/usr/bin:/bin'), 'HOME': os.environ.get('HOME', ''), 'LANG': 'C.UTF-8'}
     try:
         result = subprocess.run([str(PERMANENT / '.venv/bin/python'), '-c', SETTINGS_PROBE], cwd=PERMANENT, env=env,
-                                input=json.dumps({'probe_provider': probe_provider}), capture_output=True, text=True, timeout=90)
+                                input=json.dumps({'probe_provider': probe_provider, 'expected_origin': BASE}), capture_output=True, text=True, timeout=90)
     except (OSError, subprocess.TimeoutExpired) as exc:
         return {'probe_failed': True, 'error_class': type(exc).__name__}
     if result.returncode != 0:
@@ -308,13 +399,15 @@ def classify(notices):
     return 'no-recognised-notice'
 
 
-def invite(client, recipient):
+def invite(client, recipient, department):
     page = fetch(client, '/team/')
     departments = page.selects.get('department', [])
     if not departments:
         refuse('The synthetic owner has no department with invitation authority.')
-    chosen = next((v for v, label in departments if label == 'X-ray'), departments[0][0])
-    chosen_label = next(label for v, label in departments if v == chosen)
+    matches = [(v, label) for v, label in departments if v == department and label == 'X-ray']
+    if len(matches) != 1:
+        refuse('The exact approved X-ray department is not available to this synthetic owner.')
+    chosen, chosen_label = matches[0]
     if 'employee' not in [v for v, _ in page.selects.get('role', [])]:
         refuse('The invitation form does not offer the employee role.')
     response = client.post('/team/', data={'csrfmiddlewaretoken': page.csrf, 'department': chosen,
@@ -335,8 +428,8 @@ def invite(client, recipient):
     return outcome
 
 
-def recovery(recipient):
-    with httpx.Client(base_url=BASE, timeout=httpx.Timeout(30, connect=5), trust_env=False, follow_redirects=False) as client:
+def recovery(recipient, auth):
+    with private_client(auth) as client:
         page = fetch(client, '/recovery/')
         response = client.post('/recovery/', data={'csrfmiddlewaretoken': page.csrf, 'email': recipient},
                                headers={'Referer': BASE + '/recovery/'})
@@ -352,6 +445,17 @@ def recovery(recipient):
         return outcome
 
 
+def require_submission(stage, outcome):
+    if stage == 'invitation':
+        if outcome.get('invitation_http_status') != 302 or outcome.get('invitation_outcome') != 'accepted-by-provider':
+            refuse('Invitation was not confirmed as accepted by the provider; preserve this attempt and inspect it before any retry.')
+        return 'provider-accepted'
+    if (outcome.get('recovery_http_status') != 200 or outcome.get('recovery_page_acknowledged') is not True
+            or outcome.get('recovery_page_reports_live_delivery') is not True):
+        refuse('The recovery request did not return the expected live-delivery acknowledgement.')
+    return 'request-acknowledged-provider-outcome-not-proved'
+
+
 def logout(client, csrf):
     if csrf:
         client.post('/logout/', data={'csrfmiddlewaretoken': csrf}, headers={'Referer': BASE + '/'})
@@ -362,6 +466,8 @@ def main():
     parser.add_argument('--release', required=True)
     parser.add_argument('--recipient', required=True)
     parser.add_argument('--recipient-confirmation', required=True)
+    parser.add_argument('--department', required=True)
+    parser.add_argument('--attempt', required=True)
     parser.add_argument('--stage', required=True, choices=STAGES)
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument('--execute', action='store_true')
@@ -371,6 +477,9 @@ def main():
     if args.recipient_confirmation != CONFIRMATION:
         refuse('The recipient confirmation phrase must be exactly: ' + CONFIRMATION)
     recipient = validate_recipient(args.recipient)
+    department = canonical_uuid(args.department, '--department')
+    if not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,63}', args.attempt):
+        refuse('--attempt must be a unique lowercase letter/digit/hyphen label of at most 64 characters.')
     if not re.fullmatch(r'[a-f0-9]{40}', args.release):
         refuse('--release must be the full 40-character commit SHA.')
     here = Path(__file__).resolve().parent
@@ -383,13 +492,22 @@ def main():
     if not (stat.S_ISDIR(info.st_mode) and not stat.S_ISLNK(info.st_mode) and info.st_uid == os.getuid() and (info.st_mode & 0o777) == 0o700):
         refuse('The private runtime directory must be an owner-only 0700 directory.')
     credentials = private_read(runtime / 'private-access.json')
-    suffix = '' if args.stage == 'both' else '-' + args.stage
+    suffix = '-' + args.stage + '-' + args.attempt
     report_path = runtime / ('email-delivery-verification-' + args.release[:12] + suffix + ('' if args.execute else '-dry-run') + '.json')
     if report_path.exists() or report_path.is_symlink():
         refuse('Existing verification evidence requires inspection before another attempt.')
+    if args.execute:
+        # Reserve this attempt before any checks or potential send. A competing
+        # process must not overwrite the first process's eventual outcome report.
+        try:
+            write_private(report_path.with_suffix('.execution-lock'), {'stage': args.stage, 'attempt': args.attempt, 'started_at': now()})
+        except FileExistsError:
+            refuse('This immutable attempt is already claimed; inspect its evidence before any retry.')
 
     report = {'passed': False, 'executed': False, 'mode': 'execute' if args.execute else 'dry-run', 'stage': args.stage,
               'release': args.release, 'synthetic_only': True, 'app_origin': BASE, 'started_at': now(), 'checks': [],
+              'pass_scope': 'configuration-checks-only' if args.dry_run else 'submission-checks-only',
+              'attempt': args.attempt, 'department_id': department, 'role': 'employee',
               'recipient': mask(recipient), 'recipient_confirmation_phrase_matched': True,
               'sender_domain_dns': None, 'provider_domain_status': None, 'app_email_configuration': None,
               'invitation_http_status': None, 'invitation_outcome': None,
@@ -397,6 +515,8 @@ def main():
               'provider_message_ids_recorded': False,
               'tokens_exposed': False, 'links_stored': False,
               'inbox_receipt_confirmed': False, 'inbox_receipt_confirmed_by': None, 'inbox_receipt_confirmed_at': None,
+              'provider_delivery_confirmed': False, 'application_flow_completed': False,
+              'submission_status': 'not-attempted', 'execution_authorization': None,
               'next_steps': []}
     active = 'configuration presence'
 
@@ -420,43 +540,54 @@ def main():
         else:
             report['sender_domain_dns'] = {'domain': None, 'note': 'No configured Resend sender; DNS not queried.'}
         if not args.execute:
-            report['next_steps'] = ['Enable QUILLMD_EMAIL_MODE=resend with the verified sender in the protected environment and restart the doctor service per the checkpoint.',
-                                    'Re-run with --execute --stage invitation once the recipient has confirmed control of the inbox.']
+            report['next_steps'] = ['Establish protected HTTPS access and verify the existing sender before live account email.',
+                                    'Record owner browser reachability and independent account-state evidence in the protected runtime files.',
+                                    'Use one separately authorized invitation or recovery stage; this dry run made no login or provider request.']
             report['passed'] = True
             return report, report_path
         if not (probe.get('resend_mode') and probe.get('configured')):
             refuse('Resend delivery is not explicitly enabled and configured in the running application environment.')
-        if not probe.get('app_base_url_https'):
-            refuse('QUILLMD_APP_BASE_URL is not an HTTPS origin; emailed links would be unusable.')
+        if probe.get('app_base_url_matches_private_https') is not True:
+            refuse('QUILLMD_APP_BASE_URL must exactly match the approved private HTTPS origin.')
         status = report['provider_domain_status'] or {}
-        if status.get('readable') and status.get('domain_listed') and str(status.get('status')).lower() != 'verified':
+        if status.get('readable') and (not status.get('domain_listed') or str(status.get('status')).lower() != 'verified'):
             refuse('The provider reports the sender domain as not verified.')
-        check('Resend mode, sender and HTTPS link origin are configured')
-        with httpx.Client(base_url=BASE, timeout=httpx.Timeout(30, connect=5), trust_env=False, follow_redirects=False) as client:
+        check('Resend mode, sender assertion and exact HTTPS link origin are configured; unreadable provider status is not proof of verification')
+        report['execution_authorization'] = execution_authorization(runtime, recipient, department, args.release, args.stage)
+        check('Protected owner browser confirmation and independent account evidence match this stage')
+        auth = private_access(runtime)
+        private_https_health(auth, args.release)
+        check('TLS-verified HTTPS rejects unauthenticated access and serves the exact synthetic-only doctor release with private authentication')
+        with private_client(auth) as client:
             health(client, args.release)
             check('Running service is the exact synthetic-only doctor release')
             csrf = ''
-            if args.stage in ('invitation', 'both'):
+            if args.stage == 'invitation':
                 login(client, credentials.get('doctor'))
                 check('Synthetic owner signed in through the real login form')
-                outcome = invite(client, recipient)
+                report['executed'] = True
+                report['submission_status'] = 'attempted-outcome-unknown'
+                outcome = invite(client, recipient, department)
                 csrf = outcome.pop('csrf', '')
-                report['invitation_http_status'] = outcome.pop('invitation_http_status')
-                report['invitation_outcome'] = outcome
-                check('Invitation submitted through the real team form; outcome recorded')
+                report['invitation_http_status'] = outcome.get('invitation_http_status')
+                report['invitation_outcome'] = dict(outcome)
                 logout(client, csrf)
-            if args.stage in ('recovery', 'both'):
-                outcome = recovery(recipient)
-                report['recovery_http_status'] = outcome.pop('recovery_http_status')
-                report['recovery_outcome'] = outcome
-                check('Recovery request submitted through the public recovery form; outcome recorded')
-        report['executed'] = True
+                report['submission_status'] = require_submission('invitation', outcome)
+                check('Invitation submission accepted by provider; delivery, inbox receipt and acceptance remain unproved')
+            else:
+                report['executed'] = True
+                report['submission_status'] = 'attempted-outcome-unknown'
+                outcome = recovery(recipient, auth)
+                report['recovery_http_status'] = outcome.get('recovery_http_status')
+                report['recovery_outcome'] = dict(outcome)
+                report['submission_status'] = require_submission('recovery', outcome)
+                check('Recovery request acknowledged; provider outcome, delivery, inbox receipt and reset remain unproved')
         report['next_steps'] = [
-            'Recipient: confirm receipt of each message by replying from the controlled inbox; do not forward the message or paste its link.',
-            'Recipient: open the invitation link only through the SSH tunnel, replacing the public origin with http://localhost:9130 and keeping the path unchanged; accept with a synthetic name and a new password.',
-            'Operator: after acceptance, run --stage recovery; recipient completes the recovery form through the tunnel and replies again.',
-            'Operator: record provider message identifiers from the administrator audit view (action email.accepted) under MFA; this runner does not read them.',
-            'Human confirmation only: a person who saw both messages sets inbox_receipt_confirmed to true in this file with their name and time; the script never does.',
+            'Recipient: confirm inbox receipt and open the original HTTPS email link unchanged using the private access already verified. Do not paste or forward the link.',
+            'Recipient: complete this invitation or recovery with synthetic account details and confirm the result; never send passwords in chat.',
+            'Operator: preserve this report unchanged. Add separate timestamped evidence for provider acceptance/delivery, owner inbox receipt and completed application actions.',
+            'Operator: after verified invitation acceptance, update independent account-state evidence before requesting the one recovery email.',
+            'Operator: capture provider IDs from email.accepted audit metadata and verify scope, welcome credit, session invalidation and token reuse separately.',
         ]
         report['passed'] = True
         return report, report_path

@@ -1,5 +1,11 @@
 # Optional account email delivery
 
+**2026-09-20 continuation:** the controlled owner recipient is now established.
+Private HTTPS and separate real invitation/recovery verification are being
+prepared; see [the current runbook](private-email-verification-20260920.md).
+The following entries preserve the earlier outbox-only baseline. They do not
+describe later execution unless the continuation checkpoint records it.
+
 Current state: the private file outbox remains the default. The Resend adapter
 is implemented and tested with mocked HTTP only. No email was sent. A read-only domain-list request recognized the existing key as send-only and refused the requested read permission; that is not sender-verification evidence.
 Successful API acceptance does not establish inbox delivery.

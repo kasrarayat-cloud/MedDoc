@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import stat
 from urllib.parse import urlsplit
 
@@ -44,10 +45,14 @@ class PrivateFileEmailBackend(FileEmailBackend):
 def application_origin():
     """Fixed configured origin: never use an untrusted request Host header."""
     origin = settings.QUILLMD_APP_BASE_URL.rstrip("/")
-    parsed = urlsplit(origin)
+    try:
+        parsed = urlsplit(origin)
+        parsed.port  # Reject malformed or out-of-range ports before generating a link.
+    except ValueError:
+        raise ImproperlyConfigured("Configure a valid QuillMD application origin for email links.") from None
     if (parsed.scheme not in {"http", "https"} or not parsed.hostname
             or parsed.username or parsed.password or parsed.query or parsed.fragment
-            or parsed.path not in {"", "/"}):
+            or parsed.path not in {"", "/"} or any(character.isspace() for character in origin)):
         raise ImproperlyConfigured("Configure a valid QuillMD application origin for email links.")
     if settings.QUILLMD_EMAIL_MODE == "resend":
         if parsed.scheme != "https" or parsed.hostname in {"localhost", "127.0.0.1", "::1"}:
@@ -55,6 +60,46 @@ def application_origin():
         if parsed.hostname not in settings.ALLOWED_HOSTS:
             raise ImproperlyConfigured("Email application origin must be an allowed application host.")
     return origin
+
+
+def validate_resend_recipient(recipient):
+    """Restrict controlled sends at the transport boundary, before any HTTP call."""
+    validate_email(recipient)
+    configured = settings.QUILLMD_EMAIL_ALLOWED_RECIPIENTS
+    allowed = []
+    if configured:
+        for address in configured.split(","):
+            address = address.strip()
+            try:
+                validate_email(address)
+            except ValidationError:
+                raise ImproperlyConfigured("Configure a valid controlled email recipient allowlist.") from None
+            allowed.append(address.casefold())
+        if recipient.casefold() not in allowed:
+            raise EmailDeliveryError("The account email recipient is outside the controlled allowlist.")
+    username = settings.QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME
+    password = settings.QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD
+    if username or password:
+        if (len(allowed) != 1 or not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", username)
+                or not re.fullmatch(r"[!-~]{20,128}", password)):
+            raise ImproperlyConfigured("Private email access requires complete credentials and exactly one approved recipient.")
+        application_origin()
+
+
+def private_access_instructions(recipient, purpose):
+    """Only the approved Resend recipient receives the private browser gate login."""
+    if settings.QUILLMD_EMAIL_MODE != "resend":
+        return ""
+    validate_resend_recipient(recipient)
+    username = settings.QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME
+    password = settings.QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD
+    if purpose not in {"invitation", "recovery"} or not username:
+        return ""
+    origin = application_origin()
+    return (f"\n\nPrivate synthetic preview: the browser will first ask for an access login at {origin}."
+            f"\nUsername: {username}\nPassword: {password}"
+            "\nThis private-preview login is separate from your QuillMD account password."
+            " Do not forward this message. Use only synthetic information.")
 
 
 def resend_configuration():
@@ -110,7 +155,7 @@ class ResendEmailBackend(BaseEmailBackend):
                 or message.attachments or getattr(message, "alternatives", None)
                 or message.content_subtype != "plain"):
             raise EmailDeliveryError("Only single-recipient plain-text account emails are supported.")
-        validate_email(message.to[0])
+        validate_resend_recipient(message.to[0])
         if "\r" in message.subject or "\n" in message.subject:
             raise EmailDeliveryError("Email subject contains an invalid header character.")
         if len(message.body.encode("utf-8")) > 64 * 1024:
