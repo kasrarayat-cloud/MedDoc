@@ -82,6 +82,21 @@ class BackupAlertsTests(unittest.TestCase):
         self.assertEqual(self.sender.call_count, 2)
         self.assertEqual(len(list(self.alerts.glob('incident-*-pending.json'))), 2)
 
+    def test_expiry_approach_is_quiet_but_uncovered_next_run_is_one_warning(self):
+        self.recovery.return_value['condition'] = 'offsite_policy_expiring'
+        result, code = a.check(self.at)
+        self.assertEqual((code, result['severity'], result['healthy']), (0, 'warning', False))
+        self.sender.assert_not_called()
+        self.recovery.return_value['condition'] = 'offsite_policy_renewal_due'
+        result, code = a.check(self.at + timedelta(minutes=5))
+        self.assertEqual((code, result['severity']), (0, 'warning'))
+        a.check(self.at + timedelta(minutes=10))
+        self.sender.assert_called_once()
+        self.recovery.return_value['condition'] = 'offsite_policy_expired'
+        result, code = a.check(self.at + timedelta(minutes=15))
+        self.assertEqual((code, result['severity']), (1, 'failure'))
+        self.sender.assert_called_once()
+
     def test_uncertain_provider_outcome_no_retry_even_after_retention_window(self):
         self.health.return_value = 'backup_failed'
         self.sender.side_effect = RuntimeError('raw provider clinical secret canary')
@@ -393,6 +408,59 @@ class RecoveryStageTests(unittest.TestCase):
                           'valid_until': '2026-09-21T20:16:35+00:00'}):
             self.assertTrue(a.recovery_status(self.at)['next_run_covered_by_policy'])
 
+    def test_expired_evidence_is_failure_while_prior_backup_proof_remains_current(self):
+        with patch.object(a, 'allowance_status', return_value={
+                'eligible': False, 'reason': 'policy_expired',
+                'observed_at': (self.at-timedelta(days=1)).isoformat(),
+                'valid_until': self.at.isoformat()}):
+            result = a.recovery_status(self.at)
+            self.assertEqual(result['condition'], 'offsite_policy_expired')
+            self.assertEqual(result['current_backup_health'], 'healthy')
+            self.assertIsNotNone(result['last_isolated_restore'])
+            self.assertEqual(a.report(result['condition'], recovery=result)['severity'], 'failure')
+
+    def test_failed_renewal_keeps_deadline_and_is_visible_before_expiry(self):
+        with patch.object(a, 'renewal_status', return_value={'state': 'failed', 'reason_code': 'audit_failed'}):
+            result = a.recovery_status(self.at)
+            self.assertEqual(result['condition'], 'offsite_renewal_failed')
+            self.assertEqual(result['renewal']['reason_code'], 'audit_failed')
+            self.assertEqual(result['current_backup_health'], 'healthy')
+
+    def test_next_day_reserved_budget_shortfall_warns_without_warning_for_today_only(self):
+        allowance = {'eligible': True, 'valid_until': '2026-09-21T20:16:35+00:00',
+                     'daily_request_budget': 500, 'daily_download_budget_bytes': 100_000_000}
+        old = {'requests': 422, 'download_bytes': 98_474_544}
+        ledger = dict(version=2, day='2026-09-20', **old, days={'2026-09-20': old},
+                      legacy_import=None, external_reservations=[])
+        path = self.directory / 'budget.json'
+        a.backup.write_private(path, json.dumps(ledger).encode())
+        with patch.object(a, 'next_timer_run', return_value='2026-09-21T05:00:00+00:00'), \
+             patch.object(a, 'allowance_status', return_value=allowance):
+            self.assertEqual(a.recovery_status(self.at)['condition'], 'healthy')
+            ledger['days']['2026-09-21'] = {'requests': 480, 'download_bytes': 90_000_000}
+            path.write_text(json.dumps(ledger))
+            result = a.recovery_status(self.at)
+            self.assertEqual(result['condition'], 'offsite_next_run_budget_low')
+            self.assertEqual(result['current_backup_health'], 'healthy')
+            self.assertFalse(result['next_run_admission']['same_size_cycle_fits'])
+            self.assertEqual(a.report(result['condition'])['severity'], 'warning')
+
+    def test_controlled_success_and_timer_enablement_never_invent_scheduled_success(self):
+        result = a.recovery_status(self.at)
+        self.assertIsNone(result['last_successful_scheduled_run'])
+        self.assertFalse(result['latest_execution']['scheduled_success_verified'])
+        self.assertEqual(result['latest_execution']['origin'], 'not_recorded')
+        self.assertTrue(result['recurrence_active'])
+        self.state['invocation'] = dict(source='systemd_environment', systemd_invocation_id='a' * 32,
+                                        timer_trigger_verified=False)
+        self.write()
+        result = a.recovery_status(self.at)
+        self.assertEqual(result['latest_execution']['systemd_invocation_id'], 'a' * 32)
+        self.assertIsNone(result['last_successful_scheduled_run'])
+        self.state['invocation']['timer_trigger_verified'] = True
+        self.write()
+        self.assertEqual(a.recovery_status(self.at)['condition'], 'offsite_status_unavailable')
+
     def test_low_capacity_is_an_observed_scope_estimate_not_a_future_or_account_claim(self):
         self.state['last_capacity'] = {'observed_at': self.at.isoformat(),
                 'scope_stored_bytes_after': 990_000_000, 'scope_ceiling_bytes': 1_000_000_000,
@@ -403,6 +471,7 @@ class RecoveryStageTests(unittest.TestCase):
         self.assertEqual(result['capacity']['remaining_scope_bytes_at_observation'], 10_000_000)
         self.assertFalse(result['capacity']['future_backup_size_known'])
         self.assertFalse(result['capacity']['account_wide_usage_measurement'])
+        self.assertEqual(result['capacity']['estimated_additional_daily_backups_of_same_size'], 0)
         self.assertIsNotNone(result['last_remote_complete'])
         self.state['last_capacity']['observed_at'] = (self.at + timedelta(seconds=1)).isoformat()
         self.write()
@@ -419,6 +488,10 @@ class RecoveryStageTests(unittest.TestCase):
         result = a.recovery_status(self.at)
         self.assertEqual(result['condition'], 'offsite_cleanup_failed')
         self.assertIsNotNone(result['last_isolated_restore'])
+        with patch.object(a, 'next_timer_run', return_value='2026-09-21T05:00:00+00:00'), \
+             patch.object(a, 'allowance_status', return_value={
+                'eligible': True, 'valid_until': '2026-09-21T05:15:00+00:00'}):
+            self.assertEqual(a.recovery_status(self.at)['condition'], 'offsite_cleanup_failed')
         manual.update(state='running', reason_code=None, restore_verified=False)
         manual.pop('finished_at'); path.write_text(json.dumps(manual))
         self.assertEqual(a.recovery_status(self.at)['condition'], 'offsite_in_progress')
@@ -444,7 +517,7 @@ class RecoveryStageTests(unittest.TestCase):
     def test_failure_preserves_last_complete_and_restore(self):
         for reason, expected in [('capacity_refused', 'offsite_capacity_refused'),
                                  ('policy_missing', 'offsite_policy_unavailable'),
-                                 ('budget_exhausted', 'offsite_capacity_refused'),
+                                 ('budget_exhausted', 'offsite_budget_refused'),
                                  ('local_authentication_failed', 'offsite_decryption_failed'),
                                  ('remote_corrupt', 'offsite_integrity_failed'),
                                  ('transport_failed', 'offsite_upload_failed'),
@@ -732,6 +805,32 @@ class ExternalHeartbeatTests(unittest.TestCase):
 
 
 class OperatorVisibilityTests(unittest.TestCase):
+    def test_renewal_adapter_exposes_only_valid_local_handoff_status(self):
+        try:
+            from . import offsite_renewal
+        except ImportError:
+            import offsite_renewal
+        at = datetime(2026, 9, 20, 22, tzinfo=timezone.utc)
+        value = {'state': 'awaiting_external_audit', 'last_attempt_at': at.isoformat(),
+                 'last_successful_observation_at': (at-timedelta(hours=2)).isoformat(),
+                 'valid_until': (at+timedelta(hours=22)).isoformat(),
+                 'reason_code': 'audit_access_unavailable', 'ticket_id': 'a'*32,
+                 'unattended_available': False, 'required_access': 'separate_account_wide_read_only_audit',
+                 'failure_does_not_extend_validity': True}
+        with patch.object(offsite_renewal, 'renewal_status', return_value=value) as reader:
+            self.assertEqual(a.renewal_status(at), value)
+            for changes in ({'reason_code': 'private-secret-canary'}, {'unattended_available': True},
+                            {'ticket_id': 'unprotected-path-canary'},
+                            {'last_attempt_at': (at+timedelta(seconds=1)).isoformat()}):
+                reader.return_value = dict(value, **changes)
+                result = a.renewal_status(at)
+                self.assertEqual(result['state'], 'unavailable')
+                self.assertNotIn('canary', json.dumps(result))
+            reader.return_value = dict(value, state='importing', reason_code=None)
+            self.assertEqual(a.renewal_status(at + timedelta(minutes=4))['state'], 'importing')
+            stale = a.renewal_status(at + timedelta(minutes=6))
+            self.assertEqual((stale['state'], stale['reason_code']), ('failed', 'state_invalid'))
+
     def test_capture_metadata_cannot_hide_missing_or_changed_encrypted_members(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -794,6 +893,71 @@ class OperatorVisibilityTests(unittest.TestCase):
             self.assertTrue(result['local_reservations']['current_utc_day'])
             self.assertNotIn('canary', json.dumps(result))
             self.assertNotIn('account_storage', json.dumps(result))
+            self.assertEqual(result['remaining_requests'], 456)
+            self.assertEqual(result['remaining_reserved_response_bytes'], 99_987_655)
+            self.assertFalse(result['provider_download_charges_confirmed'])
+
+    def test_expired_authenticated_observation_remains_visible_without_becoming_eligible(self):
+        try:
+            from . import automatic_offsite as engine
+        except ImportError:
+            import automatic_offsite as engine
+        temporary = tempfile.TemporaryDirectory(); self.addCleanup(temporary.cleanup)
+        path = Path(temporary.name) / 'policy.json'
+        at = datetime(2026, 9, 21, 21, 0, tzinfo=timezone.utc)
+        observed = at - timedelta(hours=25)
+        limits = dict(observed_at=observed.isoformat(), valid_until=(at-timedelta(hours=1)).isoformat(),
+                      daily_request_budget=500, daily_download_budget_bytes=100_000_000)
+        a.backup.write_private(path, json.dumps(limits).encode())
+        def validate(*, at):
+            if at == observed:
+                return limits
+            raise engine.Refusal('policy_expired')
+        with patch.object(engine, 'POLICY', path), patch.object(engine, 'policy', side_effect=validate), \
+             patch.object(engine, 'budget_summary', return_value=dict(day='2026-09-21', requests=2, download_bytes=10)), \
+             patch.object(a, 'allocation_status', return_value={'renewal_requires_desktop': True}):
+            result = a.allowance_status(at)
+            self.assertFalse(result['eligible'])
+            self.assertEqual(result['reason'], 'policy_expired')
+            self.assertEqual(result['observed_at'], limits['observed_at'])
+            self.assertEqual(result['valid_until'], limits['valid_until'])
+            self.assertEqual(result['observation_age_seconds'], 25 * 3600)
+            self.assertEqual(result['seconds_until_expiry'], -3600)
+            self.assertEqual(result['remaining_requests'], 498)
+            # A concurrent candidate change cannot give unvalidated historical dates.
+            path.write_text(json.dumps(dict(limits, valid_until=(at+timedelta(days=1)).isoformat())))
+            changed = a.allowance_status(at)
+            self.assertIsNone(changed['valid_until'])
+            self.assertFalse(changed['eligible'])
+
+    def test_next_day_forecast_preserves_prepaid_midnight_reservations_without_mutation(self):
+        temporary = tempfile.TemporaryDirectory(); self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        path = root / 'budget.json'
+        old = dict(requests=422, download_bytes=98_474_544)
+        prepaid = dict(requests=8, download_bytes=8_000_000)
+        ledger = dict(version=2, day='2026-09-20', **old,
+                      days={'2026-09-20': old, '2026-09-21': prepaid},
+                      legacy_import=None, external_reservations=[])
+        a.backup.write_private(path, json.dumps(ledger).encode())
+        original = path.read_bytes()
+        at = datetime(2026, 9, 20, 22, 0, tzinfo=timezone.utc)
+        allowance = dict(eligible=True, valid_until='2026-09-21T20:16:35+00:00',
+                         daily_request_budget=500, daily_download_budget_bytes=100_000_000)
+        remote = dict(object_count=44, cipher_bytes=14_423_108)
+        with patch.object(a, 'OFFSITE_DIRECTORY', root):
+            today = a.next_run_admission(at, '2026-09-20T23:00:00+00:00', allowance, remote)
+            tomorrow = a.next_run_admission(at, '2026-09-21T05:00:00+00:00', allowance, remote)
+        self.assertEqual(today['remaining_reserved_response_bytes'], 1_525_456)
+        self.assertFalse(today['same_size_cycle_fits'])
+        self.assertEqual(tomorrow['remaining_requests'], 492)
+        self.assertEqual(tomorrow['remaining_reserved_response_bytes'], 92_000_000)
+        self.assertTrue(tomorrow['same_size_cycle_fits'])
+        self.assertTrue(tomorrow['policy_covered'])
+        self.assertFalse(tomorrow['future_success_verified'])
+        self.assertEqual(tomorrow['same_size_cycle_estimate']['requests'], 92)
+        self.assertEqual(tomorrow['same_size_cycle_estimate']['reserved_response_bytes'], 25_564_228)
+        self.assertEqual(path.read_bytes(), original)
 
     def test_expired_policy_and_bad_ledger_fail_closed_with_specific_reason(self):
         try:

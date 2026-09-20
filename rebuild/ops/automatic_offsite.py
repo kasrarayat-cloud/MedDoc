@@ -10,8 +10,10 @@ import os
 from pathlib import Path
 import re
 import secrets
+import signal
 import stat
 import tempfile
+import threading
 import time
 from urllib.parse import quote, urlsplit
 
@@ -28,6 +30,7 @@ POLICY = offsite.CONFIG_PARENT / 'offsite-policy.json'
 BACKUPS = offsite.RUNTIME / 'new-system-backups'
 KEY = offsite.CONFIG_PARENT / 'fresh-backup-current-20260917.key'
 CONFIG = offsite.CONFIG_PARENT / 'b2-offsite.json'
+HTTP_CLEANUP_SECONDS = 45
 REASONS = {'pending_configuration', 'policy_missing', 'policy_invalid', 'policy_expired', 'capacity_refused', 'budget_exhausted',
            'remote_corrupt', 'remote_uncertain', 'local_authentication_failed', 'local_backup_stale',
            'transport_failed', 'scope_refused', 'lock_busy', 'deadline', 'state_invalid', 'cleanup_failed'}
@@ -177,6 +180,16 @@ def status_summary(value):
             result[name] = stage_summary(name, value[name])
     if 'last_capacity' in value:
         result['last_capacity'] = capacity_summary(value['last_capacity'])
+    if 'invocation' in value:
+        invocation = value['invocation']
+        check(type(invocation) is dict and invocation.get('source') in ('systemd_environment', 'unclassified')
+              and invocation.get('timer_trigger_verified') is False, 'state_invalid')
+        identifier = invocation.get('systemd_invocation_id')
+        check((invocation['source'] == 'unclassified' and identifier is None)
+              or (invocation['source'] == 'systemd_environment' and isinstance(identifier, str)
+                  and re.fullmatch(r'[a-f0-9]{32}', identifier)), 'state_invalid')
+        result['invocation'] = {key: invocation[key] for key in
+                                ('source', 'systemd_invocation_id', 'timer_trigger_verified')}
     for name in ('started_at', 'finished_at'):
         if name in value:
             try:
@@ -292,7 +305,7 @@ class Budget:
         value = budget_ledger(self.path, at)
         # A slow response can cross midnight. Charge its entire bounded response and request
         # to BOTH possible UTC dates before sending it; a crash cannot erase the second charge.
-        until = at + timedelta(seconds=max(0, self.deadline - self.monotonic()) + 40)
+        until = at + timedelta(seconds=max(0, self.deadline - self.monotonic()) + HTTP_CLEANUP_SECONDS)
         dates = {at.strftime('%Y-%m-%d'), until.strftime('%Y-%m-%d')}
         for day in dates:
             counters = value['days'].get(day, {'requests': 0, 'download_bytes': 0})
@@ -341,6 +354,49 @@ def provider_url(value):
     return value
 
 
+@contextmanager
+def response_deadline(budget):
+    """Bound headers and the entire streamed response, including slow trickle reads.
+
+    Requests' tuple timeout bounds inactivity, not total response duration. Preserve
+    an enclosing manual recovery alarm rather than extending or silently cancelling it.
+    """
+    check(threading.current_thread() is threading.main_thread(), 'state_invalid')
+    remaining = budget.deadline - budget.monotonic()
+    valid = (timestamp(budget.limits['valid_until']) - budget.clock()).total_seconds()
+    check(remaining > 0, 'deadline')
+    check(valid > 0, 'policy_expired')
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    previous_delay, previous_interval = signal.getitimer(signal.ITIMER_REAL)
+    check(previous_interval == 0, 'state_invalid')
+    seconds = min(remaining, valid, previous_delay if previous_delay > 0 else float('inf'))
+    reason = 'policy_expired' if valid < remaining else 'deadline'
+    started = time.monotonic()
+    def expired(_signal, _frame):
+        # Do not let a blocked response close strand an unsupervised manual caller.
+        # Attempt intent and reservations already exist; a forced exit never refunds them.
+        signal.signal(signal.SIGALRM, signal.SIG_DFL)
+        signal.setitimer(signal.ITIMER_REAL, HTTP_CLEANUP_SECONDS)
+        raise Refusal(reason)
+    signal.signal(signal.SIGALRM, expired)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+        if previous_delay > 0:
+            signal.setitimer(signal.ITIMER_REAL, max(0.000001, previous_delay - (time.monotonic() - started)))
+
+
+def invocation_context(environment=None):
+    """A journal correlation key, never proof that a timer rather than an operator started the unit."""
+    value = (os.environ if environment is None else environment).get('INVOCATION_ID')
+    valid = isinstance(value, str) and re.fullmatch(r'[a-f0-9]{32}', value) is not None
+    return {'source': 'systemd_environment' if valid else 'unclassified',
+            'systemd_invocation_id': value if valid else None, 'timer_trigger_verified': False}
+
+
 class NativeTransport:
     """Native v4; no implicit retries, redirects, proxies, netrc, multipart or bucket discovery.
 
@@ -370,18 +426,19 @@ class NativeTransport:
         provider_url(url)
         # Include a full bounded response chunk beyond the expected body. A corrupt oversized
         # response can be rejected after receipt; that last chunk must still have been reserved.
-        self.budget.debit(limit + 65536)
         try:
-            with self.session.request(method, url, timeout=(10, 30), allow_redirects=False,
-                                      stream=True, **kwargs) as response:
-                check(response.status_code == 200, 'transport_failed')
-                content = bytearray()
-                for chunk in response.iter_content(65536):
-                    check(self.budget.monotonic() < self.budget.deadline, 'deadline')
-                    check(self.budget.clock() < timestamp(self.policy['valid_until']), 'policy_expired')
-                    content.extend(chunk)
-                    check(len(content) <= limit, 'remote_corrupt')
-                return bytes(content)
+            with response_deadline(self.budget):
+                self.budget.debit(limit + 65536)
+                with self.session.request(method, url, timeout=(10, 30), allow_redirects=False,
+                                          stream=True, **kwargs) as response:
+                    check(response.status_code == 200, 'transport_failed')
+                    content = bytearray()
+                    for chunk in response.iter_content(65536):
+                        check(self.budget.monotonic() < self.budget.deadline, 'deadline')
+                        check(self.budget.clock() < timestamp(self.policy['valid_until']), 'policy_expired')
+                        content.extend(chunk)
+                        check(len(content) <= limit, 'remote_corrupt')
+                    return bytes(content)
         except Refusal:
             raise
         except Exception:
@@ -602,7 +659,8 @@ def execute(*, state=STATE, policy_path=POLICY, config_path=CONFIG, key=KEY, bac
     attempt = now().strftime('%Y%m%dT%H%M%SZ-') + secrets.token_hex(4)
     record = {'version': 1, 'attempt': attempt, 'state': 'running', 'reason_code': None,
               'started_at': now().isoformat(), 'provider_calls_permitted': False,
-              'restore_performed': False, 'independent_custody_verified': False}
+              'restore_performed': False, 'independent_custody_verified': False,
+              'invocation': invocation_context()}
     try:
         with exclusion(state):
             previous = read_json(state / 'status.json', {})

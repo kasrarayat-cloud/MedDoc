@@ -105,10 +105,11 @@ def candidate_pair(directory):
                   scope_storage_ceiling_bytes=1_000_000_000, daily_download_budget_bytes=100_000_000,
                   daily_request_budget=500, max_run_seconds=900, max_local_age_hours=30)
     non_scope = audit['account_total_bytes'] - audit['quillmd_scope_bytes']
-    contract = {'version': 1, 'status': 'active', 'policy_sha256': digest(encoded(limits)),
+    portable = audit.get('kind') == 'quillmd-account-audit'
+    contract = {'version': 2 if portable else 1, 'status': 'active', 'policy_sha256': digest(encoded(limits)),
                 'observed_at': limits['observed_at'], 'valid_until': limits['valid_until'],
                 'evidence_directory': str(directory),
-                'windows_source_sha256': updated['account_audit']['source_sha256'],
+                'windows_source_sha256': None if portable else updated['account_audit']['source_sha256'],
                 'control_sources': {relative: digest((allocation.ROOT / relative).read_bytes())
                                     for relative in allocation.SOURCES},
                 'known_consumers': list(allocation.CONSUMERS),
@@ -122,11 +123,14 @@ def candidate_pair(directory):
     return limits, contract
 
 
-def install_pair(directory, commit, *, execute=False, at=None):
+def install_pair(directory, commit, *, execute=False, at=None, expected_previous_sha256=None):
     """Called after reviewed_source; one locked publication, with a fail-closed marker on partial failure."""
     fixed_time = at is not None  # Deterministic isolated fixtures; CLI always rechecks the current clock.
     at = at or engine.now()
     with engine.exclusion(engine.STATE):
+        if expected_previous_sha256 is not None:
+            base.require(digest(engine.offsite.read_private(engine.POLICY, 16384)) == expected_previous_sha256,
+                         'Concurrent policy change; preserve the new policy and reject this stale renewal.')
         limits, contract = candidate_pair(directory)
         base.require(engine.timestamp(limits['observed_at']) <= at < engine.timestamp(limits['valid_until']),
                      'Original account observation has expired; its timestamp cannot be refreshed locally.')

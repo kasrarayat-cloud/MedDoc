@@ -39,6 +39,9 @@ COOLDOWN_SECONDS = 24 * 3600
 BACKUP_TIMEOUT_SECONDS = 600
 OFFSITE_STALE_SECONDS = 30 * 3600
 OFFSITE_TIMEOUT_SECONDS = 1200
+OFFSITE_ADMISSION_WINDOW_SECONDS = 960 + 60 + 90
+POLICY_WARNING_SECONDS = 6 * 3600
+WARNINGS = {'offsite_policy_renewal_due', 'offsite_policy_expiring', 'offsite_capacity_low', 'offsite_renewal_failed', 'offsite_next_run_budget_low'}
 ERRORS = {
     'healthy': 'Local capture and offsite completion/readback are current. Isolated-restore and recovery-key custody evidence are reported separately.',
     'backup_in_progress': 'A bounded backup is running; the next monitor check will recheck completion.',
@@ -52,11 +55,17 @@ ERRORS = {
     'offsite_status_unavailable': 'Inspect private automatic-offsite status and immutable attempt evidence; missing or malformed evidence does not prove a recoverable remote backup.',
     'offsite_policy_unavailable': 'Install or renew the protected, approved storage, download and request envelope; keep recurrence disabled until all limits are established.',
     'offsite_capacity_refused': 'The approved storage or request allowance is exhausted. Preserve existing versions; obtain a reviewed capacity or retention decision before another upload.',
+    'offsite_budget_refused': 'The shared UTC-day request or response reservation budget cannot admit this work. Preserve all reservations, including uncertain attempts; wait for an eligible UTC day or diagnose the recorded refusal without resetting counters.',
+    'offsite_next_run_budget_low': 'The next scheduled UTC day lacks reserved headroom for a new backup of the last complete size. This is a forecast, not an executed failure; actual size and pagination may differ. Preserve reservations and inspect that day\'s shared consumers before the run.',
     'offsite_capacity_low': 'The last scoped inventory leaves less room than one backup of the last completed size. Actual future size is unknown; preserve retained versions and arrange a reviewed capacity decision before the next capture. The worker cannot delete versions.',
     'offsite_upload_failed': 'Inspect the redacted automatic-offsite attempt record and authenticated completion manifest; retry through the bounded service after diagnosis, never count a partial upload as complete.',
     'offsite_cleanup_failed': 'The attempt did not complete cleanup. Preserve its private journal and retained resources; verify the bounded process has stopped and repair cleanup before retrying. A prior completed backup remains separately recorded.',
     'offsite_recovery_failed': 'A manual isolated restore failed. Inspect its protected verification and cleanup evidence before retrying through the shared allowance controls; the historical verified restore remains separately recorded.',
     'offsite_policy_renewal_due': 'The next daily run falls outside current account-audit validity. Renew the account-wide evidence through the authenticated desktop and install the reviewed policy before its deadline; the restricted worker cannot refresh account-wide inventory.',
+    'offsite_policy_expiring': 'Account evidence is approaching its recorded deadline. Complete the supported renewal before expiry; current backup proof remains separately valid and no allowance is reset.',
+    'offsite_policy_expired': 'Account evidence has expired. New offsite work is refused until a supported renewal is installed; retain the last observation, prior backups and shared reservations.',
+    'offsite_renewal_failed': 'The latest account-evidence renewal failed; the original observation and deadline remain in force. Inspect the protected renewal result, repair the stated cause and renew before expiry.',
+    'offsite_renewal_in_progress': 'A bounded account-evidence import is in progress. The original deadline remains in force until the protected replacement is validated and published.',
     'offsite_decryption_failed': 'Preserve the encrypted set and failure evidence; verify the correct recovery key and object integrity. Do not rotate working keys or overwrite a complete set.',
     'offsite_integrity_failed': 'Preserve the remote objects and failure evidence; inspect readback hashes and completion manifest. The affected set has not passed integrity verification.',
     'offsite_timeout': 'Inspect the bounded automatic-offsite service and its last attempt; determine which objects exist before a controlled retry.',
@@ -289,9 +298,12 @@ def capacity_status(value, at):
     age = (at - timestamp(value['observed_at'])).total_seconds()
     backup.require(age >= 0, 'Future scoped capacity evidence.')
     headroom = value['scope_ceiling_bytes'] - value['scope_stored_bytes_after']
+    size = value['last_complete_cipher_bytes']
     return {**value, 'age_seconds': int(age), 'stale': age > OFFSITE_STALE_SECONDS,
             'remaining_scope_bytes_at_observation': headroom,
-            'room_for_same_size_backup_at_observation': headroom >= value['last_complete_cipher_bytes'],
+            'room_for_same_size_backup_at_observation': headroom >= size,
+            'estimated_additional_daily_backups_of_same_size': headroom // size if size else None,
+            'estimate_assumptions': 'One new retained set per day at the last complete size; no deletion, retries, other writes or growth. Inventory pagination and daily request limits can refuse sooner.',
             'future_backup_size_known': False, 'account_wide_usage_measurement': False}
 
 
@@ -348,8 +360,11 @@ def offsite_policy_condition(at):
 def allowance_status(at):
     """Expose freshness and local reservations, never infer account-wide usage."""
     result = {'eligible': False, 'reason': 'policy_invalid',
+              'eligibility_scope': 'policy and ledger validity; each operation separately reserves its full bounded work',
               'observed_at': None, 'valid_until': None, 'observation_age_seconds': None,
-              'local_reservations': None}
+              'local_reservations': None, 'remaining_requests': None,
+              'remaining_reserved_response_bytes': None,
+              'provider_download_charges_confirmed': False}
     try:
         try:
             from . import automatic_offsite as engine
@@ -357,22 +372,87 @@ def allowance_status(at):
             import automatic_offsite as engine
         limits = engine.policy(at=at)
         allocation = allocation_status(limits, at)
-        result.update(eligible=True, reason=None, observed_at=limits['observed_at'],
-                      valid_until=limits['valid_until'],
-                      renewal_requires_desktop=allocation['renewal_requires_desktop'],
-                      observation_age_seconds=int((at - timestamp(limits['observed_at'])).total_seconds()),
-                      daily_request_budget=limits['daily_request_budget'],
-                      daily_download_budget_bytes=limits['daily_download_budget_bytes'])
+        result.update(eligible=True, reason=None)
     except Exception as failure:
         result.update(eligible=False, reason=getattr(failure, 'code', 'state_invalid'))
         if result['reason'] not in {'policy_missing', 'policy_invalid', 'policy_expired', 'state_invalid'}:
             result['reason'] = 'policy_invalid'
+        limits = allocation = None
+        if result['reason'] == 'policy_expired':
+            # A rejected current policy must not erase the last authenticated
+            # observation. Historical validation is display-only, never admission.
+            try:
+                candidate = json.loads(backup.read_private(engine.POLICY, 16384))
+                observed = timestamp(candidate['observed_at'])
+                backup.require(observed <= at, 'Future account observation.')
+                historical = engine.policy(at=observed)
+                backup.require(historical == candidate, 'Policy changed during observation.')
+                allocation = allocation_status(historical, observed)
+                limits = historical
+            except Exception:
+                limits = allocation = None
+    if limits is not None:
+        result.update(observed_at=limits['observed_at'], valid_until=limits['valid_until'],
+                      renewal_requires_desktop=allocation['renewal_requires_desktop'],
+                      observation_age_seconds=int((at - timestamp(limits['observed_at'])).total_seconds()),
+                      seconds_until_expiry=int((timestamp(limits['valid_until']) - at).total_seconds()),
+                      daily_request_budget=limits['daily_request_budget'],
+                      daily_download_budget_bytes=limits['daily_download_budget_bytes'])
     try:
         value = engine.budget_summary(state=OFFSITE_DIRECTORY, at=at)
         result['local_reservations'] = value
         result['local_reservations']['current_utc_day'] = value['day'] == at.strftime('%Y-%m-%d')
+        if limits is not None:
+            result.update(remaining_requests=max(0, limits['daily_request_budget'] - value['requests']),
+                          remaining_reserved_response_bytes=max(0, limits['daily_download_budget_bytes'] - value['download_bytes']))
     except Exception:
         result.update(eligible=False, reason='state_invalid')
+    return result
+
+
+def next_run_admission(at, next_run, allowance, remote):
+    """A local forecast, not a promise about future evidence or provider usage."""
+    result = {'scheduled_at': next_run, 'policy_covered': False,
+              'admission_status': 'unverified',
+              'ledger_day': None, 'remaining_requests': None,
+              'remaining_reserved_response_bytes': None,
+              'same_size_cycle_estimate': None, 'same_size_cycle_fits': None,
+              'future_success_verified': False}
+    if not next_run:
+        return result
+    run_at = timestamp(next_run)
+    if run_at <= at:
+        result['timer_event_due_or_in_progress'] = True
+        return result
+    expiry = allowance.get('valid_until')
+    result['policy_covered'] = bool(allowance.get('eligible') and expiry
+        and run_at + timedelta(seconds=OFFSITE_ADMISSION_WINDOW_SECONDS) < timestamp(expiry))
+    try:
+        try:
+            from . import automatic_offsite as engine
+        except ImportError:
+            import automatic_offsite as engine
+        value = engine.budget_summary(state=OFFSITE_DIRECTORY, at=run_at)
+        requests_left = allowance['daily_request_budget'] - value['requests']
+        bytes_left = allowance['daily_download_budget_bytes'] - value['download_bytes']
+        result.update(ledger_day=value['day'],
+                      uses_later_utc_day=value['day'] > at.strftime('%Y-%m-%d'),
+                      remaining_requests=max(0, requests_left),
+                      remaining_reserved_response_bytes=max(0, bytes_left))
+        if remote:
+            count = remote['object_count']
+            estimate = {'requests': 2 * count + 4,
+                        'reserved_response_bytes': remote['cipher_bytes'] + count * (65536 + 131072) + 131072 + 2359296,
+                        'extra_inventory_pages_or_retries_included': False,
+                        'future_backup_size_known': False}
+            result.update(same_size_cycle_estimate=estimate,
+                          same_size_cycle_fits=requests_left >= estimate['requests']
+                          and bytes_left >= estimate['reserved_response_bytes'])
+    except Exception:
+        result['budget_forecast_unavailable'] = True
+    result['admission_status'] = ('policy_not_covered' if not result['policy_covered'] else
+        'estimated_budget_shortfall' if result['same_size_cycle_fits'] is False else
+        'conditional_on_runtime_checks' if result['same_size_cycle_fits'] is True else 'budget_forecast_unavailable')
     return result
 
 
@@ -383,6 +463,46 @@ def allocation_status(limits, at):
         import automatic_offsite as engine
         import offsite_allocation
     return offsite_allocation.validate(limits, engine.POLICY, at)
+
+
+def renewal_status(at):
+    """Read only the renewal mechanism's nonsecret operator-facing fields."""
+    result = {'state': 'unavailable', 'last_attempt_at': None,
+              'last_successful_observation_at': None, 'valid_until': None,
+              'reason_code': 'renewal_status_unavailable', 'ticket_id': None,
+              'unattended_available': False,
+              'required_access': 'separate_account_wide_read_only_audit',
+              'failure_does_not_extend_validity': True}
+    try:
+        try:
+            from . import offsite_renewal
+        except ImportError:
+            import offsite_renewal
+        value = offsite_renewal.renewal_status(at)
+        backup.require(type(value) is dict and set(value) == set(result)
+                       and value['state'] in {'never_requested', 'awaiting_external_audit', 'importing', 'failed', 'installed'}
+                       and value['unattended_available'] is False
+                       and value['required_access'] == result['required_access']
+                       and value['failure_does_not_extend_validity'] is True,
+                       'Invalid renewal status.')
+        for field in ('last_attempt_at', 'last_successful_observation_at', 'valid_until'):
+            if value[field] is not None:
+                observed = timestamp(value[field])
+                backup.require(field == 'valid_until' or observed <= at, 'Future renewal evidence.')
+        backup.require(value['ticket_id'] is None or isinstance(value['ticket_id'], str)
+                       and re.fullmatch('[a-f0-9]{32}', value['ticket_id']), 'Invalid renewal ticket.')
+        backup.require(value['reason_code'] is None or value['reason_code'] in {
+            'audit_access_unavailable', 'audit_failed', 'ticket_expired', 'ticket_invalid',
+            'evidence_invalid', 'policy_conflict', 'publication_failed',
+            'budget_exhausted', 'state_invalid'},
+            'Invalid renewal outcome.')
+        if value['state'] == 'importing':
+            backup.require(value['last_attempt_at'] is not None, 'Import start is absent.')
+            if (at - timestamp(value['last_attempt_at'])).total_seconds() > 300:
+                value = dict(value, state='failed', reason_code='state_invalid')
+        return {key: value[key] for key in result}
+    except Exception:
+        return result
 
 
 def next_timer_run(unit):
@@ -477,6 +597,9 @@ def recovery_status(at):
               'last_verified_readback': None, 'last_isolated_restore': None,
               'recurrence_active': False, 'recurrence_enabled': False,
               'independent_key_custody_verified': False,
+              'last_successful_scheduled_run': None,
+              'scheduled_execution_evidence': 'not_recorded; timer enablement and LastTrigger alone do not prove execution origin',
+              'renewal': renewal_status(at),
               'next_permanent_timer_run': next_timer_run('quillmd-fresh-offsite.timer'),
               'allowance': allowance_status(at)}
     try:
@@ -488,6 +611,11 @@ def recovery_status(at):
                           ('last_isolated_restore', 'restore')):
             result[key] = safe_stage(value.get(key), kind, at)
         result['capacity'] = capacity_status(value.get('last_capacity'), at)
+        result['current_backup_health'] = 'healthy' if (
+            result['last_remote_complete'] and not result['last_remote_complete']['stale']
+            and result['last_verified_readback'] and not result['last_verified_readback']['stale']
+            and all(result['last_verified_readback'][key] == result['last_remote_complete'][key]
+                    for key in ('run_id', 'manifest_cipher_sha256', 'object_count', 'cipher_bytes'))) else 'unverified_or_stale'
         # Custody is a separate owner/off-host gate. A local restore cannot establish it.
         result['independent_key_custody_verified'] = (
             bool(result['last_isolated_restore'])
@@ -497,13 +625,12 @@ def recovery_status(at):
         result['service'] = offsite_service_state()
         next_run = result['next_permanent_timer_run']
         expiry = result['allowance'].get('valid_until')
-        result['next_run_covered_by_policy'] = bool(
-            next_run and expiry and at < timestamp(next_run)
-            and timestamp(next_run) + timedelta(seconds=960) < timestamp(expiry))
+        result['next_run_admission'] = next_run_admission(at, next_run, result['allowance'], result['last_remote_complete'])
+        result['next_run_covered_by_policy'] = result['next_run_admission']['policy_covered']
         reasons = {
             'policy_missing': 'offsite_policy_unavailable', 'policy_invalid': 'offsite_policy_unavailable',
-            'policy_expired': 'offsite_policy_unavailable', 'capacity_refused': 'offsite_capacity_refused',
-            'budget_exhausted': 'offsite_capacity_refused', 'remote_corrupt': 'offsite_integrity_failed',
+            'policy_expired': 'offsite_policy_expired', 'capacity_refused': 'offsite_capacity_refused',
+            'budget_exhausted': 'offsite_budget_refused', 'remote_corrupt': 'offsite_integrity_failed',
             'remote_uncertain': 'offsite_integrity_failed',
             'local_authentication_failed': 'offsite_decryption_failed',
             'transport_failed': 'offsite_upload_failed', 'deadline': 'offsite_timeout',
@@ -520,6 +647,27 @@ def recovery_status(at):
                        and reason in set(reasons) | {None}, 'Invalid automatic-offsite outcome.')
         backup.require(state not in {'running', 'complete'} or reason is None,
                        'Contradictory automatic-offsite outcome.')
+        execution = {'state': state, 'origin': 'not_recorded', 'scheduled_success_verified': False}
+        if 'invocation' in value:
+            invocation = value['invocation']
+            backup.require(type(invocation) is dict and set(invocation) == {
+                'source', 'systemd_invocation_id', 'timer_trigger_verified'}
+                and invocation['source'] in {'systemd_environment', 'unclassified'}
+                and invocation['timer_trigger_verified'] is False, 'Invalid invocation evidence.')
+            identifier = invocation['systemd_invocation_id']
+            backup.require((invocation['source'] == 'unclassified' and identifier is None)
+                or (invocation['source'] == 'systemd_environment' and isinstance(identifier, str)
+                    and re.fullmatch('[a-f0-9]{32}', identifier)), 'Invalid invocation identity.')
+            execution.update(origin=invocation['source'], systemd_invocation_id=identifier)
+        for field in ('started_at', 'finished_at'):
+            if value.get(field) is not None:
+                observed = timestamp(value[field])
+                backup.require(observed <= at, 'Future execution evidence.')
+                execution[field] = observed.isoformat()
+        # An immutable newer failure may outrank mutable status. Do not attach
+        # the older record's times to that newer outcome.
+        if state == value.get('state') and reason == value.get('reason_code'):
+            result['latest_execution'] = execution
         if state == 'pending_configuration':
             backup.require(not unit['enabled'] and not unit['active'], 'Pending state with active recurrence.')
             condition = 'offsite_pending_configuration'
@@ -541,12 +689,23 @@ def recovery_status(at):
             condition = 'offsite_schedule_unavailable'
         else:
             condition = offsite_policy_condition(at) or 'healthy'
+            if result['allowance'].get('reason') == 'policy_expired':
+                condition = 'offsite_policy_expired'
             if condition == 'healthy' and expiry and not result['next_run_covered_by_policy']:
                 condition = 'offsite_policy_renewal_due'
+            if (condition == 'healthy' and expiry
+                    and (timestamp(expiry) - at).total_seconds() <= POLICY_WARNING_SECONDS):
+                condition = 'offsite_policy_expiring'
             if (condition == 'healthy' and result['capacity']
                     and not result['capacity']['room_for_same_size_backup_at_observation']):
                 condition = 'offsite_capacity_low'
-        if (condition in {'healthy', 'offsite_pending_configuration', 'offsite_schedule_unavailable'}
+            if condition == 'healthy' and result['next_run_admission']['same_size_cycle_fits'] is False:
+                condition = 'offsite_next_run_budget_low'
+            if condition == 'healthy' and result['renewal']['state'] == 'failed':
+                condition = 'offsite_renewal_failed'
+            if condition == 'healthy' and result['renewal']['state'] == 'importing':
+                condition = 'offsite_renewal_in_progress'
+        if (condition in WARNINGS | {'healthy', 'offsite_pending_configuration', 'offsite_schedule_unavailable', 'offsite_renewal_in_progress'}
                 and result['manual_operation'] and result['manual_operation']['condition']):
             condition = result['manual_operation']['condition']
         result['condition'] = condition
@@ -705,8 +864,11 @@ def receipt(prefix):
 
 
 def report(condition, *, checked_at=None, alert=None, recovery=None, local_capture=None, external=None):
+    warning = condition in WARNINGS
+    in_progress = condition in {'backup_in_progress', 'offsite_in_progress', 'offsite_renewal_in_progress'}
     return {'format': 1, 'condition': condition, 'action': ERRORS[condition],
             'checked_at': checked_at, 'healthy': condition in {'healthy', 'backup_in_progress', 'offsite_in_progress'},
+            'severity': 'warning' if warning else 'healthy' if condition == 'healthy' else 'in_progress' if in_progress else 'failure',
             'alert': alert, 'offsite_recovery_verified': bool(recovery and recovery.get('last_isolated_restore')),
             'local_capture': local_capture, 'offsite': recovery,
             'external_monitor': external,
@@ -729,14 +891,14 @@ def check(at=None):
             local_capture = local_capture_status(at)
             if condition == 'healthy':
                 condition = recovery['condition']
-            external = external_heartbeat(at, healthy=condition == 'healthy', execute=True)
-            if condition == 'healthy' and external['outcome'] in {'configuration_or_state_invalid', 'pending', 'uncertain_no_retry'}:
+            external = external_heartbeat(at, healthy=condition == 'healthy' or condition in WARNINGS, execute=True)
+            if (condition == 'healthy' or condition in WARNINGS) and external['outcome'] in {'configuration_or_state_invalid', 'pending', 'uncertain_no_retry'}:
                 condition = 'external_monitor_unconfirmed'
             state.update(last_check_at=at.isoformat(), condition=condition)
             alert = None
-            if condition == 'healthy':
+            if condition in {'healthy', 'offsite_policy_expiring'}:
                 state.update(incident_id=None, incident_attempt=None)
-            elif condition not in {'backup_in_progress', 'offsite_in_progress', 'offsite_pending_configuration'}:
+            elif condition not in {'backup_in_progress', 'offsite_in_progress', 'offsite_pending_configuration', 'offsite_renewal_in_progress'}:
                 if not state['incident_id']:
                     state['incident_id'] = secrets.token_hex(16)
                 if state['incident_attempt']:
@@ -756,7 +918,7 @@ def check(at=None):
                               recovery=recovery, local_capture=local_capture, external=external), 1
             result = report(condition, checked_at=state['last_check_at'], alert=alert,
                             recovery=recovery, local_capture=local_capture, external=external)
-            return result, 0 if result['healthy'] else 1
+            return result, 0 if result['healthy'] or condition in WARNINGS | {'offsite_renewal_in_progress'} else 1
     except Exception:
         return report('monitoring_state_unavailable'), 1
 
@@ -793,17 +955,19 @@ def status(at=None):
         recovery = recovery_status(at)
         # Status is read-only but still exposes fresh offsite age/configuration;
         # a previous healthy check cannot hide newly stale recovery evidence.
-        if condition in {'healthy', 'backup_in_progress', 'offsite_in_progress', 'offsite_pending_configuration'}:
+        if condition in {'healthy', 'backup_in_progress', 'offsite_in_progress', 'offsite_pending_configuration',
+                         'offsite_policy_renewal_due', 'offsite_policy_expiring', 'offsite_policy_expired',
+                         'offsite_renewal_failed', 'offsite_renewal_in_progress', 'offsite_next_run_budget_low'}:
             local_condition = backup_condition(at)
             condition = recovery['condition'] if local_condition == 'healthy' else local_condition
         external = external_heartbeat(at)
-        if condition == 'healthy' and external['outcome'] in {'configuration_or_state_invalid', 'pending', 'uncertain_no_retry'}:
+        if (condition == 'healthy' or condition in WARNINGS) and external['outcome'] in {'configuration_or_state_invalid', 'pending', 'uncertain_no_retry'}:
             condition = 'external_monitor_unconfirmed'
         result = report(condition, checked_at=state['last_check_at'], alert=alert,
                         recovery=recovery, local_capture=local_capture_status(at), external=external)
         result.update(monitor_age_seconds=int(age) if age is not None else None,
                       stale_after_seconds=STALE_SECONDS)
-        return result, 0 if result['healthy'] else 1
+        return result, 0 if result['healthy'] or condition in WARNINGS | {'offsite_renewal_in_progress'} else 1
     except Exception:
         return report('monitoring_state_unavailable'), 1
 

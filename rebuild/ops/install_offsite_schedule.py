@@ -22,6 +22,7 @@ INSTALLER = 'rebuild/ops/install_offsite_schedule.py'
 DECLARATION = 'docs/foundation/mutations/20260920-quillmd-offsite-activation.md'
 SERVICE = 'quillmd-fresh-offsite.service'
 TIMER = 'quillmd-fresh-offsite.timer'
+RUN_COVERAGE_SECONDS = 960 + 60 + 90
 CONFIG = base.APP / '.runtime/backup-secrets/b2-offsite.json'
 RESUME_COMMIT = '53571ce789426590c65939e8f6dc925176dcd4fa'
 RESUME_FAILURE = 'offsite-units-activate-20260920T212053Z-331be21a-result.json'
@@ -30,6 +31,8 @@ RESUME_BASELINE = 'offsite-units-activate-20260920T212053Z-331be21a-before.json'
 RESUME_BASELINE_SHA256 = '87dd5383cf50030b225c8299e5cd68023878aed6dab0c6f1d11ebcd53c760e4c'
 RESUME_CONTEXT = 'timer-resume-context.json'
 RESUME_CONTEXT_SHA256 = '473d642d91b9309a64cd919f53dcd887abcdf7fbfd0a0c3af020b268ff0588ed'
+QUALIFIED_RESUME = 'offsite-units-resume-20260920T215156Z-14f79278-result.json'
+QUALIFIED_RESUME_SHA256 = '2423276792f23088e5a7e35d3ba70c259cc025aeba4c21ff5825ed009a4ed052'
 
 
 def eligibility():
@@ -70,20 +73,28 @@ def first_run_coverage(limits, *, actual=False, at=None):
         # systemd's exact UTC rendering instead of parsing another datetime.
         base.require(raw == expected.strftime('%a %Y-%m-%d %H:%M:%S UTC'),
                      'Actual offsite timer differs from the reviewed next run.')
+        timing = base.command(['systemctl', 'show', TIMER,
+                               '--property=AccuracyUSec,RandomizedDelayUSec']).decode()
+        base.require(dict(line.split('=', 1) for line in timing.splitlines()) ==
+                     {'AccuracyUSec': '1min', 'RandomizedDelayUSec': '0'},
+                     'Actual timer timing differs from the reviewed coverage window.')
     expires = datetime.fromisoformat(limits['policy_expires_at'])
-    # Timer accuracy defaults to one minute; allow it as well as the 900-second job.
-    deadline = scheduled + timedelta(seconds=960)
+    # Cover the entire effective systemd envelope, not only the worker's shorter
+    # technical deadline: 960 start + 60 timer accuracy + 90 stop grace.
+    deadline = scheduled + timedelta(seconds=RUN_COVERAGE_SECONDS)
     base.require(expires.tzinfo is not None and at < scheduled and deadline < expires,
                  'Policy must remain valid through the first scheduled run and timer accuracy window.')
     return {'next_run_at': scheduled.isoformat(), 'latest_completion_at': deadline.isoformat(),
-            'policy_expires_at': expires.isoformat(), 'actual_systemd_schedule': actual}
+            'policy_expires_at': expires.isoformat(), 'actual_systemd_schedule': actual,
+            'bounded_window_seconds': RUN_COVERAGE_SECONDS}
 
 
 def service_identity():
     properties = {'User': 'claude', 'Group': 'claude', 'WorkingDirectory': str(base.APP),
                   'KillMode': 'control-group', 'NoNewPrivileges': 'yes', 'ProtectSystem': 'strict',
                   'PrivateTmp': 'yes', 'MemoryMax': '1073741824', 'MemorySwapMax': '0',
-                  'TimeoutStartUSec': '16min', 'Environment': '', 'EnvironmentFiles': '',
+                  'TimeoutStartUSec': '16min', 'TimeoutStopUSec': '1min 30s',
+                  'Environment': '', 'EnvironmentFiles': '',
                   'ReadWritePaths': str(base.MONITOR)}
     raw = base.command(['systemctl', 'show', SERVICE, '--all',
                         '--property=' + ','.join(properties)]).decode()
@@ -98,12 +109,12 @@ def adoption_receipt(commit):
     return base.MONITOR / ('installation-' + commit + '.json')
 
 
-def installation_receipt(commit, hashes, *, adopt=False):
+def installation_receipt(commit, hashes, *, adopt=False, root_helper=False):
     """Preserve the original receipt; adoption can change source revision, never units."""
     path = base.MONITOR / 'installation.json' if adopt else adoption_receipt(commit)
     if not adopt and not path.exists() and not path.is_symlink():
         path = base.MONITOR / 'installation.json'
-    receipt = base.read_private(path)
+    receipt = json.loads(operator_bytes(path)) if root_helper else base.read_private(path)
     base.require(path.stat().st_nlink == 1 and receipt.get('success') is True
                  and re.fullmatch('[a-f0-9]{40}', receipt.get('commit', '')),
                  'Successful protected installation receipt required.')
@@ -163,6 +174,7 @@ def scope():
                     'rebuild/ops/backup_restore.py', 'rebuild/ops/private_storage.py',
                     'rebuild/ops/offsite_allocation.py',
                     'rebuild/ops/offsite_operator.py',
+                    'rebuild/ops/offsite_renewal.py', 'rebuild/ops/offsite_account_audit.py',
                     'rebuild/ops/install_offsite_policy.py',
                     'rebuild/ops/backup_alerts.py', 'rebuild/ops/recovery_kit.py',
                     DECLARATION, *(f'rebuild/deploy/{u}' for u in base.UNITS))
@@ -333,10 +345,144 @@ def resume_activation(payload, result):
         os.close(fd)
 
 
+def refresh_qualification(payload):
+    """Keep the original authenticated activation proof across source-only refreshes.
+
+    The successful resume is an immutable, reviewed anchor, unlike an original
+    unit-install receipt or a manually enabled timer. A refreshed receipt carries
+    this same reference forward; changed unit bytes require fresh qualification.
+    """
+    path = base.EVIDENCE / QUALIFIED_RESUME
+    receipt = json.loads(operator_bytes(path, QUALIFIED_RESUME_SHA256))
+    base.require(receipt.get('action') == 'resume' and receipt.get('success') is True
+                 and receipt.get('baseline_preserved') is True
+                 and receipt.get('b2_configuration_unchanged') is True
+                 and receipt.get('backup_records_unchanged') is True
+                 and receipt.get('shared_journal_unchanged') is True
+                 and receipt.get('first_run_coverage_actual', {}).get('actual_systemd_schedule') is True,
+                 'Retained successful activation qualification required.')
+    unit_hashes = {name: payload['hashes']['rebuild/deploy/' + name] for name in (SERVICE, TIMER)}
+    base.require(all(receipt.get('hashes', {}).get('rebuild/deploy/' + name) == digest
+                     for name, digest in unit_hashes.items()), 'Qualified unit bytes changed.')
+    controlled = receipt.get('controlled_run', {})
+    attempt_path = Path(controlled.get('path', ''))
+    base.require(attempt_path.parent == base.MONITOR
+                 and re.fullmatch(r'[0-9]{8}T[0-9]{6}Z-[a-f0-9]{8}\.json', attempt_path.name),
+                 'Retained controlled attempt is outside protected history.')
+    attempts = set(base.MONITOR.glob('20*.json'))
+    base.require(attempt_path in attempts and len(attempts) <= 10000, 'Retained controlled attempt is missing.')
+    actual = verified_attempt(attempts - {attempt_path})
+    base.require(actual == controlled, 'Retained authenticated attempt changed.')
+    status = json.loads(operator_bytes(base.MONITOR / 'status.json'))
+    active = json.loads(operator_bytes(base.MONITOR / 'active.json'))
+    attempt = status.get('attempt', '')
+    known_failures = {'policy_missing', 'policy_invalid', 'policy_expired', 'capacity_refused', 'budget_exhausted',
+        'remote_corrupt', 'remote_uncertain', 'local_authentication_failed', 'local_backup_stale',
+        'transport_failed', 'scope_refused', 'lock_busy', 'deadline', 'state_invalid', 'cleanup_failed'}
+    base.require(type(status.get('version')) is int and status['version'] == 1
+                 and status.get('state') in {'complete', 'failed', 'refused'}
+                 and ((status['state'] == 'complete' and status.get('reason_code') is None)
+                      or (status['state'] != 'complete' and status.get('reason_code') in known_failures))
+                 and re.fullmatch(r'[0-9]{8}T[0-9]{6}Z-[a-f0-9]{8}', attempt),
+                 'Current offsite status must be a finished immutable attempt.')
+    current = base.MONITOR / (attempt + '.json')
+    base.require(current in attempts and json.loads(operator_bytes(current)) == status,
+                 'Current status differs from immutable execution evidence.')
+    remote, readback = status.get('last_remote_complete'), status.get('last_verified_readback')
+    base.require(type(remote) is dict and type(readback) is dict,
+                 'Prior complete publication and readback must remain available.')
+    publication_complete = (active.get('complete') is True and active.get('pending') is None
+        and all(active.get(name) == remote.get(name) == readback.get(name)
+                for name in ('run_id', 'manifest_cipher_sha256')))
+    base.require(status['state'] != 'complete' or publication_complete,
+                 'A successful latest execution requires complete publication.')
+    # A later successful cycle or no-op may have replaced status. Locate its
+    # actual authenticated readback rather than relabelling the original set.
+    current_proof = None
+    for candidate in sorted(attempts):
+        evidence = json.loads(operator_bytes(candidate))
+        if (evidence.get('state') == 'complete' and evidence.get('provider_calls_permitted') is True
+                and evidence.get('last_remote_complete') == remote
+                and evidence.get('last_verified_readback') == readback):
+            current_proof = verified_attempt(attempts - {candidate})
+            break
+    base.require(current_proof is not None, 'Current publication has no retained authenticated readback.')
+    at = datetime.now(timezone.utc)
+    finished = datetime.fromisoformat(status.get('finished_at', ''))
+    proof_finished = datetime.fromisoformat(current_proof['record']['finished_at'])
+    base.require(finished.tzinfo is not None and proof_finished.tzinfo is not None
+                 and proof_finished <= finished <= at, 'Future or inconsistent execution evidence.')
+    return {'receipt_path': str(path), 'receipt_sha256': QUALIFIED_RESUME_SHA256,
+            'commit': receipt['commit'], 'qualified_unit_hashes': unit_hashes,
+            'controlled_attempt_path': controlled['path'], 'controlled_attempt_sha256': controlled['sha256'],
+            'current_readback_attempt_path': current_proof['path'],
+            'current_readback_attempt_sha256': current_proof['sha256'],
+            'latest_execution': {'attempt': attempt, 'state': status['state'],
+                                 'reason_code': status.get('reason_code'), 'finished_at': finished.isoformat()},
+            'current_publication_complete': publication_complete}
+
+
+def refresh_installation(payload):
+    """Verify an already active installation after reviewed source-only changes.
+
+    No service start, timer action, provider call or allowance write is allowed.
+    The new immutable adoption receipt is written by the operator after this
+    read-only root helper returns; all previous installation evidence survives.
+    """
+    fd = os.open(base.MONITOR / 'execution.lock', os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        info = os.fstat(fd)
+        base.require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1
+                     and info.st_uid == pwd.getpwnam('claude').pw_uid
+                     and stat.S_IMODE(info.st_mode) == 0o600, 'Unsafe shared offsite lock.')
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        def assert_lock():
+            current = os.stat(base.MONITOR / 'execution.lock', follow_symlinks=False)
+            base.require((info.st_dev, info.st_ino) == (current.st_dev, current.st_ino),
+                         'Shared offsite lock changed during refresh.')
+        def snapshot():
+            paths = [CONFIG, CONFIG.parent / 'offsite-policy.json', CONFIG.parent / 'offsite-allocation.json']
+            paths += list(base.MONITOR.glob('*.json'))
+            base.require(len(paths) <= 10000, 'Oversized offsite state.')
+            return {str(path): hashlib.sha256(operator_bytes(path)).hexdigest() for path in paths}
+        assert_lock()
+        before = snapshot()
+        installation_receipt(payload['commit'], payload['hashes'], adopt=True, root_helper=True)
+        qualification = refresh_qualification(payload)
+        base.require(payload['baseline']['units'].get(base.LINK) == {
+                         'uid': 0, 'gid': 0, 'mode': 0o777, 'link': str(base.SYSTEMD / TIMER)}
+                     and base.command(['systemctl', 'is-active', TIMER]).strip() == b'active'
+                     and base.command(['systemctl', 'is-enabled', TIMER]).strip() == b'enabled',
+                     'Refresh requires the already enabled active timer.')
+        service = base.command(['systemctl', 'show', SERVICE,
+                                '--property=ActiveState,Result,ExecMainStatus']).decode()
+        service_state = dict(line.split('=', 1) for line in service.splitlines())
+        base.require(set(service_state) == {'ActiveState', 'Result', 'ExecMainStatus'}
+                     and service_state['ActiveState'] in {'inactive', 'failed'}
+                     and service_state['Result'] in {'success', 'exit-code', 'signal', 'core-dump', 'timeout',
+                         'watchdog', 'start-limit-hit', 'resources', 'oom-kill', 'protocol'}
+                     and re.fullmatch('[0-9]{1,3}', service_state['ExecMainStatus']),
+                     'Refresh requires a stopped service; any prior failure remains separately recorded.')
+        identity = service_identity()
+        limits = eligibility()
+        coverage = first_run_coverage(limits, actual=True)
+        assert_lock()
+        base.require(before == snapshot(), 'Protected offsite state changed during refresh.')
+        base.require(qualification == refresh_qualification(payload), 'Activation qualification changed during refresh.')
+        return {'service_identity': identity, 'eligibility': limits,
+                'first_run_coverage_actual': coverage, 'unit_files_changed': False,
+                'new_service_start': False, 'timer_actions': 0, 'provider_calls': 0,
+                'shared_journal_unchanged': True, 'protected_state_hashes': before,
+                'retained_activation_qualification': qualification, 'latest_service_state': service_state,
+                'execution_verification_performed': False}
+    finally:
+        os.close(fd)
+
+
 def root_action(payload):
     base.require(os.getuid() == 0 and set(payload) == {'action', 'hashes', 'baseline', 'commit'},
                  'Invalid helper input.')
-    base.require(payload['action'] in ('install', 'adopt', 'activate', 'resume', 'disable')
+    base.require(payload['action'] in ('install', 'adopt', 'activate', 'resume', 'refresh', 'disable')
                  and set(payload['hashes']) == set(base.SOURCES), 'Invalid helper scope.')
     for relative, expected in payload['hashes'].items():
         path = base.ROOT / relative
@@ -389,6 +535,9 @@ def root_action(payload):
         elif payload['action'] == 'resume':
             base.require_installed(payload['hashes'])
             result.update(resume_activation(payload, result))
+        elif payload['action'] == 'refresh':
+            base.require_installed(payload['hashes'])
+            result.update(refresh_installation(payload))
         else:
             base.require_installed(payload['hashes'])
             base.command(['systemctl', 'disable', '--now', TIMER])
@@ -436,7 +585,7 @@ def main():
     scope()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--expected-commit', required=True)
-    parser.add_argument('--action', choices=('install', 'adopt', 'activate', 'resume', 'disable'), default='install')
+    parser.add_argument('--action', choices=('install', 'adopt', 'activate', 'resume', 'refresh', 'disable'), default='install')
     parser.add_argument('--execute', action='store_true')
     args = parser.parse_args()
     base.require(os.getuid() == pwd.getpwnam('claude').pw_uid, 'Use the authorized project operator.')
@@ -447,11 +596,11 @@ def main():
         base.require_absent(before)
         configuration()
     else:
-        if args.action in ('activate', 'resume'):
+        if args.action in ('activate', 'resume', 'refresh'):
             configuration()
         base.require_installed(hashes)
-        prior_receipt = installation_receipt(args.expected_commit, hashes, adopt=args.action == 'adopt')
-        if args.action == 'adopt':
+        prior_receipt = installation_receipt(args.expected_commit, hashes, adopt=args.action in ('adopt', 'refresh'))
+        if args.action in ('adopt', 'refresh'):
             base.require(not adoption_receipt(args.expected_commit).exists(), 'Revision already adopted.')
     if not args.execute:
         print(json.dumps({'plan_verified': True, 'action': args.action, 'commit': args.expected_commit,
@@ -496,7 +645,7 @@ def main():
     base.write_private(base.EVIDENCE / (name + '-result.json'), result)
     if result['success'] and args.action == 'install':
         base.write_private(base.MONITOR / 'installation.json', result)
-    elif result['success'] and args.action == 'adopt':
+    elif result['success'] and args.action in ('adopt', 'refresh'):
         base.write_private(adoption_receipt(args.expected_commit), result)
     print(json.dumps({'success': result['success'], 'action': args.action,
                       'evidence': str(base.EVIDENCE / (name + '-result.json'))}))
