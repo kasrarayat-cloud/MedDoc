@@ -26,7 +26,8 @@ class BackupAlertsTests(unittest.TestCase):
         self.env = self.root / '.env'
         self.backup_monitor = self.root / 'backup-monitor'
         self.backup_monitor.mkdir(mode=0o700)
-        for name, value in (('DIRECTORY', self.alerts), ('CONFIG', self.config), ('ENV_FILE', self.env)):
+        for name, value in (('DIRECTORY', self.alerts), ('CONFIG', self.config), ('ENV_FILE', self.env),
+                            ('EXTERNAL_CONFIG', self.root / 'external-monitor.json')):
             replacement = patch.object(a, name, value)
             replacement.start()
             self.addCleanup(replacement.stop)
@@ -294,6 +295,21 @@ class BackupAlertsTests(unittest.TestCase):
         self.assertEqual((result['condition'], code), ('offsite_stale', 1))
         self.sender.assert_not_called()
 
+    def test_status_rechecks_local_staleness_without_waiting_for_next_alert_tick(self):
+        a.check(self.at)
+        self.health.return_value = 'backup_stale'
+        result, code = a.status(self.at + timedelta(minutes=1))
+        self.assertEqual((result['condition'], code), ('backup_stale', 1))
+        self.sender.assert_not_called()
+
+    def test_status_surfaces_newly_invalid_external_configuration_without_send(self):
+        a.check(self.at)
+        a.backup.write_private(self.root / 'external-monitor.json', b'{}')
+        result, code = a.status(self.at + timedelta(minutes=1))
+        self.assertEqual((result['condition'], code), ('external_monitor_unconfirmed', 1))
+        self.assertFalse(result['healthy'])
+        self.sender.assert_not_called()
+
 
 class RecoveryStageTests(unittest.TestCase):
     def setUp(self):
@@ -302,6 +318,8 @@ class RecoveryStageTests(unittest.TestCase):
         self.directory = Path(temp.name)
         self.directory.chmod(0o700)
         patch.object(a, 'OFFSITE_DIRECTORY', self.directory).start()
+        patch.object(a, 'next_timer_run', return_value=None).start()
+        patch.object(a, 'allowance_status', return_value={'eligible': False, 'reason': 'policy_missing'}).start()
         self.units = patch.object(a, 'offsite_systemd_state', return_value={
             'active': True, 'enabled': True}).start()
         self.policy = patch.object(a, 'offsite_policy_condition', return_value=None).start()
@@ -527,6 +545,189 @@ class ExistingResendTransportTests(unittest.TestCase):
         self.assertEqual(post.call_args.kwargs['json']['to'], [a.RECIPIENT])
         self.assertTrue(post.call_args.kwargs['headers']['Idempotency-Key'].startswith('quillmd-account/'))
         self.assertFalse(post.call_args.kwargs['follow_redirects'])
+
+
+class ExternalHeartbeatTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.config = self.root / 'external-monitor.json'
+        patch.object(a, 'DIRECTORY', self.root).start()
+        patch.object(a, 'EXTERNAL_CONFIG', self.config).start()
+        self.http = patch.object(a.requests, 'Session').start()
+        self.session = self.http.return_value.__enter__.return_value
+        self.response = self.session.get.return_value.__enter__.return_value
+        self.response.status_code = 200
+        self.response.raw.read.return_value = b'OK'
+        self.addCleanup(patch.stopall)
+        self.at = datetime(2026, 9, 20, 20, 0, tzinfo=timezone.utc)
+        self.value = {'version': 1, 'provider': 'healthchecks.io', 'synthetic_only': True,
+                      'owner_approval_reference': 'synthetic-approved-fixture',
+                      'check_url': 'https://hc-ping.com/00000000-0000-4000-8000-000000000000'}
+
+    def configure(self):
+        a.backup.write_private(self.config, json.dumps(self.value).encode())
+
+    def test_absent_configuration_and_unhealthy_readonly_checks_never_send(self):
+        self.assertEqual(a.external_heartbeat(self.at, healthy=True, execute=True)['outcome'], 'not_configured')
+        self.configure()
+        for kwargs in ({}, {'healthy': True}, {'execute': True}):
+            self.assertEqual(a.external_heartbeat(self.at, **kwargs)['outcome'], 'not_attempted')
+        self.http.assert_not_called()
+
+    def test_one_bounded_tls_ping_per_period_and_no_secret_in_record(self):
+        self.configure()
+        first = a.external_heartbeat(self.at, healthy=True, execute=True)
+        second = a.external_heartbeat(self.at + timedelta(seconds=299), healthy=True, execute=True)
+        self.assertTrue(first['provider_accepted'])
+        self.assertEqual(second, dict(first, stale=False))
+        self.session.get.assert_called_once()
+        self.assertFalse(self.session.trust_env)
+        self.assertEqual(self.session.get.call_args.kwargs['timeout'], (3, 5))
+        self.assertFalse(self.session.get.call_args.kwargs['allow_redirects'])
+        self.assertTrue(self.session.get.call_args.kwargs['stream'])
+        self.response.raw.read.assert_called_once_with(3, decode_content=False)
+        self.assertFalse(first['missed_heartbeat_alert_verified'])
+        self.assertFalse(first['human_inbox_confirmed'])
+        self.assertNotIn('hc-ping', (self.root / 'external-heartbeat.json').read_text())
+        a.external_heartbeat(self.at + timedelta(seconds=300), healthy=True, execute=True)
+        self.assertEqual(self.session.get.call_count, 2)
+
+    def test_provider_200_not_found_or_rate_limit_is_not_acceptance(self):
+        self.configure()
+        for index, body in enumerate((b'OK (not found)', b'OK (rate limited)', b'x' * 33, b'')):
+            self.response.raw.read.return_value = body
+            result = a.external_heartbeat(self.at + timedelta(seconds=index * 300), healthy=True, execute=True)
+            self.assertEqual(result['outcome'], 'uncertain_no_retry')
+            self.assertFalse(result['provider_accepted'])
+
+    def test_redirect_error_and_exception_do_not_leak_and_do_not_retry(self):
+        self.configure()
+        self.response.status_code = 302
+        result = a.external_heartbeat(self.at, healthy=True, execute=True)
+        self.assertEqual(result['outcome'], 'uncertain_no_retry')
+        self.response.raw.read.assert_not_called()
+        self.session.get.side_effect = RuntimeError('private-url-canary')
+        result = a.external_heartbeat(self.at + timedelta(minutes=5), healthy=True, execute=True)
+        self.assertNotIn('canary', json.dumps(result))
+        a.external_heartbeat(self.at + timedelta(minutes=6), healthy=True, execute=True)
+        self.assertEqual(self.session.get.call_count, 2)
+
+    def test_interrupt_reserves_period_before_request(self):
+        self.configure()
+        self.session.get.side_effect = KeyboardInterrupt
+        with self.assertRaises(KeyboardInterrupt):
+            a.external_heartbeat(self.at, healthy=True, execute=True)
+        result = a.external_heartbeat(self.at + timedelta(seconds=60), healthy=True, execute=True)
+        self.assertEqual(result['outcome'], 'pending')
+        self.session.get.assert_called_once()
+
+    def test_endpoint_variants_and_unapproved_configuration_refused_before_http(self):
+        self.configure()
+        for change in ({'version': True}, {'synthetic_only': 1}, {'owner_approval_reference': ''},
+                       {'provider': 'unknown'}, {'unexpected': 'private-canary'},
+                       *({'check_url': url} for url in ('http://hc-ping.com/a',
+                           self.value['check_url'] + '?create=1', self.value['check_url'] + '/fail',
+                           self.value['check_url'].replace('hc-ping.com', 'hc-ping.com.evil.invalid'),
+                           self.value['check_url'].replace('hc-ping.com', 'secret@hc-ping.com'),
+                           self.value['check_url'].replace('hc-ping.com', 'hc-ping.com:443')))):
+            with self.subTest(change=change):
+                self.config.write_text(json.dumps(dict(self.value, **change)))
+                result = a.external_heartbeat(self.at, healthy=True, execute=True)
+                self.assertEqual(result['outcome'], 'configuration_or_state_invalid')
+                self.assertNotIn('canary', json.dumps(result))
+        self.http.assert_not_called()
+
+    def test_nonprivate_symlink_and_hardlink_configuration_refused(self):
+        self.configure()
+        self.config.chmod(0o644)
+        self.assertEqual(a.external_heartbeat(self.at)['outcome'], 'configuration_or_state_invalid')
+        self.config.chmod(0o600)
+        extra = self.root / 'copy'
+        os.link(self.config, extra)
+        self.assertEqual(a.external_heartbeat(self.at)['outcome'], 'configuration_or_state_invalid')
+        extra.unlink()
+        self.config.rename(extra)
+        self.config.symlink_to(extra)
+        self.assertEqual(a.external_heartbeat(self.at)['outcome'], 'configuration_or_state_invalid')
+        self.http.assert_not_called()
+
+
+class OperatorVisibilityTests(unittest.TestCase):
+    def test_capture_metadata_cannot_hide_missing_or_changed_encrypted_members(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        run_id = '20260920T225900Z-aabbccdd'
+        capture = root / run_id
+        capture.mkdir(mode=0o700)
+        objects = capture / 'objects'
+        objects.mkdir(mode=0o700)
+        a.backup.write_private(capture / 'manifest.json.fernet', b'synthetic ciphertext')
+        a.backup.write_private(capture / 'database.dump.fernet', b'synthetic dump ciphertext')
+        member = objects / ('a' * 64 + '.fernet')
+        a.backup.write_private(member, b'synthetic file ciphertext')
+        summary = dict(complete=True, run_id=run_id, database='quillmd_fresh', table_count=1,
+                       row_count=1, file_count=1, file_bytes=4, source_commit='a'*40, encrypted=True,
+                       manifest_cipher_sha256=a.backup.digest(b'synthetic ciphertext'))
+        a.backup.write_private(capture / 'summary.json', json.dumps(summary).encode())
+        state = dict(healthy=True, latest_outcome='complete', last_success_run_id=run_id)
+        with patch.object(a.scheduled, 'DESTINATION', root), \
+             patch.object(a.scheduled, 'status', return_value=state), \
+             patch.object(a, 'systemd_state', return_value=dict(active=True, enabled=True, service=True)):
+            self.assertTrue(a.current_local_bundle(state))
+            self.assertEqual(a.backup_condition(datetime.now(timezone.utc)), 'healthy')
+            member.unlink()
+            self.assertEqual(a.backup_condition(datetime.now(timezone.utc)), 'backup_artifacts_unavailable')
+            a.backup.write_private(member, b'synthetic file ciphertext')
+            (capture / 'manifest.json.fernet').write_bytes(b'tampered ciphertext')
+            self.assertEqual(a.backup_condition(datetime.now(timezone.utc)), 'backup_artifacts_unavailable')
+            (capture / 'manifest.json.fernet').write_bytes(b'synthetic ciphertext')
+            (capture / 'database.dump.fernet').unlink()
+            self.assertEqual(a.backup_condition(datetime.now(timezone.utc)), 'backup_artifacts_unavailable')
+
+    def test_timer_date_is_utc_and_unknown_output_is_redacted(self):
+        with patch.object(a.subprocess, 'run', return_value=SimpleNamespace(returncode=0,
+                          stdout=b'Mon 2026-09-21 04:30:00 UTC')) as process:
+            self.assertEqual(a.next_timer_run('quillmd-fresh-backup.timer'), '2026-09-21T04:30:00+00:00')
+            process.return_value.stdout = b'private-canary'
+            self.assertIsNone(a.next_timer_run('quillmd-fresh-offsite.timer'))
+            calls = process.call_count
+            self.assertIsNone(a.next_timer_run('unapproved.service'))
+            self.assertEqual(process.call_count, calls)
+
+    def test_allowance_reports_reservations_and_freshness_not_account_usage(self):
+        try:
+            from . import automatic_offsite as engine
+        except ImportError:
+            import automatic_offsite as engine
+        at = datetime(2026, 9, 20, 20, 0, tzinfo=timezone.utc)
+        limits = dict(observed_at=(at-timedelta(minutes=30)).isoformat(),
+                      valid_until=(at+timedelta(hours=1)).isoformat(),
+                      daily_request_budget=500, daily_download_budget_bytes=100_000_000,
+                      account_storage_used_bytes_at_observation=123, private_canary='never-output')
+        budget = dict(version=1, day='2026-09-20', requests=44, download_bytes=12345)
+        with patch.object(engine, 'policy', return_value=limits), patch.object(engine, 'read_json', return_value=budget):
+            result = a.allowance_status(at)
+            self.assertTrue(result['eligible'])
+            self.assertEqual(result['observation_age_seconds'], 1800)
+            self.assertEqual(result['local_reservations']['requests'], 44)
+            self.assertTrue(result['local_reservations']['current_utc_day'])
+            self.assertNotIn('canary', json.dumps(result))
+            self.assertNotIn('account_storage', json.dumps(result))
+
+    def test_expired_policy_and_bad_ledger_fail_closed_with_specific_reason(self):
+        try:
+            from . import automatic_offsite as engine
+        except ImportError:
+            import automatic_offsite as engine
+        with patch.object(engine, 'policy', side_effect=engine.Refusal('policy_expired')), \
+             patch.object(engine, 'read_json', return_value=dict(version=1, day='2026-09-20', requests=44, download_bytes=12)):
+            result = a.allowance_status(datetime.now(timezone.utc))
+            self.assertFalse(result['eligible'])
+            self.assertEqual(result['reason'], 'policy_expired')
+            self.assertEqual(result['local_reservations']['requests'], 44)
 
 
 if __name__ == '__main__':

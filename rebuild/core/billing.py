@@ -116,6 +116,9 @@ def settle(job,actual_cost,units,rates,provider,provider_request_id='',simulated
         wallet.reserved-=r.amount; wallet.balance-=debit; wallet.save(update_fields=['reserved','balance'])
         if debit: LedgerEntry.objects.create(wallet=wallet,amount=-debit,kind='usage',key=f'usage:{job.pk}:{wallet.pk}',description='Provider cost × 1.5',job=job,balance_after=wallet.balance)
         r.state='settled'; r.save(update_fields=['state']); remaining-=debit
+        # The unused part of a paid hold becomes available just as on release().
+        # Resume older adjustments only after the settlement and its outer transaction commit.
+        if wallet.kind=='paid' and debit<r.amount: reconcile_after_commit(wallet)
     d=job.encounter.department
     result=Usage.objects.create(job=job,user=job.user,department=d,organization=d.organization,payer=job.payer or f'user:{job.user_id}',provider=provider,provider_request_id=provider_request_id,provider_resource_id=provider_resource_id,units=units,rates=rates,actual_cost=actual,charged_cost=charged,simulated=simulated)
     if over_limit>0:
@@ -268,6 +271,7 @@ def reconcile_usage(usage,reconciled_cost,evidence_reference,actor,provider_cred
             wallet=wallets[wallet_id]
             wallet.balance+=share; wallet.save(update_fields=['balance'])
             LedgerEntry.objects.create(wallet=wallet,amount=share,kind='reconciliation',key=f'reconciliation:{usage.pk}:{wallet.pk}',description='Reconciled provider cost below the configured estimate × 1.5 (credit back)',job_id=usage.job_id,balance_after=wallet.balance)
+            if wallet.kind=='paid': reconcile_after_commit(wallet,actor=actor)
     elif delta>0:
         payer=payer_wallet(usage.payer)
         wallet=Wallet.objects.select_for_update().get(pk=payer.pk)
@@ -338,6 +342,7 @@ def absorb_failed_job(job,actor=None,note=''):
         wallet=wallets[wallet_id]; wallet.balance+=owed; wallet.save(update_fields=['balance'])
         LedgerEntry.objects.create(wallet=wallet,amount=owed,kind='absorbed',key=key,description='Usage charge reversed: provider cost of a platform failure absorbed by QuillMD',job=job,balance_after=wallet.balance)
         reversed_total+=owed
+        if wallet.kind=='paid': reconcile_after_commit(wallet,actor=actor)
     if reconciliation and reconciliation.ledger_status=='pending_funds':
         reconciliation.ledger_status='absorbed'; reconciliation.save(update_fields=['ledger_status'])
     amount=reconciliation.reconciled_cost if reconciliation else usage.actual_cost

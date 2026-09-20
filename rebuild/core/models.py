@@ -6,14 +6,25 @@ from django.db import models
 from django.db.models.functions import Lower
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.utils import timezone
+from django.utils.crypto import salted_hmac
 
 class User(AbstractUser):
     id=models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False)
     email=models.EmailField(unique=True)
     verified_at=models.DateTimeField(null=True,blank=True)
+    session_version=models.PositiveBigIntegerField(default=0,editable=False)
     class Meta:
         constraints=[models.UniqueConstraint(Lower('email'),name='unique_email_casefold')]
     def __str__(self): return self.email
+    def _get_session_auth_hash(self,secret=None):
+        original=super()._get_session_auth_hash(secret=secret)
+        # Preserve existing sessions until an administrator actually suspends
+        # this account. A persistent generation also rejects a session saved by
+        # an in-flight request after suspension, and cannot revive on re-enable.
+        if not self.session_version:return original
+        return salted_hmac('quillmd.account_session_version',
+                           f'{original}:{self.session_version}',
+                           secret=secret,algorithm='sha256').hexdigest()
 
 class Entity(models.Model):
     id=models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False)

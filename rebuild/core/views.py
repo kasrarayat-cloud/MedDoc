@@ -886,8 +886,11 @@ def admin_account(request,pk):
     if not request.user.is_staff or not request.user.is_verified():raise Http404
     user=get_object_or_404(User.objects.select_for_update(),pk=pk)
     if user.is_staff:raise PermissionDenied('Administrators cannot be changed through this screen.')
-    user.is_active=request.POST.get('active')=='on';user.save(update_fields=['is_active'])
-    audit(request.user,'admin.account_access',user.pk,active=user.is_active)
+    active=request.POST.get('active')=='on'
+    revoked=user.is_active and not active
+    if revoked:user.session_version+=1
+    user.is_active=active;user.save(update_fields=['is_active','session_version'])
+    audit(request.user,'admin.account_access',user.pk,active=user.is_active,sessions_invalidated=revoked)
     return redirect('admin_dashboard')
 
 # Minimal API endpoints share the same query boundary as HTML and downloads.

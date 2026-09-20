@@ -1,3 +1,46 @@
+# Current external dependencies — private readiness, 2026-09-20
+
+Desktop custody, the three-file return, server cryptographic verification and the
+independent-key isolated restore are complete. The temporary grant and server
+return key are removed. The desktop temporary return key can be removed; retain
+Windows vault entries and working keys. Do not repeat provisioning, upload,
+original Word acceptance, Stripe sandbox or invitation/recovery campaigns.
+
+Engineering owns the current security, billing and monitoring repairs and their
+reviewed activation. Exact outcomes are in the append-only runtime checkpoint
+and `private-readiness-20260920/FINAL-REPORT.md`. See the source-backed
+[readiness record](private-readiness-20260920.md) for evidence and limits.
+
+The remaining external dependencies are consolidated here:
+
+- **Offsite admission:** an account-wide stored-byte measurement or supported
+  conservative bound, including all versions and unfinished parts, plus allocation
+  and accounting controls for consumers outside the shared project budget. The
+  rounded daily display and exact prefix inventory do not supply this fact. No
+  broader key or cap change is requested; the daily offsite timer stays disabled.
+- **Outside-host detection and notification acceptance:** an existing authorized
+  individual heartbeat endpoint in protected `backup-secrets/external-monitor.json`
+  and actual provider-side verification. The previous test alert's human inbox
+  confirmation remains distinct from provider acceptance/delivery; do not resend.
+- **Authentic provider reconciliation:** billing/usage exports, applicable rates,
+  discounts and credits in protected `provider-evidence/` (currently empty).
+  Two historical receipt exceptions remain; synthetic arithmetic is not an invoice.
+- **Independent security engagement:** named tester, public identity, source,
+  approved UTC window and emergency contact through the existing private handoff.
+  Internal security regression checks do not complete the independent test.
+- **Separately held release gates:** legitimate CPT rights/content; signed
+  patient-data agreements and approved processing regions/retention; the deferred
+  natural human recording and new SOAP native Word review. Existing WM IOV Word
+  acceptance remains complete. No public or real-patient activation is approved.
+
+These are factual/access dependencies, not a request for another generic approval.
+The Windows custody proof is tied to that computer/account; offline, Windows-loss,
+LUKS custody and whole-host disaster recovery are not established.
+
+Earlier dated entries below remain historical and are superseded by this entry.
+
+---
+
 # Current bounded action — automatic offsite recovery, 2026-09-20
 
 B2 key provisioning, transfer, installation and the real encrypted qualification

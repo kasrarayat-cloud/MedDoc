@@ -434,7 +434,15 @@ def restore(args):
                 result['cleanup_failed'] = True
                 result['cleanup_error_class'] = type(cleanup_failure).__name__
                 result['container_retained'] = True  # it may still be running; say so rather than imply it was removed
+                if result['complete']:
+                    result.update(data_verification_complete=True, complete=False,
+                                  stage='cleaning_the_isolated_database',
+                                  failed_stage='cleaning_the_isolated_database')
         write_private(restored / 'verification.json', json.dumps(result, indent=2).encode() + b'\n')
+    # A clean comparison with a retained plaintext DB is not a completed drill.
+    # This follows the finally block so an earlier failure keeps its original
+    # exception and failed_stage while both failures remain in the report.
+    require(not result.get('cleanup_failed'), 'Isolated restore cleanup failed; inspect the protected verification record.')
     print(json.dumps({'restore_directory': str(restored), **result}))
 
 
