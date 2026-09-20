@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ============================================================================
 # THE RULED-MUTATION RUNNER — the only door to an irreversible production act.
-#   0 = the mutation ran and exited 0   1 = REFUSED (nothing ran)   n = its code
+#   0 = child exited 0; gate refusal = 1; after execution, preserve child's code
 #   124 = the WATCHDOG killed a command that outran its idle/ceiling limit — the
 #         WATCHDOG block says WHICH, and whether the command signalled completion
 #
@@ -234,25 +234,14 @@ fi
 echo "═══════════════════════════════════════════════════════════════════"
 echo "RULED MUTATION — FINISHED at $(date -u +%Y-%m-%dT%H:%M:%SZ), exit $rc"
 echo "  declaration : $DECL @ ${DECL_COMMIT:0:12}"
-# ⚠️ EXIT 2 IS "REFUSED BEFORE ACTING", AND CONFLATING IT WITH A PARTIAL FAILURE
-# IS A REAL COST. The warning below tells an operator that an irreversible act
-# may have landed halfway and must be reconciled by hand before anything is
-# re-run. Printing it for a child that refused its own ARGUMENTS — having opened
-# no connection and written no byte — sends somebody to audit a database that
-# was never touched, and it teaches them to discount the warning next time.
-#
-# The convention this file already documents for ITSELF is `1 = REFUSED
-# (nothing ran)`. It is extended to the CHILD: a child may say the same thing
-# with 2, which is the conventional "usage / bad arguments" code and is what
-# `transfer-certification-to-active.ts` uses for a parse refusal.
-#
-# ⚠️ FAIL-CLOSED ON EVERYTHING ELSE. Only 0 and 2 are treated as "nothing
-# landed". Every other non-zero keeps the full warning, because a child that
-# died at an unknown point is exactly the case the warning exists for.
+# Exit codes have the CHILD's semantics. On 2026-09-20 Stripe verification
+# returned 2 for incomplete acceptance after real sandbox payment/refund
+# mutations. This wrapper cannot infer no effects or rollback from that code.
+# Keep the numeric result and require evidence inspection before any rerun.
 if [ "$rc" -eq 2 ]; then
-  echo "  ℹ️  EXIT 2 — the command REFUSED before acting (usage / bad arguments)."
-  echo "     Nothing was opened and nothing was written. Fix the invocation and"
-  echo "     re-run; there is no partial state to reconcile."
+  echo "  ⚠️ EXIT 2 — this status has the child command's own meaning."
+  echo "     Inspect the child's semantics and evidence to establish what acted."
+  echo "     Do not automatically re-run; changes may already have completed."
 elif [ "$rc" -eq 124 ]; then
   echo "  ⏱️ WATCHDOG TIMEOUT — the door killed a command that did not exit in"
   echo "     time. This is NOT a verdict on the act. Read the WATCHDOG block"

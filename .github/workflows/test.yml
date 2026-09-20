@@ -153,7 +153,7 @@ jobs:
           python manage.py collectstatic --noinput
           python manage.py seed_private
       - name: Stripe verification outcome guards (no provider access)
-        run: node --test rebuild/ops/test_stripe_verification_outcome.mjs rebuild/ops/test_stripe_verification_navigation.mjs
+        run: node --test rebuild/ops/test_stripe_verification_outcome.mjs rebuild/ops/test_stripe_verification_navigation.mjs rebuild/ops/test_stripe_verification_card_choice.mjs rebuild/ops/test_ruled_mutation_exit.mjs
       - name: Exercise private workflow and accessibility
         working-directory: rebuild
         run: |
