@@ -222,6 +222,9 @@ def template_detail(request,pk):
             with transaction.atomic():
                 Template.objects.select_for_update().get(pk=t.pk)
                 latest=t.versions.order_by('-number').first()
+                if request.POST.get('mapping_version')!=str(latest.pk):
+                    form.add_error(None,'This mapping changed. Your unsaved labels are retained below. Compare them with the current mapping before saving again.')
+                    return render(request,'template_detail.html',{'template':t,'version':latest,'form':form},status=409)
                 if latest.document_backend and labels!={f['key']:f['label'] for f in latest.fields}:
                     raise ValidationError('This qualified Word mapping uses fixed question labels so source evidence remains unambiguous. Keep the original labels.')
                 fields=[{**f,'label':labels[f['key']]} for f in latest.fields]
@@ -252,6 +255,7 @@ def encounter_new(request):
 
 def encounter_detail(request,pk):
     from documents import DocumentError
+    from .coding import cpt_licensed
     # Worker adoption and source edits lock the encounter. Capture the related
     # display records while that same row is stable, then release before Word
     # processing. Lazy jobs/codes could otherwise expose a later completion
@@ -261,7 +265,15 @@ def encounter_detail(request,pk):
             'patient','department__organization','template_version__template','finalized_by'
         ).select_for_update(of=('self',)),pk=pk)
         jobs=list(Job.objects.filter(encounter=e).order_by('-created_at'))
-        codes=list(CodeSuggestion.objects.filter(encounter=e).select_related('terminology__release','accepted_by'))
+        visible_codes=CodeSuggestion.objects.filter(encounter=e).select_related('terminology__release','accepted_by')
+        # Retain historical suggestions, but do not display licensed descriptors
+        # after entitlement expires or changes to a different licensed feed.
+        cpt=models.Q(terminology__release__system='CPT')
+        if cpt_licensed():
+            visible_codes=visible_codes.exclude(cpt & ~models.Q(terminology__release__license_reference=settings.CPT_LICENSE_ID))
+        else:
+            visible_codes=visible_codes.exclude(cpt)
+        codes=list(visible_codes)
         can_finalize=Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists()
     is_wm=bool(e.template_version.document_backend)
     rows=[{**f,**e.answers.get(f['key'],{'text':'','status':'missing','evidence':[],'reviewed':False})} for f in e.template_version.fields]
@@ -632,6 +644,9 @@ def invite_accept(request,raw):
                     membership(invite.invited_by,invite.department,roles=['owner','manager'])
                     if existing:user=existing
                     else:user=form.save(commit=False);user.username=invite.email;user.verified_at=timezone.now();user.save()
+                    current_membership=Membership.objects.select_for_update().filter(user=user,department=invite.department).first()
+                    if current_membership and not current_membership.active:
+                        return HttpResponse('Your department access is inactive. Ask the organization owner to restore it. This invitation has not been used.',status=409,content_type='text/plain')
                     # Possession of the emailed high-entropy invitation verifies this mailbox.
                     if not user.verified_at:user.verified_at=timezone.now();user.save(update_fields=['verified_at'])
                     Membership.objects.get_or_create(user=user,department=invite.department,defaults={'role':invite.role})
@@ -673,11 +688,15 @@ def accept_code(request,pk,code_pk):
 
 def billing(request):
     from .billing import checkout_form
-    personal=Wallet.objects.filter(user=request.user)
+    from .admin_queries import page_for,searched
+    query=request.GET.get('q','').strip()[:100]
     owned_orgs=Membership.objects.filter(user=request.user,active=True,role='owner').values_list('department__organization_id',flat=True)
     wallets=Wallet.objects.filter(models.Q(user=request.user)|models.Q(organization_id__in=owned_orgs))
-    usage=list(Usage.objects.filter(user=request.user).select_related('user','department','job__providerreceipt','costreconciliation__recorded_by').order_by('-created_at')[:100])
-    return render(request,'billing.html',{'wallets':wallets,'ledger':LedgerEntry.objects.filter(wallet__in=wallets).select_related('wallet').order_by('-created_at')[:100],'usage':usage_rows(usage),'payments':Payment.objects.filter(user=request.user).select_related('wallet__organization').order_by('-created_at')[:30],'form':checkout_form(request.user),'checkout_token':signing.dumps({'user':str(request.user.pk),'nonce':secrets.token_hex(24)},salt='checkout-authorization')})
+    usage=searched(Usage.objects.filter(user=request.user).select_related('user','department','job__providerreceipt','costreconciliation__recorded_by').order_by('-created_at','pk'),query,['provider','provider_request_id','provider_resource_id','department__name'])
+    ledger=searched(LedgerEntry.objects.filter(wallet__in=wallets).select_related('wallet').order_by('-created_at','pk'),query,['kind','description','key'])
+    payments=searched(Payment.objects.filter(user=request.user).select_related('wallet__organization').order_by('-created_at','pk'),query,['status','stripe_session','stripe_intent'])
+    up=page_for(request,usage,'usage_page','usage');lp=page_for(request,ledger,'ledger_page','ledger');pp=page_for(request,payments,'payments_page','payments')
+    return render(request,'billing.html',{'wallets':wallets,'ledger':lp['page'],'usage':usage_rows(list(up['page'])),'payments':pp['page'],'usage_navigation':up,'ledger_navigation':lp,'payments_navigation':pp,'query':query,'usage_totals':usage.aggregate(cost=models.Sum('actual_cost'),charge=models.Sum('charged_cost')),'form':checkout_form(request.user),'checkout_token':signing.dumps({'user':str(request.user.pk),'nonce':secrets.token_hex(24)},salt='checkout-authorization')})
 
 def usage_rows(usage):
     # Reconciled and absorbed evidence is read from the append-only ledger; the usage rows themselves are never edited.
@@ -744,12 +763,61 @@ def webhook(request):
 
 def admin_dashboard(request):
     if not request.user.is_staff or not request.user.is_verified():raise Http404
+    from .admin_queries import page_for,searched
+    query=request.GET.get('q','').strip()[:100]
     counts={'accounts':User.objects.count(),'organizations':Organization.objects.count(),'departments':Department.objects.count(),'jobs':Job.objects.count(),'welcome_credits':LedgerEntry.objects.filter(kind='welcome').count()}
     audit(request.user,'admin.dashboard')
-    usage=list(Usage.objects.select_related('user','department','organization','job__providerreceipt','costreconciliation__recorded_by').order_by('-created_at')[:100])
-    platform_costs=list(PlatformCost.objects.select_related('job','recorded_by').order_by('-created_at')[:100])
-    platform_totals={label:PlatformCost.objects.filter(kind=kind).aggregate(total=models.Sum('amount'))['total'] or Decimal('0') for kind,label in PlatformCost.KINDS}
-    return render(request,'admin_dashboard.html',{'counts':counts,'users':User.objects.order_by('-date_joined')[:100],'memberships':Membership.objects.select_related('user','department__organization')[:100],'jobs':Job.objects.select_related('user','encounter').order_by('-created_at')[:100],'usage':usage,'usage_rows':usage_rows(usage),'platform_costs':platform_costs,'platform_totals':platform_totals,'resolution_form':JobResolutionForm(),'platform_cost_form':PlatformCostForm(),'reconciliation_form':ReconciliationForm(),'payments':Payment.objects.select_related('user').order_by('-created_at')[:100],'refunds':Refund.objects.select_related('payment').order_by('-created_at')[:100],'stripe_events':WebhookEvent.objects.order_by('-created_at')[:100],'wallets':Wallet.objects.select_related('user','organization')[:100],'ledger':LedgerEntry.objects.select_related('wallet').order_by('-created_at')[:100],'reconciliation':reconciliation(),'receipts':ProviderReceipt.objects.select_related('job').order_by('-created_at')[:100],'audit_events':AuditEvent.objects.select_related('actor').order_by('-created_at')[:100]})
+    sources={
+        'users':(User.objects.order_by('-date_joined','pk'),['email','first_name','last_name'],'accounts'),
+        'memberships':(Membership.objects.select_related('user','department__organization').order_by('-created_at','pk'),['user__email','department__name','department__organization__name','role'],'permissions'),
+        'jobs':(Job.objects.select_related('user').order_by('-created_at','pk'),['user__email','kind','state','provider_request_id','provider_resource_id'],'jobs'),
+        'usage':(Usage.objects.select_related('user','department','organization','job__providerreceipt','costreconciliation__recorded_by').order_by('-created_at','pk'),['user__email','department__name','organization__name','provider','provider_request_id','provider_resource_id','payer'],'costs'),
+        'platform_costs':(PlatformCost.objects.select_related('job','recorded_by').order_by('-created_at','pk'),['kind','description','evidence_reference'],'platform-costs'),
+        'payments':(Payment.objects.select_related('user','wallet__user','wallet__organization').order_by('-created_at','pk'),['user__email','status','stripe_session','stripe_intent'],'payments'),
+        'refunds':(Refund.objects.select_related('payment').order_by('-created_at','pk'),['status','stripe_refund','payment__user__email'],'refunds'),
+        'stripe_events':(WebhookEvent.objects.order_by('-created_at','pk'),['event_id','kind','status'],'stripe-events'),
+        'wallets':(Wallet.objects.select_related('user','organization').order_by('-created_at','pk'),['user__email','organization__name','kind'],'credits'),
+        'ledger':(LedgerEntry.objects.select_related('wallet__user','wallet__organization').order_by('-created_at','pk'),['wallet__user__email','wallet__organization__name','kind','key','description'],'credits'),
+        'receipts':(ProviderReceipt.objects.select_related('job').order_by('-created_at','pk'),['provider','provider_request_id','provider_resource_id','job__user__email'],'provider-receipts'),
+    }
+    context={'counts':counts,'query':query}
+    for key,(rows,fields,anchor) in sources.items():
+        filtered=searched(rows,query,fields)
+        if key=='jobs' and request.GET.get('job_state'):filtered=filtered.filter(state=request.GET['job_state'][:20])
+        if key=='users' and request.GET.get('account_status') in ('active','inactive'):filtered=filtered.filter(is_active=request.GET['account_status']=='active')
+        navigation=page_for(request,filtered,key+'_page',anchor)
+        context[key]=navigation['page'];context[key+'_navigation']=navigation
+        if key=='usage':context['usage_totals']=filtered.aggregate(cost=models.Sum('actual_cost'),charge=models.Sum('charged_cost'))
+    context.update(usage_rows=usage_rows(list(context['usage'])),
+        platform_totals={label:PlatformCost.objects.filter(kind=kind).aggregate(total=models.Sum('amount'))['total'] or Decimal('0') for kind,label in PlatformCost.KINDS},
+        reconciliation=reconciliation(),audit_events=AuditEvent.objects.select_related('actor').order_by('-created_at','pk')[:8])
+    return render(request,'admin_dashboard.html',context)
+
+
+def admin_job_detail(request,pk):
+    if not request.user.is_staff or not request.user.is_verified():raise Http404
+    from .admin_queries import financial_context,page_for
+    job=get_object_or_404(Job.objects.select_related('user','encounter__department'),pk=pk)
+    context=financial_context(job)
+    events=AuditEvent.objects.filter(target__in=context.pop('audit_targets')).select_related('actor').order_by('-created_at','pk')
+    context['event_navigation']=page_for(request,events,anchor='charge-audit')
+    context['audit_events']=context['event_navigation']['page']
+    context['administrative']=True
+    audit(request.user,'admin.job_financial_read',job.pk)
+    return render(request,'financial_detail.html',context)
+
+
+def billing_job_detail(request,pk):
+    from .admin_queries import financial_context
+    # Personal billing history remains available after clinical membership revocation.
+    # Organization owners can inspect organization-paid charges without clinical access.
+    owned=Membership.objects.filter(user=request.user,active=True,role='owner').values_list('department__organization_id',flat=True)
+    allowed=models.Q(user=request.user)|models.Q(payer__in=[f'organization:{pk}' for pk in owned])
+    job=get_object_or_404(Job.objects.filter(allowed).select_related('user','encounter__department'),pk=pk)
+    visible=set(Wallet.objects.filter(models.Q(user=request.user)|models.Q(organization_id__in=owned)).values_list('pk',flat=True))
+    context=financial_context(job,visible);context.pop('audit_targets')
+    audit(request.user,'billing.job_read',job.pk)
+    return render(request,'financial_detail.html',context)
 
 @require_POST
 def admin_reconcile_usage(request,pk):
@@ -806,9 +874,11 @@ def admin_resolve_job(request,pk):
 
 def audit_view(request):
     if not request.user.is_staff or not request.user.is_verified():raise Http404
+    from .admin_queries import page_for
     q=request.GET.get('q','')[:100]
-    events=AuditEvent.objects.select_related('actor','department','organization').filter(models.Q(action__icontains=q)|models.Q(actor__email__icontains=q)|models.Q(target__icontains=q)).order_by('-created_at')[:200]
-    return render(request,'audit.html',{'audit_events':events,'query':q})
+    events=AuditEvent.objects.select_related('actor','department','organization').filter(models.Q(action__icontains=q)|models.Q(actor__email__icontains=q)|models.Q(target__icontains=q)).order_by('-created_at','pk')
+    navigation=page_for(request,events,size=50)
+    return render(request,'audit.html',{'audit_events':navigation['page'],'query':q,'navigation':navigation})
 
 @require_POST
 @transaction.atomic

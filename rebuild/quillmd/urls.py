@@ -11,3 +11,5 @@ urlpatterns += [path('',v.admin_dashboard if settings.ADMIN_SITE else v.dashboar
 urlpatterns += [path('encounters/<uuid:pk>/notes/',v.encounter_notes,name='encounter_notes'),path('encounters/<uuid:pk>/jobs/<uuid:job_pk>/cancel/',v.job_cancel,name='job_cancel')]
 urlpatterns += [path('jobs/<uuid:pk>/result/',v.job_result,name='job_result')]
 urlpatterns += [path('team/invitations/<uuid:pk>/revoke/',v.invitation_revoke,name='invitation_revoke')]
+
+urlpatterns += [path('console/jobs/<uuid:pk>/',v.admin_job_detail,name='admin_job_detail'),path('billing/jobs/<uuid:pk>/',v.billing_job_detail,name='billing_job_detail')]

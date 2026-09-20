@@ -1,4 +1,43 @@
-# Current status — Stripe sandbox verified, 2026-09-20
+# Current dependencies — overnight completion, 2026-09-20
+
+Stripe sandbox and controlled Resend invitation/recovery verification are complete.
+The approved owner inbox was used, links completed, welcome credit remained unique,
+and recovery/session evidence is retained. **No Stripe key, email recipient or
+replacement invitation is requested.** Earlier requests below are historical.
+
+Only these external release dependencies remain:
+
+- **Offsite recovery:** approve the dedicated private B2 destination and install
+  bucket/prefix-scoped configuration at
+  `/opt/meddoc-pro/rebuild/.runtime/backup-secrets/b2-offsite.json` (owner `claude`,
+  mode `0600`), using `external-verification-runbook.md` §3. Separately establish
+  independent recovery-key custody. Local encrypted backup/restore does not prove
+  either requirement. No bucket, contract or purchase is created automatically.
+- **Provider-cost reconciliation:** place authentic account usage/billing exports,
+  applicable rates, discounts and credit allocations in
+  `/opt/meddoc-pro/rebuild/.runtime/provider-evidence/` (mode `0700`). Two historical
+  receipt gaps stay documented; configured-rate calculations are not reconciled
+  invoices. Do not send credentials or billing files in ordinary chat.
+- **Independent security test:** provide the named tester's SSH public key,
+  approved source address, UTC window and emergency contact through the existing
+  protected handoff described in `pentest-scope.md`. Host qualification is complete;
+  reviewer access remains inactive. Internal tests do not complete this test.
+- **CPT and patient-data gates:** obtain legitimate CPT content and usage/display
+  rights before CPT activation; provide signed processing agreements and approved
+  regions/retention/control evidence before enabling real patient data. See
+  `patient-data-release-requirements.md`. No subscriptions or contracts are assumed.
+
+**Deferred by the owner tonight:** one natural human recording in preserved draft
+`0211ea6d-a705-4232-81c1-1eb027d9e774`, and desktop Word inspection of the new SOAP
+exports. Earlier native Word acceptance for the verified WM IOV package remains
+complete. These are acceptance actions, not missing credentials or a new option menu.
+
+Engineering status and evidence are in `private-beta-operations-20260920.md`.
+Public routes remain in maintenance and the private application remains synthetic-only.
+
+---
+
+## Historical status — Stripe sandbox verified, 2026-09-20
 
 The existing restricted key and paired CLI were used successfully. **No further
 Stripe credential or owner action is needed for the completed private sandbox

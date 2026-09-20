@@ -300,13 +300,13 @@ class WMDocumentWorkflow(TestCase):
 
     def test_mapping_versions_copy_backend_and_requirements_but_reject_label_changes(self):
         labels = {row['key']: row['label'] for row in self.version.fields}
-        response = self.client.post(f'/templates/{self.template.pk}/', {'labels': json.dumps(labels)})
+        response = self.client.post(f'/templates/{self.template.pk}/', {'labels': json.dumps(labels), 'mapping_version': str(self.version.pk)})
         self.assertEqual(response.status_code, 302)
         second = self.template.versions.get(number=2)
         self.assertEqual(second.document_backend, self.version.document_backend)
         self.assertEqual(second.review_requirements, self.version.review_requirements)
         labels['patient_name'] = 'Changed qualified label'
-        response = self.client.post(f'/templates/{self.template.pk}/', {'labels': json.dumps(labels)})
+        response = self.client.post(f'/templates/{self.template.pk}/', {'labels': json.dumps(labels), 'mapping_version': str(second.pk)})
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'fixed question labels')
         self.assertEqual(self.template.versions.count(), 2)

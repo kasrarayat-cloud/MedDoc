@@ -138,9 +138,11 @@ def release(job):
         w=wallets[r.wallet_id]; w.reserved-=r.amount; w.save(update_fields=['reserved'])
         r.state='released'; r.save(update_fields=['state'])
         audit(job.user,'usage.release',job.pk,wallet=str(w.pk),amount=str(r.amount))
-    # Freed paid funds are also a trigger for this payer's reconciliation charges that were held for funds.
+    # Apply only after the outer transaction releases wallet locks. Applying here
+    # would acquire an older job while holding its wallet, inverting absorption's
+    # job -> wallet order. Rollback also discards the pending callback.
     for w in wallets.values():
-        if w.kind=='paid': apply_pending_reconciliations(actor=None,wallet=w)
+        if w.kind=='paid': reconcile_after_commit(w)
 
 @transaction.atomic
 def credit_payment(payment,session):
@@ -159,7 +161,12 @@ def credit_payment(payment,session):
     p.status='paid'; p.stripe_intent=intent; p.save(update_fields=['status','stripe_intent'])
     audit(p.user,'payment.settle',p.pk,amount=str(amount))
     # New paid funds are the trigger for reconciliation charges that this payer holds; other payers' rows are untouched.
-    apply_pending_reconciliations(actor=p.user,wallet=w)
+    reconcile_after_commit(w,actor=p.user)
+
+
+def reconcile_after_commit(wallet,actor=None):
+    """Do not acquire another job's locks while a payment/release holds its wallet."""
+    transaction.on_commit(lambda:apply_pending_reconciliations(actor=actor,wallet=wallet),robust=True)
 
 @transaction.atomic
 def reconcile_refund(obj):

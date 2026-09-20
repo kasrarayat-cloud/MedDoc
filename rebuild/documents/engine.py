@@ -59,13 +59,23 @@ def validate_docx(path):
                     if b"<!DOCTYPE" in data.upper() or b"<!ENTITY" in data.upper():
                         fail("XML entities and document types are not supported.", "unsafe_upload")
                     tree = etree.fromstring(data, etree.XMLParser(resolve_entities=False, no_network=True))
+                    # XML can be UTF-16/32. Judge the parsed declaration too;
+                    # ASCII byte matching alone does not identify every DTD.
+                    if tree.getroottree().docinfo.doctype:
+                        fail("XML entities and document types are not supported.", "unsafe_upload")
                     if lower.endswith(".rels"):
                         for relation in tree:
                             target = unquote(relation.get("Target", ""))
                             if relation.get("TargetMode", "").lower() == "external" or re.match(r"^[a-z][a-z0-9+.-]*:", target, re.I):
                                 fail("External links and linked resources are not accepted in templates.", "unsafe_upload")
-                    if lower == "[content_types].xml" and b"macroenabled" in data.lower():
-                        fail("Macro enabled documents are not accepted.", "unsafe_upload")
+                            kind = relation.get("Type", "").lower()
+                            if any(marker in kind for marker in ("vbaproject", "vbasignature", "activex", "oleobject")) or kind.endswith(("/package", "/afchunk", "/control")):
+                                fail("Macros, active content, and embedded documents are not supported.", "unsafe_upload")
+                    if lower == "[content_types].xml":
+                        for declaration in tree:
+                            kind = declaration.get("ContentType", "").lower()
+                            if any(marker in kind for marker in ("macroenabled", "vbaproject", "vbasignature", "activex", "oleobject")):
+                                fail("Macros, active content, and embedded documents are not supported.", "unsafe_upload")
                     for node in tree.iter():
                         local = etree.QName(node).localname
                         if local in {"vanish", "webHidden", "specVanish", "noWrap", "fitText"} and node.get(qn("w:val"), "1") not in {"0", "false", "off"}:

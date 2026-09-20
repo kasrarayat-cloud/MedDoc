@@ -173,7 +173,7 @@ class DocumentWorkflow(TestCase):
         template, mapping = self.upload(original, "docx")
         encounter = self.create_encounter(mapping, "Symptoms: No chest pain.\nExamination: Normal gait.")
         labels = {field["key"]: "Revised " + field["label"] for field in mapping.fields}
-        response = self.client.post(f"/templates/{template.pk}/", {"labels": json.dumps(labels)})
+        response = self.client.post(f"/templates/{template.pk}/", {"labels": json.dumps(labels), "mapping_version": str(mapping.pk)})
         self.assertEqual(response.status_code, 302)
         self.assertEqual(template.versions.count(), 2)
         mapping.refresh_from_db()
