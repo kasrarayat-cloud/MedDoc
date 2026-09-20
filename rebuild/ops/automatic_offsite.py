@@ -30,7 +30,8 @@ KEY = offsite.CONFIG_PARENT / 'fresh-backup-current-20260917.key'
 CONFIG = offsite.CONFIG_PARENT / 'b2-offsite.json'
 REASONS = {'pending_configuration', 'policy_missing', 'policy_invalid', 'policy_expired', 'capacity_refused', 'budget_exhausted',
            'remote_corrupt', 'remote_uncertain', 'local_authentication_failed', 'local_backup_stale',
-           'transport_failed', 'scope_refused', 'lock_busy', 'deadline', 'state_invalid'}
+           'transport_failed', 'scope_refused', 'lock_busy', 'deadline', 'state_invalid', 'cleanup_failed'}
+_HELD_LOCKS = {}
 POLICY_FIELDS = {'version', 'approved', 'approval_reference', 'observed_at', 'valid_until', 'bucket_id', 'prefix',
                  'account_storage_limit_bytes', 'account_storage_used_bytes_at_observation',
                  'scope_storage_bytes_at_observation', 'scope_storage_ceiling_bytes',
@@ -92,6 +93,12 @@ def policy(path=POLICY, at=None):
               and 0 < item['daily_request_budget'] <= 1000
               and 30 <= item['max_run_seconds'] <= 900 and 1 <= item['max_local_age_hours'] <= 48,
               'policy_invalid')
+        if path == POLICY:
+            try:
+                from . import offsite_allocation
+            except ImportError:
+                import offsite_allocation
+            offsite_allocation.validate(item, path, at)
         return item
     except Refusal:
         raise
@@ -168,6 +175,8 @@ def status_summary(value):
     for name in ('last_remote_complete', 'last_verified_readback', 'last_isolated_restore'):
         if name in value:
             result[name] = stage_summary(name, value[name])
+    if 'last_capacity' in value:
+        result['last_capacity'] = capacity_summary(value['last_capacity'])
     for name in ('started_at', 'finished_at'):
         if name in value:
             try:
@@ -178,6 +187,17 @@ def status_summary(value):
         check(type(value['automatic_enabled']) is bool, 'state_invalid')
         result['automatic_enabled'] = value['automatic_enabled']
     return result
+
+
+def capacity_summary(value):
+    fields = ('scope_stored_bytes_after', 'scope_ceiling_bytes', 'last_complete_cipher_bytes')
+    check(type(value) is dict and all(type(value.get(name)) is int and value[name] >= 0 for name in fields),
+          'state_invalid')
+    try:
+        observed = timestamp(value['observed_at']).isoformat()
+    except Exception:
+        raise Refusal('state_invalid') from None
+    return {'observed_at': observed, **{name: value[name] for name in fields}}
 
 
 @contextmanager
@@ -195,9 +215,51 @@ def exclusion(state):
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise Refusal('lock_busy') from None
+        _HELD_LOCKS[str(state)] = (os.getpid(), fd)
         yield
     finally:
+        if _HELD_LOCKS.get(str(state)) == (os.getpid(), fd):
+            del _HELD_LOCKS[str(state)]
         os.close(fd)
+
+
+def budget_ledger(path, at):
+    """Read v1 without losing its reservations; v2 keeps every day, including prepaid midnight spill."""
+    if Path(path) == STATE / 'budget.json':
+        check(Path(path).exists(), 'state_invalid')
+    today = at.strftime('%Y-%m-%d')
+    value = read_json(Path(path), {'version': 2, 'day': today, 'requests': 0, 'download_bytes': 0,
+                                 'days': {}, 'legacy_import': None, 'external_reservations': []})
+    base = {'version', 'day', 'requests', 'download_bytes'}
+    check(type(value.get('version')) is int and value['version'] in (1, 2)
+          and set(value) == (base if value['version'] == 1 else base | {'days', 'legacy_import', 'external_reservations'}), 'state_invalid')
+    check(isinstance(value['day'], str) and re.fullmatch(r'\d{4}-\d{2}-\d{2}', value['day'])
+          and value['day'] <= today, 'state_invalid')
+    for name in ('requests', 'download_bytes'):
+        check(type(value[name]) is int and value[name] >= 0, 'state_invalid')
+    if value['version'] == 1:
+        original = dict(value)
+        value.update(version=2, days={value['day']: {key: value[key] for key in ('requests', 'download_bytes')}},
+                     legacy_import=original, external_reservations=[])
+    check(type(value['days']) is dict, 'state_invalid')
+    check(type(value['external_reservations']) is list and len(value['external_reservations']) <= 10000, 'state_invalid')
+    for day, counters in value['days'].items():
+        check(isinstance(day, str) and re.fullmatch(r'\d{4}-\d{2}-\d{2}', day)
+              and type(counters) is dict and set(counters) == {'requests', 'download_bytes'}
+              and all(type(number) is int and number >= 0 for number in counters.values()), 'state_invalid')
+    previous = value['days'].get(value['day'], {'requests': 0, 'download_bytes': 0})
+    check(all(value[name] == previous[name] for name in ('requests', 'download_bytes')), 'state_invalid')
+    current = value['days'].get(today, {'requests': 0, 'download_bytes': 0})
+    value.update(day=today, **current)
+    return value
+
+
+def budget_summary(state=STATE, at=None):
+    value = budget_ledger(Path(state) / 'budget.json', at or now())
+    return {**{key: value[key] for key in ('version', 'day', 'requests', 'download_bytes')},
+            'prior_day_count': sum(day < value['day'] for day in value['days']),
+            'reserved_future_days': sorted(day for day in value['days'] if day > value['day']),
+            'accounting': 'conservative_pre_request_reservations'}
 
 
 class Budget:
@@ -209,23 +271,65 @@ class Budget:
         self.path, self.limits, self.clock, self.monotonic = Path(state) / 'budget.json', limits, clock, monotonic
         self.deadline = monotonic() + limits['max_run_seconds']
 
-    def debit(self, download=0):
+    def assert_live(self):
+        """No alternate ledger, historical policy, missing lock or inherited fork may access B2."""
+        check(self.path == STATE / 'budget.json' and self.path.parent.resolve() == STATE
+              and self.path.exists(), 'state_invalid')
+        held = _HELD_LOCKS.get(str(STATE))
+        check(held is not None and held[0] == os.getpid(), 'lock_busy')
+        info = os.fstat(held[1])
+        actual = os.stat(STATE / 'execution.lock', follow_symlinks=False)
+        check((info.st_dev, info.st_ino) == (actual.st_dev, actual.st_ino), 'state_invalid')
+        check(policy(POLICY) == self.limits, 'policy_invalid')
+
+    def _reservation(self, requests, download):
+        if self.path == STATE / 'budget.json':
+            self.assert_live()
+        check(type(requests) is int and requests >= 0 and type(download) is int and download >= 0, 'state_invalid')
         check(self.monotonic() < self.deadline, 'deadline')
-        check(self.clock() < timestamp(self.limits['valid_until']), 'policy_expired')
-        today = self.clock().strftime('%Y-%m-%d')
-        previous = read_json(self.path, {'version': 1, 'day': today, 'requests': 0, 'download_bytes': 0})
-        check(set(previous) == {'version', 'day', 'requests', 'download_bytes'} and previous['version'] == 1
-              and type(previous['requests']) is int and previous['requests'] >= 0
-              and type(previous['download_bytes']) is int and previous['download_bytes'] >= 0
-              and isinstance(previous['day'], str) and previous['day'] <= today, 'state_invalid')
-        if previous['day'] != today:
-            previous = {'version': 1, 'day': today, 'requests': 0, 'download_bytes': 0}
-        check(previous['requests'] + 1 <= self.limits['daily_request_budget']
-              and previous['download_bytes'] + download <= self.limits['daily_download_budget_bytes'],
-              'budget_exhausted')
-        previous['requests'] += 1
-        previous['download_bytes'] += download
-        atomic(self.path, previous)
+        at = self.clock()
+        check(timestamp(self.limits['observed_at']) <= at < timestamp(self.limits['valid_until']), 'policy_expired')
+        value = budget_ledger(self.path, at)
+        # A slow response can cross midnight. Charge its entire bounded response and request
+        # to BOTH possible UTC dates before sending it; a crash cannot erase the second charge.
+        until = at + timedelta(seconds=max(0, self.deadline - self.monotonic()) + 40)
+        dates = {at.strftime('%Y-%m-%d'), until.strftime('%Y-%m-%d')}
+        for day in dates:
+            counters = value['days'].get(day, {'requests': 0, 'download_bytes': 0})
+            check(counters['requests'] + requests <= self.limits['daily_request_budget']
+                  and counters['download_bytes'] + download <= self.limits['daily_download_budget_bytes'],
+                  'budget_exhausted')
+        return value, dates
+
+    def preflight(self, requests, download_bytes):
+        """Admission for the complete known remainder; actual attempts remain charged individually."""
+        self._reservation(requests, download_bytes)
+
+    def debit(self, download=0):
+        value, dates = self._reservation(1, download)
+        for day in dates:
+            counters = value['days'].setdefault(day, {'requests': 0, 'download_bytes': 0})
+            counters['requests'] += 1
+            counters['download_bytes'] += download
+        value.update(**value['days'][value['day']])
+        atomic(self.path, value)
+
+    def reserve_external(self, requests, download_bytes, reference):
+        """Operator accounting for desktop/admin work, never a refund or an implicit new allowance."""
+        self.assert_live()
+        check(isinstance(reference, str) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:/ -]{0,199}', reference), 'state_invalid')
+        value, dates = self._reservation(requests, download_bytes)
+        check(not any(item.get('reference') == reference for item in value['external_reservations']), 'state_invalid')
+        for day in dates:
+            counters = value['days'].setdefault(day, {'requests': 0, 'download_bytes': 0})
+            counters['requests'] += requests
+            counters['download_bytes'] += download_bytes
+        entry = {'reference': reference, 'at': self.clock().isoformat(), 'requests': requests,
+                 'download_bytes': download_bytes, 'charged_days': sorted(dates)}
+        value['external_reservations'].append(entry)
+        value.update(**value['days'][value['day']])
+        atomic(self.path, value)
+        return entry
 
 
 def provider_url(value):
@@ -244,14 +348,25 @@ class NativeTransport:
     """
     def __init__(self, config, budget):
         self.config, self.budget = config, budget
+        self.policy = budget.limits
         self.session = requests.Session()
         self.session.trust_env = False
         self.token = self.api = self.download = self.upload = self.upload_token = None
+        self._write_permits = {}
+        self._inventory = None
+        self._uploads_prepared = False
+
+    def _assert_live(self):
+        check(isinstance(self.budget, Budget), 'state_invalid')
+        self.budget.assert_live()
+        check(self.config == offsite.configuration(CONFIG)
+              and self.config['bucket_id'] == self.policy['bucket_id'], 'scope_refused')
 
     def close(self):
         self.session.close()
 
     def request(self, method, url, *, limit=65536, **kwargs):
+        self._assert_live()
         provider_url(url)
         # Include a full bounded response chunk beyond the expected body. A corrupt oversized
         # response can be rejected after receipt; that last chunk must still have been reserved.
@@ -263,6 +378,7 @@ class NativeTransport:
                 content = bytearray()
                 for chunk in response.iter_content(65536):
                     check(self.budget.monotonic() < self.budget.deadline, 'deadline')
+                    check(self.budget.clock() < timestamp(self.policy['valid_until']), 'policy_expired')
                     content.extend(chunk)
                     check(len(content) <= limit, 'remote_corrupt')
                 return bytes(content)
@@ -274,7 +390,7 @@ class NativeTransport:
     def api_call(self, name, params):
         return json.loads(self.request('POST', self.api + '/b2api/v4/' + name,
                          headers={'Authorization': self.token}, json=params,
-                         limit=1024 * 1024 if name == 'b2_list_file_versions' else 65536))
+                         limit=1024 * 1024 if name in ('b2_list_file_versions', 'b2_list_unfinished_large_files') else 65536))
 
     def authorize(self):
         response = json.loads(self.request('GET', 'https://api.backblazeb2.com/b2api/v4/b2_authorize_account',
@@ -285,6 +401,7 @@ class NativeTransport:
             self.api, self.download = provider_url(storage['apiUrl']), provider_url(storage['downloadUrl'])
             self.token = response['authorizationToken']
             check(isinstance(self.token, str) and 1 <= len(self.token) <= 8192, 'scope_refused')
+            self.scope = safe
             return safe
         except Refusal:
             raise
@@ -292,6 +409,12 @@ class NativeTransport:
             raise Refusal('scope_refused') from None
 
     def inventory(self):
+        # list_file_versions is not a parts inventory. This separate endpoint is available
+        # to the existing listFiles key and refuses even one unfinished multipart upload.
+        unfinished = self.api_call('b2_list_unfinished_large_files', {
+            'bucketId': self.config['bucket_id'], 'namePrefix': offsite.PREFIX, 'maxFileCount': 100})
+        check(type(unfinished.get('files')) is list, 'remote_corrupt')
+        check(not unfinished['files'] and unfinished.get('nextFileId') is None, 'capacity_refused')
         items, cursor, seen = [], {}, set()
         for _ in range(100):
             result = self.api_call('b2_list_file_versions', {'bucketId': self.config['bucket_id'],
@@ -308,12 +431,22 @@ class NativeTransport:
                 items.append({key: item[key] for key in ('fileName', 'fileId', 'action', 'contentLength')})
             next_name, next_id = result.get('nextFileName'), result.get('nextFileId')
             if next_name is None and next_id is None:
+                self._inventory = items
                 return items
             check(isinstance(next_name, str) and next_name.startswith(offsite.PREFIX)
                   and isinstance(next_id, str) and (next_name, next_id) != (cursor.get('startFileName'), cursor.get('startFileId')),
                   'remote_corrupt')
             cursor = {'startFileName': next_name, 'startFileId': next_id}
         raise Refusal('budget_exhausted')
+
+    def prepare_uploads(self, expected, inventory):
+        check(not self._uploads_prepared and self._inventory is inventory, 'capacity_refused')
+        stored = sum(row['contentLength'] for row in inventory)
+        names = {row['fileName'] for row in inventory}
+        missing = {name: payload for name, payload in expected.items() if name not in names}
+        check(stored + sum(map(len, missing.values())) <= self.policy['scope_storage_ceiling_bytes'], 'capacity_refused')
+        self._uploads_prepared = True
+        self._write_permits = {name: (len(payload), backup.digest(payload)) for name, payload in missing.items()}
 
     def get(self, row, expected_size):
         check(row['contentLength'] == expected_size, 'remote_corrupt')
@@ -322,6 +455,10 @@ class NativeTransport:
 
     def put(self, name, payload):
         check(name.startswith(offsite.PREFIX) and len(payload) <= offsite.MAX_CIPHER, 'remote_corrupt')
+        check(self._write_permits.get(name) == (len(payload), backup.digest(payload)), 'capacity_refused')
+        # A timeout is not permission to create a duplicate immutable version. Only a new
+        # execution with a fresh inventory and the durable pending journal can reconcile it.
+        del self._write_permits[name]
         if self.upload is None:
             result = self.api_call('b2_get_upload_url', {'bucketId': self.config['bucket_id']})
             check(result.get('bucketId') == self.config['bucket_id'], 'scope_refused')
@@ -334,6 +471,29 @@ class NativeTransport:
               and result.get('action') == 'upload' and result.get('contentLength') == len(payload)
               and isinstance(result.get('fileId'), str), 'remote_corrupt')
         return {key: result[key] for key in ('fileName', 'fileId', 'action', 'contentLength')}
+
+
+@contextmanager
+def live_session(*, config_path=CONFIG, policy_path=POLICY, preflight_requests=3,
+                 preflight_download_bytes=2359296):
+    """Only live manual door: canonical protected policy, shared lock/journal and exact runtime identity."""
+    check(Path(config_path) == CONFIG and Path(policy_path) == POLICY, 'policy_invalid')
+    with exclusion(STATE):
+        limits = policy(POLICY)
+        budget = Budget(STATE, limits)
+        budget.assert_live()
+        budget.preflight(preflight_requests, preflight_download_bytes)
+        config = offsite.configuration(CONFIG)
+        check(config['bucket_id'] == limits['bucket_id'], 'policy_invalid')
+        transport = NativeTransport(config, budget)
+        try:
+            transport.authorize()
+            yield transport
+        finally:
+            try:
+                transport.close()
+            except Exception:
+                raise Refusal('cleanup_failed') from None
 
 
 def select_bundle(directory, key, limits, active, at=None):
@@ -356,6 +516,15 @@ def select_bundle(directory, key, limits, active, at=None):
         raise
     except Exception:
         raise Refusal('local_authentication_failed') from None
+
+
+def cycle_estimate(objects, missing=None, metadata=True):
+    """Worst-case one-attempt responses; no retry is free and inventory pages debit separately."""
+    uploads = len(objects) if missing is None else missing
+    reads = len(objects)
+    return {'requests': reads + uploads + (1 if uploads else 0) + (3 if metadata else 0),
+            'download_bytes': sum(map(len, objects.values())) + reads * 65536 + uploads * 131072
+                              + (131072 if uploads else 0) + (2359296 if metadata else 0)}
 
 
 def transfer(manifest, objects, cipher, transport, limits, state):
@@ -392,6 +561,10 @@ def transfer(manifest, objects, cipher, transport, limits, state):
         check(pending in expected, 'state_invalid')
         # No object after an uncertain PUT is insufficient evidence to retry: its completion may still be in flight.
         check(pending in by_name, 'remote_uncertain')
+    if isinstance(transport, NativeTransport):
+        estimate = cycle_estimate(objects, sum(name not in by_name for name in expected), metadata=False)
+        transport.budget.preflight(estimate['requests'], estimate['download_bytes'])
+        transport.prepare_uploads(expected, inventory)
     atomic(path, previous)
     for name in sorted(set(objects) - {'manifest.json.fernet'}) + ['manifest.json.fernet']:
         full_name, payload = identity + name, objects[name]
@@ -436,6 +609,8 @@ def execute(*, state=STATE, policy_path=POLICY, config_path=CONFIG, key=KEY, bac
             for name in ('last_remote_complete', 'last_verified_readback', 'last_isolated_restore'):
                 if name in previous:
                     record[name] = stage_summary(name, previous[name])
+            if 'last_capacity' in previous:
+                record['last_capacity'] = capacity_summary(previous['last_capacity'])
             atomic(state / 'status.json', record)
             transport = None
             try:
@@ -453,6 +628,12 @@ def execute(*, state=STATE, policy_path=POLICY, config_path=CONFIG, key=KEY, bac
                     record.update(state='complete', result={'no_new_local_backup': True, 'provider_calls': 0})
                 else:
                     budget = Budget(state, limits)
+                    if transport_factory is NativeTransport:
+                        check(Path(state) == STATE and Path(policy_path) == POLICY and Path(config_path) == CONFIG,
+                              'policy_invalid')
+                        budget.assert_live()
+                    estimate = cycle_estimate(objects)
+                    budget.preflight(estimate['requests'], estimate['download_bytes'])
                     transport = transport_factory(config, budget)
                     record['provider_calls_permitted'] = True
                     record['scope'] = transport.authorize()
@@ -461,14 +642,21 @@ def execute(*, state=STATE, policy_path=POLICY, config_path=CONFIG, key=KEY, bac
                     common = {name: result[name] for name in ('run_id', 'manifest_cipher_sha256', 'object_count', 'cipher_bytes')}
                     record.update(state='complete', result=result,
                                   last_remote_complete={**common, 'completed_at': finished},
-                                  last_verified_readback={**common, 'verified_at': finished})
+                                  last_verified_readback={**common, 'verified_at': finished},
+                                  last_capacity={'observed_at': finished,
+                                      'scope_stored_bytes_after': result['scope_stored_bytes_after'],
+                                      'scope_ceiling_bytes': result['scope_ceiling_bytes'],
+                                      'last_complete_cipher_bytes': result['cipher_bytes']})
             except Refusal as error:
                 record.update(state='refused', reason_code=error.code)
             except Exception:
                 record.update(state='failed', reason_code='transport_failed')
             finally:
                 if transport is not None:
-                    transport.close()
+                    try:
+                        transport.close()
+                    except Exception:
+                        record.update(state='failed', reason_code='cleanup_failed', cleanup_failed=True)
                 record['finished_at'] = now().isoformat()
                 atomic(state / 'status.json', record)
     except Refusal as error:

@@ -1,3 +1,15 @@
+# Current continuation — 2026-09-20 account audit and activation
+
+Use [finite allocation](offsite-allocation-20260920.md),
+[shared consumer commands](offsite-consumers-20260920.md), and
+[installed operations](offsite-activation-operations-20260920.md) for the current
+workflow. The complete desktop account audit has arrived; the previous missing
+inventory and return-transfer instructions below are historical. Actual execution
+and timer state are recorded in the latest runtime checkpoint. Never use the old
+unbudgeted transport examples or reset allowance to make admission pass.
+
+---
+
 # Automatic encrypted offsite backups — operating and recovery handoff
 
 Prepared 2026-09-20. This adds a guarded daily uploader to the existing encrypted

@@ -322,6 +322,8 @@ class RecoveryStageTests(unittest.TestCase):
         patch.object(a, 'allowance_status', return_value={'eligible': False, 'reason': 'policy_missing'}).start()
         self.units = patch.object(a, 'offsite_systemd_state', return_value={
             'active': True, 'enabled': True}).start()
+        self.service = patch.object(a, 'offsite_service_state', return_value={
+            'active_state': 'inactive', 'result': 'success', 'failed': False}).start()
         self.policy = patch.object(a, 'offsite_policy_condition', return_value=None).start()
         self.addCleanup(patch.stopall)
         self.at = datetime(2026, 9, 20, 18, 0, tzinfo=timezone.utc)
@@ -361,6 +363,71 @@ class RecoveryStageTests(unittest.TestCase):
         self.assertIsNotNone(result['last_isolated_restore'])
         self.assertIsNotNone(result['last_verified_readback'])
 
+    def test_new_remote_backup_does_not_erase_earlier_independent_key_restore(self):
+        prior = self.state['last_isolated_restore']['run_id']
+        self.state['last_isolated_restore']['source'] = 'independently_retrieved_key'
+        for key in ('last_remote_complete', 'last_verified_readback'):
+            self.state[key].update(run_id='20260920T193915Z-aabbccdd', manifest_cipher_sha256='b' * 64)
+        self.write()
+        result = a.recovery_status(self.at)
+        self.assertEqual(result['condition'], 'healthy')
+        self.assertTrue(result['independent_key_custody_verified'])
+        self.assertEqual(result['last_isolated_restore']['run_id'], prior)
+        self.assertNotEqual(result['last_isolated_restore']['run_id'], result['last_remote_complete']['run_id'])
+
+    def test_failed_systemd_service_cannot_hide_behind_last_complete_record(self):
+        self.service.return_value = {'active_state': 'failed', 'result': 'oom-kill', 'failed': True}
+        result = a.recovery_status(self.at)
+        self.assertEqual(result['condition'], 'offsite_upload_failed')
+        self.assertIsNotNone(result['last_remote_complete'])
+
+    def test_next_daily_run_outside_evidence_is_an_actionable_renewal_warning(self):
+        with patch.object(a, 'next_timer_run', return_value='2026-09-21T05:00:00+00:00'), \
+             patch.object(a, 'allowance_status', return_value={'eligible': True,
+                          'valid_until': '2026-09-21T05:15:00+00:00'}):
+            result = a.recovery_status(self.at)
+            self.assertEqual(result['condition'], 'offsite_policy_renewal_due')
+            self.assertFalse(result['next_run_covered_by_policy'])
+        with patch.object(a, 'next_timer_run', return_value='2026-09-21T05:00:00+00:00'), \
+             patch.object(a, 'allowance_status', return_value={'eligible': True,
+                          'valid_until': '2026-09-21T20:16:35+00:00'}):
+            self.assertTrue(a.recovery_status(self.at)['next_run_covered_by_policy'])
+
+    def test_low_capacity_is_an_observed_scope_estimate_not_a_future_or_account_claim(self):
+        self.state['last_capacity'] = {'observed_at': self.at.isoformat(),
+                'scope_stored_bytes_after': 990_000_000, 'scope_ceiling_bytes': 1_000_000_000,
+                'last_complete_cipher_bytes': 14_422_252}
+        self.write()
+        result = a.recovery_status(self.at)
+        self.assertEqual(result['condition'], 'offsite_capacity_low')
+        self.assertEqual(result['capacity']['remaining_scope_bytes_at_observation'], 10_000_000)
+        self.assertFalse(result['capacity']['future_backup_size_known'])
+        self.assertFalse(result['capacity']['account_wide_usage_measurement'])
+        self.assertIsNotNone(result['last_remote_complete'])
+        self.state['last_capacity']['observed_at'] = (self.at + timedelta(seconds=1)).isoformat()
+        self.write()
+        self.assertEqual(a.recovery_status(self.at)['condition'], 'offsite_status_unavailable')
+
+    def test_manual_cleanup_failure_and_stalled_restore_are_visible_without_erasing_prior_proof(self):
+        manual = {'version': 1, 'action': 'isolated_restore', 'attempt': '20260920T175000Z-12345678',
+                  'state': 'failed', 'reason_code': 'cleanup_failed',
+                  'started_at': (self.at - timedelta(minutes=10)).isoformat(),
+                  'finished_at': self.at.isoformat(), 'run_id': self.state['last_isolated_restore']['run_id'],
+                  'manifest_cipher_sha256': 'a' * 64, 'restore_verified': True, 'shared_accounting': True}
+        path = self.directory / 'manual-status.json'
+        a.backup.write_private(path, json.dumps(manual).encode())
+        result = a.recovery_status(self.at)
+        self.assertEqual(result['condition'], 'offsite_cleanup_failed')
+        self.assertIsNotNone(result['last_isolated_restore'])
+        manual.update(state='running', reason_code=None, restore_verified=False)
+        manual.pop('finished_at'); path.write_text(json.dumps(manual))
+        self.assertEqual(a.recovery_status(self.at)['condition'], 'offsite_in_progress')
+        self.assertEqual(a.recovery_status(self.at + timedelta(minutes=6))['condition'], 'offsite_timeout')
+        manual['private_canary'] = 'never-output'; path.write_text(json.dumps(manual))
+        result = a.recovery_status(self.at)
+        self.assertEqual(result['condition'], 'offsite_status_unavailable')
+        self.assertNotIn('canary', json.dumps(result))
+
     def test_complete_upload_without_matching_readback_is_not_fully_healthy(self):
         for change in ({'last_verified_readback': None},
                        {'last_verified_readback': dict(self.state['last_verified_readback'],
@@ -381,6 +448,7 @@ class RecoveryStageTests(unittest.TestCase):
                                  ('local_authentication_failed', 'offsite_decryption_failed'),
                                  ('remote_corrupt', 'offsite_integrity_failed'),
                                  ('transport_failed', 'offsite_upload_failed'),
+                                 ('cleanup_failed', 'offsite_cleanup_failed'),
                                  ('deadline', 'offsite_timeout')]:
             with self.subTest(reason=reason):
                 self.state.update(state='refused', reason_code=reason); self.write()
@@ -508,6 +576,15 @@ class HealthConditionsTests(unittest.TestCase):
             self.assertEqual(a.offsite_systemd_state(), {'active': False, 'enabled': False})
             self.assertEqual(run.call_count, 2)
             self.assertEqual(set(run.call_args.kwargs['env']), {'PATH', 'LC_ALL'})
+
+    def test_offsite_service_failure_is_explicit_and_unknown_output_is_redacted(self):
+        with patch.object(a.subprocess, 'run', return_value=SimpleNamespace(
+                returncode=0, stdout=b'ActiveState=failed\nResult=timeout\n')) as run:
+            self.assertEqual(a.offsite_service_state(),
+                             {'active_state': 'failed', 'result': 'timeout', 'failed': True})
+            run.return_value.stdout = b'ActiveState=private-canary\nResult=success\n'
+            with self.assertRaises(RuntimeError):
+                a.offsite_service_state()
 
     def test_policy_recheck_performs_no_http_and_redacts_validation_errors(self):
         try:
@@ -708,7 +785,8 @@ class OperatorVisibilityTests(unittest.TestCase):
                       daily_request_budget=500, daily_download_budget_bytes=100_000_000,
                       account_storage_used_bytes_at_observation=123, private_canary='never-output')
         budget = dict(version=1, day='2026-09-20', requests=44, download_bytes=12345)
-        with patch.object(engine, 'policy', return_value=limits), patch.object(engine, 'read_json', return_value=budget):
+        with patch.object(engine, 'policy', return_value=limits), patch.object(engine, 'budget_summary', return_value=budget), \
+             patch.object(a, 'allocation_status', return_value={'renewal_requires_desktop': True}):
             result = a.allowance_status(at)
             self.assertTrue(result['eligible'])
             self.assertEqual(result['observation_age_seconds'], 1800)
@@ -723,7 +801,7 @@ class OperatorVisibilityTests(unittest.TestCase):
         except ImportError:
             import automatic_offsite as engine
         with patch.object(engine, 'policy', side_effect=engine.Refusal('policy_expired')), \
-             patch.object(engine, 'read_json', return_value=dict(version=1, day='2026-09-20', requests=44, download_bytes=12)):
+             patch.object(engine, 'budget_summary', return_value=dict(day='2026-09-20', requests=44, download_bytes=12)):
             result = a.allowance_status(datetime.now(timezone.utc))
             self.assertFalse(result['eligible'])
             self.assertEqual(result['reason'], 'policy_expired')
