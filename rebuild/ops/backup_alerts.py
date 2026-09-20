@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Private, nonclinical local backup alerts. No database access or backup mutation."""
+"""Private, nonclinical recovery-stage alerts. No database access or backup mutation."""
 import argparse
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -26,19 +26,34 @@ SOURCE = Path('/opt/meddoc-pro/rebuild')
 CONFIG = SOURCE / '.runtime/backup-secrets/backup-alerts.json'
 ENV_FILE = SOURCE / '.env'
 DIRECTORY = SOURCE / '.runtime/backup-alerts'
+OFFSITE_DIRECTORY = SOURCE / '.runtime/automatic-offsite'
 RECIPIENT = 'kasra.rayat@gmail.com'
 TEST_AUTHORIZATION = '20260920-operation-recovery'
 STALE_SECONDS = 15 * 60
 COOLDOWN_SECONDS = 24 * 3600
 BACKUP_TIMEOUT_SECONDS = 600
+OFFSITE_STALE_SECONDS = 30 * 3600
+OFFSITE_TIMEOUT_SECONDS = 1200
 ERRORS = {
-    'healthy': 'No action required; local encrypted backup is current.',
+    'healthy': 'Local capture and offsite completion/readback are current. Isolated-restore and recovery-key custody evidence are reported separately.',
     'backup_in_progress': 'A bounded backup is running; the next monitor check will recheck completion.',
     'backup_failed': 'Inspect scheduled_backup.py status and the private backup-monitor attempt record; repair before retrying capture.',
     'backup_stale': 'Inspect the backup timer and last successful capture; restore the daily schedule and run a verified capture.',
     'backup_status_unavailable': 'Inspect private backup-monitor permissions and status records; do not treat missing evidence as success.',
     'backup_schedule_unavailable': 'Inspect quillmd-fresh-backup.timer and quillmd-fresh-backup.service; restore the approved schedule.',
     'backup_timeout': 'Inspect quillmd-fresh-backup.service; a running capture exceeded its approved bound.',
+    'offsite_in_progress': 'A bounded encrypted upload is running; retain the previous complete set until verified completion.',
+    'offsite_status_unavailable': 'Inspect private automatic-offsite status and immutable attempt evidence; missing or malformed evidence does not prove a recoverable remote backup.',
+    'offsite_policy_unavailable': 'Install or renew the protected, approved storage, download and request envelope; keep recurrence disabled until all limits are established.',
+    'offsite_capacity_refused': 'The approved storage or request allowance is exhausted. Preserve existing versions; obtain a reviewed capacity or retention decision before another upload.',
+    'offsite_upload_failed': 'Inspect the redacted automatic-offsite attempt record and authenticated completion manifest; retry through the bounded service after diagnosis, never count a partial upload as complete.',
+    'offsite_decryption_failed': 'Preserve the encrypted set and failure evidence; verify the correct recovery key and object integrity. Do not rotate working keys or overwrite a complete set.',
+    'offsite_integrity_failed': 'Preserve the remote objects and failure evidence; inspect readback hashes and completion manifest. The affected set has not passed integrity verification.',
+    'offsite_timeout': 'Inspect the bounded automatic-offsite service and its last attempt; determine which objects exist before a controlled retry.',
+    'offsite_stale': 'The last complete offsite backup is overdue. Inspect the automatic-offsite timer, capacity policy and last attempt while retaining existing complete sets.',
+    'offsite_readback_stale': 'The latest complete offsite backup lacks a current verified readback; inspect its encrypted manifest and readback evidence before relying on it.',
+    'offsite_schedule_unavailable': 'Inspect quillmd-fresh-offsite.timer and its approved operating envelope; recurrence remains pending while the timer is disabled.',
+    'offsite_pending_configuration': 'Automatic offsite recurrence is prepared but not activated. Establish the approved operating envelope before enabling the timer; earlier manual completion and restore evidence remain separately recorded.',
     'alert_configuration_unavailable': 'Install or repair the protected backup-alerts.json and approved Resend email configuration.',
     'monitoring_state_unavailable': 'Inspect private backup-alerts permissions and immutable attempt records; do not resend an uncertain attempt.',
     'monitoring_stale': 'Inspect quillmd-fresh-backup-alerts.timer and service; the last monitor check is overdue.',
@@ -126,6 +141,170 @@ def backup_condition(at):
         return 'backup_status_unavailable'
 
 
+def offsite_systemd_state():
+    result = {}
+    for field, operation, expected in (('active', 'is-active', b'active'),
+                                       ('enabled', 'is-enabled', b'enabled')):
+        child = subprocess.run(['systemctl', operation, 'quillmd-fresh-offsite.timer'],
+                               capture_output=True, timeout=5,
+                               env={'PATH': '/usr/bin:/bin', 'LC_ALL': 'C'})
+        result[field] = child.returncode == 0 and child.stdout.strip() == expected
+    return result
+
+
+def safe_stage(value, kind, at):
+    """Whitelist stage evidence; neither an unknown field nor its value reaches output."""
+    if value is None:
+        return None
+    required = {'run_id', 'manifest_cipher_sha256',
+                'completed_at' if kind == 'remote' else 'verified_at'}
+    required |= {'table_count', 'row_count', 'file_count'} if kind == 'restore' else {'object_count', 'cipher_bytes'}
+    optional = {'source'} if kind == 'restore' else set()
+    backup.require(isinstance(value, dict) and required <= set(value)
+                   and set(value) <= required | optional, 'Invalid recovery-stage evidence.')
+    backup.require(isinstance(value['run_id'], str) and scheduled.RUN_PATTERN.fullmatch(value['run_id'])
+                   and isinstance(value['manifest_cipher_sha256'], str)
+                   and re.fullmatch(r'[a-f0-9]{64}', value['manifest_cipher_sha256']), 'Invalid recovery identity.')
+    time_key = 'completed_at' if kind == 'remote' else 'verified_at'
+    age = (at - timestamp(value[time_key])).total_seconds()
+    backup.require(age >= 0, 'Future recovery evidence.')
+    for key in required - {'run_id', 'manifest_cipher_sha256', time_key}:
+        backup.require(type(value[key]) is int and value[key] >= 0, 'Invalid recovery totals.')
+    if kind == 'restore':
+        backup.require(value.get('source', 'not_recorded') in
+                       {'vps_key', 'independently_retrieved_key', 'not_recorded'}, 'Invalid recovery key source.')
+    result = {key: value[key] for key in required}
+    result.update(age_seconds=int(age))
+    if kind == 'restore':
+        result['source'] = value.get('source', 'not_recorded')
+    else:
+        result['stale'] = age > OFFSITE_STALE_SECONDS
+    return result
+
+
+def latest_offsite_outcome(value, at, reasons):
+    """A pre-lock failure cannot be hidden by an older shared success record.
+
+    Concurrency losers intentionally never replace shared state and are ignored;
+    the active lock holder owns its running state. Other immutable failures remain
+    visible until a later completed attempt, without replacing historic evidence.
+    """
+    state, reason = value.get('state'), value.get('reason_code')
+    boundary = value.get('finished_at') or value.get('started_at')
+    boundary = timestamp(boundary) if boundary else None
+    latest = None
+    paths = list(OFFSITE_DIRECTORY.glob('*.json'))
+    backup.require(len(paths) <= 10000, 'Oversized offsite attempt history.')
+    for path in paths:
+        if not scheduled.RUN_PATTERN.fullmatch(path.stem):
+            continue
+        attempt = json.loads(backup.read_private(path, 65536))
+        backup.require(isinstance(attempt, dict) and type(attempt.get('version')) is int
+                       and attempt['version'] == 1 and attempt.get('attempt') == path.stem
+                       and attempt.get('state') in {'complete', 'failed', 'refused'}
+                       and attempt.get('reason_code') in set(reasons) | {None}, 'Invalid offsite attempt.')
+        outcome, code = attempt['state'], attempt.get('reason_code')
+        backup.require((outcome == 'complete') == (code is None), 'Contradictory offsite attempt.')
+        finished = timestamp(attempt['finished_at'])
+        backup.require(finished <= at, 'Future offsite attempt.')
+        if code == 'lock_busy':
+            continue
+        if (boundary is None or finished > boundary) and (latest is None or finished > latest[0]):
+            latest = (finished, outcome, code)
+    if state != 'running' and latest and latest[1] in {'failed', 'refused'}:
+        return latest[1:]
+    return state, reason
+
+
+def offsite_policy_condition(at):
+    """Recheck the current approved envelope without authorizing or calling B2."""
+    try:
+        try:
+            from . import automatic_offsite
+        except ImportError:
+            import automatic_offsite
+        automatic_offsite.policy(at=at)
+        return None
+    except Exception:
+        return 'offsite_policy_unavailable'
+
+
+def recovery_status(at):
+    """No provider request: completion, readback and restore stay separate claims."""
+    result = {'condition': 'offsite_status_unavailable', 'last_remote_complete': None,
+              'last_verified_readback': None, 'last_isolated_restore': None,
+              'recurrence_active': False, 'recurrence_enabled': False,
+              'independent_key_custody_verified': False}
+    try:
+        backup.private_dir(OFFSITE_DIRECTORY)
+        value = json.loads(backup.read_private(OFFSITE_DIRECTORY / 'status.json', 65536))
+        backup.require(isinstance(value, dict) and type(value.get('version')) is int
+                       and value['version'] == 1, 'Invalid automatic-offsite status.')
+        for key, kind in (('last_remote_complete', 'remote'), ('last_verified_readback', 'readback'),
+                          ('last_isolated_restore', 'restore')):
+            result[key] = safe_stage(value.get(key), kind, at)
+        # Custody is a separate owner/off-host gate. A local restore cannot establish it.
+        result['independent_key_custody_verified'] = (
+            bool(result['last_isolated_restore'])
+            and result['last_isolated_restore']['source'] == 'independently_retrieved_key')
+        unit = offsite_systemd_state()
+        result.update(recurrence_active=unit['active'], recurrence_enabled=unit['enabled'])
+        reasons = {
+            'policy_missing': 'offsite_policy_unavailable', 'policy_invalid': 'offsite_policy_unavailable',
+            'policy_expired': 'offsite_policy_unavailable', 'capacity_refused': 'offsite_capacity_refused',
+            'budget_exhausted': 'offsite_capacity_refused', 'remote_corrupt': 'offsite_integrity_failed',
+            'remote_uncertain': 'offsite_integrity_failed',
+            'local_authentication_failed': 'offsite_decryption_failed',
+            'transport_failed': 'offsite_upload_failed', 'deadline': 'offsite_timeout',
+            'lock_busy': 'offsite_upload_failed',
+            'local_backup_stale': 'backup_stale', 'scope_refused': 'offsite_policy_unavailable',
+            'state_invalid': 'offsite_status_unavailable',
+            'pending_configuration': 'offsite_pending_configuration',
+        }
+        state, reason = latest_offsite_outcome(value, at, reasons)
+        backup.require(state in {'pending_configuration', 'running', 'complete', 'failed', 'refused'}
+                       and reason in set(reasons) | {None}, 'Invalid automatic-offsite outcome.')
+        backup.require(state not in {'running', 'complete'} or reason is None,
+                       'Contradictory automatic-offsite outcome.')
+        if state == 'pending_configuration':
+            backup.require(not unit['enabled'] and not unit['active'], 'Pending state with active recurrence.')
+            condition = 'offsite_pending_configuration'
+        elif state in {'failed', 'refused'}:
+            backup.require(reason is not None, 'Missing offsite failure reason.')
+            condition = reasons[reason]
+        elif state == 'running':
+            age = (at - timestamp(value['started_at'])).total_seconds()
+            condition = 'offsite_in_progress' if 0 <= age <= OFFSITE_TIMEOUT_SECONDS else 'offsite_timeout'
+        elif not result['last_remote_complete'] or result['last_remote_complete']['stale']:
+            condition = 'offsite_stale'
+        elif (not result['last_verified_readback'] or result['last_verified_readback']['stale']
+              or any(result['last_verified_readback'][key] != result['last_remote_complete'][key]
+                     for key in ('run_id', 'manifest_cipher_sha256', 'object_count', 'cipher_bytes'))):
+            condition = 'offsite_readback_stale'
+        elif not unit['enabled'] or not unit['active']:
+            condition = 'offsite_schedule_unavailable'
+        else:
+            condition = offsite_policy_condition(at) or 'healthy'
+        result['condition'] = condition
+    except Exception:
+        result['condition'] = 'offsite_status_unavailable'
+    return result
+
+
+def local_capture_status(at):
+    """Copy only verified, nonclinical last-capture identifiers from the existing monitor."""
+    try:
+        value = scheduled.status(at)
+        run_id, succeeded = value.get('last_success_run_id'), value.get('last_success_at')
+        backup.require(isinstance(run_id, str) and scheduled.RUN_PATTERN.fullmatch(run_id), 'Invalid capture.')
+        age = (at - timestamp(succeeded)).total_seconds()
+        backup.require(age >= 0, 'Invalid capture time.')
+        return {'last_success_run_id': run_id, 'last_success_at': succeeded,
+                'age_seconds': int(age), 'stale': age > scheduled.MAX_AGE_SECONDS}
+    except Exception:
+        return None
+
+
 def initial_state():
     return {'format': 1, 'last_check_at': None, 'condition': 'monitoring_stale',
             'incident_id': None, 'incident_attempt': None, 'last_attempt_at': None}
@@ -208,7 +387,7 @@ def attempt_alert(values, condition, identity, at, *, test=False):
               'delivery_confirmed': False, 'inbox_receipt_confirmed': False}
     backup.write_private(pending, json.dumps(record, sort_keys=True).encode() + b'\n')
     subject = ('[QuillMD NONCLINICAL TEST] Simulated backup failure' if test
-               else '[QuillMD operations] Local backup requires attention')
+               else '[QuillMD operations] Backup recovery requires attention')
     body = ('QuillMD private synthetic environment: operational backup notification.\n'
             + ('AUTHORIZED SIMULATED FAILURE; NO BACKUP WAS INTERRUPTED.\n' if test else '')
             + f'Condition: {condition}\nUTC check: {at.isoformat()}\nReference: {prefix}\n'
@@ -254,10 +433,11 @@ def receipt(prefix):
                                       'delivery_confirmed', 'inbox_receipt_confirmed')}
 
 
-def report(condition, *, checked_at=None, alert=None):
+def report(condition, *, checked_at=None, alert=None, recovery=None, local_capture=None):
     return {'format': 1, 'condition': condition, 'action': ERRORS[condition],
-            'checked_at': checked_at, 'healthy': condition in {'healthy', 'backup_in_progress'},
-            'alert': alert, 'offsite_recovery_verified': False,
+            'checked_at': checked_at, 'healthy': condition in {'healthy', 'backup_in_progress', 'offsite_in_progress'},
+            'alert': alert, 'offsite_recovery_verified': bool(recovery and recovery.get('last_isolated_restore')),
+            'local_capture': local_capture, 'offsite': recovery,
             'outside_host_failure_detection': False, 'clinical_content_included': False}
 
 
@@ -273,11 +453,15 @@ def check(at=None):
                 scheduled.atomic_status(DIRECTORY / 'status.json', state)
                 return report(state['condition'], checked_at=state['last_check_at']), 1
             condition = backup_condition(at)
+            recovery = recovery_status(at)
+            local_capture = local_capture_status(at)
+            if condition == 'healthy':
+                condition = recovery['condition']
             state.update(last_check_at=at.isoformat(), condition=condition)
             alert = None
             if condition == 'healthy':
                 state.update(incident_id=None, incident_attempt=None)
-            elif condition != 'backup_in_progress':
+            elif condition not in {'backup_in_progress', 'offsite_in_progress', 'offsite_pending_configuration'}:
                 if not state['incident_id']:
                     state['incident_id'] = secrets.token_hex(16)
                 if state['incident_attempt']:
@@ -293,8 +477,10 @@ def check(at=None):
                     alert = {'outcome': 'cooldown_suppressed', 'provider_accepted': False}
             scheduled.atomic_status(DIRECTORY / 'status.json', state)
             if alert and alert['outcome'] in {'pending', 'uncertain_no_retry'}:
-                return report('alert_delivery_unconfirmed', checked_at=state['last_check_at'], alert=alert), 1
-            result = report(condition, checked_at=state['last_check_at'], alert=alert)
+                return report('alert_delivery_unconfirmed', checked_at=state['last_check_at'], alert=alert,
+                              recovery=recovery, local_capture=local_capture), 1
+            result = report(condition, checked_at=state['last_check_at'], alert=alert,
+                            recovery=recovery, local_capture=local_capture)
             return result, 0 if result['healthy'] else 1
     except Exception:
         return report('monitoring_state_unavailable'), 1
@@ -329,7 +515,13 @@ def status(at=None):
         alert = receipt('incident-' + state['incident_attempt']) if state['incident_attempt'] else None
         if alert and alert['outcome'] in {'pending', 'uncertain_no_retry'} and condition != 'monitoring_stale':
             condition = 'alert_delivery_unconfirmed'
-        result = report(condition, checked_at=state['last_check_at'], alert=alert)
+        recovery = recovery_status(at)
+        # Status is read-only but still exposes fresh offsite age/configuration;
+        # a previous healthy check cannot hide newly stale recovery evidence.
+        if condition in {'healthy', 'offsite_in_progress', 'offsite_pending_configuration'}:
+            condition = recovery['condition']
+        result = report(condition, checked_at=state['last_check_at'], alert=alert,
+                        recovery=recovery, local_capture=local_capture_status(at))
         result.update(monitor_age_seconds=int(age) if age is not None else None,
                       stale_after_seconds=STALE_SECONDS)
         return result, 0 if result['healthy'] else 1

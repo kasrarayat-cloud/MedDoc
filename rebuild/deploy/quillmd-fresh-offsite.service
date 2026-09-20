@@ -1,0 +1,26 @@
+[Unit]
+Description=QuillMD authenticated encrypted offsite backup
+After=network-online.target quillmd-fresh-backup.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=claude
+Group=claude
+WorkingDirectory=/opt/meddoc-pro/rebuild
+UMask=0077
+ExecStart=/opt/meddoc-pro/rebuild/.venv/bin/python -B /opt/meddoc-pro/rebuild/ops/automatic_offsite.py run
+TimeoutStartSec=960
+KillMode=control-group
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/opt/meddoc-pro/rebuild/.runtime/automatic-offsite
+MemoryMax=1G
+MemorySwapMax=0
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+StandardOutput=journal
+StandardError=journal

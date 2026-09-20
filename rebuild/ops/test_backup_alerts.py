@@ -46,6 +46,9 @@ class BackupAlertsTests(unittest.TestCase):
         self.sender = patch.object(a, 'email_transport', return_value='synthetic-provider-id').start()
         self.addCleanup(patch.stopall)
         self.health = patch.object(a, 'backup_condition', return_value='healthy').start()
+        self.recovery = patch.object(a, 'recovery_status', return_value={
+            'condition': 'healthy', 'last_isolated_restore': None}).start()
+        patch.object(a, 'local_capture_status', return_value=None).start()
 
     def write_config(self, **changes):
         self.config.write_text(json.dumps(dict(self.approved, **changes)))
@@ -254,6 +257,202 @@ class BackupAlertsTests(unittest.TestCase):
         for path in self.alerts.iterdir():
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
 
+    def test_prepared_inactive_offsite_is_visible_without_unsolicited_test_or_operational_email(self):
+        self.recovery.return_value['condition'] = 'offsite_pending_configuration'
+        result, code = a.check(self.at)
+        self.assertEqual((result['condition'], code), ('offsite_pending_configuration', 1))
+        self.assertIn('not activated', result['action'])
+        self.assertFalse(result['healthy'])
+        self.sender.assert_not_called()
+
+    def test_actual_offsite_failure_uses_existing_nonclinical_route_without_duplicate_attempt(self):
+        for condition in ('offsite_capacity_refused', 'offsite_upload_failed',
+                          'offsite_decryption_failed', 'offsite_integrity_failed'):
+            with self.subTest(condition=condition):
+                self.recovery.return_value['condition'] = condition
+                result, code = a.check(self.at)
+                self.assertEqual((result['condition'], code), (condition, 1))
+                self.assertTrue(result['alert']['provider_accepted'])
+                self.assertFalse(result['alert']['delivery_confirmed'])
+                self.assertFalse(result['alert']['inbox_receipt_confirmed'])
+                self.assertFalse(result['outside_host_failure_detection'])
+        self.sender.assert_called_once()
+        self.assertIn('Condition: offsite_capacity_refused', self.sender.call_args.args[2])
+        self.assertNotIn('clinical-canary', self.sender.call_args.args[2])
+
+    def test_local_failure_takes_priority_while_remote_status_remains_visible(self):
+        self.health.return_value = 'backup_failed'
+        self.recovery.return_value['condition'] = 'offsite_capacity_refused'
+        result, _ = a.check(self.at)
+        self.assertEqual(result['condition'], 'backup_failed')
+        self.assertEqual(result['offsite']['condition'], 'offsite_capacity_refused')
+
+    def test_status_rechecks_remote_staleness_without_sending_email(self):
+        a.check(self.at)
+        self.recovery.return_value['condition'] = 'offsite_stale'
+        result, code = a.status(self.at + timedelta(minutes=5))
+        self.assertEqual((result['condition'], code), ('offsite_stale', 1))
+        self.sender.assert_not_called()
+
+
+class RecoveryStageTests(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.directory = Path(temp.name)
+        self.directory.chmod(0o700)
+        patch.object(a, 'OFFSITE_DIRECTORY', self.directory).start()
+        self.units = patch.object(a, 'offsite_systemd_state', return_value={
+            'active': True, 'enabled': True}).start()
+        self.policy = patch.object(a, 'offsite_policy_condition', return_value=None).start()
+        self.addCleanup(patch.stopall)
+        self.at = datetime(2026, 9, 20, 18, 0, tzinfo=timezone.utc)
+        identity = {'run_id': '20260920T095332Z-a9da0017', 'manifest_cipher_sha256': 'a' * 64}
+        self.state = {'version': 1, 'state': 'complete', 'reason_code': None,
+                      'started_at': (self.at - timedelta(hours=1)).isoformat(),
+                      'finished_at': self.at.isoformat(),
+                      'last_remote_complete': dict(identity, completed_at=self.at.isoformat(),
+                                                   object_count=44, cipher_bytes=14422252),
+                      'last_verified_readback': dict(identity, verified_at=self.at.isoformat(),
+                                                     object_count=44, cipher_bytes=14422252),
+                      'last_isolated_restore': dict(identity, verified_at=self.at.isoformat(),
+                                                    table_count=35, row_count=225615, file_count=42,
+                                                    source='vps_key')}
+        self.path = self.directory / 'status.json'
+        a.backup.write_private(self.path, json.dumps(self.state).encode())
+
+    def write(self):
+        self.path.write_text(json.dumps(self.state))
+
+    def test_remote_completion_readback_and_restore_are_distinct_with_custody_still_pending(self):
+        result = a.recovery_status(self.at)
+        self.assertEqual(result['condition'], 'healthy')
+        self.assertEqual(result['last_remote_complete']['object_count'], 44)
+        self.assertEqual(result['last_verified_readback']['cipher_bytes'], 14422252)
+        self.assertEqual(result['last_isolated_restore']['row_count'], 225615)
+        self.assertFalse(result['independent_key_custody_verified'])
+        self.assertTrue(a.report('healthy', recovery=result)['offsite_recovery_verified'])
+        self.assertFalse(a.report('healthy', recovery=result)['outside_host_failure_detection'])
+
+    def test_seeded_historical_manual_evidence_remains_visible_while_recurrence_pending(self):
+        self.state['state'] = 'pending_configuration'
+        self.units.return_value = {'active': False, 'enabled': False}
+        self.write()
+        result = a.recovery_status(self.at)
+        self.assertEqual(result['condition'], 'offsite_pending_configuration')
+        self.assertIsNotNone(result['last_isolated_restore'])
+        self.assertIsNotNone(result['last_verified_readback'])
+
+    def test_complete_upload_without_matching_readback_is_not_fully_healthy(self):
+        for change in ({'last_verified_readback': None},
+                       {'last_verified_readback': dict(self.state['last_verified_readback'],
+                                                       manifest_cipher_sha256='b' * 64)}):
+            with self.subTest(change=change):
+                self.state.update(change); self.write()
+                result = a.recovery_status(self.at)
+                self.assertEqual(result['condition'], 'offsite_readback_stale')
+                self.assertIsNotNone(result['last_remote_complete'])
+
+    def test_stale_remote_does_not_reuse_local_capture_or_new_restore_timestamp(self):
+        self.assertEqual(a.recovery_status(self.at + timedelta(hours=31))['condition'], 'offsite_stale')
+
+    def test_failure_preserves_last_complete_and_restore(self):
+        for reason, expected in [('capacity_refused', 'offsite_capacity_refused'),
+                                 ('policy_missing', 'offsite_policy_unavailable'),
+                                 ('budget_exhausted', 'offsite_capacity_refused'),
+                                 ('local_authentication_failed', 'offsite_decryption_failed'),
+                                 ('remote_corrupt', 'offsite_integrity_failed'),
+                                 ('transport_failed', 'offsite_upload_failed'),
+                                 ('deadline', 'offsite_timeout')]:
+            with self.subTest(reason=reason):
+                self.state.update(state='refused', reason_code=reason); self.write()
+                result = a.recovery_status(self.at)
+                self.assertEqual(result['condition'], expected)
+                self.assertIsNotNone(result['last_remote_complete'])
+                self.assertIsNotNone(result['last_isolated_restore'])
+
+    def test_running_bound_and_disabled_schedule_are_separate(self):
+        self.state.update(state='running', started_at=self.at.isoformat()); self.write()
+        self.assertEqual(a.recovery_status(self.at)['condition'], 'offsite_in_progress')
+        self.assertEqual(a.recovery_status(self.at + timedelta(seconds=1201))['condition'], 'offsite_timeout')
+        self.state['state'] = 'complete'; self.write()
+        self.units.return_value['enabled'] = False
+        self.assertEqual(a.recovery_status(self.at)['condition'], 'offsite_schedule_unavailable')
+
+    def test_contradictory_success_and_lock_refusal_cannot_report_healthy(self):
+        self.state['reason_code'] = 'transport_failed'; self.write()
+        self.assertEqual(a.recovery_status(self.at)['condition'], 'offsite_status_unavailable')
+        self.state.update(state='refused', reason_code='lock_busy'); self.write()
+        self.assertEqual(a.recovery_status(self.at)['condition'], 'offsite_upload_failed')
+
+    def test_newer_prelock_failure_is_visible_but_concurrency_loser_does_not_hide_success(self):
+        name = '20260920T180001Z-abcdef01'
+        at = self.at + timedelta(seconds=1)
+        attempt = {'version': 1, 'attempt': name, 'state': 'refused',
+                   'reason_code': 'state_invalid', 'finished_at': at.isoformat()}
+        path = self.directory / (name + '.json')
+        a.backup.write_private(path, json.dumps(attempt).encode())
+        self.assertEqual(a.recovery_status(at)['condition'], 'offsite_status_unavailable')
+        attempt['reason_code'] = 'lock_busy'; path.write_text(json.dumps(attempt))
+        self.assertEqual(a.recovery_status(at)['condition'], 'healthy')
+
+    def test_missing_or_expired_policy_cannot_hide_behind_recent_remote_success(self):
+        self.policy.return_value = 'offsite_policy_unavailable'
+        result = a.recovery_status(self.at)
+        self.assertEqual(result['condition'], 'offsite_policy_unavailable')
+        self.assertIsNotNone(result['last_remote_complete'])
+        self.state.update(state='pending_configuration', reason_code='pending_configuration'); self.write()
+        self.units.return_value = {'active': False, 'enabled': False}
+        self.assertEqual(a.recovery_status(self.at)['condition'], 'offsite_pending_configuration')
+
+    def test_current_runner_precedes_older_history_and_malformed_attempt_is_redacted(self):
+        name = '20260920T180001Z-abcdef01'
+        at = self.at + timedelta(seconds=1)
+        attempt = {'version': 1, 'attempt': name, 'state': 'refused',
+                   'reason_code': 'state_invalid', 'finished_at': at.isoformat()}
+        path = self.directory / (name + '.json')
+        a.backup.write_private(path, json.dumps(attempt).encode())
+        self.state.update(state='running', started_at=(at + timedelta(seconds=1)).isoformat())
+        self.state.pop('finished_at'); self.write()
+        self.assertEqual(a.recovery_status(at + timedelta(seconds=2))['condition'], 'offsite_in_progress')
+        attempt['reason_code'] = 'private-clinical-canary'; path.write_text(json.dumps(attempt))
+        result = a.recovery_status(at + timedelta(seconds=2))
+        self.assertEqual(result['condition'], 'offsite_status_unavailable')
+        self.assertNotIn('canary', json.dumps(result))
+
+    def test_wrong_types_unknown_values_and_future_timestamps_fail_closed_without_disclosure(self):
+        original = json.loads(json.dumps(self.state))
+        for field, replacement in [('version', True), ('state', 'private-clinical-canary'),
+                                   ('reason_code', 'private-secret-canary'),
+                                   ('last_remote_complete', dict(original['last_remote_complete'],
+                                                                 object_count=True)),
+                                   ('last_remote_complete', dict(original['last_remote_complete'],
+                                                                 private_secret='never-output')),
+                                   ('last_remote_complete', dict(original['last_remote_complete'],
+                                                                 completed_at=(self.at + timedelta(seconds=1)).isoformat()))]:
+            with self.subTest(field=field):
+                self.state = dict(original, **{field: replacement}); self.write()
+                result = a.recovery_status(self.at)
+                self.assertEqual(result['condition'], 'offsite_status_unavailable')
+                self.assertNotIn('canary', json.dumps(result))
+                self.assertNotIn('never-output', json.dumps(result))
+
+    def test_private_mode_regular_file_and_directory_constraints_fail_closed(self):
+        self.path.chmod(0o644)
+        self.assertEqual(a.recovery_status(self.at)['condition'], 'offsite_status_unavailable')
+        self.path.chmod(0o600)
+        preserved = self.directory / 'preserved'
+        self.path.rename(preserved); self.path.symlink_to(preserved)
+        self.assertEqual(a.recovery_status(self.at)['condition'], 'offsite_status_unavailable')
+        self.assertEqual(json.loads(preserved.read_text()), self.state)
+
+    def test_missing_or_malformed_evidence_never_infers_completion(self):
+        self.path.unlink()
+        result = a.recovery_status(self.at)
+        self.assertEqual(result['condition'], 'offsite_status_unavailable')
+        self.assertIsNone(result['last_remote_complete'])
+        a.backup.write_private(self.path, b'private-parse-failure-canary')
+        self.assertNotIn('canary', json.dumps(a.recovery_status(self.at)))
 
 class HealthConditionsTests(unittest.TestCase):
     def setUp(self):
@@ -284,6 +483,24 @@ class HealthConditionsTests(unittest.TestCase):
             self.assertEqual(set(run.call_args.kwargs['env']), {'PATH', 'LC_ALL'})
         with patch.object(a, 'systemd_state', side_effect=RuntimeError('secret-canary')):
             self.assertEqual(a.backup_condition(self.at), 'backup_status_unavailable')
+
+    def test_offsite_systemd_output_is_whitelisted(self):
+        with patch.object(a.subprocess, 'run', return_value=SimpleNamespace(
+                returncode=0, stdout=b'private-service-canary', stderr=b'private-canary')) as run:
+            self.assertEqual(a.offsite_systemd_state(), {'active': False, 'enabled': False})
+            self.assertEqual(run.call_count, 2)
+            self.assertEqual(set(run.call_args.kwargs['env']), {'PATH', 'LC_ALL'})
+
+    def test_policy_recheck_performs_no_http_and_redacts_validation_errors(self):
+        try:
+            from . import automatic_offsite as engine
+        except ImportError:
+            import automatic_offsite as engine
+        with patch.object(engine, 'policy', side_effect=RuntimeError('private-policy-canary')) as policy, \
+             patch.object(engine.requests, 'Session') as session:
+            self.assertEqual(a.offsite_policy_condition(self.at), 'offsite_policy_unavailable')
+            policy.assert_called_once_with(at=self.at)
+            session.assert_not_called()
 
     def test_future_running_timestamp_fails_closed(self):
         with patch.object(a, 'systemd_state', return_value={'active': True, 'enabled': True, 'service': True}), \
