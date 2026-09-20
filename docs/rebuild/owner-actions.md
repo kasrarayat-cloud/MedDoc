@@ -1,3 +1,31 @@
+# Current bounded action — automatic offsite recovery, 2026-09-20
+
+B2 key provisioning, transfer, installation and the real encrypted qualification
+are complete. Do not repeat them. The previous empty-account observation is
+historical. The new uploader and monitoring are prepared with a disabled timer
+until a current operating envelope supports activation.
+
+**One protected desktop recovery handoff:** store the existing Fernet backup key,
+scoped B2 configuration and prepared selection manifest in your independently
+controlled encrypted vault; retrieve the saved Fernet key from that vault for the
+isolated drill. In the same handoff record current B2 account caps/usage and the
+selected exclusive operating allocation without changing account settings.
+Exact files, protected destinations and engineering-owned steps:
+[recovery-kit.md](recovery-kit.md) and [automatic-offsite.md](automatic-offsite.md).
+No secret belongs in chat; no new credential, master key or architecture choice
+is requested. The vault copy enables independent recovery proof; account evidence
+enables the bounded daily timer. Preparation on the VPS proves neither.
+
+Deferred dependencies remain: actual alert inbox confirmation and external
+heartbeat configuration; authentic provider billing evidence; independent
+security reviewer; legitimate CPT rights; patient-data approvals; natural human
+dictation and new SOAP native Word inspection. Their existing secure handoffs
+below remain valid. Public maintenance and synthetic-only operation continue.
+
+Earlier dated entries are retained as history, including now-completed B2 setup.
+
+---
+
 # Offsite update — 2026-09-20, after desktop replacement verification
 
 The owner approved private bucket `quillmd-private-backups-20260920`, ID

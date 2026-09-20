@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily QuillMD encrypted offsite backup (capacity approval required)
+
+[Timer]
+OnCalendar=*-*-* 05:00:00 UTC
+Persistent=true
+RandomizedDelaySec=0
+Unit=quillmd-fresh-offsite.service
+
+[Install]
+WantedBy=timers.target
