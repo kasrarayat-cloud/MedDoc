@@ -5,6 +5,8 @@
  *
  *   node rebuild/stripe-sandbox-verify.mjs --release FULL_SHA --dry-run
  *   node rebuild/stripe-sandbox-verify.mjs --release FULL_SHA --execute
+ * Add --attempt LOWERCASE_LABEL only after inspecting any previous attempt;
+ * reports remain exclusive and earlier evidence is never overwritten.
  *
  * --dry-run validates every precondition, records the wallet baseline and
  * writes a report with executed:false. It never submits a checkout.
@@ -34,6 +36,7 @@ import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {requireExecutionCLI, verificationOutcome} from './ops/stripe_verification_outcome.mjs';
+import {observeCheckoutReturn, validateVerificationArguments} from './ops/stripe_verification_navigation.mjs';
 
 const app=path.dirname(fileURLToPath(import.meta.url));
 const permanent='/opt/meddoc-pro/rebuild';
@@ -43,7 +46,8 @@ const permanent='/opt/meddoc-pro/rebuild';
 // Session cookies are host-scoped and SameSite=Strict, so the browser lands on
 // localhost UNAUTHENTICATED after Stripe redirects it. That is the product's
 // documented behaviour ("A checkout redirect does not grant balance"); the
-// runner observes the landing URL and returns to 127.0.0.1 where its session is.
+// runner observes the actual return request and any login redirect chain,
+// then returns to 127.0.0.1 where its session is.
 const base='http://127.0.0.1:9130';
 const alias='http://localhost:9130';
 const appOrigins=new Set([base,alias]);
@@ -67,12 +71,13 @@ const MAX_CHECKOUTS=2;
 const args=process.argv.slice(2);
 const value=name=>{const i=args.indexOf(name);return i>=0?args[i+1]:undefined;};
 const release=value('--release');
+const attempt=value('--attempt')||'';
 const execute=args.includes('--execute');
 const dryRun=args.includes('--dry-run');
 const mode=execute?'execute':'dry-run';
 const stripeCli=process.env.STRIPE_CLI||'';
 
-const report={passed:false,executed:false,execution_completed:false,sandbox_acceptance:'not attempted',mode,release,synthetic_only:true,app_origins:[base,alias],
+const report={passed:false,executed:false,execution_completed:false,sandbox_acceptance:'not attempted',mode,release,attempt,synthetic_only:true,app_origins:[base,alias],
   checks:[],checkout_submissions:0,refused_checkout_posts:0,refused_provider_posts:0,
   blocked_requests:{count:0,hosts:{}},stripe_hosts_contacted:{},
   card_data_stored:false,checkout_url_stored:false,webhook_secret_read:false,api_key_read:false,
@@ -263,8 +268,7 @@ function findCompletedEvent(listing,sessionId){
 }
 
 try{
-  assert(args.length===3&&/^[a-f0-9]{40}$/.test(release||'')&&(execute!==dryRun),'Usage: --release FULL_SHA with exactly one of --execute or --dry-run.');
-  assert.deepEqual([...args].filter(x=>x.startsWith('--')).sort(),['--'+mode,'--release']);
+  validateVerificationArguments(args);
   assert.equal(app,permanent,'Use the reviewed permanent release after activation.');
   assert.equal(await fs.realpath(app),app);
   const runtime=path.join(app,'.runtime');const info=await fs.lstat(runtime);
@@ -273,7 +277,7 @@ try{
   assert(credentials.doctor&&credentials.doctor.email.endsWith('@synthetic.quillmd.invalid'));
   // Exclusive evidence deliberately survives failures: an uncertain paid
   // request is inspected by a person before any new attempt is possible.
-  reportPath=path.join(runtime,'stripe-sandbox-verification-'+release.slice(0,12)+(execute?'':'-dry-run')+'.json');
+  reportPath=path.join(runtime,'stripe-sandbox-verification-'+release.slice(0,12)+(attempt?'-'+attempt:'')+(execute?'':'-dry-run')+'.json');
   assert(!(await fs.lstat(reportPath).then(()=>true,()=>false)),'Existing verification evidence requires inspection before another attempt.');
   stage='Operator CLI required for sandbox execution';
   requireExecutionCLI(execute,stripeCli);
@@ -323,11 +327,7 @@ try{
       report.stripe_ids.checkout_session_id=session;
     });
     await check('Case 1: Stripe test card is accepted and Stripe redirects to the application',async()=>{
-      await hostedCheckoutPay(page,CARD_SUCCESS);
-      await page.waitForURL(url=>appOrigins.has(url.origin)&&url.pathname==='/billing/'&&url.searchParams.get('payment')==='processing',{timeout:90000});
-      const landed=new URL(page.url());
-      report.cases.payment_success.success_redirect={origin:landed.origin,path:landed.pathname,query:'payment=processing',
-        note:'Landing is unauthenticated by design (host-scoped Strict cookies); balance is read back on 127.0.0.1 with the existing session.'};
+      report.cases.payment_success.success_redirect=await observeCheckoutReturn(page,alias,()=>hostedCheckoutPay(page,CARD_SUCCESS));
     });
     await check('Case 1: signed completion event credits the paid wallet exactly once',async()=>{
       const paidBefore=wallet(baseline,'Paid');

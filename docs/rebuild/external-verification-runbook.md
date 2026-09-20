@@ -25,6 +25,17 @@ Common rules for every step below:
 
 ## 1. Stripe sandbox — `rebuild/stripe-sandbox-verify.mjs`
 
+### 2026-09-20 return-chain and attempt evidence amendment
+
+The runner now observes the actual success navigation before the application's
+unauthenticated login redirect. It also accepts an optional `--attempt
+LOWERCASE_LABEL` to retain a separately named, exclusively created report after
+engineering inspects an earlier attempt. The original report is never replaced;
+the label does not authorize repeated uncertain checkouts. See
+[the focused repair and executed browser evidence](stripe-return-verification-20260920.md).
+The older preparation statements below remain dated historical context; real
+execution and currently installed configuration are recorded in the checkpoint.
+
 ### 2026-09-19 verification correction
 
 Real sandbox execution remains blocked: the protected application has no Stripe
