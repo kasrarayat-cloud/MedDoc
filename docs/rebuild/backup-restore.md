@@ -171,3 +171,105 @@ storage, separate key escrow/recovery, retention, RPO/RTO, scheduled monitoring,
 failed-backup alerts and an operator promotion rehearsal need decisions and
 qualification. No subscription, cloud resource, remote upload or schedule was
 created. Preserve new backups and their keys across deployments/worktree removal.
+
+## 2026-09-20 — Current recovery proof and local schedule
+
+The earlier operational limits above remain historical evidence. The authorized
+overnight continuation closes the local scheduling omission independently of the
+still unavailable offsite destination. No retention or key-custody policy changes.
+
+Current backup `20260920T081236Z-04a49ff8` restored successfully on its first
+attempt into `quillmd-restore-c965470cd3de6157`: 35 tables, 225,581 rows and 42
+referenced files (2,428,954 bytes). All table/file hashes matched, all four
+financial/scope invariants were zero and eight custom triggers were enabled.
+The restore used no network or published ports, no workers/provider credentials,
+and tmpfs without swap. It wrote zero decrypted files and removed its owned
+container. This proof includes the completed Stripe/email/SOAP records and the
+deferred human-dictation draft; it does not turn the same-VPS backup into offsite
+recovery or independent key custody.
+
+Evidence: `rebuild/.runtime/overnight-completion-20260920/backup-attempt-01.json`
+and `restore-attempt-01.json`. Source repository identity in the backup is
+`db5f54524a2b3bbda4eaa28a46612e9523966697`; running application identity was
+separately verified as `928897f4e934f1912855f96662617c6d0d9df629` on doctor,
+administrator and worker.
+
+### Local operation
+
+`ops/scheduled_backup.py` wraps the existing audited backup tool. The dedicated
+`quillmd-fresh-backup.service` runs as the existing operator identity with the
+read-only database role and existing current encryption key. Its timer uses
+04:30 UTC daily and catches a missed schedule after downtime. No application
+restart, cloud access, credential creation, provider request, automatic retry,
+retention deletion or shared scheduler modification is involved. Activation
+requires the exact reviewed release and a committed scoped declaration; source
+files alone are not evidence that the timer was installed.
+
+The service limits the supervisor and its children to 2 GiB without swap, and
+allows ten minutes for the operation. The child has a nine-minute timeout. It
+refuses less than 2 GiB free disk space, unsafe permissions/symlinks, mismatched
+summary/manifest identity and concurrent execution. An incomplete run stays
+preserved. Each attempt has a private immutable JSON record under
+`.runtime/backup-monitor/`; `latest.json` is atomically replaced. A failed
+attempt retains the last successful run identity and exits nonzero. Child
+stderr and exception messages are never copied into status or the journal.
+
+An independent fixture refutation found that an invalid capture-lock mode could
+fail before a new attempt was recorded, leaving status green from the preceding
+success. The repaired runner records failed attempts even when the lock cannot
+be opened or validated; only the lock holder replaces shared status. The status
+reader checks the lock and immutable attempt history. Repairing a lock's mode
+alone cannot stand in for a new successful capture. Twelve focused tests include
+this reproduced case and an unopenable symlink lock; no lock checks were relaxed.
+
+Create the monitor directory as owner `claude`, mode `0700`, before installing
+the two exact reviewed units from `rebuild/deploy/`. Installation must preserve
+the existing source/key/role owners and permissions. No `.env` or credentials
+are installed into the service unit.
+
+Operator checks (no secrets or clinical contents in output):
+
+```bash
+systemctl status quillmd-fresh-backup.service quillmd-fresh-backup.timer --no-pager
+systemctl list-timers --all quillmd-fresh-backup.timer --no-pager
+rebuild/.venv/bin/python rebuild/ops/scheduled_backup.py status
+journalctl -u quillmd-fresh-backup.service --since '2 days ago' --no-pager
+```
+
+The status command returns a nonzero exit for no successful scheduled capture,
+a failed/unfinished latest attempt, future timestamps, or age over 30 hours.
+The initial manually verified backup above does not count as execution of this
+new runner; one controlled service capture must pass at activation. It need not
+repeat the completed isolated restore unless backup/restore code changes.
+
+### Incident and recovery
+
+1. Read status, service exit code and the immutable attempt record. Preserve an
+   incomplete capture and its error evidence. Do not delete older backups to
+   hide a disk-space failure or change permissions to bypass a refusal.
+2. Check `quillmd-fresh-volume`, `quillmd-fresh-database`, doctor, admin and worker
+   states. The service startup proofs under `/var/lib/quillmd/proofs/` bind each
+   process PID and release; read them through `ops/private_storage.py`.
+3. For low space, pause capture and investigate project-scoped growth. Retention
+   changes need their own recorded policy. For permission/configuration errors,
+   compare the installed identity and protected files to the runbook. Never
+   print key/role file contents. For a timeout, check the exact service cgroup
+   has ended before a single deliberate retry; no uncertain provider calls are
+   part of this backup operation.
+4. For restoration, keep the live database untouched. Use `restore-check` above
+   with an authenticated complete backup and the matching separately preserved
+   key. Inspect the resulting report and require all hashes/invariants, network
+   isolation, no worker/provider actions and owned-container cleanup. Promotion
+   of a restored database is a separate declared operation with its own data
+   delta and rollback plan.
+5. Recheck public maintenance and synthetic-only health after any actual repair.
+   A documentation/status change does not warrant application redeployment.
+
+Failure visibility here is local status plus systemd/journald. No external alert
+delivery or operator acknowledgement is claimed. An approved destination and
+scoped key are still required for offsite upload/restore; independent key
+custody, remote recovery, RPO/RTO beyond the measured local exercise, and verified
+out-of-band alert routing remain separate release gates. The inherited shared
+`quillmd-postreboot-proof.service` failed on 2026-09-06 and is explicitly preserved
+by the ownership audit; it is not this rebuild's backup service and must not be
+silently reset, rewritten or cited as a successful reboot proof.

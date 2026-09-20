@@ -13,6 +13,7 @@
  * records. Screenshots/report/export stay under rebuild/.runtime/browser-artifacts.
  */
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -163,6 +164,42 @@ try {
   await check('Doctor cannot access administrator console', async () => {
     const response = await page.goto(new URL('/console/', base).href);
     assert([403, 404].includes(response.status()));
+  });
+  await check('Administrator authenticates with MFA and has financial-only access', async () => {
+    await page.goto(new URL('/login/', base).href);
+    await page.locator('[name=email]').fill(credentials.admin.email);
+    await page.locator('[name=password]').fill(credentials.admin.password);
+    const counter = Buffer.alloc(8);
+    counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000)));
+    const digest = crypto.createHmac('sha1', Buffer.from(credentials.admin.totp_key_hex, 'hex')).update(counter).digest();
+    const code = String((digest.readUInt32BE(digest[digest.length - 1] & 15) & 0x7fffffff) % 1000000).padStart(6, '0');
+    await page.locator('[name=otp]').fill(code);
+    await Promise.all([page.waitForNavigation(), page.getByRole('button', { name: 'Sign in', exact: true }).click()]);
+    const response = await page.goto(new URL('/console/', base).href);
+    assert.equal(response.status(), 200);
+    const patients = await page.request.get(new URL('/api/patients/', base).href);
+    assert.deepEqual((await patients.json()).patients, []);
+    await accessibility('Administrator overview accessibility');
+    await noPageOverflow();
+  });
+  await check('Admin financial drill-down renders explicit fixture costs without clinical notes', async () => {
+    const link = page.locator('#jobs a[href^="/console/jobs/"]').first();
+    await link.click();
+    await page.waitForURL(/\/console\/jobs\/[0-9a-f-]+\/$/);
+    assert.equal(await page.getByRole('heading', { name: 'Explain this charge', exact: true }).count(), 1);
+    const body = await page.locator('body').innerText();
+    assert(body.includes('Simulated fixture') && body.includes('Not reconciled'));
+    assert(!body.includes('Synthetic patient reports left wrist discomfort'));
+    await accessibility('Financial evidence accessibility');
+    await noPageOverflow();
+    await page.screenshot({ path: path.join(artifacts, 'admin-charge-evidence.png'), fullPage: true });
+  });
+  await check('Admin filters disclose empty matches and audit retains readable drill-downs', async () => {
+    await page.goto(new URL('/console/?q=no-such-isolated-fixture', base).href);
+    assert((await page.locator('#accounts').innerText()).includes('No accounts match these filters.'));
+    await page.goto(new URL('/console/audit/?q=admin.job_financial_read', base).href);
+    assert.equal(await page.locator('tbody tr').count(), 1);
+    await accessibility('Filtered audit accessibility');
   });
   await check('No client-side JavaScript errors', async () => assert.equal(scriptErrors.length, 0));
 } catch {

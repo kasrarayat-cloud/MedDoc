@@ -21,3 +21,32 @@ A new project-only local encrypted-backup timer/service may be installed after i
 ## Evidence and cleanup
 
 Retain historical artifacts and failure attempts. Reports distinguish live private browser checks, isolated fixture tests, provider-returned usage times configured rates, authentic invoice reconciliation, and external/deferred acceptance. Do not fabricate missing provider evidence. Normal logout and removal of only newly created helper profiles/test databases/restore containers is permitted after verification. Keep all rebuilt records and audit rows. Finish with requirement-to-evidence checklist, exact revisions, morning report, consolidated secure owner-dependency locations and additive checkpoint. No technical option queue.
+
+## Specific activation delta — appended before execution
+
+Migration `core.0015_reconciliation_evidence_guard` adds only PostgreSQL function
+`quillmd_reconciliation_evidence_guard()` and trigger
+`reconciliation_evidence_immutable` on `core_costreconciliation`, plus its one
+`django_migrations` history row. It rejects deletion or modification of evidence
+fields while permitting existing `ledger_status` transitions. No table, historical
+row, balance, original ledger entry, provider receipt, reconciliation exception,
+clinical document or file changes. Existing schema, constraints, indexes and eight
+earlier guards remain. The additive guard is compatible with the earlier runtime;
+code rollback retains it rather than weakening evidence protection.
+
+The sole application environment change is the exact reviewed release SHA. The
+fresh doctor/admin/worker are stopped before shared main advances, then started
+only after source, schema and preservation checks pass. Retain the exact previous
+tracked application bytes and private configuration with manifests before advance.
+A failed gate must preserve failure evidence and stop these three services; it
+must never relabel mixed source as the old release. Recovery uses verified prior
+runtime bytes/configuration or a reviewed forward repair; no live database restore.
+
+The only new host units are `quillmd-fresh-backup.service` and
+`quillmd-fresh-backup.timer`, with exact reviewed bytes and root ownership. Their
+read-only host baseline and absence are checked first. Create only the private
+`rebuild/.runtime/backup-monitor` directory as claude0700; enable the dedicated
+timer and execute one bounded capture to prove the installed path. Preserve all
+other unit files and service policies. If the new unit fails, keep its report,
+diagnose its scoped policy and repair through the same review gate. Do not relax
+application filesystem isolation or change the shared database service.

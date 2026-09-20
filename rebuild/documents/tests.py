@@ -4,6 +4,7 @@ from copy import deepcopy
 import hashlib
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -14,6 +15,7 @@ from docx import Document
 from docx.enum.table import WD_ROW_HEIGHT_RULE
 from docx.opc.constants import RELATIONSHIP_TYPE as RT
 from docx.shared import Inches
+from lxml import etree
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import DictionaryObject, NameObject, TextStringObject
 from reportlab.pdfgen import canvas
@@ -156,6 +158,54 @@ class DocumentTests(unittest.TestCase):
                     value = b'<!DOCTYPE foo [<!ENTITY x SYSTEM "file:///etc/passwd">]>' + value
                 outgoing.writestr(name, value)
         self.assert_error("unsafe_upload", inspect_template, bad)
+
+    def test_utf16_doctype_is_rejected_but_benign_encoded_xml_is_supported(self):
+        original = self.word()
+        for encoding in ("utf-8", "utf-16", "utf-32"):
+            for external_doctype in (False, True):
+                with self.subTest(encoding=encoding, external_doctype=external_doctype):
+                    target = self.directory / f"encoded-{encoding}-{external_doctype}.docx"
+                    with ZipFile(original) as incoming, ZipFile(target, "w") as outgoing:
+                        for part in incoming.infolist():
+                            value = incoming.read(part.filename)
+                            if part.filename == "word/document.xml":
+                                body = re.sub(r"^<\?xml[^?]*\?>", "", value.decode()).lstrip()
+                                declaration = f'<?xml version="1.0" encoding="{encoding.upper()}"?>\n'
+                                if external_doctype:
+                                    declaration += '<!DOCTYPE w:document SYSTEM "https://synthetic.invalid/never-fetch.dtd">\n'
+                                value = (declaration + body).encode(encoding)
+                            outgoing.writestr(part, value)
+                    if external_doctype:
+                        self.assert_error("unsafe_upload", inspect_template, target)
+                    else:
+                        self.assertEqual(len(inspect_template(target)["fields"]), 3)
+
+    def test_active_content_declarations_are_rejected_even_with_innocuous_part_names(self):
+        original = self.word()
+        for discriminator in ("content-type", "relationship", "both"):
+            for encoding in ("utf-8", "utf-16"):
+                with self.subTest(discriminator=discriminator, encoding=encoding):
+                    target = self.directory / f"renamed-active-{discriminator}-{encoding}.docx"
+                    with ZipFile(original) as incoming, ZipFile(target, "w") as outgoing:
+                        for part in incoming.infolist():
+                            value = incoming.read(part.filename)
+                            if part.filename == "[Content_Types].xml":
+                                tree = etree.fromstring(value)
+                                declaration = etree.SubElement(tree, "{http://schemas.openxmlformats.org/package/2006/content-types}Override")
+                                declaration.set("PartName", "/word/benign-marker.bin")
+                                declaration.set("ContentType", "application/vnd.ms-office.vbaProject" if discriminator != "relationship" else "application/octet-stream")
+                                value = etree.tostring(tree, encoding=encoding, xml_declaration=True)
+                            elif part.filename == "word/_rels/document.xml.rels":
+                                tree = etree.fromstring(value)
+                                relation = etree.SubElement(tree, "{http://schemas.openxmlformats.org/package/2006/relationships}Relationship")
+                                relation.set("Id", "rIdSyntheticActive")
+                                relation.set("Type", "http://schemas.microsoft.com/office/2006/relationships/vbaProject" if discriminator != "content-type" else "https://synthetic.invalid/inert-marker")
+                                relation.set("Target", "benign-marker.bin")
+                                value = etree.tostring(tree, encoding=encoding, xml_declaration=True)
+                            outgoing.writestr(part, value)
+                        # Never generate executable macro content for this regression.
+                        outgoing.writestr("word/benign-marker.bin", b"SYNTHETIC NON-EXECUTABLE TEST MARKER")
+                    self.assert_error("unsafe_upload", inspect_template, target)
 
     def test_pdf_roundtrip_and_original_bytes(self):
         original = self.pdf()

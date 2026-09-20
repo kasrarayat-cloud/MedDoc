@@ -561,7 +561,7 @@ class RefutationRegressions(PolicyFixture,TestCase):
         row=reconcile_usage(usage,Decimal('0.9'),'INV-SYNTH-TOPUP',self.user);self.assertEqual(row.ledger_status,'pending_funds')
         payment=Payment.objects.create(user=self.user,wallet=self.paid,amount_cents=500,stripe_session='cs_test_regress_topup')
         session={'id':payment.stripe_session,'payment_status':'paid','currency':'usd','amount_total':500,'metadata':{'payment_id':str(payment.pk)},'payment_intent':'pi_test_regress_topup','mode':'payment'}
-        credit_payment(payment,session)
+        with self.captureOnCommitCallbacks(execute=True):credit_payment(payment,session)
         row.refresh_from_db();self.assertEqual(row.ledger_status,'applied')
         self.assertEqual(self.balances(),(Decimal('9.25'),Decimal('5')-Decimal('0.6')))
         self.assertTrue(AuditEvent.objects.filter(action='usage.reconciliation_applied',target=str(usage.job_id)).exists())
@@ -610,11 +610,13 @@ class RefutationRegressions(PolicyFixture,TestCase):
         job.state='succeeded';job.finished_at=timezone.now();job.save(update_fields=['state','finished_at'])
         row=reconcile_usage(usage,Decimal('0.9'),'INV-SYNTH-TENANT-B',other_user);self.assertEqual(row.ledger_status,'pending_funds')
         payment=Payment.objects.create(user=self.user,wallet=self.paid,amount_cents=500,stripe_session='cs_test_tenant_a')
-        credit_payment(payment,{'id':payment.stripe_session,'payment_status':'paid','currency':'usd','amount_total':500,'metadata':{'payment_id':str(payment.pk)},'payment_intent':'pi_test_tenant_a','mode':'payment'})
+        with self.captureOnCommitCallbacks(execute=True):
+            credit_payment(payment,{'id':payment.stripe_session,'payment_status':'paid','currency':'usd','amount_total':500,'metadata':{'payment_id':str(payment.pk)},'payment_intent':'pi_test_tenant_a','mode':'payment'})
         row.refresh_from_db();self.assertEqual(row.ledger_status,'pending_funds')
         self.assertFalse(AuditEvent.objects.filter(action='usage.reconciliation_applied').exists())
         payment_b=Payment.objects.create(user=other_user,wallet=other_paid,amount_cents=500,stripe_session='cs_test_tenant_b')
-        credit_payment(payment_b,{'id':payment_b.stripe_session,'payment_status':'paid','currency':'usd','amount_total':500,'metadata':{'payment_id':str(payment_b.pk)},'payment_intent':'pi_test_tenant_b','mode':'payment'})
+        with self.captureOnCommitCallbacks(execute=True):
+            credit_payment(payment_b,{'id':payment_b.stripe_session,'payment_status':'paid','currency':'usd','amount_total':500,'metadata':{'payment_id':str(payment_b.pk)},'payment_intent':'pi_test_tenant_b','mode':'payment'})
         row.refresh_from_db();self.assertEqual(row.ledger_status,'applied')
         event=AuditEvent.objects.get(action='usage.reconciliation_applied',target=str(job.pk));self.assertEqual(event.actor_id,other_user.pk)
         other_paid.refresh_from_db();self.assertEqual(other_paid.balance,Decimal('5')-Decimal('0.6'))
@@ -630,8 +632,7 @@ class RefutationRegressions(PolicyFixture,TestCase):
         self.paid.refresh_from_db();available=self.paid.balance-self.paid.reserved;self.assertEqual(available,Decimal('0.15'))
         row=reconcile_usage(usage,Decimal('0.9'),'INV-SYNTH-RELEASE',self.user)
         self.assertEqual(row.charge_delta,Decimal('0.6'));self.assertGreater(row.charge_delta,available);self.assertEqual(row.ledger_status,'pending_funds')
-        release(blocker)
+        with self.captureOnCommitCallbacks(execute=True):release(blocker)
         row.refresh_from_db();self.assertEqual(row.ledger_status,'applied')
         self.paid.refresh_from_db();self.assertEqual(self.paid.reserved,0);self.assertEqual(self.paid.balance,Decimal('1.4')-Decimal('0.6'))
         self.assertTrue(audit_report()['all_checks_pass'])
-
