@@ -100,3 +100,56 @@ claim removal or bypass that restriction. Vault entries remain intact.
 
 This act grants neither public launch nor real patient use, and proves no
 whole-host, Windows-loss, offline or LUKS recovery.
+
+## 2026-09-20 — Repair the verified timer-only qualification failure
+
+PR1239 and both exact CI citations passed. Operations source advanced to
+`53571ce789426590c65939e8f6dc925176dcd4fa`; the application remains97597c
+with all three original PIDs. Policy publication and unit adoption succeeded.
+The actual installed service completed2026-09-20T21:20:54.727556Z through
+21:21:24.147021Z:44 new encrypted objects/14,423,108 bytes, authenticated
+SHA-256 readback and manifest-last completion. The prior44-object set and
+independent-key restore remain preserved. Shared reservations are419 requests
+and96,115,248 response bytes; no failed request or counter is refunded.
+
+The subsequent local timer check failed in the chrooted installation helper:
+`datetime.strptime` lazily imports `_strptime`, which is unavailable there.
+The exact helper reproduced this read-only against the existing local timer;
+native datetime formatting works. The offsite timer briefly started21:21:25
+and was disabled21:21:26. It did not fire. The successful service attempt is
+not an activation success or a daily calendar firing.
+
+Keep the failed result `offsite-units-activate-20260920T212053Z-331be21a-result.json`
+unchanged, SHA256`50c80ff8b454d66612597fd20fffad27ece47dcff80e8177c94e6328c196e752`.
+Its original before-payload SHA256 is
+`87dd5383cf50030b225c8299e5cd68023878aed6dab0c6f1d11ebcd53c760e4c`.
+Root independent inspection found that original baseline exactly matches the
+post-failure host: protected configuration, all units and application PIDs.
+The immutable successful attempt equals current status; every recorded source
+hash still matches. The protected **current** resume-context snapshot is
+`timer-resume-context.json`, SHA256
+`473d642d91b9309a64cd919f53dcd887abcdf7fbfd0a0c3af020b268ff0588ed`.
+This is a current observation, not a retroactive pre-failure configuration hash.
+
+Repair only the scheduler installer and affected tests plus this declaration.
+Use exact expected UTC text comparison instead of the lazy parser. After new
+review, branch/merge CI and source advance, adopt the unchanged units under the
+new revision. The narrowly pinned resume action may reuse only this exact
+successful controlled attempt from this exact failed activation. Under the
+canonical execution lock, verify the frozen failure/context/attempt hashes,
+unchanged provider-control sources, protected inputs, status/active completion,
+allowance history and application/unit baseline. Refuse drift, expired policy,
+an unverified/no-op/historical substitute or an already-enabled timer.
+
+Resume enables and verifies only the existing timer. It must not start the
+service again, call B2, recapture/restore/reupload data, reset allowance, extend
+policy freshness or weaken the ordinary fresh qualification requirement.
+Revalidate policy and actual next run through the full bounded interval, and
+assert attempts/accounting and every unrelated baseline field remain unchanged.
+Retain a separate resume receipt. On failure, disable only the offsite timer
+and preserve all evidence. No application restart or shared policy change.
+
+After actual successful resume, one bounded shared-operator scoped metadata
+inventory may verify retained versions and unfinished-upload absence, provided
+its complete reservation still fits the unchanged allowance. Record those
+requests separately; it does not refresh the desktop account-wide observation.

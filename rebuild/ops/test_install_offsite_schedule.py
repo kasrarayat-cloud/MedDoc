@@ -345,5 +345,206 @@ class EffectiveServiceIdentityTests(unittest.TestCase):
                     self.assertNotIn('private-canary', str(failure.exception))
 
 
+class RetainedQualificationResumeTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        saved = dict(vars(s.base)); self.addCleanup(lambda: vars(s.base).update(saved))
+        s.base.ROOT = self.root
+        s.base.APP = self.root / 'rebuild'
+        s.scope()
+        for folder in (s.base.MONITOR, s.base.EVIDENCE, s.base.APP / '.runtime/backup-secrets'):
+            folder.mkdir(parents=True, mode=0o700)
+        self.patch(s, 'CONFIG', s.base.APP / '.runtime/backup-secrets/b2-offsite.json')
+        self.patch(s.pwd, 'getpwnam', SimpleNamespace(pw_uid=os.getuid()), returns=True)
+        self.clock = self.patch(s, 'datetime', wraps=datetime)
+        self.clock.now.return_value = datetime(2026, 9, 20, 22, tzinfo=timezone.utc)
+        self.hashes = {}
+        for relative in s.base.SOURCES:
+            path = self.root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('reviewed fixture ' + relative)
+        (s.base.APP / 'deploy' / s.TIMER).write_text(
+            'OnCalendar=*-*-* 05:00:00 UTC\nRandomizedDelaySec=0\nPersistent=true\n')
+        self.hashes = {relative: s.base.digest(self.root / relative) for relative in s.base.SOURCES}
+        self.baseline = {'units': {}, 'configuration': {'synthetic': 'unchanged'}, 'processes': {'app': 'same'}}
+        self.payload = dict(action='resume', hashes=self.hashes, baseline=copy.deepcopy(self.baseline), commit='a'*40)
+        old = dict(self.hashes, **{s.INSTALLER: 'b'*64, s.DECLARATION: 'c'*64})
+        self.before = dict(action='activate', hashes=old, baseline=copy.deepcopy(self.baseline), commit=s.RESUME_COMMIT)
+        self.limits = {'policy_expires_at': '2026-09-21T20:16:35.867379+00:00', 'scope_ceiling_bytes': 1_000_000_000,
+                       'daily_request_budget': 500, 'daily_download_budget_bytes': 100_000_000}
+        identity = dict(run_id='20260920T193915Z-9cc67364', manifest_cipher_sha256='d'*64,
+                        object_count=44, cipher_bytes=14_423_108)
+        self.record = dict(version=1, attempt='20260920T212054Z-9fb5d226', state='complete', reason_code=None,
+                           provider_calls_permitted=True, started_at='2026-09-20T21:20:54+00:00',
+                           finished_at='2026-09-20T21:21:24+00:00',
+                           result=dict(identity, authenticated=True, ciphertext_sha256_verified=True),
+                           last_remote_complete=dict(identity, completed_at='2026-09-20T21:21:24+00:00'),
+                           last_verified_readback=dict(identity, verified_at='2026-09-20T21:21:24+00:00'))
+        self.attempt = s.base.MONITOR / (self.record['attempt'] + '.json')
+        self.write(self.attempt, self.record)
+        self.controlled = dict(path=str(self.attempt), sha256=s.base.digest(self.attempt), record=self.record)
+        self.failure = dict(action='activate', commit=s.RESUME_COMMIT, hashes=old, success=False, timer_disabled=True,
+                            backup_records_unchanged=True, b2_configuration_unchanged=True,
+                            finished_at='2026-09-20T21:22:00+00:00', controlled_run=self.controlled,
+                            eligibility=self.limits, eligibility_after_run=self.limits,
+                            first_run_coverage_before_enable=s.first_run_coverage(self.limits))
+        self.policy = {'observed_at': '2026-09-20T20:16:35.867379+00:00', 'valid_until': self.limits['policy_expires_at']}
+        self.budget = {'version': 2, 'day': '2026-09-20', 'requests': 419, 'download_bytes': 96_115_248}
+        active = dict(version=1, complete=True, pending=None, **{key: identity[key] for key in ('run_id','manifest_cipher_sha256')})
+        files = {'b2_configuration': (s.CONFIG, {'fixture': True}),
+                 'policy': (s.CONFIG.parent/'offsite-policy.json', self.policy),
+                 'allocation': (s.CONFIG.parent/'offsite-allocation.json', {'fixture': True}),
+                 'status': (s.base.MONITOR/'status.json', self.record),
+                 'active': (s.base.MONITOR/'active.json', active),
+                 'budget': (s.base.MONITOR/'budget.json', self.budget)}
+        self.context = dict(at='2026-09-20T21:28:24+00:00', prior_commit=s.RESUME_COMMIT,
+                            original_baseline_identical_after_failure=True,
+                            inspection_does_not_retroactively_measure_pre_failure_config=True, provider_calls=0,
+                            controlled_attempt=str(self.attempt), controlled_attempt_sha256=self.controlled['sha256'],
+                            attempt_files={self.attempt.name:self.controlled['sha256']}, budget=self.budget, protected_files={})
+        for name, (path, value) in files.items():
+            self.write(path, value)
+            metadata = s.base.metadata(path)
+            self.context['protected_files'][name] = dict(path=str(path), sha256=metadata.pop('sha256'), metadata=metadata)
+        self.write(s.base.MONITOR / 'execution.lock', {})
+        self.reseal()
+        self.calls = []
+        self.patch(s.base, 'command', side_effect=self.command)
+        self.patch(s, 'eligibility', self.limits, returns=True)
+        self.patch(s, 'service_identity', {'User':'claude'}, returns=True)
+        self.patch(s.base, 'baseline', side_effect=lambda: copy.deepcopy(self.baseline))
+        self.patch(s.base, 'require_installed')
+        self.patch(s.base, 'compare_baseline')
+
+    def patch(self, target, name, value=None, *, returns=False, **kwargs):
+        if returns:
+            kwargs['return_value'] = value
+            item = patch.object(target, name, **kwargs)
+        elif value is not None:
+            item = patch.object(target, name, value, **kwargs)
+        else:
+            item = patch.object(target, name, **kwargs)
+        value = item.start(); self.addCleanup(item.stop)
+        return value
+
+    def write(self, path, value):
+        path.write_text(json.dumps(value, sort_keys=True)); path.chmod(0o600)
+
+    def reseal(self):
+        self.write(s.base.EVIDENCE/s.RESUME_FAILURE, self.failure)
+        self.write(s.base.EVIDENCE/s.RESUME_BASELINE, self.before)
+        self.context['failed_report_sha256'] = s.base.digest(s.base.EVIDENCE/s.RESUME_FAILURE)
+        self.context['before_payload_sha256'] = s.base.digest(s.base.EVIDENCE/s.RESUME_BASELINE)
+        self.write(s.base.EVIDENCE/s.RESUME_CONTEXT, self.context)
+        self.patch(s, 'RESUME_FAILURE_SHA256', self.context['failed_report_sha256'])
+        self.patch(s, 'RESUME_BASELINE_SHA256', self.context['before_payload_sha256'])
+        self.patch(s, 'RESUME_CONTEXT_SHA256', s.base.digest(s.base.EVIDENCE/s.RESUME_CONTEXT))
+
+    def command(self, args, timeout=40):
+        self.calls.append(args)
+        if args == ['systemctl','show',s.SERVICE,'--property=ActiveState,Result,ExecMainStatus']:
+            return b'ActiveState=inactive\nResult=success\nExecMainStatus=0\n'
+        if '--property=NextElapseUSecRealtime' in args:
+            return b'Mon 2026-09-21 05:00:00 UTC\n'
+        if args[:2] == ['systemctl','is-active']:return b'active\n'
+        if args[:2] == ['systemctl','is-enabled']:return b'enabled\n'
+        if '--property=ActiveState' in args:return b'inactive\n'
+        if args[:2] == ['systemctl','enable']:self.baseline['units'][s.base.LINK]='enabled'
+        if args[:3] == ['systemctl','disable','--now']:self.baseline['units'].pop(s.base.LINK,None)
+        return b''
+
+    def test_resume_starts_only_timer_with_readonly_lock_and_no_budget_or_proof_changes(self):
+        original_open = s.os.open
+        with patch.object(s.os,'open',wraps=original_open) as opened:
+            result=s.resume_activation(self.payload,{})
+        self.assertEqual(opened.call_args.args[1], s.os.O_RDONLY | s.os.O_NOFOLLOW)
+        self.assertEqual([call for call in self.calls if call[:2]==['systemctl','start']], [['systemctl','start',s.TIMER]])
+        self.assertFalse(result['new_service_start'])
+        self.assertEqual(result['provider_calls'],0)
+        self.assertEqual(json.loads((s.base.MONITOR/'budget.json').read_bytes()), self.budget)
+        self.assertEqual(json.loads(self.attempt.read_bytes()), self.record)
+
+    def test_missing_lazy_parser_import_does_not_affect_actual_next_run_comparison(self):
+        import builtins
+        original_import=builtins.__import__
+        def guarded(name,*args,**kwargs):
+            if name=='_strptime':raise ModuleNotFoundError('no _strptime in helper chroot')
+            return original_import(name,*args,**kwargs)
+        with patch('builtins.__import__',side_effect=guarded):
+            self.assertTrue(s.first_run_coverage(self.limits,actual=True)['actual_systemd_schedule'])
+
+    def test_state_budget_config_or_extra_attempt_drift_refuses_before_timer_mutation(self):
+        for name in ('status','budget','active','policy','allocation','b2_configuration'):
+            path=Path(self.context['protected_files'][name]['path']);raw=path.read_bytes()
+            with self.subTest(name=name):
+                path.write_bytes(raw+b' ')
+                with self.assertRaises(RuntimeError):s.resume_activation(self.payload,{})
+                self.assertFalse(self.calls)
+                path.write_bytes(raw)
+        self.write(s.base.MONITOR/'20260920T213000Z-aaaaaaaa.json',self.record)
+        with self.assertRaises(RuntimeError):s.resume_activation(self.payload,{})
+        self.assertFalse(self.calls)
+
+    def test_source_or_original_host_baseline_drift_refuses(self):
+        for target,key in ((self.payload['hashes'],'rebuild/ops/automatic_offsite.py'),
+                           (self.payload['baseline']['processes'],'app')):
+            original=target[key];target[key]='changed'
+            with self.assertRaises(RuntimeError):s.resume_qualification(self.payload)
+            target[key]=original
+        self.assertFalse(self.calls)
+
+    def test_noop_or_unauthenticated_retained_evidence_cannot_qualify_even_with_resealed_fixture(self):
+        for field in ('authenticated','ciphertext_sha256_verified','no_new_local_backup'):
+            original=copy.deepcopy(self.record)
+            self.record['result'][field]=(field=='no_new_local_backup')
+            self.write(self.attempt,self.record)
+            with self.assertRaises(RuntimeError):s.verified_attempt(set())
+            self.record.clear();self.record.update(original)
+        self.assertFalse(self.calls)
+
+    def test_failed_original_receipt_predicates_are_not_optional(self):
+        self.failure['timer_disabled']=False;self.reseal()
+        with self.assertRaises(RuntimeError):s.resume_qualification(self.payload)
+        self.assertFalse(self.calls)
+
+    def test_competing_lock_refuses_without_disabling_another_consumer(self):
+        fd=s.os.open(s.base.MONITOR/'execution.lock',s.os.O_RDONLY)
+        try:
+            s.fcntl.flock(fd,s.fcntl.LOCK_EX|s.fcntl.LOCK_NB)
+            with self.assertRaises(BlockingIOError):s.resume_activation(self.payload,{})
+            self.assertFalse(self.calls)
+        finally:s.os.close(fd)
+
+    def test_post_enable_mismatch_disables_only_timer_preserving_readback(self):
+        original=self.command
+        def wrong(args,timeout=40):
+            if '--property=NextElapseUSecRealtime' in args:return b'Tue 2026-09-22 05:00:00 UTC'
+            return original(args,timeout)
+        with patch.object(s.base,'command',side_effect=wrong):
+            result={}
+            with self.assertRaises(RuntimeError):s.resume_activation(self.payload,result)
+        self.assertTrue(result['timer_disabled'])
+        self.assertIn(['systemctl','disable','--now',s.TIMER],self.calls)
+        self.assertNotIn(['systemctl','stop',s.SERVICE],self.calls)
+        self.assertEqual(json.loads(self.attempt.read_bytes()),self.record)
+
+    def test_replaced_lock_during_timer_enablement_refuses_and_contains_timer(self):
+        original=self.command
+        def replace_lock(args,timeout=40):
+            if args == ['systemctl','enable',s.TIMER]:
+                replacement=s.base.MONITOR/'fixture-replacement.lock'
+                self.write(replacement,{})
+                s.os.replace(replacement,s.base.MONITOR/'execution.lock')
+            return original(args,timeout)
+        result={}
+        with patch.object(s.base,'command',side_effect=replace_lock), self.assertRaisesRegex(RuntimeError,'lock changed'):
+            s.resume_activation(self.payload,result)
+        self.assertTrue(result['timer_disabled'])
+        self.assertNotIn(['systemctl','start',s.SERVICE],self.calls)
+        self.assertNotIn(['systemctl','stop',s.SERVICE],self.calls)
+
+
 if __name__ == '__main__':
     unittest.main()

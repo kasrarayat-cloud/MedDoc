@@ -2,6 +2,7 @@
 """Scoped installation of offsite units; activation requires a fresh capacity policy and verified service run."""
 import argparse
 from datetime import datetime, timedelta, timezone
+import fcntl
 import hashlib
 import json
 import os
@@ -9,6 +10,7 @@ from pathlib import Path
 import pwd
 import re
 import secrets
+import stat
 import subprocess
 
 try:
@@ -21,6 +23,13 @@ DECLARATION = 'docs/foundation/mutations/20260920-quillmd-offsite-activation.md'
 SERVICE = 'quillmd-fresh-offsite.service'
 TIMER = 'quillmd-fresh-offsite.timer'
 CONFIG = base.APP / '.runtime/backup-secrets/b2-offsite.json'
+RESUME_COMMIT = '53571ce789426590c65939e8f6dc925176dcd4fa'
+RESUME_FAILURE = 'offsite-units-activate-20260920T212053Z-331be21a-result.json'
+RESUME_FAILURE_SHA256 = '50c80ff8b454d66612597fd20fffad27ece47dcff80e8177c94e6328c196e752'
+RESUME_BASELINE = 'offsite-units-activate-20260920T212053Z-331be21a-before.json'
+RESUME_BASELINE_SHA256 = '87dd5383cf50030b225c8299e5cd68023878aed6dab0c6f1d11ebcd53c760e4c'
+RESUME_CONTEXT = 'timer-resume-context.json'
+RESUME_CONTEXT_SHA256 = '473d642d91b9309a64cd919f53dcd887abcdf7fbfd0a0c3af020b268ff0588ed'
 
 
 def eligibility():
@@ -56,8 +65,11 @@ def first_run_coverage(limits, *, actual=False, at=None):
     if actual:
         raw = base.command(['/usr/bin/env', 'TZ=UTC', 'systemctl', 'show', TIMER,
                             '--property=NextElapseUSecRealtime', '--value']).decode().strip()
-        scheduled = datetime.strptime(raw, '%a %Y-%m-%d %H:%M:%S UTC').replace(tzinfo=timezone.utc)
-        base.require(scheduled == expected, 'Actual offsite timer differs from the reviewed next run.')
+        # strptime lazily imports _strptime, unavailable after the pinned helper
+        # chroots into the host. The expected instant is already known; require
+        # systemd's exact UTC rendering instead of parsing another datetime.
+        base.require(raw == expected.strftime('%a %Y-%m-%d %H:%M:%S UTC'),
+                     'Actual offsite timer differs from the reviewed next run.')
     expires = datetime.fromisoformat(limits['policy_expires_at'])
     # Timer accuracy defaults to one minute; allow it as well as the 900-second job.
     deadline = scheduled + timedelta(seconds=960)
@@ -171,10 +183,160 @@ def configuration():
                  'Installed protected B2 configuration required.')
 
 
+def operator_bytes(path, expected=None):
+    """Read claude-owned records inside the root helper without relaxing metadata."""
+    base.require(path.resolve() == path, 'Unsafe resume evidence path.')
+    with path.open('rb') as stream:
+        info = os.fstat(stream.fileno())
+        base.require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1
+                     and info.st_uid == pwd.getpwnam('claude').pw_uid
+                     and stat.S_IMODE(info.st_mode) == 0o600 and info.st_size < 4 * 1024 * 1024,
+                     'Unsafe resume evidence metadata.')
+        raw = stream.read(4 * 1024 * 1024)
+    base.require(expected is None or hashlib.sha256(raw).hexdigest() == expected,
+                 'Pinned resume evidence changed.')
+    return raw
+
+
+def resume_snapshot(context):
+    """This fixed observation is a current-state pin, not a retroactive secret hash."""
+    paths = {'b2_configuration': CONFIG,
+             'policy': base.APP / '.runtime/backup-secrets/offsite-policy.json',
+             'allocation': base.APP / '.runtime/backup-secrets/offsite-allocation.json',
+             **{name: base.MONITOR / (name + '.json') for name in ('budget', 'status', 'active')}}
+    base.require(set(context['protected_files']) == set(paths), 'Unexpected resume state scope.')
+    values = {}
+    for name, path in paths.items():
+        expected = context['protected_files'][name]
+        base.require(expected['path'] == str(path), 'Resume state path differs.')
+        raw = operator_bytes(path, expected['sha256'])
+        base.require(base.metadata(path) == {**expected['metadata'], 'sha256': expected['sha256']},
+                     'Resume state metadata changed.')
+        if name in {'policy', 'status', 'active', 'budget'}:
+            values[name] = json.loads(raw)
+    actual = {path.name: hashlib.sha256(operator_bytes(path)).hexdigest()
+              for path in base.MONITOR.glob('20*.json')}
+    base.require(actual == context['attempt_files'], 'Offsite attempt history changed after qualification.')
+    return values
+
+
+def resume_qualification(payload):
+    """Resume only the one authenticated run whose local timer parser failed.
+
+    The hash-pinned failure and its immutable successful readback must survive;
+    an arbitrary historical backup or a no-op can never take this path.
+    """
+    failure = json.loads(operator_bytes(base.EVIDENCE / RESUME_FAILURE, RESUME_FAILURE_SHA256))
+    before = json.loads(operator_bytes(base.EVIDENCE / RESUME_BASELINE, RESUME_BASELINE_SHA256))
+    context = json.loads(operator_bytes(base.EVIDENCE / RESUME_CONTEXT, RESUME_CONTEXT_SHA256))
+    base.require(failure['action'] == before['action'] == 'activate'
+                 and failure['commit'] == before['commit'] == context['prior_commit'] == RESUME_COMMIT
+                 and failure['success'] is False and failure['timer_disabled'] is True
+                 and failure['backup_records_unchanged'] is True and failure['b2_configuration_unchanged'] is True
+                 and context['original_baseline_identical_after_failure'] is True
+                 and context['inspection_does_not_retroactively_measure_pre_failure_config'] is True
+                 and context['provider_calls'] == 0
+                 and context['failed_report_sha256'] == RESUME_FAILURE_SHA256
+                 and context['before_payload_sha256'] == RESUME_BASELINE_SHA256,
+                 'The exact failed timer qualification is required.')
+    base.require(before['baseline'] == payload['baseline'], 'Original controlled-run host baseline changed.')
+    old_hashes = before['hashes']
+    base.require(failure['hashes'] == old_hashes and set(old_hashes) == set(payload['hashes'])
+                 and all(old_hashes[name] == current for name, current in payload['hashes'].items()
+                         if name not in {INSTALLER, DECLARATION}),
+                 'Resume permits only the reviewed timer verifier and declaration repair.')
+    values = resume_snapshot(context)
+    path = Path(context['controlled_attempt'])
+    base.require(path.parent == base.MONITOR and path.name in context['attempt_files'],
+                 'Controlled attempt is outside the pinned history.')
+    attempts = set(base.MONITOR.glob('20*.json'))
+    controlled = verified_attempt(attempts - {path})
+    base.require(controlled == failure['controlled_run']
+                 and controlled['sha256'] == context['controlled_attempt_sha256']
+                 and values['status'] == controlled['record'] and values['budget'] == context['budget'],
+                 'Current status does not match the retained authenticated run.')
+    active, record = values['active'], controlled['record']
+    base.require(active.get('complete') is True and active.get('pending') is None
+                 and all(active.get(key) == record['result'][key]
+                         for key in ('run_id', 'manifest_cipher_sha256')),
+                 'Partial or different remote publication cannot qualify the timer.')
+    at = datetime.now(timezone.utc)
+    times = [datetime.fromisoformat(raw) for raw in
+             (values['policy']['observed_at'], record['started_at'], record['finished_at'],
+              failure['finished_at'], context['at'], values['policy']['valid_until'])]
+    base.require(all(moment.tzinfo is not None for moment in times)
+                 and times[0] <= times[1] <= times[2] <= times[3] <= times[4] <= at < times[5],
+                 'Retained qualification is outside its original evidence interval.')
+    limits = eligibility()
+    base.require(limits == failure['eligibility'] == failure['eligibility_after_run']
+                 and first_run_coverage(limits) == failure['first_run_coverage_before_enable'],
+                 'The original qualification envelope or next calendar run changed.')
+    return context, controlled, limits
+
+
+def resume_activation(payload, result):
+    """Hold the existing provider-work lock; change only timer enablement, never start its service."""
+    # The existing privileged helper mounts the project read-only. Linux flock
+    # permits an exclusive lock on a read-only descriptor; no state write is needed.
+    fd = os.open(base.MONITOR / 'execution.lock', os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        info = os.fstat(fd)
+        base.require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1
+                     and info.st_uid == pwd.getpwnam('claude').pw_uid
+                     and stat.S_IMODE(info.st_mode) == 0o600, 'Unsafe shared offsite lock.')
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        lock_path = os.stat(base.MONITOR / 'execution.lock', follow_symlinks=False)
+        base.require((info.st_dev, info.st_ino) == (lock_path.st_dev, lock_path.st_ino),
+                     'Shared offsite lock changed while being acquired.')
+        context, controlled, limits = resume_qualification(payload)
+        result.update(controlled_run=controlled, retained_failed_receipt=RESUME_FAILURE,
+                      retained_failed_receipt_sha256=RESUME_FAILURE_SHA256,
+                      resume_context_sha256=RESUME_CONTEXT_SHA256)
+        raw = base.command(['systemctl', 'show', SERVICE, '--property=ActiveState,Result,ExecMainStatus']).decode()
+        base.require(dict(line.split('=', 1) for line in raw.splitlines()) ==
+                     {'ActiveState': 'inactive', 'Result': 'success', 'ExecMainStatus': '0'},
+                     'Retained controlled service must remain successfully completed and inactive.')
+        base.require(base.command(['systemctl', 'show', TIMER, '--property=ActiveState', '--value']).strip()
+                     == b'inactive' and base.LINK not in payload['baseline']['units'],
+                     'Resume requires the verified disabled timer.')
+        identity = service_identity()
+        coverage = first_run_coverage(limits)
+        result['timer_enable_attempted'] = True
+        base.command(['systemctl', 'enable', TIMER])
+        base.command(['systemctl', 'start', TIMER])
+        base.require(base.command(['systemctl', 'is-active', TIMER]).strip() == b'active'
+                     and base.command(['systemctl', 'is-enabled', TIMER]).strip() == b'enabled',
+                     'Offsite timer resume failed.')
+        actual = first_run_coverage(eligibility(), actual=True)
+        lock_path = os.stat(base.MONITOR / 'execution.lock', follow_symlinks=False)
+        base.require((info.st_dev, info.st_ino) == (lock_path.st_dev, lock_path.st_ino),
+                     'Shared offsite lock changed during timer resume.')
+        resume_snapshot(context)  # No request, reservation, attempt, configuration or evidence mutation.
+        return {'controlled_run': controlled, 'retained_failed_receipt': RESUME_FAILURE,
+                'retained_failed_receipt_sha256': RESUME_FAILURE_SHA256,
+                'resume_context_sha256': RESUME_CONTEXT_SHA256, 'service_identity': identity,
+                'first_run_coverage_before_enable': coverage, 'first_run_coverage_actual': actual,
+                'new_service_start': False, 'provider_calls': 0, 'shared_journal_unchanged': True}
+    except Exception:
+        if result.get('timer_enable_attempted'):
+            # Contain only our timer while still holding the provider-work lock.
+            # A pre-lock or proof refusal must not interrupt another consumer.
+            try:
+                base.command(['systemctl', 'disable', '--now', TIMER])
+                result['timer_disabled'] = (
+                    base.command(['systemctl', 'show', TIMER, '--property=ActiveState', '--value']).strip()
+                    == b'inactive' and base.LINK not in base.baseline()['units'])
+            except Exception:
+                result['timer_disabled'] = False
+        raise
+    finally:
+        os.close(fd)
+
+
 def root_action(payload):
     base.require(os.getuid() == 0 and set(payload) == {'action', 'hashes', 'baseline', 'commit'},
                  'Invalid helper input.')
-    base.require(payload['action'] in ('install', 'adopt', 'activate', 'disable')
+    base.require(payload['action'] in ('install', 'adopt', 'activate', 'resume', 'disable')
                  and set(payload['hashes']) == set(base.SOURCES), 'Invalid helper scope.')
     for relative, expected in payload['hashes'].items():
         path = base.ROOT / relative
@@ -224,6 +386,9 @@ def root_action(payload):
                          and base.command(['systemctl', 'is-enabled', TIMER]).strip() == b'enabled',
                          'Offsite timer activation failed.')
             result['first_run_coverage_actual'] = first_run_coverage(eligibility(), actual=True)
+        elif payload['action'] == 'resume':
+            base.require_installed(payload['hashes'])
+            result.update(resume_activation(payload, result))
         else:
             base.require_installed(payload['hashes'])
             base.command(['systemctl', 'disable', '--now', TIMER])
@@ -240,7 +405,7 @@ def root_action(payload):
             base.compare_baseline(prior, after, payload['hashes'], False)
             base.require(base.LINK not in after['units'], 'Timer enablement survived rollback.')
         else:
-            base.compare_baseline(payload['baseline'], after, payload['hashes'], payload['action'] == 'activate')
+            base.compare_baseline(payload['baseline'], after, payload['hashes'], payload['action'] in ('activate', 'resume'))
         result.update(success=True, baseline_preserved=True, after=after)
     except Exception:
         result['error'] = 'Scoped offsite installation failed; retained evidence requires diagnosis.'
@@ -248,6 +413,16 @@ def root_action(payload):
             try:
                 base.command(['systemctl', 'disable', '--now', TIMER])
                 base.command(['systemctl', 'stop', SERVICE])
+                result['timer_disabled'] = (
+                    base.command(['systemctl', 'show', TIMER, '--property=ActiveState', '--value']).strip()
+                    == b'inactive' and base.LINK not in base.baseline()['units'])
+            except Exception:
+                result['timer_disabled'] = False
+        elif payload['action'] == 'resume' and result.get('timer_enable_attempted') and not result.get('timer_disabled'):
+            # A post-return host-baseline failure still contains our timer, but
+            # must never interrupt a separate provider consumer's service.
+            try:
+                base.command(['systemctl', 'disable', '--now', TIMER])
                 result['timer_disabled'] = (
                     base.command(['systemctl', 'show', TIMER, '--property=ActiveState', '--value']).strip()
                     == b'inactive' and base.LINK not in base.baseline()['units'])
@@ -261,7 +436,7 @@ def main():
     scope()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--expected-commit', required=True)
-    parser.add_argument('--action', choices=('install', 'adopt', 'activate', 'disable'), default='install')
+    parser.add_argument('--action', choices=('install', 'adopt', 'activate', 'resume', 'disable'), default='install')
     parser.add_argument('--execute', action='store_true')
     args = parser.parse_args()
     base.require(os.getuid() == pwd.getpwnam('claude').pw_uid, 'Use the authorized project operator.')
@@ -272,7 +447,7 @@ def main():
         base.require_absent(before)
         configuration()
     else:
-        if args.action == 'activate':
+        if args.action in ('activate', 'resume'):
             configuration()
         base.require_installed(hashes)
         prior_receipt = installation_receipt(args.expected_commit, hashes, adopt=args.action == 'adopt')
@@ -294,7 +469,7 @@ def main():
     name = 'offsite-units-' + args.action + '-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-') + secrets.token_hex(4)
     payload = {'action': args.action, 'hashes': hashes, 'baseline': before, 'commit': args.expected_commit}
     base.write_private(base.EVIDENCE / (name + '-before.json'), payload)
-    body = ('import argparse,datetime,hashlib,json,os,pathlib,pwd,re,secrets,stat,subprocess,sys\n'
+    body = ('import argparse,datetime,fcntl,hashlib,json,os,pathlib,pwd,re,secrets,stat,subprocess,sys\n'
             'os.chroot("/host");os.chdir("/")\n'
             'sys.path.insert(0,' + repr(str(base.APP / 'ops')) + ')\n'
             'files=' + repr(hashes) + '\n'
