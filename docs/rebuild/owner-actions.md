@@ -1,3 +1,18 @@
+# Current status — Stripe sandbox verified, 2026-09-20
+
+The existing restricted key and paired CLI were used successfully. **No further
+Stripe credential or owner action is needed for the completed private sandbox
+batch.** Funding, decline, refunds, duplicate delivery, controlled retry and
+refund-before-completion handling passed with real events and ledger evidence.
+See [the measured result](stripe-sandbox-verification-20260920.md).
+
+The deferred checklist below remains separate. Engineering next verifies existing
+secure sender/owner-inbox configuration for controlled email tests before naming
+any missing input. Public maintenance, synthetic-only operation and inactive
+reviewer access remain. Temporary webhook forwarding is stopped after testing.
+
+## Earlier Stripe setup request — historical, now completed
+
 # Current action — Stripe sandbox, 2026-09-19
 
 Owner action: On the VPS as claude, run /home/claude/.local/bin/stripe login and
