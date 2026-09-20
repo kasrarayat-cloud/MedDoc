@@ -1,0 +1,23 @@
+# Declaration — bounded private beta operational completion
+
+Owner authorizes sustained independent completion in the current conversation on 2026-09-20. No public launch, real patient data, provider change, subscription, email, live payment, broad cleanup, shared-host reboot or unrelated service change. Preserve human dictation draft 0211ea6d-a705-4232-81c1-1eb027d9e774 and completed SOAP/Word/Stripe/email evidence. Human microphone and new SOAP Word appearance are deferred, not passed.
+
+## Baseline and scope before any act
+
+Main is db5f54524a2b3bbda4eaa28a46612e9523966697; expected private served release is 928897f4e934f1912855f96662617c6d0d9df629. Capture doctor/admin HTTP and independent worker service proofs. Baseline hashes are in protected rebuild/.runtime/overnight-completion-20260920/baseline.json at 08:12:48Z: 11 users, 2 organizations, 3 departments, 10 memberships, 8 invitations, 3 patients, 12 templates, 20 versions, 17 encounters/jobs/usage, 15 reservations, 14 receipts, 30 ledger entries, 22 wallets, 3 payments, 2 refunds, 7 webhooks and 726 audit events. Capture a new encrypted same-system backup and one isolated restore because previous proof predates Stripe/email/SOAP. Never restore the running database.
+
+Prepare and repair only demonstrated administration, clinical safety, worker-financial or local backup operational gaps. Isolated tests use the dedicated test database on 55439, credential-free synthetic fixtures and deterministic faults. No new live clinical provider calls or payments are proposed. Financial policy, historical receipt exceptions and all original evidence remain immutable.
+
+## Normal private verification
+
+Use existing synthetic doctor, employee, foreign department/organization and administrator accounts. Log in normally; administrators must pass actual MFA. Read actual private pages, filters, exports, audit history, job financial evidence and balances. Normal access audits, login timestamps and temporary helper sessions may change. If necessary for served account revocation proof, temporarily disable only the existing reserved synthetic employee fixture and restore its exact prior account/membership state through normal authorized forms; never change owner inbox account, owner/admin status, passwords, MFA configuration or other roles. Preserve attributable audit rows, including failures. No clinical notes, source, document, template, payment or balance mutation during these probes.
+
+## Required code/operation activation gates
+
+Changes remain in isolated integration worktree until review, focused regressions, full required exact-revision CI, PR merge and descendant citation. Shared main stays clean; only necessary runtime changes activate. Before stopping services establish exact source range, allowed paths, rollback source/configuration and immutable stopped-state database/schema/file baseline. Restart only the three fresh private services, preserve all existing secrets and settings except honest release revision. Compare all records, schema/constraints and private files after activation; migrations, if any, require a specific additional declared delta first. No original financial record or balance may change. Verify doctor/admin/worker revisions independently and actual repaired served behavior. Public maintenance, private preview TLS/form authentication, MFA, synthetic-only and inactive reviewer access remain.
+
+A new project-only local encrypted-backup timer/service may be installed after its scoped tests/review/citation. Use the existing read-only backup role and encryption key, no new key or retention policy, no deletions. Offsite scheduling/restore remains pending until an approved destination and scoped configuration exist. Failure status must remain redacted and visible; no unsolicited alert emails. Install only specifically named QuillMD fresh backup units through the existing authorized administrative mechanism, preserving all unrelated systemd/SSH/nginx resources.
+
+## Evidence and cleanup
+
+Retain historical artifacts and failure attempts. Reports distinguish live private browser checks, isolated fixture tests, provider-returned usage times configured rates, authentic invoice reconciliation, and external/deferred acceptance. Do not fabricate missing provider evidence. Normal logout and removal of only newly created helper profiles/test databases/restore containers is permitted after verification. Keep all rebuilt records and audit rows. Finish with requirement-to-evidence checklist, exact revisions, morning report, consolidated secure owner-dependency locations and additive checkpoint. No technical option queue.
