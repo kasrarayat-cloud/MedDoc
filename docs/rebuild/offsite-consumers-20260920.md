@@ -15,6 +15,11 @@ state directory. An alternate state directory, stale policy, replaced lock,
 missing ledger, or different runtime configuration cannot authorize HTTP.
 `offsite_backup.authorize`, `McTransport`, its `command` method and its read/write
 methods now refuse before network or subprocess work. No second S3 client remains.
+The historical runtime `b2-offsite-20260920/inventory_approved_prefix.py` also
+issued direct HTTP. Policy installation preserves its exact original source as
+protected historical text and replaces that entry point with a zero-I/O refusal.
+An unknown changed helper refuses installation; an unretired helper refuses live
+policy admission. Historical scripts are evidence, not supported operating tools.
 
 | Consumer | Supported entry point | Shared controls |
 | --- | --- | --- |

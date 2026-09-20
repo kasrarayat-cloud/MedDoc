@@ -59,7 +59,8 @@ class AllocationTests(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('fixture code')
             self.item['control_sources'][relative] = allocation.digest(path.read_bytes())
-        for name, value in (('ROOT', self.root), ('CONTRACT', self.contract), ('EVIDENCE_ROOT', self.directory.parent), ('LEDGER', self.ledger)):
+        for name, value in (('ROOT', self.root), ('CONTRACT', self.contract), ('EVIDENCE_ROOT', self.directory.parent),
+                            ('LEDGER', self.ledger), ('HELPER_PATH', self.root/'historical-inventory.py')):
             patch = mock.patch.object(allocation, name, value)
             patch.start()
             self.addCleanup(patch.stop)
@@ -137,6 +138,14 @@ class AllocationTests(unittest.TestCase):
     def test_protected_contract_required(self):
         self.contract.chmod(0o644)
         with self.assertRaises(RuntimeError): self.validate()
+
+    def test_historical_unbudgeted_helper_must_be_retired_before_admission(self):
+        helper = self.root/'historical-inventory.py'
+        helper.write_bytes(b'import requests\nrequests.get("https://api.backblazeb2.com")\n')
+        helper.chmod(0o600)
+        with self.assertRaises(ValueError): self.validate()
+        helper.write_bytes(allocation.RETIRED_HELPER_STUB)
+        self.validate()
 
     def test_historical_reservations_cannot_disappear_on_new_day(self):
         self.write(self.ledger, dict(version=2, day='2026-09-21', requests=0, download_bytes=0,

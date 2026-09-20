@@ -20,6 +20,11 @@ EVIDENCE_ROOT = offsite.RUNTIME / 'offsite-account-evidence'
 LEDGER = offsite.RUNTIME / 'automatic-offsite/budget.json'
 HISTORY_DAY = '2026-09-20'
 HISTORY_FLOOR = {'requests': 296, 'download_bytes': 68_551_020}
+HELPER_PATH = offsite.RUNTIME / 'b2-offsite-20260920/inventory_approved_prefix.py'
+HELPER_ORIGINAL_SHA256 = '348f579da63694dde887a7c955bccaca4643775d5c1b76866670faa9eb1b2a7d'
+RETIRED_HELPER_STUB = (b'#!/usr/bin/env python3\n'
+                      b'raise SystemExit("Historical unbudgeted inventory is retired. Use the reviewed '
+                      b'rebuild/ops/offsite_operator.py inventory command with shared accounting.")\n')
 SOURCES = tuple('rebuild/ops/' + name + '.py' for name in
                 ('automatic_offsite', 'offsite_backup', 'offsite_operator', 'offsite_allocation', 'install_offsite_policy'))
 CONSUMERS = ['scheduled_upload', 'manual_upload', 'verification_readback',
@@ -62,6 +67,8 @@ def validate(limits, policy_path, at, *, contract_path=None):
     if contract_path is None:
         marker = offsite.CONFIG_PARENT / 'offsite-policy-installing.json'
         require(not marker.exists() and not marker.is_symlink())
+    if HELPER_PATH.exists() or HELPER_PATH.is_symlink():
+        require(offsite.read_private(HELPER_PATH, 262144) == RETIRED_HELPER_STUB)
     raw = offsite.read_private(contract_path or CONTRACT, 262144)
     item = json.loads(raw)
     fields = {'version', 'status', 'policy_sha256', 'observed_at', 'valid_until',

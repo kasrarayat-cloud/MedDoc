@@ -22,6 +22,8 @@ class PolicyInstallationTests(TestCase):
         records.mkdir(mode=0o700)
         policy_path, contract_path = self.secrets / 'offsite-policy.json', self.secrets / 'offsite-allocation.json'
         ledger = self.state / 'budget.json'
+        helper_parent = self.root / 'historical-helper'
+        helper_parent.mkdir(mode=0o700)
         original = dict(version=1, day='2026-09-20', requests=296, download_bytes=68_551_020)
         installer.engine.atomic(ledger, original)
         audit = {'scans': [{'completed_at': self.at.isoformat()}],
@@ -32,6 +34,7 @@ class PolicyInstallationTests(TestCase):
         for target, name, value in (
             (installer.allocation, 'EVIDENCE_ROOT', evidence_root),
             (installer.allocation, 'CONTRACT', contract_path), (installer.allocation, 'LEDGER', ledger),
+            (installer.allocation, 'HELPER_PATH', helper_parent / 'inventory_approved_prefix.py'),
             (installer.allocation, 'SOURCES', ()), (installer.engine.offsite, 'CONFIG_PARENT', self.secrets),
             (installer.engine, 'POLICY', policy_path), (installer.engine, 'STATE', self.state),
             (installer.base, 'EVIDENCE', records)):
@@ -39,6 +42,14 @@ class PolicyInstallationTests(TestCase):
             guard.start()
             self.addCleanup(guard.stop)
         return directory, policy_path, contract_path, ledger, records
+
+    def original_helper(self):
+        original = b'# Offline fixture of the prior raw requests helper.\nraise SystemExit("fixture")\n'
+        installer.engine.backup.write_private(installer.allocation.HELPER_PATH, original)
+        guard = patch.object(installer.allocation, 'HELPER_ORIGINAL_SHA256', installer.digest(original))
+        guard.start()
+        self.addCleanup(guard.stop)
+        return original
 
     def test_plan_has_no_policy_candidates_receipts_or_journal_mutation(self):
         directory, policy_path, contract_path, ledger, records = self.prepare()
@@ -140,3 +151,67 @@ class PolicyInstallationTests(TestCase):
         installer.engine.atomic(path, value)
         with self.assertRaisesRegex(RuntimeError, 'disagree'):
             installer.candidate_pair(directory)
+
+    def test_known_raw_helper_archived_and_retired_before_any_candidate_validation(self):
+        directory, policy_path, contract_path, ledger, records = self.prepare()
+        original = self.original_helper()
+        def validate(*args, **kwargs):
+            self.assertEqual(installer.allocation.HELPER_PATH.read_bytes(), installer.allocation.RETIRED_HELPER_STUB)
+            self.assertEqual(next(records.glob('retired-prefix-inventory-original-*.txt')).read_bytes(), original)
+            return {}
+        with patch.object(installer.allocation, 'validate', side_effect=validate):
+            result = installer.install_pair(directory, 'f'*40, execute=True, at=self.at)
+        self.assertTrue(result['success'])
+        self.assertEqual(result['legacy_helper']['state'], 'retired')
+        self.assertEqual(installer.allocation.HELPER_PATH.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(len(list(records.glob('retired-prefix-inventory-original-*.txt'))), 1)
+        # A repeat reads and verifies the same source-history artifact; it does not rewrite it.
+        archive = next(records.glob('retired-prefix-inventory-original-*.txt'))
+        before = archive.stat().st_mtime_ns
+        with patch.object(installer.allocation, 'validate', return_value={}):
+            installer.install_pair(directory, 'f'*40, execute=True, at=self.at)
+        self.assertEqual(archive.stat().st_mtime_ns, before)
+
+    def test_unknown_helper_source_refuses_without_policy_publication_or_replacement(self):
+        directory, policy_path, contract_path, ledger, records = self.prepare()
+        self.original_helper()
+        installer.allocation.HELPER_PATH.write_bytes(b'unrecognized changed implementation')
+        before = installer.allocation.HELPER_PATH.read_bytes()
+        with self.assertRaisesRegex(RuntimeError, 'Unrecognized'):
+            installer.install_pair(directory, 'f'*40, at=self.at)
+        with patch.object(installer.allocation, 'validate') as validate, \
+                self.assertRaisesRegex(RuntimeError, 'Unrecognized'):
+            installer.install_pair(directory, 'f'*40, execute=True, at=self.at)
+        validate.assert_not_called()
+        self.assertEqual(installer.allocation.HELPER_PATH.read_bytes(), before)
+        self.assertFalse(policy_path.exists() or contract_path.exists())
+        result = json.loads(next(records.glob('*-result.json')).read_bytes())
+        self.assertEqual(result['failed_stage'], 'legacy_helper_retirement')
+        self.assertFalse(result['success'])
+
+    def test_helper_plan_never_retires_or_archives_source(self):
+        directory, policy_path, contract_path, ledger, records = self.prepare()
+        original = self.original_helper()
+        result = installer.install_pair(directory, 'f'*40, at=self.at)
+        self.assertEqual(result['legacy_helper']['state'], 'requires_retirement')
+        self.assertEqual(installer.allocation.HELPER_PATH.read_bytes(), original)
+        self.assertEqual(list(records.iterdir()), [])
+
+    def test_retired_stub_with_lost_or_corrupt_history_is_not_silently_accepted(self):
+        directory, policy_path, contract_path, ledger, records = self.prepare()
+        installer.engine.backup.write_private(installer.allocation.HELPER_PATH, installer.allocation.RETIRED_HELPER_STUB)
+        with self.assertRaisesRegex(RuntimeError, 'missing its original'):
+            installer.install_pair(directory, 'f'*40, execute=True, at=self.at)
+        archive = records / ('retired-prefix-inventory-original-' + installer.allocation.HELPER_ORIGINAL_SHA256 + '.txt')
+        installer.engine.backup.write_private(archive, b'not original')
+        with self.assertRaisesRegex(RuntimeError, 'does not match'):
+            installer.install_pair(directory, 'f'*40, execute=True, at=self.at)
+
+    def test_unsafe_helper_metadata_refuses_before_replacement(self):
+        directory, policy_path, contract_path, ledger, records = self.prepare()
+        original = self.original_helper()
+        installer.allocation.HELPER_PATH.chmod(0o644)
+        with self.assertRaises(Exception):
+            installer.install_pair(directory, 'f'*40, execute=True, at=self.at)
+        self.assertEqual(installer.allocation.HELPER_PATH.read_bytes(), original)
+        self.assertFalse(policy_path.exists() or contract_path.exists())

@@ -33,6 +33,15 @@ Retire the old unbudgeted adapter. Preserve the original296 requests and
 navigation/response cushion. This is reservation accounting, not exact provider
 usage. No refund, counter reset, cap increase or new paid allowance is permitted.
 
+The final consumer audit also found the historical runtime helper
+`b2-offsite-20260920/inventory_approved_prefix.py` issuing direct HTTP. Before
+policy admission, preserve its exact source bytes (SHA256
+`348f579da63694dde887a7c955bccaca4643775d5c1b76866670faa9eb1b2a7d`) as a
+protected historical text artifact and replace only that known helper with a
+zero-I/O refusal pointing to the shared operator command. Unknown source bytes
+must refuse retirement for inspection. Historical result files stay unchanged.
+The allocation validator refuses if that executable entry point is reintroduced.
+
 The policy reserves the existing prefix within its existing private bucket:
 1,000,000,000 stored bytes,100,000,000 response bytes/UTC day,500 requests/UTC
 day,900-second technical run and30-hour maximum local age. Provider displayed

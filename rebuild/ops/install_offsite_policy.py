@@ -35,6 +35,55 @@ def fsync_directory(path):
         os.close(fd)
 
 
+def helper_retirement_state():
+    path = allocation.HELPER_PATH
+    if not path.exists() and not path.is_symlink():
+        return {'state': 'absent', 'path': str(path)}
+    engine.backup.private_dir(path.parent)
+    raw = engine.offsite.read_private(path, 262144)
+    sha = digest(raw)
+    state = ('already_retired' if raw == allocation.RETIRED_HELPER_STUB else
+             'requires_retirement' if sha == allocation.HELPER_ORIGINAL_SHA256 else 'unrecognized')
+    return {'state': state, 'path': str(path), 'sha256': sha}
+
+
+def retire_known_helper(attempt):
+    """Retire only the measured unbudgeted helper, preserving its exact non-executable source history."""
+    status = helper_retirement_state()
+    base.require(status['state'] != 'unrecognized', 'Unrecognized historical helper source; refuse replacement.')
+    if status['state'] == 'absent':
+        return status
+    path = allocation.HELPER_PATH
+    archive = base.EVIDENCE / ('retired-prefix-inventory-original-' + allocation.HELPER_ORIGINAL_SHA256 + '.txt')
+    if archive.exists() or archive.is_symlink():
+        preserved = engine.offsite.read_private(archive, 262144)
+        base.require(digest(preserved) == allocation.HELPER_ORIGINAL_SHA256,
+                     'Historical helper archive does not match the measured original.')
+    else:
+        base.require(status['state'] == 'requires_retirement',
+                     'Retired helper is missing its original source history; inspect before renewal.')
+        preserved = engine.offsite.read_private(path, 262144)
+        base.require(digest(preserved) == allocation.HELPER_ORIGINAL_SHA256,
+                     'Historical helper changed before archival.')
+        engine.backup.write_private(archive, preserved)
+        fsync_directory(base.EVIDENCE)
+    if status['state'] == 'requires_retirement':
+        temporary = path.parent / ('.retired-prefix-inventory-' + attempt + '.tmp')
+        engine.backup.write_private(temporary, allocation.RETIRED_HELPER_STUB)
+        try:
+            base.require(engine.offsite.read_private(path, 262144) == preserved,
+                         'Historical helper changed before exact replacement.')
+            os.replace(temporary, path)
+            fsync_directory(path.parent)
+        finally:
+            if temporary.exists():
+                temporary.unlink()
+    base.require(engine.offsite.read_private(path, 262144) == allocation.RETIRED_HELPER_STUB,
+                 'Historical unbudgeted helper was not retired.')
+    return {'state': 'retired', 'path': str(path), 'original_sha256': allocation.HELPER_ORIGINAL_SHA256,
+            'archive': str(archive), 'stub_sha256': digest(allocation.RETIRED_HELPER_STUB)}
+
+
 def candidate_pair(directory):
     directory = Path(directory).absolute()
     base.require(directory.parent == allocation.EVIDENCE_ROOT and directory.resolve() == directory,
@@ -87,7 +136,11 @@ def install_pair(directory, commit, *, execute=False, at=None):
                   'renewal_requires_desktop': True, 'policy_sha256': digest(encoded(limits)),
                   'contract_sha256': digest(encoded(contract))}
         if not execute:
+            retirement = helper_retirement_state()
+            base.require(retirement['state'] != 'unrecognized',
+                         'Unrecognized historical helper source; refuse replacement.')
             return dict(result, plan_prepared=True, fixed_files_changed=False,
+                        legacy_helper=retirement,
                         candidate_validation='performed before publication by --execute')
         engine.backup.private_dir(base.EVIDENCE)
         parent = engine.offsite.CONFIG_PARENT
@@ -107,8 +160,10 @@ def install_pair(directory, commit, *, execute=False, at=None):
         engine.backup.write_private(base.EVIDENCE / (name + '-intent.json'), encoded({
             **result, 'policy': limits, 'allocation': contract, 'previous': previous,
             'ledger_sha256_before': digest(ledger_before)}))
-        stage = 'candidate_validation'
+        stage = 'legacy_helper_retirement'
         try:
+            result['legacy_helper'] = retire_known_helper(name)
+            stage = 'candidate_validation'
             engine.backup.write_private(candidate, encoded(limits))
             engine.backup.write_private(companion, encoded(contract))
             engine.policy(candidate, at)
@@ -133,7 +188,7 @@ def install_pair(directory, commit, *, execute=False, at=None):
                           shared_journal_unchanged=True, ledger_sha256=digest(ledger_before))
             return result
         except Exception:
-            result.update(failed_stage=stage, fixed_files_may_have_changed=stage != 'candidate_validation',
+            result.update(failed_stage=stage, fixed_files_may_have_changed=stage in ('publication', 'installed_validation'),
                           failure='Policy installation failed; inspect protected intent/result and any publication marker.')
             raise
         finally:
