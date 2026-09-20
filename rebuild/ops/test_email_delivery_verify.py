@@ -85,39 +85,45 @@ class PrivateOriginTests(unittest.TestCase):
                 runner.private_access(Path('/unused'))
         with patch.object(runner, 'private_read', return_value={
                 'origin': runner.BASE, 'username': 'synthetic', 'password': 'synthetic-only'}):
-            self.assertIsInstance(runner.private_access(Path('/unused')), httpx.BasicAuth)
+            self.assertEqual(runner.private_access(Path('/unused')), {'username': 'synthetic', 'password': 'synthetic-only'})
 
-    def test_client_enforces_tls_and_never_follows_redirects_or_proxy_environment(self):
-        with patch.object(runner.httpx, 'Client') as client:
-            auth = httpx.BasicAuth('synthetic', 'synthetic-only')
-            runner.private_client(auth)
+    def test_client_enforces_tls_and_never_sends_basic_credentials(self):
+        with patch.object(runner.httpx, 'Client') as client, patch.object(runner.preview_http, 'authenticate') as login, patch.object(runner.preview_http, 'sign_out') as logout:
+            auth = {'username': 'synthetic', 'password': 'synthetic-only'}
+            with runner.private_client(auth):
+                pass
             options = client.call_args.kwargs
             self.assertEqual(options['base_url'], runner.BASE)
-            self.assertIs(options['auth'], auth)
+            self.assertNotIn('auth', options)
             self.assertIs(options['verify'], True)
             self.assertIs(options['follow_redirects'], False)
             self.assertIs(options['trust_env'], False)
+            login.assert_called_once()
+            logout.assert_called_once()
 
-    def probe(self, public_status=401, challenge='Basic realm="Private"', auth_status=200, body=None):
+    def probe(self, public_status=302, location='/preview/sign-in/?flow=' + 'a' * 64, challenge=None, auth_status=200, body=None):
         seen = []
-        auth = httpx.BasicAuth('synthetic', 'synthetic-only')
+        auth = {'username': 'synthetic', 'password': 'synthetic-only'}
         def client(client_auth=None):
             def handler(request):
-                seen.append((str(request.url), bool(request.headers.get('authorization'))))
+                seen.append((str(request.url), client_auth is not None, bool(request.headers.get('authorization'))))
                 if client_auth is None:
-                    return httpx.Response(public_status, headers={'www-authenticate': challenge, 'location': 'https://attacker.invalid'})
-                return httpx.Response(auth_status, json=body or {'release': RELEASE, 'data_mode': 'synthetic-only', 'surface': 'doctor'},
-                                      headers={'location': 'https://attacker.invalid'})
-            return httpx.Client(base_url=runner.BASE, auth=client_auth, transport=httpx.MockTransport(handler), follow_redirects=False)
+                    headers = {'location': location}
+                    if challenge is not None:
+                        headers['www-authenticate'] = challenge
+                    return httpx.Response(public_status, headers=headers)
+                return httpx.Response(auth_status, json=body or {'release': RELEASE, 'data_mode': 'synthetic-only', 'surface': 'doctor'}, headers={'location': 'https://attacker.invalid'})
+            return httpx.Client(base_url=runner.BASE, transport=httpx.MockTransport(handler), follow_redirects=False)
         with patch.object(runner, 'private_client', side_effect=client):
             runner.private_https_health(auth, RELEASE)
         return seen
 
-    def test_private_gate_proves_unauthenticated_401_and_exact_authenticated_release(self):
-        self.assertEqual(self.probe(), [(runner.BASE + '/health/', False), (runner.BASE + '/health/', True)])
+    def test_private_gate_proves_form_redirect_and_exact_authenticated_release(self):
+        self.assertEqual(self.probe(), [(runner.BASE + '/health/', False, False), (runner.BASE + '/health/', True, False)])
 
-    def test_public_access_redirect_wrong_challenge_or_release_never_pass(self):
-        for changes in ({'public_status': 200}, {'public_status': 302}, {'challenge': 'Bearer'},
+    def test_public_access_external_return_basic_challenge_or_wrong_release_never_pass(self):
+        for changes in ({'public_status': 200}, {'public_status': 401}, {'challenge': 'Basic realm="Private"'},
+                        {'location': 'https://attacker.invalid/preview/sign-in/'}, {'location': '/login/'},
                         {'auth_status': 302}, {'body': {'release': 'b' * 40, 'data_mode': 'synthetic-only', 'surface': 'doctor'}},
                         {'body': {'release': RELEASE, 'data_mode': 'real-patients', 'surface': 'doctor'}}):
             with self.subTest(changes=changes), self.assertRaises(runner.Refusal):

@@ -96,7 +96,7 @@ def private_access_instructions(recipient, purpose):
     if purpose not in {"invitation", "recovery"} or not username:
         return ""
     origin = application_origin()
-    return (f"\n\nPrivate synthetic preview: the browser will first ask for an access login at {origin}."
+    return (f"\n\nPrivate synthetic preview: first sign in on the private preview access page at {origin}."
             f"\nUsername: {username}\nPassword: {password}"
             "\nThis private-preview login is separate from your QuillMD account password."
             " Do not forward this message. Use only synthetic information.")
