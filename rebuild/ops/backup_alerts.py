@@ -2,7 +2,7 @@
 """Private, nonclinical recovery-stage alerts. No database access or backup mutation."""
 import argparse
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import fcntl
 import io
 import json
@@ -52,7 +52,11 @@ ERRORS = {
     'offsite_status_unavailable': 'Inspect private automatic-offsite status and immutable attempt evidence; missing or malformed evidence does not prove a recoverable remote backup.',
     'offsite_policy_unavailable': 'Install or renew the protected, approved storage, download and request envelope; keep recurrence disabled until all limits are established.',
     'offsite_capacity_refused': 'The approved storage or request allowance is exhausted. Preserve existing versions; obtain a reviewed capacity or retention decision before another upload.',
+    'offsite_capacity_low': 'The last scoped inventory leaves less room than one backup of the last completed size. Actual future size is unknown; preserve retained versions and arrange a reviewed capacity decision before the next capture. The worker cannot delete versions.',
     'offsite_upload_failed': 'Inspect the redacted automatic-offsite attempt record and authenticated completion manifest; retry through the bounded service after diagnosis, never count a partial upload as complete.',
+    'offsite_cleanup_failed': 'The attempt did not complete cleanup. Preserve its private journal and retained resources; verify the bounded process has stopped and repair cleanup before retrying. A prior completed backup remains separately recorded.',
+    'offsite_recovery_failed': 'A manual isolated restore failed. Inspect its protected verification and cleanup evidence before retrying through the shared allowance controls; the historical verified restore remains separately recorded.',
+    'offsite_policy_renewal_due': 'The next daily run falls outside current account-audit validity. Renew the account-wide evidence through the authenticated desktop and install the reviewed policy before its deadline; the restricted worker cannot refresh account-wide inventory.',
     'offsite_decryption_failed': 'Preserve the encrypted set and failure evidence; verify the correct recovery key and object integrity. Do not rotate working keys or overwrite a complete set.',
     'offsite_integrity_failed': 'Preserve the remote objects and failure evidence; inspect readback hashes and completion manifest. The affected set has not passed integrity verification.',
     'offsite_timeout': 'Inspect the bounded automatic-offsite service and its last attempt; determine which objects exist before a controlled retry.',
@@ -193,6 +197,22 @@ def offsite_systemd_state():
     return result
 
 
+def offsite_service_state():
+    """Observe unit failures even if the runner died before writing a new journal."""
+    child = subprocess.run(['systemctl', 'show', 'quillmd-fresh-offsite.service',
+                            '--property=ActiveState,Result'], capture_output=True, timeout=5,
+                           env={'PATH': '/usr/bin:/bin', 'LC_ALL': 'C'})
+    backup.require(child.returncode == 0, 'Offsite service status unavailable.')
+    value = dict(line.split('=', 1) for line in child.stdout.decode().splitlines())
+    backup.require(set(value) == {'ActiveState', 'Result'}
+                   and value['ActiveState'] in {'active', 'activating', 'deactivating', 'inactive', 'failed'}
+                   and value['Result'] in {'success', 'exit-code', 'signal', 'core-dump', 'timeout',
+                                           'watchdog', 'start-limit-hit', 'resources', 'oom-kill', 'protocol'},
+                   'Unknown offsite service status.')
+    return {'active_state': value['ActiveState'], 'result': value['Result'],
+            'failed': value['ActiveState'] == 'failed' or value['Result'] != 'success'}
+
+
 def safe_stage(value, kind, at):
     """Whitelist stage evidence; neither an unknown field nor its value reaches output."""
     if value is None:
@@ -257,6 +277,61 @@ def latest_offsite_outcome(value, at, reasons):
     return state, reason
 
 
+def capacity_status(value, at):
+    """Observed scoped bytes, plus a same-size estimate; never an account-wide total."""
+    if value is None:
+        return None
+    fields = {'observed_at', 'scope_stored_bytes_after', 'scope_ceiling_bytes', 'last_complete_cipher_bytes'}
+    backup.require(type(value) is dict and set(value) == fields
+                   and all(type(value[name]) is int and value[name] >= 0 for name in fields - {'observed_at'})
+                   and value['scope_stored_bytes_after'] <= value['scope_ceiling_bytes'],
+                   'Invalid scoped capacity evidence.')
+    age = (at - timestamp(value['observed_at'])).total_seconds()
+    backup.require(age >= 0, 'Future scoped capacity evidence.')
+    headroom = value['scope_ceiling_bytes'] - value['scope_stored_bytes_after']
+    return {**value, 'age_seconds': int(age), 'stale': age > OFFSITE_STALE_SECONDS,
+            'remaining_scope_bytes_at_observation': headroom,
+            'room_for_same_size_backup_at_observation': headroom >= value['last_complete_cipher_bytes'],
+            'future_backup_size_known': False, 'account_wide_usage_measurement': False}
+
+
+def manual_operation_status(at, reasons):
+    path = OFFSITE_DIRECTORY / 'manual-status.json'
+    if not path.exists() and not path.is_symlink():
+        return None
+    value = json.loads(backup.read_private(path, 16384))
+    fields = {'version', 'action', 'attempt', 'state', 'reason_code', 'started_at',
+              'run_id', 'manifest_cipher_sha256', 'restore_verified', 'shared_accounting'}
+    backup.require(type(value) is dict and fields <= set(value) <= fields | {'finished_at'}
+                   and type(value['version']) is int and value['version'] == 1
+                   and value['action'] == 'isolated_restore'
+                   and value['state'] in {'running', 'complete', 'failed', 'refused'}
+                   and value['reason_code'] in set(reasons) | {None}
+                   and type(value['restore_verified']) is bool and value['shared_accounting'] is True
+                   and isinstance(value['attempt'], str) and scheduled.RUN_PATTERN.fullmatch(value['attempt'])
+                   and isinstance(value['run_id'], str) and scheduled.RUN_PATTERN.fullmatch(value['run_id'])
+                   and isinstance(value['manifest_cipher_sha256'], str)
+                   and re.fullmatch('[a-f0-9]{64}', value['manifest_cipher_sha256']),
+                   'Invalid manual operation status.')
+    started = timestamp(value['started_at'])
+    backup.require(started <= at, 'Future manual operation status.')
+    if value['state'] == 'running':
+        backup.require('finished_at' not in value and value['reason_code'] is None
+                       and value['restore_verified'] is False, 'Invalid running manual operation.')
+        condition = 'offsite_in_progress' if (at - started).total_seconds() <= 945 else 'offsite_timeout'
+    else:
+        backup.require('finished_at' in value and started <= timestamp(value['finished_at']) <= at,
+                       'Invalid manual completion time.')
+        if value['state'] == 'complete':
+            backup.require(value['reason_code'] is None and value['restore_verified'] is True,
+                           'Unverified manual completion.')
+            condition = None
+        else:
+            backup.require(value['reason_code'] is not None, 'Manual failure reason absent.')
+            condition = reasons[value['reason_code']]
+    return {**value, 'condition': condition}
+
+
 def offsite_policy_condition(at):
     """Recheck the current approved envelope without authorizing or calling B2."""
     try:
@@ -281,8 +356,10 @@ def allowance_status(at):
         except ImportError:
             import automatic_offsite as engine
         limits = engine.policy(at=at)
+        allocation = allocation_status(limits, at)
         result.update(eligible=True, reason=None, observed_at=limits['observed_at'],
                       valid_until=limits['valid_until'],
+                      renewal_requires_desktop=allocation['renewal_requires_desktop'],
                       observation_age_seconds=int((at - timestamp(limits['observed_at'])).total_seconds()),
                       daily_request_budget=limits['daily_request_budget'],
                       daily_download_budget_bytes=limits['daily_download_budget_bytes'])
@@ -291,20 +368,21 @@ def allowance_status(at):
         if result['reason'] not in {'policy_missing', 'policy_invalid', 'policy_expired', 'state_invalid'}:
             result['reason'] = 'policy_invalid'
     try:
-        value = engine.read_json(OFFSITE_DIRECTORY / 'budget.json', {})
-        if value:
-            backup.require(set(value) == {'version', 'day', 'requests', 'download_bytes'}
-                           and type(value['version']) is int and value['version'] == 1
-                           and isinstance(value['day'], str)
-                           and re.fullmatch(r'\d{4}-\d{2}-\d{2}', value['day'])
-                           and datetime.strptime(value['day'], '%Y-%m-%d').date() <= at.date()
-                           and all(type(value[key]) is int and value[key] >= 0
-                                   for key in ('requests', 'download_bytes')), 'Invalid allowance evidence.')
-            result['local_reservations'] = {key: value[key] for key in ('day', 'requests', 'download_bytes')}
-            result['local_reservations']['current_utc_day'] = value['day'] == at.strftime('%Y-%m-%d')
+        value = engine.budget_summary(state=OFFSITE_DIRECTORY, at=at)
+        result['local_reservations'] = value
+        result['local_reservations']['current_utc_day'] = value['day'] == at.strftime('%Y-%m-%d')
     except Exception:
         result.update(eligible=False, reason='state_invalid')
     return result
+
+
+def allocation_status(limits, at):
+    try:
+        from . import automatic_offsite as engine, offsite_allocation
+    except ImportError:
+        import automatic_offsite as engine
+        import offsite_allocation
+    return offsite_allocation.validate(limits, engine.POLICY, at)
 
 
 def next_timer_run(unit):
@@ -409,12 +487,19 @@ def recovery_status(at):
         for key, kind in (('last_remote_complete', 'remote'), ('last_verified_readback', 'readback'),
                           ('last_isolated_restore', 'restore')):
             result[key] = safe_stage(value.get(key), kind, at)
+        result['capacity'] = capacity_status(value.get('last_capacity'), at)
         # Custody is a separate owner/off-host gate. A local restore cannot establish it.
         result['independent_key_custody_verified'] = (
             bool(result['last_isolated_restore'])
             and result['last_isolated_restore']['source'] == 'independently_retrieved_key')
         unit = offsite_systemd_state()
         result.update(recurrence_active=unit['active'], recurrence_enabled=unit['enabled'])
+        result['service'] = offsite_service_state()
+        next_run = result['next_permanent_timer_run']
+        expiry = result['allowance'].get('valid_until')
+        result['next_run_covered_by_policy'] = bool(
+            next_run and expiry and at < timestamp(next_run)
+            and timestamp(next_run) + timedelta(seconds=960) < timestamp(expiry))
         reasons = {
             'policy_missing': 'offsite_policy_unavailable', 'policy_invalid': 'offsite_policy_unavailable',
             'policy_expired': 'offsite_policy_unavailable', 'capacity_refused': 'offsite_capacity_refused',
@@ -422,11 +507,14 @@ def recovery_status(at):
             'remote_uncertain': 'offsite_integrity_failed',
             'local_authentication_failed': 'offsite_decryption_failed',
             'transport_failed': 'offsite_upload_failed', 'deadline': 'offsite_timeout',
+            'cleanup_failed': 'offsite_cleanup_failed',
             'lock_busy': 'offsite_upload_failed',
             'local_backup_stale': 'backup_stale', 'scope_refused': 'offsite_policy_unavailable',
             'state_invalid': 'offsite_status_unavailable',
             'pending_configuration': 'offsite_pending_configuration',
+            'recovery_failed': 'offsite_recovery_failed',
         }
+        result['manual_operation'] = manual_operation_status(at, reasons)
         state, reason = latest_offsite_outcome(value, at, reasons)
         backup.require(state in {'pending_configuration', 'running', 'complete', 'failed', 'refused'}
                        and reason in set(reasons) | {None}, 'Invalid automatic-offsite outcome.')
@@ -441,6 +529,8 @@ def recovery_status(at):
         elif state == 'running':
             age = (at - timestamp(value['started_at'])).total_seconds()
             condition = 'offsite_in_progress' if 0 <= age <= OFFSITE_TIMEOUT_SECONDS else 'offsite_timeout'
+        elif result['service']['failed']:
+            condition = 'offsite_upload_failed'
         elif not result['last_remote_complete'] or result['last_remote_complete']['stale']:
             condition = 'offsite_stale'
         elif (not result['last_verified_readback'] or result['last_verified_readback']['stale']
@@ -451,6 +541,14 @@ def recovery_status(at):
             condition = 'offsite_schedule_unavailable'
         else:
             condition = offsite_policy_condition(at) or 'healthy'
+            if condition == 'healthy' and expiry and not result['next_run_covered_by_policy']:
+                condition = 'offsite_policy_renewal_due'
+            if (condition == 'healthy' and result['capacity']
+                    and not result['capacity']['room_for_same_size_backup_at_observation']):
+                condition = 'offsite_capacity_low'
+        if (condition in {'healthy', 'offsite_pending_configuration', 'offsite_schedule_unavailable'}
+                and result['manual_operation'] and result['manual_operation']['condition']):
+            condition = result['manual_operation']['condition']
         result['condition'] = condition
         result['disabled_reason'] = condition if not unit['enabled'] or not unit['active'] else None
     except Exception:

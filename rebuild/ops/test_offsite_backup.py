@@ -1,4 +1,5 @@
 import copy
+from contextlib import contextmanager
 import errno
 import io
 import json
@@ -6,9 +7,10 @@ import os
 from pathlib import Path
 import stat
 import tempfile
+import time
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -162,33 +164,26 @@ class OffsiteSecurityTests(unittest.TestCase):
             offsite.download_backup(self.run_id, 'a' * 64, self.cipher, MemoryTransport(), self.root)
         self.assertEqual(sentinel.read_bytes(), b'SYNTHETIC original')
 
-    def test_transport_commands_never_receive_credentials_or_list_delete_flags(self):
+    def test_retired_authorization_rejects_before_network(self):
+        with patch('requests.Session') as session, self.assertRaisesRegex(RuntimeError, 'shared'):
+            offsite.authorize(self.config)
+        session.assert_not_called()
+
+    def test_retired_subprocess_transport_cannot_bypass_shared_reservations(self):
+        import subprocess
         client = object.__new__(offsite.McTransport)
         client.config, client.scratch = self.config, self.root
         client.client_config = self.root / 'config'
-        client.environment = {'PATH': '/usr/bin:/bin', 'MC_REGION': self.config['region']}
-        with patch.object(offsite.subprocess, 'run', return_value=SimpleNamespace(returncode=0)) as execute:
-            client.put(self.run_id, 'a' * 64, 'database.dump.fernet', self.objects['database.dump.fernet'])
-        args, kwargs = execute.call_args
-        command = args[0]
-        self.assertIn('put', command)
-        self.assertIn('--disable-multipart', command)
-        self.assertNotIn(self.config['application_key'], repr(command))
-        self.assertNotIn(self.config['application_key_id'], repr(command))
-        self.assertNotIn('rm', command)
-        self.assertNotIn('ls', command)
-        self.assertNotIn('--insecure', command)
-        self.assertNotIn('MC_INSECURE', kwargs['env'])
-        self.assertFalse((self.root / 'upload.fernet').exists())
-
-    def test_target_rejects_keyfile_traversal_unknown_runs(self):
-        client = object.__new__(offsite.McTransport)
-        client.config = self.config
-        for name in ('backup.key', '../manifest.json.fernet', 'summary.json'):
-            with self.subTest(name=name), self.assertRaises(RuntimeError):
-                client.target(self.run_id, 'a' * 64, name)
-        with self.assertRaises(RuntimeError):
-            client.target('../run', 'a' * 64, 'manifest.json.fernet')
+        client.environment = {'PATH': '/usr/bin:/bin'}
+        for operation in (lambda: offsite.McTransport(self.config, self.root),
+                          lambda: client.command(['version']),
+                          lambda: client.put(self.run_id, 'a' * 64, 'database.dump.fernet',
+                                             self.objects['database.dump.fernet']),
+                          lambda: client.get(self.run_id, 'a' * 64, 'manifest.json.fernet')):
+            with self.subTest(operation=operation), patch.object(subprocess, 'run') as process:
+                with self.assertRaisesRegex(RuntimeError, 'shared'):
+                    operation()
+                process.assert_not_called()
 
     def test_local_backup_plan_rejects_misplaced_plaintext(self):
         source = self.root / self.run_id
@@ -205,31 +200,148 @@ class OffsiteSecurityTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 offsite.authenticated_plan(source, key)
 
-    def test_cli_hands_downloaded_ciphertext_to_networkless_restore_adapter(self):
+    def remote_fixture(self, budget=None):
+        manifest_hash = offsite.backup.digest(self.objects['manifest.json.fernet'])
+        prefix = offsite.PREFIX + self.run_id + '/' + manifest_hash + '/'
+        rows = [{'fileName': prefix + name, 'fileId': name, 'action': 'upload', 'contentLength': len(data)}
+                for name, data in self.objects.items()]
+        transport = SimpleNamespace(
+            scope={'fixture': True}, policy={'max_run_seconds': 900},
+            budget=budget or SimpleNamespace(preflight=Mock(), deadline=time.monotonic() + 900),
+            inventory=Mock(return_value=rows),
+            get=Mock(side_effect=lambda row, size: self.objects[row['fileId']]))
+        return manifest_hash, transport
+
+    def test_download_adapter_reserves_every_ciphertext_plus_response_overrun(self):
+        manifest_hash, transport = self.remote_fixture()
+        adapter = offsite.InventoriedDownload(transport, self.run_id, manifest_hash)
+        transport.budget.preflight.assert_called_once_with(2, sum(map(len, self.objects.values())) + 2 * 65536)
+        destination, report = offsite.download_backup(self.run_id, manifest_hash, self.cipher, adapter, self.root)
+        self.assertTrue(report['all_objects_authenticated'])
+        self.assertEqual(transport.get.call_count, 2)
+        self.assertTrue((destination / 'database.dump.fernet').exists())
+
+    def test_download_adapter_budget_refusal_precedes_all_object_downloads(self):
+        manifest_hash, transport = self.remote_fixture()
+        transport.budget.preflight.side_effect = RuntimeError('budget exhausted')
+        with self.assertRaisesRegex(RuntimeError, 'budget exhausted'):
+            offsite.InventoriedDownload(transport, self.run_id, manifest_hash)
+        transport.get.assert_not_called()
+
+    def test_download_adapter_never_resurrects_an_older_hidden_version(self):
+        manifest_hash, transport = self.remote_fixture()
+        rows = transport.inventory.return_value
+        rows.insert(0, dict(rows[-1], fileId='hidden', action='hide', contentLength=0))
+        with self.assertRaisesRegex(RuntimeError, 'missing or hidden'):
+            offsite.InventoriedDownload(transport, self.run_id, manifest_hash)
+        transport.get.assert_not_called()
+
+    def test_legacy_execute_upload_refuses_before_config_key_or_provider_work(self):
+        argv = ['offsite_backup.py', '--config', 'fixture-config', '--backup', 'fixture-backup',
+                '--key-file', 'fixture-key', '--output', str(self.root), '--execute']
+        with patch('sys.argv', argv), patch.object(offsite, 'configuration') as configured, \
+             patch.object(offsite.backup, 'key_at') as keyed, patch.object(offsite, 'shared_engine') as engine:
+            with self.assertRaisesRegex(SystemExit, 'automatic_offsite.py run'):
+                offsite.main()
+        configured.assert_not_called(); keyed.assert_not_called(); engine.assert_not_called()
+
+    def execute_recovery_fixture(self, close_error=False, restore_error=False):
         key = self.root / 'test.key'
         key.write_bytes(b'synthetic placeholder'); key.chmod(0o600)
         output = self.root / 'roundtrip'; output.mkdir(mode=0o700)
-        fake = MemoryTransport()
+        manifest_hash, transport = self.remote_fixture()
+        active = []
+        @contextmanager
+        def session(**kwargs):
+            self.assertEqual(kwargs, {'config_path': Path('fixture-config')})
+            active.append(True)
+            try:
+                yield transport
+            finally:
+                active.pop()
+                if close_error:
+                    raise RuntimeError('cleanup failed fixture')
         def simulated_restore(args):
+            self.assertTrue(active, 'Shared exclusion must remain held during isolated restore.')
+            self.assertEqual(Path(args.key_file), key)
             self.assertEqual(Path(args.backup), output / self.run_id)
             self.assertFalse(args.keep_container)
-            self.assertTrue((Path(args.backup) / 'database.dump.fernet').is_file())
+            if restore_error:
+                raise RuntimeError('restore cleanup failed fixture')
             print(json.dumps({'complete': True, 'all_table_hashes_match': True, 'all_file_hashes_match': True,
                               'network': 'none', 'provider_actions': 0, 'workers_started': 0}))
-        argv = ['offsite_backup.py', '--config', 'fixture-config', '--backup', 'fixture-backup',
-                '--key-file', str(key), '--output', str(output), '--execute']
+        argv = ['offsite_backup.py', '--config', 'fixture-config', '--download-run-id', self.run_id,
+                '--manifest-sha', manifest_hash, '--key-file', str(key), '--output', str(output), '--execute']
         with patch('sys.argv', argv), patch.object(offsite, 'configuration', return_value=self.config), \
-             patch.object(offsite, 'authenticated_plan', return_value=(self.manifest, self.objects)), \
              patch.object(offsite.backup, 'key_at', return_value=self.cipher), \
-             patch.object(offsite, 'authorize', return_value={'fixture': True}), \
-             patch.object(offsite, 'McTransport', return_value=fake), \
+             patch.object(offsite, 'shared_engine', return_value=SimpleNamespace(live_session=session, Refusal=type('FixtureRefusal', (RuntimeError,), {}))), \
+             patch.object(offsite, 'manual_status') as summary, \
              patch.object(offsite.backup, 'restore', side_effect=simulated_restore) as restored, \
              patch('sys.stdout', new_callable=io.StringIO):
-            offsite.main()
+            if close_error or restore_error:
+                with self.assertRaisesRegex(RuntimeError, 'cleanup failed fixture'):
+                    offsite.main()
+            else:
+                offsite.main()
         restored.assert_called_once()
-        evidence = json.loads((output / ('offsite-' + self.run_id + '.json')).read_text())
+        self.assertEqual(summary.call_args_list[0].args[2], 'running')
+        self.assertEqual(summary.call_args_list[-1].args[2], 'failed' if close_error or restore_error else 'complete')
+        return json.loads((output / ('offsite-' + self.run_id + '.json')).read_text())
+
+    def test_cli_hands_budgeted_download_to_networkless_restore_with_only_explicit_key(self):
+        evidence = self.execute_recovery_fixture()
+        self.assertTrue(evidence['complete'])
         self.assertTrue(evidence['restore_verified'])
+        self.assertTrue(evidence['shared_accounting'])
         self.assertFalse(evidence['vault_recovery_demonstrated'])
+
+    def test_restore_cleanup_failure_never_reports_complete(self):
+        evidence = self.execute_recovery_fixture(restore_error=True)
+        self.assertFalse(evidence['complete'])
+        self.assertFalse(evidence['restore_verified'])
+
+    def test_transport_cleanup_failure_never_reports_complete(self):
+        evidence = self.execute_recovery_fixture(close_error=True)
+        self.assertFalse(evidence['complete'])
+        self.assertTrue(evidence['restore_verified'])
+
+    def test_recovery_deadline_arms_bounded_cleanup_and_cancels_alarm_afterward(self):
+        handler = None
+        def save_handler(signum, callback):
+            nonlocal handler
+            if callable(callback):
+                handler = callback
+        with patch.object(offsite.signal, 'getsignal', return_value=offsite.signal.SIG_DFL), \
+             patch.object(offsite.signal, 'signal', side_effect=save_handler), \
+             patch.object(offsite.signal, 'setitimer') as alarm:
+            with self.assertRaisesRegex(RuntimeError, 'runtime allowance has expired'):
+                with offsite.recovery_deadline(time.monotonic() + 2):
+                    handler(None, None)
+            durations = [item.args[1] for item in alarm.call_args_list]
+            self.assertGreater(durations[0], 1.9)
+            self.assertLessEqual(durations[0], 2)
+            self.assertEqual(durations[1:], [45, 0])
+
+    def test_manual_summary_preserves_latest_attempt_and_never_emits_secret_extras(self):
+        engine = offsite.shared_engine()
+        report = {'attempt': '20260920T220000Z-aabbccdd', 'started_at': '2026-09-20T22:00:00+00:00',
+                  'backup_run_id': self.run_id, 'manifest_cipher_sha256': 'a' * 64,
+                  'restore_verified': False, 'unexpected': 'DO-NOT-PUBLISH'}
+        with patch.object(engine, 'STATE', self.root):
+            offsite.manual_status(engine, report, 'running')
+            record = json.loads((self.root / 'manual-status.json').read_text())
+            self.assertNotIn('DO-NOT-PUBLISH', json.dumps(record))
+            self.assertEqual(record['run_id'], self.run_id)
+            self.assertEqual(record['state'], 'running')
+            self.assertNotIn('finished_at', record)
+            next_attempt = dict(report, attempt='20260920T220001Z-11223344')
+            offsite.manual_status(engine, next_attempt, 'running')
+            before = (self.root / 'manual-status.json').read_bytes()
+            offsite.manual_status(engine, report, 'complete', require_attempt=True)
+            self.assertEqual((self.root / 'manual-status.json').read_bytes(), before)
+            with engine.exclusion(self.root):
+                offsite.manual_status(engine, report, 'refused', 'lock_busy')
+            self.assertEqual((self.root / 'manual-status.json').read_bytes(), before)
 
     def test_cli_preparation_authenticates_bundle_without_provider_or_restore_calls(self):
         source = self.root / self.run_id
@@ -259,7 +371,7 @@ class OffsiteSecurityTests(unittest.TestCase):
 
     def test_missing_destination_configuration_cannot_contact_provider_even_with_execute(self):
         argv = ['offsite_backup.py', '--config', str(self.root / 'absent.json'),
-                '--backup', str(self.root / self.run_id),
+                '--download-run-id', self.run_id, '--manifest-sha', 'a' * 64,
                 '--key-file', str(self.root / 'fixture.key'), '--output', str(self.root), '--execute']
         with patch('sys.argv', argv), patch.object(offsite, 'CONFIG_PARENT', self.root), \
              patch.object(offsite, 'authorize') as authorized, \

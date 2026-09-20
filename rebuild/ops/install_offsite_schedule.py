@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Scoped installation of offsite units; activation requires a fresh capacity policy and verified service run."""
 import argparse
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import os
@@ -17,7 +17,7 @@ except ImportError:
     import install_backup_schedule as base
 
 INSTALLER = 'rebuild/ops/install_offsite_schedule.py'
-DECLARATION = 'docs/foundation/mutations/20260920-quillmd-automatic-offsite.md'
+DECLARATION = 'docs/foundation/mutations/20260920-quillmd-offsite-activation.md'
 SERVICE = 'quillmd-fresh-offsite.service'
 TIMER = 'quillmd-fresh-offsite.timer'
 CONFIG = base.APP / '.runtime/backup-secrets/b2-offsite.json'
@@ -33,6 +33,76 @@ def eligibility():
                  'Current approved operating envelope required before activation.')
     return {k: result[k] for k in ('policy_expires_at', 'scope_ceiling_bytes',
                                   'daily_download_budget_bytes', 'daily_request_budget')}
+
+
+def first_run_coverage(limits, *, actual=False, at=None):
+    """The reviewed daily calendar and its entire bounded run must fit the evidence.
+
+    An inactive timer has no NextElapseUSecRealtime. Check the exact reviewed
+    calendar before any provider work, then recheck systemd's actual schedule.
+    """
+    at = at or datetime.now(timezone.utc)
+    base.require(at.tzinfo is not None, 'UTC-aware activation time required.')
+    at = at.astimezone(timezone.utc)
+    calendar = (base.APP / 'deploy' / TIMER).read_text().splitlines()
+    base.require([line for line in calendar if line.startswith('OnCalendar=')]
+                 == ['OnCalendar=*-*-* 05:00:00 UTC']
+                 and 'RandomizedDelaySec=0' in calendar and 'Persistent=true' in calendar,
+                 'Only the reviewed daily UTC calendar is supported.')
+    expected = at.replace(hour=5, minute=0, second=0, microsecond=0)
+    if expected <= at:
+        expected += timedelta(days=1)
+    scheduled = expected
+    if actual:
+        raw = base.command(['/usr/bin/env', 'TZ=UTC', 'systemctl', 'show', TIMER,
+                            '--property=NextElapseUSecRealtime', '--value']).decode().strip()
+        scheduled = datetime.strptime(raw, '%a %Y-%m-%d %H:%M:%S UTC').replace(tzinfo=timezone.utc)
+        base.require(scheduled == expected, 'Actual offsite timer differs from the reviewed next run.')
+    expires = datetime.fromisoformat(limits['policy_expires_at'])
+    # Timer accuracy defaults to one minute; allow it as well as the 900-second job.
+    deadline = scheduled + timedelta(seconds=960)
+    base.require(expires.tzinfo is not None and at < scheduled and deadline < expires,
+                 'Policy must remain valid through the first scheduled run and timer accuracy window.')
+    return {'next_run_at': scheduled.isoformat(), 'latest_completion_at': deadline.isoformat(),
+            'policy_expires_at': expires.isoformat(), 'actual_systemd_schedule': actual}
+
+
+def service_identity():
+    properties = {'User': 'claude', 'Group': 'claude', 'WorkingDirectory': str(base.APP),
+                  'KillMode': 'control-group', 'NoNewPrivileges': 'yes', 'ProtectSystem': 'strict',
+                  'PrivateTmp': 'yes', 'MemoryMax': '1073741824', 'MemorySwapMax': '0',
+                  'TimeoutStartUSec': '16min', 'Environment': '', 'EnvironmentFiles': '',
+                  'ReadWritePaths': str(base.MONITOR)}
+    raw = base.command(['systemctl', 'show', SERVICE, '--all',
+                        '--property=' + ','.join(properties)]).decode()
+    actual = dict(line.split('=', 1) for line in raw.splitlines())
+    # This systemd omits EnvironmentFiles when the unit has none, even with --all.
+    actual.setdefault('EnvironmentFiles', '')
+    base.require(actual == properties, 'Effective offsite service identity or containment differs.')
+    return actual
+
+
+def adoption_receipt(commit):
+    return base.MONITOR / ('installation-' + commit + '.json')
+
+
+def installation_receipt(commit, hashes, *, adopt=False):
+    """Preserve the original receipt; adoption can change source revision, never units."""
+    path = base.MONITOR / 'installation.json' if adopt else adoption_receipt(commit)
+    if not adopt and not path.exists() and not path.is_symlink():
+        path = base.MONITOR / 'installation.json'
+    receipt = base.read_private(path)
+    base.require(path.stat().st_nlink == 1 and receipt.get('success') is True
+                 and re.fullmatch('[a-f0-9]{40}', receipt.get('commit', '')),
+                 'Successful protected installation receipt required.')
+    if adopt:
+        base.require(all(receipt.get('hashes', {}).get('rebuild/deploy/' + name)
+                         == hashes['rebuild/deploy/' + name] for name in (SERVICE, TIMER)),
+                     'Adoption cannot change the originally reviewed unit bytes.')
+    else:
+        base.require(receipt['commit'] == commit and receipt.get('hashes') == hashes,
+                     'Exact reviewed installation receipt required.')
+    return {'path': str(path), 'sha256': base.digest(path), 'commit': receipt['commit']}
 
 
 def verified_attempt(prior):
@@ -75,10 +145,14 @@ def scope():
     base.SERVICE, base.TIMER, base.UNITS = SERVICE, TIMER, (SERVICE, TIMER)
     base.LINK = 'timers.target.wants/' + TIMER
     base.MONITOR = base.APP / '.runtime/automatic-offsite'
-    base.EVIDENCE = base.APP / '.runtime/automatic-offsite-20260920'
+    base.EVIDENCE = base.APP / '.runtime/offsite-activation-20260920'
     base.SOURCES = (INSTALLER, 'rebuild/ops/install_backup_schedule.py',
                     'rebuild/ops/automatic_offsite.py', 'rebuild/ops/offsite_backup.py',
                     'rebuild/ops/backup_restore.py', 'rebuild/ops/private_storage.py',
+                    'rebuild/ops/offsite_allocation.py',
+                    'rebuild/ops/offsite_operator.py',
+                    'rebuild/ops/install_offsite_policy.py',
+                    'rebuild/ops/backup_alerts.py', 'rebuild/ops/recovery_kit.py',
                     DECLARATION, *(f'rebuild/deploy/{u}' for u in base.UNITS))
 
 
@@ -100,7 +174,7 @@ def configuration():
 def root_action(payload):
     base.require(os.getuid() == 0 and set(payload) == {'action', 'hashes', 'baseline', 'commit'},
                  'Invalid helper input.')
-    base.require(payload['action'] in ('install', 'activate', 'disable')
+    base.require(payload['action'] in ('install', 'adopt', 'activate', 'disable')
                  and set(payload['hashes']) == set(base.SOURCES), 'Invalid helper scope.')
     for relative, expected in payload['hashes'].items():
         path = base.ROOT / relative
@@ -121,10 +195,19 @@ def root_action(payload):
                     os.fsync(stream.fileno())
             base.command(['systemctl', 'daemon-reload'])
             base.require_installed(payload['hashes'])
+        elif payload['action'] == 'adopt':
+            base.require_installed(payload['hashes'])
+            base.require(base.LINK not in payload['baseline']['units'], 'Adoption requires an inactive timer.')
+            base.require(base.command(['systemctl', 'show', TIMER, '--property=ActiveState', '--value']).strip()
+                         == b'inactive', 'Adoption requires an inactive timer.')
+            result['service_identity'] = service_identity()
+            result['unit_files_changed'] = False
         elif payload['action'] == 'activate':
             base.require_installed(payload['hashes'])
             base.require(base.LINK not in payload['baseline']['units'], 'Timer already enabled.')
             result['eligibility'] = eligibility()
+            result['first_run_coverage_before'] = first_run_coverage(result['eligibility'])
+            result['service_identity'] = service_identity()
             base.require(base.command(['systemctl', 'show', TIMER, '--property=ActiveState', '--value']).strip()
                          == b'inactive', 'Timer must be inactive before controlled run.')
             prior = set(base.MONITOR.glob('20*.json'))
@@ -134,11 +217,13 @@ def root_action(payload):
                          {'Result': 'success', 'ExecMainStatus': '0'}, 'Controlled offsite run failed.')
             result['controlled_run'] = verified_attempt(prior)
             result['eligibility_after_run'] = eligibility()
+            result['first_run_coverage_before_enable'] = first_run_coverage(result['eligibility_after_run'])
             base.command(['systemctl', 'enable', TIMER])
             base.command(['systemctl', 'start', TIMER])
             base.require(base.command(['systemctl', 'is-active', TIMER]).strip() == b'active'
                          and base.command(['systemctl', 'is-enabled', TIMER]).strip() == b'enabled',
                          'Offsite timer activation failed.')
+            result['first_run_coverage_actual'] = first_run_coverage(eligibility(), actual=True)
         else:
             base.require_installed(payload['hashes'])
             base.command(['systemctl', 'disable', '--now', TIMER])
@@ -163,7 +248,9 @@ def root_action(payload):
             try:
                 base.command(['systemctl', 'disable', '--now', TIMER])
                 base.command(['systemctl', 'stop', SERVICE])
-                result['timer_disabled'] = True
+                result['timer_disabled'] = (
+                    base.command(['systemctl', 'show', TIMER, '--property=ActiveState', '--value']).strip()
+                    == b'inactive' and base.LINK not in base.baseline()['units'])
             except Exception:
                 result['timer_disabled'] = False
     result['finished_at'] = datetime.now(timezone.utc).isoformat()
@@ -174,7 +261,7 @@ def main():
     scope()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--expected-commit', required=True)
-    parser.add_argument('--action', choices=('install', 'activate', 'disable'), default='install')
+    parser.add_argument('--action', choices=('install', 'adopt', 'activate', 'disable'), default='install')
     parser.add_argument('--execute', action='store_true')
     args = parser.parse_args()
     base.require(os.getuid() == pwd.getpwnam('claude').pw_uid, 'Use the authorized project operator.')
@@ -188,9 +275,9 @@ def main():
         if args.action == 'activate':
             configuration()
         base.require_installed(hashes)
-        receipt = base.read_private(base.MONITOR / 'installation.json')
-        base.require(receipt.get('success') and receipt.get('commit') == args.expected_commit
-                     and receipt.get('hashes') == hashes, 'Exact reviewed installation receipt required.')
+        prior_receipt = installation_receipt(args.expected_commit, hashes, adopt=args.action == 'adopt')
+        if args.action == 'adopt':
+            base.require(not adoption_receipt(args.expected_commit).exists(), 'Revision already adopted.')
     if not args.execute:
         print(json.dumps({'plan_verified': True, 'action': args.action, 'commit': args.expected_commit,
                           'host_mutation': False, 'application_restart': False}))
@@ -223,6 +310,8 @@ def main():
     except Exception:
         result = {'success': False, 'error': 'helper_outcome_unconfirmed'}
     result['hashes'] = hashes
+    if args.action != 'install':
+        result['prior_installation_receipt'] = prior_receipt
     result['backup_records_unchanged'] = backups == unchanged_backups()
     result['b2_configuration_checked'] = args.action != 'disable'
     result['b2_configuration_unchanged'] = (config_before == base.metadata(CONFIG)
@@ -232,6 +321,8 @@ def main():
     base.write_private(base.EVIDENCE / (name + '-result.json'), result)
     if result['success'] and args.action == 'install':
         base.write_private(base.MONITOR / 'installation.json', result)
+    elif result['success'] and args.action == 'adopt':
+        base.write_private(adoption_receipt(args.expected_commit), result)
     print(json.dumps({'success': result['success'], 'action': args.action,
                       'evidence': str(base.EVIDENCE / (name + '-result.json'))}))
     return 0 if result['success'] else 1

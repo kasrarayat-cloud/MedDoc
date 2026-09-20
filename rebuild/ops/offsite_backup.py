@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
-"""Explicit encrypted B2 round trip; no scheduling, deletion or provisioning."""
+"""Offline backup preparation and budgeted isolated recovery; uploads use automatic_offsite."""
 import argparse
-from contextlib import redirect_stdout
+from contextlib import contextmanager, redirect_stdout
 from datetime import datetime, timezone
 import io
 import json
 import os
 from pathlib import Path
 import re
-import resource
+import signal
+import secrets
 import stat
-import subprocess
-import tempfile
+import time
 from types import SimpleNamespace
-
-import requests
 
 try:
     from . import backup_restore as backup
@@ -24,8 +22,9 @@ except ImportError:
 RUNTIME = Path('/opt/meddoc-pro/rebuild/.runtime')
 CONFIG_PARENT = RUNTIME / 'backup-secrets'
 PREFIX = 'quillmd-fresh/synthetic/'
-MC = Path('/usr/local/bin/mc')
-MC_RELEASE = 'RELEASE.2025-08-13T08-35-41Z'
+TRANSPORT_VERSION = 'Native API v4; canonical policy, execution lock and shared durable budget'
+RETIRED_TRANSPORT = ('Legacy transport is disabled: use the shared automatic_offsite.py run uploader '
+                     'or offsite_backup.py --download-run-id recovery path.')
 CAPABILITIES = {'listFiles', 'readFiles', 'writeFiles'}
 MAX_CIPHER = backup.MAX_OBJECT_BYTES * 2
 RUN_ID = r'[0-9]{8}T[0-9]{6}Z-[a-f0-9]{8}'
@@ -85,14 +84,17 @@ def verify_scope(config, response):
 
 
 def authorize(config):
-    with requests.Session() as session:
-        session.trust_env = False  # No inherited proxies, netrc or custom CA override.
-        response = session.get('https://api.backblazeb2.com/b2api/v4/b2_authorize_account',
-                               auth=(config['application_key_id'], config['application_key']),
-                               timeout=(10, 30), allow_redirects=False)
-        require(response.status_code == 200 and len(response.content) <= 65536,
-                'Provider scope authorization failed; no upload attempted.')
-        return verify_scope(config, response.json())
+    """Keep the historical symbol fail-closed; standalone authorization was unbudgeted."""
+    raise RuntimeError(RETIRED_TRANSPORT)
+
+
+def shared_engine():
+    # Lazy import: automatic_offsite imports the non-network validation primitives here.
+    try:
+        from . import automatic_offsite
+    except ImportError:
+        import automatic_offsite
+    return automatic_offsite
 
 
 def safe_object(value):
@@ -179,62 +181,89 @@ def authenticated_plan(path, key_file):
 
 
 class McTransport:
-    """Established S3 client; credentials live only in temporary private config."""
-    def __init__(self, config, scratch):
-        self.config = config
-        self.scratch = backup.private_dir(scratch)
-        info = MC.lstat()
-        require(stat.S_ISREG(info.st_mode) and info.st_uid == 0 and not (info.st_mode & 0o022),
-                'Use the reviewed root-owned MinIO client.')
-        version = subprocess.run([str(MC), '--version'], capture_output=True, timeout=10, check=False)
-        require(version.returncode == 0 and MC_RELEASE.encode() in version.stdout, 'MinIO client version requires qualification.')
-        self.client_config = self.scratch / 'mc-config'
-        self.client_config.mkdir(mode=0o700)
-        backup.write_private(self.client_config / 'config.json', json.dumps({'version': '10', 'aliases': {
-            'quillmdoffsite': {'url': config['endpoint'], 'accessKey': config['application_key_id'],
-                             'secretKey': config['application_key'], 'api': 'S3v4', 'path': 'on'}}}).encode())
-        # A narrow environment also excludes inherited MC_HOST aliases,
-        # MC_INSECURE/MC_DEBUG and all application/provider/payment credentials.
-        self.environment = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'LANG': 'C.UTF-8',
-                            'MC_REGION': config['region'], 'MC_NO_COLOR': '1', 'MC_QUIET': '1',
-                            'MC_DISABLE_PAGER': '1'}
+    """Retired live client. Historical qualification evidence remains unchanged."""
+    def __init__(self, *args, **kwargs):
+        raise RuntimeError(RETIRED_TRANSPORT)
 
-    def target(self, run_id, manifest_hash, name):
-        require(re.fullmatch(RUN_ID, run_id) and re.fullmatch(SHA, manifest_hash), 'Invalid remote backup identity.')
-        safe_object(name)
-        # Content-address the authenticated manifest. A repeated transfer can
-        # create an additional identical B2 object version, never replace bytes
-        # belonging to a different authenticated backup with the same run ID.
-        return 'quillmdoffsite/' + self.config['bucket'] + '/' + PREFIX + run_id + '/' + manifest_hash + '/' + name
+    def command(self, *args, **kwargs):
+        raise RuntimeError(RETIRED_TRANSPORT)
 
-    def command(self, args):
-        def bounded_file_size():
-            resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_CIPHER, MAX_CIPHER))
-            os.umask(0o077)
-        result = subprocess.run([str(MC), '--config-dir', str(self.client_config), '--quiet', '--no-color', *args],
-                                env=self.environment, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                timeout=180, check=False, preexec_fn=bounded_file_size)
-        require(result.returncode == 0, 'Scoped encrypted-object transfer failed; no raw client output emitted.')
+    put = command
+    get = command
 
-    def put(self, run_id, manifest_hash, name, payload):
-        safe_object(name)
-        require(len(payload) <= MAX_CIPHER, 'Encrypted object exceeds transfer limit.')
-        local = self.scratch / 'upload.fernet'
-        backup.write_private(local, payload)
-        try:
-            self.command(['put', '--disable-multipart', str(local), self.target(run_id, manifest_hash, name)])
-        finally:
-            local.unlink()
+
+class InventoriedDownload:
+    """Adapt only a completely inventoried encrypted set to the recovery primitive."""
+    def __init__(self, transport, run_id, manifest_hash):
+        require(re.fullmatch(RUN_ID, run_id) and re.fullmatch(SHA, manifest_hash), 'Invalid recovery identity.')
+        self.transport, self.identity = transport, (run_id, manifest_hash)
+        prefix = PREFIX + run_id + '/' + manifest_hash + '/'
+        self.rows = {}
+        for row in transport.inventory():
+            if row['fileName'].startswith(prefix):
+                name = safe_object(row['fileName'][len(prefix):])
+                # Native list versions is newest-first. A hide marker must not
+                # resurrect an older version or silently select different bytes.
+                self.rows.setdefault(name, row)
+        require('manifest.json.fernet' in self.rows and all(
+            row['action'] == 'upload' and 0 < row['contentLength'] <= MAX_CIPHER
+            for row in self.rows.values()), 'Remote complete encrypted set is missing or hidden.')
+        # No object content is downloaded unless the entire inventoried set fits
+        # the remaining shared allowance. Requests themselves debit durably.
+        transport.budget.preflight(len(self.rows), sum(row['contentLength'] + 65536 for row in self.rows.values()))
 
     def get(self, run_id, manifest_hash, name):
-        local = self.scratch / 'download.fernet'
-        require(not local.exists() and not local.is_symlink(), 'Download staging collision.')
+        require((run_id, manifest_hash) == self.identity and name in self.rows,
+                'Object absent from the selected complete remote inventory.')
+        row = self.rows[name]
+        return self.transport.get(row, row['contentLength'])
+
+
+@contextmanager
+def recovery_deadline(deadline):
+    """Bound CLI recovery as well as HTTP; the first timeout still runs restore cleanup."""
+    require(signal.getsignal(signal.SIGALRM) == signal.SIG_DFL,
+            'Recovery requires a dedicated bounded operator process.')
+    remaining = deadline - time.monotonic()
+    require(remaining > 0, 'Shared recovery runtime allowance has expired.')
+    def expired(_signal, _frame):
+        # backup.restore's finally block gets one bounded cleanup window. A
+        # hung cleanup cannot leave this process holding the shared lock forever.
+        signal.signal(signal.SIGALRM, signal.SIG_DFL)
+        signal.setitimer(signal.ITIMER_REAL, 45)
+        raise RuntimeError('Shared recovery runtime allowance has expired.')
+    signal.signal(signal.SIGALRM, expired)
+    signal.setitimer(signal.ITIMER_REAL, remaining)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, signal.SIG_DFL)
+
+
+def manual_status(engine, report, state, reason=None, *, locked=False, require_attempt=False):
+    """Only a typed summary reaches the monitor; lock losers cannot replace a runner."""
+    summary = {name: report[name] for name in ('attempt', 'started_at', 'backup_run_id',
+                                              'manifest_cipher_sha256', 'restore_verified')}
+    summary['run_id'] = summary.pop('backup_run_id')
+    summary.update(version=1, action='isolated_restore', state=state, reason_code=reason, shared_accounting=True)
+    if state != 'running':
+        summary['finished_at'] = datetime.now(timezone.utc).isoformat()
+    def write():
+        path = engine.STATE / 'manual-status.json'
+        previous = engine.read_json(path, {})
+        if require_attempt and previous.get('attempt') != report['attempt']:
+            return  # A newer manual attempt owns this summary; the immutable report still survives.
+        engine.atomic(path, summary)
+    if locked:
+        write()
+    else:
         try:
-            self.command(['get', self.target(run_id, manifest_hash, name), str(local)])
-            return read_private(local)
-        finally:
-            if local.exists() and not local.is_symlink():
-                local.unlink()
+            with engine.exclusion(engine.STATE):
+                write()
+        except engine.Refusal as error:
+            if error.code != 'lock_busy':
+                raise
 
 
 def download_backup(run_id, manifest_hash, cipher, transport, output, expected_manifest=None):
@@ -291,7 +320,10 @@ def main():
     parser.add_argument('--output', required=True, help='Existing operator-owned 0700 directory for round-trip evidence.')
     parser.add_argument('--execute', action='store_true')
     args = parser.parse_args()
-    config = configuration(args.config)
+    if args.execute and args.backup:
+        raise SystemExit('Manual uploads now share the scheduled engine: run automatic_offsite.py run. '
+                           'It selects the authenticated completed local backup under canonical policy and accounting.')
+    configuration(args.config)
     cipher = backup.key_at(args.key_file)
     if args.backup:
         require(args.manifest_sha is None, 'Recovery hash is only valid for download mode.')
@@ -307,32 +339,49 @@ def main():
         print(json.dumps({'prepared': True, 'network_calls': 0, 'encrypted_object_count': len(objects),
                           'remote_verified': False, 'restore_verified': False}))
         return
+    engine = shared_engine()
     report = {'started_at': datetime.now(timezone.utc).isoformat(), 'complete': False, 'live_transport': True,
               'backup_run_id': run_id, 'restore_verified': False, 'vault_recovery_demonstrated': False,
-              'mode': 'upload-roundtrip' if args.backup else 'download-only-recovery'}
+              'attempt': datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-') + secrets.token_hex(4),
+              'manifest_cipher_sha256': args.manifest_sha,
+              'mode': 'download-only-recovery', 'shared_accounting': True,
+              'decryption_key_source': 'explicit --key-file only; no live-key fallback'}
     report_path = output / ('offsite-' + run_id + '.json')
-    require(not report_path.exists(), 'Existing transfer evidence requires inspection before another attempt.')
+    require(not report_path.exists() and not report_path.is_symlink(),
+            'Existing transfer evidence requires inspection before another attempt.')
+    # Exclusive durable intent also survives SIGKILL or a hung cleanup process.
+    backup.write_private(report_path.with_suffix('.started.json'), json.dumps(report, indent=2).encode() + b'\n')
+    entered = False
     try:
-        report['scope'] = authorize(config)
-        with tempfile.TemporaryDirectory(prefix='.offsite-transport-', dir=output) as temporary:
-            transport = McTransport(config, Path(temporary))
-            if args.backup:
-                destination, evidence = transfer_roundtrip(manifest, objects, cipher, transport, output)
-            else:
-                destination, evidence = download_backup(run_id, args.manifest_sha, cipher, transport, output)
-            report.update(evidence)
-        restore_output = output / ('restore-' + run_id)
-        restore_output.mkdir(mode=0o700)
-        captured = io.StringIO()
-        with redirect_stdout(captured):
-            backup.restore(SimpleNamespace(backup=str(destination), key_file=args.key_file,
-                                           output=str(restore_output), keep_container=False))
-        restored = json.loads(captured.getvalue().strip())
-        require(restored.get('complete') is True and restored.get('all_table_hashes_match') is True
-                and restored.get('all_file_hashes_match') is True and restored.get('network') == 'none'
-                and restored.get('provider_actions') == 0 and restored.get('workers_started') == 0,
-                'Downloaded backup did not pass isolated restoration.')
-        report.update(complete=True, restore_verified=True, isolated_restore=restored)
+        with engine.live_session(config_path=Path(args.config)) as transport:
+            entered = True
+            report['scope'] = transport.scope
+            manual_status(engine, report, 'running', locked=True)
+            with recovery_deadline(transport.budget.deadline):
+                adapter = InventoriedDownload(transport, run_id, args.manifest_sha)
+                destination, evidence = download_backup(run_id, args.manifest_sha, cipher, adapter, output)
+                report.update(evidence)
+                restore_output = output / ('restore-' + run_id)
+                restore_output.mkdir(mode=0o700)
+                captured = io.StringIO()
+                with redirect_stdout(captured):
+                    backup.restore(SimpleNamespace(backup=str(destination), key_file=args.key_file,
+                                                   output=str(restore_output), keep_container=False))
+                restored = json.loads(captured.getvalue().strip())
+                require(restored.get('complete') is True and restored.get('all_table_hashes_match') is True
+                        and restored.get('all_file_hashes_match') is True and restored.get('network') == 'none'
+                        and restored.get('provider_actions') == 0 and restored.get('workers_started') == 0,
+                        'Downloaded backup did not pass isolated restoration.')
+                report.update(restore_verified=True, isolated_restore=restored)
+        manual_status(engine, report, 'complete', require_attempt=True)
+        report['complete'] = True  # Includes transport cleanup success.
+    except Exception as error:
+        reason = (error.code if isinstance(error, engine.Refusal) else
+                  'cleanup_failed' if 'cleanup' in str(error).lower() else 'recovery_failed')
+        report['reason_code'] = reason
+        manual_status(engine, report, 'refused' if isinstance(error, engine.Refusal) else 'failed',
+                      reason, require_attempt=entered)
+        raise
     finally:
         report['finished_at'] = datetime.now(timezone.utc).isoformat()
         backup.write_private(report_path, json.dumps(report, indent=2).encode() + b'\n')

@@ -1,3 +1,31 @@
+# Current offsite continuation — complete account evidence received, 2026-09-20
+
+The desktop account audit closes the previous inventory gap over its recorded
+observation interval. Engineering owns shared accounting, finite allocation,
+reviewed installation and controlled-service qualification under existing authority.
+See [allocation and provenance](offsite-allocation-20260920.md) and the
+[operator runbook](offsite-activation-operations-20260920.md). Exact live results
+are recorded separately in the append-only runtime checkpoint and
+`offsite-activation-20260920/FINAL-REPORT.md`; a policy draft is not activation.
+
+The first policy window ends **2026-09-21T20:16:35.867379Z**. Fresh account-wide
+renewal requires the existing owner desktop account access; the restricted worker
+cannot inspect the entire account. Do not supply another runtime/master key or
+repeat the SFTP handoff or independent-key restore. The Windows vault entries
+remain intact. Desktop revoked-audit and temporary returned-key files remain
+protected because desktop automatic approval review blocked deletion; server
+return copies and the temporary SSH grant were already removed.
+
+Other genuine external dependencies remain: an authorized outside-host heartbeat
+endpoint and provider-side detection/delivery proof, the existing alert's human
+inbox confirmation, authentic provider invoices and applicable adjustments,
+independent security engagement, deferred natural dictation/new SOAP native Word
+review, CPT rights and patient-data agreements/regions/retention. Original Word,
+Stripe and earlier email milestones are not reopened. No public launch or patient
+use is approved. Earlier entries below retain their dated historical meaning.
+
+---
+
 # Current external dependencies — private readiness, 2026-09-20
 
 Desktop custody, the three-file return, server cryptographic verification and the

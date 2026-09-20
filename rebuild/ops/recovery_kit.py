@@ -114,7 +114,9 @@ def prepare(report_file):
             'reviewed_code_commit': subprocess.check_output(
                 ['git', '-C', str(PROJECT.parent), 'rev-parse', 'HEAD'], stderr=subprocess.PIPE, text=True).strip(),
             'locked_dependencies': 'rebuild/requirements.txt',
-            'entrypoint': 'rebuild/ops/offsite_backup.py', 'transport_version': offsite.MC_RELEASE,
+            'entrypoint': 'rebuild/ops/offsite_backup.py', 'transport_version': offsite.TRANSPORT_VERSION,
+            'requires_current_account_evidence_and_shared_allowance': True,
+            'operator_consumer_runbook': 'docs/rebuild/offsite-consumers-20260920.md',
             'postgres_runtime': image_requirements(manifest['image_id']),
             'postgres_image_must_be_available_locally': True, 'implicit_image_pull': False},
         'returned_key_destination': str(HANDOFF / RETURNED_NAME),

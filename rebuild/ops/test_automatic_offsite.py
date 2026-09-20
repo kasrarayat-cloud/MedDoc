@@ -98,6 +98,14 @@ class AutomaticOffsiteTests(unittest.TestCase):
                        'application_key_id': 'synthetic-key-id', 'application_key': 'synthetic-key-value'}
         self.remote = MemoryB2()
 
+    def native_transport(self, config, budget):
+        """Explicit offline injection: HTTP is mocked in every caller; bypass only the live-path guard."""
+        transport = auto.NativeTransport(config, budget)
+        guard = patch.object(transport, '_assert_live')
+        guard.start()
+        self.addCleanup(guard.stop)
+        return transport
+
     def call(self, remote=None, limits=None):
         return auto.transfer(self.manifest, self.objects, self.cipher, remote or self.remote,
                              limits or self.policy, self.state)
@@ -260,7 +268,7 @@ class AutomaticOffsiteTests(unittest.TestCase):
 
     def test_budget_debits_before_http_and_keeps_failed_reservations(self):
         budget = auto.Budget(self.state, dict(self.policy, daily_request_budget=1), clock=lambda: self.at)
-        transport = auto.NativeTransport(self.config, budget)
+        transport = self.native_transport(self.config, budget)
         self.addCleanup(transport.close)
         with patch.object(transport.session, 'request', side_effect=OSError('SECRET should never propagate')) as request:
             with self.assertRaisesRegex(auto.Refusal, '^transport_failed$'):
@@ -292,34 +300,34 @@ class AutomaticOffsiteTests(unittest.TestCase):
         self.assertEqual(json.loads((self.state / 'budget.json').read_text())['download_bytes'], 9)
 
     def test_native_inventory_counts_versions_and_refuses_unfinished_or_foreign_objects(self):
-        transport = auto.NativeTransport(self.config, Mock())
+        transport = self.native_transport(self.config, Mock())
         self.addCleanup(transport.close)
         row = {'bucketId': self.config['bucket_id'], 'fileName': auto.offsite.PREFIX + 'file',
                'fileId': 'id', 'contentLength': 10, 'action': 'upload'}
-        with patch.object(transport, 'api_call', return_value={'files': [row], 'nextFileName': None, 'nextFileId': None}) as api:
+        with patch.object(transport, 'api_call', side_effect=[{'files': [], 'nextFileId': None}, {'files': [row], 'nextFileName': None, 'nextFileId': None}]) as api:
             self.assertEqual(transport.inventory()[0]['contentLength'], 10)
             self.assertEqual(api.call_args[0][1]['prefix'], auto.offsite.PREFIX)
             self.assertEqual(api.call_args[0][1]['bucketId'], self.config['bucket_id'])
         for update, code in [(dict(action='start', contentLength=0), 'capacity_refused'),
                              (dict(fileName='another-project/file'), 'remote_corrupt'),
                              (dict(bucketId='f' * 24), 'remote_corrupt')]:
-            with patch.object(transport, 'api_call', return_value={'files': [dict(row, **update)]}), self.assertRaisesRegex(auto.Refusal, code):
+            with patch.object(transport, 'api_call', side_effect=[{'files': [], 'nextFileId': None}, {'files': [dict(row, **update)]}]), self.assertRaisesRegex(auto.Refusal, code):
                 transport.inventory()
 
     def test_native_inventory_paginates_all_versions_and_rejects_repeated_cursor(self):
-        transport = auto.NativeTransport(self.config, Mock())
+        transport = self.native_transport(self.config, Mock())
         self.addCleanup(transport.close)
         row = {'bucketId': self.config['bucket_id'], 'fileName': auto.offsite.PREFIX + 'file',
                'fileId': 'one', 'contentLength': 10, 'action': 'upload'}
         first = {'files': [row], 'nextFileName': row['fileName'], 'nextFileId': 'two'}
         second = {'files': [dict(row, fileId='two')], 'nextFileName': None, 'nextFileId': None}
-        with patch.object(transport, 'api_call', side_effect=[first, second]):
+        with patch.object(transport, 'api_call', side_effect=[{'files': [], 'nextFileId': None}, first, second]):
             self.assertEqual(sum(x['contentLength'] for x in transport.inventory()), 20)
-        with patch.object(transport, 'api_call', side_effect=[first, dict(first, files=[])]), self.assertRaisesRegex(auto.Refusal, 'remote_corrupt'):
+        with patch.object(transport, 'api_call', side_effect=[{'files': [], 'nextFileId': None}, first, dict(first, files=[])]), self.assertRaisesRegex(auto.Refusal, 'remote_corrupt'):
             transport.inventory()
 
     def test_native_scope_uses_v4_and_existing_exact_guard(self):
-        transport = auto.NativeTransport(self.config, Mock())
+        transport = self.native_transport(self.config, Mock())
         self.addCleanup(transport.close)
         response = {'authorizationToken': 'synthetic-token', 'apiInfo': {'storageApi': {
             's3ApiUrl': self.config['endpoint'], 'apiUrl': 'https://api004.backblazeb2.com',
@@ -417,7 +425,7 @@ class AutomaticOffsiteTests(unittest.TestCase):
 
     def test_native_http_enforces_tls_no_redirect_proxy_netrc_or_implicit_retry(self):
         budget = auto.Budget(self.state, self.policy, clock=lambda: self.at)
-        transport = auto.NativeTransport(self.config, budget)
+        transport = self.native_transport(self.config, budget)
         self.addCleanup(transport.close)
         response = Mock()
         response.status_code = 200
@@ -438,7 +446,7 @@ class AutomaticOffsiteTests(unittest.TestCase):
 
     def test_native_http_error_body_never_reported_and_redirect_is_not_followed(self):
         budget = auto.Budget(self.state, self.policy, clock=lambda: self.at)
-        transport = auto.NativeTransport(self.config, budget)
+        transport = self.native_transport(self.config, budget)
         self.addCleanup(transport.close)
         for code in (302, 401, 503):
             response = Mock(status_code=code)
@@ -453,7 +461,7 @@ class AutomaticOffsiteTests(unittest.TestCase):
 
     def test_native_http_oversized_response_refused_with_reservation_retained(self):
         budget = auto.Budget(self.state, self.policy, clock=lambda: self.at)
-        transport = auto.NativeTransport(self.config, budget)
+        transport = self.native_transport(self.config, budget)
         self.addCleanup(transport.close)
         response = Mock(status_code=200)
         response.iter_content.return_value = [b'too many bytes']
@@ -464,12 +472,13 @@ class AutomaticOffsiteTests(unittest.TestCase):
         self.assertEqual(json.loads((self.state / 'budget.json').read_text())['download_bytes'], 2 + 65536)
 
     def test_native_put_uses_explicit_bucket_v4_upload_and_authenticated_byte_readback_by_id(self):
-        transport = auto.NativeTransport(self.config, Mock())
+        transport = self.native_transport(self.config, Mock())
         self.addCleanup(transport.close)
         transport.api, transport.download, transport.token = ('https://api004.backblazeb2.com',
             'https://f004.backblazeb2.com', 'synthetic-authorized-token')
         full_name = auto.offsite.PREFIX + self.run_id + '/' + 'c' * 64 + '/database.dump.fernet'
         payload = self.objects['database.dump.fernet']
+        transport._write_permits[full_name] = (len(payload), auto.backup.digest(payload))
         upload = {'bucketId': self.config['bucket_id'],
                   'uploadUrl': 'https://pod-001-0001-01.backblaze.com/b2api/v4/b2_upload_file?bucket=synthetic',
                   'authorizationToken': 'synthetic-upload-token'}
@@ -493,8 +502,9 @@ class AutomaticOffsiteTests(unittest.TestCase):
     def test_native_put_cannot_accept_other_bucket_or_foreign_upload_url(self):
         for upload in ({'bucketId': 'another-bucket', 'uploadUrl': 'https://pod-001.backblaze.com/upload'},
                        {'bucketId': self.config['bucket_id'], 'uploadUrl': 'https://attacker.invalid/upload'}):
-            transport = auto.NativeTransport(self.config, Mock())
+            transport = self.native_transport(self.config, Mock())
             self.addCleanup(transport.close)
+            transport._write_permits[auto.offsite.PREFIX + 'synthetic'] = (7, auto.backup.digest(b'fixture'))
             with patch.object(transport, 'api_call', return_value=dict(upload, authorizationToken='synthetic')), \
                     patch.object(transport, 'request') as request, self.assertRaisesRegex(auto.Refusal, 'scope_refused'):
                 transport.put(auto.offsite.PREFIX + 'synthetic', b'fixture')

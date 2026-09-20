@@ -1,6 +1,7 @@
 """Installer boundary tests using files and fake systemd; no host or email acts."""
 import copy
 import contextlib
+from datetime import datetime, timedelta, timezone
 import io
 import json
 import os
@@ -46,6 +47,9 @@ class OffsiteInstallerTests(unittest.TestCase):
             item = patch.object(s.base, name, side_effect=value)
             item.start(); self.addCleanup(item.stop)
         p = patch.object(s, 'eligibility', return_value={'synthetic': True}); p.start(); self.addCleanup(p.stop)
+        p = patch.object(s, 'first_run_coverage', return_value={'synthetic': True})
+        self.coverage = p.start(); self.addCleanup(p.stop)
+        p = patch.object(s, 'service_identity', return_value={'User': 'claude'}); p.start(); self.addCleanup(p.stop)
         p = patch.object(s, 'verified_attempt', return_value={'synthetic': True}); p.start(); self.addCleanup(p.stop)
         p = patch.object(s.os, 'getuid', return_value=0); p.start(); self.addCleanup(p.stop)
         p = patch.object(s.os, 'fchown'); p.start(); self.addCleanup(p.stop)
@@ -107,8 +111,29 @@ class OffsiteInstallerTests(unittest.TestCase):
         self.assertFalse(result['success'])
         self.assertTrue(result['timer_disabled'])
         self.assertNotIn(['systemctl', 'enable', s.TIMER], self.calls)
-        self.assertEqual(self.calls[-2:], [['systemctl', 'disable', '--now', s.TIMER],
-                                         ['systemctl', 'stop', s.SERVICE]])
+        self.assertIn(['systemctl', 'disable', '--now', s.TIMER], self.calls)
+        self.assertIn(['systemctl', 'stop', s.SERVICE], self.calls)
+
+    def test_adopt_does_not_write_units_reload_or_start_services(self):
+        result = s.root_action(self.payload('adopt'))
+        self.assertTrue(result['success'])
+        self.assertFalse(result['unit_files_changed'])
+        self.assertEqual(self.calls, [['systemctl', 'show', s.TIMER, '--property=ActiveState', '--value']])
+
+    def test_expiry_before_next_run_refuses_before_provider_work(self):
+        self.coverage.side_effect = RuntimeError('Policy expires before next run')
+        result = s.root_action(self.payload('activate'))
+        self.assertFalse(result['success'])
+        self.assertNotIn(['systemctl', 'start', s.SERVICE], self.calls)
+        self.assertNotIn(['systemctl', 'enable', s.TIMER], self.calls)
+
+    def test_post_enable_schedule_mismatch_disables_timer_and_retains_run(self):
+        self.coverage.side_effect = [{}, {}, RuntimeError('Unexpected next run')]
+        result = s.root_action(self.payload('activate'))
+        self.assertFalse(result['success'])
+        self.assertTrue(result['timer_disabled'])
+        self.assertIn('controlled_run', result)
+        self.assertIn(['systemctl', 'enable', s.TIMER], self.calls)
 
     def test_disable_retains_unit_files_and_other_sessions(self):
         self.state['units'][s.base.LINK] = 'synthetic link'
@@ -220,6 +245,7 @@ class DisableWithoutProviderConfigurationTests(unittest.TestCase):
             stack.enter_context(patch.object(s.base, 'require_installed'))
             stack.enter_context(patch.object(s.base, 'read_private', return_value={
                 'success': True, 'commit': revision, 'hashes': hashes}))
+            stack.enter_context(patch.object(s, 'installation_receipt', return_value={'commit': revision}))
             stack.enter_context(patch.object(s.base, 'private_directory'))
             stack.enter_context(patch.object(s.base, 'write_private', side_effect=lambda path, value: written.append(value)))
             stack.enter_context(patch.object(s.base, 'metadata', side_effect=AssertionError('B2 metadata must not be read')))
@@ -234,6 +260,89 @@ class DisableWithoutProviderConfigurationTests(unittest.TestCase):
         self.assertTrue(final['success'])
         self.assertFalse(final['b2_configuration_checked'])
         self.assertIsNone(final['b2_configuration_unchanged'])
+
+
+class NextRunCoverageTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        (self.root / 'deploy').mkdir()
+        self.calendar = self.root / 'deploy' / s.TIMER
+        self.calendar.write_text('OnCalendar=*-*-* 05:00:00 UTC\nRandomizedDelaySec=0\nPersistent=true\n')
+        p = patch.object(s.base, 'APP', self.root); p.start(); self.addCleanup(p.stop)
+        self.at = datetime(2026, 9, 20, 22, tzinfo=timezone.utc)
+        self.limits = {'policy_expires_at': '2026-09-21T20:16:35.867379+00:00'}
+
+    def test_next_daily_run_and_entire_runtime_are_inside_evidence(self):
+        result = s.first_run_coverage(self.limits, at=self.at)
+        self.assertEqual(result['next_run_at'], '2026-09-21T05:00:00+00:00')
+        self.assertEqual(result['latest_completion_at'], '2026-09-21T05:16:00+00:00')
+        self.assertFalse(result['actual_systemd_schedule'])
+
+    def test_expiry_before_runtime_end_and_unknown_timezone_are_refused(self):
+        for expiry in ['2026-09-21T04:59:59+00:00', '2026-09-21T05:15:59+00:00',
+                       '2026-09-21T05:16:00+00:00', '2026-09-21T20:16:00']:
+            with self.subTest(expiry=expiry), self.assertRaises(RuntimeError):
+                s.first_run_coverage({'policy_expires_at': expiry}, at=self.at)
+        with self.assertRaises(RuntimeError):
+            s.first_run_coverage(self.limits, at=self.at.replace(tzinfo=None))
+
+    def test_actual_systemd_schedule_must_match_next_utc_calendar(self):
+        with patch.object(s.base, 'command', return_value=b'Mon 2026-09-21 05:00:00 UTC\n') as command:
+            self.assertTrue(s.first_run_coverage(self.limits, actual=True, at=self.at)['actual_systemd_schedule'])
+            command.return_value = b'Tue 2026-09-22 05:00:00 UTC\n'
+            with self.assertRaises(RuntimeError):
+                s.first_run_coverage(self.limits, actual=True, at=self.at)
+        self.calendar.write_text('OnCalendar=*-*-* 05:00:00\nRandomizedDelaySec=0\nPersistent=true\n')
+        with self.assertRaises(RuntimeError):
+            s.first_run_coverage(self.limits, at=self.at)
+
+
+class AdoptionReceiptTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        p = patch.object(s.base, 'MONITOR', self.root); p.start(); self.addCleanup(p.stop)
+        self.hashes = {'rebuild/deploy/' + name: 'a' * 64 for name in (s.SERVICE, s.TIMER)}
+        self.old = dict(success=True, commit='b' * 40, hashes=dict(self.hashes, old_source='original'))
+        s.base.write_private(self.root / 'installation.json', self.old)
+        self.original = (self.root / 'installation.json').read_bytes()
+
+    def test_adoption_changes_source_revision_only_and_keeps_original(self):
+        result = s.installation_receipt('c' * 40, dict(self.hashes, source='new'), adopt=True)
+        self.assertEqual(result['commit'], 'b' * 40)
+        self.assertEqual((self.root / 'installation.json').read_bytes(), self.original)
+        with self.assertRaises(RuntimeError):
+            s.installation_receipt('c' * 40, self.hashes)
+        s.base.write_private(s.adoption_receipt('c' * 40), dict(success=True, commit='c' * 40, hashes=self.hashes))
+        self.assertEqual(s.installation_receipt('c' * 40, self.hashes)['commit'], 'c' * 40)
+
+    def test_changed_effective_units_cannot_be_adopted(self):
+        altered = dict(self.hashes)
+        altered['rebuild/deploy/' + s.SERVICE] = 'd' * 64
+        with self.assertRaises(RuntimeError):
+            s.installation_receipt('c' * 40, altered, adopt=True)
+
+
+class EffectiveServiceIdentityTests(unittest.TestCase):
+    def test_environment_file_or_wrong_user_refuses_without_echoing_environment(self):
+        properties = {'User': 'claude', 'Group': 'claude', 'WorkingDirectory': str(s.base.APP),
+                      'KillMode': 'control-group', 'NoNewPrivileges': 'yes', 'ProtectSystem': 'strict',
+                      'PrivateTmp': 'yes', 'MemoryMax': '1073741824', 'MemorySwapMax': '0',
+                      'TimeoutStartUSec': '16min', 'Environment': '', 'ReadWritePaths': str(s.base.MONITOR)}
+        def output(value):
+            return '\n'.join(key + '=' + item for key, item in value.items()).encode()
+        with patch.object(s.base, 'command', return_value=output(properties)) as command:
+            self.assertEqual(s.service_identity()['EnvironmentFiles'], '')
+            for field, value in [('User', 'root'), ('EnvironmentFiles', '/tmp/unreviewed'),
+                                 ('Environment', 'TOKEN=private-canary')]:
+                with self.subTest(field=field):
+                    command.return_value = output(dict(properties, **{field: value}))
+                    with self.assertRaises(RuntimeError) as failure:
+                        s.service_identity()
+                    self.assertNotIn('private-canary', str(failure.exception))
 
 
 if __name__ == '__main__':

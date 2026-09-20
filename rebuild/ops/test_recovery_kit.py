@@ -85,6 +85,8 @@ class RecoveryKitTests(unittest.TestCase):
         self.assertFalse(manifest['independent_custody_verified'])
         self.assertFalse(manifest['disk_unlock_material']['required_for_clean_offsite_restore'])
         self.assertEqual(manifest['row_count'], 7)
+        self.assertTrue(manifest['restore_prerequisites']['requires_current_account_evidence_and_shared_allowance'])
+        self.assertEqual(manifest['restore_prerequisites']['transport_version'], kit.offsite.TRANSPORT_VERSION)
         self.assertEqual((self.key.read_bytes(), self.config_path.read_bytes()), original)
 
     def test_existing_selection_is_preserved(self):
