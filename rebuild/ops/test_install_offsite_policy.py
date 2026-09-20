@@ -6,8 +6,12 @@ from pathlib import Path
 from unittest import TestCase
 from unittest.mock import patch
 
-from . import install_offsite_policy as installer
-from . import test_automatic_offsite as fixtures
+try:
+    from . import install_offsite_policy as installer
+    from . import test_automatic_offsite as fixtures
+except ImportError:
+    import install_offsite_policy as installer
+    import test_automatic_offsite as fixtures
 
 
 class PolicyInstallationTests(TestCase):

@@ -4,8 +4,12 @@ import json
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
-from . import automatic_offsite as auto
-from . import test_automatic_offsite as fixtures
+try:
+    from . import automatic_offsite as auto
+    from . import test_automatic_offsite as fixtures
+except ImportError:
+    import automatic_offsite as auto
+    import test_automatic_offsite as fixtures
 
 
 class SharedAccountingTests(TestCase):
