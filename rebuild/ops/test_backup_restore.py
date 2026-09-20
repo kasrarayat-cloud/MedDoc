@@ -2,6 +2,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -179,6 +180,60 @@ class RestoreReadinessSurvivesThePostgresInitRace(unittest.TestCase):
         # The failing command's own output is never recorded: a database error can quote row data.
         self.assertNotIn('stderr.decode', body)
         ast.parse(source)
+
+
+class RestoreCleanupFailureTests(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.root = Path(temp.name)
+        self.manifest = dict(image_id='sha256:' + 'a' * 64, dump={}, files=[],
+                             tables={'synthetic': {'rows': 2, 'sha256': 'b' * 64}},
+                             invariants={'wallet_bounds': 0}, run_id='synthetic-backup')
+        self.args = SimpleNamespace(key_file='synthetic-key', backup=self.root,
+                                    output=self.root, keep_container=False)
+        for name, replacement in (
+            ('key_at', {'return_value': object()}),
+            ('load_backup', {'return_value': (self.root, self.manifest)}),
+            ('decrypt_checked', {'return_value': b'synthetic dump'}),
+            ('run', {'return_value': self.manifest['image_id'].encode()}),
+            ('restore_ready', {'return_value': True}),
+            ('fingerprint', {'return_value': self.manifest['tables']}),
+            ('invariant_counts', {'return_value': self.manifest['invariants']}),
+            ('restore_query', {'return_value': [{'count': 8}]}),
+            ('inspect_container', {'return_value': {'Mounts': [], 'HostConfig': {
+                'Tmpfs': {'/var/lib/postgresql/data': 'rw'}, 'ReadonlyRootfs': True,
+                'Memory': 768, 'MemorySwap': 768, 'NetworkMode': 'none', 'PortBindings': {}}}}),
+            ('remove_owned_restore', {'side_effect': RuntimeError('private-cleanup-canary')}),
+        ):
+            patch.object(b, name, **replacement).start()
+        self.addCleanup(patch.stopall)
+
+    def evidence(self):
+        return json.loads(next(self.root.glob('restore-*/verification.json')).read_text())
+
+    def test_successful_comparison_with_failed_cleanup_is_not_success(self):
+        with self.assertRaisesRegex(RuntimeError, 'cleanup failed'):
+            b.restore(self.args)
+        evidence = self.evidence()
+        self.assertFalse(evidence['complete'])
+        self.assertTrue(evidence['data_verification_complete'])
+        self.assertTrue(evidence['cleanup_failed'])
+        self.assertTrue(evidence['container_retained'])
+        self.assertEqual(evidence['failed_stage'], 'cleaning_the_isolated_database')
+        self.assertNotIn('canary', json.dumps(evidence))
+
+    def test_primary_restore_failure_survives_cleanup_failure(self):
+        with patch.object(b, 'fingerprint', side_effect=ValueError('primary synthetic failure')):
+            with self.assertRaisesRegex(ValueError, 'primary synthetic failure'):
+                b.restore(self.args)
+        evidence = self.evidence()
+        self.assertFalse(evidence['complete'])
+        self.assertEqual(evidence['error_class'], 'ValueError')
+        self.assertEqual(evidence['failed_stage'], 'restoring_the_dump')
+        self.assertTrue(evidence['cleanup_failed'])
+        self.assertTrue(evidence['container_retained'])
+        self.assertNotIn('canary', json.dumps(evidence))
 
 
 if __name__ == '__main__':

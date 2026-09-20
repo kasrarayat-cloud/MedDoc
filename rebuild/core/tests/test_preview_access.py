@@ -197,15 +197,20 @@ class PreviewAccessTests(TestCase):
         user = User.objects.create_user(username='synthetic-account', email='synthetic-account@example.invalid', verified_at=timezone.now())
         self.client.force_login(user)
         app_key = self.client.cookies['quillmd_doctor_session'].value
-        original = Session.objects.get(pk=app_key).session_data
+        original = Session.objects.get(pk=app_key).get_decoded()
+        self.assertEqual(original['_auth_user_id'], str(user.pk))
         self.client.cookies[COOKIE] = app_key
-        self.login()
+        # SESSION_SAVE_EVERY_REQUEST legitimately re-signs the same payload.
+        # Cross a signing timestamp boundary deliberately; compare authority,
+        # not the time-dependent signature bytes of an ordinary refresh.
+        with patch('django.core.signing.time.time', return_value=time.time() + 2):
+            self.login()
         self.assertNotEqual(self.client.cookies[COOKIE].value, app_key)
-        self.assertEqual(Session.objects.get(pk=app_key).session_data, original)
+        self.assertEqual(Session.objects.get(pk=app_key).get_decoded(), original)
         response = self.post('/preview/sign-out/', {})
         self.assertEqual(response.status_code, 302)
         self.assertEqual(self.client.cookies['quillmd_doctor_session'].value, app_key)
-        self.assertEqual(Session.objects.get(pk=app_key).session_data, original)
+        self.assertEqual(Session.objects.get(pk=app_key).get_decoded(), original)
 
     def test_logout_invalidates_copied_preview_cookie(self):
         self.login()

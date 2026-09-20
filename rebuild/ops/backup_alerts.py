@@ -13,6 +13,9 @@ import secrets
 import stat
 import subprocess
 import sys
+from urllib.parse import urlsplit
+
+import requests
 
 from dotenv import dotenv_values
 
@@ -27,6 +30,8 @@ CONFIG = SOURCE / '.runtime/backup-secrets/backup-alerts.json'
 ENV_FILE = SOURCE / '.env'
 DIRECTORY = SOURCE / '.runtime/backup-alerts'
 OFFSITE_DIRECTORY = SOURCE / '.runtime/automatic-offsite'
+EXTERNAL_CONFIG = SOURCE / '.runtime/backup-secrets/external-monitor.json'
+HEARTBEAT_INTERVAL_SECONDS = 300
 RECIPIENT = 'kasra.rayat@gmail.com'
 TEST_AUTHORIZATION = '20260920-operation-recovery'
 STALE_SECONDS = 15 * 60
@@ -40,6 +45,7 @@ ERRORS = {
     'backup_failed': 'Inspect scheduled_backup.py status and the private backup-monitor attempt record; repair before retrying capture.',
     'backup_stale': 'Inspect the backup timer and last successful capture; restore the daily schedule and run a verified capture.',
     'backup_status_unavailable': 'Inspect private backup-monitor permissions and status records; do not treat missing evidence as success.',
+    'backup_artifacts_unavailable': 'The recorded local capture is missing, altered or incomplete. Inspect its protected summary, manifest and encrypted objects; retain remote recovery sets and do not count capture metadata alone as a current backup.',
     'backup_schedule_unavailable': 'Inspect quillmd-fresh-backup.timer and quillmd-fresh-backup.service; restore the approved schedule.',
     'backup_timeout': 'Inspect quillmd-fresh-backup.service; a running capture exceeded its approved bound.',
     'offsite_in_progress': 'A bounded encrypted upload is running; retain the previous complete set until verified completion.',
@@ -58,6 +64,7 @@ ERRORS = {
     'monitoring_state_unavailable': 'Inspect private backup-alerts permissions and immutable attempt records; do not resend an uncertain attempt.',
     'monitoring_stale': 'Inspect quillmd-fresh-backup-alerts.timer and service; the last monitor check is overdue.',
     'alert_delivery_unconfirmed': 'Inspect the private alert receipt and provider evidence; do not automatically resend an uncertain request.',
+    'external_monitor_unconfirmed': 'Inspect the protected external-monitor configuration and heartbeat receipt. A successful ping is not a missed-heartbeat alert or human inbox confirmation.',
     'authorized_nonclinical_test': 'This is the single authorized simulated-failure test. Normal backups were not interrupted. Confirm inbox receipt to the QuillMD operator.',
 }
 SAFE_ENV_FIELDS = (
@@ -131,6 +138,10 @@ def backup_condition(at):
         if not unit['service']:
             return 'backup_failed'
         if state.get('healthy') is True:
+            try:
+                current_local_bundle(state)
+            except Exception:
+                return 'backup_artifacts_unavailable'
             return 'healthy'
         if state.get('latest_outcome') == 'failed':
             return 'backup_failed'
@@ -139,6 +150,36 @@ def backup_condition(at):
         return 'backup_status_unavailable'
     except Exception:
         return 'backup_status_unavailable'
+
+
+def current_local_bundle(state):
+    """Check continued presence without reading a key or claiming a new restore.
+
+    Capture metadata alone survives deletion of the backup it names. Recheck
+    the nonsecret summary binding and every encrypted member's structural presence;
+    full member authentication remains the upload/isolated-restore gate.
+    """
+    run_id = state.get('last_success_run_id')
+    backup.require(isinstance(run_id, str) and scheduled.RUN_PATTERN.fullmatch(run_id), 'Invalid capture identity.')
+    root = backup.private_dir(scheduled.DESTINATION / run_id)
+    summary = json.loads(backup.read_private(root / 'summary.json', 65536))
+    backup.require(type(summary) is dict, 'Invalid capture summary.')
+    summary = scheduled.validate_summary(json.dumps(dict(summary, backup_directory=str(root))))
+    backup.require(summary['run_id'] == run_id and summary['file_count'] <= 10000, 'Invalid capture identity or size.')
+    objects = backup.private_dir(root / 'objects')
+    files = [root / 'summary.json', root / 'manifest.json.fernet', root / 'database.dump.fernet']
+    count = 0
+    for path in objects.iterdir():
+        count += 1
+        backup.require(count <= 10000 and re.fullmatch(r'[a-f0-9]{64}\.fernet', path.name), 'Invalid encrypted member.')
+        files.append(path)
+    backup.require(count == summary['file_count'], 'Missing encrypted member.')
+    for path in files:
+        info = path.lstat()
+        backup.require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and info.st_uid == os.getuid()
+                       and stat.S_IMODE(info.st_mode) == 0o600
+                       and 0 < info.st_size <= 2 * backup.MAX_OBJECT_BYTES, 'Unsafe or missing encrypted member.')
+    return True
 
 
 def offsite_systemd_state():
@@ -229,12 +270,137 @@ def offsite_policy_condition(at):
         return 'offsite_policy_unavailable'
 
 
+def allowance_status(at):
+    """Expose freshness and local reservations, never infer account-wide usage."""
+    result = {'eligible': False, 'reason': 'policy_invalid',
+              'observed_at': None, 'valid_until': None, 'observation_age_seconds': None,
+              'local_reservations': None}
+    try:
+        try:
+            from . import automatic_offsite as engine
+        except ImportError:
+            import automatic_offsite as engine
+        limits = engine.policy(at=at)
+        result.update(eligible=True, reason=None, observed_at=limits['observed_at'],
+                      valid_until=limits['valid_until'],
+                      observation_age_seconds=int((at - timestamp(limits['observed_at'])).total_seconds()),
+                      daily_request_budget=limits['daily_request_budget'],
+                      daily_download_budget_bytes=limits['daily_download_budget_bytes'])
+    except Exception as failure:
+        result.update(eligible=False, reason=getattr(failure, 'code', 'state_invalid'))
+        if result['reason'] not in {'policy_missing', 'policy_invalid', 'policy_expired', 'state_invalid'}:
+            result['reason'] = 'policy_invalid'
+    try:
+        value = engine.read_json(OFFSITE_DIRECTORY / 'budget.json', {})
+        if value:
+            backup.require(set(value) == {'version', 'day', 'requests', 'download_bytes'}
+                           and type(value['version']) is int and value['version'] == 1
+                           and isinstance(value['day'], str)
+                           and re.fullmatch(r'\d{4}-\d{2}-\d{2}', value['day'])
+                           and datetime.strptime(value['day'], '%Y-%m-%d').date() <= at.date()
+                           and all(type(value[key]) is int and value[key] >= 0
+                                   for key in ('requests', 'download_bytes')), 'Invalid allowance evidence.')
+            result['local_reservations'] = {key: value[key] for key in ('day', 'requests', 'download_bytes')}
+            result['local_reservations']['current_utc_day'] = value['day'] == at.strftime('%Y-%m-%d')
+    except Exception:
+        result.update(eligible=False, reason='state_invalid')
+    return result
+
+
+def next_timer_run(unit):
+    """Only the two permanent calendar timers; never echo arbitrary systemd output."""
+    try:
+        backup.require(unit in {'quillmd-fresh-backup.timer', 'quillmd-fresh-offsite.timer'}, 'Unknown timer.')
+        child = subprocess.run(['systemctl', 'show', unit, '--property=NextElapseUSecRealtime', '--value'],
+                               capture_output=True, timeout=5, env={'PATH': '/usr/bin:/bin', 'LC_ALL': 'C', 'TZ': 'UTC'})
+        backup.require(child.returncode == 0, 'Timer status unavailable.')
+        date = datetime.strptime(child.stdout.decode().strip(), '%a %Y-%m-%d %H:%M:%S UTC')
+        return date.replace(tzinfo=timezone.utc).isoformat()
+    except Exception:
+        return None
+
+
+def external_configuration():
+    if not EXTERNAL_CONFIG.exists() and not EXTERNAL_CONFIG.is_symlink():
+        return None
+    backup.private_dir(EXTERNAL_CONFIG.parent)
+    backup.require(EXTERNAL_CONFIG.lstat().st_nlink == 1, 'Invalid external-monitor file.')
+    value = json.loads(backup.read_private(EXTERNAL_CONFIG, 4096))
+    backup.require(type(value) is dict and set(value) == {'version', 'provider', 'check_url',
+                   'owner_approval_reference', 'synthetic_only'} and type(value['version']) is int
+                   and value['version'] == 1 and value['provider'] == 'healthchecks.io'
+                   and value['synthetic_only'] is True
+                   and isinstance(value['owner_approval_reference'], str)
+                   and 12 <= len(value['owner_approval_reference']) <= 256, 'Invalid approved heartbeat configuration.')
+    url = value['check_url']
+    parsed = urlsplit(url)
+    backup.require(isinstance(url, str) and parsed.scheme == 'https' and parsed.netloc == 'hc-ping.com'
+                   and not parsed.query and not parsed.fragment
+                   and re.fullmatch(r'/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}', parsed.path),
+                   'Invalid heartbeat endpoint.')
+    return url
+
+
+def external_heartbeat(at, *, healthy=False, execute=False):
+    """Optional success-only heartbeat. No URL, response or exception reaches evidence.
+
+    A durable reservation precedes I/O; manual checks cannot multiply pings. A
+    later scheduled period is a new heartbeat, not a retry of uncertain delivery.
+    """
+    result = {'configured': False, 'outcome': 'not_configured', 'last_attempt_at': None,
+              'provider_accepted': False, 'missed_heartbeat_alert_verified': False,
+              'human_inbox_confirmed': False}
+    try:
+        url = external_configuration()
+        if url is None:
+            return result
+        result.update(configured=True, outcome='not_attempted')
+        path = DIRECTORY / 'external-heartbeat.json'
+        if path.exists() or path.is_symlink():
+            saved = json.loads(backup.read_private(path, 4096))
+            backup.require(type(saved) is dict and set(saved) == {'version', 'attempted_at', 'outcome'}
+                           and type(saved['version']) is int and saved['version'] == 1
+                           and saved['outcome'] in {'pending', 'provider_accepted', 'uncertain_no_retry'},
+                           'Invalid heartbeat receipt.')
+            age = (at - timestamp(saved['attempted_at'])).total_seconds()
+            backup.require(age >= 0, 'Future heartbeat receipt.')
+            result.update(last_attempt_at=saved['attempted_at'], outcome=saved['outcome'],
+                          provider_accepted=saved['outcome'] == 'provider_accepted',
+                          stale=age > STALE_SECONDS)
+            if age < HEARTBEAT_INTERVAL_SECONDS:
+                return result
+        if not execute or not healthy:
+            return result
+        pending = {'version': 1, 'attempted_at': at.isoformat(), 'outcome': 'pending'}
+        scheduled.atomic_status(path, pending)
+        try:
+            with requests.Session() as session:
+                session.trust_env = False
+                with session.get(url, timeout=(3, 5), allow_redirects=False, stream=True,
+                                 headers={'User-Agent': 'QuillMD-private-monitor/1'}) as response:
+                    backup.require(response.status_code == 200, 'Heartbeat was not accepted.')
+                    # HTTP200 also means "OK (not found)" / rate-limited; accept only exact OK.
+                    content = response.raw.read(3, decode_content=False)
+                    backup.require(content == b'OK', 'Heartbeat was not accepted.')
+            pending['outcome'] = 'provider_accepted'
+        except Exception:
+            pending['outcome'] = 'uncertain_no_retry'
+        scheduled.atomic_status(path, pending)
+        result.update(outcome=pending['outcome'], last_attempt_at=pending['attempted_at'],
+                      provider_accepted=pending['outcome'] == 'provider_accepted', stale=False)
+    except Exception:
+        result.update(outcome='configuration_or_state_invalid', provider_accepted=False)
+    return result
+
+
 def recovery_status(at):
     """No provider request: completion, readback and restore stay separate claims."""
     result = {'condition': 'offsite_status_unavailable', 'last_remote_complete': None,
               'last_verified_readback': None, 'last_isolated_restore': None,
               'recurrence_active': False, 'recurrence_enabled': False,
-              'independent_key_custody_verified': False}
+              'independent_key_custody_verified': False,
+              'next_permanent_timer_run': next_timer_run('quillmd-fresh-offsite.timer'),
+              'allowance': allowance_status(at)}
     try:
         backup.private_dir(OFFSITE_DIRECTORY)
         value = json.loads(backup.read_private(OFFSITE_DIRECTORY / 'status.json', 65536))
@@ -286,6 +452,7 @@ def recovery_status(at):
         else:
             condition = offsite_policy_condition(at) or 'healthy'
         result['condition'] = condition
+        result['disabled_reason'] = condition if not unit['enabled'] or not unit['active'] else None
     except Exception:
         result['condition'] = 'offsite_status_unavailable'
     return result
@@ -299,8 +466,14 @@ def local_capture_status(at):
         backup.require(isinstance(run_id, str) and scheduled.RUN_PATTERN.fullmatch(run_id), 'Invalid capture.')
         age = (at - timestamp(succeeded)).total_seconds()
         backup.require(age >= 0, 'Invalid capture time.')
+        try:
+            present = current_local_bundle(value)
+        except Exception:
+            present = False
         return {'last_success_run_id': run_id, 'last_success_at': succeeded,
-                'age_seconds': int(age), 'stale': age > scheduled.MAX_AGE_SECONDS}
+                'age_seconds': int(age), 'stale': age > scheduled.MAX_AGE_SECONDS,
+                'encrypted_artifacts_present': present,
+                'next_permanent_timer_run': next_timer_run('quillmd-fresh-backup.timer')}
     except Exception:
         return None
 
@@ -433,11 +606,12 @@ def receipt(prefix):
                                       'delivery_confirmed', 'inbox_receipt_confirmed')}
 
 
-def report(condition, *, checked_at=None, alert=None, recovery=None, local_capture=None):
+def report(condition, *, checked_at=None, alert=None, recovery=None, local_capture=None, external=None):
     return {'format': 1, 'condition': condition, 'action': ERRORS[condition],
             'checked_at': checked_at, 'healthy': condition in {'healthy', 'backup_in_progress', 'offsite_in_progress'},
             'alert': alert, 'offsite_recovery_verified': bool(recovery and recovery.get('last_isolated_restore')),
             'local_capture': local_capture, 'offsite': recovery,
+            'external_monitor': external,
             'outside_host_failure_detection': False, 'clinical_content_included': False}
 
 
@@ -457,6 +631,9 @@ def check(at=None):
             local_capture = local_capture_status(at)
             if condition == 'healthy':
                 condition = recovery['condition']
+            external = external_heartbeat(at, healthy=condition == 'healthy', execute=True)
+            if condition == 'healthy' and external['outcome'] in {'configuration_or_state_invalid', 'pending', 'uncertain_no_retry'}:
+                condition = 'external_monitor_unconfirmed'
             state.update(last_check_at=at.isoformat(), condition=condition)
             alert = None
             if condition == 'healthy':
@@ -478,9 +655,9 @@ def check(at=None):
             scheduled.atomic_status(DIRECTORY / 'status.json', state)
             if alert and alert['outcome'] in {'pending', 'uncertain_no_retry'}:
                 return report('alert_delivery_unconfirmed', checked_at=state['last_check_at'], alert=alert,
-                              recovery=recovery, local_capture=local_capture), 1
+                              recovery=recovery, local_capture=local_capture, external=external), 1
             result = report(condition, checked_at=state['last_check_at'], alert=alert,
-                            recovery=recovery, local_capture=local_capture)
+                            recovery=recovery, local_capture=local_capture, external=external)
             return result, 0 if result['healthy'] else 1
     except Exception:
         return report('monitoring_state_unavailable'), 1
@@ -518,10 +695,14 @@ def status(at=None):
         recovery = recovery_status(at)
         # Status is read-only but still exposes fresh offsite age/configuration;
         # a previous healthy check cannot hide newly stale recovery evidence.
-        if condition in {'healthy', 'offsite_in_progress', 'offsite_pending_configuration'}:
-            condition = recovery['condition']
+        if condition in {'healthy', 'backup_in_progress', 'offsite_in_progress', 'offsite_pending_configuration'}:
+            local_condition = backup_condition(at)
+            condition = recovery['condition'] if local_condition == 'healthy' else local_condition
+        external = external_heartbeat(at)
+        if condition == 'healthy' and external['outcome'] in {'configuration_or_state_invalid', 'pending', 'uncertain_no_retry'}:
+            condition = 'external_monitor_unconfirmed'
         result = report(condition, checked_at=state['last_check_at'], alert=alert,
-                        recovery=recovery, local_capture=local_capture_status(at))
+                        recovery=recovery, local_capture=local_capture_status(at), external=external)
         result.update(monitor_age_seconds=int(age) if age is not None else None,
                       stale_after_seconds=STALE_SECONDS)
         return result, 0 if result['healthy'] else 1

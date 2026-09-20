@@ -4,7 +4,7 @@ from datetime import timedelta
 from django import forms
 from django.conf import settings
 from django.contrib.auth.forms import PasswordResetForm, SetPasswordForm
-from django.contrib.auth.tokens import default_token_generator
+from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.contrib.auth.views import PasswordResetConfirmView, INTERNAL_RESET_SESSION_TOKEN
 from django.db import transaction
 from django.http import Http404
@@ -19,6 +19,17 @@ from django_otp.plugins.otp_totp.models import TOTPDevice
 from .email_delivery import deliver_account_email
 from .models import User, Verification
 from .security import audit, digest, rate_limit, token
+
+
+class RecoveryTokenGenerator(PasswordResetTokenGenerator):
+    def _make_hash_value(self, user, timestamp):
+        original = super()._make_hash_value(user, timestamp)
+        # Retain already-issued links for accounts that have never been
+        # suspended; a suspended account's earlier links cannot revive later.
+        return original if not user.session_version else f'{original}|session_version={user.session_version}'
+
+
+recovery_token_generator = RecoveryTokenGenerator()
 
 
 class RecoveryRequestForm(PasswordResetForm):
@@ -48,7 +59,7 @@ def recovery_request(request):
         allowed_email = rate_limit('recovery-email:' + email, limit=3)
         if allowed_ip and allowed_email:
             for user in form.get_users(email):
-                raw = f'{urlsafe_base64_encode(force_bytes(user.pk))}/{default_token_generator.make_token(user)}'
+                raw = f'{urlsafe_base64_encode(force_bytes(user.pk))}/{recovery_token_generator.make_token(user)}'
                 deliver_account_email(user, user.pk, user.email, 'recovery', raw)
                 audit(user, 'auth.recovery_requested')
         # Same response for inactive, unknown, unverified and rate-limited accounts.
@@ -57,6 +68,7 @@ def recovery_request(request):
 
 
 class RecoveryConfirmView(PasswordResetConfirmView):
+    token_generator = recovery_token_generator
     form_class = RecoveryPasswordForm
     template_name = 'recovery.html'
     success_url = reverse_lazy('recovery_complete')
