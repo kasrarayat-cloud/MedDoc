@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -24,6 +25,16 @@ class BackupInstallerTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
+        # CI has no VPS service account. Model its identity using the owner of
+        # these isolated fixtures; root_action separately models the root helper.
+        actor = self.root.stat()
+        fixture_actor = SimpleNamespace(pw_uid=actor.st_uid, pw_gid=actor.st_gid)
+        def fixture_account(name):
+            self.assertEqual(name, 'claude')
+            return fixture_actor
+        account = patch.object(s.pwd, 'getpwnam', side_effect=fixture_account)
+        account.start()
+        self.addCleanup(account.stop)
         self.app = self.root / 'rebuild'
         self.systemd = self.root / 'systemd'
         self.monitor = self.app / '.runtime/backup-monitor'

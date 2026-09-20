@@ -8,7 +8,10 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from . import source_module
+try:
+    from . import source_module
+except ImportError:
+    import source_module
 
 ROOT = Path(__file__).resolve().parents[2]
 activation = source_module.load('private_operations_activation_tested', ROOT / 'scripts/activate-private-operations.py')
