@@ -37,6 +37,7 @@ import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {requireExecutionCLI, verificationOutcome} from './ops/stripe_verification_outcome.mjs';
 import {observeCheckoutReturn, validateVerificationArguments} from './ops/stripe_verification_navigation.mjs';
+import {prepareHostedCardChoice} from './ops/stripe_verification_card_choice.mjs';
 
 const app=path.dirname(fileURLToPath(import.meta.url));
 const permanent='/opt/meddoc-pro/rebuild';
@@ -227,14 +228,9 @@ async function startCheckout(page,caseName){
   return {before,session:sessionIdFromCheckoutURL(page.url())};
 }
 async function hostedCheckoutPay(page,cardNumber){
+  await page.locator('#email, [name=email], input[type=email]').first().waitFor({state:'visible',timeout:20000});
+  await prepareHostedCardChoice(page);
   await fillFirst(page,'email',['#email','[name=email]','input[type=email]'],CHECKOUT_EMAIL);
-  const cardVisible=await page.locator('#cardNumber, [name=cardNumber], [autocomplete="cc-number"]').first().isVisible().catch(()=>false);
-  if(!cardVisible){
-    for(const selector of ['[data-testid="card-accordion-item-button"]','#card-tab','button:has-text("Card")']){
-      const locator=page.locator(selector).first();
-      if(await locator.isVisible().catch(()=>false)){await locator.click();break;}
-    }
-  }
   await fillFirst(page,'card number',['#cardNumber','[name=cardNumber]','[autocomplete="cc-number"]'],cardNumber);
   await fillFirst(page,'card expiry',['#cardExpiry','[name=cardExpiry]','[autocomplete="cc-exp"]'],futureExpiry());
   await fillFirst(page,'card cvc',['#cardCvc','[name=cardCvc]','[autocomplete="cc-csc"]'],'123');
