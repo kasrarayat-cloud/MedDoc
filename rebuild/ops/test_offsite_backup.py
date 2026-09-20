@@ -231,6 +231,47 @@ class OffsiteSecurityTests(unittest.TestCase):
         self.assertTrue(evidence['restore_verified'])
         self.assertFalse(evidence['vault_recovery_demonstrated'])
 
+    def test_cli_preparation_authenticates_bundle_without_provider_or_restore_calls(self):
+        source = self.root / self.run_id
+        source.mkdir(mode=0o700)
+        for name, payload in self.objects.items():
+            offsite.backup.write_private(source / name, payload)
+        output = self.root / 'preparation'
+        output.mkdir(mode=0o700)
+        config = self.root / 'b2.json'
+        offsite.backup.write_private(config, json.dumps(self.config).encode())
+        argv = ['offsite_backup.py', '--config', str(config), '--backup', str(source),
+                '--key-file', str(self.root / 'fixture.key'), '--output', str(output)]
+        with patch('sys.argv', argv), patch.object(offsite, 'CONFIG_PARENT', self.root), \
+             patch.object(offsite.backup, 'key_at', return_value=self.cipher), \
+             patch.object(offsite, 'authorize') as authorized, \
+             patch.object(offsite, 'McTransport') as transport, \
+             patch.object(offsite.backup, 'restore') as restored, \
+             patch('sys.stdout', new_callable=io.StringIO) as stdout:
+            offsite.main()
+        authorized.assert_not_called()
+        transport.assert_not_called()
+        restored.assert_not_called()
+        self.assertEqual(json.loads(stdout.getvalue()), {
+            'prepared': True, 'network_calls': 0, 'encrypted_object_count': 2,
+            'remote_verified': False, 'restore_verified': False})
+        self.assertEqual(list(output.iterdir()), [])
+
+    def test_missing_destination_configuration_cannot_contact_provider_even_with_execute(self):
+        argv = ['offsite_backup.py', '--config', str(self.root / 'absent.json'),
+                '--backup', str(self.root / self.run_id),
+                '--key-file', str(self.root / 'fixture.key'), '--output', str(self.root), '--execute']
+        with patch('sys.argv', argv), patch.object(offsite, 'CONFIG_PARENT', self.root), \
+             patch.object(offsite, 'authorize') as authorized, \
+             patch.object(offsite, 'McTransport') as transport, \
+             patch.object(offsite.backup, 'restore') as restored:
+            with self.assertRaises(FileNotFoundError):
+                offsite.main()
+        authorized.assert_not_called()
+        transport.assert_not_called()
+        restored.assert_not_called()
+        self.assertEqual(list(self.root.iterdir()), [])
+
     def restore_arguments(self):
         source = self.root / self.run_id
         source.mkdir(mode=0o700)

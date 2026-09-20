@@ -44,6 +44,14 @@ jobs:
       QUILLMD_HTTPS: '0'
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Ten retained activation checks compare authentic, completed release ranges.
+          # A shallow clone silently skips that evidence even though these commits exist.
+          fetch-depth: 0
+      - name: Require historical activation evidence
+        run: |
+          test "$(git rev-parse --is-shallow-repository)" = false
+          git rev-parse --verify 'refs/remotes/origin/main^{commit}'
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

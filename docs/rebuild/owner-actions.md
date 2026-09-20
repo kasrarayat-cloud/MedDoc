@@ -1,3 +1,70 @@
+# Current owner actions — operational recovery, 2026-09-20
+
+This list supersedes earlier question queues; historical entries below remain
+unchanged. Engineering has selected the backup destination/adapter, scoped access,
+alert design and verification procedures. No architecture questionnaire remains.
+Stripe, invitation/recovery, earlier WM IOV native Word acceptance and reviewer-host
+qualification stay complete. No replacement key, email recipient, invitation or
+repeat campaign is requested.
+
+## Prioritized unavoidable external inputs
+
+1. **Offsite recovery and independent key custody.** In the approved B2 account,
+   approve/select the dedicated private `quillmd-fresh-synthetic-backups` bucket,
+   prefix `quillmd-fresh/synthetic/`, and key limited to `listFiles`, `readFiles`,
+   `writeFiles`. Install the exact JSON configuration as claude0600 at
+   `/opt/meddoc-pro/rebuild/.runtime/backup-secrets/b2-offsite.json` via authenticated
+   SSH/SFTP. Establish an actual separately controlled vault copy of the existing
+   recovery key and retrieve it for the drill. The selected destination, exact
+   provider steps, schema and commands are in [offsite-backup.md](offsite-backup.md#2026-09-20-setup-and-recovery-handoff).
+   No destination approval, credential or independent custodian is presumed.
+2. **Operational notification acceptance and outside-host detection.** After the
+   one authorized message is sent, confirm whether the email titled
+   `[QuillMD NONCLINICAL TEST] Simulated backup failure` reached the approved inbox.
+   Provider acceptance/delivery alone do not answer this. Separately activate the
+   selected external heartbeat check using [operational-alerts.md](operational-alerts.md#outside-host-outage-detection--prepared-not-active),
+   handing its individual URL through the protected `external-monitor.json` path.
+   No account management key or server password is needed. The current VPS-local
+   monitor cannot detect its own complete disappearance from outside.
+3. **Authentic provider costs.** Transfer actual Anthropic/Deepgram billing/usage
+   exports, applicable rates, discounts and credit allocations to
+   `/opt/meddoc-pro/rebuild/.runtime/provider-evidence/` (0700; files0600) using the
+   authenticated transfer channel. This blocks invoice reconciliation. Configured
+   rate arithmetic remains separate; two historical receipt gaps remain exceptions.
+4. **Independent security review.** Engage the reviewer and place their name,
+   SSH public key, approved source address, UTC window and emergency contact in
+   `/opt/meddoc-pro/rebuild/.runtime/reviewer-access/owner-handoff.json` (0600,
+   parent0700). Engineering validates the recorded scope before activation.
+   Reviewer access remains inactive; internal tests are not this assessment.
+5. **CPT content and rights.** Put the legitimate dataset/API entitlement and
+   usage/display/distribution license in the protected contract handoff at
+   `/opt/meddoc-pro/rebuild/.runtime/owner-contracts/` (0700; files0600), or provide
+   authorized access to the owner's contract vault. CPT stays disabled. No license
+   purchase or contract acceptance is assumed.
+6. **Patient-data release approval.** Provide executed processing agreements and
+   approved regions, retention, incident contacts and key-custody/control evidence
+   through the same protected contract/vault handoff. See
+   [patient-data-release-requirements.md](patient-data-release-requirements.md).
+   Historical possible storage/retention changes there are not current authority
+   to destroy data or alter keys. Keep all existing copies and policies until a
+   separate reviewed control change. Real patient data remains disabled.
+7. **Deferred clinical acceptance.** Complete one natural human recording in the
+   preserved draft `0211ea6d-a705-4232-81c1-1eb027d9e774`, and inspect the existing
+   new SOAP exports in desktop Word. Use the retained SOAP review package and
+   checkpoint; no regeneration or repeat WM IOV inspection is needed. These are
+   distinct acceptance actions, not missing credentials.
+
+Keep secret values, private URLs, billing files and signed agreements out of
+ordinary chat and Git. Engineering owns installation, tests and repair after
+secure handoff. The current runtime checkpoint records actual completion and
+remaining inbox interaction; this list does not assert any pending item passed.
+Public release is held: synthetic-only private operation and public maintenance
+remain in force.
+
+---
+
+## Historical overnight dependency list (preserved)
+
 # Current dependencies — overnight completion, 2026-09-20
 
 Stripe sandbox and controlled Resend invitation/recovery verification are complete.
