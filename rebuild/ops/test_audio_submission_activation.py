@@ -244,10 +244,15 @@ class AllowedPaths(unittest.TestCase):
         if subprocess.run(['git', '-C', str(ROOT), 'cat-file', '-e', shipped + '^{commit}'],
                           capture_output=True).returncode:
             self.skipTest('The activation range is not available in this checkout (shallow clone).')
-        trunk = subprocess.run(['git', '-C', str(ROOT), 'rev-list', '--first-parent', 'main'],
+        # PR jobs check out a detached merge and need not create a local main branch.
+        # The fetched remote trunk proves the same ancestry without mutating any ref.
+        trunk_ref = 'refs/remotes/origin/main'
+        if subprocess.run(['git', '-C', str(ROOT), 'show-ref', '--verify', '--quiet', trunk_ref]).returncode:
+            trunk_ref = 'refs/heads/main'
+        trunk = subprocess.run(['git', '-C', str(ROOT), 'rev-list', '--first-parent', trunk_ref],
                                capture_output=True, text=True)
         if trunk.returncode:
-            self.skipTest('No local `main` ref in this checkout.')
+            self.skipTest('No fetched or local `main` ref in this checkout.')
         self.assertIn(shipped, trunk.stdout.split(), 'what shipped is not on the trunk first-parent line')
         parents = subprocess.check_output(['git', '-C', str(ROOT), 'rev-list', '--parents', '-n', '1', shipped],
                                           text=True).split()

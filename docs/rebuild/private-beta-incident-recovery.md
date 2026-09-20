@@ -116,8 +116,11 @@ old backups. Preserve its `INCOMPLETE` directory. After a demonstrated repair,
 use the same project service for one deliberate retry and record its outcome.
 No app restart or offsite purchase is necessary for a local backup.
 
-This proves local failure visibility through status/journald, not delivery to an
-external alert recipient. The older shared `quillmd-postreboot-proof` unit is a
+The separately installed backup-alert monitor now has its own operations runbook:
+[operational-alerts.md](operational-alerts.md). Its actual send/delivery/inbox status
+is recorded in the runtime operational-recovery report; local backup status alone
+is not email evidence. Check both monitor and backup status. Total VPS failure
+requires the separately gated outside-host heartbeat. The older shared `quillmd-postreboot-proof` unit is a
 different, preserved service; do not reset its failure to obtain a green screen.
 
 ## 5. Demonstrate restoration without touching the live database

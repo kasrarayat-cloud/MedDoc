@@ -1,0 +1,11 @@
+[Unit]
+Description=Check QuillMD local backup health every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=15s
+Unit=quillmd-fresh-backup-alerts.service
+
+[Install]
+WantedBy=timers.target
