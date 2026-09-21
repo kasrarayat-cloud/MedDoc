@@ -106,20 +106,49 @@ class MultiColumnRule(Base):
         offered = multi_column_answers(self.cells_of(["Height", "", "Weight", ""]))
         self.assertEqual([label for label, _ in offered], ["Height", "Weight"])
 
-    def test_a_pairs_grid_with_one_answer_already_printed_offers_only_the_blank(self):
-        """The case that decided the rule's shape.
+    def test_a_part_filled_pairs_row_is_refused_because_data_wears_the_same_shape(self):
+        """⚠️ THIS TEST ASSERTED THE OPPOSITE, AND THE REFUTATION PASS WAS RIGHT.
 
-        Read as "one blank, labelled by the first cell", this row answers Procedure. It is a
-        pairs grid with a preprinted value, and the blank belongs to Consent.
+        It read `Procedure | Colonoscopy | Consent | ____` as a pairs grid with a preprinted
+        value and offered `Consent`. But `Aspirin | 81 mg | Daily | ____` is THE SAME SHAPE,
+        and there the question offered was `Daily` — a frequency — with its answer written into
+        the Route column of a medication row. Measured, both of them.
+
+        Nothing in the row tells the two apart, so neither is mapped. The row is reported.
         """
-        offered = multi_column_answers(self.cells_of(["Procedure", "Colonoscopy", "Consent", ""]))
-        self.assertEqual([label for label, _ in offered], ["Consent"])
-
-    def test_odd_width_with_exactly_one_blank_takes_the_first_cell_as_its_question(self):
-        for row in (["Estimated blood loss", "", "mL"], ["Estimated blood loss", "mL", ""]):
+        for row in (["Procedure", "Colonoscopy", "Consent", ""],
+                    ["Aspirin", "81 mg", "Daily", ""],
+                    ["Date", "Finding", "Action", ""]):
             with self.subTest(row=row):
-                offered = multi_column_answers(self.cells_of(row))
-                self.assertEqual([label for label, _ in offered], ["Estimated blood loss"])
+                self.assertEqual(multi_column_answers(self.cells_of(row)), [])
+
+    def test_no_odd_width_row_is_mapped_however_tidy_it_looks(self):
+        """⚠️ ALSO REVERSED. `Label | blank | Unit` was mapped as one question.
+
+        `Estimated blood loss | ____ | mL` cannot be told from `Sodium | 140 | ____`, where the
+        answer lands in the REFERENCE RANGE column beside a result that already reads 140, or
+        from `Diabetes | ____ | X`, free text into the Yes column of a history grid whose No
+        column is ticked. All three are "one blank after a non-empty first cell".
+        """
+        for row in (["Estimated blood loss", "", "mL"], ["Estimated blood loss", "mL", ""],
+                    ["Sodium", "140", ""], ["Diabetes", "", "X"]):
+            with self.subTest(row=row):
+                self.assertEqual(multi_column_answers(self.cells_of(row)), [])
+
+    def test_a_cell_holding_a_ticked_symbol_is_not_an_empty_answer_cell(self):
+        """`cell_text` reads only `w:t`, so a Wingdings tick reads as empty and gets erased."""
+        cells = self.cells_of(["Consent obtained", "", "Sedation", ""])
+        run = cells[1].xpath(".//w:p")[0].makeelement(qn("w:r"), {})
+        symbol = OxmlElement("w:sym")
+        symbol.set(qn("w:font"), "Wingdings")
+        symbol.set(qn("w:char"), "F0FE")
+        run.append(symbol)
+        cells[1].xpath(".//w:p")[0].append(run)
+        self.assertEqual(multi_column_answers(cells), [])
+        # Positive control: without the symbol the identical row IS a pairs grid.
+        self.assertEqual([label for label, _ in
+                          multi_column_answers(self.cells_of(["Consent obtained", "", "Sedation", ""]))],
+                         ["Consent obtained", "Sedation"])
 
     def test_two_blanks_after_one_label_are_refused(self):
         self.assertEqual(multi_column_answers(self.cells_of(["Allergies", "", ""])), [])
@@ -155,11 +184,14 @@ class MultiColumnImport(Base):
         grid(document, [["Measure", "Value", "Measure", "Value"], ["Systolic", "", "Diastolic", ""]], 4)
         self.assertEqual(self.labels(self.save(document, "header.docx")), ["Systolic", "Diastolic"])
 
-    def test_label_answer_unit_maps_one_question(self):
+    def test_label_answer_unit_is_reported_not_mapped(self):
+        """An accepted narrowing: `value | blank | unit` reads exactly like a result table row."""
         document = Document()
         grid(document, [["Estimated blood loss", "", "mL"], ["Procedure duration", "", "minutes"]], 3)
-        self.assertEqual(self.labels(self.save(document, "units.docx")),
-                         ["Estimated blood loss", "Procedure duration"])
+        with self.assertRaises(DocumentError) as raised:
+            inspect_template(self.save(document, "units.docx"))
+        self.assertEqual(raised.exception.code, "no_fields")
+        self.assertIn("not two columns", str(raised.exception))
 
     def test_an_ambiguous_row_is_refused_and_the_refusal_explains_itself(self):
         document = Document()
@@ -342,3 +374,60 @@ class OwnerFormUnchanged(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LegacyMappingSurvivesAContractOnlyRefusal(Base):
+    """⚠️ THE FALLBACK EXISTED AND COULD NOT BE REACHED.
+
+    `process` inspects under the CURRENT contract before it can compare structures, so a
+    refusal the current contract invented — a fixed-height answer cell, or a field count the
+    wider contract pushes past the limit — escaped first. An encounter whose every field a
+    clinician had already reviewed became un-finalizable and un-exportable, refused by name
+    over a table row the doctor never mapped. Measured on both triggers.
+    """
+
+    def exact_height_pairs(self, name="exact-height.docx"):
+        document = Document()
+        two = document.add_table(rows=1, cols=2)
+        two.rows[0].cells[0].text = "Allergies"
+        wide = grid(document, [["Height", "", "Weight", ""]], 4)
+        properties = wide.rows[0]._tr.get_or_add_trPr()
+        height = OxmlElement("w:trHeight")
+        height.set(qn("w:val"), "340")
+        height.set(qn("w:hRule"), "exact")
+        properties.append(height)
+        return self.save(document, name)
+
+    def stored_legacy_mapping(self, path):
+        return docx_inspect(Path(path), contract=CONTRACT_V1)[3]
+
+    def test_the_current_contract_really_does_refuse_this_document(self):
+        """The precondition. Without it every assertion below could pass for the wrong reason."""
+        with self.assertRaises(DocumentError) as raised:
+            inspect_template(self.exact_height_pairs())
+        self.assertEqual(raised.exception.code, "overflow_risk")
+
+    def test_a_mapping_made_before_that_refusal_existed_still_fills(self):
+        path = self.exact_height_pairs()
+        stored = self.stored_legacy_mapping(path)
+        self.assertEqual([f["label"] for f in stored], ["Allergies"])
+        out, summary, _ = self.fill(path, "legacy-out.docx",
+                                    answers={stored[0]["key"]: "Penicillin - anaphylaxis"},
+                                    fields=stored)
+        self.assertEqual(summary["filled"], 1)
+        with ZipFile(out) as package:
+            body = package.read("word/document.xml").decode()
+        self.assertIn("Penicillin - anaphylaxis", body)
+
+    def test_a_fresh_upload_of_the_same_document_is_still_refused(self):
+        """The fallback is a compatibility path, not a way to weaken the current contract."""
+        with self.assertRaises(DocumentError) as raised:
+            inspect_template(self.exact_height_pairs())
+        self.assertEqual(raised.exception.code, "overflow_risk")
+
+    def test_a_mapping_that_does_not_match_the_legacy_inspection_is_refused(self):
+        path = self.exact_height_pairs()
+        wrong = [{**f, "locator": {"cell": 99}} for f in self.stored_legacy_mapping(path)]
+        with self.assertRaises(DocumentError) as raised:
+            self.fill(path, "wrong-out.docx", answers={}, fields=wrong)
+        self.assertEqual(raised.exception.code, "overflow_risk")

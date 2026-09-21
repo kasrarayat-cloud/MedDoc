@@ -41,6 +41,18 @@ TAB_PROMPT_VERSIONS = frozenset(('extractive-v4-tab-evidence-units', PREVIOUS_PR
 # The tab contract has carried this since v4; the LEGACY contract — the one a table,
 # multi-column or mixed mapping selects — never did. Defined once because it must reach BOTH
 # providers: the OpenAI branch substitutes its own legacy string and would otherwise drop it.
+#: ⚠️ ONE STEM PER SUBJECT, USED ON BOTH SIDES OF THE GUARD. The label side tested
+#: `\bdictated\b` while the quote side already accepted `dictation` — so a form spelling its
+#: question `Date of dictation` disarmed the guard completely, and `Procedure date: September 21`
+#: was asserted as the date of dictation. In the other direction `\bconsent\b` does not match
+#: `consented`, so "The patient was consented for the procedure" — standard operative-note
+#: phrasing — was BLANKED and finalization refused until the clinician retyped it. Both measured.
+#: A subject guard that is asymmetric between question and evidence is two different rules.
+SUBJECTS = (r'\bconsent(?:ed|ing|s)?\b',
+            r'\bdictat(?:ed|ion|ing|es)\b',
+            r'\btranscri(?:bed|ption|bing|bes)\b')
+
+
 ATTESTATION_GUIDANCE = (' Leave consent, attestation, signature and dictated/transcribed date questions empty '
                         'unless the notes explicitly document that fact; never infer them from a procedure, '
                         'a clinician name, a date elsewhere in the notes, or preprinted text on the form. '
@@ -293,9 +305,7 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=()):
             if ':' not in quote and not FINITE_STATEMENT.search(quote): guarded=True
             # Dates and consent are not inferred from a procedure date or general
             # narrative. These source subjects must themselves be documented.
-            if re.search(r'\bdictated\b',label) and not re.search(r'\b(?:dictated|dictation)\b',quote,re.I): guarded=True
-            if re.search(r'\btranscribed\b',label) and not re.search(r'\b(?:transcribed|transcription)\b',quote,re.I): guarded=True
-            if re.search(r'\bconsent\b',label) and not re.search(r'\bconsent\b',quote,re.I): guarded=True
+            if any(re.search(subject,label,re.I) and not re.search(subject,quote,re.I) for subject in SUBJECTS): guarded=True
             group=re.sub(r'\s+[—–-]\s+\d+$','',label)
             if group!=label:
                 used=used_numbered.setdefault(group,{})
@@ -383,9 +393,7 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
         # again blanked correctly documented dates (caught by test_tab_form_policy).
         guarded=any(
             quote not in explicit
-            and ((re.search(r'\bconsent\b',label) and not re.search(r'\bconsent\b',quote,re.I))
-                 or (re.search(r'\bdictated\b',label) and not re.search(r'\b(?:dictated|dictation)\b',quote,re.I))
-                 or (re.search(r'\btranscribed\b',label) and not re.search(r'\b(?:transcribed|transcription)\b',quote,re.I)))
+            and any(re.search(subject,label,re.I) and not re.search(subject,quote,re.I) for subject in SUBJECTS)
             for quote in item.quotes)
         explicit_conflict=len(explicit)>1
         if explicit_conflict:

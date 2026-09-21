@@ -155,3 +155,78 @@ class UnlabelledSourceIsNotAnAnswer(TestCase):
                                   response(fields, {'cell_0': ['Dr Synthetic Example']}))
         self.assertEqual(out['cell_0']['status'], 'missing')
         self.assertEqual(out['cell_0']['text'], '')
+
+
+class SubjectGuardsAreSymmetric(TestCase):
+    """⚠️ ONE STEM PER SUBJECT, ON BOTH SIDES — the asymmetry was the whole defect.
+
+    The label side tested `\\bdictated\\b` while the quote side already accepted `dictation`, so
+    a form whose question reads `Date of dictation` disarmed the guard entirely and the
+    PROCEDURE date was asserted as the dictation date. Pointing the other way, `\\bconsent\\b`
+    does not match `consented`, so standard operative phrasing was BLANKED and finalization
+    refused until the clinician retyped documentation that was already correct.
+    """
+
+    def judge(self, label, notes, quote=None):
+        field = {'key': 'cell_0', 'label': label, 'kind': 'text', 'locator': {'cell': 0}}
+        chosen = Selections(fields=[Selection(key='cell_0', quotes=[notes if quote is None else quote],
+                                              conflict=False)])
+        answer = validate_selections(notes, [field], chosen, evidence_contract='legacy')['cell_0']
+        return answer['status'], answer['text']
+
+    def test_a_noun_form_question_still_guards_the_documentation_date(self):
+        notes = 'Procedure date: September 21, 2026.'
+        for label in ('Date of dictation', 'Dictation date', 'Transcription date',
+                      'Date of transcription', 'DD (dictated)', 'DT (transcribed)'):
+            with self.subTest(label=label):
+                self.assertEqual(self.judge(label, notes), ('conflict', ''))
+
+    def test_documented_consent_in_the_verb_form_is_not_blanked(self):
+        for notes in ('The patient was consented for the procedure after discussion of risks.',
+                      'Patient consented in the pre-operative area.',
+                      'Informed consent was obtained.'):
+            with self.subTest(notes=notes):
+                self.assertEqual(self.judge('CONSENT', notes), ('supported', notes))
+
+    def test_a_procedure_sentence_is_still_refused_as_consent_evidence(self):
+        notes = 'The scope was advanced to the cecum.'
+        self.assertEqual(self.judge('CONSENT', notes), ('conflict', ''))
+
+    def test_a_date_the_question_own_label_introduced_survives(self):
+        """The exemption this guard already needed: the LABEL establishes the subject."""
+        notes = 'DD (dictated): 2026-09-18'
+        self.assertEqual(self.judge('DD (dictated)', notes, quote='2026-09-18'),
+                         ('supported', '2026-09-18'))
+
+
+class SignatureIsRecognisedByPolicyOrLabel(TestCase):
+    """⚠️ NO SHORT-CIRCUIT. Judging a tab field "by its policy alone" is false whenever the
+    inspector did not set one — a heading-continuation signature arrives with no policy at all.
+    """
+
+    def recognised(self, label, locator=None):
+        from core.tab_review import clinician_identity
+        return clinician_identity({'key': 'k', 'label': label, 'kind': 'text',
+                                   'locator': locator or {'cell': 0}})
+
+    def test_signature_shaped_questions_are_recognised_wherever_they_sit(self):
+        for label in ('Electronically signed by', 'Signed by', 'Signature', 'Signature:',
+                      'Physician signature', 'Surgeon signature', 'Signature of surgeon',
+                      'Signed', 'Signed by (MD)', 'Electronically signed by (print name)',
+                      'Signature/Date', 'Electronically signed by\uff1a', 'Electronically signed by.'):
+            for locator in ({'cell': 0}, {'tab_form': {'version': 1}}):
+                with self.subTest(label=label, locator=tuple(locator)):
+                    self.assertTrue(self.recognised(label, locator))
+
+    def test_a_date_question_that_merely_says_signature_is_not_an_identity_field(self):
+        """The false-refusal control. Treating these as signatures would block finalization."""
+        for label in ('Signature date', 'Date of signature', 'Attestation',
+                      'Attending attestation', 'DD (dictated)'):
+            with self.subTest(label=label):
+                self.assertFalse(self.recognised(label))
+
+    def test_an_explicit_policy_still_wins_regardless_of_the_label(self):
+        from core.tab_review import clinician_identity
+        self.assertTrue(clinician_identity({'key': 'k', 'label': 'Anything at all', 'kind': 'text',
+                                            'locator': {'tab_form': {'version': 1}},
+                                            'answer_policy': 'clinician_identity'}))

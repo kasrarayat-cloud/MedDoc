@@ -111,8 +111,9 @@ def answerable_row(row_cells):
     one other cell entirely empty. A fully populated data table and a one-column layout
     table both score false, so an ordinary document does not collect advisory noise.
     """
-    texts = ["".join(cell.xpath(".//w:t/text()")).strip() for cell in row_cells]
-    return any(text and len(text) <= 80 for text in texts) and any(not text for text in texts)
+    texts = [cell_text(cell) for cell in row_cells]
+    return (any(text and len(text) <= 80 for text in texts)
+            and any(not cell_occupied(cell) for cell in row_cells))
 
 
 def answer_tabs_present(paragraphs):
@@ -138,13 +139,29 @@ def cell_text(cell):
     return "".join(cell.xpath(".//w:t/text()")).strip()
 
 
-def usable_answer_cell(cell):
-    """An empty cell that can safely receive an answer.
+#: ⚠️ ELEMENTS THAT RENDER SOMETHING WITHOUT PRODUCING A `w:t`. `cell_text` reads only
+#: `.//w:t`, so a cell holding a TICKED WINGDINGS CHECKBOX (`w:sym w:char="F0FE"`) reads as
+#: empty — and the write path assigns `Run.text`, which clears the run and DELETES the symbol.
+#: Measured: a consent box a clinician had ticked was erased from the document being finalized.
+#: The old screen named three tags out of this set while the docstring promised never to
+#: overwrite anything, which is a promise enumerated instead of stated.
+OCCUPYING = (".//w:drawing | .//w:pict | .//w:br | .//w:sym | .//w:object"
+             " | .//w:fldChar | .//w:fldSimple | .//w:sdt")
 
-    A drawing, picture or line break means something is already there, and overwriting it is
-    exactly what this adapter must never do.
+
+def cell_occupied(cell):
+    """Anything already in this cell — text OR rendered content `cell_text` cannot see.
+
+    ONE predicate, because the two readers disagreeing is the failure: the answer-target screen
+    and the unmapped-area notice must mean the same thing by "empty", or a cell is silently
+    overwritten by one and not reported by the other.
     """
-    return not cell_text(cell) and not cell.xpath(".//w:drawing | .//w:pict | .//w:br")
+    return bool(cell_text(cell)) or bool(cell.xpath(OCCUPYING))
+
+
+def usable_answer_cell(cell):
+    """An empty cell that can safely receive an answer."""
+    return not cell_occupied(cell)
 
 
 def multi_column_answers(row_cells):
@@ -175,29 +192,31 @@ def multi_column_answers(row_cells):
         return []                                   # a fully populated row is data, not questions
 
     if len(row_cells) % 2 == 0:
-        # A PAIRS GRID stays a pairs grid when some answers are already printed. Requiring every
-        # value cell to be blank would mislabel the common part-completed form: in
-        # `Procedure | Diagnostic colonoscopy | Consent | ____` the blank belongs to Consent, and
-        # reading the row as "one blank, labelled by the first cell" answers Procedure instead.
-        # Every label must be present, and every EMPTY cell must sit in a value position — a
-        # blank where a label belongs has no question, and borrowing one is heading theft.
+        # ⚠️ EVERY VALUE CELL MUST BE BLANK. The earlier rule allowed a part-filled row, and
+        # measurement REFUTED it: `Procedure | Diagnostic colonoscopy | Consent | ____` reads as a
+        # pairs grid, but `Aspirin | 81 mg | Daily | ____` is THE SAME SHAPE — and there the only
+        # question offered was `Daily`, a frequency, whose answer was written into the Route
+        # column. A header row with one empty trailing cell, `Date | Finding | Action | ____`,
+        # mapped `Action` and wrote a clinical finding INTO THE HEADER ROW.
+        #
+        # Nothing in a row distinguishes a part-completed question from ordinary data, so the
+        # part-completed form is now REPORTED as unmapped instead of guessed at. That is the
+        # promise this adapter makes about an ambiguous layout, applied to itself.
         labels, values = texts[0::2], row_cells[1::2]
         if (all(label and len(label) <= MAX_LABEL_CELL for label in labels)
                 and all(index % 2 == 1 for index in blanks)):
             offered = [(label, cell) for label, cell in zip(labels, values)
                        if not cell_text(cell) and usable_answer_cell(cell)]
-            if len(offered) == len(blanks):      # every blank is offered, or something else is wrong
+            if len(offered) == len(values) == len(blanks):
                 return offered
         return []
 
-    # ODD WIDTH: pairs cannot apply, so the only unambiguous shape is a single blank in a row
-    # whose first cell carries the question — `Label | blank | Unit` and `Label | Unit | blank`
-    # alike. More than one blank leaves nothing to say which question the second belongs to.
-    if len(blanks) == 1 and texts[0] and len(texts[0]) <= MAX_LABEL_CELL and blanks[0] != 0:
-        cell = row_cells[blanks[0]]
-        if usable_answer_cell(cell):
-            return [(texts[0], cell)]
-
+    # ⚠️ ODD WIDTH HAS NO UNAMBIGUOUS SHAPE, and the branch that claimed one is REMOVED.
+    # It accepted "exactly one blank, first cell carries the question", which cannot tell
+    # `Estimated blood loss | ____ | mL` apart from `Sodium | 140 | ____`, where the answer lands
+    # in the REFERENCE RANGE column of a result table beside a result that already reads 140, or
+    # from `Diabetes | ____ | X`, where free text goes into the Yes column of a history grid whose
+    # No column is already ticked. All three are one blank after a non-empty first cell.
     return []
 
 
@@ -578,7 +597,25 @@ def process(workspace, request):
     path = workspace / ("input." + fmt)
     warnings = []
     if fmt == "docx":
-        document, paragraphs, cells, fields, notes = docx_inspect(path)
+        stored = request.get("mapping") if request.get("operation") == "fill" else None
+        try:
+            document, paragraphs, cells, fields, notes = docx_inspect(path)
+        except DocumentFailure as refusal:
+            # ⚠️ A REFUSAL THE CURRENT CONTRACT INVENTED MUST NOT STRAND AN OLDER MAPPING.
+            # The structural fallback further down only runs if the inspection RETURNS. A v2-only
+            # `fail()` — a fixed-height answer cell, or a field count the wider contract pushes past
+            # the limit — escapes first, and a reviewed encounter then cannot be exported AT ALL,
+            # refused by name over a table row the doctor never mapped. Retry under the contract
+            # the stored mapping was made with, and accept it only if it matches field for field.
+            if stored is None:
+                raise
+            try:
+                legacy = docx_inspect(path, contract=CONTRACT_V1)
+            except DocumentFailure:
+                raise refusal from None
+            if structure(legacy[3]) != structure(stored):
+                raise refusal from None
+            document, paragraphs, cells, fields, notes = legacy
         warnings = ["DOCX answers expand and can change pagination. Review the exported document's layout."]
         if fields and "tab_form" in fields[0]["locator"]:
             warnings.extend(TAB_WARNINGS)

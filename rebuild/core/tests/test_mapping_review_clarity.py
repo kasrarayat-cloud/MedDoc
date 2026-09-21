@@ -10,6 +10,8 @@ field dict would invalidate every mapping version already saved.
 
 Isolated synthetic DB; no provider request.
 """
+import json
+
 from django.test import TestCase, override_settings
 
 from core import field_location
@@ -115,3 +117,52 @@ class DuplicateLabels(TestCase):
                       'The note must name the cause a doctor can actually act on.')
         self.assertEqual(duplicate_label_note([{'label': 'A'}, {'label': 'B'}]), [],
                          'A clean form collects no note.')
+
+
+@override_settings(STORAGES=STORAGES)
+class ASignatureQuestionKeepsItsSignatureLabel(BoundaryFixture, TestCase):
+    """⚠️ THE TWO HALVES OF ONE CHANGE CANCELLED EACH OTHER.
+
+    `structure()` deliberately excludes the label so a RENAMED mapping still fills, and the
+    signature check reads that same editable label — so renaming `Electronically signed by` to
+    `Attending physician` turned the identity check OFF for generation and finalization alike.
+    Measured: "Dr Someone Else" accepted as the signature of a different clinician, by way of
+    one ordinary label edit on the mapping-review screen.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.user)
+        from core.models import TemplateVersion
+        latest = self.encounter.template_version
+        # A mapping version is append-only, so the signature label arrives as a NEW version
+        # rather than an edit. Asserted, not assumed: a qualified Word backend refuses every
+        # rename for its own reason and would pass the test below without the guard existing.
+        self.assertFalse(latest.document_backend)
+        fields = [dict(field) for field in latest.fields]
+        fields[0]['label'] = 'Electronically signed by'
+        self.version = TemplateVersion.objects.create(
+            template=latest.template, number=latest.number + 1, fields=fields,
+            review_requirements=latest.review_requirements,
+            document_backend=latest.document_backend, created_by=self.user)
+        self.key = fields[0]['key']
+
+    def rename(self, label):
+        labels = {f['key']: f['label'] for f in self.version.fields}
+        labels[self.key] = label
+        before = self.version.template.versions.count()
+        response = self.client.post(f'/templates/{self.version.template.pk}/',
+                                    {'mapping_version': self.version.pk,
+                                     'labels': json.dumps(labels)}, follow=True)
+        return response, before, self.version.template.versions.count()
+
+    def test_renaming_it_to_an_ordinary_question_is_refused_and_saves_nothing(self):
+        response, before, after = self.rename('Attending physician')
+        self.assertContains(response, 'signature question keeps a signature label')
+        self.assertEqual(before, after)
+
+    def test_renaming_it_to_another_signature_spelling_is_allowed(self):
+        """The control. A guard that refused every rename would pass the test above for free."""
+        response, before, after = self.rename('Signed by (MD)')
+        self.assertNotContains(response, 'signature question keeps a signature label')
+        self.assertEqual(after, before + 1)

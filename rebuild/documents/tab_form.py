@@ -133,7 +133,11 @@ def inspect_tabs(path, paragraphs, fail):
                      'locator': {'tab_form': {'version': VERSION, 'source_sha256': digest,
                                              'grouping': grouping, 'anchors': [anchor]}},
                      'review_notes': notes}
-            normalized = re.sub(r'\s+', ' ', label).strip().casefold()
+            # ⚠️ STRIP TRAILING PUNCTUATION, NOT ONLY THE INLINE COLON. A heading-continuation
+            # label is taken from `paragraph.text` verbatim, so `Electronically signed by:` never
+            # reached this set and the field got NO clinician-identity policy — measured, and it
+            # finalized another clinician's name. A full-width colon does the same thing.
+            normalized = re.sub(r'\s+', ' ', label).strip().rstrip(':：.· \t').strip().casefold()
             if normalized in {'electronically signed by', 'signed by'}:
                 field['answer_policy'] = 'clinician_identity'
                 field['review_notes'].append('Optional clinician identity: review explicitly; this does not create a digital signature.')

@@ -6,15 +6,27 @@ from django.core.exceptions import ValidationError
 # The same normalised labels the tab inspector recognises. Kept here so the rule belongs to
 # the REVIEW contract rather than to one importer, and so a second importer cannot acquire a
 # signature field without the protection that is supposed to travel with it.
-SIGNATURE_LABELS = {'electronically signed by', 'signed by'}
+#: Trailing punctuation a form author may type after a question. Stripped as one class rather
+#: than in a fixed order: `rstrip(':')` then `strip()` handled `'Electronically signed by :'`,
+#: and nothing handled a FULL-WIDTH colon or a trailing period. Both were measured unprotected.
+TRAILING = ':：.,;· \t'
+
+_ROLE = r"(?:physician|provider|surgeon|clinician|attending|resident|doctor|md|do|np|pa|author)"
+#: A signature answer area names a PERSON. Enumerated deliberately rather than by "contains
+#: signature", because `Signature date` and `Date of signature` are DATE questions — refusing to
+#: finalize them unless they equal the clinician's name would be a false rejection, and this
+#: file has already shipped one of those.
+SIGNATURE_PATTERNS = tuple(re.compile(pattern) for pattern in (
+    r"(?:electronically |digitally |e[- ])?sign(?:ed|ature)(?: by| of)?(?: ?\([^)]*\))?",
+    rf"{_ROLE}'?s? sign(?:ature|ed)(?: by)?",
+    rf"sign(?:ature|ed)(?: by| of)? (?:the )?{_ROLE}",
+    r"signature ?/ ?date",
+))
 
 
 def signature_label(label):
-    # ⚠️ ORDER MATTERS, and getting it wrong defeated the whole fix. The tab inspector does
-    # rstrip(':') THEN strip; doing strip() first leaves the space that the colon was hiding, so
-    # 'Electronically signed by :' normalised to 'electronically signed by ' and did not match.
-    # A cell label keeps whatever spacing the form author typed, so this is an ordinary spelling.
-    return re.sub(r'\s+', ' ', str(label or '')).strip().rstrip(':').strip().casefold() in SIGNATURE_LABELS
+    text = re.sub(r'\s+', ' ', str(label or '')).strip().rstrip(TRAILING).strip().casefold()
+    return any(pattern.fullmatch(text) for pattern in SIGNATURE_PATTERNS)
 
 
 def clinician_identity(field):
@@ -26,11 +38,16 @@ def clinician_identity(field):
     finalization, so the name never had to match the clinician signing. Measured on
     `Electronically signed by | ____`: status `supported`, text taken straight from the notes.
 
-    Recognising the label as well keeps the protection with the QUESTION rather than with the
-    importer that happened to produce it.
+    ⚠️ AND THE FIRST REPAIR KEPT A SHORT-CIRCUIT THAT DEFEATED ITSELF. It read
+    "a tab field is judged by its policy alone", which is false whenever the inspector did not
+    set one — a heading-continuation signature (`Electronically signed by:` as a Word heading
+    over a blank underlined line) came through with NO policy, and `signature_label` said True
+    about a label this function never consulted. Measured end to end: another clinician's name
+    finalized, on a document whose inline-label twin was correctly protected.
+
+    There is no short-circuit now. Policy OR label, for every field, so the protection travels
+    with the QUESTION rather than with the importer that happened to produce it.
     """
-    if isinstance(field.get('locator'), dict) and 'tab_form' in field['locator']:
-        return field.get('answer_policy') == 'clinician_identity'
     return field.get('answer_policy') == 'clinician_identity' or signature_label(field.get('label'))
 
 
