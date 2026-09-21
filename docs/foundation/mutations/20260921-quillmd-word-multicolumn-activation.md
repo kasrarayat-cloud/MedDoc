@@ -1,0 +1,118 @@
+# Declaration — private activation of the multi-column/mixed Word release, September 21, 2026
+
+Advances the served application from `21809ef408a5f7b6691beb338a7640da82fcfb97` to the merged
+release. **No migration, no public-asset change.** The operations-status publisher is installed
+by its own ruled act afterwards, not by this one.
+
+## The reviewed schema expectation
+
+⚠️ **This list is the EXPECTATION, and the adapter reads it from HERE.** It is not read from the
+database the activation is about to check, because a check whose expected value comes from the
+thing under test cannot fail. It is the 35 tables this lineage shipped against — taken from the
+retained capture manifest `20260921T043001Z-0a6f66da` that the previous activation pinned as its
+recovery evidence — **plus exactly one table, `core_servicehealth`, created by the reviewed
+migration `0018_servicehealth`**. Nothing else is added, and nothing is removed.
+
+Independently corroborated by tonight's verified capture `20260921T194532Z-1b826c0d`, whose
+manifest holds these same 36 names and whose set equals live `pg_tables` exactly.
+
+<!-- declared-schema -->
+
+```text
+auth_group
+auth_group_permissions
+auth_permission
+core_auditevent
+core_code
+core_codeset
+core_codesuggestion
+core_costreconciliation
+core_department
+core_encounter
+core_invitation
+core_job
+core_ledgerentry
+core_loginattempt
+core_membership
+core_organization
+core_patient
+core_payment
+core_platformcost
+core_providerreceipt
+core_refund
+core_reservation
+core_servicehealth
+core_template
+core_templateversion
+core_usage
+core_user
+core_user_groups
+core_user_user_permissions
+core_verification
+core_wallet
+core_webhookevent
+django_content_type
+django_migrations
+django_session
+otp_totp_totpdevice
+```
+
+## Migration frontier
+
+| | |
+|---|---|
+| frontier before AND after | `0018_servicehealth` |
+| history rows for it | exactly **1** |
+| migrations applied by this act | **none** |
+
+## Declared source scope
+
+Advancing `21809ef408a5f7b6691beb338a7640da82fcfb97` to the merged release changes these files
+and no others:
+
+<!-- declared-source-scope -->
+
+```text
+.claude/settings.json
+docs/foundation/mutations/20260921-quillmd-desktop-key-administration.md
+docs/foundation/mutations/20260921-quillmd-operations-publisher.md
+docs/foundation/mutations/20260921-quillmd-word-multicolumn-mixed.md
+rebuild/core/field_location.py
+rebuild/core/generation.py
+rebuild/core/tab_review.py
+rebuild/core/tests/test_mapping_review_clarity.py
+rebuild/core/tests/test_tab_form_policy.py
+rebuild/core/tests/test_tab_independent_sections.py
+rebuild/core/tests/test_unlabelled_source_scope.py
+rebuild/core/views.py
+rebuild/deploy/quillmd-fresh-operations-publisher.service
+rebuild/deploy/quillmd-fresh-operations-publisher.timer
+rebuild/documents/engine.py
+rebuild/documents/tab_form.py
+rebuild/documents/test_multicolumn_and_mixed.py
+rebuild/documents/test_tab_form.py
+rebuild/documents/test_unmapped_areas.py
+rebuild/ops/install_operations_publisher.py
+rebuild/ops/test_admin_console_activation.py
+rebuild/ops/test_operations_publisher_install.py
+rebuild/ops/test_word_multicolumn_scope.py
+scripts/ci/verify-fresh.sh
+```
+
+**Zero migrations and zero files under `rebuild/static/` appear in that range** — measured, not
+assumed. The two `rebuild/deploy/` unit files and `rebuild/ops/install_operations_publisher.py`
+are carried into the tree so the publisher's own ruled act can find them; **this act installs no
+unit and enables no timer.**
+
+## What MUST NOT change
+
+Documents, mappings, finalized records and exports; wallets, ledger, reservations, settlements
+and provider receipts; audit history; MFA and inactive reviewer access; backup and offsite
+timers, policies, tickets and evidence; the renewal installed at 19:38Z; public maintenance; and
+every other project on this host. Clinical counts are compared before and after.
+
+## Failure recovery
+
+The driver's own receipt, lock and staged-state directory are retained on failure. A failure is
+diagnosed from that receipt and repaired; it is **not** blindly replayed, and no guard is
+weakened to get past it.

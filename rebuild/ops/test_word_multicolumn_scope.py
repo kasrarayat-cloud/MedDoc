@@ -121,6 +121,24 @@ def git(*command):
     return done.stdout.strip() if done.returncode == 0 else None
 
 
+def candidate_has_landed():
+    """True once the declaration is on `origin/main` — i.e. the candidate is history.
+
+    ⚠️ WITHOUT THIS THE MODULE IS A LANDMINE FOR EVERY LATER BRANCH. The locator anchors on
+    the declaration being in the diff from the baseline; after the merge that is true on every
+    descendant, so the exact-match assertion fired on unrelated work — measured on the very next
+    branch. A declaration describes a CANDIDATE; once merged, its scope is fixed in the merge
+    commit and re-judging it against a moving branch is meaningless.
+
+    Cannot-tell is NOT treated as landed: an unreachable `origin/main` returns False, so the
+    stricter path runs and the baseline check below still fails loudly.
+    """
+    head = git('rev-parse', '--verify', 'origin/main^{commit}')
+    if not head:
+        return False
+    return bool(git('ls-tree', '--name-only', head, DECLARATION))
+
+
 def locate_candidate():
     """Find the tip that CARRIES this candidate, without asking whether it matches.
 
@@ -265,6 +283,9 @@ class DeclaredSourceScope(unittest.TestCase):
         is the WRONG answer on one that does. Only this test can tell the two apart, so it is
         the one that must be read when the module reports OK.
         """
+        if candidate_has_landed():
+            self.skipTest('This candidate is merged; its scope is fixed in the merge '
+                          'commit and is not re-judged against a later branch.')
         # ⚠️ CANNOT-TELL AND NOT-THE-CANDIDATE ARE DIFFERENT ANSWERS, and this control used to
         # give both of them a skip — fail-OPEN, the very shape this module was rewritten to
         # close. If git cannot resolve the baseline, the checkout cannot answer the question at
@@ -281,6 +302,9 @@ class DeclaredSourceScope(unittest.TestCase):
         self.assertLessEqual(REQUIRED, changed)
 
     def test_the_declaration_matches_this_candidates_real_change_exactly(self):
+        if candidate_has_landed():
+            self.skipTest('This candidate is merged; its scope is fixed in the merge '
+                          'commit and is not re-judged against a later branch.')
         declared = declared_paths()
         tip, changed = locate_candidate()
         if tip is None:
