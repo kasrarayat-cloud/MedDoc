@@ -22,6 +22,7 @@ from django.views.decorators.http import require_POST,require_http_methods
 from django_otp import login as otp_login
 from django_otp.plugins.otp_totp.models import TOTPDevice
 from .models import *
+from . import field_location
 from .forms import *
 from .security import audit,departments,scoped,membership,digest,token,store_upload,private_path,rate_limit
 from .billing import welcome_credit,credit_payment,reconcile_refund,reconciliation,stripe_test_key_configured,reconcile_usage,release
@@ -225,7 +226,7 @@ def template_detail(request,pk):
                 latest=t.versions.order_by('-number').first()
                 if request.POST.get('mapping_version')!=str(latest.pk):
                     form.add_error(None,'This mapping changed. Your unsaved labels are retained below. Compare them with the current mapping before saving again.')
-                    return render(request,'template_detail.html',{'template':t,'version':latest,'form':form},status=409)
+                    return render(request,'template_detail.html',{'template':t,'version':latest,'form':form,'field_rows':field_location.rows(latest.fields),'field_locations':[field_location.describe(f) for f in latest.fields]},status=409)
                 if latest.document_backend and labels!={f['key']:f['label'] for f in latest.fields}:
                     raise ValidationError('This qualified Word mapping uses fixed question labels so source evidence remains unambiguous. Keep the original labels.')
                 fields=[{**f,'label':labels[f['key']]} for f in latest.fields]
@@ -233,7 +234,7 @@ def template_detail(request,pk):
                 audit(request.user,'template.mapping_version',version.pk,department=t.department,number=version.number)
             messages.success(request,'New mapping version saved. Existing documents keep their original version.');return redirect('template_detail',pk=t.pk)
         except ValidationError as exc:form.add_error(None,error_message(exc))
-    return render(request,'template_detail.html',{'template':t,'version':version,'form':form})
+    return render(request,'template_detail.html',{'template':t,'version':version,'form':form,'field_rows':field_location.rows(version.fields),'field_locations':[field_location.describe(f) for f in version.fields]})
 
 def template_original(request,pk):
     t=get_object_or_404(scoped(Template,request.user),pk=pk)

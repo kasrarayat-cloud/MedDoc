@@ -127,6 +127,19 @@ document.querySelectorAll("form[data-mapping-form]").forEach((form) => {
   try {
     const labels = JSON.parse(original.value);
     if (!labels || Array.isArray(labels) || typeof labels !== "object") return;
+    // Where each blank sits in the original form. "Question 1, Question 2, ..." asked the
+    // doctor to confirm a label without saying WHICH blank it names, which is the one thing
+    // this screen exists to establish. Absent or short: fall back, never mislabel.
+    let locations = [];
+    const carrier = document.getElementById("mapping-locations");
+    if (carrier) {
+      try {
+        const parsed = JSON.parse(carrier.textContent);
+        if (Array.isArray(parsed)) locations = parsed;
+      } catch (_) {
+        locations = [];
+      }
+    }
     Object.entries(labels).forEach(([key, value], index) => {
       const wrapper = document.createElement("p");
       const label = document.createElement("label");
@@ -136,7 +149,9 @@ document.querySelectorAll("form[data-mapping-form]").forEach((form) => {
       input.maxLength = 300;
       input.required = true;
       label.htmlFor = input.id;
-      label.textContent = `Question ${index + 1}`;
+      label.textContent = typeof locations[index] === "string" && locations[index]
+        ? `Question ${index + 1} — ${locations[index]}`
+        : `Question ${index + 1}`;
       input.addEventListener("input", () => {
         labels[key] = input.value;
         original.value = JSON.stringify(labels);
