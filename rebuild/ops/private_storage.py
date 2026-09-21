@@ -26,6 +26,11 @@ import subprocess
 
 from dotenv import dotenv_values
 
+try:
+    from .managed_helper import IMAGE as HELPER_IMAGE, HelperFailure, run_helper
+except ImportError:
+    from managed_helper import IMAGE as HELPER_IMAGE, HelperFailure, run_helper
+
 STATE_DIR = Path('/var/lib/quillmd')
 # Version 2 identities live on the encrypted volume. A device-mapper minor is assigned
 # when the volume opens, so the device number is resolved from this node at check time.
@@ -389,12 +394,17 @@ def _execute(root, action, relative=None, criteria=None):
                 '--pids-limit=32', '--memory=1g', '--cpus=1',
                 '--user', f"{expected['uid']}:{expected['gid']}",
                 '--mount', f'type=bind,src={root},dst=/data,readonly',
-                'python:3-slim', 'python', '-B', '-c', _helper_source()]
-        result = subprocess.run(args, input=request, stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE, timeout=300, check=False)
+                HELPER_IMAGE, 'python', '-B', '-c', _helper_source()]
+        result = run_helper(args, input=request, timeout=300, max_stdout=MAX_OBJECT_BYTES + 257,
+                            failure_directory=Path('/opt/meddoc-pro/rebuild/.runtime/backup-monitor'))
         del request
         _require(result.returncode == 0)
         return result.stdout
+    except HelperFailure as failure:
+        raise RuntimeError('Private storage helper failed: ' + failure.reason
+                           + '; cleanup_complete=' + str(failure.cleanup_complete)
+                           + '; container=' + str(failure.container_name)
+                           + '; protected output was suppressed.') from None
     except Exception:
         raise RuntimeError('Private storage helper failed; protected output was suppressed.') from None
 

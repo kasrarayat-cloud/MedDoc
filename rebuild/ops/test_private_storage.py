@@ -94,7 +94,7 @@ class PrivateStorageTests(unittest.TestCase):
     def test_unapproved_roots_refused_before_docker(self):
         for root in ('/etc', '/var/lib/quillmd', '/var/lib/quillmd/files/sub',
                      '/var/lib/quillmd/../files', '/var/lib/quillmd-else/files'):
-            with self.subTest(root=root), patch.object(storage.subprocess, 'run') as run:
+            with self.subTest(root=root), patch.object(storage, 'run_helper') as run:
                 with self.assertRaises(RuntimeError):
                     storage.read_file(Path(root), 'synthetic.bin')
                 run.assert_not_called()
@@ -103,7 +103,7 @@ class PrivateStorageTests(unittest.TestCase):
         expected = dict(self.expected, uid=1234, gid=1235)
         response = subprocess.CompletedProcess([], 0, b'{}', b'')
         with patch.object(storage, '_installation', return_value=expected), \
-                patch.object(storage.subprocess, 'run', return_value=response) as run:
+                patch.object(storage, 'run_helper', return_value=response) as run:
             self.assertEqual(storage.inventory(Path('/var/lib/quillmd/files')), {})
         args = run.call_args.args[0]
         for flag in ('--pull=never', '--network=none', '--read-only', '--cap-drop=ALL',
@@ -145,7 +145,7 @@ class PrivateStorageTests(unittest.TestCase):
     def test_helper_failure_never_exposes_stderr_or_content(self):
         response = subprocess.CompletedProcess([], 1, b'PRIVATE_CONTENT', b'PRIVATE_SECRET')
         with patch.object(storage, '_installation', return_value=self.expected), \
-                patch.object(storage.subprocess, 'run', return_value=response):
+                patch.object(storage, 'run_helper', return_value=response):
             with self.assertRaises(RuntimeError) as caught:
                 storage.inventory('/var/lib/quillmd/files')
         self.assertNotIn('PRIVATE', str(caught.exception))

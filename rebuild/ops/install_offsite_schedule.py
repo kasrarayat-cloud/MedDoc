@@ -169,7 +169,7 @@ def scope():
     base.LINK = 'timers.target.wants/' + TIMER
     base.MONITOR = base.APP / '.runtime/automatic-offsite'
     base.EVIDENCE = base.APP / '.runtime/offsite-activation-20260920'
-    base.SOURCES = (INSTALLER, 'rebuild/ops/install_backup_schedule.py',
+    base.SOURCES = (INSTALLER, 'rebuild/ops/install_backup_schedule.py', 'rebuild/ops/managed_helper.py',
                     'rebuild/ops/automatic_offsite.py', 'rebuild/ops/offsite_backup.py',
                     'rebuild/ops/backup_restore.py', 'rebuild/ops/private_storage.py',
                     'rebuild/ops/offsite_allocation.py',
@@ -628,11 +628,16 @@ def main():
             'operation.scope()\n'
             'print(json.dumps(operation.root_action(' + repr(payload) + '),sort_keys=True))\n')
     try:
-        child = subprocess.run(base.helper_command(), input=body.encode(), capture_output=True, timeout=1050,
-                               env={'PATH': '/usr/local/bin:/usr/bin:/bin'})
+        child = base.managed_helper_run(base.helper_command(), input=body.encode(), timeout=1050)
         result = json.loads(child.stdout) if child.returncode == 0 else {'success': False, 'error': 'helper_failed'}
-    except Exception:
-        result = {'success': False, 'error': 'helper_outcome_unconfirmed'}
+        result.update(helper_container=getattr(child, 'helper_container', None),
+                      helper_cleanup_complete=getattr(child, 'helper_cleanup_complete', False))
+    except Exception as error:
+        result = {'success': False, 'error': 'helper_outcome_unconfirmed',
+                  'helper_reason': getattr(error, 'reason', 'transport_failed'),
+                  'helper_container': getattr(error, 'container_name', None),
+                  'helper_initial_reason': getattr(error, 'operation_reason', None),
+                  'helper_cleanup_complete': getattr(error, 'cleanup_complete', False)}
     result['hashes'] = hashes
     if args.action != 'install':
         result['prior_installation_receipt'] = prior_receipt

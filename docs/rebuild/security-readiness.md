@@ -1,3 +1,14 @@
+# Current internal operations supplement — September20–21,2026
+
+The [privileged operations supplement](privileged-operations-security-20260921.md)
+records the reviewed helper/renewal boundaries, demonstrated timeout and inventory
+admission repairs, actual-host versus fixture scope and remaining operator trust.
+Use the latest protected checkpoint for exact installed revision and final proof.
+The independent reviewer engagement remains outstanding and reviewer access is
+inactive. Earlier entries below retain their historical dates; subsequent backup,
+Stripe, email and recovery completion is recorded in owner-actions/checkpoint and
+must not be reopened from this older table.
+
 # Private beta security readiness — 2026-09-17
 
 Statuses describe observed evidence and deliberately separate prepared changes

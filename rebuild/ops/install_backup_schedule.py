@@ -24,7 +24,7 @@ SERVICE = 'quillmd-fresh-backup.service'
 TIMER = 'quillmd-fresh-backup.timer'
 UNITS = (SERVICE, TIMER)
 LINK = 'timers.target.wants/' + TIMER
-SOURCES = (INSTALLER, 'rebuild/ops/scheduled_backup.py', 'rebuild/ops/backup_restore.py',
+SOURCES = (INSTALLER, 'rebuild/ops/managed_helper.py', 'rebuild/ops/scheduled_backup.py', 'rebuild/ops/backup_restore.py',
            'rebuild/ops/private_storage.py', DECLARATION, *(f'rebuild/deploy/{u}' for u in UNITS))
 PROTECTED = (APP / '.env', APP / '.runtime/db-role-secrets/fresh-db-roles.json',
              APP / '.runtime/backup-secrets/fresh-backup-current-20260917.key')
@@ -245,6 +245,15 @@ def root_action(payload):
     return result
 
 
+def managed_helper_run(*args, **kwargs):
+    # Loaded only by the operator process, never after the root helper chroots.
+    try:
+        from .managed_helper import run_helper
+    except ImportError:
+        from managed_helper import run_helper
+    return run_helper(*args, **kwargs)
+
+
 def helper_command():
     return ['docker', 'run', '--rm', '-i', '--pull=never', '--log-driver=none', '--network', 'none', '--pid=host',
             '--mount', 'type=bind,src=/,dst=/host,readonly',
@@ -293,16 +302,21 @@ def main():
             'print(json.dumps(namespace["root_action"](' + repr(payload) + '),sort_keys=True))\n')
     require(hashlib.sha256(source).hexdigest() == hashes[INSTALLER], 'Installer drift.')
     try:
-        child = subprocess.run(helper_command(), input=body.encode(), capture_output=True, timeout=900,
-                               env={'PATH': '/usr/local/bin:/usr/bin:/bin'})
-    except subprocess.TimeoutExpired:
-        result = {'success': False, 'error': 'Helper deadline exceeded; completion and timer state unverified.'}
+        child = managed_helper_run(helper_command(), input=body.encode(), timeout=900)
+    except (subprocess.TimeoutExpired, RuntimeError) as error:
+        result = {'success': False, 'error': 'Helper failed; completion and timer state unverified.',
+                  'helper_reason': getattr(error, 'reason', 'deadline_or_transport_failed'),
+                  'helper_container': getattr(error, 'container_name', None),
+                  'helper_initial_reason': getattr(error, 'operation_reason', None),
+                  'helper_cleanup_complete': getattr(error, 'cleanup_complete', False)}
         write_private(EVIDENCE / (name + '-result.json'), result)
         print(json.dumps({'success': False, 'evidence': str(EVIDENCE / (name + '-result.json'))}))
         return 1
     if child.returncode == 0:
         try:
             result = json.loads(child.stdout)
+            result.update(helper_container=getattr(child, 'helper_container', None),
+                          helper_cleanup_complete=getattr(child, 'helper_cleanup_complete', False))
         except Exception:
             result = {'success': False, 'error': 'Invalid helper result.'}
     else:
