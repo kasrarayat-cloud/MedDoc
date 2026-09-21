@@ -417,6 +417,46 @@ def published_operations(keys=ServiceHealth.KEYS, at=None):
 
 
 # --------------------------------------------------------------------------------------
+# Who may change who pays
+# --------------------------------------------------------------------------------------
+
+def may_change_payer(user):
+    """Whether this account may change `Department.organization_pays`. Today: nobody.
+
+    ⚠️ THE SETTING IS READ-ONLY BECAUSE THE ROLE MODEL CANNOT EXPRESS THE BOUNDARY, not because
+    the implementation is missing. The operating instruction is that changing who is billed
+    belongs to an explicitly authorized highest-privilege platform owner / billing role, and that
+    an ordinary organization or department administrator must never be able to do it silently.
+
+    Measured, not assumed: `is_superuser` is referenced in exactly one place in this codebase — a
+    template branch that renders the same word as `is_staff` — so it confers nothing, and
+    production carries **1 staff account and 0 superusers**. Granting the capability to `is_staff`
+    would hand it to precisely the population the instruction excludes. Inventing a new role here
+    would be inventing an authorization boundary nobody ratified.
+
+    So the capability requires BOTH an explicit deployment grant and the highest flag that exists.
+    Both are false today, the control is read-only for everyone, and the refusal is enforced on
+    the SERVER rather than by hiding the form. The implementation and its invariant tests are
+    retained behind this gate so that enabling the role later is a configuration change, not a
+    rewrite.
+    """
+    from django.conf import settings
+    return bool(getattr(settings, 'QUILLMD_PAYER_ROLE_GRANTED', False)
+                and getattr(user, 'is_superuser', False)
+                and getattr(user, 'is_staff', False))
+
+
+def payer_restriction_note():
+    """What the screen says instead of offering the control. Honest about the existing path."""
+    return ('Who pays is shown here but cannot be changed from this console. Changing which '
+            'balance is billed is reserved for an explicitly authorized platform owner or '
+            'billing role, and this deployment has not established one — no account holds it. '
+            'The supported path today is to create the department with the intended payer, or '
+            'to have the deployment grant that role before using this control. The setting is '
+            'displayed on every department so the current answer is never in doubt.')
+
+
+# --------------------------------------------------------------------------------------
 # Per-account detail
 # --------------------------------------------------------------------------------------
 

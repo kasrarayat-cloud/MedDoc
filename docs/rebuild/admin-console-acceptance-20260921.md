@@ -418,6 +418,83 @@ blocking the stated outcome.
 
 ---
 
+## 6A · Disposition of every deferred item — integration pass, 2026-09-21 PM
+
+Each row below now has an outcome, not a deferral. **R** = repaired in scope, **P** = deliberate
+restriction preserved with an honest UI and a usable existing path, **L** = non-blocking later
+enhancement, recorded.
+
+| item | disp. | what actually happened |
+|---|---|---|
+| grant or adjust a credit | **P** | The credits section now says so in place: ledger entries are immutable by design, so adjusting a balance can only mean a compensating entry, and who may mint credit is unsettled policy. The two real paths are named — automatic $10 on verification, and an explicit Stripe checkout by the account holder. |
+| issue a refund | **P** | The refunds section now explains *why* it is read-only — the application holds a Checkout-write-only credential, so a button here could only move the ledger while no money moved — and names the supported path: the operator's own Stripe access, after which the signed event debits the balance automatically. |
+| retry or requeue a failed job | **R (as status, not as a control)** | No force-complete was added, deliberately. Instead the recovery semantics are now **measured** by `StuckJobRecoverySemantics`: `mark_stale` is the only automatic recovery, it moves a job past the bound to `reconciliation`, and it **keeps the reservation held** — an unknown outcome is neither a charge nor a refund. A grep test pins that exactly one production caller exists (the worker loop), which is *why* a dead worker leaves jobs running and the console must say so. |
+| resend a verification link; clear a lockout | **L** | Unchanged. `LoginAttempt` keys are hashed, so a lookup path needs designing; the account page now at least shows verification state, which is the common diagnosis. |
+| suspend another administrator | **P** | Still refused, with the reason on screen. |
+| rename / move / retire an organization or department | **L** | Unchanged; retirement needs a decision about the department's patients and templates. |
+| per-dimension filters | **L** | Unchanged. The date window was the axis that mattered and it shipped. |
+| unpaginated wallet loop | **L** | Unchanged on the dashboard. The organizations page's own N+1 **was** repaired this pass (bounded queries + a page of twenty, with a query-count test). |
+| `/health/` returns `ok` unconditionally | **L** | Unchanged. Changing its contract touches whatever monitors it, and the console now carries the real composite status instead. |
+| `auth.login_failed` records no subject | **P** | Unchanged deliberately. Recording attempted identifiers is a privacy decision, not an oversight. |
+| exact money on `encounter_input.html` / `voice_limit.html` | **L** | Still raw `Decimal`. Now that Tab 1's work is merged these files are no longer being edited concurrently, but one string is asserted by a CI browser test and the gain is cosmetic; recorded rather than bundled into an integration release. |
+| `L4` lock-mode change has no test | **L** | Unchanged; a meaningful assertion needs a contrived deadlock harness. |
+| spent-funds refund case | **P** | Visible in words; no console control, consistent with the refund restriction above. |
+
+### The one deferred item the integration brief promoted to a repair
+
+**`organization_pays` is now read-only, enforced on the server.** The operating instruction is
+that changing who is billed belongs to an explicitly authorized platform owner / billing role and
+must never be available to an ordinary organization or department administrator.
+
+That boundary **cannot be expressed by the current role model**, and this was measured rather
+than assumed: `is_superuser` appears in exactly one place in the codebase — a template branch
+that renders the same word as `is_staff` — and production carries **1 staff account and 0
+superusers**. Granting the capability to `is_staff` would hand it to precisely the population the
+instruction excludes; inventing a new role would be inventing an authorization boundary nobody
+ratified.
+
+So `core.admin_console.may_change_payer` requires **both** a deployment grant
+(`QUILLMD_PAYER_ROLE_GRANTED`, default off) **and** `is_superuser`. Both are false, the control
+is read-only for everyone, and `admin_department_payer` **raises PermissionDenied on the route** —
+not merely hidden in the template, because a control absent from a page is not an authorization
+boundary. The implementation is retained behind the gate, now with the confirmation showing
+old → new payer, a mandatory ≥12-character reason kept in the audit record, and a test proving
+existing `Job.payer` / `Usage.payer` attribution is untouched by a change. Enabling the role
+later is configuration, not a rewrite.
+
+---
+
+## 6B · The backup question, investigated rather than inherited
+
+⚠️ **MY OWN EARLIER FLAG WAS WRONG AND IS WITHDRAWN.** This morning's preflight recorded
+*"`postgres-backup` exited 2026-09-17 — no backup for ~4 days"* and I surfaced it as a QuillMD
+risk. It is not one.
+
+`meddoc-pro-postgres-backup-1` is `prodrigestivill/postgres-backup-local:16` with
+`POSTGRES_HOST=postgres`, `POSTGRES_USER=meddoc` — it backs up the **legacy Next.js `meddoc`
+database** in `meddoc-pro-postgres-1`. That application is retired (`app.quillmd.com` answers 503
+by design, the `meddoc-pro` compose service was removed). It has nothing to do with the Django
+rebuild, whose data lives in `quillmd_fresh` on `127.0.0.1:55438`. **It was not restarted**, per
+the instruction not to revive a retired or unrelated unit.
+
+**QuillMD's actual backup path is healthy and current**, read from its own receipts:
+
+| evidence | value |
+|---|---|
+| local encrypted capture | `outcome: complete`, `2026-09-21T04:31:03Z`, run `20260921T043001Z-0a6f66da`, database `quillmd_fresh`, encrypted, 2,637,181 bytes |
+| offsite transfer | `state: complete`, `2026-09-21T05:00:15Z`, 14,733,336 cipher bytes, 55 objects |
+| **verified remote readback** | present, `manifest_cipher_sha256 ac714b19…` — **matching the upload's own manifest hash**, so this is a genuine readback and not merely an upload receipt |
+| independent isolated restore | retained: 42 files, 225,615 rows |
+| 5-minute alert timer | **live** — `last_check_at 2026-09-21T14:26:04Z`, minutes before this was written |
+| monitor condition | `offsite_policy_renewal_due` — a WARNING in the aggregator's own set, i.e. the storage policy needs renewal; **captures and transfers are working** |
+
+**The recovery point the activation gate requires therefore exists**: a complete local encrypted
+capture from 04:31Z today and a verified offsite readback from 05:00Z today, both predating this
+integration. No offsite restore was repeated, no key rotated, no plaintext dump written, and no
+provider-account request made.
+
+---
+
 ## 7 · For the owner
 
 1. **What counts as revenue when promotional credit funds the work?** The console shows the two

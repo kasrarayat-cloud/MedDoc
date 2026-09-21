@@ -16,14 +16,21 @@
   <div class="section" id="department-{{ row.department.pk }}">
     <div class="section-heading"><h3>{{ row.department.name }}</h3><span class="badge {% if row.department.organization_pays %}warning{% endif %}">{% if row.department.organization_pays %}Organization pays{% else %}Each user pays{% endif %}</span></div>
 
+    {% if may_change_payer %}
     <details><summary>Change who pays for this department</summary>
       <form method="post" action="{% url 'admin_department_payer' row.department.pk %}" data-submit-once class="details-body">{% csrf_token %}
         <input type="hidden" name="back" value="{% url 'admin_organizations' %}#department-{{ row.department.pk }}">
         <p class="small muted">This selects the paid balance a new request reserves against. It is <strong>not retrospective</strong>: each job records its payer when funds are first held, and settled charges keep the payer recorded on them. A user&rsquo;s personal promotional credit is always spent first either way.</p>
+        <p><strong>Now:</strong> {% if row.department.organization_pays %}{{ entry.organization.name }} (organization paid balance){% else %}each user&rsquo;s own paid balance{% endif %}. <strong>After saving:</strong> {% if row.department.organization_pays %}each user&rsquo;s own paid balance{% else %}{{ entry.organization.name }} (organization paid balance){% endif %}, for requests made from now on.</p>
         <p><label class="check-label" for="pays-{{ row.department.pk }}"><input id="pays-{{ row.department.pk }}" name="organization_pays" type="checkbox" {% if row.department.organization_pays %}checked{% endif %}>Charge {{ entry.organization.name }} after each user&rsquo;s personal promotional credit</label></p>
+        <p><label for="payer-reason-{{ row.department.pk }}">Why is this changing? (at least 12 characters; kept with the audit entry)</label><input id="payer-reason-{{ row.department.pk }}" name="reason" minlength="12" maxlength="240" required></p>
+        <p><label class="check-label" for="payer-confirm-{{ row.department.pk }}"><input id="payer-confirm-{{ row.department.pk }}" name="confirm" type="checkbox" required>I have read which balance will be billed from now on.</label></p>
         <button type="submit" class="secondary">Save payer</button>
       </form>
     </details>
+    {% else %}
+    <p class="small muted"><strong>Who pays is read-only here.</strong> {{ payer_restriction }}</p>
+    {% endif %}
 
     {% if row.active_owners == 0 %}<div class="notice warning" role="status"><strong>This department has no active owner.</strong> Nobody can invite into it, create patients in it, or restore access to it from the clinician side. Give an active, verified member the owner role.</div>{% endif %}
 

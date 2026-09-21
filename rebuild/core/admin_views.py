@@ -125,6 +125,8 @@ def admin_organizations(request):
         })
     audit(request.user, 'admin.organizations_read')
     return render(request, 'admin_organizations.html', {
+        'may_change_payer': admin_console.may_change_payer(request.user),
+        'payer_restriction': admin_console.payer_restriction_note(),
         'organizations': [{'organization': organization,
                            'departments': departments_by_organization.get(organization.pk, []),
                            'wallets': wallets_by_organization.get(organization.pk, [])}
@@ -190,9 +192,19 @@ def admin_department_payer(request, pk):
     charge they are explaining to a customer.
     """
     gate(request)
+    # ⚠️ ENFORCED HERE, NOT BY HIDING THE FORM. A control that is merely absent from the template
+    # is not an authorization boundary; the route is what an ordinary administrator can reach.
+    if not admin_console.may_change_payer(request.user):
+        raise PermissionDenied(admin_console.payer_restriction_note())
     department = get_object_or_404(
         Department.objects.select_for_update(of=('self',)).select_related('organization'), pk=pk)
     pays = request.POST.get('organization_pays') == 'on'
+    reason = (request.POST.get('reason') or '').replace('\x00', '').strip()[:240]
+    if len(reason) < 12:
+        raise ValidationError('Record why the payer is changing (at least 12 characters). '
+                              'It is kept with the audit entry and is the only account of the decision.')
+    if request.POST.get('confirm') != 'on':
+        raise ValidationError('Confirm that you have read which balance will be billed from now on.')
     was = department.organization_pays
     if pays == was:
         messages.info(request, f'{department.name} already bills to {"the organization" if pays else "each user"}. Nothing changed.')
@@ -202,7 +214,7 @@ def admin_department_payer(request, pk):
     if pays:
         Wallet.objects.get_or_create(organization=department.organization, kind='paid')
     audit(request.user, 'admin.department_payer', department.pk, department=department,
-          organization_pays_from=was, organization_pays_to=pays)
+          organization_pays_from=was, organization_pays_to=pays, reason=reason)
     messages.success(request, f'{department.name} now bills to '
                               f'{"the organization paid balance" if pays else "each user’s own paid balance"}, '
                               'for requests made from now on. Charges already settled keep the payer recorded on them.')

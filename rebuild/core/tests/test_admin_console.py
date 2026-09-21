@@ -626,6 +626,69 @@ class SecondRoundFindings(ConsoleFixture):
                              f'query count grew from {len(small)} to {len(large)} with the tree')
 
 
+class StuckJobRecoverySemantics(ConsoleFixture):
+    """What actually recovers a stuck job, measured — instead of adding a force-complete control.
+
+    The deferred gap was "no retry or requeue". The question underneath it is whether automatic
+    recovery is demonstrated, because a control that force-completes a job whose provider outcome
+    is unknown can release or absorb money for a request that is still in flight. These tests
+    establish the real semantics so the console can describe them accurately.
+    """
+
+    def stale(self, minutes):
+        job = Job.objects.create(encounter=self.encounter, user=self.user,
+                                 request_key=f'stale:{minutes}', state='running',
+                                 started_at=timezone.now() - timedelta(minutes=minutes))
+        reserve(job, Decimal('0.2'))
+        return job
+
+    def test_the_reaper_moves_a_stale_job_to_reconciliation_and_keeps_the_money_held(self):
+        """`mark_stale` is the only automatic recovery, and it deliberately does NOT free funds."""
+        from core.jobs import mark_stale
+        job = self.stale(minutes=10)
+        held_before = Reservation.objects.filter(job=job, state='held').count()
+        self.assertEqual(held_before, 1)
+        mark_stale()
+        job.refresh_from_db()
+        self.assertEqual(job.state, 'reconciliation')
+        self.assertIn('unknown provider outcome', job.error)
+        self.assertIn('Automatic retry is disabled', job.error)
+        # ⚠️ THE RESERVATION SURVIVES. An unknown outcome is not a refund and not a charge; the
+        # money stays held until a human resolves it with evidence. That is why there is no
+        # force-complete button.
+        self.assertEqual(Reservation.objects.filter(job=job, state='held').count(), 1)
+        self.assertFalse(Usage.objects.filter(job=job).exists())
+
+    def test_the_reaper_leaves_a_job_inside_the_bound_alone(self):
+        """The positive control: a reaper that fired on everything would pass the test above."""
+        from core.jobs import mark_stale
+        job = self.stale(minutes=1)
+        mark_stale()
+        job.refresh_from_db()
+        self.assertEqual(job.state, 'running')
+
+    def test_nothing_outside_the_worker_loop_calls_the_reaper(self):
+        """Which is exactly why a dead worker leaves jobs running and the console must say so."""
+        import subprocess
+        hits = subprocess.run(['grep', '-rn', 'mark_stale', '--include=*.py', '.'],
+                              capture_output=True, text=True, cwd='.').stdout
+        callers = [line for line in hits.splitlines()
+                   if 'mark_stale()' in line and '/tests/' not in line and 'def mark_stale' not in line]
+        self.assertEqual(len(callers), 1, f'expected exactly one production caller, got: {callers}')
+        self.assertIn('management/commands/worker.py', callers[0])
+
+    def test_the_console_reports_the_escalation_rather_than_offering_a_force_control(self):
+        self.stale(minutes=10)
+        health = admin_console.processing_health()
+        self.assertEqual(health['severity'], 'error')
+        self.assertIn('reaper', health['detail'])
+        self.assertIn('funds stay reserved', health['detail'].lower())
+        self.sign_in()
+        body = self.client.get('/console/services/').content.decode()
+        self.assertNotIn('Force complete', body)
+        self.assertNotIn('Retry job', body)
+
+
 class ConsoleAccessControl(ConsoleFixture):
     ROUTES = ['/console/', '/console/audit/', '/console/organizations/', '/console/services/',
               '/console/usage.csv']
@@ -715,20 +778,70 @@ class MembershipAndPayerInvariants(ConsoleFixture):
         staff_membership.refresh_from_db()
         self.assertEqual(staff_membership.role, 'employee')
 
-    def test_changing_the_payer_is_audited_and_does_not_rewrite_settled_work(self):
+    def test_an_ordinary_administrator_cannot_change_who_pays(self):
+        """Who is billed is reserved for a platform owner / billing role this deployment has not
+        established, so the control is read-only — and the refusal is enforced on the SERVER.
+
+        A control merely absent from the template is not an authorization boundary: the route is
+        what an ordinary administrator can reach. `is_superuser` confers nothing anywhere in this
+        codebase and production carries zero superusers, so granting this to `is_staff` would
+        hand it to exactly the population the restriction excludes.
+        """
         self.sign_in()
-        recorded = Job.objects.get(pk=self.job.pk).payer
+        was = self.department.organization_pays
         response = self.client.post(f'/console/departments/{self.department.pk}/payer/',
-                                    {'organization_pays': 'on'})
-        self.assertEqual(response.status_code, 302)
+                                    {'organization_pays': 'on', 'reason': 'trying it on anyway',
+                                     'confirm': 'on'})
+        self.assertEqual(response.status_code, 403)
         self.department.refresh_from_db()
-        self.assertTrue(self.department.organization_pays)
-        self.assertTrue(Wallet.objects.filter(organization=self.org, kind='paid').exists())
-        self.assertEqual(Job.objects.get(pk=self.job.pk).payer, recorded)
-        self.assertEqual(Usage.objects.get(pk=self.usage.pk).payer, recorded)
-        event = AuditEvent.objects.get(action='admin.department_payer')
-        self.assertEqual(event.details['organization_pays_to'], True)
-        self.assertEqual(event.details['organization_pays_from'], False)
+        self.assertEqual(self.department.organization_pays, was)
+        self.assertFalse(AuditEvent.objects.filter(action='admin.department_payer').exists())
+        # And the screen says so rather than silently omitting the control.
+        body = self.client.get('/console/organizations/').content.decode()
+        self.assertIn('Who pays is read-only here', body)
+        self.assertIn('has not established one', body)
+
+    def test_the_payer_control_refuses_without_a_reason_or_confirmation(self):
+        with self.granted():
+            self.sign_in()
+            for payload in [{'organization_pays': 'on', 'confirm': 'on'},
+                            {'organization_pays': 'on', 'reason': 'too short', 'confirm': 'on'},
+                            {'organization_pays': 'on', 'reason': 'a sufficiently long reason'}]:
+                with self.subTest(payload=sorted(payload)):
+                    self.assertEqual(self.client.post(
+                        f'/console/departments/{self.department.pk}/payer/', payload).status_code, 400)
+            self.department.refresh_from_db()
+            self.assertFalse(self.department.organization_pays)
+
+    def granted(self):
+        """Grant the capability the way a deployment would: the flag AND the highest flag there is."""
+        User.objects.filter(pk=self.admin.pk).update(is_superuser=True)
+        self.admin.refresh_from_db()
+        return override_settings(QUILLMD_PAYER_ROLE_GRANTED=True)
+
+    def test_changing_the_payer_is_audited_and_does_not_rewrite_settled_work(self):
+        """The retained implementation, exercised with the capability granted."""
+        with self.granted():
+            self.sign_in()
+            recorded = Job.objects.get(pk=self.job.pk).payer
+            response = self.client.post(f'/console/departments/{self.department.pk}/payer/',
+                                        {'organization_pays': 'on', 'confirm': 'on',
+                                         'reason': 'billing owner moved this department to the organization balance'})
+            self.assertEqual(response.status_code, 302)
+            self.department.refresh_from_db()
+            self.assertTrue(self.department.organization_pays)
+            self.assertTrue(Wallet.objects.filter(organization=self.org, kind='paid').exists())
+            # ⚠️ THE INVARIANT THE SCREEN PROMISES: the change is prospective only. `Job.payer` is
+            # stamped when funds are first held and never re-read from the department.
+            self.assertEqual(Job.objects.get(pk=self.job.pk).payer, recorded)
+            self.assertEqual(Usage.objects.get(pk=self.usage.pk).payer, recorded)
+            self.assertEqual(
+                {r.wallet_id for r in Reservation.objects.filter(job=self.job)},
+                {r.wallet_id for r in Reservation.objects.filter(job=self.job)})
+            event = AuditEvent.objects.get(action='admin.department_payer')
+            self.assertEqual(event.details['organization_pays_to'], True)
+            self.assertEqual(event.details['organization_pays_from'], False)
+            self.assertIn('billing owner moved', event.details['reason'])
 
     def test_the_return_location_cannot_be_used_to_redirect_off_the_console(self):
         self.sign_in()
