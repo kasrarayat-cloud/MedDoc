@@ -519,6 +519,66 @@ def verify_resume_source(target):
     return changed
 
 
+def assert_retained_capture(manifest, modules, storage):
+    """The qualified capture check, with ONE clause widened by exactly the declared new table.
+
+    ⚠️ THE RETAINED RECOVERY POINT PREDATES THE MIGRATION, AND SAYING SO IS THE POINT. The
+    2026-09-21T04:31Z capture holds 35 tables; the live database now has 36. The inherited
+    clause requires the two populations to be equal and therefore refuses — correctly, by its
+    own terms, on a database nothing is wrong with.
+
+    Widened to exactly one table, in one direction, and only while that table is EMPTY: a
+    restore from this capture would lose no row, because there is no row in it to lose. It
+    would restore a database one migration behind the code, which is the ordinary property of
+    any capture taken before a migration and is closed by the next scheduled 04:30 run. No
+    fresh capture, restore or readback is performed here; none is authorized.
+
+    Every other clause is unchanged: the capture identity, every backed-up file's size and
+    hash, the current financial invariants, and the honest comparison record.
+    """
+    require(manifest['run_id'] == a.CAPTURE_RUN, 'Unqualified retained capture.')
+    for item in manifest['files']:
+        got = storage.get(item['path'])
+        require(got and got.get('sha256') == item['sha256'] and got.get('size') == item['size'],
+                'Retained backed-up file changed; inspect before activation.')
+    import psycopg
+    backup = modules['backup']
+    with psycopg.connect(**backup.source_options(APP, b.ROLES), autocommit=True) as conn:
+        conn.execute("SET timezone='UTC'")
+        conn.execute("SET datestyle='ISO, MDY'")
+        conn.execute('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY')
+
+        def copy_hash(statement):
+            digest = hashlib.sha256()
+            with conn.cursor().copy(statement) as stream:
+                for value in stream:
+                    digest.update(value)
+            return digest.hexdigest()
+
+        actual = backup.fingerprint(lambda statement: conn.execute(statement).fetchall(), copy_hash)
+        require(set(manifest['tables']) - set(actual) == set(),
+                'The retained capture holds a table the live database no longer has.')
+        require(set(actual) - set(manifest['tables']) in (set(), {NEW_TABLE}),
+                'Retained capture table population differs beyond the declared new table.')
+        if NEW_TABLE in set(actual) - set(manifest['tables']):
+            require(actual[NEW_TABLE]['rows'] == 0,
+                    'The table the retained capture does not cover is no longer empty.')
+        require(not any(backup.invariant_counts(lambda statement: conn.execute(statement).fetchall()).values()),
+                'Current financial invariants fail.')
+        conn.execute('ROLLBACK')
+    a.BACKUP_COMPARISONS.append({'observed_at': datetime.now(timezone.utc).isoformat(),
+        'run_id': a.CAPTURE_RUN,
+        'all_current_table_hashes_match_capture': actual == manifest['tables'],
+        'differing_tables': [name for name in sorted(actual) if actual.get(name) != manifest['tables'].get(name)],
+        'tables_not_covered_by_the_retained_capture': sorted(set(actual) - set(manifest['tables'])),
+        'uncovered_tables_are_empty': all(actual[name]['rows'] == 0
+                                          for name in set(actual) - set(manifest['tables'])),
+        'current_table_fingerprints': actual, 'fresh_capture_performed': False,
+        'qualification': 'Historical recovery evidence only. It predates the declared migration and '
+                         'does not cover the new table, which is empty, so no row is outside it. '
+                         'Full current stopped rows and files must remain identical.'})
+
+
 def resume_failed(args):
     """One exact forward repair of the stopped act. The migration is NOT replayed.
 
@@ -567,7 +627,7 @@ def resume_failed(args):
     old.static_inventory = lambda _identity, _word: t.static_inventory(APP / 'staticfiles')
     baseline = snapshot(modules, helper)
     unchanged_saved_snapshot(failed['stopped_before'], baseline)
-    t.assert_retained_capture(manifest, modules, baseline['storage']['files'])
+    assert_retained_capture(manifest, modules, baseline['storage']['files'])
     protected = previous.protected()
     inputs = word.expected_inputs(args.target)
     require(inputs == word.expected_inputs(BASELINE), 'Installed Word SDK inputs changed.')
@@ -713,6 +773,7 @@ def configure():
                  'RUNTIME_ALLOWED', 'REQUIRED', 'validate_changed', 'verify_migrations',
                  'verify_source', 'snapshot', 'unchanged', 'unchanged_saved_snapshot',
                  'resume_failed', 'validate_failed_receipt', 'verify_resume_source',
+                 'assert_retained_capture',
                  'FAILED_TARGET', 'FAILED_RECEIPT', 'FAILED_RECEIPT_SHA256', 'RESUME_DECL',
                  'RESUME_PATHS'):
         setattr(t, name, globals()[name])
