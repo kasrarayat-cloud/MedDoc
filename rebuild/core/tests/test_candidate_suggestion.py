@@ -16,7 +16,8 @@ import json
 from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 
-from core.generation import Selection, Selections, validate_selections, SCOPE_REVIEW_REASON
+from core.generation import (INHERITED_SCOPE, SCOPE_POINTERS, SCOPE_REFRAMERS, Selection,
+                             Selections, validate_selections, SCOPE_REVIEW_REASON)
 from io import BytesIO
 from zipfile import ZipFile
 
@@ -43,8 +44,11 @@ class ScopeUncertaintyKeepsTheCandidate(TestCase):
         self.assertEqual(answer['status'], 'conflict')
         self.assertEqual(answer['text'], '', 'nothing may be accepted by the validator')
         self.assertEqual(answer['suggestion'], 'the scope reached the cecum')
-        self.assertEqual(answer['evidence'][0]['quote'], SCOPED,
-                         'the evidence shown must be this answer\'s own line, not the whole note')
+        # ⚠️ `evidence` still carries the WHOLE note, exactly as before this feature existed —
+        # that is what shows a denial or a hypothetical frame. The answer's own passage is a
+        # separate, additional key.
+        self.assertEqual(answer['evidence'], [{'quote': NOTE, 'start': 0, 'end': len(NOTE)}])
+        self.assertEqual(answer['suggestion_evidence'][0]['quote'], SCOPED)
 
     def test_the_reason_says_scope_and_denies_being_a_contradiction(self):
         """⚠️ Uncertainty about scope must not be presented as a proven clinical contradiction."""
@@ -55,16 +59,16 @@ class ScopeUncertaintyKeepsTheCandidate(TestCase):
         self.assertIn('not been accepted', reason.lower())
 
     def test_the_offsets_still_index_the_source(self):
-        entry = judge(NOTE, [SCOPED])['evidence'][0]
-        self.assertEqual(NOTE[entry['start']:entry['end']], entry['quote'])
+        for entry in judge(NOTE, [SCOPED])['suggestion_evidence'] + judge(NOTE, [SCOPED])['evidence']:
+            self.assertEqual(NOTE[entry['start']:entry['end']], entry['quote'])
 
     def test_both_contracts_use_one_implementation(self):
         """A second copy of this rule would drift from the first the day either moved."""
         import inspect
         from core import generation
         source = inspect.getsource(generation)
-        self.assertEqual(source.count('def scope_review('), 1)
-        self.assertEqual(source.count('output[item.key]=scope_review('), 2,
+        self.assertEqual(source.count('def with_scope_suggestion('), 1)
+        self.assertEqual(source.count('answer=with_scope_suggestion('), 2,
                          'the tab contract and the legacy contract must both call it')
 
 
@@ -205,9 +209,11 @@ class AnUnacceptedSuggestionCannotReachAnExport(DocumentWorkflow):
         self.assertEqual(answer['status'], 'conflict')
         self.assertEqual(answer['text'], '')
         self.assertEqual(answer['suggestion'], self.SUGGESTION)
-        entry = answer['evidence'][0]
-        self.assertEqual(encounter.notes[entry['start']:entry['end']], entry['quote'],
-                         'the shown evidence must still index the doctor\'s own notes')
+        self.assertEqual(answer['evidence'],
+                         [{'quote': encounter.notes, 'start': 0, 'end': len(encounter.notes)}],
+                         'the governing context stays attached to the answer, unchanged')
+        entry = answer['suggestion_evidence'][0]
+        self.assertEqual(encounter.notes[entry['start']:entry['end']], entry['quote'])
         self.assertEqual(entry['quote'], self.SUGGESTION)
         page = self.client.get(f'/encounters/{encounter.pk}/').content.decode()
         self.assertIn('Suggested answer', page)
@@ -320,3 +326,47 @@ class TheClinicianActionIsRecordedSeparately(AnUnacceptedSuggestionCannotReachAn
         self.finalize(encounter)
         page = self.client.get(f'/encounters/{encounter.pk}/').content.decode()
         self.assertNotIn(f'name="accept_{self.key}"', page)
+
+
+class APolarityOrAttRIBUTIONMarkerSuppressesTheOfferEntirely(TestCase):
+    """⚠️ THE FIRST VERSION OF THIS FEATURE WOULD HAVE PUT AN ACCEPT BUTTON UNDER A DENIAL.
+
+    Each note below is taken from a reviewed test written by an earlier refutation pass. In every
+    one the extracted value is real and the governing context inverts it, so the candidate must
+    not be offered for one-click acceptance at all — showing it would dress a real objection up
+    as a formatting quibble.
+    """
+
+    def offer(self, notes, quote, label='Finding'):
+        return judge(notes, [quote], label=label).get('suggestion')
+
+    def test_a_denial_heading_suppresses_it(self):
+        notes = 'The following findings are denied:\nFinding: diabetes'
+        self.assertEqual(judge(notes, ['diabetes'], label='Finding')['status'], 'conflict')
+        self.assertIsNone(self.offer(notes, 'diabetes'))
+
+    def test_a_hypothetical_frame_suppresses_it(self):
+        notes = 'Suppose bleeding were present.\nBleeding was observed.'
+        self.assertIsNone(self.offer(notes, 'Bleeding was observed.', label='Bleeding'))
+
+    def test_family_history_attribution_suppresses_it(self):
+        notes = 'Family history: polyps.\nPolyps were observed.'
+        self.assertIsNone(self.offer(notes, 'Polyps were observed.', label='Polyps'))
+
+    def test_reported_speech_suppresses_it(self):
+        notes = 'The patient said "it hurts here".\nFinding: tenderness'
+        self.assertIsNone(self.offer(notes, 'tenderness'))
+
+    def test_a_plain_pointer_does_not_suppress_it(self):
+        """POSITIVE CONTROL: without it, every assertion above could pass because nothing is ever
+        offered. `following` is a pointer, so scope is open but polarity is not asserted."""
+        notes = 'See the findings listed in the report.\nFinding: diabetes'
+        self.assertEqual(judge(notes, ['diabetes'], label='Finding')['status'], 'conflict')
+        self.assertEqual(self.offer(notes, 'diabetes'), 'diabetes')
+
+    def test_the_two_halves_are_still_one_vocabulary(self):
+        """Splitting the list must not add, drop or alter a single word."""
+        original = ('following|these|those|above|below|listed|family history|'
+                    'if|would|could|might|hypothetical|imagine|suppose')
+        self.assertEqual(SCOPE_POINTERS + '|' + SCOPE_REFRAMERS, original)
+        self.assertEqual(INHERITED_SCOPE.pattern, r'\b(?:' + original + r')\b')
