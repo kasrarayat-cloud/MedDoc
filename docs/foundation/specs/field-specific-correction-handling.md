@@ -102,6 +102,23 @@ properties of where a match sits — not new words.
 question's label is not review-required merely because some *other* line is unlabelled. This
 replaces the all-or-nothing `scoped_lines` test and is what fixes A1–A3.
 
+> ⚠️ **BEFORE BUILDING S2 OR S3, READ THIS — IT IS THE MISTAKE THIS SPECIFICATION IS MOST LIKELY TO
+> REPEAT.** `UNSCOPED_NEGATIVE_HEADING` carries a `^` anchor, is compiled **without `re.M`**, and its
+> `[^:]*` **spans newlines**. Searching a whole note with it can therefore only ever match the span
+> before the note's **first colon**. That is correct where `source_units` uses it — per quote, where
+> `^` means the start of that sentence — and silently wrong anywhere else.
+>
+> The candidate-review release made exactly this error and it reached a signed document: with
+> `Indication: screening colonoscopy` above `The following findings are denied:`, the heading became
+> invisible and the denied finding was offered for one-click acceptance. The suite's own reference
+> case passed, because it had no line above the heading. It failed the other way too — any note with
+> `no`, `not` or `never` before its first colon was treated as a negative heading.
+>
+> **S2 and S3 are ENTIRELY about which lines a marker governs, so every detector they use must be
+> applied at the scope its pattern was written for**, and a test for each must include a line above
+> the marker and a line below it. An anchored pattern is a claim about position; applying it to a
+> larger string silently changes what that claim means.
+
 **S2 · Forward scope.** A line ending in `:`, or matching `UNSCOPED_NEGATIVE_HEADING`, or matching
 `INHERITED_SCOPE` on a forward token (`following`, `these`, `those`, `below`, `listed`), governs the
 lines **after** it until the next such line or the end of the note. An explicitly labelled line does
