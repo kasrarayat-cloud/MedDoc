@@ -274,3 +274,18 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .8rem; line-hei
   .page, .review-document { padding: 0; border: 0; }
   .answer { break-inside: avoid; }
 }
+
+/* Keep source input in the existing document flow, ahead of its answer draft. */
+.document-input { padding: 24px; border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 24px; }
+.document-input .section-heading { align-items: start; }
+.document-input .actions p { margin: 0; }
+.voice-input, .generation-action { margin-top: 24px; padding-top: 22px; border-top: 1px solid var(--line); }
+.voice-input fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.voice-input .voice-controls { margin-block: 14px; }
+.voice-input audio { max-width: 100%; }
+.transcript-review { border-left: 3px solid var(--accent); padding-left: 18px; margin-top: 22px; }
+.transcript-review details { margin-bottom: 14px; }
+.generation-action p:last-child:empty { display: none; }
+@media (max-width: 600px) { .document-input { padding: 17px; } .document-input .section-heading { flex-wrap: wrap; gap: 12px; } }
+
+[data-undo-edits][hidden] { display: none; }

@@ -613,6 +613,14 @@ class RecordingChargeLimit(BoundaryFixture, TestCase):
                               return_value=deepgram(TRANSCRIPT, 'dg_limit_partial', duration=20))
         self.assertEqual(job.state, 'succeeded')
         self.encounter.refresh_from_db()
+        self.assertNotIn(TRANSCRIPT, self.encounter.notes)
+        stored = json.loads(private_path(job.result_path).read_text())['transcript']
+        self.assertContains(self.client.get(f'/encounters/{self.encounter.pk}/'), 'Transcription incomplete')
+        applied = self.client.post(f'/encounters/{self.encounter.pk}/notes/', {
+            'revision': self.encounter.revision, 'transcript_job': str(job.pk), 'corrected_transcript': stored,
+            'transcript_mode': 'append', 'transcript_reviewed': 'on'})
+        self.assertEqual(applied.status_code, 302)
+        self.encounter.refresh_from_db()
         self.assertIn(TRANSCRIPT, self.encounter.notes)
         # The marker names what was SUBMITTED, not the priced ceiling: ffprobe measures the payload that is POSTed.
         self.assertIn('[Transcription incomplete: the provider processed 0:20 of the 1:00 of audio submitted; 0:40 was not '
@@ -666,6 +674,11 @@ class RecordingChargeLimit(BoundaryFixture, TestCase):
                 marker = ('[Transcription incomplete: the provider processed 4:57 of the 5:00 of audio submitted; 0:03 was '
                           'not transcribed.]')
                 self.assertEqual(marker in stored, marked); self.assertTrue(stored.startswith(TRANSCRIPT))
+                applied = self.client.post(f'/encounters/{self.encounter.pk}/notes/', {
+                    'revision': self.encounter.revision, 'transcript_job': str(job.pk), 'corrected_transcript': stored,
+                    'transcript_mode': 'append', 'transcript_reviewed': 'on'})
+                self.assertEqual(applied.status_code, 302)
+                self.encounter.refresh_from_db()
                 self.assertEqual(self.encounter.notes.count('[Transcription incomplete'), 1)  # the 3 s run's marker; none for 1 s
 
     def test_the_limit_page_says_whether_the_balance_covers_it_never_the_amount(self):

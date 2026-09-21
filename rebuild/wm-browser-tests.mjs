@@ -112,7 +112,7 @@ try{
   await create(scenario,scenario.notes+'\n'+field.label+': 99 '+field.locator.unit);await generate();
   assert.equal(await page.locator(`[name="answer_${field.key}"]`).inputValue(),'');
   await review(scenario,false);await review(scenario);await finalize();assert.equal(await page.getByRole('link',{name:'Export original format'}).count(),0);
-  await page.getByText('Edit source notes',{exact:true}).click();await page.locator('[name=notes]').fill(scenario.notes);await page.getByRole('button',{name:'Save source notes',exact:true}).click();await page.waitForLoadState();
+  await page.locator('[name=notes]').fill(scenario.notes);await page.getByRole('button',{name:'Save source notes',exact:true}).click();await page.waitForLoadState();
   assert.equal(await page.locator('input[name^=reviewed_]:checked').count(),0);assert.equal(await page.locator('input[name^=claim_reviewed_]:checked').count(),0);
   assert.equal(await page.locator('textarea[name=answer_patient_name]').inputValue(),'');
  });
