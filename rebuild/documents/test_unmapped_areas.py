@@ -67,17 +67,32 @@ class UnmappedAreasAreReported(unittest.TestCase):
 
     # ---------- the shapes that must now be reported ----------
 
-    def test_four_column_pairs_are_reported_not_dropped(self):
-        """Expected independently: 2 label/blank pairs per row, 2 rows -> 4 answer areas."""
+    def test_unambiguous_four_column_pairs_are_now_MAPPED_not_merely_reported(self):
+        """Superseded by real support: these four answer areas are placed, not described.
+
+        Reporting them was the right first step and the wrong final state. What still earns a
+        note is a row whose placement cannot be decided — covered below and in
+        documents/test_multicolumn_and_mixed.py.
+        """
         document = Document()
         qa_table(document, [["Height", "", "Weight", ""], ["Pulse", "", "BP", ""]], 4)
         qa_table(document, [["Referring clinician", ""]], 2)
         result = self.inspect(document, "four-column.docx")
 
+        self.assertEqual([f["label"] for f in result["fields"]],
+                         ["Height", "Weight", "Pulse", "BP", "Referring clinician"])
+        self.assertEqual([n for n in self.notes(result) if "not two columns" in n], [],
+                         "a shape that is now supported must not also be reported as skipped")
+
+    def test_a_row_whose_placement_is_undecidable_is_still_reported(self):
+        """The note survives exactly where it should: two blanks after one label."""
+        document = Document()
+        qa_table(document, [["Allergies", "", ""], ["Medications", "", ""]], 3)
+        qa_table(document, [["Referring clinician", ""]], 2)
+        result = self.inspect(document, "undecidable.docx")
+
         self.assertEqual([f["label"] for f in result["fields"]], ["Referring clinician"])
         notes = self.notes(result)
-        self.assertTrue(any("not two columns" in n for n in notes), notes)
-        self.assertTrue(any("4 table row" not in n for n in notes))   # 2 rows skipped, not 4
         self.assertTrue(any(n.startswith("2 table row(s)") for n in notes), notes)
         self.assertTrue(any("{{Question name}}" in n for n in notes),
                         f"A note must offer a supported alternative, literally. Got: {notes}")
@@ -131,10 +146,10 @@ class UnmappedAreasAreReported(unittest.TestCase):
         underlined_tab(paragraph)
         result = self.inspect(combined, "underline-with-table.docx")
 
-        self.assertEqual([f["label"] for f in result["fields"]], ["Referring clinician"])
-        notes = self.notes(result)
-        self.assertTrue(any("underlined answer blanks" in n for n in notes), notes)
-        self.assertTrue(any("ONE method" in n for n in notes), notes)
+        # Superseded by real support: precedence no longer discards the section it reported.
+        self.assertEqual([f["label"] for f in result["fields"]], ["Referring clinician", "EXTENT"])
+        self.assertEqual([n for n in self.notes(result) if "ONE method" in n], [],
+                         "the precedence note must not outlive the precedence problem")
 
     def test_a_wholesale_refusal_explains_which_shape_it_found(self):
         """A form of visible blanks must not be told it contains nothing."""

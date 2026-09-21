@@ -199,10 +199,17 @@ def _replace_tab(run, answer):
             index += 1
 
 
-def fill_tabs(path, output, parts, fields, answers):
+def fill_tabs(path, output, parts, fields, answers, also_changed=()):
+    """Write tab answers and emit the package.
+
+    `also_changed` names parts another writer has already mutated in this same element tree —
+    a mixed mapping fills its table cells and placeholders first. They must be listed here or
+    the package copy below would write their ORIGINAL bytes back and silently discard those
+    answers, which is the one failure this function's copy-the-original design makes easy.
+    """
     parts = {str(part.partname).lstrip('/'): part for part in parts}
     paragraphs = {name: list(part.element.iter(qn('w:p'))) for name, part in parts.items()}
-    changed = set()
+    changed = {name for name in also_changed if name in parts}
     paired = defaultdict(list)
     for field in fields:
         locator = field['locator']['tab_form']

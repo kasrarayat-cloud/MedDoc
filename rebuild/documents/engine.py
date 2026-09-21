@@ -128,7 +128,80 @@ def answer_tabs_present(paragraphs):
     return False
 
 
-def docx_inspect(path):
+MAX_LABEL_CELL = 80
+CONTRACT_V1 = "v1"          # two-column tables only; tabs only when nothing else matched
+CONTRACT_V2 = "v2"          # + unambiguous multi-column rows, + tabs alongside other structures
+CONTRACT = CONTRACT_V2
+
+
+def cell_text(cell):
+    return "".join(cell.xpath(".//w:t/text()")).strip()
+
+
+def usable_answer_cell(cell):
+    """An empty cell that can safely receive an answer.
+
+    A drawing, picture or line break means something is already there, and overwriting it is
+    exactly what this adapter must never do.
+    """
+    return not cell_text(cell) and not cell.xpath(".//w:drawing | .//w:pict | .//w:br")
+
+
+def multi_column_answers(row_cells):
+    """Answer cells in a row of MORE than two columns, only where placement is unambiguous.
+
+    Returns a list of (label, answer_cell), or [] when the row must not be mapped.
+
+    Two shapes qualify, and nothing else does:
+
+      PAIRS      Label | blank | Label | blank | …   — strict alternation, even width >= 4.
+                 Every blank has exactly one label immediately before it, so no boundary is
+                 inferred. Six columns work the same way as four.
+
+      ONE BLANK  exactly one empty cell anywhere in the row, and the FIRST cell carries text.
+                 Covers Label | blank | Unit and Label | Unit | blank alike: there is only one
+                 place an answer can go, and only one cell that can be its question.
+
+    Deliberately NOT qualifying: two or more blanks that are not a strict alternation (is the
+    second blank another answer to the same question, or a separate unlabelled one?), and any
+    row whose first cell is empty (its blank has no question, and borrowing one from elsewhere
+    is the heading-theft this product already refuses).
+    """
+    if len(row_cells) <= 2:
+        return []
+    texts = [cell_text(cell) for cell in row_cells]
+    blanks = [i for i, text in enumerate(texts) if not text]
+    if not blanks:
+        return []                                   # a fully populated row is data, not questions
+
+    if len(row_cells) % 2 == 0:
+        # A PAIRS GRID stays a pairs grid when some answers are already printed. Requiring every
+        # value cell to be blank would mislabel the common part-completed form: in
+        # `Procedure | Diagnostic colonoscopy | Consent | ____` the blank belongs to Consent, and
+        # reading the row as "one blank, labelled by the first cell" answers Procedure instead.
+        # Every label must be present, and every EMPTY cell must sit in a value position — a
+        # blank where a label belongs has no question, and borrowing one is heading theft.
+        labels, values = texts[0::2], row_cells[1::2]
+        if (all(label and len(label) <= MAX_LABEL_CELL for label in labels)
+                and all(index % 2 == 1 for index in blanks)):
+            offered = [(label, cell) for label, cell in zip(labels, values)
+                       if not cell_text(cell) and usable_answer_cell(cell)]
+            if len(offered) == len(blanks):      # every blank is offered, or something else is wrong
+                return offered
+        return []
+
+    # ODD WIDTH: pairs cannot apply, so the only unambiguous shape is a single blank in a row
+    # whose first cell carries the question — `Label | blank | Unit` and `Label | Unit | blank`
+    # alike. More than one blank leaves nothing to say which question the second belongs to.
+    if len(blanks) == 1 and texts[0] and len(texts[0]) <= MAX_LABEL_CELL and blanks[0] != 0:
+        cell = row_cells[blanks[0]]
+        if usable_answer_cell(cell):
+            return [(texts[0], cell)]
+
+    return []
+
+
+def docx_inspect(path, contract=CONTRACT):
     validate_docx(path)
     document = Document(path)
     paragraphs = []
@@ -143,14 +216,24 @@ def docx_inspect(path):
             paragraphs.append(Paragraph(element, part))
         for row in part.element.iter(qn("w:tr")):
             row_cells = row.findall(qn("w:tc"))
-            if len(row_cells) != 2:
-                if answerable_row(row_cells):
-                    skipped["multi_column"] += 1
-                continue
-            # Merged cells can conceal a different question/answer boundary.
+            # Merged cells can conceal a different question/answer boundary. Checked before the
+            # width rules so a merged wide row is reported as merged, not as multi-column.
             if any(cell.xpath(".//w:vMerge | .//w:gridSpan | .//w:tbl") for cell in row_cells):
                 if answerable_row(row_cells):
                     skipped["merged"] += 1
+                continue
+            if len(row_cells) != 2:
+                pairs = multi_column_answers(row_cells) if contract == CONTRACT_V2 else []
+                if not pairs:
+                    if answerable_row(row_cells):
+                        skipped["multi_column"] += 1
+                    continue
+                if row.xpath('./w:trPr/w:trHeight[@w:hRule="exact"]'):
+                    fail("A blank answer cell has fixed height and could hide text; use an expanding row.", "overflow_risk")
+                for label, answer_cell in pairs:
+                    cells.append((answer_cell, part))
+                    fields.append({"key": f"cell_{len(cells)-1}", "label": label, "kind": "text",
+                                   "locator": {"cell": len(cells) - 1}})
                 continue
             left, right = row_cells
             label = "".join(left.xpath(".//w:t/text()")).strip()
@@ -161,7 +244,7 @@ def docx_inspect(path):
                     continue
                 if row.xpath('./w:trPr/w:trHeight[@w:hRule="exact"]'):
                     fail("A blank answer cell has fixed height and could hide text; use an expanding row.", "overflow_risk")
-                cells.append(right)
+                cells.append((right, part))
                 fields.append({"key": f"cell_{len(cells)-1}", "label": label, "kind": "text", "locator": {"cell": len(cells)-1}})
     for index, paragraph in enumerate(paragraphs):
         remaining = TOKEN.sub("", paragraph.text)
@@ -177,11 +260,26 @@ def docx_inspect(path):
     if not fields:
         fields = inspect_tabs(path, paragraphs, fail)
     elif answer_tabs_present(paragraphs):
-        # PRECEDENCE, REPORTED. The tab adapter runs only when nothing else matched, so a form
-        # holding both a question/answer table and a labelled underlined section previously
-        # mapped the table and discarded the section without a word. The same section on its
-        # own imports perfectly, which is what makes the silence so misleading.
-        skipped["underlined_tabs"] += 1
+        # PRECEDENCE, NOW RESOLVED RATHER THAN REPORTED. A form holding both a question/answer
+        # table and a labelled underlined section used to map the table and discard the section
+        # without a word — while the same section ALONE imported perfectly. The two contracts are
+        # disjoint by construction (inspect_tabs refuses any tab inside a table cell), so they
+        # compose. Placeholders and tables already coexisted; this brings tabs into the same set.
+        #
+        # ⚠️ NEVER WORSE THAN BEFORE. inspect_tabs REFUSES an ambiguous tab layout, and it is
+        # entitled to: adjacent blanks without separate labels, an unlabelled area with no
+        # heading. Letting that refusal escape would turn a form that imports today into one
+        # that does not. So a refusal falls back to the note this replaced, and the rest of the
+        # form still maps.
+        if contract == CONTRACT_V2:
+            try:
+                tab_fields = inspect_tabs(path, paragraphs, fail)
+            except DocumentFailure:
+                tab_fields = []
+                skipped["underlined_tabs_ambiguous"] += 1
+            fields.extend(tab_fields)
+        else:
+            skipped["underlined_tabs"] += 1
     if not fields:
         # The skipped areas ARE the explanation. Without them this refusal tells a doctor whose
         # form is full of visible blanks that the form contains nothing at all.
@@ -204,6 +302,10 @@ UNMAPPED_NOTES = {
     "underlined_tabs": ("This form also contains labelled underlined answer blanks. They were NOT mapped, because a form "
                         "uses ONE method: placeholders and question/answer tables take precedence. Keep one style "
                         "throughout, or add a {{{{Question name}}}} placeholder on each underlined line."),
+    "underlined_tabs_ambiguous": ("This form also contains underlined answer blanks that could NOT be placed unambiguously, "
+                                  "so they were not mapped; everything else in the form was. Adjacent blanks need their own "
+                                  "label and a separating tab, and a blank with no label needs a section heading above it. "
+                                  "Fix the layout, or add a {{{{Question name}}}} placeholder on each of those lines."),
 }
 
 
@@ -402,6 +504,58 @@ def validate_mapping(fields, mapping, answers):
             fail("An answer contains unsupported control characters.", "invalid_answer")
 
 
+def apply_cell_and_placeholder(document, paragraphs, cells, fields, answers):
+    """Write every non-tab answer into the tree, returning the package parts touched.
+
+    Reverse order matters for placeholders: two tokens in one paragraph share an offset
+    space, so replacing the later span first keeps the earlier one's offsets valid.
+    """
+    changed = set()
+    for field in reversed(fields):
+        answer = answers.get(field["key"], "")
+        locator = field["locator"]
+        if "cell" in locator:
+            cell, part = cells[locator["cell"]]
+            paragraph = Paragraph(cell.findall(qn("w:p"))[0], part)
+            if paragraph.runs:
+                paragraph.runs[0].text = answer
+            else:
+                paragraph.add_run(answer)
+            if answer:
+                changed.add(str(part.partname).lstrip("/"))
+        else:
+            paragraph = paragraphs[locator["paragraph"]]
+            replace_span(paragraph, locator["start"], locator["end"], answer)
+            changed.add(str(paragraph.part.partname).lstrip("/"))
+    return changed
+
+
+def fill_docx(path, output, document, paragraphs, cells, fields, answers):
+    """Fill a DOCX whatever mix of answer shapes its mapping holds.
+
+    The dispatch used to be all-or-nothing on `fields[0]`: one tab field sent the WHOLE
+    mapping to fill_tabs, and otherwise the whole mapping went through python-docx. A mapping
+    holding both — now possible, and the point of this change — could not be filled by either.
+
+    ⚠️ THE TWO WRITERS ALSO SAVE DIFFERENTLY, AND THAT IS NOT INCIDENTAL. fill_tabs copies the
+    ORIGINAL package and substitutes only the parts it touched, so untouched bytes survive
+    exactly; python-docx's save() re-serializes every part. They mutate the same element tree,
+    so a mixed document can use both writers and then the byte-preserving save — but a
+    tab-free document keeps python-docx's save, because changing how EXISTING supported forms
+    are written is not this change's business.
+    """
+    tab_fields = [f for f in fields if "tab_form" in f["locator"]]
+    other_fields = [f for f in fields if "tab_form" not in f["locator"]]
+    if tab_fields and other_fields:
+        changed = apply_cell_and_placeholder(document, paragraphs, cells, other_fields, answers)
+        fill_tabs(path, output, docx_parts(document), tab_fields, answers, also_changed=changed)
+    elif tab_fields:
+        fill_tabs(path, output, docx_parts(document), tab_fields, answers)
+    else:
+        apply_cell_and_placeholder(document, paragraphs, cells, other_fields, answers)
+        document.save(output)
+
+
 def process(workspace, request):
     fmt = request["format"]
     path = workspace / ("input." + fmt)
@@ -425,24 +579,20 @@ def process(workspace, request):
     if request["operation"] != "fill":
         fail("Unsupported operation.")
     answers = request["answers"]
+    if fmt == "docx" and fields != request["mapping"]:
+        # ⚠️ A STORED MAPPING IS BOUND TO THE CONTRACT THAT PRODUCED IT. Mappings saved before
+        # multi-column and mixed support existed hold FEWER fields for the same document, and
+        # validate_mapping compares exactly — so re-inspecting such a template under the current
+        # contract would refuse to export it. Re-read it under the legacy contract instead.
+        # Exact equality is the proof: if the legacy inspection matches the stored mapping
+        # field for field, it IS that mapping's contract, and filling it behaves as it always did.
+        legacy = docx_inspect(path, contract=CONTRACT_V1)
+        if legacy[3] == request["mapping"]:
+            document, paragraphs, cells, fields, _ = legacy
+            result["fields"] = fields
     validate_mapping(fields, request["mapping"], answers)
-    if fmt == "docx" and fields and "tab_form" in fields[0]["locator"]:
-        fill_tabs(path, workspace / "output.docx", docx_parts(document), fields, answers)
-    elif fmt == "docx":
-        for field in reversed(fields):
-            answer = answers.get(field["key"], "")
-            locator = field["locator"]
-            if "cell" in locator:
-                cell = cells[locator["cell"]]
-                elements = cell.findall(qn("w:p"))
-                paragraph = Paragraph(elements[0], document.part)
-                if paragraph.runs:
-                    paragraph.runs[0].text = answer
-                else:
-                    paragraph.add_run(answer)
-            else:
-                replace_span(paragraphs[locator["paragraph"]], locator["start"], locator["end"], answer)
-        document.save(workspace / "output.docx")
+    if fmt == "docx":
+        fill_docx(path, workspace / "output.docx", document, paragraphs, cells, fields, answers)
     else:
         values = {field["key"]: answers.get(field["key"], "") for field in fields}
         for field in fields:
