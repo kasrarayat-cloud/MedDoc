@@ -104,7 +104,7 @@ class PinnedIdentity(unittest.TestCase):
 
 class DeclaredSourceScope(unittest.TestCase):
     def paths(self):
-        return c.RUNTIME_ALLOWED | {c.DECL, c.SCREENSHOTS + '01-overview.jpg',
+        return c.RUNTIME_ALLOWED | {c.DECL, c.RESUME_DECL, c.SCREENSHOTS + '01-overview.jpg',
                                     c.SCREENSHOTS + 'README.md', 'docs/rebuild/admin-console-acceptance.md'}
 
     def test_the_reviewed_combined_diff_is_accepted(self):
@@ -194,8 +194,10 @@ class PreservationComparison(unittest.TestCase):
                                                                     for row in COLUMNS]})):
             with self.subTest(case=name), self.assertRaises(RuntimeError):
                 c.unchanged(BEFORE, after)
+        # A resume baseline is post-migration and legitimate; losing the table never is.
+        c.unchanged(copy.deepcopy(AFTER), copy.deepcopy(AFTER))
         with self.assertRaises(RuntimeError):
-            c.unchanged(dict(copy.deepcopy(BEFORE), new_table_rows=0), copy.deepcopy(AFTER))
+            c.unchanged(copy.deepcopy(AFTER), dict(copy.deepcopy(AFTER), new_table_rows=None))
 
     def test_an_unjudged_snapshot_component_refuses_rather_than_passing_silently(self):
         for shape in (dict(copy.deepcopy(AFTER), extra='unreviewed'),
@@ -404,7 +406,8 @@ class MigrationPhases(unittest.TestCase):
         with self.advanced, patch.object(c.b, 'run') as run, \
              patch.object(c.b, 'management', side_effect=lambda *x: ['management', *x]), \
              patch.object(c.b, 'verify_migration_plan') as plan_check, \
-             patch.object(c.b, 'output', side_effect=[c.PREVIOUS_MIGRATION, 'applied-plan', '1', '1', '0']):
+             patch.object(c.b, 'output', side_effect=[c.PREVIOUS_MIGRATION, 'applied-plan', '1', '1', '0',
+                                                      '1', ','.join(sorted(c.NEW_PERMISSIONS))]):
             c.verify_migrations(self.old, self.advance())
         run.assert_called_once()
         self.assertEqual(run.call_args.args[0], ['management', 'migrate', 'core', c.MIGRATION, '--noinput'])
@@ -415,7 +418,11 @@ class MigrationPhases(unittest.TestCase):
         for values, label in (([('0019_other')], 'frontier already moved'),
                               ([c.PREVIOUS_MIGRATION, 'applied-plan', '2', '1', '0'], 'duplicate history row'),
                               ([c.PREVIOUS_MIGRATION, 'applied-plan', '1', '0', '0'], 'existing history lost'),
-                              ([c.PREVIOUS_MIGRATION, 'applied-plan', '1', '1', '3'], 'new table not empty')):
+                              ([c.PREVIOUS_MIGRATION, 'applied-plan', '1', '1', '3'], 'new table not empty'),
+                              ([c.PREVIOUS_MIGRATION, 'applied-plan', '1', '1', '0', '0',
+                                ','.join(sorted(c.NEW_PERMISSIONS))], 'no ContentType written'),
+                              ([c.PREVIOUS_MIGRATION, 'applied-plan', '1', '1', '0', '1',
+                                'add_servicehealth'], 'permissions incomplete')):
             c.STATE.update(migration_checks=1, migration_performed=False)
             with self.subTest(case=label), self.advanced, patch.object(c.b, 'run'), \
                  patch.object(c.b, 'management', side_effect=lambda *x: ['management', *x]), \
@@ -436,6 +443,184 @@ class MigrationPhases(unittest.TestCase):
                 c.verify_migrations(self.old, plan)
             run.assert_not_called()
             output.assert_not_called()
+
+
+class DeclaredBookkeeping(unittest.TestCase):
+    """A CreateModel migration also writes a ContentType and four permissions."""
+
+    def test_the_row_universes_are_symmetric_so_one_filter_serves_both(self):
+        old = SimpleNamespace(PSQL=['psql'], tables=Mock(return_value=[
+            'auth_permission', 'core_usage', c.NEW_TABLE, 'django_content_type', 'django_migrations']))
+        with patch.object(c.subprocess, 'check_output', return_value=b'{"a": 1}\n') as query:
+            self.assertEqual(sorted(c.rows(old)),
+                             ['auth_permission', 'core_usage', 'django_content_type', 'django_migrations'])
+        statements = {call.args[0][-1].split('FROM "')[1].split('"')[0]: call.args[0][-1]
+                      for call in query.call_args_list}
+        self.assertNotIn(c.NEW_TABLE, ' '.join(statements.values()))
+        self.assertIn("name='" + c.MIGRATION + "'", statements['django_migrations'])
+        self.assertIn("model='" + c.NEW_MODEL + "'", statements['django_content_type'])
+        self.assertIn('content_type_id NOT IN', statements['auth_permission'])
+        self.assertNotIn('WHERE', statements['core_usage'])
+
+    def test_every_bookkeeping_filter_names_the_new_model_and_nothing_wider(self):
+        for table, clause in c.BOOKKEEPING.items():
+            with self.subTest(table=table):
+                self.assertIn(c.NEW_MODEL if table != 'django_migrations' else c.MIGRATION, clause)
+                self.assertTrue(clause.startswith('WHERE'))
+        self.assertEqual(set(c.BOOKKEEPING), {'django_migrations', 'django_content_type', 'auth_permission'})
+        self.assertEqual(sorted(c.NEW_PERMISSIONS),
+                         sorted('%s_%s' % (verb, c.NEW_MODEL) for verb in ('add', 'change', 'delete', 'view')))
+
+    def test_the_added_bookkeeping_must_be_exactly_the_models_own(self):
+        good = ['1', ','.join(sorted(c.NEW_PERMISSIONS))]
+        with patch.object(c.b, 'output', side_effect=list(good)):
+            c.check_new_bookkeeping(SimpleNamespace(PSQL=['psql']))
+        for values, label in ((['0', good[1]], 'no ContentType'), (['2', good[1]], 'two ContentTypes'),
+                              (['1', 'add_servicehealth'], 'a permission missing'),
+                              (['1', good[1] + ',extra_servicehealth'], 'an extra permission')):
+            with self.subTest(case=label), patch.object(c.b, 'output', side_effect=values), \
+                 self.assertRaises(RuntimeError):
+                c.check_new_bookkeeping(SimpleNamespace(PSQL=['psql']))
+
+    def test_the_apply_asserts_the_bookkeeping_before_it_is_believed(self):
+        self.assertIn('check_new_bookkeeping(old)', inspect.getsource(c.verify_migrations))
+        self.assertIn('check_new_bookkeeping(old)', inspect.getsource(c.verify_resume_migrations))
+
+
+class SavedSnapshotComparison(unittest.TestCase):
+    def saved(self, snapshot):
+        return json.loads(json.dumps(snapshot))
+
+    def test_a_json_reloaded_baseline_compares_with_a_live_one(self):
+        c.unchanged_saved_snapshot(self.saved(BEFORE), copy.deepcopy(AFTER))
+        c.unchanged(BEFORE, copy.deepcopy(AFTER))
+
+    def test_normalising_the_wire_shape_does_not_hide_a_real_change(self):
+        for key in ('constraints', 'indexes'):
+            after = copy.deepcopy(AFTER)
+            after[key] = [tuple(['core_usage', 'renamed'] + list(r)[2:]) for r in BEFORE[key]] + after[key][1:]
+            with self.subTest(key=key), self.assertRaises(RuntimeError):
+                c.unchanged_saved_snapshot(self.saved(BEFORE), after)
+        after = copy.deepcopy(AFTER); after['clinical'] = {'finalized': 17, 'encounters': 28}
+        with self.assertRaises(RuntimeError):
+            c.unchanged_saved_snapshot(self.saved(BEFORE), after)
+
+    def test_the_normaliser_preserves_order_inside_a_row(self):
+        """It fixes tuple-vs-list and NOTHING else; two rows with the same fields transposed differ."""
+        self.assertEqual(c.wire(('a', 'b', 'c')), ['a', 'b', 'c'])
+        self.assertNotEqual(c.wire(('a', 'b')), c.wire(('b', 'a')))
+        self.assertEqual(c.wire({'k': ('x', ('y', 'z'))}), {'k': ['x', ['y', 'z']]})
+        self.assertEqual(c.wire(('a', 'b')), c.wire(['a', 'b']))
+        after = copy.deepcopy(AFTER)
+        row = list(BEFORE['constraints'][0])
+        after['constraints'] = [tuple([row[1], row[0]] + row[2:])] + after['constraints'][1:]
+        with self.assertRaises(RuntimeError):
+            c.unchanged_saved_snapshot(self.saved(BEFORE), after)
+
+    def test_reordering_is_a_difference_and_is_never_sorted_away(self):
+        """The normaliser fixes tuple-vs-list ONLY. Sorting would let a reshuffle pass."""
+        for key in ('constraints', 'indexes', 'schema'):
+            after = copy.deepcopy(AFTER)
+            kept = [r for r in after[key] if (r['table_name'] if key == 'schema' else r[0]) != c.NEW_TABLE]
+            new_rows = [r for r in after[key] if (r['table_name'] if key == 'schema' else r[0]) == c.NEW_TABLE]
+            if len(kept) < 2:
+                kept = kept + kept
+            after[key] = list(reversed(kept)) + new_rows
+            with self.subTest(key=key), self.assertRaises(RuntimeError):
+                c.unchanged_saved_snapshot(self.saved(BEFORE), after)
+
+    def test_both_comparators_are_the_same_tolerance(self):
+        self.assertIn('compare(before, after', inspect.getsource(c.unchanged))
+        self.assertIn('compare(before, after', inspect.getsource(c.unchanged_saved_snapshot))
+
+    def test_a_resume_baseline_is_accepted_and_a_disappearance_is_not(self):
+        resumed = copy.deepcopy(AFTER)
+        c.unchanged(resumed, copy.deepcopy(AFTER))
+        with self.assertRaises(RuntimeError):
+            c.unchanged(resumed, copy.deepcopy(BEFORE))
+
+
+class ForwardRepair(unittest.TestCase):
+    def failed(self, **over):
+        base = {'complete': False, 'target': c.FAILED_TARGET, 'baseline': c.BASELINE,
+                'served_before': c.RUNNING_RELEASE, 'stage': 'advance_stopped_source_ff_only',
+                'failure_kind': 'RuntimeError', 'failure_services_stopped': True,
+                'provider_calls': 0, 'migration_performed': True, 'declared_migration': c.MIGRATION,
+                'state_directory': str(c.EVIDENCE / ('activation-state-' + c.FAILED_TARGET[:12]))}
+        base.update(over)
+        return json.dumps(base).encode()
+
+    def test_only_the_exact_pinned_failure_is_resumable(self):
+        data = self.failed()
+        with patch.object(c, 'FAILED_RECEIPT_SHA256', c.sha(data)):
+            c.validate_failed_receipt(data)
+            for over, label in (({'complete': True}, 'a completed act'),
+                                ({'stage': 'collect_and_install_source_bound_public_assets'}, 'a later stage'),
+                                ({'migration_performed': False}, 'no migration applied'),
+                                ({'provider_calls': 1}, 'a provider call'),
+                                ({'failure_services_stopped': False}, 'services left running'),
+                                ({'target': 'b' * 40}, 'another target'),
+                                ({'static_transition': {}}, 'assets already moved'),
+                                ({'state_directory': '/tmp/elsewhere'}, 'a moved state directory')):
+                bad = self.failed(**over)
+                with self.subTest(case=label), patch.object(c, 'FAILED_RECEIPT_SHA256', c.sha(bad)), \
+                     self.assertRaises(RuntimeError):
+                    c.validate_failed_receipt(bad)
+        with self.assertRaises(RuntimeError):
+            c.validate_failed_receipt(data)          # the content pin itself
+
+    def resume_source(self, changed, head=None, origin=None, dirty=''):
+        """Drive verify_resume_source for real, with only the repository answers stubbed."""
+        target = 'c' * 40
+        answers = {('rev-parse', 'HEAD'): head or c.FAILED_TARGET,
+                   ('rev-parse', 'origin/main'): origin or target,
+                   ('branch', '--show-current'): 'main',
+                   ('status', '--porcelain', '--untracked-files=no'): dirty,
+                   ('diff', '--name-only', c.FAILED_TARGET, target): '\n'.join(sorted(changed))}
+        blobs = {c.SELF: (ROOT / c.SELF).read_bytes(), c.DRIVER: (ROOT / c.DRIVER).read_bytes()}
+        with patch.object(c.b, 'git', side_effect=lambda *a: answers[a]), \
+             patch.object(c.b, 'output', return_value=''), patch.object(c.b, 'run'), \
+             patch.object(c.b, 'blob', side_effect=lambda _sha, path: blobs[path]):
+            return c.verify_resume_source(target)
+
+    def test_the_repair_may_change_only_three_paths(self):
+        """Behavioural, not a source grep: a disabling prefix leaves the text intact."""
+        self.assertEqual(c.RESUME_PATHS, {c.SELF, c.OPS_TEST, c.RESUME_DECL})
+        self.assertEqual(self.resume_source(c.RESUME_PATHS), c.RESUME_PATHS)
+        for bad, label in ((c.RESUME_PATHS | {'rebuild/core/views.py'}, 'an application file'),
+                           (c.RESUME_PATHS | {'rebuild/core/migrations/0019_x.py'}, 'another migration'),
+                           (c.RESUME_PATHS | {'rebuild/static/app.css'}, 'a public asset'),
+                           (c.RESUME_PATHS - {c.RESUME_DECL}, 'no repair declaration'),
+                           (c.RESUME_PATHS - {c.SELF}, 'no activator change')):
+            with self.subTest(case=label), self.assertRaises(RuntimeError):
+                self.resume_source(bad)
+
+    def test_the_repair_refuses_a_moved_shared_tree(self):
+        for over, label in (({'head': 'd' * 40}, 'shared main no longer at the failed target'),
+                            ({'origin': 'e' * 40}, 'origin/main is not the repair target'),
+                            ({'dirty': ' M rebuild/core/views.py'}, 'shared tree dirty')):
+            with self.subTest(case=label), self.assertRaises(RuntimeError):
+                self.resume_source(c.RESUME_PATHS, **over)
+
+    def test_the_repair_never_replays_the_migration_and_keeps_every_gate(self):
+        source = inspect.getsource(c.resume_failed)
+        self.assertNotIn("management('migrate'", source)
+        self.assertIn('verify_resume_migrations', source)
+        self.assertIn('scripts/check-citation.sh', source)
+        self.assertIn('scripts/check-cotenants.sh', source)
+        self.assertIn("declaration == SOURCE / RESUME_DECL", source)
+        self.assertIn('unchanged_saved_snapshot', source)
+        self.assertIn("len(old.tables()) == 36", source)
+        self.assertLess(source.index('if not args.execute'), source.index('create_static_stage'))
+        self.assertLess(source.index('create_static_stage'), source.index('replace_environment'))
+        self.assertLess(source.index('replace_environment'), source.index("systemd('start'"))
+
+    def test_the_resume_refuses_a_still_running_original_and_a_used_result_path(self):
+        source = inspect.getsource(c.resume_failed)
+        self.assertIn('os.kill(lock_value', source)
+        self.assertIn('Original activation process is still present', source)
+        self.assertIn('not any(p.exists() or p.is_symlink() for p in (result_path, state))', source)
+        self.assertIn("lock_value.get('target') == FAILED_TARGET", source)
 
 
 class ReceiptHonesty(unittest.TestCase):
