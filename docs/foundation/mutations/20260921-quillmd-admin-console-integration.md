@@ -13,9 +13,14 @@ The owner delegated this routine integration decision. No product question is re
 ## Measured prerequisites
 
 - Shared repository `main` and served doctor/admin/worker are **not** the same revision, and
-  that is expected: `main` is `06d095b2ce9a73f3764eed733319117e1ad456c8` (PR #1252, exact-merge
-  CI 2 of 2) while the served release is **`e66d84abbb4cda663dc4489d175c71d477572fca`**. The
-  baseline this activation moves *from* is the served release.
+  that is expected: at the time this is written `main` is
+  `06d095b2ce9a73f3764eed733319117e1ad456c8` (PR #1252) while the served release is
+  **`e66d84abbb4cda663dc4489d175c71d477572fca`**. The baseline this activation moves *from* is
+  the served release, read from the running surfaces rather than from `main`. The **target** is
+  the merge commit of PR #1251, which contains `06d095b2` — so this one act installs both
+  candidates, and the served release advances by two merges rather than one.
+- The activator refuses any target that is not a merged pull request's own merge commit on
+  `main`, and refuses to run from anywhere but the clean reviewed worktree.
 - Stop if a concurrent source or release change requires inspection.
 - Recovery point, read from QuillMD's own receipts and **not** inherited from a prior report:
   local encrypted capture of `quillmd_fresh` **complete 2026-09-21T04:31:03Z**
@@ -31,6 +36,29 @@ The owner delegated this routine integration decision. No product question is re
 Application code, templates, one new additive migration and **both** public static assets.
 No dependency, SDK, service-unit, privilege, billing-policy, backup-policy or provider change.
 No provider, payment, email, backup, B2 or renewal call is made by the activator.
+
+The diff also carries the act's own two files — `scripts/activate-admin-console.py` and its
+guards in `rebuild/ops/test_admin_console_activation.py`. They are named here because the
+activator's allowlist is exhaustive: a path that is not declared refuses the activation, so the
+instrument has to declare itself.
+
+### The one door
+
+    bash scripts/run-ruled-mutation.sh --declaration docs/foundation/mutations/20260921-quillmd-admin-console-integration.md \
+      -- .venv/bin/python scripts/activate-admin-console.py --target <merge-sha> \
+         --backup-report <retained restore proof> --result <receipt> --execute
+
+`activate-admin-console.py` is a thin adapter: it pins `scripts/activate-typed-voice.py` by
+sha256, which already owns the public-asset transition, and adds exactly two things — the
+declared migration, and a preservation comparison that tolerates that migration and nothing
+else. **Default is read-only**; `--execute` is opt-in. Fifteen mutations of its guards were
+each applied and each caught before this was written.
+
+Two honesty repairs are made to the inherited receipt, because the inherited act is code-only
+and this one is not: `migration_performed` reports what actually happened rather than the
+inherited constant `False`, and the inherited claim
+`existing_schema_indexes_constraints_catalog_unchanged` is replaced by the narrower
+`…_apart_from_declared_new_table`. A receipt that overstates preservation is worse than none.
 
 ### Schema — the expected delta, written before the act
 
