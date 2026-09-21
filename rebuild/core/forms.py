@@ -21,7 +21,12 @@ class ScopedForm(forms.Form):
 class UploadForm(ScopedForm):
     name=forms.CharField(max_length=140)
     department=forms.ModelChoiceField(queryset=Department.objects.none())
-    file=forms.FileField(label='Original Word (.docx) or fillable PDF form')
+    # `accept` narrows the OS picker to the two formats the adapter supports, so an
+    # unsupported file is not chosen, uploaded and only then refused. It is a convenience,
+    # never a check: the suffix test and the adapter's own validation still decide.
+    file=forms.FileField(label='Original Word (.docx) or fillable PDF form',
+                         help_text='A blank form. Word .docx or a fillable PDF, up to 10 MB. Password-protected files, macros and active content are refused.',
+                         widget=forms.ClearableFileInput(attrs={'accept':'.docx,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf'}))
     synthetic_only=forms.BooleanField(label='This is a blank form with no patient data.')
 class MappingForm(forms.Form):
     labels=forms.JSONField(label='Field labels',help_text='JSON object mapping field keys to question labels. Locations cannot be changed; saving creates a new version.')

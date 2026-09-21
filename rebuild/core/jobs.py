@@ -213,7 +213,15 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     fingerprint=hashlib.sha256(private_path(input_path).read_bytes()).hexdigest() if kind=='transcription' else str(e.revision)
     key=f'{kind}:{e.pk}:{fingerprint}'
     old=Job.objects.filter(request_key=key).first()
-    if old: return old
+    # Idempotency is the point: the same revision, or the same audio bytes, must never buy a
+    # second provider call. But the CALLER has to be able to tell, because a generation does not
+    # renumber the revision, so a stale page's re-POST lands here holding a key a SUCCEEDED job
+    # still owns. Announcing that as "queued" tells the doctor a request was made that was not,
+    # and invites them to wait for answers that will never change. Not persisted; a per-instance
+    # fact about THIS call, never about the row.
+    if old:
+        old.reused=True
+        return old
     if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists(): raise ValidationError('This encounter already has a pending job.')
     config=dict(config or generation.configuration())
     if kind=='transcription':
@@ -252,6 +260,7 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
         if streams.isdigit() and int(streams)>1: raise ValidationError(AMBIGUOUS_STREAMS.format(count=int(streams)))
         if streams.isdigit() and int(streams)==0: raise ValidationError(NO_AUDIO_TRACK)
     job=Job.objects.create(encounter=e,user=user,kind=kind,revision=e.revision,request_key=key,input_path=input_path,config=config)
+    job.reused=False
     if kind=='transcription':
         reserve(job,charge_limit=charge_limit)
     else:
