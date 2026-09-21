@@ -6,11 +6,19 @@ twice. That behaviour is correct and is NOT changed here.
 
 What was wrong is what the doctor is TOLD. A successful generation does not bump
 `Encounter.revision` (only a notes save, an answer save or a transcript append does), so the
-succeeded job keeps holding `generation:<pk>:<revision>`. A re-POST from a stale page —
-browser Back, or a second tab — therefore returns that old job while the view reports
-"Generation queued. Refresh this page to view the result." Nothing was queued, nothing new
-will appear, and where the page also says "charged separately at provider usage x 1.5" the
-billing disclosure is false too.
+succeeded job keeps holding `generation:<pk>:<revision>`. A re-POST from a stale page
+therefore returns that old job while the view reports "Generation queued. Refresh this page
+to view the result." Nothing was queued, nothing new will appear, and where the page also
+says "charged separately at provider usage x 1.5" the billing disclosure is false too.
+
+⚠️ WHICH STALE PAGE, MEASURED RATHER THAN ASSUMED. An earlier description of this defect said
+"browser Back, or a second tab". Only the second tab is right. Every response carries
+`Cache-Control: no-store, private`, which disables the back/forward cache, so Back RE-FETCHES
+and the generate form is absent once answers exist (verified in Chromium against the
+candidate: button count 0 after the job succeeds). The reachable route is a SECOND TAB opened
+before generating, which still holds a live form — exercised end to end in
+`.runtime/word-forms-doctor-20260921/candidate-walk.mjs`, step "repeat generation from a
+second tab". The server-side behaviour proven below is what makes either route safe.
 
 Isolated synthetic DB. No provider request is made by these tests.
 """
