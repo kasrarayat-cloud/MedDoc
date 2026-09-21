@@ -258,7 +258,13 @@ def docx_inspect(path, contract=CONTRACT):
             label = "".join(left.xpath(".//w:t/text()")).strip()
             contents = "".join(right.xpath(".//w:t/text()")).strip()
             if label and not contents:
-                if right.xpath(".//w:drawing | .//w:pict | .//w:br"):
+                # ⚠️ THE THIRD READER, AND IT WAS LEFT BEHIND. `cell_occupied`'s docstring says
+                # "ONE predicate, because the two readers disagreeing is the failure" — and this
+                # one, the SHIPPED MAJORITY PATH, still enumerated three tags. Measured on
+                # `Consent obtained | ☑`: the ticked Wingdings box has no `w:t`, so `contents` is
+                # empty, the row mapped, and `Run.text` DELETED the symbol from the exported
+                # document. Pre-existing, and the one line that makes the docstring true.
+                if not usable_answer_cell(right):
                     skipped["answer_cell_contents"] += 1
                     continue
                 if row.xpath('./w:trPr/w:trHeight[@w:hRule="exact"]'):
@@ -341,7 +347,7 @@ def duplicate_label_note(fields):
     mapping-review screen, which is where a person can settle it in seconds.
 
     ⚠️ A WARNING AND NOT A FIELD KEY. `validate_mapping` compares the stored mapping against
-    a fresh inspection with `fields != mapping`, so adding anything to the field dict would
+    a fresh inspection with `fields != mapping (⚠️ SUPERSEDED: `validate_mapping` now compares STRUCTURE — key, kind, locator and the rest — and excludes only `label`, which the mapping-review rename gate owns instead.)`, so adding anything to the field dict would
     refuse every mapping version already saved — measured, not assumed.
     """
     counts = Counter((field.get("label") or "").strip() for field in fields)

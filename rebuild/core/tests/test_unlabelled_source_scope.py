@@ -273,6 +273,26 @@ class TheTwoSignatureLabelSetsAgree(TestCase):
     asserted rather than assumed — a second copy drifts from the first the day either moves.
     """
 
+    def test_the_two_copies_of_the_trailing_punctuation_are_character_identical(self):
+        """⚠️ ONE RULE, TWO READERS — and they had already drifted.
+
+        `documents/tab_form.py` cannot import from `core` (it runs in the sandboxed adapter), so
+        the normalisation is written twice. The copies diverged on `,` and `;`, and the
+        agreement test above only checks inspector -> review rule, which cannot see it.
+        """
+        import re as _re
+        from core import tab_review
+        from documents import tab_form
+        review = _re.search(r"TRAILING = '([^']*)'", pathlib.Path(tab_review.__file__).read_text())
+        # Anchored on the NORMALISATION line, not on any `rstrip`: the first `rstrip` in that
+        # file is the inline-label colon strip, and matching it made this test compare `:` to
+        # the full set and fail for the wrong reason.
+        inspector = _re.search(r"normalized = .*\.rstrip\('([^']*)'\)",
+                               pathlib.Path(tab_form.__file__).read_text())
+        self.assertIsNotNone(review, 'the review rule no longer names a TRAILING set; re-read it')
+        self.assertIsNotNone(inspector, 'the inspector no longer strips a set; re-read it')
+        self.assertEqual(sorted(review.group(1)), sorted(inspector.group(1)))
+
     def test_every_label_the_inspector_marks_is_also_recognised_by_the_review_rule(self):
         from core.tab_review import signature_label
         from documents import tab_form

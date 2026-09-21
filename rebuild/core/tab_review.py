@@ -9,6 +9,8 @@ from django.core.exceptions import ValidationError
 #: Trailing punctuation a form author may type after a question. Stripped as one class rather
 #: than in a fixed order: `rstrip(':')` then `strip()` handled `'Electronically signed by :'`,
 #: and nothing handled a FULL-WIDTH colon or a trailing period. Both were measured unprotected.
+#: ⚠️ KEPT CHARACTER-FOR-CHARACTER IN STEP WITH `documents/tab_form.py`'s copy. The two
+#: diverged on `,` and `;`, and the agreement test only checked one direction.
 TRAILING = ':：.,;· \t'
 
 _ROLE = r"(?:physician|provider|surgeon|clinician|attending|resident|doctor|md|do|np|pa|author)"
@@ -32,9 +34,22 @@ NOT_THE_CLINICIAN = re.compile(
     r'\b(?:patient|witness|guardian|parent|interpreter|relative|family|next of kin|carer)\b')
 
 
+#: ⚠️ THE QUALIFIER ARM IS CONTENT-BLIND, AND THAT REOPENED THE BOUND THIS FILE CLAIMS.
+#: `(?: ?\([^)]*\))?` accepts any parenthetical, so `Signature (date)` and
+#: `Signature (date and time)` matched and would have demanded the finalizer's own name in a
+#: DATE question — the exact false-refusal class the declaration says it bounded, arriving by
+#: another spelling. Checked on the parenthetical ALONE, deliberately: a blanket date test would
+#: also reject `Signature/Date`, which IS a signature line and is correctly recognised.
+QUALIFIER = re.compile(r'\(([^)]*)\)')
+DATE_QUESTION = re.compile(r'\b(?:date|dated|time|day)\b')
+
+
 def signature_label(label):
     text = re.sub(r'\s+', ' ', str(label or '')).strip().rstrip(TRAILING).strip().casefold()
     if NOT_THE_CLINICIAN.search(text):
+        return False
+    inner = QUALIFIER.search(text)
+    if inner and DATE_QUESTION.search(inner.group(1)):
         return False
     return any(pattern.fullmatch(text) for pattern in SIGNATURE_PATTERNS)
 

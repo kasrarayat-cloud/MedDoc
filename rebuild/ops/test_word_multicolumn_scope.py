@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 SELF = 'rebuild/ops/test_word_multicolumn_scope.py'
 DECLARATION = 'docs/foundation/mutations/20260921-quillmd-word-multicolumn-mixed.md'
-DECLARATION_SHA256 = '9c74be38c02bd5b8439863715af2dab9dc8e6ddd6bab94b3409adad9bf3018f7'
+DECLARATION_SHA256 = 'a17fe11c81d798deaeec7364d25c3290f9993d1580e1344887cb5f926870a0f3'
 MARKER = '<!-- declared-source-scope -->'
 
 #: The baseline this candidate is rebased onto: the source revision Tab 2 published as healthy
@@ -32,7 +32,7 @@ MARKER = '<!-- declared-source-scope -->'
 BASELINE = '875ee6e2a0836c37fcb293c228664186c1106291'
 
 #: Exact, because a count that tracks the file cannot detect an accidental edit to the file.
-DECLARED_COUNT = 15
+DECLARED_COUNT = 16
 
 #: ⚠️ THE ONLY PLACES A DECLARED PATH MAY LIVE. This was a BLACKLIST that named
 #: `rebuild/ops/` — and this repository keeps `scripts/activate-admin-console.py` (the very
@@ -265,10 +265,20 @@ class DeclaredSourceScope(unittest.TestCase):
         is the WRONG answer on one that does. Only this test can tell the two apart, so it is
         the one that must be read when the module reports OK.
         """
+        # ⚠️ CANNOT-TELL AND NOT-THE-CANDIDATE ARE DIFFERENT ANSWERS, and this control used to
+        # give both of them a skip — fail-OPEN, the very shape this module was rewritten to
+        # close. If git cannot resolve the baseline, the checkout cannot answer the question at
+        # all and that is a FAILURE, not an honest skip.
+        self.assertIsNotNone(git('rev-parse', '--verify', BASELINE + '^{commit}'),
+                             'the declared baseline is unreachable; this checkout cannot judge '
+                             'the declaration, so it must not report OK')
         tip, changed = locate_candidate()
         if tip is None:
-            self.skipTest('No tip in this checkout adds the declaration; this is not the candidate.')
-        self.assertTrue(changed, 'the candidate was located but its change set is empty')
+            self.skipTest('The baseline resolves but no tip adds the declaration; this checkout '
+                          'genuinely does not carry the candidate.')
+        # Not `assertTrue(changed)`, which was true by construction: REQUIRED is seven paths and
+        # only the declaration itself is guaranteed by the locator.
+        self.assertLessEqual(REQUIRED, changed)
 
     def test_the_declaration_matches_this_candidates_real_change_exactly(self):
         declared = declared_paths()

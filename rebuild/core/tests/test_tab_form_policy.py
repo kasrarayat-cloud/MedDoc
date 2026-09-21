@@ -65,6 +65,26 @@ class TabIdentityPolicyTests(SimpleTestCase):
         with self.assertRaises(ValidationError):
             validate_identity(fields,{'old':{'text':'Legacy reviewed text'}},self.actor)
 
+    def test_a_parenthetical_that_makes_it_a_date_question_is_not_a_signature(self):
+        """⚠️ THE DECLARED BOUND WAS REACHABLE BY ANOTHER SPELLING.
+
+        The qualifier arm `( ?\([^)]*\))?` is content-blind, so `Signature (date)` and
+        `Signature (date and time)` matched and would have demanded the finalizing clinician's
+        own name in a DATE question — exactly the false refusal the declaration says it bounded.
+        """
+        for label in ('Signature (date)', 'Signature (date and time)', 'Signature (Date)'):
+            with self.subTest(label=label):
+                fields=[{'key':'old','label':label,'locator':{'paragraph':0}}]
+                validate_identity(fields,{'old':{'text':'12/09/2026'}},self.actor)
+
+    def test_the_signature_lines_it_must_still_recognise_are_untouched(self):
+        """The control on that narrowing: a date WORD alone must not disarm the guard."""
+        for label in ('Signature/Date', 'Signature (print name)', 'Electronically signed by'):
+            with self.subTest(label=label):
+                fields=[{'key':'old','label':label,'locator':{'paragraph':0}}]
+                with self.assertRaises(ValidationError):
+                    validate_identity(fields,{'old':{'text':'Somebody Else'}},self.actor)
+
     def test_a_signature_that_is_explicitly_somebody_elses_is_not_the_finalizers(self):
         """The false-refusal control on the same widening."""
         for label in ('Patient signature','Signed by (witness)','Guardian signature',

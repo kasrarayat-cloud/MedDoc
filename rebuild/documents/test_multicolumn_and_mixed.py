@@ -16,6 +16,7 @@ Fixtures are authored here so the suite is self-contained. Synthetic only.
 """
 
 from pathlib import Path
+import hashlib
 import re
 import tempfile
 import unittest
@@ -322,7 +323,7 @@ class FillBehaviour(Base):
 class ContractCompatibility(Base):
     """A mapping saved before this change must still export, unchanged.
 
-    `validate_mapping` compares `fields != mapping` exactly, so a document that now yields MORE
+    `validate_mapping` compares `fields != mapping (⚠️ SUPERSEDED: `validate_mapping` now compares STRUCTURE — key, kind, locator and the rest — and excludes only `label`, which the mapping-review rename gate owns instead.)` exactly, so a document that now yields MORE
     fields would refuse its own stored mapping. Filling re-reads under the legacy contract when
     the current one does not match, and exact equality is the proof that it is the right one.
     """
@@ -381,9 +382,6 @@ class OwnerFormUnchanged(unittest.TestCase):
             self.assertEqual(summary["filled"], 24)
             self.assertEqual(summary["missing"], [])
 
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class LegacyMappingSurvivesAContractOnlyRefusal(Base):
@@ -481,3 +479,106 @@ class TheOtherWritersPartsSurvive(Base):
         self.assertIn(cell_answer, header_xml,
                       "the header answer was written back as original bytes")
         self.assertIn(tab_answer, body_xml)
+
+
+class AcceptanceForIntegration(Base):
+    """The integration lead's own acceptance, added at merge time.
+
+    Each of these is an acceptance criterion the candidate's documentation ASSERTED and that no
+    test in the branch actually measured. A claim with no check is the thing this programme
+    keeps finding, so they are checks now.
+    """
+
+    #: The owner's form filled with a fixed answer per field. A CONTENT digest over the zip
+    #: entries, not the file bytes — a .docx carries a timestamp, and hashing raw bytes produced
+    #: a false "not byte-identical" for one reviewer, which was withdrawn.
+    OWNER_FILLED_CONTENT_SHA256 = 'd7b0ef52b309d90c82d0999404fc674b42e135c56594a4b867b82c874d79f71a'
+
+    @staticmethod
+    def content_digest(path):
+        with ZipFile(path) as package:
+            return hashlib.sha256(b''.join(
+                name.encode() + package.read(name) for name in sorted(package.namelist()))).hexdigest()
+
+    def test_the_owner_form_fills_to_exactly_the_same_bytes(self):
+        fields = inspect_template(str(OWNER_FORM))["fields"]
+        self.assertEqual(len(fields), 24)
+        self.assertEqual(sum(len(f["locator"]["tab_form"]["anchors"]) for f in fields), 28)
+        answers = {f["key"]: "ANSWER-%03d" % i for i, f in enumerate(fields)}
+        first = str(Path(self.directory.name) / "owner-one.docx")
+        second = str(Path(self.directory.name) / "owner-two.docx")
+        fill_template(str(OWNER_FORM), fields, answers, first)
+        fill_template(str(OWNER_FORM), fields, answers, second)
+        self.assertEqual(self.content_digest(first), self.OWNER_FILLED_CONTENT_SHA256)
+        # The determinism control: a digest that moved between two runs of the SAME code could
+        # never have been pinned, and the equality above would mean nothing.
+        self.assertEqual(self.content_digest(first), self.content_digest(second))
+
+    def test_a_ticked_checkbox_in_a_two_column_row_is_preserved_and_reported(self):
+        """The SHIPPED MAJORITY PATH, and it was the one reader not converted.
+
+        Measured before the repair: `Consent obtained | [ticked]` mapped, and the `Run.text`
+        assignment DELETED the Wingdings symbol from the exported document — a consent box a
+        clinician had ticked, gone from the record being finalized.
+        """
+        document = Document()
+        table = document.add_table(rows=1, cols=2)
+        table.rows[0].cells[0].text = "Consent obtained"
+        run = table.rows[0].cells[1].paragraphs[0].add_run()
+        symbol = OxmlElement("w:sym")
+        symbol.set(qn("w:font"), "Wingdings")
+        symbol.set(qn("w:char"), "F0FE")
+        run._r.append(symbol)
+        document.add_paragraph("PLAN: {{Plan}}")
+        path = self.save(document, "ticked-two-column.docx")
+
+        result = inspect_template(path)
+        self.assertEqual([f["label"] for f in result["fields"]], ["Plan"],
+                         "the occupied answer cell must not be offered as a question")
+        self.assertTrue([w for w in result["warnings"] if "NOT mapped" in w],
+                        "and it must be reported, not silently dropped")
+        out, _summary, _answers = self.fill(path, "ticked-two-column-out.docx")
+        with ZipFile(out) as package:
+            body = package.read("word/document.xml").decode()
+        self.assertIn("w:sym", body, "the ticked checkbox was erased from the export")
+
+    def test_a_stored_mapping_places_its_answer_in_its_own_cell_not_a_renumbered_one(self):
+        """The clinical hazard behind the finalize change, at the layer that can be measured.
+
+        `cell_N` is a running counter, so a template mapped before multi-column support yields
+        FEWER fields and the same key names a DIFFERENT cell under a fresh inspection. The
+        measured case put an allergy answer into a height blank of a finalized document.
+        """
+        document = Document()
+        grid(document, [["Height", "", "Weight", ""]], 4)
+        two = document.add_table(rows=1, cols=2)
+        two.rows[0].cells[0].text = "Allergies"
+        path = self.save(document, "renumbered.docx")
+
+        stored = docx_inspect(Path(path), contract=CONTRACT_V1)[3]
+        self.assertEqual([f["label"] for f in stored], ["Allergies"])
+        fresh = inspect_template(path)["fields"]
+        self.assertEqual([f["label"] for f in fresh], ["Height", "Weight", "Allergies"],
+                         "the fixture must actually renumber, or this proves nothing")
+        # ⚠️ THE LOCATORS COMPARE EQUAL, AND THAT IS THE HAZARD ITSELF. `cell_N` is a running
+        # counter, so both mappings say `{"cell": 0}` while index 0 denotes a DIFFERENT physical
+        # cell under each contract. Nothing in the dict distinguishes them; only the label does.
+        self.assertEqual(stored[0]["locator"], fresh[0]["locator"])
+        self.assertNotEqual(stored[0]["label"], fresh[0]["label"],
+                            "the fixture must renumber, or this proves nothing")
+
+        out, summary, _ = self.fill(path, "renumbered-out.docx",
+                                    answers={stored[0]["key"]: "Penicillin - anaphylaxis"},
+                                    fields=stored)
+        self.assertEqual(summary["filled"], 1)
+        with ZipFile(out) as package:
+            body = package.read("word/document.xml").decode()
+        allergy, height = body.index("Allergies"), body.index("Height")
+        answer = body.index("Penicillin - anaphylaxis")
+        self.assertGreater(answer, allergy, "the answer landed before the question it belongs to")
+        self.assertLess(abs(answer - allergy), abs(answer - height),
+                        "the answer sits nearer the Height blank than the Allergies blank")
+
+
+if __name__ == "__main__":
+    unittest.main()

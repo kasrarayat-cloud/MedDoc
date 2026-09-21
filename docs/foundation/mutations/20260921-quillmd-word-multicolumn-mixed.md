@@ -28,12 +28,13 @@ protected classes on its own account.
 
 ## The declared source scope
 
-Fifteen files. Exhaustive — anything not named here is not part of this candidate.
+Sixteen files. Exhaustive — anything not named here is not part of this candidate.
 
 <!-- declared-source-scope -->
 
 ```text
 docs/foundation/mutations/20260921-quillmd-word-multicolumn-mixed.md
+rebuild/core/field_location.py
 rebuild/core/generation.py
 rebuild/core/tab_review.py
 rebuild/core/tests/test_mapping_review_clarity.py
@@ -120,6 +121,37 @@ any signature the label marks as somebody else's: `Patient signature`, `Signed b
 **What is not known, and is not guessed:** how many stored encounters carry such a label. That
 needs a read of the live database, which this candidate does not touch and which is Tab 2's to
 perform during coordinated integration. The blast radius is stated as a predicate, not a count.
+
+## Integration acceptance — six further repairs, 2026-09-21
+
+Reviewed at merge time by the integration lead against the owner's acceptance list. Six defects
+were reproduced by measurement and repaired here; all six were in this candidate or in the path
+it touches.
+
+| # | defect | evidence |
+|---|---|---|
+| 1 | **the two-column mapper erased a ticked checkbox** — the SHIPPED MAJORITY PATH still enumerated three tags while `cell_occupied`'s own docstring claimed one shared predicate. Measured: `Consent obtained \| ☑` mapped and the symbol was deleted from the export | now uses `usable_answer_cell`; the row is reported instead |
+| 2 | **`Signature (date)` and `Signature (date and time)` were treated as clinician-signature fields** — the declared false-refusal bound, reachable by another spelling, because the qualifier arm is content-blind | the parenthetical alone is checked; `Signature/Date` stays recognised |
+| 3 | the two copies of the trailing-punctuation set had **diverged on `,` and `;`** | aligned, and asserted character-for-character in both directions |
+| 4 | four docstrings still asserted the superseded `fields != mapping` rule | annotated as superseded |
+| 5 | `if __name__ == "__main__"` sat **before** two test classes, so a direct run skipped them silently | moved to the end |
+| 6 | the declaration instrument's anti-vacuous control was **fail-OPEN on cannot-tell** and tautological | an unreachable baseline now FAILS; the assertion is `REQUIRED <= changed` |
+
+**And three acceptance claims had no check.** The declaration asserted the owner's form "exports
+byte-identically" and legacy mappings "fill byte-identically", while the tests asserted counts.
+`AcceptanceForIntegration` now pins a **content digest** over the zip entries (not file bytes — a
+`.docx` carries a timestamp, which produced a withdrawn false finding once), with a determinism
+control, plus the ticked-checkbox regression and a placement regression for the renumbered-cell
+hazard behind the finalize change.
+
+## Measured signature impact on the live database
+
+Read-only aggregate, counts only, no label or name printed: **227 fields, 23 template versions,
+28 encounters. Identity fields before: 3. After: 3. Newly covered: 0. Coverage lost: 0.**
+**Zero stored encounters need a clinician decision they did not already need.** The three
+signature-bearing versions carry 1 draft, 2 review and 5 finalized encounters, and all three were
+already protected by `answer_policy`. A positive control over synthetic fields moved three
+verdicts, so the zero is a measurement and not a broken instrument.
 
 ## Activation conditions
 

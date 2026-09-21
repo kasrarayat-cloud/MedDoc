@@ -5,7 +5,7 @@ ever set `location`, so the "Location" column showed the literal word "text" on 
 on the one screen whose stated purpose is "Review where each answer belongs."
 
 The description is display-only on purpose: `documents.engine.validate_mapping` compares the
-stored field list against a fresh inspection with `fields != mapping`, so adding a key to the
+stored field list against a fresh inspection with `fields != mapping (⚠️ SUPERSEDED: `validate_mapping` now compares STRUCTURE — key, kind, locator and the rest — and excludes only `label`, which the mapping-review rename gate owns instead.)`, so adding a key to the
 field dict would invalidate every mapping version already saved.
 
 Isolated synthetic DB; no provider request.
