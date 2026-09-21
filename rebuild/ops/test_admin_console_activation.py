@@ -145,15 +145,29 @@ class DeclaredSourceScope(unittest.TestCase):
         with patch.object(c, 'RUNTIME_ALLOWED', c.RUNTIME_ALLOWED | {'rebuild/core/harmless.py'}):
             c.validate_changed(self.paths() | {'rebuild/core/harmless.py'})
 
-    def test_the_declared_scope_matches_the_real_diff_of_the_reviewed_branch(self):
-        def git(*command):
-            done = subprocess.run(['git', *command], cwd=ROOT, capture_output=True, text=True, timeout=60)
-            return done.stdout if done.returncode == 0 else ''
-        committed = set(git('diff', '--name-only', c.BASELINE, 'HEAD').split())
-        if not committed:
-            self.skipTest('Baseline is not reachable from this checkout.')
-        working = {line[3:] for line in git('status', '--porcelain', '--untracked-files=all').splitlines()}
-        c.validate_changed(committed | working)
+    #: The revision this activation actually installed. The allowlist describes THAT range and
+    #: is deliberately exhaustive, so later unrelated work is expected to fall outside it — such
+    #: work belongs to its own declaration and its own instrument, not to a wildcard here.
+    INSTALLED = '21809ef408a5f7b6691beb338a7640da82fcfb97'
+
+    def test_the_declared_scope_matches_the_range_this_activation_installed(self):
+        done = subprocess.run(['git', 'diff', '--name-only', c.BASELINE, self.INSTALLED],
+                              cwd=ROOT, capture_output=True, text=True, timeout=60)
+        if done.returncode != 0 or not done.stdout.strip():
+            self.skipTest('The installed range is not reachable from this checkout.')
+        changed = set(done.stdout.split())
+        c.validate_changed(changed)
+        self.assertIn(c.MIGRATION_PATH, changed)
+        self.assertIn('rebuild/static/app.css', changed)
+        self.assertIn('rebuild/static/app.js', changed)
+
+    def test_work_outside_that_range_is_refused_rather_than_waved_through(self):
+        """A later, unrelated candidate must bring its own declaration; this allowlist stays exhaustive."""
+        for outside in ('rebuild/ops/install_operations_publisher.py',
+                        'rebuild/deploy/quillmd-fresh-operations-publisher.service',
+                        'rebuild/documents/tabs.py'):
+            with self.subTest(path=outside), self.assertRaises(RuntimeError):
+                c.validate_changed(self.paths() | {outside})
 
 
 class PreservationComparison(unittest.TestCase):

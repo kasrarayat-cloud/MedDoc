@@ -1,0 +1,11 @@
+[Unit]
+Description=Publish QuillMD backup/offsite status for the console every five minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+AccuracySec=15s
+Unit=quillmd-fresh-operations-publisher.service
+
+[Install]
+WantedBy=timers.target

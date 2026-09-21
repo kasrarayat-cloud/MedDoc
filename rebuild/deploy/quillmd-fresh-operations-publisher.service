@@ -1,0 +1,29 @@
+[Unit]
+Description=QuillMD private operations status publication for the administration console
+After=network-online.target quillmd-fresh-database.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=claude
+Group=claude
+WorkingDirectory=/opt/meddoc-pro/rebuild
+UMask=0077
+Environment=QUILLMD_ADMIN_SITE=0
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=TMPDIR=/var/lib/quillmd/tmp
+EnvironmentFile=/opt/meddoc-pro/rebuild/.env
+ExecStart=/opt/meddoc-pro/rebuild/.venv/bin/python -B /opt/meddoc-pro/rebuild/manage.py publish_operations_status
+TimeoutStartSec=60
+KillMode=control-group
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/quillmd/tmp
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=256M
+MemorySwapMax=0
+StandardOutput=journal
+StandardError=journal
