@@ -374,12 +374,46 @@ class ExactFailedStateResumeTests(unittest.TestCase):
 
     def test_resume_stops_and_checks_original_rows_before_source_advance(self):
         source = inspect.getsource(c.resume_failed)
-        self.assertLess(source.index('unchanged(failed[\'stopped_before\'], baseline)'), source.index("b.run(['git', 'merge', '--ff-only'"))
+        self.assertLess(source.index('unchanged_saved_snapshot(failed[\'stopped_before\'], baseline)'), source.index("b.run(['git', 'merge', '--ff-only'"))
         self.assertIn('changed == RESUME_PATHS', inspect.getsource(c.verify_resume_source))
         self.assertEqual(c.RESUME_PATHS, {c.SELF, 'rebuild/ops/test_typed_voice_activation.py', c.RESUME_DECL})
         self.assertNotIn("management('migrate'", source)
         self.assertNotIn("management('shell'", inspect.getsource(c.collect_static))
         self.assertIn('original-lock.json', source)
+
+    def test_saved_entire_snapshot_matches_current_tuple_rows_without_losing_fields(self):
+        runtime = {'tables': ['core_usage', 'core_encounter'],
+            'rows': {'core_usage': {'rows': 16, 'sha256': 'old-intact'}},
+            'schema': [{'table_name': 'core_usage', 'is_nullable': 'NO'}],
+            'constraints': [('core_usage', 'charge_nonnegative', 'c', '-', 'CHECK (charged >= 0)'),
+                            ('core_encounter', 'encounter_pk', 'p', '-', 'PRIMARY KEY (id)')],
+            'indexes': [('core_usage', 'usage_pk', 'CREATE UNIQUE INDEX usage_pk ON core_usage (id)')],
+            'catalog': {'functions': [{'name': 'audit()', 'security_definer': False, 'config': None}], 'triggers': []},
+            'clinical': {'finalized': 3},
+            'storage': {'files': {'old-export': {'sha256': 'file-intact', 'size': 38393}}, 'mail': {}},
+            'static': {'old.css': {'sha256': 'css-intact', 'mode': 420, 'inode': 5}},
+            'unit_files': {'doctor': 'unit-intact'}, 'shared_configs': {'nginx': 'config-intact'},
+            'preserved_operations': {'files': {'budget': 'budget-intact'}, 'timers': ['05:00', '06:00']}}
+        saved = json.loads(json.dumps(runtime))
+        with self.assertRaises(RuntimeError):
+            c.unchanged(saved, runtime)  # Original read-only refusal, despite same receipt values.
+        c.unchanged_saved_snapshot(saved, runtime)
+        self.assertIsInstance(runtime['constraints'][0], tuple)
+        for name in runtime:
+            changed = copy.deepcopy(runtime)
+            changed[name] = 'changed-value'
+            with self.subTest(field=name), self.assertRaises(RuntimeError):
+                c.unchanged_saved_snapshot(saved, changed)
+        for changed in (dict(runtime, extra='unreviewed'), {k: v for k, v in runtime.items() if k != 'catalog'}):
+            with self.assertRaises(RuntimeError):
+                c.unchanged_saved_snapshot(saved, changed)
+        for key, value in [('constraints', list(reversed(runtime['constraints']))),
+                           ('preserved_operations', {'files': {'budget': 'budget-intact'}, 'timers': ['06:00', '05:00']}),
+                           ('catalog', {'functions': [{'name': 'audit()', 'security_definer': 0, 'config': None}], 'triggers': []})]:
+            with self.subTest(change=key), self.assertRaises(RuntimeError):
+                c.unchanged_saved_snapshot(saved, dict(runtime, **{key: value}))
+        with self.assertRaises(RuntimeError):
+            c.unchanged_saved_snapshot({'nested': {'1': 'value'}}, {'nested': {1: 'value'}})
 
 
 if __name__ == '__main__':
