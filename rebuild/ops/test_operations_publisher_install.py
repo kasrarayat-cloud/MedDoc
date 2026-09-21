@@ -164,7 +164,8 @@ class ReadOnlyByDefault(unittest.TestCase):
              patch.object(c.base, 'require_absent'), patch.object(c.base, 'require_installed'), \
              patch.object(c.base, 'private_directory'), patch.object(c.base, 'write_private'), \
              patch.object(c, 'published_row', return_value=None), \
-             patch.object(c.os, 'getuid', return_value=c.pwd.getpwnam('claude').pw_uid), \
+             patch.object(c.pwd, 'getpwnam', return_value=SimpleNamespace(pw_uid=4242)), \
+             patch.object(c.os, 'getuid', return_value=4242), \
              patch.object(c.base, 'managed_helper_run') as helper, \
              patch.object(sys, 'argv', ['install', '--expected-commit', 'a' * 40, *extra]):
             helper.return_value = SimpleNamespace(returncode=0, stdout=b'{"success": false}')
@@ -183,8 +184,18 @@ class ReadOnlyByDefault(unittest.TestCase):
         self.assertLess(source.index('if not args.execute'), source.index('managed_helper_run'))
 
     def test_only_the_project_operator_may_run_it(self):
-        import inspect
+        """Behavioural: a mismatched uid must refuse before anything is read or run."""
+        import inspect, sys
         self.assertIn("pwd.getpwnam('claude').pw_uid", inspect.getsource(c.main))
+        with patch.object(c.pwd, 'getpwnam', return_value=SimpleNamespace(pw_uid=4242)), \
+             patch.object(c.os, 'getuid', return_value=4243), \
+             patch.object(c.base, 'reviewed_source') as reviewed, \
+             patch.object(c.base, 'managed_helper_run') as helper, \
+             patch.object(sys, 'argv', ['install', '--expected-commit', 'a' * 40, '--execute']), \
+             self.assertRaises(RuntimeError):
+            c.main()
+        reviewed.assert_not_called()
+        helper.assert_not_called()
 
 
 if __name__ == '__main__':
