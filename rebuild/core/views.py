@@ -321,7 +321,7 @@ def encounter_detail(request,pk):
     prior_transcriptions=sum(1 for job in jobs if job.kind=='transcription' and billable_outcome(job))
     for job in jobs:
         job.display_error=public_error(job); job.can_cancel=may_cancel(job,request.user); job.deliverable=bool(job.result_path) and deliverable(job)
-    return render(request,'encounter_detail.html',{'encounter':e,'answer_rows':rows,'wm_template':is_wm,'wm_requirements':requirements,'wm_review_error':review_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions})
+    return render(request,'encounter_detail.html',{'encounter':e,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'wm_requirements':requirements,'wm_review_error':review_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions})
 
 @require_POST
 def generate_view(request,pk):
@@ -450,6 +450,8 @@ def finalize(request,pk):
                               trusted_context=reviewed['trusted_context'])
                 finalized_at=datetime.fromisoformat(reviewed['trusted_context']['finalized_at'])
             else:
+                from .tab_review import validate_identity
+                validate_identity(canonical['fields'],e.answers,request.user)
                 fill_template(original,canonical['fields'],{k:v['text'] for k,v in e.answers.items()},out)
             out.chmod(0o600)
             e.export_path=relative;e.export_sha256=hashlib.sha256(out.read_bytes()).hexdigest();e.finalized_at=finalized_at;e.finalized_by=request.user;e.status='finalized';e.save()

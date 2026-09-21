@@ -39,6 +39,12 @@ are created mode 0600 with exclusive creation. Symlink source files are refused.
   footers, including placeholders split across multiple styled runs.
 * DOCX two-column tables with a question in the first cell and a blank second
   cell. Nested/merged row boundaries are not inferred.
+* DOCX labelled underlined answer tabs when no older placeholder/table mapping
+  applies. A single-underlined tab-only run is an answer area; ordinary tabs,
+  paragraph borders and underlined text are not. Inline pairs require separate
+  labels and a separating tab. Blank continuation paragraphs require an adjacent
+  real heading; numbered answers retain that section's context. Orphan/ambiguous
+  areas and positioned paragraphs are refused, not partially mapped.
 * PDF AcroForm text fields using an explicit Helvetica font size and printable
   ASCII. Text width and height are checked using ReportLab font metrics for
   every visible widget. Explicit newlines are supported in multiline fields.
@@ -50,6 +56,24 @@ mocked document generation. DOCX insertion retains other text, styles, layout
 settings and questions. Text expansion can change pagination; visual review is
 required. PDF fields retain questions/page content and receive regenerated
 appearances, but remain form fields; no archival signature or PDF/A claim is made.
+
+The underlined-tab v1 locator binds the complete original SHA256, package part,
+paragraph, run and child positions. Logical questions retain their physical
+answer anchors separately. Explicit answer lines occupy existing continuation
+areas; surplus lines expand the last area, and unused areas remain blank. Long
+paired answers separate at the existing separator into flowing lines. Exact line
+spacing becomes minimum spacing and paragraph keeping is relaxed for pagination;
+font, size, underlining, labels, tab stops and section setup stay intact. Answer
+ink is black. Only changed story XML is serialized; other package-part bytes are
+copied unchanged. Pagination may grow and is not fixed-layout Word parity.
+
+The supplied blank colonoscopy fixture has 24 logical fields and 28 physical
+answer tabs, with five excluded separators. Consent and procedure continuation
+lines are grouped and flagged for mapping review. The mapping page surfaces these
+review notes, and this adapter exposes manual answer entry before AI generation.
+No clinical statement, date or signature is supplied by the adapter. Recognized
+signer fields are never generated from notes; a nonblank value requires the
+actual finalizer's identity and that clinician's own explicit field review.
 
 ## Explicit unsupported cases
 

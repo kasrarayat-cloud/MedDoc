@@ -22,7 +22,7 @@ if [[ "$gate" == python || "$gate" == all ]]; then
     "$quillmd_ci_python" manage.py check
     "$quillmd_ci_python" manage.py makemigrations --check --dry-run
     "$quillmd_ci_python" manage.py test core.tests --verbosity 2
-    "$quillmd_ci_python" -m unittest documents.tests documents.test_sdk_sandbox documents.test_sdk_service documents.test_layout -v
+    "$quillmd_ci_python" -m unittest documents.tests documents.test_tab_form documents.test_sdk_sandbox documents.test_sdk_service documents.test_layout -v
     "$quillmd_ci_python" -m unittest discover -s ops -p 'test_*.py' -v
   )
 fi

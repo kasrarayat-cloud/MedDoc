@@ -120,6 +120,9 @@ while IFS= read -r f; do
     # The accepted tracked fixture — a customer's BLANK form. Recorded decision,
     # see "Tracked fixtures" in AGENTS.md. Do not re-flag it.
     "WM IOV Template.docx")                              continue ;;
+    # Owner-supplied BLANK original, structurally inspected 2026-09-21: no patient values.
+    # Exact SHA/provenance and compatibility contract live beside this one fixture.
+    "rebuild/documents/__fixtures__/Colonoscopy_Operative_Template.docx") continue ;;
     "colon_blank_answers.pdf")                           continue ;;
     # SLICE-0 (#317): the colon OPERATIVE NOTE native DOCX Template Twin, authored
     # from the blank `colon_blank_answers.pdf` above. A BLANK form — 17 empty

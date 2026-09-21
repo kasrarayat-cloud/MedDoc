@@ -126,7 +126,12 @@ def validate_selections(notes,fields,selections,*,context_labels=()):
     lines=[line.strip() for line in notes.splitlines() if line.strip()]
     scoped_lines=all((parsed:=labelled_value(line,labels)) and parsed[1] for line in lines)
     inherited_context=len(lines)>1 and not scoped_lines
+    from .tab_review import clinician_identity
     for item in selections.fields:
+        if clinician_identity(next(f for f in fields if f['key']==item.key)):
+            output[item.key]={'text':'','status':'missing','evidence':[],'reviewed':False,
+                              'reason':'Signature requires explicit review by the finalizing clinician; it is not generated from notes.'}
+            continue
         if injection:
             output[item.key]={'text':'','status':'conflict','evidence':[],'reviewed':False,'reason':'Instruction-like source text requires manual review.'}; continue
         evidence=[]

@@ -16,6 +16,11 @@ from pypdf import PdfReader, PdfWriter
 from pypdf.generic import ArrayObject, DictionaryObject, IndirectObject
 from reportlab.pdfbase.pdfmetrics import stringWidth
 
+if __package__:
+    from .tab_form import inspect_tabs, fill_tabs, WARNINGS as TAB_WARNINGS
+else:  # Isolated worker imports this module directly.
+    from tab_form import inspect_tabs, fill_tabs, WARNINGS as TAB_WARNINGS
+
 MAX_FIELDS = 200
 MAX_ANSWER = 100_000
 TOKEN = re.compile(r"\{\{\s*([\w][\w .?:/()\-]{0,119}?)\s*\}\}")
@@ -134,7 +139,9 @@ def docx_inspect(path):
             fields.append({"key": f"text_{index}_{match.start()}", "label": match.group(1).strip(), "kind": "text",
                            "locator": {"paragraph": index, "start": match.start(), "end": match.end(), "token": match.group()}})
     if not fields:
-        fail("No supported fields found. Use {{Question}} placeholders or two-column question/blank-answer tables.", "no_fields")
+        fields = inspect_tabs(path, paragraphs, fail)
+    if not fields:
+        fail("No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields.", "no_fields")
     if len(fields) > MAX_FIELDS or any(len(field["label"]) > 2000 for field in fields):
         fail("The template exceeds 200 fields or has an oversized question.", "field_limit")
     return document, paragraphs, cells, fields
@@ -304,6 +311,8 @@ def process(workspace, request):
     if fmt == "docx":
         document, paragraphs, cells, fields = docx_inspect(path)
         warnings = ["DOCX answers expand and can change pagination. Review the exported document's layout."]
+        if fields and "tab_form" in fields[0]["locator"]:
+            warnings.extend(TAB_WARNINGS)
     elif fmt == "pdf":
         reader, fields = pdf_inspect(path)
         warnings = ["PDF text fields only. Answers must fit visibly; overflow is rejected."]
@@ -316,7 +325,9 @@ def process(workspace, request):
         fail("Unsupported operation.")
     answers = request["answers"]
     validate_mapping(fields, request["mapping"], answers)
-    if fmt == "docx":
+    if fmt == "docx" and fields and "tab_form" in fields[0]["locator"]:
+        fill_tabs(path, workspace / "output.docx", docx_parts(document), fields, answers)
+    elif fmt == "docx":
         for field in reversed(fields):
             answer = answers.get(field["key"], "")
             locator = field["locator"]
