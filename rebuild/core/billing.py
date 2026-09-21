@@ -8,6 +8,7 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 from .models import User, Wallet, LedgerEntry, Reservation, Usage, Membership, Organization, Payment, Refund, WebhookEvent, CostReconciliation, PlatformCost
 from .security import audit, membership
+from .stripe_validation import validate_event_environment
 ZERO=Decimal('0')
 MULTIPLIER=Decimal('1.5')
 
@@ -229,7 +230,7 @@ def apply_additional_debit(row,wallet):
     return True
 
 @transaction.atomic
-def reconcile_usage(usage,reconciled_cost,evidence_reference,actor,provider_credit_applied=ZERO,discount_applied=ZERO,evidence_sha256='',note=''):
+def reconcile_usage(usage,reconciled_cost,evidence_reference,actor,provider_credit_applied=ZERO,discount_applied=ZERO,evidence_sha256='',note='',evidence_kind='unclassified'):
     """Record authentic provider evidence for one usage row and settle the difference by appended ledger entries.
 
     The Usage row and its original 'usage' ledger entries are never modified. Credits back return to the wallets that
@@ -240,6 +241,7 @@ def reconcile_usage(usage,reconciled_cost,evidence_reference,actor,provider_cred
     Job.objects.select_for_update().get(pk=usage.job_id)
     if CostReconciliation.objects.filter(usage=usage).exists(): raise ValidationError('This usage row has already been reconciled; history is append-only.')
     if actor is None or not getattr(actor,'pk',None): raise ValidationError('A recorded administrator is required.')
+    if not isinstance(evidence_kind,str) or evidence_kind not in dict(CostReconciliation.EVIDENCE_KINDS): raise ValidationError('Unknown reconciliation evidence kind.')
     reconciled=exact(reconciled_cost);credit=exact(provider_credit_applied or ZERO);discount=exact(discount_applied or ZERO)
     if reconciled!=reconciled.quantize(Decimal('0.00000000001')): raise ValidationError('Reconciled cost is limited to 11 decimal places so its exact 1.5× delta fits the 12-decimal ledger.')
     if usage.simulated and reconciled!=0: raise ValidationError('Simulated usage has no provider cost to reconcile.')
@@ -256,7 +258,7 @@ def reconcile_usage(usage,reconciled_cost,evidence_reference,actor,provider_cred
     customer_after=min(uncapped_after,limit) if limit is not None else uncapped_after
     delta=customer_after-usage.charged_cost
     over_limit_delta=(uncapped_after-customer_after)-(uncapped_before-usage.charged_cost)
-    row=CostReconciliation(usage=usage,reconciled_cost=reconciled,provider_credit_applied=credit,discount_applied=discount,evidence_reference=evidence_reference,evidence_sha256=evidence_sha256,recorded_by=actor,note=note,charge_delta=delta,over_limit_delta=over_limit_delta,ledger_status='applied')
+    row=CostReconciliation(usage=usage,evidence_kind=evidence_kind,reconciled_cost=reconciled,provider_credit_applied=credit,discount_applied=discount,evidence_reference=evidence_reference,evidence_sha256=evidence_sha256,recorded_by=actor,note=note,charge_delta=delta,over_limit_delta=over_limit_delta,ledger_status='applied')
     absorbed=LedgerEntry.objects.filter(job_id=usage.job_id,kind='absorbed').exists() or PlatformCost.objects.filter(job_id=usage.job_id,kind='absorbed_failure').exists()
     if absorbed:
         # The user's charge was already reversed in full; the evidence is recorded against the platform cost, never credited or debited twice.
@@ -279,7 +281,7 @@ def reconcile_usage(usage,reconciled_cost,evidence_reference,actor,provider_cred
         if not apply_additional_debit(row,wallet):
             row.ledger_status='pending_funds'; row.save(update_fields=['ledger_status'])
     else: row.save()
-    audit(actor,'usage.reconcile',usage.job_id,department=usage.department,reconciled_cost=str(reconciled),charge_delta=str(delta),ledger_status=row.ledger_status,evidence_reference=evidence_reference)
+    audit(actor,'usage.reconcile',usage.job_id,department=usage.department,reconciled_cost=str(reconciled),charge_delta=str(delta),ledger_status=row.ledger_status,evidence_reference=evidence_reference,evidence_kind=evidence_kind)
     return row
 
 def apply_pending_reconciliations(actor=None,wallet=None):
@@ -396,6 +398,7 @@ REFUND_EVENTS={'refund.created','refund.updated','refund.failed'}
 
 
 def record_stripe_event(event,payload_hash):
+    validate_event_environment(event)
     event_id=event.get('id');kind=event.get('type')
     if not isinstance(event_id,str) or not event_id or len(event_id)>180 or not isinstance(kind,str) or len(kind)>80:
         raise ValidationError('Malformed payment event.')

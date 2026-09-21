@@ -67,6 +67,7 @@ class VoiceForm(forms.Form):
     audio=forms.FileField(label='Recorded audio (.wav, .webm, .mp3, .m4a)')
     consent=forms.BooleanField(label='Send this synthetic recording for transcription; charge provider usage × 1.5, never more than the limit shown.')
 class ReconciliationForm(forms.Form):
+    evidence_kind=forms.ChoiceField(choices=[('', 'Select the authenticated evidence type'),('provider_report', 'Provider cost report or export (not an invoice)'),('invoice', 'Provider invoice')],label='Evidence type')
     reconciled_cost=forms.DecimalField(min_value=0,max_digits=24,decimal_places=11,label='Reconciled actual provider cost (USD, up to 11 decimals)')
     evidence_reference=forms.CharField(max_length=240,label='Evidence reference (invoice number, export sha256 or report id)')
     evidence_sha256=forms.CharField(max_length=64,required=False,label='Evidence file sha256 (optional)')

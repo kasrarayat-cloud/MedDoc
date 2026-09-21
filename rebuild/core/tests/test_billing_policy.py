@@ -214,7 +214,7 @@ class ReconciliationLedger(PolicyFixture,TestCase):
         usage=self.settled(Decimal('8'))
         self.assertEqual(LedgerEntry.objects.get(job=usage.job,kind='usage',wallet=self.promo).amount,Decimal('-10'))
         self.assertEqual(LedgerEntry.objects.get(job=usage.job,kind='usage',wallet=self.paid).amount,Decimal('-2'))
-        row=reconcile_usage(usage,Decimal('4'),'INV-SYNTH-0001',self.user,provider_credit_applied=Decimal('2'),discount_applied=Decimal('2'),note='Synthetic invoice line')
+        row=reconcile_usage(usage,Decimal('4'),'INV-SYNTH-0001',self.user,provider_credit_applied=Decimal('2'),discount_applied=Decimal('2'),note='Synthetic invoice line',evidence_kind='invoice')
         self.assertEqual(row.charge_delta,Decimal('-6'));self.assertEqual(row.ledger_status,'applied');self.assertEqual(row.recorded_by,self.user)
         promo_credit=LedgerEntry.objects.get(kind='reconciliation',wallet=self.promo);paid_credit=LedgerEntry.objects.get(kind='reconciliation',wallet=self.paid)
         self.assertEqual(promo_credit.amount,Decimal('5'));self.assertEqual(paid_credit.amount,Decimal('1'))
@@ -223,7 +223,7 @@ class ReconciliationLedger(PolicyFixture,TestCase):
         usage=Usage.objects.get(pk=usage.pk)
         self.assertEqual(usage.actual_cost,Decimal('8'));self.assertEqual(usage.charged_cost,Decimal('12'))
         self.assertEqual(LedgerEntry.objects.filter(kind='usage').count(),2)
-        self.assertEqual(usage.invoice_status,'Reconciled to provider evidence: INV-SYNTH-0001')
+        self.assertEqual(usage.invoice_status,'Invoice-reconciled actual: INV-SYNTH-0001')
         report=audit_report();row=report['rows'][0]
         self.assertTrue(report['all_checks_pass']);self.assertTrue(row['invoice_reconciled'])
         self.assertEqual(Decimal(row['reconciliation']['charge_delta']),Decimal('-6'));self.assertEqual(row['reconciliation']['ledger_status'],'applied')
@@ -231,7 +231,7 @@ class ReconciliationLedger(PolicyFixture,TestCase):
         self.assertEqual(len(row['reconciliation_ledger']),2)
         self.client.force_login(self.user)
         page=self.client.get('/billing/')
-        self.assertContains(page,'Reconciled actual');self.assertContains(page,'credit back')
+        self.assertContains(page,'Invoice-reconciled actual');self.assertContains(page,'credit back')
 
     def test_additional_charge_is_debited_from_the_payer_paid_wallet(self):
         fund(self.paid,Decimal('5'),'payment:policy-debit')
@@ -291,7 +291,7 @@ class ReconciliationLedger(PolicyFixture,TestCase):
         for key in ['defined_cost_usd','user_charge_usd','cost_evidence','invoice_reconciled','ledger','checks','discount_rate','configured_list_cost_usd','reconciliation','reconciliation_ledger','absorbed','absorbed_reversal_usd','absorbed_platform_cost_usd','absorbed_ledger']:
             self.assertIn(key,row)
         self.assertIsNone(row['reconciliation']);self.assertFalse(row['absorbed']);self.assertEqual(row['discount_rate'],'0')
-        self.assertEqual(report['reconciliation_summary'],{'reconciled_rows':0,'unreconciled_rows':1,'pending_funds':0,'absorbed_rows':0})
+        self.assertEqual(report['reconciliation_summary'],{'reconciled_rows':0,'unreconciled_rows':1,'pending_funds':0,'absorbed_rows':0,'evidence_kinds':{'unclassified':0,'provider_report':0,'invoice':0}})
 
 
 @override_settings(ADMIN_SITE=False,STORAGES=STORAGES)
@@ -341,7 +341,7 @@ class AdminConsolePolicy(PolicyFixture,TestCase):
         fund(self.paid,Decimal('5'),'payment:policy-console')
         usage=self.settled(Decimal('0.5'))
         ledger_before=LedgerEntry.objects.count()
-        response=self.client.post(f'/console/usage/{usage.pk}/reconcile/',{'reconciled_cost':'0.4','evidence_reference':'INV-SYNTH-0007','provider_credit_applied':'0.05','note':'Synthetic invoice line'})
+        response=self.client.post(f'/console/usage/{usage.pk}/reconcile/',{'reconciled_cost':'0.4','evidence_kind':'invoice','evidence_reference':'INV-SYNTH-0007','provider_credit_applied':'0.05','note':'Synthetic invoice line'})
         self.assertEqual(response.status_code,302)
         row=CostReconciliation.objects.get(usage=usage)
         self.assertEqual(row.recorded_by,admin);self.assertEqual(row.charge_delta,Decimal('-0.15'));self.assertEqual(row.provider_credit_applied,Decimal('0.05'))

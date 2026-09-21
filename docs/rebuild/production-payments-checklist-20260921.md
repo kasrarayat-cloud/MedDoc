@@ -1,0 +1,51 @@
+# Production payment activation checklist — prepared, inactive
+
+This extends the existing sandbox runbook and completed September 20 payment acceptance. It does not authorize live credentials, endpoint registration, production records, real cards, refunds, public launch or patient-data processing. Current code is sandbox-only. No existing approved live deployment plan was found; this is the concrete remaining implementation/configuration contract, not a claim that setting an environment variable is sufficient.
+
+## Environment and initialization contract
+
+- Keep the rebuilt private database, files, credentials, synthetic users, grants, sandbox funds, provider receipts, proof and audit history intact. Its identity is private/sandbox. Never convert it to production by editing flags or by copying balances.
+- Create a separately named empty production database and separate encrypted state/storage only after the applicable activation authority. Pin its environment identity, Stripe account ID and live mode once; thereafter fail startup if runtime credentials, database identity, deployment identity or webhook identity disagree. Verify empty business tables and no imported private accounts, clinical documents, payments, wallets, reservations, Stripe events or synthetic grants before initialization. Use the common application and migrations, not a second accounting platform.
+- Production configuration must use separate protected environment/signing/session secrets, database credentials, service identities and file roots. The private environment must not receive production keys, and production must not receive sandbox keys, endpoint secrets, sessions, customer/payment IDs or private seed files. Restrict each database role and filesystem root to its own environment.
+- Transfer only explicitly reviewed blank supported templates through the supported upload/mapping workflow and checksum manifest. Do not copy synthetic encounter/template foreign-key trees. Existing private uploaded templates and finalized documents remain untouched.
+- Do not run `seed_private` in production. It already refuses when SYNTHETIC_ONLY is false. Authorize the real administrator separately, enroll MFA through the real workflow, and verify application startup cannot recreate synthetic accounts. Each later verified user receives exactly one personal promotional $10 welcome grant through the existing invitation/mailbox-verification writer; purchased funds start at zero and are only credited by a validated live payment. Preserve unique welcome and ledger identities.
+
+## Required code gate before credentials are installed
+
+The current hardcoded `SYNTHETIC_ONLY=True`, `STRIPE_LIVE_ENABLED=False`, test-only key classifier, localhost return URLs and test product label intentionally prevent a live deployment. A separately reviewed production mode must first add strict deployment/database/account/mode binding, allowlisted HTTPS return origins and correct product wording. The production receiver must require explicit `livemode:true`; the private receiver must retain explicit false. This task's own-account validator rejects Connect/organization account/context events; future live own-account operation must preserve that namespace refusal rather than opening a generic multi-account interface.
+
+Current Payment/Wallet/WebhookEvent models do not partition live and sandbox records. Separate databases are therefore mandatory; changing the same database between modes is forbidden. Payment and replay keys can retain their existing UUID uniqueness inside each fixed environment. Bootstrap acceptance must demonstrate that no test balances, grants or event IDs crossed that boundary and that missing/wrong identity fails before any ledger mutation.
+
+## Credential and endpoint contract
+
+| Item | Exact prepared requirement | Current state |
+| --- | --- | --- |
+| Runtime payment credential | Account-scoped restricted **live** key; Checkout Sessions → Write only, matching the existing proved sandbox integration. No organization key, Connect routing, refunds, payouts, transfers, customer administration or webhook administration on the runtime key. Restrict to production server access policy where supported. | Not created or installed; sandbox runtime key preserved. |
+| Account identity | Owner-authenticated evidence of the intended business live account ID and endpoint ownership. Verify credential account through a separately authorized administrative/account-read capability or dashboard evidence; do not grant unrelated read/admin scopes to the restricted Checkout worker merely for this check. | Sandbox ID known; production live account/credential relationship unverified. |
+| Webhook endpoint | Planned `https://app.quillmd.com/billing/webhook/`, own-account live events only, HTTPS, raw request body preserved, dedicated endpoint signing secret, tested explicit API version recorded at registration. No sandbox CLI secret in production. | Route exists in application; permanent public routing/registration remains inactive. |
+| Events | `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired`, `refund.created`, `refund.updated`, `refund.failed`. | Implemented event types; no new registration occurred. |
+| Routing | Forward only exact webhook POST route to the production receiver independently of browser login/preview authentication; maintain body size limits and signature verification. Admin surface remains private/MFA. No global preview-auth bypass. | Requires approved production ingress; public routes unchanged. |
+| Checkout return | Fixed approved production HTTPS origin and `/billing/` path; payment=processing is informational only. A browser redirect must never grant funds. | Existing localhost returns retained in private build. |
+| Credential storage | Separate protected production secret store/environment with exact owner/mode and available independent recovery custody. No secrets in repository, package or screenshots. | No live values requested or stored. |
+
+Stripe documents that sandbox and live objects are separate, and that webhook signing secrets are distinct from API keys. Restricted keys are preferable to unrestricted keys; permissions and access policies must be checked against the actual provisioned key. [Stripe API keys](https://docs.stripe.com/keys).
+
+Stripe's `account` event field identifies a connected account, while `context` identifies an authentication context; an ordinary own-account event can omit both. Therefore endpoint/credential provisioning binds the owner account, while ingress rejects unsupported namespaces. Do not infer the owner account from absent `account`, or require a connected-account field on every ordinary event. [Stripe Event object](https://docs.stripe.com/api/events/object).
+
+## Post-approval acceptance, not executed here
+
+1. Record exact reviewed release, production DB/state/environment IDs, expected provider account, restricted capability evidence, endpoint ID/API version, and rollback release. Verify maintenance/reviewer controls remain as approved.
+2. Validate config and immutable environment marker before payment admission; reject test key/live DB, live key/private DB, wrong account context, wrong endpoint signature and wrong event mode before event/ledger writes. Check every service uses the intended environment without logging credentials.
+3. Verify the separate production initialization has zero copied private financial/clinical history. Exercise one real newly verified production user only when signup/mailbox authority exists: exactly one $10 promotional grant, zero purchased funds, no duplicate on a verification replay. Existing synthetic proof does not establish this future production event.
+4. With a separately approved bounded real payment amount and controlled purchaser, verify one actual Checkout, Stripe paid status, signed matching event, one paid-wallet ledger credit, no promotional change, replay idempotency and accountable webhook delivery. Reuse sandbox refund/decline evidence for unchanged code; a real refund is a separate financial action requiring its own authority. No real card execution is part of this preparation.
+5. Verify administrator finance history distinguishes payments, promotional funds, usage estimates, provider-reported actuals, invoice reconciliation, reservations and unresolved exceptions. Do not label Stripe fees/payouts/provider-credit purchases as per-request AI consumption.
+
+## Safe rollback and reversal
+
+Before admitting live payment traffic, implement/verify a gate that stops new Checkout submissions independently of the event receiver. On rollback, pause new submissions and paid provider work; retain the signed webhook receiver or a durable approved queue so already-created real payments/refunds can still reconcile. Never return success before durable event acceptance. Preserve request IDs, uncertain sessions, receipts, balances, reservations and audit history; inspect provider status under existing authority before retrying any uncertain operation.
+
+Revert to the exact previously accepted **production** code/configuration against the same production history, within its documented schema compatibility. Never route production events to the private database, replace production history with a synthetic snapshot, delete paid balances, or use a data reset as rollback. An unsupported schema downgrade stops for a forward repair; no restore over the ledger is implied. Credential revocation/rotation must not silently strand genuine events; record the retained delivery/reconciliation path. Refunds, disputes, taxes and provider credits follow their approved policies, and missing financial policy remains an explicit decision rather than an invented reversal rule.
+
+## Remaining external inputs
+
+Production business account/identity, specifically authorized restricted live credentials and endpoint registration, bounded live-payment acceptance authority, authentic provider costs/account discounts/credits and the existing separate release gates. Prior original Word acceptance, sandbox lifecycle, invitation/recovery verification and independent-key restore remain completed for their recorded scopes.

@@ -754,7 +754,9 @@ def webhook(request):
     if len(request.body)>1024*1024:return HttpResponse(status=413)
     try:event=stripe.Webhook.construct_event(request.body,request.headers.get('Stripe-Signature',''),settings.STRIPE_WEBHOOK_SECRET)
     except (ValueError,stripe.SignatureVerificationError):return HttpResponse(status=400)
-    if event.get('livemode') is not False:return HttpResponse('Only explicit test-mode payment events are accepted.',status=400)
+    from .stripe_validation import validate_event_environment
+    try:validate_event_environment(event)
+    except ValidationError:return HttpResponse('Payment event environment is not supported.',status=400)
     try:
         row=record_stripe_event(event,hashlib.sha256(request.body).hexdigest())
         if not process_stripe_event(row.pk):return HttpResponse('Payment requires reconciliation.',status=409)
@@ -826,7 +828,7 @@ def admin_reconcile_usage(request,pk):
     form=ReconciliationForm(request.POST)
     if not form.is_valid():raise ValidationError('; '.join(f'{field}: {" ".join(errors)}' for field,errors in form.errors.items()))
     data=form.cleaned_data
-    row=reconcile_usage(usage,data['reconciled_cost'],data['evidence_reference'],request.user,provider_credit_applied=data.get('provider_credit_applied') or Decimal('0'),discount_applied=data.get('discount_applied') or Decimal('0'),evidence_sha256=data.get('evidence_sha256') or '',note=data.get('note') or '')
+    row=reconcile_usage(usage,data['reconciled_cost'],data['evidence_reference'],request.user,evidence_kind=data['evidence_kind'],provider_credit_applied=data.get('provider_credit_applied') or Decimal('0'),discount_applied=data.get('discount_applied') or Decimal('0'),evidence_sha256=data.get('evidence_sha256') or '',note=data.get('note') or '')
     messages.success(request,f'Reconciliation recorded. Charge delta ${row.charge_delta}; ledger status {row.ledger_status}.')
     return redirect('/console/#cost-reconciliation')
 

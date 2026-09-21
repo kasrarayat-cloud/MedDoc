@@ -1,3 +1,43 @@
+# Current business-readiness continuation — September 21, 2026
+
+Authentic billing evidence is still required. The protected correlation package
+`rebuild/.runtime/business-readiness-20260921/quillmd-billing-correlation-20260921.zip`
+contains the existing QuillMD request/resource identifiers, UTC period, preserved
+rates and estimates; it is not a provider invoice and its VPS path does not prove
+desktop delivery. Nine Anthropic and six Deepgram operations total
+$0.160260900700 configured cost and $0.240391351050 original customer charges.
+Actual provider-reported/invoiced amounts remain unknown; no adjustment is justified
+without attributable evidence. The two historical receipt gaps stay exceptions.
+Obtain owner-authenticated account/project-scoped usage/cost exports and issued
+invoices where available, preserving original bytes and provenance. An aggregate
+shared-account bill cannot be allocated to jobs without an approved rule.
+
+[Business evidence and reconciliation](business-readiness-20260921.md) records the
+bounded repairs and supported import process. The existing writer is manual,
+MFA-protected and one reconciliation per usage; it is not a bulk invoice importer.
+Reports now distinguish administrator-classified provider reports, invoices and
+unclassified evidence without inferring authenticity from a filename/hash.
+
+The [first paid release checklist](production-activation-checklist-20260921.md)
+and [payment configuration contract](production-payments-checklist-20260921.md)
+are prepared and **inactive**. Current code remains synthetic and sandbox-only;
+a live key cannot safely promote it. A reviewed fixed production profile, separate
+empty database/encrypted state, account/mode binding and bounded live acceptance
+are required before activation. Preserve the private system and all test history.
+Do not copy sandbox funds, customer/event IDs or welcome grants. The existing
+verified-registration workflow grants a new user exactly $10 promotional credit
+with $0 purchased funds.
+
+Keep the separate 05:00 UTC backup and 06:00–18:00 account-renewal workflow intact.
+This business task authorizes no B2 requests, new provider generation, email,
+real payment, public ingress or patient-data processing. Exact installed revisions,
+CI, preservation and remaining inputs are in the current runtime checkpoint and
+`business-readiness-20260921/FINAL-REPORT.md`.
+
+Earlier dated entries below are retained history. Their older incomplete Word,
+sandbox-payment, key-return and plaintext-cleanup instructions do not reopen the
+completed evidence in this milestone.
+
 # Current continuation — renewable evidence and failure visibility, 2026-09-20
 
 Automatic encrypted offsite execution is active; the first daily05:00UTC firing
