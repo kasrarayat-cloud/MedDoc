@@ -92,7 +92,10 @@ removed.
 
 **The existing vocabulary is reused unchanged.** `INHERITED_SCOPE`, `UNSCOPED_NEGATIVE_HEADING`,
 `QUOTED_SOURCE`, `FINITE_STATEMENT`, `SUBJECTS` and `INLINE_CORRECTION` remain the only detectors.
-No new keyword list is introduced. What changes is **binding and direction**, which are structural
+No new keyword list is introduced. `INHERITED_SCOPE`'s fourteen words are already split in code
+into `SCOPE_POINTERS` and `SCOPE_REFRAMERS` (`generation.py`), with `INHERITED_SCOPE` rebuilt from
+the halves and a test asserting the union still equals the original — so S2/S3 and S4/S5 have their
+distinction available without adding a word. What changes is **binding and direction**, which are structural
 properties of where a match sits — not new words.
 
 **S1 · Self-scoped evidence.** An answer whose evidence is a line explicitly labelled with its own
@@ -111,6 +114,15 @@ the lines **before** it. (C3 keeps its current outcome, narrowed to preceding fi
 **S4 · Self-referential modals.** `if`, `would`, `could`, `might`, `hypothetical`, `imagine`,
 `suppose` describe the clause they sit in. They govern **their own sentence only**, so an answer
 drawn from a different sentence is unaffected. (D1 narrows.)
+
+> ⚠️ **S4 IS THE RISKIEST NARROWING IN THIS SPECIFICATION AND MUST BE BUILT LAST.** These words
+> are `SCOPE_REFRAMERS` — the half of the vocabulary that changes POLARITY or ATTRIBUTION rather
+> than leaving scope open. The candidate-review release already had to suppress its suggestion
+> offer for exactly this half, because the first shape of that feature would have put a one-click
+> Accept button under `The following findings are denied:` / `Finding: diabetes`. Three reviewed
+> tests written by an earlier refutation pass caught it. **Narrowing a reframer's reach is a
+> different and much more dangerous act than narrowing a pointer's**, and S4/S5 should not ship in
+> the same release as S1–S3.
 
 **S5 · Quotation.** `QUOTED_SOURCE` governs the unit containing it — reported speech is a fact about
 that sentence. (D2 narrows.)

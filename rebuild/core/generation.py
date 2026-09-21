@@ -192,7 +192,13 @@ UNSCOPED_NEGATIVE_HEADING = re.compile(r'^[^:]*\b(?:denied|denies|absent|negativ
 FINITE_STATEMENT = re.compile(r'\b(?:is|are|was|were|has|have|had|denies|reports|reported|showed|revealed|advanced|seen|collected|recommend|received|underwent)\b',re.I)
 
 ABBREVIATION = re.compile(r'(?:\b(?:dr|mr|mrs|ms|prof|st|vs|etc|approx)|\b[A-Z]|\be\.g|\bi\.e)\.$', re.I)
-INLINE_CORRECTION = re.compile(r';\s*correction\s*,\s*(\S.*)$', re.I)
+#: ⚠️ ONE TOKEN, TWO ANCHORINGS — NOT A SECOND KEYWORD LIST. Inline (`…; correction, X`)
+#: binds to its own sentence and already carries a value. Line-initial (`Correction: …`)
+#: names no sentence, so nothing can bind it; it is read only to SUPPRESS an offer,
+#: never to widen one. `docs/foundation/specs/field-specific-correction-handling.md` S6.
+CORRECTION = r'correction'
+INLINE_CORRECTION = re.compile(r';\s*' + CORRECTION + r'\s*,\s*(\S.*)$', re.I)
+LINE_INITIAL_CORRECTION = re.compile(r'^\s*' + CORRECTION + r'\b', re.I | re.M)
 QUANTITY = re.compile(r'(?:(?:less than|greater than|about|approximately)\s+|[<>]=?\s*)?'
     r'(?:\d+(?:\.\d+)?|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)'
     r'\s+([a-z]+)\.?$', re.I)
@@ -293,13 +299,44 @@ def tab_source_value(quote,labels):
 #: Measured cost of discarding it: a real provider response returned three correct answers, each
 #: quoting its own question's line, and all three were blanked because the note also carried an
 #: opening remark and two closing sentences. The doctor had to retype every one.
+#: ⚠️ THIS TEXT SAYS ONLY WHAT THE VALIDATOR ACTUALLY KNOWS. It used to assert "not a
+#: contradiction found in the notes", which the validator is in no position to claim: it checks
+#: provenance and two labelled values, and a correction on a later unlabelled line trips neither.
+#: A refutation lens produced a note whose next line read "the patient reports severe crushing
+#: chest pain" under a suggestion of "no chest pain", with this sentence above it telling the
+#: clinician there was nothing to find. Saying less is the fix; the full note is shown regardless.
 SCOPE_REVIEW_REASON = (
-    'The surrounding note may change what this answer means, so it needs your decision. '
-    'This is uncertainty about scope — not a contradiction found in the notes. '
-    'The suggestion was read from the evidence shown and has NOT been accepted.')
+    'Another line in this note may govern this answer, so it needs your decision. '
+    'Nothing was checked for or against it beyond where the words came from — read the full '
+    'note above before deciding. This was read from the evidence shown and has NOT been accepted.')
 
 
-def suggestible(notes):
+def suggestible(notes, texts, explicit):
+    """Whether a held candidate may be offered for one-click acceptance at all.
+
+    Four conditions, each from a demonstrated counterexample. Every one SUPPRESSES; none widens,
+    so this function can only ever offer less than the note already made review-required.
+    """
+    # ⚠️ ONE CANDIDATE, OR NONE. `'\n'.join(texts)` is the right shape for a supported multi-
+    # sentence answer, and the wrong shape here: given `Allergies: penicillin` followed by
+    # `Patient now reports no known drug allergies.`, it offered BOTH as one accept-able answer,
+    # putting `penicillin` in the allergies cell of a patient the same note says has none.
+    if len(texts) != 1:
+        return False
+    # ⚠️ IF THIS QUESTION HAS ITS OWN LABELLED ANSWER AND THE CANDIDATE IS NOT IT, THE TWO
+    # DISAGREE. `len(explicit)>1` only counts labelled values against each other, so a labelled
+    # value contradicted by a free-text sentence passes it: `Extent: … splenic flexure` beside
+    # `The scope was advanced to the cecum.` offered the caecum for one click.
+    if explicit and texts[0] not in explicit:
+        return False
+    # A line-initial correction names no sentence, so nothing binds it and it may correct this
+    # answer. Suppress rather than guess. The inline form is already bound to its own unit.
+    if LINE_INITIAL_CORRECTION.search(notes):
+        return False
+    return _plain_pointer_only(notes)
+
+
+def _plain_pointer_only(notes):
     """Whether a held candidate may be offered for one-click acceptance at all.
 
     ⚠️ THIS EXISTS BECAUSE THE FIRST VERSION OF THIS FEATURE WOULD HAVE PUT AN ACCEPT BUTTON
@@ -322,7 +359,7 @@ def suggestible(notes):
                 or QUOTED_SOURCE.search(notes))
 
 
-def with_scope_suggestion(answer, notes, texts, own):
+def with_scope_suggestion(answer, notes, texts, own, explicit):
     """Attach the held candidate and the passage it was read from. Never alters the answer.
 
     `own` is the answer's own evidence, captured BEFORE the whole-note substitution. It is kept
@@ -330,7 +367,7 @@ def with_scope_suggestion(answer, notes, texts, own):
     governing context a clinician must see — a denial heading, a hypothetical frame — and
     narrowing it was the defect this shape replaced.
     """
-    if not texts or not suggestible(notes):
+    if not texts or not suggestible(notes, texts, explicit):
         return answer
     return {**answer, 'suggestion': '\n'.join(texts), 'suggestion_evidence': own,
             'reason': SCOPE_REVIEW_REASON}
@@ -393,7 +430,7 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=()):
         answer={'text':'\n'.join(texts) if status=='supported' else '',
                 'status':status,'evidence':evidence,'reviewed':False}
         if inherited and not (item.conflict or len(explicit)>1 or injection or guarded):
-            answer=with_scope_suggestion(answer,notes,texts,own)
+            answer=with_scope_suggestion(answer,notes,texts,own,set(explicit))
         output[item.key]=answer
     return output
 
@@ -478,7 +515,7 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
             evidence=[{'quote':notes,'start':0,'end':len(notes)}]
         answer={'text':'\n'.join(texts) if status=='supported' else '', 'status':status,'evidence':evidence,'reviewed':False}
         if inherited_context and not (item.conflict or explicit_conflict or guarded):
-            answer=with_scope_suggestion(answer,notes,texts,own)
+            answer=with_scope_suggestion(answer,notes,texts,own,set(explicit))
         output[item.key]=answer
     return output
 

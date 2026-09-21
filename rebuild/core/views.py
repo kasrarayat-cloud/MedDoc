@@ -384,21 +384,40 @@ def save_answers(request,pk):
     labels=[row['label'] for row in e.template_version.fields+e.template_version.review_requirements]
     if is_wm and any(request.POST.get('claim_reviewed_'+row['key'])=='on' for row in e.template_version.review_requirements):
         membership(request.user,e.department,roles=['owner','clinician'])
-    answers={};review_errors=[];target_revision=e.revision+1
+    answers={};review_errors=[];newly_accepted=[];target_revision=e.revision+1
     for field in e.template_version.fields:
         key=field['key'];previous=e.answers.get(key,{'text':'','evidence':[],'status':'missing'})
         value=request.POST.get('answer_'+key,'')
         # ⚠️ A SUGGESTION BECOMES AN ANSWER ONLY BY AN EXPLICIT ACT, NEVER BY SAVING.
         # The textarea is deliberately NOT prefilled with the suggestion: if it were, an
         # ordinary save would accept it silently, and so would a reopen, an API read or an
-        # export. Accepting takes its own checkbox, and anything typed always wins over it.
-        accepted=False
-        if not value.strip() and request.POST.get('accept_'+key)=='on':
-            value=str(previous.get('suggestion') or ''); accepted=bool(value)
+        # export. Accepting takes its own checkbox, and typed text wins over it.
+        suggestion=str(previous.get('suggestion') or '')
+        # ⚠️ AN ACCEPTANCE IS A FACT ABOUT A DECISION ALREADY MADE, SO IT IS CARRIED FORWARD,
+        # NOT RECOMPUTED FROM THE POST. Recomputing it withdrew every acceptance on the very next
+        # save: once accepted, the page renders the accepted branch, which has NO checkbox to
+        # re-post, so an ordinary save of any other field wrote False over a real True — and the
+        # finalized record then told the doctor their own decision had not been made. Three
+        # independent refutation lenses found this within minutes of each other.
+        # It survives only while the stored text is still exactly the suggestion; editing away
+        # withdraws it, and typing the same words by hand never grants it.
+        accepted=bool(previous.get('accepted_suggestion')) and bool(suggestion) and value==suggestion
+        if not value.strip() and request.POST.get('accept_'+key)=='on' and suggestion:
+            # ⚠️ GATED LIKE ITS SIBLING. `reviewed` below demands owner/clinician, the template
+            # renders this box `disabled` for everyone else, and the server checked nothing — so
+            # an employee-role member could clear the conflict gate and have the page state, in
+            # the clinician's name, that the suggestion was accepted. `accept_code` two hundred
+            # lines down is the in-repo precedent: role-gated, attributed and audited.
+            membership(request.user,e.department,roles=['owner','clinician'])
+            value=suggestion; accepted=True; newly_accepted.append(key)
         if len(value)>20000:return HttpResponse('Answer too long; nothing was truncated or saved.',status=400)
         reviewed=request.POST.get('reviewed_'+key)=='on'
         if reviewed:membership(request.user,e.department,roles=['owner','clinician'])
-        answers[key]={**previous,'text':value,'reviewed':reviewed,'accepted_suggestion':accepted,'status':'edited' if value!=previous.get('text','') else previous.get('status','missing'),'reviewed_by':str(request.user.pk) if reviewed else None}
+        answers[key]={**previous,'text':value,'reviewed':reviewed,'accepted_suggestion':accepted,
+                      # The accepter is whoever performed the explicit act, carried forward while
+                      # the acceptance stands. A later saver must not inherit somebody's decision.
+                      'accepted_by':str(request.user.pk) if key in newly_accepted else (previous.get('accepted_by') if accepted else None),
+                      'status':'edited' if value!=previous.get('text','') else previous.get('status','missing'),'reviewed_by':str(request.user.pk) if reviewed else None}
         if is_wm:
             quote=request.POST.get('source_'+key,'')
             if len(quote)>50000:return HttpResponse('Source quotations exceed the supported limit; nothing was saved.',status=400)
@@ -447,7 +466,8 @@ def save_answers(request,pk):
                                'reviewer_id':str(request.user.pk)}
             review_errors.append(error_message(exc))
     e.save(update_fields=['answers','revision','status','template_review'])
-    audit(request.user,'encounter.answers_saved',e.pk,department=e.department,revision=e.revision)
+    audit(request.user,'encounter.answers_saved',e.pk,department=e.department,revision=e.revision,
+          accepted_suggestions=sorted(newly_accepted))
     if is_wm:audit(request.user,'encounter.template_review_saved',e.pk,department=e.department,revision=e.revision,complete=e.template_review.get('assessment',{}).get('complete',False))
     messages.success(request,'Edits saved. Review every answer before finalizing.')
     for message in dict.fromkeys(review_errors):messages.warning(request,'Review remains incomplete: '+message)

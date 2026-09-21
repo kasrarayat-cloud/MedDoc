@@ -17,13 +17,17 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 
 from core.generation import (INHERITED_SCOPE, SCOPE_POINTERS, SCOPE_REFRAMERS, Selection,
-                             Selections, validate_selections, SCOPE_REVIEW_REASON)
+                             Selections, validate_selections, validate_tab_selections,
+                             SCOPE_REVIEW_REASON)
 from io import BytesIO
 from zipfile import ZipFile
 
 from docx import Document
 
+from django.utils import timezone
+
 from core.jobs import run_one
+from core.models import AuditEvent, Membership, User
 from core.tests.test_billing_boundary import BoundaryFixture
 from core.tests.test_workflow import DocumentWorkflow
 from core.tests.test_billing_policy import STORAGES
@@ -38,6 +42,25 @@ def judge(notes, quotes, *, conflict=False, label='EXTENT', key='k'):
     return validate_selections(notes, fields, chosen, evidence_contract='legacy')[key]
 
 
+def judge_tab(notes, quotes, *, conflict=False, label='EXTENT', key='k'):
+    """⚠️ THE CONTRACT THE OWNER'S WORD FORMS ACTUALLY USE, AND IT HAD NO COVERAGE HERE AT ALL.
+
+    A refutation lens instrumented the suite and measured `validate_tab_selections` called ZERO
+    times across 44 tests, because `judge` pins `evidence_contract='legacy'` and the DOCX/PDF
+    fixtures route legacy too. It then widened the tab validator's guard to fire on a model-
+    DECLARED contradiction — offering `written` for one-click acceptance under a note that
+    contradicts it — and the whole suite stayed green. The §1e encounter that motivated this
+    entire feature ran on the tab contract.
+
+    Tab evidence is a complete offered source sentence, not a bare value, so callers pass whole
+    lines here where the legacy helper above takes values.
+    """
+    fields = [{'key': key, 'label': label, 'kind': 'text',
+               'locator': {'cell': 0, 'tab_form': {'version': 1}}}]
+    chosen = Selections(fields=[Selection(key=key, quotes=quotes, conflict=conflict)])
+    return validate_tab_selections(notes, fields, chosen)[key]
+
+
 class ScopeUncertaintyKeepsTheCandidate(TestCase):
     def test_the_candidate_and_its_own_evidence_survive(self):
         answer = judge(NOTE, [SCOPED])
@@ -50,13 +73,21 @@ class ScopeUncertaintyKeepsTheCandidate(TestCase):
         self.assertEqual(answer['evidence'], [{'quote': NOTE, 'start': 0, 'end': len(NOTE)}])
         self.assertEqual(answer['suggestion_evidence'][0]['quote'], SCOPED)
 
-    def test_the_reason_says_scope_and_denies_being_a_contradiction(self):
-        """⚠️ Uncertainty about scope must not be presented as a proven clinical contradiction."""
-        reason = judge(NOTE, [SCOPED])['reason']
-        self.assertEqual(reason, SCOPE_REVIEW_REASON)
-        self.assertIn('scope', reason.lower())
-        self.assertIn('not a contradiction', reason.lower())
-        self.assertIn('not been accepted', reason.lower())
+    def test_the_reason_claims_no_more_than_the_validator_knows(self):
+        """⚠️ Uncertainty must not be presented as a proven clinical contradiction — AND THE
+        MIRROR IS EQUALLY FALSE. This text once asserted "not a contradiction found in the notes",
+        which the validator cannot know: it checks provenance and two labelled values, and a
+        correction on a later unlabelled line trips neither. A refutation lens produced a note
+        whose next line read "severe crushing chest pain" under a suggestion of "no chest pain",
+        with that sentence above it saying there was nothing to find."""
+        reason = judge(NOTE, [SCOPED])['reason'].lower()
+        self.assertEqual(judge(NOTE, [SCOPED])['reason'], SCOPE_REVIEW_REASON)
+        self.assertIn('not been accepted', reason)
+        self.assertIn('read the full note', reason)
+        self.assertIn('may govern', reason, 'it must still say why a decision is needed')
+        for overclaim in ('not a contradiction', 'no contradiction', 'is correct', 'verified',
+                          'confirmed', 'consistent with'):
+            self.assertNotIn(overclaim, reason, f'the reason must not assert {overclaim!r}')
 
     def test_the_offsets_still_index_the_source(self):
         for entry in judge(NOTE, [SCOPED])['suggestion_evidence'] + judge(NOTE, [SCOPED])['evidence']:
@@ -195,6 +226,17 @@ class AnUnacceptedSuggestionCannotReachAnExport(DocumentWorkflow):
         self.key, self.other = by_label['Symptoms'], by_label['Examination']
         return encounter
 
+    def section(self, encounter, label):
+        """The page carries every answer, so an assertion about one must be scoped to its own section."""
+        page = self.client.get(f'/encounters/{encounter.pk}/').content.decode()
+        # Bounded at the closing tag: unbounded, the LAST answer's "section" swallows the page
+        # tail including the source-notes panel, which would make these assertions false-red or
+        # false-green depending on render order.
+        sections = [part.split('</section>')[0]
+                    for part in page.split('<section class="answer">') if f'{label}</h3>' in part]
+        self.assertEqual(len(sections), 1, f'expected exactly one {label} section')
+        return sections[0]
+
     def resolve_other(self, encounter, payload):
         """The second field is accepted explicitly, so only the field under test is in question."""
         payload.update({'accept_' + self.other: 'on', 'answer_' + self.other: '',
@@ -215,13 +257,27 @@ class AnUnacceptedSuggestionCannotReachAnExport(DocumentWorkflow):
         entry = answer['suggestion_evidence'][0]
         self.assertEqual(encounter.notes[entry['start']:entry['end']], entry['quote'])
         self.assertEqual(entry['quote'], self.SUGGESTION)
-        page = self.client.get(f'/encounters/{encounter.pk}/').content.decode()
-        self.assertIn('Suggested answer', page)
-        self.assertIn(self.SUGGESTION, page, 'the doctor must be able to see what was read')
-        self.assertNotIn(f'>{self.SUGGESTION}</textarea>', page)
+        # The API, against state the generator produced rather than a dict this test wrote.
+        api = json.loads(self.client.get(f'/api/encounters/{encounter.pk}/').content)['answers']
+        self.assertEqual(api[self.key]['text'], '')
+        self.assertEqual(api[self.key]['suggestion'], self.SUGGESTION)
+        # ⚠️ SCOPED TO THIS ANSWER'S OWN SECTION. Page-wide, every assertion here is vacuous:
+        # the other answer's block satisfies 'Suggested answer', and the source-notes panel at
+        # encounter_detail.html:52 renders the whole note, so the suggestion string is present
+        # even with every suggestion block stripped from the page. Measured by a lens.
+        section = self.section(encounter, 'Symptoms')
+        self.assertIn('Suggested answer', section)
+        self.assertIn(self.SUGGESTION, section, 'the doctor must be able to see what was read')
+        self.assertIn(f'name="accept_{self.key}"', section)
+        self.assertNotIn(f'>{self.SUGGESTION}</textarea>', section)
 
     def test_an_unaccepted_suggestion_blocks_finalization_and_never_becomes_a_document(self):
         encounter = self.generated()
+        # ⚠️ ASSERTED BEFORE ANY SAVE. Checking it after `resolve_other` posts an empty answer
+        # made this test pass even when generation auto-accepted the suggestion, because the
+        # save wiped the very value it was meant to catch.
+        self.assertEqual(encounter.answers[self.key]['text'], '')
+        self.assertEqual(encounter.answers[self.key]['status'], 'conflict')
         # Saved and reopened repeatedly — none of it is an acceptance.
         for _ in range(2):
             self.resolve_other(encounter, {'answer_' + self.key: '', 'reviewed_' + self.key: 'on'})
@@ -281,13 +337,6 @@ class AnUnacceptedSuggestionCannotReachAnExport(DocumentWorkflow):
 class TheClinicianActionIsRecordedSeparately(AnUnacceptedSuggestionCannotReachAnExport):
     """⚠️ A finalized document that says "not accepted" over an answer the doctor DID accept is a lie
     about a clinical record. Acceptance is stored as its own fact, not inferred by comparing strings."""
-
-    def section(self, encounter, label):
-        """The page carries every answer, so an assertion about one must be scoped to its own section."""
-        page = self.client.get(f'/encounters/{encounter.pk}/').content.decode()
-        sections = [part for part in page.split('<section class="answer">') if f'{label}</h3>' in part]
-        self.assertEqual(len(sections), 1, f'expected exactly one {label} section')
-        return sections[0]
 
     def test_accepting_records_the_action_and_the_finalized_page_says_so(self):
         encounter = self.generated()
@@ -370,3 +419,258 @@ class APolarityOrAttRIBUTIONMarkerSuppressesTheOfferEntirely(TestCase):
                     'if|would|could|might|hypothetical|imagine|suppose')
         self.assertEqual(SCOPE_POINTERS + '|' + SCOPE_REFRAMERS, original)
         self.assertEqual(INHERITED_SCOPE.pattern, r'\b(?:' + original + r')\b')
+
+
+class WhatTheRefutationPassFound(AnUnacceptedSuggestionCannotReachAnExport):
+    """Every test here is a defect three isolated refutation lenses demonstrated in this diff.
+
+    Each ran in its own sealed worktree with its own database, so none could see the others'
+    work — and the first two rows below were found independently by three of them.
+    """
+
+    def test_an_ordinary_later_save_does_not_withdraw_an_acceptance(self):
+        """⚠️ THE ONE ALL THREE LENSES FOUND. Once accepted, the page renders the accepted branch,
+        which has NO checkbox to re-post. Recomputing the flag from the POST therefore wrote False
+        over a real True on the very next save — and the finalized record then told the doctor
+        their own decision had not been made."""
+        encounter = self.generated()
+        self.resolve_other(encounter, {'answer_' + self.key: '', 'accept_' + self.key: 'on',
+                                       'reviewed_' + self.key: 'on'})
+        self.assertTrue(encounter.answers[self.key]['accepted_suggestion'])
+        # Re-post exactly the form the page now renders — no accept box exists in it.
+        page = self.section(encounter, 'Symptoms')
+        self.assertNotIn(f'name="accept_{self.key}"', page, 'the premise of this test')
+        for _ in range(3):
+            self.resolve_other(encounter, {'answer_' + self.key: self.SUGGESTION,
+                                           'reviewed_' + self.key: 'on'})
+            self.assertTrue(encounter.answers[self.key]['accepted_suggestion'],
+                            'an ordinary re-save must not revoke a decision nobody revoked')
+        self.finalize(encounter)
+        self.assertIn('Suggestion accepted', self.section(encounter, 'Symptoms'))
+
+    def saved_audit_row(self, before):
+        """⚠️ SELECTED BY WHAT IS NEW, NOT BY `order_by('-id')`. `Entity` uses a UUID primary key,
+        so ordering by it sorts hex strings and returns an arbitrary row — which read exactly like
+        a real failure until I looked."""
+        rows = AuditEvent.objects.filter(action='encounter.answers_saved').exclude(pk__in=before)
+        self.assertEqual(rows.count(), 1)
+        return rows.get()
+
+    def audit_ids(self):
+        return set(AuditEvent.objects.filter(action='encounter.answers_saved')
+                   .values_list('pk', flat=True))
+
+    def test_the_acceptance_is_attributed_and_audited(self):
+        encounter = self.generated()
+        before = self.audit_ids()
+        self.resolve_other(encounter, {'answer_' + self.key: '', 'accept_' + self.key: 'on',
+                                       'reviewed_' + self.key: 'on'})
+        self.assertEqual(encounter.answers[self.key]['accepted_by'], str(self.user.pk))
+        self.assertIn(self.key, self.saved_audit_row(before).details['accepted_suggestions'])
+        # Carrying it forward must not re-attribute it, and is not itself a new act.
+        before = self.audit_ids()
+        self.resolve_other(encounter, {'answer_' + self.key: self.SUGGESTION,
+                                       'reviewed_' + self.key: 'on'})
+        self.assertEqual(encounter.answers[self.key]['accepted_by'], str(self.user.pk))
+        self.assertNotIn(self.key, self.saved_audit_row(before).details['accepted_suggestions'])
+
+    def test_typing_the_same_words_by_hand_is_not_an_acceptance(self):
+        encounter = self.generated()
+        self.resolve_other(encounter, {'answer_' + self.key: self.SUGGESTION,
+                                       'reviewed_' + self.key: 'on'})
+        self.assertFalse(encounter.answers[self.key]['accepted_suggestion'])
+        self.assertIsNone(encounter.answers[self.key]['accepted_by'])
+
+    def test_accepting_requires_the_same_role_as_reviewing(self):
+        """The template renders the box `disabled` for everyone else; that is client-side only.
+        `accept_code`, the other accept-a-suggestion action, is role-gated, attributed and audited."""
+        weak = User.objects.create_user(username='weak-role', email='weak@synthetic.invalid',
+                                        verified_at=timezone.now())
+        Membership.objects.create(user=weak, department=self.department, role='employee')
+        encounter = self.generated()
+        self.client.force_login(weak)
+        response = self.client.post(f'/encounters/{encounter.pk}/save/',
+                                    {'revision': encounter.revision,
+                                     'answer_' + self.key: '', 'accept_' + self.key: 'on'})
+        self.assertEqual(response.status_code, 403)
+        encounter.refresh_from_db()
+        self.assertEqual(encounter.answers[self.key]['text'], '')
+        self.assertFalse(encounter.answers[self.key].get('accepted_suggestion'))
+        # POSITIVE CONTROL — the same user, the same request, against the sibling control.
+        self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/save/',
+                                          {'revision': encounter.revision,
+                                           'reviewed_' + self.key: 'on'}).status_code, 403)
+
+
+class ACandidateIsNotOfferedWhenTheNoteDisagreesWithIt(TestCase):
+    """Three shapes a refutation lens drove to a signed document, each offered for one click."""
+
+    def test_a_line_initial_correction_suppresses_the_offer(self):
+        notes = ('Symptoms: no chest pain\n'
+                 'Correction: the patient reports severe crushing chest pain.\n'
+                 'Examination: normal gait')
+        answer = judge(notes, ['no chest pain'], label='Symptoms')
+        self.assertEqual(answer['status'], 'conflict')
+        self.assertIsNone(answer.get('suggestion'),
+                          'the next line retracts this answer; it is not a formatting quibble')
+
+    def test_a_labelled_answer_contradicted_by_free_text_suppresses_the_offer(self):
+        notes = ('Fictional test note. Findings follow:\n'
+                 'Extent: the scope reached the splenic flexure\n'
+                 'The scope was advanced to the cecum.')
+        answer = judge(notes, ['The scope was advanced to the cecum.'], label='Extent')
+        self.assertEqual(answer['status'], 'conflict')
+        self.assertIsNone(answer.get('suggestion'),
+                          'splenic flexure versus caecum is a completeness claim, not a quibble')
+
+    def test_two_candidate_values_suppress_the_offer(self):
+        notes = ('Fictional software test only. Prior records reviewed:\n'
+                 'Allergies: penicillin\n'
+                 'Patient now reports no known drug allergies.')
+        answer = judge(notes, ['penicillin', 'Patient now reports no known drug allergies.'],
+                       label='Allergies')
+        self.assertEqual(answer['status'], 'conflict')
+        self.assertIsNone(answer.get('suggestion'),
+                          'one checkbox must not write a drug allergy and its retraction together')
+
+    def test_the_ordinary_case_is_still_offered(self):
+        """POSITIVE CONTROL. Without it every assertion above passes if nothing is ever offered."""
+        self.assertEqual(judge(NOTE, [SCOPED])['suggestion'], 'the scope reached the cecum')
+
+
+class EveryRuleHoldsUnderTheTabContractToo(TestCase):
+    """⚠️ THE CONTRACT THE OWNER'S WORD FORMS USE, WHICH HAD ZERO COVERAGE IN THIS MODULE.
+
+    A refutation lens measured `validate_tab_selections` called zero times across all 44 tests,
+    then widened its guard so a model-DECLARED contradiction became a one-click suggestion — and
+    the suite stayed green. Every rule the legacy tests assert is re-asserted here against the tab
+    validator, which reaches the code by a different path with a different evidence shape.
+
+    ⚠️ EVERY NOTE HERE CARRIES `PREFIX`, AND THAT IS LOAD-BEARING. The tab validator only holds an
+    answer when something in the note leaves scope open; without it these notes come back
+    `supported`, and every "offers nothing" assertion below would pass because nothing is ever
+    offered. `listed` is a plain POINTER, so it makes the answer review-required without asserting
+    anything about polarity — which is exactly the state in which a candidate SHOULD be offered.
+    `test_the_prefix_alone_still_offers` is the control that proves it.
+    """
+    PREFIX = 'See the findings listed in the report.\n'
+    SCOPED_LINE = 'EXTENT: the scope reached the cecum.'
+    TAB_NOTE = PREFIX + SCOPED_LINE
+
+    def test_the_prefix_alone_still_offers(self):
+        """THE CONTROL FOR EVERY SUPPRESSION TEST IN THIS CLASS."""
+        answer = judge_tab(self.TAB_NOTE, [self.SCOPED_LINE])
+        self.assertEqual(answer['status'], 'conflict')
+        self.assertEqual(answer['text'], '')
+        self.assertEqual(answer['suggestion'], 'the scope reached the cecum.')
+        self.assertEqual(answer['evidence'],
+                         [{'quote': self.TAB_NOTE, 'start': 0, 'end': len(self.TAB_NOTE)}],
+                         'the governing context stays attached, exactly as before')
+        entry = answer['suggestion_evidence'][0]
+        self.assertEqual(entry['quote'], self.SCOPED_LINE)
+        self.assertEqual(self.TAB_NOTE[entry['start']:entry['end']], entry['quote'])
+
+    def test_the_real_mixed_word_shape_still_offers(self):
+        """The §1e shape: the doctor's own heading, which this form does not use, and no full
+        stop. That is what made `inherited` true on the encounter this feature came from."""
+        notes = 'Fictional software test only.\nEXTENT: the scope reached the cecum'
+        fields = [{'key': 'k', 'label': 'Extent of examination', 'kind': 'text',
+                   'locator': {'cell': 0, 'tab_form': {'version': 1}}}]
+        chosen = Selections(fields=[Selection(key='k', quotes=['EXTENT: the scope reached the cecum'],
+                                              conflict=False)])
+        answer = validate_tab_selections(notes, fields, chosen)['k']
+        self.assertEqual(answer['status'], 'conflict')
+        self.assertEqual(answer['suggestion'], 'EXTENT: the scope reached the cecum')
+
+    def test_a_model_declared_conflict_is_never_dressed_as_a_suggestion(self):
+        """The exact mutation that passed 44 of 44 while this contract had no coverage."""
+        answer = judge_tab(self.TAB_NOTE, [self.SCOPED_LINE], conflict=True)
+        self.assertEqual(answer['status'], 'conflict')
+        self.assertIsNone(answer.get('suggestion'))
+
+    def test_a_denial_heading_suppresses_the_offer(self):
+        notes = 'The following findings are denied:\nFinding: diabetes.'
+        answer = judge_tab(notes, ['Finding: diabetes.'], label='Finding')
+        self.assertEqual(answer['status'], 'conflict')
+        self.assertIsNone(answer.get('suggestion'))
+
+    def test_a_hypothetical_frame_suppresses_the_offer(self):
+        notes = 'Suppose bleeding were present.\nBleeding was observed.'
+        answer = judge_tab(notes, ['Bleeding was observed.'], label='Bleeding')
+        self.assertEqual(answer['status'], 'conflict')
+        self.assertIsNone(answer.get('suggestion'))
+
+    def test_reported_speech_suppresses_the_offer(self):
+        notes = 'The patient said "it hurts here".\nFinding: tenderness.'
+        answer = judge_tab(notes, ['Finding: tenderness.'], label='Finding')
+        self.assertEqual(answer['status'], 'conflict')
+        self.assertIsNone(answer.get('suggestion'))
+
+    def test_a_line_initial_correction_suppresses_the_offer(self):
+        notes = self.PREFIX + ('Symptoms: no chest pain.\n'
+                               'Correction: the patient reports severe crushing chest pain.')
+        answer = judge_tab(notes, ['Symptoms: no chest pain.'], label='Symptoms')
+        self.assertEqual(answer['status'], 'conflict')
+        self.assertIsNone(answer.get('suggestion'))
+
+    def test_two_explicit_values_offer_nothing(self):
+        notes = self.PREFIX + 'CONSENT: written.\nCONSENT: verbal.'
+        answer = judge_tab(notes, ['CONSENT: written.', 'CONSENT: verbal.'], label='CONSENT')
+        self.assertEqual(answer['status'], 'conflict')
+        self.assertIsNone(answer.get('suggestion'))
+
+    def test_a_failed_subject_guard_offers_nothing(self):
+        notes = self.PREFIX + 'The scope was advanced to the cecum.'
+        answer = judge_tab(notes, ['The scope was advanced to the cecum.'], label='CONSENT')
+        self.assertEqual(answer['status'], 'conflict')
+        self.assertIsNone(answer.get('suggestion'))
+
+    def test_an_identity_field_offers_nothing(self):
+        answer = judge_tab(self.TAB_NOTE, [self.SCOPED_LINE], label='Electronically signed by')
+        self.assertEqual(answer['status'], 'missing')
+        self.assertIsNone(answer.get('suggestion'))
+
+    def test_invalid_provenance_is_still_refused(self):
+        with self.assertRaises(ValidationError):
+            judge_tab(self.TAB_NOTE, ['EXTENT: a sentence never written.'])
+
+    def test_both_validators_were_actually_reached(self):
+        """⚠️ THE CONTROL FOR THE HELPERS THEMSELVES. Without it, every test in this class could
+        be running the legacy validator through a mislabelled helper and proving nothing."""
+        from core import generation
+        seen = []
+        original = generation.validate_tab_selections
+        try:
+            generation.validate_tab_selections = lambda *a, **k: (seen.append('tab'), original(*a, **k))[1]
+            validate_tab_selections(self.TAB_NOTE,
+                                    [{'key': 'k', 'label': 'EXTENT', 'kind': 'text',
+                                      'locator': {'cell': 0, 'tab_form': {'version': 1}}}],
+                                    Selections(fields=[Selection(key='k', quotes=[self.SCOPED_LINE],
+                                                                 conflict=False)]))
+        finally:
+            generation.validate_tab_selections = original
+        # `validate_selections` dispatches to the tab validator by looking at the locators, so a
+        # legacy-contract call reaching it would show up here too.
+        self.assertEqual(judge(NOTE, [SCOPED])['suggestion'], 'the scope reached the cecum',
+                         'and the legacy helper must still reach the legacy validator')
+        self.assertEqual(judge_tab(self.TAB_NOTE, [self.SCOPED_LINE])['suggestion'],
+                         'the scope reached the cecum.',
+                         'the two helpers must return different shapes from different code')
+
+
+class TypedTextWinsOnTheRealDocumentPath(AnUnacceptedSuggestionCannotReachAnExport):
+    """A lens noted "typed text wins" was asserted only against a hand-written answers dict, so
+    the rule had no coverage on the authenticated docx path it actually governs."""
+
+    def test_typed_text_beats_a_ticked_accept_box_and_is_what_exports(self):
+        encounter = self.generated()
+        self.resolve_other(encounter, {'answer_' + self.key: self.TYPED,
+                                       'accept_' + self.key: 'on',
+                                       'reviewed_' + self.key: 'on'})
+        self.assertEqual(encounter.answers[self.key]['text'], self.TYPED)
+        self.assertFalse(encounter.answers[self.key]['accepted_suggestion'])
+        exported = self.finalize(encounter)
+        self.assertEqual(Document(BytesIO(exported)).paragraphs[0].text, f'Symptoms: {self.TYPED}')
+        with ZipFile(BytesIO(exported)) as archive:
+            blob = b''.join(archive.read(n) for n in archive.namelist())
+        self.assertNotIn(self.SUGGESTION.encode(), blob)
