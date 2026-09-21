@@ -341,7 +341,14 @@ def generate_view(request,pk):
         if not rate_limit('generate:'+str(request.user.pk),limit=30):raise ValidationError('Generation rate limit reached.')
         if 'revision' in request.POST and request.POST['revision']!=str(e.revision):raise ValidationError('Source notes changed. Reload before generating answers.')
         quoted=usage_quote(request,e)
-        enqueue(e,request.user,config=quoted,expected_revision=e.revision);messages.success(request,'Generation queued. Refresh this page to view the result.')
+        job=enqueue(e,request.user,config=quoted,expected_revision=e.revision)
+        if getattr(job,'reused',False):
+            # Reached from a stale page (Back, or a second tab): a generation does not renumber the
+            # revision, so the succeeded job still holds this request key. Saying "queued" would
+            # promise a request that was not made and answers that will not change.
+            messages.info(request,'These source notes already have an answer draft from an earlier request. No new request was made and nothing was charged. Edit and save the notes to generate again.')
+        else:
+            messages.success(request,'Generation queued. Refresh this page to view the result.')
     except ValidationError as exc:messages.error(request,error_message(exc))
     return redirect('encounter_detail',pk=pk)
 
@@ -517,7 +524,12 @@ def voice(request,pk):
                 'standard_limit':Decimal(over.quote['standard_limit']),
                 'affordable':available_balance(request.user,e.department)>=Decimal(over.quote['charge_limit'])},status=409)
         if job.input_path!=relative:private_path(relative).unlink(missing_ok=True)
-        messages.success(request,f"Transcription queued with a limit of ${Decimal(job.config.get('charge_limit','0'))}. Review the transcript before generating answers.")
+        if getattr(job,'reused',False):
+            # The identical recording already holds this request key; the redundant upload was just
+            # removed above. Nothing was sent to the provider and nothing was charged again.
+            messages.info(request,'This recording was already transcribed for this document. No new request was made and nothing was charged. Its transcript is below in Document record.')
+        else:
+            messages.success(request,f"Transcription queued with a limit of ${Decimal(job.config.get('charge_limit','0'))}. Review the transcript before generating answers.")
     except ValidationError as exc:
         if relative:private_path(relative).unlink(missing_ok=True)
         messages.error(request,error_message(exc))

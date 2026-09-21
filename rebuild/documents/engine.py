@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from pathlib import PurePosixPath
 import re
 import stat
@@ -17,9 +18,9 @@ from pypdf.generic import ArrayObject, DictionaryObject, IndirectObject
 from reportlab.pdfbase.pdfmetrics import stringWidth
 
 if __package__:
-    from .tab_form import inspect_tabs, fill_tabs, WARNINGS as TAB_WARNINGS
+    from .tab_form import inspect_tabs, fill_tabs, _answer_tab, WARNINGS as TAB_WARNINGS
 else:  # Isolated worker imports this module directly.
-    from tab_form import inspect_tabs, fill_tabs, WARNINGS as TAB_WARNINGS
+    from tab_form import inspect_tabs, fill_tabs, _answer_tab, WARNINGS as TAB_WARNINGS
 
 MAX_FIELDS = 200
 MAX_ANSWER = 100_000
@@ -103,26 +104,61 @@ def docx_parts(document):
                 yield part
 
 
+def answerable_row(row_cells):
+    """A row that LOOKS like question/answer but is not a shape this adapter maps.
+
+    Deliberately conservative: at least one short, label-like cell with text, and at least
+    one other cell entirely empty. A fully populated data table and a one-column layout
+    table both score false, so an ordinary document does not collect advisory noise.
+    """
+    texts = ["".join(cell.xpath(".//w:t/text()")).strip() for cell in row_cells]
+    return any(text and len(text) <= 80 for text in texts) and any(not text for text in texts)
+
+
+def answer_tabs_present(paragraphs):
+    """Underlined answer tabs exist somewhere, WITHOUT mapping them.
+
+    Detection only. The tab adapter owns its own contract and runs solely when no
+    placeholder/table mapping applies; this exists so that precedence can be REPORTED
+    instead of silently discarding a whole section of the doctor's form.
+    """
+    for paragraph in paragraphs:
+        if any(_answer_tab(run) for run in paragraph._p.findall(qn("w:r"))):
+            return True
+    return False
+
+
 def docx_inspect(path):
     validate_docx(path)
     document = Document(path)
     paragraphs = []
     cells = []
     fields = []
+    # Answer-shaped areas this adapter deliberately does NOT map. Every one of these was a
+    # silent `continue`: the import succeeded, the doctor saw a plausible field list, and the
+    # rest of the form was gone with nothing said. Refusing them is right; saying nothing is not.
+    skipped = Counter()
     for part in docx_parts(document):
         for element in part.element.iter(qn("w:p")):
             paragraphs.append(Paragraph(element, part))
         for row in part.element.iter(qn("w:tr")):
             row_cells = row.findall(qn("w:tc"))
             if len(row_cells) != 2:
+                if answerable_row(row_cells):
+                    skipped["multi_column"] += 1
                 continue
             # Merged cells can conceal a different question/answer boundary.
             if any(cell.xpath(".//w:vMerge | .//w:gridSpan | .//w:tbl") for cell in row_cells):
+                if answerable_row(row_cells):
+                    skipped["merged"] += 1
                 continue
             left, right = row_cells
             label = "".join(left.xpath(".//w:t/text()")).strip()
             contents = "".join(right.xpath(".//w:t/text()")).strip()
-            if label and not contents and not right.xpath(".//w:drawing | .//w:pict | .//w:br"):
+            if label and not contents:
+                if right.xpath(".//w:drawing | .//w:pict | .//w:br"):
+                    skipped["answer_cell_contents"] += 1
+                    continue
                 if row.xpath('./w:trPr/w:trHeight[@w:hRule="exact"]'):
                     fail("A blank answer cell has fixed height and could hide text; use an expanding row.", "overflow_risk")
                 cells.append(right)
@@ -140,11 +176,44 @@ def docx_inspect(path):
                            "locator": {"paragraph": index, "start": match.start(), "end": match.end(), "token": match.group()}})
     if not fields:
         fields = inspect_tabs(path, paragraphs, fail)
+    elif answer_tabs_present(paragraphs):
+        # PRECEDENCE, REPORTED. The tab adapter runs only when nothing else matched, so a form
+        # holding both a question/answer table and a labelled underlined section previously
+        # mapped the table and discarded the section without a word. The same section on its
+        # own imports perfectly, which is what makes the silence so misleading.
+        skipped["underlined_tabs"] += 1
     if not fields:
-        fail("No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields.", "no_fields")
+        # The skipped areas ARE the explanation. Without them this refusal tells a doctor whose
+        # form is full of visible blanks that the form contains nothing at all.
+        fail(" ".join(["No supported fields found."] + unmapped_notes(skipped)
+                      + ["Use labelled underlined answer tabs, {{Question}} placeholders, or two-column "
+                         "question/blank-answer tables. Unlabelled decorative lines are not fields."]), "no_fields")
     if len(fields) > MAX_FIELDS or any(len(field["label"]) > 2000 for field in fields):
         fail("The template exceeds 200 fields or has an oversized question.", "field_limit")
-    return document, paragraphs, cells, fields
+    return document, paragraphs, cells, fields, unmapped_notes(skipped)
+
+
+UNMAPPED_NOTES = {
+    "multi_column": ("{count} table row(s) have a question and a blank answer but are not two columns, so they were NOT "
+                     "mapped. Only two-column question/answer rows are placed automatically. Split those rows into two "
+                     "columns, or add a {{{{Question name}}}} placeholder in each answer cell."),
+    "merged": ("{count} table row(s) with merged cells were NOT mapped, because a merge can hide where the answer really "
+               "belongs. Unmerge those answer cells, or add a {{{{Question name}}}} placeholder inside each one."),
+    "answer_cell_contents": ("{count} blank answer cell(s) contain a line break, image or drawing and were NOT mapped, so "
+                             "nothing there is overwritten. Clear the cell, or add a {{{{Question name}}}} placeholder in it."),
+    "underlined_tabs": ("This form also contains labelled underlined answer blanks. They were NOT mapped, because a form "
+                        "uses ONE method: placeholders and question/answer tables take precedence. Keep one style "
+                        "throughout, or add a {{{{Question name}}}} placeholder on each underlined line."),
+}
+
+
+def unmapped_notes(skipped):
+    """Name every answer-shaped area that was skipped, with a supported alternative.
+
+    Ordered by UNMAPPED_NOTES so the same document always reports the same way. These are
+    review notes, not errors: the mapping that WAS produced remains valid and usable.
+    """
+    return [UNMAPPED_NOTES[reason].format(count=skipped[reason]) for reason in UNMAPPED_NOTES if skipped.get(reason)]
 
 
 def replace_span(paragraph, start, end, answer):
@@ -309,10 +378,13 @@ def process(workspace, request):
     path = workspace / ("input." + fmt)
     warnings = []
     if fmt == "docx":
-        document, paragraphs, cells, fields = docx_inspect(path)
+        document, paragraphs, cells, fields, notes = docx_inspect(path)
         warnings = ["DOCX answers expand and can change pagination. Review the exported document's layout."]
         if fields and "tab_form" in fields[0]["locator"]:
             warnings.extend(TAB_WARNINGS)
+        # Answer-shaped areas that were NOT mapped, named first: they are what the doctor
+        # would otherwise discover only by reading the exported form and finding it blank.
+        warnings = notes + warnings
     elif fmt == "pdf":
         reader, fields = pdf_inspect(path)
         warnings = ["PDF text fields only. Answers must fit visibly; overflow is rejected."]
