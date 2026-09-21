@@ -34,6 +34,43 @@ ADAPTER = 'scripts/activate-business-readiness.py'
 ADAPTER_SHA256 = '4e85207114a175d248907a82a49c60408d1e58f6f9a83011c8f3214734896a04'
 BASELINE = '08e40870f18ca4e79b0cc2b27d6b09ba48f911a7'
 RUNNING_RELEASE = 'cf3905346d1b72d29cf602b98853f4017294afb5'
+#: ⚠️ A COUNT IS NOT A SCHEMA. Both call sites below read `len(old.tables()) == 35`, and two
+#: DIFFERENT 35-table sets compare equal by length — one table dropped and another added cancel
+#: out exactly, which is the shape a preservation check exists to catch. The expectation is the
+#: SET, by name, and it is the SAME object on the normal path and the recovery path, so the two
+#: cannot drift apart.
+#:
+#: These 35 names are the schema this driver shipped against, taken from the RETAINED capture
+#: manifest `20260921T043001Z-0a6f66da` — the run this lineage already pins as recovery evidence
+#: — and NOT from the live database, because a check whose expectation is read from the thing it
+#: is testing cannot fail. Historical callers keep exactly this set and are unchanged.
+#:
+#: An adapter for a later baseline overrides this from ITS OWN reviewed declaration. It is not
+#: widened here.
+BASELINE_TABLES = frozenset({
+    'auth_group', 'auth_group_permissions', 'auth_permission',
+    'core_auditevent', 'core_code', 'core_codeset',
+    'core_codesuggestion', 'core_costreconciliation', 'core_department',
+    'core_encounter', 'core_invitation', 'core_job',
+    'core_ledgerentry', 'core_loginattempt', 'core_membership',
+    'core_organization', 'core_patient', 'core_payment',
+    'core_platformcost', 'core_providerreceipt', 'core_refund',
+    'core_reservation', 'core_template', 'core_templateversion',
+    'core_usage', 'core_user', 'core_user_groups',
+    'core_user_user_permissions', 'core_verification', 'core_wallet',
+    'core_webhookevent', 'django_content_type', 'django_migrations',
+    'django_session', 'otp_totp_totpdevice',
+})
+
+
+def require_baseline_schema(old):
+    """The one reviewed schema expectation, shared by the normal and the recovery path."""
+    observed = frozenset(old.tables())
+    require(observed == BASELINE_TABLES,
+            'Unexpected tables. Missing: %s. Unexpected: %s.'
+            % (sorted(BASELINE_TABLES - observed), sorted(observed - BASELINE_TABLES)))
+
+
 MIGRATION = '0017_reconciliation_evidence_kind'
 RUNTIME_ALLOWED = {
     '.github/workflows/test.yml',
@@ -443,8 +480,9 @@ def resume_failed(args):
     require(old_stage.resolve(strict=True) == old_stage and old_stage.is_dir() and not list(old_stage.iterdir()),
             'Original collector progressed unexpectedly; inspect without generic resume.')
     b.stopped()
-    require(len(old.tables()) == 35 and b.output(old.PSQL + ["SELECT count(*) FROM core_job WHERE state IN ('queued','running','reconciliation')"]) == '0',
-            'Unexpected tables or unresolved jobs during repair.')
+    require_baseline_schema(old)
+    require(b.output(old.PSQL + ["SELECT count(*) FROM core_job WHERE state IN ('queued','running','reconciliation')"]) == '0',
+            'Unresolved jobs during repair.')
     verify_migrations(old, b.output(b.management('showmigrations', '--plan'), cwd=APP))
     original = word.checked_file(APP / '.env', private=True)
     require(original == word.checked_file(state_before / 'prior-environment.env', private=True)
@@ -600,8 +638,9 @@ def main():
     original = word.checked_file(APP / '.env', private=True)
     updated = b.updated_environment(original, args.target)
     restore, manifest = a.backup_evidence(args.backup_report, modules)
-    require(len(old.tables()) == 35 and b.output(old.PSQL + ["SELECT count(*) FROM core_job WHERE state IN ('queued','running','reconciliation')"]) == '0',
-            'Unexpected tables or unresolved jobs.')
+    require_baseline_schema(old)
+    require(b.output(old.PSQL + ["SELECT count(*) FROM core_job WHERE state IN ('queued','running','reconciliation')"]) == '0',
+            'Unresolved jobs.')
     verify_migrations(old, b.output(b.management('showmigrations', '--plan'), cwd=APP))
     before_health = b.health(RUNNING_RELEASE)
     before_proofs = identity.verify_live(RUNNING_RELEASE, storage)

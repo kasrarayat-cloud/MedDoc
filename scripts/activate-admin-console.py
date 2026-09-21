@@ -29,7 +29,7 @@ APP = ROOT / 'rebuild'
 PRIVATE = APP / '.runtime'
 SELF = 'scripts/activate-admin-console.py'
 DRIVER = 'scripts/activate-typed-voice.py'
-DRIVER_SHA256 = 'ef4c050862b52d29b2dc62a0d60bc183354f50d8e41c261f9137f1f79bded4bd'
+DRIVER_SHA256 = '4e2efda2357fa2c33262eb2f747ac7201eadbc94875528cde2b7fe9040ebba18'
 DECL = 'docs/foundation/mutations/20260921-quillmd-admin-console-integration.md'
 EVIDENCE = PRIVATE / 'admin-console-20260921'
 # The baseline is the SERVED release, not shared main: main already carries the merged
