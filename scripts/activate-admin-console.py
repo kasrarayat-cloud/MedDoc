@@ -12,7 +12,10 @@ migration, and a preservation comparison that tolerates that migration and nothi
 """
 from pathlib import Path, PurePosixPath
 import hashlib
+import json
+import os
 import re
+import stat
 import subprocess
 import sys
 import types
@@ -42,6 +45,9 @@ CAPTURE_RUN = '20260921T043001Z-0a6f66da'
 CAPTURE_SOURCE = '08e40870f18ca4e79b0cc2b27d6b09ba48f911a7'
 CAPTURE_MANIFEST_SHA256 = 'ac714b19363a66294d35cfde0d4b1de62de2ab9db1916b67f466f9e41bd19c82'
 OPS_TEST = 'rebuild/ops/test_admin_console_activation.py'
+# The last transition that installed public assets, and its receipt, pinned by content.
+PRIOR_TRANSITION = 'typed-voice-20260921/typed-voice-resume-b6b40b02.json'
+PRIOR_TRANSITION_SHA256 = '757d43c7da60db56ea8f5030757e7bf95db4f37e5677cae7648a114c4b04d13e'
 SCREENSHOTS = 'docs/rebuild/admin-console-screenshots-20260921/'
 RESULT_PATTERN = r'typed-voice-activation-[a-zA-Z0-9_-]+\.json'
 RENAMED_PATTERN = r'admin-console-activation-[a-zA-Z0-9_-]+\.json'
@@ -254,6 +260,116 @@ def validate_changed(changed):
             'No service policy or workflow change is declared by this activation.')
 
 
+LOADED = {}
+
+
+def recorded_static():
+    """The retained public assets, from the last transition's OWN receipt, pinned by sha256."""
+    data = (PRIVATE / PRIOR_TRANSITION).read_bytes()
+    require(sha(data) == PRIOR_TRANSITION_SHA256, 'Prior static-transition receipt changed.')
+    receipt = json.loads(data)
+    require(receipt.get('complete') is True and receipt.get('migration_performed') is False
+            and receipt.get('existing_hashed_assets_retained') is True,
+            'Prior receipt is not a completed retaining code-only transition.')
+    after = receipt.get('static_transition', {}).get('after')
+    require(isinstance(after, dict) and after, 'Prior transition recorded no installed public assets.')
+    return after
+
+
+def authenticated_static_inventory(identity, word):
+    """The inherited reader's guards, with its FIXED retained set replaced by a RECORDED one.
+
+    ⚠️ THE INHERITED ALLOWLIST IS SINGLE-USE, AND THIS IS ITS SECOND RECURRENCE. It admits the
+    CURRENT compiled asset plus two hard-coded historical ones, so EVERY retaining transition
+    leaves behind an asset the next activation cannot name. Its own docstring records the first
+    recurrence — it exists because the activator before it "only recognizes the current manifest".
+    Measured here: `staticfiles/` holds three CSS and two JS generations, and the constant names
+    one CSS pair, so the reader refuses a directory nothing is wrong with. Hard-coding today's
+    four extra assets would only move the wall to the next activation.
+
+    ⚠️ NOTHING IS LOOSENED. Every structural guard is kept: canonical root, operator ownership,
+    no symlink, regular files, one link, bounded size and count, exact 0644/0755 modes, the
+    manifest equal to the reviewed input set, each compiled name matching the hashed pattern, and
+    each collected source byte-equal to the current application source. The inherited constant
+    keeps full authority over the two assets it does name. What changes is only the PROVENANCE of
+    the rest: an extra object must appear in the last transition's own pinned receipt with
+    identical kind/mode/size/sha256, AND be a previously compiled form of a declared input.
+
+    ⚠️ THIS BUILDS ITS ROWS INDEPENDENTLY, ON PURPOSE. The caller cross-checks this against the
+    entry point's own descriptor reader. Delegating to that reader would make the comparison
+    compare a value with itself, so a future simplification that calls it here would silently
+    turn a real cross-check into a tautology. The ops test pins that this does not delegate.
+    """
+    root = APP / 'staticfiles'
+    require(root.is_absolute() and root.resolve(strict=True) == root, 'Canonical static root required.')
+    rows = {}
+    for path in [root, *sorted(root.rglob('*'))]:
+        require(len(rows) < 10000, 'Static output inventory exceeds the bounded scope.')
+        info = path.lstat()
+        directory = stat.S_ISDIR(info.st_mode)
+        require(info.st_uid == os.getuid() and not stat.S_ISLNK(info.st_mode)
+                and (directory or stat.S_ISREG(info.st_mode))
+                and stat.S_IMODE(info.st_mode) == (0o755 if directory else 0o644)
+                and (directory or (info.st_nlink == 1 and info.st_size <= 16 * 1024 * 1024)),
+                'Static output must be operator-owned, regular, unlinked and correctly moded.')
+        relative = '.' if path == root else path.relative_to(root).as_posix()
+        row = {'mode': stat.S_IMODE(info.st_mode), 'device': info.st_dev, 'inode': info.st_ino,
+               'kind': 'directory' if directory else 'file'}
+        if not directory:
+            data = path.read_bytes()
+            require(len(data) == info.st_size, 'Static output changed during read.')
+            row.update(size=len(data), sha256=sha(data))
+        rows[relative] = row
+    manifest = json.loads((root / 'staticfiles.json').read_bytes())
+    inputs = identity.static_sources()
+    require(isinstance(manifest.get('paths'), dict) and set(manifest['paths']) == set(inputs) == t.STATIC_INPUTS,
+            'Static manifest differs from the reviewed application and installed OTP assets.')
+    allowed, allowed_dirs, patterns = {'staticfiles.json'}, {'.'}, []
+    for source, compiled in manifest['paths'].items():
+        original = PurePosixPath(source)
+        pattern = re.escape(str(original.with_suffix(''))) + r'\.[a-f0-9]{12}' + re.escape(original.suffix)
+        require(isinstance(compiled, str) and re.fullmatch(pattern, compiled),
+                'Static manifest includes an unexpected path.')
+        require((root / source).read_bytes() == inputs[source].read_bytes(),
+                'Collected static input differs from current application source.')
+        require(compiled in rows and rows[compiled]['kind'] == 'file', 'Compiled static asset is missing.')
+        patterns.append(pattern)
+        for name in (source, compiled):
+            allowed.update((name, name + '.gz', name + '.br'))
+            allowed_dirs.update(str(parent) for parent in PurePosixPath(name).parents)
+    inherited = LOADED['old'].RETAINED_STATIC
+    for name, expected in inherited.items():
+        found = rows.get(name, {})
+        require(found.get('kind') == 'file'
+                and all(found.get(key) == expected[key] for key in ('mode', 'size', 'sha256')),
+                'A historically retained public asset differs from its exact recorded bytes or mode.')
+    retained = recorded_static()
+    for name, row in rows.items():
+        if name in allowed or name in inherited or (row['kind'] == 'directory' and name in allowed_dirs):
+            continue
+        expected = retained.get(name)
+        require(expected is not None
+                and all(expected.get(key) == row.get(key) for key in ('kind', 'mode', 'size', 'sha256')),
+                'Static output contains an object no recorded transition installed: ' + name)
+        require(row['kind'] == 'file'
+                and any(re.fullmatch(pattern + r'(?:\.gz|\.br)?', name) for pattern in patterns),
+                'A retained public asset is not a previously compiled form of a declared input: ' + name)
+    return rows
+
+
+_inherited_load = a.load
+
+
+def load(name, relative, target):
+    module = _inherited_load(name, relative, target)
+    if name == 'old':
+        LOADED['old'] = module
+        # Replace only this one reader on the byte-identical qualified helper, the same way the
+        # inherited adapters replace `systemd` and `private_write` on theirs.
+        module.static_inventory = authenticated_static_inventory
+    return module
+
+
 def verify_source(target):
     changed = _inherited_verify_source(target)
     require((SOURCE / DRIVER).read_bytes() == b.blob(BASELINE, DRIVER) == b.blob(target, DRIVER),
@@ -285,6 +401,7 @@ def configure():
                  'PREVIOUS_MIGRATION', 'CAPTURE_RUN', 'CAPTURE_SOURCE', 'CAPTURE_MANIFEST_SHA256'):
         setattr(a, name, globals()[name])
     a.receipt = receipt
+    a.load = load
     a.configured_driver()
     for name in ('EVIDENCE', 'SELF', 'DECL', 'BASELINE', 'RUNNING_RELEASE', 'MIGRATION',
                  'RUNTIME_ALLOWED', 'REQUIRED', 'validate_changed', 'verify_migrations',

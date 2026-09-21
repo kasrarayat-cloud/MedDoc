@@ -6,7 +6,9 @@ that did not happen.
 """
 import copy
 import inspect
+import json
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -212,6 +214,145 @@ class PreservationComparison(unittest.TestCase):
         self.assertIn("WHERE NOT (app='core' AND name='" + c.MIGRATION + "')",
                       [s for s in statements if 'django_migrations' in s][0])
         self.assertNotIn('WHERE', [s for s in statements if 'core_usage' in s][0])
+
+
+class StaticAuthentication(unittest.TestCase):
+    """The inherited allowlist is single-use; these pin what replaced it."""
+
+    HASHED = 'app.aaaaaaaaaaaa.css'
+    OLDER = 'app.bbbbbbbbbbbb.css'
+    HISTORIC = 'app.cccccccccccc.css'
+
+    def build(self):
+        base = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, base, True)
+        root = base / 'staticfiles'
+        root.mkdir(mode=0o755)
+        source = base / 'src'
+        source.mkdir(mode=0o755)
+        (source / 'app.css').write_bytes(b'body{}')
+        payload = {'app.css': b'body{}', self.HASHED: b'body{}', self.HASHED + '.gz': b'gz',
+                   self.OLDER: b'older', self.OLDER + '.gz': b'oldgz', self.HISTORIC: b'historic'}
+        for name, data in payload.items():
+            (root / name).write_bytes(data); (root / name).chmod(0o644)
+        (root / 'staticfiles.json').write_bytes(json.dumps({'paths': {'app.css': self.HASHED}}).encode())
+        (root / 'staticfiles.json').chmod(0o644)
+        digest = {n: c.sha(d) for n, d in payload.items()}
+        retained = {n: {'kind': 'file', 'mode': 0o644, 'size': len(payload[n]), 'sha256': digest[n]}
+                    for n in (self.OLDER, self.OLDER + '.gz')}
+        historic = {self.HISTORIC: {'mode': 0o644, 'size': len(payload[self.HISTORIC]),
+                                    'sha256': digest[self.HISTORIC]}}
+        identity = SimpleNamespace(static_sources=lambda: {'app.css': source / 'app.css'})
+        return base, root, identity, retained, historic
+
+    def run_inventory(self, base, identity, retained, historic, **over):
+        with patch.object(c, 'APP', base), patch.object(c.t, 'STATIC_INPUTS', {'app.css'}), \
+             patch.dict(c.LOADED, {'old': SimpleNamespace(RETAINED_STATIC=dict(historic))}, clear=False), \
+             patch.object(c, 'recorded_static', return_value=dict(retained, **over.pop('extra', {}))):
+            return c.authenticated_static_inventory(identity, None)
+
+    def test_a_population_every_object_of_which_is_accounted_for_is_accepted(self):
+        base, root, identity, retained, historic = self.build()
+        rows = self.run_inventory(base, identity, retained, historic)
+        self.assertEqual(set(rows), {'.', 'staticfiles.json', 'app.css', self.HASHED,
+                                     self.HASHED + '.gz', self.OLDER, self.OLDER + '.gz', self.HISTORIC})
+
+    def test_a_directory_no_manifest_entry_explains_refuses(self):
+        base, root, identity, retained, historic = self.build()
+        (root / 'sub').mkdir(mode=0o755)
+        with self.assertRaises(RuntimeError):
+            self.run_inventory(base, identity, retained, historic)
+
+    def test_an_object_no_recorded_transition_installed_refuses(self):
+        base, root, identity, retained, historic = self.build()
+        (root / 'app.dddddddddddd.css').write_bytes(b'stranger')
+        (root / 'app.dddddddddddd.css').chmod(0o644)
+        with self.assertRaises(RuntimeError) as caught:
+            self.run_inventory(base, identity, retained, historic)
+        self.assertIn('no recorded transition installed', str(caught.exception))
+
+    def test_a_retained_object_whose_bytes_or_mode_drifted_refuses(self):
+        for mutate, label in (
+                (lambda root: (root / self.OLDER).write_bytes(b'tampered'), 'bytes changed'),
+                (lambda root: (root / self.OLDER).chmod(0o600), 'mode changed')):
+            base, root, identity, retained, historic = self.build()
+            mutate(root)
+            with self.subTest(case=label), self.assertRaises(RuntimeError):
+                self.run_inventory(base, identity, retained, historic)
+
+    def test_a_recorded_object_that_is_not_a_compiled_form_of_an_input_refuses(self):
+        base, root, identity, retained, historic = self.build()
+        (root / 'unrelated.txt').write_bytes(b'x'); (root / 'unrelated.txt').chmod(0o644)
+        extra = {'unrelated.txt': {'kind': 'file', 'mode': 0o644, 'size': 1, 'sha256': c.sha(b'x')}}
+        with self.assertRaises(RuntimeError) as caught:
+            self.run_inventory(base, identity, retained, historic, extra=extra)
+        self.assertIn('previously compiled form', str(caught.exception))
+
+    def test_the_inherited_constant_keeps_full_authority_over_what_it_names(self):
+        base, root, identity, retained, historic = self.build()
+        (root / self.HISTORIC).write_bytes(b'rewritten-history')
+        with self.assertRaises(RuntimeError) as caught:
+            self.run_inventory(base, identity, retained, historic)
+        self.assertIn('historically retained', str(caught.exception))
+
+    def test_a_manifest_that_does_not_match_the_reviewed_inputs_refuses(self):
+        """Isolated: the manifest is internally valid, so ONLY the reviewed-input set can refuse."""
+        base, root, identity, retained, historic = self.build()
+        other, hashed = 'other.css', 'other.aaaaaaaaaaaa.css'
+        (base / 'src' / other).write_bytes(b'x')
+        for name in (other, hashed):
+            (root / name).write_bytes(b'x'); (root / name).chmod(0o644)
+        (root / 'staticfiles.json').write_bytes(
+            json.dumps({'paths': {'app.css': self.HASHED, other: hashed}}).encode())
+        (root / 'staticfiles.json').chmod(0o644)
+        identity = SimpleNamespace(static_sources=lambda: {'app.css': base / 'src' / 'app.css',
+                                                           other: base / 'src' / other})
+        with self.assertRaises(RuntimeError) as caught:
+            self.run_inventory(base, identity, retained, historic)
+        self.assertIn('reviewed application', str(caught.exception))
+
+    def test_a_wrongly_permissioned_current_asset_refuses(self):
+        """Isolated: this asset is in the manifest set, so no retained comparison can catch it."""
+        base, root, identity, retained, historic = self.build()
+        (root / self.HASHED).chmod(0o600)
+        with self.assertRaises(RuntimeError) as caught:
+            self.run_inventory(base, identity, retained, historic)
+        self.assertIn('operator-owned, regular, unlinked and correctly moded', str(caught.exception))
+
+    def test_a_collected_source_that_differs_from_the_application_refuses(self):
+        base, root, identity, retained, historic = self.build()
+        (root / 'app.css').write_bytes(b'body{different}')
+        with self.assertRaises(RuntimeError):
+            self.run_inventory(base, identity, retained, historic)
+
+    def test_it_does_not_delegate_to_the_entry_points_reader(self):
+        """Non-vacuity pin: the caller compares the two, so delegating makes that a tautology."""
+        base, root, identity, retained, historic = self.build()
+        with patch.object(c.t, 'static_inventory') as peer:
+            self.run_inventory(base, identity, retained, historic)
+        peer.assert_not_called()
+        self.assertIsNot(c.authenticated_static_inventory, c.t.static_inventory)
+        self.assertNotIn('t.static_inventory', inspect.getsource(c.authenticated_static_inventory))
+
+    def test_the_prior_receipt_is_pinned_by_content(self):
+        source = inspect.getsource(c.recorded_static)
+        self.assertIn('PRIOR_TRANSITION_SHA256', source)
+        self.assertIn("receipt.get('complete') is True", source)
+        with patch.object(c.Path, 'read_bytes', return_value=b'{"complete": true}'), \
+             self.assertRaises(RuntimeError):
+            c.recorded_static()
+
+    def test_the_loader_replaces_that_reader_on_the_qualified_helper_and_nothing_else(self):
+        self.assertIs(c.a.load, c.load)
+        self.assertIs(c.b.load, c.load)
+        old = SimpleNamespace(static_inventory='original')
+        other = SimpleNamespace(static_inventory='original')
+        with patch.object(c, '_inherited_load', side_effect=[old, other]):
+            self.assertIs(c.load('old', 'scripts/activate-word-export.py', 'a' * 40), old)
+            self.assertIs(c.load('word', 'scripts/activate-word-beta.py', 'a' * 40), other)
+        self.assertIs(old.static_inventory, c.authenticated_static_inventory)
+        self.assertEqual(other.static_inventory, 'original')
+        self.assertIs(c.LOADED['old'], old)
 
 
 class MigrationPhases(unittest.TestCase):
