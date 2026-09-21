@@ -466,33 +466,43 @@ class NativeTransport:
             raise Refusal('scope_refused') from None
 
     def inventory(self):
+        # A failed refresh must not leave a previous inventory eligible for write permits.
+        self._inventory = None
+        self._write_permits.clear()
         # list_file_versions is not a parts inventory. This separate endpoint is available
         # to the existing listFiles key and refuses even one unfinished multipart upload.
         unfinished = self.api_call('b2_list_unfinished_large_files', {
             'bucketId': self.config['bucket_id'], 'namePrefix': offsite.PREFIX, 'maxFileCount': 100})
-        check(type(unfinished.get('files')) is list, 'remote_corrupt')
-        check(not unfinished['files'] and unfinished.get('nextFileId') is None, 'capacity_refused')
-        items, cursor, seen = [], {}, set()
+        check(type(unfinished) is dict and {'files', 'nextFileId'} <= set(unfinished)
+              and type(unfinished['files']) is list and len(unfinished['files']) <= 100,
+              'remote_corrupt')
+        check(unfinished['nextFileId'] is None
+              or (isinstance(unfinished['nextFileId'], str) and unfinished['nextFileId']), 'remote_corrupt')
+        check(not unfinished['files'] and unfinished['nextFileId'] is None, 'capacity_refused')
+        items, cursor, seen, cursors = [], {}, set(), set()
         for _ in range(100):
             result = self.api_call('b2_list_file_versions', {'bucketId': self.config['bucket_id'],
                                    'prefix': offsite.PREFIX, 'maxFileCount': 1000, **cursor})
-            check(type(result.get('files')) is list and len(result['files']) <= 1000, 'remote_corrupt')
+            # Missing continuation fields are unknown completeness, not explicit JSON null.
+            check(type(result) is dict and {'files', 'nextFileName', 'nextFileId'} <= set(result)
+                  and type(result['files']) is list and len(result['files']) <= 1000, 'remote_corrupt')
             for item in result['files']:
-                check(item.get('bucketId') == self.config['bucket_id'] and isinstance(item.get('fileName'), str)
+                check(type(item) is dict and item.get('bucketId') == self.config['bucket_id'] and isinstance(item.get('fileName'), str)
                       and item['fileName'].startswith(offsite.PREFIX) and isinstance(item.get('fileId'), str)
-                      and item['fileId'] not in seen and type(item.get('contentLength')) is int
+                      and item['fileId'] and item['fileId'] not in seen and type(item.get('contentLength')) is int
                       and item['contentLength'] >= 0, 'remote_corrupt')
                 # Multipart parts are not measurable through list versions. Refuse all writes instead of assuming zero.
                 check(item.get('action') in ('upload', 'hide'), 'capacity_refused')
                 seen.add(item['fileId'])
                 items.append({key: item[key] for key in ('fileName', 'fileId', 'action', 'contentLength')})
-            next_name, next_id = result.get('nextFileName'), result.get('nextFileId')
+            next_name, next_id = result['nextFileName'], result['nextFileId']
             if next_name is None and next_id is None:
                 self._inventory = items
                 return items
             check(isinstance(next_name, str) and next_name.startswith(offsite.PREFIX)
-                  and isinstance(next_id, str) and (next_name, next_id) != (cursor.get('startFileName'), cursor.get('startFileId')),
+                  and isinstance(next_id, str) and next_id and (next_name, next_id) not in cursors,
                   'remote_corrupt')
+            cursors.add((next_name, next_id))
             cursor = {'startFileName': next_name, 'startFileId': next_id}
         raise Refusal('budget_exhausted')
 

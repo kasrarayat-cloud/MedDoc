@@ -23,6 +23,15 @@ provider reconciliation, independent security review, deferred human dictation/n
 SOAP Word review, CPT rights and patient-data permissions are separate release
 gates, not unfinished backup implementation. No public-launch approval.
 
+The [internal privileged-operations security supplement](privileged-operations-security-20260921.md)
+is ready for the eventual independent reviewer. Internal host/canary and fixture
+checks do not replace that engagement. Reviewer access stays inactive until its
+existing identity/key/window qualification is actually satisfied. The separate
+September21 desktop renewal follow-up is owner-scheduled; this security task does
+not create another schedule or authorize a provider run. After an operations
+repair, use the latest checkpoint's exact revision for the VPS import command;
+the original ticket/package and their source/policy bindings remain preserved.
+
 Earlier entries below are retained history; this current continuation supersedes
 older disabled-timer or incomplete-inventory handoff instructions.
 

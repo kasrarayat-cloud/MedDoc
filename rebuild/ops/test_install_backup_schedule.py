@@ -246,7 +246,7 @@ class BackupInstallerTests(unittest.TestCase):
              patch.object(s, 'reviewed_source', return_value=self.hashes), \
              patch.object(s, 'baseline', side_effect=self.inventory), \
              patch.object(s, 'command', side_effect=self.fake_command), \
-             patch.object(s.subprocess, 'run', side_effect=subprocess.TimeoutExpired(
+             patch.object(s, 'managed_helper_run', side_effect=subprocess.TimeoutExpired(
                  ['fixture-helper'], 900, output=b'PRIVATE OUTPUT', stderr=b'PRIVATE ERROR')) as child, \
              redirect_stdout(io.StringIO()) as output:
             self.assertEqual(s.main(), 1)

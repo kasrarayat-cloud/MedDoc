@@ -214,3 +214,69 @@ cannot validate; never roll back journal or policy timestamps. No public launch,
 provider generation call, remote deletion, clinical/billing mutation or desktop
 secret deletion. Final detailed report/checkpoint goes in the protected
 `offsite-renewal-20260920` evidence directory.
+
+## 2026-09-20 — Internal security review of helper lifetime
+
+The owner authorizes provider-free internal review of the new operational privilege
+boundaries. Starting repository/operations e0774545374deb53e9d6e15eca63deca90bf399c,
+application97597c2972072821a27f4ce840775c07fca48a63. The actual application processes
+retain quillmd-app UID996/GID988, no extra groups/capabilities and NoNewPrivileges.
+Synthetic canary checks under that identity deny Docker, sudo escalation,
+operator-runtime access and helper-source writes; no application-to-root path has
+been demonstrated. Claude's existing Docker authority remains root-equivalent;
+the installation helper is an operator mechanism, not a sandbox against claude.
+
+A bounded no-network/no-mount reproduction showed that subprocess.run timeout
+killed the Docker client while its synthetic helper container remained running.
+Repair the installed transport used by the three unit installers and private
+storage reader: independent invocation identity, bounded output, deadline and
+verified ownership-specific cleanup. Include an in-container deadline so killing
+the parent does not leave an indefinite helper. Refuse cleanup uncertainty;
+never delete a container merely because its name resembles a QuillMD task.
+Retain original reproduction, failed attempts and cleanup proof. Pin the private
+reader to the existing immutable local helper image. No new image pull is needed.
+
+After independent internal review and successful exact branch/merge CI, advance
+permanent main and execute only the existing source-only offsite refresh. Add the
+new helper module to the reviewed installer source set. Do not start backup,
+restore, upload, readback, renewal or email. Preserve application PIDs, all unit
+bytes and timer settings, policy bytes/observation/expiry, allocation, original
+account evidence, real September21 ticket/package and all accounting. If no
+admission-control source changed, no policy rebind is necessary. Never use this
+source change to extend evidence validity or spend a ticket.
+
+Verify the actual installed constrained private-storage interface against only
+this task's app-owned synthetic canaries; verify helper timeout/interruption,
+output redaction, concurrent ownership and cleanup with isolated containers.
+Read actual service identities and reuse unchanged prior same-PID startup proof;
+a separate probe PID must be labelled separately. Do not enter unrelated process
+namespaces or weaken host AppArmor, SSH or application controls. Keep reviewer
+access inactive. Remove only the task's exact canaries, labelled containers and
+worktree after evidence is retained. Source and prior receipts remain a rollback
+path; rollback cannot rewind allowance, data or evidence times.
+
+The next offsite05:00 and renewal06:00–18:00UTC September21 events stay separate.
+The owner reports a separate desktop follow-up already scheduled; do not create a
+duplicate. If the actual event occurs during useful work, inspect existing logs
+read-only and distinguish any scheduled result from a manual test. No provider
+call, public launch, patient data, cap change, broader runtime credential,
+shared-host reboot or unrelated project change is authorized by this repair.
+
+An additional provider-free ingress reproduction found that Native inventory
+accepted absent pagination terminators as completed empty inventories, then
+created upload permits against unsupported capacity. Require explicit typed
+pagination fields, complete termination, bounded valid cursors/rows and invalidation
+of a previous admission on failed refresh. Preserve the original two reproductions;
+positive explicitly terminated empty inventory must still work. No live provider
+request is needed for this defect or its verification.
+
+This directly justified admission-source repair changes automatic_offsite.py's
+control hash. After exact reviewed CI, rebind the existing original September20
+account evidence to the new control hashes through the existing policy installer.
+Assert policy bytes, observation and expiry remain identical. Then use the normal
+source-only refresh. The canonical September21 ticket and ZIP remain unchanged:
+the pinned collector bytes and expected policy hash are unchanged, and its older
+issuer revision remains provenance. The VPS import command must use the new
+reviewed installed operations revision; do not edit/reissue the ticket or ask the
+desktop to repeat a key transfer. Capture the source transition and resulting
+allocation hash separately from account-evidence freshness.

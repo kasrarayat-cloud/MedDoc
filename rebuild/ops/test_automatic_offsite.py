@@ -311,7 +311,8 @@ class AutomaticOffsiteTests(unittest.TestCase):
         for update, code in [(dict(action='start', contentLength=0), 'capacity_refused'),
                              (dict(fileName='another-project/file'), 'remote_corrupt'),
                              (dict(bucketId='f' * 24), 'remote_corrupt')]:
-            with patch.object(transport, 'api_call', side_effect=[{'files': [], 'nextFileId': None}, {'files': [dict(row, **update)]}]), self.assertRaisesRegex(auto.Refusal, code):
+            with patch.object(transport, 'api_call', side_effect=[{'files': [], 'nextFileId': None},
+                              {'files': [dict(row, **update)], 'nextFileName': None, 'nextFileId': None}]), self.assertRaisesRegex(auto.Refusal, code):
                 transport.inventory()
 
     def test_native_inventory_paginates_all_versions_and_rejects_repeated_cursor(self):

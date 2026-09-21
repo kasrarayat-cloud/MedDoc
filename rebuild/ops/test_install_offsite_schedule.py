@@ -251,7 +251,7 @@ class DisableWithoutProviderConfigurationTests(unittest.TestCase):
             stack.enter_context(patch.object(s.base, 'metadata', side_effect=AssertionError('B2 metadata must not be read')))
             stack.enter_context(patch.object(s, 'configuration', side_effect=AssertionError('B2 configuration must not be read')))
             stack.enter_context(patch.object(s, 'eligibility', side_effect=AssertionError('Policy must not be read')))
-            runner = stack.enter_context(patch.object(s.subprocess, 'run', return_value=result))
+            runner = stack.enter_context(patch.object(s.base, 'managed_helper_run', return_value=result))
             output = io.StringIO()
             with contextlib.redirect_stdout(output):
                 self.assertEqual(s.main(), 0)

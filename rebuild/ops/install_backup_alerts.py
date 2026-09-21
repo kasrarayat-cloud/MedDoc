@@ -32,7 +32,7 @@ def scope():
     base.LINK = 'timers.target.wants/' + TIMER
     base.MONITOR = base.APP / '.runtime/backup-alerts'
     base.EVIDENCE = base.APP / '.runtime/operational-recovery-20260920'
-    base.SOURCES = (INSTALLER, 'rebuild/ops/install_backup_schedule.py',
+    base.SOURCES = (INSTALLER, 'rebuild/ops/install_backup_schedule.py', 'rebuild/ops/managed_helper.py',
                     'rebuild/ops/backup_alerts.py', 'rebuild/ops/scheduled_backup.py',
                     'rebuild/ops/backup_restore.py', 'rebuild/core/email_backend.py',
                     DECLARATION, *(f'rebuild/deploy/{u}' for u in base.UNITS))
@@ -162,11 +162,16 @@ def main():
             'operation.scope()\n'
             'print(json.dumps(operation.root_action(' + repr(payload) + '),sort_keys=True))\n')
     try:
-        child = subprocess.run(base.helper_command(), input=body.encode(), capture_output=True, timeout=150,
-                               env={'PATH': '/usr/local/bin:/usr/bin:/bin'})
+        child = base.managed_helper_run(base.helper_command(), input=body.encode(), timeout=150)
         result = json.loads(child.stdout) if child.returncode == 0 else {'success': False, 'error': 'helper_failed'}
-    except Exception:
-        result = {'success': False, 'error': 'helper_outcome_unconfirmed'}
+        result.update(helper_container=getattr(child, 'helper_container', None),
+                      helper_cleanup_complete=getattr(child, 'helper_cleanup_complete', False))
+    except Exception as error:
+        result = {'success': False, 'error': 'helper_outcome_unconfirmed',
+                  'helper_reason': getattr(error, 'reason', 'transport_failed'),
+                  'helper_container': getattr(error, 'container_name', None),
+                  'helper_initial_reason': getattr(error, 'operation_reason', None),
+                  'helper_cleanup_complete': getattr(error, 'cleanup_complete', False)}
     result['hashes'] = hashes
     result['backup_records_unchanged'] = backups == unchanged_backups()
     result['alert_configuration_unchanged'] = config_before == base.metadata(CONFIG)
