@@ -52,6 +52,14 @@ declared public-static transition: preserve every old hashed asset and OTP file;
 allow current app aliases/compressions and manifest to change, publishing the
 manifest last. The original rollback static TAR remains protected and intact.
 
+The first repair CI exposed an inherited restrictive umask: the new staging root
+was0700 although its collected children had the required modes. Preserve that
+failed run. Stage creation now exclusively creates a new directory, verifies its
+descriptor identity/ownership and sets only that directory to0755 with `fchmod`.
+It refuses an existing directory or symlink and leaves the caller's umask and
+all other paths unchanged. A real collector subprocess regression runs under
+umask077; the strict public-static mode guard remains unchanged.
+
 Recompare all other stopped state exactly, change only the release setting,
 start only doctor/admin/worker and verify exact served revision, interfaces,
 worker restart, source readability, Word artifact and public maintenance.

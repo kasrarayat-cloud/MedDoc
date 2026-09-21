@@ -183,6 +183,23 @@ def static_inventory(root):
     return rows
 
 
+def create_static_stage(stage):
+    """Set the mode of this exclusively created public-assets directory only."""
+    require(stage.is_absolute() and stage.parent.resolve(strict=True) == stage.parent,
+            'Canonical static stage parent required.')
+    stage.mkdir(mode=0o700)
+    expected = stage.lstat()
+    fd = os.open(stage, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        actual = os.fstat(fd)
+        require(stat.S_ISDIR(actual.st_mode) and actual.st_uid == os.getuid()
+                and (actual.st_dev, actual.st_ino) == (expected.st_dev, expected.st_ino),
+                'New static stage identity changed.')
+        os.fchmod(fd, 0o755)
+    finally:
+        os.close(fd)
+
+
 def collect_static(stage):
     # Static compilation requires neither project settings/credentials nor a DB
     # role. Keep the migrator's allowlist unchanged; configure only these five
@@ -489,7 +506,7 @@ def resume_failed(args):
         unchanged(baseline, snapshot(modules, helper))
         checkpoint('collect_and_install_source_bound_public_assets')
         stage = state / 'static-stage'
-        stage.mkdir(mode=0o755)
+        create_static_stage(stage)
         collect_static(stage)
         staged = validate_staged_static(stage, identity.static_sources())
         installed_static = install_static(APP / 'staticfiles', stage, baseline['static'], staged)
@@ -651,7 +668,7 @@ def main():
         result['stopped_after_source'] = after
         checkpoint('collect_and_install_source_bound_public_assets')
         stage = state / 'static-stage'
-        stage.mkdir(mode=0o755)
+        create_static_stage(stage)
         collect_static(stage)
         staged = validate_staged_static(stage, identity.static_sources())
         installed_static = install_static(APP / 'staticfiles', stage, baseline['static'], staged)

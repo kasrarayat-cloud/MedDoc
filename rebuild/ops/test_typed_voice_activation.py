@@ -290,7 +290,7 @@ class PublicStaticTransitionTests(unittest.TestCase):
         (app / 'quillmd/settings.py').write_text('raise RuntimeError("Project settings must not load")')
         (app / 'quillmd/static_storage.py').write_bytes((ROOT / 'rebuild/quillmd/static_storage.py').read_bytes())
         stage = self.root / 'stage'
-        stage.mkdir(mode=0o755)
+        c.create_static_stage(stage)
         with patch.object(c, 'APP', app), patch.object(c.b, 'management', side_effect=AssertionError('DB wrapper forbidden')):
             c.collect_static(stage)
         otp = Path(importlib.util.find_spec('django_otp').origin).parent
@@ -301,6 +301,27 @@ class PublicStaticTransitionTests(unittest.TestCase):
         self.assertGreater(len(c.validate_staged_static(stage, inputs)), 5)
         with self.assertRaises(RuntimeError):
             c.collect_static(stage)
+
+    def test_actual_collection_under_restrictive_inherited_umask(self):
+        previous = os.umask(0o077)
+        try:
+            self.test_actual_collector_subprocess_needs_no_db_wrapper_or_project_settings()
+            self.assertEqual((self.root / 'stage').stat().st_mode & 0o777, 0o755)
+            self.assertEqual(os.umask(0o077), 0o077, 'Stage creation changed the caller umask.')
+        finally:
+            os.umask(previous)
+
+    def test_stage_creation_never_repermissions_existing_directory_or_symlink(self):
+        existing = self.root / 'existing'
+        existing.mkdir(mode=0o700)
+        with self.assertRaises(FileExistsError):
+            c.create_static_stage(existing)
+        self.assertEqual(existing.stat().st_mode & 0o777, 0o700)
+        link = self.root / 'link'
+        link.symlink_to(existing, target_is_directory=True)
+        with self.assertRaises(FileExistsError):
+            c.create_static_stage(link)
+        self.assertEqual(existing.stat().st_mode & 0o777, 0o700)
 
     def test_original_management_wrapper_still_refuses_shell_before_execution(self):
         source = self.root / 'wrapper-source'
