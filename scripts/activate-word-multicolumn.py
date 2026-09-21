@@ -26,23 +26,32 @@ SOURCE = Path(__file__).resolve().parents[1]
 APP = ROOT / 'rebuild'
 SELF = 'scripts/activate-word-multicolumn.py'
 DECL = 'docs/foundation/mutations/20260921-quillmd-word-multicolumn-activation.md'
-DECL_SHA256 = '595585a6f27d8abe238aaca17d79ca45d587158ef907f73844665aa1ab912c7f'
+DECL_SHA256 = 'e7816d70712c9f49c6f3a39d2633cee1580ddba398b38d200250d781f9f3005f'
 BASELINE = '21809ef408a5f7b6691beb338a7640da82fcfb97'
 EVIDENCE = ROOT / 'rebuild/.runtime/word-multicolumn-activation-20260921'
 DRIVER = 'scripts/activate-typed-voice.py'
 DRIVER_SHA256 = '4e2efda2357fa2c33262eb2f747ac7201eadbc94875528cde2b7fe9040ebba18'
 MIGRATION = '0018_servicehealth'
-#: ⚠️ THE ACTIVATION SAFETY CAPTURE, AND IT IS NOT THE RESTORE DRILL. Two different artifacts:
-#: `RESTORED_RUN` is the completed independent-key restore proof, historical and pinned by the
-#: driver — it is NOT repeated here. `CAPTURE_RUN` is the recent capture this act falls back to,
-#: and the chain requires it inside a 30-hour window, so each activation pins its own.
+#: ⚠️ THE ACTIVATION SAFETY CAPTURE IS NOT THE PUBLISHER'S COVERAGE CAPTURE. I conflated the
+#: two and the read-only run caught it, which is what read-only is for.
 #:
-#: This one is tonight's controlled capture, and it is the reason the publisher can be installed
-#: at all: it is the first capture that COVERS `core_servicehealth`. Its table set was verified
-#: against live `pg_tables` by name, not by count.
-CAPTURE_RUN = '20260921T194532Z-1b826c0d'
-CAPTURE_SOURCE = '21809ef408a5f7b6691beb338a7640da82fcfb97'
-CAPTURE_MANIFEST_SHA256 = '6c960a6d504c431f789a7214c43336cb8309420a89c30083f3a3939f86ebeab4'
+#: The chain requires the final capture to share the RESTORED DRILL's schema exactly —
+#: `set(latest['tables']) == set(manifest['tables'])` at activate-private-readiness.py:345 —
+#: because a rollback target whose schema was never restore-proven is not evidence. Tonight's
+#: 36-table capture has one table the drill's 35 do not, so it REFUSES, correctly. Measured:
+#: drill 35, morning capture 35 and set-equal to the drill, tonight 36 differing by exactly
+#: `core_servicehealth`.
+#:
+#: So the safety capture is the morning one — the same capture the previous activation pinned,
+#: restore-schema-matched and inside the thirty-hour window. This act changes no schema, and the
+#: one table it does not carry is empty.
+#:
+#: Tonight's 36-table capture is NOT abandoned and NOT weakened: it exists to satisfy the
+#: PUBLISHER's coverage requirement, which is checked by the publisher's own ruled act, not by
+#: this one. Re-proving a restore against it would be the restoration work that is out of scope.
+CAPTURE_RUN = '20260921T043001Z-0a6f66da'
+CAPTURE_SOURCE = '08e40870f18ca4e79b0cc2b27d6b09ba48f911a7'
+CAPTURE_MANIFEST_SHA256 = 'ac714b19363a66294d35cfde0d4b1de62de2ab9db1916b67f466f9e41bd19c82'
 #: The completed static transition of the release now serving. This act reinstalls nothing.
 STATIC_RECEIPT = APP / '.runtime/admin-console-20260921/admin-console-resume-21809ef408a5.json'
 STATIC_RECEIPT_SHA256 = 'a83479597ac649a31f3d02e0d73e3412a4d79e7ab6c2bec2027c4c95126922bc'

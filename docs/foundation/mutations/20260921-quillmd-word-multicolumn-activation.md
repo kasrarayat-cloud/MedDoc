@@ -118,6 +118,21 @@ and provider receipts; audit history; MFA and inactive reviewer access; backup a
 timers, policies, tickets and evidence; the renewal installed at 19:38Z; public maintenance; and
 every other project on this host. Clinical counts are compared before and after.
 
+## Two captures, two roles
+
+⚠️ **The activation safety capture is NOT the publisher's coverage capture**, and a read-only run
+refused when this declaration's first draft conflated them.
+
+| | capture | why |
+|---|---|---|
+| **activation safety** | `20260921T043001Z-0a6f66da` (35 tables) | the chain requires the final capture to share the RESTORED DRILL's schema exactly — a rollback target whose schema was never restore-proven is not evidence. Measured set-equal to the drill; inside the thirty-hour window; the same capture the previous activation pinned |
+| **publisher coverage** | `20260921T194532Z-1b826c0d` (36 tables) | the first capture containing `core_servicehealth`, verified against live `pg_tables` **by name**. Checked by the publisher's own ruled act, not by this one |
+
+This act changes no schema, and the one table the safety capture does not carry is empty.
+Re-proving an independent-key restore against tonight's capture would be restoration work that is
+out of scope, so the guard is left exactly as it is. Full account:
+`rebuild/.runtime/word-multicolumn-activation-20260921/readonly-refusal-20260921.md`.
+
 ## Failure recovery
 
 The driver's own receipt, lock and staged-state directory are retained on failure. A failure is
