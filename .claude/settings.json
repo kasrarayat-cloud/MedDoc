@@ -104,6 +104,8 @@
       "Bash(bash scripts/merge-pr.sh:*)",
       "Bash(bash scripts/prove-mutation.sh:*)",
       "Bash(bash scripts/run-ruled-mutation.sh:*)",
+      "Bash(rebuild/.venv/bin/python -B rebuild/ops/offsite_operator.py:*)",
+      "Bash(rebuild/.venv/bin/python -B rebuild/ops/offsite_renewal.py:*)",
       "Bash(bash scripts/deploy-prod.sh:*)",
       "Bash(bash scripts/check-retirement-conditions.sh:*)",
       "Bash(bash scripts/sweep-orphan-branches.sh:*)",
