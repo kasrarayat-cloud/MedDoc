@@ -6,6 +6,7 @@ import secrets
 from datetime import datetime,timedelta
 from decimal import Decimal
 from pathlib import Path
+from uuid import UUID
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate,login as auth_login,logout as auth_logout
@@ -248,7 +249,7 @@ def encounter_new(request):
         data=form.cleaned_data
         with transaction.atomic():
             membership(request.user,data['patient'].department)
-            e=Encounter(department=data['patient'].department,patient=data['patient'],template_version=data['template_version'],created_by=request.user,notes=data['notes'],service_date=data['service_date']);e.full_clean(exclude=['answers','finalized_at','finalized_by','export_path','export_sha256']);e.save()
+            e=Encounter(department=data['patient'].department,patient=data['patient'],template_version=data['template_version'],created_by=request.user,notes=data['notes'],service_date=data['service_date']);e.full_clean(exclude=['notes','answers','finalized_at','finalized_by','export_path','export_sha256']);e.save()
             audit(request.user,'encounter.create',e.pk,department=e.department)
         return redirect('encounter_detail',pk=e.pk)
     return render(request,'encounter_form.html',{'form':form})
@@ -321,15 +322,26 @@ def encounter_detail(request,pk):
     prior_transcriptions=sum(1 for job in jobs if job.kind=='transcription' and billable_outcome(job))
     for job in jobs:
         job.display_error=public_error(job); job.can_cancel=may_cancel(job,request.user); job.deliverable=bool(job.result_path) and deliverable(job)
-    return render(request,'encounter_detail.html',{'encounter':e,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'wm_requirements':requirements,'wm_review_error':review_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions})
+    transcript_reviews=[]
+    applied=set(AuditEvent.objects.filter(action='transcription.applied',target__in=[str(job.pk) for job in jobs]).values_list('target',flat=True))
+    for job in jobs:
+        if (job.kind=='transcription' and job.config.get('transcript_review_required')
+                and job.state=='succeeded' and str(job.pk) not in applied):
+            try:
+                raw,transcript=review_transcript(job)
+                transcript_reviews.append({'job':job,'raw':raw,'text':transcript})
+            except (ValidationError,OSError,ValueError):
+                job.display_error='The retained transcript could not be verified. Contact an administrator; do not resubmit a paid recording.'
+    return render(request,'encounter_detail.html',{'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'wm_requirements':requirements,'wm_review_error':review_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions})
 
 @require_POST
 def generate_view(request,pk):
     e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
     try:
         if not rate_limit('generate:'+str(request.user.pk),limit=30):raise ValidationError('Generation rate limit reached.')
+        if 'revision' in request.POST and request.POST['revision']!=str(e.revision):raise ValidationError('Source notes changed. Reload before generating answers.')
         quoted=usage_quote(request,e)
-        enqueue(e,request.user,config=quoted);messages.success(request,'Generation queued. Refresh this page to view the result.')
+        enqueue(e,request.user,config=quoted,expected_revision=e.revision);messages.success(request,'Generation queued. Refresh this page to view the result.')
     except ValidationError as exc:messages.error(request,error_message(exc))
     return redirect('encounter_detail',pk=pk)
 
@@ -488,9 +500,9 @@ def voice(request,pk):
         relative=store_upload(form.cleaned_data['audio'],'audio')
         raw=private_path(relative).read_bytes()[:16]
         if not (raw.startswith((b'RIFF',b'ID3',b'\x1aE\xdf\xa3',b'\xff\xfb',b'\xff\xf3',b'\xff\xf2')) or raw[4:8]==b'ftyp'):raise ValidationError('Audio file signature does not match a supported recording.')
-        quoted=usage_quote(request,e)
+        quoted={**usage_quote(request,e),'transcript_review_required':True}
         try:
-            job=enqueue(e,request.user,'transcription',relative,config=quoted)
+            job=enqueue(e,request.user,'transcription',relative,config=quoted,expected_revision=e.revision)
         except RecordingOverLimit as over:
             # Nothing was sent and the upload is kept: the doctor chooses a shorter segment or a clearly priced higher limit.
             approval=signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'path':relative,
@@ -548,7 +560,7 @@ def voice_approve(request,pk):
             raise ValidationError('The document changed after the quote. Upload the recording again; nothing was sent.')
         if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=data.get('sha256'):
             raise ValidationError('The quoted recording is no longer available. Upload it again; nothing was sent.')
-        job=enqueue(e,request.user,'transcription',relative,config=data['config'],approved_limit=data['charge_limit'])
+        job=enqueue(e,request.user,'transcription',relative,config=data['config'],approved_limit=data['charge_limit'],expected_revision=data['revision'])
         if job.input_path!=relative:path.unlink(missing_ok=True)
         audit(request.user,'voice.limit_approved',job.pk,department=e.department,charge_limit=str(data['charge_limit']))
         messages.success(request,f"Transcription queued with your approved limit of ${data['charge_limit']}.")
@@ -912,14 +924,44 @@ def encounter_notes(request,pk):
     e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
     if e.status=='finalized' or Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():return HttpResponse('This document is locked.',status=409)
     if request.POST.get('revision')!=str(e.revision):return HttpResponse('Reload before editing changed notes.',status=409)
-    notes=request.POST.get('notes','')
+    transcript_job=None;raw_transcript=None
+    if request.POST.get('transcript_job'):
+        try:transcript_id=UUID(request.POST['transcript_job'])
+        except (ValueError,TypeError):return HttpResponse('Invalid transcript reference.',status=400)
+        transcript_job=get_object_or_404(Job,pk=transcript_id,encounter=e,kind='transcription',state='succeeded')
+        if not transcript_job.config.get('transcript_review_required') or AuditEvent.objects.filter(action='transcription.applied',target=str(transcript_job.pk)).exists():
+            return HttpResponse('This transcript has already been applied or is not awaiting review.',status=409)
+        if request.POST.get('transcript_reviewed')!='on' or request.POST.get('transcript_mode') not in ['append','replace']:
+            return HttpResponse('Review the transcript and choose how to add it to the source notes.',status=400)
+        try:raw_transcript,_=review_transcript(transcript_job)
+        except (ValidationError,OSError,ValueError):return HttpResponse('The retained transcript could not be verified. Nothing changed.',status=409)
+        corrected=request.POST.get('corrected_transcript','')
+        if not corrected.strip() or len(corrected)>50000:return HttpResponse('Reviewed transcript must contain 1–50,000 characters.',status=400)
+        notes=(e.notes+'\n\n'+corrected if e.notes else corrected) if request.POST['transcript_mode']=='append' else corrected
+    else:notes=request.POST.get('notes','')
     if not notes.strip() or len(notes)>50000:return HttpResponse('Notes must contain 1–50,000 characters; nothing was truncated.',status=400)
     e.notes=notes;e.answers={};e.revision+=1;e.status='draft';wm_review.invalidate_review(e);e.save(update_fields=['notes','answers','revision','status','template_review'])
     CodeSuggestion.objects.filter(encounter=e).update(accepted_by=None,accepted_at=None)
     CodeSuggestion.objects.filter(encounter=e).delete()
     audit(request.user,'coding.invalidated_by_source_edit',e.pk,department=e.department)
     audit(request.user,'encounter.notes_saved',e.pk,department=e.department,revision=e.revision)
+    if transcript_job:
+        audit(request.user,'transcription.applied',transcript_job.pk,department=e.department,revision=e.revision,
+              mode=request.POST['transcript_mode'],raw_sha256=hashlib.sha256(raw_transcript.encode()).hexdigest(),
+              corrected_sha256=hashlib.sha256(corrected.encode()).hexdigest(),corrected=corrected.replace('\r\n','\n')!=raw_transcript.replace('\r\n','\n'))
     messages.success(request,'Notes saved. Generate and review a new answer draft.');return redirect('encounter_detail',pk=pk)
+
+def review_transcript(job):
+    """Read only the bounded, hash-bound retained result for a reviewed transcript."""
+    if not job.result_path or not deliverable(job):raise ValidationError('Transcript is not deliverable.')
+    with private_path(job.result_path).open('rb') as source:payload=source.read(1024*1024+1)
+    if len(payload)>1024*1024 or hashlib.sha256(payload).hexdigest()!=job.result_sha256:
+        raise ValidationError('Transcript integrity check failed.')
+    data=json.loads(payload)
+    if not isinstance(data,dict) or not isinstance(data.get('raw_transcript'),str) or not isinstance(data.get('transcript'),str):
+        raise ValidationError('Transcript is unavailable.')
+    return data['raw_transcript'],data['transcript']
+
 
 def job_result(request,pk):
     job=get_object_or_404(Job.objects.filter(encounter__department__in=departments(request.user)),pk=pk)

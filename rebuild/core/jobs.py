@@ -202,10 +202,14 @@ def recording_charge_limit(e,input_path,config,approved_limit=None):
 
 
 @transaction.atomic
-def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_limit=None):
+def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_limit=None,expected_revision=None):
     e=Encounter.objects.select_for_update().get(pk=encounter.pk)
     membership(user,e.department)
     if e.status=='finalized': raise ValidationError('Finalized documents are immutable.')
+    if expected_revision is not None and e.revision!=expected_revision:
+        raise ValidationError('Source notes changed after the quote. Reload and review the current notes before submitting.')
+    if kind=='generation' and not e.notes.strip():
+        raise ValidationError('Type and save source notes, or review and add a transcript, before generating answers.')
     fingerprint=hashlib.sha256(private_path(input_path).read_bytes()).hexdigest() if kind=='transcription' else str(e.revision)
     key=f'{kind}:{e.pk}:{fingerprint}'
     old=Job.objects.filter(request_key=key).first()
@@ -518,7 +522,9 @@ def run_one():
             audit(job.user,'provider.receipt',job.pk,department=e.department,provider=provider,request_id=request_id,resource_id=resource_id,actual_cost=str(cost))
         # The delivered transcript, stored and downloaded, carries the same incomplete-portion marker the notes would.
         note=coverage_note(job,units) if job.kind=='transcription' and isinstance(result,str) else ''
-        if job.kind=='transcription': saved={'transcript':result+note if isinstance(result,str) else result}
+        if job.kind=='transcription':
+            saved={'transcript':result+note if isinstance(result,str) else result}
+            if job.config.get('transcript_review_required'): saved['raw_transcript']=result
         elif isinstance(result,dict) and 'anthropic_response' in result:
             saved={'provider_output':result['anthropic_response'].model_dump(mode='json')}
         elif isinstance(result,dict) and 'response' in result:
@@ -543,14 +549,20 @@ def run_one():
             if e.status=='finalized' or e.revision!=job.revision: raise NotAdoptedByUser('Source changed while this job ran; output was not adopted. Its recorded usage stays billed.')
             if job.kind=='generation':
                 e.answers=answers; e.status='review'
+            elif job.config.get('transcript_review_required'):
+                # The usable transcript is delivered and settled, but only an explicit
+                # reviewed application can change source notes. Old jobs keep their
+                # previously disclosed append behavior.
+                audit(job.user,'transcription.review_ready',job.pk,department=e.department)
             else:
                 text=result+note
                 if len(e.notes)+len(text)+2>NOTE_LIMIT: raise NotAdoptedByUser(OVERFLOW_ERROR)
                 e.notes+='\n\n'+text; e.answers={}; e.status='draft'; e.revision+=1
                 CodeSuggestion.objects.filter(encounter=e).delete()
                 audit(job.user,'coding.invalidated_by_transcription',e.pk,department=e.department)
-            e.template_review={}
-            e.save()
+            if not (job.kind=='transcription' and job.config.get('transcript_review_required')):
+                e.template_review={}
+                e.save()
             job.state='succeeded';job.provider=provider;job.provider_request_id=request_id;job.finished_at=timezone.now();job.save()
             audit(job.user,'job.succeeded',job.pk,department=e.department,kind=job.kind)
     except Exception as exc:

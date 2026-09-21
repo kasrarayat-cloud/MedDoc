@@ -2,10 +2,10 @@
 {% block title %}New document{% endblock %}
 {% block breadcrumb %}Documents <span>/</span> New{% endblock %}
 {% block content %}
-<div class="page-heading"><div><div class="eyebrow">Clinical document</div><h1>Add the documented information.</h1><p>Select your form and patient, then enter the notes that will support the answers.</p></div><div class="actions"><a class="button secondary" href="{% url 'template_upload' %}">Upload another form</a></div></div>
+<div class="page-heading"><div><div class="eyebrow">Clinical document</div><h1>Add the documented information.</h1><p>Select your form and patient. Type notes here, or create the document first to record or upload audio.</p></div><div class="actions"><a class="button secondary" href="{% url 'template_upload' %}">Upload another form</a></div></div>
 <ol class="step-list" aria-label="Document workflow"><li>Upload original</li><li>Review mapping</li><li class="current" aria-current="step">Add notes</li><li>Review & export</li></ol>
 <div class="split">
-  <section class="form-section"><form method="post" enctype="multipart/form-data" data-submit-once>{% csrf_token %}{{ form.as_p }}<div class="form-footer"><button type="submit" data-pending-label="Saving notes…">Create document</button><a href="{% url 'dashboard' %}">Cancel</a></div></form></section>
+  <section class="form-section"><form method="post" enctype="multipart/form-data" data-submit-once data-unsaved-form>{% csrf_token %}{{ form.as_p }}<div class="form-footer"><button type="submit" data-pending-label="Saving notes…">Create document</button><a href="{% url 'dashboard' %}">Cancel</a></div></form></section>
   <aside class="aside"><h2>The notes are the source</h2><p>Include the findings you actually documented. Missing information remains visible for review, and conflicting statements need your judgment.</p><h2>Department access</h2><p>Patients and forms shown here are limited to your authorized workspace. The selected department determines which colleagues can access the patient.</p>{% include 'integrations.html' %}</aside>
 </div>
 {% endblock %}

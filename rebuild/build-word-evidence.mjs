@@ -53,7 +53,7 @@ async function save(page) {
 }
 async function editNotes(page, id, notes) {
   await page.goto(`${base}/encounters/${id}/`);
-  await page.getByText('Edit source notes',{exact:true}).click();
+
   await page.locator('#source-notes-edit').fill(notes);
   await page.getByRole('button',{name:'Save source notes',exact:true}).click();
   await page.waitForLoadState('domcontentloaded');

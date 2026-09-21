@@ -33,7 +33,7 @@ class PatientForm(ScopedForm):
 class EncounterForm(ScopedForm):
     patient=forms.ModelChoiceField(queryset=Patient.objects.none())
     template_version=forms.ModelChoiceField(queryset=TemplateVersion.objects.none(),label='Template and mapping version')
-    notes=forms.CharField(widget=forms.Textarea(attrs={'rows':9}),max_length=50000,help_text='Record documented facts only. All answers remain subject to clinician review.')
+    notes=forms.CharField(label='Type source notes (or add voice next)',required=False,widget=forms.Textarea(attrs={'rows':9}),max_length=50000,help_text='Type documented facts here, or leave this blank to record or upload audio after creating the document. Review is required before export.')
     service_date=forms.DateField(label='Date of service or discharge',widget=forms.DateInput(attrs={'type':'date'}),help_text='The date the service was provided, in your local time. Diagnosis codes are validated against the ICD-10-CM release in effect on that date, not the date you write the note. Check it if your clinic is not on UTC; it cannot be changed afterwards.')
     synthetic_only=forms.BooleanField(label='These are synthetic clinical notes.')
     def __init__(self,*args,user,**kwargs):

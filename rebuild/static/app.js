@@ -10,10 +10,86 @@ document.querySelectorAll("form p > input[type='checkbox']").forEach((input) => 
   }
 });
 
+// Source edits stay in this page until explicitly saved. Do not let another
+// action submit an older source revision or discard a corrected transcript.
+const draftForms = [...document.querySelectorAll("form[data-unsaved-form]")];
+const formValue = (form) => JSON.stringify([...new FormData(form)].filter(([key]) => key !== "csrfmiddlewaretoken"));
+const draftBaselines = new Map(draftForms.map((form) => [form, formValue(form)]));
+const dirtyForms = () => draftForms.filter((form) => formValue(form) !== draftBaselines.get(form));
+// Multiple edited forms need an explicit way out without silently choosing which
+// draft to lose. Undo is reversible in memory until this page is left.
+draftForms.forEach((form) => {
+  let undone = null;
+  const undo = document.createElement("button");
+  undo.type = "button";
+  undo.className = "quiet";
+  undo.dataset.undoEdits = "true";
+  undo.hidden = true;
+  const help = document.createElement("p");
+  help.className = "helptext";
+  help.hidden = true;
+  const refresh = () => {
+    const dirty = formValue(form) !== draftBaselines.get(form);
+    undo.hidden = !dirty && !undone;
+    undo.textContent = dirty ? "Undo these unsaved edits" : "Restore undone edits";
+    help.hidden = !undone || dirty;
+    help.textContent = "Saved values restored for this form. You can restore the undone edits until you leave this page.";
+  };
+  undo.addEventListener("click", () => {
+    if (formValue(form) !== draftBaselines.get(form)) {
+      undone = [...form.elements].filter((element) => element.name && element.type !== "file")
+        .map((element) => ({element, value: element.value, checked: element.checked}));
+      form.reset();
+    } else if (undone) {
+      undone.forEach(({element, value, checked}) => {element.value = value; if (typeof checked === "boolean") element.checked = checked;});
+      undone = null;
+    }
+    form.dispatchEvent(new Event("input", {bubbles:true}));
+    refresh();
+  });
+  form.addEventListener("input", refresh);
+  form.addEventListener("change", refresh);
+  form.append(undo, help);
+});
+let pageSubmission = false;
+let audioUnsaved = false;
+let audioBusy = false;
+const notesForm = document.querySelector("[data-notes-form]");
+const notesStatus = document.querySelector("[data-notes-status]");
+const generationStatus = document.querySelector("[data-generation-status]");
+if (notesForm) notesForm.addEventListener("input", () => {
+  const dirty = dirtyForms().includes(notesForm);
+  notesStatus.textContent = dirty ? "Unsaved notes. Save before generating or transcribing." : "Notes match the saved revision.";
+  if (generationStatus) generationStatus.textContent = dirty ? "Save your current notes before generating answers." : "";
+});
+document.addEventListener("submit", (event) => {
+  const form = event.target;
+  const unsaved = dirtyForms().find((other) => other !== form);
+  const voice = form.matches("[data-voice-form]");
+  if (unsaved || audioBusy || (audioUnsaved && !voice)) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const target = unsaved?.querySelector("textarea, input, select") || document.querySelector("[data-voice-record]");
+    target?.focus();
+    const message = unsaved ? "Save or undo the unsaved edits in the other form before using this action." : audioBusy ? "Stop or discard the recording before continuing." : "Transcribe or discard the selected recording before using another action.";
+    if (generationStatus) generationStatus.textContent = message;
+    if (notesStatus) notesStatus.textContent = message;
+  }
+}, true);
+window.addEventListener("beforeunload", (event) => {
+  if (!pageSubmission && (dirtyForms().length || audioUnsaved || audioBusy)) {
+    event.preventDefault();
+    event.returnValue = "";
+  }
+});
+// Run after each form's own validation/recording guard.
+document.addEventListener("submit", (event) => { if (!event.defaultPrevented) pageSubmission = true; });
+
 // Preserve native validation and form field submission while limiting accidental
 // repeated clicks. The server remains responsible for idempotency.
 document.querySelectorAll("form[data-submit-once]").forEach((form) => {
   form.addEventListener("submit", (event) => {
+    if (event.defaultPrevented) return;
     if (form.dataset.submitting === "true") {
       event.preventDefault();
       return;
@@ -21,15 +97,25 @@ document.querySelectorAll("form[data-submit-once]").forEach((form) => {
     form.dataset.submitting = "true";
     const button = event.submitter;
     if (button) {
+      button.dataset.originalLabel = button.textContent;
       button.setAttribute("aria-disabled", "true");
       button.textContent = button.dataset.pendingLabel || "Working…";
     }
   });
 });
 
-// Browsers may restore a submitted page from back/forward cache.
+// A back/forward restore must retain the doctor's edits. The server still
+// rejects stale revisions/quotes; reset only the completed submission UI.
 window.addEventListener("pageshow", (event) => {
-  if (event.persisted) window.location.reload();
+  if (!event.persisted) return;
+  pageSubmission = false;
+  document.querySelectorAll("form[data-submit-once]").forEach((form) => {
+    delete form.dataset.submitting;
+    form.querySelectorAll("[data-original-label]").forEach((button) => {
+      button.textContent = button.dataset.originalLabel;
+      button.removeAttribute("aria-disabled");
+    });
+  });
 });
 
 // Question labels are editable without exposing JSON. Keep the server-rendered
@@ -67,85 +153,124 @@ document.querySelectorAll("form[data-mapping-form]").forEach((form) => {
 document.querySelectorAll("form[data-voice-form]").forEach((form) => {
   const start = form.querySelector("[data-voice-record]");
   const stop = form.querySelector("[data-voice-stop]");
+  const discard = form.querySelector("[data-voice-discard]");
   const status = form.querySelector("[data-voice-status]");
   const preview = form.querySelector("[data-voice-preview]");
   const fileInput = form.querySelector("input[type=file]");
-  if (!start || !stop || !status || !fileInput) return;
-  if (!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia) {
-    start.disabled = true;
-    status.textContent = "Microphone recording is unavailable in this browser. You can upload a recording below.";
-    return;
-  }
-  let recorder;
-  let recordingStream;
-  let stopTimer;
-  let audioUrl;
+  if (!start || !stop || !discard || !status || !fileInput) return;
+  let recorder, recordingStream, stopTimer, audioUrl;
+  let generation = 0;
   let recordingFailed = false;
   const release = () => {
     recordingStream?.getTracks().forEach((track) => track.stop());
+    recordingStream = null;
     clearTimeout(stopTimer);
-    start.disabled = false;
+    audioBusy = false;
+    start.disabled = !capable;
+    fileInput.disabled = false;
     stop.disabled = true;
   };
-  start.addEventListener("click", async () => {
+  const previewFile = (file) => {
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    audioUrl = file ? URL.createObjectURL(file) : null;
+    preview.hidden = !file;
+    if (file) preview.src = audioUrl; else preview.removeAttribute("src");
+    audioUnsaved = Boolean(file);
+    discard.disabled = !file;
+  };
+  const clearRecording = () => {
+    generation += 1;
+    recordingFailed = true;
+    if (recorder?.state === "recording") recorder.stop();
+    release();
+    fileInput.value = "";
+    previewFile(null);
+    const consent = form.querySelector("input[name=consent]");
+    if (consent) consent.checked = false;
+    status.textContent = "Recording discarded. Nothing was sent.";
+  };
+  discard.addEventListener("click", clearRecording);
+  fileInput.addEventListener("change", () => {
+    previewFile(fileInput.files[0]);
+    const consent = form.querySelector("input[name=consent]");
+    if (consent) consent.checked = false;
+    status.textContent = fileInput.files.length ? "Recording selected. Listen, confirm processing below, then transcribe." : "No recording selected.";
+  });
+  const capable = Boolean(window.MediaRecorder && navigator.mediaDevices?.getUserMedia);
+  if (!capable) {
     start.disabled = true;
+    status.textContent = "Microphone recording is unavailable in this browser. Open the private site in a supported secure browser, or upload a recording below.";
+  }
+  start.addEventListener("click", async () => {
+    if (audioBusy) return;
+    if (audioUnsaved) { status.textContent = "Transcribe or discard the current recording before starting another."; return; }
+    const attempt = ++generation;
+    start.disabled = true;
+    fileInput.disabled = true;
+    discard.disabled = false;
+    audioBusy = true;
     recordingFailed = false;
-    status.textContent = "Allow microphone access to begin recording.";
+    status.textContent = "Allow microphone access to begin recording. Choose Discard to cancel.";
     try {
-      recordingStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (attempt !== generation) { stream.getTracks().forEach((track) => track.stop()); return; }
+      recordingStream = stream;
       const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((value) => MediaRecorder.isTypeSupported(value));
       if (!mimeType) throw new Error("Unsupported recording format");
-      recorder = new MediaRecorder(recordingStream, { mimeType });
+      recorder = new MediaRecorder(stream, { mimeType });
       const chunks = [];
       let size = 0;
       recorder.addEventListener("dataavailable", (event) => {
-        if (!event.data.size) return;
+        if (attempt !== generation || !event.data.size || recordingFailed) return;
         size += event.data.size;
-        chunks.push(event.data);
-        if (size > 15 * 1024 * 1024 && recorder.state === "recording") {
+        if (size > 15 * 1024 * 1024) {
+          recordingFailed = true;
           recorder.stop();
-          status.textContent = "Recording stopped at the file size limit. Review this recording before uploading.";
+          status.textContent = "Recording exceeded the file size limit and was discarded. Record a shorter segment.";
+          return;
         }
+        chunks.push(event.data);
       });
       recorder.addEventListener("error", () => {
+        if (attempt !== generation) return;
         recordingFailed = true;
         release();
-        status.textContent = "The recording failed. Record again or upload an existing file.";
+        status.textContent = "The recording failed. Discard it and record again, or upload an existing file.";
       });
       recorder.addEventListener("stop", () => {
+        if (attempt !== generation) return;
         release();
         if (recordingFailed || !chunks.length) return;
         const blob = new Blob(chunks, { type: mimeType });
-        const extension = mimeType.includes("mp4") ? "m4a" : "webm";
-        const file = new File([blob], `quillmd-recording.${extension}`, { type: mimeType });
-        const transfer = new DataTransfer();
-        transfer.items.add(file);
-        fileInput.files = transfer.files;
-        if (audioUrl) URL.revokeObjectURL(audioUrl);
-        audioUrl = URL.createObjectURL(blob);
-        preview.src = audioUrl;
-        preview.hidden = false;
-        status.textContent = "Recording ready. Listen to it, confirm processing below, then select Transcribe recording.";
+        const file = new File([blob], `quillmd-recording.${mimeType.includes("mp4") ? "m4a" : "webm"}`, { type: mimeType });
+        try {
+          const transfer = new DataTransfer();
+          transfer.items.add(file);
+          fileInput.files = transfer.files;
+          previewFile(file);
+          const consent = form.querySelector("input[name=consent]");
+          if (consent) consent.checked = false;
+          status.textContent = "Recording ready. Listen to it, confirm processing below, then select Transcribe recording.";
+        } catch (_) {
+          status.textContent = "This browser could not attach the recording. Upload an existing recording instead; nothing was sent.";
+        }
       });
       recorder.start(1000);
       stop.disabled = false;
       status.textContent = "Recording. Select Stop when finished. Nothing is sent until you submit this form.";
       stopTimer = setTimeout(() => { if (recorder.state === "recording") recorder.stop(); }, 5 * 60 * 1000);
-    } catch (_) {
+    } catch (error) {
+      if (attempt !== generation) return;
       release();
-      status.textContent = "Microphone access was unavailable. Check browser permissions or upload a recording.";
+      discard.disabled = true;
+      const explanations = {
+        NotAllowedError: "Microphone permission was denied. Allow microphone access in this site's browser permissions, then try again or upload a recording.",
+        NotFoundError: "No microphone was found. Connect a microphone, then try again or upload a recording.",
+        NotReadableError: "The microphone could not be opened. Close other apps using it, then try again or upload a recording."
+      };
+      status.textContent = explanations[error.name] || "Microphone recording could not start. Check this browser's recording support or upload an existing file.";
     }
   });
   stop.addEventListener("click", () => { if (recorder?.state === "recording") recorder.stop(); });
-  form.addEventListener("submit", (event) => {
-    if (recorder?.state === "recording") {
-      event.preventDefault();
-      form.dataset.submitting = "false";
-      status.textContent = "Stop the recording before submitting it.";
-      if (event.submitter) {
-        event.submitter.removeAttribute("aria-disabled");
-        event.submitter.textContent = "Transcribe recording";
-      }
-    }
-  });
+  window.addEventListener("pagehide", () => { generation += 1; release(); if (audioUrl) URL.revokeObjectURL(audioUrl); });
 });
