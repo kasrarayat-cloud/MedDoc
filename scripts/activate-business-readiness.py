@@ -88,6 +88,24 @@ _original_snapshot = base.snapshot
 _original_retained = base.retained_source_manifest
 _original_backup = base.backup_evidence
 _original_shared = base.shared_configs
+_original_run = base.run
+_original_output = base.output
+
+
+def run(command, **kwargs):
+    """Preserve source readability and suppress caches across management execve."""
+    kwargs = dict(kwargs, env=dict(kwargs.get('env', os.environ), PYTHONDONTWRITEBYTECODE='1'))
+    if (type(command) is list and len(command) == 4 and command[:3] == ['git', 'merge', '--ff-only']
+            and re.fullmatch('[a-f0-9]{40}', command[3])):
+        # Child-only umask: private receipt creation in this process stays0600,
+        # and a future concurrent thread cannot observe a process-global change.
+        kwargs['umask'] = 0o022
+    return _original_run(command, **kwargs)
+
+
+def output(command, **kwargs):
+    kwargs = dict(kwargs, env=dict(kwargs.get('env', os.environ), PYTHONDONTWRITEBYTECODE='1'))
+    return _original_output(command, **kwargs)
 
 
 def validate_changed(changed):
@@ -287,7 +305,7 @@ def configured_driver():
     for name in ('BASELINE', 'RUNNING_RELEASE', 'SELF', 'DECL', 'MIGRATION', 'MIGRATION_PATH',
                  'MIGRATION_SHA256', 'PREVIOUS_MIGRATION', 'EVIDENCE', 'SOURCE', 'RUNTIME_ALLOWED', 'BASELINE_OPERATION_PATHS',
                  'validate_changed', 'validate_migration', 'load', 'rows', 'check_schema', 'backup_evidence',
-                 'snapshot', 'shared_configs', 'retained_source_manifest'):
+                 'snapshot', 'shared_configs', 'retained_source_manifest', 'run', 'output'):
         setattr(base, name, globals()[name])
     base.verify_session_versions = verify_evidence_column
     base.assert_backup_current = assert_retained_backup

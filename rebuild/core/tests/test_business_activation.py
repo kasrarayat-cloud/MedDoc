@@ -103,6 +103,13 @@ class BusinessActivationTests(unittest.TestCase):
         self.assertEqual(len(result),2);call=helper.run_helper.call_args
         self.assertIn('--read-only',call.args[0]);self.assertIn('--log-driver=none',call.args[0]);self.assertEqual(call.kwargs['timeout'],60)
 
+    def test_driver_routes_both_subprocess_channels_through_bytecode_guard(self):
+        self.assertIs(b.run,a.run)
+        self.assertIs(b.output,a.output)
+        with patch.object(a,'_original_output',return_value='ok') as output:
+            self.assertEqual(a.output(['synthetic-command'],env={'ONLY':'preserved'}),'ok')
+            self.assertEqual(output.call_args.kwargs['env'],{'ONLY':'preserved','PYTHONDONTWRITEBYTECODE':'1'})
+
     def test_current_backup_helper_must_match_both_baseline_and_target(self):
         import tempfile
         with tempfile.TemporaryDirectory() as directory:
