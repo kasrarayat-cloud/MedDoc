@@ -64,9 +64,9 @@ const CARD_SUCCESS='4242424242424242';
 const CARD_DECLINED='4000000000000002';
 const CHECKOUT_EMAIL='stripe-sandbox@synthetic.quillmd.invalid';
 const TOP_UP_USD='5.00';
-const TOP_UP_MICRO=5000000n;
+const TOP_UP_MICRO=5000000000000n;   // $5.00 in pico-dollars, the stored precision
 const REFUND_CENTS=200;
-const REFUND_MICRO=2000000n;
+const REFUND_MICRO=2000000000000n;   // $2.00 in pico-dollars
 const MAX_CHECKOUTS=2;
 
 const args=process.argv.slice(2);
@@ -118,8 +118,24 @@ async function check(name,action){stage=name;await action();report.checks.push({
 function count(map,key){if(!(key in map)&&Object.keys(map).length>=50)key='(other)';map[key]=(map[key]||0)+1;}
 function stripeHost(hostname){return stripeHostSuffixes.some(suffix=>hostname===suffix.slice(1)||hostname.endsWith(suffix));}
 // Exact micro-dollar arithmetic on the six-decimal strings the billing page renders.
-function micro(text){const m=/^\$?(-?)(\d+)\.(\d{6})$/.exec(String(text).trim());assert(m,'Unrecognised balance format on the billing page.');const v=BigInt(m[2])*1000000n+BigInt(m[3]);return m[1]?-v:v;}
-function usd(v){const negative=v<0n;const a=negative?-v:v;return (negative?'-':'')+(a/1000000n).toString()+'.'+(a%1000000n).toString().padStart(6,'0');}
+function micro(text){
+  // ⚠️ THE UNIT IS PICO-DOLLARS (1e-12), NOT MICRO-DOLLARS, and the name is kept only because it
+  // is used throughout. The balances this page shows are DecimalField(decimal_places=12), and an
+  // ordinary generation lands on a sub-micro figure: 4211 input + 866 output tokens at the app's
+  // own rates gives a promotional balance of $9.9615655. A six-decimal parser either truncated
+  // that silently or — in the first version of this fix — REFUSED it and aborted the whole
+  // verification at baseline for any account that had ever generated a document. Parse the full
+  // stored precision instead, so neither happens.
+  //
+  // The page also renders money exactly now: trailing zeros trimmed to a minimum of cents, and
+  // a ledger movement carrying an explicit sign OUTSIDE the currency symbol ('+$0.25', '-$0.25').
+  const m=/^([+-]?)\$([+-]?)(\d+)\.(\d{2,12})$/.exec(String(text).trim());
+  assert(m,`Unrecognised money format on the billing page: ${JSON.stringify(String(text).trim())}`);
+  const v=BigInt(m[3])*1000000000000n+BigInt(m[4].padEnd(12,'0'));
+  return (m[1]==='-'||m[2]==='-')?-v:v;
+}
+
+function usd(v){const negative=v<0n;const a=negative?-v:v;const frac=(a%1000000000000n).toString().padStart(12,'0').replace(/0+$/,'').padEnd(2,'0');return (negative?'-':'')+(a/1000000000000n).toString()+'.'+frac;}
 function futureExpiry(){const year=new Date().getUTCFullYear()+3;return '12/'+String(year%100).padStart(2,'0');}
 
 async function guardedContext(){
@@ -334,7 +350,7 @@ try{
       assert(afterPayment,'Payment did not settle within 180s: forwarding may not be running, the signing secret may not match, or the event needs reconciliation. Nothing was retried.');
       const created=afterPayment.payments.filter(p=>!baseline.payments.some(b=>b.id===p.id));
       localPaymentId=created[0].id;
-      assert.equal(created[0].amount.replace(/\s/g,''),'500¢');
+      assert.equal(created[0].amount.replace(/\s/g,''),'$5.00');  // dollars, not raw cents
       assert.equal(wallet(afterPayment,'Promotional'),wallet(baseline,'Promotional'),'Promotional balance moved during a paid top-up.');
       assert.equal(ledgerCount(afterPayment,'payment',TOP_UP_MICRO),ledgerCount(baseline,'payment',TOP_UP_MICRO)+1,'Expected exactly one new payment ledger entry.');
       report.cases.payment_success={...report.cases.payment_success,status:'passed',local_payment_id:localPaymentId,stripe_checkout_session_id:session,

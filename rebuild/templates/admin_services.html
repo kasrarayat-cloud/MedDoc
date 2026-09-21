@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% load console %}
+{% block title %}Services and backups{% endblock %}
+{% block breadcrumb %}Services{% endblock %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow">Operations</div><h1>What is configured, and what is actually happening.</h1><p>These are two different questions and the console keeps them apart. A key being present in the environment is not evidence that the service works.</p></div><div class="actions"><a class="button secondary" href="{% url 'admin_dashboard' %}">Back to administration</a></div></div>
+
+<section class="section" id="processing"><div class="section-heading"><h2>Processing</h2><span class="badge {{ processing.severity }}">{{ processing.verdict }}</span></div>
+<p>{{ processing.detail }}</p>
+<div class="balance-strip">
+  <section class="balance-item"><div class="small muted">Queued</div><strong class="balance-value">{{ processing.queued }}</strong>{% if processing.oldest_queued_at %}<p class="small muted">Oldest since {{ processing.oldest_queued_at|date:'Y-m-d H:i' }} UTC</p>{% endif %}</section>
+  <section class="balance-item"><div class="small muted">Running</div><strong class="balance-value">{{ processing.running }}</strong>{% if processing.oldest_running_since %}<p class="small muted">Oldest since {{ processing.oldest_running_since|date:'Y-m-d H:i' }} UTC</p>{% endif %}</section>
+  <section class="balance-item"><div class="small muted">Past the {{ processing.staleness_minutes }}-minute bound</div><strong class="balance-value">{{ processing.overdue }}</strong></section>
+  <section class="balance-item"><div class="small muted">Awaiting a decision</div><strong class="balance-value">{{ processing.awaiting_owner }}</strong></section>
+  <section class="balance-item"><div class="small muted">Funds held</div><strong class="balance-value">{{ processing.funds_held_on_open_jobs|usd }}</strong></section>
+</div>
+<p class="small muted"><strong>How this is known.</strong> The web process cannot see the worker process, and does not claim to. <code>core.jobs.mark_stale</code> moves any job running longer than {{ processing.staleness_minutes }} minutes into reconciliation, and it runs on every pass of the worker loop — so a job that has outlived that bound establishes that the reaper has not run. An empty queue proves nothing either way, and the panel says so rather than showing green.</p>
+</section>
+
+<section class="section" id="backups"><div class="section-heading"><h2>Backup and recovery</h2></div>
+<p class="small muted">Backup state is computed by a privileged process and <strong>published</strong> into the database for this page to read. It is not read from disk: the admin service runs as a different identity and its unit carries <code>InaccessiblePaths=…/rebuild/.runtime</code>, so every backup state file is masked from its mount namespace. A view that read those paths would report &ldquo;unavailable&rdquo; on a perfectly healthy host.</p>
+{% for row in published %}
+<div class="template-row"><div>
+  <strong>{{ row.name }}</strong>
+  <p>{{ row.status }}</p>
+  <p class="small muted">{{ row.detail }}</p>
+  {% if row.published %}<p class="small muted">Computed {{ row.computed_at|date:'Y-m-d H:i:s' }} UTC · {{ row.age_seconds }}s ago{% if row.stale %} · <strong>STALE</strong>{% endif %}</p>
+    {% if row.payload.local_capture %}<details><summary>Last local capture</summary><div class="details-body"><dl class="metadata">{% for key, value in row.payload.local_capture.items %}<dt>{{ key }}</dt><dd>{{ value }}</dd>{% endfor %}</dl></div></details>{% endif %}
+    {% if row.payload.offsite %}<details><summary>Offsite recovery</summary><div class="details-body"><dl class="metadata">{% for key, value in row.payload.offsite.items %}<dt>{{ key }}</dt><dd>{{ value }}</dd>{% endfor %}</dl></div></details>{% endif %}
+  {% else %}<p class="small muted mono">python manage.py publish_operations_status</p>{% endif %}
+</div><span class="badge {{ row.severity }}">{% if row.published %}{% if row.stale %}stale{% else %}{{ row.severity }}{% endif %}{% else %}unknown{% endif %}</span></div>
+{% empty %}<p class="small muted">No operational status keys are defined.</p>{% endfor %}
+</section>
+
+<section class="section" id="observed"><div class="section-heading"><h2>Observed</h2><span class="small muted">Measured in this process, right now</span></div>
+<div class="template-row"><div><strong>{{ email.name }}</strong><p>{{ email.status }}</p><p class="small muted">{{ email.detail }}{% if email.last_failure_at %} Last failure {{ email.last_failure_at|date:'Y-m-d H:i' }} UTC. <a href="{% url 'audit' %}?action=email.failed">Open those audit rows</a>.{% endif %}</p></div><span class="badge {{ email.severity }}">{{ email.severity }}</span></div>
+{% for tool in configuration.media_tools %}<div class="template-row"><div><strong>{{ tool.name }}</strong><p class="mono">{{ tool.status }}</p><p class="small muted">Without either tool every recording is refused before the provider is called, and nothing is charged. Recording failures that look like a transcription outage are usually this.</p></div><span class="badge {{ tool.severity }}">{{ tool.severity }}</span></div>{% endfor %}
+</section>
+
+<section class="section" id="configured"><div class="section-heading"><h2>Configured</h2><span class="small muted">Presence and shape only — no value is ever read back</span></div>
+{% include 'integrations.html' %}
+<div class="table-wrap"><table><caption class="small muted">Private credentials. The console reports whether each is set and whether its shape is recognised; it never reads, logs or compares the value.</caption><thead><tr><th scope="col">Name</th><th scope="col">Status</th></tr></thead><tbody>{% for row in configuration.secrets %}<tr><td class="mono">{{ row.name }}</td><td><span class="badge {{ row.severity }}">{{ row.status }}</span></td></tr>{% endfor %}</tbody></table></div>
+<div class="table-wrap"><table><caption class="small muted">Non-secret settings. These are identifiers and modes; their value is the answer.</caption><thead><tr><th scope="col">Setting</th><th scope="col">Value</th></tr></thead><tbody>{% for row in configuration.settings %}<tr><td class="mono">{{ row.name }}</td><td class="mono">{{ row.value }}</td></tr>{% endfor %}</tbody></table></div>
+<div class="table-wrap"><table><caption class="small muted">Release gates and the surface this page is served from.</caption><thead><tr><th scope="col">Gate</th><th scope="col">Value</th></tr></thead><tbody>{% for row in configuration.gates %}<tr><td class="mono">{{ row.name }}</td><td class="mono">{{ row.value }}</td></tr>{% endfor %}</tbody></table></div>
+<p class="small muted">This is the same data <code>python manage.py configuration_status</code> prints, from the same function, so the browser and the terminal cannot disagree.</p>
+</section>
+{% endblock %}

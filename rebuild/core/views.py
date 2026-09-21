@@ -780,33 +780,46 @@ def webhook(request):
 def admin_dashboard(request):
     if not request.user.is_staff or not request.user.is_verified():raise Http404
     from .admin_queries import page_for,searched
-    query=request.GET.get('q','').strip()[:100]
-    counts={'accounts':User.objects.count(),'organizations':Organization.objects.count(),'departments':Department.objects.count(),'jobs':Job.objects.count(),'welcome_credits':LedgerEntry.objects.filter(kind='welcome').count()}
+    from . import admin_console
+    query=request.GET.get('q','').replace('\x00','').strip()[:100]
+    # An inclusive UTC calendar window. When no dates are given `filters` is empty and every
+    # queryset below is byte-identical to what it was before the window existed.
+    window=admin_console.date_window(request)
     audit(request.user,'admin.dashboard')
+    # Third element of each tuple is the DATE COLUMN the window filters on. It is not always
+    # `created_at`: User extends AbstractUser and carries `date_joined` instead.
     sources={
-        'users':(User.objects.order_by('-date_joined','pk'),['email','first_name','last_name'],'accounts'),
-        'memberships':(Membership.objects.select_related('user','department__organization').order_by('-created_at','pk'),['user__email','department__name','department__organization__name','role'],'permissions'),
-        'jobs':(Job.objects.select_related('user').order_by('-created_at','pk'),['user__email','kind','state','provider_request_id','provider_resource_id'],'jobs'),
-        'usage':(Usage.objects.select_related('user','department','organization','job__providerreceipt','costreconciliation__recorded_by').order_by('-created_at','pk'),['user__email','department__name','organization__name','provider','provider_request_id','provider_resource_id','payer'],'costs'),
-        'platform_costs':(PlatformCost.objects.select_related('job','recorded_by').order_by('-created_at','pk'),['kind','description','evidence_reference'],'platform-costs'),
-        'payments':(Payment.objects.select_related('user','wallet__user','wallet__organization').order_by('-created_at','pk'),['user__email','status','stripe_session','stripe_intent'],'payments'),
-        'refunds':(Refund.objects.select_related('payment').order_by('-created_at','pk'),['status','stripe_refund','payment__user__email'],'refunds'),
-        'stripe_events':(WebhookEvent.objects.order_by('-created_at','pk'),['event_id','kind','status'],'stripe-events'),
-        'wallets':(Wallet.objects.select_related('user','organization').order_by('-created_at','pk'),['user__email','organization__name','kind'],'credits'),
-        'ledger':(LedgerEntry.objects.select_related('wallet__user','wallet__organization').order_by('-created_at','pk'),['wallet__user__email','wallet__organization__name','kind','key','description'],'credits'),
-        'receipts':(ProviderReceipt.objects.select_related('job').order_by('-created_at','pk'),['provider','provider_request_id','provider_resource_id','job__user__email'],'provider-receipts'),
+        'users':(User.objects.order_by('-date_joined','pk'),['email','first_name','last_name'],'accounts','date_joined'),
+        'memberships':(Membership.objects.select_related('user','department__organization').order_by('-created_at','pk'),['user__email','department__name','department__organization__name','role'],'permissions','created_at'),
+        'jobs':(Job.objects.select_related('user').order_by('-created_at','pk'),['user__email','kind','state','provider_request_id','provider_resource_id'],'jobs','created_at'),
+        'usage':(Usage.objects.select_related('user','department','organization','job__providerreceipt','costreconciliation__recorded_by').order_by('-created_at','pk'),['user__email','department__name','organization__name','provider','provider_request_id','provider_resource_id','payer'],'costs','created_at'),
+        'platform_costs':(PlatformCost.objects.select_related('job','recorded_by').order_by('-created_at','pk'),['kind','description','evidence_reference'],'platform-costs','created_at'),
+        'payments':(Payment.objects.select_related('user','wallet__user','wallet__organization').order_by('-created_at','pk'),['user__email','status','stripe_session','stripe_intent'],'payments','created_at'),
+        'refunds':(Refund.objects.select_related('payment').order_by('-created_at','pk'),['status','stripe_refund','payment__user__email'],'refunds','created_at'),
+        'stripe_events':(WebhookEvent.objects.order_by('-created_at','pk'),['event_id','kind','status'],'stripe-events','created_at'),
+        'wallets':(Wallet.objects.select_related('user','organization').order_by('-created_at','pk'),['user__email','organization__name','kind'],'credits','created_at'),
+        'ledger':(LedgerEntry.objects.select_related('wallet__user','wallet__organization').order_by('-created_at','pk'),['wallet__user__email','wallet__organization__name','kind','key','description'],'credits','created_at'),
+        'receipts':(ProviderReceipt.objects.select_related('job').order_by('-created_at','pk'),['provider','provider_request_id','provider_resource_id','job__user__email'],'provider-receipts','created_at'),
     }
-    context={'counts':counts,'query':query}
-    for key,(rows,fields,anchor) in sources.items():
-        filtered=searched(rows,query,fields)
+    context={'query':query,'window':window}
+    for key,(rows,fields,anchor,date_field) in sources.items():
+        # One window narrows every list consistently, against whichever date column that model
+        # actually has — see admin_console.window_filters for why that is not always created_at.
+        filtered=searched(rows.filter(**admin_console.window_filters(window,date_field)),query,fields)
         if key=='jobs' and request.GET.get('job_state'):filtered=filtered.filter(state=request.GET['job_state'][:20])
-        if key=='users' and request.GET.get('account_status') in ('active','inactive'):filtered=filtered.filter(is_active=request.GET['account_status']=='active')
+        if key=='users' and request.GET.get('account_status') in ('active','inactive','unverified'):
+            filtered=filtered.filter(verified_at__isnull=True) if request.GET['account_status']=='unverified' else filtered.filter(is_active=request.GET['account_status']=='active')
         navigation=page_for(request,filtered,key+'_page',anchor)
         context[key]=navigation['page'];context[key+'_navigation']=navigation
         if key=='usage':context['usage_totals']=filtered.aggregate(cost=models.Sum('actual_cost'),charge=models.Sum('charged_cost'))
     context.update(usage_rows=usage_rows(list(context['usage'])),
         platform_totals={label:PlatformCost.objects.filter(kind=kind).aggregate(total=models.Sum('amount'))['total'] or Decimal('0') for kind,label in PlatformCost.KINDS},
-        reconciliation=reconciliation(),audit_events=AuditEvent.objects.select_related('actor').order_by('-created_at','pk')[:8])
+        reconciliation=reconciliation(),audit_events=AuditEvent.objects.exclude(action='admin.dashboard').select_related('actor').order_by('-created_at','pk')[:8],
+        overview=admin_console.business_overview(window),
+        processing=admin_console.processing_health(),
+        published=admin_console.published_operations(),
+        reconciliation_form=ReconciliationForm(),
+        refunded=admin_console.refunded_cents([p.pk for p in context['payments']]))
     return render(request,'admin_dashboard.html',context)
 
 
@@ -891,10 +904,23 @@ def admin_resolve_job(request,pk):
 def audit_view(request):
     if not request.user.is_staff or not request.user.is_verified():raise Http404
     from .admin_queries import page_for
-    q=request.GET.get('q','')[:100]
-    events=AuditEvent.objects.select_related('actor','department','organization').filter(models.Q(action__icontains=q)|models.Q(actor__email__icontains=q)|models.Q(target__icontains=q)).order_by('-created_at','pk')
+    from . import admin_console
+    q=request.GET.get('q','').replace('\x00','')[:100]
+    window=admin_console.date_window(request)
+    events=AuditEvent.objects.select_related('actor','department','organization').filter(models.Q(action__icontains=q)|models.Q(actor__email__icontains=q)|models.Q(target__icontains=q)).filter(**window['filters']).order_by('-created_at','pk')
+    # An EXACT action match, beside the free-text box rather than replacing it. `action__icontains`
+    # silently widens across a family: 'payment.refund' also matches 'payment.refund_failed', and
+    # 'admin.account' matches 'admin.account_read' — so an investigator filtering for one action can
+    # be reading three. The picker is populated from the actions that actually exist, so it can
+    # never offer a value that returns nothing.
+    # A NUL byte cannot exist in PostgreSQL text; psycopg raises DataError out of the view.
+    action=request.GET.get('action','').replace('\x00','')[:70]
+    if action:events=events.filter(action=action)
+    actions=list(AuditEvent.objects.values_list('action',flat=True).order_by('action').distinct())
+    audit(request.user,'admin.audit_read',query=q,action_filter=action,window=window['label'])
     navigation=page_for(request,events,size=50)
-    return render(request,'audit.html',{'audit_events':navigation['page'],'query':q,'navigation':navigation})
+    return render(request,'audit.html',{'audit_events':navigation['page'],'query':q,'navigation':navigation,
+                                        'window':window,'actions':actions,'action':action})
 
 @require_POST
 @transaction.atomic
@@ -907,7 +933,20 @@ def admin_account(request,pk):
     if revoked:user.session_version+=1
     user.is_active=active;user.save(update_fields=['is_active','session_version'])
     audit(request.user,'admin.account_access',user.pk,active=user.is_active,sessions_invalidated=revoked)
-    return redirect('admin_dashboard')
+    if revoked:
+        # ⚠️ SUSPENDING AN ACCOUNT CAN LEAVE A DEPARTMENT WITH NO USABLE OWNER, and this is
+        # deliberately NOT refused: a security suspension must never be blocked by organization
+        # structure. The membership screen refuses the equivalent edit, so the invariant it states
+        # is about THAT screen, not about the product. Here the state is announced instead.
+        orphaned=[m.department.name for m in Membership.objects.filter(user=user,active=True,role='owner').select_related('department')
+                  if not Membership.objects.filter(department=m.department_id,active=True,role='owner',user__is_active=True,user__verified_at__isnull=False).exclude(user=user).exists()]
+        if orphaned:
+            messages.warning(request,'Suspended. '+', '.join(orphaned)+' now has no active, verified owner: nobody can invite into it, create patients in it, or restore access from the clinician side. Give another member the owner role.')
+        else:
+            messages.success(request,'Account suspended and signed out of every session.')
+    elif user.is_active:
+        messages.success(request,'Account enabled. Existing sessions were not restored; the account can sign in again.')
+    return redirect(request.POST.get('back') if (request.POST.get('back') or '').startswith('/console/') else 'admin_dashboard')
 
 # Minimal API endpoints share the same query boundary as HTML and downloads.
 def api_patients(request):
