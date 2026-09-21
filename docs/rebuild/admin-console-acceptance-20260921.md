@@ -260,6 +260,37 @@ invoice evidence `$0.18` → new uncapped `$0.27`, under the limit, so delta `+$
 ledger: promotional `−$0.03843`, paid `−$0.23157` → **net charge $0.27**. Both wallets read
 "Ledger agrees".
 
+### Two write workflows walked against the live isolated stack
+
+Not through the test database — through the running server on `:9161`, against the seeded
+synthetic data, so the effect is observed rather than asserted.
+
+**A role change is honoured by the server, not merely displayed.** The check is
+`core.security.membership`, the function the product itself uses to decide access:
+
+```
+before: xray_employee@… is employee in X-ray
+server: may act as owner/clinician -> NO
+POST /console/memberships/<pk>/  302  -> role now clinician
+server: may act as owner/clinician -> YES      (the change is real, not cosmetic)
+audit : admin@… {'account': 'xray_employee@…', 'role_from': 'employee', 'role_to': 'clinician',
+                 'active_from': True, 'active_to': True}
+```
+
+**A payer change is not retrospective, which is what the screen promises.**
+
+```
+before: organization_pays=False, 4 jobs carry a recorded payer
+POST /console/departments/<pk>/payer/  302  -> organization_pays=True
+org paid wallet created                    : True
+recorded payers unchanged on existing jobs : True
+audit : admin@… {'organization_pays_from': False, 'organization_pays_to': True}
+```
+
+The second line is the one that matters: `Job.payer` is stamped when funds are first held and is
+never re-read from the department, so an administrator explaining an old charge is not looking at
+a number this setting could have moved underneath them.
+
 ### Tests
 Both runs are `bash scripts/ci/verify-fresh.sh python`, the same gate CI runs, each against its
 own isolated database.
