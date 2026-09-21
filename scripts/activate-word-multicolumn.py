@@ -14,6 +14,7 @@ by length, and that is exactly the drift a preservation check exists to catch.
 The operations-status publisher is installed by its own ruled act afterwards. This one installs
 no unit and enables no timer.
 """
+from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -26,7 +27,7 @@ SOURCE = Path(__file__).resolve().parents[1]
 APP = ROOT / 'rebuild'
 SELF = 'scripts/activate-word-multicolumn.py'
 DECL = 'docs/foundation/mutations/20260921-quillmd-word-multicolumn-activation.md'
-DECL_SHA256 = 'e7816d70712c9f49c6f3a39d2633cee1580ddba398b38d200250d781f9f3005f'
+DECL_SHA256 = 'e684caa76a994affe4f95417945412cb7737fc6b8ba36a9aef1ae5beb4e00532'
 BASELINE = '21809ef408a5f7b6691beb338a7640da82fcfb97'
 EVIDENCE = ROOT / 'rebuild/.runtime/word-multicolumn-activation-20260921'
 DRIVER = 'scripts/activate-typed-voice.py'
@@ -55,6 +56,7 @@ CAPTURE_MANIFEST_SHA256 = 'ac714b19363a66294d35cfde0d4b1de62de2ab9db1916b67f466f
 #: The completed static transition of the release now serving. This act reinstalls nothing.
 STATIC_RECEIPT = APP / '.runtime/admin-console-20260921/admin-console-resume-21809ef408a5.json'
 STATIC_RECEIPT_SHA256 = 'a83479597ac649a31f3d02e0d73e3412a4d79e7ab6c2bec2027c4c95126922bc'
+NEW_TABLE = 'core_servicehealth'
 SCHEMA_MARKER = '<!-- declared-schema -->'
 SCOPE_MARKER = '<!-- declared-source-scope -->'
 
@@ -156,6 +158,83 @@ def load(name, relative, target):
 
 
 driver.a.load = load
+
+
+def judge_population(actual, covered):
+    """The retained capture predates the reviewed migration. Bounded acceptance, stated in one place.
+
+    ⚠️ THE TWO CHECKS IN THIS CHAIN WANT DIFFERENT CAPTURES, and that is why an exception exists
+    at all. `backup_evidence` requires the safety capture to share the RESTORED DRILL's schema
+    (35 tables); `assert_retained_capture` requires it to equal the LIVE population (36). No one
+    capture satisfies both without a fresh independent-key restore drill, which is out of scope.
+
+    So this widens ONE clause by EXACTLY the declared new table, in ONE direction, and ONLY while
+    that table is EMPTY: a restore from this capture would lose no row, because there is no row in
+    it to lose. It restores a database one migration behind the code, which is the ordinary
+    property of any capture taken before a migration.
+
+    ⚠️ AND IT IS NARROWER THAN THE PRECEDENT IT COPIES, because the situation improved: a capture
+    that DOES cover the table now exists (`20260921T194532Z-1b826c0d`, verified against live
+    `pg_tables` by name). The publisher's coverage requirement is therefore met STRICTLY and is
+    not relying on this exception at all. Nothing about that requirement is weakened here.
+
+    Every other clause is unchanged: capture identity, every backed-up file's size and hash, the
+    financial invariants, and the honest comparison record.
+    """
+    require(set(covered) - set(actual) == set(),
+            'The retained capture holds a table the live database no longer has.')
+    extra = set(actual) - set(covered)
+    require(extra in (set(), {NEW_TABLE}),
+            'Retained capture table population differs beyond the declared new table.')
+    if extra:
+        require(actual[NEW_TABLE]['rows'] == 0,
+                'The table the retained capture does not cover is no longer empty.')
+    return extra
+
+
+def assert_retained_capture(manifest, modules, storage):
+    a, b = driver.a, driver.b
+    require(manifest['run_id'] == a.CAPTURE_RUN, 'Unqualified retained capture.')
+    for item in manifest['files']:
+        got = storage.get(item['path'])
+        require(got and got.get('sha256') == item['sha256'] and got.get('size') == item['size'],
+                'Retained backed-up file changed; inspect before activation.')
+    import psycopg
+    backup = modules['backup']
+    with psycopg.connect(**backup.source_options(APP, b.ROLES), autocommit=True) as conn:
+        conn.execute("SET timezone='UTC'")
+        conn.execute("SET datestyle='ISO, MDY'")
+        conn.execute('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY')
+
+        def copy_hash(statement):
+            digest = hashlib.sha256()
+            with conn.cursor().copy(statement) as stream:
+                for value in stream:
+                    digest.update(value)
+            return digest.hexdigest()
+
+        actual = backup.fingerprint(lambda statement: conn.execute(statement).fetchall(), copy_hash)
+        uncovered = judge_population(actual, manifest['tables'])
+        require(not any(backup.invariant_counts(lambda statement: conn.execute(statement).fetchall()).values()),
+                'Current financial invariants fail.')
+        conn.execute('ROLLBACK')
+    a.BACKUP_COMPARISONS.append({
+        'observed_at': datetime.now(timezone.utc).isoformat(), 'run_id': a.CAPTURE_RUN,
+        'all_current_table_hashes_match_capture': actual == manifest['tables'],
+        'differing_tables': [n for n in sorted(actual) if actual.get(n) != manifest['tables'].get(n)],
+        'tables_not_covered_by_the_retained_capture': sorted(uncovered),
+        'uncovered_tables_are_empty': all(actual[n]['rows'] == 0 for n in uncovered),
+        'current_table_fingerprints': actual, 'fresh_capture_performed': False,
+        'a_covering_capture_exists_elsewhere': '20260921T194532Z-1b826c0d',
+        'qualification': 'Historical recovery evidence only. It predates the declared migration '
+                         'and does not cover the new table, which is empty, so no row is outside '
+                         'it. A separate verified capture DOES cover that table and is what the '
+                         'operations publisher requires; this exception is not load-bearing for '
+                         'publisher coverage. Full current stopped rows and files must remain '
+                         'identical.'})
+
+
+driver.assert_retained_capture = assert_retained_capture
 
 
 if __name__ == '__main__':

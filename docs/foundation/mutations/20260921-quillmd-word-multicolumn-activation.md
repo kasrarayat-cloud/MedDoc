@@ -133,6 +133,30 @@ Re-proving an independent-key restore against tonight's capture would be restora
 out of scope, so the guard is left exactly as it is. Full account:
 `rebuild/.runtime/word-multicolumn-activation-20260921/readonly-refusal-20260921.md`.
 
+## ⚠️ One bounded acceptance, and exactly what it costs
+
+The retained safety capture **predates the reviewed migration**, so it holds 35 tables while the
+live database holds 36. Two checks in this chain want different captures and no single capture
+satisfies both: `backup_evidence` requires the safety capture to share the RESTORED DRILL's
+schema, and `assert_retained_capture` requires it to equal the LIVE population. Reconciling them
+strictly would need a fresh independent-key restore drill against a 36-table capture, which is
+restoration work outside this scope.
+
+**One clause is therefore widened by exactly one table, in one direction, and only while that
+table is EMPTY.** A restore from this capture would lose no row, because there is no row in it to
+lose; it restores a database one migration behind the code, which is the ordinary property of any
+capture taken before a migration.
+
+⚠️ **This is NARROWER than the precedent it copies.** When the previous activation accepted the
+same exception, no capture covering the table existed. One does now —
+`20260921T194532Z-1b826c0d`, verified against live `pg_tables` **by name** — so the **publisher's
+coverage requirement is met strictly and does not rely on this exception at all.** Nothing about
+that requirement is weakened.
+
+Proved rather than described: a non-empty uncovered table refuses, a second uncovered table
+refuses, an uncovered table that is not the declared one refuses, and a table the capture holds
+but the live database lost refuses. Identical populations take the strict path.
+
 ## Failure recovery
 
 The driver's own receipt, lock and staged-state directory are retained on failure. A failure is
