@@ -5,6 +5,9 @@ import hashlib
 import json
 import os
 import tempfile
+import subprocess
+import sys
+import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
@@ -273,6 +276,110 @@ class PublicStaticTransitionTests(unittest.TestCase):
             if name.startswith('app.') and name not in ('app.css', 'app.js'):
                 self.assertEqual(after[name], before[name])
         self.assertEqual(list(old.rglob('.typed-voice-*')), [])
+
+    def test_actual_collector_subprocess_needs_no_db_wrapper_or_project_settings(self):
+        app = self.root / 'application'
+        (app / 'quillmd').mkdir(parents=True)
+        # Keep the real interpreter's venv metadata/site-packages; a lone
+        # executable symlink outside its venv would correctly lose Django.
+        (app / '.venv').symlink_to(Path(sys.executable).parent.parent, target_is_directory=True)
+        (app / 'static').mkdir()
+        (app / 'static/app.css').write_text('body {color:black}')
+        (app / 'static/app.js').write_text('"use strict";')
+        (app / 'quillmd/__init__.py').write_text('')
+        (app / 'quillmd/settings.py').write_text('raise RuntimeError("Project settings must not load")')
+        (app / 'quillmd/static_storage.py').write_bytes((ROOT / 'rebuild/quillmd/static_storage.py').read_bytes())
+        stage = self.root / 'stage'
+        c.create_static_stage(stage)
+        with patch.object(c, 'APP', app), patch.object(c.b, 'management', side_effect=AssertionError('DB wrapper forbidden')):
+            c.collect_static(stage)
+        otp = Path(importlib.util.find_spec('django_otp').origin).parent
+        inputs = {'app.css': app / 'static/app.css', 'app.js': app / 'static/app.js',
+            'django_otp/css/login.css': otp / 'static/django_otp/css/login.css',
+            'otp_totp/css/qrcode.css': otp / 'plugins/otp_totp/static/otp_totp/css/qrcode.css',
+            'otp_totp/js/qrcode.js': otp / 'plugins/otp_totp/static/otp_totp/js/qrcode.js'}
+        self.assertGreater(len(c.validate_staged_static(stage, inputs)), 5)
+        with self.assertRaises(RuntimeError):
+            c.collect_static(stage)
+
+    def test_actual_collection_under_restrictive_inherited_umask(self):
+        previous = os.umask(0o077)
+        try:
+            self.test_actual_collector_subprocess_needs_no_db_wrapper_or_project_settings()
+            self.assertEqual((self.root / 'stage').stat().st_mode & 0o777, 0o755)
+            self.assertEqual(os.umask(0o077), 0o077, 'Stage creation changed the caller umask.')
+        finally:
+            os.umask(previous)
+
+    def test_stage_creation_never_repermissions_existing_directory_or_symlink(self):
+        existing = self.root / 'existing'
+        existing.mkdir(mode=0o700)
+        with self.assertRaises(FileExistsError):
+            c.create_static_stage(existing)
+        self.assertEqual(existing.stat().st_mode & 0o777, 0o700)
+        link = self.root / 'link'
+        link.symlink_to(existing, target_is_directory=True)
+        with self.assertRaises(FileExistsError):
+            c.create_static_stage(link)
+        self.assertEqual(existing.stat().st_mode & 0o777, 0o700)
+
+    def test_original_management_wrapper_still_refuses_shell_before_execution(self):
+        source = self.root / 'wrapper-source'
+        source.mkdir()
+        marker = self.root / 'must-not-exist'
+        (source / 'manage.py').write_text('from pathlib import Path; Path(' + repr(str(marker)) + ').touch()')
+        credentials = self.root / 'fixture-roles.json'
+        credentials.write_text(json.dumps({'database': 'quillmd_fresh', 'roles': {}}))
+        credentials.chmod(0o600)
+        result = subprocess.run([sys.executable, '-B', str(ROOT / 'rebuild/ops/with_db_role.py'),
+            '--credentials', str(credentials), '--source', str(source), '--role', 'migrator', '--',
+            'shell', '-c', 'raise RuntimeError("must not execute")'], capture_output=True, timeout=15)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(b'Only migration, check and verified terminology import commands are allowed', result.stderr)
+        self.assertFalse(marker.exists())
+
+
+class ExactFailedStateResumeTests(unittest.TestCase):
+    def fixture(self):
+        return {'complete': False, 'baseline': c.BASELINE, 'served_before': c.RUNNING_RELEASE,
+            'target': c.FAILED_TARGET, 'stage': 'collect_and_install_source_bound_public_assets',
+            'failure_kind': 'CalledProcessError', 'failure_services_stopped': True,
+            'migration_performed': False, 'provider_calls': 0, 'stopped_before': {'rows': 'same'},
+            'stopped_after_source': {'rows': 'same'},
+            'state_directory': str(c.EVIDENCE / ('activation-state-' + c.FAILED_TARGET[:12]))}
+
+    def test_receipt_requires_exact_bytes_and_exact_stopped_failure(self):
+        value = self.fixture()
+        data = json.dumps(value).encode()
+        with patch.object(c, 'FAILED_RECEIPT_SHA256', c.sha(data)):
+            self.assertEqual(c.validate_failed_receipt(data), value)
+            with self.assertRaises(RuntimeError):
+                c.validate_failed_receipt(data + b'\n')
+        for key, bad in [('complete', True), ('target', 'a' * 40), ('failure_services_stopped', False),
+                         ('stage', 'start_and_verify_exact_private_release'), ('provider_calls', 1),
+                         ('stopped_after_source', {'rows': 'changed'}), ('state_directory', '/unrelated')]:
+            changed = dict(value, **{key: bad})
+            encoded = json.dumps(changed).encode()
+            with self.subTest(key=key), patch.object(c, 'FAILED_RECEIPT_SHA256', c.sha(encoded)), self.assertRaises(RuntimeError):
+                c.validate_failed_receipt(encoded)
+
+    def test_failure_report_keeps_class_stage_exit_and_stderr_identity_without_secret_text(self):
+        error = subprocess.CalledProcessError(7, ['not-published'], stderr=b'synthetic-secret-canary')
+        result = c.failure_details(error, 'collect_and_install_source_bound_public_assets')
+        self.assertEqual(result['failure_kind'], 'CalledProcessError')
+        self.assertEqual(result['failed_subprocess_exit_code'], 7)
+        self.assertEqual(result['failure_diagnostic_code'], 'credential_free_static_collection_failed')
+        self.assertEqual(result['failure_stderr_sha256'], c.sha(error.stderr))
+        self.assertNotIn('synthetic-secret-canary', json.dumps(result))
+
+    def test_resume_stops_and_checks_original_rows_before_source_advance(self):
+        source = inspect.getsource(c.resume_failed)
+        self.assertLess(source.index('unchanged(failed[\'stopped_before\'], baseline)'), source.index("b.run(['git', 'merge', '--ff-only'"))
+        self.assertIn('changed == RESUME_PATHS', inspect.getsource(c.verify_resume_source))
+        self.assertEqual(c.RESUME_PATHS, {c.SELF, 'rebuild/ops/test_typed_voice_activation.py', c.RESUME_DECL})
+        self.assertNotIn("management('migrate'", source)
+        self.assertNotIn("management('shell'", inspect.getsource(c.collect_static))
+        self.assertIn('original-lock.json', source)
 
 
 if __name__ == '__main__':
