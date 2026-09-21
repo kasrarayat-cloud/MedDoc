@@ -102,7 +102,8 @@ class TabFormWorkflowTests(TestCase):
         self.assertEqual(revised.fields[0]["locator"], original_fields[0]["locator"])
         encounter = self.encounter(revised)
         page = self.client.get(f"/encounters/{encounter.pk}/")
-        self.assertContains(page, "enter and review the documented answers below")
+        self.assertContains(page, 'id="source-notes-edit"', count=1)
+        self.assertContains(page, 'data-generate-form', count=1)
         for field in revised.fields:
             self.assertContains(page, f'name="answer_{field["key"]}"', count=1)
         self.assertEqual(encounter.answers, {})

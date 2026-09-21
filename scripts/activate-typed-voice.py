@@ -41,6 +41,7 @@ RUNTIME_ALLOWED = {
     'rebuild/core/forms.py', 'rebuild/core/views.py', 'rebuild/core/generation.py', 'rebuild/core/jobs.py',
     'rebuild/core/tests/test_input_workflow.py',
     'rebuild/core/tests/test_recording_limit.py',
+    'rebuild/core/tests/test_tab_form_workflow.py',
     'rebuild/core/tests/test_natural_tab_generation.py',
     'rebuild/templates/encounter_detail.html', 'rebuild/templates/encounter_input.html',
     'rebuild/templates/encounter_form.html',
