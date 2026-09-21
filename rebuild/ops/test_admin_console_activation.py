@@ -15,7 +15,7 @@ import unittest
 from pathlib import Path
 import types
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from ops import source_module
 
@@ -641,6 +641,72 @@ class ForwardRepair(unittest.TestCase):
         self.assertIn('Original activation process is still present', source)
         self.assertIn('not any(p.exists() or p.is_symlink() for p in (result_path, state))', source)
         self.assertIn("lock_value.get('target') == FAILED_TARGET", source)
+
+
+class RetainedCaptureCoverage(unittest.TestCase):
+    """The recovery point predates the migration; the tolerance is one EMPTY table, one way."""
+
+    def harness(self, actual, files=None, invariants=None):
+        import psycopg
+        manifest = {'run_id': c.a.CAPTURE_RUN,
+                    'tables': {'core_usage': {'rows': 28, 'sha256': 'u'},
+                               'core_wallet': {'rows': 3, 'sha256': 'w'}},
+                    'files': [{'path': 'kept', 'sha256': 'fh', 'size': 8}]}
+        backup = SimpleNamespace(source_options=Mock(return_value={}), fingerprint=Mock(return_value=actual),
+                                 invariant_counts=Mock(return_value=invariants or {'usage_multiplier': 0}))
+        storage = files if files is not None else {'kept': {'sha256': 'fh', 'size': 8}}
+        with patch.object(psycopg, 'connect', return_value=MagicMock()), \
+             patch.object(c.a, 'BACKUP_COMPARISONS', []):
+            c.assert_retained_capture(manifest, {'backup': backup}, storage)
+            return c.a.BACKUP_COMPARISONS[0]
+
+    def covered(self):
+        return {'core_usage': {'rows': 28, 'sha256': 'u'}, 'core_wallet': {'rows': 3, 'sha256': 'w'}}
+
+    def test_an_exactly_covered_database_is_accepted(self):
+        report = self.harness(self.covered())
+        self.assertTrue(report['all_current_table_hashes_match_capture'])
+        self.assertEqual(report['tables_not_covered_by_the_retained_capture'], [])
+        self.assertFalse(report['fresh_capture_performed'])
+
+    def test_the_declared_new_table_may_be_uncovered_only_while_it_is_empty(self):
+        report = self.harness(dict(self.covered(), **{c.NEW_TABLE: {'rows': 0, 'sha256': 'e'}}))
+        self.assertEqual(report['tables_not_covered_by_the_retained_capture'], [c.NEW_TABLE])
+        self.assertTrue(report['uncovered_tables_are_empty'])
+        self.assertFalse(report['all_current_table_hashes_match_capture'])
+        with self.assertRaises(RuntimeError) as caught:
+            self.harness(dict(self.covered(), **{c.NEW_TABLE: {'rows': 1, 'sha256': 'x'}}))
+        self.assertIn('no longer empty', str(caught.exception))
+
+    def test_any_other_population_difference_still_refuses(self):
+        for actual, label in (
+                (dict(self.covered(), core_other={'rows': 0, 'sha256': 'o'}), 'a different new table'),
+                (dict(self.covered(), core_other={'rows': 0, 'sha256': 'o'},
+                      **{c.NEW_TABLE: {'rows': 0, 'sha256': 'e'}}), 'two new tables'),
+                ({'core_usage': {'rows': 28, 'sha256': 'u'}}, 'a table the capture has and the database does not')):
+            with self.subTest(case=label), self.assertRaises(RuntimeError):
+                self.harness(actual)
+
+    def test_a_changed_backed_up_file_refuses_before_any_database_call(self):
+        import psycopg
+        with patch.object(psycopg, 'connect') as connect, self.assertRaises(RuntimeError):
+            self.harness(self.covered(), files={'kept': {'sha256': 'tampered', 'size': 8}})
+        connect.assert_not_called()
+
+    def test_failing_financial_invariants_refuse(self):
+        with self.assertRaises(RuntimeError):
+            self.harness(self.covered(), invariants={'usage_multiplier': 1})
+
+    def test_no_fresh_capture_restore_or_readback_is_performed(self):
+        """Searches the executable body, not the prose that says none is performed."""
+        source = inspect.getsource(c.assert_retained_capture)
+        body = source.split('"""', 2)[2]
+        self.assertIn('psycopg.connect', body)
+        for forbidden in ('load_backup', 'scheduled_backup', 'readback', 'restore(', 'upload', 'Fernet'):
+            self.assertNotIn(forbidden, body)
+        self.assertIn("'fresh_capture_performed': False", body)
+        self.assertIn('READ ONLY', body)
+        self.assertIn("conn.execute('ROLLBACK')", body)
 
 
 class ReceiptHonesty(unittest.TestCase):

@@ -76,6 +76,25 @@ ContentType and four permissions — then leaves it alone.
 | `core_servicehealth` | still **empty** — it is populated later, by a separate act |
 | storage, mail, unit files, shared configuration, co-tenants | identical |
 
+## ⚠️ The recovery point predates the migration, and that is stated rather than papered over
+
+The retained capture (`20260921T043001Z-0a6f66da`, complete 04:31:03Z) holds **35 tables**. The
+live database now has **36**. The qualified capture check requires the two populations to be
+equal and therefore refuses — correctly, by its own terms, on a database nothing is wrong with.
+
+It is widened here by **exactly one table, in one direction, and only while that table is
+empty**. A restore from this capture would lose **no row**, because there is no row in it to
+lose; it would restore a database one migration behind the code, which is the ordinary property
+of any capture taken before a migration.
+
+**This closes itself.** The local capture timer runs at 04:30 daily and the offsite leg at 05:00;
+the next scheduled run covers the new table with no action from anybody. **No fresh capture,
+restore, readback or renewal is performed by this act, and none is authorized by it.**
+
+Every other clause of that check is unchanged: the capture identity, every backed-up file's size
+and hash, the current financial invariants, and an honest comparison record that now names which
+tables the capture does not cover and asserts they are empty.
+
 ## Preservation required
 
 Clinical records, originals, versioned mappings, finalized exports, financial entries and
