@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 SELF = 'rebuild/ops/test_word_multicolumn_scope.py'
 DECLARATION = 'docs/foundation/mutations/20260921-quillmd-word-multicolumn-mixed.md'
-DECLARATION_SHA256 = 'd7c80b92c5098c924bb7cbc4f650f214c8a7be02e3ac9df6efa658a5194d1418'
+DECLARATION_SHA256 = 'e2fcf07a325f83cc2f8322b19cf83327a67f250444e54a59036c11c3e736dec8'
 MARKER = '<!-- declared-source-scope -->'
 
 #: The baseline this candidate is rebased onto: the source revision Tab 2 published as healthy
@@ -32,7 +32,7 @@ MARKER = '<!-- declared-source-scope -->'
 BASELINE = '875ee6e2a0836c37fcb293c228664186c1106291'
 
 #: Exact, because a count that tracks the file cannot detect an accidental edit to the file.
-DECLARED_COUNT = 13
+DECLARED_COUNT = 14
 
 #: Files this candidate cannot ship without. engine/tab_form carry the import and the export;
 #: generation/tab_review/views carry the clinical-path repairs the review gate found.
@@ -90,13 +90,20 @@ def git(*command):
     return done.stdout.strip() if done.returncode == 0 else None
 
 
-def locate_candidate(declared):
-    """Find the tip whose own change is EXACTLY the declared set.
+def locate_candidate():
+    """Find the tip that CARRIES this candidate, without asking whether it matches.
+
+    ⚠️ IT USED TO LOCATE BY EQUALITY WITH THE DECLARED SET, AND THAT MADE THE WHOLE MODULE
+    VACUOUS. A stale declaration simply matched no tip, so the comparison SKIPPED and the suite
+    printed OK — which is exactly what happened the first time the declaration went out of date,
+    one commit after this file was written. "Not the candidate" and "the candidate, declared
+    wrongly" are different facts and must not share an answer.
+
+    The declaration file itself is the anchor: nothing else in the repository adds it, so a tip
+    whose change contains it IS this candidate, and its diff must then match EXACTLY.
 
     Two tips, because the checkout differs by surface: a pull-request run tests a merge of the
     base into the candidate, so the candidate is `HEAD^2`; a local branch IS the candidate.
-    The comparison is equality, so a tip carrying more or less than the declaration does not
-    match — that is what makes this a check rather than a subset filter.
     """
     for tip in ('HEAD^2', 'HEAD'):
         resolved = git('rev-parse', '--verify', tip + '^{commit}')
@@ -108,8 +115,9 @@ def locate_candidate(declared):
         names = git('diff', '--name-only', base, resolved)
         if names is None:
             continue
-        if set(names.split()) == declared:
-            return tip, set(names.split())
+        changed = set(names.split())
+        if DECLARATION in changed:
+            return tip, changed
     return None, None
 
 
@@ -162,24 +170,31 @@ class DeclaredSourceScope(unittest.TestCase):
             with self.subTest(path=missing), self.assertRaises(RuntimeError):
                 validate_declared(good - {missing})
 
-    def test_the_declaration_matches_this_candidates_real_change(self):
-        declared = declared_paths()
-        tip, changed = locate_candidate(declared)
-        if tip is None:
-            self.skipTest('No tip in this checkout changes exactly the declared set; the '
-                          'declaration describes a candidate, and this checkout is not it.')
-        self.assertEqual(changed, declared)
-        validate_declared(changed)
+    def test_the_candidate_is_actually_found_in_this_checkout(self):
+        """THE ANTI-VACUOUS CONTROL. If the comparison below ever skips, this fails instead.
 
-    def test_that_match_is_equality_and_not_a_subset_filter(self):
-        """Without this, a declaration naming half the change would still 'match'."""
+        A skip is the honest answer on a checkout that does not carry this candidate — and it
+        is the WRONG answer on one that does. Only this test can tell the two apart, so it is
+        the one that must be read when the module reports OK.
+        """
+        tip, changed = locate_candidate()
+        if tip is None:
+            self.skipTest('No tip in this checkout adds the declaration; this is not the candidate.')
+        self.assertTrue(changed, 'the candidate was located but its change set is empty')
+
+    def test_the_declaration_matches_this_candidates_real_change_exactly(self):
         declared = declared_paths()
-        if locate_candidate(declared)[0] is None:
-            self.skipTest('The candidate is not present in this checkout.')
-        for wrong in (declared - {'rebuild/documents/engine.py'},
-                      declared | {'rebuild/core/harmless.py'}):
-            with self.subTest(size=len(wrong)):
-                self.assertIsNone(locate_candidate(wrong)[0])
+        tip, changed = locate_candidate()
+        if tip is None:
+            self.skipTest('No tip in this checkout adds the declaration; this is not the candidate.')
+        # Both directions, named separately, because the failure message IS the repair
+        # instruction: one says the declaration is missing a file, the other that it names one
+        # this candidate does not touch.
+        self.assertEqual(sorted(changed - declared), [],
+                         'changed by this candidate and NOT named in the declaration')
+        self.assertEqual(sorted(declared - changed), [],
+                         'named in the declaration and NOT changed by this candidate')
+        validate_declared(changed)
 
 
 if __name__ == '__main__':

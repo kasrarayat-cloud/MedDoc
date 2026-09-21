@@ -28,7 +28,7 @@ protected classes on its own account.
 
 ## The declared source scope
 
-Thirteen files. Exhaustive — anything not named here is not part of this candidate.
+Fourteen files. Exhaustive — anything not named here is not part of this candidate.
 
 <!-- declared-source-scope -->
 
@@ -36,6 +36,7 @@ Thirteen files. Exhaustive — anything not named here is not part of this candi
 docs/foundation/mutations/20260921-quillmd-word-multicolumn-mixed.md
 rebuild/core/generation.py
 rebuild/core/tab_review.py
+rebuild/core/tests/test_mapping_review_clarity.py
 rebuild/core/tests/test_tab_independent_sections.py
 rebuild/core/tests/test_unlabelled_source_scope.py
 rebuild/core/views.py
@@ -57,7 +58,7 @@ scripts/ci/verify-fresh.sh
 | `core/views.py` | `finalize` fills through the **stored** mapping, not a fresh inspection |
 | `scripts/ci/verify-fresh.sh` | names the new documents module, because that list is explicit and an unnamed module is inert |
 | `ops/test_word_multicolumn_scope.py` | this declaration's instrument |
-| the four `test_*` modules | the proofs, including the ones that caught two defects this candidate introduced |
+| the five `test_*` modules | the proofs, including the ones that caught defects this candidate introduced |
 
 ## What is NOT declared, and is refused rather than merely absent
 
@@ -104,3 +105,20 @@ text boxes, legacy Word fields, tracked changes, and scanned forms.
    in advance — see `HANDOFF.md` §1e. No repeat transcription, no new spending authority.
 3. The clinical-generation review gate runs over the finished diff before merge, as standing
    authority requires, and its findings are repaired before the candidate is offered.
+
+## What the review gate found on this diff
+
+Four lenses, one sealed sandbox. **Eight findings survived independent re-measurement in a clean
+tree** — re-measured rather than believed, because the lenses shared a sandbox and one of them
+was authorised to mutate it. **All eight were defects in this candidate, and all eight are
+repaired here.** Three concerned answer PLACEMENT on multi-column rows, and closing them
+narrowed the feature: a part-filled pairs row and every odd-width row are now reported as
+unmapped rather than guessed at, because nothing in such a row distinguishes a question from
+ordinary data. Nothing shipped is lost by that — the narrowed shapes are ones this unmerged
+candidate introduced.
+
+⚠️ **And the ninth was in the instrument below.** It located this candidate by matching the
+declared set, so a declaration that went out of date matched no tip, SKIPPED, and printed OK.
+It happened on the first real occasion, one commit after the instrument was written. It now
+anchors on the declaration file itself — nothing else adds it — and a mismatch FAILS, naming
+the offending path in both directions.
