@@ -351,6 +351,39 @@ class CostReconciliation(Entity):
             models.CheckConstraint(condition=~models.Q(evidence_reference=''),name='reconciliation_evidence_required'),
             models.CheckConstraint(condition=models.Q(evidence_kind__in=['unclassified','provider_report','invoice']),name='reconciliation_evidence_kind_known'),
         ]
+class ServiceHealth(Entity):
+    """Operational status PUBLISHED into the database by a privileged process, for the console to read.
+
+    The web process cannot compute this and must not pretend to. `quillmd-fresh-admin.service`
+    runs as `quillmd-app` and carries `InaccessiblePaths=/opt/meddoc-pro/rebuild/.runtime`, so
+    every backup/offsite state file is masked from its mount namespace; the state directories are
+    also mode 0700 owned by a different identity. A view that reads those paths returns
+    'unavailable' on a perfectly healthy host — a false red, which becomes a false green the first
+    time somebody decides the panel is unreliable.
+
+    So the identity that owns the state publishes here (`manage.py publish_operations_status`) and
+    the console reads a row. `computed_at` and `expected_interval_seconds` exist so the reader can
+    tell 'fresh' from 'stale' from 'never published' rather than collapsing all three into silence.
+
+    The payload carries only what the publishing side already redacts: conditions, timestamps, run
+    identifiers and boolean verdicts. Never a secret, never a path, never clinical content.
+    """
+    KEYS = {'backup': 'Backup and offsite recovery'}
+    SEVERITIES = [('healthy', 'Healthy'), ('warning', 'Warning'), ('in_progress', 'In progress'), ('failure', 'Failure')]
+    key = models.CharField(max_length=40, unique=True)
+    condition = models.CharField(max_length=60)
+    severity = models.CharField(max_length=12, choices=SEVERITIES)
+    healthy = models.BooleanField()
+    action = models.CharField(max_length=400)
+    payload = models.JSONField(default=dict)
+    computed_at = models.DateTimeField()
+    published_at = models.DateTimeField(auto_now=True)
+    expected_interval_seconds = models.PositiveIntegerField(default=300)
+    class Meta:
+        constraints = [models.CheckConstraint(condition=models.Q(expected_interval_seconds__gte=60), name='service_health_interval_sane')]
+    def __str__(self): return f'{self.key} · {self.condition}'
+
+
 class PlatformCost(Entity):
     """Costs QuillMD carries itself. Never charged to a user and never part of a wallet ledger."""
     KINDS=[('fixed_overhead','Fixed overhead'),('absorbed_failure','Provider cost of a platform failure'),

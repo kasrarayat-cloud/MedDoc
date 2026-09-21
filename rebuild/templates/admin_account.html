@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+{% load console %}
+{% block title %}{{ account.email }}{% endblock %}
+{% block breadcrumb %}Account{% endblock %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow">One account</div><h1>{{ account.email }}</h1><p class="mono">{{ account.pk }}</p><p>{{ account.get_full_name|default:'No name recorded' }} · joined {{ account.date_joined|date:'Y-m-d' }} UTC</p></div><div class="actions"><a class="button secondary" href="{% url 'admin_dashboard' %}#accounts">Back to accounts</a></div></div>
+
+<section class="section" id="status"><div class="section-heading"><h2>Access</h2></div>
+<div class="balance-strip">
+  <section class="balance-item"><div class="small muted">Account</div><strong class="balance-value">{% if account.is_active %}Enabled{% else %}Suspended{% endif %}</strong><p class="small muted">{% if account.is_active %}May sign in, subject to verification and MFA below.{% else %}Cannot sign in. Existing sessions were invalidated when it was suspended.{% endif %}</p></section>
+  <section class="balance-item"><div class="small muted">Email verification</div><strong class="balance-value">{% if verified %}Verified{% else %}Not verified{% endif %}</strong><p class="small muted">{% if verified %}{{ account.verified_at|date:'Y-m-d H:i' }} UTC{% else %}An unverified account is refused at sign-in and at every request. This is the most common cause of &ldquo;I cannot log in&rdquo;.{% endif %}</p></section>
+  <section class="balance-item"><div class="small muted">Multi-factor</div><strong class="balance-value">{% if mfa_devices %}{{ mfa_devices|length }} enrolled{% else %}None{% endif %}</strong><p class="small muted">{% if account.is_staff %}Administrators cannot sign in without a confirmed authenticator.{% else %}MFA is required for administrators only.{% endif %}{% for device in mfa_devices %}<span class="subline">{{ device.name }} · {% if device.confirmed %}confirmed{% else %}UNCONFIRMED{% endif %}</span>{% endfor %}</p></section>
+  <section class="balance-item"><div class="small muted">Role</div><strong class="balance-value">{% if account.is_staff %}Administrator{% else %}Clinical user{% endif %}</strong><p class="small muted">Last sign-in {{ account.last_login|date:'Y-m-d H:i'|default:'never' }}{% if account.last_login %} UTC{% endif %}.</p></section>
+</div>
+<div class="actions">
+  {% if account.is_staff %}<p class="small muted">This is an administrator account. Enabling, suspending and signing out are refused here on purpose: there is no second pair of eyes on this screen, and an administrator who locks out the only other administrator has no route back through the product.</p>
+  {% else %}
+  <form method="post" action="{% url 'admin_account' account.pk %}" data-submit-once>{% csrf_token %}<input type="hidden" name="back" value="{% url 'admin_account_page' account.pk %}"><label class="check-label" for="active-toggle"><input id="active-toggle" name="active" type="checkbox" {% if account.is_active %}checked{% endif %}>Account enabled</label><button type="submit" class="secondary">Save access</button></form>
+  <form method="post" action="{% url 'admin_revoke_sessions' account.pk %}" data-submit-once>{% csrf_token %}<input type="hidden" name="back" value="{% url 'admin_account_page' account.pk %}"><button type="submit" class="secondary">Sign out everywhere</button></form>
+  {% endif %}
+</div>
+<p class="small muted">Suspending an account both blocks sign-in and invalidates every live session. &ldquo;Sign out everywhere&rdquo; does only the second, for a lost device. Both are recorded in the audit trail below with your account as the actor.</p>
+</section>
+
+<section class="section" id="money"><div class="section-heading"><h2>Money</h2><span class="small muted">USD, exact</span></div>
+<div class="balance-strip">
+  <section class="balance-item"><div class="small muted">Promotional balance</div><strong class="balance-value">{{ wallet_totals.promo|usd }}</strong><p class="small muted">Personal welcome credit remaining. Spent before paid funds on every request.</p></section>
+  <section class="balance-item"><div class="small muted">Paid balance</div><strong class="balance-value">{{ wallet_totals.paid|usd }}</strong><p class="small muted">This account&rsquo;s own topped-up funds. An organization-paid department bills the organization wallet instead.</p></section>
+  <section class="balance-item"><div class="small muted">Currently reserved</div><strong class="balance-value">{{ wallet_totals.reserved|usd }}</strong><p class="small muted">Held against requests that have not settled.</p></section>
+  <section class="balance-item"><div class="small muted">Charged to this account</div><strong class="balance-value">{{ charged_total|usd }}</strong><p class="small muted">Net of usage, reconciliation and absorption movements on this account&rsquo;s own wallets.</p></section>
+  <section class="balance-item"><div class="small muted">Provider cost incurred</div><strong class="balance-value">{{ usage_cost|usd }}</strong><p class="small muted">{{ usage_count }} usage record(s); original charges {{ usage_charged|usd }}.</p></section>
+</div>
+{% if wallets %}<div class="table-wrap"><table><caption class="small muted">Every balance that pays for this account&rsquo;s work, including the organization wallet when a department bills the organization.</caption><thead><tr><th scope="col">Balance</th><th scope="col">Owner</th><th scope="col">Type</th><th scope="col">Balance</th><th scope="col">Reserved</th></tr></thead><tbody>{% for wallet in wallets %}<tr><td>{{ wallet.label }}</td><td>{% if wallet.user_id %}this account{% else %}{{ wallet.organization.name }} (organization){% endif %}</td><td>{{ wallet.get_kind_display }}</td><td class="number">{{ wallet.balance|usd }}</td><td class="number">{{ wallet.reserved|usd }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="small muted">No balances exist for this account.</p>{% endif %}
+</section>
+
+<section class="section" id="permissions"><div class="section-heading"><h2>Organizations and departments</h2><a class="button secondary" href="{% url 'admin_organizations' %}">Change roles and access</a></div>
+{% if memberships %}<div class="table-wrap"><table><thead><tr><th scope="col">Organization</th><th scope="col">Department</th><th scope="col">Role</th><th scope="col">Who pays</th><th scope="col">Effective access</th></tr></thead><tbody>{% for membership in memberships %}<tr><td>{{ membership.department.organization.name }}</td><td>{{ membership.department.name }}</td><td>{{ membership.get_role_display }}</td><td>{% if membership.department.organization_pays %}Organization paid balance{% else %}Each user&rsquo;s own paid balance{% endif %}</td><td>{% if not account.is_active %}<span class="badge error">No &mdash; account suspended</span>{% elif not verified %}<span class="badge warning">No &mdash; unverified</span>{% elif membership.active %}<span class="badge success">Yes</span>{% else %}<span class="badge warning">No &mdash; membership inactive</span>{% endif %}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="small muted">This account belongs to no department. It can sign in and see nothing clinical.</p>{% endif %}
+</section>
+
+<section class="section" id="jobs"><div class="section-heading"><h2>Work</h2></div>
+<p>{{ jobs_total }} job(s) in total; <strong>{{ jobs_unresolved }}</strong> with no established outcome. <a href="{% url 'admin_dashboard' %}?q={{ account.email|urlencode }}#jobs">Open them in the jobs list</a>.</p>
+</section>
+
+<section class="section" id="payments"><div class="section-heading"><h2>Payments and refunds</h2></div>
+{% if payments %}<div class="table-wrap"><table><thead><tr><th scope="col">Payment</th><th scope="col">Status</th><th scope="col">Amount</th><th scope="col">Refunded</th><th scope="col">Net</th><th scope="col">Recorded (UTC)</th></tr></thead><tbody>{% for payment in payments %}<tr><td class="mono">{{ payment.stripe_session|default:payment.pk }}</td><td><span class="badge {% if refunded|get_item:payment.pk %}warning{% else %}{{ payment.status }}{% endif %}">{{ payment.status }}{% if refunded|get_item:payment.pk %} · refunded{% endif %}</span></td><td class="number">{{ payment.amount_cents|cents_usd }}</td><td class="number">{% if refunded|get_item:payment.pk %}{{ refunded|get_item:payment.pk|cents_usd }}{% else %}—{% endif %}</td><td class="number">{{ payment|net_cents:refunded|cents_usd }}</td><td>{{ payment.created_at|date:'Y-m-d H:i' }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="small muted">No payments.</p>{% endif %}
+{% if refunds %}<div class="table-wrap"><table><thead><tr><th scope="col">Refund</th><th scope="col">Status</th><th scope="col">Amount</th><th scope="col">Reached the ledger?</th><th scope="col">Recorded (UTC)</th></tr></thead><tbody>{% for refund in refunds %}<tr><td class="mono">{{ refund.stripe_refund }}</td><td><span class="badge {% if refund.status == 'succeeded' %}success{% else %}warning{% endif %}">{{ refund.status }}</span></td><td class="number">{{ refund.amount_cents|cents_usd }}</td><td>{% if refund.status == 'succeeded' %}Yes{% else %}<strong>No money has moved.</strong>{% endif %}</td><td>{{ refund.created_at|date:'Y-m-d H:i' }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+</section>
+
+<section class="section" id="account-audit"><div class="section-heading"><h2>Audit trail</h2><span class="small muted">Actions BY this account and actions ON it</span></div>
+{% if audit_events %}<div class="table-wrap"><table><thead><tr><th scope="col">Time (UTC)</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Detail</th></tr></thead><tbody>{% for event in audit_events %}<tr><td class="number">{{ event.created_at|date:'Y-m-d H:i:s' }}</td><td>{{ event.actor.email|default:'System' }}</td><td>{{ event.action }}</td><td><details><summary>Inspect</summary><div class="details-body"><dl class="metadata">{% for key, value in event.details.items %}<dt>{{ key }}</dt><dd>{{ value }}</dd>{% empty %}<dd>No detail recorded.</dd>{% endfor %}</dl><p class="small mono">Event {{ event.pk }} · target {{ event.target|default:'—' }}</p></div></details></td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="small muted">No audit events reference this account.</p>{% endif %}
+{% include 'pagination.html' with navigation=event_navigation %}
+</section>
+{% endblock %}

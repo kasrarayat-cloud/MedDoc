@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+{% load console %}
+{% block title %}Organizations{% endblock %}
+{% block breadcrumb %}Organizations{% endblock %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow">Structure and permissions</div><h1>Who belongs where, and who pays.</h1><p>The organization tree with every membership, the payer setting that decides which balance is billed, and outstanding invitations.</p></div><div class="actions"><a class="button secondary" href="{% url 'admin_dashboard' %}#permissions">Back to administration</a></div></div>
+
+<div class="notice"><p><strong>Effective access is not the membership flag.</strong> The server requires an active membership <em>and</em> an enabled, verified account (<code>core.security.membership</code>). A membership can read &ldquo;active&rdquo; for somebody who cannot sign in at all.</p></div>
+
+{% for entry in organizations %}
+<section class="section" id="organization-{{ entry.organization.pk }}">
+  <div class="section-heading"><h2>{{ entry.organization.name }}</h2><span class="small muted mono">{{ entry.organization.pk }}</span></div>
+  {% if entry.wallets %}<p class="small muted">Organization balances: {% for wallet in entry.wallets %}{{ wallet.get_kind_display }} {{ wallet.balance|usd }} (reserved {{ wallet.reserved|usd }}){% if not forloop.last %} · {% endif %}{% endfor %}</p>{% else %}<p class="small muted">This organization holds no balance of its own. One is created the first time a department bills the organization.</p>{% endif %}
+
+  {% for row in entry.departments %}
+  <div class="section" id="department-{{ row.department.pk }}">
+    <div class="section-heading"><h3>{{ row.department.name }}</h3><span class="badge {% if row.department.organization_pays %}warning{% endif %}">{% if row.department.organization_pays %}Organization pays{% else %}Each user pays{% endif %}</span></div>
+
+    {% if may_change_payer %}
+    <details><summary>Change who pays for this department</summary>
+      <form method="post" action="{% url 'admin_department_payer' row.department.pk %}" data-submit-once class="details-body">{% csrf_token %}
+        <input type="hidden" name="back" value="{% url 'admin_organizations' %}#department-{{ row.department.pk }}">
+        <p class="small muted">This selects the paid balance a new request reserves against. It is <strong>not retrospective</strong>: each job records its payer when funds are first held, and settled charges keep the payer recorded on them. A user&rsquo;s personal promotional credit is always spent first either way.</p>
+        <p><strong>Now:</strong> {% if row.department.organization_pays %}{{ entry.organization.name }} (organization paid balance){% else %}each user&rsquo;s own paid balance{% endif %}. <strong>After saving:</strong> {% if row.department.organization_pays %}each user&rsquo;s own paid balance{% else %}{{ entry.organization.name }} (organization paid balance){% endif %}, for requests made from now on.</p>
+        <p><label class="check-label" for="pays-{{ row.department.pk }}"><input id="pays-{{ row.department.pk }}" name="organization_pays" type="checkbox" {% if row.department.organization_pays %}checked{% endif %}>Charge {{ entry.organization.name }} after each user&rsquo;s personal promotional credit</label></p>
+        <p><label for="payer-reason-{{ row.department.pk }}">Why is this changing? (at least 12 characters; kept with the audit entry)</label><input id="payer-reason-{{ row.department.pk }}" name="reason" minlength="12" maxlength="240" required></p>
+        <p><label class="check-label" for="payer-confirm-{{ row.department.pk }}"><input id="payer-confirm-{{ row.department.pk }}" name="confirm" type="checkbox" required>I have read which balance will be billed from now on.</label></p>
+        <button type="submit" class="secondary">Save payer</button>
+      </form>
+    </details>
+    {% else %}
+    <p class="small muted"><strong>Who pays is read-only here.</strong> {{ payer_restriction }}</p>
+    {% endif %}
+
+    {% if row.active_owners == 0 %}<div class="notice warning" role="status"><strong>This department has no active owner.</strong> Nobody can invite into it, create patients in it, or restore access to it from the clinician side. Give an active, verified member the owner role.</div>{% endif %}
+
+    {% if row.memberships %}<div class="table-wrap"><table>
+      <thead><tr><th scope="col">Member</th><th scope="col">Role</th><th scope="col">Membership</th><th scope="col">Effective access</th><th scope="col">Change</th></tr></thead>
+      <tbody>{% for membership in row.memberships %}<tr>
+        <td><a href="{% url 'admin_account_page' membership.user.pk %}">{{ membership.user.email }}</a><span class="subline">{% if membership.user.is_staff %}Administrator{% else %}Clinical user{% endif %}</span></td>
+        <td>{{ membership.get_role_display }}</td>
+        <td>{% if membership.active %}Active{% else %}Inactive{% endif %}</td>
+        <td>{% if not membership.user.is_active %}<span class="badge error">No &mdash; account suspended</span>{% elif not membership.user.verified_at %}<span class="badge warning">No &mdash; unverified</span>{% elif membership.active %}<span class="badge success">Yes</span>{% else %}<span class="badge warning">No &mdash; membership inactive</span>{% endif %}</td>
+        <td>{% if membership.user.is_staff %}<span class="small muted">Administrator memberships are not changed here.</span>{% else %}
+          <details><summary>Edit</summary><form method="post" action="{% url 'admin_membership' membership.pk %}" data-submit-once class="details-body">{% csrf_token %}
+            <input type="hidden" name="back" value="{% url 'admin_organizations' %}#department-{{ row.department.pk }}">
+            <p><label for="role-{{ membership.pk }}">Role</label><select id="role-{{ membership.pk }}" name="role">{% for value, label in roles %}<option value="{{ value }}" {% if membership.role == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></p>
+            <p><label class="check-label" for="active-{{ membership.pk }}"><input id="active-{{ membership.pk }}" name="active" type="checkbox" {% if membership.active %}checked{% endif %}>Department access enabled</label></p>
+            <button type="submit" class="secondary">Save membership</button>
+          </form></details>
+        {% endif %}</td>
+      </tr>{% endfor %}</tbody></table></div>{% else %}<p class="small muted">No memberships in this department.</p>{% endif %}
+
+    {% if row.invitations %}<div class="table-wrap"><table>
+      <caption class="small muted">Outstanding invitations. An expired link cannot be accepted; revoking sets the expiry to now.</caption>
+      <thead><tr><th scope="col">Invited</th><th scope="col">Role</th><th scope="col">Invited by</th><th scope="col">Expires (UTC)</th><th scope="col">Revoke</th></tr></thead>
+      <tbody>{% for invitation in row.invitations %}<tr>
+        <td>{{ invitation.email }}</td><td>{{ invitation.get_role_display }}</td><td>{{ invitation.invited_by.email }}</td>
+        <td>{{ invitation.expires_at|date:'Y-m-d H:i' }}</td>
+        <td><form method="post" action="{% url 'admin_invitation_revoke' invitation.pk %}" data-submit-once>{% csrf_token %}<input type="hidden" name="back" value="{% url 'admin_organizations' %}#department-{{ row.department.pk }}"><button type="submit" class="quiet">Revoke</button></form></td>
+      </tr>{% endfor %}</tbody></table></div>{% endif %}
+  </div>
+  {% empty %}<p class="small muted">This organization has no departments.</p>{% endfor %}
+</section>
+{% empty %}
+<div class="empty-state"><h2>No organizations</h2><p>Nothing has been created yet.</p></div>
+{% endfor %}
+{% include 'pagination.html' with navigation=navigation %}
+{% endblock %}

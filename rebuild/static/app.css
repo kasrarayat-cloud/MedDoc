@@ -113,6 +113,13 @@ td a:hover { text-decoration: underline; }
 .badge.error, .badge.failed, .badge.conflict { color: var(--danger); background: var(--danger-bg); border-color: #e9c4bd; }
 .badge.matched, .badge.completed { color: var(--accent); background: var(--accent-light); border-color: #c4ddd1; }
 .badge.MISMATCH { color: var(--danger); background: var(--danger-bg); border-color: #e9c4bd; }
+/* Job states and operational verdicts are written straight into the class
+   (`class="badge {{ job.state }}"`), so a state with no variant rendered in the same neutral grey
+   as every other one — a status column that cannot be scanned is not a status column. */
+.badge.succeeded, .badge.paid, .badge.healthy { color: var(--accent); background: var(--accent-light); border-color: #c4ddd1; }
+.badge.reconciliation, .badge.pending, .badge.processing, .badge.creating, .badge.uncertain, .badge.stale, .badge.in_progress, .badge.unknown { color: var(--warning); background: var(--warning-bg); border-color: #eddcaf; }
+.badge.cancelled, .badge.failure { color: var(--danger); background: var(--danger-bg); border-color: #e9c4bd; }
+.badge.queued, .badge.running { color: var(--muted); background: var(--surround); }
 .empty-state { padding: 43px 28px; text-align: center; border: 1px dashed var(--line-strong); border-radius: var(--radius); background: #fbfcfc; }
 .empty-state.compact { padding: 25px; }
 .empty-state h2 { font-size: 1.1rem; margin-bottom: 8px; }

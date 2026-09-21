@@ -59,8 +59,19 @@ class AdminEvidenceTests(SyntheticFixture, TestCase):
         self.admin_login()
         response=self.client.get(f'/console/jobs/{self.job.pk}/')
         self.assertEqual(response.status_code,200)
-        for marker in ['configured-fixture-v1','0.200000000000','0.300000000000','Promotional','Ledger agrees']:
-            self.assertContains(response,marker)
+        # ⚠️ THE MARKERS CHANGED WITH THE RENDERING, AND THE ASSERTION IS NOW STRICTLY STRONGER.
+        # The page used to print the raw twelve-place Decimal ('0.200000000000'); it now prints
+        # the exact value trimmed to at least cents. Rather than swap one literal for another,
+        # these derive the expected text FROM THE STORED VALUES, so the test fails if the figure
+        # changes, if the rendering loses precision, or if the row stops being displayed at all.
+        from core.templatetags.console import usd
+        usage=Usage.objects.get(job=self.job)
+        for marker in ['configured-fixture-v1',
+                       f'{usd(usage.actual_cost)} — configured estimate',
+                       f'<dt>Cost × 1.5</dt><dd>{usd(usage.actual_cost*Decimal("1.5"))}</dd>',
+                       f'<dt>Original user charge</dt><dd>{usd(usage.charged_cost)}</dd>',
+                       'Promotional','Ledger agrees']:
+            self.assertContains(response,marker,html=False)
         self.assertNotContains(response,'SENSITIVE_CLINICAL_MARKER')
         self.assertNotContains(response,self.patient.display_name)
         self.assertEqual(self.client.get(f'/api/encounters/{self.encounter.pk}/').status_code,404)

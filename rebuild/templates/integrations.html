@@ -1,3 +1,3 @@
 <ul class="integration-list">
-  {% for integration in integrations %}<li><div class="integration-line"><strong>{{ integration.name }}</strong><span class="badge {{ integration.status }}">{{ integration.status }}</span></div><p>{{ integration.detail }}</p></li>{% empty %}<li><p>No provider status is available. Check configuration before using an external service.</p></li>{% endfor %}
+  {% for integration in integrations %}<li><div class="integration-line"><strong>{{ integration.name }}</strong><span class="badge {{ integration.severity|default:'' }}">{{ integration.status }}</span></div><p>{{ integration.detail }}</p></li>{% empty %}<li><p>No provider status is available. Check configuration before using an external service.</p></li>{% endfor %}
 </ul>

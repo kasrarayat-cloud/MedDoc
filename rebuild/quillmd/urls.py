@@ -13,3 +13,17 @@ urlpatterns += [path('jobs/<uuid:pk>/result/',v.job_result,name='job_result')]
 urlpatterns += [path('team/invitations/<uuid:pk>/revoke/',v.invitation_revoke,name='invitation_revoke')]
 
 urlpatterns += [path('console/jobs/<uuid:pk>/',v.admin_job_detail,name='admin_job_detail'),path('billing/jobs/<uuid:pk>/',v.billing_job_detail,name='billing_job_detail')]
+
+# Administration console, added 2026-09-21. New views live in core/admin_views.py so that
+# core/views.py — a file several parallel workstreams edit — takes the smallest possible diff.
+from core import admin_views as a
+urlpatterns += [
+    path('console/accounts/<uuid:pk>/detail/', a.admin_account_page, name='admin_account_page'),
+    path('console/accounts/<uuid:pk>/sessions/', a.admin_revoke_sessions, name='admin_revoke_sessions'),
+    path('console/organizations/', a.admin_organizations, name='admin_organizations'),
+    path('console/memberships/<uuid:pk>/', a.admin_membership, name='admin_membership'),
+    path('console/departments/<uuid:pk>/payer/', a.admin_department_payer, name='admin_department_payer'),
+    path('console/invitations/<uuid:pk>/revoke/', a.admin_invitation_revoke, name='admin_invitation_revoke'),
+    path('console/services/', a.admin_services, name='admin_services'),
+    path('console/usage.csv', a.admin_usage_export, name='admin_usage_export'),
+]

@@ -81,6 +81,11 @@ AI_CACHED_RATE=os.getenv('QUILLMD_AI_CACHED_RATE','')
 STRIPE_SECRET_KEY=os.getenv('STRIPE_SECRET_KEY','')
 STRIPE_WEBHOOK_SECRET=os.getenv('STRIPE_WEBHOOK_SECRET','')
 STRIPE_LIVE_ENABLED=False
+# Who may change Department.organization_pays — i.e. which balance a department is billed to.
+# OFF by default and deliberately: the instruction is that this belongs to an explicitly
+# authorized platform owner / billing role, and this deployment has not established one.
+# Granting it also requires the account to be a superuser; see core.admin_console.may_change_payer.
+QUILLMD_PAYER_ROLE_GRANTED=os.getenv('QUILLMD_PAYER_ROLE_GRANTED','0')=='1'
 CPT_LICENSE_ID=os.getenv('CPT_LICENSE_ID','')
 CPT_LICENSE_EXPIRY=os.getenv('CPT_LICENSE_EXPIRY','')
 LOGGING={'version':1,'disable_existing_loggers':False,'handlers':{'console':{'class':'logging.StreamHandler'}},'root':{'handlers':['console'],'level':'WARNING'},'loggers':{'django.request':{'handlers':['console'],'level':'CRITICAL','propagate':False}}}
