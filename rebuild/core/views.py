@@ -388,10 +388,17 @@ def save_answers(request,pk):
     for field in e.template_version.fields:
         key=field['key'];previous=e.answers.get(key,{'text':'','evidence':[],'status':'missing'})
         value=request.POST.get('answer_'+key,'')
+        # ⚠️ A SUGGESTION BECOMES AN ANSWER ONLY BY AN EXPLICIT ACT, NEVER BY SAVING.
+        # The textarea is deliberately NOT prefilled with the suggestion: if it were, an
+        # ordinary save would accept it silently, and so would a reopen, an API read or an
+        # export. Accepting takes its own checkbox, and anything typed always wins over it.
+        accepted=False
+        if not value.strip() and request.POST.get('accept_'+key)=='on':
+            value=str(previous.get('suggestion') or ''); accepted=bool(value)
         if len(value)>20000:return HttpResponse('Answer too long; nothing was truncated or saved.',status=400)
         reviewed=request.POST.get('reviewed_'+key)=='on'
         if reviewed:membership(request.user,e.department,roles=['owner','clinician'])
-        answers[key]={**previous,'text':value,'reviewed':reviewed,'status':'edited' if value!=previous.get('text','') else previous.get('status','missing'),'reviewed_by':str(request.user.pk) if reviewed else None}
+        answers[key]={**previous,'text':value,'reviewed':reviewed,'accepted_suggestion':accepted,'status':'edited' if value!=previous.get('text','') else previous.get('status','missing'),'reviewed_by':str(request.user.pk) if reviewed else None}
         if is_wm:
             quote=request.POST.get('source_'+key,'')
             if len(quote)>50000:return HttpResponse('Source quotations exceed the supported limit; nothing was saved.',status=400)

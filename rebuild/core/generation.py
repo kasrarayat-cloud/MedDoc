@@ -271,6 +271,40 @@ def tab_source_value(quote,labels):
     return None
 
 
+#: ⚠️ A CANDIDATE HELD FOR REVIEW IS NOT A DISCARDED ONE. When the provenance checks have
+#: already passed — the quote is present in the source, its offsets are bound, it was not
+#: borrowed from another question's label — and the ONLY reservation is that the note carries
+#: context which might govern the answer, the extracted value and its own evidence are kept and
+#: shown as a SUGGESTION. `text` stays empty and `status` stays `conflict`, so nothing is
+#: accepted and finalization still demands an explicit decision.
+#:
+#: Measured cost of the old behaviour: a real provider response returned three correct answers,
+#: each quoting its own question's line, and all three were blanked because the note also had an
+#: opening disclaimer and two closing sentences. The doctor had to retype every one.
+#:
+#: This applies ONLY to scope uncertainty. A genuine contradiction, a failed subject guard and
+#: instruction-like source text keep their existing treatment, because presenting any of those as
+#: a suggestion would dress a real objection up as a formatting quibble.
+SCOPE_REVIEW_REASON = (
+    'The surrounding note may change what this answer means, so it needs your decision. '
+    'This is uncertainty about scope — not a contradiction found in the notes. '
+    'The suggestion was read from the evidence shown and has NOT been accepted.')
+
+
+def scope_review(texts, evidence):
+    """One implementation, used by both contracts. A second copy would drift from the first.
+
+    ⚠️ The evidence kept here is the ANSWER'S OWN passage, where the previous behaviour substituted
+    the whole note. That is deliberate and it does not hide the governing context: the encounter page
+    renders the complete saved note in its own panel (`encounter_detail.html`, "Saved source notes"),
+    so the surrounding text the reason warns about is on screen either way. Substituting the whole
+    note here would only remove the one thing the doctor cannot otherwise work out — WHICH passage
+    this value was read from.
+    """
+    return {'text': '', 'status': 'conflict', 'evidence': evidence, 'reviewed': False,
+            'suggestion': '\n'.join(texts), 'reason': SCOPE_REVIEW_REASON}
+
+
 def validate_tab_selections(notes,fields,selections,*,context_labels=()):
     units,inherited=source_units(notes,fields,context_labels=context_labels)
     labels=recognized_labels(fields,context_labels)
@@ -321,6 +355,8 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=()):
         conflict=item.conflict or len(explicit)>1 or injection or (inherited and bool(texts)) or guarded
         if len(explicit)>1:
             evidence=[{k:unit[k] for k in ('quote','start','end')} for unit in explicit.values()]
+        if inherited and texts and not (item.conflict or len(explicit)>1 or injection or guarded):
+            output[item.key]=scope_review(texts,evidence); continue
         if (inherited or injection) and texts:
             evidence=[{'quote':notes,'start':0,'end':len(notes)}]
         status='conflict' if conflict else 'supported' if texts else 'missing'
@@ -403,6 +439,8 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
         explicit_conflict=len(explicit)>1
         if explicit_conflict:
             evidence=[{'quote':q,'start':start,'end':start+len(q)} for q,start in explicit.items()]
+        if inherited_context and texts and not (item.conflict or explicit_conflict or guarded):
+            output[item.key]=scope_review(texts,evidence); continue
         status='conflict' if item.conflict or explicit_conflict or guarded or (inherited_context and texts) else 'supported' if texts else 'missing'
         if inherited_context and texts:
             evidence=[{'quote':notes,'start':0,'end':len(notes)}]
