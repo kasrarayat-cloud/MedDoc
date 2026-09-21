@@ -170,5 +170,45 @@ class PinsAndSpentActivators(unittest.TestCase):
         self.assertIn('Shared source already carries the new migration before the advance.', console)
 
 
+class RetainedCapturePopulation(unittest.TestCase):
+    """The retained capture predates the reviewed migration. The acceptance is bounded, and here
+    is where the bounds are proved rather than described."""
+
+    def setUp(self):
+        self.adapter = load(ADAPTER, '_wm_adapter_population')
+
+    def judge(self, actual, covered):
+        return self.adapter.judge_population(actual, covered)
+
+    def test_identical_populations_take_the_strict_path(self):
+        self.assertEqual(self.judge({'a': {'rows': 1}}, {'a': {'rows': 1}}), set())
+
+    def test_exactly_the_declared_new_table_while_empty_is_accepted(self):
+        uncovered = self.judge({'a': {'rows': 1}, 'core_servicehealth': {'rows': 0}},
+                               {'a': {'rows': 1}})
+        self.assertEqual(uncovered, {'core_servicehealth'})
+
+    def test_the_uncovered_table_having_rows_refuses(self):
+        """⚠️ THE BOUND THAT MATTERS: a row outside the recovery point is a row that can be lost."""
+        with self.assertRaises(RuntimeError):
+            self.judge({'a': {'rows': 1}, 'core_servicehealth': {'rows': 1}}, {'a': {'rows': 1}})
+
+    def test_a_second_uncovered_table_refuses(self):
+        with self.assertRaises(RuntimeError):
+            self.judge({'a': {'rows': 1}, 'core_servicehealth': {'rows': 0}, 'other': {'rows': 0}},
+                       {'a': {'rows': 1}})
+
+    def test_an_uncovered_table_that_is_not_the_declared_one_refuses(self):
+        with self.assertRaises(RuntimeError):
+            self.judge({'a': {'rows': 1}, 'something_else': {'rows': 0}}, {'a': {'rows': 1}})
+
+    def test_a_table_the_capture_has_and_the_live_database_lost_refuses(self):
+        with self.assertRaises(RuntimeError):
+            self.judge({'a': {'rows': 1}}, {'a': {'rows': 1}, 'dropped': {'rows': 0}})
+
+    def test_the_exception_is_bounded_to_one_named_table(self):
+        self.assertEqual(self.adapter.NEW_TABLE, 'core_servicehealth')
+
+
 if __name__ == '__main__':
     unittest.main()
