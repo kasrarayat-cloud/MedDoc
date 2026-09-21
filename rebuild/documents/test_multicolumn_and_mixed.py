@@ -22,6 +22,7 @@ import unittest
 from zipfile import ZipFile
 
 from docx import Document
+from docx.shared import Inches
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from lxml import etree
@@ -134,6 +135,15 @@ class MultiColumnRule(Base):
                     ["Sodium", "140", ""], ["Diabetes", "", "X"]):
             with self.subTest(row=row):
                 self.assertEqual(multi_column_answers(self.cells_of(row)), [])
+
+    def test_a_picture_in_a_value_cell_is_not_an_empty_answer_area(self):
+        """The drawing/picture arm of the occupancy screen, which had no test at all."""
+        cells = self.cells_of(["Patient signature", "", "Weight", ""])
+        paragraph = cells[1].xpath(".//w:p")[0]
+        run = paragraph.makeelement(qn("w:r"), {})
+        run.append(OxmlElement("w:pict"))
+        paragraph.append(run)
+        self.assertEqual(multi_column_answers(cells), [])
 
     def test_a_cell_holding_a_ticked_symbol_is_not_an_empty_answer_cell(self):
         """`cell_text` reads only `w:t`, so a Wingdings tick reads as empty and gets erased."""
@@ -431,3 +441,43 @@ class LegacyMappingSurvivesAContractOnlyRefusal(Base):
         with self.assertRaises(DocumentError) as raised:
             self.fill(path, "wrong-out.docx", answers={}, fields=wrong)
         self.assertEqual(raised.exception.code, "overflow_risk")
+
+
+class TheOtherWritersPartsSurvive(Base):
+    """⚠️ `also_changed` HAD NO TEST THAT COULD FAIL WITHOUT IT.
+
+    The mixed fixture puts every answer in `word/document.xml`, which `fill_tabs` marks changed
+    on its own — so deleting `changed = {name for name in also_changed if name in parts}`
+    left the whole documents suite green. Measured, with the mutation asserted applied and the
+    file restored. The real loss needs a SECOND part: `fill_tabs` emits its output by copying
+    the ORIGINAL package and substituting only the parts it touched, so an answer the cell
+    writer put in a header is written back as original bytes and silently disappears — while
+    the product reports `filled: 2, missing: []`.
+    """
+
+    def header_and_body(self):
+        document = Document()
+        header = document.sections[0].header
+        table = header.add_table(rows=1, cols=2, width=Inches(6))
+        table.rows[0].cells[0].text = "Referring clinician"
+        underlined_tab(document.add_paragraph("EXTENT:"))
+        return self.save(document, "header-mixed.docx")
+
+    def test_a_table_answer_in_the_header_is_not_overwritten_by_the_tab_writer(self):
+        path = self.header_and_body()
+        fields = inspect_template(path)["fields"]
+        kinds = {f["label"]: next(iter(f["locator"])) for f in fields}
+        self.assertEqual(kinds, {"Referring clinician": "cell", "EXTENT": "tab_form"},
+                         "the fixture must be genuinely mixed, or this proves nothing")
+        out, summary, answers = self.fill(path, "header-mixed-out.docx")
+        self.assertEqual(summary["missing"], [])
+        with ZipFile(out) as package:
+            names = package.namelist()
+            self.assertIn("word/header1.xml", names)
+            header_xml = package.read("word/header1.xml").decode()
+            body_xml = package.read("word/document.xml").decode()
+        cell_answer = answers[next(f["key"] for f in fields if f["label"] == "Referring clinician")]
+        tab_answer = answers[next(f["key"] for f in fields if f["label"] == "EXTENT")]
+        self.assertIn(cell_answer, header_xml,
+                      "the header answer was written back as original bytes")
+        self.assertIn(tab_answer, body_xml)

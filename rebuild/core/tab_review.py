@@ -24,8 +24,18 @@ SIGNATURE_PATTERNS = tuple(re.compile(pattern) for pattern in (
 ))
 
 
+#: ⚠️ A SIGNATURE THAT IS EXPLICITLY SOMEBODY ELSE'S IS NOT THE CLINICIAN'S, and calling it
+#: one is a FALSE REFUSAL: `validate_identity` would then demand the finalizing clinician's own
+#: name in a witness or patient signature line and refuse the document until it got it.
+#: `Signed by (witness)` matched the qualifier arm and did exactly that. Measured.
+NOT_THE_CLINICIAN = re.compile(
+    r'\b(?:patient|witness|guardian|parent|interpreter|relative|family|next of kin|carer)\b')
+
+
 def signature_label(label):
     text = re.sub(r'\s+', ' ', str(label or '')).strip().rstrip(TRAILING).strip().casefold()
+    if NOT_THE_CLINICIAN.search(text):
+        return False
     return any(pattern.fullmatch(text) for pattern in SIGNATURE_PATTERNS)
 
 

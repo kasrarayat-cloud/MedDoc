@@ -28,7 +28,7 @@ protected classes on its own account.
 
 ## The declared source scope
 
-Fourteen files. Exhaustive — anything not named here is not part of this candidate.
+Fifteen files. Exhaustive — anything not named here is not part of this candidate.
 
 <!-- declared-source-scope -->
 
@@ -37,6 +37,7 @@ docs/foundation/mutations/20260921-quillmd-word-multicolumn-mixed.md
 rebuild/core/generation.py
 rebuild/core/tab_review.py
 rebuild/core/tests/test_mapping_review_clarity.py
+rebuild/core/tests/test_tab_form_policy.py
 rebuild/core/tests/test_tab_independent_sections.py
 rebuild/core/tests/test_unlabelled_source_scope.py
 rebuild/core/views.py
@@ -58,7 +59,7 @@ scripts/ci/verify-fresh.sh
 | `core/views.py` | `finalize` fills through the **stored** mapping, not a fresh inspection |
 | `scripts/ci/verify-fresh.sh` | names the new documents module, because that list is explicit and an unnamed module is inert |
 | `ops/test_word_multicolumn_scope.py` | this declaration's instrument |
-| the five `test_*` modules | the proofs, including the ones that caught defects this candidate introduced |
+| the six `test_*` modules | the proofs, including the ones that caught defects this candidate introduced |
 
 ## What is NOT declared, and is refused rather than merely absent
 
@@ -98,6 +99,28 @@ unsupported** and are reported as omitted or unsupported answer areas rather tha
 two or more blanks after one label, a blank in a label position, merged cells, content controls,
 text boxes, legacy Word fields, tracked changes, and scanned forms.
 
+## ⚠️ ONE ACCEPTED CAPABILITY CHANGE, ON EXISTING DATA — for the owner to revisit
+
+**A stored encounter whose question is labelled `Signature` (or `Physician signature`,
+`Signature of surgeon`, `Signed by`, and the like) can no longer be finalized until the
+clinician reviews that field and either enters their own account name or leaves it blank.**
+
+It is a deliberate consequence of the repair, not a side effect. The refutation pass measured
+the alternative: `Signature` is the commonest signature label on a real Word form, and a name
+lifted from the dictation reached the signature line of a finalized record with no check that
+the finalizer was the person named. A pre-existing test asserted the old behaviour using that
+exact label to stand for "an ordinary field"; it now asserts the new one and says why.
+
+**The false-refusal direction was bounded deliberately.** `Signature date`, `Date of signature`
+and `Attestation` are NOT treated as identity fields — they are date and free-text questions,
+and demanding the clinician's name in them would block finalization for no safety gain. Nor is
+any signature the label marks as somebody else's: `Patient signature`, `Signed by (witness)`,
+`Guardian signature`, `Interpreter signature`.
+
+**What is not known, and is not guessed:** how many stored encounters carry such a label. That
+needs a read of the live database, which this candidate does not touch and which is Tab 2's to
+perform during coordinated integration. The blast radius is stated as a predicate, not a count.
+
 ## Activation conditions
 
 1. Tab 2 coordinates integration. This candidate stays **unmerged and undeployed** until then.
@@ -116,6 +139,14 @@ narrowed the feature: a part-filled pairs row and every odd-width row are now re
 unmapped rather than guessed at, because nothing in such a row distinguishes a question from
 ordinary data. Nothing shipped is lost by that — the narrowed shapes are ones this unmerged
 candidate introduced.
+
+**A second round over the repaired diff found ten more; six survived re-measurement and are
+also repaired here.** They were: the abbreviations `DD`/`DT` disarming the date guard from the
+other side; `Signed by (witness)` claimed as the finalizing clinician's own signature; the
+declaration guard refusing `rebuild/ops/` while this repository keeps its activation scripts,
+merge wrapper, mutation runner and push hook under `scripts/`; a declaration list that could be
+read from the wrong fenced block; the version gate tested only at v4 when v5 is what will be in
+the queue; and `also_changed` having no test that could fail without it.
 
 ⚠️ **And the ninth was in the instrument below.** It located this candidate by matching the
 declared set, so a declaration that went out of date matched no tip, SKIPPED, and printed OK.

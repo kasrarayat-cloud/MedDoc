@@ -44,8 +44,34 @@ class TabIdentityPolicyTests(SimpleTestCase):
             validate_identity(fields,{'signed':{'text':'Someone Else'}},self.actor)
 
     def test_legacy_regular_fields_retain_their_existing_behavior(self):
-        fields=[{'key':'old','label':'Signature','locator':{'paragraph':0}}]
+        fields=[{'key':'old','label':'Findings','locator':{'paragraph':0}}]
         validate_identity(fields,{'old':{'text':'Legacy reviewed text'}},self.actor)
+
+    def test_a_legacy_field_actually_labelled_signature_is_no_longer_regular(self):
+        """⚠️ A DELIBERATE CHANGE OF BEHAVIOUR ON EXISTING DATA, recorded rather than slipped in.
+
+        This case used the label 'Signature' to stand for "an ordinary legacy field", and the
+        assertion was that it finalizes with any text and no review. But 'Signature' is the
+        commonest signature label on a real Word form, and the refutation pass measured the
+        consequence: a name lifted from the dictation reached the signature line of a finalized
+        record with no check that the finalizer was the person named.
+
+        So the protection now follows the LABEL, and the cost lands here: an existing encounter
+        whose question is called 'Signature' can no longer be finalized until the clinician
+        reviews it and enters their own name or leaves it blank. That is a real cost on stored
+        work, it is the owner's to revisit, and it is written into the handoff as such.
+        """
+        fields=[{'key':'old','label':'Signature','locator':{'paragraph':0}}]
+        with self.assertRaises(ValidationError):
+            validate_identity(fields,{'old':{'text':'Legacy reviewed text'}},self.actor)
+
+    def test_a_signature_that_is_explicitly_somebody_elses_is_not_the_finalizers(self):
+        """The false-refusal control on the same widening."""
+        for label in ('Patient signature','Signed by (witness)','Guardian signature',
+                      'Signature date','Attestation'):
+            with self.subTest(label=label):
+                fields=[{'key':'old','label':label,'locator':{'paragraph':0}}]
+                validate_identity(fields,{'old':{'text':'Legacy reviewed text'}},self.actor)
 
     def test_another_reviewers_checkbox_cannot_authorize_finalizers_signature(self):
         for answer in ({'text':'Synthetic Clinician','reviewed':True,'reviewed_by':'other'},

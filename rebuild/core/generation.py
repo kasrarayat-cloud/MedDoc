@@ -48,9 +48,14 @@ TAB_PROMPT_VERSIONS = frozenset(('extractive-v4-tab-evidence-units', PREVIOUS_PR
 #: `consented`, so "The patient was consented for the procedure" — standard operative-note
 #: phrasing — was BLANKED and finalization refused until the clinician retyped it. Both measured.
 #: A subject guard that is asymmetric between question and evidence is two different rules.
+#: ⚠️ AND THE FORM'S OWN ABBREVIATIONS COUNT AS THE SUBJECT. `DD (dictated):` and
+#: `DT (transcribed):` are how this vocabulary is actually written on an operative note, so a
+#: quote reading `DT: 2026-09-19` documents the transcription date — and demanding the long word
+#: again blanked it and blocked finalization. Measured. They go in the ONE stem, not in a
+#: second rule on one side, because a subject spelled differently per side is two rules.
 SUBJECTS = (r'\bconsent(?:ed|ing|s)?\b',
-            r'\bdictat(?:ed|ion|ing|es)\b',
-            r'\btranscri(?:bed|ption|bing|bes)\b')
+            r'\b(?:dictat(?:ed|ion|ing|es)|dd)\b',
+            r'\b(?:transcri(?:bed|ption|bing|bes)|dt)\b')
 
 
 ATTESTATION_GUIDANCE = (' Leave consent, attestation, signature and dictated/transcribed date questions empty '

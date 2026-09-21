@@ -22,6 +22,8 @@ single unlabelled sentence answering the only question on a form. That rule is a
 PRECEDING line imposes ("The following findings are denied:"), which a one-line note cannot
 have; `len(lines) > 1` is correct, not an off-by-one. test_labelled_answer_values caught it.
 """
+import pathlib
+
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
@@ -230,3 +232,57 @@ class SignatureIsRecognisedByPolicyOrLabel(TestCase):
         self.assertTrue(clinician_identity({'key': 'k', 'label': 'Anything at all', 'kind': 'text',
                                             'locator': {'tab_form': {'version': 1}},
                                             'answer_policy': 'clinician_identity'}))
+
+
+class TheVersionGateIsTestedAtTheVersionThatWillBeQueued(TestCase):
+    """⚠️ THE ONLY TEST OF THIS GATE USED v4, AND v5 IS WHAT WILL BE IN THE QUEUE.
+
+    Mutating the gate from `== CURRENT_PROMPT_VERSION` to
+    `in (PREVIOUS_PROMPT_VERSION, CURRENT_PROMPT_VERSION)` — the exact relabelling the bump
+    exists to prevent, where a v5 job receives v6 text while its stored attribution still says
+    v5 — left all 675 core tests green. Measured, with the mutation asserted applied and the
+    file restored afterwards.
+    """
+
+    SENTENCE = 'Preprinted form text is context, not a documented patient fact.'
+
+    def instruction_for(self, version):
+        from core.generation import configuration
+        config = dict(configuration())
+        config['mode'] = 'live'          # the same shape the sibling tests above use
+        config['prompt_version'] = version
+        return _legacy_instructions(config)
+
+    def test_the_current_version_receives_the_attestation_guidance(self):
+        self.assertIn(self.SENTENCE, self.instruction_for('extractive-v6-source-scope-attestation'))
+
+    def test_the_version_sitting_in_the_queue_today_does_not(self):
+        from core.generation import PREVIOUS_PROMPT_VERSION
+        self.assertEqual(PREVIOUS_PROMPT_VERSION, 'extractive-v5-tab-independent-sections')
+        self.assertNotIn(self.SENTENCE, self.instruction_for(PREVIOUS_PROMPT_VERSION))
+
+    def test_no_older_version_receives_it_either(self):
+        for version in ('extractive-v4-tab-evidence-units', 'extractive-v3-old'):
+            with self.subTest(version=version):
+                self.assertNotIn(self.SENTENCE, self.instruction_for(version))
+
+
+class TheTwoSignatureLabelSetsAgree(TestCase):
+    """The tab inspector keeps its own copy of the recognised spellings, in the sandboxed
+    adapter, which cannot import from `core`. Two readers of one rule, so the agreement is
+    asserted rather than assumed — a second copy drifts from the first the day either moves.
+    """
+
+    def test_every_label_the_inspector_marks_is_also_recognised_by_the_review_rule(self):
+        from core.tab_review import signature_label
+        from documents import tab_form
+        import re as _re
+        source = pathlib.Path(tab_form.__file__).read_text()
+        marked = _re.search(r"if normalized in \{([^}]*)\}:\n\s*field\['answer_policy'\]", source)
+        self.assertIsNotNone(marked, 'the inspector no longer marks a set of labels; re-read it')
+        spellings = _re.findall(r"'([^']+)'", marked.group(1))
+        self.assertTrue(spellings, 'the inspector marks no spellings at all')
+        for spelling in spellings:
+            with self.subTest(spelling=spelling):
+                self.assertTrue(signature_label(spelling),
+                                'the inspector marks it and the review rule does not')

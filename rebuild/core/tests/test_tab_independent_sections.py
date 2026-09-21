@@ -37,12 +37,26 @@ class IndependentSectionPromptTests(SimpleTestCase):
             sent = client.return_value.messages.create.call_args.kwargs
         return raw, sent, config
 
+    def test_the_current_instruction_cannot_change_without_a_version_bump(self):
+        """⚠️ THE TRIPWIRE THIS FILE THOUGHT IT HAD, AND DID NOT.
+
+        The assertion below used to read `config['prompt_version'] == CURRENT_PROMPT_VERSION`,
+        with a comment explaining that a literal would turn a required bump into a failure.
+        That is backwards: `configuration()` SETS that key from that constant, so the assertion
+        compared the constant to itself and could never fail. The refutation pass inserted a
+        whole sentence into the v5/v6 paragraph with no bump and the suite stayed green — which
+        is precisely the relabelling the v6 bump was justified by.
+
+        A literal version and a digest of the exact text sent. Editing the instruction now
+        fails HERE, and the repair is to bump the version and re-pin, deliberately.
+        """
+        _, sent, config = self.mocked_generation()
+        self.assertEqual(config['prompt_version'], 'extractive-v6-source-scope-attestation')
+        self.assertEqual(hashlib.sha256(sent['system'].encode()).hexdigest(),
+                         '476768227326ce344dfe791dbbef0545da87ddd31ed037cf14aa308a78a16358')
+
     def test_new_prompt_clarifies_partial_description_and_independent_reuse(self):
         _, sent, config = self.mocked_generation()
-        # Pinned to the constant, not to a literal: the version string must move whenever the
-        # instructions change, and a literal here turns that required bump into a test failure.
-        from core.generation import CURRENT_PROMPT_VERSION
-        self.assertEqual(config['prompt_version'], CURRENT_PROMPT_VERSION)
         self.assertIn('independently applicable fields in different sections', sent['system'])
         self.assertIn('do not leave those steps out because other details are missing', sent['system'])
         self.assertIn('never invent the remaining steps', sent['system'])
