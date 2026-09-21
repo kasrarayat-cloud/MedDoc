@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
+import re
 import sys
 import types
 
@@ -56,6 +57,12 @@ CAPTURE_MANIFEST_SHA256 = 'ac714b19363a66294d35cfde0d4b1de62de2ab9db1916b67f466f
 #: The completed static transition of the release now serving. This act reinstalls nothing.
 STATIC_RECEIPT = APP / '.runtime/admin-console-20260921/admin-console-resume-21809ef408a5.json'
 STATIC_RECEIPT_SHA256 = 'a83479597ac649a31f3d02e0d73e3412a4d79e7ab6c2bec2027c4c95126922bc'
+#: ⚠️ THE INHERITED DRIVER HARD-CODES ITS OWN RECEIPT NAME, and a receipt called
+#: `typed-voice-activation-*` for this release would mislead whoever reads the evidence later.
+#: Exactly ONE pattern is renamed; every other regex the driver uses stays the module's own.
+#: The same targeted rename the admin-console adapter made, for the same reason.
+RESULT_PATTERN = r'typed-voice-activation-[a-zA-Z0-9_-]+\.json'
+RENAMED_PATTERN = r'word-multicolumn-activation-[a-zA-Z0-9_-]+\.json'
 NEW_TABLE = 'core_servicehealth'
 SCHEMA_MARKER = '<!-- declared-schema -->'
 SCOPE_MARKER = '<!-- declared-source-scope -->'
@@ -235,6 +242,21 @@ def assert_retained_capture(manifest, modules, storage):
 
 
 driver.assert_retained_capture = assert_retained_capture
+
+
+class _RenamedReceiptRe:
+    """Rename only the inherited receipt-name pattern; everything else is the real `re`."""
+
+    def __getattr__(self, name):
+        return getattr(re, name)
+
+    def fullmatch(self, pattern, string, *args, **kwargs):
+        if pattern == RESULT_PATTERN:
+            pattern = RENAMED_PATTERN
+        return re.fullmatch(pattern, string, *args, **kwargs)
+
+
+driver.re = _RenamedReceiptRe()
 
 
 if __name__ == '__main__':
