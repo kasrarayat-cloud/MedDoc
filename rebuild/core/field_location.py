@@ -1,7 +1,7 @@
 """Where an answer goes, in words a doctor can check against their own form.
 
 DISPLAY ONLY, and deliberately so. `documents.engine.validate_mapping` compares the stored
-field list against a fresh inspection with `fields != mapping`, so adding a key to the field
+field list against a fresh inspection with `fields != mapping (⚠️ SUPERSEDED: `validate_mapping` now compares STRUCTURE — key, kind, locator and the rest — and excludes only `label`, which the mapping-review rename gate owns instead.)`, so adding a key to the field
 dict would invalidate every mapping version already saved. Nothing here is persisted or sent
 to the adapter; it is derived from the locator each time a review screen is rendered.
 

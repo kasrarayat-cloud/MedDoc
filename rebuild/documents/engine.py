@@ -111,8 +111,9 @@ def answerable_row(row_cells):
     one other cell entirely empty. A fully populated data table and a one-column layout
     table both score false, so an ordinary document does not collect advisory noise.
     """
-    texts = ["".join(cell.xpath(".//w:t/text()")).strip() for cell in row_cells]
-    return any(text and len(text) <= 80 for text in texts) and any(not text for text in texts)
+    texts = [cell_text(cell) for cell in row_cells]
+    return (any(text and len(text) <= 80 for text in texts)
+            and any(not cell_occupied(cell) for cell in row_cells))
 
 
 def answer_tabs_present(paragraphs):
@@ -128,7 +129,98 @@ def answer_tabs_present(paragraphs):
     return False
 
 
-def docx_inspect(path):
+MAX_LABEL_CELL = 80
+CONTRACT_V1 = "v1"          # two-column tables only; tabs only when nothing else matched
+CONTRACT_V2 = "v2"          # + unambiguous multi-column rows, + tabs alongside other structures
+CONTRACT = CONTRACT_V2
+
+
+def cell_text(cell):
+    return "".join(cell.xpath(".//w:t/text()")).strip()
+
+
+#: ⚠️ ELEMENTS THAT RENDER SOMETHING WITHOUT PRODUCING A `w:t`. `cell_text` reads only
+#: `.//w:t`, so a cell holding a TICKED WINGDINGS CHECKBOX (`w:sym w:char="F0FE"`) reads as
+#: empty — and the write path assigns `Run.text`, which clears the run and DELETES the symbol.
+#: Measured: a consent box a clinician had ticked was erased from the document being finalized.
+#: The old screen named three tags out of this set while the docstring promised never to
+#: overwrite anything, which is a promise enumerated instead of stated.
+OCCUPYING = (".//w:drawing | .//w:pict | .//w:br | .//w:sym | .//w:object"
+             " | .//w:fldChar | .//w:fldSimple | .//w:sdt")
+
+
+def cell_occupied(cell):
+    """Anything already in this cell — text OR rendered content `cell_text` cannot see.
+
+    ONE predicate, because the two readers disagreeing is the failure: the answer-target screen
+    and the unmapped-area notice must mean the same thing by "empty", or a cell is silently
+    overwritten by one and not reported by the other.
+    """
+    return bool(cell_text(cell)) or bool(cell.xpath(OCCUPYING))
+
+
+def usable_answer_cell(cell):
+    """An empty cell that can safely receive an answer."""
+    return not cell_occupied(cell)
+
+
+def multi_column_answers(row_cells):
+    """Answer cells in a row of MORE than two columns, only where placement is unambiguous.
+
+    Returns a list of (label, answer_cell), or [] when the row must not be mapped.
+
+    Two shapes qualify, and nothing else does:
+
+      PAIRS      Label | blank | Label | blank | …   — strict alternation, even width >= 4.
+                 Every blank has exactly one label immediately before it, so no boundary is
+                 inferred. Six columns work the same way as four.
+
+      ONE BLANK  exactly one empty cell anywhere in the row, and the FIRST cell carries text.
+                 Covers Label | blank | Unit and Label | Unit | blank alike: there is only one
+                 place an answer can go, and only one cell that can be its question.
+
+    Deliberately NOT qualifying: two or more blanks that are not a strict alternation (is the
+    second blank another answer to the same question, or a separate unlabelled one?), and any
+    row whose first cell is empty (its blank has no question, and borrowing one from elsewhere
+    is the heading-theft this product already refuses).
+    """
+    if len(row_cells) <= 2:
+        return []
+    texts = [cell_text(cell) for cell in row_cells]
+    blanks = [i for i, text in enumerate(texts) if not text]
+    if not blanks:
+        return []                                   # a fully populated row is data, not questions
+
+    if len(row_cells) % 2 == 0:
+        # ⚠️ EVERY VALUE CELL MUST BE BLANK. The earlier rule allowed a part-filled row, and
+        # measurement REFUTED it: `Procedure | Diagnostic colonoscopy | Consent | ____` reads as a
+        # pairs grid, but `Aspirin | 81 mg | Daily | ____` is THE SAME SHAPE — and there the only
+        # question offered was `Daily`, a frequency, whose answer was written into the Route
+        # column. A header row with one empty trailing cell, `Date | Finding | Action | ____`,
+        # mapped `Action` and wrote a clinical finding INTO THE HEADER ROW.
+        #
+        # Nothing in a row distinguishes a part-completed question from ordinary data, so the
+        # part-completed form is now REPORTED as unmapped instead of guessed at. That is the
+        # promise this adapter makes about an ambiguous layout, applied to itself.
+        labels, values = texts[0::2], row_cells[1::2]
+        if (all(label and len(label) <= MAX_LABEL_CELL for label in labels)
+                and all(index % 2 == 1 for index in blanks)):
+            offered = [(label, cell) for label, cell in zip(labels, values)
+                       if not cell_text(cell) and usable_answer_cell(cell)]
+            if len(offered) == len(values) == len(blanks):
+                return offered
+        return []
+
+    # ⚠️ ODD WIDTH HAS NO UNAMBIGUOUS SHAPE, and the branch that claimed one is REMOVED.
+    # It accepted "exactly one blank, first cell carries the question", which cannot tell
+    # `Estimated blood loss | ____ | mL` apart from `Sodium | 140 | ____`, where the answer lands
+    # in the REFERENCE RANGE column of a result table beside a result that already reads 140, or
+    # from `Diabetes | ____ | X`, where free text goes into the Yes column of a history grid whose
+    # No column is already ticked. All three are one blank after a non-empty first cell.
+    return []
+
+
+def docx_inspect(path, contract=CONTRACT):
     validate_docx(path)
     document = Document(path)
     paragraphs = []
@@ -143,25 +235,41 @@ def docx_inspect(path):
             paragraphs.append(Paragraph(element, part))
         for row in part.element.iter(qn("w:tr")):
             row_cells = row.findall(qn("w:tc"))
-            if len(row_cells) != 2:
-                if answerable_row(row_cells):
-                    skipped["multi_column"] += 1
-                continue
-            # Merged cells can conceal a different question/answer boundary.
+            # Merged cells can conceal a different question/answer boundary. Checked before the
+            # width rules so a merged wide row is reported as merged, not as multi-column.
             if any(cell.xpath(".//w:vMerge | .//w:gridSpan | .//w:tbl") for cell in row_cells):
                 if answerable_row(row_cells):
                     skipped["merged"] += 1
+                continue
+            if len(row_cells) != 2:
+                pairs = multi_column_answers(row_cells) if contract == CONTRACT_V2 else []
+                if not pairs:
+                    if answerable_row(row_cells):
+                        skipped["multi_column"] += 1
+                    continue
+                if row.xpath('./w:trPr/w:trHeight[@w:hRule="exact"]'):
+                    fail("A blank answer cell has fixed height and could hide text; use an expanding row.", "overflow_risk")
+                for label, answer_cell in pairs:
+                    cells.append((answer_cell, part))
+                    fields.append({"key": f"cell_{len(cells)-1}", "label": label, "kind": "text",
+                                   "locator": {"cell": len(cells) - 1}})
                 continue
             left, right = row_cells
             label = "".join(left.xpath(".//w:t/text()")).strip()
             contents = "".join(right.xpath(".//w:t/text()")).strip()
             if label and not contents:
-                if right.xpath(".//w:drawing | .//w:pict | .//w:br"):
+                # ⚠️ THE THIRD READER, AND IT WAS LEFT BEHIND. `cell_occupied`'s docstring says
+                # "ONE predicate, because the two readers disagreeing is the failure" — and this
+                # one, the SHIPPED MAJORITY PATH, still enumerated three tags. Measured on
+                # `Consent obtained | ☑`: the ticked Wingdings box has no `w:t`, so `contents` is
+                # empty, the row mapped, and `Run.text` DELETED the symbol from the exported
+                # document. Pre-existing, and the one line that makes the docstring true.
+                if not usable_answer_cell(right):
                     skipped["answer_cell_contents"] += 1
                     continue
                 if row.xpath('./w:trPr/w:trHeight[@w:hRule="exact"]'):
                     fail("A blank answer cell has fixed height and could hide text; use an expanding row.", "overflow_risk")
-                cells.append(right)
+                cells.append((right, part))
                 fields.append({"key": f"cell_{len(cells)-1}", "label": label, "kind": "text", "locator": {"cell": len(cells)-1}})
     for index, paragraph in enumerate(paragraphs):
         remaining = TOKEN.sub("", paragraph.text)
@@ -177,11 +285,26 @@ def docx_inspect(path):
     if not fields:
         fields = inspect_tabs(path, paragraphs, fail)
     elif answer_tabs_present(paragraphs):
-        # PRECEDENCE, REPORTED. The tab adapter runs only when nothing else matched, so a form
-        # holding both a question/answer table and a labelled underlined section previously
-        # mapped the table and discarded the section without a word. The same section on its
-        # own imports perfectly, which is what makes the silence so misleading.
-        skipped["underlined_tabs"] += 1
+        # PRECEDENCE, NOW RESOLVED RATHER THAN REPORTED. A form holding both a question/answer
+        # table and a labelled underlined section used to map the table and discard the section
+        # without a word — while the same section ALONE imported perfectly. The two contracts are
+        # disjoint by construction (inspect_tabs refuses any tab inside a table cell), so they
+        # compose. Placeholders and tables already coexisted; this brings tabs into the same set.
+        #
+        # ⚠️ NEVER WORSE THAN BEFORE. inspect_tabs REFUSES an ambiguous tab layout, and it is
+        # entitled to: adjacent blanks without separate labels, an unlabelled area with no
+        # heading. Letting that refusal escape would turn a form that imports today into one
+        # that does not. So a refusal falls back to the note this replaced, and the rest of the
+        # form still maps.
+        if contract == CONTRACT_V2:
+            try:
+                tab_fields = inspect_tabs(path, paragraphs, fail)
+            except DocumentFailure:
+                tab_fields = []
+                skipped["underlined_tabs_ambiguous"] += 1
+            fields.extend(tab_fields)
+        else:
+            skipped["underlined_tabs"] += 1
     if not fields:
         # The skipped areas ARE the explanation. Without them this refusal tells a doctor whose
         # form is full of visible blanks that the form contains nothing at all.
@@ -204,6 +327,10 @@ UNMAPPED_NOTES = {
     "underlined_tabs": ("This form also contains labelled underlined answer blanks. They were NOT mapped, because a form "
                         "uses ONE method: placeholders and question/answer tables take precedence. Keep one style "
                         "throughout, or add a {{{{Question name}}}} placeholder on each underlined line."),
+    "underlined_tabs_ambiguous": ("This form also contains underlined answer blanks that could NOT be placed unambiguously, "
+                                  "so they were not mapped; everything else in the form was. Adjacent blanks need their own "
+                                  "label and a separating tab, and a blank with no label needs a section heading above it. "
+                                  "Fix the layout, or add a {{{{Question name}}}} placeholder on each of those lines."),
 }
 
 
@@ -220,7 +347,7 @@ def duplicate_label_note(fields):
     mapping-review screen, which is where a person can settle it in seconds.
 
     ⚠️ A WARNING AND NOT A FIELD KEY. `validate_mapping` compares the stored mapping against
-    a fresh inspection with `fields != mapping`, so adding anything to the field dict would
+    a fresh inspection with `fields != mapping (⚠️ SUPERSEDED: `validate_mapping` now compares STRUCTURE — key, kind, locator and the rest — and excludes only `label`, which the mapping-review rename gate owns instead.)`, so adding anything to the field dict would
     refuse every mapping version already saved — measured, not assumed.
     """
     counts = Counter((field.get("label") or "").strip() for field in fields)
@@ -387,10 +514,27 @@ def check_pdf_capacity(field, answer):
             fail(f"The complete answer for {field['label']} will not fit visibly. Edit the form or use DOCX. No text was truncated.", "answer_overflow")
 
 
+def structure(fields):
+    """A mapping's binding, without the question text.
+
+    ⚠️ THE LABEL IS DELIBERATELY EXCLUDED, and this file's own contract says why: "Editable
+    clinical labels should be separate application metadata." Mapping review lets a doctor
+    rename a question, which produces a new mapping version whose labels differ from a fresh
+    inspection of the unchanged original. Comparing labels would refuse every renamed mapping
+    at fill time — which is exactly why the caller used to hand us a fresh inspection instead
+    of the stored mapping, discarding the doctor's labels and, once two contracts existed,
+    filling answers into renumbered cells.
+
+    Everything that decides WHERE an answer goes — key, kind and locator — is still compared
+    exactly, so a stale or altered binding is still refused.
+    """
+    return [{k: v for k, v in field.items() if k != "label"} for field in fields]
+
+
 def validate_mapping(fields, mapping, answers):
     if not isinstance(mapping, list) or not isinstance(answers, dict):
         fail("Invalid mapping or answers.", "invalid_mapping")
-    if fields != mapping:
+    if structure(fields) != structure(mapping):
         fail("The field mapping does not match this original. Reinspect and create a new mapping version.", "mapping_mismatch")
     keys = {field["key"] for field in fields}
     if set(answers) - keys:
@@ -402,12 +546,82 @@ def validate_mapping(fields, mapping, answers):
             fail("An answer contains unsupported control characters.", "invalid_answer")
 
 
+def apply_cell_and_placeholder(document, paragraphs, cells, fields, answers):
+    """Write every non-tab answer into the tree, returning the package parts touched.
+
+    Reverse order matters for placeholders: two tokens in one paragraph share an offset
+    space, so replacing the later span first keeps the earlier one's offsets valid.
+    """
+    changed = set()
+    for field in reversed(fields):
+        answer = answers.get(field["key"], "")
+        locator = field["locator"]
+        if "cell" in locator:
+            cell, part = cells[locator["cell"]]
+            paragraph = Paragraph(cell.findall(qn("w:p"))[0], part)
+            if paragraph.runs:
+                paragraph.runs[0].text = answer
+            else:
+                paragraph.add_run(answer)
+            if answer:
+                changed.add(str(part.partname).lstrip("/"))
+        else:
+            paragraph = paragraphs[locator["paragraph"]]
+            replace_span(paragraph, locator["start"], locator["end"], answer)
+            changed.add(str(paragraph.part.partname).lstrip("/"))
+    return changed
+
+
+def fill_docx(path, output, document, paragraphs, cells, fields, answers):
+    """Fill a DOCX whatever mix of answer shapes its mapping holds.
+
+    The dispatch used to be all-or-nothing on `fields[0]`: one tab field sent the WHOLE
+    mapping to fill_tabs, and otherwise the whole mapping went through python-docx. A mapping
+    holding both — now possible, and the point of this change — could not be filled by either.
+
+    ⚠️ THE TWO WRITERS ALSO SAVE DIFFERENTLY, AND THAT IS NOT INCIDENTAL. fill_tabs copies the
+    ORIGINAL package and substitutes only the parts it touched, so untouched bytes survive
+    exactly; python-docx's save() re-serializes every part. They mutate the same element tree,
+    so a mixed document can use both writers and then the byte-preserving save — but a
+    tab-free document keeps python-docx's save, because changing how EXISTING supported forms
+    are written is not this change's business.
+    """
+    tab_fields = [f for f in fields if "tab_form" in f["locator"]]
+    other_fields = [f for f in fields if "tab_form" not in f["locator"]]
+    if tab_fields and other_fields:
+        changed = apply_cell_and_placeholder(document, paragraphs, cells, other_fields, answers)
+        fill_tabs(path, output, docx_parts(document), tab_fields, answers, also_changed=changed)
+    elif tab_fields:
+        fill_tabs(path, output, docx_parts(document), tab_fields, answers)
+    else:
+        apply_cell_and_placeholder(document, paragraphs, cells, other_fields, answers)
+        document.save(output)
+
+
 def process(workspace, request):
     fmt = request["format"]
     path = workspace / ("input." + fmt)
     warnings = []
     if fmt == "docx":
-        document, paragraphs, cells, fields, notes = docx_inspect(path)
+        stored = request.get("mapping") if request.get("operation") == "fill" else None
+        try:
+            document, paragraphs, cells, fields, notes = docx_inspect(path)
+        except DocumentFailure as refusal:
+            # ⚠️ A REFUSAL THE CURRENT CONTRACT INVENTED MUST NOT STRAND AN OLDER MAPPING.
+            # The structural fallback further down only runs if the inspection RETURNS. A v2-only
+            # `fail()` — a fixed-height answer cell, or a field count the wider contract pushes past
+            # the limit — escapes first, and a reviewed encounter then cannot be exported AT ALL,
+            # refused by name over a table row the doctor never mapped. Retry under the contract
+            # the stored mapping was made with, and accept it only if it matches field for field.
+            if stored is None:
+                raise
+            try:
+                legacy = docx_inspect(path, contract=CONTRACT_V1)
+            except DocumentFailure:
+                raise refusal from None
+            if structure(legacy[3]) != structure(stored):
+                raise refusal from None
+            document, paragraphs, cells, fields, notes = legacy
         warnings = ["DOCX answers expand and can change pagination. Review the exported document's layout."]
         if fields and "tab_form" in fields[0]["locator"]:
             warnings.extend(TAB_WARNINGS)
@@ -425,24 +639,20 @@ def process(workspace, request):
     if request["operation"] != "fill":
         fail("Unsupported operation.")
     answers = request["answers"]
+    if fmt == "docx" and structure(fields) != structure(request["mapping"]):
+        # ⚠️ A STORED MAPPING IS BOUND TO THE CONTRACT THAT PRODUCED IT. Mappings saved before
+        # multi-column and mixed support existed hold FEWER fields for the same document, and
+        # validate_mapping compares exactly — so re-inspecting such a template under the current
+        # contract would refuse to export it. Re-read it under the legacy contract instead.
+        # Exact equality is the proof: if the legacy inspection matches the stored mapping
+        # field for field, it IS that mapping's contract, and filling it behaves as it always did.
+        legacy = docx_inspect(path, contract=CONTRACT_V1)
+        if structure(legacy[3]) == structure(request["mapping"]):
+            document, paragraphs, cells, fields, _ = legacy
+            result["fields"] = fields
     validate_mapping(fields, request["mapping"], answers)
-    if fmt == "docx" and fields and "tab_form" in fields[0]["locator"]:
-        fill_tabs(path, workspace / "output.docx", docx_parts(document), fields, answers)
-    elif fmt == "docx":
-        for field in reversed(fields):
-            answer = answers.get(field["key"], "")
-            locator = field["locator"]
-            if "cell" in locator:
-                cell = cells[locator["cell"]]
-                elements = cell.findall(qn("w:p"))
-                paragraph = Paragraph(elements[0], document.part)
-                if paragraph.runs:
-                    paragraph.runs[0].text = answer
-                else:
-                    paragraph.add_run(answer)
-            else:
-                replace_span(paragraphs[locator["paragraph"]], locator["start"], locator["end"], answer)
-        document.save(workspace / "output.docx")
+    if fmt == "docx":
+        fill_docx(path, workspace / "output.docx", document, paragraphs, cells, fields, answers)
     else:
         values = {field["key"]: answers.get(field["key"], "") for field in fields}
         for field in fields:

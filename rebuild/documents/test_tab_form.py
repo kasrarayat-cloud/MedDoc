@@ -257,12 +257,38 @@ class UnderlinedTabFormTests(unittest.TestCase):
         self.assert_failure(inspect_template, path, codes={"no_fields"})
 
     def test_prior_placeholder_contract_is_not_silently_extended(self):
+        """The extension is deliberate now, and it is still not SILENT.
+
+        This guard was written when mapping precedence was the only protection an
+        already-uploaded template had: a placeholder document had to keep yielding exactly its
+        placeholders, or its stored mapping would stop matching and it could no longer export.
+
+        Underlined blanks alongside another structure are now mapped on purpose. The protection
+        the guard was buying is provided explicitly instead — the legacy contract still sees one
+        field, and a mapping saved under it still fills. What the guard forbade was a silent
+        change to EXISTING mappings, and that is still forbidden and still tested, here and in
+        documents/test_multicolumn_and_mixed.py::ContractCompatibility.
+        """
+        from .engine import CONTRACT_V1, docx_inspect
+
         path = self.directory / "prior-placeholder.docx"
         document = Document()
         document.add_paragraph("{{Existing question}}")
         document.add_paragraph("Later ordinary label: ").add_run("\t").underline = True
         document.save(path)
-        fields = inspect_template(path)["fields"]
-        self.assertEqual(len(fields), 1)
-        self.assertEqual(fields[0]["label"], "Existing question")
-        self.assertNotIn("tab_form", fields[0]["locator"])
+
+        legacy = docx_inspect(path, contract=CONTRACT_V1)[3]
+        self.assertEqual(len(legacy), 1, "the legacy contract must be unchanged")
+        self.assertEqual(legacy[0]["label"], "Existing question")
+        self.assertNotIn("tab_form", legacy[0]["locator"])
+
+        answers = {legacy[0]["key"]: "Answer under the stored mapping"}
+        output = self.directory / "prior-placeholder-filled.docx"
+        summary = fill_template(path, legacy, answers, output)
+        self.assertEqual(summary["filled"], 1,
+                         "a mapping saved before this change must still export")
+
+        current = inspect_template(path)["fields"]
+        self.assertEqual([f["label"] for f in current], ["Existing question", "Later ordinary label"])
+        self.assertNotIn("tab_form", current[0]["locator"])
+        self.assertIn("tab_form", current[1]["locator"])

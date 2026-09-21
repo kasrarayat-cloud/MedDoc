@@ -229,6 +229,15 @@ def template_detail(request,pk):
                     return render(request,'template_detail.html',{'template':t,'version':latest,'form':form,'field_rows':field_location.rows(latest.fields),'field_locations':[field_location.describe(f) for f in latest.fields]},status=409)
                 if latest.document_backend and labels!={f['key']:f['label'] for f in latest.fields}:
                     raise ValidationError('This qualified Word mapping uses fixed question labels so source evidence remains unambiguous. Keep the original labels.')
+                # ⚠️ A RENAME MUST NOT REMOVE THE SIGNATURE PROTECTION. `structure()` excludes the
+                # label so a renamed mapping still fills, and `clinician_identity` reads that same
+                # editable label — so renaming `Electronically signed by` to `Attending physician`
+                # silently turned the signature check OFF for both generation and finalization.
+                # Measured: "Dr Someone Else" accepted as the signature of a different clinician.
+                from .tab_review import signature_label
+                lost=[f['label'] for f in latest.fields
+                      if signature_label(f['label']) and not signature_label(labels[f['key']])]
+                if lost:raise ValidationError('A signature question keeps a signature label, because the identity check reads it: '+', '.join(sorted(lost))+'. Rename the other questions and leave this one as the form words it.')
                 fields=[{**f,'label':labels[f['key']]} for f in latest.fields]
                 version=TemplateVersion.objects.create(template=t,number=latest.number+1,fields=fields,review_requirements=latest.review_requirements,document_backend=latest.document_backend,created_by=request.user)
                 audit(request.user,'template.mapping_version',version.pk,department=t.department,number=version.number)
@@ -454,10 +463,16 @@ def finalize(request,pk):
             if hashlib.sha256(original.read_bytes()).hexdigest()!=e.template_version.template.sha256:raise ValidationError('Original integrity check failed.')
             relative=f'exports/{secrets.token_hex(24)}.{e.template_version.template.format.lower()}'
             out=private_path(relative);out.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
-            canonical=inspect_template(original)
             finalized_at=timezone.now()
             if e.template_version.document_backend:
                 version=e.template_version
+                # ⚠️ COMPUTED HERE, NOT ABOVE, BECAUSE ONLY THIS BRANCH READS IT. Unconditionally
+                # re-inspecting the original made finalization fail for any template the CURRENT
+                # contract refuses but the stored mapping's contract accepted — a fixed-height
+                # answer cell, or a wider field count — stranding a reviewed encounter that was
+                # already generated. The ordinary path below fills through `version.fields` and
+                # never needed a fresh inspection at all.
+                canonical=inspect_template(original)
                 if (document_backend(canonical)!=version.document_backend or canonical['fields']!=version.fields
                         or canonical.get('review_requirements')!=version.review_requirements):
                     raise ValidationError('The original Word mapping differs from this immutable mapping version.')
@@ -471,8 +486,18 @@ def finalize(request,pk):
                 finalized_at=datetime.fromisoformat(reviewed['trusted_context']['finalized_at'])
             else:
                 from .tab_review import validate_identity
-                validate_identity(canonical['fields'],e.answers,request.user)
-                fill_template(original,canonical['fields'],{k:v['text'] for k,v in e.answers.items()},out)
+                # ⚠️ THE STORED MAPPING IS THE AUTHORITY, NOT A FRESH INSPECTION. The answers are
+                # keyed to `version.fields`, and a fresh inspection can now legitimately differ
+                # from it: a template imported before multi-column and mixed support yields FEWER
+                # fields, so the same `cell_N` key names a DIFFERENT cell. Passing `canonical`
+                # here filled one question's answer into another question's blank — measured on a
+                # V1 mapping of [cell_0='Allergies'] re-inspected to [cell_0='Height', …], where
+                # the allergy answer landed in the height blank of a finalized document. It also
+                # made `fill_template`'s legacy-contract fallback unreachable, because the caller
+                # passed the fresh fields as the mapping and the two were equal by construction.
+                version=e.template_version
+                validate_identity(version.fields,e.answers,request.user)
+                fill_template(original,version.fields,{k:v['text'] for k,v in e.answers.items()},out)
             out.chmod(0o600)
             e.export_path=relative;e.export_sha256=hashlib.sha256(out.read_bytes()).hexdigest();e.finalized_at=finalized_at;e.finalized_by=request.user;e.status='finalized';e.save()
             audit(request.user,'encounter.finalize',e.pk,department=e.department,export_sha256=e.export_sha256,mapping_version=e.template_version.number)

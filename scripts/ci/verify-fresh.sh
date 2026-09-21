@@ -24,7 +24,7 @@ if [[ "$gate" == python || "$gate" == all ]]; then
     "$quillmd_ci_python" manage.py test core.tests --verbosity 2
     # ⚠️ This list is EXPLICIT, not discovered: a new documents/test_*.py that is not named
     # here never runs in CI and is inert. Add the module in the same change as the test.
-    "$quillmd_ci_python" -m unittest documents.tests documents.test_tab_form documents.test_sdk_sandbox documents.test_sdk_service documents.test_layout documents.test_unmapped_areas -v
+    "$quillmd_ci_python" -m unittest documents.tests documents.test_tab_form documents.test_sdk_sandbox documents.test_sdk_service documents.test_layout documents.test_unmapped_areas documents.test_multicolumn_and_mixed -v
     "$quillmd_ci_python" -m unittest discover -s ops -p 'test_*.py' -v
   )
 fi
