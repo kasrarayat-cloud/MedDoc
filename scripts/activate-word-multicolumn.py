@@ -32,6 +32,17 @@ EVIDENCE = ROOT / 'rebuild/.runtime/word-multicolumn-activation-20260921'
 DRIVER = 'scripts/activate-typed-voice.py'
 DRIVER_SHA256 = '4e2efda2357fa2c33262eb2f747ac7201eadbc94875528cde2b7fe9040ebba18'
 MIGRATION = '0018_servicehealth'
+#: ⚠️ THE ACTIVATION SAFETY CAPTURE, AND IT IS NOT THE RESTORE DRILL. Two different artifacts:
+#: `RESTORED_RUN` is the completed independent-key restore proof, historical and pinned by the
+#: driver — it is NOT repeated here. `CAPTURE_RUN` is the recent capture this act falls back to,
+#: and the chain requires it inside a 30-hour window, so each activation pins its own.
+#:
+#: This one is tonight's controlled capture, and it is the reason the publisher can be installed
+#: at all: it is the first capture that COVERS `core_servicehealth`. Its table set was verified
+#: against live `pg_tables` by name, not by count.
+CAPTURE_RUN = '20260921T194532Z-1b826c0d'
+CAPTURE_SOURCE = '21809ef408a5f7b6691beb338a7640da82fcfb97'
+CAPTURE_MANIFEST_SHA256 = '6c960a6d504c431f789a7214c43336cb8309420a89c30083f3a3939f86ebeab4'
 #: The completed static transition of the release now serving. This act reinstalls nothing.
 STATIC_RECEIPT = APP / '.runtime/admin-console-20260921/admin-console-resume-21809ef408a5.json'
 STATIC_RECEIPT_SHA256 = 'a83479597ac649a31f3d02e0d73e3412a4d79e7ab6c2bec2027c4c95126922bc'
@@ -94,7 +105,9 @@ driver = pinned_module(DRIVER, DRIVER_SHA256, '_word_multicolumn_driver')
 for module in (driver, driver.a, driver.b):
     for name, value in {'BASELINE': BASELINE, 'RUNNING_RELEASE': BASELINE, 'SOURCE': SOURCE,
                         'SELF': SELF, 'DECL': DECL, 'EVIDENCE': EVIDENCE,
-                        'MIGRATION': MIGRATION}.items():
+                        'MIGRATION': MIGRATION, 'CAPTURE_RUN': CAPTURE_RUN,
+                        'CAPTURE_SOURCE': CAPTURE_SOURCE,
+                        'CAPTURE_MANIFEST_SHA256': CAPTURE_MANIFEST_SHA256}.items():
         setattr(module, name, value)
 driver.__file__ = __file__
 driver.RUNTIME_ALLOWED = ALLOWED
