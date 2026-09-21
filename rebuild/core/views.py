@@ -288,6 +288,16 @@ def encounter_detail(request,pk):
         can_finalize=Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists()
     is_wm=bool(e.template_version.document_backend)
     rows=[{**f,**e.answers.get(f['key'],{'text':'','status':'missing','evidence':[],'reviewed':False})} for f in e.template_version.fields]
+    # ⚠️ A CLINICAL DECISION IS ATTRIBUTED TO THE PERSON WHO MADE IT, NOT TO WHOEVER IS READING.
+    # The page told every reader "You accepted this as your answer" — so a second clinician opening
+    # the encounter was informed, about somebody else's decision, that they had made it. That is
+    # the same misattribution as a finalized record denying an acceptance, pointed the other way.
+    # `accept_code`, in this same template, has named its accepter all along.
+    accepters={str(pk):email for pk,email in User.objects.filter(
+        pk__in={row['accepted_by'] for row in rows if row.get('accepted_by')}).values_list('pk','email')}
+    for row in rows:
+        row['accepted_by_email']=accepters.get(str(row.get('accepted_by') or ''),'')
+        row['accepted_by_me']=str(row.get('accepted_by') or '')==str(request.user.pk)
     requirements=[];review_error='';assessment=None;resolved_ok=False
     if is_wm:
         decisions=e.template_review.get('decisions',{})
@@ -384,7 +394,7 @@ def save_answers(request,pk):
     labels=[row['label'] for row in e.template_version.fields+e.template_version.review_requirements]
     if is_wm and any(request.POST.get('claim_reviewed_'+row['key'])=='on' for row in e.template_version.review_requirements):
         membership(request.user,e.department,roles=['owner','clinician'])
-    answers={};review_errors=[];newly_accepted=[];target_revision=e.revision+1
+    answers={};review_errors=[];newly_accepted=[];withdrawn=[];target_revision=e.revision+1
     for field in e.template_version.fields:
         key=field['key'];previous=e.answers.get(key,{'text':'','evidence':[],'status':'missing'})
         value=request.POST.get('answer_'+key,'')
@@ -410,6 +420,13 @@ def save_answers(request,pk):
             # lines down is the in-repo precedent: role-gated, attributed and audited.
             membership(request.user,e.department,roles=['owner','clinician'])
             value=suggestion; accepted=True; newly_accepted.append(key)
+        # ⚠️ AND WITHDRAWING ONE NEEDS THE SAME AUTHORITY AS GRANTING ONE. Gating only the grant
+        # left an employee-role member able to destroy a clinician's attested decision by an
+        # ordinary save — unattributed, unaudited, and silently. Overwriting answer TEXT was
+        # already possible before this feature; erasing an attestation was not.
+        if previous.get('accepted_suggestion') and not accepted:
+            membership(request.user,e.department,roles=['owner','clinician'])
+            withdrawn.append(key)
         if len(value)>20000:return HttpResponse('Answer too long; nothing was truncated or saved.',status=400)
         reviewed=request.POST.get('reviewed_'+key)=='on'
         if reviewed:membership(request.user,e.department,roles=['owner','clinician'])
@@ -467,7 +484,7 @@ def save_answers(request,pk):
             review_errors.append(error_message(exc))
     e.save(update_fields=['answers','revision','status','template_review'])
     audit(request.user,'encounter.answers_saved',e.pk,department=e.department,revision=e.revision,
-          accepted_suggestions=sorted(newly_accepted))
+          accepted_suggestions=sorted(newly_accepted),withdrawn_acceptances=sorted(withdrawn))
     if is_wm:audit(request.user,'encounter.template_review_saved',e.pk,department=e.department,revision=e.revision,complete=e.template_review.get('assessment',{}).get('complete',False))
     messages.success(request,'Edits saved. Review every answer before finalizing.')
     for message in dict.fromkeys(review_errors):messages.warning(request,'Review remains incomplete: '+message)

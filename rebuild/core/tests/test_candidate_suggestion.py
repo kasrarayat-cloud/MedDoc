@@ -16,7 +16,8 @@ import json
 from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 
-from core.generation import (INHERITED_SCOPE, SCOPE_POINTERS, SCOPE_REFRAMERS, Selection,
+from core import generation
+from core.generation import (INHERITED_SCOPE, SCOPE_POINTERS, SCOPE_REFRAMERS, Selection, negative_heading,
                              Selections, validate_selections, validate_tab_selections,
                              SCOPE_REVIEW_REASON)
 from io import BytesIO
@@ -58,7 +59,11 @@ def judge_tab(notes, quotes, *, conflict=False, label='EXTENT', key='k'):
     fields = [{'key': key, 'label': label, 'kind': 'text',
                'locator': {'cell': 0, 'tab_form': {'version': 1}}}]
     chosen = Selections(fields=[Selection(key=key, quotes=quotes, conflict=conflict)])
-    return validate_tab_selections(notes, fields, chosen)[key]
+    # ⚠️ DISPATCHED THROUGH THE MODULE, NOT THROUGH THE NAME IMPORTED AT THE TOP OF THIS FILE.
+    # A direct call cannot be observed: patching `generation.validate_tab_selections` leaves a
+    # module-level `from ... import` binding untouched, so the counter in `setUp` below counted
+    # nothing and the control that exists to catch a mislabelled helper could not catch one.
+    return generation.validate_tab_selections(notes, fields, chosen)[key]
 
 
 class ScopeUncertaintyKeepsTheCandidate(TestCase):
@@ -546,16 +551,35 @@ class EveryRuleHoldsUnderTheTabContractToo(TestCase):
     the suite stayed green. Every rule the legacy tests assert is re-asserted here against the tab
     validator, which reaches the code by a different path with a different evidence shape.
 
-    ⚠️ EVERY NOTE HERE CARRIES `PREFIX`, AND THAT IS LOAD-BEARING. The tab validator only holds an
-    answer when something in the note leaves scope open; without it these notes come back
-    `supported`, and every "offers nothing" assertion below would pass because nothing is ever
-    offered. `listed` is a plain POINTER, so it makes the answer review-required without asserting
-    anything about polarity — which is exactly the state in which a candidate SHOULD be offered.
-    `test_the_prefix_alone_still_offers` is the control that proves it.
+    ⚠️ EVERY NOTE HERE IS REVIEW-REQUIRED, AND THAT IS LOAD-BEARING. The tab validator only holds
+    an answer when something leaves scope open; otherwise these notes come back `supported` and
+    every "offers nothing" assertion passes because nothing is ever offered. Some notes carry
+    `PREFIX`, whose `listed` is a plain POINTER — review-required without asserting anything about
+    polarity, which is exactly the state in which a candidate SHOULD be offered. The rest are held
+    by their own marker, and each of those tests asserts `status == 'conflict'` to show it.
+    `test_the_prefix_alone_still_offers` is the control that proves an offer happens at all.
     """
     PREFIX = 'See the findings listed in the report.\n'
     SCOPED_LINE = 'EXTENT: the scope reached the cecum.'
     TAB_NOTE = PREFIX + SCOPED_LINE
+
+    def setUp(self):
+        """⚠️ THE CONTROL FOR THE WHOLE CLASS, AND IT RUNS ON EVERY TEST IN IT.
+
+        A lens rewrote `judge_tab` to call the LEGACY validator — the exact "mislabelled helper"
+        the old control named — and all twelve tests here passed. Counting the calls is the only
+        thing that catches that, so the count is asserted per test rather than in one test that
+        can itself be bypassed.
+        """
+        self.tab_calls = []
+        original = generation.validate_tab_selections
+        def counted(*args, **kwargs):
+            self.tab_calls.append(1)
+            return original(*args, **kwargs)
+        generation.validate_tab_selections = counted
+        self.addCleanup(setattr, generation, 'validate_tab_selections', original)
+        self.addCleanup(lambda: self.assertTrue(
+            self.tab_calls, 'this test never reached validate_tab_selections'))
 
     def test_the_prefix_alone_still_offers(self):
         """THE CONTROL FOR EVERY SUPPRESSION TEST IN THIS CLASS."""
@@ -578,7 +602,7 @@ class EveryRuleHoldsUnderTheTabContractToo(TestCase):
                    'locator': {'cell': 0, 'tab_form': {'version': 1}}}]
         chosen = Selections(fields=[Selection(key='k', quotes=['EXTENT: the scope reached the cecum'],
                                               conflict=False)])
-        answer = validate_tab_selections(notes, fields, chosen)['k']
+        answer = generation.validate_tab_selections(notes, fields, chosen)['k']
         self.assertEqual(answer['status'], 'conflict')
         self.assertEqual(answer['suggestion'], 'EXTENT: the scope reached the cecum')
 
@@ -634,28 +658,17 @@ class EveryRuleHoldsUnderTheTabContractToo(TestCase):
         with self.assertRaises(ValidationError):
             judge_tab(self.TAB_NOTE, ['EXTENT: a sentence never written.'])
 
-    def test_both_validators_were_actually_reached(self):
-        """⚠️ THE CONTROL FOR THE HELPERS THEMSELVES. Without it, every test in this class could
-        be running the legacy validator through a mislabelled helper and proving nothing."""
-        from core import generation
-        seen = []
-        original = generation.validate_tab_selections
-        try:
-            generation.validate_tab_selections = lambda *a, **k: (seen.append('tab'), original(*a, **k))[1]
-            validate_tab_selections(self.TAB_NOTE,
-                                    [{'key': 'k', 'label': 'EXTENT', 'kind': 'text',
-                                      'locator': {'cell': 0, 'tab_form': {'version': 1}}}],
-                                    Selections(fields=[Selection(key='k', quotes=[self.SCOPED_LINE],
-                                                                 conflict=False)]))
-        finally:
-            generation.validate_tab_selections = original
-        # `validate_selections` dispatches to the tab validator by looking at the locators, so a
-        # legacy-contract call reaching it would show up here too.
-        self.assertEqual(judge(NOTE, [SCOPED])['suggestion'], 'the scope reached the cecum',
-                         'and the legacy helper must still reach the legacy validator')
-        self.assertEqual(judge_tab(self.TAB_NOTE, [self.SCOPED_LINE])['suggestion'],
-                         'the scope reached the cecum.',
-                         'the two helpers must return different shapes from different code')
+    def test_the_two_helpers_reach_different_validators(self):
+        """The class-wide counter above proves each test REACHES the tab validator. This proves
+        the two helpers are not the same code wearing two names — by the error each one raises,
+        which is written in the validator itself and differs between the contracts."""
+        with self.assertRaises(ValidationError) as tab:
+            judge_tab(self.TAB_NOTE, ['EXTENT: a sentence never written.'])
+        with self.assertRaises(ValidationError) as legacy:
+            judge(NOTE, ['a value never written'])
+        self.assertIn('complete offered source sentence', str(tab.exception))
+        self.assertIn('complete source line', str(legacy.exception))
+        self.assertNotEqual(str(tab.exception), str(legacy.exception))
 
 
 class TypedTextWinsOnTheRealDocumentPath(AnUnacceptedSuggestionCannotReachAnExport):
@@ -674,3 +687,91 @@ class TypedTextWinsOnTheRealDocumentPath(AnUnacceptedSuggestionCannotReachAnExpo
         with ZipFile(BytesIO(exported)) as archive:
             blob = b''.join(archive.read(n) for n in archive.namelist())
         self.assertNotIn(self.SUGGESTION.encode(), blob)
+
+
+class WhatTheSecondRefutationPassFound(TestCase):
+    """Five more, on the repairs themselves. A fix in this codebase is wrong before it is right."""
+
+    def test_a_denial_heading_below_an_ordinary_line_still_suppresses(self):
+        """⚠️ THE HIGH. `UNSCOPED_NEGATIVE_HEADING` is anchored and compiled without `re.M`, and
+        its `[^:]*` spans newlines, so searching a whole note could only ever see the span before
+        the note's FIRST colon. One ordinary labelled line above the heading hid it, and
+        `chest pain` was offered for one-click acceptance under `findings are denied`."""
+        notes = ('Indication: screening colonoscopy\n'
+                 'The following findings are denied:\n'
+                 'Symptoms: chest pain')
+        answer = judge(notes, ['chest pain'], label='Symptoms')
+        self.assertEqual(answer['status'], 'conflict')
+        self.assertIsNone(answer.get('suggestion'))
+        # CONTROL: the heading rule is what suppresses it, not the pointer word `following`.
+        self.assertFalse(negative_heading('Indication: screening colonoscopy\nSymptoms: chest pain'))
+        self.assertTrue(negative_heading(notes))
+
+    def test_the_heading_rule_does_not_fire_on_ordinary_prose(self):
+        """The same anchor defect, the other way: `[^:]*` spanning newlines made any note with
+        `no`/`not`/`never` before its first colon a negative heading."""
+        self.assertFalse(negative_heading(
+            'The patient did not tolerate oral preparation.\nFindings: a 5 mm sessile polyp'))
+
+    def test_a_bulleted_or_plural_correction_still_suppresses(self):
+        for prefix in ('- ', '* ', '• ', '1. ', '1) ', '  ', ''):
+            for word in ('Correction', 'Corrections', 'CORRECTION'):
+                notes = f'Symptoms: no chest pain\n{prefix}{word}: severe crushing chest pain.'
+                self.assertIsNone(judge(notes, ['no chest pain'], label='Symptoms').get('suggestion'),
+                                  f'{prefix!r}{word} must suppress the offer')
+        # CONTROL: the word mid-sentence is not a correction line.
+        notes = 'Prose that leaves scope open.\nSymptoms: no chest pain\nThe correction was noted.'
+        self.assertEqual(judge(notes, ['no chest pain'], label='Symptoms').get('suggestion'),
+                         'no chest pain')
+
+
+class AnAcceptanceIsAttributedOnThePageAndDefendedFromWithdrawal(
+        AnUnacceptedSuggestionCannotReachAnExport):
+    """Two more from the second pass, both about who owns a clinical decision."""
+
+    def accept_as(self, encounter, user):
+        self.client.force_login(user)
+        self.resolve_other(encounter, {'answer_' + self.key: '', 'accept_' + self.key: 'on',
+                                       'reviewed_' + self.key: 'on'})
+
+    def colleague(self, role='clinician', name='second-clinician'):
+        other = User.objects.create_user(username=name, email=f'{name}@synthetic.invalid',
+                                         verified_at=timezone.now())
+        Membership.objects.create(user=other, department=self.department, role=role)
+        return other
+
+    def test_a_second_clinician_is_told_who_accepted_it_not_that_they_did(self):
+        """⚠️ The page said "You accepted this as your answer" to every reader, so a colleague was
+        informed, about somebody else's clinical decision, that they had made it. `accept_code`
+        has named its accepter in this same template all along."""
+        encounter = self.generated()
+        self.accept_as(encounter, self.user)
+        self.client.force_login(self.colleague())
+        section = self.section(encounter, 'Symptoms')
+        self.assertIn(self.user.email, section)
+        self.assertNotIn('You accepted this', section)
+        # CONTROL: the person who did accept it is still addressed directly.
+        self.client.force_login(self.user)
+        self.assertIn('You accepted this', self.section(encounter, 'Symptoms'))
+
+    def test_withdrawing_an_acceptance_needs_the_authority_that_granted_it(self):
+        encounter = self.generated()
+        self.accept_as(encounter, self.user)
+        weak = self.colleague(role='employee', name='weak-withdrawer')
+        self.client.force_login(weak)
+        response = self.client.post(f'/encounters/{encounter.pk}/save/',
+                                    {'revision': encounter.revision,
+                                     'answer_' + self.key: 'something else entirely'})
+        self.assertEqual(response.status_code, 403)
+        encounter.refresh_from_db()
+        self.assertTrue(encounter.answers[self.key]['accepted_suggestion'])
+        self.assertEqual(encounter.answers[self.key]['accepted_by'], str(self.user.pk))
+        # CONTROL: a clinician may withdraw it, and the withdrawal is recorded as an act.
+        self.client.force_login(self.user)
+        before = set(AuditEvent.objects.filter(action='encounter.answers_saved')
+                     .values_list('pk', flat=True))
+        self.resolve_other(encounter, {'answer_' + self.key: 'something else entirely',
+                                       'reviewed_' + self.key: 'on'})
+        self.assertFalse(encounter.answers[self.key]['accepted_suggestion'])
+        row = AuditEvent.objects.filter(action='encounter.answers_saved').exclude(pk__in=before).get()
+        self.assertIn(self.key, row.details['withdrawn_acceptances'])

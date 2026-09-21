@@ -198,7 +198,8 @@ ABBREVIATION = re.compile(r'(?:\b(?:dr|mr|mrs|ms|prof|st|vs|etc|approx)|\b[A-Z]|
 #: never to widen one. `docs/foundation/specs/field-specific-correction-handling.md` S6.
 CORRECTION = r'correction'
 INLINE_CORRECTION = re.compile(r';\s*' + CORRECTION + r'\s*,\s*(\S.*)$', re.I)
-LINE_INITIAL_CORRECTION = re.compile(r'^\s*' + CORRECTION + r'\b', re.I | re.M)
+LINE_INITIAL_CORRECTION = re.compile(r'^[\s\-*\u2022]*(?:\d+[.)]\s*)?' + CORRECTION + r's?\b',
+                                     re.I | re.M)
 QUANTITY = re.compile(r'(?:(?:less than|greater than|about|approximately)\s+|[<>]=?\s*)?'
     r'(?:\d+(?:\.\d+)?|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)'
     r'\s+([a-z]+)\.?$', re.I)
@@ -336,6 +337,29 @@ def suggestible(notes, texts, explicit):
     return _plain_pointer_only(notes)
 
 
+def negative_heading(notes):
+    """⚠️ APPLIED PER LINE, BECAUSE THE PATTERN IS ANCHORED AND THE NOTE IS NOT ONE LINE.
+
+    `UNSCOPED_NEGATIVE_HEADING` carries `^` and `[^:]*`, and is compiled WITHOUT `re.M`, so
+    searching a whole note can only ever match the span before the note's FIRST colon. That is
+    correct where `source_units` uses it — per quote, where `^` means the start of that sentence
+    — and silently wrong applied to a multi-line note. Measured cost of getting it wrong: with
+
+        Indication: screening colonoscopy
+        The following findings are denied:
+        Symptoms: chest pain
+
+    the heading became invisible because one ordinary labelled line moved the first colon, and
+    `chest pain` was offered for one-click acceptance under a denial. Removing that first line
+    restored the suppression — which is exactly why the suite's own reference case passed.
+
+    It failed in the other direction too: `[^:]*` spans newlines, so any note with `no`, `not` or
+    `never` anywhere before its first colon was treated as a negative heading. Per line, an
+    unpunctuated clinical sentence with no colon simply does not match.
+    """
+    return any(UNSCOPED_NEGATIVE_HEADING.search(line) for line in notes.splitlines())
+
+
 def _plain_pointer_only(notes):
     """Whether a held candidate may be offered for one-click acceptance at all.
 
@@ -355,7 +379,7 @@ def _plain_pointer_only(notes):
     still govern this answer, and deciding that it does not is exactly the judgement this
     function is not entitled to make.
     """
-    return not (UNSCOPED_NEGATIVE_HEADING.search(notes) or REFRAMED_SCOPE.search(notes)
+    return not (negative_heading(notes) or REFRAMED_SCOPE.search(notes)
                 or QUOTED_SOURCE.search(notes))
 
 
