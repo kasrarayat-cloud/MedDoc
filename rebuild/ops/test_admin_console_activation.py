@@ -570,18 +570,38 @@ class ForwardRepair(unittest.TestCase):
             c.validate_failed_receipt(data)          # the content pin itself
 
     def resume_source(self, changed, head=None, origin=None, dirty=''):
-        """Drive verify_resume_source for real, with only the repository answers stubbed."""
+        """Drive verify_resume_source for real, with only the repository answers stubbed.
+
+        The worktree layout is built in a temporary directory rather than assumed, so this
+        runs identically on a developer host and on a plain CI checkout.
+        """
         target = 'c' * 40
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, True)
+        source = root / '.worktrees' / 'repair'
+        (source / 'scripts').mkdir(parents=True)
+        (source / c.DRIVER).write_bytes((ROOT / c.DRIVER).read_bytes())
         answers = {('rev-parse', 'HEAD'): head or c.FAILED_TARGET,
                    ('rev-parse', 'origin/main'): origin or target,
                    ('branch', '--show-current'): 'main',
                    ('status', '--porcelain', '--untracked-files=no'): dirty,
                    ('diff', '--name-only', c.FAILED_TARGET, target): '\n'.join(sorted(changed))}
-        blobs = {c.SELF: (ROOT / c.SELF).read_bytes(), c.DRIVER: (ROOT / c.DRIVER).read_bytes()}
-        with patch.object(c.b, 'git', side_effect=lambda *a: answers[a]), \
+        blobs = {c.SELF: Path(c.__file__).read_bytes(), c.DRIVER: (ROOT / c.DRIVER).read_bytes()}
+        with patch.object(c, 'ROOT', root), patch.object(c, 'SOURCE', source.resolve()), \
+             patch.object(c.b, 'git', side_effect=lambda *a: answers[a]), \
              patch.object(c.b, 'output', return_value=''), patch.object(c.b, 'run'), \
              patch.object(c.b, 'blob', side_effect=lambda _sha, path: blobs[path]):
             return c.verify_resume_source(target)
+
+    def test_the_repair_refuses_to_run_outside_a_worktree(self):
+        """Positive control for the harness above: the shared tree itself is not a repair tree."""
+        with patch.object(c, 'SOURCE', c.ROOT), self.assertRaises(RuntimeError):
+            self.resume_source_in_place()
+
+    def resume_source_in_place(self):
+        with patch.object(c.b, 'git', return_value=''), patch.object(c.b, 'output', return_value=''), \
+             patch.object(c.b, 'run'):
+            return c.verify_resume_source('c' * 40)
 
     def test_the_repair_may_change_only_three_paths(self):
         """Behavioural, not a source grep: a disabling prefix leaves the text intact."""
