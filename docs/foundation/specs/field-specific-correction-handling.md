@@ -135,6 +135,13 @@ so there is one vocabulary and two anchorings:
 - **line-initial** (`Correction: …`) — bound to the field its text names, when it names one; when it
   names none, it is **unbound** and governs the whole note.
 
+Both anchorings now exist in code: `CORRECTION` holds the token once and `INLINE_CORRECTION` and
+`LINE_INITIAL_CORRECTION` are built from it. The candidate-review release reads the line-initial
+form **only to suppress a one-click offer**, never to widen scope — a refutation lens drove
+`Symptoms: no chest pain` / `Correction: the patient reports severe crushing chest pain.` to a
+signed Word document in one click. **Suppression is available now; BINDING the correction to the
+field it names is the work this specification schedules, and it is a strictly larger claim.**
+
 **S7 · Unbound is whole-note.** Any scope or correction line that cannot be bound by S2–S6 governs
 every field, exactly as today. **Narrowing is opt-in per established binding and can only move a
 field from `conflict` to `supported` where a binding was positively demonstrated — never the
@@ -170,7 +177,10 @@ finalization would put in the document. The doctor wrote the correction in plain
 own note and nothing carried it.
 
 **This is pre-existing — it is not introduced by Option C** — and it is live for tab-contract forms,
-which is what the §1e encounter used. Under S6 the expected outcome is that `ext` is held for review
+which is what the §1e encounter used. The candidate-review release does **not** repair it: it only
+declines to offer a one-click answer when a line-initial correction is present, so the stale value
+is still returned as `supported` and still reaches the document if the clinician approves it. The
+gap is narrower and it is not closed. Under S6 the expected outcome is that `ext` is held for review
 with the correction line as its evidence. It is recorded here rather than repaired in this release
 because the repair belongs with the rest of S1–S7 and its own adversarial pass.
 
