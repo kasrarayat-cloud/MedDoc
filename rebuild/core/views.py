@@ -22,6 +22,7 @@ from django.views.decorators.http import require_POST,require_http_methods
 from django_otp import login as otp_login
 from django_otp.plugins.otp_totp.models import TOTPDevice
 from .models import *
+from . import field_location
 from .forms import *
 from .security import audit,departments,scoped,membership,digest,token,store_upload,private_path,rate_limit
 from .billing import welcome_credit,credit_payment,reconcile_refund,reconciliation,stripe_test_key_configured,reconcile_usage,release
@@ -225,7 +226,7 @@ def template_detail(request,pk):
                 latest=t.versions.order_by('-number').first()
                 if request.POST.get('mapping_version')!=str(latest.pk):
                     form.add_error(None,'This mapping changed. Your unsaved labels are retained below. Compare them with the current mapping before saving again.')
-                    return render(request,'template_detail.html',{'template':t,'version':latest,'form':form},status=409)
+                    return render(request,'template_detail.html',{'template':t,'version':latest,'form':form,'field_rows':field_location.rows(latest.fields),'field_locations':[field_location.describe(f) for f in latest.fields]},status=409)
                 if latest.document_backend and labels!={f['key']:f['label'] for f in latest.fields}:
                     raise ValidationError('This qualified Word mapping uses fixed question labels so source evidence remains unambiguous. Keep the original labels.')
                 fields=[{**f,'label':labels[f['key']]} for f in latest.fields]
@@ -233,7 +234,7 @@ def template_detail(request,pk):
                 audit(request.user,'template.mapping_version',version.pk,department=t.department,number=version.number)
             messages.success(request,'New mapping version saved. Existing documents keep their original version.');return redirect('template_detail',pk=t.pk)
         except ValidationError as exc:form.add_error(None,error_message(exc))
-    return render(request,'template_detail.html',{'template':t,'version':version,'form':form})
+    return render(request,'template_detail.html',{'template':t,'version':version,'form':form,'field_rows':field_location.rows(version.fields),'field_locations':[field_location.describe(f) for f in version.fields]})
 
 def template_original(request,pk):
     t=get_object_or_404(scoped(Template,request.user),pk=pk)
@@ -341,7 +342,14 @@ def generate_view(request,pk):
         if not rate_limit('generate:'+str(request.user.pk),limit=30):raise ValidationError('Generation rate limit reached.')
         if 'revision' in request.POST and request.POST['revision']!=str(e.revision):raise ValidationError('Source notes changed. Reload before generating answers.')
         quoted=usage_quote(request,e)
-        enqueue(e,request.user,config=quoted,expected_revision=e.revision);messages.success(request,'Generation queued. Refresh this page to view the result.')
+        job=enqueue(e,request.user,config=quoted,expected_revision=e.revision)
+        if getattr(job,'reused',False):
+            # Reached from a stale page (Back, or a second tab): a generation does not renumber the
+            # revision, so the succeeded job still holds this request key. Saying "queued" would
+            # promise a request that was not made and answers that will not change.
+            messages.info(request,'These source notes already have an answer draft from an earlier request. No new request was made and nothing was charged. Edit and save the notes to generate again.')
+        else:
+            messages.success(request,'Generation queued. Refresh this page to view the result.')
     except ValidationError as exc:messages.error(request,error_message(exc))
     return redirect('encounter_detail',pk=pk)
 
@@ -517,7 +525,12 @@ def voice(request,pk):
                 'standard_limit':Decimal(over.quote['standard_limit']),
                 'affordable':available_balance(request.user,e.department)>=Decimal(over.quote['charge_limit'])},status=409)
         if job.input_path!=relative:private_path(relative).unlink(missing_ok=True)
-        messages.success(request,f"Transcription queued with a limit of ${Decimal(job.config.get('charge_limit','0'))}. Review the transcript before generating answers.")
+        if getattr(job,'reused',False):
+            # The identical recording already holds this request key; the redundant upload was just
+            # removed above. Nothing was sent to the provider and nothing was charged again.
+            messages.info(request,'This recording was already transcribed for this document. No new request was made and nothing was charged. Its transcript is below in Document record.')
+        else:
+            messages.success(request,f"Transcription queued with a limit of ${Decimal(job.config.get('charge_limit','0'))}. Review the transcript before generating answers.")
     except ValidationError as exc:
         if relative:private_path(relative).unlink(missing_ok=True)
         messages.error(request,error_message(exc))
