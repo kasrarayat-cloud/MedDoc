@@ -210,5 +210,24 @@ class RetainedCapturePopulation(unittest.TestCase):
         self.assertEqual(self.adapter.NEW_TABLE, 'core_servicehealth')
 
 
+class ReceiptName(unittest.TestCase):
+    def setUp(self):
+        self.adapter = load(ADAPTER, '_wm_adapter_receipt')
+
+    def test_the_inherited_receipt_name_is_renamed_and_the_rename_is_not_inert(self):
+        """A receipt named for another release would mislead whoever reads the evidence later."""
+        renamer = self.adapter.driver.re
+        pattern = self.adapter.RESULT_PATTERN
+        self.assertTrue(renamer.fullmatch(pattern, 'word-multicolumn-activation-78b4fd1ebbec.json'))
+        self.assertIsNone(renamer.fullmatch(pattern, 'typed-voice-activation-78b4fd1ebbec.json'),
+                          'the rename is inert; the inherited name still matches')
+
+    def test_only_that_one_pattern_is_renamed(self):
+        renamer = self.adapter.driver.re
+        self.assertTrue(renamer.fullmatch(r'[a-f0-9]{4}', 'dead'))
+        self.assertIsNone(renamer.fullmatch(r'[a-f0-9]{4}', 'zzzz'))
+        self.assertTrue(renamer.search(r'abc', 'xxabcxx'))
+
+
 if __name__ == '__main__':
     unittest.main()
