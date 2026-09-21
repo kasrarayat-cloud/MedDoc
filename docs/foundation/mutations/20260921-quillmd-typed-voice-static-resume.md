@@ -60,6 +60,14 @@ It refuses an existing directory or symlink and leaves the caller's umask and
 all other paths unchanged. A real collector subprocess regression runs under
 umask077; the strict public-static mode guard remains unchanged.
 
+The next read-only resume precheck exposed a representation mismatch before any
+new mutation: original JSON receipt arrays load as lists, whereas the qualified
+constraint/index readers return tuple rows. Preserve that failed precheck.
+Compare the entire saved/current snapshot using its JSON representation, keeping
+every field, scalar type and array order. No table, constraint, index, operation,
+file or configuration is excluded; changed values, missing fields and reordered
+arrays still refuse. Fresh in-process before/after comparisons remain unchanged.
+
 Recompare all other stopped state exactly, change only the release setting,
 start only doctor/admin/worker and verify exact served revision, interfaces,
 worker restart, source readability, Word artifact and public maintenance.

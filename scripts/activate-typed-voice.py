@@ -104,6 +104,27 @@ def unchanged(before, after):
         require(after[name] == before[name], 'Undeclared code-only activation delta: ' + name)
 
 
+def unchanged_saved_snapshot(before, after):
+    """Compare all saved/current values using the receipt's JSON representation.
+
+    The qualified SQL readers return constraint/index rows as tuples, while a
+    JSON receipt reloads those same arrays as lists. Normalize only that wire
+    representation; never sort arrays, omit fields or coerce scalar values.
+    """
+    def receipt_value(value):
+        if isinstance(value, dict):
+            require(all(type(key) is str for key in value), 'Snapshot object keys must remain JSON strings.')
+            return {key: receipt_value(item) for key, item in value.items()}
+        if isinstance(value, (tuple, list)):
+            return [receipt_value(item) for item in value]
+        return value
+    require(before.keys() == after.keys(), 'Preservation inventory shape changed.')
+    for name in before:
+        require(json.dumps(receipt_value(after[name]), sort_keys=True, allow_nan=False) ==
+                json.dumps(receipt_value(before[name]), sort_keys=True, allow_nan=False),
+                'Undeclared saved-state activation delta: ' + name)
+
+
 def verify_migrations(old, plan):
     b.verify_migration_plan(plan, applied=True)
     require(b.output(old.PSQL + ["SELECT name FROM django_migrations WHERE app='core' ORDER BY id DESC LIMIT 1"]) == MIGRATION,
@@ -437,7 +458,7 @@ def resume_failed(args):
             'Pinned service helper unavailable.')
     old.static_inventory = lambda _identity, _word: static_inventory(APP / 'staticfiles')
     baseline = snapshot(modules, helper)
-    unchanged(failed['stopped_before'], baseline)
+    unchanged_saved_snapshot(failed['stopped_before'], baseline)
     assert_retained_capture(manifest, modules, baseline['storage']['files'])
     protected = previous.protected()
     inputs = word.expected_inputs(args.target)
