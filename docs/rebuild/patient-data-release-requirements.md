@@ -1,3 +1,40 @@
+# Current scoped status — September 21, 2026
+
+The dated September 17 checklist below is retained history. The following entries
+supersede its stale technical status; no public launch or patient-data approval is
+implied.
+
+- The restricted synthetic B2 destination, encrypted offsite workflow and daily
+  timer are installed. The first September 21 05:00 UTC scheduled result remains
+  future until actual evidence exists. Account renewal remains owner-assisted;
+  current evidence expires September 21 at20:16:35.867379 UTC.
+- Windows Credential Manager custody, returned-key receipt and the independent-key
+  restore of35 tables/225,615 rows/42 files are complete for their recorded scope.
+  This does not cover Windows-account/computer loss, offline/LUKS custody or
+  whole-host recovery. The prior plaintext-copy cleanup completed; do not repeat
+  broad deletion.
+- Nine database integrity triggers and the dedicated service/DB roles are
+  installed. The latest [internal operations security proof](privileged-operations-security-20260921.md)
+  remains applicable; it does not replace independent penetration testing.
+- Three loaded ICD-10-CM releases cover October 1,2025 through September 30,2027;
+  service-date release checks remain enforced. CPT stays disabled without rights.
+- Original WM IOV native Word acceptance, sandbox payment lifecycle,
+  invitation/recovery verification and independent-key restore are completed in
+  their documented scopes. Natural human dictation and new SOAP native Word
+  appearance remain separate checks.
+- Authentic attributable provider billing evidence, a reviewed clean production
+  profile and Stripe live setup/acceptance, independent security engagement,
+  outside-host monitoring/alert receipt, and patient-data agreements/regions/
+  retention/processing controls remain external release gates. Internal tests do
+  not certify contracts or regulatory compliance.
+
+The [inactive first-release checklist](production-activation-checklist-20260921.md)
+extends these requirements with a separate empty production namespace, exact
+payment gating and data-preserving rollback. The private rebuilt system remains
+intact and synthetic-only.
+
+---
+
 # Patient-data and public-release requirements — fresh QuillMD application
 
 Prepared 2026-09-17 against release `8f8a6763`. The application is private,

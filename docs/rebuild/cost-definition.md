@@ -57,3 +57,33 @@ Owner policy (2026-09-18): the displayed maximum charge is a binding customer li
 4. **Above it: explained first.** Nothing is sent and the upload is kept. The page shows the length, the quoted limit and whether the available balance covers it. It offers either a shorter segment (the upload is removed, even after the approval expired, and never once an approval queued it) or an explicit approval of that exact, priced higher limit. The approval is signed and bound to the doctor, the document, its version and the recording's hash, and is valid for 30 minutes; an upload nobody approved is removed by the worker 40 minutes after the quote. Recordings longer than `QUILLMD_VOICE_MAX_MINUTES` (60 by default) are refused before any request.
 5. **Charged at most the limit.** The customer is charged exactly provider usage × 1.5 up to the held limit, never more. If the provider bills more than the estimate, QuillMD absorbs the difference as one `absorbed_over_limit` platform cost. The provider cost (`Usage.actual_cost`), the customer charge (`Usage.charged_cost` and the usage ledger debits) and the absorbed difference stay separate. The database now enforces `charged ≤ 1.5 × cost`, and `audit_billing` requires any shortfall to equal that platform cost exactly. A later cost reconciliation raises the customer charge only up to the limit and records the rest as `over_limit_delta`.
 6. **Useful work is delivered.** A usable transcript is added to the notes. If the provider processed more than 2 seconds less audio than the measured recording, a visible "[Transcription incomplete …]" marker says which portion is missing, in the notes and in the downloaded transcript; nothing is silently truncated. A usable transcript that could not be added because the notes would exceed their limit is delivered for download from the document record and stays charged within the limit (`not_adopted:`), like any usable output the user's own state kept out of the notes: never discarded, and never free. Cancellation, platform failures, retries and duplicate prevention follow the billing boundary above.
+
+
+## September 21, 2026 — evidence classification and current limits
+
+The preserved metered-cost formula and ledger policy above are unchanged. The
+reconciler now stores an explicit evidence kind: `provider_report`, `invoice`, or
+`unclassified`. Existing rows acquire `unclassified` without inferring an invoice
+from a reference or content hash; the finance form requires an explicit choice for
+new evidence. Audit/export and customer/admin explanations distinguish
+provider-reported actuals from invoice-reconciled amounts. These labels record an
+administrator's reviewed attribution; they do not authenticate an external file
+or establish whole-account invoice reconciliation.
+
+A local metering receipt remains units at preserved configured rates. Its field
+name `actual_cost` does not make it an authentic billed amount. The current
+protected manifest contains 15 non-simulated operations totaling
+$0.160260900700 configured cost and $0.240391351050 original charges. No authentic
+billing export is present, no live reconciliation was applied, and the two
+historical receipt gaps remain unresolved.
+
+The installed importer is the existing MFA-protected manual per-usage entry.
+There is no generic CSV/JSON/PDF importer or approved aggregate-to-job allocation
+rule. Validate original evidence/provenance/currency/account/period before entry;
+see [the business evidence procedure](business-readiness-20260921.md). One immutable
+reconciliation per usage is supported. Re-import and a later corrected/overlapping
+record both refuse without mutation; this is safe rejection, not an implemented
+correction workflow. Preserve later originals and preview differences; do not
+rewrite history or represent a provider-report record as an invoice upgrade.
+Any future correction workflow must be reviewed and append-only. Keep the new
+classification column and history during rollback.

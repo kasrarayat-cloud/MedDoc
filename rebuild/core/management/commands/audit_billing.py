@@ -117,9 +117,9 @@ def audit_report(file_reader=None):
         rows.append({'job_id':str(usage.job_id),'user_id':str(usage.user_id),'department_id':str(usage.department_id),'organization_id':str(usage.organization_id),'payer':usage.payer,
             'provider':usage.provider,'http_request_id':usage.http_request_id or None,'provider_resource_id':usage.resource_id or None,
             'simulated':usage.simulated,'units':usage.units,'configured_rates':usage.rates,'defined_cost_usd':str(usage.actual_cost),'user_charge_usd':str(usage.charged_cost),
-            'cost_evidence':usage.cost_evidence,'invoice_reconciled':bool(reconciliation and (reconciliation.evidence_sha256 or reconciliation.evidence_reference)),'enqueue_config_recorded':bool(usage.job.config),
+            'cost_evidence':usage.cost_evidence,'reconciliation_recorded':bool(reconciliation),'provider_evidence_reconciled':bool(reconciliation and reconciliation.provider_evidence_reconciled),'invoice_reconciled':bool(reconciliation and reconciliation.invoice_reconciled),'enqueue_config_recorded':bool(usage.job.config),
             'discount_rate':str(usage.rates.get('discount_rate','0') or '0'),'configured_list_cost_usd':usage.rates.get('list_cost_usd'),
-            'reconciliation':{'reconciled_cost':str(reconciliation.reconciled_cost),'charge_delta':str(reconciliation.charge_delta),'ledger_status':reconciliation.ledger_status,'evidence_reference':reconciliation.evidence_reference,'evidence_sha256':reconciliation.evidence_sha256,'provider_credit_applied':str(reconciliation.provider_credit_applied),'discount_applied':str(reconciliation.discount_applied),'over_limit_delta':str(reconciliation.over_limit_delta),'recorded_at':reconciliation.created_at.isoformat()} if reconciliation else None,
+            'reconciliation':{'evidence_kind':reconciliation.evidence_kind,'evidence_status':reconciliation.evidence_status,'reconciled_cost':str(reconciliation.reconciled_cost),'charge_delta':str(reconciliation.charge_delta),'ledger_status':reconciliation.ledger_status,'evidence_reference':reconciliation.evidence_reference,'evidence_sha256':reconciliation.evidence_sha256,'provider_credit_applied':str(reconciliation.provider_credit_applied),'discount_applied':str(reconciliation.discount_applied),'over_limit_delta':str(reconciliation.over_limit_delta),'recorded_at':reconciliation.created_at.isoformat()} if reconciliation else None,
             'customer_limit_usd':str(limit) if limit is not None else None,'absorbed_over_limit_usd':str(sum(over_rows,Decimal(0))),
             'reconciliation_ledger':reconciliation_entries,
             'absorbed':absorbed,'absorbed_reversal_usd':str(absorbed_reversal),'absorbed_platform_cost_usd':str(absorbed_cost.amount) if absorbed_cost else None,'absorbed_ledger':absorbed_entries,
@@ -150,19 +150,20 @@ def audit_report(file_reader=None):
     unresolved=list(Job.objects.filter(state__in=['queued','running','reconciliation']).values('id','kind','state','provider','provider_request_id','provider_resource_id'))
     platform_costs={'totals_by_kind':{kind:str(PlatformCost.objects.filter(kind=kind).aggregate(total=Sum('amount'))['total'] or Decimal(0)) for kind,_ in PlatformCost.KINDS},
         'rows':PlatformCost.objects.count(),'policy':'Fixed overhead and absorbed platform-failure cost are tracked separately and never charged to users.'}
-    reconciliation_summary={'reconciled_rows':CostReconciliation.objects.count(),'unreconciled_rows':Usage.objects.filter(costreconciliation__isnull=True).count(),
+    evidence_counts={kind:CostReconciliation.objects.filter(evidence_kind=kind).count() for kind,_ in CostReconciliation.EVIDENCE_KINDS}
+    reconciliation_summary={'evidence_kinds':evidence_counts,'reconciled_rows':CostReconciliation.objects.count(),'unreconciled_rows':Usage.objects.filter(costreconciliation__isnull=True).count(),
         'pending_funds':CostReconciliation.objects.filter(ledger_status='pending_funds').count(),'absorbed_rows':sum(row['absorbed'] for row in rows)}
     return {'checked_at':timezone.now().isoformat(),'scope':'Read-only fresh application records; no external requests; no clinical text or credentials exported.',
         'charge_policy':'User charge is exactly 1.5 × the attributable metered provider cost after applicable discounts and allocated provider credits; configured-rate rows are estimates until reconciled to authentic provider evidence.',
         'platform_costs':platform_costs,'reconciliation_summary':reconciliation_summary,
-        'cost_basis':'Provider-metered units priced at configured USD rates; reservations are estimates; account invoices are not reconciled.',
+        'cost_basis':'Original usage is provider-metered units priced at configured USD rates; reservations are estimates. Classified reconciliation evidence and adjustments are reported separately.',
         'fingerprint_limit':'A configured pricing fingerprint identifies the application configuration, not a provider contract, tariff version, invoice, or verified account discount.',
         'rate_reference_reviewed_on':'2026-09-17','rate_references':['https://platform.claude.com/docs/en/about-claude/pricing','https://deepgram.com/pricing'],
         'rows':rows,'wallets':wallets,'unsettled_provider_receipts':unsettled,'unresolved_jobs':unresolved,
         'ledger_policy':ledger_policy,'cancellation_policy':cancellation_policy,'hold_policy':hold_policy,
         'all_checks_pass':all(all(row['checks'].values()) for row in rows+wallets) and all(ledger_policy['checks'].values()) and all(cancellation_policy['checks'].values()) and all(hold_policy['checks'].values()),
         'durable_receipt_gaps':sum(not row['durable_receipt_present'] and not row['simulated'] for row in rows),
-        'invoice_reconciliation':'Not performed; account invoices, discounts and promotional provider credits remain unverified.'}
+        'invoice_reconciliation':{'invoice_rows':evidence_counts['invoice'],'provider_report_rows':evidence_counts['provider_report'],'unclassified_rows':evidence_counts['unclassified'],'scope':'Administrator-recorded per-usage classification; no account-wide or whole-invoice reconciliation is implied.','provenance':'Source authenticity and attribution require administrator review; this audit verifies ledger arithmetic, not provider authenticity.'}}
 
 
 class Command(BaseCommand):

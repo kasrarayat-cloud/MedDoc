@@ -214,7 +214,7 @@ class Usage(ProviderIdentifiers,Entity):
     @property
     def invoice_status(self):
         row=self.reconciliation
-        return f'Reconciled to provider evidence: {row.evidence_reference}' if row else 'Not reconciled to a provider invoice'
+        return f'{row.evidence_status}: {row.evidence_reference}' if row else 'Not reconciled to a provider invoice'
     class Meta:
         constraints=[
             # Never above 1.5 × cost. Below it only when the approved customer limit capped the charge; the audit requires the
@@ -312,8 +312,12 @@ class ProviderReceipt(ProviderIdentifiers,Entity):
 class CostReconciliation(Entity):
     """Authentic provider evidence for one usage row. The Usage row and its original ledger entries are never modified;
     the difference is settled by appended ledger entries of kind 'reconciliation'."""
+    EVIDENCE_KINDS=[('unclassified','Unclassified evidence · invoice status unknown'),
+                    ('provider_report','Provider-reported actual · not invoice reconciled'),
+                    ('invoice','Invoice-reconciled actual')]
     LEDGER_STATUSES=[('applied','Applied to the ledger'),('pending_funds','Pending available paid funds'),('absorbed','No user ledger movement: the charge was already reversed as an absorbed platform failure')]
     usage=models.OneToOneField(Usage,on_delete=models.PROTECT)
+    evidence_kind=models.CharField(max_length=16,choices=EVIDENCE_KINDS,default='unclassified')
     reconciled_cost=models.DecimalField(max_digits=24,decimal_places=12)
     provider_credit_applied=models.DecimalField(max_digits=24,decimal_places=12,default=0)
     discount_applied=models.DecimalField(max_digits=24,decimal_places=12,default=0)
@@ -326,6 +330,15 @@ class CostReconciliation(Entity):
     # limit the customer approved, so evidence of a higher provider cost moves this, not the customer's ledger.
     over_limit_delta=models.DecimalField(max_digits=24,decimal_places=12,default=0)
     ledger_status=models.CharField(max_length=16,choices=LEDGER_STATUSES)
+    @property
+    def evidence_status(self):
+        return dict(self.EVIDENCE_KINDS).get(self.evidence_kind, self.EVIDENCE_KINDS[0][1])
+    @property
+    def invoice_reconciled(self):
+        return self.evidence_kind=='invoice'
+    @property
+    def provider_evidence_reconciled(self):
+        return self.evidence_kind in ('provider_report','invoice')
     def save(self,*args,**kwargs):
         # Evidence and amounts are append-only; only the ledger status may advance once funds exist.
         if not self._state.adding and set(kwargs.get('update_fields') or ())!={'ledger_status'}: raise ValidationError('Cost reconciliations are immutable apart from their ledger status.')
@@ -336,6 +349,7 @@ class CostReconciliation(Entity):
             models.CheckConstraint(condition=models.Q(reconciled_cost__gte=0,provider_credit_applied__gte=0,discount_applied__gte=0),name='reconciliation_amounts_nonnegative'),
             models.CheckConstraint(condition=models.Q(ledger_status__in=['applied','pending_funds','absorbed']),name='reconciliation_ledger_status_known'),
             models.CheckConstraint(condition=~models.Q(evidence_reference=''),name='reconciliation_evidence_required'),
+            models.CheckConstraint(condition=models.Q(evidence_kind__in=['unclassified','provider_report','invoice']),name='reconciliation_evidence_kind_known'),
         ]
 class PlatformCost(Entity):
     """Costs QuillMD carries itself. Never charged to a user and never part of a wallet ledger."""
