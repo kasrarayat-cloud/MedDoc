@@ -93,8 +93,8 @@ try{
     await p.locator('#final-review').check();await p.getByRole('button',{name:'Finalize document',exact:true}).click();
     await p.getByText('Finalized after clinical review. This document is read-only and ready to export in its original format.',{exact:true}).waitFor();
     const response=await context.request.get(base+`/api/encounters/${encounter}/`);assert.equal(response.status(),200);
-    const state=await response.json();assert.equal(state.status,'finalized');assert.equal(state.notes,scenario.notes);
-    for(const field of input.fields){assert.equal(state.answers[field.key].text,scenario.answers[field.key]);assert.equal(state.answers[field.key].reviewed,true);}
+    const state=await response.json();assert.equal(state.status,'finalized');assert.equal(state.notes.replace(/\r\n/g,'\n'),scenario.notes.replace(/\r\n/g,'\n'));
+    for(const field of input.fields){assert.equal(state.answers[field.key].text.replace(/\r\n/g,'\n'),scenario.answers[field.key].replace(/\r\n/g,'\n'));assert.equal(state.answers[field.key].reviewed,true);}
     result.export=await download(p,p.getByRole('link',{name:/Export original format/}),name+'-authenticated.docx');
     result.finalized_state=state;result.finished_at=new Date().toISOString();await checkpoint();
     await p.screenshot({path:out+`/${name}-finalized.png`,fullPage:true});
