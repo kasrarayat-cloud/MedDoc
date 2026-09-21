@@ -67,8 +67,9 @@ otp_totp_totpdevice
 
 ## Declared source scope
 
-Advancing `21809ef408a5f7b6691beb338a7640da82fcfb97` to the merged release changes these files
-and no others:
+Advancing `21809ef408a5f7b6691beb338a7640da82fcfb97` to the merged release changes these
+**thirty** files and no others — the twenty-four already reviewed, plus the minimal driver repair,
+its two refreshed pins, this adapter, this declaration and its guards:
 
 <!-- declared-source-scope -->
 
@@ -76,6 +77,7 @@ and no others:
 .claude/settings.json
 docs/foundation/mutations/20260921-quillmd-desktop-key-administration.md
 docs/foundation/mutations/20260921-quillmd-operations-publisher.md
+docs/foundation/mutations/20260921-quillmd-word-multicolumn-activation.md
 docs/foundation/mutations/20260921-quillmd-word-multicolumn-mixed.md
 rebuild/core/field_location.py
 rebuild/core/generation.py
@@ -95,7 +97,12 @@ rebuild/documents/test_unmapped_areas.py
 rebuild/ops/install_operations_publisher.py
 rebuild/ops/test_admin_console_activation.py
 rebuild/ops/test_operations_publisher_install.py
+rebuild/ops/test_word_multicolumn_activation.py
 rebuild/ops/test_word_multicolumn_scope.py
+scripts/activate-admin-console.py
+scripts/activate-typed-voice-generation.py
+scripts/activate-typed-voice.py
+scripts/activate-word-multicolumn.py
 scripts/ci/verify-fresh.sh
 ```
 
