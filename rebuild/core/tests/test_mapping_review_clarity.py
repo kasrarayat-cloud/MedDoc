@@ -82,3 +82,36 @@ class MappingReviewScreen(BoundaryFixture, TestCase):
         self.assertIn('accept=', body)
         self.assertIn('.docx', body)
         self.assertIn('.pdf', body)
+
+
+class DuplicateLabels(TestCase):
+    """Two answers that read as the same question must be pointed at, not left to chance."""
+
+    def test_rows_mark_every_field_sharing_a_label(self):
+        fields = [{'key': 'a', 'label': 'FINDINGS — 1', 'locator': {'cell': 0}},
+                  {'key': 'b', 'label': 'FINDINGS — 1', 'locator': {'cell': 1}},
+                  {'key': 'c', 'label': 'FINDINGS — 2', 'locator': {'cell': 2}}]
+        marked = [row['duplicate'] for row in field_location.rows(fields)]
+        self.assertEqual(marked, [True, True, False],
+                         'Both halves of a collision are marked; a unique label is not.')
+
+    def test_no_field_is_marked_when_every_label_is_unique(self):
+        fields = [{'key': 'a', 'label': 'Indication', 'locator': {'cell': 0}},
+                  {'key': 'b', 'label': 'Plan', 'locator': {'cell': 1}}]
+        self.assertEqual([row['duplicate'] for row in field_location.rows(fields)], [False, False])
+
+    def test_the_importer_reports_the_collision_as_an_inspection_warning(self):
+        """Reported through warnings, which validate_mapping does not compare.
+
+        Putting it in the field dict would refuse every mapping version already saved —
+        measured directly in documents/test_unmapped_areas.py's sibling assertion.
+        """
+        from documents.engine import duplicate_label_note
+        note = duplicate_label_note([{'label': 'FINDINGS — 1'}, {'label': 'FINDINGS — 1'},
+                                     {'label': 'FINDINGS — 2'}])
+        self.assertEqual(len(note), 1)
+        self.assertIn('"FINDINGS — 1" (2x)', note[0])
+        self.assertIn('bold text rather than a Word heading', note[0],
+                      'The note must name the cause a doctor can actually act on.')
+        self.assertEqual(duplicate_label_note([{'label': 'A'}, {'label': 'B'}]), [],
+                         'A clean form collects no note.')

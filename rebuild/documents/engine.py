@@ -190,7 +190,7 @@ def docx_inspect(path):
                          "question/blank-answer tables. Unlabelled decorative lines are not fields."]), "no_fields")
     if len(fields) > MAX_FIELDS or any(len(field["label"]) > 2000 for field in fields):
         fail("The template exceeds 200 fields or has an oversized question.", "field_limit")
-    return document, paragraphs, cells, fields, unmapped_notes(skipped)
+    return document, paragraphs, cells, fields, unmapped_notes(skipped) + duplicate_label_note(fields)
 
 
 UNMAPPED_NOTES = {
@@ -205,6 +205,35 @@ UNMAPPED_NOTES = {
                         "uses ONE method: placeholders and question/answer tables take precedence. Keep one style "
                         "throughout, or add a {{{{Question name}}}} placeholder on each underlined line."),
 }
+
+
+def duplicate_label_note(fields):
+    """Two answer areas that read as the same question cannot be told apart.
+
+    It happens for ordinary reasons: the same {{placeholder}} name used twice, two sections
+    with the same title, or — the case that matters clinically — a section title that Word
+    does not consider a heading, so the numbered slots beneath it inherit the PREVIOUS
+    section's name and a recommendation ends up labelled as a finding.
+
+    This is reported, not repaired, and deliberately so. Inferring a heading from bold or
+    capitalised text would be guessing at formatting, and the label is editable on the
+    mapping-review screen, which is where a person can settle it in seconds.
+
+    ⚠️ A WARNING AND NOT A FIELD KEY. `validate_mapping` compares the stored mapping against
+    a fresh inspection with `fields != mapping`, so adding anything to the field dict would
+    refuse every mapping version already saved — measured, not assumed.
+    """
+    counts = Counter((field.get("label") or "").strip() for field in fields)
+    repeated = sorted(label for label, count in counts.items() if label and count > 1)
+    if not repeated:
+        return []
+    shown = ", ".join(f'"{label}" ({counts[label]}x)' for label in repeated[:5])
+    if len(repeated) > 5:
+        shown += f", and {len(repeated) - 5} more"
+    return [f"{len(repeated)} question label(s) appear more than once: {shown}. Answers cannot be told apart "
+            f"while two questions read the same. If these are genuinely different questions — a section title "
+            f"that is bold text rather than a Word heading makes the items beneath it inherit the previous "
+            f"section's name — rename them under Edit field mapping before using this form."]
 
 
 def unmapped_notes(skipped):

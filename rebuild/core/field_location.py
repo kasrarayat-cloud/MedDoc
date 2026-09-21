@@ -64,5 +64,18 @@ def describe(field):
 
 
 def rows(fields):
-    """Fields paired with their described location, for a review table or editor."""
-    return [{'field': field, 'location': describe(field)} for field in fields or []]
+    """Fields paired with their described location, for a review table or editor.
+
+    `duplicate` marks a row whose question label is shared with another row. Two answers that
+    read as the same question cannot be told apart, and the top-of-page inspection note says
+    so — this points at the specific rows to rename. Display only, like everything here.
+    """
+    fields = fields or []
+    counts = {}
+    for field in fields:
+        label = (field.get('label') or '').strip()
+        counts[label] = counts.get(label, 0) + 1
+    return [{'field': field,
+             'location': describe(field),
+             'duplicate': counts.get((field.get('label') or '').strip(), 0) > 1}
+            for field in fields]
