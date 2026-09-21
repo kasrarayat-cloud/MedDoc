@@ -39,7 +39,10 @@ class IndependentSectionPromptTests(SimpleTestCase):
 
     def test_new_prompt_clarifies_partial_description_and_independent_reuse(self):
         _, sent, config = self.mocked_generation()
-        self.assertEqual(config['prompt_version'], 'extractive-v5-tab-independent-sections')
+        # Pinned to the constant, not to a literal: the version string must move whenever the
+        # instructions change, and a literal here turns that required bump into a test failure.
+        from core.generation import CURRENT_PROMPT_VERSION
+        self.assertEqual(config['prompt_version'], CURRENT_PROMPT_VERSION)
         self.assertIn('independently applicable fields in different sections', sent['system'])
         self.assertIn('do not leave those steps out because other details are missing', sent['system'])
         self.assertIn('never invent the remaining steps', sent['system'])

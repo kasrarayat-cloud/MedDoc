@@ -471,8 +471,18 @@ def finalize(request,pk):
                 finalized_at=datetime.fromisoformat(reviewed['trusted_context']['finalized_at'])
             else:
                 from .tab_review import validate_identity
-                validate_identity(canonical['fields'],e.answers,request.user)
-                fill_template(original,canonical['fields'],{k:v['text'] for k,v in e.answers.items()},out)
+                # ⚠️ THE STORED MAPPING IS THE AUTHORITY, NOT A FRESH INSPECTION. The answers are
+                # keyed to `version.fields`, and a fresh inspection can now legitimately differ
+                # from it: a template imported before multi-column and mixed support yields FEWER
+                # fields, so the same `cell_N` key names a DIFFERENT cell. Passing `canonical`
+                # here filled one question's answer into another question's blank — measured on a
+                # V1 mapping of [cell_0='Allergies'] re-inspected to [cell_0='Height', …], where
+                # the allergy answer landed in the height blank of a finalized document. It also
+                # made `fill_template`'s legacy-contract fallback unreachable, because the caller
+                # passed the fresh fields as the mapping and the two were equal by construction.
+                version=e.template_version
+                validate_identity(version.fields,e.answers,request.user)
+                fill_template(original,version.fields,{k:v['text'] for k,v in e.answers.items()},out)
             out.chmod(0o600)
             e.export_path=relative;e.export_sha256=hashlib.sha256(out.read_bytes()).hexdigest();e.finalized_at=finalized_at;e.finalized_by=request.user;e.status='finalized';e.save()
             audit(request.user,'encounter.finalize',e.pk,department=e.department,export_sha256=e.export_sha256,mapping_version=e.template_version.number)

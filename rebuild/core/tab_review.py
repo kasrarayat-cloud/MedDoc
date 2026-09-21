@@ -10,7 +10,11 @@ SIGNATURE_LABELS = {'electronically signed by', 'signed by'}
 
 
 def signature_label(label):
-    return re.sub(r'\s+', ' ', str(label or '')).strip().rstrip(':').casefold() in SIGNATURE_LABELS
+    # ⚠️ ORDER MATTERS, and getting it wrong defeated the whole fix. The tab inspector does
+    # rstrip(':') THEN strip; doing strip() first leaves the space that the colon was hiding, so
+    # 'Electronically signed by :' normalised to 'electronically signed by ' and did not match.
+    # A cell label keeps whatever spacing the form author typed, so this is an ordinary spelling.
+    return re.sub(r'\s+', ' ', str(label or '')).strip().rstrip(':').strip().casefold() in SIGNATURE_LABELS
 
 
 def clinician_identity(field):

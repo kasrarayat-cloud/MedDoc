@@ -489,10 +489,27 @@ def check_pdf_capacity(field, answer):
             fail(f"The complete answer for {field['label']} will not fit visibly. Edit the form or use DOCX. No text was truncated.", "answer_overflow")
 
 
+def structure(fields):
+    """A mapping's binding, without the question text.
+
+    ⚠️ THE LABEL IS DELIBERATELY EXCLUDED, and this file's own contract says why: "Editable
+    clinical labels should be separate application metadata." Mapping review lets a doctor
+    rename a question, which produces a new mapping version whose labels differ from a fresh
+    inspection of the unchanged original. Comparing labels would refuse every renamed mapping
+    at fill time — which is exactly why the caller used to hand us a fresh inspection instead
+    of the stored mapping, discarding the doctor's labels and, once two contracts existed,
+    filling answers into renumbered cells.
+
+    Everything that decides WHERE an answer goes — key, kind and locator — is still compared
+    exactly, so a stale or altered binding is still refused.
+    """
+    return [{k: v for k, v in field.items() if k != "label"} for field in fields]
+
+
 def validate_mapping(fields, mapping, answers):
     if not isinstance(mapping, list) or not isinstance(answers, dict):
         fail("Invalid mapping or answers.", "invalid_mapping")
-    if fields != mapping:
+    if structure(fields) != structure(mapping):
         fail("The field mapping does not match this original. Reinspect and create a new mapping version.", "mapping_mismatch")
     keys = {field["key"] for field in fields}
     if set(answers) - keys:
@@ -579,7 +596,7 @@ def process(workspace, request):
     if request["operation"] != "fill":
         fail("Unsupported operation.")
     answers = request["answers"]
-    if fmt == "docx" and fields != request["mapping"]:
+    if fmt == "docx" and structure(fields) != structure(request["mapping"]):
         # ⚠️ A STORED MAPPING IS BOUND TO THE CONTRACT THAT PRODUCED IT. Mappings saved before
         # multi-column and mixed support existed hold FEWER fields for the same document, and
         # validate_mapping compares exactly — so re-inspecting such a template under the current
@@ -587,7 +604,7 @@ def process(workspace, request):
         # Exact equality is the proof: if the legacy inspection matches the stored mapping
         # field for field, it IS that mapping's contract, and filling it behaves as it always did.
         legacy = docx_inspect(path, contract=CONTRACT_V1)
-        if legacy[3] == request["mapping"]:
+        if structure(legacy[3]) == structure(request["mapping"]):
             document, paragraphs, cells, fields, _ = legacy
             result["fields"] = fields
     validate_mapping(fields, request["mapping"], answers)
