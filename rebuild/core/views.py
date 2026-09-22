@@ -260,6 +260,15 @@ def template_original(request,pk):
 @require_http_methods(['GET','POST'])
 def encounter_new(request):
     form=EncounterForm(request.POST or None,user=request.user)
+    # "Use this form" links carry ?template=<template id>. Preselect that form's CURRENT mapping
+    # version, taken from the form's own scoped queryset so an out-of-scope or malformed id selects
+    # nothing. Without this the doctor landed on an empty list of every mapping version of every
+    # form, superseded versions included, and had to find the form they had just chosen again.
+    if request.method=='GET' and request.GET.get('template'):
+        try:chosen=UUID(request.GET['template'])
+        except (ValueError,TypeError):chosen=None
+        latest=chosen and form.fields['template_version'].queryset.filter(template_id=chosen).order_by('-number').first()
+        if latest:form.initial['template_version']=latest.pk
     if request.method=='POST' and form.is_valid():
         data=form.cleaned_data
         with transaction.atomic():
@@ -387,14 +396,19 @@ def job_cancel(request,pk,job_pk):
     messages.success(request,'Queued request cancelled before any provider request. Held funds were released; nothing was charged.')
     return redirect('encounter_detail',pk=pk)
 
+def document_refusal(request,encounter,message,status):
+    """A refused document edit. Every caller returns BEFORE any write, so nothing was saved; the page
+    says so and links back to the document instead of leaving the doctor on a bare text response."""
+    return render(request,'document_refusal.html',{'encounter':encounter,'message':message},status=status)
+
 @require_POST
 @transaction.atomic
 def save_answers(request,pk):
     from documents import DocumentError
     e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
-    if e.status=='finalized':return HttpResponse('Finalized documents are immutable.',status=409)
-    if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():return HttpResponse('Wait until the pending job is resolved.',status=409)
-    if request.POST.get('revision')!=str(e.revision):return HttpResponse('This document changed. Reload before editing.',status=409)
+    if e.status=='finalized':return document_refusal(request,e,'Finalized documents are immutable.',409)
+    if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():return document_refusal(request,e,'Wait until the pending job is resolved.',409)
+    if request.POST.get('revision')!=str(e.revision):return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Reopen it to see the current version before editing.',409)
     is_wm=bool(e.template_version.document_backend)
     labels=[row['label'] for row in e.template_version.fields+e.template_version.review_requirements]
     if is_wm and any(request.POST.get('claim_reviewed_'+row['key'])=='on' for row in e.template_version.review_requirements):
@@ -432,7 +446,7 @@ def save_answers(request,pk):
         if previous.get('accepted_suggestion') and not accepted:
             membership(request.user,e.department,roles=['owner','clinician'])
             withdrawn.append(key)
-        if len(value)>20000:return HttpResponse('Answer too long; nothing was truncated or saved.',status=400)
+        if len(value)>20000:return document_refusal(request,e,'Answer too long; nothing was truncated or saved.',400)
         reviewed=request.POST.get('reviewed_'+key)=='on'
         if reviewed:membership(request.user,e.department,roles=['owner','clinician'])
         answers[key]={**previous,'text':value,'reviewed':reviewed,'accepted_suggestion':accepted,
@@ -442,7 +456,7 @@ def save_answers(request,pk):
                       'status':'edited' if value!=previous.get('text','') else previous.get('status','missing'),'reviewed_by':str(request.user.pk) if reviewed else None}
         if is_wm:
             quote=request.POST.get('source_'+key,'')
-            if len(quote)>50000:return HttpResponse('Source quotations exceed the supported limit; nothing was saved.',status=400)
+            if len(quote)>50000:return document_refusal(request,e,'Source quotations exceed the supported limit; nothing was saved.',400)
             try:evidence=source_quote_evidence(e.notes,field['label'],quote,labels)
             except ValidationError as exc:
                 evidence=[];reviewed=False;review_errors.append(error_message(exc))
@@ -454,14 +468,14 @@ def save_answers(request,pk):
     if is_wm:
         for requirement in e.template_version.review_requirements:
             key=requirement['key'];quote=request.POST.get('claim_source_'+key,'')
-            if len(quote)>50000:return HttpResponse('Source quotations exceed the supported limit; nothing was saved.',status=400)
+            if len(quote)>50000:return document_refusal(request,e,'Source quotations exceed the supported limit; nothing was saved.',400)
             reviewed=request.POST.get('claim_reviewed_'+key)=='on'
             try:evidence=source_quote_evidence(e.notes,requirement['label'],quote,labels)
             except ValidationError as exc:
                 evidence=[];reviewed=False;review_errors.append(error_message(exc))
             variant=request.POST.get('claim_variant_'+key,requirement.get('default_variant'))
             if variant not in {item['id'] for item in requirement['variants']}:
-                return HttpResponse('Choose an approved statement alternative. No changes were saved.',status=400)
+                return document_refusal(request,e,'Choose an approved statement alternative. No changes were saved.',400)
             decisions[key]={'reviewed':reviewed,'evidence':evidence,'variant':variant}
     e.answers=answers;e.revision=target_revision;e.status='review';wm_review.invalidate_review(e)
     if is_wm and Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists():
@@ -495,6 +509,11 @@ def save_answers(request,pk):
     for message in dict.fromkeys(review_errors):messages.warning(request,'Review remains incomplete: '+message)
     return redirect('encounter_detail',pk=pk)
 
+def field_list(labels,limit=12):
+    """Question labels for a refusal message, in form order, bounded so a long form stays readable."""
+    shown=', '.join(labels[:limit])
+    return shown+(f', and {len(labels)-limit} more.' if len(labels)>limit else '.')
+
 @require_POST
 def finalize(request,pk):
     from documents import inspect_template,fill_template,DocumentError
@@ -506,8 +525,12 @@ def finalize(request,pk):
             if request.POST.get('reviewed')!='on':raise ValidationError('Explicit clinical review confirmation is required.')
             if request.POST.get('revision')!=str(e.revision):raise ValidationError('Document changed; reload before finalizing.')
             if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():raise ValidationError('Resolve pending jobs before finalizing.')
-            if any(not e.answers.get(f['key'],{}).get('reviewed') for f in e.template_version.fields):raise ValidationError('A clinician must review every field, including missing information.')
-            if any(v.get('status')=='conflict' for v in e.answers.values()):raise ValidationError('Resolve every conflict by editing the answer before finalizing.')
+            unreviewed=[f['label'] for f in e.template_version.fields if not e.answers.get(f['key'],{}).get('reviewed')]
+            if unreviewed:raise ValidationError('A clinician must review every field, including missing information. Not yet reviewed: '+field_list(unreviewed))
+            order=[f['key'] for f in e.template_version.fields]
+            names={f['key']:f['label'] for f in e.template_version.fields}
+            conflicts=[names.get(k,k) for k in sorted((k for k,v in e.answers.items() if v.get('status')=='conflict'),key=lambda k:(order.index(k) if k in order else len(order),k))]
+            if conflicts:raise ValidationError('Resolve every conflict before finalizing: write or choose the answer yourself, or tick "Accept this suggestion" where a suggestion is offered, then save. Still in conflict: '+field_list(conflicts))
             original=private_path(e.template_version.template.original_path)
             if hashlib.sha256(original.read_bytes()).hexdigest()!=e.template_version.template.sha256:raise ValidationError('Original integrity check failed.')
             relative=f'exports/{secrets.token_hex(24)}.{e.template_version.template.format.lower()}'
@@ -1048,24 +1071,24 @@ def api_encounter(request,pk):
 @transaction.atomic
 def encounter_notes(request,pk):
     e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
-    if e.status=='finalized' or Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():return HttpResponse('This document is locked.',status=409)
-    if request.POST.get('revision')!=str(e.revision):return HttpResponse('Reload before editing changed notes.',status=409)
+    if e.status=='finalized' or Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():return document_refusal(request,e,'This document is locked.',409)
+    if request.POST.get('revision')!=str(e.revision):return document_refusal(request,e,'The notes changed after you opened this document, in another window or by a colleague. Reopen it to see the current notes before editing.',409)
     transcript_job=None;raw_transcript=None
     if request.POST.get('transcript_job'):
         try:transcript_id=UUID(request.POST['transcript_job'])
-        except (ValueError,TypeError):return HttpResponse('Invalid transcript reference.',status=400)
+        except (ValueError,TypeError):return document_refusal(request,e,'Invalid transcript reference.',400)
         transcript_job=get_object_or_404(Job,pk=transcript_id,encounter=e,kind='transcription',state='succeeded')
         if not transcript_job.config.get('transcript_review_required') or AuditEvent.objects.filter(action='transcription.applied',target=str(transcript_job.pk)).exists():
-            return HttpResponse('This transcript has already been applied or is not awaiting review.',status=409)
+            return document_refusal(request,e,'This transcript has already been applied or is not awaiting review.',409)
         if request.POST.get('transcript_reviewed')!='on' or request.POST.get('transcript_mode') not in ['append','replace']:
-            return HttpResponse('Review the transcript and choose how to add it to the source notes.',status=400)
+            return document_refusal(request,e,'Review the transcript and choose how to add it to the source notes.',400)
         try:raw_transcript,_=review_transcript(transcript_job)
-        except (ValidationError,OSError,ValueError):return HttpResponse('The retained transcript could not be verified. Nothing changed.',status=409)
+        except (ValidationError,OSError,ValueError):return document_refusal(request,e,'The retained transcript could not be verified. Nothing changed.',409)
         corrected=request.POST.get('corrected_transcript','')
-        if not corrected.strip() or len(corrected)>50000:return HttpResponse('Reviewed transcript must contain 1–50,000 characters.',status=400)
+        if not corrected.strip() or len(corrected)>50000:return document_refusal(request,e,'Reviewed transcript must contain 1–50,000 characters.',400)
         notes=(e.notes+'\n\n'+corrected if e.notes else corrected) if request.POST['transcript_mode']=='append' else corrected
     else:notes=request.POST.get('notes','')
-    if not notes.strip() or len(notes)>50000:return HttpResponse('Notes must contain 1–50,000 characters; nothing was truncated.',status=400)
+    if not notes.strip() or len(notes)>50000:return document_refusal(request,e,'Notes must contain 1–50,000 characters; nothing was truncated.',400)
     e.notes=notes;e.answers={};e.revision+=1;e.status='draft';wm_review.invalidate_review(e);e.save(update_fields=['notes','answers','revision','status','template_review'])
     CodeSuggestion.objects.filter(encounter=e).update(accepted_by=None,accepted_at=None)
     CodeSuggestion.objects.filter(encounter=e).delete()
