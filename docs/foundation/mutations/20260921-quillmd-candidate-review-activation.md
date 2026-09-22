@@ -1,6 +1,36 @@
 # Declaration — private activation of the candidate-review release, September 21, 2026
 
-> ## ⛔ HELD 2026-09-22 — THIS ACTIVATION CANNOT PROCEED WITHOUT AN OWNER DECISION
+> ## ✅ RESOLVED 2026-09-22T05:0xZ — the owner authorised option 1 and the drill was performed
+>
+> **The hold below is KEPT VERBATIM and dated, because it was true when written and the record of
+> a correctly-functioning guard is worth more than a tidy document.** The owner chose the first of
+> the three options: a new independent-key recovery drill. It was performed against an
+> OFFSITE-ORIGIN 36-table capture, and the exception is removed rather than widened.
+>
+> | | |
+> |---|---|
+> | capture | `20260922T043002Z-7d766ca1` — scheduled 04:30Z run, **36 tables**, 226,080 rows, 64 files, `source_commit eb37c784` |
+> | offsite | scheduled 05:00Z upload — 66 objects, 18,509,364 ciphertext bytes, readback verified, `live_transport`/`transport_verified`/`restore_verified` all true |
+> | reservation | **80 requests / 22,000,000 bytes**, sized from TODAY's measured manifest, not from 2026-09-20 observation bytes |
+> | drill proof | `recovery-custody-handoff-20260922/return-evidence/independent-key-restore/result.json`, sha256 `f2df7c56486b5d09de254ee7ab69c30697ca2b6487b84b700fe06c7fa7f49d0f` |
+> | populated table | `core_servicehealth` **rows: 1**, asserted from the DOWNLOADED offsite manifest decrypted with the returned key — not from the local capture |
+>
+> ⚠️ **WHAT THE DRILL PROVES, STATED WITHOUT INFLATION.** The Fernet key was recovered
+> independently from the Windows vault and the operating key was **never opened** —
+> `operating_key_opens_observed_during_drill: 0`, observed by an **inotify watch that fires for
+> ANY process on this host**, with its own positive control, because a Python audit hook is
+> language-level and cannot see a `docker` child. The restore container has `--network none`,
+> `--read-only`, tmpfs-only and **no host bind mounts**, so no container process can reach the key
+> path. **The B2 RETRIEVAL credential was the live one and its independent recovery is NOT
+> demonstrated** — recorded as `live_b2_configuration_used: true`, exactly as in 2026-09-20.
+>
+> **Historical evidence is untouched.** The 2026-09-20 proof remains byte-identical at
+> `774171311054f0df…`, its activators keep their own constants, and every new pin is set on the
+> modules for this run only, so no past receipt or consumed eligibility is disturbed.
+>
+> ---
+>
+> ## ⛔ HELD 2026-09-22 (SUPERSEDED BY THE ABOVE, KEPT AS WRITTEN)
 >
 > **The code is merged, gated and cited; it is NOT installed.** The serving release remains
 > `eb37c784`. Three read-only refusals stand between this declaration and the act, and the third
