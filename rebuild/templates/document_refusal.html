@@ -1,0 +1,8 @@
+{% extends 'base.html' %}
+{% block title %}Not saved{% endblock %}
+{% block breadcrumb %}Documents <span>/</span> Not saved{% endblock %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow">{{ encounter.template_version.template.name }}</div><h1>Nothing was saved.</h1><p>{{ message }}</p></div></div>
+{% if encounter.status == 'finalized' %}<div class="notice warning" role="status">This document is finalized and read-only. It cannot be edited; its export remains available from the document page.</div>{% else %}<div class="notice warning" role="status">The document is unchanged. If you typed text you want to keep, use your browser's Back button to copy it, then reopen the document and enter it again.</div>{% endif %}
+<div class="actions"><a class="button" href="{% url 'encounter_detail' encounter.pk %}">Reopen this document</a><a href="{% url 'dashboard' %}">Return to workspace</a></div>
+{% endblock %}
