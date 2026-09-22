@@ -63,6 +63,15 @@ RESTORED_MANIFEST_SHA256 = 'c3c4994fa4b50c51e75197e2ba57f8e2427daaf5929539c01498
 CAPTURE_RUN = '20260922T043002Z-7d766ca1'
 CAPTURE_SOURCE = 'eb37c7846f3ef634c16b4da46456663b88217a60'
 CAPTURE_MANIFEST_SHA256 = 'c3c4994fa4b50c51e75197e2ba57f8e2427daaf5929539c01498548da2083011'
+#: ⚠️ THE INHERITED STATIC ALLOWLIST IS STALE AND REJECTS THE LIVE TREE.
+#: `activate-word-export.static_inventory` carries `allowed_dirs = {'.'}`, so the five OTP asset
+#: directories that have been installed for releases — `django_otp/`, `django_otp/css/`,
+#: `otp_totp/`, `otp_totp/css/`, `otp_totp/js/` — are "objects outside the reviewed public asset
+#: set". Measured: 31 files + 6 directories = the 37 entries the serving release's own receipt
+#: records. Every recent activation replaced this check for the same reason; this one pins the
+#: COMPLETED transition of the release now serving and requires the tree to still match it.
+STATIC_RECEIPT = APP / '.runtime/candidate-review-repair-20260922/candidate-review-repair-52b28b369600.json'
+STATIC_RECEIPT_SHA256 = 'a36729114ad2c01ca2daf05751fe52f9d11c9e59e593f027a382af6380c17875'
 RESULT_PATTERN = r'typed-voice-activation-[a-zA-Z0-9_-]+\.json'
 RENAMED_PATTERN = r'publication-install-[a-zA-Z0-9_-]+\.json'
 SCHEMA_MARKER = '<!-- declared-schema -->'
@@ -149,6 +158,44 @@ driver.REQUIRED = REQUIRED
 #: The one reviewed expectation, replacing the driver's own era set. An expectation taken from
 #: the thing under test cannot fail, so it is read from the declaration.
 driver.BASELINE_TABLES = BASELINE_TABLES
+
+
+def validate_static_receipt(data):
+    require(sha(data) == STATIC_RECEIPT_SHA256, 'Completed static receipt bytes changed.')
+    receipt = json.loads(data)
+    require(receipt.get('complete') is True and receipt.get('target') == RUNNING_RELEASE
+            and receipt.get('stage') == 'complete' and receipt.get('provider_calls') == 0,
+            'Completed static transition of the serving release is required.')
+    return receipt['static_transition']['after']
+
+
+def current_static(identity, word):
+    """The installed assets, authenticated against the receipt written when they were installed.
+
+    ⚠️ THIS RELEASE CHANGES NO STATIC SOURCE, so the collection must come back identical and the
+    honest check is equality with the completed transition — not a stale hand-written allowlist
+    that predates the OTP asset directories.
+    """
+    expected = validate_static_receipt(word.checked_file(STATIC_RECEIPT, private=True))
+    current = driver.static_inventory(APP / 'staticfiles')
+    require(current == expected, 'Current static assets differ from the completed activation evidence.')
+    for name, source in identity.static_sources().items():
+        require(current.get(name, {}).get('sha256') == sha(source.read_bytes()),
+                'Current static alias differs from its unchanged source.')
+    return current
+
+
+_qualified_load = driver.a.load
+
+
+def load(name, relative, target):
+    module = _qualified_load(name, relative, target)
+    if name == 'old':
+        module.static_inventory = current_static
+    return module
+
+
+driver.a.load = load
 
 
 class _RenamedReceiptRe:
