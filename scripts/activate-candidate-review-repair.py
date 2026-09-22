@@ -46,7 +46,7 @@ SOURCE = Path(__file__).resolve().parents[1]
 APP = ROOT / 'rebuild'
 SELF = 'scripts/activate-candidate-review-repair.py'
 DECL = 'docs/foundation/mutations/20260922-quillmd-candidate-review-repair.md'
-DECL_SHA256 = 'ca72a7ab073870319e8e54dfd83cbf8eaee33fd94f9d3ea4ab4fcb554463d212'
+DECL_SHA256 = 'dacb3ce79209662b6ab9a59be7447208db5f9d7fc7472fa530a5718d87b2d311'
 #: ⚠️ THE TREE AND THE CONFIGURED RELEASE HAVE DIVERGED, AND THAT IS PRECISELY THE PARTIAL STATE.
 #: The stopped act installed the source (so the shared tree is at 5b2576c5) but never replaced the
 #: environment (so the app is still CONFIGURED as, and serves, eb37c784). These are two different
@@ -191,7 +191,11 @@ _qualified_load = driver.a.load
 def validate_static_receipt(data):
     require(sha(data) == STATIC_RECEIPT_SHA256, 'Completed static receipt bytes changed.')
     receipt = json.loads(data)
-    require(receipt.get('complete') is True and receipt.get('target') == BASELINE
+    # ⚠️ THE SAME DIVERGENCE, IN A SECOND PLACE. The installed static assets belong to the
+    # release that is SERVING, not to the tree commit — the stopped act left them
+    # byte-identical (before == after == 37, matching this receipt). So the completed
+    # transition to authenticate is RUNNING_RELEASE's, not BASELINE's.
+    require(receipt.get('complete') is True and receipt.get('target') == RUNNING_RELEASE
             and receipt.get('stage') == 'complete' and receipt.get('provider_calls') == 0
             and receipt.get('existing_hashed_assets_retained') is True
             and receipt.get('static_delta_source_bound') is True
