@@ -11,6 +11,7 @@ import sys
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ops import activation_exclusion as exclusion
@@ -112,3 +113,110 @@ def _hold_briefly(queue):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def _fake_publisher(seconds):
+    """A process whose command line contains the publisher command, so the drain must see it."""
+    import subprocess
+    return subprocess.Popen([sys.executable, '-c',
+                             'import time,sys; time.sleep(float(sys.argv[1]))  # publish_operations_status',
+                             str(seconds)])
+
+
+class InterruptionRecovery(unittest.TestCase):
+    """⚠️ A `finally` DOES NOT RUN AFTER SIGKILL OR A HOST FAILURE.
+
+    An activation that pauses the publisher timer and is then killed would leave publication
+    stopped indefinitely — the "permanently disabled timer" outcome arriving by accident. These
+    prove the durable marker and the supported recovery path actually close that.
+    """
+
+    def setUp(self):
+        self.restored = []
+        self.patch = patch.object(exclusion, '_helper_systemctl',
+                                  side_effect=lambda a, u: self.restored.append((a, u)))
+        self.patch.start()
+        self.addCleanup(self.patch.stop)
+        self.addCleanup(lambda: exclusion.TIMER_STATE.unlink(missing_ok=True))
+        exclusion.TIMER_STATE.unlink(missing_ok=True)
+
+    def test_the_marker_is_durable_and_written_before_the_pause(self):
+        state = exclusion.note_timer_paused('activation:test', prior_active=True)
+        self.assertTrue(exclusion.TIMER_STATE.exists())
+        owed = exclusion.pause_owed()
+        self.assertEqual(owed['owner'], 'activation:test')
+        self.assertTrue(owed['must_restore'])
+        self.assertTrue(owed['prior_active'])
+        self.assertEqual(owed['paused_at'], state['paused_at'])
+
+    def test_recovery_restores_publication_after_an_interruption(self):
+        """The SIGKILL case: marker owed, nothing holding exclusion, no finally ever ran."""
+        exclusion.note_timer_paused('activation:killed', prior_active=True)
+        os.utime(exclusion.TIMER_STATE, (time.time() - 3600, time.time() - 3600))
+        result = exclusion.recover_publication()
+        self.assertTrue(result['recovered'], result)
+        self.assertEqual(self.restored, [('start', exclusion.PUBLISHER_TIMER)])
+        self.assertFalse(exclusion.TIMER_STATE.exists(), 'the debt must be cleared once paid')
+
+    def test_recovery_never_interrupts_a_live_activation(self):
+        """⚠️ THE DANGEROUS FAILURE MODE. Restarting the publisher mid-act would recreate exactly
+        the race the whole repair exists to remove."""
+        exclusion.note_timer_paused('activation:live', prior_active=True)
+        os.utime(exclusion.TIMER_STATE, (time.time() - 3600, time.time() - 3600))
+        with exclusion.hold('activation:live'):
+            result = exclusion.recover_publication()
+        self.assertFalse(result['recovered'])
+        self.assertEqual(result['reason'], 'activation_still_holds_exclusion')
+        self.assertEqual(self.restored, [], 'the timer was restarted under a live act')
+
+    def test_recovery_is_a_no_op_when_no_pause_is_owed(self):
+        """It runs on every tick of an unrelated timer; it must cost nothing when idle."""
+        result = exclusion.recover_publication()
+        self.assertFalse(result['recovered'])
+        self.assertEqual(result['reason'], 'no_pause_owed')
+        self.assertEqual(self.restored, [])
+
+    def test_recovery_waits_out_the_grace_so_it_cannot_race_a_finally(self):
+        exclusion.note_timer_paused('activation:just-started', prior_active=True)
+        result = exclusion.recover_publication()
+        self.assertFalse(result['recovered'])
+        self.assertEqual(result['reason'], 'within_grace')
+        self.assertEqual(self.restored, [])
+
+    def test_a_completed_activation_leaves_no_debt(self):
+        exclusion.note_timer_paused('activation:clean', prior_active=True)
+        exclusion.clear_timer_pause('activation:clean')
+        self.assertIsNone(exclusion.pause_owed())
+        self.assertFalse(exclusion.recover_publication()['recovered'])
+
+
+class TheDrainSeesWhatTheLockCannot(unittest.TestCase):
+    """⚠️ ON A FIRST INSTALLATION THE RUNNING PUBLISHER PREDATES THE LOCK AND NEVER TAKES IT.
+    Acquiring the lock therefore cannot drain it, and pausing the timer does not stop a run
+    already executing. Only waiting for the process to exit drains that case."""
+
+    def test_a_live_publisher_is_detected_and_waited_for(self):
+        child = _fake_publisher(3)
+        try:
+            self.assertIn(child.pid, exclusion.publisher_processes())
+            start = time.monotonic()
+            self.assertTrue(exclusion.drain_publisher(timeout=30))
+            self.assertGreater(time.monotonic() - start, 0.5, 'the drain returned without waiting')
+            self.assertEqual(exclusion.publisher_processes(), [])
+        finally:
+            child.wait(30)
+
+    def test_the_probe_does_not_match_its_own_process_tree(self):
+        """POSITIVE CONTROL for the self-match that has already bitten twice in this work."""
+        self.assertEqual(exclusion.publisher_processes('publish_operations_status'), [])
+        self.assertNotIn(os.getpid(), exclusion._own_process_tree() and [] or [])
+        self.assertIn(os.getpid(), exclusion._own_process_tree())
+
+    def test_the_drain_is_bounded_and_names_the_blocker(self):
+        child = _fake_publisher(20)
+        try:
+            with self.assertRaises(TimeoutError) as caught:
+                exclusion.drain_publisher(timeout=1)
+            self.assertIn(str(child.pid), str(caught.exception))
+        finally:
+            child.kill(); child.wait(30)

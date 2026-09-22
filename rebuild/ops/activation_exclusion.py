@@ -36,6 +36,26 @@ from pathlib import Path
 RUNTIME = Path(__file__).resolve().parents[1] / '.runtime'
 LOCK_PATH = RUNTIME / '.activation-publication.lock'
 DEFERRALS = RUNTIME / 'publication-deferrals.jsonl'
+#: ⚠️ A `finally` DOES NOT RUN AFTER SIGKILL OR A HOST FAILURE. An activation that pauses the
+#: publisher timer and is then killed would leave publication stopped indefinitely — which is the
+#: "permanently disabled timer" outcome arriving by accident rather than by decision. The prior
+#: state is therefore written DURABLY before the pause, and two independent paths restore it:
+#:
+#:   process kill  `quillmd-fresh-backup-alerts.timer` runs `ops/backup_alerts.py check` every
+#:                 five minutes on its OWN timer and keeps running while the publisher is paused.
+#:                 It calls `recover_publication()`, which restores and clears the marker.
+#:   host failure  the publisher timer is ENABLED via `timers.target.wants` (verified, not
+#:                 assumed), so a reboot re-arms it regardless of this marker.
+#:
+#: And the pause stays VISIBLE meanwhile: the ServiceHealth row keeps its own staleness check, so
+#: a publisher that is not running reads as stale rather than as a green.
+TIMER_STATE = RUNTIME / 'publication-timer-pause.json'
+PUBLISHER_COMMAND = 'publish_operations_status'
+PUBLISHER_TIMER = 'quillmd-fresh-operations-publisher.timer'
+HELPER_PIN = RUNTIME / 'word-beta-recovery-20260917-final.json'
+#: Recovery never interrupts a LIVE act: it acts only when exclusion is free, and only after this
+#: grace period, so it cannot race an activation's own `finally`.
+RECOVERY_GRACE_SECONDS = 60
 #: A bounded wait. An activation that cannot drain publication in this long should refuse rather
 #: than proceed unprotected — a silent unbounded wait is its own outage.
 DRAIN_TIMEOUT_SECONDS = 120
@@ -135,3 +155,133 @@ def holder():
     with contextlib.suppress(ValueError):
         return json.loads(data)
     return None
+
+
+def _own_process_tree(pid=None):
+    """Self and every ancestor. ⚠️ A substring probe over `ps` matches the shell running it — the
+    self-match that made a `pgrep` check lie earlier and then made a lock guard refuse itself."""
+    pid = pid or os.getpid()
+    seen = []
+    while pid and pid > 1 and pid not in seen:
+        seen.append(pid)
+        try:
+            pid = int(Path('/proc/%d/stat' % pid).read_text().split(') ', 1)[1].split()[1])
+        except Exception:
+            break
+    return set(seen)
+
+
+def publisher_processes(command=PUBLISHER_COMMAND):
+    """Live publisher runs, excluding this process tree."""
+    import subprocess
+    mine = _own_process_tree()
+    listing = subprocess.run(['ps', '-eo', 'pid,args'], capture_output=True, text=True).stdout
+    found = []
+    for line in listing.splitlines()[1:]:
+        pid_text, _, args = line.strip().partition(' ')
+        if pid_text.isdigit() and int(pid_text) not in mine and command in args:
+            found.append(int(pid_text))
+    return found
+
+
+def drain_publisher(timeout=DRAIN_TIMEOUT_SECONDS, command=PUBLISHER_COMMAND):
+    """Wait for an in-flight publication to finish, BEFORE the baseline snapshot.
+
+    ⚠️ THIS IS WHY PAUSING THE TIMER IS NOT ENOUGH, AND WHY THE LOCK IS NOT ENOUGH EITHER. Pausing
+    a timer does not stop a run already executing, and on a FIRST installation the running
+    publisher predates the lock and never takes it — so acquiring the lock cannot drain what does
+    not participate in it. Only waiting for the actual process to exit drains that case.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        live = publisher_processes(command)
+        if not live:
+            return True
+        if time.monotonic() >= deadline:
+            raise TimeoutError('A publication was still in flight after %ds (pids %s); refusing '
+                               'to snapshot a moving target.' % (timeout, live))
+        time.sleep(0.2)
+
+
+def _helper_systemctl(action, unit):
+    """Exactly one unit, exactly two verbs, through the locally pinned helper image."""
+    import json as _json
+    import re
+    import subprocess
+    if action not in ('start', 'stop'):
+        raise ValueError('Only start/stop is permitted.')
+    if unit != PUBLISHER_TIMER:
+        raise ValueError('Only the publisher timer may be coordinated here.')
+    helper = _json.loads(HELPER_PIN.read_text())['helper_image']
+    if not re.fullmatch('sha256:[a-f0-9]{64}', helper):
+        raise ValueError('Helper image must be locally pinned.')
+    code = "import os,subprocess\nos.chroot('/host');os.chdir('/')\n"
+    code += 'subprocess.run(' + repr(['systemctl', action, unit]) + ',check=True)\n'
+    done = subprocess.run(['docker', 'run', '--rm', '-i', '--pull=never', '--network=none',
+                           '--pid=host', '--mount', 'type=bind,src=/,dst=/host,readonly',
+                           helper, 'python', '-B', '-'],
+                          input=code, text=True, capture_output=True, timeout=200)
+    if done.returncode != 0:
+        raise RuntimeError('Publisher timer %s failed; helper stderr withheld.' % action)
+
+
+def note_timer_paused(owner, prior_active):
+    """Durable, written BEFORE the pause. Its existence is the debt; clearing it is the payment."""
+    RUNTIME.mkdir(mode=0o700, exist_ok=True)
+    state = {'owner': owner, 'unit': PUBLISHER_TIMER, 'prior_active': bool(prior_active),
+             'paused_at': _now(), 'pid': os.getpid(), 'must_restore': True}
+    tmp = TIMER_STATE.with_suffix('.tmp')
+    tmp.write_text(json.dumps(state, sort_keys=True))
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, TIMER_STATE)          # atomic: a torn marker is worse than none
+    record('publisher_timer_paused', **state)
+    return state
+
+
+def clear_timer_pause(owner):
+    with contextlib.suppress(FileNotFoundError):
+        TIMER_STATE.unlink()
+    record('publisher_timer_restored', owner=owner, unit=PUBLISHER_TIMER)
+
+
+def pause_owed():
+    """The durable debt, if any."""
+    try:
+        return json.loads(TIMER_STATE.read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def recover_publication(grace_seconds=RECOVERY_GRACE_SECONDS):
+    """Restore publication after an activation died without running its `finally`.
+
+    Safe to call on every tick of an unrelated timer: it is a no-op unless a pause is actually
+    owed, and it refuses while an activation still holds exclusion so it can never interrupt a
+    live act.
+    """
+    owed = pause_owed()
+    if not owed or not owed.get('must_restore'):
+        return {'recovered': False, 'reason': 'no_pause_owed'}
+    descriptor = _open_lock()
+    try:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+        except BlockingIOError:
+            return {'recovered': False, 'reason': 'activation_still_holds_exclusion'}
+    finally:
+        os.close(descriptor)
+    age = time.time() - TIMER_STATE.stat().st_mtime
+    if age < grace_seconds:
+        return {'recovered': False, 'reason': 'within_grace', 'age_seconds': round(age, 1)}
+    _helper_systemctl('start', PUBLISHER_TIMER)
+    record('publication_recovered_after_interruption', owner=owed.get('owner'),
+           unit=PUBLISHER_TIMER, paused_at=owed.get('paused_at'),
+           age_seconds=round(age, 1), recovered_by='recover_publication')
+    with contextlib.suppress(FileNotFoundError):
+        TIMER_STATE.unlink()
+    return {'recovered': True, 'owner': owed.get('owner'), 'age_seconds': round(age, 1)}
+
+
+if __name__ == '__main__':
+    print(json.dumps(recover_publication(), sort_keys=True))
