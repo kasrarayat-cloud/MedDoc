@@ -28,11 +28,18 @@ that runs it surfaces a failure the same way the alert check does.
 """
 import json
 import sys
+from pathlib import Path
+
+_ROOT = str(Path(__file__).resolve().parents[3])
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from core.models import ServiceHealth
+
+from ops import activation_exclusion as exclusion
 
 #: Keys of the aggregator's report that are safe and useful to retain. Anything the aggregator
 #: might add later is dropped rather than published blind: a redaction allowlist only works if
@@ -65,6 +72,27 @@ class Command(BaseCommand):
         interval = options['interval_seconds']
         if interval < 60:
             raise CommandError('An interval under 60 seconds cannot be distinguished from a stuck publisher.')
+        if options['dry_run']:
+            return self.publish(interval, dry_run=True)
+        # ⚠️ EXCLUSION, AND THE COLLECTION HAPPENS INSIDE IT. This command and the activation both
+        # write state the activation's preservation checks guard. On 2026-09-22 a tick landed
+        # inside an act's window and the invariant refused, correctly. Collecting outside the lock
+        # and writing inside it would be worse than the race it replaces: it would publish a
+        # picture of the host from BEFORE the activation under a current timestamp.
+        with exclusion.attempt('publish_operations_status') as acquired:
+            if not acquired:
+                holder = exclusion.holder() or {}
+                exclusion.record('publication_deferred', reason='activation_holds_exclusion',
+                                 holder=holder.get('owner'), holder_pid=holder.get('pid'))
+                # No write, and NO health claimed. The existing row is left strictly alone so its
+                # own staleness check keeps working — a deferred tick must age visibly, not be
+                # papered over with a manufactured green.
+                self.stdout.write('Publication deferred: an activation holds exclusion. '
+                                  'Nothing written; the existing row keeps its own freshness.')
+                return
+            return self.publish(interval, dry_run=False)
+
+    def publish(self, interval, *, dry_run):
         report, code = collect()
         if not isinstance(report, dict) or 'condition' not in report or 'severity' not in report:
             raise CommandError('The operations aggregator returned a shape this publisher does not recognise.')
@@ -82,7 +110,7 @@ class Command(BaseCommand):
             'computed_at': timezone.now(),
             'expected_interval_seconds': interval,
         }
-        if options['dry_run']:
+        if dry_run:
             self.stdout.write(json.dumps({**document, 'computed_at': document['computed_at'].isoformat()},
                                          sort_keys=True, indent=2))
             return
