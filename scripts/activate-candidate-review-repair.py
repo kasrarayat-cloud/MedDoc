@@ -46,7 +46,7 @@ SOURCE = Path(__file__).resolve().parents[1]
 APP = ROOT / 'rebuild'
 SELF = 'scripts/activate-candidate-review-repair.py'
 DECL = 'docs/foundation/mutations/20260922-quillmd-candidate-review-repair.md'
-DECL_SHA256 = 'b67b76a291a39c41d6da1a4a7c0fabb6c0a13a574fd61ea5f8238d862fcc2829'
+DECL_SHA256 = 'bd81c09785a8126e998232b44de2dd35f2978e399164d9cb4cd3ce527663091c'
 #: The stopped act already advanced the tree, so THIS release is the repair's baseline.
 BASELINE = '5b2576c5081ad7e86376197d828b1b7ac5336ad4'
 EVIDENCE = ROOT / 'rebuild/.runtime/candidate-review-repair-20260922'
@@ -139,7 +139,8 @@ BASELINE_TABLES = frozenset(declared(SCHEMA_MARKER, DECLARATION.decode()))
 ALLOWED = declared(SCOPE_MARKER, DECLARATION.decode()) | {SELF, DECL}
 #: The repair changes only itself and its declaration; the code it completes already landed.
 REQUIRED = {SELF, DECL, 'rebuild/ops/activation_exclusion.py',
-            'rebuild/core/management/commands/publish_operations_status.py'}
+            'rebuild/core/management/commands/publish_operations_status.py',
+            'rebuild/ops/backup_alerts.py'}
 require('core_servicehealth' in BASELINE_TABLES, 'The declared schema omits the reviewed new table.')
 require(len(BASELINE_TABLES) == 36, 'The declared schema is not this baseline.')
 
