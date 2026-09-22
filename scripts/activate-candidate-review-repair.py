@@ -250,16 +250,6 @@ def publisher_timer(action):
     require(done.returncode == 0, 'Publisher timer %s failed; helper stderr withheld.' % action)
 
 
-def drain_publisher(timeout=120):
-    """Stopping a timer does not stop a run already in flight. Wait for one, bounded."""
-    import subprocess as sp
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        listing = sp.run(['ps', '-eo', 'args'], capture_output=True, text=True).stdout
-        if PUBLISHER_COMMAND not in listing:
-            return True
-        time.sleep(0.5)
-    raise RuntimeError('A publication was still in flight after %ds; refusing to proceed.' % timeout)
 
 
 if __name__ == '__main__':
@@ -270,17 +260,23 @@ if __name__ == '__main__':
         sys.path.insert(0, str(APP))
         from ops import activation_exclusion as exclusion
         target = sys.argv[sys.argv.index('--target') + 1]
+        owner = 'activation:' + target[:12]
+        # ⚠️ THE DEBT IS RECORDED DURABLY BEFORE IT IS INCURRED, not after. If this process dies
+        # between the pause and the finally, the marker is what lets the independent alerts timer
+        # restore publication; writing it afterwards would leave exactly the window it exists for.
+        exclusion.note_timer_paused(owner, prior_active=True)
         publisher_timer('stop')
-        exclusion.record('publisher_timer_stopped', owner='activation:' + target[:12],
-                         unit=PUBLISHER_TIMER, reason='bounded coordination for the repair act')
         try:
-            drain_publisher()
-            exclusion.record('publication_drained', owner='activation:' + target[:12])
+            # ⚠️ PAUSING THE TIMER DOES NOT STOP A RUN ALREADY IN FLIGHT, and the installed
+            # publisher does not take the new lock, so acquiring the lock cannot drain it either.
+            # The drain therefore waits for the actual process to exit, BEFORE the baseline
+            # snapshot that driver.main() takes.
+            exclusion.drain_publisher()
+            exclusion.record('publication_drained', owner=owner)
             # Held across the baseline snapshot, every preservation check and the receipt —
             # released only after the act has written its outcome, success or failure.
-            with exclusion.hold('activation:' + target[:12]):
+            with exclusion.hold(owner):
                 driver.main()
         finally:
             publisher_timer('start')
-            exclusion.record('publisher_timer_restored', owner='activation:' + target[:12],
-                             unit=PUBLISHER_TIMER)
+            exclusion.clear_timer_pause(owner)

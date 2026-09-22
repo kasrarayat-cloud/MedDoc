@@ -877,6 +877,19 @@ def report(condition, *, checked_at=None, alert=None, recovery=None, local_captu
 
 def check(at=None):
     at = at or now()
+    # ⚠️ THE INDEPENDENT RECOVERY PATH, AND IT LIVES HERE FOR A REASON. An activation pauses the
+    # publisher timer and restores it in a `finally` — but a `finally` does not run after SIGKILL
+    # or a host failure, and a paused publisher cannot recover itself because it is not running.
+    # This check runs on its OWN five-minute timer, which keeps ticking throughout, so it is the
+    # one thing positioned to pay that debt. It is a no-op unless a pause is actually owed, and it
+    # refuses while an activation still holds exclusion, so it can never interrupt a live act.
+    try:
+        from ops import activation_exclusion as _exclusion
+        _exclusion.recover_publication()
+    except Exception:
+        # Recovery is best-effort and must never turn the alert check itself into a failure:
+        # a monitor that dies trying to fix something monitors nothing.
+        pass
     try:
         with locked():
             state = read_state()
