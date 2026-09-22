@@ -61,6 +61,11 @@ different purposes — `BASELINE` for the shared-tree assertion and the diff ran
 for `updated_environment` and the live-health checks — and a normal activation may collapse them
 because normally they agree.
 
+The divergence shows up in **two** places, and both are pinned to the serving release: the
+environment check, and the completed static transition whose assets are the ones actually
+installed. The second surfaced only after the first was fixed — a reminder that one conflation
+found is not the class enumerated.
+
 Collapsing them here made the first read-only pass refuse with *"Unexpected configured release"*.
 That refusal was correct: it noticed the very divergence this repair exists to close. The adapter
 now pins them separately, and the configured value is taken from the application's **own**
