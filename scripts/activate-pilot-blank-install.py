@@ -226,12 +226,19 @@ def _helper(code, writable_systemd=False, timeout=200):
     return managed_helper.run_helper(argv, input=code.encode(), timeout=timeout)
 
 
-def systemctl(action, unit):
-    """Exactly the verbs this act needs, on exactly the units it names."""
+def systemctl(action, unit, *, judged_by_record=False):
+    """Exactly the verbs this act needs, on exactly the units it names.
+
+    ⚠️ `judged_by_record`: starting the publisher oneshot returns non-zero whenever the run exits 1,
+    and it exits 1 BY DESIGN after publishing an unhealthy backup state. On 2026-09-22 that made this
+    call raise on a release that had installed cleanly. For that one start the exit is not the
+    verdict; `publisher_verification.judge` decides from systemd's record, the journal and the row.
+    """
     require(action in ('start', 'stop'), 'Unpermitted systemd verb.')
     require(unit in (PUBLISHER_TIMER, PUBLISHER_SERVICE, ALERTS_SERVICE), 'Unpermitted unit.')
+    require(not judged_by_record or (action, unit) == ('start', PUBLISHER_SERVICE), 'Only the publisher start is judged by record.')
     code = ("import os,subprocess\nos.chroot('/host');os.chdir('/')\n"
-            'subprocess.run(' + repr(['systemctl', action, unit]) + ',check=True)\n')
+            'subprocess.run(' + repr(['systemctl', action, unit]) + ',check=' + repr(not judged_by_record) + ')\n')
     _helper(code)
 
 
@@ -270,14 +277,23 @@ def prove_through_the_unit(publisher, before_row, before_invocation):
     `Result=success` is compatible with no publication at all. The row must move as well, and the
     invocation must be a NEW one rather than a replay of the last completed run.
     """
-    systemctl('start', PUBLISHER_SERVICE)
-    state = invocation_of(PUBLISHER_SERVICE)
-    require(state.get('InvocationID') and state.get('InvocationID') != before_invocation.get('InvocationID'),
-            'systemd did not record a new invocation; the status read is a replay, not a run.')
-    require(state.get('Result') == 'success' and state.get('ExecMainStatus') == '0',
-            'The unit-driven publication did not succeed: %s' % state)
-    row = publisher.verify_publication(before_row)
-    return {'unit': state, 'row': row}
+    from ops import publisher_verification as verification
+    started = datetime.now(timezone.utc)
+    systemctl('start', PUBLISHER_SERVICE, judged_by_record=True)
+    state = unit_state(PUBLISHER_SERVICE, ('InvocationID', 'Result', 'ExecMainStatus',
+                                          'ExecMainStartTimestamp', 'ExecMainExitTimestamp'))
+    code = ("import os,subprocess,sys\nos.chroot('/host');os.chdir('/')\n"
+            "sys.stdout.write(subprocess.run(" + repr(['journalctl', '-u', PUBLISHER_SERVICE, '--since',
+                                                       started.strftime('%Y-%m-%d %H:%M:%S UTC'), '-o', 'json', '--no-pager'])
+            + ",capture_output=True,text=True,check=True).stdout)\n")
+    entries = [(item.get('_SYSTEMD_INVOCATION_ID') or item.get('INVOCATION_ID') or '', str(item.get('MESSAGE', '')))
+               for item in (json.loads(line) for line in _helper(code).stdout.decode().splitlines() if line.strip())]
+    row = publisher.published_row()
+    try:
+        verdict = verification.judge(before_row, before_invocation.get('InvocationID'), state, row, entries)
+    except verification.VerificationFailure as failure:
+        raise RuntimeError('The unit-driven publication is not verified: ' + str(failure)) from None
+    return {'unit': state, 'row': row, 'verdict': verdict}
 
 
 def await_scheduled_tick(publisher, after_row, after_invocation, bound_seconds=480):
