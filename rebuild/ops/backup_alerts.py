@@ -903,7 +903,18 @@ def check(at=None):
     # one thing positioned to pay that debt. It is a no-op unless a pause is actually owed, and it
     # refuses while an activation still holds exclusion, so it can never interrupt a live act.
     try:
-        from ops import activation_exclusion as _exclusion
+        #: ⚠️ THE SIBLING IMPORT FORM, BECAUSE THIS FILE IS RUN AS A SCRIPT, NOT AS A PACKAGE.
+        #: Its unit is `python -B /opt/meddoc-pro/rebuild/ops/backup_alerts.py check`, which puts
+        #: `rebuild/ops` on `sys.path` and NOT `rebuild` — so `from ops import …` raises
+        #: ModuleNotFoundError every tick. It shipped that way in `52b28b36`, inside the bare
+        #: `except: pass`, so the independent recovery hook was INERT from the moment it landed
+        #: and said nothing about it. The recorder added below is what surfaced it, on its first
+        #: two ticks, in production. Every other sibling in this file already uses this form
+        #: (see `scheduled_backup`, line 22) — this one line did not.
+        try:
+            from . import activation_exclusion as _exclusion
+        except ImportError:
+            import activation_exclusion as _exclusion
         _exclusion.recover_publication()
     except Exception as error:
         # Recovery is best-effort and must never turn the alert check itself into a failure:
