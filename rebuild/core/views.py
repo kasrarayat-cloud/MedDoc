@@ -309,9 +309,17 @@ def encounter_detail(request,pk):
     # `accept_code`, in this same template, has named its accepter all along.
     accepters={str(pk):email for pk,email in User.objects.filter(
         pk__in={row['accepted_by'] for row in rows if row.get('accepted_by')}).values_list('pk','email')}
+    from .tab_review import clinician_identity
+    deciders={str(pk):email for pk,email in User.objects.filter(
+        pk__in={(row.get('blank_decision') or {}).get('by') for row in rows} - {None}).values_list('pk','email')}
     for row in rows:
         row['accepted_by_email']=accepters.get(str(row.get('accepted_by') or ''),'')
         row['accepted_by_me']=str(row.get('accepted_by') or '')==str(request.user.pk)
+        # "Leave blank — reviewed" is offered on ordinary forms only: a qualified Word form keeps
+        # its own "No answer documented" choice, and a signature keeps the identity rules.
+        row['blank_eligible']=not e.template_version.document_backend and not clinician_identity(row)
+        row['left_blank']=row.get('status')=='left_blank'
+        row['blank_by_email']=deciders.get(str((row.get('blank_decision') or {}).get('by') or ''),'')
     requirements=[];review_error='';assessment=None;resolved_ok=False
     if is_wm:
         decisions=e.template_review.get('decisions',{})
@@ -405,6 +413,7 @@ def document_refusal(request,encounter,message,status):
 @transaction.atomic
 def save_answers(request,pk):
     from documents import DocumentError
+    from .tab_review import clinician_identity
     e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
     if e.status=='finalized':return document_refusal(request,e,'Finalized documents are immutable.',409)
     if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():return document_refusal(request,e,'Wait until the pending job is resolved.',409)
@@ -413,10 +422,29 @@ def save_answers(request,pk):
     labels=[row['label'] for row in e.template_version.fields+e.template_version.review_requirements]
     if is_wm and any(request.POST.get('claim_reviewed_'+row['key'])=='on' for row in e.template_version.review_requirements):
         membership(request.user,e.department,roles=['owner','clinician'])
-    answers={};review_errors=[];newly_accepted=[];withdrawn=[];target_revision=e.revision+1
+    answers={};review_errors=[];newly_accepted=[];withdrawn=[];newly_blank=[];withdrawn_blank=[];target_revision=e.revision+1
     for field in e.template_version.fields:
         key=field['key'];previous=e.answers.get(key,{'text':'','evidence':[],'status':'missing'})
         value=request.POST.get('answer_'+key,'')
+        # ⚠️ WHITESPACE IS NOT AN ANSWER. A space counted as an edit, so one keystroke could clear a
+        # generated conflict — or erase a clinician's "Leave blank — reviewed" decision without the
+        # authority check or audit that a real withdrawal carries. An answer is its text or nothing.
+        if not value.strip():value=''
+        # "Leave blank — reviewed": the clinician's explicit decision that no answer belongs here.
+        # It is a DECISION, kept apart from an untouched empty field (`missing`), a generated
+        # `conflict` and an accepted suggestion, so it may not be combined with either of them.
+        blank=request.POST.get('blank_'+key)=='on'
+        prior_blank=previous.get('status')=='left_blank'
+        # On a field already left blank the box arrives ticked as rendered; typing an answer or
+        # accepting the suggestion there is the withdrawal the page describes, not a contradiction.
+        if blank and prior_blank and (value.strip() or request.POST.get('accept_'+key)=='on'):
+            blank=False
+        if blank:
+            if is_wm or clinician_identity(field):
+                return document_refusal(request,e,'"'+field['label']+'" cannot be marked "Leave blank — reviewed". Nothing was saved.',400)
+            if value.strip() or request.POST.get('accept_'+key)=='on':
+                return document_refusal(request,e,'Choose one decision for "'+field['label']+'": your own answer, the offered suggestion, or leave it blank. Nothing was saved.',400)
+            membership(request.user,e.department,roles=['owner','clinician'])
         # ⚠️ A SUGGESTION BECOMES AN ANSWER ONLY BY AN EXPLICIT ACT, NEVER BY SAVING.
         # The textarea is deliberately NOT prefilled with the suggestion: if it were, an
         # ordinary save would accept it silently, and so would a reopen, an API read or an
@@ -464,6 +492,32 @@ def save_answers(request,pk):
                                 reviewed_by=str(request.user.pk) if reviewed else None,
                                 review_revision=target_revision if reviewed else None)
             if not value:answers[key]['status']='missing'
+        else:
+            # ⚠️ CARRIED FORWARD LIKE AN ACCEPTANCE, AND WITHDRAWN ONLY BY AN ACT. The box is
+            # disabled for employees and so never posted by them; reading "not posted" as "untick"
+            # would let an ordinary save erase a clinician's decision. Withdrawal therefore needs
+            # the enabled control's marker (or typed text), and the clinician's authority.
+            withdraw=prior_blank and not blank and (bool(value.strip()) or request.POST.get('blank_shown_'+key)=='1')
+            stamp={'by':str(request.user.pk),'revision':target_revision,'at':timezone.now().isoformat()}
+            history=list(previous.get('blank_history') or [])
+            if blank:
+                decision=previous.get('blank_decision') if prior_blank else {**stamp,'from_status':previous.get('status','missing')}
+                if not prior_blank:
+                    history.append({'decision':'left_blank',**stamp,'from_status':previous.get('status','missing')})
+                    newly_blank.append(key)
+                answers[key].update(text='',status='left_blank',reviewed=True,reviewed_by=str(request.user.pk),
+                                    accepted_suggestion=False,accepted_by=None,blank_decision=decision,blank_history=history)
+            elif withdraw:
+                membership(request.user,e.department,roles=['owner','clinician'])
+                origin=(previous.get('blank_decision') or {}).get('from_status','missing')
+                history.append({'decision':'withdrawn',**stamp})
+                answers[key].pop('blank_decision',None)
+                # ⚠️ ONLY an empty origin comes back. A `supported` or `edited` answer was cleared to
+                # leave it blank, so restoring that label over empty text would show a supported
+                # answer the clinician had deleted; it is an edit, and says so.
+                answers[key].update(status='edited' if value.strip() or origin not in ('conflict','missing') else origin,
+                                    blank_history=history)
+                withdrawn_blank.append(key)
     decisions={}
     if is_wm:
         for requirement in e.template_version.review_requirements:
@@ -503,7 +557,8 @@ def save_answers(request,pk):
             review_errors.append(error_message(exc))
     e.save(update_fields=['answers','revision','status','template_review'])
     audit(request.user,'encounter.answers_saved',e.pk,department=e.department,revision=e.revision,
-          accepted_suggestions=sorted(newly_accepted),withdrawn_acceptances=sorted(withdrawn))
+          accepted_suggestions=sorted(newly_accepted),withdrawn_acceptances=sorted(withdrawn),
+          left_blank=sorted(newly_blank),withdrawn_blank_decisions=sorted(withdrawn_blank))
     if is_wm:audit(request.user,'encounter.template_review_saved',e.pk,department=e.department,revision=e.revision,complete=e.template_review.get('assessment',{}).get('complete',False))
     messages.success(request,'Edits saved. Review every answer before finalizing.')
     for message in dict.fromkeys(review_errors):messages.warning(request,'Review remains incomplete: '+message)
@@ -530,7 +585,7 @@ def finalize(request,pk):
             order=[f['key'] for f in e.template_version.fields]
             names={f['key']:f['label'] for f in e.template_version.fields}
             conflicts=[names.get(k,k) for k in sorted((k for k,v in e.answers.items() if v.get('status')=='conflict'),key=lambda k:(order.index(k) if k in order else len(order),k))]
-            if conflicts:raise ValidationError('Resolve every conflict before finalizing: write or choose the answer yourself, or tick "Accept this suggestion" where a suggestion is offered, then save. Still in conflict: '+field_list(conflicts))
+            if conflicts:raise ValidationError('Resolve every conflict before finalizing. Each needs your decision: your own answer, the offered suggestion where there is one, or "Leave blank — reviewed" when no answer belongs there. Still in conflict: '+field_list(conflicts))
             original=private_path(e.template_version.template.original_path)
             if hashlib.sha256(original.read_bytes()).hexdigest()!=e.template_version.template.sha256:raise ValidationError('Original integrity check failed.')
             relative=f'exports/{secrets.token_hex(24)}.{e.template_version.template.format.lower()}'
