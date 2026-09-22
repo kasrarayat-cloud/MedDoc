@@ -33,6 +33,7 @@ that are already there against evidence produced when they were put there.
 """
 from datetime import datetime, timezone
 import time
+import contextlib
 import hashlib
 import json
 from pathlib import Path
@@ -46,7 +47,7 @@ SOURCE = Path(__file__).resolve().parents[1]
 APP = ROOT / 'rebuild'
 SELF = 'scripts/activate-candidate-review-repair.py'
 DECL = 'docs/foundation/mutations/20260922-quillmd-candidate-review-repair.md'
-DECL_SHA256 = 'dacb3ce79209662b6ab9a59be7447208db5f9d7fc7472fa530a5718d87b2d311'
+DECL_SHA256 = '16a2bf89a2287ee98d18dc021162da452784211be98f927ef927e70f7cba7c06'
 #: ⚠️ THE TREE AND THE CONFIGURED RELEASE HAVE DIVERGED, AND THAT IS PRECISELY THE PARTIAL STATE.
 #: The stopped act installed the source (so the shared tree is at 5b2576c5) but never replaced the
 #: environment (so the app is still CONFIGURED as, and serves, eb37c784). These are two different
@@ -275,13 +276,30 @@ if __name__ == '__main__':
         driver.main()
     else:
         EVIDENCE.mkdir(mode=0o700, exist_ok=True)
-        sys.path.insert(0, str(APP))
+        # ⚠️ FROM THE SOURCE BEING INSTALLED, NOT THE TREE IT IS INSTALLED INTO. `APP` is the
+        # INSTALLED application, which does not carry `activation_exclusion` yet — this repair is
+        # what puts it there. Importing from APP failed at the import, six seconds in, before any
+        # mutation: the chicken-and-egg of a coordination mechanism that ships in the very act it
+        # coordinates. SOURCE is the reviewed target worktree, so these are the exact bytes the
+        # act is about to install.
+        sys.path.insert(0, str(SOURCE / 'rebuild'))
         from ops import activation_exclusion as exclusion
+        # ⚠️ AND BIND IT TO THE INSTALLED RUNTIME, EXPLICITLY. Imported from the target worktree,
+        # the module's `__file__`-relative default would put the lock, the pause marker and the
+        # deferral records under the WORKTREE, while the installed publisher looks in the
+        # installed runtime. Two locks, no exclusion — and silently so, because every check would
+        # still pass. Reproduced in isolation before this line was written.
+        bound = exclusion.bind_runtime(APP / '.runtime')
+        require(bound['lock'].startswith(str(APP / '.runtime')), 'Exclusion bound outside the installed runtime.')
         target = sys.argv[sys.argv.index('--target') + 1]
         owner = 'activation:' + target[:12]
         # ⚠️ THE DEBT IS RECORDED DURABLY BEFORE IT IS INCURRED, not after. If this process dies
         # between the pause and the finally, the marker is what lets the independent alerts timer
         # restore publication; writing it afterwards would leave exactly the window it exists for.
+        # ⚠️ THE WATCHDOG STARTS BEFORE THE DEBT IS INCURRED. On a first install the INSTALLED
+        # `backup_alerts.py` carries no `recover_publication`, because this act installs it — so
+        # the ordinary recovery path does not exist yet for the very window it is needed in.
+        watchdog = exclusion.spawn_bootstrap_watchdog(owner, SOURCE / 'rebuild', APP / '.runtime')
         exclusion.note_timer_paused(owner, prior_active=True)
         publisher_timer('stop')
         try:
@@ -298,3 +316,5 @@ if __name__ == '__main__':
         finally:
             publisher_timer('start')
             exclusion.clear_timer_pause(owner)
+            with contextlib.suppress(Exception):
+                watchdog.wait(timeout=20)          # it exits as soon as the debt is cleared

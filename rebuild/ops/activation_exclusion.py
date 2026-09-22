@@ -27,6 +27,7 @@ activation held exclusion", not a manufactured green.
 """
 import contextlib
 import fcntl
+import sys
 import json
 import os
 import time
@@ -61,14 +62,40 @@ RECOVERY_GRACE_SECONDS = 60
 DRAIN_TIMEOUT_SECONDS = 120
 
 
+def bind_runtime(runtime_dir):
+    """Point every path at ONE runtime, explicitly.
+
+    ⚠️ INSTALLED-STATE PATHS MUST NEVER FOLLOW THIS MODULE'S OWN LOCATION. On a first install the
+    adapter imports this module from the TARGET WORKTREE, because the installed tree does not
+    carry it yet. A `__file__`-relative runtime then puts the lock, the pause marker and the
+    deferral records under the worktree, while the installed publisher looks in the installed
+    runtime — two different locks, no exclusion, and an activation that LOOKS coordinated while
+    coordinating nothing. That failure is silent: every check passes and the race is untouched.
+
+    Normal in-process use needs no call: imported from the installed tree, the default is already
+    correct. It is the cross-tree case that must be explicit.
+    """
+    global RUNTIME, LOCK_PATH, DEFERRALS, TIMER_STATE
+    RUNTIME = Path(runtime_dir).resolve()
+    LOCK_PATH = RUNTIME / '.activation-publication.lock'
+    DEFERRALS = RUNTIME / 'publication-deferrals.jsonl'
+    TIMER_STATE = RUNTIME / 'publication-timer-pause.json'
+    return {'runtime': str(RUNTIME), 'lock': str(LOCK_PATH),
+            'deferrals': str(DEFERRALS), 'timer_state': str(TIMER_STATE)}
+
+
+def bound_runtime():
+    return {'runtime': str(RUNTIME), 'lock': str(LOCK_PATH),
+            'deferrals': str(DEFERRALS), 'timer_state': str(TIMER_STATE)}
+
+
 def _now():
     return datetime.now(timezone.utc).isoformat()
 
 
 def _open_lock():
-    RUNTIME.mkdir(mode=0o700, exist_ok=True)
-    descriptor = os.open(LOCK_PATH, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
-    return descriptor
+    RUNTIME.mkdir(mode=0o700, parents=True, exist_ok=True)
+    return os.open(LOCK_PATH, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
 
 
 def record(event, **fields):
@@ -285,3 +312,43 @@ def recover_publication(grace_seconds=RECOVERY_GRACE_SECONDS):
 
 if __name__ == '__main__':
     print(json.dumps(recover_publication(), sort_keys=True))
+
+
+#: ⚠️ THE BOOTSTRAP RECOVERY GAP, AND IT IS NOT THE SAME AS THE ORDINARY ONE.
+#: `recover_publication()` is reached from `ops/backup_alerts.py`, which runs on its own timer —
+#: but on a FIRST INSTALL the INSTALLED `backup_alerts.py` has no such call, because this act is
+#: what installs it. So during first installation the ordinary recovery path DOES NOT EXIST: an
+#: act that pauses the timer and is then killed would leave publication stopped with nothing
+#: positioned to notice. Testing recovery with the future installed version proves nothing about
+#: that window.
+#:
+#: A detached watchdog closes it. It is spawned from the TARGET source BEFORE the pause, survives
+#: the parent (own session), refuses while exclusion is held, and exits as soon as the debt is
+#: cleared or its bounded lifetime ends. A reboot remains the independent backstop for host
+#: failure, since the timer is enabled.
+WATCHDOG_TTL_SECONDS = 1800
+
+
+def spawn_bootstrap_watchdog(owner, source_root, runtime_dir, ttl=WATCHDOG_TTL_SECONDS,
+                             grace=RECOVERY_GRACE_SECONDS):
+    import subprocess
+    code = (
+        'import sys, time\n'
+        'sys.path.insert(0, %r)\n'
+        'from ops import activation_exclusion as x\n'
+        'x.bind_runtime(%r)\n'
+        'deadline = time.time() + %d\n'
+        'while time.time() < deadline:\n'
+        '    if not x.pause_owed():\n'
+        '        break\n'
+        '    r = x.recover_publication(grace_seconds=%d)\n'
+        '    if r.get("recovered"):\n'
+        '        x.record("publication_recovered_by_bootstrap_watchdog", owner=%r)\n'
+        '        break\n'
+        '    time.sleep(5)\n'
+    ) % (str(source_root), str(runtime_dir), int(ttl), int(grace), owner)
+    process = subprocess.Popen([sys.executable, '-c', code], start_new_session=True,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    record('bootstrap_watchdog_started', owner=owner, pid=process.pid, ttl_seconds=int(ttl),
+           reason='the installed backup_alerts cannot recover a pause it does not know about')
+    return process
