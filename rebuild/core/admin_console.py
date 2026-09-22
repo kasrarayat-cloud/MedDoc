@@ -375,6 +375,10 @@ def email_delivery(window=None, at=None):
             'counts': counts}
 
 
+#: Twelve five-minute cadences is one hour: past any ordinary miss, restart or maintenance pause.
+FAILED_PUBLICATION_CADENCES = 12
+
+
 def published_operations(keys=ServiceHealth.KEYS, at=None):
     """Read what the privileged side PUBLISHED. Never guess, never report absence as health.
 
@@ -400,17 +404,36 @@ def published_operations(keys=ServiceHealth.KEYS, at=None):
                            'status': 'Never published',
                            'detail': ('No privileged process has published this status. That is not a report of health: '
                                       'it means the publisher has not run here. Install the publisher, or treat this as unknown.'),
-                           'computed_at': None, 'age_seconds': None, 'stale': None, 'payload': {}})
+                           'computed_at': None, 'age_seconds': None, 'stale': None, 'failed': None,
+                           'payload': {}})
             continue
         age = (at - row.computed_at).total_seconds()
         stale = age > row.expected_interval_seconds * 2 or age < 0
+        #: ⚠️ A MISSED TICK AND A DEAD PUBLISHER ARE DIFFERENT FACTS AND USED TO RENDER ALIKE.
+        #: Staleness was capped at 'warning' however old the row was, so the 2026-09-22 outage —
+        #: the publisher raising EROFS on every tick for six and a half hours, seventy-seven
+        #: cadences — presented with the same badge as one late publication. The age was in the
+        #: text, but a badge that cannot escalate is one people stop reading.
+        #:
+        #: FAILED is deliberately far past STALE rather than just after it: at twelve cadences
+        #: (an hour, at the five-minute cadence) no ordinary miss, restart or brief maintenance
+        #: pause can reach it, so the escalation means the publisher is not running rather than
+        #: that a tick slipped. Negative ages are clock movement, not evidence of a dead
+        #: publisher, so they stay STALE.
+        failed = age > row.expected_interval_seconds * FAILED_PUBLICATION_CADENCES
         result.append({
             'key': key, 'name': label, 'published': True,
-            'severity': 'warning' if stale else row.severity,
-            'status': (f'Last published {int(age // 60)} min ago — STALE, older than twice its {row.expected_interval_seconds // 60}-minute cadence'
+            'severity': 'failure' if failed else 'warning' if stale else row.severity,
+            'status': (f'No publication for {int(age // 60)} min — FAILED, past {FAILED_PUBLICATION_CADENCES}x its '
+                       f'{row.expected_interval_seconds // 60}-minute cadence; the publisher is not running'
+                       if failed else
+                       f'Last published {int(age // 60)} min ago — STALE, older than twice its {row.expected_interval_seconds // 60}-minute cadence'
                        if stale else row.condition),
-            'detail': row.action if not stale else (row.action + ' · This reading is old; it describes the state at the time shown, not now.'),
-            'computed_at': row.computed_at, 'age_seconds': int(age), 'stale': stale,
+            'detail': row.action if not stale else (row.action + (
+                ' · This is not a late reading: at this age the publisher itself has stopped. '
+                'Inspect the unit and its journal, not the state it last described.'
+                if failed else ' · This reading is old; it describes the state at the time shown, not now.')),
+            'computed_at': row.computed_at, 'age_seconds': int(age), 'stale': stale, 'failed': failed,
             'payload': row.payload if isinstance(row.payload, dict) else {},
         })
     return result
