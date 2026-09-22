@@ -1,5 +1,52 @@
 # Declaration — private activation of the candidate-review release, September 21, 2026
 
+> ## ⛔ HELD 2026-09-22 — THIS ACTIVATION CANNOT PROCEED WITHOUT AN OWNER DECISION
+>
+> **The code is merged, gated and cited; it is NOT installed.** The serving release remains
+> `eb37c784`. Three read-only refusals stand between this declaration and the act, and the third
+> is not something a session below the owner may clear.
+>
+> **The conflict is structural, not a configuration mistake:**
+>
+> | requirement | source | demands |
+> |---|---|---|
+> | the restore proof must be THE pinned independent-key one | `activate-private-readiness.py:73,317` — pinned by path **and** sha256 | capture `20260920T095332Z-a9da0017`, **35 tables** |
+> | the safety capture must share the drill's table set | `activate-private-readiness.py:344` | **35 tables** |
+> | the safety capture's population must equal live | `activate-typed-voice.py:192` | **36 tables** |
+>
+> Migration `0018_servicehealth` added the 36th table, so the last two cannot both hold. The only
+> bridge was the previous activation's bounded exception — valid *only while `core_servicehealth`
+> was EMPTY*, because a restore would then lose no row. **The operations publisher has since
+> written one row, so that exception expired exactly as designed.**
+>
+> ⚠️ **AND A LOCAL RESTORE IS NOT A SUBSTITUTE, WHICH IS WHY THE GUARD NAMES THE KIND AND NOT JUST
+> THE SHAPE.** A fresh 36-table capture WAS taken and restore-verified locally
+> (`20260922T024158Z-8d231f14` / `restore-88da076936d4dc98`, all hashes matching, networkless, zero
+> provider actions) and the guard still refused: *"Use the exact completed independent-key restore
+> proof."* That proof carries `returned_key_path`, `key_source_calls` and
+> `live_key_deny_positive_control` — it proves recovery **with the live key DENIED**. The local
+> check used the live key. It proves the ciphertext round-trips; it does not prove the backup is
+> recoverable by someone who does not hold the operating key, which is the property being claimed.
+> Exactly one independent-key drill exists and it predates the migration.
+>
+> **THE THREE WAYS OUT ARE ALL THE OWNER'S**, and each is a class this programme reserves to him:
+>
+> 1. **A new independent-key restore drill against a 36-table capture** — keys and B2 allowance.
+>    Standing instruction was *do not repeat a full offsite restore* and *do not spend additional
+>    B2 allowance*.
+> 2. **Accept a narrowed exception** for a non-empty `core_servicehealth` — standing instruction
+>    was *do not weaken the coverage guard*, and an accepted-capability loss is the owner's to
+>    accept and to have written down.
+> 3. **Empty `core_servicehealth`** — deletion of data, and the row is a published operations
+>    record.
+>
+> **Nothing here was worked around.** The fresh capture and its local verification are kept as
+> genuine evidence; they are simply not the proof this chain requires. The adapter below is
+> complete and correct for options 1 or 2 and will run unchanged once one is chosen — under
+> option 1 it needs only `RESTORED_RUN` / `RESTORED_RELEASE` and `--backup-report` pointed at the
+> new drill.
+
+
 Advances the served application from the multi-column/mixed Word release. **No migration, no
 public-asset change, no schema change of any kind.** The change is confined to what a clinician is
 SHOWN when the scope validator holds an answer, and to how an acceptance is recorded.

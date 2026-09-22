@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """Code-only preserving activation for the candidate-review release.
 
+⛔ HELD 2026-09-22 — this adapter is complete and CANNOT RUN yet. The pinned independent-key
+restore proof covers a 35-table capture taken before migration `0018_servicehealth`, while the
+live population is 36, and the bounded exception that bridged the two expired when
+`core_servicehealth` stopped being empty. A local restore is not a substitute: the guard demands
+the proof whose positive control is that the LIVE KEY WAS DENIED. The three ways out are all owner
+decisions and are written out at the top of the declaration. Read that before touching anything
+here.
+
 Default is read-only. The qualified driver retains current rows, financial history and files.
 This release carries NO migration and NO public-asset change, so the adapter authenticates the
 completed static receipt of the release already installed instead of reinstalling assets.
@@ -32,7 +40,7 @@ SOURCE = Path(__file__).resolve().parents[1]
 APP = ROOT / 'rebuild'
 SELF = 'scripts/activate-candidate-review.py'
 DECL = 'docs/foundation/mutations/20260921-quillmd-candidate-review-activation.md'
-DECL_SHA256 = '7943ca482f47354a39c9321df3bc9fd358141d0fb994a7fd8cceb5bdc180887a'
+DECL_SHA256 = 'e1407b8aae23d6c9b28f5c23d3d149560c376479781af6c787e5e93919020766'
 BASELINE = 'eb37c7846f3ef634c16b4da46456663b88217a60'
 EVIDENCE = ROOT / 'rebuild/.runtime/candidate-review-activation-20260921'
 DRIVER = 'scripts/activate-typed-voice.py'
