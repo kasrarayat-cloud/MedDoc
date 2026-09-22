@@ -65,11 +65,26 @@ No returned backup key, runtime-key replacement or SSH grant is needed.
    to that desktop's protected directory. Source hash is pinned in the ticket.
    Feed credential JSON with `application_key_id` and `application_key` through a
    secure stdin pipe, e.g. an existing protected vault retrieval. Invoke Python
-   with `--ticket TICKET --output NEW_PROTECTED_OUTPUT --credential-stdin`.
-   No secret is saved by the collector. Do not paste credential literals into a
-   terminal command. The per-user spent-ticket registry must remain intact.
-   Copying a ticket to another computer/account to evade that registry is outside
-   the authorized consumer model. All replicas would need independent budgets.
+   with `--ticket TICKET --output NEW_OUTPUT_DIRECTORY --credential-stdin`.
+   `NEW_OUTPUT_DIRECTORY` must not exist yet, and its parent must be an existing
+   protected directory given as a plain absolute path (a symlink, junction or `..`
+   is refused). The collector checks mode 0700 on POSIX only; on Windows it cannot
+   verify the ACL, so choose a restricted folder. It creates the directory and
+   writes `intent.json` and `account-audit.json` inside it; never pass the JSON
+   file's own path. These checks run before the ticket is spent. The ticket is
+   spent before the credential is read, so every later refusal spends it
+   (credential, collector hash, authentication, scope, timeout, a failed write).
+   A refusal during collection prints `"status": "failed"` with a `reason_code`,
+   exits 2 and writes a failed `account-audit.json`; the others print one generic
+   line and exit 1. The ticket was spent exactly when its `.used.json` marker
+   exists in `~/.quillmd-account-audit-spend`. Use a new output name for any
+   retry.
+   (Corrected 2026-09-22: this step said `NEW_PROTECTED_OUTPUT`, which did not
+   say the path is a new directory.) No secret is saved by the collector. Do not
+   paste credential literals into a terminal command. The per-user spent-ticket
+   registry must remain intact. Copying a ticket to another computer/account to
+   evade that registry is outside the authorized consumer model. All replicas
+   would need independent budgets.
 3. The collector performs two complete matching account inventories. Retained
    versions count even when names repeat. It refuses scope drift, partial pages,
    timeout, auth failure, changed scans or **any unfinished upload/start marker**.
@@ -78,14 +93,15 @@ No returned backup key, runtime-key replacement or SSH grant is needed.
    See [the provider's capability requirement](https://www.backblaze.com/apidocs/b2-list-parts).
    It makes no object-content download or provider mutation and does not retry.
    Preserve a failed result and request a newly charged ticket before retrying.
-4. Return only `account-audit.json` by an existing authorized secure channel to a
-   claude0600 regular single-link file under a0700 directory. Keep its original
-   bytes. The VPS operator imports with the reviewed declaration below. The
-   importer checks issued ticket, exact byte hashes, shared reservation, account,
-   scans, sums, deadline, control revision and concurrent-policy guard. It creates
-   new evidence with the actual scan time+24hours, retains old evidence, and never
-   refunds the prepaid allowance. Historical cap observations stay historical;
-   their continued caps rely on the existing administrative unchanged-cap rule.
+4. Return only a verified `account-audit.json` (the collector exited 0) by an
+   existing authorized secure channel to a claude0600 regular single-link file
+   under a0700 directory. Keep its original bytes. The VPS operator imports with
+   the reviewed declaration below. The importer checks issued ticket, exact byte
+   hashes, shared reservation, account, scans, sums, deadline, control revision
+   and concurrent-policy guard. It creates new evidence with the actual scan
+   time+24hours, retains old evidence, and never refunds the prepaid allowance.
+   Historical cap observations stay historical; their continued caps rely on the
+   existing administrative unchanged-cap rule.
 5. A temporary audit credential should be revoked in the owner's authenticated
    interface within separately reserved administration allowance; retain that
    additive result. Collection/import does not invent a revocation check. A
