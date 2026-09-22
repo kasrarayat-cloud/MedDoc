@@ -502,6 +502,92 @@ class PublishedOperationsStatus(ConsoleFixture):
         self.publish(computed_at=timezone.now() + timedelta(hours=1))
         self.assertTrue(admin_console.published_operations()[0]['stale'])
 
+    def test_a_dead_publisher_escalates_past_stale_to_failure(self):
+        """⚠️ THE 2026-09-22 OUTAGE, AS A TEST. The publisher raised EROFS on every tick for
+        six and a half hours — seventy-seven cadences — and the panel rendered `warning`, the
+        same badge as one late publication. The age was in the text; the badge could not
+        escalate, and a badge that cannot escalate is one people stop reading."""
+        self.publish(condition='offsite_policy_renewal_due', severity='warning', healthy=False,
+                     computed_at=timezone.now() - timedelta(seconds=23000),
+                     expected_interval_seconds=300)
+        row = admin_console.published_operations()[0]
+        self.assertTrue(row['failed'])
+        self.assertTrue(row['stale'], 'a failed row is still stale; failure is the stronger claim')
+        self.assertEqual(row['severity'], 'failure')
+        self.assertIn('FAILED', row['status'])
+        self.assertIn('the publisher is not running', row['status'])
+        self.assertIn('Inspect the unit and its journal', row['detail'])
+
+    def test_the_escalation_boundary_holds_on_both_sides(self):
+        """⚠️ THE POSITIVE CONTROL. Without it, a predicate that returned True unconditionally
+        passes the test above and every stale row would render as a dead publisher."""
+        cadence = 300
+        just_stale = cadence * admin_console.FAILED_PUBLICATION_CADENCES - 60
+        just_failed = cadence * admin_console.FAILED_PUBLICATION_CADENCES + 60
+        self.publish(computed_at=timezone.now() - timedelta(seconds=just_stale),
+                     expected_interval_seconds=cadence)
+        row = admin_console.published_operations()[0]
+        self.assertTrue(row['stale'])
+        self.assertFalse(row['failed'], 'a merely stale row must not be reported as a dead publisher')
+        self.assertEqual(row['severity'], 'warning')
+        self.publish(computed_at=timezone.now() - timedelta(seconds=just_failed),
+                     expected_interval_seconds=cadence)
+        self.assertTrue(admin_console.published_operations()[0]['failed'])
+
+    def test_a_fresh_row_is_neither_stale_nor_failed(self):
+        self.publish()
+        row = admin_console.published_operations()[0]
+        self.assertFalse(row['stale'])
+        self.assertFalse(row['failed'])
+
+    def test_a_clock_that_moved_backwards_is_stale_but_not_a_dead_publisher(self):
+        """A negative age is clock movement. Calling it a dead publisher would send somebody to
+        read a journal that has nothing wrong in it."""
+        self.publish(computed_at=timezone.now() + timedelta(hours=1))
+        row = admin_console.published_operations()[0]
+        self.assertTrue(row['stale'])
+        self.assertFalse(row['failed'])
+
+    def test_every_row_carries_the_failed_key_including_never_published(self):
+        """A caller that reads row['failed'] must never meet a missing key on one branch only."""
+        self.assertIsNone(admin_console.published_operations()[0]['failed'])
+        self.publish()
+        self.assertIs(admin_console.published_operations()[0]['failed'], False)
+
+    def test_the_rendered_badge_says_failed_and_not_stale(self):
+        """⚠️ THE ESCALATION MUST BE VISIBLE, NOT JUST STYLED.
+
+        The template read `stale` whenever the row was stale — and a failed row IS stale, so a
+        dead publisher rendered the escalated COLOUR under the word *stale*. A severity a reader
+        cannot read is not a distinction, and the colour alone is exactly what people stop
+        noticing. The class still comes from `severity`; only the word changed.
+        """
+        self.publish(computed_at=timezone.now() - timedelta(seconds=23000),
+                     expected_interval_seconds=300)
+        # ⚠️ `sign_in()`, not `force_login`: this console requires MFA, and a bare login is
+        # REDIRECTED. The first version of this test skipped it and failed as
+        # "'>failed<' not found in ''" — an empty body reported as a content mismatch, which
+        # sends the reader looking at the template instead of at the authentication.
+        self.sign_in()
+        response = self.client.get('/console/services/')
+        self.assertEqual(response.status_code, 200, 'the page must render before its text means anything')
+        body = response.content.decode()
+        self.assertIn('badge failure', body)
+        self.assertIn('>failed<', body)
+
+    def test_a_merely_stale_row_still_renders_the_word_stale(self):
+        """⚠️ THE POSITIVE CONTROL. Without it a template that always printed `failed` would
+        pass the test above and destroy the distinction it exists to make."""
+        self.publish(computed_at=timezone.now() - timedelta(seconds=1200),
+                     expected_interval_seconds=300)
+        self.sign_in()
+        response = self.client.get('/console/services/')
+        self.assertEqual(response.status_code, 200, 'the page must render before its text means anything')
+        body = response.content.decode()
+        self.assertIn('>stale<', body)
+        self.assertNotIn('>failed<', body)
+        self.assertIn('badge warning', body)
+
     def test_the_publisher_copies_the_aggregator_and_refuses_an_unasserted_report(self):
         from core.management.commands import publish_operations_status as command
         report = {'condition': 'healthy', 'severity': 'healthy', 'healthy': True, 'action': 'Nothing to do.',

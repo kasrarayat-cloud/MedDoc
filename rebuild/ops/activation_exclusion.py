@@ -86,19 +86,31 @@ def bind_runtime(runtime_dir):
     Normal in-process use needs no call: imported from the installed tree, the default is already
     correct. It is the cross-tree case that must be explicit.
     """
-    global RUNTIME, PUBLICATION, LOCK_PATH, DEFERRALS, TIMER_STATE
+    global RUNTIME, PUBLICATION, LOCK_PATH, DEFERRALS, TIMER_STATE, HELPER_PIN
     RUNTIME = Path(runtime_dir).resolve()
     PUBLICATION = RUNTIME / 'publication'
     LOCK_PATH = PUBLICATION / '.activation-publication.lock'
     DEFERRALS = PUBLICATION / 'publication-deferrals.jsonl'
     TIMER_STATE = PUBLICATION / 'publication-timer-pause.json'
+    #: ⚠️ AND THE HELPER PIN, WHICH THIS FUNCTION USED TO LEAVE BEHIND. It was rebinding the four
+    #: artifacts and NOT the pin, so a module imported from a target worktree kept a `__file__`
+    #: relative pin path under that worktree — where no `.runtime` pin exists. The first thing to
+    #: need it is `_helper_systemctl`, reached from `recover_publication()`, reached from the
+    #: BOOTSTRAP WATCHDOG — the only recovery path in the window before the new units are
+    #: installed. Its stderr goes to DEVNULL and its loop has no handler, so it would have died
+    #: on `FileNotFoundError` SILENTLY, leaving the publisher timer stopped and the pause owed
+    #: indefinitely. The one component whose whole job is to recover would have been the one
+    #: component that could not.
+    HELPER_PIN = RUNTIME / 'word-beta-recovery-20260917-final.json'
     return {'runtime': str(RUNTIME), 'publication': str(PUBLICATION), 'lock': str(LOCK_PATH),
-            'deferrals': str(DEFERRALS), 'timer_state': str(TIMER_STATE)}
+            'deferrals': str(DEFERRALS), 'timer_state': str(TIMER_STATE),
+            'helper_pin': str(HELPER_PIN)}
 
 
 def bound_runtime():
     return {'runtime': str(RUNTIME), 'publication': str(PUBLICATION), 'lock': str(LOCK_PATH),
-            'deferrals': str(DEFERRALS), 'timer_state': str(TIMER_STATE)}
+            'deferrals': str(DEFERRALS), 'timer_state': str(TIMER_STATE),
+            'helper_pin': str(HELPER_PIN)}
 
 
 def _now():

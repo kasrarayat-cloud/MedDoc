@@ -875,6 +875,25 @@ def report(condition, *, checked_at=None, alert=None, recovery=None, local_captu
             'outside_host_failure_detection': False, 'clinical_content_included': False}
 
 
+def _record_recovery_failure(error):
+    """Durable, bounded, non-clinical. It must never raise: a recorder that can fail the caller
+    reintroduces the very problem the `except` above exists to avoid."""
+    try:
+        record = {'at_utc': now().isoformat(), 'event': 'publication_recovery_failed',
+                  'error_class': type(error).__name__,
+                  'errno': getattr(error, 'errno', None),
+                  # The message, not the traceback, and bounded: this is an operations ledger,
+                  # not a crash dump, and an unbounded string is how a ledger becomes unreadable.
+                  'detail': str(error)[:300]}
+        DIRECTORY.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with open(DIRECTORY / 'recovery-failures.jsonl', 'a', encoding='utf-8') as stream:
+            stream.write(json.dumps(record, sort_keys=True) + '\n')
+        os.chmod(DIRECTORY / 'recovery-failures.jsonl', 0o600)
+    except Exception:
+        # Nothing further is available, and raising here would defeat the whole point.
+        pass
+
+
 def check(at=None):
     at = at or now()
     # ⚠️ THE INDEPENDENT RECOVERY PATH, AND IT LIVES HERE FOR A REASON. An activation pauses the
@@ -886,10 +905,26 @@ def check(at=None):
     try:
         from ops import activation_exclusion as _exclusion
         _exclusion.recover_publication()
-    except Exception:
+    except Exception as error:
         # Recovery is best-effort and must never turn the alert check itself into a failure:
         # a monitor that dies trying to fix something monitors nothing.
-        pass
+        #
+        # ⚠️ BUT BEST-EFFORT IS NOT SILENT, AND THIS `except` IS DISABLED FOR EXACTLY THE CASE
+        # IT EXISTS TO HANDLE. On 2026-09-22 the shipped exclusion lock sat on a path this unit's
+        # `ProtectSystem=strict` sandbox makes read-only, so any `_open_lock()` here raises EROFS
+        # and the bare `pass` would swallow it.
+        #
+        # ⚠️ STATED PRECISELY, BECAUSE THE FIRST VERSION OF THIS COMMENT OVERCLAIMED: it did NOT
+        # fire during that outage. `recover_publication()` returns at `pause_owed()` before it
+        # ever opens the lock, and no pause was owed — so the swallow was never reached. What was
+        # broken is the path that pays a pause DEBT, which is the one thing this hook is for: the
+        # day an activation dies mid-act, recovery would fail here and say nothing.
+        #
+        # ⚠️ AND THE RECORD CANNOT GO TO THE DEFERRAL LEDGER, BECAUSE THAT LEDGER IS THE THING
+        # THAT MAY BE UNWRITABLE. A failure record written to the path whose unwritability IS
+        # the failure is not a record. It goes in OUR OWN directory, which is this unit's
+        # `ReadWritePaths` grant and is therefore writable exactly when recovery is not.
+        _record_recovery_failure(error)
     try:
         with locked():
             state = read_state()

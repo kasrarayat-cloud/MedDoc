@@ -103,7 +103,12 @@ WM_BLOCKERS={
     'asymptomatic_conflicts_with_documented_symptom':'Asymptomatic conflicts with another selected symptom.',
 }
 
-def health(request): return JsonResponse({'status':'ok','data_mode':'synthetic-only','surface':'admin' if settings.ADMIN_SITE else 'doctor','release':settings.RELEASE_SHA})
+#: ⚠️ `data_mode` WAS A HARDCODED LITERAL AND WAS BEING CITED AS PROOF OF THE GUARD.
+#: It printed 'synthetic-only' unconditionally, so it would have kept printing it with
+#: SYNTHETIC_ONLY flipped to False — every check that read /health/ as evidence of
+#: synthetic-only operation was reading a label that could not disagree with itself.
+#: It is now derived from the setting the seed and verification commands actually enforce.
+def health(request): return JsonResponse({'status':'ok','data_mode':'synthetic-only' if settings.SYNTHETIC_ONLY else 'live','surface':'admin' if settings.ADMIN_SITE else 'doctor','release':settings.RELEASE_SHA})
 
 @require_http_methods(['GET','POST'])
 def login_view(request):

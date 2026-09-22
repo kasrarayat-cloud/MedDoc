@@ -28,7 +28,7 @@
     {% if row.payload.local_capture %}<details><summary>Last local capture</summary><div class="details-body"><dl class="metadata">{% for key, value in row.payload.local_capture.items %}<dt>{{ key }}</dt><dd>{{ value }}</dd>{% endfor %}</dl></div></details>{% endif %}
     {% if row.payload.offsite %}<details><summary>Offsite recovery</summary><div class="details-body"><dl class="metadata">{% for key, value in row.payload.offsite.items %}<dt>{{ key }}</dt><dd>{{ value }}</dd>{% endfor %}</dl></div></details>{% endif %}
   {% else %}<p class="small muted mono">python manage.py publish_operations_status</p>{% endif %}
-</div><span class="badge {{ row.severity }}">{% if row.published %}{% if row.stale %}stale{% else %}{{ row.severity }}{% endif %}{% else %}unknown{% endif %}</span></div>
+</div><span class="badge {{ row.severity }}">{% if row.published %}{% if row.failed %}failed{% elif row.stale %}stale{% else %}{{ row.severity }}{% endif %}{% else %}unknown{% endif %}</span></div>
 {% empty %}<p class="small muted">No operational status keys are defined.</p>{% endfor %}
 </section>
 

@@ -449,3 +449,46 @@ class TheUnitsThatRunThisModuleCanWriteItsPaths(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class BindingCarriesEveryPathIncludingTheHelperPin(unittest.TestCase):
+    """⚠️ THE ONE PATH `bind_runtime` USED TO LEAVE BEHIND, AND IT IS THE RECOVERY PATH.
+
+    `bind_runtime` rebound the lock, the ledger and the marker and NOT `HELPER_PIN`, which is
+    computed from the module's own `__file__` at import. An adapter imports this module from the
+    TARGET WORKTREE — that is the whole reason `bind_runtime` exists — so the pin kept pointing
+    at `<worktree>/rebuild/.runtime/word-beta-recovery-*.json`, which does not exist.
+
+    The first thing to need it is `_helper_systemctl`, reached from `recover_publication()`,
+    reached from the BOOTSTRAP WATCHDOG: the only recovery available in the window before the new
+    units are installed. Its loop has no handler and its stderr is DEVNULL, so it would have died
+    on FileNotFoundError in silence, leaving the publisher timer stopped and the pause owed. The
+    one component whose entire job is recovery would have been the one that could not run.
+    """
+
+    def setUp(self):
+        self.original = exclusion.bound_runtime()
+        self.addCleanup(exclusion.bind_runtime, self.original['runtime'])
+
+    def test_the_helper_pin_follows_the_binding(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            bound = exclusion.bind_runtime(directory)
+            expected = pathlib.Path(directory).resolve() / 'word-beta-recovery-20260917-final.json'
+            self.assertEqual(exclusion.HELPER_PIN, expected)
+            self.assertEqual(bound['helper_pin'], str(expected))
+
+    def test_every_reported_path_is_under_the_bound_runtime(self):
+        """⚠️ THE GENERAL FORM, so the next path added here cannot repeat the omission."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            bound = exclusion.bind_runtime(directory)
+            root = str(pathlib.Path(directory).resolve())
+            for key, value in bound.items():
+                self.assertTrue(value.startswith(root),
+                                '%s did not follow the binding: %s' % (key, value))
+
+    def test_the_binding_reports_the_pin_rather_than_hiding_it(self):
+        """A path the caller cannot see is a path the caller cannot assert on — and the adapter
+        asserts on exactly what this returns."""
+        self.assertIn('helper_pin', exclusion.bound_runtime())

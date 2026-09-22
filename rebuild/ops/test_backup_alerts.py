@@ -974,3 +974,117 @@ class OperatorVisibilityTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class RecoveryFailureIsRecordedNotSwallowed(unittest.TestCase):
+    """⚠️ THE `except Exception: pass` THAT CONCEALED A SIX-HOUR OUTAGE.
+
+    On 2026-09-22 the shipped exclusion lock sat on a path this unit's `ProtectSystem=strict`
+    sandbox makes read-only, so any `_open_lock()` here raises EROFS and the bare `pass` would
+    swallow it.
+
+    ⚠️ AND THE PRECISE CLAIM MATTERS: it did NOT fire during that outage. `recover_publication()`
+    returns at `pause_owed()` before opening the lock, and no pause was owed. What was disabled is
+    the path that pays a pause DEBT — the one case this hook exists for — so the failure would
+    arrive on the day an activation dies mid-act, and arrive silently.
+
+    ⚠️ AND THE RECORD CANNOT GO TO THE DEFERRAL LEDGER. That ledger lives beside the lock, so in
+    the failure being recorded it is exactly the thing that is unwritable. A failure record
+    written to the path whose unwritability IS the failure is not a record. It goes in this
+    unit's own `ReadWritePaths` grant, which is writable precisely when recovery is not.
+    """
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.directory = Path(temporary.name) / 'backup-alerts'
+        patch.object(a, 'DIRECTORY', self.directory).start()
+        self.addCleanup(patch.stopall)
+
+    def ledger(self):
+        path = self.directory / 'recovery-failures.jsonl'
+        if not path.exists():
+            return []
+        return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+
+    def test_the_erofs_that_actually_happened_is_recorded(self):
+        a._record_recovery_failure(
+            OSError(30, 'Read-only file system',
+                    '/opt/meddoc-pro/rebuild/.runtime/publication/.activation-publication.lock'))
+        records = self.ledger()
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]['event'], 'publication_recovery_failed')
+        self.assertEqual(records[0]['error_class'], 'OSError')
+        self.assertEqual(records[0]['errno'], 30)
+        self.assertIn('Read-only file system', records[0]['detail'])
+
+    def test_the_record_lands_in_the_directory_this_unit_can_always_write(self):
+        """The grant is `.runtime/backup-alerts`; nothing outside it is writable under the
+        sandbox, so the record must be inside it or it is not a record."""
+        a._record_recovery_failure(OSError(30, 'Read-only file system', '/somewhere'))
+        written = self.directory / 'recovery-failures.jsonl'
+        self.assertTrue(written.exists())
+        self.assertEqual(written.parent, self.directory)
+        self.assertEqual(oct(written.stat().st_mode)[-3:], '600')
+
+    def test_the_recorder_can_never_fail_its_caller(self):
+        """⚠️ A recorder that raises reintroduces the exact problem the `except` exists to avoid:
+        a monitor that dies trying to report something monitors nothing."""
+        with patch.object(a, 'DIRECTORY', Path('/proc/nonexistent-and-unwritable/alerts')):
+            a._record_recovery_failure(OSError(30, 'Read-only file system', '/x'))  # must not raise
+
+    def test_records_accumulate_rather_than_overwrite(self):
+        """Failure history is evidence; the second tick must not erase the first."""
+        for index in range(3):
+            a._record_recovery_failure(OSError(30, 'Read-only file system', '/x%d' % index))
+        self.assertEqual(len(self.ledger()), 3)
+
+    def test_an_unbounded_message_is_truncated(self):
+        a._record_recovery_failure(RuntimeError('x' * 5000))
+        self.assertLessEqual(len(self.ledger()[0]['detail']), 300)
+
+    def test_check_records_the_failure_instead_of_swallowing_it(self):
+        """⚠️ THE END-TO-END CLAIM, AND THE POSITIVE CONTROL FOR IT.
+
+        `check()` must still not raise — its own outer handler guarantees that — and must no
+        longer be SILENT. The control is the second half: with recovery succeeding, nothing is
+        written, so a recorder that fired unconditionally would fail here.
+
+        ⚠️ AND THE PATCH TARGET IS THE PACKAGE ATTRIBUTE, NOT A MODULE THIS TEST IMPORTED.
+        The first version patched whatever `activation_exclusion` this test file could import.
+        Run as `unittest ops.test_backup_alerts` that is the same object `check()` resolves and
+        the test passed; run as `unittest discover -s ops` — which is what CI does — the test
+        module is top-level, so it patched `activation_exclusion` while `check()` used
+        `ops.activation_exclusion`. Two objects, one name, patch applied to the wrong one, and
+        the test failed for the right reason. `check()` does `from ops import
+        activation_exclusion`, which resolves the ATTRIBUTE on the package, so that is the only
+        target that is correct under both layouts.
+        """
+        import importlib
+        try:
+            package = importlib.import_module('ops')
+            importlib.import_module('ops.activation_exclusion')
+        except ImportError:  # pragma: no cover - both CI layouts import it
+            self.fail('ops.activation_exclusion must be importable; check() resolves it that way')
+
+        def erofs():
+            raise OSError(30, 'Read-only file system',
+                          '/opt/meddoc-pro/rebuild/.runtime/publication/.activation-publication.lock')
+
+        # `locked` short-circuits the rest of check(); its outer handler turns that into a normal
+        # return, which is exactly the shape the live unit had while it was concealing.
+        with patch.object(package, 'activation_exclusion', SimpleNamespace(recover_publication=erofs)), \
+             patch.object(a, 'locked', side_effect=RuntimeError('stop after the recovery step')):
+            result, code = a.check()
+        self.assertEqual(result['condition'], 'monitoring_state_unavailable')
+        self.assertEqual(code, 1)
+        self.assertEqual(len(self.ledger()), 1, 'the swallowed failure left no record')
+        self.assertEqual(self.ledger()[0]['errno'], 30)
+
+        quiet = SimpleNamespace(recover_publication=lambda: {'recovered': False,
+                                                             'reason': 'no_pause_owed'})
+        with patch.object(package, 'activation_exclusion', quiet), \
+             patch.object(a, 'locked', side_effect=RuntimeError('stop after the recovery step')):
+            a.check()
+        self.assertEqual(len(self.ledger()), 1,
+                         'a successful recovery must write nothing; the recorder is not unconditional')

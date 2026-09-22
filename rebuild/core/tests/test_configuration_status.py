@@ -57,3 +57,37 @@ class ConfigurationStatusDisclosesNothing(SimpleTestCase):
         # happily kept pinning them. A test that locks in a screen's wording is only ever as true as the wording.
         self.assertEqual(missing.count('EVERY recording is refused before the provider'), 2)
         self.assertNotIn('submitted exactly as uploaded', missing)
+
+
+class HealthReportsTheGuardRatherThanAsserting(SimpleTestCase):
+    """⚠️ `data_mode` WAS A HARDCODED LITERAL AND WAS BEING READ AS PROOF OF THE GUARD.
+
+    `/health/` printed `synthetic-only` unconditionally. It would have kept printing it with
+    `SYNTHETIC_ONLY` set to False, so every check that cited `/health/` as evidence of
+    synthetic-only operation — including this programme's own post-reboot and post-activation
+    checks — was reading a label that could not disagree with itself.
+
+    A field that cannot report the bad case is not evidence; it is decoration that looks like
+    evidence, which is worse than no field at all.
+    """
+
+    @override_settings(SYNTHETIC_ONLY=True)
+    def test_it_reports_synthetic_only_when_the_guard_is_on(self):
+        self.assertEqual(self.client.get('/health/').json()['data_mode'], 'synthetic-only')
+
+    @override_settings(SYNTHETIC_ONLY=False)
+    def test_it_reports_live_when_the_guard_is_off(self):
+        """⚠️ THE POSITIVE CONTROL, AND THE WHOLE POINT. Before the repair this assertion was
+        impossible to satisfy: the literal could not move."""
+        self.assertEqual(self.client.get('/health/').json()['data_mode'], 'live')
+
+    @override_settings(SYNTHETIC_ONLY=True)
+    def test_the_configuration_report_names_the_same_setting_the_health_field_derives_from(self):
+        """Two surfaces, one fact. If they ever disagree, one of them is lying, and the point of
+        deriving the field was to make that impossible."""
+        self.assertIn('SYNTHETIC_ONLY: True', self.report())
+
+    def report(self):
+        out = StringIO()
+        call_command('configuration_status', stdout=out)
+        return out.getvalue()
