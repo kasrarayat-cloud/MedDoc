@@ -173,14 +173,33 @@ def fixture(notes,fields,*,context_labels=(),evidence_contract=None):
 TAB_CONTRACT = 'tab-complete-evidence-v1'
 # A sentence boundary is not permission to discard an inherited heading. Such
 # sources remain review-required, including a header followed by labelled lines.
-INHERITED_SCOPE = re.compile(r'\b(?:following|these|those|above|below|listed|family history|'
-    r'if|would|could|might|hypothetical|imagine|suppose)\b', re.I)
+#: ⚠️ ONE VOCABULARY, READ TWO WAYS — NOT A SECOND KEYWORD LIST. The same fourteen words that
+#: have always made a source review-required are split here into the two jobs they were already
+#: doing, and `INHERITED_SCOPE` is rebuilt from the halves so there is one definition.
+#:
+#: A POINTER leaves scope open: it says some other line may govern this one, without saying what
+#: it would do to it. A REFRAMER changes the POLARITY or the ATTRIBUTION of what it governs —
+#: whether the finding happened at all, or whether it happened to this patient.
+#:
+#: The distinction is load-bearing for `suggestible` below, and `test_candidate_suggestion`
+#: asserts the union still equals the original fourteen words so the two cannot drift.
+SCOPE_POINTERS = r'following|these|those|above|below|listed'
+SCOPE_REFRAMERS = r'family history|if|would|could|might|hypothetical|imagine|suppose'
+INHERITED_SCOPE = re.compile(r'\b(?:' + SCOPE_POINTERS + '|' + SCOPE_REFRAMERS + r')\b', re.I)
+REFRAMED_SCOPE = re.compile(r'\b(?:' + SCOPE_REFRAMERS + r')\b', re.I)
 QUOTED_SOURCE = re.compile(r'["“”]|(?<!\w)[\'‘]')
 UNSCOPED_NEGATIVE_HEADING = re.compile(r'^[^:]*\b(?:denied|denies|absent|negative|no|not|without|never)\b[^:]*:',re.I)
 FINITE_STATEMENT = re.compile(r'\b(?:is|are|was|were|has|have|had|denies|reports|reported|showed|revealed|advanced|seen|collected|recommend|received|underwent)\b',re.I)
 
 ABBREVIATION = re.compile(r'(?:\b(?:dr|mr|mrs|ms|prof|st|vs|etc|approx)|\b[A-Z]|\be\.g|\bi\.e)\.$', re.I)
-INLINE_CORRECTION = re.compile(r';\s*correction\s*,\s*(\S.*)$', re.I)
+#: ⚠️ ONE TOKEN, TWO ANCHORINGS — NOT A SECOND KEYWORD LIST. Inline (`…; correction, X`)
+#: binds to its own sentence and already carries a value. Line-initial (`Correction: …`)
+#: names no sentence, so nothing can bind it; it is read only to SUPPRESS an offer,
+#: never to widen one. `docs/foundation/specs/field-specific-correction-handling.md` S6.
+CORRECTION = r'correction'
+INLINE_CORRECTION = re.compile(r';\s*' + CORRECTION + r'\s*,\s*(\S.*)$', re.I)
+LINE_INITIAL_CORRECTION = re.compile(r'^[\s\-*\u2022]*(?:\d+[.)]\s*)?' + CORRECTION + r's?\b',
+                                     re.I | re.M)
 QUANTITY = re.compile(r'(?:(?:less than|greater than|about|approximately)\s+|[<>]=?\s*)?'
     r'(?:\d+(?:\.\d+)?|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)'
     r'\s+([a-z]+)\.?$', re.I)
@@ -271,6 +290,113 @@ def tab_source_value(quote,labels):
     return None
 
 
+#: ⚠️ A CANDIDATE HELD FOR REVIEW IS NOT A DISCARDED ONE. When the provenance checks have
+#: already passed — the quote is present in the source, its offsets are bound, it was not
+#: borrowed from another question's label — and the ONLY reservation is that some other line
+#: might govern the answer, the extracted value is kept and shown as a SUGGESTION. `text`,
+#: `status` and `evidence` are BYTE-FOR-BYTE what they were before this existed; the suggestion
+#: is added beside them. Nothing is accepted and finalization still demands a decision.
+#:
+#: Measured cost of discarding it: a real provider response returned three correct answers, each
+#: quoting its own question's line, and all three were blanked because the note also carried an
+#: opening remark and two closing sentences. The doctor had to retype every one.
+#: ⚠️ THIS TEXT SAYS ONLY WHAT THE VALIDATOR ACTUALLY KNOWS. It used to assert "not a
+#: contradiction found in the notes", which the validator is in no position to claim: it checks
+#: provenance and two labelled values, and a correction on a later unlabelled line trips neither.
+#: A refutation lens produced a note whose next line read "the patient reports severe crushing
+#: chest pain" under a suggestion of "no chest pain", with this sentence above it telling the
+#: clinician there was nothing to find. Saying less is the fix; the full note is shown regardless.
+SCOPE_REVIEW_REASON = (
+    'Another line in this note may govern this answer, so it needs your decision. '
+    'Nothing was checked for or against it beyond where the words came from — read the full '
+    'note above before deciding. This was read from the evidence shown and has NOT been accepted.')
+
+
+def suggestible(notes, texts, explicit):
+    """Whether a held candidate may be offered for one-click acceptance at all.
+
+    Four conditions, each from a demonstrated counterexample. Every one SUPPRESSES; none widens,
+    so this function can only ever offer less than the note already made review-required.
+    """
+    # ⚠️ ONE CANDIDATE, OR NONE. `'\n'.join(texts)` is the right shape for a supported multi-
+    # sentence answer, and the wrong shape here: given `Allergies: penicillin` followed by
+    # `Patient now reports no known drug allergies.`, it offered BOTH as one accept-able answer,
+    # putting `penicillin` in the allergies cell of a patient the same note says has none.
+    if len(texts) != 1:
+        return False
+    # ⚠️ IF THIS QUESTION HAS ITS OWN LABELLED ANSWER AND THE CANDIDATE IS NOT IT, THE TWO
+    # DISAGREE. `len(explicit)>1` only counts labelled values against each other, so a labelled
+    # value contradicted by a free-text sentence passes it: `Extent: … splenic flexure` beside
+    # `The scope was advanced to the cecum.` offered the caecum for one click.
+    if explicit and texts[0] not in explicit:
+        return False
+    # A line-initial correction names no sentence, so nothing binds it and it may correct this
+    # answer. Suppress rather than guess. The inline form is already bound to its own unit.
+    if LINE_INITIAL_CORRECTION.search(notes):
+        return False
+    return _plain_pointer_only(notes)
+
+
+def negative_heading(notes):
+    """⚠️ APPLIED PER LINE, BECAUSE THE PATTERN IS ANCHORED AND THE NOTE IS NOT ONE LINE.
+
+    `UNSCOPED_NEGATIVE_HEADING` carries `^` and `[^:]*`, and is compiled WITHOUT `re.M`, so
+    searching a whole note can only ever match the span before the note's FIRST colon. That is
+    correct where `source_units` uses it — per quote, where `^` means the start of that sentence
+    — and silently wrong applied to a multi-line note. Measured cost of getting it wrong: with
+
+        Indication: screening colonoscopy
+        The following findings are denied:
+        Symptoms: chest pain
+
+    the heading became invisible because one ordinary labelled line moved the first colon, and
+    `chest pain` was offered for one-click acceptance under a denial. Removing that first line
+    restored the suppression — which is exactly why the suite's own reference case passed.
+
+    It failed in the other direction too: `[^:]*` spans newlines, so any note with `no`, `not` or
+    `never` anywhere before its first colon was treated as a negative heading. Per line, an
+    unpunctuated clinical sentence with no colon simply does not match.
+    """
+    return any(UNSCOPED_NEGATIVE_HEADING.search(line) for line in notes.splitlines())
+
+
+def _plain_pointer_only(notes):
+    """Whether a held candidate may be offered for one-click acceptance at all.
+
+    ⚠️ THIS EXISTS BECAUSE THE FIRST VERSION OF THIS FEATURE WOULD HAVE PUT AN ACCEPT BUTTON
+    UNDER A DENIAL. Three reviewed tests caught it — `test_full_line_cannot_hide_inherited_
+    negative_or_family_context` and both parameterisations of `test_refutation_scope_cannot_drop_
+    denial_or_quoted_hypothesis`, all of them written by an earlier refutation pass. Given
+    `The following findings are denied:` / `Finding: diabetes`, the candidate is `diabetes`, and
+    offering that as a one-click answer inverts the note.
+
+    So a REFRAMER, a negative heading, or reported speech suppresses the offer entirely. Those
+    are real objections, and presenting a real objection as a suggestion dresses it up as a
+    formatting quibble. A POINTER alone does not: it leaves scope open without asserting
+    anything about polarity, which is the §1e case and the one worth fixing.
+
+    Suppression is a property of the whole note, deliberately. A reframer two lines away may
+    still govern this answer, and deciding that it does not is exactly the judgement this
+    function is not entitled to make.
+    """
+    return not (negative_heading(notes) or REFRAMED_SCOPE.search(notes)
+                or QUOTED_SOURCE.search(notes))
+
+
+def with_scope_suggestion(answer, notes, texts, own, explicit):
+    """Attach the held candidate and the passage it was read from. Never alters the answer.
+
+    `own` is the answer's own evidence, captured BEFORE the whole-note substitution. It is kept
+    under its own key rather than replacing `evidence`, because `evidence` is what carries the
+    governing context a clinician must see — a denial heading, a hypothetical frame — and
+    narrowing it was the defect this shape replaced.
+    """
+    if not texts or not suggestible(notes, texts, explicit):
+        return answer
+    return {**answer, 'suggestion': '\n'.join(texts), 'suggestion_evidence': own,
+            'reason': SCOPE_REVIEW_REASON}
+
+
 def validate_tab_selections(notes,fields,selections,*,context_labels=()):
     units,inherited=source_units(notes,fields,context_labels=context_labels)
     labels=recognized_labels(fields,context_labels)
@@ -321,11 +447,15 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=()):
         conflict=item.conflict or len(explicit)>1 or injection or (inherited and bool(texts)) or guarded
         if len(explicit)>1:
             evidence=[{k:unit[k] for k in ('quote','start','end')} for unit in explicit.values()]
+        own=evidence
         if (inherited or injection) and texts:
             evidence=[{'quote':notes,'start':0,'end':len(notes)}]
         status='conflict' if conflict else 'supported' if texts else 'missing'
-        output[item.key]={'text':'\n'.join(texts) if status=='supported' else '',
-                          'status':status,'evidence':evidence,'reviewed':False}
+        answer={'text':'\n'.join(texts) if status=='supported' else '',
+                'status':status,'evidence':evidence,'reviewed':False}
+        if inherited and not (item.conflict or len(explicit)>1 or injection or guarded):
+            answer=with_scope_suggestion(answer,notes,texts,own,set(explicit))
+        output[item.key]=answer
     return output
 
 
@@ -403,10 +533,14 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
         explicit_conflict=len(explicit)>1
         if explicit_conflict:
             evidence=[{'quote':q,'start':start,'end':start+len(q)} for q,start in explicit.items()]
+        own=evidence
         status='conflict' if item.conflict or explicit_conflict or guarded or (inherited_context and texts) else 'supported' if texts else 'missing'
         if inherited_context and texts:
             evidence=[{'quote':notes,'start':0,'end':len(notes)}]
-        output[item.key]={'text':'\n'.join(texts) if status=='supported' else '', 'status':status,'evidence':evidence,'reviewed':False}
+        answer={'text':'\n'.join(texts) if status=='supported' else '', 'status':status,'evidence':evidence,'reviewed':False}
+        if inherited_context and not (item.conflict or explicit_conflict or guarded):
+            answer=with_scope_suggestion(answer,notes,texts,own,set(explicit))
+        output[item.key]=answer
     return output
 
 def generate(notes,fields,config=None,*,context_labels=()):
