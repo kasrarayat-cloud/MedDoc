@@ -35,8 +35,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 RUNTIME = Path(__file__).resolve().parents[1] / '.runtime'
-LOCK_PATH = RUNTIME / '.activation-publication.lock'
-DEFERRALS = RUNTIME / 'publication-deferrals.jsonl'
+#: ⚠️ THE COORDINATION ARTIFACTS LIVE IN THEIR OWN DIRECTORY, AND THAT IS A SANDBOX REQUIREMENT
+#: RATHER THAN TIDINESS. The publisher runs under `ProtectSystem=strict`, so every path it writes
+#: must be named in its unit's `ReadWritePaths`. Granting `.runtime` itself would hand the
+#: publisher write access to the whole evidence tree — `backup-secrets/` included — to buy one
+#: lock. A dedicated directory is the narrowest grant that works, and it is the convention every
+#: other ops unit already follows (`backup-alerts`, `new-system-backups`, `automatic-offsite`).
+#:
+#: ⚠️ AND IT MUST BE A DIRECTORY, NOT THREE FILE GRANTS. `note_timer_paused` writes a `.tmp`
+#: sibling and `os.replace`s it, and `recover_publication` `unlink`s the marker; both need write
+#: on the PARENT. A per-file grant would pass review, mount read-write, and still fail there.
+PUBLICATION = RUNTIME / 'publication'
+LOCK_PATH = PUBLICATION / '.activation-publication.lock'
+DEFERRALS = PUBLICATION / 'publication-deferrals.jsonl'
 #: ⚠️ A `finally` DOES NOT RUN AFTER SIGKILL OR A HOST FAILURE. An activation that pauses the
 #: publisher timer and is then killed would leave publication stopped indefinitely — which is the
 #: "permanently disabled timer" outcome arriving by accident rather than by decision. The prior
@@ -50,7 +61,7 @@ DEFERRALS = RUNTIME / 'publication-deferrals.jsonl'
 #:
 #: And the pause stays VISIBLE meanwhile: the ServiceHealth row keeps its own staleness check, so
 #: a publisher that is not running reads as stale rather than as a green.
-TIMER_STATE = RUNTIME / 'publication-timer-pause.json'
+TIMER_STATE = PUBLICATION / 'publication-timer-pause.json'
 PUBLISHER_COMMAND = 'publish_operations_status'
 PUBLISHER_TIMER = 'quillmd-fresh-operations-publisher.timer'
 HELPER_PIN = RUNTIME / 'word-beta-recovery-20260917-final.json'
@@ -75,17 +86,18 @@ def bind_runtime(runtime_dir):
     Normal in-process use needs no call: imported from the installed tree, the default is already
     correct. It is the cross-tree case that must be explicit.
     """
-    global RUNTIME, LOCK_PATH, DEFERRALS, TIMER_STATE
+    global RUNTIME, PUBLICATION, LOCK_PATH, DEFERRALS, TIMER_STATE
     RUNTIME = Path(runtime_dir).resolve()
-    LOCK_PATH = RUNTIME / '.activation-publication.lock'
-    DEFERRALS = RUNTIME / 'publication-deferrals.jsonl'
-    TIMER_STATE = RUNTIME / 'publication-timer-pause.json'
-    return {'runtime': str(RUNTIME), 'lock': str(LOCK_PATH),
+    PUBLICATION = RUNTIME / 'publication'
+    LOCK_PATH = PUBLICATION / '.activation-publication.lock'
+    DEFERRALS = PUBLICATION / 'publication-deferrals.jsonl'
+    TIMER_STATE = PUBLICATION / 'publication-timer-pause.json'
+    return {'runtime': str(RUNTIME), 'publication': str(PUBLICATION), 'lock': str(LOCK_PATH),
             'deferrals': str(DEFERRALS), 'timer_state': str(TIMER_STATE)}
 
 
 def bound_runtime():
-    return {'runtime': str(RUNTIME), 'lock': str(LOCK_PATH),
+    return {'runtime': str(RUNTIME), 'publication': str(PUBLICATION), 'lock': str(LOCK_PATH),
             'deferrals': str(DEFERRALS), 'timer_state': str(TIMER_STATE)}
 
 
@@ -94,7 +106,7 @@ def _now():
 
 
 def _open_lock():
-    RUNTIME.mkdir(mode=0o700, parents=True, exist_ok=True)
+    PUBLICATION.mkdir(mode=0o700, parents=True, exist_ok=True)
     return os.open(LOCK_PATH, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
 
 
@@ -254,7 +266,7 @@ def _helper_systemctl(action, unit):
 
 def note_timer_paused(owner, prior_active):
     """Durable, written BEFORE the pause. Its existence is the debt; clearing it is the payment."""
-    RUNTIME.mkdir(mode=0o700, exist_ok=True)
+    PUBLICATION.mkdir(mode=0o700, parents=True, exist_ok=True)
     state = {'owner': owner, 'unit': PUBLISHER_TIMER, 'prior_active': bool(prior_active),
              'paused_at': _now(), 'pid': os.getpid(), 'must_restore': True}
     tmp = TIMER_STATE.with_suffix('.tmp')
