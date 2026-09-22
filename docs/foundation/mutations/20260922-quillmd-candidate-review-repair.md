@@ -104,11 +104,19 @@ otp_totp_totpdevice
 ```text
 docs/foundation/mutations/20260922-quillmd-candidate-review-repair.md
 rebuild/core/management/commands/publish_operations_status.py
+rebuild/core/tests/test_option_c_acceptance.py
 rebuild/core/tests/test_publication_exclusion.py
 rebuild/ops/activation_exclusion.py
+rebuild/ops/backup_alerts.py
 rebuild/ops/test_activation_exclusion.py
 scripts/activate-candidate-review-repair.py
 ```
+
+⚠️ **THIS LIST DRIFTED ONCE AND THE ADAPTER'S OWN CHECK CAUGHT IT.** Two files —
+`rebuild/ops/backup_alerts.py`, which carries the independent recovery hook, and
+`rebuild/core/tests/test_option_c_acceptance.py` — entered the range after the first version of
+this declaration was written. A declaration that names a smaller range than the tree it ships is
+not a smaller promise; it is a false one, and the activation refuses rather than accepting it.
 
 ## What must change, and what must not
 
