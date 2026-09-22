@@ -112,10 +112,6 @@ def _hold_briefly(queue):
         time.sleep(3)
 
 
-if __name__ == '__main__':
-    unittest.main()
-
-
 def _fake_publisher(seconds):
     """A process whose command line contains the publisher command, so the drain must see it."""
     import subprocess
@@ -243,9 +239,14 @@ class InstalledStatePathsAreNotTargetSourcePaths(unittest.TestCase):
             for key in ('lock', 'deferrals', 'timer_state'):
                 self.assertTrue(bound[key].startswith(str(pathlib.Path(directory).resolve())),
                                 f'{key} did not follow the binding: {bound[key]}')
-            self.assertEqual(exclusion.LOCK_PATH.parent, pathlib.Path(directory).resolve())
-            self.assertEqual(exclusion.TIMER_STATE.parent, pathlib.Path(directory).resolve())
-            self.assertEqual(exclusion.DEFERRALS.parent, pathlib.Path(directory).resolve())
+            # ⚠️ The artifacts moved into ONE granted subdirectory on 2026-09-22 so a sandboxed
+            # unit can be given write access to exactly them; the binding must carry that
+            # directory too, or a rebound runtime silently splits the lock from the marker.
+            expected = pathlib.Path(directory).resolve() / 'publication'
+            self.assertEqual(exclusion.PUBLICATION, expected)
+            self.assertEqual(exclusion.LOCK_PATH.parent, expected)
+            self.assertEqual(exclusion.TIMER_STATE.parent, expected)
+            self.assertEqual(exclusion.DEFERRALS.parent, expected)
 
     def test_a_lock_taken_after_binding_is_the_bound_one(self):
         """The failure was silent, so prove the FILE that actually gets locked moves too."""
@@ -255,7 +256,7 @@ class InstalledStatePathsAreNotTargetSourcePaths(unittest.TestCase):
             with exclusion.hold('activation:bound'):
                 holder = exclusion.holder()
                 self.assertEqual(holder['owner'], 'activation:bound')
-                self.assertTrue((pathlib.Path(directory) / '.activation-publication.lock').exists())
+                self.assertTrue((pathlib.Path(directory) / 'publication' / '.activation-publication.lock').exists())
 
     def test_two_runtimes_do_not_exclude_each_other(self):
         """⚠️ THE POSITIVE CONTROL FOR THE WHOLE CLASS: it demonstrates the silent failure mode.
@@ -295,13 +296,40 @@ class BootstrapRecoveryWithoutTheInstalledHook(unittest.TestCase):
         self.directory = __import__('tempfile').mkdtemp()
         exclusion.bind_runtime(self.directory)
 
-    def test_the_installed_baseline_genuinely_lacks_the_hook(self):
-        """The premise, verified rather than assumed."""
-        installed = pathlib.Path('/opt/meddoc-pro/rebuild/ops/backup_alerts.py')
-        if not installed.exists():
-            self.skipTest('installed tree unavailable')
-        self.assertNotIn('recover_publication', installed.read_text(),
-                         'premise gone: the installed hook now exists, so re-read this test')
+    def test_the_watchdog_does_not_depend_on_the_installed_hook(self):
+        """⚠️ RE-READ 2026-09-22, ON THIS TEST'S OWN INSTRUCTION — AND THE INSTRUCTION WAS RIGHT.
+
+        It used to assert that the INSTALLED `ops/backup_alerts.py` contained no
+        `recover_publication`, and it carried the message *"premise gone: the installed hook now
+        exists, so re-read this test"*. The 2026-09-22 activation installed that hook, so the
+        premise expired exactly as predicted and the test went permanently red on the host while
+        skipping in CI — a failure nobody would see until they ran the suite where the tree is.
+
+        ⚠️ A TEST THAT ASSERTS SOMETHING IS ABSENT FROM A TREE YOU ARE ABOUT TO INSTALL INTO
+        FALSIFIES ITSELF ON SUCCESS. The durable claim was never about today's file; it is that
+        the watchdog must work during the FIRST-INSTALL window, when the hook is not there yet.
+        That is a property of the watchdog, so it is now measured on the watchdog: the bootstrap
+        path must not reach `backup_alerts` at all.
+        """
+        import re
+        #: ⚠️ A BARE SUBSTRING IS THE WRONG PROBE HERE, AND IT FAILED THIS TEST ONCE BEFORE IT
+        #: WAS RIGHT. The watchdog's own `record()` call explains itself in prose that contains
+        #: the words "the installed backup_alerts cannot recover a pause it does not know
+        #: about" — a MENTION, not a dependency. Match the forms that actually create one.
+        dependency = re.compile(r'import\s+backup_alerts|import\s+[^\n]*\bbackup_alerts\b'
+                                r'|\bbackup_alerts\s*\.')
+        source = pathlib.Path(__file__).resolve().parent / 'activation_exclusion.py'
+        watchdog = source.read_text().split('def spawn_bootstrap_watchdog', 1)[1]
+        self.assertIsNone(dependency.search(watchdog),
+                          'the bootstrap watchdog reaches for the hook it exists to replace')
+        #: ⚠️ POSITIVE CONTROL: a probe that cannot fire certifies nothing. Each real form must
+        #: be caught, and the prose that broke the first attempt must still be allowed through.
+        for real in ('from ops import backup_alerts as b', 'import backup_alerts',
+                     '    backup_alerts.recover_publication()'):
+            self.assertIsNotNone(dependency.search(real), real)
+        self.assertIsNone(dependency.search(
+            "reason='the installed backup_alerts cannot recover a pause it does not know about'"),
+            'the probe reads prose as a dependency, which is how it failed the first time')
 
     def test_the_watchdog_recovers_a_pause_its_parent_never_cleared(self):
         calls = []
@@ -325,3 +353,99 @@ class BootstrapRecoveryWithoutTheInstalledHook(unittest.TestCase):
                 exclusion.recover_publication(grace_seconds=1)
         self.assertIsNotNone(exclusion.pause_owed(),
                              'the debt was cleared although restoration failed')
+
+
+class TheUnitsThatRunThisModuleCanWriteItsPaths(unittest.TestCase):
+    """⚠️ THE DEFECT THIS CLASS EXISTS FOR, MEASURED ON A LIVE HOST, 2026-09-22.
+
+    `52b28b36` shipped this module and its `flock`. Neither unit that takes the lock was granted
+    write access to the path it lives on, and both run `ProtectSystem=strict`. From 07:53:54Z the
+    publisher raised `OSError: [Errno 30] Read-only file system` on every five-minute tick — 62
+    consecutive failures, zero successes, the `core_servicehealth` row six and a half hours stale
+    against its own 900-second freshness bound.
+
+    ⚠️ AND IT WAS MASKED BY A FALSE GREEN. The 08:00:09Z publication that appeared to prove
+    resumption was run by the operator OUTSIDE the sandbox, so it never exercised the failing
+    path. A proof that does not run where the code runs proves nothing about where the code runs.
+
+    ⚠️ AND THE DESIGNED BACKSTOP WAS DISABLED BY THE SAME CAUSE. `backup_alerts.check()` calls
+    `recover_publication()` inside `except Exception: pass`, so the identical EROFS would be
+    swallowed silently — the one path positioned to pay a pause debt could not pay it, and would
+    not say so. It survived only because no pause was owed.
+
+    These tests read the REQUIRED directory off the module rather than restating it, so moving a
+    path moves the requirement with it and cannot drift.
+    """
+
+    #: Each unit that executes code taking the exclusion lock, and its tracked source.
+    UNITS = ('quillmd-fresh-operations-publisher.service',
+             'quillmd-fresh-backup-alerts.service')
+
+    @staticmethod
+    def _grants(service_text, directory):
+        """True when a `ProtectSystem=strict` unit may write `directory`.
+
+        A grant counts only if it names the directory itself or an ancestor — systemd mounts the
+        listed path read-write, and nothing below an ungranted parent becomes writable.
+        """
+        granted = []
+        for line in service_text.splitlines():
+            if line.startswith('ReadWritePaths='):
+                granted += line.split('=', 1)[1].split()
+        wanted = pathlib.PurePosixPath(directory)
+        for entry in granted:
+            candidate = pathlib.PurePosixPath(entry.lstrip('-+!'))
+            if candidate == wanted or candidate in wanted.parents:
+                return True
+        return False
+
+    #: The units name the INSTALLED tree, which does not move. Only the directory NAME can
+    #: drift, so that half is read off the module — and off `.name`, not the whole path, because
+    #: other tests in this file rebind the runtime and a rebound global would fail this spuriously.
+    INSTALLED_RUNTIME = '/opt/meddoc-pro/rebuild/.runtime'
+
+    def test_every_unit_that_takes_the_lock_may_write_the_directory_holding_it(self):
+        required = str(pathlib.PurePosixPath(self.INSTALLED_RUNTIME) / exclusion.PUBLICATION.name)
+        for unit in self.UNITS:
+            text = (Path(__file__).resolve().parents[2] / 'rebuild/deploy' / unit).read_text()
+            self.assertIn('ProtectSystem=strict', text,
+                          unit + ' no longer sandboxes; this guard assumed it did')
+            self.assertTrue(self._grants(text, required),
+                            unit + ' cannot write ' + required +
+                            ' — every lock attempt under it raises EROFS')
+
+    def test_the_lock_the_deferrals_and_the_marker_all_live_under_that_one_directory(self):
+        """A grant covers a DIRECTORY. An artifact that escapes it is ungranted and will fail."""
+        directory = exclusion.PUBLICATION
+        for artifact in (exclusion.LOCK_PATH, exclusion.DEFERRALS, exclusion.TIMER_STATE):
+            self.assertEqual(artifact.parent, directory,
+                             str(artifact) + ' escapes the granted directory')
+
+    def test_the_grant_check_rejects_the_unit_text_that_actually_shipped(self):
+        """⚠️ THE POSITIVE CONTROL. Without it, a predicate that returns True unconditionally
+        passes both tests above and this whole class certifies nothing.
+
+        This is the publisher's `ReadWritePaths` line exactly as `52b28b36` shipped it. The check
+        must FAIL against it, because it did fail against it, for six and a half hours.
+        """
+        shipped = ('[Service]\nProtectSystem=strict\n'
+                   'ReadWritePaths=/var/lib/quillmd/tmp\n')
+        self.assertFalse(self._grants(shipped, '/opt/meddoc-pro/rebuild/.runtime/publication'),
+                         'the check passed the very unit text that broke the publisher')
+        # ...and it must still ACCEPT a correct grant, so it is not merely always-False.
+        repaired = shipped.replace('ReadWritePaths=/var/lib/quillmd/tmp',
+                                   'ReadWritePaths=/var/lib/quillmd/tmp '
+                                   '/opt/meddoc-pro/rebuild/.runtime/publication')
+        self.assertTrue(self._grants(repaired, '/opt/meddoc-pro/rebuild/.runtime/publication'))
+
+    def test_a_parent_grant_counts_and_a_sibling_grant_does_not(self):
+        """The two ways a reviewer misreads a `ReadWritePaths` line."""
+        parent = 'ReadWritePaths=/opt/meddoc-pro/rebuild/.runtime\n'
+        sibling = 'ReadWritePaths=/opt/meddoc-pro/rebuild/.runtime/backup-alerts\n'
+        target = '/opt/meddoc-pro/rebuild/.runtime/publication'
+        self.assertTrue(self._grants(parent, target), 'an ancestor grant does make it writable')
+        self.assertFalse(self._grants(sibling, target), 'a sibling grant makes nothing writable')
+
+
+if __name__ == '__main__':
+    unittest.main()
