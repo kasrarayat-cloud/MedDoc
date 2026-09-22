@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Code-only preserving activation for the candidate-review release.
 
-⛔ HELD 2026-09-22 — this adapter is complete and CANNOT RUN yet. The pinned independent-key
+✅ RESOLVED 2026-09-22 — the hold below was cleared by a new independent-key drill against an
+offsite-origin 36-table capture. Kept for the record: The pinned independent-key
 restore proof covers a 35-table capture taken before migration `0018_servicehealth`, while the
 live population is 36, and the bounded exception that bridged the two expired when
 `core_servicehealth` stopped being empty. A local restore is not a substitute: the guard demands
@@ -40,42 +41,49 @@ SOURCE = Path(__file__).resolve().parents[1]
 APP = ROOT / 'rebuild'
 SELF = 'scripts/activate-candidate-review.py'
 DECL = 'docs/foundation/mutations/20260921-quillmd-candidate-review-activation.md'
-DECL_SHA256 = 'e1407b8aae23d6c9b28f5c23d3d149560c376479781af6c787e5e93919020766'
+DECL_SHA256 = 'b46e8897e1ef0bc296d5a52fcb68422a2127a6f07ccf247b8de07b73962072df'
 BASELINE = 'eb37c7846f3ef634c16b4da46456663b88217a60'
 EVIDENCE = ROOT / 'rebuild/.runtime/candidate-review-activation-20260921'
 DRIVER = 'scripts/activate-typed-voice.py'
 DRIVER_SHA256 = '4e2efda2357fa2c33262eb2f747ac7201eadbc94875528cde2b7fe9040ebba18'
 MIGRATION = '0018_servicehealth'
-#: ⚠️ THE INHERITED BOUNDED EXCEPTION IS GONE, AND THAT IS THE POINT OF THIS PIN.
+#: ⚠️ THE INHERITED BOUNDED EXCEPTION IS GONE, AND A NEW INDEPENDENT-KEY DRILL IS WHY.
 #:
 #: The previous activation accepted a 35-table safety capture that did not cover
-#: `core_servicehealth`, bounded to ONLY while that table was EMPTY — because a restore from it
-#: would then lose no row. The operations publisher has since written a row, so the exception
-#: expired exactly as designed and the read-only pass refused: *"The table the retained capture
-#: does not cover is no longer empty."* That refusal was correct and is not worked around here.
+#: `core_servicehealth`, bounded to ONLY while that table was EMPTY. The operations publisher
+#: wrote a row, the exception expired exactly as designed, and the read-only pass refused. The
+#: 2026-09-20 drill could not rescue it either: its proof is byte-frozen by sha256 and covers a
+#: capture taken BEFORE migration `0018_servicehealth`.
 #:
-#: The resolution is a capture that covers everything, obtained through the existing authorized
-#: LOCAL procedure — no offsite restore, no B2 allowance, no provider call:
+#: So a new drill was performed on 2026-09-22 against an OFFSITE-ORIGIN 36-table capture:
 #:
-#:   backup       -> 20260922T024158Z-8d231f14   36 tables, 226,080 rows, 64 files,
-#:                                               source_commit eb37c784 = the running release
-#:   restore-check-> restore-88da076936d4dc98    isolated and networkless; all table hashes and
-#:                                               all file hashes match; provider_actions 0,
-#:                                               network none, published_ports 0, container not
-#:                                               retained; financial invariants all zero
-#:   compose      -> backup-restore-20260922T024158Z-8d231f14.json, validator passed
+#:   capture   20260922T043002Z-7d766ca1 — scheduled 04:30Z run, 36 tables, 226,080 rows,
+#:             64 files, source_commit eb37c784 = the running release
+#:   offsite   scheduled 05:00Z upload, 66 objects, 18,509,364 ciphertext bytes, readback
+#:             verified; live_transport / transport_verified / restore_verified all true
+#:   drill     downloaded back under a BOUNDED reservation (80 requests / 22,000,000 bytes,
+#:             sized from today's measured manifest, not from 2026-09-20 observation bytes) and
+#:             restored in isolation with the desktop's vault-returned key as the SOLE
+#:             decryption source
 #:
-#: Because that capture's population equals the live population exactly, the DRIVER'S OWN
-#: `assert_retained_capture` now passes unmodified. This adapter therefore overrides it with
-#: NOTHING. The guard is strictly stronger than the one it replaces, not weaker.
+#: ⚠️ WHAT THE DRILL PROVES, AND WHAT IT DOES NOT. The Fernet key was independently recovered and
+#: the operating key was never opened — observed by an inotify watch that fires for ANY process
+#: on this host, with its own positive control, because a Python audit hook is language-level and
+#: cannot see a docker child. The B2 RETRIEVAL credential was the live one; its independent
+#: recovery is NOT demonstrated, exactly as in 2026-09-20.
 #:
-#: The restore evidence is re-pinned to the same capture, so the drill and the safety capture are
-#: one run and `set(latest['tables']) == set(manifest['tables'])` holds by identity rather than by
-#: coincidence. Both are set on the modules for THIS run only; the historical activators' own
-#: constants are untouched, as their receipts depend on them.
-CAPTURE_RUN = '20260922T024158Z-8d231f14'
+#: Because this capture's population equals the live population, the DRIVER'S OWN
+#: `assert_retained_capture` passes unmodified and this adapter overrides it with nothing.
+#:
+#: Every pin below is set on the modules for THIS RUN ONLY. The historical activators keep their
+#: own constants and their proof stays byte-identical at 774171311054f0df…, so no past receipt
+#: and no consumed activation eligibility is disturbed.
+RESTORE_RESULT = APP / '.runtime/recovery-custody-handoff-20260922/return-evidence/independent-key-restore/result.json'
+RESTORE_RESULT_SHA256 = 'f2df7c56486b5d09de254ee7ab69c30697ca2b6487b84b700fe06c7fa7f49d0f'
+RESTORED_MANIFEST_SHA256 = 'c3c4994fa4b50c51e75197e2ba57f8e2427daaf5929539c01498548da2083011'
+CAPTURE_RUN = '20260922T043002Z-7d766ca1'
 CAPTURE_SOURCE = 'eb37c7846f3ef634c16b4da46456663b88217a60'
-CAPTURE_MANIFEST_SHA256 = '36d905a82be06ef7c69332b744d4e711fa82857013890d825fd44665ee451c7a'
+CAPTURE_MANIFEST_SHA256 = 'c3c4994fa4b50c51e75197e2ba57f8e2427daaf5929539c01498548da2083011'
 #: The completed static transition of the release now serving. This act reinstalls nothing.
 STATIC_RECEIPT = APP / '.runtime/word-multicolumn-activation-20260921/word-multicolumn-activation-eb37c7846f3e.json'
 STATIC_RECEIPT_SHA256 = '626d7eff5f318b618ff020af813e1265253eadedd0bf26828f05e844529d16f1'
@@ -147,7 +155,10 @@ for module in (driver, driver.a, driver.b):
                         'MIGRATION': MIGRATION, 'CAPTURE_RUN': CAPTURE_RUN,
                         'CAPTURE_SOURCE': CAPTURE_SOURCE,
                         'CAPTURE_MANIFEST_SHA256': CAPTURE_MANIFEST_SHA256,
-                        'RESTORED_RUN': CAPTURE_RUN, 'RESTORED_RELEASE': CAPTURE_SOURCE}.items():
+                        'RESTORED_RUN': CAPTURE_RUN, 'RESTORED_RELEASE': CAPTURE_SOURCE,
+                        'RESTORED_MANIFEST_SHA256': RESTORED_MANIFEST_SHA256,
+                        'RESTORE_RESULT': RESTORE_RESULT,
+                        'RESTORE_RESULT_SHA256': RESTORE_RESULT_SHA256}.items():
         setattr(module, name, value)
 driver.__file__ = __file__
 driver.RUNTIME_ALLOWED = ALLOWED
