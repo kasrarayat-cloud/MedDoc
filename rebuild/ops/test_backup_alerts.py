@@ -4,6 +4,7 @@ import fcntl
 import json
 import os
 from pathlib import Path
+import sys
 from types import SimpleNamespace
 import tempfile
 import unittest
@@ -1050,41 +1051,100 @@ class RecoveryFailureIsRecordedNotSwallowed(unittest.TestCase):
         longer be SILENT. The control is the second half: with recovery succeeding, nothing is
         written, so a recorder that fired unconditionally would fail here.
 
-        ⚠️ AND THE PATCH TARGET IS THE PACKAGE ATTRIBUTE, NOT A MODULE THIS TEST IMPORTED.
-        The first version patched whatever `activation_exclusion` this test file could import.
-        Run as `unittest ops.test_backup_alerts` that is the same object `check()` resolves and
-        the test passed; run as `unittest discover -s ops` — which is what CI does — the test
-        module is top-level, so it patched `activation_exclusion` while `check()` used
-        `ops.activation_exclusion`. Two objects, one name, patch applied to the wrong one, and
-        the test failed for the right reason. `check()` does `from ops import
-        activation_exclusion`, which resolves the ATTRIBUTE on the package, so that is the only
-        target that is correct under both layouts.
+        ⚠️ AND THE PATCH COVERS EVERY NAME THE MODULE CAN RESOLVE, because `check()` imports it
+        two ways on purpose: `from . import` under the package layout, `import` under the script
+        layout its unit actually uses. Patching one name passed under one layout and silently did
+        nothing under the other — which is the same two-objects-one-name trap that made the hook
+        inert in the first place. Both are patched, so the test cannot pass by missing.
         """
+        import contextlib as _contextlib
         import importlib
-        try:
-            package = importlib.import_module('ops')
-            importlib.import_module('ops.activation_exclusion')
-        except ImportError:  # pragma: no cover - both CI layouts import it
-            self.fail('ops.activation_exclusion must be importable; check() resolves it that way')
+        targets = []
+        for name in ('ops.activation_exclusion', 'activation_exclusion'):
+            try:
+                targets.append(importlib.import_module(name))
+            except ImportError:
+                continue
+        self.assertTrue(targets, 'the recovery module must be importable under this layout')
 
         def erofs():
             raise OSError(30, 'Read-only file system',
                           '/opt/meddoc-pro/rebuild/.runtime/publication/.activation-publication.lock')
 
-        # `locked` short-circuits the rest of check(); its outer handler turns that into a normal
-        # return, which is exactly the shape the live unit had while it was concealing.
-        with patch.object(package, 'activation_exclusion', SimpleNamespace(recover_publication=erofs)), \
-             patch.object(a, 'locked', side_effect=RuntimeError('stop after the recovery step')):
+        with _contextlib.ExitStack() as stack:
+            for module in targets:
+                stack.enter_context(patch.object(module, 'recover_publication', erofs))
+            stack.enter_context(patch.object(a, 'locked',
+                                             side_effect=RuntimeError('stop after the recovery step')))
             result, code = a.check()
         self.assertEqual(result['condition'], 'monitoring_state_unavailable')
         self.assertEqual(code, 1)
         self.assertEqual(len(self.ledger()), 1, 'the swallowed failure left no record')
         self.assertEqual(self.ledger()[0]['errno'], 30)
 
-        quiet = SimpleNamespace(recover_publication=lambda: {'recovered': False,
-                                                             'reason': 'no_pause_owed'})
-        with patch.object(package, 'activation_exclusion', quiet), \
-             patch.object(a, 'locked', side_effect=RuntimeError('stop after the recovery step')):
+        with _contextlib.ExitStack() as stack:
+            for module in targets:
+                stack.enter_context(patch.object(module, 'recover_publication',
+                                                 lambda: {'recovered': False, 'reason': 'no_pause_owed'}))
+            stack.enter_context(patch.object(a, 'locked',
+                                             side_effect=RuntimeError('stop after the recovery step')))
             a.check()
         self.assertEqual(len(self.ledger()), 1,
                          'a successful recovery must write nothing; the recorder is not unconditional')
+
+
+class TheRecoveryHookImportsUnderItsOwnUnit(unittest.TestCase):
+    """⚠️ THE HOOK WAS INERT FROM THE MOMENT IT SHIPPED, AND NOTHING SAID SO.
+
+    `quillmd-fresh-backup-alerts.service` runs
+    `python -B /opt/meddoc-pro/rebuild/ops/backup_alerts.py check`. Running a FILE puts its own
+    directory — `rebuild/ops` — on `sys.path`, not `rebuild`. So `from ops import
+    activation_exclusion` raises ModuleNotFoundError on every tick, and in `52b28b36` that landed
+    inside a bare `except Exception: pass`.
+
+    The independent recovery path — the one thing positioned to pay a pause debt after an
+    activation dies — therefore never ran at all, and the EROFS story everyone told about it
+    (including me, in the declaration for this very release) was the wrong mechanism. The
+    recorder added alongside it is what surfaced the truth, in production, on its first two
+    ticks:
+
+        {"event": "publication_recovery_failed", "error_class": "ModuleNotFoundError",
+         "detail": "No module named 'ops'"}    16:39:55Z and 16:44:55Z
+
+    ⚠️ THIS TEST REPRODUCES THE UNIT'S INVOCATION rather than asserting on the source text. A
+    grep for the import form would pass the day somebody changes the form and breaks the path
+    some other way; only running it the way systemd runs it can fail for the right reason.
+    """
+
+    def run_as_the_unit(self, body):
+        """A child with ONLY rebuild/ops on sys.path — exactly what `python ops/backup_alerts.py`
+        gives you, and nothing this test process has already imported."""
+        import subprocess
+        ops = str(Path(__file__).resolve().parent)
+        program = 'import sys\nsys.path[:] = [%r] + [p for p in sys.path if p != %r]\n' % (ops, ops)
+        return subprocess.run([sys.executable, '-B', '-c', program + body],
+                              capture_output=True, text=True, timeout=120, cwd=ops)
+
+    def test_the_broken_form_really_does_fail_that_way(self):
+        """⚠️ THE POSITIVE CONTROL. Without it the test above could pass because the import is
+        trivially satisfiable, rather than because the fallback form is what saves it."""
+        done = self.run_as_the_unit('from ops import activation_exclusion\n')
+        self.assertNotEqual(done.returncode, 0, 'the shipped form must still fail this way')
+        self.assertIn('No module named', done.stderr)
+
+    def test_check_reaches_recovery_under_the_unit_invocation(self):
+        """End to end: `check()` must actually call it, not merely be able to import it."""
+        done = self.run_as_the_unit(
+            'import backup_alerts as a, activation_exclusion as x, pathlib, tempfile\n'
+            'from unittest.mock import patch\n'
+            'called = []\n'
+            'd = pathlib.Path(tempfile.mkdtemp())\n'
+            'a.DIRECTORY = d\n'
+            'x.recover_publication = lambda: called.append(1) or {"recovered": False}\n'
+            'with patch.object(a, "locked", side_effect=RuntimeError("stop")):\n'
+            '    a.check()\n'
+            'print("CALLED", bool(called), "RECORDED", (d / "recovery-failures.jsonl").exists())\n')
+        self.assertEqual(done.returncode, 0, done.stderr[-400:])
+        self.assertIn('CALLED True', done.stdout)
+        self.assertIn('RECORDED False', done.stdout,
+                      'a successful recovery must not write a failure record')
