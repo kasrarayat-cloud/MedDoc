@@ -32,32 +32,42 @@ SOURCE = Path(__file__).resolve().parents[1]
 APP = ROOT / 'rebuild'
 SELF = 'scripts/activate-candidate-review.py'
 DECL = 'docs/foundation/mutations/20260921-quillmd-candidate-review-activation.md'
-DECL_SHA256 = '1724229cf59487c53183dc8f001528dee6c5694a67648c736d3a04382dd601c3'
+DECL_SHA256 = '7943ca482f47354a39c9321df3bc9fd358141d0fb994a7fd8cceb5bdc180887a'
 BASELINE = 'eb37c7846f3ef634c16b4da46456663b88217a60'
 EVIDENCE = ROOT / 'rebuild/.runtime/candidate-review-activation-20260921'
 DRIVER = 'scripts/activate-typed-voice.py'
 DRIVER_SHA256 = '4e2efda2357fa2c33262eb2f747ac7201eadbc94875528cde2b7fe9040ebba18'
 MIGRATION = '0018_servicehealth'
-#: ⚠️ THE ACTIVATION SAFETY CAPTURE IS NOT THE PUBLISHER'S COVERAGE CAPTURE. I conflated the
-#: two and the read-only run caught it, which is what read-only is for.
+#: ⚠️ THE INHERITED BOUNDED EXCEPTION IS GONE, AND THAT IS THE POINT OF THIS PIN.
 #:
-#: The chain requires the final capture to share the RESTORED DRILL's schema exactly —
-#: `set(latest['tables']) == set(manifest['tables'])` at activate-private-readiness.py:345 —
-#: because a rollback target whose schema was never restore-proven is not evidence. Tonight's
-#: 36-table capture has one table the drill's 35 do not, so it REFUSES, correctly. Measured:
-#: drill 35, morning capture 35 and set-equal to the drill, tonight 36 differing by exactly
-#: `core_servicehealth`.
+#: The previous activation accepted a 35-table safety capture that did not cover
+#: `core_servicehealth`, bounded to ONLY while that table was EMPTY — because a restore from it
+#: would then lose no row. The operations publisher has since written a row, so the exception
+#: expired exactly as designed and the read-only pass refused: *"The table the retained capture
+#: does not cover is no longer empty."* That refusal was correct and is not worked around here.
 #:
-#: So the safety capture is the morning one — the same capture the previous activation pinned,
-#: restore-schema-matched and inside the thirty-hour window. This act changes no schema, and the
-#: one table it does not carry is empty.
+#: The resolution is a capture that covers everything, obtained through the existing authorized
+#: LOCAL procedure — no offsite restore, no B2 allowance, no provider call:
 #:
-#: Tonight's 36-table capture is NOT abandoned and NOT weakened: it exists to satisfy the
-#: PUBLISHER's coverage requirement, which is checked by the publisher's own ruled act, not by
-#: this one. Re-proving a restore against it would be the restoration work that is out of scope.
-CAPTURE_RUN = '20260921T043001Z-0a6f66da'
-CAPTURE_SOURCE = '08e40870f18ca4e79b0cc2b27d6b09ba48f911a7'
-CAPTURE_MANIFEST_SHA256 = 'ac714b19363a66294d35cfde0d4b1de62de2ab9db1916b67f466f9e41bd19c82'
+#:   backup       -> 20260922T024158Z-8d231f14   36 tables, 226,080 rows, 64 files,
+#:                                               source_commit eb37c784 = the running release
+#:   restore-check-> restore-88da076936d4dc98    isolated and networkless; all table hashes and
+#:                                               all file hashes match; provider_actions 0,
+#:                                               network none, published_ports 0, container not
+#:                                               retained; financial invariants all zero
+#:   compose      -> backup-restore-20260922T024158Z-8d231f14.json, validator passed
+#:
+#: Because that capture's population equals the live population exactly, the DRIVER'S OWN
+#: `assert_retained_capture` now passes unmodified. This adapter therefore overrides it with
+#: NOTHING. The guard is strictly stronger than the one it replaces, not weaker.
+#:
+#: The restore evidence is re-pinned to the same capture, so the drill and the safety capture are
+#: one run and `set(latest['tables']) == set(manifest['tables'])` holds by identity rather than by
+#: coincidence. Both are set on the modules for THIS run only; the historical activators' own
+#: constants are untouched, as their receipts depend on them.
+CAPTURE_RUN = '20260922T024158Z-8d231f14'
+CAPTURE_SOURCE = 'eb37c7846f3ef634c16b4da46456663b88217a60'
+CAPTURE_MANIFEST_SHA256 = '36d905a82be06ef7c69332b744d4e711fa82857013890d825fd44665ee451c7a'
 #: The completed static transition of the release now serving. This act reinstalls nothing.
 STATIC_RECEIPT = APP / '.runtime/word-multicolumn-activation-20260921/word-multicolumn-activation-eb37c7846f3e.json'
 STATIC_RECEIPT_SHA256 = '626d7eff5f318b618ff020af813e1265253eadedd0bf26828f05e844529d16f1'
@@ -67,7 +77,6 @@ STATIC_RECEIPT_SHA256 = '626d7eff5f318b618ff020af813e1265253eadedd0bf26828f05e84
 #: The same targeted rename the admin-console adapter made, for the same reason.
 RESULT_PATTERN = r'typed-voice-activation-[a-zA-Z0-9_-]+\.json'
 RENAMED_PATTERN = r'candidate-review-activation-[a-zA-Z0-9_-]+\.json'
-NEW_TABLE = 'core_servicehealth'
 SCHEMA_MARKER = '<!-- declared-schema -->'
 SCOPE_MARKER = '<!-- declared-source-scope -->'
 
@@ -129,7 +138,8 @@ for module in (driver, driver.a, driver.b):
                         'SELF': SELF, 'DECL': DECL, 'EVIDENCE': EVIDENCE,
                         'MIGRATION': MIGRATION, 'CAPTURE_RUN': CAPTURE_RUN,
                         'CAPTURE_SOURCE': CAPTURE_SOURCE,
-                        'CAPTURE_MANIFEST_SHA256': CAPTURE_MANIFEST_SHA256}.items():
+                        'CAPTURE_MANIFEST_SHA256': CAPTURE_MANIFEST_SHA256,
+                        'RESTORED_RUN': CAPTURE_RUN, 'RESTORED_RELEASE': CAPTURE_SOURCE}.items():
         setattr(module, name, value)
 driver.__file__ = __file__
 driver.RUNTIME_ALLOWED = ALLOWED
@@ -171,81 +181,9 @@ def load(name, relative, target):
 driver.a.load = load
 
 
-def judge_population(actual, covered):
-    """The retained capture predates the reviewed migration. Bounded acceptance, stated in one place.
-
-    ⚠️ THE TWO CHECKS IN THIS CHAIN WANT DIFFERENT CAPTURES, and that is why an exception exists
-    at all. `backup_evidence` requires the safety capture to share the RESTORED DRILL's schema
-    (35 tables); `assert_retained_capture` requires it to equal the LIVE population (36). No one
-    capture satisfies both without a fresh independent-key restore drill, which is out of scope.
-
-    So this widens ONE clause by EXACTLY the declared new table, in ONE direction, and ONLY while
-    that table is EMPTY: a restore from this capture would lose no row, because there is no row in
-    it to lose. It restores a database one migration behind the code, which is the ordinary
-    property of any capture taken before a migration.
-
-    ⚠️ AND IT IS NARROWER THAN THE PRECEDENT IT COPIES, because the situation improved: a capture
-    that DOES cover the table now exists (`20260921T194532Z-1b826c0d`, verified against live
-    `pg_tables` by name). The publisher's coverage requirement is therefore met STRICTLY and is
-    not relying on this exception at all. Nothing about that requirement is weakened here.
-
-    Every other clause is unchanged: capture identity, every backed-up file's size and hash, the
-    financial invariants, and the honest comparison record.
-    """
-    require(set(covered) - set(actual) == set(),
-            'The retained capture holds a table the live database no longer has.')
-    extra = set(actual) - set(covered)
-    require(extra in (set(), {NEW_TABLE}),
-            'Retained capture table population differs beyond the declared new table.')
-    if extra:
-        require(actual[NEW_TABLE]['rows'] == 0,
-                'The table the retained capture does not cover is no longer empty.')
-    return extra
-
-
-def assert_retained_capture(manifest, modules, storage):
-    a, b = driver.a, driver.b
-    require(manifest['run_id'] == a.CAPTURE_RUN, 'Unqualified retained capture.')
-    for item in manifest['files']:
-        got = storage.get(item['path'])
-        require(got and got.get('sha256') == item['sha256'] and got.get('size') == item['size'],
-                'Retained backed-up file changed; inspect before activation.')
-    import psycopg
-    backup = modules['backup']
-    with psycopg.connect(**backup.source_options(APP, b.ROLES), autocommit=True) as conn:
-        conn.execute("SET timezone='UTC'")
-        conn.execute("SET datestyle='ISO, MDY'")
-        conn.execute('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY')
-
-        def copy_hash(statement):
-            digest = hashlib.sha256()
-            with conn.cursor().copy(statement) as stream:
-                for value in stream:
-                    digest.update(value)
-            return digest.hexdigest()
-
-        actual = backup.fingerprint(lambda statement: conn.execute(statement).fetchall(), copy_hash)
-        uncovered = judge_population(actual, manifest['tables'])
-        require(not any(backup.invariant_counts(lambda statement: conn.execute(statement).fetchall()).values()),
-                'Current financial invariants fail.')
-        conn.execute('ROLLBACK')
-    a.BACKUP_COMPARISONS.append({
-        'observed_at': datetime.now(timezone.utc).isoformat(), 'run_id': a.CAPTURE_RUN,
-        'all_current_table_hashes_match_capture': actual == manifest['tables'],
-        'differing_tables': [n for n in sorted(actual) if actual.get(n) != manifest['tables'].get(n)],
-        'tables_not_covered_by_the_retained_capture': sorted(uncovered),
-        'uncovered_tables_are_empty': all(actual[n]['rows'] == 0 for n in uncovered),
-        'current_table_fingerprints': actual, 'fresh_capture_performed': False,
-        'a_covering_capture_exists_elsewhere': '20260921T194532Z-1b826c0d',
-        'qualification': 'Historical recovery evidence only. It predates the declared migration '
-                         'and does not cover the new table, which is empty, so no row is outside '
-                         'it. A separate verified capture DOES cover that table and is what the '
-                         'operations publisher requires; this exception is not load-bearing for '
-                         'publisher coverage. Full current stopped rows and files must remain '
-                         'identical.'})
-
-
-driver.assert_retained_capture = assert_retained_capture
+#: ⚠️ NO `assert_retained_capture` OVERRIDE. The previous adapter needed one to widen a single
+#: clause by exactly one empty table; this one needs none, because the pinned capture covers
+#: the live population exactly. An adapter that overrides nothing here is the goal state.
 
 
 class _RenamedReceiptRe:

@@ -72,6 +72,38 @@ rebuild/templates/encounter_detail.html
 scripts/activate-candidate-review.py
 ```
 
+## The recovery evidence, and an exception that is REMOVED rather than broadened
+
+⚠️ **The previous activation carried a bounded exception and it has expired. That is recorded here
+because a guard that refuses is evidence, not an obstacle.** That activation accepted a 35-table
+safety capture which did not cover `core_servicehealth`, bounded explicitly to *only while that
+table is EMPTY* — a restore from it would then lose no row. The operations publisher has since
+written one row, so this release's read-only pass refused:
+
+    RuntimeError: The table the retained capture does not cover is no longer empty.
+
+The refusal was correct. It is **not** worked around, and the exception is **not** widened.
+
+Instead the prerequisite is met strictly, through the existing authorized LOCAL procedure — no
+offsite restore, no B2 allowance, no provider call, no new key:
+
+| step | result |
+|---|---|
+| `backup_restore.py backup` | `20260922T024158Z-8d231f14` — **36 tables**, 226,080 rows, 64 files, `source_commit` `eb37c784` = the running release |
+| `backup_restore.py restore-check` | `restore-88da076936d4dc98` — isolated and networkless: `all_table_hashes_match` and `all_file_hashes_match` true, `provider_actions` 0, `network` none, `published_ports` 0, `workers_started` 0, `provider_credentials_copied` false, container not retained, financial invariants all zero |
+| `compose-backup-restore-proof.py` | `backup-restore-20260922T024158Z-8d231f14.json`, 65 objects, 65 plaintext checked, validator passed |
+
+Because that capture's table population equals the live population exactly, **the driver's own
+`assert_retained_capture` passes unmodified and this adapter overrides it with nothing.** The
+safety capture and the restore drill are now the same run, so the schema-equality clause holds by
+identity rather than by coincidence. The historical activators' own constants are untouched; the
+two values are set on the modules for this run only, because their receipts depend on them.
+
+⚠️ **The compose step refused once before this, and that refusal is also recorded**: paired with
+the older 36-table capture `20260921T194532Z-1b826c0d`, it asserted the live `/health/` release
+against the capture's `source_commit` and found `eb37c784` against `21809ef4`. A stale capture
+cannot be dressed in current health evidence. The fresh capture is what makes the pairing honest.
+
 ## What must change, and what must not
 
 **MUST change:** the running image's source, and nothing else about the deployment.
@@ -87,6 +119,7 @@ scripts/activate-candidate-review.py
 | ledger entries | 47 |
 | usage rows | 29 |
 | service-health rows | 1 |
+| cost-reconciliation rows | 0 (the driver asserts this) |
 | static assets | identical to the completed receipt of the release now serving |
 | stored documents, balances, audit history, MFA | untouched |
 
