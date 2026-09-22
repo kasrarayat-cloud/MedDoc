@@ -32,6 +32,7 @@ serving. That is the point: this adapter reinstalls nothing, so it must authenti
 that are already there against evidence produced when they were put there.
 """
 from datetime import datetime, timezone
+import time
 import hashlib
 import json
 from pathlib import Path
@@ -45,7 +46,7 @@ SOURCE = Path(__file__).resolve().parents[1]
 APP = ROOT / 'rebuild'
 SELF = 'scripts/activate-candidate-review-repair.py'
 DECL = 'docs/foundation/mutations/20260922-quillmd-candidate-review-repair.md'
-DECL_SHA256 = 'd6a58501c5c56e156bda5c56f214cd0066e1f8b8823a0a487b101f5a65b46a45'
+DECL_SHA256 = 'b67b76a291a39c41d6da1a4a7c0fabb6c0a13a574fd61ea5f8238d862fcc2829'
 #: The stopped act already advanced the tree, so THIS release is the repair's baseline.
 BASELINE = '5b2576c5081ad7e86376197d828b1b7ac5336ad4'
 EVIDENCE = ROOT / 'rebuild/.runtime/candidate-review-repair-20260922'
@@ -137,7 +138,8 @@ require(sha(DECLARATION) == DECL_SHA256, 'Reviewed activation declaration change
 BASELINE_TABLES = frozenset(declared(SCHEMA_MARKER, DECLARATION.decode()))
 ALLOWED = declared(SCOPE_MARKER, DECLARATION.decode()) | {SELF, DECL}
 #: The repair changes only itself and its declaration; the code it completes already landed.
-REQUIRED = {SELF, DECL}
+REQUIRED = {SELF, DECL, 'rebuild/ops/activation_exclusion.py',
+            'rebuild/core/management/commands/publish_operations_status.py'}
 require('core_servicehealth' in BASELINE_TABLES, 'The declared schema omits the reviewed new table.')
 require(len(BASELINE_TABLES) == 36, 'The declared schema is not this baseline.')
 
@@ -224,7 +226,61 @@ class _RenamedReceiptRe:
 driver.re = _RenamedReceiptRe()
 
 
+#: ⚠️ THE PUBLISHER TIMER IS COORDINATED WITH, NOT SILENCED. The installed publisher is not yet
+#: lock-aware — this repair is what installs the lock-aware one — so for THIS act the code-level
+#: exclusion is one-sided. The timer is therefore stopped for the act and RESTORED in a finally,
+#: on success or failure alike, with both transitions recorded. It is never disabled, and the
+#: deferral is visible rather than silent: the ServiceHealth row keeps its own freshness check, so
+#: a longer-than-expected gap still reads as stale instead of as a manufactured green.
+PUBLISHER_TIMER = 'quillmd-fresh-operations-publisher.timer'
+PUBLISHER_COMMAND = 'publish_operations_status'
+
+
+def publisher_timer(action):
+    """Exactly one unit, exactly two verbs, through the same pinned helper the driver uses."""
+    require(action in ('start', 'stop'), 'Only start/stop of the publisher timer is permitted.')
+    helper = json.loads((APP / '.runtime/word-beta-recovery-20260917-final.json').read_text())['helper_image']
+    require(re.fullmatch('sha256:[a-f0-9]{64}', helper), 'Helper image must be locally pinned.')
+    code = "import os,subprocess\nos.chroot('/host');os.chdir('/')\n"
+    code += 'subprocess.run(' + repr(['systemctl', action, PUBLISHER_TIMER]) + ',check=True)\n'
+    import subprocess as sp
+    done = sp.run(['docker', 'run', '--rm', '-i', '--pull=never', '--network=none', '--pid=host',
+                   '--mount', 'type=bind,src=/,dst=/host,readonly', helper, 'python', '-B', '-'],
+                  input=code, text=True, capture_output=True, timeout=200)
+    require(done.returncode == 0, 'Publisher timer %s failed; helper stderr withheld.' % action)
+
+
+def drain_publisher(timeout=120):
+    """Stopping a timer does not stop a run already in flight. Wait for one, bounded."""
+    import subprocess as sp
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        listing = sp.run(['ps', '-eo', 'args'], capture_output=True, text=True).stdout
+        if PUBLISHER_COMMAND not in listing:
+            return True
+        time.sleep(0.5)
+    raise RuntimeError('A publication was still in flight after %ds; refusing to proceed.' % timeout)
+
+
 if __name__ == '__main__':
-    if '--execute' in sys.argv:
+    if '--execute' not in sys.argv:
+        driver.main()
+    else:
         EVIDENCE.mkdir(mode=0o700, exist_ok=True)
-    driver.main()
+        sys.path.insert(0, str(APP))
+        from ops import activation_exclusion as exclusion
+        target = sys.argv[sys.argv.index('--target') + 1]
+        publisher_timer('stop')
+        exclusion.record('publisher_timer_stopped', owner='activation:' + target[:12],
+                         unit=PUBLISHER_TIMER, reason='bounded coordination for the repair act')
+        try:
+            drain_publisher()
+            exclusion.record('publication_drained', owner='activation:' + target[:12])
+            # Held across the baseline snapshot, every preservation check and the receipt —
+            # released only after the act has written its outcome, success or failure.
+            with exclusion.hold('activation:' + target[:12]):
+                driver.main()
+        finally:
+            publisher_timer('start')
+            exclusion.record('publisher_timer_restored', owner='activation:' + target[:12],
+                             unit=PUBLISHER_TIMER)
