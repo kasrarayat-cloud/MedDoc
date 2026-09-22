@@ -9,6 +9,7 @@ import multiprocessing
 import os
 import sys
 import time
+import pathlib
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -220,3 +221,107 @@ class TheDrainSeesWhatTheLockCannot(unittest.TestCase):
             self.assertIn(str(child.pid), str(caught.exception))
         finally:
             child.kill(); child.wait(30)
+
+
+class InstalledStatePathsAreNotTargetSourcePaths(unittest.TestCase):
+    """⚠️ THE DEFECT THE IMPORT FIX HID, AND IT WOULD HAVE FAILED SILENTLY.
+
+    On a first install the adapter imports this module from the TARGET WORKTREE, because the
+    installed tree does not carry it yet. A `__file__`-relative runtime then puts the lock and the
+    pause marker under the worktree while the installed publisher looks in the installed runtime:
+    two locks, no exclusion, and every check still passing.
+    """
+
+    def setUp(self):
+        self.original = exclusion.bound_runtime()
+        self.addCleanup(exclusion.bind_runtime, self.original['runtime'])
+
+    def test_binding_moves_every_path_together(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            bound = exclusion.bind_runtime(directory)
+            for key in ('lock', 'deferrals', 'timer_state'):
+                self.assertTrue(bound[key].startswith(str(pathlib.Path(directory).resolve())),
+                                f'{key} did not follow the binding: {bound[key]}')
+            self.assertEqual(exclusion.LOCK_PATH.parent, pathlib.Path(directory).resolve())
+            self.assertEqual(exclusion.TIMER_STATE.parent, pathlib.Path(directory).resolve())
+            self.assertEqual(exclusion.DEFERRALS.parent, pathlib.Path(directory).resolve())
+
+    def test_a_lock_taken_after_binding_is_the_bound_one(self):
+        """The failure was silent, so prove the FILE that actually gets locked moves too."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            exclusion.bind_runtime(directory)
+            with exclusion.hold('activation:bound'):
+                holder = exclusion.holder()
+                self.assertEqual(holder['owner'], 'activation:bound')
+                self.assertTrue((pathlib.Path(directory) / '.activation-publication.lock').exists())
+
+    def test_two_runtimes_do_not_exclude_each_other(self):
+        """⚠️ THE POSITIVE CONTROL FOR THE WHOLE CLASS: it demonstrates the silent failure mode.
+        Holding in one runtime leaves the other free, which is exactly what the unfixed adapter
+        would have produced while reporting success."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
+            exclusion.bind_runtime(a)
+            with exclusion.hold('activation:in-a'):
+                exclusion.bind_runtime(b)
+                queue = multiprocessing.get_context('spawn').Queue()
+                child = multiprocessing.get_context('spawn').Process(
+                    target=_attempt_in, args=(queue, b))
+                child.start(); child.join(30)
+                self.assertTrue(queue.get(timeout=10),
+                                'a second runtime must NOT be excluded — this is the bug')
+            exclusion.bind_runtime(a)
+
+
+def _attempt_in(queue, runtime):
+    from ops import activation_exclusion as x
+    x.bind_runtime(runtime)
+    with x.attempt('probe') as acquired:
+        queue.put(bool(acquired))
+
+
+class BootstrapRecoveryWithoutTheInstalledHook(unittest.TestCase):
+    """⚠️ THE INSTALLED backup_alerts HAS NO recover_publication DURING FIRST INSTALLATION.
+
+    Testing recovery with the future installed version proves nothing about that window. The
+    watchdog is the mechanism that exists BEFORE the install, so it is what must be exercised.
+    """
+
+    def setUp(self):
+        self.original = exclusion.bound_runtime()
+        self.addCleanup(exclusion.bind_runtime, self.original['runtime'])
+        self.directory = __import__('tempfile').mkdtemp()
+        exclusion.bind_runtime(self.directory)
+
+    def test_the_installed_baseline_genuinely_lacks_the_hook(self):
+        """The premise, verified rather than assumed."""
+        installed = pathlib.Path('/opt/meddoc-pro/rebuild/ops/backup_alerts.py')
+        if not installed.exists():
+            self.skipTest('installed tree unavailable')
+        self.assertNotIn('recover_publication', installed.read_text(),
+                         'premise gone: the installed hook now exists, so re-read this test')
+
+    def test_the_watchdog_recovers_a_pause_its_parent_never_cleared(self):
+        calls = []
+        with patch.object(exclusion, '_helper_systemctl', side_effect=lambda a, u: calls.append(a)):
+            exclusion.note_timer_paused('activation:killed-during-first-install', prior_active=True)
+            os.utime(exclusion.TIMER_STATE, (time.time() - 3600, time.time() - 3600))
+            self.assertIsNotNone(exclusion.pause_owed())
+            result = exclusion.recover_publication(grace_seconds=1)
+        self.assertTrue(result['recovered'], result)
+        self.assertEqual(calls, ['start'])
+        self.assertIsNone(exclusion.pause_owed(), 'the debt must clear only after restoration')
+
+    def test_the_debt_survives_a_failed_restoration(self):
+        """⚠️ Clearing the marker on a restoration that did not happen would lose the debt and
+        leave publication stopped with nothing left to notice."""
+        with patch.object(exclusion, '_helper_systemctl',
+                          side_effect=RuntimeError('systemctl refused')):
+            exclusion.note_timer_paused('activation:restore-fails', prior_active=True)
+            os.utime(exclusion.TIMER_STATE, (time.time() - 3600, time.time() - 3600))
+            with self.assertRaises(RuntimeError):
+                exclusion.recover_publication(grace_seconds=1)
+        self.assertIsNotNone(exclusion.pause_owed(),
+                             'the debt was cleared although restoration failed')

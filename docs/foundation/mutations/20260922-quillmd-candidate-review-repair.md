@@ -44,6 +44,21 @@ activation and by every publisher write path:
 | truthful monitoring | every deferral is appended to `publication-deferrals.jsonl`; the `ServiceHealth` row is left strictly alone so its own staleness check keeps working |
 | no manufactured health | a deferred tick writes nothing and asserts nothing |
 
+⚠️ **AND THE IMPORT FIX HID A WORSE DEFECT, FOUND BY REPRODUCING THE FIRST-INSTALL CONDITION IN
+ISOLATION RATHER THAN BY RUNNING THE ACT AGAIN.** Importing the module from the target worktree
+makes its `__file__`-relative runtime point at the **worktree**, so the activation would have taken
+its lock and written its pause marker there while the installed publisher looked in the installed
+runtime. **Two different locks, no exclusion, and silently so** — every check would still have
+passed. The adapter now binds the runtime explicitly and asserts the binding.
+
+⚠️ **AND THE BOOTSTRAP RECOVERY GAP IS NOT THE ORDINARY ONE.** `recover_publication()` is reached
+from `ops/backup_alerts.py` — but the INSTALLED `backup_alerts.py` has no such call, because this
+act installs it. During first installation the ordinary recovery path **does not exist**, and a
+test using the future installed version proves nothing about that window. A detached watchdog,
+spawned from the target source **before** the pause, closes it: it survives the parent, refuses
+while exclusion is held, and exits as soon as the debt is cleared. A reboot remains the backstop
+for host failure, since the timer is enabled.
+
 ⚠️ **AND THE MECHANISM SHIPS IN THE ACT IT COORDINATES, WHICH BIT ONCE.** The adapter first
 imported `activation_exclusion` from the INSTALLED application, which does not carry it — this
 repair is what puts it there. The act failed at the import, six seconds in, before any mutation:
