@@ -46,7 +46,7 @@ SOURCE = Path(__file__).resolve().parents[1]
 APP = ROOT / 'rebuild'
 SELF = 'scripts/activate-candidate-review-repair.py'
 DECL = 'docs/foundation/mutations/20260922-quillmd-candidate-review-repair.md'
-DECL_SHA256 = 'dacb3ce79209662b6ab9a59be7447208db5f9d7fc7472fa530a5718d87b2d311'
+DECL_SHA256 = 'f216e91feae23184ef86be51c81597a05361080e4a0aa5adf597d44171c2cb38'
 #: ⚠️ THE TREE AND THE CONFIGURED RELEASE HAVE DIVERGED, AND THAT IS PRECISELY THE PARTIAL STATE.
 #: The stopped act installed the source (so the shared tree is at 5b2576c5) but never replaced the
 #: environment (so the app is still CONFIGURED as, and serves, eb37c784). These are two different
@@ -275,7 +275,13 @@ if __name__ == '__main__':
         driver.main()
     else:
         EVIDENCE.mkdir(mode=0o700, exist_ok=True)
-        sys.path.insert(0, str(APP))
+        # ⚠️ FROM THE SOURCE BEING INSTALLED, NOT THE TREE IT IS INSTALLED INTO. `APP` is the
+        # INSTALLED application, which does not carry `activation_exclusion` yet — this repair is
+        # what puts it there. Importing from APP failed at the import, six seconds in, before any
+        # mutation: the chicken-and-egg of a coordination mechanism that ships in the very act it
+        # coordinates. SOURCE is the reviewed target worktree, so these are the exact bytes the
+        # act is about to install.
+        sys.path.insert(0, str(SOURCE / 'rebuild'))
         from ops import activation_exclusion as exclusion
         target = sys.argv[sys.argv.index('--target') + 1]
         owner = 'activation:' + target[:12]

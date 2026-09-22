@@ -44,6 +44,13 @@ activation and by every publisher write path:
 | truthful monitoring | every deferral is appended to `publication-deferrals.jsonl`; the `ServiceHealth` row is left strictly alone so its own staleness check keeps working |
 | no manufactured health | a deferred tick writes nothing and asserts nothing |
 
+⚠️ **AND THE MECHANISM SHIPS IN THE ACT IT COORDINATES, WHICH BIT ONCE.** The adapter first
+imported `activation_exclusion` from the INSTALLED application, which does not carry it — this
+repair is what puts it there. The act failed at the import, six seconds in, before any mutation:
+no pause marker, no lock, no receipt, the timer still enabled and the service still healthy. The
+adapter now imports from the reviewed target worktree, so it uses the exact bytes it is about to
+install.
+
 ⚠️ **AND FOR THIS ONE ACT THE EXCLUSION IS ONE-SIDED, WHICH IS SAID HERE RATHER THAN GLOSSED.** The
 installed publisher is not yet lock-aware — this repair is what installs the lock-aware one. So
 the adapter additionally **stops the publisher timer for the act and restores it in a `finally`**,
