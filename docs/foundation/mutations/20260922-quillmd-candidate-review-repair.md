@@ -52,6 +52,20 @@ already in flight, so a bounded drain waits for any live `publish_operations_sta
 lock is taken. The timer is never disabled, and the deferral stays visible: the row keeps its own
 freshness check, so a longer gap reads as stale rather than as a green.
 
+## The tree and the configured release have diverged
+
+⚠️ **THIS IS THE PARTIAL STATE, STATED AS TWO FACTS RATHER THAN ONE.** The stopped act installed
+the source, so the shared tree is at `5b2576c5`; it never replaced the environment, so the
+application is still **configured as** and **serves** `eb37c784`. The driver reads these for
+different purposes — `BASELINE` for the shared-tree assertion and the diff range, `RUNNING_RELEASE`
+for `updated_environment` and the live-health checks — and a normal activation may collapse them
+because normally they agree.
+
+Collapsing them here made the first read-only pass refuse with *"Unexpected configured release"*.
+That refusal was correct: it noticed the very divergence this repair exists to close. The adapter
+now pins them separately, and the configured value is taken from the application's **own**
+`/health/` output — `rebuild/.env` is not read by any route.
+
 ## The reviewed schema expectation
 
 Unchanged from the stopped act, reproduced in full rather than referenced.

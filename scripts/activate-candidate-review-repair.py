@@ -46,9 +46,22 @@ SOURCE = Path(__file__).resolve().parents[1]
 APP = ROOT / 'rebuild'
 SELF = 'scripts/activate-candidate-review-repair.py'
 DECL = 'docs/foundation/mutations/20260922-quillmd-candidate-review-repair.md'
-DECL_SHA256 = 'bd81c09785a8126e998232b44de2dd35f2978e399164d9cb4cd3ce527663091c'
-#: The stopped act already advanced the tree, so THIS release is the repair's baseline.
+DECL_SHA256 = 'ca72a7ab073870319e8e54dfd83cbf8eaee33fd94f9d3ea4ab4fcb554463d212'
+#: ⚠️ THE TREE AND THE CONFIGURED RELEASE HAVE DIVERGED, AND THAT IS PRECISELY THE PARTIAL STATE.
+#: The stopped act installed the source (so the shared tree is at 5b2576c5) but never replaced the
+#: environment (so the app is still CONFIGURED as, and serves, eb37c784). These are two different
+#: facts and the driver reads them for two different purposes: BASELINE is the tree's commit, used
+#: for the shared-tree assertion and the diff range; RUNNING_RELEASE is what `.env` says and what
+#: `/health/` reports, used by `updated_environment` and by the live-health checks.
+#:
+#: Collapsing them — as a normal activation may, because normally they agree — is what made the
+#: first read-only pass refuse with "Unexpected configured release". The refusal was correct: it
+#: noticed the divergence this repair exists to close.
+#:
+#: The configured value is taken from the application's OWN /health/ output, never by reading
+#: `.env`, which is not read by any route.
 BASELINE = '5b2576c5081ad7e86376197d828b1b7ac5336ad4'
+RUNNING_RELEASE = 'eb37c7846f3ef634c16b4da46456663b88217a60'
 EVIDENCE = ROOT / 'rebuild/.runtime/candidate-review-repair-20260922'
 DRIVER = 'scripts/activate-typed-voice.py'
 DRIVER_SHA256 = '4e2efda2357fa2c33262eb2f747ac7201eadbc94875528cde2b7fe9040ebba18'
@@ -157,7 +170,7 @@ def pinned_module(relative, expected, name):
 
 driver = pinned_module(DRIVER, DRIVER_SHA256, '_candidate_review_repair_driver')
 for module in (driver, driver.a, driver.b):
-    for name, value in {'BASELINE': BASELINE, 'RUNNING_RELEASE': BASELINE, 'SOURCE': SOURCE,
+    for name, value in {'BASELINE': BASELINE, 'RUNNING_RELEASE': RUNNING_RELEASE, 'SOURCE': SOURCE,
                         'SELF': SELF, 'DECL': DECL, 'EVIDENCE': EVIDENCE,
                         'MIGRATION': MIGRATION, 'CAPTURE_RUN': CAPTURE_RUN,
                         'CAPTURE_SOURCE': CAPTURE_SOURCE,
