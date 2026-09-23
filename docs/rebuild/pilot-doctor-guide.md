@@ -211,11 +211,16 @@ lists every charge; choose a charge's service name to see how it was calculated.
   `Transcription correction:`.
 - **Write each denial as its own answer** (`Symptoms: no chest pain`) when you can: nothing
   governs it, so it comes back ready.
-- **On the WM IOV form, labelled lines never govern**: every label there names its own side, vein
-  and measure, so a heading, pointer or correction written inside a labelled answer changes no
-  other answer. An unlabelled line (which already sends every answer back) is read in full: a
-  heading, a sentence ending on a forward pointer or a correction there withholds the suggestions
-  it governs.
+- **On the WM IOV form, labelled lines govern only when the answer itself is a heading**: every
+  label there names its own side, vein and measure, so a pointer or correction written inside a
+  labelled answer changes no other answer. But an answer that ends in a colon
+  (`Right tributary row 11: anatomical location: none of the following:`) introduces the lines
+  after it: it and every answer after it come back held, never filled in, and you type each one
+  on the page (the form accepts only the value under its own label) or correct the notes. A stray
+  colon after a value (`lateral calf:`) does the same. A prewritten statement's approved wording
+  (`… By:`) and an unanswered question are not headings. An unlabelled line (which already sends
+  every answer back) is read in full: a heading, a sentence ending on a forward pointer or a
+  correction there withholds the suggestions it governs.
 - **A draft from before this release** is shown by the same rule: an answer it filled in from a
   governed line is shown empty, with its candidate and the lines that govern it, and an accepted
   suggestion there is shown the same way with a warning. Neither can be finalized as it is. Type

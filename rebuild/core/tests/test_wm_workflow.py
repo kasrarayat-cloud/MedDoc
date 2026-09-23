@@ -100,7 +100,7 @@ class WMDocumentWorkflow(TestCase):
         self.assertEqual(self.version.document_backend['backend'], BACKEND)
         self.assertEqual((len(self.version.fields), len(self.version.review_requirements)), (90, 14))
 
-    def prepare(self, *, positive=False, missing_measurement=False, long_answer=False, select_variants=True):
+    def prepare(self, *, positive=False, missing_measurement=False, long_answer=False, select_variants=True, heading=None):
         values = {}
         for field in self.version.fields:
             if field['kind'] == 'choice':
@@ -116,6 +116,10 @@ class WMDocumentWorkflow(TestCase):
             values['sdt_1706206184'] = ', however, there has been a recurrence.'
         if missing_measurement: values['measurement_15_1'] = ''
         if long_answer: values['patient_name'] = 'SYNTHETIC 😀 ' + ('documented ' * 1800) + 'END-OF-COMPLETE-ANSWER'
+        if heading:
+            # A question whose own value introduces the lines after it, and a diameter below it the export can be read by.
+            values[heading] = 'none of the following:'
+            values['measurement_15_1'] = '7.7 mm'
         variants = {row['key']: row['default_variant'] for row in self.version.review_requirements}
         for key in ('claim_23', 'claim_27'): variants[key] = 'original'
         for key in ('claim_30', 'claim_31', 'claim_34', 'claim_35'): variants[key] = 'selected'
@@ -137,7 +141,15 @@ class WMDocumentWorkflow(TestCase):
         self.assertTrue(run_one())
         encounter.refresh_from_db()
         self.assertEqual(Job.objects.get(encounter=encounter).state, 'succeeded')
-        for key, value in values.items(): self.assertEqual(encounter.answers[key]['text'], value)
+        order = [field['key'] for field in self.version.fields]
+        self.governed = ({key for key in order[order.index(heading):] if values[key]} if heading else set())
+        for key, value in values.items():
+            if key in self.governed:
+                answer = encounter.answers[key]
+                self.assertEqual((answer['status'], answer['text'], answer['held_candidate']['text']), ('conflict', '', value), key)
+                self.assertNotIn('suggestion', answer)
+            else:
+                self.assertEqual(encounter.answers[key]['text'], value)
         # First select alternatives without claiming to have seen new wording.
         self.values, self.variants = values, variants
         if select_variants:self.save(encounter, reviewed=False)
@@ -191,6 +203,52 @@ class WMDocumentWorkflow(TestCase):
         self.assertIn('No saphenous reflux in right lower extremity.', document)
         self.assertNotIn('Evaluation Only', document)
         self.assertEqual(encounter.finalized_by_id, self.user.pk)
+
+    def test_a_question_whose_value_is_a_heading_holds_what_follows_through_review_finalize_and_export(self):
+        """The older-form case followed through on the qualified form (2026-09-23): a location written as a heading held
+        every answer after it (measured on 2d900862: all READY). Held: a tick on the page as rendered cannot finalize;
+        the clinician's own answers, typed on the page, finalize and are exported."""
+        encounter = self.prepare(heading='location_11', select_variants=False)
+        self.assertIn('measurement_15_1', self.governed)
+        self.assertEqual(encounter.answers['measurement_1_1']['text'], '3.2 mm')        # above it: ready
+        page = self.client.get(f'/encounters/{encounter.pk}/')
+        self.assertContains(page, 'data-held-candidate')
+        self.assertContains(page, 'Right tributary row 11: anatomical location: none of the following:')
+
+        class Shown(HTMLParser):
+            def __init__(self):
+                super().__init__(); self.values = {}
+            def handle_starttag(self, tag, attrs):
+                attrs = dict(attrs)
+                if tag == 'input' and attrs.get('name', '').startswith('held_shown_'):
+                    self.values[attrs['name']] = attrs.get('value', '')
+        shown = Shown(); shown.feed(page.content.decode())
+        self.assertTrue({'held_shown_' + key for key in self.governed} <= set(shown.values), shown.values)
+        # The page as rendered, every box ticked: the held answers are empty there.
+        payload = self.payload(encounter, reviewed=False)
+        payload.update(shown.values)
+        for key in self.governed:
+            payload['answer_' + key] = ''; payload['source_' + key] = ''
+        for field in self.version.fields:
+            payload['reviewed_' + field['key']] = 'on'
+        for row in self.version.review_requirements:
+            payload['claim_reviewed_' + row['key']] = 'on'
+        self.save(encounter, payload=payload)
+        self.client.post(f'/encounters/{encounter.pk}/finalize/', {'revision': encounter.revision, 'reviewed': 'on'})
+        encounter.refresh_from_db()
+        self.assertNotEqual(encounter.status, 'finalized')
+        self.assertFalse(encounter.export_path)
+        # The clinician types each answer on the page (the form accepts only the value under its own label).
+        payload = self.payload(encounter, reviewed=False)
+        payload.update(shown.values)
+        self.save(encounter, payload=payload)
+        for key in self.governed:
+            self.assertEqual((encounter.answers[key]['status'], encounter.answers[key]['text']), ('edited', self.values[key]), key)
+        self.save(encounter)
+        exported = self.finalize(encounter)
+        with ZipFile(BytesIO(exported)) as zipped:
+            document = zipped.read('word/document.xml').decode()
+        self.assertIn('7.7 mm', document)
 
     def test_positive_reflux_approved_statement_and_long_answer_are_not_truncated(self):
         encounter = self.prepare(positive=True, long_answer=True)

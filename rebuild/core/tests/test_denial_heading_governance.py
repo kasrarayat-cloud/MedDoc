@@ -1809,14 +1809,18 @@ class TheQualifiedWordFormKeepsItsLabelsSelfContained(ExpectationsMixin, TestCas
 
     def test_a_labelled_line_never_governs_on_the_qualified_form(self):
         """⚠️ THIRD PASS. Its labels carry colons, its signature statement's approved wording ends in `By:`, and an
-        unanswered question ends in a colon: read as headings, each held every one of the 90 answers."""
+        unanswered question ends in a colon: read as headings, each held every one of the 90 answers.
+
+        ⚠️ REVISED 2026-09-23, when the older-form case was followed through review: this test also asserted that
+        `…anatomical location: none of the following:` above the measurements left them READY, which is the documented
+        defect itself. A question whose own value is a heading now governs (`TheOlderFormCaseFollowedThrough`); the
+        statement, mid-note too, and the unanswered question still do not."""
         fields = self.FIELDS + [{'key': 'measurement_1_1', 'label': 'Right GSV at the SFJ: diameter (mm)', 'kind': 'measurement',
                                  'locator': {'row': 1, 'column': 1, 'unit': 'mm'}}]
         signature = 'Prewritten statement: Signature timestamp: Electronically Signed On <<insert date and time>> By:'
         base = ('Left GSV at the SFJ: reflux time (ms): 700 ms\nRight impression: reflux or absence: reflux positive.\n'
                 'Right tributary row 11: anatomical location: lateral calf')
-        heading = 'Right tributary row 11: anatomical location: none of the following:'
-        for notes in (base + '\n' + signature, heading + '\n' + base.rsplit('\n', 1)[0]):
+        for notes in (base + '\n' + signature, signature + '\n' + base):
             with self.subTest(notes=notes):
                 answers = generation.generate(notes, fields, FIXTURE, context_labels=['Prewritten statement: Signature timestamp'])[0]
                 self.assert_ready(answers['measurement_15_2'], '700 ms')
@@ -2233,3 +2237,204 @@ class TheDecisionIsEnforcedThroughFinalizationAndExport(DocumentWorkflow):
         encounter.refresh_from_db()
         self.assertNotEqual(encounter.status, 'finalized')
         self.assertContains(response, 'still need your decision: Symptoms.')
+
+
+class TheOlderFormCaseFollowedThrough(ExpectationsMixin, TestCase):
+    """The case the pilot guide documented as open ("on question/answer tables, placeholders, fillable PDFs and the WM
+    IOV form, a heading that is itself one of the form's questions ... a denied finding can come back as a ready
+    answer"), followed through review, finalization and export on each form (2026-09-23). Tables, placeholders and
+    PDFs hold it (their end-to-end tests are below and above); the qualified Word form did not: there a labelled line
+    never governed, so a question whose own VALUE is a heading left every answer after it ready."""
+    FIELDS = TheQualifiedWordFormKeepsItsLabelsSelfContained.FIELDS + [
+        {'key': 'measurement_1_1', 'label': 'Right GSV at the SFJ: diameter (mm)', 'kind': 'measurement',
+         'locator': {'row': 1, 'column': 1, 'unit': 'mm'}}]
+    HEADING = 'Right tributary row 11: anatomical location: none of the following:'
+    SIGNATURE = 'Prewritten statement: Signature timestamp: Electronically Signed On <<insert date and time>> By:'
+
+    def answers(self, notes):
+        return generation.generate(notes, self.FIELDS, FIXTURE, context_labels=['Prewritten statement: Signature timestamp'])[0]
+
+    def test_a_question_whose_value_is_a_heading_governs_what_follows_on_the_qualified_form(self):
+        notes = (self.HEADING + '\nLeft GSV at the SFJ: reflux time (ms): 700 ms\n'
+                 'Right impression: reflux or absence: reflux positive.')
+        answers = self.answers(notes)
+        self.assert_needs_decision(answers['measurement_15_2'], '700 ms', self.HEADING)
+        self.assert_needs_decision(answers['sdt_-213273323'], 'reflux positive.', self.HEADING)
+        # Its own value introduces the lines after it; it is not a location.
+        self.assert_needs_decision(answers['location_11'], 'none of the following:', self.HEADING)
+        # The Word review validates evidence per label: the candidate keeps its OWN line, the heading travels as context.
+        self.assertEqual([entry['quote'] for entry in answers['measurement_15_2']['held_candidate']['evidence']], ['700 ms'])
+        self.assertNotIn('Leave blank', answers['measurement_15_2']['held_candidate']['reason'])
+
+    def test_what_comes_before_it_stays_ready(self):
+        answers = self.answers('Left GSV at the SFJ: reflux time (ms): 700 ms\n' + self.HEADING +
+                               '\nRight impression: reflux or absence: reflux positive.')
+        self.assert_ready(answers['measurement_15_2'], '700 ms')
+        self.assert_needs_decision(answers['sdt_-213273323'], 'reflux positive.', self.HEADING)
+
+    def test_a_statement_an_unanswered_question_or_an_ordinary_value_still_governs_nothing(self):
+        """Positive controls: the approved signature wording ends in `By:` (anywhere in the note), an unanswered
+        question is only its label, and words in a value are not read on this form (round 6 of the pilot)."""
+        tail = 'Left GSV at the SFJ: reflux time (ms): 700 ms\nRight impression: reflux or absence: reflux positive.'
+        for line in (self.SIGNATURE, 'Right tributary row 11: anatomical location: lateral calf, not visualized below',
+                     'Right tributary row 11: anatomical location: lateral calf 10:30',
+                     'Right tributary row 11: anatomical location: lateral calf -'):
+            with self.subTest(line=line):
+                answers = self.answers(line + '\n' + tail)
+                self.assert_ready(answers['measurement_15_2'], '700 ms')
+                self.assert_ready(answers['sdt_-213273323'], 'reflux positive.')
+        answers = self.answers('Right GSV at the SFJ: diameter (mm):\n' + tail)
+        self.assertEqual(answers['measurement_15_2'].get('suggestion'), '700 ms', answers['measurement_15_2'])
+        self.assertNotIn('held_candidate', answers['measurement_15_2'])
+
+    def test_a_value_ending_in_a_colon_fails_closed(self):
+        """The documented cost: a stray colon after a value (`lateral calf:`) holds what follows it, which the clinician
+        types or corrects in the note; it never pre-fills."""
+        answers = self.answers('Right tributary row 11: anatomical location: lateral calf:\n'
+                               'Left GSV at the SFJ: reflux time (ms): 700 ms')
+        self.assert_needs_decision(answers['measurement_15_2'], '700 ms', 'lateral calf:')
+
+    def test_the_page_and_finalization_read_the_same_rule(self):
+        notes = self.HEADING + '\nLeft GSV at the SFJ: reflux time (ms): 700 ms'
+        at = notes.index('700 ms')
+        stale = {'measurement_15_2': {'text': '700 ms', 'status': 'supported', 'reviewed': True,
+                                      'evidence': [{'quote': '700 ms', 'start': at, 'end': at + 6}]}}
+        self.assertEqual(generation.governed_decisions(notes, self.FIELDS, stale, ['Prewritten statement: Signature timestamp']),
+                         ['Left GSV at the SFJ: reflux time (ms)'])
+        governance = generation.governance_for(notes, self.FIELDS, ['Prewritten statement: Signature timestamp'])
+        row = generation.as_currently_governed(governance, notes, {**self.FIELDS[1], **stale['measurement_15_2']}, True)
+        self.assertEqual((row['status'], row['text']), ('conflict', ''))
+        self.assertIn(self.HEADING, [entry['quote'] for entry in row['held_candidate']['context']])
+
+
+class TheSurvivingMutantIsSeparated(ExpectationsMixin, TestCase):
+    """M184 survived the fifteenth-pass mutation run: dropping the namespaced-tag alternative (`<o:p>`, `<w:br>`) from
+    `HTML_TAG` changed no test. A correction after a period and Word's own markup is still a correction: without that
+    alternative the whole line, correction included, came back as a READY answer (measured on the mutant)."""
+
+    def test_a_correction_after_a_namespaced_word_tag_is_read(self):
+        for notes, label, candidate in (
+                ('Findings: sessile polyp.<o:p> Correction: no polyp seen.', 'Findings',
+                 'sessile polyp.<o:p> Correction: no polyp seen.'),
+                ('Chest pain: yes.<w:br> correction, no chest pain', 'Chest pain', 'yes.<w:br> correction, no chest pain')):
+            with self.subTest(notes=notes):
+                answer = fixture_answers([label], notes)[label]
+                self.assert_needs_decision(answer, candidate, notes)
+
+
+class TheGoverningHeadingIsShownAndEnforcedOnEveryOlderForm(DocumentWorkflow):
+    """Stored mappings from real uploads, authenticated, generate -> page -> finalize -> export (2026-09-23)."""
+    CONDITIONS = ['Diabetes', 'Hypertension', 'Asthma', 'Stroke', 'Glaucoma', 'Gout', 'Migraine', 'Epilepsy', 'Anemia',
+                  'Arthritis', 'Osteoporosis', 'Psoriasis', 'Eczema', 'Thyroid disease', 'Kidney stones', 'Colon polyps',
+                  'Breast cancer', 'Melanoma', 'Glaucoma suspect', 'Heart disease']
+    SYSTEMS = ['Constitutional', 'Eyes', 'Ears', 'Nose', 'Throat', 'Cardiovascular', 'Respiratory', 'Gastrointestinal',
+               'Genitourinary', 'Musculoskeletal', 'Skin', 'Neurological', 'Psychiatric', 'Endocrine', 'Hematologic',
+               'Allergic', 'Immunologic', 'Breast']
+
+    def table_docx(self, labels):
+        document = Document()
+        table = document.add_table(rows=len(labels), cols=2)
+        for row, label in enumerate(labels):
+            table.cell(row, 0).text = label
+        buffer = BytesIO(); document.save(buffer)
+        return buffer.getvalue()
+
+    def placeholder_docx(self, labels):
+        document = Document()
+        for label in labels:
+            document.add_paragraph(label + ': {{' + label + '}}')
+        buffer = BytesIO(); document.save(buffer)
+        return buffer.getvalue()
+
+    def fillable_pdf(self, labels):
+        from reportlab.pdfgen import canvas
+        buffer = BytesIO()
+        document = canvas.Canvas(buffer)
+        for index, label in enumerate(labels):
+            document.drawString(30, 780 - 60 * index, label + ':')
+            document.acroForm.textfield(name=label, tooltip=label, x=30, y=740 - 60 * index, width=300, height=30,
+                                        fontName='Helvetica', fontSize=10)
+        document.showPage(); document.save()
+        return buffer.getvalue()
+
+    def generated(self, data, suffix, notes):
+        template, mapping = self.upload(data, suffix)
+        encounter = self.create_encounter(mapping, notes)
+        self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/generate/').status_code, 302)
+        self.assertTrue(run_one())
+        encounter.refresh_from_db()
+        return encounter, {f['label'].rstrip(':'): f['key'] for f in mapping.fields}
+
+    def section(self, encounter, label):
+        page = self.client.get(f'/encounters/{encounter.pk}/').content.decode()
+        sections = [part.split('</section>')[0] for part in page.split('<section class="answer">') if f'{label}</h3>' in part]
+        self.assertEqual(len(sections), 1, f'expected exactly one {label} section')
+        return sections[0]
+
+    def post(self, encounter, keys, **extra):
+        payload = {'revision': encounter.revision}
+        for key in keys:
+            payload['answer_' + key] = ''
+            payload['reviewed_' + key] = 'on'
+        payload.update(extra)
+        self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/save/', payload).status_code, 302)
+        encounter.refresh_from_db()
+
+    def test_a_family_history_heading_twenty_lines_above_is_shown_with_the_last_answer(self):
+        heading = 'Family history: the following conditions:'
+        labels = ['Indication', 'Family history'] + self.CONDITIONS
+        notes = 'Indication: annual physical\n' + heading + '\n' + '\n'.join(c + ': mother' for c in self.CONDITIONS)
+        encounter, keys = self.generated(self.table_docx(labels), 'docx', notes)
+        self.assertEqual((encounter.answers[keys['Indication']]['status'], encounter.answers[keys['Indication']]['text']),
+                         ('supported', 'annual physical'))            # positive control: above the heading, ready
+        last = encounter.answers[keys['Heart disease']]
+        self.assertEqual((last['status'], last['text'], last['held_candidate']['text']), ('conflict', '', 'mother'))
+        section = self.section(encounter, 'Heart disease')
+        self.assertIn('data-governing-line', section)
+        self.assertIn(heading, section)
+        self.assertNotIn('data-held-candidate', self.section(encounter, 'Indication'))
+
+    def test_a_denial_heading_beyond_a_full_window_of_sub_headings_is_still_shown(self):
+        """Eighteen sub-headings sit between the answer and the denial heading, so more lines govern it than are shown
+        (the page counts the rest); the denial is shown among them because words that change meaning come first."""
+        heading = 'Review of systems: negative for the following:'
+        findings = [system + ' finding' for system in self.SYSTEMS]
+        notes = heading + '\n' + '\n'.join(f'{system}:\n{finding}: present' for system, finding in zip(self.SYSTEMS, findings))
+        encounter, keys = self.generated(self.table_docx(findings), 'docx', notes)
+        section = self.section(encounter, findings[-1])
+        self.assertIn(heading, section)
+        self.assertIn('data-governing-more', section)
+        self.assertEqual(encounter.answers[keys[findings[-1]]]['text'], '')
+
+    def check_older_form(self, data, suffix, exported_value):
+        notes = HEADING + '\nSymptoms: chest pain'
+        encounter, keys = self.generated(data, suffix, notes)
+        ros, symptoms = keys['Review of systems'], keys['Symptoms']
+        answer = encounter.answers[symptoms]
+        self.assertEqual((answer['status'], answer['text'], answer['held_candidate']['text']), ('conflict', '', 'chest pain'))
+        self.assertNotIn('suggestion', answer)
+        self.assertIn(HEADING, self.section(encounter, 'Symptoms'))
+        self.post(encounter, (ros, symptoms))                                   # the tick alone
+        response = self.client.post(f'/encounters/{encounter.pk}/finalize/', {'reviewed': 'on', 'revision': encounter.revision},
+                                    follow=True)
+        encounter.refresh_from_db()
+        self.assertNotEqual(encounter.status, 'finalized')
+        self.assertContains(response, 'Symptoms')
+        self.assertEqual(self.client.get(f'/encounters/{encounter.pk}/export/').status_code, 404)
+        self.post(encounter, (ros, symptoms), **{'answer_' + ros: 'negative for chest pain', 'answer_' + symptoms: 'denies chest pain'})
+        exported = self.finalize(encounter)
+        self.assertEqual(exported_value(exported, 'Symptoms'), 'denies chest pain')
+        return exported
+
+    def test_a_fillable_pdf_holds_the_denied_finding_through_finalization_and_export(self):
+        from pypdf import PdfReader
+        exported = self.check_older_form(self.fillable_pdf(['Review of systems', 'Symptoms']), 'pdf',
+                                         lambda data, name: PdfReader(BytesIO(data)).get_form_text_fields()[name])
+        self.assertNotIn('chest pain', PdfReader(BytesIO(exported)).get_form_text_fields()['Symptoms'].replace('denies chest pain', ''))
+
+    def test_a_placeholder_form_holds_the_denied_finding_through_finalization_and_export(self):
+        def value(data, name):
+            lines = [p.text for p in Document(BytesIO(data)).paragraphs if p.text.startswith(name + ':')]
+            self.assertEqual(len(lines), 1, lines)
+            return lines[0].split(':', 1)[1].strip()
+        self.check_older_form(self.placeholder_docx(['Review of systems', 'Symptoms']), 'docx', value)

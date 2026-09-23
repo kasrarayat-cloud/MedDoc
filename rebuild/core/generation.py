@@ -876,7 +876,7 @@ def bare_label(text, parsed):
             and not any(SCOPE_POINTER.search(reading) or POINTER.search(reading) for reading in readings(text)))
 
 
-def heading_governance(notes, labels, *, lexical=True, per_sentence=True):
+def heading_governance(notes, labels, *, lexical=True, per_sentence=True, questions=frozenset()):
     """⚠️ ONE READER FOR EVERY CONSUMER: both validators, the page, save and finalization call this, never a copy.
 
     Returns `(starts, spans, headings, forward, backward, meaning)`: the note's non-empty lines' start offsets (sorted)
@@ -899,8 +899,9 @@ def heading_governance(notes, labels, *, lexical=True, per_sentence=True):
     pass: a mid-line exemption on the legacy form left the corrected value supported). That erratum corrects that
     question, whose two answers the validator already makes a conflict. Earlier answers are read lazily, once each.
 
-    ⚠️ THE QUALIFIED WORD FORM (`lexical=False`): a LABELLED line there is an answer and never governs. An unlabelled
-    line is read in full; it already sends every answer back, so there it only withholds offers.
+    ⚠️ THE QUALIFIED WORD FORM (`lexical=False`): a LABELLED line there is an answer and never governs, except one whose
+    own VALUE is a heading (`question_value_heading`), which governs what follows it. An unlabelled line is read in
+    full; it already sends every answer back, so there it only withholds offers.
     ⚠️ A sentence that points BACK is not read: its common case is the ROS closing line `…negative except as noted
     above.`, which names the positives above it (second refutation pass).
     """
@@ -991,6 +992,11 @@ def heading_governance(notes, labels, *, lexical=True, per_sentence=True):
                     # Shown from its sentence to the end of the line: what it corrects to follows the word.
                     shown_low = sentences[max(0, bisect.bisect_right(sentence_starts, at) - 1)][0]
                     backward.append((start + at, index, start + shown_low, end, True))
+            elif question_value_heading(parsed, questions):
+                # Its own value is held, and every answer after it: forward only (a closing value introduces nothing),
+                # shown from the line's start so its label is read with it.
+                headings[index] = start
+                forward.append((end, index, start, end, changes_meaning(stripped)))
         offset += len(line)
     # A heading that closes the note can only introduce what came before it, unless it is a bare label. Trailing bare
     # headings (`Signed by: ____`) are passed over when the line before them is a heading too (tenth pass: a signature
@@ -1022,6 +1028,23 @@ def heading_governance(notes, labels, *, lexical=True, per_sentence=True):
     # Whether this release withholds every offer in the note: once per note, not once per answer (ninth pass).
     withheld = opens or bool(INLINE_BREAK.search(notes)) or not _plain_pointer_only(notes)
     return starts, spans, headings, forward, backward, meaning, opens, by_line, withheld, per_sentence
+
+
+def question_labels(fields):
+    """The canonical labels of the form's own questions, as `labelled_value` returns them (not a statement's)."""
+    return frozenset(recognized_labels(fields).values())
+
+
+def question_value_heading(parsed, questions):
+    """On the qualified Word form, a question whose own value ends in a colon: `Right tributary row 11: anatomical
+    location: none of the following:` introduces the lines after it; it does not answer.
+
+    ⚠️ FOUND WHEN THE OLDER-FORM CASE WAS FOLLOWED THROUGH REVIEW (2026-09-23): with labelled lines never governing,
+    `Left GSV at the SFJ: reflux time (ms): 700 ms` under that line came back ready, needing only a review tick. Structural,
+    not a word list (round 6 of the pilot: a location `not visualized below` read by its words emptied all 90 answers):
+    no option of that form and no date, identity, location or measurement value ends in a colon. A prewritten
+    statement is not a question (its approved signature wording ends in `By:`), and an unanswered question has no value."""
+    return bool(parsed and parsed[0] in questions and seen_text(parsed[1]) and ends_in_colon(parsed[1]))
 
 
 def answered_label(text, labels):
@@ -1269,7 +1292,9 @@ def governance_for(notes, fields, context_labels=()):
             units = source_units(notes, fields, context_labels=context_labels)[0]
         except ValidationError:
             units = []
-    governance = heading_governance(notes, labels, lexical=not qualified_word_form(fields), per_sentence=per_sentence)
+    word_form = qualified_word_form(fields)
+    governance = heading_governance(notes, labels, lexical=not word_form, per_sentence=per_sentence,
+                                    questions=question_labels(fields) if word_form else frozenset())
     return (*governance, occurrence_index(notes, labels, units))
 
 
@@ -1509,7 +1534,8 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
     # finalized on a review tick. Every answer whose own line a heading or a governing sentence reaches
     # is now a decision, with the candidate kept beside the line that governs it.
     word_form=qualified_word_form(fields)
-    governance=heading_governance(notes,labels,lexical=not word_form,per_sentence=False)
+    governance=heading_governance(notes,labels,lexical=not word_form,per_sentence=False,
+                                  questions=question_labels(fields) if word_form else frozenset())
     index=occurrence_index(notes,labels)
     from .tab_review import clinician_identity
     for item in selections.fields:
