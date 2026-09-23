@@ -675,6 +675,13 @@ def finalize(request,pk):
             names={f['key']:f['label'] for f in e.template_version.fields}
             conflicts=[names.get(k,k) for k in sorted((k for k,v in e.answers.items() if v.get('status')=='conflict'),key=lambda k:(order.index(k) if k in order else len(order),k))]
             if conflicts:raise ValidationError('Resolve every conflict before finalizing. Each needs your decision: your own answer, the offered suggestion where there is one, or "Leave blank — reviewed" when no answer belongs there. Still in conflict: '+field_list(conflicts))
+            # ⚠️ RECOMPUTED FROM THE NOTES, NOT TRUSTED FROM THE DRAFT. A draft generated before headings
+            # governed their lines (or by any path that skipped the rule) can still hold a denied finding as
+            # a ready answer; the review tick alone must not finalize it.
+            from .generation import governed_supported
+            governed=governed_supported(e.notes,e.template_version.fields,e.answers,
+                                        [row['label'] for row in e.template_version.review_requirements])
+            if governed:raise ValidationError('These answers were read from lines that a heading or a sentence in the notes may change, and still need your decision: '+field_list(governed)+' Clear each one and save, then type your own answer or choose "Leave blank — reviewed".')
             original=private_path(e.template_version.template.original_path)
             if hashlib.sha256(original.read_bytes()).hexdigest()!=e.template_version.template.sha256:raise ValidationError('Original integrity check failed.')
             relative=f'exports/{secrets.token_hex(24)}.{e.template_version.template.format.lower()}'

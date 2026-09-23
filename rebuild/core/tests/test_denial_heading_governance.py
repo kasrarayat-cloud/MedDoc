@@ -25,6 +25,7 @@ from docx import Document
 from core import generation
 from core.generation import Selection, Selections, validate_selections
 from core.jobs import run_one
+from core.models import Encounter
 from core.tests.test_workflow import DocumentWorkflow
 
 FIXTURE = {'mode': 'fixture', 'prompt_version': 'legacy-offline-test'}
@@ -67,7 +68,7 @@ class ExpectationsMixin:
         held = answer.get('held_candidate')
         self.assertIsNotNone(held, 'the candidate must be preserved for the clinician, not discarded')
         self.assertEqual(held['text'], candidate)
-        quotes = [entry['quote'] for entry in answer['evidence']] + [entry['quote'] for entry in held['evidence']]
+        quotes = [entry['quote'] for entry in answer['evidence'] + held['evidence'] + held.get('context', [])]
         self.assertTrue(any(context in quote for quote in quotes),
                         f'the governing line {context!r} must be shown with the candidate: {quotes}')
 
@@ -108,7 +109,12 @@ class TheReproducedDefect(ExpectationsMixin, TestCase):
                 self.assertEqual(answers['Indication']['status'], 'conflict')
                 self.assertEqual(answers['Indication'].get('held_candidate', {}).get('text'), 'screening colonoscopy')
 
-    def test_e4_mixed_findings_only_the_governed_paragraph_needs_a_decision(self):
+    def test_e4_mixed_findings_what_precedes_the_heading_stays_ready_what_follows_needs_a_decision(self):
+        """⚠️ REVISED BEFORE IMPLEMENTATION, after the design was refuted. The first expectation kept
+        Examination and Plan ready because a blank line separated them. A blank line does not end a list:
+        pasted notes separate items with them, and the app itself joins note segments with one, so
+        `Dyspnea: yes` after a blank line under the same heading would have been pre-filled. Everything
+        after a heading needs a decision; what comes before it does not."""
         notes = ('Chief complaint: right calf pain for three weeks\n' + HEADING + '\nSymptoms: chest pain, dyspnea\n\n'
                  'Examination: mild right ankle swelling\nPlan: duplex ultrasound')
         labels = ['Chief complaint', 'Review of systems', 'Symptoms', 'Examination', 'Plan']
@@ -119,8 +125,17 @@ class TheReproducedDefect(ExpectationsMixin, TestCase):
             with self.subTest(path=path):
                 self.assert_ready(answers['Chief complaint'], 'right calf pain for three weeks')
                 self.assert_needs_decision(answers['Symptoms'], 'chest pain, dyspnea', HEADING)
-                self.assert_ready(answers['Examination'], 'mild right ankle swelling')
-                self.assert_ready(answers['Plan'], 'duplex ultrasound')
+                self.assert_needs_decision(answers['Examination'], 'mild right ankle swelling', HEADING)
+                self.assert_needs_decision(answers['Plan'], 'duplex ultrasound', HEADING)
+
+    def test_e5b_items_separated_by_blank_lines_are_all_governed(self):
+        notes = HEADING + '\n\nChest pain: yes\n\nDyspnea: yes\n\nPalpitations: yes'
+        labels = ['Review of systems', 'Chest pain', 'Dyspnea', 'Palpitations']
+        for path, answers in self.both(labels, notes, {'Review of systems': [HEADING], 'Chest pain': ['Chest pain: yes'],
+                                                       'Dyspnea': ['Dyspnea: yes'], 'Palpitations': ['Palpitations: yes']}):
+            with self.subTest(path=path):
+                for label in ('Chest pain', 'Dyspnea', 'Palpitations'):
+                    self.assert_needs_decision(answers[label], 'yes', HEADING)
 
     def test_e5_a_blank_line_after_the_heading_does_not_release_the_list_below_it(self):
         notes = HEADING + '\n\nSymptoms: chest pain'
@@ -136,6 +151,76 @@ class TheReproducedDefect(ExpectationsMixin, TestCase):
                                        {'Symptoms': ['Symptoms: chest pain'], 'Review of systems': [closing]}):
             with self.subTest(path=path):
                 self.assert_needs_decision(answers['Symptoms'], 'chest pain', closing)
+
+    def test_e6b_a_closing_heading_governs_every_earlier_line_even_across_a_blank_line(self):
+        closing = 'Review of systems: all of the above denied:'
+        notes = 'Chest pain: yes\nDyspnea: yes\n\n' + closing
+        labels = ['Chest pain', 'Dyspnea', 'Review of systems']
+        for path, answers in self.both(labels, notes, {'Chest pain': ['Chest pain: yes'], 'Dyspnea': ['Dyspnea: yes'],
+                                                       'Review of systems': [closing]}):
+            with self.subTest(path=path):
+                self.assert_needs_decision(answers['Chest pain'], 'yes', closing)
+                self.assert_needs_decision(answers['Dyspnea'], 'yes', closing)
+
+    def test_e6c_a_backward_heading_with_lines_after_it_governs_both_ways(self):
+        closing = 'Review of systems: all of the above denied:'
+        notes = 'Symptoms: chest pain, dyspnea\n' + closing + '\n\nExamination: mild right ankle swelling'
+        labels = ['Symptoms', 'Review of systems', 'Examination']
+        for path, answers in self.both(labels, notes, {'Symptoms': ['Symptoms: chest pain, dyspnea'],
+                                                       'Review of systems': [closing],
+                                                       'Examination': ['Examination: mild right ankle swelling']}):
+            with self.subTest(path=path):
+                self.assert_needs_decision(answers['Symptoms'], 'chest pain, dyspnea', closing)
+                self.assert_needs_decision(answers['Examination'], 'mild right ankle swelling', closing)
+
+    def test_e1b_a_heading_the_vocabulary_does_not_know_still_governs(self):
+        """`none` and `absence` are not denial words the gate knows, and `Family hx` is not a reframer it
+        knows. Structure decides here, not words."""
+        for heading, labels in (('Review of systems: none of the following:', ['Review of systems', 'Symptoms']),
+                                ('Review of systems: absence of the following:', ['Review of systems', 'Symptoms']),
+                                ('Family hx: the following conditions:', ['Family hx', 'Symptoms'])):
+            notes = heading + '\nSymptoms: chest pain'
+            for path, answers in self.both(labels, notes, {labels[0]: [heading], 'Symptoms': ['Symptoms: chest pain']}):
+                with self.subTest(heading=heading, path=path):
+                    self.assert_needs_decision(answers['Symptoms'], 'chest pain', heading)
+
+    def test_e3b_an_unmapped_heading_the_vocabulary_does_not_know_offers_nothing(self):
+        """Before the repair this offered `chest pain` for one click: `none` is not a denial word."""
+        for heading in ('ROS: none of the following:', 'Family hx: the following conditions:', 'Mother has the following:'):
+            notes = 'Indication: screening colonoscopy\n' + heading + '\nSymptoms: chest pain'
+            for path, answers in self.both(['Indication', 'Symptoms'], notes,
+                                           {'Indication': ['Indication: screening colonoscopy'], 'Symptoms': ['Symptoms: chest pain']}):
+                with self.subTest(heading=heading, path=path):
+                    self.assert_needs_decision(answers['Symptoms'], 'chest pain', heading)
+
+    def test_e9_a_governing_sentence_without_a_colon_is_read_where_it_points(self):
+        """The original defect with a full stop instead of a colon. Only the existing vocabularies, anchored
+        on where the pointer sits: the sentence ENDS by pointing forward or back."""
+        cases = (
+            ('Review of systems: negative for the following symptoms.', ['Symptoms: chest pain'], 'forward'),
+            ('Review of systems: patient denies the following', ['Chest pain: yes', 'Dyspnea: yes'], 'forward'),
+            ('Review of systems: negative for the symptoms below.', ['Symptoms: chest pain'], 'forward'),
+            ('Family history: mother had the following', ['Diabetes: yes', 'Hypertension: yes'], 'forward'),
+            ('Review of systems: patient denies all of the above.', ['Cardiovascular: chest pain, palpitations',
+                                                                     'Respiratory: cough, dyspnea'], 'backward'),
+        )
+        for line, items, direction in cases:
+            notes = '\n'.join([line] + items) if direction == 'forward' else '\n'.join(items + [line])
+            labels = [line.split(':')[0]] + [item.split(':')[0] for item in items]
+            picks = {line.split(':')[0]: [line], **{item.split(':')[0]: [item] for item in items}}
+            for path, answers in self.both(labels, notes, picks):
+                with self.subTest(line=line, path=path):
+                    for item in items:
+                        label, value = item.split(': ', 1)
+                        self.assert_needs_decision(answers[label], value, line)
+
+    def test_e8b_a_correction_written_as_another_questions_answer_governs_what_came_before(self):
+        for labels, correction in ((['Symptoms', 'Addendum'], 'Addendum: Correction: the patient does report severe crushing chest pain.'),
+                                   (['Symptoms', 'Comments'], 'Comments: correction, patient reports severe chest pain')):
+            notes = 'Symptoms: no chest pain\n' + correction
+            for path, answers in self.both(labels, notes, {'Symptoms': ['Symptoms: no chest pain'], labels[1]: [correction]}):
+                with self.subTest(correction=correction, path=path):
+                    self.assert_needs_decision(answers['Symptoms'], 'no chest pain', correction)
 
     def test_e7_an_attribution_heading_never_gives_the_patient_the_familys_finding(self):
         heading = 'Family history: the following conditions:'
@@ -169,11 +254,40 @@ class ValidAnswersStillWork(ExpectationsMixin, TestCase):
         self.assert_ready(answers['Symptoms'], 'no chest pain')
         self.assert_ready(answers['Review of systems'], 'negative for chest pain and dyspnea')
 
-    def test_p3_anatomical_and_backward_pointers_are_answers_not_headings(self):
-        notes = 'Findings: No reflux below the knee.\nImpression: No DVT in the veins listed above.'
-        answers = fixture_answers(['Findings', 'Impression'], notes)
+    def test_p3_a_pointer_word_inside_a_sentence_governs_nothing(self):
+        """Anatomy and time use the same words mid-sentence; only a sentence that ENDS on a pointer points."""
+        notes = ('Findings: No reflux below the knee.\nAbdomen: Soft, no tenderness above the umbilicus.\n'
+                 'Complications: No bleeding following polypectomy.\nDischarge: No driving for the following 24 hours.\n'
+                 'Impression: Normal venous study.')
+        answers = fixture_answers(['Findings', 'Abdomen', 'Complications', 'Discharge', 'Impression'], notes)
         self.assert_ready(answers['Findings'], 'No reflux below the knee.')
+        self.assert_ready(answers['Abdomen'], 'Soft, no tenderness above the umbilicus.')
+        self.assert_ready(answers['Complications'], 'No bleeding following polypectomy.')
+        self.assert_ready(answers['Discharge'], 'No driving for the following 24 hours.')
+        self.assert_ready(answers['Impression'], 'Normal venous study.')
+
+    def test_p3b_a_backward_reference_governs_what_precedes_it_and_nothing_after(self):
+        notes = 'Findings: No reflux below the knee.\nImpression: No DVT in the veins listed above.\nPlan: repeat in one year'
+        answers = fixture_answers(['Findings', 'Impression', 'Plan'], notes)
+        self.assert_needs_decision(answers['Findings'], 'No reflux below the knee.', 'Impression: No DVT in the veins listed above.')
         self.assert_ready(answers['Impression'], 'No DVT in the veins listed above.')
+        self.assert_ready(answers['Plan'], 'repeat in one year')
+
+    def test_p3c_the_documented_cost_a_sentence_ending_on_a_forward_pointer_governs_what_follows(self):
+        """⚠️ THE TRADE, PINNED SO IT IS NOT MISTAKEN FOR A BUG. `…no reflux at mid-thigh or below.` ends by
+        pointing forward exactly as `…negative for the symptoms below.` does; without grammar the two cannot
+        be told apart. The sentence itself stays its question's answer; the answers after it need a decision."""
+        notes = 'Right GSV: Reflux at the SFJ, 1200 ms; no reflux at mid-thigh or below.\nImpression: Right GSV insufficiency'
+        answers = fixture_answers(['Right GSV', 'Impression'], notes)
+        self.assert_ready(answers['Right GSV'], 'Reflux at the SFJ, 1200 ms; no reflux at mid-thigh or below.')
+        self.assert_needs_decision(answers['Impression'], 'Right GSV insufficiency',
+                                   'Right GSV: Reflux at the SFJ, 1200 ms; no reflux at mid-thigh or below.')
+
+    def test_p5_a_reference_without_a_denial_changes_nothing(self):
+        notes = 'Findings: Clinical correlation with the above findings is required.\nPlan: see the instructions below'
+        answers = fixture_answers(['Findings', 'Plan'], notes)
+        self.assert_ready(answers['Findings'], 'Clinical correlation with the above findings is required.')
+        self.assert_ready(answers['Plan'], 'see the instructions below')
 
     def test_p4_a_colon_inside_a_value_is_not_a_heading(self):
         notes = 'Plan: review at 10:30\nFollow-up: in 2 weeks: sooner if worse'
@@ -244,6 +358,49 @@ class TheDecisionIsEnforcedThroughFinalizationAndExport(DocumentWorkflow):
         encounter = self.generated()
         self.save(encounter, **{'answer_' + self.symptoms: self.TYPED,
                                 'answer_' + self.ros: 'negative for chest pain'})
+        exported = self.finalize(encounter)
+        cells = [cell.text for row in Document(BytesIO(exported)).tables[0].rows for cell in row.cells]
+        self.assertEqual(cells, ['Review of systems', 'negative for chest pain', 'Symptoms', self.TYPED])
+
+    def section(self, encounter, label):
+        page = self.client.get(f'/encounters/{encounter.pk}/').content.decode()
+        sections = [part.split('</section>')[0] for part in page.split('<section class="answer">') if f'{label}</h3>' in part]
+        self.assertEqual(len(sections), 1, f'expected exactly one {label} section')
+        return sections[0]
+
+    def test_the_page_shows_the_candidate_and_its_governing_line_with_no_accept_control(self):
+        encounter = self.generated()
+        section = self.section(encounter, 'Symptoms')
+        self.assertIn('data-held-candidate', section)
+        self.assertIn('not offered as an answer', section)
+        self.assertIn('<blockquote class="suggestion-text">chest pain</blockquote>', section)
+        self.assertIn('data-governing-line', section)
+        self.assertIn(HEADING, section)
+        self.assertNotIn(f'name="accept_{self.symptoms}"', section)
+        self.assertNotIn('>chest pain</textarea>', section)
+
+    def test_a_draft_generated_before_the_rule_cannot_finalize_the_denied_finding_on_a_tick(self):
+        """What 02c29f99 stored for these notes, measured before the repair: both answers `supported`."""
+        encounter = self.generated()
+        value = HEADING.index('negative')
+        finding = encounter.notes.index('chest pain')
+        stale = {self.ros: {'text': 'negative for the following:', 'status': 'supported', 'reviewed': False,
+                            'evidence': [{'quote': 'negative for the following:', 'start': value, 'end': len(HEADING)}]},
+                 self.symptoms: {'text': 'chest pain', 'status': 'supported', 'reviewed': False,
+                                 'evidence': [{'quote': 'chest pain', 'start': finding, 'end': finding + len('chest pain')}]}}
+        Encounter.objects.filter(pk=encounter.pk).update(answers=stale)
+        encounter.refresh_from_db()
+        # The page posts the pre-filled text back; the tick alone is the defect's whole gesture.
+        self.save(encounter, **{'answer_' + self.ros: 'negative for the following:', 'answer_' + self.symptoms: 'chest pain'})
+        self.assertEqual(encounter.answers[self.symptoms]['status'], 'supported')
+        response = self.finalize_attempt(encounter)
+        encounter.refresh_from_db()
+        self.assertNotEqual(encounter.status, 'finalized')
+        self.assertContains(response, 'still need your decision: Review of systems, Symptoms.')
+        self.assertEqual(self.client.get(f'/encounters/{encounter.pk}/export/').status_code, 404)
+        # The remedy the message names: clear and save, then decide.
+        self.save(encounter)
+        self.save(encounter, **{'answer_' + self.symptoms: self.TYPED, 'answer_' + self.ros: 'negative for chest pain'})
         exported = self.finalize(encounter)
         cells = [cell.text for row in Document(BytesIO(exported)).tables[0].rows for cell in row.cells]
         self.assertEqual(cells, ['Review of systems', 'negative for chest pain', 'Symptoms', self.TYPED])

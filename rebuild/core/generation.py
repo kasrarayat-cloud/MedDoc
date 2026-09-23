@@ -1,4 +1,5 @@
 """Extractive clinical mapping: providers select source quotations, never compose facts."""
+import bisect
 import functools
 import json
 import hashlib
@@ -459,23 +460,166 @@ def _plain_pointer_only(notes):
                 or QUOTED_SOURCE.search(notes))
 
 
-def with_scope_suggestion(answer, notes, texts, own, explicit):
+def with_scope_suggestion(answer, notes, texts, own, explicit, context=None):
     """Attach the held candidate and the passage it was read from. Never alters the answer.
 
     `own` is the answer's own evidence, captured BEFORE the whole-note substitution. It is kept
     under its own key rather than replacing `evidence`, because `evidence` is what carries the
     governing context a clinician must see — a denial heading, a hypothetical frame — and
     narrowing it was the defect this shape replaced.
+
+    ⚠️ AND A CANDIDATE THAT IS NOT OFFERED IS STILL KEPT. It used to be discarded, so the clinician
+    saw a blank conflict and no trace of what the note said. `context` is the line(s) that govern
+    this answer's own line (`heading_governance`); when there are any, STRUCTURE withholds the offer,
+    whatever the words: `none of the following:` and `Family hx:` carry no word the vocabulary gate
+    knows, and an offer under them put the denied or the family's finding in one click.
     """
-    if not texts or not suggestible(notes, texts, explicit):
+    if not texts:
         return answer
-    return {**answer, 'suggestion': '\n'.join(texts), 'suggestion_evidence': own,
-            'reason': SCOPE_REVIEW_REASON}
+    if not context and suggestible(notes, texts, explicit):
+        return {**answer, 'suggestion': '\n'.join(texts), 'suggestion_evidence': own,
+                'reason': SCOPE_REVIEW_REASON}
+    return {**answer, 'held_candidate': {'text': '\n'.join(texts), 'evidence': own, 'context': context or [],
+                                         'reason': HELD_REASON}}
+
+
+#: ⚠️ WHICH WAY A POINTER LOOKS: a partition of SCOPE_POINTERS, not new words. A line that ENDS on
+#: "following"/"below" introduces what comes next; one that ends on "above"/"these"/"those"/"listed"
+#: refers to what came before. Mid-sentence they are usually anatomy or time ("below the knee",
+#: "following polypectomy") and govern nothing.
+FORWARD_POINTERS = frozenset(('following', 'below'))
+BACKWARD_POINTERS = frozenset(SCOPE_POINTERS.split('|')) - FORWARD_POINTERS
+WORD = re.compile(r'\w+')
+HELD_REASON = ('Read from the notes but NOT offered as an answer: the line shown with it may change what it '
+               'means (a heading, a denial, a family history, a hypothetical or a correction). Type your own '
+               'answer, or choose "Leave blank — reviewed".')
+
+
+def changes_meaning(text):
+    """A denial, reframer or correction word, in either reading of the text. The existing vocabularies only."""
+    return any(DENIAL.search(reading) or REFRAMED_SCOPE.search(reading) for reading in readings(text))
+
+
+def governing_shape(text, value):
+    """How one line can govern others: (forward, backward). `value` is its labelled value, else the line.
+
+    Structure first and without words: a line that visibly ends in a colon introduces what follows.
+    Then the existing vocabularies, anchored on where the pointer sits: a denial, family-history or
+    hypothetical sentence that ENDS by pointing (`…negative for the following symptoms.`, `…all of the
+    above.`), and a value that BEGINS with a correction, which revises what came before it.
+    """
+    words = [word.lower() for word in WORD.findall(text[-160:])][-3:]
+    heading = ends_in_colon(text)
+    meaning = changes_meaning(text)
+    ends_forward = bool(words) and (words[-1] in FORWARD_POINTERS or words[-3:-1] == ['the', 'following'])
+    ends_backward = bool(words) and words[-1] in BACKWARD_POINTERS
+    correction = bool(LINE_INITIAL_CORRECTION.match(value))
+    forward = heading or (meaning and ends_forward)
+    backward = correction or (meaning and ends_backward) or (
+        heading and any(word.lower() in BACKWARD_POINTERS for word in WORD.findall(text)))
+    return forward, backward, heading
+
+
+def qualified_word_form(fields):
+    """The qualified Word form: its content-control answers carry `sdt_id` (other content-control forms are
+    refused at upload). Every label there names its own side, vein and measure, so a sentence in one value
+    cannot re-scope another; only structural headings and corrections govern on it."""
+    return any('sdt_id' in (field.get('locator') or {}) for field in fields)
+
+
+def heading_governance(notes, labels, *, lexical=True):
+    """⚠️ ONE READER FOR EVERY CONSUMER: both validators and finalization call this, never a copy.
+
+    Returns `(starts, spans, headings, governors)` over the note's non-empty lines: their start offsets
+    (sorted), their stripped spans, the indexes of lines that visibly end in a colon (a labelled one is
+    a heading, never an answer), and `{line index: [nearest governing line indexes]}`.
+
+    Forward governance runs to the END of the note and backward to its start. Nothing structural bounds
+    a list: blank lines do not (pasted text separates items with them, and the app itself joins note
+    segments with one), so a later answer is not provably outside a heading's list. A heading that is the
+    last line of the note governs the lines before it. Linear in the note: each line keeps only its
+    nearest governor in each direction.
+    """
+    starts, spans, forward, backward, headings = [], [], [], [], set()
+    offset = 0
+    for line in notes.splitlines(keepends=True):
+        stripped = line.strip()
+        if stripped:
+            start = offset + line.index(stripped)
+            parsed = labelled_value(stripped, labels)
+            value = parsed[1] if parsed else stripped
+            ahead, behind, heading = governing_shape(stripped, value)
+            if not lexical:
+                ahead, behind = heading, bool(LINE_INITIAL_CORRECTION.match(value)) or (
+                    heading and any(word.lower() in BACKWARD_POINTERS for word in WORD.findall(stripped)))
+            if heading:
+                headings.add(len(spans))
+            starts.append(start); spans.append((start, start + len(stripped)))
+            forward.append(ahead); backward.append(behind)
+        offset += len(line)
+    if headings and max(headings) == len(spans) - 1:
+        backward[-1] = True
+    governors = {}
+    nearest = None
+    for index in range(len(spans)):
+        if nearest is not None:
+            governors.setdefault(index, []).append(nearest)
+        if forward[index]:
+            nearest = index
+    nearest = None
+    for index in reversed(range(len(spans))):
+        if nearest is not None:
+            governors.setdefault(index, []).append(nearest)
+        if backward[index]:
+            nearest = index
+    return starts, spans, headings, governors
+
+
+def governed_context(governance, notes, evidence):
+    """The governing lines for this evidence, as evidence entries, or None when nothing governs it.
+
+    Evidence on a heading line is governed by that heading itself: its value introduces other lines
+    and is not an answer.
+    """
+    starts, spans, headings, governors = governance
+    found = []
+    for entry in evidence:
+        index = bisect.bisect_right(starts, entry['start']) - 1
+        if index < 0:
+            continue
+        for governor in ([index] if index in headings else []) + governors.get(index, []):
+            if governor not in found:
+                found.append(governor)
+    if not found:
+        return None
+    return [{'quote': notes[spans[i][0]:spans[i][1]], 'start': spans[i][0], 'end': spans[i][1]} for i in sorted(found)]
+
+
+def held_for_decision(answer, texts, own, context):
+    """A governed answer: never pre-filled, never offered, the candidate kept beside what governs it."""
+    shown = sorted({(entry['start'], entry['end']): entry for entry in context + own}.values(), key=lambda e: e['start'])
+    return {**answer, 'status': 'conflict', 'text': '', 'evidence': shown,
+            'held_candidate': {'text': '\n'.join(texts), 'evidence': own, 'context': context, 'reason': HELD_REASON}}
+
+
+def governed_supported(notes, fields, answers, context_labels=()):
+    """Labels whose stored answer is still `supported` although the note governs its evidence.
+
+    Finalization's independent check: it recomputes from the notes rather than trusting how the draft
+    was generated, so a draft made before this rule (or by any path that skipped it) cannot finalize a
+    governed finding on a review tick alone.
+    """
+    labels = recognized_labels(fields, context_labels)
+    governance = heading_governance(notes, labels, lexical=not qualified_word_form(fields))
+    return [field['label'] for field in fields
+            if (answer := answers.get(field['key']) or {}).get('status') == 'supported'
+            and answer.get('evidence') and governed_context(governance, notes, answer['evidence']) is not None]
 
 
 def validate_tab_selections(notes,fields,selections,*,context_labels=()):
     units,inherited=source_units(notes,fields,context_labels=context_labels)
     labels=recognized_labels(fields,context_labels)
+    governance=heading_governance(notes,labels)
     injection=bool(INJECTION.search(notes) or any(INJECTION.search(f['label']) for f in fields))
     from .tab_review import clinician_identity
     output={}; used_numbered={}
@@ -530,7 +674,8 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=()):
         answer={'text':'\n'.join(texts) if status=='supported' else '',
                 'status':status,'evidence':evidence,'reviewed':False}
         if inherited and not (item.conflict or len(explicit)>1 or injection or guarded):
-            answer=with_scope_suggestion(answer,notes,texts,own,set(explicit))
+            answer=with_scope_suggestion(answer,notes,texts,own,set(explicit),
+                                         governed_context(governance,notes,own))
         output[item.key]=answer
     return output
 
@@ -552,6 +697,12 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
     # caught by test_labelled_answer_values. Selecting the wrong sentence for a question is a
     # model error this validator cannot see; the instruction and clinician review own it.
     inherited_context=len(lines)>1 and not scoped_lines
+    # ⚠️ A FULLY LABELLED NOTE IS NOT A LIST OF SELF-CONTAINED ANSWERS. With a `Review of systems`
+    # question on the form, `Review of systems: negative for the following:` above `Symptoms: chest pain`
+    # parsed as two labelled answers, and the denied chest pain came back SUPPORTED, pre-filled, and
+    # finalized on a review tick. Every answer whose own line a heading or a governing sentence reaches
+    # is now a decision, with the candidate kept beside the line that governs it.
+    governance=heading_governance(notes,labels,lexical=not qualified_word_form(fields))
     from .tab_review import clinician_identity
     for item in selections.fields:
         if clinician_identity(next(f for f in fields if f['key']==item.key)):
@@ -615,7 +766,10 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
             evidence=[{'quote':notes,'start':0,'end':len(notes)}]
         answer={'text':'\n'.join(texts) if status=='supported' else '', 'status':status,'evidence':evidence,'reviewed':False}
         if inherited_context and not (item.conflict or explicit_conflict or guarded):
-            answer=with_scope_suggestion(answer,notes,texts,own,set(explicit))
+            answer=with_scope_suggestion(answer,notes,texts,own,set(explicit),
+                                         governed_context(governance,notes,own))
+        elif status=='supported' and (context:=governed_context(governance,notes,own)) is not None:
+            answer=held_for_decision(answer,texts,own,context)
         output[item.key]=answer
     return output
 
