@@ -119,17 +119,21 @@ lists every charge; choose a charge's service name to see how it was calculated.
   final punctuation, or a word such as *if*, *would*, *could*, *might*, *these*, *those*, *above*,
   *below*, *following* or *listed* anywhere in the notes sends the generated answers back to you as
   conflicts to decide. On every other form, only a line that is not a label with its answer does
-  (a label left empty counts).
+  (a label left empty counts, and so does a label whose text introduces other lines: it ends in a
+  colon, or it is a denial pointing at other lines).
 - **Read the whole note before accepting a suggestion.** Suggestions are withheld in three
   cases: a denial line that governs other lines, meaning a line containing *denied*, *denies*,
-  *absent*, *negative*, *no*, *not*, *without* or *never* that ends in a colon
+  *deny*, *absent*, *negative*, *negatives*, *no*, *not*, *without* or *never* that ends in a
+  colon
   (`ROS: negative for the following:`), points at other lines with *following*, *these*,
   *those*, *above*, *below* or *listed* (`The patient denied each of the symptoms below.`), or
   has the denial word before its first colon (`Not seen: …`); the words *if*, *would*, *could*,
   *might*, *family history*, *hypothetical*, *imagine* or *suppose* anywhere in the notes; or a
-  quotation. A denial written any other way (for example *Chest pain was denied.* on one line
-  and *Symptoms: chest pain* on another) can still come with a suggestion that states the
-  opposite of what you meant.
+  quotation. A denial word next to one of those pointer words withholds every suggestion in the
+  note even in an ordinary sentence (*no driving for the following 24 hours*); type those answers
+  yourself. A denial written any other way (for example *Chest pain was denied.* on one line and
+  *Symptoms: chest pain* on another) can still come with a suggestion that states the opposite of
+  what you meant.
 - **WM IOV only:** every non-empty answer must be the exact value under its exact label. A
   dropdown value must match one of the form's own options, and a measurement is the number, a
   space, then its unit (`3.2 mm`, `400 ms`; `3.2mm` and `3,2 mm` are refused). Each of the 11 prewritten statements must also be its own line: its
@@ -170,7 +174,7 @@ Prewritten statement: Clinical correlation: Clinical correlation with the above 
 | kind | what works | notes |
 |---|---|---|
 | **Word (.docx)** | two-column question/answer tables, `{{Question}}` placeholders, multi-column question rows, mixed layouts, and lines of a label plus an underlined Tab (an ordinary paragraph, not inside a table, nothing typed after the Tab) | typed underscores `____` are not answer fields; answers expand in place, so check every exported page |
-| **Fillable PDF** | every field a visible plain text field with a fixed font size (not Auto), standard Helvetica font, no format scripts, not rotated, read-only, comb or rich-text; no links, attachments or other actions anywhere in the file | answers in plain ASCII only (no curly quotes or apostrophes, long dashes, °, µ or accented letters) and must fit their box; a character outside ASCII is refused at finalize, naming the question |
+| **Fillable PDF** | every field a visible plain text field with a fixed font size (not Auto), standard Helvetica font, no format scripts, not rotated, read-only, comb or rich-text; no links, attachments or other actions anywhere in the file | answers in plain ASCII only (no curly quotes or apostrophes, long dashes, °, µ, accented letters or no-break spaces) and must fit their box; a character outside ASCII is refused at finalize, naming the question and the character |
 | **Qualified WM IOV form** | exactly **one** file, recognised by its fingerprint, with its dropdowns and prewritten statements | labelled notes required; its own *No answer documented* choice replaces *Leave blank — reviewed* |
 
 **Refused at upload:** any other Word file with dropdowns, date pickers or other content controls;

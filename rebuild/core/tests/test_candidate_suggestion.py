@@ -736,7 +736,10 @@ class ADenialThatGovernsOtherLinesSuppressesTheOffer(TestCase):
     """
     GOVERNING = ('ROS: negative for the following:', 'Review of systems: patient denies:',
                  'Patient denies the following', 'The patient denied each of the symptoms below.',
-                 'Negative for the following')
+                 'Negative for the following',
+                 # Round 4: a plural the old word boundary could not see, and colons nobody can tell apart.
+                 'Pertinent negatives:', 'Pertinent negatives: fever, chest pain',
+                 'ROS: negative for\uff1a', 'ROS: negative for:\u200b')
 
     def test_each_governing_denial_suppresses_the_offer_on_both_contracts(self):
         for heading in self.GOVERNING:
@@ -761,10 +764,39 @@ class ADenialThatGovernsOtherLinesSuppressesTheOffer(TestCase):
         self.assertEqual(tab.get('suggestion'), 'chest pain.')
         self.assertFalse(negative_heading('The patient did not tolerate oral preparation.\nFindings: a 5 mm polyp'))
 
-    def test_the_denial_vocabulary_is_shared_not_changed(self):
+    def test_the_status_vocabulary_is_unchanged_and_suppression_only_widens_it(self):
         self.assertEqual(generation.UNSCOPED_NEGATIVE_HEADING.pattern,
                          r'^[^:]*\b(?:denied|denies|absent|negative|no|not|without|never)\b[^:]*:')
-        self.assertEqual(generation.DENIAL.pattern, r'\b(?:denied|denies|absent|negative|no|not|without|never)\b')
+        self.assertEqual(generation.SUPPRESSING_DENIAL_WORDS.split('|')[:8], generation.DENIAL_WORDS.split('|'))
+        self.assertEqual(generation.DENIAL.pattern, r'\b(?:' + generation.SUPPRESSING_DENIAL_WORDS + r')\b')
+
+    def test_a_pointer_beside_a_denial_withholds_offers_even_in_an_ordinary_sentence(self):
+        """The documented, deliberate cost: over-suppressing costs a retyped answer."""
+        notes = 'Extent: the scope reached the cecum\nDischarge: no driving for the following 24 hours'
+        self.assertTrue(negative_heading(notes))
+        self.assertIsNone(judge(notes, ['the scope reached the cecum'], label='Extent').get('suggestion'))
+
+    def labelled_heading_form(self, notes, heading_quote):
+        fields = [{'key': 'ros', 'label': 'Review of systems', 'kind': 'text', 'locator': {'cell': 0}},
+                  {'key': 'k', 'label': 'Symptoms', 'kind': 'text', 'locator': {'cell': 1}}]
+        chosen = Selections(fields=[Selection(key='ros', quotes=[heading_quote], conflict=False),
+                                    Selection(key='k', quotes=['chest pain'], conflict=False)])
+        return validate_selections(notes, fields, chosen, evidence_contract='legacy')
+
+    def test_a_heading_written_as_another_questions_answer_does_not_prefill_the_denied_finding(self):
+        """⚠️ WORSE THAN A SUGGESTION. With `Review of systems` on the form, the heading parsed as that
+        question's answer, every line counted as scoped, and `chest pain` came back SUPPORTED."""
+        for heading in ('negative for the following:', 'patient denies:', 'negative for the symptoms below.'):
+            with self.subTest(heading=heading):
+                answers = self.labelled_heading_form(f'Review of systems: {heading}\nSymptoms: chest pain', heading)
+                self.assertEqual(answers['k']['status'], 'conflict')
+                self.assertEqual(answers['k']['text'], '')
+                self.assertIsNone(answers['k'].get('suggestion'))
+        # CONTROL: an ordinary denial ANSWER under that label stays a scoped, supported answer.
+        # Same two lines, same quotes, only the heading made an ordinary answer: both stay supported.
+        answers = self.labelled_heading_form('Review of systems: negative for fever\nSymptoms: chest pain', 'negative for fever')
+        self.assertEqual((answers['ros']['status'], answers['k']['status']), ('supported', 'supported'))
+        self.assertEqual(answers['k']['text'], 'chest pain')
 
 
 class AnAcceptanceIsAttributedOnThePageAndDefendedFromWithdrawal(

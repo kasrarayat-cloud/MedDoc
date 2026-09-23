@@ -190,8 +190,17 @@ REFRAMED_SCOPE = re.compile(r'\b(?:' + SCOPE_REFRAMERS + r')\b', re.I)
 QUOTED_SOURCE = re.compile(r'["“”]|(?<!\w)[\'‘]')
 DENIAL_WORDS = r'denied|denies|absent|negative|no|not|without|never'
 UNSCOPED_NEGATIVE_HEADING = re.compile(r'^[^:]*\b(?:' + DENIAL_WORDS + r')\b[^:]*:',re.I)
-DENIAL = re.compile(r'\b(?:' + DENIAL_WORDS + r')\b', re.I)
+#: ⚠️ A SUPERSET OF `DENIAL_WORDS`, READ ONLY TO WITHHOLD AN OFFER OR TO REFUSE A LINE AS AN ANSWER —
+#: never to decide a status in `source_units`. `\bnegative\b` cannot match `Pertinent negatives:`,
+#: the commonest denial heading there is. Widening only ever suppresses more.
+SUPPRESSING_DENIAL_WORDS = DENIAL_WORDS + r'|negatives|deny'
+COLONS = ':\uff1a\ufe55\ufe13'
+DENIAL = re.compile(r'\b(?:' + SUPPRESSING_DENIAL_WORDS + r')\b', re.I)
+DENIAL_BEFORE_COLON = re.compile(r'^[^' + COLONS + r']*\b(?:' + SUPPRESSING_DENIAL_WORDS + r')\b[^' + COLONS + r']*[' + COLONS + r']', re.I)
+ENDS_IN_COLON = re.compile(r'[' + COLONS + r']\s*$')
 SCOPE_POINTER = re.compile(r'\b(?:' + SCOPE_POINTERS + r')\b', re.I)
+#: Copied text carries characters nobody can see; a heading that visibly ends in a colon must count.
+INVISIBLE = re.compile('[\u200b\u200c\u200d\u2060\ufeff]')
 FINITE_STATEMENT = re.compile(r'\b(?:is|are|was|were|has|have|had|denies|reports|reported|showed|revealed|advanced|seen|collected|recommend|received|underwent)\b',re.I)
 
 ABBREVIATION = re.compile(r'(?:\b(?:dr|mr|mrs|ms|prof|st|vs|etc|approx)|\b[A-Z]|\be\.g|\bi\.e)\.$', re.I)
@@ -367,9 +376,24 @@ def negative_heading(notes):
     acceptance. A line holding a denial word that ENDS in a colon, or that POINTS at other lines,
     is a heading too. Suppression only; `source_units` already sends such notes back as conflicts.
     """
-    return any(UNSCOPED_NEGATIVE_HEADING.search(line)
-               or (DENIAL.search(line) and (line.rstrip().endswith(':') or SCOPE_POINTER.search(line)))
-               for line in notes.splitlines())
+    return any(UNSCOPED_NEGATIVE_HEADING.search(line) or DENIAL_BEFORE_COLON.search(INVISIBLE.sub('', line))
+               or governs_other_lines(line) for line in notes.splitlines())
+
+
+def governs_other_lines(text):
+    """A denial that ends in a colon or points at other lines: `negative for the following:`.
+
+    ⚠️ DELIBERATELY OVER-INCLUSIVE. `Discharge: no driving for the following 24 hours` trips it too and
+    withholds every offer in that note. That costs a retyped answer; missing a real heading costs a
+    denied finding accepted with one click.
+    """
+    text = INVISIBLE.sub('', text)
+    return bool(DENIAL.search(text) and (ENDS_IN_COLON.search(text) or SCOPE_POINTER.search(text)))
+
+
+def heading_value(value):
+    """A labelled value that introduces other lines is a heading, not that question's answer."""
+    return bool(ENDS_IN_COLON.search(INVISIBLE.sub('', value)) or governs_other_lines(value))
 
 
 def _plain_pointer_only(notes):
@@ -480,7 +504,10 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
     injection=bool(INJECTION.search(notes) or any(INJECTION.search(f['label']) for f in fields))
     labels=recognized_labels(fields,context_labels)
     lines=[line.strip() for line in notes.splitlines() if line.strip()]
-    scoped_lines=all((parsed:=labelled_value(line,labels)) and parsed[1] for line in lines)
+    # ⚠️ A LABELLED HEADING IS NOT AN ANSWER. With a `Review of systems` question on the form,
+    # `Review of systems: negative for the following:` above `Symptoms: chest pain` counted as two
+    # scoped answers, and the denied `chest pain` came back SUPPORTED, pre-filled, with no conflict.
+    scoped_lines=all((parsed:=labelled_value(line,labels)) and parsed[1] and not heading_value(parsed[1]) for line in lines)
     # `len(lines)>1` is deliberate and is NOT an off-by-one: this rule is about context a
     # PRECEDING line imposes on a later one ("The following findings are denied:"), which a
     # single-line note cannot have. Widening it to every unscoped note was tried and reverted —

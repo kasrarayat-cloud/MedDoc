@@ -57,11 +57,11 @@ def docx_with_content_control():
 
 
 
-def fillable_pdf(link=False):
+def fillable_pdf(link=False, name='Plan', tooltip='Plan'):
     """One multi-line Helvetica text field, the shape the upload page calls supported."""
     buffer = BytesIO(); document = canvas.Canvas(buffer)
     document.drawString(30, 780, 'Plan:')
-    document.acroForm.textfield(name='Plan', tooltip='Plan', x=30, y=600, width=420, height=140,
+    document.acroForm.textfield(name=name, tooltip=tooltip, x=30, y=600, width=420, height=140,
                                 fontName='Helvetica', fontSize=10, fieldFlags='multiline')
     if link:
         document.linkURL('https://clinic.invalid/', (30, 60, 200, 80))
@@ -432,8 +432,26 @@ class BrowserLineBreaksReachTheDocumentOnce(DocumentWorkflow):
         template, mapping = self.upload(fillable_pdf(), 'pdf')
         encounter = self.create_encounter(mapping, 'Plan: duplex ultrasound.')
         self.generate(encounter)
+        for typed, where in (('review in two weeks \u2014 sooner if worse', '(\u201c\u2014\u201d, U+2014 at character 21)'),
+                             ('review\u00a0in two weeks', '(U+00A0 at character 7)')):
+            with self.subTest(where=where):
+                self.review(encounter, override=typed)
+                response = self.client.post(f'/encounters/{encounter.pk}/finalize/', {'reviewed': 'on', 'revision': encounter.revision}, follow=True)
+                self.assertContains(response, 'The answer for Plan has a character a PDF form cannot hold ' + where)
+                encounter.refresh_from_db()
+                self.assertEqual(encounter.status, 'review')
+
+    def test_the_refusal_names_a_renamed_question_as_the_doctor_sees_it(self):
+        """The engine re-inspects the original, whose field is still `Text1`; the doctor renamed it."""
+        import json
+        template, mapping = self.upload(fillable_pdf(name='Text1', tooltip=None), 'pdf')
+        self.assertEqual(mapping.fields[0]['label'], 'Text1')
+        response = self.client.post(f'/templates/{template.pk}/', {'labels': json.dumps({'Text1': 'Follow-up plan'}), 'mapping_version': str(mapping.pk)})
+        self.assertEqual(response.status_code, 302)
+        renamed = template.versions.get(number=2)
+        encounter = self.create_encounter(renamed, 'Follow-up plan: duplex ultrasound.')
+        self.generate(encounter)
         self.review(encounter, override='review in two weeks \u2014 sooner if worse')
         response = self.client.post(f'/encounters/{encounter.pk}/finalize/', {'reviewed': 'on', 'revision': encounter.revision}, follow=True)
-        self.assertContains(response, 'The answer for Plan has a character a PDF form cannot hold')
-        encounter.refresh_from_db()
-        self.assertEqual(encounter.status, 'review')
+        self.assertContains(response, 'The answer for Follow-up plan has a character a PDF form cannot hold')
+        self.assertNotContains(response, 'The answer for Text1')
