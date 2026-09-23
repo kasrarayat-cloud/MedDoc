@@ -1,4 +1,5 @@
 """Extractive clinical mapping: providers select source quotations, never compose facts."""
+import functools
 import json
 import hashlib
 import re
@@ -346,6 +347,7 @@ def suggestible(notes, texts, explicit):
     return _plain_pointer_only(notes)
 
 
+@functools.lru_cache(maxsize=8)
 def negative_heading(notes):
     """⚠️ APPLIED PER LINE, BECAUSE THE PATTERN IS ANCHORED AND THE NOTE IS NOT ONE LINE.
 
@@ -372,6 +374,8 @@ def negative_heading(notes):
     symptoms below.` (no colon at all) each offered the denied `chest pain` for one-click
     acceptance. A line holding a denial word that ENDS in a colon, or that POINTS at other lines,
     is a heading too. Suppression only; `source_units` already sends such notes back as conflicts.
+
+    A property of the whole note, asked once per FIELD: cached, so a 100-field form pays for it once.
     """
     return any(UNSCOPED_NEGATIVE_HEADING.search(line) or denial_before_colon(line) or governs_other_lines(line)
                for line in notes.splitlines())
@@ -399,6 +403,8 @@ def readings(text):
     them splits `de`+`nied`. A check that only withholds may take the union and lose nothing.
     """
     yield text
+    if text.isascii():   # no ASCII character is a format character or a default-ignorable mark
+        return
     visible = ''.join(character for character in text if not invisible(character))
     if visible != text:
         yield visible
