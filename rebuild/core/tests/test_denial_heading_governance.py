@@ -162,6 +162,17 @@ class TheReproducedDefect(ExpectationsMixin, TestCase):
                 self.assert_needs_decision(answers['Chest pain'], 'yes', closing)
                 self.assert_needs_decision(answers['Dyspnea'], 'yes', closing)
 
+    def test_e6d_a_closing_heading_governs_what_precedes_it_even_without_a_pointer_word(self):
+        """Structure alone: a heading with nothing after it can only introduce what came before."""
+        closing = 'Review of systems: patient denies:'
+        notes = 'Chest pain: yes\nDyspnea: yes\n' + closing
+        labels = ['Chest pain', 'Dyspnea', 'Review of systems']
+        for path, answers in self.both(labels, notes, {'Chest pain': ['Chest pain: yes'], 'Dyspnea': ['Dyspnea: yes'],
+                                                       'Review of systems': [closing]}):
+            with self.subTest(path=path):
+                self.assert_needs_decision(answers['Chest pain'], 'yes', closing)
+                self.assert_needs_decision(answers['Dyspnea'], 'yes', closing)
+
     def test_e6c_a_backward_heading_with_lines_after_it_governs_both_ways(self):
         closing = 'Review of systems: all of the above denied:'
         notes = 'Symptoms: chest pain, dyspnea\n' + closing + '\n\nExamination: mild right ankle swelling'
@@ -284,10 +295,14 @@ class ValidAnswersStillWork(ExpectationsMixin, TestCase):
                                    'Right GSV: Reflux at the SFJ, 1200 ms; no reflux at mid-thigh or below.')
 
     def test_p5_a_reference_without_a_denial_changes_nothing(self):
-        notes = 'Findings: Clinical correlation with the above findings is required.\nPlan: see the instructions below'
-        answers = fixture_answers(['Findings', 'Plan'], notes)
+        """A pointer alone asserts nothing about polarity: only a denial, family history, hypothetical or
+        correction beside it makes it govern."""
+        notes = ('Findings: Clinical correlation with the above findings is required.\nPlan: see the instructions below\n'
+                 'Follow-up: in two weeks')
+        answers = fixture_answers(['Findings', 'Plan', 'Follow-up'], notes)
         self.assert_ready(answers['Findings'], 'Clinical correlation with the above findings is required.')
         self.assert_ready(answers['Plan'], 'see the instructions below')
+        self.assert_ready(answers['Follow-up'], 'in two weeks')
 
     def test_p4_a_colon_inside_a_value_is_not_a_heading(self):
         notes = 'Plan: review at 10:30\nFollow-up: in 2 weeks: sooner if worse'
