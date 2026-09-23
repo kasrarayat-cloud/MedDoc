@@ -2483,3 +2483,11 @@ class WhatTheSixteenthPassFound(ExpectationsMixin, TestCase):
         answer = fixture_answers(labels, notes)['Headache']
         self.assert_needs_decision(answer, 'frontal', 'Review of systems: none of the following.')
         self.assertFalse([entry for entry in answer['held_candidate']['context'] if 'more' in entry])
+
+    def test_every_line_that_governs_from_below_is_shown_when_they_fit(self):
+        """Five headings after the answer that name what precedes them, none with words that change meaning: the three
+        nearest were shown and the other two counted (the mutation run of the sixteenth-pass repair)."""
+        lines = ['See the above:', 'As listed above:', 'Those above:', 'All of the above:', 'Items listed:']
+        answer = fixture_answers(['Symptoms'], 'Symptoms: chest pain\n' + '\n'.join(lines))['Symptoms']
+        quotes = [entry.get('quote') for entry in answer['held_candidate']['context']]
+        self.assertEqual(quotes, lines)
