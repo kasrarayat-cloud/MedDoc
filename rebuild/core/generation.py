@@ -1065,12 +1065,13 @@ def governed_supported(governance, notes, answer, label=None):
 
 def own_evidence(answer, notes):
     """The lines an answer's candidate was read from, whichever shape stored it — never the whole-note span the
-    whole-note rule substitutes for `evidence` (fifth pass: offset 0 made an unrelated answer look governed)."""
+    whole-note rule substitutes for `evidence` (fifth pass: offset 0 made an unrelated answer look governed; ninth
+    pass: on a one-line note, offset 0 put the candidate before a pointer in the middle of that line). Without its
+    own lines an answer is judged by `cleared_governed`'s fail-closed branch."""
     held = (answer.get('held_candidate') or {}).get('evidence') or answer.get('suggestion_evidence') or answer.get('own_evidence')
     if held:
         return held
-    multiline = '\n' in notes.strip()
-    return [entry for entry in answer.get('evidence') or [] if not (multiline and entry.get('quote') == notes)]
+    return [entry for entry in answer.get('evidence') or [] if entry.get('quote') != notes]
 
 
 def seen_text(text):

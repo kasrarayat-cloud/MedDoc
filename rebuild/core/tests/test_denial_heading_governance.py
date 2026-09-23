@@ -539,6 +539,13 @@ class WhatTheThirdPassFound(ExpectationsMixin, TestCase):
         answer = fixture_answers(['Diagnosis', 'Basal insulin', 'Correction scale'], notes)['Diagnosis']
         self.assertNotIn('suggestion', answer)
         self.assertIn('starts with the word Correction', answer['held_candidate']['reason'])
+        # And an offer an earlier release STORED on that note is withheld on the page and refused at finalization.
+        fields = form('Diagnosis', 'Basal insulin', 'Correction scale')
+        start = notes.index('type 2 diabetes')
+        offered = {'status': 'conflict', 'text': 'type 2 diabetes', 'accepted_suggestion': True, 'suggestion': 'type 2 diabetes',
+                   'suggestion_evidence': [{'quote': 'type 2 diabetes', 'start': start, 'end': start + 15}]}
+        self.assertEqual(generation.offer_context(generation.governance_for(notes, fields), notes, offered, 'Diagnosis'), [])
+        self.assertIn('Diagnosis', generation.governed_decisions(notes, fields, {'q0': offered}))
 
     def test_the_documented_costs_of_errata_and_empty_questions(self):
         """⚠️ TRADES, PINNED. An erratum on no label, or under a label nobody answered before, may correct any line above
@@ -1069,7 +1076,8 @@ class WhatTheNinthPassFound(ExpectationsMixin, TestCase):
     def test_a_pointer_next_to_markup_or_a_dash_still_governs(self):
         for line in ('Review of systems: _negative for the following_', 'Review of systems: negative for the following--',
                      'Review of systems: negative for the following-', "Review of systems: 'negative for the following'",
-                     'Review of systems: __negative for the following__', 'Review of systems: _see below_'):
+                     'Review of systems: __negative for the following__', 'Review of systems: _see below_',
+                     'Review of systems: negative, see _below_', 'Review of systems: negative for the _following_'):
             with self.subTest(line=line):
                 self.held(fixture_answers(['Review of systems', 'Symptoms'], line + '\nSymptoms: chest pain')['Symptoms'])
         answer = fixture_answers(['Symptoms'], '_Patient denies the following_\nSymptoms: chest pain')['Symptoms']
@@ -1087,6 +1095,10 @@ class WhatTheNinthPassFound(ExpectationsMixin, TestCase):
         self.assertNotEqual(tab_answers(['Symptoms', 'Review of systems'], notes)[1]['Symptoms']['status'], 'supported')
         notes = 'Review of systems: negative for the following:\nSymptoms: chest pain\nPlan: review\nSymptoms: chest pain'
         self.assertNotEqual(tab_answers(['Symptoms', 'Review of systems', 'Plan'], notes)[1]['Symptoms']['status'], 'supported')
+        # The kept occurrence (the tab validator keeps the LAST) is ungoverned; the earlier one is corrected.
+        notes = 'Symptoms: chest pain\nCorrection: the patient denies chest pain.\nSymptoms: chest pain'
+        for answers in (fixture_answers(['Symptoms'], notes), tab_answers(['Symptoms'], notes)[1]):
+            self.assertNotEqual(answers['Symptoms']['status'], 'supported', answers['Symptoms'])
 
     def test_the_page_and_finalization_judge_every_occurrence_of_a_stored_draft(self):
         """A draft from the installed release kept ONE occurrence; the page and finalization judge them all, by the
@@ -1134,6 +1146,18 @@ class WhatTheNinthPassFound(ExpectationsMixin, TestCase):
         line = 'Plan: see below. See below. See below. See below. The patient denies the following.'
         context = fixture_answers(['Plan', 'Symptoms'], line + '\nSymptoms: chest pain')['Symptoms']['held_candidate']['context']
         self.assertIn('The patient denies the following.', ' '.join(entry.get('quote', '') for entry in context))
+
+    def test_an_earlier_release_answer_on_a_one_line_note_is_judged_fail_closed(self):
+        """Its only evidence is the whole note: offset 0 would put the candidate before the mid-line pointer."""
+        notes = 'Indication: screening. The patient denies the following. Chest pain, dyspnea.'
+        fields = form('Indication', 'Symptoms')
+        stored = {'q1': {'status': 'edited', 'text': '', 'reviewed': True,
+                         'evidence': [{'quote': notes, 'start': 0, 'end': len(notes)}]}}
+        self.assertIn('Symptoms', generation.governed_decisions(notes, fields, stored))
+        # CONTROL: nothing in the note governs or withholds, so it finalizes empty.
+        plain = 'Indication: screening. Chest pain and dyspnea were reported.'
+        stored = {'q1': {**stored['q1'], 'evidence': [{'quote': plain, 'start': 0, 'end': len(plain)}]}}
+        self.assertNotIn('Symptoms', generation.governed_decisions(plain, fields, stored))
 
     def test_an_ungoverned_answer_cleared_on_a_one_paragraph_note_finalizes_empty(self):
         notes = ('Fictional software test only. Indication: rectal bleeding. Correction: the indication is iron deficiency anemia. '
