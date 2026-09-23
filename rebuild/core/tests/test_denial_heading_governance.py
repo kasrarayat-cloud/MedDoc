@@ -1662,6 +1662,78 @@ class WhatTheFourteenthPassFound(ExpectationsMixin, TestCase):
         self.assertIn('Symptoms ?', generation.governed_decisions(notes, fields, stored))
 
 
+class WhatTheFifteenthPassFound(ExpectationsMixin, TestCase):
+    """Refutation of the finished diff, fifteenth pass (over 647e383e)."""
+
+    def not_ready(self, answer):
+        self.assertNotEqual(answer['status'], 'supported', answer)
+        self.assertNotIn('suggestion', answer)
+
+    def test_an_aside_then_a_long_blank_run_still_ends_the_pointer_sentence(self):
+        for value in ('negative for the following (per patient) ' + '_' * 55,
+                      'negative for the following (per patient).' + ' ' * 55 + 'Page 1 of 2'):
+            with self.subTest(value=value[:40]):
+                notes = 'Review of systems: ' + value + '\nSymptoms: chest pain'
+                answer = provider_answers(['Review of systems', 'Symptoms'], notes, {'Symptoms': ['Symptoms: chest pain']})['Symptoms']
+                self.not_ready(answer)
+        notes = ('INDICATION: screening colonoscopy.\nPertinent negatives are as follows (per the nursing record).' + ' ' * 55
+                 + 'Reviewed with the patient.\nCOMPLICATIONS: perforation, post-polypectomy bleeding.')
+        self.not_ready(tab_answers(['INDICATION', 'COMPLICATIONS'], notes)[1]['COMPLICATIONS'])
+
+    def test_a_correction_after_a_bracketed_marker_or_a_column_gap_is_a_correction(self):
+        for line in ('<<ADDENDUM>> Correction: there was no perforation; no complications occurred.',
+                     '<Addendum 9/22> Correction: no polyp was found.'):
+            with self.subTest(line=line):
+                self.assertTrue(generation.erratum_points(line))
+        self.not_ready(tab_answers(['Findings'], 'Findings: sigmoid polyp.' + ' ' * 55 + 'Correction: no polyp was found.')[1]['Findings'])
+        # CONTROL: the word inside the brackets is still read as the word.
+        self.assertTrue(generation.erratum_points('<CORRECTION>: no polyp was found.'))
+
+    def test_comments_counts_and_dash_runs_stay_linear(self):
+        import time
+        fields = [{'key': f'k{i}', 'label': f'Question {i}', 'kind': 'text', 'locator': {'cell': i}} for i in range(100)]
+        tab = [{**field, 'locator': {**field['locator'], 'tab_form': {'version': 1}}} for field in fields]
+        notes_list = ['Question 1: chest pain\nPlan.' + '<!--x-->' * 30 + 'Follow up in two weeks.',
+                      '\u200b' + '?<!--' * 12500, '\u200b' + '.<!--' * 9999, '\u200b' + ':<!--' * 9999,
+                      'Review of systems: negative\nSymptoms: chest pain\nPlan: see below' + '<<>' * 16 + 'x.',
+                      'Review of systems: negative\nSymptoms: chest pain\n' + '-' * 5000 + ' Assessment: stable',
+                      ' '.join(['-' * 80] * 20) + ' text']
+        for notes in notes_list:
+            with self.subTest(notes=notes[:24]):
+                started = time.perf_counter()
+                generation.governance_for(notes[:50000], fields)
+                generation.governance_for(notes[:50000], tab)
+                self.assertLess(time.perf_counter() - started, 4)
+
+    def test_a_disagreement_typed_then_cleared_needs_a_decision(self):
+        notes = 'Allergies: penicillin\nPatient now reports no known drug allergies.'
+        fields = form('Allergies', 'Plan')
+        answer = provider_answers(['Allergies', 'Plan'], notes, {'Allergies': ['Allergies: penicillin', 'Patient now reports no known drug allergies.']})['Allergies']
+        self.assertIn('held_candidate', answer)
+        stored = {'q0': {**answer, 'status': 'edited', 'text': ''}}
+        self.assertIn('Allergies', generation.governed_decisions(notes, fields, stored))
+
+    def test_a_typed_held_answer_says_it_stands(self):
+        notes = HEADING + '\nSymptoms: chest pain'
+        fields = form('Review of systems', 'Symptoms')
+        answer = fixture_answers(['Review of systems', 'Symptoms'], notes)['Symptoms']
+        row = generation.as_currently_governed(generation.governance_for(notes, fields),
+                                               notes, {**fields[1], **answer, 'status': 'edited', 'text': 'denies chest pain'})
+        self.assertEqual(row['held_candidate']['reason'], generation.HELD_REASON_EDITED)
+
+    def test_an_angle_bracket_placeholder_after_a_colon_is_an_answer(self):
+        for line in ('Time: <time>', 'Pick: <select>', 'Address: <address>', 'Knees: <b/l>'):
+            with self.subTest(line=line):
+                self.assertFalse(generation.ends_in_colon(line))
+        # CONTROL: closing, namespaced and line-break tags still close a heading.
+        for line in ('Mother:</b>', 'Family history:<o:p></o:p>', 'Mother:<br>'):
+            self.assertTrue(generation.ends_in_colon(line), line)
+
+    def test_an_italic_underscore_before_a_blank_is_not_a_clock(self):
+        self.assertTrue(generation.ends_in_colon('_Review of systems: negative for_: ______'))
+        self.assertFalse(generation.ends_in_colon('Time out: __:__'))
+
+
 class TheEleventhPassCostsStayLinear(ExpectationsMixin, TestCase):
     """Performance lens, eleventh pass: many governors on one line times many occurrences, and many spellings of one
     value, each held the row lock for a minute or more."""

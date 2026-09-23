@@ -138,12 +138,17 @@ lists every charge; choose a charge's service name to see how it was calculated.
   not count) and no denial, family history, hypothetical or pointer word (`Signed by:`,
   `**Signed by:**`, `Signed by: ______`, `Electronically signed on 09/21/2026 at 10:42 by:`, an
   empty `Allergies:`). A dash after a colon is an answer, not a heading (`Allergies: -`, `Nose: —`
-  mean none), and so is a value in angle brackets (`Allergies: <penicillin>`, `PSA: <0.1>`); only a
+  mean none), and so is a value in angle brackets (`Allergies: <penicillin>`, `PSA: <0.1>`, a
+  placeholder such as `Time: <time>`); only a
   real HTML tag after the colon (`<br>`, `</b>`, Word's `<o:p></o:p>`), a footnote mark (`¹`), `\`
   or `~~` is markup; a blank or filled clock (`Time out: __:__`, `__ : __`) is not a heading, but a
   number before closing markup is (`_Mother, age 72:_`). A sign-off row whose every field is a
   signature, date, time or signer label (`Signature: ____ Date: ____`, `Signed by: Dr A  Date:`,
-  `Surgeon: ____ Signature: ____`) is a bare label; a row with any other field is not. A bare signature or date row after a closing
+  `Surgeon: ____ Signature: ____`) is a bare label; a row with any other field is not. The signer
+  words read are *signed*, *signature*, *dictated*, *transcribed*, *reviewed by*, *verified by*,
+  *date*, *time*, *surgeon*, *physician*, *clinician*, *provider*, *attending*, *resident*,
+  *nurse*, *name*, *credentials* and *NPI*; a footer such as `Reported by: Dr A  Date:` or
+  `Radiologist:` still governs the answers above it. A bare signature or date row after a closing
   heading (`Review of systems: negative for:` then `Signed by: ____`) does not stop that heading
   closing the notes. A sentence break inside brackets does not end a heading's or a pointer's
   sentence (`… all of the above were denied (per intake form. Reviewed today):`), and markup around a
@@ -155,7 +160,9 @@ lists every charge; choose a charge's service name to see how it was calculated.
   that **ends** on *following*, *below*, *as follows* or *the following* and one more word (`…
   patient denies the following.`, `Her mother had the following.`, `… is as follows.`, `… the
   following symptom(s).`, `… the following co-morbidities.`), including after an aside of any
-  length (`… the following (reviewed today).`) or before a colon and a list on the same line (`…
+  length (`… the following (reviewed today).`; an aside left open on its line, nested twice, or in
+  braces `{…}` is not read as one, and the pointer is then missed) or before a colon and a list on
+  the same line (`…
   as follows: polyps.`), makes every answer after it a decision, in the same paragraph and on later
   lines, whatever non-word characters trail it to the end of its line (`… the following.*`, `…
   the following.<br>`). A period ends such a sentence only before a new sentence (`… the following
@@ -192,7 +199,9 @@ lists every charge; choose a charge's service name to see how it was calculated.
   form anywhere in a paragraph, on every other form only at the start of its line. ⚠️ So a
   correction of another question written under a question already answered (`Comments:
   Correction: the allergy is sulfa`) is NOT applied to that other answer: write it under the
-  question it corrects. A note line that starts with the word *Correction* or *Corrections*, after
+  question it corrects. A correction after a timestamp, a bracketed number or another word and a
+  dash (`[09/22 14:05] Correction:`, `(9/22) Correction:`, `Addendum - Correction:`,
+  `ADDENDUM/CORRECTION:`) is not read: start the line with the word instead. A note line that starts with the word *Correction* or *Corrections*, after
   any bullet or list number, also withholds every suggestion (below) — even a treatment line
   (`Correction scale:`, `Correction insulin:`, `Correction of …`) or a line naming a form question
   (`Correction achieved: 10 degrees`) — and so does a line that opens with a correction such as

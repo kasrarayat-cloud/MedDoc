@@ -480,19 +480,23 @@ MARKUP_TAIL = (frozenset('*_"\'|`~\\\u00b9\u00b2\u00b3') | frozenset(map(chr, ra
                | frozenset(chr(code) for code in range(0x10000) if unicodedata.category(chr(code)) in ('Pe', 'Pf')))
 #: A real HTML tag (`<br>`, `</b>`, `<br data-mce-bogus="1">`): a known name, then a space, `/` or `>`. Not a value in
 #: angle brackets (`<penicillin>`, `<a.patel@example.nhs.uk>`, `< 2 cm >`, `<0.1>`).
-HTML_TAG = re.compile(r'(?:</[A-Za-z][\w:.\-]*\s*>|<!--[^\n]*?-->'
+HTML_TAG = re.compile(r'(?:</[A-Za-z][\w:.\-]{0,60}\s{0,20}>|<!--(?:(?!-->)[^\n]){0,200}-->'
                       r'|<(?:[A-Za-z]+:[A-Za-z][\w.\-]*|a|abbr|address|article|aside|b|bdi|bdo|big|blockquote|body|br|button'
                       r'|caption|center|cite|code|col|colgroup|dd|del|details|dfn|div|dl|dt|em|fieldset|figcaption|figure'
                       r'|font|footer|form|h[1-6]|head|header|hr|html|i|img|input|ins|kbd|label|legend|li|main|mark|nav|nobr'
                       r'|ol|option|p|pre|q|s|samp|section|select|small|span|strike|strong|sub|summary|sup|table|tbody|td'
-                      r'|textarea|tfoot|th|thead|time|tr|tt|u|ul|var|wbr)(?=[\s/>])[^<>\n]*>)', re.I)
+                      r'|textarea|tfoot|th|thead|time|tr|tt|u|ul|var|wbr)(?=[\s/>])[^<>\n]{0,200}>)', re.I)
+#: What may follow a heading's colon: a closing tag, a comment, a namespaced tag (Word's `<o:p>`) or a line-break tag,
+#: never an opening element that may be a placeholder value (`Time: <time>`, `Pick: <select>`, fifteenth pass).
+HEADING_TAG = re.compile(r'(?:</[A-Za-z][\w:.\-]{0,60}\s{0,20}>|<!--(?:(?!-->)[^\n]){0,200}-->'
+                         r'|<(?:[A-Za-z]+:[A-Za-z][\w.\-]*|br|wbr|hr)(?=[\s/>])[^<>\n]{0,200}>)', re.I)
 #: An HTML character reference at the end of a line (`&nbsp;`, `&#160;`, `&#xa0;`).
 CHARACTER_REFERENCE = re.compile(r'&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});$')
 
 
 DIGITS = frozenset('0123456789')
 #: A markdown table's separator row (`|---|---:|`, `| :---: |`): alignment colons, not a heading.
-TABLE_RULE = re.compile(r'^[\s|:\-]*-{3,}[\s|:\-]*$')
+TABLE_CHARS = re.compile(r'[\s|:\-]*+')
 
 
 def heading_colon(text):
@@ -500,7 +504,7 @@ def heading_colon(text):
     followed only by whitespace, invisible characters, markup, closing marks or a short tag (`<br>`). One pass from
     the end. ONE reader for `ends_in_colon` and `bare_label` (tenth pass: `Signed by: ____` was a heading to one and
     had an inner colon to the other)."""
-    if TABLE_RULE.match(text):
+    if '---' in text and TABLE_CHARS.fullmatch(text):
         return -1
     blank = blank_set()
     end = len(text)
@@ -508,7 +512,7 @@ def heading_colon(text):
         character = text[end - 1]
         if character in blank or character in MARKUP_TAIL:
             end -= 1
-        elif character == '>' and (opening := text.rfind('<', max(0, end - 200), end)) >= 0 and HTML_TAG.fullmatch(text, opening, end):
+        elif character == '>' and (opening := text.rfind('<', max(0, end - 260), end)) >= 0 and HEADING_TAG.fullmatch(text, opening, end):
             end = opening
         elif character == ';' and (reference := CHARACTER_REFERENCE.search(text, max(0, end - 12), end)):
             end = reference.start()
@@ -524,6 +528,12 @@ def heading_colon(text):
     while right < len(text) and text[right] in ' \t':
         right += 1
     before, after = text[left] if left >= 0 else '', text[right] if right < len(text) else ''
+    if before == '_':
+        run = left
+        while run >= 0 and text[run] == '_':
+            run -= 1
+        if run >= 0 and text[run].isalnum():
+            before = ''                          # `_negative for_:`: the underscore closes a word, it is no blank
     if (before in DIGITS and after in DIGITS) or (before == '_' and after == '_'):
         return -1
     return end - 1
@@ -658,18 +668,18 @@ POINTER = re.compile(LETTER_BEFORE + r"(?:following|below|as[\s\u2800]+follows|t
 ASIDE = r'\s*(?:\((?:[^()\n]|\([^()\n]*\))*\)|\[[^\[\]\n]*\])'
 MANY_ASIDES = re.compile('(?:' + ASIDE + '){5}')
 #: Whatever may trail a sentence to the END of its line: anything that is not a word, and markup (`*`, `<br>`, `_`).
-MARKUP_UNIT = r'(?:[^\w\n<&]|_|[' + SUPERSCRIPTS + r']|<[^>\n]{0,200}>|<|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});|&)'
+MARKUP_UNIT = (r'(?:[^\S\n]++|[^\w\s<&]|_|[' + SUPERSCRIPTS + r']|<[^<>\n]{0,200}>|<|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});|&)')
 #: Every run below is at most 50 units, so no pointer re-reads a whole line (fourteenth pass: thousands of pointers
 #: inside `<below>` tags did); a pointer followed by 50 units or more ends its sentence (MANY_MARKUP, fail closed).
 TRAIL = MARKUP_UNIT + '{0,50}+'
-MANY_MARKUP = re.compile(MARKUP_UNIT + '{50}')
+MANY_MARKUP = re.compile('(?:' + ASIDE + '){0,4}' + MARKUP_UNIT + '{50}+')
 #: Between a sentence's period and the next sentence: whitespace and markup, at least one (twelfth pass:
 #: `*Negative for the following.* Reviewed` and `following. **Reviewed**` hid the sentence end). Possessive.
-AFTER_PERIOD = (r'(?:[\s\u2800*_~`]|<[^>\n]{0,200}>|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});){1,50}+')
+AFTER_PERIOD = (r'(?:[\s\u2800]++|[*_~`]|<[^<>\n]{0,200}>|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});){1,50}+')
 #: The same markup before a colon or a sentence's period (`_…as follows_. Next`, `**…following**: fever`, eleventh
 #: pass: only the end of the line skipped it). Possessive; never a colon, a sentence end or a line break.
-MARKUP_RUN = (r'(?:[^\w\n<&.!?\u2026' + ''.join(sorted(COLONS)) + r']|_|[' + SUPERSCRIPTS
-              + r']|<[^>\n]{0,200}>|<|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});|&){0,50}+')
+MARKUP_RUN = (r'(?:[^\S\n]++|[^\w\s<&.!?\u2026' + ''.join(sorted(COLONS)) + r']|_|[' + SUPERSCRIPTS
+              + r']|<[^<>\n]{0,200}>|<|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});|&){0,50}+')
 SENTENCE_END = re.compile(r'(?:' + ASIDE + r'){0,4}(?:' + MARKUP_RUN + COLON_CLASS + '|' + TRAIL + r'$'
                           + r'|' + MARKUP_RUN + r'[.!?\u2026]+["\'\u201d\u2019)\]]*'
                           + r'(?:' + AFTER_PERIOD + r'(?=[A-Z0-9"\'\u201c(\[])|(?=[A-Z"\'\u201c(\[])))')
@@ -685,13 +695,14 @@ SENTENCE_END = re.compile(r'(?:' + ASIDE + r'){0,4}(?:' + MARKUP_RUN + COLON_CLA
 TREATMENT = r'(?:of|scale|factor|dose|insulin|officers?|facility|facilities)\b'
 #: Not a letter, a digit, a colon, a line break or a sentence end (an underscore is none of those either): possessive,
 #: and never an anchor, so it is linear.
-NON_LETTERS = (r'(?:[^\w\n.!?\u2026<&' + ''.join(sorted(COLONS)) + r']|_|' + HTML_TAG.pattern + r'|<'
+NON_LETTERS = (r'(?:[^\S\n]++|[^\w\s.!?\u2026<&' + ''.join(sorted(COLONS)) + r']|_|' + HTML_TAG.pattern
+               + r'|<(?![^<>\n]{0,200}?' + CORRECTION + r')[^<>\n.!?\u2026' + ''.join(sorted(COLONS)) + r']{1,200}>|<'
                r'|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});|&){0,50}+')
 #: At a line's start a number is a list marker (`1.`, `1-`, `2.1`, `#2`); after a colon or a sentence it is a VALUE
 #: (`Glucose: 312 correction given`, `Potassium: 3.1 - correction`), unless it is a list number (`1. `) (seventh pass).
 LINE_MARKER = r'(?:(?:\d+(?:\.\d+)*(?:[.)\-]|(?=\s))|(?:[ivx]{1,4}|[a-z])[.)])' + NON_LETTERS + ')?'
 VALUE_MARKER = r'(?:(?:\d{1,2}[.)](?=\s)|(?:[ivx]{1,4}|[a-z])[.)])' + NON_LETTERS + ')?'
-ERRATUM = re.compile(r'(?:^' + NON_LETTERS + LINE_MARKER + r'|(?:(?<=' + COLON_CLASS + r')(?!\d)|(?<=[.!?\u2026])(?=(?:["\'\u201d\u2019)\]\u2800*_~`]|' + HTML_TAG.pattern + r'|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});){0,50}[\s\u2800]))'
+ERRATUM = re.compile(r'(?:^' + NON_LETTERS + LINE_MARKER + r'|(?:(?<=' + COLON_CLASS + r')(?!\d)|(?<=[.!?\u2026])(?=(?:["\'\u201d\u2019)\]*_~`]|' + HTML_TAG.pattern + r'|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});){0,50}+[\s\u2800]))'
                      + NON_LETTERS + VALUE_MARKER + ')'
                      + '(?:' + ONE_WORD + r'\s+(?=' + CORRECTION + r's?\s*(?:' + COLON_CLASS + r'|[,;\u2013\u2014]|--|\s-\s)))?'
                      + r'(?P<word>' + CORRECTION + r's?)(?![^\W_]|/|[\-\u2010\u2011](?=[^\W_]))'
@@ -716,7 +727,8 @@ HELD_REASON_WORD = ('Read from the notes but NOT offered as an answer: the line 
                     'means. Choose or type your own answer, and paste its complete source line.')
 #: No single line governs it; something elsewhere in the note withholds the offer.
 HELD_REASON_NOTE = ('Read from the notes but NOT offered as an answer: something elsewhere in the note may change what '
-                    'it means (a word such as if, would or family history, a quotation, a denial heading, a line that '
+                    'it means (a word such as if, would or family history, a quotation, a denial heading, a denial word '
+                    'next to a pointer word in an ordinary sentence, a line that '
                     'starts with the word Correction even for a treatment, a line that opens with a correction such as '
                     'Transcription correction:, or a line break the page shows inline). Read the full note, then type your '
                     'own answer, or choose "Leave blank — reviewed".')
@@ -1336,7 +1348,7 @@ def cleared_governed(governance, notes, answer, label=None):
     context = page_context(governance, notes, label, own)
     # A cleared stored OFFER the note withholds is shown held, so it is refused as held (eleventh pass: two saves
     # released an accepted offer the page still said needed "Leave blank — reviewed").
-    if context is None and (answer.get('suggestion') or answer.get('held_candidate')) and withheld_note_wide(governance, notes):
+    if context is None and (answer.get('held_candidate') or (answer.get('suggestion') and withheld_note_wide(governance, notes))):
         return []
     return context
 
@@ -1349,6 +1361,9 @@ def as_currently_governed(governance, notes, answer, word_form=False):
     flagged `governed_acceptance`: it stays accepted in the record until the clinician decides again on this page,
     and finalization refuses it until then."""
     label = answer.get('label')                 # a page row carries its question's label
+    if (answer.get('held_candidate') and answer.get('status') == 'edited' and not is_empty(answer.get('text'))
+            and not word_form):
+        return {**answer, 'held_candidate': {**answer['held_candidate'], 'reason': HELD_REASON_EDITED}}
     context = governed_supported(governance, notes, answer, label)
     if context is not None:
         return held_for_decision(answer, [answer.get('text', '')], answer['evidence'], context, word_form, prefilled=True)
