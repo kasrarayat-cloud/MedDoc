@@ -127,9 +127,11 @@ lists every charge; choose a charge's service name to see how it was calculated.
   one of the form's questions, makes every answer written after it, to the end of the notes, a
   decision for you: it is never filled in and never offered for one click. What was read is shown
   beside it, with the lines that govern it (*Written under* above it, *Followed by* below it; up to
-  15 lines: the nearest, the outermost heading it is written under, the denials and family history,
-  then the rest nearest first, so every governing line is shown when there are 15 or fewer; any
-  beyond 15 are counted: read the full note then; a line that
+  15 lines: the nearest, the first governing line of the note, the lines with the denial,
+  family-history, hypothetical and correction words listed in this guide, then the rest nearest
+  first, so every governing line is shown when there are 15 or fewer; any beyond 15 are counted,
+  and a heading among them in other words (`none of the following`) may be one of those: read the
+  full note then; a line that
   is the answer's own is shown as *In the same line*; when the same words also appear elsewhere in
   the notes, the page says where, because a line may govern them there). A question left
   empty mid-note (`Allergies:`) counts, because it may be a heading (`Pertinent negatives:`). A
@@ -184,7 +186,8 @@ lists every charge; choose a charge's service name to see how it was calculated.
   sentence that refers back without a colon (`… negative except as noted above.`) is not read.
 - **A correction governs what came before it.** The word *correction* where a line, an answer or
   a sentence starts (also glued to the sentence before it, a missed space: `adenoma.Correction: …`,
-  `adenoma.<o:p></o:p>Correction: …`) — after any bullet, bracket, quote or list marker (`● Correction: …`, `1-
+  `adenoma.(Correction: …)`, `adenoma.<o:p></o:p>Correction: …`, but not after a decimal point:
+  `1.5u correction` is a dose; a full-width `。` ends a sentence too) — after any bullet, bracket, quote or list marker (`● Correction: …`, `1-
   Correction: …`, `#2 Correction: …`, `(Correction: …)`, `a) Correction: …`, `Addendum: Correction:
   …`), or after one word before a colon, comma or dash (`Transcription correction: …`, `Physician's
   correction: …`) — makes every answer before it a decision, in the same paragraph too, whatever

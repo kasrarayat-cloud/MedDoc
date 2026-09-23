@@ -2491,3 +2491,44 @@ class WhatTheSixteenthPassFound(ExpectationsMixin, TestCase):
         answer = fixture_answers(['Symptoms'], 'Symptoms: chest pain\n' + '\n'.join(lines))['Symptoms']
         quotes = [entry.get('quote') for entry in answer['held_candidate']['context']]
         self.assertEqual(quotes, lines)
+
+
+class WhatTheSeventeenthPassFound(ExpectationsMixin, TestCase):
+    """Round 17 over the sixteenth-pass repairs (2026-09-23)."""
+    FORM = ['Findings', 'Histology']
+
+    def notes(self, tail):
+        return 'Findings: sessile polyp.\nHistology: ' + tail
+
+    def test_a_glued_correction_behind_a_bracket_bullet_quote_or_list_marker_is_read(self):
+        for tail in ('adenoma.(Correction: there was no polyp.)', 'adenoma.[Correction: no polyp.]',
+                     'adenoma.<br>• Correction: no polyp.', 'adenoma.a) Correction: no polyp.', 'adenoma.“Correction: no polyp.”',
+                     'adenoma.– Correction: no polyp.', 'adenoma.1) Correction: no polyp.',
+                     '6.2 mm.Correction: 5.2 mm', 'Temp 37.8.Correction: 38.7'):
+            with self.subTest(tail=tail):
+                self.assert_needs_decision(fixture_answers(self.FORM, self.notes(tail))['Findings'], 'sessile polyp.',
+                                           'Histology: ' + tail)
+
+    def test_a_decimal_point_before_the_word_is_not_a_sentence_end(self):
+        """The sixteenth-pass repair read `1.5u correction,` (a dose) as a correction and held every earlier answer."""
+        for tail in ('adenoma, lispro 1.5u correction, ICR 1:15', 'BGL 15.2 correction, 2u given.',
+                     'At 14.30 correction, 2 units given.', 'Near add +2.50 correction; progressive lenses.'):
+            with self.subTest(tail=tail):
+                self.assert_ready(fixture_answers(self.FORM, self.notes(tail))['Findings'], 'sessile polyp.')
+
+    def test_a_full_width_sentence_end_starts_a_correction(self):
+        for tail in ('adenoma。 Correction: there was no polyp.', 'adenoma。Correction: no polyp.', 'adenoma．Correction: no polyp.'):
+            with self.subTest(tail=tail):
+                self.assert_needs_decision(fixture_answers(self.FORM, self.notes(tail))['Findings'], 'sessile polyp.',
+                                           'Histology: ' + tail)
+
+    def test_a_skipped_abbreviation_does_not_hide_a_correction_it_overlaps(self):
+        tail = 'adenoma vs.<a href="mailto:">Correction: there was no polyp.</a>'
+        self.assert_needs_decision(fixture_answers(self.FORM, self.notes(tail))['Findings'], 'sessile polyp.', 'Histology: ' + tail)
+
+    def test_the_outermost_heading_is_shown_on_a_line_of_nearer_governing_sentences(self):
+        labels = ['Review of systems', 'Chest pain', 'Cough', 'Headache']
+        notes = ('Review of systems: none of the following. Cardiac as below. Pulmonary as below. Neuro as below.\n'
+                 'Chest pain: at rest\nCough: productive\nHeadache: frontal')
+        answer = fixture_answers(labels, notes)['Headache']
+        self.assert_needs_decision(answer, 'frontal', 'Review of systems: none of the following.')

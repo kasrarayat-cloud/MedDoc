@@ -702,10 +702,15 @@ NON_LETTERS = (r'(?:[^\S\n]++|[^\w\s.!?\u2026<&' + ''.join(sorted(COLONS)) + r']
 #: (`Glucose: 312 correction given`, `Potassium: 3.1 - correction`), unless it is a list number (`1. `) (seventh pass).
 LINE_MARKER = r'(?:(?:\d+(?:\.\d+)*(?:[.)\-]|(?=\s))|(?:[ivx]{1,4}|[a-z])[.)])' + NON_LETTERS + ')?'
 VALUE_MARKER = r'(?:(?:\d{1,2}[.)](?=\s)|(?:[ivx]{1,4}|[a-z])[.)])' + NON_LETTERS + ')?'
+#: Glued to a sentence end only a marker closed by `)` (`adenoma.a) Correction:`): a letter and a period there is an
+#: abbreviation's (`i.e. correction`, seventeenth pass).
+GLUED_MARKER = r'(?:(?:\d{1,2}|[ivx]{1,4}|[a-z])\)' + NON_LETTERS + ')?'
 #: ⚠️ SIXTEENTH PASS: a correction GLUED to the sentence before it (`adenoma.Correction: no polyp.`, a missed space; or
 #: Word's `adenoma.<o:p></o:p>Correction:`) did not start a sentence, so the finding it corrects stayed ready. After
-#: the sentence end the word itself (or one word and the word) now starts one too; nothing else glued does.
-ERRATUM = re.compile(r'(?:^' + NON_LETTERS + LINE_MARKER + r'|(?:(?<=' + COLON_CLASS + r')(?!\d)|(?<=[.!?\u2026])(?=(?:["\'\u201d\u2019)\]*_~`]|' + HTML_TAG.pattern + r'|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});){0,50}+(?:[\s\u2800]|(?:' + ONE_WORD + r'\s+)?' + CORRECTION + r')))'
+#: the sentence end the word itself (or one word and the word) now starts one too, after the same bracket, bullet, quote
+#: or list marker a sentence start allows (seventeenth pass: `adenoma.(Correction: …)`), but never after a decimal point
+#: (`1.5u correction,` is a dose). A full-width sentence end (`。`, `．`, `！`, `？`) is one too.
+ERRATUM = re.compile(r'(?:^' + NON_LETTERS + LINE_MARKER + r'|(?:(?<=' + COLON_CLASS + r')(?!\d)|(?<=[.!?\u2026\u3002\uff0e\uff01\uff1f\uff61])(?=(?:["\'\u201d\u2019)\]*_~`]|' + HTML_TAG.pattern + r'|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});){0,50}+(?:[\s\u2800]|(?!(?<=[0-9][.])[0-9])' + NON_LETTERS + GLUED_MARKER + r'(?:' + ONE_WORD + r'\s+)?' + CORRECTION + r')))'
                      + NON_LETTERS + VALUE_MARKER + ')'
                      + '(?:' + ONE_WORD + r'\s+(?=' + CORRECTION + r's?\s*(?:' + COLON_CLASS + r'|[,;\u2013\u2014]|--|\s-\s)))?'
                      + r'(?P<word>' + CORRECTION + r's?)(?![^\W_]|/|[\-\u2010\u2011](?=[^\W_]))'
@@ -806,13 +811,18 @@ def erratum_points(text):
     """The offsets in `text` of every erratum's word `correction`, in either reading."""
     found = set()
     for reading, kept in positioned_readings(text):
-        for match in ERRATUM.finditer(reading):
+        at = 0
+        while (match := ERRATUM.search(reading, at)):
             before = match.start()
             while before and reading[before - 1] in '”’)]':
                 before -= 1
             if before and reading[before - 1] == '.' and NOT_A_SENTENCE_END.search(reading[max(0, before - 32):before]):
+                # Searched again from the next character, not after the skipped match (seventeenth pass: a glued match
+                # after `vs.` hid a correction read from a colon inside it).
+                at = match.start() + 1
                 continue
             found.add(match.start('word') if kept is None else kept[match.start('word')])
+            at = max(match.end(), match.start() + 1)
     return sorted(found)
 
 
@@ -1172,6 +1182,8 @@ def governed_context(governance, notes, evidence, others=()):
         found += [(not backward[i][4], backward[i][0] - first_at, backward[i][2:4]) for i in near]
         if line in selves:
             found.append((False, 0, (headings[line], spans[line][1])))
+        if ahead and line == forward[0][1]:
+            found.append((False, -1, forward[0][2:4]))    # the outermost heading's own sentence, first (seventeenth pass)
         merged = []
         for low, high in sorted(window for _, _, window in sorted(found)[:3]):
             if merged and low <= merged[-1][1]:
