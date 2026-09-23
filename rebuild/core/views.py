@@ -214,7 +214,42 @@ def template_upload(request):
         except (ValidationError,DocumentError) as exc:
             if relative:private_path(relative).unlink(missing_ok=True)
             form.add_error(None,error_message(exc))
+            # The engine's wording names an adapter the doctor cannot choose. Add what they CAN do,
+            # keyed on the refusal code, without changing the refusal itself.
+            hint=UPLOAD_REFUSAL_HINTS.get(getattr(exc,'code',None))
+            if hint:form.add_error(None,hint)
     return render(request,'template_upload.html',{'form':form})
+
+UPLOAD_REFUSAL_HINTS={
+    'unsupported_structure':('This form uses Word features QuillMD does not fill: dropdowns, date pickers or other content controls, '
+                             'text boxes, fields or tracked changes. The only supported form with dropdowns is the qualified WM IOV '
+                             'file, uploaded exactly as received. Otherwise use a form with two-column question/answer tables, '
+                             'labelled underlined blanks or {{Question}} placeholders.'),
+    'unsupported_field':'Use a fillable PDF whose answer fields are plain text fields, or a supported Word (.docx) form.',
+}
+
+def statement_guide(version):
+    """The qualified form's prewritten statements, readable BEFORE any draft exists.
+
+    A qualified WM IOV finalization needs each kept statement as its own labelled notes line, and its
+    wording depends on the answers, so until now a doctor could see it only after generating. This
+    lists every statement's exact label and approved wordings from the stored mapping, with each
+    answer-dependent part named by its question. It is guidance only: the document page still shows,
+    and the review still checks, the exact resolved wording.
+    """
+    if not version or not version.document_backend:return []
+    labels={f['key']:f['label'] for f in version.fields}
+    def show(template):
+        def token(match):
+            name=match.group(1)
+            if name=='signer_name':return '[your account name]'
+            if name.endswith('reflux_connector'):return ' [is] '
+            if name.endswith('treatment_connector'):return ' '
+            return '['+labels.get(name,name)+']'
+        return ' '.join(re.sub(r'\{([^{}]+)\}',token,template or '').split())
+    return [{'label':row['label'],'variants':[{'label':variant.get('label') or variant.get('id',''),
+             'wording':show(variant.get('text_template'))} for variant in row.get('variants',[])]}
+            for row in version.review_requirements if row.get('kind')=='assertion']
 
 @require_http_methods(['GET','POST'])
 def template_detail(request,pk):
@@ -231,7 +266,7 @@ def template_detail(request,pk):
                 latest=t.versions.order_by('-number').first()
                 if request.POST.get('mapping_version')!=str(latest.pk):
                     form.add_error(None,'This mapping changed. Your unsaved labels are retained below. Compare them with the current mapping before saving again.')
-                    return render(request,'template_detail.html',{'template':t,'version':latest,'form':form,'field_rows':field_location.rows(latest.fields),'field_locations':[field_location.describe(f) for f in latest.fields]},status=409)
+                    return render(request,'template_detail.html',{'template':t,'version':latest,'form':form,'field_rows':field_location.rows(latest.fields),'field_locations':[field_location.describe(f) for f in latest.fields],'statements':statement_guide(latest)},status=409)
                 if latest.document_backend and labels!={f['key']:f['label'] for f in latest.fields}:
                     raise ValidationError('This qualified Word mapping uses fixed question labels so source evidence remains unambiguous. Keep the original labels.')
                 # ⚠️ A RENAME MUST NOT REMOVE THE SIGNATURE PROTECTION. `structure()` excludes the
@@ -248,7 +283,7 @@ def template_detail(request,pk):
                 audit(request.user,'template.mapping_version',version.pk,department=t.department,number=version.number)
             messages.success(request,'New mapping version saved. Existing documents keep their original version.');return redirect('template_detail',pk=t.pk)
         except ValidationError as exc:form.add_error(None,error_message(exc))
-    return render(request,'template_detail.html',{'template':t,'version':version,'form':form,'field_rows':field_location.rows(version.fields),'field_locations':[field_location.describe(f) for f in version.fields]})
+    return render(request,'template_detail.html',{'template':t,'version':version,'form':form,'field_rows':field_location.rows(version.fields),'field_locations':[field_location.describe(f) for f in version.fields],'statements':statement_guide(version)})
 
 def template_original(request,pk):
     t=get_object_or_404(scoped(Template,request.user),pk=pk)
@@ -276,7 +311,7 @@ def encounter_new(request):
             e=Encounter(department=data['patient'].department,patient=data['patient'],template_version=data['template_version'],created_by=request.user,notes=data['notes'],service_date=data['service_date']);e.full_clean(exclude=['notes','answers','finalized_at','finalized_by','export_path','export_sha256']);e.save()
             audit(request.user,'encounter.create',e.pk,department=e.department)
         return redirect('encounter_detail',pk=e.pk)
-    return render(request,'encounter_form.html',{'form':form})
+    return render(request,'encounter_form.html',{'form':form,'has_patients':form.fields['patient'].queryset.exists()})
 
 def encounter_detail(request,pk):
     from documents import DocumentError
@@ -320,6 +355,16 @@ def encounter_detail(request,pk):
         row['blank_eligible']=not e.template_version.document_backend and not clinician_identity(row)
         row['left_blank']=row.get('status')=='left_blank'
         row['blank_by_email']=deciders.get(str((row.get('blank_decision') or {}).get('by') or ''),'')
+        # ⚠️ "I REVIEWED THIS ANSWER" IS THE READER'S OWN STATEMENT, SO IT IS NEVER PRE-TICKED FROM
+        # SOMEBODY ELSE'S REVIEW. Rendering the stored flag let a second clinician's plain Save
+        # re-post every box and re-stamp reviewed_by to themselves — the signature row included,
+        # which is exactly what validate_identity trusts. The qualified Word branch below already
+        # binds the box to its reviewer; ordinary forms now do too. The stored state stays visible.
+        answer=e.answers.get(row['key'],{})
+        row['stored_reviewed']=answer.get('reviewed') is True
+        row['reviewed']=row['stored_reviewed'] and answer.get('reviewed_by')==str(request.user.pk)
+        row['reviewed_by_other']=row['stored_reviewed'] and not row['reviewed']
+        row['identity']=clinician_identity(row)
     requirements=[];review_error='';assessment=None;resolved_ok=False
     if is_wm:
         decisions=e.template_review.get('decisions',{})
@@ -371,10 +416,14 @@ def encounter_detail(request,pk):
                 and job.state=='succeeded' and str(job.pk) not in applied):
             try:
                 raw,transcript=review_transcript(job)
-                transcript_reviews.append({'job':job,'raw':raw,'text':transcript})
+                # An empty result (silence, a muted microphone) is a processed, charged request with
+                # nothing to add; say so rather than leave an unexplained empty required box.
+                transcript_reviews.append({'job':job,'raw':raw,'text':transcript,'empty':not (raw or '').strip()})
             except (ValidationError,OSError,ValueError):
                 job.display_error='The retained transcript could not be verified. Contact an administrator; do not resubmit a paid recording.'
-    return render(request,'encounter_detail.html',{'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'wm_requirements':requirements,'wm_review_error':review_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions})
+    return render(request,'encounter_detail.html',{'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'wm_requirements':requirements,'wm_review_error':review_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
+        # The exact name validate_identity compares a signature with, so the page can say what to type.
+        'signer_name':' '.join((request.user.get_full_name() or request.user.email).split())})
 
 @require_POST
 def generate_view(request,pk):
@@ -656,11 +705,18 @@ def voice(request,pk):
     relative=None
     try:
         if not form.is_valid():raise ValidationError('Choose a supported recording and confirm provider processing.')
-        if Path(form.cleaned_data['audio'].name).suffix.lower() not in ['.wav','.webm','.mp3','.m4a']:raise ValidationError('Unsupported audio file.')
+        if Path(form.cleaned_data['audio'].name).suffix.lower() not in ['.wav','.webm','.mp3','.m4a']:raise ValidationError(AUDIO_FORMATS_HINT)
         relative=store_upload(form.cleaned_data['audio'],'audio')
         raw=private_path(relative).read_bytes()[:16]
-        if not (raw.startswith((b'RIFF',b'ID3',b'\x1aE\xdf\xa3',b'\xff\xfb',b'\xff\xf3',b'\xff\xf2')) or raw[4:8]==b'ftyp'):raise ValidationError('Audio file signature does not match a supported recording.')
-        quoted={**usage_quote(request,e),'transcript_review_required':True}
+        # The same frame-sync rule as core/audio.py, which measures the recording: the narrower
+        # three-prefix list refused MPEG audio that the measuring reader accepts.
+        mpeg=len(raw)>1 and raw[0]==0xFF and raw[1]&0xE0==0xE0
+        if not (raw.startswith((b'RIFF',b'ID3',b'\x1aE\xdf\xa3')) or mpeg or raw[4:8]==b'ftyp'):raise ValidationError('This file is not a recording QuillMD can read. '+AUDIO_FORMATS_HINT)
+        # ⚠️ A RECORDING EXISTS ONLY IN THE PAGE UNTIL IT IS SENT, so a quote that expires while the
+        # doctor dictates discards it. The voice quote therefore lives as long as the over-limit
+        # approval and the session (30 min). The limit it shows still binds, the signed pricing
+        # configuration is unchanged, and length is re-measured at enqueue.
+        quoted={**usage_quote(request,e,max_age=VOICE_QUOTE_SECONDS,expired=VOICE_QUOTE_EXPIRED),'transcript_review_required':True}
         try:
             job=enqueue(e,request.user,'transcription',relative,config=quoted,expected_revision=e.revision)
         except RecordingOverLimit as over:
@@ -1179,13 +1235,18 @@ def job_result(request,pk):
     return FileResponse(path.open('rb'),as_attachment=True,filename=f'quillmd-provider-result-{str(job.pk)[:8]}.json',content_type='application/json')
 
 
-def usage_quote(request,encounter):
+AUDIO_FORMATS_HINT='Upload a .wav, .webm, .mp3 or .m4a recording (up to 15 MB), or record in the browser.'
+VOICE_QUOTE_SECONDS=1800
+VOICE_QUOTE_EXPIRED=('The price shown on this page expired or changed before this recording was sent. Nothing was sent or '
+                     'charged, and the recording was not kept. Reload the page, then record or upload it again.')
+
+def usage_quote(request,encounter,max_age=600,expired='Usage quote expired or changed. Reload to review the current maximum charge.'):
     from .generation import configuration
     raw=request.POST.get('usage_quote')
     if not raw and settings.AI_MODE!='live':return configuration()
     try:
-        quote=signing.loads(raw,salt='usage-quote',max_age=600)
+        quote=signing.loads(raw,salt='usage-quote',max_age=max_age)
         if quote['user']!=str(request.user.pk) or quote['encounter']!=str(encounter.pk) or quote['revision']!=encounter.revision:raise ValueError()
         return quote['config']
     except (signing.BadSignature,ValueError,TypeError,KeyError):
-        raise ValidationError('Usage quote expired or changed. Reload to review the current maximum charge.')
+        raise ValidationError(expired)

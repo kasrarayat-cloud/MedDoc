@@ -69,7 +69,9 @@ class CheckoutForm(forms.Form):
     amount=forms.DecimalField(min_value=5,max_value=500,decimal_places=2,label='One-time top-up (USD)')
     consent=forms.BooleanField(label='I authorize this one-time payment. There are no automatic top-ups.')
 class VoiceForm(forms.Form):
-    audio=forms.FileField(label='Recorded audio (.wav, .webm, .mp3, .m4a)')
+    audio=forms.FileField(label='Recorded audio (.wav, .webm, .mp3, .m4a)',
+                          help_text='Up to 15 MB: about 1½ minutes of CD-quality WAV. Use MP3, M4A or the browser recorder for longer recordings.',
+                          widget=forms.ClearableFileInput(attrs={'accept':'.wav,.webm,.mp3,.m4a,audio/*'}))
     consent=forms.BooleanField(label='Send this synthetic recording for transcription; charge provider usage × 1.5, never more than the limit shown.')
 class ReconciliationForm(forms.Form):
     evidence_kind=forms.ChoiceField(choices=[('', 'Select the authenticated evidence type'),('provider_report', 'Provider cost report or export (not an invoice)'),('invoice', 'Provider invoice')],label='Evidence type')

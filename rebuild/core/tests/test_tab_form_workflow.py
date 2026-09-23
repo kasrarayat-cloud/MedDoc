@@ -7,6 +7,8 @@ from pathlib import Path
 import tempfile
 from zipfile import ZipFile
 
+from html.parser import HTMLParser
+
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -17,6 +19,36 @@ from core.models import AuditEvent, Department, Encounter, Job, LedgerEntry, Mem
 from core.security import private_path
 from documents.test_tab_form import ORIGINAL, SOURCE_SHA256
 from .test_workflow import TEST_SETTINGS
+
+
+class RenderedForm(HTMLParser):
+    """What a browser would submit from one rendered form: enabled fields, ticked boxes only."""
+    def __init__(self, action):
+        super().__init__(); self.action = action; self.inside = False; self.data = {}; self.textarea = None; self.select = None
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == "form": self.inside = attrs.get("action") == self.action
+        if not self.inside or "disabled" in attrs or not attrs.get("name"): return
+        if tag == "input":
+            if attrs.get("type") == "checkbox":
+                if "checked" in attrs: self.data[attrs["name"]] = "on"
+            else: self.data[attrs["name"]] = attrs.get("value", "")
+        elif tag == "textarea": self.textarea = attrs["name"]; self.data[self.textarea] = ""
+        elif tag == "select": self.select = attrs["name"]
+        elif tag == "option" and self.select and "selected" in attrs: self.data[self.select] = attrs.get("value", "")
+
+    def handle_data(self, data):
+        if self.textarea: self.data[self.textarea] += data
+
+    def handle_endtag(self, tag):
+        if tag == "form": self.inside = False
+        if tag == "textarea": self.textarea = None
+        if tag == "select": self.select = None
+
+
+def rendered_post(html, action):
+    form = RenderedForm(action); form.feed(html); return form.data
 
 
 @override_settings(**TEST_SETTINGS)
@@ -158,6 +190,36 @@ class TabFormWorkflowTests(TestCase):
         self.finish(encounter)
         self.assertEqual(encounter.status, "finalized")
         self.assertEqual(encounter.finalized_by_id, self.other.pk)
+        self.assert_no_billable_work()
+
+    def test_second_clinician_saving_the_rendered_page_inherits_no_review(self):
+        """A plain Save of the page as another clinician sees it re-stamps nobody's review as theirs."""
+        encounter = self.encounter()
+        self.save(encounter, self.other.get_full_name())
+        action = f"/encounters/{encounter.pk}/save/"
+        # Control: the clinician who reviewed sees their own ticks, so the parser reads real boxes.
+        own = rendered_post(self.client.get(f"/encounters/{encounter.pk}/").content.decode(), action)
+        self.assertEqual({k for k in own if k.startswith("reviewed_")},
+                         {"reviewed_" + f["key"] for f in encounter.template_version.fields})
+        self.client.force_login(self.other)
+        page = self.client.get(f"/encounters/{encounter.pk}/")
+        payload = rendered_post(page.content.decode(), action)
+        self.assertFalse([k for k in payload if k.startswith("reviewed_")])
+        self.assertContains(page, "data-reviewed-by-other")
+        self.assertContains(page, "data-signature-rule")
+        self.assertContains(page, self.other.get_full_name())
+        self.assertEqual(self.client.post(action, payload).status_code, 302)
+        encounter.refresh_from_db()
+        self.assertFalse(any(answer.get("reviewed") for answer in encounter.answers.values()))
+        self.assertEqual(encounter.answers[self.signature_key]["text"], self.other.get_full_name())
+        self.finish(encounter)
+        self.assertEqual(encounter.status, "review")
+        self.assertFalse(encounter.export_path)
+        self.assertFalse(AuditEvent.objects.filter(action="encounter.finalize", target=str(encounter.pk)).exists())
+        # The named clinician's own explicit review is what allows finalization.
+        self.save(encounter, self.other.get_full_name())
+        self.finish(encounter)
+        self.assertEqual((encounter.status, encounter.finalized_by_id), ("finalized", self.other.pk))
         self.assert_no_billable_work()
 
     def test_explicit_blank_signature_can_finalize_and_remains_blank(self):

@@ -176,6 +176,7 @@ document.querySelectorAll("form[data-voice-form]").forEach((form) => {
   let recorder, recordingStream, stopTimer, audioUrl;
   let generation = 0;
   let recordingFailed = false;
+  let reachedLimit = false;
   const release = () => {
     recordingStream?.getTracks().forEach((track) => track.stop());
     recordingStream = null;
@@ -206,6 +207,13 @@ document.querySelectorAll("form[data-voice-form]").forEach((form) => {
   };
   discard.addEventListener("click", clearRecording);
   fileInput.addEventListener("change", () => {
+    // Refuse an oversized file here, before it is uploaded and refused by the server.
+    if (fileInput.files[0] && fileInput.files[0].size > 15 * 1024 * 1024) {
+      fileInput.value = "";
+      previewFile(null);
+      status.textContent = "This file is larger than 15 MB and was not selected. Use MP3, M4A or the browser recorder for longer recordings.";
+      return;
+    }
     previewFile(fileInput.files[0]);
     const consent = form.querySelector("input[name=consent]");
     if (consent) consent.checked = false;
@@ -225,6 +233,7 @@ document.querySelectorAll("form[data-voice-form]").forEach((form) => {
     discard.disabled = false;
     audioBusy = true;
     recordingFailed = false;
+    reachedLimit = false;
     status.textContent = "Allow microphone access to begin recording. Choose Discard to cancel.";
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -265,7 +274,7 @@ document.querySelectorAll("form[data-voice-form]").forEach((form) => {
           previewFile(file);
           const consent = form.querySelector("input[name=consent]");
           if (consent) consent.checked = false;
-          status.textContent = "Recording ready. Listen to it, confirm processing below, then select Transcribe recording.";
+          status.textContent = (reachedLimit ? "Recording stopped at the 5-minute limit; anything said after that was not recorded. " : "") + "Recording ready. Listen to it, confirm processing below, then select Transcribe recording.";
         } catch (_) {
           status.textContent = "This browser could not attach the recording. Upload an existing recording instead; nothing was sent.";
         }
@@ -273,7 +282,7 @@ document.querySelectorAll("form[data-voice-form]").forEach((form) => {
       recorder.start(1000);
       stop.disabled = false;
       status.textContent = "Recording. Select Stop when finished. Nothing is sent until you submit this form.";
-      stopTimer = setTimeout(() => { if (recorder.state === "recording") recorder.stop(); }, 5 * 60 * 1000);
+      stopTimer = setTimeout(() => { if (recorder.state === "recording") { reachedLimit = true; recorder.stop(); } }, 5 * 60 * 1000);
     } catch (error) {
       if (attempt !== generation) return;
       release();
