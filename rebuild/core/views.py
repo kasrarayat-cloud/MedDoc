@@ -58,14 +58,17 @@ def wm_resolve(encounter,actor,decisions=None):
     context={'reviewer_id':str(signer.pk),'revision':encounter.revision,'notes':encounter.notes,
              'signer_name':' '.join(signer.get_full_name().split()) or signer.email,
              'finalized_at':(encounter.finalized_at or timezone.now()).isoformat()}
-    result=resolve_template(original,version.document_backend,wm_review.sdk_answers(encounter,actor),
+    sent=wm_review.sdk_answers(encounter,actor)
+    result=resolve_template(original,version.document_backend,sent,
                             claim_variants=variants,trusted_context=context)
     if (result.get('backend')!=version.document_backend.get('backend')
             or result.get('mapping_digest')!=version.document_backend.get('mapping_digest')
             or result.get('sha256')!=version.template.sha256):
         raise ValidationError('The resolved Word statements differ from the selected mapping version.')
     if result.get('conflicts'):
-        raise ValidationError('The chosen answers and prewritten statement alternatives conflict. Correct their documented choices before review and export.')
+        # The adapter names each conflict; say which statement and which answers, on the page only.
+        from .wm_conflicts import WmConflicts,describe
+        raise WmConflicts(describe(result['conflicts'],version,sent,variants))
     return result['review_requirements']
 
 
@@ -395,7 +398,7 @@ def encounter_detail(request,pk):
         row['reviewed']=row['stored_reviewed'] and answer.get('reviewed_by')==str(request.user.pk)
         row['reviewed_by_other']=row['stored_reviewed'] and not row['reviewed']
         row['identity']=clinician_identity(row)
-    requirements=[];review_error='';assessment=None;resolved_ok=False
+    requirements=[];review_error='';assessment=None;resolved_ok=False;wm_conflicts=[]
     if is_wm:
         decisions=e.template_review.get('decisions',{})
         try:
@@ -405,6 +408,7 @@ def encounter_detail(request,pk):
                 assessment=wm_review.evaluate_review(e,request.user,decisions,resolved_requirements=requirements)
         except (ValidationError,DocumentError) as exc:
             review_error=error_message(exc)
+            wm_conflicts=getattr(exc,'rows',[])
             requirements=e.template_version.review_requirements
         for row in rows:
             answer=e.answers.get(row['key'],{})
@@ -415,6 +419,7 @@ def encounter_detail(request,pk):
             reasons=assessment['answers'][row['key']]['blockers'] if assessment else []
             if assessment:row['status']=assessment['answers'][row['key']]['status']
             row['review_errors']=[WM_BLOCKERS.get(reason,'Clinical review is incomplete.') for reason in reasons]
+            row['review_errors']+=[conflict['explanation'] for conflict in wm_conflicts if row['key'] in conflict['answer_keys']]
         for row in requirements:
             row['unresolved']=not resolved_ok
             decision=decisions.get(row['key'],{})
@@ -428,6 +433,7 @@ def encounter_detail(request,pk):
                     'variant':row['selected_variant']},salt='wm-statement-review')
             reasons=assessment['assertions'][row['key']]['blockers'] if assessment else []
             row['review_errors']=[WM_BLOCKERS.get(reason,'Clinical review is incomplete.') for reason in reasons]
+            row['review_errors']+=[conflict['explanation'] for conflict in wm_conflicts if row['key'] in conflict['statement_keys']]
     from .generation import maximum_cost,configuration
     try:maximum_charge=maximum_cost(e.notes,e.template_version.fields,context_labels=[row['label'] for row in e.template_version.review_requirements])*Decimal('1.5')
     except ValidationError:maximum_charge=None
@@ -451,7 +457,7 @@ def encounter_detail(request,pk):
                 transcript_reviews.append({'job':job,'raw':raw,'text':transcript,'empty':not (raw or '').strip() and not (transcript or '').strip()})
             except (ValidationError,OSError,ValueError):
                 job.display_error='The retained transcript could not be verified. Contact an administrator; do not resubmit a paid recording.'
-    return render(request,'encounter_detail.html',{'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'wm_requirements':requirements,'wm_review_error':review_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
+    return render(request,'encounter_detail.html',{'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
         'signer_name':' '.join((request.user.get_full_name() or request.user.email).split())})
 

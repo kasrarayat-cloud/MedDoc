@@ -206,6 +206,16 @@ class WMDocumentWorkflow(TestCase):
         encounter = self.prepare(positive=True, select_variants=False)
         response = self.client.get(f'/encounters/{encounter.pk}/')
         self.assertTrue(response.context['wm_review_error'])
+        # The adapter's own conflict strings, named on the page: which statement, which answer.
+        from core.wm_conflicts import GENERAL
+        named = [row for row in response.context['wm_conflicts']
+                 if any('saphenous reflux finding' in statement[0] for statement in row['statements'])]
+        self.assertTrue(named, response.context['wm_conflicts'])
+        for row in named:
+            self.assertTrue(any('impression: reflux or absence' in answer[0] and answer[1] == 'reflux positive.'
+                                for answer in row['answers']), row)
+            self.assertNotEqual(row['explanation'], GENERAL)
+        self.assertContains(response, 'data-wm-conflict')
         class HiddenVariants(HTMLParser):
             def __init__(self):
                 super().__init__(); self.values = {}

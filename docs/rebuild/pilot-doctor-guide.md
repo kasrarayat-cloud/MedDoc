@@ -88,13 +88,13 @@ documented — preserve unselected field*; empty measurements stay blank. Below 
 the 14 prewritten statements and signing items. Each needs an approved wording and a review tick,
 and each of the 11 clinical statements also needs a source quotation: its own notes line. If
 finalizing is refused, scroll for the red lines under each answer and statement: they say what
-is missing. One exception: when chosen statement wordings and the answers disagree, the page
-shows a single general message that names no statement. The form page lists, for each wording,
-the answers it needs given or left unanswered, but some combinations conflict even so and are
-not listed there: for example, a side's reflux answer *reflux positive.* with any wording other
-than that side's positive reflux statement; a reflux time over 500 ms with a *No saphenous
-reflux* wording; measurements or locations on a side whose wording says *not assessed*; or the
-indication *Previous vein treatment* while both legs' statements say there was none.
+is missing. When chosen statement wordings and the answers disagree, the notice at the top of
+the page lists each conflict: the statement, its chosen wording, the answers it clashes with and
+why. The same line appears under that statement and under each answer involved. Examples: a
+side's reflux answer *reflux positive.* with any wording other than that side's positive reflux
+statement; a reflux time over 500 ms with a *No saphenous reflux* wording; measurements or
+locations on a side whose wording says *not assessed*; the indication *Previous vein treatment*
+while both legs' statements say there was none.
 
 ## 7. Finalize and download
 
@@ -120,14 +120,23 @@ lists every charge; choose a charge's service name to see how it was calculated.
   *below*, *following* or *listed* anywhere in the notes sends the generated answers back to you as
   conflicts to decide. On every other form, only a line that is not a label with its answer does
   (a label left empty counts).
-- **Write each denial as its own answer** (`Symptoms: no chest pain`), never as a heading over
-  other labelled lines. On question/answer tables, placeholders, fillable PDFs and the WM IOV form,
-  if the heading is itself one of the form's questions (`Review of systems: negative for the
-  following:` on a form with a *Review of systems* question), the labelled lines below it are
-  read as ordinary answers, and a denied finding can come back as a ready answer. Review every
-  answer against the note before you tick it.
-- **Read the whole note before accepting a suggestion.** Suggestions are withheld in three
-  cases: a denial line that governs other lines, meaning a line containing *denied*, *denies*,
+- **A heading governs what comes after it.** A line ending in a colon (`Review of systems:
+  negative for the following:`, `Family hx: the following conditions:`), even when it is itself
+  one of the form's questions, makes every answer written after it, to the end of the notes, a
+  decision for you: it is never filled in and never offered for one click. What was read is shown
+  beside it, with the line it is written under. A heading at the very end, or one that refers to
+  what came before it (`… all of the above denied:`), governs the lines before it as well. A
+  sentence works the same way when it contains a denial, a family history or a hypothetical and
+  **ends** by pointing: forward (`… negative for the following symptoms.`, `… the symptoms
+  below.`) or back (`… patient denies all of the above.`). So does an answer that begins with
+  *Correction*, for the lines before it. Answers before a forward heading are not affected.
+- **Write each denial as its own answer** (`Symptoms: no chest pain`) when you can: nothing
+  governs it, so it comes back ready. A sentence that ends on *below* or *following* next to a
+  denial (`… no reflux at mid-thigh or below.`) points like a heading, so the answers after it
+  need your decision; the same words inside a sentence (`No reflux below the knee.`) do not.
+- **Read the whole note before accepting a suggestion.** Suggestions are never offered for an
+  answer governed by a heading or a governing sentence (above). Otherwise they are withheld in
+  three cases: a denial line that governs other lines, meaning a line containing *denied*, *denies*,
   *deny*, *absent*, *negative*, *negatives*, *no*, *not*, *without* or *never* that ends in a
   colon
   (`ROS: negative for the following:`), points at other lines with *following*, *these*,
