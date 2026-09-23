@@ -246,9 +246,9 @@ class WMDocumentWorkflow(TestCase):
             self.assertEqual((encounter.answers[key]['status'], encounter.answers[key]['text']), ('edited', self.values[key]), key)
         self.save(encounter)
         exported = self.finalize(encounter)
-        with ZipFile(BytesIO(exported)) as zipped:
-            document = zipped.read('word/document.xml').decode()
-        self.assertIn('7.7 mm', document)
+        # The adapter writes a measurement's number into its own cell; the unit is the column's (CI measured it).
+        from docx import Document
+        self.assertEqual(Document(BytesIO(exported)).tables[0].rows[15].cells[1].text.strip(), '7.7')
 
     def test_positive_reflux_approved_statement_and_long_answer_are_not_truncated(self):
         encounter = self.prepare(positive=True, long_answer=True)
