@@ -128,19 +128,23 @@ lists every charge; choose a charge's service name to see how it was calculated.
   beside it, with the lines that govern it (*Written under* above it, *Followed by* below it; up to
   15, nearest and denials first, and the rest counted: read the full note then). A question left
   empty mid-note (`Allergies:`) counts, because it may be a heading (`Pertinent negatives:`). A
-  heading at the very end, or one that names what came before it with *above*, *these*, *those* or
-  *listed* (`… all of the above denied:`), governs the lines before it as well. A bare label at the
-  end does not: one with no other colon in it (a clock time does not count) and no denial, family
-  history, hypothetical or pointer word (`Signed by:`, `Electronically signed on 09/21/2026 at
-  10:42 by:`, an empty `Allergies:`). `Dictated by: Dr A, reviewed by:` (another colon) and
-  `Dictated but not read:` (*not*) are headings. A closing line with words the vocabulary does not
-  know (`Ruled out:`) is read as bare: write those as answers.
+  heading at the very end, or one that contains *above*, *these*, *those* or *listed* (`… all of
+  the above denied:`, and also `Discharge medications as listed below:`), governs the lines before
+  it as well; at the end of a paragraph it reaches back from its own sentence. A bare label at the
+  end does not: one with no other colon in what follows a form question's label (a clock time does
+  not count) and no denial, family history, hypothetical or pointer word (`Signed by:`,
+  `Electronically signed on 09/21/2026 at 10:42 by:`, an empty `Allergies:`). `Dictated by: Dr A,
+  reviewed by:` (another colon, unless *Dictated by* is one of the form's questions) and `Dictated
+  but not read:` (*not*) are headings. A closing line with words the vocabulary does not know
+  (`Ruled out:`) is read as bare: write those as answers.
 - **A sentence that ends by pointing forward works the same way, whatever its words.** A sentence
   that **ends** on *following*, *below*, *as follows* or *the following* and one more word (`…
   patient denies the following.`, `Her mother had the following.`, `… is as follows.`, `… the
-  following symptom(s).`, `… the following co-morbidities.`), including after an aside (`… the
-  following (reviewed today).`) or before a colon and a list on the same line (`… as follows:
-  polyps.`), makes every answer after it a decision, in the same paragraph and on later lines. This
+  following symptom(s).`, `… the following co-morbidities.`), including after an aside of any
+  length (`… the following (reviewed today).`) or before a colon and a list on the same line (`…
+  as follows: polyps.`), makes every answer after it a decision, in the same paragraph and on later
+  lines. A period ends such a sentence only before a new sentence (`… the following wk. at the GP`
+  does not). This
   includes exception lists (`… negative except as noted below.`: type the positives below it
   yourself), references (`see the instructions below`), anatomy (`competent below.`) and times
   (`Do not drive until the following day.`). The same words inside a sentence (`No reflux below
@@ -151,18 +155,21 @@ lists every charge; choose a charge's service name to see how it was calculated.
   and *aforementioned* are not: end such a line with a colon, which is read whatever its words. A
   sentence that refers back without a colon (`… negative except as noted above.`) is not read.
 - **A correction governs what came before it.** The word *correction* where a line, an answer or
-  a sentence starts (`Correction: …`, `correction, …`, `Correction to my dictation, …`, `(Correction:
-  …)`, `a) Correction: …`, `Addendum: Correction: …`), or after one word before a colon, comma or
-  dash (`Transcription correction: …`), makes every answer before it a decision, in the same
-  paragraph too, whatever follows it — except a treatment or a target: `Correction of …`,
+  a sentence starts — after any bullet, bracket, quote or list marker (`● Correction: …`, `1-
+  Correction: …`, `#2 Correction: …`, `(Correction: …)`, `a) Correction: …`, `Addendum: Correction:
+  …`), or after one word before a colon, comma or dash (`Transcription correction: …`, `Physician's
+  correction: …`) — makes every answer before it a decision, in the same paragraph too, whatever
+  follows it (`Correction to my dictation, …`) — except a treatment or a target: `Correction of …`,
   `Correction scale`, `factor`, `dose` or `insulin`, `Correction (sliding scale)`, `Correction to`
   a number, `Correction-scale`, `Correction/…`, `Corrections officer` or `facility`. So
   `Corrections (state prison officer)`, `Correction to no more than 8 mmol/L`, an insulin order line
   `Correction: 2 units per 50 mg/dL` and `Correction: Bazett` are read as corrections too, and the
   answers above them need your decision. Only the word *correction* is read (`Erratum:` and
-  `Corrected:` are not). One exception: a correction that is the whole answer to a question already
-  answered above it, alone in its sentence (`Pain score: Correction: three out of ten`), corrects
-  that question only, which already needs your decision because it has two answers. ⚠️ So a
+  `Corrected:` are not), and not when *correction* is part of a form question's own label
+  (`Correction achieved: 10 degrees`). One exception: a correction that opens the whole answer to a
+  question already answered above it (`Pain score: Correction: three out of ten`) corrects that
+  question only, which already needs your decision because it has two answers — on an underlined-Tab
+  form anywhere in a paragraph, on every other form only at the start of its line. ⚠️ So a
   correction of another question written under a question already answered (`Comments:
   Correction: the allergy is sulfa`) is NOT applied to that other answer: write it under the
   question it corrects. A note line that starts with the word *Correction* also withholds every
@@ -178,14 +185,16 @@ lists every charge; choose a charge's service name to see how it was calculated.
   governed line is shown empty, with its candidate and the lines that govern it, and an accepted
   suggestion there is shown the same way with a warning. Neither can be finalized as it is. Type
   your own answer (its words may be the same) or choose "Leave blank — reviewed"; saving with the
-  box empty keeps the earlier acceptance.
+  box empty keeps the earlier acceptance. (On the WM IOV form, which has no "Leave blank —
+  reviewed", such an acceptance is replaced by choosing or typing an answer; none exists in the
+  pilot's drafts.)
 - **An answer written under a governing line needs a decision.** If you type it and then clear it,
   choose "Leave blank — reviewed" before finalizing: an empty box there is not a decision. (Elsewhere,
   clearing an answer and ticking it reviewed leaves it empty, as before.) Invisible characters count
   as empty.
 - **Read the whole note before accepting a suggestion.** Suggestions are never offered for an
   answer governed by a heading or a governing sentence (above). Otherwise they are withheld in
-  three cases: a denial line that governs other lines, meaning a line containing *denied*, *denies*,
+  four cases: a denial line that governs other lines, meaning a line containing *denied*, *denies*,
   *deny*, *absent*, *negative*, *negatives*, *no*, *not*, *without* or *never* that ends in a
   colon
   (`ROS: negative for the following:`), points at other lines with *following*, *these*,

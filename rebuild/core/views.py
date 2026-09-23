@@ -517,7 +517,7 @@ def save_answers(request,pk):
     answers={};review_errors=[];newly_accepted=[];withdrawn=[];newly_blank=[];withdrawn_blank=[];target_revision=e.revision+1
     previous_answers=dict(e.answers)
     # ⚠️ ONCE PER SAVE, NOT PER FIELD: this runs under the row lock, and a 100-field save recomputed it per offer.
-    from .generation import governance_for,governed_supported,held_for_decision,is_empty,offer_context
+    from .generation import governance_for,governed_supported,held_for_decision,is_empty,offer_context,seen_text
     governance=governance_for(e.notes,e.template_version.fields,[row['label'] for row in e.template_version.review_requirements])
     for field in e.template_version.fields:
         key=field['key'];previous=e.answers.get(key,{'text':'','evidence':[],'status':'missing'})
@@ -530,7 +530,7 @@ def save_answers(request,pk):
         # and taking that as a decision is the defect's own gesture. Without the marker it stays `supported`, and
         # finalization refuses it.
         if held_shown and supported_context is not None:
-            previous=held_for_decision(previous,[previous.get('text','')],previous['evidence'],supported_context,is_wm)
+            previous=held_for_decision(previous,[previous.get('text','')],previous['evidence'],supported_context,is_wm,prefilled=True)
         # Browsers post a textarea's line breaks as CRLF. Stored as posted, a multi-line answer was
         # refused by every fillable PDF at finalize (a carriage return is not printable), exported
         # to a Word table cell as two breaks per line, and compared unequal to its own unchanged text.
@@ -540,13 +540,13 @@ def save_answers(request,pk):
         # authority check or audit that a real withdrawal carries. An answer is its text or nothing.
         # Nor are invisible characters or a blank braille cell: they export as a visually empty cell (fifth pass).
         if not value.strip() or is_empty(value):value=''
-        # ⚠️ AND WHITESPACE IS NOT A DECISION EITHER: a page from before this release re-posting the pre-filled
-        # governed text (or an accepted governed suggestion) with one stray space keeps what it re-posts, which
-        # finalization refuses.
-        if not held_shown and supported_context is not None and value.strip()==str(previous.get('text','')).strip():
+        # ⚠️ AND WHAT NOBODY CAN SEE IS NOT A DECISION EITHER: a page from before this release re-posting the pre-filled
+        # governed text (or an accepted governed suggestion) with a stray space or invisible character keeps what it
+        # re-posts, which finalization refuses.
+        if not held_shown and supported_context is not None and seen_text(value)==seen_text(previous.get('text','')):
             value=previous.get('text','')
         if (not held_shown and governed_offer and previous.get('accepted_suggestion')
-                and value.strip()==str(previous.get('suggestion') or '').strip()):
+                and seen_text(value)==seen_text(previous.get('suggestion'))):
             value=str(previous.get('suggestion') or '')
         # "Leave blank — reviewed": the clinician's explicit decision that no answer belongs here.
         # It is a DECISION, kept apart from an untouched empty field (`missing`), a generated

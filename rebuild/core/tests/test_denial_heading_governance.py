@@ -820,6 +820,79 @@ class WhatTheFifthPassFound(ExpectationsMixin, TestCase):
         self.assertEqual(generation.governed_decisions(notes, fields, {'q1': {**cleared, 'held_candidate': None}}), [])
 
 
+class WhatTheSixthPassFound(ExpectationsMixin, TestCase):
+    """Refutation of the finished diff, sixth pass (over 8a72af06). Each input was demonstrated by a lens."""
+
+    def held(self, answer):
+        self.assertEqual(answer['status'], 'conflict', answer)
+        self.assertEqual(answer['text'], '')
+        self.assertNotIn('suggestion', answer)
+
+    def test_the_exemption_needs_the_validator_to_see_both_answers(self):
+        """The legacy validator reads a question's answers per LINE, so a mid-line erratum is never its second answer."""
+        notes = 'Allergies: none\nMedications: aspirin 81 mg daily. Allergies: Correction: penicillin (anaphylaxis).'
+        for path, answers in (('fixture', fixture_answers(['Allergies', 'Medications'], notes)),
+                              ('provider-shaped', provider_answers(['Allergies', 'Medications'], notes,
+                                                                   {'Allergies': ['Allergies: none'], 'Medications': [notes.split('\n')[1]]}))):
+            with self.subTest(path=path):
+                self.assertNotEqual(answers['Allergies']['status'], 'supported', answers['Allergies'])
+                self.assertNotIn('suggestion', answers['Allergies'])
+
+    def test_any_bullet_or_list_marker_before_the_word_still_makes_an_erratum(self):
+        for bullet in ('\u25cf ', '\u25cb ', '\u25a0 ', '\u27a2 ', '\uf0b7 ', '> ', '+ ', 'iii) ', '1- ', '2.1 ', '#2 ',
+                       "Physician's correction", 'Late-entry correction', '2nd correction'):
+            line = (bullet + ': there were no complications.') if bullet.endswith('correction') else (bullet + 'Correction: there were no complications.')
+            with self.subTest(line=line):
+                _, answers = tab_answers(['PROCEDURE', 'COMPLICATIONS'], 'PROCEDURE: diagnostic colonoscopy.\nCOMPLICATIONS: perforation.\n' + line)
+                self.held(answers['COMPLICATIONS'])
+        answer = fixture_answers(['Symptoms', 'Plan'], 'Symptoms: chest pain\n\u25cf Correction: the patient has no chest pain.\nPlan: follow up')['Symptoms']
+        self.assertNotIn('suggestion', answer)
+
+    def test_a_single_capital_ends_a_sentence_before_an_erratum(self):
+        for sentence in ('Sedation: moderate, ASA class I.', 'Serology positive for hepatitis E.', 'History obtained from the pt.', 'Diet, fluids, etc.'):
+            with self.subTest(sentence=sentence):
+                _, answers = tab_answers(['PROCEDURE', 'COMPLICATIONS'], 'PROCEDURE: diagnostic colonoscopy.\nCOMPLICATIONS: perforation.\n'
+                                         + sentence + ' Correction: there were no complications.')
+                self.held(answers['COMPLICATIONS'])
+
+    def test_an_aside_of_any_length_keeps_the_pointer(self):
+        line = ('Family history: her mother had the following conditions (reviewed with the patient and with her daughter, '
+                'who accompanies her to clinic today).')
+        self.assert_needs_decision(fixture_answers(['Family history', 'Diabetes'], line + '\nDiabetes: yes')['Diabetes'], 'yes', 'had the following')
+
+    def test_a_form_question_named_correction_is_not_an_erratum(self):
+        notes = 'Procedure: left hallux valgus osteotomy\nFindings: HVA 32 degrees\nCorrection achieved: HVA 10 degrees\nPlan: post-op shoe'
+        answers = fixture_answers(['Procedure', 'Findings', 'Correction achieved', 'Plan'], notes)
+        self.assert_ready(answers['Procedure'], 'left hallux valgus osteotomy')
+        answers = fixture_answers(['VA', 'Correction'], 'VA: 6/6 both eyes\nCorrection: spectacles for distance')
+        self.assert_ready(answers['VA'], '6/6 both eyes')
+        # CONTROL: the same words when Correction is NOT one of the form's questions are an erratum.
+        self.held(fixture_answers(['VA'], 'VA: 6/6 both eyes\nCorrection: spectacles for distance')['VA'])
+
+    def test_a_heading_closing_a_paragraph_governs_from_its_own_sentence(self):
+        notes = 'Indication: screening colonoscopy. Findings: sigmoid polyp. Plan: repeat colonoscopy in 5 years. Signed by:'
+        _, answers = tab_answers(['Indication', 'Findings', 'Plan'], notes)
+        self.assertEqual(answers['Indication'].get('suggestion'), 'screening colonoscopy.', answers['Indication'])
+
+    def test_a_pointer_period_is_a_sentence_end_only_before_a_new_sentence(self):
+        for line in ('Plan: sutures out the following wk. at the GP surgery', 'Plan: sutures out the following Mon. at the GP surgery'):
+            with self.subTest(line=line):
+                self.assert_ready(fixture_answers(['Plan', 'Follow-up'], line + '\nFollow-up: in two weeks')['Follow-up'], 'in two weeks')
+
+    def test_an_erratum_is_shown_as_its_sentence_and_bounded(self):
+        notes = 'Q0: finding 0\n' + 'Correction: none. ' * 300
+        held = fixture_answers(['Q0'], notes)['Q0']['held_candidate']
+        self.assertTrue(all(len(entry.get('quote', '')) <= 402 for entry in held['context']))
+        self.assertTrue(held['context'][0]['quote'].startswith('Correction: none.'))
+
+    def test_more_counts_distinct_lines(self):
+        answers = fixture_answers(['Symptoms'], 'Symptoms: chest pain\nNone of these apply:\nSymptoms: dyspnea')
+        self.assertNotIn({'more': 1}, answers['Symptoms']['held_candidate']['context'])
+        answers = fixture_answers(['Indication', 'Findings'], 'Indication: screening colonoscopy\nFindings: sigmoid polyp\n'
+                                  'Correction to the above:\nThe polyp was in the rectum.')
+        self.assertEqual([e.get('more') for e in answers['Indication']['held_candidate']['context'] if 'more' in e], [])
+
+
 class TheQualifiedWordFormKeepsItsLabelsSelfContained(ExpectationsMixin, TestCase):
     """On the qualified Word form every label names its own side, vein and measure, so a sentence in one value
     cannot re-scope another: only structural headings and corrections govern there. Round 6 of the pilot
@@ -1147,6 +1220,31 @@ class TheDecisionIsEnforcedThroughFinalizationAndExport(DocumentWorkflow):
         section = self.section(encounter, 'Symptoms')
         self.assertIn('data-governing-line', section)
         self.assertIn(HEADING, section)
+
+    def test_a_stale_page_cannot_make_a_decision_with_an_invisible_character(self):
+        encounter = self.generated()
+        finding = encounter.notes.index('chest pain')
+        stale = {self.ros: {'text': 'none', 'status': 'edited', 'reviewed': False, 'evidence': []},
+                 self.symptoms: {'text': 'chest pain', 'status': 'supported', 'reviewed': False,
+                                 'evidence': [{'quote': 'chest pain', 'start': finding, 'end': finding + len('chest pain')}]}}
+        Encounter.objects.filter(pk=encounter.pk).update(answers=stale)
+        encounter.refresh_from_db()
+        self.save(encounter, **{'answer_' + self.ros: 'none', 'answer_' + self.symptoms: 'chest pain\u200b'})
+        self.assertEqual(encounter.answers[self.symptoms]['status'], 'supported')
+
+    def test_a_finalized_draft_from_an_earlier_release_says_it_was_filled_in(self):
+        encounter = self.generated()
+        finding = encounter.notes.index('chest pain')
+        stale = {self.ros: {'text': 'none', 'status': 'edited', 'reviewed': False, 'evidence': []},
+                 self.symptoms: {'text': 'chest pain', 'status': 'supported', 'reviewed': False,
+                                 'evidence': [{'quote': 'chest pain', 'start': finding, 'end': finding + len('chest pain')}]}}
+        Encounter.objects.filter(pk=encounter.pk).update(answers=stale)
+        encounter.refresh_from_db()
+        self.save(encounter, **{'answer_' + self.ros: 'none', 'answer_' + self.symptoms: self.TYPED, 'held_shown_' + self.symptoms: '1'})
+        self.finalize(encounter)
+        section = self.section(encounter, 'Symptoms')
+        self.assertNotIn('never offered', section)
+        self.assertIn('filled in by an earlier release', section)
 
     def test_a_pre_repair_accepted_offer_under_a_heading_cannot_finalize(self):
         self.NOTES = 'Patient reports none of the following:\nSymptoms: chest pain'
