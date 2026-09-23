@@ -235,7 +235,7 @@ SUPPRESSING_DENIAL_WORDS = DENIAL_WORDS + r'|negatives|deny'
 DENIAL = re.compile(r'\b(?:' + SUPPRESSING_DENIAL_WORDS + r')\b', re.I)
 SCOPE_POINTER = re.compile(r'\b(?:' + SCOPE_POINTERS + r')\b', re.I)
 #: Colons of every width, and the look-alikes pasted text carries (ratio, modifier letter, Armenian, Hebrew...).
-COLONS = frozenset(':\uff1a\ufe55\ufe13\u2236\ua789\u02f8\u05c3\u0589\u1804\ufe30')
+COLONS = frozenset(':\uff1a\ufe55\ufe13\u2236\ua789\u02f8\u05c3\u0589\u1804\ufe30\u205a\u2982\u1361\u16ec\ua6f4\u17d6')
 FINITE_STATEMENT = re.compile(r'\b(?:is|are|was|were|has|have|had|denies|reports|reported|showed|revealed|advanced|seen|collected|recommend|received|underwent)\b',re.I)
 
 ABBREVIATION = re.compile(r'(?:\b(?:dr|mr|mrs|ms|prof|st|vs|etc|approx)|\b[A-Z]|\be\.g|\bi\.e)\.$', re.I)
@@ -437,12 +437,19 @@ def invisible(character):
     return any(low <= code <= high for low, high in IGNORABLE_RANGES)
 
 
+@functools.lru_cache(maxsize=1)
+def blanks():
+    """Every character that shows nothing: whitespace, format characters, the other default-ignorable code points
+    and the blank braille cell (U+2800); as a string for `rstrip` and a table for `translate`. Built once per
+    process from the planes that hold them."""
+    codes = [code for code in list(range(0x20000)) + list(range(0xE0000, 0xE1000))
+             if chr(code).isspace() or invisible(chr(code)) or code == 0x2800]
+    return ''.join(map(chr, codes)), dict.fromkeys(code for code in codes if not chr(code).isspace())
+
+
 def visible_end(text):
     """Text with trailing whitespace, invisible characters and the blank braille cell (U+2800) removed."""
-    end = len(text)
-    while end and (text[end - 1].isspace() or invisible(text[end - 1]) or text[end - 1] == '\u2800'):
-        end -= 1
-    return text[:end]
+    return text.rstrip(blanks()[0])
 
 
 def ends_in_colon(text):
@@ -461,9 +468,15 @@ def readings(text):
     yield text
     if text.isascii():   # no ASCII character is a format character or a default-ignorable mark
         return
-    visible = ''.join(character for character in text if not invisible(character))
+    visible = text.translate(invisibles())
     if visible != text:
         yield visible
+
+
+@functools.lru_cache(maxsize=1)
+def invisibles():
+    """The `translate` table that removes invisible characters (not U+2800, not whitespace)."""
+    return {code: None for code in blanks()[1] if code != 0x2800}
 
 
 def denial_before_colon(line):
@@ -550,21 +563,22 @@ BACKWARD_POINTERS = frozenset(SCOPE_POINTERS.split('|')) - FORWARD_POINTERS
 WORD = re.compile(r'\w+')
 COLON_CLASS = '[' + ''.join(sorted(COLONS)) + ']'
 #: One word as a doctor writes it (fifth pass): `symptom(s)`, `co-morbidities`, `sx/signs`, `pt's`.
-ONE_WORD = r"[\w'\u2019/\-]+(?:\(s\))?"
+ONE_WORD = r"(?:[\w'\u2019/\-\u2010\u2011]|\([a-z]{1,3}\))+"
 #: ⚠️ POSITION, NOT VOCABULARY. A pointer, or `the following <one word>`, that ENDS its sentence is the prose form
 #: of a heading's colon. No word before it is read: an exception, an earlier sentence, the label or a relative's
 #: name decided nothing reliably (third refutation pass), so none is asked. `follows` only as `as follows`: the
 #: bare verb is an examination finding (`fixes and follows`).
-POINTER = re.compile(r"\b(?:following|below|as\s+follows|the\s+following\s+(" + ONE_WORD + r"))(?![\w'\u2019/\-(])", re.I)
+POINTER = re.compile(r"\b(?:following|below|as\s+follows|the\s+following\s+(" + ONE_WORD + r"))(?![\w'\u2019/\-\u2010\u2011(])", re.I)
 #: ⚠️ WHERE A SENTENCE ENDS, AS `source_units` READS IT: the end of the line; a colon (`…as follows: polyps.`, which
 #: introduces an inline list); or `.`/`!`/`?`/`…` then whitespace, the end, closing quotes/brackets, or a capital —
 #: optionally after one aside (`… the following (reviewed today).`). NOT a semicolon (`…the following morning; able
 #: to bear weight.`), not a decimal (`the following 1.5 hours`), not `a.m.`, not an abbreviation.
 #: One aside, one level of brackets inside it (`(see HPI (2019))`); any number of them may follow the pointer.
 ASIDE = r'\s*(?:\((?:[^()\n]|\([^()\n]*\))*\)|\[[^\[\]\n]*\])'
+MANY_ASIDES = re.compile('(?:' + ASIDE + '){5}')
 #: Whatever may trail a sentence to the END of its line: anything that is not a word, and markup (`*`, `<br>`, `_`).
 TRAIL = r'(?:[^\w\n<]|_|<[^>\n]{0,20}>|<)*+'
-SENTENCE_END = re.compile(r'(?:' + ASIDE + r')*(?:\s*' + COLON_CLASS + '|' + TRAIL + r'$'
+SENTENCE_END = re.compile(r'(?:' + ASIDE + r'){0,4}(?:\s*' + COLON_CLASS + '|' + TRAIL + r'$'
                           + r'|[^\w.!?\u2026' + ''.join(sorted(COLONS)) + r']*[.!?\u2026]+["\'\u201d\u2019)\]]*'
                           + r'(?:\s+(?=[A-Z0-9"\'\u201c(\[])|(?=[A-Z"\'\u201c(\[])))')
 #: ⚠️ AN ERRATUM FAILS CLOSED (fifth pass). The word `correction(s)` where a line, a value or a sentence starts is an
@@ -584,7 +598,7 @@ NON_LETTERS = r'(?:[^\w\n.!?\u2026' + ''.join(sorted(COLONS)) + r']|_)*+'
 #: (`Glucose: 312 correction given`, `Potassium: 3.1 - correction`), unless it is a list number (`1. `) (seventh pass).
 LINE_MARKER = r'(?:(?:\d+(?:\.\d+)*(?:[.)\-]|(?=\s))|(?:[ivx]{1,4}|[a-z])[.)])' + NON_LETTERS + ')?'
 VALUE_MARKER = r'(?:(?:\d{1,2}[.)](?=\s)|(?:[ivx]{1,4}|[a-z])[.)])' + NON_LETTERS + ')?'
-ERRATUM = re.compile(r'(?:^' + NON_LETTERS + LINE_MARKER + r'|(?:(?<=' + COLON_CLASS + r')(?!\d)|(?<=[.!?\u2026])(?=["\'\u201d\u2019)\]]*\s))'
+ERRATUM = re.compile(r'(?:^' + NON_LETTERS + LINE_MARKER + r'|(?:(?<=' + COLON_CLASS + r')(?!\d)|(?<=[.!?\u2026])(?=["\'\u201d\u2019)\]\u2800]*[\s\u2800]))'
                      + NON_LETTERS + VALUE_MARKER + ')'
                      + '(?:' + ONE_WORD + r'\s+(?=' + CORRECTION + r's?\s*(?:' + COLON_CLASS + r'|[,;\u2013\u2014]|--|\s-\s)))?'
                      + r'(?P<word>' + CORRECTION + r's?)(?![^\W_]|[/\-\u2010\u2011])'
@@ -593,6 +607,8 @@ ERRATUM = re.compile(r'(?:^' + NON_LETTERS + LINE_MARKER + r'|(?:(?<=' + COLON_C
 #: Only titles and the dotted forms: `ASA class I.`, `hepatitis B.`, `…from the pt.` and `etc.` end a sentence
 #: (sixth pass), because the erratum after them fails closed.
 ABBREVIATED_WORD = re.compile(r'(?:\b(?:dr|mr|mrs|ms|prof|st|vs)|\bi\.e|\be\.g)\.$', re.I)
+#: Before an erratum only these: `mild MR.`, `PR 160 ms.` and `history of MS.` end a sentence.
+NOT_A_SENTENCE_END = re.compile(r'(?:\bvs|\bi\.e|\be\.g)\.$', re.I)
 #: The value itself begins with the word (no list marker): the shape of `Pain score: Correction: three out of ten`.
 VALUE_ERRATUM = re.compile(NON_LETTERS + r'(?P<word>' + CORRECTION + r's?)\b', re.I)
 #: Where `source_units` ends a sentence (abbreviations kept whole).
@@ -607,9 +623,9 @@ HELD_REASON_WORD = ('Read from the notes but NOT offered as an answer: the line 
                     'means. Choose or type your own answer, and paste its complete source line.')
 #: No single line governs it; something elsewhere in the note withholds the offer.
 HELD_REASON_NOTE = ('Read from the notes but NOT offered as an answer: something elsewhere in the note may change what '
-                    'it means (a word such as if, would or family history, a quotation, a denial heading or a line '
-                    'starting with Correction). Read the full note, then type your own answer, or choose "Leave blank '
-                    '— reviewed".')
+                    'it means (a word such as if, would or family history, a quotation, a denial heading, or a line '
+                    'that opens with a correction: Correction:, Transcription correction:, 1. Correction). Read the full '
+                    'note, then type your own answer, or choose "Leave blank — reviewed".')
 HELD_REASON_NOTE_WORD = ('Read from the notes but NOT offered as an answer: something elsewhere in the note may change '
                          'what it means. Read the full note, then choose or type your own answer, and paste its complete '
                          'source line.')
@@ -638,7 +654,7 @@ def changes_meaning(text):
 def positioned_readings(text):
     """`readings`, each with the map back to `text`: (reading, kept offsets or None when it IS `text`)."""
     yield text, None
-    if text.isascii():
+    if text.isascii() or text.translate(invisibles()) == text:
         return
     kept = [index for index, character in enumerate(text) if not invisible(character)]
     if len(kept) != len(text):
@@ -651,7 +667,8 @@ def forward_point(text):
     for reading, kept in positioned_readings(text):
         for match in POINTER.finditer(reading):
             end = match.end()
-            if not SENTENCE_END.match(reading, end):
+            # More asides than SENTENCE_END reads (it is bounded, to stay linear) end the sentence: fail closed.
+            if not SENTENCE_END.match(reading, end) and not MANY_ASIDES.match(reading, end):
                 continue
             if match.group(1) and reading[end:end + 1] == '.' and ABBREVIATED_WORD.search(reading[max(0, end - 32):end + 1]):
                 continue
@@ -668,7 +685,7 @@ def erratum_points(text):
             before = match.start()
             while before and reading[before - 1] in '”’)]':
                 before -= 1
-            if before and reading[before - 1] == '.' and ABBREVIATED_WORD.search(reading[max(0, before - 32):before]):
+            if before and reading[before - 1] == '.' and NOT_A_SENTENCE_END.search(reading[max(0, before - 32):before]):
                 continue
             found.add(match.start('word') if kept is None else kept[match.start('word')])
     return sorted(found)
@@ -769,10 +786,17 @@ def heading_governance(notes, labels, *, lexical=True, per_sentence=True):
                     if any(word.lower() in BACKWARD_POINTERS for reading in readings(heading_text) for word in WORD.findall(reading)):
                         backward.append((start + last_low, index, start + last_low, end, meaning))
                 # A pointer in a question's VALUE (its own label, `…informed of the following risks:`, is not one), on a
-                # colon-ending line too: `…including the following. COMPLICATIONS: … Findings are as follows:`.
-                value_at = parsed[2] if parsed else 0
-                if (point := forward_point(stripped[value_at:])) is not None:
-                    point += value_at
+                # colon-ending line too: `…including the following. COMPLICATIONS: … Findings are as follows:`. On the
+                # tab contract each sentence's own label is skipped, mid-paragraph too (eighth pass).
+                point = None
+                for low, high in units:
+                    own_unit = (answered_label if per_sentence else labelled_value)(stripped[low:high], labels) if per_sentence else parsed
+                    value_at = low + (own_unit[2] if own_unit else 0)
+                    found = forward_point(stripped[value_at:high])
+                    if found is not None:
+                        point = value_at + found
+                        break
+                if point is not None:
                     # Shown from the line's start through the pointer's sentence: the label and the frame with it.
                     through = sentences[bisect.bisect_left([high for _, high in sentences], point)][1] if point <= len(stripped) else len(stripped)
                     forward.append((start + point, index, start, start + through, changes_meaning(stripped[:through])))
@@ -782,7 +806,7 @@ def heading_governance(notes, labels, *, lexical=True, per_sentence=True):
                 for at in erratum_points(stripped):
                     low, high = units[max(0, bisect.bisect_right(unit_starts, at) - 1)]
                     if low not in owners:
-                        owners[low] = labelled_value(stripped[low:high], labels)
+                        owners[low] = (answered_label if per_sentence else labelled_value)(stripped[low:high], labels)
                     own = owners[low]
                     if own and at - low < own[2]:
                         continue                  # the word is in the question's own label: not an erratum
@@ -799,7 +823,16 @@ def heading_governance(notes, labels, *, lexical=True, per_sentence=True):
     forward.sort(); backward.sort()
     # Indexes of the governors whose words change meaning, so a held answer finds the nearest ones by bisection.
     meaning = ([i for i, governor in enumerate(forward) if governor[4]], [i for i, governor in enumerate(backward) if governor[4]])
-    return starts, spans, headings, forward, backward, meaning, opens
+    # ⚠️ ONE ENTRY PER LINE SHOWS EVERY GOVERNING SPAN ON IT (eighth pass): `…patient denies the following.
+    # Cardiovascular:` has two governors on one line, and showing only the nearest hid the denial.
+    shown = {}
+    for governor in forward + backward:
+        low, high = shown.get(governor[1], (governor[2], governor[3]))
+        shown[governor[1]] = (min(low, governor[2]), max(high, governor[3]))
+    for index, low in headings.items():
+        old = shown.get(index, (low, spans[index][1]))
+        shown[index] = (min(old[0], low), max(old[1], spans[index][1]))
+    return starts, spans, headings, forward, backward, meaning, opens, shown
 
 
 def answered_label(text, labels):
@@ -847,7 +880,7 @@ def governed_context(governance, notes, evidence):
     then 57 MB of quotes): the nearest three each way, then every one whose words change meaning, nearest first;
     the other DISTINCT lines are counted in a final `{'more': n}` entry, never dropped silently.
     """
-    starts, spans, headings, forward, backward, (forward_meaning, backward_meaning), _ = governance
+    starts, spans, headings, forward, backward, (forward_meaning, backward_meaning), _, line_shown = governance
     ats = [entry['start'] for entry in evidence]
     if not ats:
         return None
@@ -879,8 +912,9 @@ def governed_context(governance, notes, evidence):
             governor = forward[before[index]]; take(governor[1], governor[2], governor[3], False)
         if index < len(after):
             governor = backward[after[index]]; take(governor[1], governor[2], governor[3], True)
-    shown = [{'quote': shown_quote(notes, low, high, later), 'start': low, 'end': high, 'after': later,
-              'same': line in own_lines} for line, (low, high, later) in sorted(chosen.items(), key=lambda item: item[1][0])]
+    shown = [{'quote': shown_quote(notes, *line_shown[line], later), 'start': line_shown[line][0], 'end': line_shown[line][1],
+              'after': later, 'same': line in own_lines}
+             for line, (low, high, later) in sorted(chosen.items(), key=lambda item: line_shown[item[0]][0])]
     return shown + ([{'more': len(governing) - len(shown)}] if len(governing) > len(shown) else [])
 
 
@@ -947,7 +981,7 @@ def own_evidence(answer, notes):
 
 def seen_text(text):
     """What a reader can see: invisible characters and blank cells removed, whitespace stripped."""
-    return ''.join(character for character in str(text or '') if not invisible(character) and character != '\u2800').strip()
+    return str(text or '').translate(blanks()[1]).strip()
 
 
 def is_empty(text):

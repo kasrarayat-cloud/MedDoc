@@ -729,7 +729,7 @@ def finalize(request,pk):
             from .generation import governed_decisions
             governed=governed_decisions(e.notes,e.template_version.fields,e.answers,
                                         [row['label'] for row in e.template_version.review_requirements])
-            if governed:raise ValidationError('These answers were read from lines that a heading or a sentence in the notes may change, and still need your decision: '+field_list(governed)+' Each is shown on the document with the lines that govern it: enter your own answer there'+('' if e.template_version.document_backend else ' or choose "Leave blank — reviewed"')+'.')
+            if governed:raise ValidationError('These answers were read from lines that a heading or a sentence in the notes may change, and still need your decision: '+field_list(governed)+' Each is shown on the document with what governs it (its lines, or the reason that applies to the whole note): enter your own answer there'+('' if e.template_version.document_backend else ' or choose "Leave blank — reviewed"')+'.')
             original=private_path(e.template_version.template.original_path)
             if hashlib.sha256(original.read_bytes()).hexdigest()!=e.template_version.template.sha256:raise ValidationError('Original integrity check failed.')
             relative=f'exports/{secrets.token_hex(24)}.{e.template_version.template.format.lower()}'

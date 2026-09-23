@@ -994,6 +994,60 @@ class WhatTheSeventhPassFound(ExpectationsMixin, TestCase):
         self.assertLess(time.perf_counter() - started, 20)
 
 
+class WhatTheEighthPassFound(ExpectationsMixin, TestCase):
+    """Refutation of the finished diff, eighth pass (over dc4f8fff)."""
+
+    def held(self, answer):
+        self.assertEqual(answer['status'], 'conflict', answer)
+        self.assertEqual(answer['text'], '')
+        self.assertNotIn('suggestion', answer)
+
+    def test_a_correction_after_a_clinical_abbreviation_still_governs(self):
+        for notes, labels, held in (
+                ('Symptoms: no chest pain\nEcho: mild MR. Correction: patient reports severe crushing chest pain.', ['Symptoms', 'Echo'], 'Symptoms'),
+                ('QTc: 450 ms\nRhythm: sinus, PR 160 ms. Correction: QTc 520 ms, prolonged.', ['QTc', 'Rhythm'], 'QTc'),
+                ('Symptoms: no chest pain\nHistory: MS. Correction: patient reports severe chest pain.', ['Symptoms', 'History'], 'Symptoms')):
+            with self.subTest(notes=notes):
+                self.held(fixture_answers(labels, notes)[held])
+
+    def test_one_word_is_one_token_as_it_is_written(self):
+        for line, item in (('Review of systems: negative for the following sign(s)/symptom(s).', 'Symptoms: chest pain, dyspnea'),
+                           ('Family history: her mother had the following diagnosis(es).', 'Diabetes: yes'),
+                           ('Review of systems: negative for the following co\u2011morbidities.', 'Symptoms: chest pain')):
+            label = item.split(':')[0]
+            with self.subTest(line=line):
+                self.held(fixture_answers([line.split(':')[0], label], line + '\n' + item)[label])
+        answer = fixture_answers(['Symptoms', 'Comments'], 'Symptoms: no chest pain\nComments: Late\u2011entry correction: patient does report severe crushing chest pain.')['Symptoms']
+        self.held(answer)
+
+    def test_a_question_label_mid_paragraph_is_never_a_pointer(self):
+        notes = ('Consent: obtained from the patient. Patient was informed of the following risks: bleeding and perforation. '
+                 'Complications: none. Estimated blood loss: minimal.')
+        _, answers = tab_answers(['Consent', 'Patient was informed of the following risks', 'Complications', 'Estimated blood loss'], notes)
+        self.assertEqual(answers['Complications'].get('suggestion') or answers['Complications']['text'], 'none.', answers['Complications'])
+
+    def test_a_question_label_stated_as_label_was_value_is_not_an_erratum(self):
+        notes = 'Diagnosis: right hallux valgus.\nProcedure: chevron osteotomy.\nCorrection achieved was 7 degrees.'
+        _, answers = tab_answers(['Diagnosis', 'Procedure', 'Correction achieved'], notes)
+        self.assertEqual(answers['Diagnosis']['status'], 'supported', answers['Diagnosis'])
+
+    def test_more_colon_look_alikes_and_a_blank_cell_before_a_correction(self):
+        for mark in ('\u205a', '\u2982', '\u1361'):
+            with self.subTest(mark=repr(mark)):
+                self.held(fixture_answers(['ROS', 'Symptoms'], 'ROS: negative for' + mark + '\nSymptoms: chest pain')['Symptoms'])
+        self.held(fixture_answers(['Symptoms', 'Comments'], 'Symptoms: no chest pain\nComments: reviewed.\u2800 Correction: patient reports severe chest pain.')['Symptoms'])
+
+    def test_every_governing_span_on_a_line_is_shown(self):
+        for notes, labels, word in (('Review of systems: patient denies the following. Cardiovascular:\nSymptoms: chest pain',
+                                     ['Review of systems', 'Symptoms'], 'patient denies the following'),
+                                    ('Family history: her mother had the following. Endocrine:\nDiabetes: yes',
+                                     ['Family history', 'Diabetes'], 'her mother had the following')):
+            with self.subTest(notes=notes):
+                answers = fixture_answers(labels, notes)
+                held = answers[labels[1]]['held_candidate']
+                self.assertTrue(any(word in entry.get('quote', '') for entry in held['context']), held['context'])
+
+
 class TheQualifiedWordFormKeepsItsLabelsSelfContained(ExpectationsMixin, TestCase):
     """On the qualified Word form every label names its own side, vein and measure, so a sentence in one value
     cannot re-scope another: only structural headings and corrections govern there. Round 6 of the pilot
