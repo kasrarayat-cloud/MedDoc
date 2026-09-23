@@ -921,7 +921,10 @@ class WhatTheSeventhPassFound(ExpectationsMixin, TestCase):
     def test_a_pointer_sentence_ends_whatever_trails_it_to_the_line_end(self):
         for line in ('Review of systems: Patient denies the following.\u2800', 'Review of systems: *Patient denies the following.*',
                      'Review of systems: Patient denies the following.<br>', 'Review of systems: Patient denies the following. -',
-                     'Review of systems: Patient denies the following (see HPI (2019)).', 'Review of systems: Patient denies the following (a) (b).'):
+                     'Review of systems: Patient denies the following (see HPI (2019)).', 'Review of systems: Patient denies the following (a) (b).',
+                     'Review of systems: Patient denies the following (see HPI) (reviewed today).',
+                     # More asides than are read one by one end the sentence: fail closed.
+                     'Review of systems: Patient denies the following (first) (second) (third) (fourth) (fifth) (sixth).'):
             with self.subTest(line=line):
                 self.held(fixture_answers(['Review of systems', 'Symptoms'], line + '\nSymptoms: chest pain')['Symptoms'])
 
@@ -1036,6 +1039,7 @@ class WhatTheEighthPassFound(ExpectationsMixin, TestCase):
             with self.subTest(mark=repr(mark)):
                 self.held(fixture_answers(['ROS', 'Symptoms'], 'ROS: negative for' + mark + '\nSymptoms: chest pain')['Symptoms'])
         self.held(fixture_answers(['Symptoms', 'Comments'], 'Symptoms: no chest pain\nComments: reviewed.\u2800 Correction: patient reports severe chest pain.')['Symptoms'])
+        self.held(fixture_answers(['Symptoms', 'Comments'], 'Symptoms: no chest pain\nComments: reviewed.\u2800Correction: patient reports severe chest pain.')['Symptoms'])
 
     def test_every_governing_span_on_a_line_is_shown(self):
         for notes, labels, word in (('Review of systems: patient denies the following. Cardiovascular:\nSymptoms: chest pain',
