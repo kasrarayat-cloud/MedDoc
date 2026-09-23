@@ -139,13 +139,16 @@ lists every charge; choose a charge's service name to see how it was calculated.
   `**Signed by:**`, `Signed by: ______`, `Electronically signed on 09/21/2026 at 10:42 by:`, an
   empty `Allergies:`). A dash after a colon is an answer, not a heading (`Allergies: -`, `Nose: —`
   mean none), and so is a value in angle brackets (`Allergies: <penicillin>`, `PSA: <0.1>`); only a
-  real HTML tag after the colon (`<br>`, `</b>`, Word's `<o:p></o:p>`) is markup, and a blank clock
-  field (`Time out: __:__`) is not a heading. A bare signature or date row after a closing
+  real HTML tag after the colon (`<br>`, `</b>`, Word's `<o:p></o:p>`), a footnote mark (`¹`), `\`
+  or `~~` is markup; a blank or filled clock (`Time out: __:__`, `__ : __`) is not a heading, but a
+  number before closing markup is (`_Mother, age 72:_`). A sign-off row of several blank or named
+  fields (`Signature: ____ Date: ____`, `Signed by: Dr A  Date:`) is a bare label. A bare signature or date row after a closing
   heading (`Review of systems: negative for:` then `Signed by: ____`) does not stop that heading
   closing the notes. A sentence break inside brackets does not end a heading's or a pointer's
-  sentence (`… all of the above were denied (per intake form. Reviewed today):`). `Dictated by: Dr A,
-  reviewed by:` (another colon, unless *Dictated by* is one of the form's questions) and `Dictated
-  but not read:` (*not*) are headings. A closing line with words the vocabulary does not know
+  sentence (`… all of the above were denied (per intake form. Reviewed today):`), and markup around a
+  sentence's period does not hide where it ends (`*Negative for the following.* Reviewed today.`).
+  `Dictated by: Dr A, diagnosis:` (another colon that is not a sign-off field, unless *Dictated by*
+  is one of the form's questions) and `Dictated but not read:` (*not*) are headings. A closing line with words the vocabulary does not know
   (`Ruled out:`) is read as bare: write those as answers.
 - **A sentence that ends by pointing forward works the same way, whatever its words.** A sentence
   that **ends** on *following*, *below*, *as follows* or *the following* and one more word (`…
@@ -209,8 +212,8 @@ lists every charge; choose a charge's service name to see how it was calculated.
   pilot's drafts.) Edited on a page opened before this release, the answer keeps its candidate and
   the lines that govern it beside your text; cleared there, it stays held. An answer you typed on a
   governed line before this release keeps your text and is shown with those lines: check it against
-  them. A suggestion such a draft stored under a note that now withholds suggestions, typed over and
-  cleared, still needs "Leave blank — reviewed". An answer such a draft
+  them. An answer the note withholds suggestions for (from either release), typed over and cleared,
+  still needs "Leave blank — reviewed", as the page says. An answer such a draft
   could only store with the whole note as its source, cleared, needs "Leave blank — reviewed"
   whenever anything in the note may govern it or withholds suggestions (for example *if* in a plan).
 - **An answer written under a governing line needs a decision.** If you type it and then clear it,

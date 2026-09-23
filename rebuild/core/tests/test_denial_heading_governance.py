@@ -1488,6 +1488,100 @@ class WhatTheTwelfthPassFound(ExpectationsMixin, TestCase):
         self.assertLess(time.perf_counter() - started, 20)
 
 
+class WhatTheThirteenthPassFound(ExpectationsMixin, TestCase):
+    """Refutation of the finished diff, thirteenth pass (over 573a82e8)."""
+    TAB = ['PATIENT NAME', 'PROCEDURE', 'COMPLICATIONS']
+    HEAD = 'PATIENT NAME: SYNTHETIC TAB PATIENT\nPROCEDURE: Colonoscopy.\n'
+
+    def not_ready(self, answer):
+        self.assertNotEqual(answer['status'], 'supported', answer)
+        self.assertNotIn('suggestion', answer)
+
+    def test_a_number_then_closing_markup_is_a_heading_not_a_clock(self):
+        for heading in ('History: _The patient has not had the following since 2020:_', '_Mother, age 72:_', '__Father, deceased 2019:__'):
+            with self.subTest(heading=heading):
+                self.assertTrue(generation.ends_in_colon(heading))
+                label = heading.split(':')[0] if heading.startswith('History') else None
+                labels = ['History', 'Symptoms'] if label else ['Diabetes']
+                target = 'Symptoms: chest pain' if label else 'Diabetes: yes'
+                answer = fixture_answers(labels, heading + '\n' + target)[labels[-1]]
+                self.not_ready(answer)
+        # CONTROL: a blank clock, spaced or not, is still not a heading.
+        for clock in ('Time out: __:__', 'Time out: __ : __'):
+            self.assertFalse(generation.ends_in_colon(clock), clock)
+
+    def test_markup_after_a_period_still_ends_the_sentence(self):
+        for frame in ('*Negative for the following.* Reviewed with the patient today.', '_Negative for the following._ Reviewed today.',
+                      '<i>Negative for the following.</i> Reviewed today.', 'Negative for the following.&nbsp;Reviewed today.',
+                      'Negative for the following. **Reviewed** with the patient.'):
+            with self.subTest(frame=frame):
+                answer = provider_answers(['Review of systems', 'Symptoms'], 'Review of systems: ' + frame + '\nSymptoms: chest pain',
+                                          {'Symptoms': ['Symptoms: chest pain']})['Symptoms']
+                self.assertNotEqual(answer['status'], 'supported', answer)
+        for glue in ('._ Correction:', '.</b> Correction:', '.** Correction:'):
+            with self.subTest(glue=glue):
+                notes = 'Symptoms: chest pain\nPlan: review in clinic' + glue + ' no chest pain was reported.'
+                answer = provider_answers(['Symptoms', 'Plan'], notes, {'Symptoms': ['Symptoms: chest pain']})['Symptoms']
+                self.assertNotEqual(answer['status'], 'supported', answer)
+
+    def test_every_hidden_governing_line_is_counted_beside_the_other_places(self):
+        notes = 'Mother:\nCardiac:\nGI:\nSkin:\nDiabetes: yes\nDiabetes: yes'
+        answer = provider_answers(['Diabetes'], notes, {'Diabetes': ['Diabetes: yes']})['Diabetes']
+        context = answer['held_candidate']['context']
+        shown = [entry for entry in context if 'quote' in entry]
+        more = sum(entry.get('more', 0) for entry in context)
+        self.assertEqual(len(shown) + more, 4, context)
+
+    def test_a_trailing_footnote_mark_or_markdown_break_still_closes_a_heading(self):
+        for tail in ('\u00b9', '\\', '~~'):
+            with self.subTest(tail=repr(tail)):
+                self.not_ready(fixture_answers(['Family history', 'Diabetes'], 'Family history:' + tail + '\nDiabetes: yes')['Diabetes'])
+        # CONTROL: plus and equals are values (`SOB: +`, `Pupils: =`).
+        for value in ('+', '='):
+            self.assertFalse(generation.ends_in_colon('SOB: ' + value), value)
+
+    def test_a_blank_sign_off_row_of_several_fields_is_bare(self):
+        for row in ('Signature: ____________ Date: ____________', 'Signed: __________ Date: __________', 'Signed by: Dr A Synthetic  Date:',
+                    'Surgeon: ________ Signature: ________', 'Clinician signature: ____ Date: ____ Time: __:__'):
+            with self.subTest(row=row):
+                # A row ending in a clock is not a heading at all; any other is a bare one.
+                self.assertTrue(generation.bare_label(row, None) or not generation.ends_in_colon(row), row)
+                notes = 'Indication: right knee pain\nFindings: small joint effusion\nPlan: MRI right knee\n' + row
+                answer = provider_answers(['Indication', 'Findings', 'Plan'], notes, {'Findings': ['Findings: small joint effusion']})['Findings']
+                self.assertEqual(answer.get('suggestion'), 'small joint effusion', answer)
+        # CONTROL: a field that is not a sign-off field keeps the inner colon a heading.
+        self.assertFalse(generation.bare_label('Signed by: Dr A  Diagnosis: pending', None))
+
+    def test_a_cleared_answer_the_note_withholds_needs_a_decision_whichever_release_made_it(self):
+        notes = 'Fictional software test only.\nSymptoms: chest pain\n\u25cf Correction scale insulin given.'
+        fields = form('Symptoms')
+        answer = fixture_answers(['Symptoms'], notes)['Symptoms']
+        self.assertIn('held_candidate', answer)
+        stored = {'q0': {**answer, 'status': 'edited', 'text': ''}}
+        self.assertIn('Symptoms', generation.governed_decisions(notes, fields, stored))
+
+    def test_pointer_words_inside_tags_or_references_are_not_prose_and_cost_stays_linear(self):
+        import time
+        fields = [{'key': f'k{i}', 'label': f'Question {i}', 'kind': 'text', 'locator': {'cell': i}} for i in range(100)]
+        for notes in ('\u200b' + '<below>' * 7142, '\u200b' + '&below;' * 7142, '\u200b' + '<following>' * 4545):
+            with self.subTest(notes=notes[:12]):
+                started = time.perf_counter()
+                generation.governance_for(notes[:50000], fields)
+                self.assertLess(time.perf_counter() - started, 3)
+
+    def test_questions_quoting_their_own_value_above_many_repeats_stay_linear(self):
+        import time
+        labels = [f'Question {i}' for i in range(100)]
+        fields = form(*labels)
+        notes = ''.join(f'Question {i}: x\n' for i in range(100)) + 'x\n' * 24000
+        started = time.perf_counter()
+        answers = provider_answers(labels, notes, {label: ['x'] for label in labels})
+        governance = generation.governance_for(notes, fields)
+        for field in fields:
+            generation.as_currently_governed(governance, notes, {**field, **answers[field['label']], 'status': 'supported', 'text': 'x'})
+        self.assertLess(time.perf_counter() - started, 20)
+
+
 class TheEleventhPassCostsStayLinear(ExpectationsMixin, TestCase):
     """Performance lens, eleventh pass: many governors on one line times many occurrences, and many spellings of one
     value, each held the row lock for a minute or more."""
@@ -1903,7 +1997,7 @@ class TheDecisionIsEnforcedThroughFinalizationAndExport(DocumentWorkflow):
         section = self.section(encounter, 'Symptoms')
         self.assertIn('data-governing-line', section)
         self.assertIn(HEADING, section)
-        self.assertIn('Your answer was typed before this release', section)
+        self.assertIn('Lines in the notes may change what this answer means', section)
 
     def test_a_stale_page_cannot_make_a_decision_with_an_invisible_character(self):
         encounter = self.generated()
