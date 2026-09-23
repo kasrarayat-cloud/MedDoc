@@ -17,7 +17,9 @@ class AccessMiddleware:
             if admin_surface and not request.user.is_staff: return HttpResponseNotFound()
             if request.user.is_staff and path not in ('/mfa/','/logout/') and not request.user.is_verified(): return redirect('mfa_setup')
         response=self.get_response(request)
-        response['Content-Security-Policy']="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com; object-src 'none'"
+        # media-src blob: lets the doctor play back a browser recording before sending it; without it the
+        # default-src fallback blocked the preview the page asks them to listen to (measured in Chromium).
+        response['Content-Security-Policy']="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com; object-src 'none'"
         response['X-Frame-Options']='DENY'
         response['Permissions-Policy']='microphone=(self), camera=(), geolocation=()'
         if not path.startswith('/static/'): response['Cache-Control']='no-store, private'

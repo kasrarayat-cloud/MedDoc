@@ -499,8 +499,16 @@ def pdf_inspect(path):
 
 
 def check_pdf_capacity(field, answer):
-    if any(ord(character) < 32 and character != "\n" or ord(character) > 126 for character in answer):
-        fail("PDF answers currently require printable ASCII text; use DOCX for Unicode.", "unsupported_characters")
+    unsupported = next(((index, character) for index, character in enumerate(answer)
+                        if ord(character) < 32 and character != "\n" or ord(character) > 126), None)
+    if unsupported:
+        index, character = unsupported
+        # Name the character: a no-break space or a stray carriage return looks like plain text.
+        shown = f"\u201c{character}\u201d, " if character.isprintable() and not character.isspace() else ""
+        fail(f"The answer for {field['label']} has a character a PDF form cannot hold ({shown}U+{ord(character):04X} at "
+             f"character {index + 1}): use plain ASCII letters, digits and punctuation (no curly quotes, long dashes, "
+             f"symbols, accented letters or invisible characters such as no-break spaces), or use DOCX for Unicode. "
+             f"No export was created.", "unsupported_characters")
     if field["max_length"] and len(answer) > field["max_length"]:
         fail(f"The answer for {field['label']} exceeds the PDF field's character limit. No export was created.", "answer_overflow")
     for capacity in field["capacity"]:
@@ -655,8 +663,11 @@ def process(workspace, request):
         fill_docx(path, workspace / "output.docx", document, paragraphs, cells, fields, answers)
     else:
         values = {field["key"]: answers.get(field["key"], "") for field in fields}
+        # Refusals name the question as the doctor sees it: the stored mapping's label, which a rename
+        # changes, not the PDF's own tooltip or internal field name. The structure was proved equal above.
+        labels = {entry["key"]: entry.get("label") for entry in request["mapping"]}
         for field in fields:
-            check_pdf_capacity(field, values[field["key"]])
+            check_pdf_capacity({**field, "label": labels.get(field["key"]) or field["label"]}, values[field["key"]])
         writer = PdfWriter()
         writer.append(reader)
         for page in writer.pages:

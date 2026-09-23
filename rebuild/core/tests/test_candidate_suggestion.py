@@ -725,6 +725,106 @@ class WhatTheSecondRefutationPassFound(TestCase):
                          'no chest pain')
 
 
+
+class ADenialThatGovernsOtherLinesSuppressesTheOffer(TestCase):
+    """⚠️ THE SAME ANCHOR, INSIDE ONE LINE. Found by the pilot's third refutation pass.
+
+    `UNSCOPED_NEGATIVE_HEADING` sees a denial word only AHEAD of a line's first colon, so a label in
+    front of the denial (`ROS: negative for the following:`) or no colon at all (`Patient denies the
+    following`) left it blind, and `chest pain` was offered for one-click acceptance under a note
+    that denies it — on both evidence contracts.
+    """
+    GOVERNING = ('ROS: negative for the following:', 'Review of systems: patient denies:',
+                 'Patient denies the following', 'The patient denied each of the symptoms below.',
+                 'Negative for the following',
+                 # Round 4: a plural the old word boundary could not see, and colons nobody can tell apart.
+                 'Pertinent negatives:', 'Pertinent negatives: fever, chest pain',
+                 'ROS: negative for\uff1a', 'ROS: negative for:\u200b')
+
+    def test_each_governing_denial_suppresses_the_offer_on_both_contracts(self):
+        for heading in self.GOVERNING:
+            with self.subTest(heading=heading):
+                self.assertTrue(negative_heading(heading + '\nSymptoms: chest pain'))
+                legacy = judge(heading + '\nSymptoms: chest pain', ['chest pain'], label='Symptoms')
+                self.assertEqual(legacy['status'], 'conflict')
+                self.assertIsNone(legacy.get('suggestion'))
+                tab = judge_tab(heading + '\nSymptoms: chest pain.', ['Symptoms: chest pain.'], label='Symptoms')
+                self.assertEqual(tab['status'], 'conflict')
+                self.assertIsNone(tab.get('suggestion'))
+
+    def test_a_denial_that_governs_no_other_line_still_allows_the_offer(self):
+        """POSITIVE CONTROL: without it every assertion above could pass because nothing is offered.
+        A denial inside a labelled answer, or in prose that neither ends in a colon nor points
+        anywhere, is not a heading; a pointer with no denial is the case this feature exists for."""
+        notes = 'Allergies: no known drug allergies\nSee the findings listed in the report.\nSymptoms: chest pain'
+        self.assertFalse(negative_heading(notes))
+        self.assertEqual(judge(notes, ['chest pain'], label='Symptoms').get('suggestion'), 'chest pain')
+        tab = judge_tab(notes + '.', ['Symptoms: chest pain.'], label='Symptoms')
+        self.assertEqual(tab['status'], 'conflict')
+        self.assertEqual(tab.get('suggestion'), 'chest pain.')
+        self.assertFalse(negative_heading('The patient did not tolerate oral preparation.\nFindings: a 5 mm polyp'))
+
+    def test_the_status_vocabulary_is_unchanged_and_suppression_only_widens_it(self):
+        self.assertEqual(generation.UNSCOPED_NEGATIVE_HEADING.pattern,
+                         r'^[^:]*\b(?:denied|denies|absent|negative|no|not|without|never)\b[^:]*:')
+        self.assertEqual(generation.SUPPRESSING_DENIAL_WORDS.split('|')[:8], generation.DENIAL_WORDS.split('|'))
+        self.assertEqual(generation.DENIAL.pattern, r'\b(?:' + generation.SUPPRESSING_DENIAL_WORDS + r')\b')
+
+    def test_a_pointer_beside_a_denial_withholds_offers_even_in_an_ordinary_sentence(self):
+        """The documented, deliberate cost: over-suppressing costs a retyped answer."""
+        notes = 'Extent: the scope reached the cecum\nDischarge: no driving for the following 24 hours'
+        self.assertTrue(negative_heading(notes))
+        self.assertIsNone(judge(notes, ['the scope reached the cecum'], label='Extent').get('suggestion'))
+
+    def test_a_denial_beside_an_ordinary_pointer_word_is_still_that_questions_answer(self):
+        """⚠️ A GUARD, NOT A FEATURE. Rounds 4-6 tried to decide a legacy STATUS from denial and pointer
+        words; every version blanked realistic notes (`No reflux below the knee.`, `…mid-thigh or
+        below.`, a WM location `not visualized below` emptied all 90 answers) and was withdrawn. These
+        must stay supported: the gate may withhold an offer, it never decides an answer."""
+        for value in ('No reflux below the knee.', 'No bleeding following polypectomy.',
+                      'No driving for the following 24 hours.', 'Soft, no tenderness above the umbilicus.',
+                      'Benign nevi; these are not concerning.', 'Good, without residual stool in the segments listed here.',
+                      'No DVT in the veins listed above.', 'No change from the study above.',
+                      'Reflux at the SFJ, 1200 ms; no reflux at mid-thigh or below.', 'Negative except as noted below.',
+                      'Normal above the knees, absent below.', 'Lateral calf, not visualized below',
+                      'No immediate complications following.'):
+            with self.subTest(value=value):
+                fields = [{'key': 'f', 'label': 'Findings', 'kind': 'text', 'locator': {'cell': 0}},
+                          {'key': 'i', 'label': 'Impression', 'kind': 'text', 'locator': {'cell': 1}}]
+                chosen = Selections(fields=[Selection(key='f', quotes=[value], conflict=False),
+                                            Selection(key='i', quotes=['Normal venous study.'], conflict=False)])
+                answers = validate_selections(f'Findings: {value}\nImpression: Normal venous study.', fields, chosen,
+                                              evidence_contract='legacy')
+                self.assertEqual((answers['f']['status'], answers['i']['status']), ('supported', 'supported'))
+                self.assertEqual(answers['f']['text'], value)
+
+    def test_a_heading_that_visibly_ends_in_a_colon_counts_on_both_contracts(self):
+        """Round 5: the tab contract read only an ASCII colon, and a bidi mark or soft hyphen after the
+        colon hid it from the gate. Format characters and default-ignorable marks are invisible."""
+        for tail in ('\uff1a', ':\u200b', ':\u200e', ':\u200f', ':\u00ad', ':\u2063', ':\ufeff', ':\u034f', ':\ufe0f'):
+            with self.subTest(tail=repr(tail)):
+                self.assertTrue(generation.ends_in_colon('pertinent negatives' + tail))
+                self.assertTrue(negative_heading(f'Review of systems: pertinent negatives{tail}\nSymptoms: chest pain'))
+                fields = [{'key': 'ros', 'label': 'Review of systems', 'kind': 'text', 'locator': {'cell': 0, 'tab_form': {'version': 1}}},
+                          {'key': 'k', 'label': 'Symptoms', 'kind': 'text', 'locator': {'cell': 1, 'tab_form': {'version': 1}}}]
+                tab, *_ = generation.generate(f'Review of systems: pertinent negatives{tail}\nSymptoms: chest pain.', fields,
+                                              {'mode': 'fixture', 'prompt_version': generation.CURRENT_PROMPT_VERSION})
+                self.assertNotEqual(tab['k']['status'], 'supported')
+        self.assertFalse(generation.ends_in_colon('negative for the following'))
+
+    def test_an_invisible_character_inside_a_word_can_neither_join_nor_split_a_denial(self):
+        """Round 5: deleting U+200B joined `no` and `ne` into `none`. Round 6: keeping it split `de`+`nied`,
+        and a soft hyphen from copied hyphenated text does the same. Both readings are searched."""
+        self.assertTrue(negative_heading('Review of systems: no\u200bne of the following:\nSymptoms: chest pain'))
+        for heading in ('The following findings are de\u200bnied:', 'The following findings are de\u00adnied:',
+                        'Patient de\u200bnies the following', 'Pertinent nega\u200btives: fever'):
+            with self.subTest(heading=repr(heading)):
+                notes = f'Indication: screening colonoscopy\n{heading}\nSymptoms: chest pain'
+                self.assertTrue(negative_heading(notes))
+                self.assertIsNone(judge(notes, ['chest pain'], label='Symptoms').get('suggestion'))
+
+
+
 class AnAcceptanceIsAttributedOnThePageAndDefendedFromWithdrawal(
         AnUnacceptedSuggestionCannotReachAnExport):
     """Two more from the second pass, both about who owns a clinical decision."""

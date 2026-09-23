@@ -1,7 +1,9 @@
 """Extractive clinical mapping: providers select source quotations, never compose facts."""
+import functools
 import json
 import hashlib
 import re
+import unicodedata
 from decimal import Decimal, InvalidOperation, ROUND_DOWN, ROUND_HALF_EVEN
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -188,7 +190,15 @@ SCOPE_REFRAMERS = r'family history|if|would|could|might|hypothetical|imagine|sup
 INHERITED_SCOPE = re.compile(r'\b(?:' + SCOPE_POINTERS + '|' + SCOPE_REFRAMERS + r')\b', re.I)
 REFRAMED_SCOPE = re.compile(r'\b(?:' + SCOPE_REFRAMERS + r')\b', re.I)
 QUOTED_SOURCE = re.compile(r'["“”]|(?<!\w)[\'‘]')
-UNSCOPED_NEGATIVE_HEADING = re.compile(r'^[^:]*\b(?:denied|denies|absent|negative|no|not|without|never)\b[^:]*:',re.I)
+DENIAL_WORDS = r'denied|denies|absent|negative|no|not|without|never'
+UNSCOPED_NEGATIVE_HEADING = re.compile(r'^[^:]*\b(?:' + DENIAL_WORDS + r')\b[^:]*:',re.I)
+#: ⚠️ A SUPERSET OF `DENIAL_WORDS`, READ ONLY TO WITHHOLD AN OFFER OR TO REFUSE A LINE AS AN ANSWER —
+#: never to decide a status in `source_units`. `\bnegative\b` cannot match `Pertinent negatives:`,
+#: the commonest denial heading there is. Widening only ever suppresses more.
+SUPPRESSING_DENIAL_WORDS = DENIAL_WORDS + r'|negatives|deny'
+DENIAL = re.compile(r'\b(?:' + SUPPRESSING_DENIAL_WORDS + r')\b', re.I)
+SCOPE_POINTER = re.compile(r'\b(?:' + SCOPE_POINTERS + r')\b', re.I)
+COLONS = frozenset(':\uff1a\ufe55\ufe13')
 FINITE_STATEMENT = re.compile(r'\b(?:is|are|was|were|has|have|had|denies|reports|reported|showed|revealed|advanced|seen|collected|recommend|received|underwent)\b',re.I)
 
 ABBREVIATION = re.compile(r'(?:\b(?:dr|mr|mrs|ms|prof|st|vs|etc|approx)|\b[A-Z]|\be\.g|\bi\.e)\.$', re.I)
@@ -245,7 +255,7 @@ def source_units(notes, fields, *, context_labels=()):
             offset+=len(line); continue
         start=offset+line.index(stripped)
         parsed=labelled_value(stripped,labels)
-        if stripped.endswith(':') or INHERITED_SCOPE.search(stripped): inherited=True
+        if ends_in_colon(stripped) or INHERITED_SCOPE.search(stripped): inherited=True
         if not re.search(r'[.!?]["\')\]]?$',stripped) and not (parsed and parsed[1]):
             # A lone unpunctuated statement is still complete under the old
             # contract; multiple fragments can inherit an omitted heading.
@@ -337,6 +347,7 @@ def suggestible(notes, texts, explicit):
     return _plain_pointer_only(notes)
 
 
+@functools.lru_cache(maxsize=8)
 def negative_heading(notes):
     """⚠️ APPLIED PER LINE, BECAUSE THE PATTERN IS ANCHORED AND THE NOTE IS NOT ONE LINE.
 
@@ -356,8 +367,73 @@ def negative_heading(notes):
     It failed in the other direction too: `[^:]*` spans newlines, so any note with `no`, `not` or
     `never` anywhere before its first colon was treated as a negative heading. Per line, an
     unpunctuated clinical sentence with no colon simply does not match.
+
+    ⚠️ AND A DENIAL CAN GOVERN OTHER LINES WITHOUT STANDING BEFORE THE FIRST COLON. The anchored
+    pattern only sees a denial word ahead of a line's first colon, so `ROS: negative for the
+    following:` (label first), `Patient denies the following` and `The patient denied each of the
+    symptoms below.` (no colon at all) each offered the denied `chest pain` for one-click
+    acceptance. A line holding a denial word that ENDS in a colon, or that POINTS at other lines,
+    is a heading too. Suppression only; `source_units` already sends such notes back as conflicts.
+
+    A property of the whole note, asked once per FIELD: cached, so a 100-field form pays for it once.
     """
-    return any(UNSCOPED_NEGATIVE_HEADING.search(line) for line in notes.splitlines())
+    return any(UNSCOPED_NEGATIVE_HEADING.search(line) or denial_before_colon(line) or governs_other_lines(line)
+               for line in notes.splitlines())
+
+
+def invisible(character):
+    """Characters nobody can see: every format character (zero-width, bidi marks, soft hyphen) and the
+    default-ignorable marks (combining grapheme joiner, variation selectors) that copied text carries."""
+    return unicodedata.category(character) == 'Cf' or character == '\u034f' or '\ufe00' <= character <= '\ufe0f'
+
+
+def ends_in_colon(text):
+    """Whether text visibly ends in a colon: fullwidth and small colons count, and so does a colon
+    followed only by whitespace or invisible characters."""
+    end = len(text)
+    while end and (text[end - 1].isspace() or invisible(text[end - 1])):
+        end -= 1
+    return bool(end) and text[end - 1] in COLONS
+
+
+def readings(text):
+    """The text as written and, if different, with invisible characters removed.
+
+    ⚠️ BOTH, BECAUSE EITHER ALONE HIDES A DENIAL. Deleting them joins `no` + `ne` into `none`; keeping
+    them splits `de`+`nied`. A check that only withholds may take the union and lose nothing.
+    """
+    yield text
+    if text.isascii():   # no ASCII character is a format character or a default-ignorable mark
+        return
+    visible = ''.join(character for character in text if not invisible(character))
+    if visible != text:
+        yield visible
+
+
+def denial_before_colon(line):
+    """A denial word ahead of the line's first colon, of any width. Split once: linear, no backtracking."""
+    for reading in readings(line):
+        for index, character in enumerate(reading):
+            if character in COLONS:
+                if DENIAL.search(reading, 0, index):
+                    return True
+                break
+    return False
+
+
+def governs_other_lines(text):
+    """A denial that ends in a colon or points at other lines: `negative for the following:`.
+
+    Words are searched in every reading of the text (see `readings`), so an invisible character can
+    neither join two words into a non-denial nor split a denial word apart.
+
+    ⚠️ DELIBERATELY OVER-INCLUSIVE, AND ONLY EVER READ TO WITHHOLD AN OFFER.
+    `Discharge: no driving for the following 24 hours` trips it and withholds every offer in that note.
+    That costs a retyped answer; missing a real heading costs a denied finding accepted with one click.
+    """
+    return any(DENIAL.search(reading) and (ends_in_colon(reading) or SCOPE_POINTER.search(reading))
+               for reading in readings(text))
+
 
 
 def _plain_pointer_only(notes):

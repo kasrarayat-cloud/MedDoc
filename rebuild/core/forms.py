@@ -17,7 +17,11 @@ class OTPForm(forms.Form):
 class ScopedForm(forms.Form):
     def __init__(self,*args,user,**kwargs):
         super().__init__(*args,**kwargs); self.user=user
-        if 'department' in self.fields: self.fields['department'].queryset=departments(user)
+        if 'department' in self.fields:
+            self.fields['department'].queryset=departments(user)
+            # A doctor with one department is not asked to find it in a list of one.
+            only=list(self.fields['department'].queryset[:2])
+            if len(only)==1 and not self.is_bound: self.initial.setdefault('department',only[0].pk)
 class UploadForm(ScopedForm):
     name=forms.CharField(max_length=140)
     department=forms.ModelChoiceField(queryset=Department.objects.none())
@@ -69,7 +73,9 @@ class CheckoutForm(forms.Form):
     amount=forms.DecimalField(min_value=5,max_value=500,decimal_places=2,label='One-time top-up (USD)')
     consent=forms.BooleanField(label='I authorize this one-time payment. There are no automatic top-ups.')
 class VoiceForm(forms.Form):
-    audio=forms.FileField(label='Recorded audio (.wav, .webm, .mp3, .m4a)')
+    audio=forms.FileField(label='Recorded audio (.wav, .webm, .mp3, .m4a)',
+                          help_text='Up to 15 MB: about 1½ minutes of CD-quality WAV. Use MP3, M4A or the browser recorder for longer recordings.',
+                          widget=forms.ClearableFileInput(attrs={'accept':'.wav,.webm,.mp3,.m4a,audio/*'}))
     consent=forms.BooleanField(label='Send this synthetic recording for transcription; charge provider usage × 1.5, never more than the limit shown.')
 class ReconciliationForm(forms.Form):
     evidence_kind=forms.ChoiceField(choices=[('', 'Select the authenticated evidence type'),('provider_report', 'Provider cost report or export (not an invoice)'),('invoice', 'Provider invoice')],label='Evidence type')

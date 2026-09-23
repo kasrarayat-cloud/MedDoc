@@ -7,6 +7,8 @@ from pathlib import Path
 import tempfile
 from zipfile import ZipFile
 
+from html.parser import HTMLParser
+
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -17,6 +19,36 @@ from core.models import AuditEvent, Department, Encounter, Job, LedgerEntry, Mem
 from core.security import private_path
 from documents.test_tab_form import ORIGINAL, SOURCE_SHA256
 from .test_workflow import TEST_SETTINGS
+
+
+class RenderedForm(HTMLParser):
+    """What a browser would submit from one rendered form: enabled fields, ticked boxes only."""
+    def __init__(self, action):
+        super().__init__(); self.action = action; self.inside = False; self.data = {}; self.textarea = None; self.select = None
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == "form": self.inside = attrs.get("action") == self.action
+        if not self.inside or "disabled" in attrs or not attrs.get("name"): return
+        if tag == "input":
+            if attrs.get("type") == "checkbox":
+                if "checked" in attrs: self.data[attrs["name"]] = "on"
+            else: self.data[attrs["name"]] = attrs.get("value", "")
+        elif tag == "textarea": self.textarea = attrs["name"]; self.data[self.textarea] = ""
+        elif tag == "select": self.select = attrs["name"]
+        elif tag == "option" and self.select and "selected" in attrs: self.data[self.select] = attrs.get("value", "")
+
+    def handle_data(self, data):
+        if self.textarea: self.data[self.textarea] += data
+
+    def handle_endtag(self, tag):
+        if tag == "form": self.inside = False
+        if tag == "textarea": self.textarea = None
+        if tag == "select": self.select = None
+
+
+def rendered_post(html, action):
+    form = RenderedForm(action); form.feed(html); return form.data
 
 
 @override_settings(**TEST_SETTINGS)
@@ -159,6 +191,152 @@ class TabFormWorkflowTests(TestCase):
         self.assertEqual(encounter.status, "finalized")
         self.assertEqual(encounter.finalized_by_id, self.other.pk)
         self.assert_no_billable_work()
+
+    def blank_key(self):
+        return next(f["key"] for f in self.version.fields if f["key"] != self.signature_key)
+
+    def save_with_blank(self, encounter, signature):
+        """Every row reviewed; one ordinary row decided "Leave blank — reviewed"."""
+        values = self.save(encounter, signature)
+        key = self.blank_key()
+        payload = {"revision": encounter.revision, "answer_" + key: "", "blank_" + key: "on", "blank_shown_" + key: "1"}
+        for other, value in values.items():
+            payload["reviewed_" + other] = "on"
+            if other != key: payload["answer_" + other] = value
+        self.assertEqual(self.client.post(f"/encounters/{encounter.pk}/save/", payload).status_code, 302)
+        encounter.refresh_from_db()
+        self.assertEqual(encounter.answers[key]["status"], "left_blank")
+
+    def test_second_clinician_saving_the_rendered_page_inherits_no_review(self):
+        """A plain Save of the page as another clinician sees it re-stamps nobody's review as theirs."""
+        encounter = self.encounter()
+        self.save_with_blank(encounter, self.other.get_full_name())
+        blank = self.blank_key()
+        action = f"/encounters/{encounter.pk}/save/"
+        # Control: the clinician who reviewed sees their own ticks, so the parser reads real boxes.
+        own_page = self.client.get(f"/encounters/{encounter.pk}/")
+        own = rendered_post(own_page.content.decode(), action)
+        self.assertEqual({k for k in own if k.startswith("reviewed_")},
+                         {"reviewed_" + f["key"] for f in encounter.template_version.fields})
+        self.assertNotContains(own_page, "data-reviewed-by-other")
+        self.client.force_login(self.other)
+        page = self.client.get(f"/encounters/{encounter.pk}/")
+        payload = rendered_post(page.content.decode(), action)
+        self.assertFalse([k for k in payload if k.startswith("reviewed_")])
+        self.assertEqual(payload.get("blank_" + blank), "on")          # the colleague's decision is shown, not re-made
+        self.assertContains(page, "data-reviewed-by-other")
+        self.assertContains(page, "data-signature-rule", count=1)
+        self.assertContains(page, "exactly as <strong>Synthetic Beta Clinician</strong>")
+        self.assertContains(page, "finalizing as <strong>Synthetic Beta Clinician</strong>")
+        self.assertEqual(self.client.post(action, payload).status_code, 302)
+        encounter.refresh_from_db()
+        self.assertFalse(any(answer.get("reviewed") for answer in encounter.answers.values()))
+        self.assertEqual((encounter.answers[blank]["status"], encounter.answers[blank]["blank_decision"]["by"]),
+                         ("left_blank", str(self.user.pk)))
+        withdrawn = AuditEvent.objects.filter(action="encounter.answers_saved", target=str(encounter.pk)).latest("created_at")
+        self.assertEqual(len(withdrawn.details["withdrawn_reviews"]), len(encounter.template_version.fields))
+        self.assertEqual(encounter.answers[self.signature_key]["text"], self.other.get_full_name())
+        self.finish(encounter)
+        self.assertEqual(encounter.status, "review")
+        self.assertFalse(encounter.export_path)
+        self.assertFalse(AuditEvent.objects.filter(action="encounter.finalize", target=str(encounter.pk)).exists())
+        # The named clinician's own explicit review is what allows finalization.
+        self.save_with_blank(encounter, self.other.get_full_name())
+        self.finish(encounter)
+        self.assertEqual((encounter.status, encounter.finalized_by_id), ("finalized", self.other.pk))
+        self.assert_no_billable_work()
+
+    def test_an_employee_save_then_a_colleagues_plain_save_cannot_pass_a_blank_row_to_finalization(self):
+        encounter = self.encounter()
+        self.save_with_blank(encounter, "")
+        blank = self.blank_key()
+        employee = User.objects.create_user(username="tab-employee", email="tab-employee@synthetic.invalid", verified_at=timezone.now())
+        Membership.objects.create(user=employee, department=self.department, role="employee")
+        action = f"/encounters/{encounter.pk}/save/"
+        self.client.force_login(employee)
+        self.assertEqual(self.client.post(action, rendered_post(self.client.get(f"/encounters/{encounter.pk}/").content.decode(), action)).status_code, 302)
+        encounter.refresh_from_db()
+        self.assertEqual((encounter.answers[blank]["status"], encounter.answers[blank]["reviewed"]), ("left_blank", False))
+        self.client.force_login(self.other)
+        page = self.client.get(f"/encounters/{encounter.pk}/")
+        self.assertContains(page, "left blank — review needed")
+        payload = rendered_post(page.content.decode(), action)
+        for field in encounter.template_version.fields:          # the colleague ticks every row except the blank one
+            if field["key"] != blank: payload["reviewed_" + field["key"]] = "on"
+        self.assertEqual(self.client.post(action, payload).status_code, 302)
+        encounter.refresh_from_db()
+        self.assertFalse(encounter.answers[blank]["reviewed"])
+        self.finish(encounter)
+        self.assertEqual(encounter.status, "review")
+        payload["reviewed_" + blank] = "on"; payload["revision"] = encounter.revision
+        self.assertEqual(self.client.post(action, payload).status_code, 302)
+        encounter.refresh_from_db()
+        self.assertTrue(encounter.answers[blank]["reviewed"])
+        self.finish(encounter)
+        self.assertEqual((encounter.status, encounter.finalized_by_id), ("finalized", self.other.pk))
+
+    def last_withdrawn(self, encounter):
+        return AuditEvent.objects.filter(action="encounter.answers_saved", target=str(encounter.pk)).latest("created_at").details["withdrawn_reviews"]
+
+    def test_the_withdrawal_audit_names_exactly_the_reviews_removed(self):
+        encounter = self.encounter()
+        keys = [f["key"] for f in self.version.fields]
+        action = f"/encounters/{encounter.pk}/save/"
+        payload = {"revision": encounter.revision, "reviewed_" + keys[0]: "on", "reviewed_" + keys[1]: "on"}
+        payload.update({"answer_" + k: "Synthetic documented answer" for k in keys if k != self.signature_key})
+        self.assertEqual(self.client.post(action, payload).status_code, 302)
+        encounter.refresh_from_db()
+        self.assertEqual(self.last_withdrawn(encounter), [])                     # a first review withdraws nothing
+        own = rendered_post(self.client.get(f"/encounters/{encounter.pk}/").content.decode(), action)
+        self.assertEqual(self.client.post(action, own).status_code, 302)
+        encounter.refresh_from_db()
+        self.assertEqual(self.last_withdrawn(encounter), [])                     # the reviewer's own re-save neither
+        self.client.force_login(self.other)
+        theirs = rendered_post(self.client.get(f"/encounters/{encounter.pk}/").content.decode(), action)
+        theirs["reviewed_" + keys[2]] = "on"                                     # a row nobody had reviewed
+        self.assertEqual(self.client.post(action, theirs).status_code, 302)
+        encounter.refresh_from_db()
+        self.assertEqual(self.last_withdrawn(encounter), sorted(keys[:2]))
+        self.assertEqual(encounter.answers[keys[2]]["reviewed_by"], str(self.other.pk))
+
+    def test_a_new_blank_decision_is_the_clinicians_own_review_without_a_second_tick(self):
+        encounter = self.encounter()
+        values = self.save(encounter, "")
+        key = self.blank_key()
+        payload = {"revision": encounter.revision, "answer_" + key: "", "blank_" + key: "on", "blank_shown_" + key: "1"}
+        for other, value in values.items():
+            if other != key: payload.update({"answer_" + other: value, "reviewed_" + other: "on"})
+        self.assertEqual(self.client.post(f"/encounters/{encounter.pk}/save/", payload).status_code, 302)
+        encounter.refresh_from_db()
+        self.assertEqual((encounter.answers[key]["status"], encounter.answers[key]["reviewed"], encounter.answers[key]["reviewed_by"]),
+                         ("left_blank", True, str(self.user.pk)))
+        self.assertContains(self.client.get(f"/encounters/{encounter.pk}/"), "left blank — reviewed")
+        self.finish(encounter)
+        self.assertEqual(encounter.status, "finalized")
+
+    def test_finalize_refuses_each_unmet_guard_on_a_form_that_can_finalize(self):
+        encounter = self.encounter()
+        self.save(encounter, "")
+        url = f"/encounters/{encounter.pk}/finalize/"
+        def refused(data, text):
+            response = self.client.post(url, {"revision": encounter.revision, "reviewed": "on", **data}, follow=True)
+            encounter.refresh_from_db()
+            self.assertContains(response, text)
+            self.assertEqual(encounter.status, "review"); self.assertFalse(encounter.export_path)
+        refused({"reviewed": ""}, "Explicit clinical review confirmation is required.")
+        refused({"revision": encounter.revision - 1}, "Document changed; reload before finalizing.")
+        for state in ("queued", "running", "reconciliation"):
+            with self.subTest(state=state):
+                job = Job.objects.create(encounter=encounter, user=self.user, request_key="synthetic-guard-" + state, state=state)
+                refused({}, "Resolve pending jobs before finalizing.")
+                job.delete()
+        original = private_path(self.template.original_path)
+        original.write_bytes(self.original + b"tampered")
+        refused({}, "Original integrity check failed.")
+        original.write_bytes(self.original)
+        self.finish(encounter)                                           # positive control: every guard met
+        self.assertEqual(encounter.status, "finalized")
+        self.assertTrue(encounter.export_path)
 
     def test_explicit_blank_signature_can_finalize_and_remains_blank(self):
         encounter = self.encounter()

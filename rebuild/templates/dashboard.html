@@ -14,7 +14,7 @@
   {% else %}
   <div class="empty-state">
     <svg class="empty-glyph" viewBox="0 0 30 36" aria-hidden="true"><path d="M6 2h13l6 6v26H6zM19 2v7h6M11 15h9m-9 6h9m-9 6h6"/></svg>
-    <h2>Your first document starts here</h2><p>Upload a Word or PDF form, add documented notes, then review the answers with their source evidence.</p><a class="button" href="{% url 'template_upload' %}">Upload your first form</a>
+    <h2>Your first document starts here</h2><p>Upload a supported blank form, add a fictional patient, type or dictate documented notes, then review each answer with its source evidence. The upload page lists which forms are supported.</p><div class="actions"><a class="button" href="{% url 'template_upload' %}">Upload your first form</a><a href="{% url 'patients' %}">Add a patient</a></div>
   </div>
   {% endif %}
 </section>
@@ -22,8 +22,8 @@
   <section class="section" id="templates">
     <div class="section-heading"><h2>Form library</h2><a href="{% url 'template_upload' %}">Upload form <span aria-hidden="true">＋</span></a></div>
     {% for template in templates %}
-    <div class="template-row"><span class="file-kind">{{ template.format|upper }}</span><div><a href="{% url 'template_detail' template.pk %}">{{ template.name }}</a><p>Original retained · Added {{ template.created_at|date:'M j, Y' }}</p></div><a href="{% url 'encounter_new' %}?template={{ template.pk }}" aria-label="Use {{ template.name }}">Use form <span aria-hidden="true">→</span></a></div>
-    {% empty %}<div class="empty-state compact"><p>No forms yet. Your uploaded original and its mapping versions will appear here.</p></div>{% endfor %}
+    <div class="template-row"><span class="file-kind">{{ template.format|upper }}</span><div><a href="{% url 'template_detail' template.pk %}">{{ template.name }}</a><p>Original retained · Added {{ template.created_at|date:'M j, Y' }}</p></div><a href="{% url 'encounter_new' %}?template={{ template.pk }}" aria-label="Use form: {{ template.name }}">Use form <span aria-hidden="true">→</span></a></div>
+    {% empty %}<div class="empty-state compact"><p>No forms yet. <a href="{% url 'template_upload' %}">Upload a supported blank form</a>; it and its mapping versions will appear here.</p></div>{% endfor %}
   </section>
   <aside class="aside"><h2>Connected services</h2>{% include 'integrations.html' %}<p class="small muted">Service status reflects this private environment. A simulated provider does not send information to a live service.</p></aside>
 </div>
