@@ -908,6 +908,84 @@ class WhatTheSixthPassFound(ExpectationsMixin, TestCase):
         self.assertEqual([e.get('more') for e in answers['Indication']['held_candidate']['context'] if 'more' in e], [])
 
 
+class WhatTheSeventhPassFound(ExpectationsMixin, TestCase):
+    """Refutation of the finished diff, seventh pass (over 19e441f9). Each input was demonstrated by a lens."""
+
+    def held(self, answer):
+        self.assertEqual(answer['status'], 'conflict', answer)
+        self.assertEqual(answer['text'], '')
+        self.assertNotIn('suggestion', answer)
+
+    def test_a_pointer_sentence_ends_whatever_trails_it_to_the_line_end(self):
+        for line in ('Review of systems: Patient denies the following.\u2800', 'Review of systems: *Patient denies the following.*',
+                     'Review of systems: Patient denies the following.<br>', 'Review of systems: Patient denies the following. -',
+                     'Review of systems: Patient denies the following (see HPI (2019)).', 'Review of systems: Patient denies the following (a) (b).'):
+            with self.subTest(line=line):
+                self.held(fixture_answers(['Review of systems', 'Symptoms'], line + '\nSymptoms: chest pain')['Symptoms'])
+
+    def test_a_pointer_before_a_heading_on_the_same_line_still_governs(self):
+        notes = ('PATIENT NAME: SYNTHETIC TAB PATIENT.\nBefore the procedure the risks were explained, including the following. '
+                 'COMPLICATIONS: perforation, bleeding and missed lesions. Findings are as follows:\nFINDINGS: sigmoid diverticulosis.')
+        _, answers = tab_answers(['PATIENT NAME', 'COMPLICATIONS', 'FINDINGS'], notes)
+        self.held(answers['COMPLICATIONS'])
+
+    def test_an_erratum_in_markdown_underscores_still_governs(self):
+        for line in ('_Correction:_ a small perforation was identified and clipped.', '__Correction__: a small perforation was identified.'):
+            with self.subTest(line=line):
+                _, answers = tab_answers(['COMPLICATIONS'], 'COMPLICATIONS: There were no immediate complications.\n' + line)
+                self.held(answers['COMPLICATIONS'])
+
+    def test_a_closing_as_follows_is_not_bare(self):
+        answer = fixture_answers(['Indication', 'Diagnoses'], 'Indication: screening colonoscopy\nDiagnoses: breast cancer\nMother had them, as follows:')['Diagnoses']
+        self.assertNotIn('suggestion', answer)
+
+    def test_a_trailing_invisible_line_does_not_hide_the_closing_heading(self):
+        answer = fixture_answers(['Indication', 'Symptoms'], 'Indication: screening colonoscopy\nSymptoms: chest pain\nExcluded the following:\n\u200b')['Symptoms']
+        self.assertNotIn('suggestion', answer)
+
+    def test_a_form_question_named_with_correction_withholds_nothing_note_wide(self):
+        notes = ('Seen with her daughter today.\nVisual acuity: 6/12 right, 6/9 left unaided\nRefractive correction: spectacles, '
+                 'prescription two years old\nIOP: 15 mmHg both eyes\nPlan: update spectacles')
+        answers = fixture_answers(['Visual acuity', 'Refractive correction', 'IOP', 'Plan'], notes)
+        self.assertEqual(answers['IOP'].get('suggestion'), '15 mmHg both eyes', answers['IOP'])
+
+    def test_a_value_or_a_clock_time_before_the_word_is_not_a_list_marker(self):
+        for line in ('Glucose: 312 correction given', 'Potassium: 3.1 - correction started orally', 'Calcium: 2.02 (albumin correction: 2.26)',
+                     'Events: at 12:00 correction 4 units for glucose 280'):
+            label = line.split(':')[0]
+            with self.subTest(line=line):
+                self.assert_ready(fixture_answers(['Diagnosis', label], 'Diagnosis: type 2 diabetes\n' + line)['Diagnosis'], 'type 2 diabetes')
+        # CONTROL: a list number after a label is still a marker.
+        self.held(fixture_answers(['Diagnosis', 'Comments'], 'Diagnosis: type 2 diabetes\nComments: 1. Correction: type 1 diabetes')['Diagnosis'])
+
+    def test_a_question_whose_own_label_ends_on_a_pointer_does_not_govern(self):
+        notes = ('Procedure: colonoscopy with polypectomy\nPatient was informed of the following risks: bleeding, perforation, missed lesion\n'
+                 'Consent: written consent obtained')
+        answers = fixture_answers(['Procedure', 'Patient was informed of the following risks', 'Consent'], notes)
+        self.assert_ready(answers['Consent'], 'written consent obtained')
+        self.assert_ready(answers['Patient was informed of the following risks'], 'bleeding, perforation, missed lesion')
+
+    def test_one_line_is_shown_once_and_its_own_line_is_named_so(self):
+        notes = 'Impression: no reflux\n' + ' '.join(f'Correction: segment {i} is the left side.' for i in range(20))
+        held = fixture_answers(['Impression'], notes)['Impression']['held_candidate']
+        self.assertEqual(len([e for e in held['context'] if 'quote' in e]), 1)
+        self.assertNotIn('more', held['context'][-1])
+
+    def test_the_cap_holds_for_an_answers_own_heading_sentences(self):
+        notes = '\n'.join(f'Allergies: item{i} of the following:' for i in range(40))
+        held = fixture_answers(['Allergies'], notes)['Allergies']['held_candidate']
+        self.assertLessEqual(len(held['context']), 16)
+        self.assertIn('more', held['context'][-1])
+
+    def test_a_dash_only_note_is_linear(self):
+        import time
+        fields = [{'key': f'k{i}', 'label': f'Question {i}', 'kind': 'text', 'locator': {'cell': i}} for i in range(100)]
+        notes = ''.join(f'Question {i}: yes\n' for i in range(100)) + '\u2014\n' * 5000
+        started = time.perf_counter()
+        generation.generate(notes, fields, FIXTURE)
+        self.assertLess(time.perf_counter() - started, 20)
+
+
 class TheQualifiedWordFormKeepsItsLabelsSelfContained(ExpectationsMixin, TestCase):
     """On the qualified Word form every label names its own side, vein and measure, so a sentence in one value
     cannot re-scope another: only structural headings and corrections govern there. Round 6 of the pilot
@@ -1260,6 +1338,26 @@ class TheDecisionIsEnforcedThroughFinalizationAndExport(DocumentWorkflow):
         section = self.section(encounter, 'Symptoms')
         self.assertNotIn('never offered', section)
         self.assertIn('filled in by an earlier release', section)
+
+    def test_an_earlier_release_offer_this_release_withholds_note_wide_cannot_be_accepted(self):
+        self.NOTES = '\u25cf Correction: the following symptoms belong to another patient.\nSymptoms: chest pain'
+        encounter = self.generated()
+        self.stale_offer(encounter)
+        section = self.section(encounter, 'Symptoms')
+        self.assertNotIn(f'name="accept_{self.symptoms}"', section)
+        response = self.client.post(f'/encounters/{encounter.pk}/save/', {'revision': encounter.revision,
+            'answer_' + self.ros: '', 'answer_' + self.symptoms: '', 'accept_' + self.symptoms: 'on',
+            'reviewed_' + self.ros: 'on', 'reviewed_' + self.symptoms: 'on'})
+        self.assertEqual(response.status_code, 400)
+
+    def test_an_oversized_answer_is_refused_before_it_is_read(self):
+        import time
+        encounter = self.generated()
+        started = time.perf_counter()
+        response = self.client.post(f'/encounters/{encounter.pk}/save/', {'revision': encounter.revision,
+            'answer_' + self.symptoms: '\u2800' * 2000000, 'answer_' + self.ros: 'none'})
+        self.assertEqual(response.status_code, 400)
+        self.assertLess(time.perf_counter() - started, 5)
 
     def test_a_pre_repair_accepted_offer_under_a_heading_cannot_finalize(self):
         self.NOTES = 'Patient reports none of the following:\nSymptoms: chest pain'

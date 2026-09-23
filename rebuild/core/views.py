@@ -535,6 +535,8 @@ def save_answers(request,pk):
         # refused by every fillable PDF at finalize (a carriage return is not printable), exported
         # to a Word table cell as two breaks per line, and compared unequal to its own unchanged text.
         value=request.POST.get('answer_'+key,'').replace('\r\n','\n').replace('\r','\n')
+        # Refused before it is read character by character (seventh pass: a 20 MB value held the row lock ~10 s).
+        if len(value)>20000:return document_refusal(request,e,'Answer too long; nothing was truncated or saved.',400)
         # ⚠️ WHITESPACE IS NOT AN ANSWER. A space counted as an edit, so one keystroke could clear a
         # generated conflict — or erase a clinician's "Leave blank — reviewed" decision without the
         # authority check or audit that a real withdrawal carries. An answer is its text or nothing.

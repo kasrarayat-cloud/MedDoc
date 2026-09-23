@@ -126,7 +126,8 @@ lists every charge; choose a charge's service name to see how it was calculated.
   one of the form's questions, makes every answer written after it, to the end of the notes, a
   decision for you: it is never filled in and never offered for one click. What was read is shown
   beside it, with the lines that govern it (*Written under* above it, *Followed by* below it; up to
-  15, nearest and denials first, and the rest counted: read the full note then). A question left
+  15 lines, nearest and denials first, and the rest counted: read the full note then; a line that
+  is the answer's own is shown as *In the same line*). A question left
   empty mid-note (`Allergies:`) counts, because it may be a heading (`Pertinent negatives:`). A
   heading at the very end, or one that contains *above*, *these*, *those* or *listed* (`… all of
   the above denied:`, and also `Discharge medications as listed below:`), governs the lines before
@@ -143,8 +144,10 @@ lists every charge; choose a charge's service name to see how it was calculated.
   following symptom(s).`, `… the following co-morbidities.`), including after an aside of any
   length (`… the following (reviewed today).`) or before a colon and a list on the same line (`…
   as follows: polyps.`), makes every answer after it a decision, in the same paragraph and on later
-  lines. A period ends such a sentence only before a new sentence (`… the following wk. at the GP`
-  does not). This
+  lines, whatever non-word characters trail it to the end of its line (`… the following.*`, `…
+  the following.<br>`). A period ends such a sentence only before a new sentence (`… the following
+  wk. at the GP` does not). A form question's own label is not read as a pointer (`Patient was
+  informed of the following risks:` is a question, and its answer is an answer). This
   includes exception lists (`… negative except as noted below.`: type the positives below it
   yourself), references (`see the instructions below`), anatomy (`competent below.`) and times
   (`Do not drive until the following day.`). The same words inside a sentence (`No reflux below
@@ -166,7 +169,9 @@ lists every charge; choose a charge's service name to see how it was calculated.
   `Correction: 2 units per 50 mg/dL` and `Correction: Bazett` are read as corrections too, and the
   answers above them need your decision. Only the word *correction* is read (`Erratum:` and
   `Corrected:` are not), and not when *correction* is part of a form question's own label
-  (`Correction achieved: 10 degrees`). One exception: a correction that opens the whole answer to a
+  (`Correction achieved: 10 degrees`, `Refractive correction:`). After a label, a number before the
+  word is a value, not a list marker (`Glucose: 312 correction given` is not a correction), unless
+  it is a list number (`Comments: 1. Correction: …`). One exception: a correction that opens the whole answer to a
   question already answered above it (`Pain score: Correction: three out of ten`) corrects that
   question only, which already needs your decision because it has two answers — on an underlined-Tab
   form anywhere in a paragraph, on every other form only at the start of its line. ⚠️ So a
