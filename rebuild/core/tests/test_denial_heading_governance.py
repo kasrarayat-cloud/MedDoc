@@ -1088,6 +1088,37 @@ class WhatTheNinthPassFound(ExpectationsMixin, TestCase):
         notes = 'Review of systems: negative for the following:\nSymptoms: chest pain\nPlan: review\nSymptoms: chest pain'
         self.assertNotEqual(tab_answers(['Symptoms', 'Review of systems', 'Plan'], notes)[1]['Symptoms']['status'], 'supported')
 
+    def test_the_page_and_finalization_judge_every_occurrence_of_a_stored_draft(self):
+        """A draft from the installed release kept ONE occurrence; the page and finalization judge them all, by the
+        index generation reads, so they agree with generation."""
+        notes = 'Symptoms: chest pain\nReview of systems: negative for the following:\nSymptoms: chest pain'
+        for tab in (False, True):
+            with self.subTest(tab=tab):
+                fields = [{'key': f'q{i}', 'label': label, 'kind': 'text',
+                           'locator': {'cell': i, **({'tab_form': {'version': 1}} if tab else {})}}
+                          for i, label in enumerate(['Symptoms', 'Review of systems'])]
+                quote = 'Symptoms: chest pain' + ('' if not tab else '')
+                stored = {'q0': {'status': 'supported', 'text': 'chest pain', 'reviewed': False,
+                                 'evidence': [{'quote': quote, 'start': 0, 'end': len(quote)}]}}
+                governance = generation.governance_for(notes, fields)
+                row = generation.as_currently_governed(governance, notes, {**fields[0], **stored['q0']})
+                self.assertEqual((row['status'], row['text']), ('conflict', ''), row)
+                self.assertIn('Symptoms', generation.governed_decisions(notes, fields, stored))
+                # CONTROL: the same draft with no governor after it stays as it was, and finalizes.
+                plain = 'Symptoms: chest pain\nReview of systems: reviewed\nSymptoms: chest pain'
+                governance = generation.governance_for(plain, fields)
+                self.assertEqual(generation.as_currently_governed(governance, plain, {**fields[0], **stored['q0']})['status'], 'supported')
+                self.assertNotIn('Symptoms', generation.governed_decisions(plain, fields, stored))
+
+    def test_a_short_value_repeated_under_another_label_is_not_judged_for_this_question(self):
+        notes = 'Question 2: yes\nReview: negative for the following:\nQuestion 5: yes'
+        answers = fixture_answers(['Question 2', 'Review', 'Question 5'], notes)
+        self.assert_ready(answers['Question 2'], 'yes')
+        self.held(answers['Question 5'])
+        fields = form('Question 2', 'Review', 'Question 5')
+        stored = {fields[0]['key']: answers['Question 2']}
+        self.assertEqual(generation.governed_decisions(notes, fields, stored), [])
+
     def test_each_governing_window_on_a_long_line_is_shown(self):
         middle = ' '.join(f'System {i}: symptom {i}, sign {i} or finding {i}.' for i in range(12))
         line = 'Review of systems: the patient denies the following. ' + middle + ' Correction: the patient does report exertional chest pain.'

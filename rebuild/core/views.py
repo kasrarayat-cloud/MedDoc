@@ -522,8 +522,8 @@ def save_answers(request,pk):
     for field in e.template_version.fields:
         key=field['key'];previous=e.answers.get(key,{'text':'','evidence':[],'status':'missing'})
         held_shown=request.POST.get('held_shown_'+key)=='1'
-        supported_context=governed_supported(governance,e.notes,previous)
-        governed_offer=offer_context(governance,e.notes,previous) is not None
+        supported_context=governed_supported(governance,e.notes,previous,field['label'])
+        governed_offer=offer_context(governance,e.notes,previous,field['label']) is not None
         # A draft from an earlier release holding a governed answer as `supported` is saved as the page showed it —
         # held — so the clinician's answer is their decision even when it repeats the candidate's words. ⚠️ ONLY WHEN
         # THIS PAGE SHOWED IT HELD (`held_shown_`): a page opened before this release posts the pre-filled text back,
@@ -589,7 +589,7 @@ def save_answers(request,pk):
         if not value.strip() and request.POST.get('accept_'+key)=='on' and suggestion:
             # ⚠️ RECOMPUTED, NOT TRUSTED. An offer stored by an earlier release under a heading the notes now
             # show governs this line would put the denied or the family's finding in one click.
-            if offer_context(governance,e.notes,previous) is not None:
+            if offer_context(governance,e.notes,previous,field['label']) is not None:
                 return document_refusal(request,e,'The suggestion for "'+field['label']+'" is no longer offered: a heading or a sentence in the notes may change it. Type your own answer'+('' if is_wm else ' or choose "Leave blank — reviewed"')+'. Nothing was saved.',400)
             # ⚠️ GATED LIKE ITS SIBLING. `reviewed` below demands owner/clinician, the template
             # renders this box `disabled` for everyone else, and the server checked nothing — so

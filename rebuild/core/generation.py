@@ -897,7 +897,7 @@ def governed_context(governance, notes, evidence):
     then 57 MB of quotes): the nearest three each way, then every one whose words change meaning, nearest first;
     the other DISTINCT lines are counted in a final `{'more': n}` entry, never dropped silently.
     """
-    starts, spans, headings, forward, backward, (forward_meaning, backward_meaning), _, by_line, _ = governance
+    starts, spans, headings, forward, backward, (forward_meaning, backward_meaning), _, by_line, _ = governance[:9]
     ats = [entry['start'] for entry in evidence]
     if not ats:
         return None
@@ -979,11 +979,64 @@ def with_governing_lines(answer, texts, own, context, word_form=False):
                                          'reason': held_reason(context, word_form)}}
 
 
+def occurrence_index(notes, labels, units=None):
+    """Where every quote a question may select occurs, as `(anywhere, by_label)`: ONE reader for both validators and
+    the page (ninth pass: the validators judged one occurrence of a repeated quote, and the page judged only the one a
+    stored draft kept). Legacy (`units` None): whole lines, and values after a recognized label; tab: each unit."""
+    anywhere, by_label = {}, {}
+    if units is None:
+        offset = 0
+        for line in notes.splitlines(keepends=True):
+            full = line.strip()
+            if full:
+                parsed = labelled_value(line, labels)
+                if not parsed or parsed[0] not in labels:
+                    anywhere.setdefault(full, []).append(offset + line.index(full))
+                else:
+                    own = by_label.setdefault(parsed[0], {})
+                    own.setdefault(full, []).append(offset + line.index(full))
+                    if parsed[1]:
+                        own.setdefault(parsed[1], []).append(offset + parsed[2])
+            offset += len(line)
+    else:
+        for unit in units:
+            parsed = tab_source_value(unit['quote'], labels)
+            (by_label.setdefault(parsed[0], {}) if parsed else anywhere).setdefault(unit['quote'], []).append(unit['start'])
+    return anywhere, by_label
+
+
+def every_occurrence(index, label, evidence):
+    """`evidence`, and every other place its quotes occur where this question may select them (its own label's lines
+    and unlabelled lines), so governance is judged over all of them. `index` None: `evidence` alone."""
+    if not index or not evidence:
+        return evidence
+    anywhere, by_label = index
+    own = by_label.get(str(label or '').strip().rstrip(':?').casefold(), {})
+    seen = {(entry.get('quote'), entry.get('start')) for entry in evidence}
+    return evidence + [{'quote': quote, 'start': at, 'end': at + len(quote)}
+                       for quote in dict.fromkeys(entry.get('quote') for entry in evidence) if quote
+                       for at in anywhere.get(quote, []) + own.get(quote, []) if (quote, at) not in seen]
+
+
 def governance_for(notes, fields, context_labels=()):
     """The note's governance for this form, computed once: on the qualified Word form labelled lines never govern,
-    and the answered-question exception reads answers the way this form's validator does."""
-    return heading_governance(notes, recognized_labels(fields, context_labels), lexical=not qualified_word_form(fields),
-                              per_sentence=tab_evidence_contract(fields))
+    and the answered-question exception reads answers the way this form's validator does. Its last element is the
+    occurrence index, so the page judges a stored answer over every occurrence exactly as generation does."""
+    labels = recognized_labels(fields, context_labels)
+    per_sentence = tab_evidence_contract(fields)
+    units = None
+    if per_sentence:
+        try:
+            units = source_units(notes, fields, context_labels=context_labels)[0]
+        except ValidationError:
+            units = []
+    governance = heading_governance(notes, labels, lexical=not qualified_word_form(fields), per_sentence=per_sentence)
+    return (*governance, occurrence_index(notes, labels, units))
+
+
+def judged(governance, label, evidence):
+    """What the page judges for a stored answer: `evidence` at every occurrence (`governance_for`'s index)."""
+    return every_occurrence(governance[9] if len(governance) > 9 else None, label, evidence)
 
 
 def withheld_note_wide(governance, notes):
@@ -992,22 +1045,22 @@ def withheld_note_wide(governance, notes):
     return governance[8]
 
 
-def offer_context(governance, notes, answer):
+def offer_context(governance, notes, answer, label=None):
     """The governing lines of a stored one-click offer, or None; `[]` when no line governs it but this release
     withholds every offer in the note (seventh pass: a bulleted correction this release reads note-wide). An offer
     made by an earlier release is recomputed here, never trusted."""
     if not answer.get('suggestion') or not answer.get('suggestion_evidence'):
         return None
-    context = governed_context(governance, notes, answer['suggestion_evidence'])
+    context = governed_context(governance, notes, judged(governance, label, answer['suggestion_evidence']))
     return [] if context is None and withheld_note_wide(governance, notes) else context
 
 
-def governed_supported(governance, notes, answer):
+def governed_supported(governance, notes, answer, label=None):
     """The governing lines of a stored answer still `supported` on a governed line, or None. Only generation
     writes `supported` (a clinician's answer is `edited`), so this is a draft from before this rule."""
     if answer.get('status') != 'supported' or not answer.get('evidence'):
         return None
-    return governed_context(governance, notes, answer['evidence'])
+    return governed_context(governance, notes, judged(governance, label, answer['evidence']))
 
 
 def own_evidence(answer, notes):
@@ -1038,7 +1091,7 @@ def is_empty(text):
     return not visible_end(str(text or '')).strip()
 
 
-def cleared_governed(governance, notes, answer):
+def cleared_governed(governance, notes, answer, label=None):
     """The governing lines of an ordinary-form answer edited to nothing whose own lines are governed, or None.
 
     An answer from an earlier release that carries ONLY the whole-note span (this release keeps `own_evidence` beside
@@ -1050,7 +1103,7 @@ def cleared_governed(governance, notes, answer):
     if not own and answer.get('evidence') and 'own_evidence' not in answer:
         starts, spans, headings, forward, backward = governance[:5]
         return [] if (headings or forward or backward or withheld_note_wide(governance, notes)) else None
-    return governed_context(governance, notes, own)
+    return governed_context(governance, notes, judged(governance, label, own))
 
 
 def as_currently_governed(governance, notes, answer, word_form=False):
@@ -1060,17 +1113,18 @@ def as_currently_governed(governance, notes, answer, word_form=False):
     finalization refuses exactly the same answers (`governed_decisions`). An ACCEPTED governed offer is shown held,
     flagged `governed_acceptance`: it stays accepted in the record until the clinician decides again on this page,
     and finalization refuses it until then."""
-    context = governed_supported(governance, notes, answer)
+    label = answer.get('label')                 # a page row carries its question's label
+    context = governed_supported(governance, notes, answer, label)
     if context is not None:
         return held_for_decision(answer, [answer.get('text', '')], answer['evidence'], context, word_form, prefilled=True)
-    context = offer_context(governance, notes, answer)
+    context = offer_context(governance, notes, answer, label)
     if context is not None:
         held = {key: value for key, value in answer.items() if key not in ('suggestion', 'suggestion_evidence')}
         return {**held, 'text': '' if answer.get('accepted_suggestion') else answer.get('text', ''),
                 'governed_acceptance': bool(answer.get('accepted_suggestion')),
                 'held_candidate': {'text': answer['suggestion'], 'evidence': answer['suggestion_evidence'],
                                    'context': context, 'reason': held_reason(context, word_form)}}
-    if not word_form and not answer.get('held_candidate') and (context := cleared_governed(governance, notes, answer)) is not None:
+    if not word_form and not answer.get('held_candidate') and (context := cleared_governed(governance, notes, answer, label)) is not None:
         return {**answer, 'held_candidate': {'text': '', 'evidence': own_evidence(answer, notes), 'context': context,
                                              'reason': held_reason(context, word_form)}}
     return answer
@@ -1089,11 +1143,11 @@ def governed_decisions(notes, fields, answers, context_labels=()):
     found = []
     for field in fields:
         answer = answers.get(field['key']) or {}
-        if governed_supported(governance, notes, answer) is not None:
+        if governed_supported(governance, notes, answer, field['label']) is not None:
             found.append(field['label'])
-        elif answer.get('accepted_suggestion') and offer_context(governance, notes, answer) is not None:
+        elif answer.get('accepted_suggestion') and offer_context(governance, notes, answer, field['label']) is not None:
             found.append(field['label'])
-        elif not word_form and cleared_governed(governance, notes, answer) is not None:
+        elif not word_form and cleared_governed(governance, notes, answer, field['label']) is not None:
             found.append(field['label'])
     return found
 
@@ -1102,6 +1156,7 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=()):
     units,inherited=source_units(notes,fields,context_labels=context_labels)
     labels=recognized_labels(fields,context_labels)
     governance=heading_governance(notes,labels)
+    index=occurrence_index(notes,labels,units)
     injection=bool(INJECTION.search(notes) or any(INJECTION.search(f['label']) for f in fields))
     from .tab_review import clinician_identity
     output={}; used_numbered={}
@@ -1114,7 +1169,7 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=()):
                               'reason':'Signature requires explicit review by the finalizing clinician; it is not generated from notes.'}
             continue
         label=field['label'].strip().rstrip(':?').casefold()
-        allowed={}; explicit={}; occurrences={}
+        allowed={}; explicit={}
         for unit in units:
             quote=unit['quote']; parsed=tab_source_value(quote,labels)
             # Exact source question labels keep their previous cross-field guard.
@@ -1123,7 +1178,6 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=()):
             corrected=corrected_quantity(unit,field)
             if corrected is not None:value=corrected
             allowed[quote]=(unit,value)
-            occurrences.setdefault(quote,[]).append({k:unit[k] for k in ('quote','start','end')})
             if parsed and parsed[1]: explicit.setdefault(value,unit)
         evidence=[]; texts=[]; guarded=False
         choices=[by_id[value] for value in item.unit_ids] if isinstance(item,UnitSelection) else item.quotes
@@ -1151,7 +1205,7 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=()):
         if len(explicit)>1:
             evidence=[{k:unit[k] for k in ('quote','start','end')} for unit in explicit.values()]
         own=evidence
-        judged=own+[entry for entry in (e for q in {e['quote'] for e in own} for e in occurrences.get(q,())) if entry not in own]
+        judged=every_occurrence(index,label,own)
         if (inherited or injection) and texts:
             evidence=[{'quote':notes,'start':0,'end':len(notes)}]
         status='conflict' if conflict else 'supported' if texts else 'missing'
@@ -1195,6 +1249,7 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
     # is now a decision, with the candidate kept beside the line that governs it.
     word_form=qualified_word_form(fields)
     governance=heading_governance(notes,labels,lexical=not word_form,per_sentence=False)
+    index=occurrence_index(notes,labels)
     from .tab_review import clinician_identity
     for item in selections.fields:
         if clinician_identity(next(f for f in fields if f['key']==item.key)):
@@ -1208,7 +1263,6 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
         label=field['label'].strip().rstrip(':?').casefold()
         allowed={}
         explicit={}
-        occurrences={}
         offset=0
         for line in notes.splitlines(keepends=True):
             full=line.strip()
@@ -1221,13 +1275,11 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
                     # parse or shorten it again independently of its source span.
                     text=parsed[1] if parsed and line_label==label else full
                     allowed.setdefault(full,(offset+line.index(full),text))
-                    occurrences.setdefault(full,[]).append(offset+line.index(full))
                 if parsed and line_label==label:
                     value=parsed[1]
                     if value:
                         allowed.setdefault(value,(offset+parsed[2],value))
                         explicit.setdefault(value,offset+parsed[2])
-                        occurrences.setdefault(value,[]).append(offset+parsed[2])
             offset+=len(line)
         selected_texts=[]
         for quote in item.quotes:
@@ -1256,8 +1308,7 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
         if explicit_conflict:
             evidence=[{'quote':q,'start':start,'end':start+len(q)} for q,start in explicit.items()]
         own=evidence
-        judged=own+[entry for entry in ({'quote':q,'start':at,'end':at+len(q)} for q in {e['quote'] for e in own} for at in occurrences.get(q,()))
-                    if entry not in own]
+        judged=every_occurrence(index,label,own)
         status='conflict' if item.conflict or explicit_conflict or guarded or (inherited_context and texts) else 'supported' if texts else 'missing'
         if inherited_context and texts:
             evidence=[{'quote':notes,'start':0,'end':len(notes)}]
