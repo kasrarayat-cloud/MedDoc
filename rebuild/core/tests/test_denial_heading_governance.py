@@ -370,6 +370,8 @@ class WhatTheSecondPassFound(ExpectationsMixin, TestCase):
         notes = 'Indication: screening colonoscopy\nSymptoms: no chest pain\n\u2013 Correction: patient reports severe crushing chest pain.'
         answer = fixture_answers(['Indication', 'Symptoms'], notes)['Symptoms']
         self.assertEqual(answer['status'], 'conflict'); self.assertNotIn('suggestion', answer)
+        self.assertIn('\u2013 Correction: patient reports severe crushing chest pain.',
+                      [entry.get('quote') for entry in answer['held_candidate']['context']])
 
     def test_the_numero_abbreviation_in_a_label_governs_nothing(self):
         notes = 'No. of polyps: 2\nPathology: Pending\nRecommendation: Repeat colonoscopy in 3 years'
@@ -388,9 +390,9 @@ class WhatTheSecondPassFound(ExpectationsMixin, TestCase):
     def test_a_format_character_outside_the_selectors_after_a_colon_still_ends_a_heading(self):
         for tail in (':\U000E0100', ':\u3164', ':\u115f', ':\uffa0'):
             with self.subTest(tail=repr(tail)):
-                notes = 'Family hx: the following conditions' + tail + '\nDiabetes: yes'
+                notes = 'Family hx: pertinent negatives' + tail + '\nDiabetes: yes'
                 self.assert_needs_decision(fixture_answers(['Family hx', 'Diabetes'], notes)['Diabetes'], 'yes',
-                                           'Family hx: the following conditions')
+                                           'Family hx: pertinent negatives')
 
     def test_the_tab_contract_holds_what_finalization_would_refuse(self):
         """The page and finalization must follow ONE rule: a tab answer finalization would refuse is held on the page."""
@@ -577,6 +579,8 @@ class WhatTheFourthPassFound(ExpectationsMixin, TestCase):
                 # The word opens the value but is a treatment; the erratum is later on the line.
                 (['Insulin', 'Allergies'], 'Insulin: glargine 10 units\nAllergies: penicillin\n'
                  'Insulin: Correction scale with meals. Correction: the allergy is sulfa, not penicillin.', 'Allergies'),
+                (['Insulin', 'Allergies'], 'Insulin: glargine 10 units\nAllergies: penicillin\n'
+                 'Insulin: Correction scale with meals: correction, the allergy is sulfa, not penicillin.', 'Allergies'),
                 # An earlier erratum is not an answer that the later one could be correcting.
                 (['Pain score', 'Allergies'], 'Pain score: Correction: three out of ten\nAllergies: penicillin\n'
                  'Pain score: Correction: the allergy is sulfa, not penicillin.', 'Allergies')):
@@ -762,6 +766,34 @@ class WhatTheFifthPassFound(ExpectationsMixin, TestCase):
         self.assertIn(HEADING, quotes)
         self.assertLessEqual(len(held['context']), 16)
         self.assertEqual(held['context'][-1].get('more'), 401 - (len(held['context']) - 1))
+        # Every one of these changes meaning; the cap still holds and the rest are counted.
+        notes = ''.join(f'Negative {i}:\n' for i in range(400)) + 'Symptoms: chest pain'
+        held = fixture_answers(['Symptoms'], notes)['Symptoms']['held_candidate']
+        self.assertEqual(len(held['context']), 16)
+        self.assertEqual(held['context'][-1], {'more': 385})
+        # With fewer than the cap, the three nearest ordinary headings are all shown.
+        notes = 'Section A:\nSection B:\nSection C:\nSection D:\nSection E:\nSymptoms: chest pain'
+        held = fixture_answers(['Symptoms'], notes)['Symptoms']['held_candidate']
+        self.assertEqual([e.get('quote') for e in held['context']], ['Section C:', 'Section D:', 'Section E:', None])
+        self.assertEqual(held['context'][-1], {'more': 2})
+
+    def test_a_disagreement_says_so_rather_than_pointing_elsewhere(self):
+        answer = provider_answers(['Extent', 'Complications'], 'Extent: splenic flexure\nThe scope was advanced to the cecum.\n'
+                                  'Complications: none', {'Extent': ['The scope was advanced to the cecum.']})['Extent']
+        self.assertEqual(answer['held_candidate']['context'], [])
+        self.assertIn('more than one answer', answer['held_candidate']['reason'])
+
+    def test_the_longest_label_is_measured_once_per_form(self):
+        class Counting(generation.Labels):
+            iterations = 0
+
+            def __iter__(self):
+                type(self).iterations += 1
+                return super().__iter__()
+        labels = Counting(generation.recognized_labels(form('Pain score')))
+        for _ in range(100):
+            generation.labelled_value('Pain score: 3', labels)
+        self.assertLessEqual(Counting.iterations, 1)
 
     def test_governance_is_linear_on_adversarial_notes(self):
         import time
@@ -1088,6 +1120,33 @@ class TheDecisionIsEnforcedThroughFinalizationAndExport(DocumentWorkflow):
         encounter.refresh_from_db()
         self.assertNotEqual(encounter.status, 'finalized')
         self.assertContains(response, 'still need your decision: Review of systems, Symptoms.')
+
+    def test_an_invisible_answer_is_saved_as_no_answer(self):
+        encounter = self.generated()
+        self.save(encounter, **{'answer_' + self.symptoms: '\u200b\u2800', 'answer_' + self.ros: 'none'})
+        self.assertEqual(encounter.answers[self.symptoms]['text'], '')
+
+    def test_a_stale_page_keeps_an_accepted_governed_suggestion_despite_a_space(self):
+        self.NOTES = 'Patient reports none of the following:\nSymptoms: chest pain'
+        encounter = self.generated()
+        self.stale_offer(encounter, accepted=True)
+        self.save(encounter, **{'answer_' + self.symptoms: 'chest pain '})
+        self.assertTrue(encounter.answers[self.symptoms]['accepted_suggestion'])
+        self.assertContains(self.finalize_attempt(encounter), 'still need your decision: Symptoms.')
+
+    def test_a_governed_answer_cleared_on_a_stale_page_shows_its_lines(self):
+        encounter = self.generated()
+        finding = encounter.notes.index('chest pain')
+        stale = {self.ros: {'text': 'none', 'status': 'edited', 'reviewed': False, 'evidence': []},
+                 self.symptoms: {'text': 'chest pain', 'status': 'supported', 'reviewed': False,
+                                 'evidence': [{'quote': 'chest pain', 'start': finding, 'end': finding + len('chest pain')}]}}
+        Encounter.objects.filter(pk=encounter.pk).update(answers=stale)
+        encounter.refresh_from_db()
+        self.save(encounter, **{'answer_' + self.ros: 'none'})          # a page from before: the box cleared
+        self.assertEqual((encounter.answers[self.symptoms]['status'], encounter.answers[self.symptoms]['text']), ('edited', ''))
+        section = self.section(encounter, 'Symptoms')
+        self.assertIn('data-governing-line', section)
+        self.assertIn(HEADING, section)
 
     def test_a_pre_repair_accepted_offer_under_a_heading_cannot_finalize(self):
         self.NOTES = 'Patient reports none of the following:\nSymptoms: chest pain'

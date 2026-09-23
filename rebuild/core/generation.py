@@ -736,8 +736,7 @@ def heading_governance(notes, labels, *, lexical=True):
                 errata = erratum_points(stripped)
                 for at in errata:
                     low, high = next((unit for unit in units if unit[0] <= at < unit[1]), (0, len(stripped)))
-                    if not corrects_its_own_answer(stripped[low:high], at - low, sum(low <= e < high for e in errata),
-                                                   labels, answered, lambda: absorb(start + low)):
+                    if not corrects_its_own_answer(stripped[low:high], at - low, labels, answered, lambda: absorb(start + low)):
                         backward.append((start + at, index, start + low, end, True))
         offset += len(line)
     # A heading that closes the note can only introduce what came before it, unless it is a bare label.
@@ -751,12 +750,13 @@ def heading_governance(notes, labels, *, lexical=True):
     return starts, spans, headings, forward, backward, meaning
 
 
-def corrects_its_own_answer(unit, at, count, labels, answered, absorb):
-    """The one erratum that corrects only its own question: the WHOLE value of a recognized question in its sentence
-    (its first word, no list marker), the only erratum in that sentence, whose question was ANSWERED earlier — a
-    non-empty value that is not itself an erratum, as `Label: value` or the tab form's `Label was value`."""
+def corrects_its_own_answer(unit, at, labels, answered, absorb):
+    """The erratum that corrects only its own question: the one that opens the WHOLE value of a recognized question
+    in its sentence (its first word, no list marker), whose question was ANSWERED earlier — a non-empty value that is
+    not itself an erratum, as `Label: value` or the tab form's `Label was value`. Any other erratum in the same
+    sentence is judged by itself, and reaches back."""
     parsed = labelled_value(unit, labels)
-    if not parsed or count != 1:
+    if not parsed:
         return False
     match = VALUE_ERRATUM.match(parsed[1])
     if not match or at != parsed[2] + match.start('word'):
