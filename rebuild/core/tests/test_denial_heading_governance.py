@@ -68,7 +68,7 @@ class ExpectationsMixin:
         held = answer.get('held_candidate')
         self.assertIsNotNone(held, 'the candidate must be preserved for the clinician, not discarded')
         self.assertEqual(held['text'], candidate)
-        quotes = [entry['quote'] for entry in answer['evidence'] + held['evidence'] + held.get('context', [])]
+        quotes = [entry.get('quote', '') for entry in answer['evidence'] + held['evidence'] + held.get('context', [])]
         self.assertTrue(any(context in quote for quote in quotes),
                         f'the governing line {context!r} must be shown with the candidate: {quotes}')
 
@@ -228,7 +228,8 @@ class TheReproducedDefect(ExpectationsMixin, TestCase):
                 with self.subTest(line=line, path=path):
                     for item in items:
                         label, value = item.split(': ', 1)
-                        self.assert_needs_decision(answers[label], value, line)
+                        # The governing line is shown from its start through the pointer's sentence.
+                        self.assert_needs_decision(answers[label], value, line.split(' All other')[0])
 
     def test_e8b_a_correction_written_as_another_questions_answer_governs_what_came_before(self):
         for labels, correction in ((['Symptoms', 'Addendum'], 'Addendum: Correction: the patient does report severe crushing chest pain.'),
@@ -517,6 +518,16 @@ class WhatTheThirdPassFound(ExpectationsMixin, TestCase):
         self.assertEqual(fixture_answers(['Indication', 'Bowel prep: quality'], notes)['Indication'].get('suggestion'),
                          'screening colonoscopy')
 
+    def test_the_documented_costs_of_an_erratum_that_fails_closed(self):
+        """⚠️ TRADES, PINNED (fifth pass): an unlisted continuation after the word is read as an erratum, so these hold the
+        answer above them: a target phrased in words, an occupation in brackets, an order line named Correction."""
+        for line in ('Occupation: Corrections (state prison officer).', 'Plan: Correction to no more than 8 mmol/L in 24 hours.',
+                     'Insulin: Correction: 2 units per 50 mg/dL above 150.'):
+            label = line.split(':')[0]
+            with self.subTest(line=line):
+                answer = fixture_answers(['Diagnosis', label], 'Diagnosis: type 2 diabetes\n' + line)['Diagnosis']
+                self.assert_needs_decision(answer, 'type 2 diabetes', line)
+
     def test_the_documented_costs_of_errata_and_empty_questions(self):
         """⚠️ TRADES, PINNED. An erratum on no label, or under a label nobody answered before, may correct any line above
         it, so every answer above it needs a decision (`Corrections: none` included). An unanswered question mid-note
@@ -594,8 +605,8 @@ class WhatTheFourthPassFound(ExpectationsMixin, TestCase):
 
     def test_the_word_correction_in_a_treatment_a_target_or_an_occupation_governs_nothing(self):
         for line in ('Insulin: Correction/sliding scale lispro with meals', 'Result: Correction to 14 degrees was achieved.',
-                     'Refraction: Correction to 20/20 OU with -1.50 sphere.', 'Occupation: Corrections (state prison officer)',
-                     'Plan: Correction to no more than 8 mmol/L in 24 hours with 3% saline.', 'Insulin: Correction factor 50'):
+                     'Refraction: Correction to 20/20 OU with -1.50 sphere.', 'Occupation: Corrections officer',
+                     'Insulin: Correction factor 50'):
             label = line.split(':')[0]
             with self.subTest(line=line):
                 answers = fixture_answers(['Diagnosis', label], 'Diagnosis: type 2 diabetes\n' + line)
@@ -630,6 +641,10 @@ class WhatTheFourthPassFound(ExpectationsMixin, TestCase):
         closing = 'Family history: the following conditions:'
         answers = fixture_answers(['Diagnoses', 'Family history'], 'Diagnoses: diabetes\n' + closing)
         self.assert_needs_decision(answers['Diagnoses'], 'diabetes', closing)
+        # The reframing word may sit in the label alone (no pointer on the line).
+        closing = 'Family history: mother:'
+        answer = fixture_answers(['Diagnoses', 'Family history'], 'Diagnoses: diabetes\n' + closing)['Diagnoses']
+        self.assert_needs_decision(answer, 'diabetes', closing)
         # A pointer at the very end points at what came before it.
         self.assert_needs_decision(fixture_answers(['Diagnoses'], 'Diagnoses: diabetes\nThe following:')['Diagnoses'],
                                    'diabetes', 'The following:')
@@ -673,6 +688,104 @@ class WhatTheFourthPassFound(ExpectationsMixin, TestCase):
         self.assertEqual(held['context'], [])
         self.assertNotIn('the line shown', held['reason'])
         self.assertIn('elsewhere in the note', held['reason'])
+
+
+class WhatTheFifthPassFound(ExpectationsMixin, TestCase):
+    """Refutation of the finished diff, fifth pass (over 32ae81f5). Each input was demonstrated by a lens."""
+
+    def held(self, answer):
+        self.assertEqual(answer['status'], 'conflict', answer)
+        self.assertEqual(answer['text'], '')
+        self.assertNotIn('suggestion', answer)
+
+    def test_the_one_word_after_the_following_is_a_word_as_a_doctor_writes_it(self):
+        for line, item in (('Review of systems: patient denies the following symptom(s).', 'Symptoms: chest pain, dyspnea'),
+                           ('Review of systems: patient denies the following (reviewed today).', 'Symptoms: chest pain'),
+                           ('Review of systems: negative for the following sx/signs.', 'Symptoms: chest pain'),
+                           ("Review of systems: negative for the following pt's.", 'Symptoms: chest pain'),
+                           ('Family history: her mother had the following co-morbidities.', 'Diabetes: yes')):
+            label, value = item.split(': ', 1)
+            with self.subTest(line=line):
+                self.assert_needs_decision(fixture_answers([line.split(':')[0], label], line + '\n' + item)[label], value, line)
+
+    def test_a_pointer_followed_by_a_colon_governs_what_follows_on_the_line(self):
+        for middle in ('Her previous colonoscopy in 2019 elsewhere was as follows: polyps.', 'It showed the following: polyps.'):
+            notes = 'PROCEDURE: diagnostic colonoscopy. ' + middle + ' COMPLICATIONS: perforation.'
+            with self.subTest(middle=middle):
+                _, answers = tab_answers(['PROCEDURE', 'COMPLICATIONS'], notes)
+                self.held(answers['COMPLICATIONS'])
+
+    def test_follows_is_read_only_as_as_follows(self):
+        notes = 'HEENT: Red reflex present bilaterally. Fixes and follows.\nHeart: Regular rate and rhythm, no murmur.'
+        self.assert_ready(fixture_answers(['HEENT', 'Heart'], notes)['Heart'], 'Regular rate and rhythm, no murmur.')
+
+    def test_an_erratum_is_any_correction_that_is_not_a_listed_treatment_or_target(self):
+        """⚠️ FAIL CLOSED (fifth pass): the round before narrowed the shapes and `Correction to my dictation, …` stopped
+        governing. Now the word governs unless a treatment or target continuation follows it."""
+        for correction in ('Correction to my dictation, there were no complications.', 'Correction for the record: there were no complications.',
+                           'Correction -- there were no complications.', 'Correction\u2026 there were no complications.',
+                           'Correction [transcription error]: there were no complications.', 'Correction per Dr. Smith: there were no complications.',
+                           'Correction and addendum: there were no complications.', 'Transcription correction: there were no complications.',
+                           'Correction (dictation error) there were no complications.',
+                           'Correction to the operative note of September 21: there were no complications.'):
+            with self.subTest(correction=correction):
+                _, answers = tab_answers(['PROCEDURE', 'COMPLICATIONS'],
+                                         'PROCEDURE: diagnostic colonoscopy. COMPLICATIONS: perforation. ' + correction)
+                self.held(answers['COMPLICATIONS'])
+        answer = fixture_answers(['Extent', 'Plan'], 'Extent: cecum\nNote: correction to my dictation, the scope reached only the '
+                                                     'splenic flexure.\nPlan: repeat colonoscopy in one year')['Extent']
+        self.held(answer)
+        for line in ('Occupation: Corrections officer.', 'Insulin: Correction (sliding scale), lispro with meals.',
+                     'Plan: Discussed bracing vs. correction, and the family chose bracing.', 'Plan: Glasses, i.e. correction, full time.',
+                     'Refraction: Correction to 20/20 OU.', 'Insulin: Correction dose 2 units.', 'Insulin: correction factor 50.'):
+            label = line.split(':')[0]
+            with self.subTest(line=line):
+                self.assert_ready(fixture_answers(['Diagnosis', label], 'Diagnosis: type 2 diabetes\n' + line)['Diagnosis'], 'type 2 diabetes')
+
+    def test_a_note_wide_hold_is_not_triggered_by_a_lettered_treatment_line(self):
+        for line in ('a) Correction of hypokalemia with oral potassium chloride.', '(corrections officer, day shift)'):
+            notes = 'Fictional software test only.\nAssessment: Hypokalemia.\nPlan: Potassium chloride 40 mEq orally.\n' + line
+            with self.subTest(line=line):
+                self.assertEqual(fixture_answers(['Assessment', 'Plan'], notes)['Assessment'].get('suggestion'), 'Hypokalemia.')
+
+    def test_the_answered_question_exception_reads_sentences_not_lines(self):
+        notes = ('Symptoms: Left ankle soreness began yesterday. Pertinent negatives: Denies fever. Pain score: Six out of ten. '
+                 'Pain score: Correction: three out of ten; the earlier six out of ten was entered in error.')
+        _, answers = tab_answers(['Symptoms', 'Pertinent negatives', 'Pain score'], notes)
+        self.assertEqual(answers['Symptoms']['status'], 'supported', answers['Symptoms'])
+        self.assertEqual(answers['Pertinent negatives']['status'], 'supported')
+
+    def test_many_governors_are_bounded_and_counted_and_every_meaningful_one_is_kept_first(self):
+        notes = 'Review of systems: negative for the following:\n' + ''.join(f'Section {i}:\n' for i in range(400)) + 'Symptoms: chest pain'
+        held = fixture_answers(['Review of systems', 'Symptoms'], notes)['Symptoms']['held_candidate']
+        quotes = [entry.get('quote') for entry in held['context']]
+        self.assertIn(HEADING, quotes)
+        self.assertLessEqual(len(held['context']), 16)
+        self.assertEqual(held['context'][-1].get('more'), 401 - (len(held['context']) - 1))
+
+    def test_governance_is_linear_on_adversarial_notes(self):
+        import time
+        fields = [{'key': f'k{i}', 'label': f'Question {i}', 'kind': 'text', 'locator': {'cell': i}} for i in range(100)]
+        for notes in ('\n'.join(['x'] * 500 + ['Question 1: Correction, 3'] * 200), 'Question 0: yes.' + '"' * 49984,
+                      '\n'.join(['Section:'] * 5000 + [f'Question {i}: yes' for i in range(100)])):
+            with self.subTest(size=len(notes)):
+                started = time.perf_counter()
+                generation.generate(notes, fields, FIXTURE)
+                self.assertLess(time.perf_counter() - started, 20)
+
+    def test_a_governed_conflict_for_another_reason_still_shows_its_governing_line(self):
+        notes = 'Comments: negative for the following:\nSymptoms: chest pain\nSymptoms: palpitations\nPlan: review'
+        answer = fixture_answers(['Comments', 'Symptoms', 'Plan'], notes)['Symptoms']
+        self.assertEqual(answer['status'], 'conflict')
+        self.assertIn('Comments: negative for the following:', [e.get('quote') for e in answer['held_candidate']['context']])
+
+    def test_a_whole_note_span_is_never_the_answers_own_line(self):
+        """An answer whose stored evidence is the whole note is not governed by an erratum that precedes its lines."""
+        notes = 'Comments: Correction: dictated in error, disregard the earlier draft.\nSymptoms: chest pain\nSymptoms: palpitations\nSeen today.'
+        fields = form('Comments', 'Symptoms')
+        answers = generation.generate(notes, fields, FIXTURE)[0]
+        cleared = {**answers['q1'], 'status': 'edited', 'text': ''}
+        self.assertEqual(generation.governed_decisions(notes, fields, {'q1': {**cleared, 'held_candidate': None}}), [])
 
 
 class TheQualifiedWordFormKeepsItsLabelsSelfContained(ExpectationsMixin, TestCase):
