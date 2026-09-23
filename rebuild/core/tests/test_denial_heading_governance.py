@@ -367,6 +367,10 @@ class WhatTheSecondPassFound(ExpectationsMixin, TestCase):
         notes = 'Symptoms: no chest pain\nComments: \u200bCorrection, patient reports severe crushing chest pain.'
         self.assert_needs_decision(fixture_answers(['Symptoms', 'Comments'], notes)['Symptoms'], 'no chest pain',
                                    'Comments: \u200bCorrection, patient reports severe crushing chest pain.')
+        # Inside the word, too: only the reading with invisible characters removed sees it.
+        notes = 'Symptoms: no chest pain\nComments: Correc\u00adtion, patient reports severe crushing chest pain.'
+        self.assert_needs_decision(fixture_answers(['Symptoms', 'Comments'], notes)['Symptoms'], 'no chest pain',
+                                   'Comments: Correc\u00adtion, patient reports severe crushing chest pain.')
         notes = 'Indication: screening colonoscopy\nSymptoms: no chest pain\n\u2013 Correction: patient reports severe crushing chest pain.'
         answer = fixture_answers(['Indication', 'Symptoms'], notes)['Symptoms']
         self.assertEqual(answer['status'], 'conflict'); self.assertNotIn('suggestion', answer)
@@ -627,6 +631,7 @@ class WhatTheFourthPassFound(ExpectationsMixin, TestCase):
         for line, after in (('HPI: Inverted the right ankle playing soccer; swelling appeared the following morning; able to bear weight.',
                              'Examination: mild swelling'),
                             ('Left SSV: Competent at the SPJ and below; diameter 3.0 mm.', 'Impression: normal study'),
+                            ('Left SSV: Competent at the SPJ and below; Diameter 3.0 mm.', 'Impression: normal study'),
                             ('Plan: Repeat chest X-ray the following a.m. before discharge.', 'Follow-up: in two weeks'),
                             ('Monitoring: Vital signs every 15 minutes for the following 1.5 hours in recovery.', 'Disposition: home'),
                             ('Plan: Review the scan with the following Dr. Smith next week.', 'Follow-up: in two weeks')):
@@ -847,6 +852,11 @@ class WhatTheSixthPassFound(ExpectationsMixin, TestCase):
                 self.held(answers['COMPLICATIONS'])
         answer = fixture_answers(['Symptoms', 'Plan'], 'Symptoms: chest pain\n\u25cf Correction: the patient has no chest pain.\nPlan: follow up')['Symptoms']
         self.assertNotIn('suggestion', answer)
+        # A number before the word is a list marker even with no separator after the word.
+        for line in ('#2 Correction the perforation was in the prior patient.', '2.1 Correction the perforation was in the prior patient.'):
+            with self.subTest(line=line):
+                _, answers = tab_answers(['PROCEDURE', 'COMPLICATIONS'], 'PROCEDURE: diagnostic colonoscopy.\nCOMPLICATIONS: perforation.\n' + line)
+                self.held(answers['COMPLICATIONS'])
 
     def test_a_single_capital_ends_a_sentence_before_an_erratum(self):
         for sentence in ('Sedation: moderate, ASA class I.', 'Serology positive for hepatitis E.', 'History obtained from the pt.', 'Diet, fluids, etc.'):
@@ -873,6 +883,11 @@ class WhatTheSixthPassFound(ExpectationsMixin, TestCase):
         notes = 'Indication: screening colonoscopy. Findings: sigmoid polyp. Plan: repeat colonoscopy in 5 years. Signed by:'
         _, answers = tab_answers(['Indication', 'Findings', 'Plan'], notes)
         self.assertEqual(answers['Indication'].get('suggestion'), 'screening colonoscopy.', answers['Indication'])
+        # CONTROL: a closing heading that is not bare reaches every sentence before it, on its own line too.
+        notes = 'Indication: screening colonoscopy. Findings: sigmoid polyp. Patient denies:'
+        _, answers = tab_answers(['Indication', 'Findings'], notes)
+        self.assertNotIn('suggestion', answers['Indication'])
+        self.assertIn('Patient denies:', [e.get('quote') for e in answers['Indication']['held_candidate']['context']])
 
     def test_a_pointer_period_is_a_sentence_end_only_before_a_new_sentence(self):
         for line in ('Plan: sutures out the following wk. at the GP surgery', 'Plan: sutures out the following Mon. at the GP surgery'):

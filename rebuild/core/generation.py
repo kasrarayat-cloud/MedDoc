@@ -247,10 +247,6 @@ CORRECTION = r'correction'
 INLINE_CORRECTION = re.compile(r';\s*' + CORRECTION + r'\s*,\s*(\S.*)$', re.I)
 DASHES = r'[\s\-*\u2022\u2012\u2013\u2014\u2015\u2023\u2043\u25aa\u25e6\u00b7]*'
 LINE_INITIAL_CORRECTION = re.compile(r'^' + DASHES + r'(?:\d+[.)]\s*)?' + CORRECTION + r's?\b', re.I | re.M)
-#: Before an erratum's word: dashes, bullets, opening brackets and quotes, then an optional list marker (`1.`,
-#: `a)`, `(2)`): `(Correction: …)` and `a) Correction: …` start with the word as surely as `- Correction:` does.
-BULLETS = r'[\s\-*\u2022\u2012\u2013\u2014\u2015\u2023\u2043\u25aa\u25e6\u00b7(\[{"\'\u201c\u2018]*'
-LIST_MARKER = r'(?:\(?(?:\d{1,3}|[a-z])[.)]\s*)?'
 QUANTITY = re.compile(r'(?:(?:less than|greater than|about|approximately)\s+|[<>]=?\s*)?'
     r'(?:\d+(?:\.\d+)?|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)'
     r'\s+([a-z]+)\.?$', re.I)
@@ -586,7 +582,7 @@ ERRATUM = re.compile(r'(?:^|(?<=' + COLON_CLASS + r')|(?<=[.!?\u2026])(?=["\'\u2
 #: (sixth pass), because the erratum after them fails closed.
 ABBREVIATED_WORD = re.compile(r'(?:\b(?:dr|mr|mrs|ms|prof|st|vs)|\bi\.e|\be\.g)\.$', re.I)
 #: The value itself begins with the word (no list marker): the shape of `Pain score: Correction: three out of ten`.
-VALUE_ERRATUM = re.compile(BULLETS + r'(?P<word>' + CORRECTION + r's?)\b', re.I)
+VALUE_ERRATUM = re.compile(NON_LETTERS + r'(?P<word>' + CORRECTION + r's?)\b', re.I)
 #: Where `source_units` ends a sentence (abbreviations kept whole).
 UNIT_BREAK = re.compile(r'[.!?]\s+(?=[A-Z0-9"\'(])')
 #: A held answer shows at most this many governing lines; the rest are counted, never dropped silently.
