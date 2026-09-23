@@ -275,6 +275,45 @@ class TabFormWorkflowTests(TestCase):
         self.finish(encounter)
         self.assertEqual((encounter.status, encounter.finalized_by_id), ("finalized", self.other.pk))
 
+    def last_withdrawn(self, encounter):
+        return AuditEvent.objects.filter(action="encounter.answers_saved", target=str(encounter.pk)).latest("created_at").details["withdrawn_reviews"]
+
+    def test_the_withdrawal_audit_names_exactly_the_reviews_removed(self):
+        encounter = self.encounter()
+        keys = [f["key"] for f in self.version.fields]
+        action = f"/encounters/{encounter.pk}/save/"
+        payload = {"revision": encounter.revision, "reviewed_" + keys[0]: "on", "reviewed_" + keys[1]: "on"}
+        payload.update({"answer_" + k: "Synthetic documented answer" for k in keys if k != self.signature_key})
+        self.assertEqual(self.client.post(action, payload).status_code, 302)
+        encounter.refresh_from_db()
+        self.assertEqual(self.last_withdrawn(encounter), [])                     # a first review withdraws nothing
+        own = rendered_post(self.client.get(f"/encounters/{encounter.pk}/").content.decode(), action)
+        self.assertEqual(self.client.post(action, own).status_code, 302)
+        encounter.refresh_from_db()
+        self.assertEqual(self.last_withdrawn(encounter), [])                     # the reviewer's own re-save neither
+        self.client.force_login(self.other)
+        theirs = rendered_post(self.client.get(f"/encounters/{encounter.pk}/").content.decode(), action)
+        theirs["reviewed_" + keys[2]] = "on"                                     # a row nobody had reviewed
+        self.assertEqual(self.client.post(action, theirs).status_code, 302)
+        encounter.refresh_from_db()
+        self.assertEqual(self.last_withdrawn(encounter), sorted(keys[:2]))
+        self.assertEqual(encounter.answers[keys[2]]["reviewed_by"], str(self.other.pk))
+
+    def test_a_new_blank_decision_is_the_clinicians_own_review_without_a_second_tick(self):
+        encounter = self.encounter()
+        values = self.save(encounter, "")
+        key = self.blank_key()
+        payload = {"revision": encounter.revision, "answer_" + key: "", "blank_" + key: "on", "blank_shown_" + key: "1"}
+        for other, value in values.items():
+            if other != key: payload.update({"answer_" + other: value, "reviewed_" + other: "on"})
+        self.assertEqual(self.client.post(f"/encounters/{encounter.pk}/save/", payload).status_code, 302)
+        encounter.refresh_from_db()
+        self.assertEqual((encounter.answers[key]["status"], encounter.answers[key]["reviewed"], encounter.answers[key]["reviewed_by"]),
+                         ("left_blank", True, str(self.user.pk)))
+        self.assertContains(self.client.get(f"/encounters/{encounter.pk}/"), "left blank — reviewed")
+        self.finish(encounter)
+        self.assertEqual(encounter.status, "finalized")
+
     def test_finalize_refuses_each_unmet_guard_on_a_form_that_can_finalize(self):
         encounter = self.encounter()
         self.save(encounter, "")

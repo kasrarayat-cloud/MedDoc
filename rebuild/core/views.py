@@ -231,10 +231,21 @@ UPLOAD_REFUSAL_HINTS=(
      'fields or tracked changes. The only supported form with dropdowns is the qualified WM IOV file, uploaded exactly as '
      'received. Otherwise use a form with two-column question/answer tables, a label followed by an underlined Tab, or '
      '{{Question}} placeholders.'),
+    # One engine sentence covers three causes: the line is in a table cell, or it carries a link, bookmark
+    # or spelling mark. The hint names all of them rather than guessing which.
     ('underlined answer area crosses an unsupported structure',
-     'Retype that line as plain text: the label, then an underlined Tab, with no links, bookmarks or spelling marks inside it.'),
-    ('PDF text fields only','Every field in the PDF must be a plain text field: remove checkboxes, radio buttons and dropdowns.'),
-    ('Helvetica','Set every PDF text field to the standard Helvetica font, or use a supported Word (.docx) form.'),
+     'An underlined answer line must be an ordinary paragraph, not inside a table cell, holding only the label and an '
+     'underlined Tab: no links, bookmarks or spelling marks. Move such lines out of any table, or use a two-column '
+     'question/answer table instead.'),
+    ('PDF text fields only','Every field in the PDF must be a plain text field: remove checkboxes, radio buttons, dropdowns, '
+     'signature fields and buttons.'),
+    ('Read-only, password, file-select, comb, and rich-text',
+     'Turn off the read-only, password, comb and rich-text options on every PDF field, or use a supported Word (.docx) form.'),
+    ('explicit font size','Set every PDF field to a fixed font size (a number, not Auto).'),
+    ('Helvetica','Set every PDF field to the standard Helvetica font in its properties, or use a supported Word (.docx) form.'),
+    ('Rotated PDF fields','Use unrotated PDF text fields, or a supported Word (.docx) form.'),
+    ('PDF actions','Remove field actions and format scripts (such as Date or Number formats) from the PDF, or use a supported Word (.docx) form.'),
+    ('non-wrapping text','Remove hidden text and turn off fit-text or do-not-wrap formatting in the form, then upload it again.'),
 )
 #: An encrypted Office file is an OLE container, not a ZIP, so the engine can only call it unsupported.
 OLE_CONTAINER=b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1'
@@ -258,8 +269,11 @@ def statement_guide(version):
             if name.endswith('treatment_connector'):return ' '
             return '['+labels.get(name,name)+']'
         return ' '.join(re.sub(r'\{([^{}]+)\}',token,template or '').split())
+    names=lambda keys:[labels.get(key,key) for key in keys or []]
     return [{'label':row['label'],'variants':[{'label':variant.get('label') or variant.get('id',''),
-             'wording':show(variant.get('text_template'))} for variant in row.get('variants',[])]}
+             'wording':show(variant.get('text_template')),
+             'needs':names(variant.get('required_control_keys')),'empty':names(variant.get('empty_control_keys'))}
+             for variant in row.get('variants',[])]}
             for row in version.review_requirements if row.get('kind')=='assertion']
 
 @require_http_methods(['GET','POST'])
@@ -733,7 +747,7 @@ def voice(request,pk):
         # doctor dictates discards it. The voice quote therefore lives as long as the over-limit
         # approval and the session (30 min). The limit it shows still binds, the signed pricing
         # configuration is unchanged, and length is re-measured at enqueue.
-        quoted={**usage_quote(request,e,max_age=VOICE_QUOTE_SECONDS,expired=VOICE_QUOTE_EXPIRED,changed=VOICE_NOTES_CHANGED),'transcript_review_required':True}
+        quoted={**usage_quote(request,e,max_age=VOICE_QUOTE_SECONDS,expired=VOICE_QUOTE_EXPIRED,changed=VOICE_DOCUMENT_CHANGED),'transcript_review_required':True}
         try:
             job=enqueue(e,request.user,'transcription',relative,config=quoted,expected_revision=e.revision)
         except RecordingOverLimit as over:
@@ -1260,8 +1274,10 @@ AUDIO_FORMATS_HINT='Upload a .wav, .webm, .mp3 or .m4a recording (up to 15 MB), 
 VOICE_QUOTE_SECONDS=1800
 VOICE_QUOTE_EXPIRED=('The price shown on this page expired before this recording was sent. Nothing was sent or '
                      'charged, and the recording was not kept. Reload the page, then record or upload it again.')
-VOICE_NOTES_CHANGED=('The notes changed in another window or by a colleague after this page loaded. Nothing was sent or '
-                     'charged, and the recording was not kept. Reload the page, then record or upload it again.')
+#: The revision moves when notes OR answers are saved, so the reason names the document, not the notes.
+VOICE_DOCUMENT_CHANGED=('This document (its notes or answers) changed in another window or by a colleague after this page '
+                        'loaded. Nothing was sent or charged, and the recording was not kept. Reload the page, then record '
+                        'or upload it again.')
 
 def usage_quote(request,encounter,max_age=600,expired='Usage quote expired or changed. Reload to review the current maximum charge.',changed=None):
     from .generation import configuration

@@ -17,7 +17,11 @@ class OTPForm(forms.Form):
 class ScopedForm(forms.Form):
     def __init__(self,*args,user,**kwargs):
         super().__init__(*args,**kwargs); self.user=user
-        if 'department' in self.fields: self.fields['department'].queryset=departments(user)
+        if 'department' in self.fields:
+            self.fields['department'].queryset=departments(user)
+            # A doctor with one department is not asked to find it in a list of one.
+            only=list(self.fields['department'].queryset[:2])
+            if len(only)==1 and not self.is_bound: self.initial.setdefault('department',only[0].pk)
 class UploadForm(ScopedForm):
     name=forms.CharField(max_length=140)
     department=forms.ModelChoiceField(queryset=Department.objects.none())

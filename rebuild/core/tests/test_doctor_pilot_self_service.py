@@ -24,7 +24,7 @@ from core.generation import configuration
 from core.jobs import enqueue, run_one
 from core.models import Department, Encounter, Job, Membership, Organization, Patient, Template, TemplateVersion, User
 from core.security import private_path
-from core.views import VOICE_NOTES_CHANGED, VOICE_QUOTE_EXPIRED, VOICE_QUOTE_SECONDS, mpeg_frame_sync
+from core.views import UPLOAD_REFUSAL_HINTS, VOICE_DOCUMENT_CHANGED, VOICE_QUOTE_EXPIRED, VOICE_QUOTE_SECONDS, mpeg_frame_sync
 from documents import DocumentError
 from core.tests.audio_fixtures import wav_bytes
 from core.tests.test_billing_boundary import LIVE, BoundaryFixture, deepgram
@@ -71,10 +71,18 @@ class NewDoctorPages(SyntheticFixture, TestCase):
         self.assertContains(page, '<a href="/patients/">Add a patient</a>')
         self.assertNotContains(page, 'Upload a Word or PDF form')
 
+    def test_the_only_department_is_preselected_on_the_patient_and_upload_forms(self):
+        for url in ('/patients/', '/templates/upload/'):
+            with self.subTest(url=url):
+                self.assertContains(self.client.get(url), f'<option value="{self.department.pk}" selected>')
+        second = Department.objects.create(organization=self.department.organization, name='Second practice')
+        Membership.objects.create(user=self.doctor, department=second, role='owner')
+        self.assertNotContains(self.client.get('/patients/'), f'<option value="{self.department.pk}" selected>')
+
     def test_the_upload_page_explains_supported_and_refused_forms_before_upload(self):
         page = self.client.get('/templates/upload/')
         self.assertContains(page, 'data-supported-forms')
-        for words in ('two-column question/answer tables', 'a label followed by an underlined Tab', 'typed underscores', 'Fillable PDF', 'standard Helvetica font',
+        for words in ('two-column question/answer tables', 'a label and an underlined Tab', 'not inside a table', 'Typed underscores', 'Fillable PDF', 'standard Helvetica font', 'not Auto',
                       'qualified WM IOV form', 'exactly as you received it', 'Refused at upload'):
             self.assertContains(page, words)
         self.assertNotContains(page, 'reported before export')
@@ -102,8 +110,20 @@ class NewDoctorPages(SyntheticFixture, TestCase):
         response = self.client.post('/templates/upload/', {'name': 'Synthetic marked form', 'department': self.department.pk,
             'synthetic_only': 'on', 'file': SimpleUploadedFile('marked.docx', output.getvalue())})
         self.assertContains(response, 'underlined answer area crosses an unsupported structure')
-        self.assertContains(response, 'Retype that line as plain text')
+        self.assertContains(response, 'must be an ordinary paragraph, not inside a table cell')
         self.assertNotContains(response, 'The only supported form with dropdowns')
+
+    def test_every_hint_is_keyed_on_exactly_one_real_engine_refusal(self):
+        """If the engine's wording changes, a hint silently stops appearing; this keeps them aligned."""
+        import re as regex
+        root = Path(__file__).resolve().parents[2] / 'documents'
+        refusals = [m for name in ('engine.py', 'tab_form.py')
+                    for m in regex.findall(r"fail\(\s*(?:\"([^\"]+)\"|'([^']+)')", (root / name).read_text())]
+        messages = [a or b for a, b in refusals]
+        self.assertGreater(len(messages), 20)
+        for marker, _ in UPLOAD_REFUSAL_HINTS:
+            with self.subTest(marker=marker):
+                self.assertEqual(sum(marker in message for message in messages), 1, marker)
 
     def test_an_encrypted_or_old_word_file_is_named_as_such(self):
         response = self.client.post('/templates/upload/', {'name': 'Synthetic protected form', 'department': self.department.pk,
@@ -125,8 +145,10 @@ class NewDoctorPages(SyntheticFixture, TestCase):
         template = Template.objects.create(department=self.department, name='Synthetic qualified', format='docx', original_name='q.docx',
                                            original_path='originals/q.docx', sha256=hashlib.sha256(blob).hexdigest(), created_by=self.doctor)
         requirement = {'key': 'claim_1', 'label': 'Prewritten statement: Right impression', 'kind': 'assertion', 'default_variant': 'selected',
-                       'variants': [{'id': 'selected', 'label': 'Documented right finding', 'text_template': 'Right {sdt_1}{right_reflux_connector}{sdt_2}'},
-                                    {'id': 'not_documented', 'label': 'Not documented', 'text_template': '   Right findings were not documented.'}]}
+                       'variants': [{'id': 'selected', 'label': 'Documented right finding', 'text_template': 'Right {sdt_1}{right_reflux_connector}{sdt_2}',
+                                     'required_control_keys': ['sdt_1', 'sdt_2'], 'empty_control_keys': []},
+                                    {'id': 'not_documented', 'label': 'Not documented', 'text_template': '   Right findings were not documented.',
+                                     'required_control_keys': [], 'empty_control_keys': ['sdt_2']}]}
         identity = {'key': 'claim_2', 'label': 'Prewritten statement: Interpreting physician', 'kind': 'identity', 'default_variant': 'trusted',
                     'variants': [{'id': 'trusted', 'label': 'Signer', 'text_template': 'PHYSICIAN: {signer_name}'}]}
         TemplateVersion.objects.create(template=template, number=1, created_by=self.doctor, document_backend={'backend': 'synthetic-qualified'},
@@ -137,6 +159,8 @@ class NewDoctorPages(SyntheticFixture, TestCase):
         self.assertContains(page, 'Prewritten statement: Right impression')
         self.assertContains(page, 'Right [Right vein] [is] [Right finding]')
         self.assertContains(page, 'Right findings were not documented.')
+        self.assertContains(page, 'Needs answers to: Right vein, Right finding.')
+        self.assertContains(page, 'Needs these left unanswered: Right finding.')
         self.assertNotContains(page, 'Prewritten statement: Interpreting physician')   # identity is never written in notes
         # An ordinary form shows no statement guide.
         ordinary = self.make_scope('ordinary-page', self.department.organization)[4]
@@ -249,11 +273,14 @@ class PilotVoice(BoundaryFixture, TestCase):
             refused = self.client.post(self.url + 'generate/', {'usage_quote': self.quote_signed_ago(20 * 60), 'revision': self.encounter.revision})
         self.assertIn('Usage quote expired or changed. Reload to review the current maximum charge.', texts(refused))
 
-    def test_a_notes_change_is_named_as_the_reason_not_an_expired_price(self):
+    def test_a_document_change_is_named_as_the_reason_not_an_expired_price(self):
         quote = self.quote_signed_ago(0)
-        self.encounter.revision += 1; self.encounter.save(update_fields=['revision'])
+        # Answers saved in another window move the revision without touching the notes.
+        saved = self.client.post(self.url + 'save/', {'revision': self.encounter.revision, 'answer_symptoms': 'Fictional answer only'})
+        self.assertEqual(saved.status_code, 302)
+        self.encounter.refresh_from_db()
         response = self.send(quote)
-        self.assertIn(VOICE_NOTES_CHANGED, texts(response))
+        self.assertIn(VOICE_DOCUMENT_CHANGED, texts(response))
         self.assertNotIn(VOICE_QUOTE_EXPIRED, texts(response))
         self.assertFalse(Job.objects.filter(encounter=self.encounter).exists())
         self.assertEqual(self.uploads(), [])

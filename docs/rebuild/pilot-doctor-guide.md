@@ -23,16 +23,17 @@ notes every few minutes; an unsaved page is lost when a session ends.
 
 ## 2. Add a fictional patient
 
-Sidebar **Patients** → enter a fictional name and reference (for example *Synthetic Patient A*,
-*SYN-001*) → tick *This is a synthetic test patient* → **Create patient**. A document cannot be
+Sidebar **Patients** → choose your department (a new account has one, *Personal practice*, already
+selected) → enter a fictional name and reference (for example *Synthetic Patient A*, *SYN-001*) →
+tick *This is a synthetic test patient* → **Create patient**. A document cannot be
 created without a patient.
 
 ## 3. Add your form
 
 Sidebar **Workspace** → **Upload form ＋** (on an empty workspace: **Upload your first form**).
 The upload page lists the **Supported forms**; read it before choosing a file. Enter a name,
-choose the file, tick *This is a blank form with no patient data*, then **Upload and inspect
-form**. The form page shows every answer field it found.
+choose your department, choose the file, tick *This is a blank form with no patient data*, then
+**Upload and inspect form**. The form page shows every answer field it found.
 
 - **The qualified WM IOV form:** upload the blank WM IOV file provided for this pilot **exactly as
   you received it**. Do not open and save it in Word first: it is recognised by its fingerprint,
@@ -56,8 +57,8 @@ The document page starts with **1. Type or dictate your notes**.
 - **Typing:** edit the **Source notes** box, then **Save source notes**.
 - **Voice:** choose **Use voice**, then **Record voice** (up to 5 minutes) and **Stop**, or
   upload a recording (.wav, .webm, .mp3 or .m4a, up to 15 MB). Listen to it, tick the consent
-  box, then **Transcribe recording**. Send it within 30 minutes of opening the page; after that
-  the price expires and the recording is not kept. Refresh until **Review the returned
+  box, then **Transcribe recording**. Send it within 30 minutes of opening the page and before your
+  preview access ends; after that the recording is not kept. Refresh until **Review the returned
   transcript** appears. The transcript has no punctuation and writes numbers as words, so
   correct it there. Choose **Append** or **Replace**, tick the review box, then **Save reviewed
   transcript to notes**. Nothing reaches your notes without this step.
@@ -86,7 +87,9 @@ documented — preserve unselected field*; empty measurements stay blank. Below 
 the 14 prewritten statements and signing items. Each needs an approved wording and a review tick,
 and each of the 11 clinical statements also needs a source quotation: its own notes line. If
 finalizing is refused, scroll for the red lines under each answer and statement: they say what
-is missing.
+is missing. One exception: when a chosen statement wording and the dropdown answers disagree, the
+page shows a single general message that names no statement; check each statement's wording
+against the answers it depends on (the form page lists them).
 
 ## 7. Finalize and download
 
@@ -100,22 +103,28 @@ lists every charge; choose a charge's service name to see how it was calculated.
 
 | form | labelled lines (`Question label: answer`) | ordinary narrative sentences |
 |---|---|---|
-| **A label followed by an underlined Tab** | most reliable | can be matched to the right question; check each one |
-| **Question/answer tables, `{{Question}}` placeholders, multi-column or mixed forms** | most reliable | any unlabelled line sends **every** answer back to you as a **conflict** to decide |
+| **Lines with a label and an underlined Tab** | most reliable | can be matched when every sentence is complete (a verb such as *is* or *has*, ending in `.` `!` or `?`); otherwise answers come back for your decision |
+| **Question/answer tables, `{{Question}}` placeholders, multi-column or mixed forms, fillable PDFs** | most reliable | any unlabelled line sends **every** answer back to you as a **conflict** to decide |
 | **The WM IOV form** | **required** | **not supported**: narrative notes cannot be finalized on this form |
 
 - Use the form's own question wording as the label, one fact per line.
-- On every form, a heading line ending in a colon, a quotation, or a word such as *if*, *would*,
-  *could*, *might*, *these*, *those*, *above*, *below*, *following* or *listed* in the notes can
-  send the generated answers back to you as conflicts to decide.
-- A suggestion is never offered for text under a denial, a hypothetical (*if*, *would*,
-  *could*, *might*) or a quotation. You then type the answer yourself.
+- On underlined-Tab forms, a heading line ending in a colon, a quotation, an extra line without
+  final punctuation, or a word such as *if*, *would*, *could*, *might*, *these*, *those*, *above*,
+  *below*, *following* or *listed* anywhere in the notes sends the generated answers back to you as
+  conflicts to decide. On every other form, only an unlabelled line does.
+- **Read the whole note before accepting a suggestion.** Suggestions are withheld only in three
+  cases: a line ending in a colon that contains *denied*, *denies*, *absent*, *negative*, *no*,
+  *not*,
+  *without* or *never*; the words *if*, *would*, *could*, *might*, *family history*,
+  *hypothetical*, *imagine* or *suppose* anywhere in the notes; or a quotation. A denial or
+  condition written any other way (for example *The patient denied each of the symptoms below.*)
+  can still come with a suggestion that states the opposite of what you meant.
 - **WM IOV only:** every non-empty answer must be the exact value under its exact label. A
   dropdown value must match one of the form's own options, and a measurement needs its unit
   (`3.2 mm`, `400 ms`). Each of the 11 prewritten statements must also be its own line: its
-  label, a colon, then one approved wording from the form page. A *not documented* or *not
-  assessed* wording requires the related questions to be left unanswered. Saving changed notes
-  clears the draft, so write the statement lines **before** generating.
+  label, a colon, then one approved wording from the form page. Some wordings need particular
+  questions answered, or left unanswered; the form page says which for each wording. Saving
+  changed notes clears the draft, so write the statement lines **before** generating.
 - Answers come only from your notes; nothing is inferred from outside them.
 
 ## A fictional example
@@ -149,13 +158,14 @@ Prewritten statement: Clinical correlation: Clinical correlation with the above 
 
 | kind | what works | notes |
 |---|---|---|
-| **Word (.docx)** | two-column question/answer tables, a label followed by an underlined Tab, `{{Question}}` placeholders, multi-column question rows, mixed layouts | typed underscores `____` are not answer fields; answers expand in place, so check every exported page |
-| **Fillable PDF** | every field a visible plain text field in the standard Helvetica font | basic characters only: no °, µ or accented letters |
+| **Word (.docx)** | two-column question/answer tables, `{{Question}}` placeholders, multi-column question rows, mixed layouts, and lines of a label plus an underlined Tab (an ordinary paragraph, not inside a table, nothing typed after the Tab) | typed underscores `____` are not answer fields; answers expand in place, so check every exported page |
+| **Fillable PDF** | every field a visible plain text field with a fixed font size (not Auto), standard Helvetica font, no format scripts, not rotated, read-only, comb or rich-text | answers in plain ASCII only (no curly quotes or apostrophes, long dashes, °, µ or accented letters) and must fit their box; a character outside ASCII is refused at finalize |
 | **Qualified WM IOV form** | exactly **one** file, recognised by its fingerprint, with its dropdowns and prewritten statements | labelled notes required; its own *No answer documented* choice replaces *Leave blank — reviewed* |
 
 **Refused at upload:** any other Word file with dropdowns, date pickers or other content controls;
-text boxes, tracked changes, fields or macros; PDFs with checkboxes, radio buttons or dropdown
-fields; scanned or flat PDFs; password-protected or encrypted files and old `.doc` files. A
+text boxes, tracked changes, fields or macros; PDFs with checkboxes, radio buttons, dropdown,
+signature or button fields; scanned or flat PDFs; password-protected or encrypted files and old
+`.doc` files. A
 form with dropdowns is **not** qualified because it resembles the WM IOV form. CPT coding is off
 during the pilot.
 
