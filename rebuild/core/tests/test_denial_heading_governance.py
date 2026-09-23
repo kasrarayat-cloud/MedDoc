@@ -565,6 +565,8 @@ class WhatTheFourthPassFound(ExpectationsMixin, TestCase):
         answer = fixture_answers(['Fever'], 'Fever: yes. Correction: no fever.')['Fever']
         self.assertNotEqual(answer['status'], 'supported')
         self.assertNotIn('suggestion', answer)
+        # The governing sentence is on the answer's own line, and the page says so.
+        self.assertTrue(answer['held_candidate']['context'][0]['same'])
 
     def test_a_forward_pointer_in_the_same_paragraph_governs_the_sentences_after_it(self):
         notes = ('PROCEDURE: diagnostic colonoscopy. Her colonoscopy in 2019 at another centre had the following. '
@@ -951,7 +953,7 @@ class WhatTheSeventhPassFound(ExpectationsMixin, TestCase):
 
     def test_a_value_or_a_clock_time_before_the_word_is_not_a_list_marker(self):
         for line in ('Glucose: 312 correction given', 'Potassium: 3.1 - correction started orally', 'Calcium: 2.02 (albumin correction: 2.26)',
-                     'Events: at 12:00 correction 4 units for glucose 280'):
+                     'Events: at 12:00 correction 4 units for glucose 280', 'Events: at 12:00 correction: 4 units for glucose 280'):
             label = line.split(':')[0]
             with self.subTest(line=line):
                 self.assert_ready(fixture_answers(['Diagnosis', label], 'Diagnosis: type 2 diabetes\n' + line)['Diagnosis'], 'type 2 diabetes')
@@ -970,6 +972,12 @@ class WhatTheSeventhPassFound(ExpectationsMixin, TestCase):
         held = fixture_answers(['Impression'], notes)['Impression']['held_candidate']
         self.assertEqual(len([e for e in held['context'] if 'quote' in e]), 1)
         self.assertNotIn('more', held['context'][-1])
+
+    def test_a_one_line_notes_whole_line_is_the_answers_own_line(self):
+        notes = 'Symptoms: chest pain. Correction: no chest pain.'
+        fields = form('Symptoms')
+        cleared = {'status': 'edited', 'text': '', 'evidence': [{'quote': notes, 'start': 0, 'end': len(notes)}]}
+        self.assertEqual(generation.governed_decisions(notes, fields, {'q0': cleared}), ['Symptoms'])
 
     def test_the_cap_holds_for_an_answers_own_heading_sentences(self):
         notes = '\n'.join(f'Allergies: item{i} of the following:' for i in range(40))
