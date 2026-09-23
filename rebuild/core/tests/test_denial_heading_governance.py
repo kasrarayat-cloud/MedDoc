@@ -766,11 +766,14 @@ class WhatTheFifthPassFound(ExpectationsMixin, TestCase):
             with self.subTest(line=line):
                 self.assert_ready(fixture_answers(['Diagnosis', label], 'Diagnosis: type 2 diabetes\n' + line)['Diagnosis'], 'type 2 diabetes')
 
-    def test_a_note_wide_hold_is_not_triggered_by_a_lettered_treatment_line(self):
+    def test_the_documented_cost_a_lettered_treatment_line_withholds_every_offer(self):
+        """⚠️ TRADE, RE-PINNED IN THE TENTH PASS (it was pinned the other way here): a line starting with the word
+        after ANY bullet or marker withholds every offer, a treatment included, because the same exemption let
+        `● Correction of the earlier entry: …` release an offer under a real erratum. It costs a typed answer."""
         for line in ('a) Correction of hypokalemia with oral potassium chloride.', '(corrections officer, day shift)'):
             notes = 'Fictional software test only.\nAssessment: Hypokalemia.\nPlan: Potassium chloride 40 mEq orally.\n' + line
             with self.subTest(line=line):
-                self.assertEqual(fixture_answers(['Assessment', 'Plan'], notes)['Assessment'].get('suggestion'), 'Hypokalemia.')
+                self.assertNotIn('suggestion', fixture_answers(['Assessment', 'Plan'], notes)['Assessment'])
 
     def test_the_answered_question_exception_reads_sentences_not_lines(self):
         notes = ('Symptoms: Left ankle soreness began yesterday. Pertinent negatives: Denies fever. Pain score: Six out of ten. '
@@ -1148,9 +1151,10 @@ class WhatTheNinthPassFound(ExpectationsMixin, TestCase):
         self.assertIn('The patient denies the following.', ' '.join(entry.get('quote', '') for entry in context))
 
     def test_an_earlier_release_answer_on_a_one_line_note_is_judged_fail_closed(self):
-        """Its only evidence is the whole note: offset 0 would put the candidate before the mid-line pointer."""
+        """On the tab contract its only evidence may be the whole-note span: offset 0 would put the candidate before
+        the mid-line pointer. (On the legacy contract a one-line note is never substituted: tenth pass.)"""
         notes = 'Indication: screening. The patient denies the following. Chest pain, dyspnea.'
-        fields = form('Indication', 'Symptoms')
+        fields = [{**field, 'locator': {**field['locator'], 'tab_form': {'version': 1}}} for field in form('Indication', 'Symptoms')]
         stored = {'q1': {'status': 'edited', 'text': '', 'reviewed': True,
                          'evidence': [{'quote': notes, 'start': 0, 'end': len(notes)}]}}
         self.assertIn('Symptoms', generation.governed_decisions(notes, fields, stored))
@@ -1176,6 +1180,122 @@ class WhatTheNinthPassFound(ExpectationsMixin, TestCase):
         started = time.perf_counter()
         generation.governance_for(notes, fields)
         self.assertLess(time.perf_counter() - started, 2)
+
+
+class WhatTheTenthPassFound(ExpectationsMixin, TestCase):
+    """Refutation of the finished diff, tenth pass (over 36a3ac72)."""
+
+    def held(self, answer):
+        self.assertEqual(answer['status'], 'conflict', answer)
+        self.assertEqual(answer['text'], '')
+        self.assertNotIn('suggestion', answer)
+
+    def test_a_dash_written_for_none_is_an_answer_not_a_heading(self):
+        for value in ('-', '--', '\u2014', '\u2013', '---'):
+            with self.subTest(value=value):
+                self.assertFalse(generation.ends_in_colon('Allergies: ' + value))
+                notes = f'Chest pain: {value}\nSOB: +, on exertion\nAllergies: NKDA'
+                answers = fixture_answers(['Chest pain', 'SOB', 'Allergies'], notes)
+                self.assert_ready(answers['SOB'], '+, on exertion')
+                self.assert_ready(answers['Chest pain'], value)
+                tab = tab_answers(['Chest pain', 'SOB', 'Allergies'], notes)[1]
+                self.assertNotIn('held_candidate', tab['SOB'])
+        # CONTROL: markup that closes a heading still does.
+        self.assertTrue(generation.ends_in_colon('**Mother:**') and generation.ends_in_colon('Family history: _Mother:_'))
+
+    def test_a_closing_label_in_markup_or_with_a_blank_line_is_bare(self):
+        for closing in ('Signed by: ______________', '**Signed by:**', '_Electronically signed by:_', 'Signed by:<br>',
+                        '(Signed by:)', 'Electronically signed on 09/21/2026 at 10:42 by: ____'):
+            with self.subTest(closing=closing):
+                self.assertTrue(generation.bare_label(closing, None))
+                answer = fixture_answers(['Indication', 'Findings'], 'Indication: screening\nFindings: normal\n' + closing)['Findings']
+                self.assertEqual(answer.get('suggestion'), 'normal', answer)
+        # CONTROL: an inner colon, or a pointer, still governs what came before.
+        self.assertFalse(generation.bare_label('Signed by: Dr A: pending review', None))
+        answer = fixture_answers(['Indication', 'Findings'], 'Indication: screening\nFindings: normal\n**None of the above:**')['Findings']
+        self.assertNotIn('suggestion', answer)
+
+    def test_a_line_starting_with_correction_after_any_bullet_or_marker_withholds_every_offer(self):
+        for prefix in ('\u25cf', '\uf0b7', '\u25cb', '>', '\u2192', '\u2713', '\u25a0', '(1)', 'a)', 'i.', '#2', '1.2', '1. a)', '-', '1)'):
+            for rest in ('Correction of the earlier entry: the patient reports chest pain.', 'Correction scale: 2 units per 50 mg/dL'):
+                with self.subTest(prefix=prefix, rest=rest):
+                    notes = f'Symptoms: no chest pain\n{prefix} {rest}\nFictional note, no heading here'
+                    self.assertNotIn('suggestion', fixture_answers(['Symptoms'], notes)['Symptoms'])
+        # CONTROL: the word inside a value, or inside another word, is not a line start; the offer stays.
+        for line in ('Plan: correction of anemia with oral iron', 'Incorrect entry struck through'):
+            with self.subTest(line=line):
+                notes = f'Symptoms: no chest pain\n{line}\nFictional note, no heading here'
+                self.assertEqual(fixture_answers(['Symptoms', 'Plan'], notes)['Symptoms'].get('suggestion'), 'no chest pain')
+
+    def test_a_line_starting_with_correction_after_any_line_break_withholds_every_offer(self):
+        for separator in ('\u2028', '\x0b', '\x0c', '\x85', '\x1e', '\r'):
+            with self.subTest(separator=repr(separator)):
+                notes = 'Diabetes: yes' + separator + '\uf0b7 Correction of previous entry: the diabetes is her mother\u2019s.'
+                self.assertNotIn('suggestion', fixture_answers(['Diabetes'], notes)['Diabetes'])
+
+    def test_a_control_character_inside_a_word_hides_nothing(self):
+        for line in ('Comments: Correc\x7ftion: severe crushing chest pain today.',
+                     'Comments: Physician\u00e2\x80\x99s correc\x81tion: severe crushing chest pain today.'):
+            with self.subTest(line=repr(line)):
+                answer = provider_answers(['Symptoms', 'Comments'], 'Symptoms: no chest pain\n' + line,
+                                          {'Symptoms': ['Symptoms: no chest pain']})['Symptoms']
+                self.assertNotEqual(answer['status'], 'supported', answer)
+        answer = fixture_answers(['Diabetes'], 'Comments: her mother has the fol\x7flowing\nDiabetes: yes')['Diabetes']
+        self.assertNotIn('suggestion', answer)
+
+    def test_a_repeat_whose_label_differs_in_case_or_spacing_is_judged(self):
+        for repeat in ('SYMPTOMS: chest pain', 'Symptoms:  chest pain', 'Symptoms : chest pain', 'symptoms: chest pain'):
+            with self.subTest(repeat=repeat):
+                notes = 'Symptoms: chest pain\nReview of systems: negative for the following:\n' + repeat
+                answer = provider_answers(['Review of systems', 'Symptoms'], notes, {'Symptoms': ['Symptoms: chest pain']})['Symptoms']
+                self.assertNotEqual(answer['status'], 'supported', answer)
+        fields = [{'key': 'k', 'label': 'Symptoms', 'kind': 'text', 'locator': {'cell': 0, 'tab_form': {'version': 1}}}]
+        notes = 'Symptoms: chest pain\nCorrection: the patient denies chest pain.\nSYMPTOMS: chest pain'
+        chosen = Selections(fields=[Selection(key='k', quotes=['SYMPTOMS: chest pain'], conflict=False)])
+        answer = validate_selections(notes, fields, chosen)['k']
+        self.assertNotEqual(answer['status'], 'supported', answer)
+
+    def test_markup_or_a_closing_mark_outside_the_old_list_still_ends_a_heading(self):
+        for heading in ('Review of systems: negative for:&nbsp;', 'Review of systems: | negative for: |',
+                        'Review of systems: `negative for:`', 'Review of systems: negative for:\uff09',
+                        'Review of systems: negative for:\u3009', 'Review of systems: negative for the following&nbsp;',
+                        'Review of systems: negative for:<br data-mce-bogus="1">'):
+            with self.subTest(heading=heading):
+                self.held(fixture_answers(['Review of systems', 'Symptoms'], heading + '\nSymptoms: chest pain')['Symptoms'])
+
+    def test_a_colon_heading_shows_the_sentence_that_changes_its_meaning(self):
+        notes = 'Diabetes: yes\nComments: Findings reported by her mother, not by the patient. Cardiovascular:\nHypertension: yes'
+        answer = provider_answers(['Diabetes', 'Comments', 'Hypertension'], notes, {'Hypertension': ['Hypertension: yes']})['Hypertension']
+        shown = ' '.join(entry.get('quote', '') for entry in answer['held_candidate']['context'])
+        self.assertIn('reported by her mother', shown)
+        # CONTROL: when the heading's own sentence carries the meaning, only that sentence is shown.
+        notes = 'Comments: seen today. Pertinent negatives:\nSymptoms: chest pain'
+        answer = provider_answers(['Comments', 'Symptoms'], notes, {'Symptoms': ['Symptoms: chest pain']})['Symptoms']
+        self.assertEqual([entry['quote'] for entry in answer['held_candidate']['context']], ['Pertinent negatives:'])
+
+    def test_a_ready_answer_on_a_one_line_legacy_note_cleared_finalizes_empty(self):
+        notes = 'Mild bilateral ankle edema; patient would like compression stockings.'
+        answer = provider_answers(['Findings'], notes, {'Findings': [notes]})['Findings']
+        self.assertEqual(answer['status'], 'supported')
+        fields = form('Findings')
+        stored = {'q0': {**answer, 'status': 'edited', 'text': ''}}
+        self.assertEqual(generation.governed_decisions(notes, fields, stored), [])
+        # And on the tab contract, the answer keeps its own line beside it, so clearing it is judged by that line.
+        notes = 'Mild bilateral ankle edema was seen.'
+        fields, answers = tab_answers(['Findings'], notes)
+        stored = {fields[0]['key']: {**answers['Findings'], 'status': 'edited', 'text': ''}}
+        self.assertEqual(generation.governed_decisions(notes, fields, stored), [])
+
+    def test_many_lines_or_many_pointers_in_one_sentence_are_linear(self):
+        import time
+        fields = [{'key': f'k{i}', 'label': f'Question {i}', 'kind': 'text', 'locator': {'cell': i}} for i in range(100)]
+        head = ''.join(f'Question {i}: yes\n' for i in range(100))
+        for notes in ('Findings:\n' + 'x\n' * 24000, head + 'see below.X ' * 4000, head + 'below: ' * 7000,
+                      head + 'the following: ' * 3000):
+            with self.subTest(notes=notes[-30:]):
+                started = time.perf_counter()
+                generation.governance_for(notes[:50000], fields)
+                self.assertLess(time.perf_counter() - started, 2)
 
 
 class TheQualifiedWordFormKeepsItsLabelsSelfContained(ExpectationsMixin, TestCase):
@@ -1479,6 +1599,35 @@ class TheDecisionIsEnforcedThroughFinalizationAndExport(DocumentWorkflow):
         self.assertNotEqual(encounter.status, 'finalized')
         self.assertContains(response, 'still need your decision: Review of systems, Symptoms.')
 
+    def test_a_visible_edit_on_a_stale_page_keeps_what_governs_it(self):
+        """Tenth pass: a page opened before this release, edited visibly, saved the answer bare, and its governing
+        heading was never shown again before finalization."""
+        encounter = self.generated()
+        value = HEADING.index('negative')
+        finding = encounter.notes.index('chest pain')
+        stale = {self.ros: {'text': 'negative for the following:', 'status': 'supported', 'reviewed': False,
+                            'evidence': [{'quote': 'negative for the following:', 'start': value, 'end': len(HEADING)}]},
+                 self.symptoms: {'text': 'chest pain', 'status': 'supported', 'reviewed': False,
+                                 'evidence': [{'quote': 'chest pain', 'start': finding, 'end': finding + len('chest pain')}]}}
+        Encounter.objects.filter(pk=encounter.pk).update(answers=stale)
+        encounter.refresh_from_db()
+        self.save(encounter, **{'answer_' + self.ros: 'Negative for the following:', 'answer_' + self.symptoms: 'Chest pain'})
+        saved = encounter.answers[self.symptoms]
+        self.assertEqual((saved['status'], saved['text']), ('edited', 'Chest pain'))
+        self.assertEqual(saved['held_candidate']['text'], 'chest pain')
+        self.assertTrue(saved['held_candidate']['prefilled'])
+        section = self.section(encounter, 'Symptoms')
+        self.assertIn('data-governing-line', section)
+        self.assertIn(HEADING, section)
+        # Cleared on a stale page instead, it stays held: nothing to finalize.
+        Encounter.objects.filter(pk=encounter.pk).update(answers=stale)
+        encounter.refresh_from_db()
+        self.save(encounter, **{'answer_' + self.ros: 'none', 'answer_' + self.symptoms: ''})
+        self.assertEqual((encounter.answers[self.symptoms]['status'], encounter.answers[self.symptoms]['text']), ('conflict', ''))
+        response = self.finalize_attempt(encounter)
+        encounter.refresh_from_db()
+        self.assertNotEqual(encounter.status, 'finalized')
+
     def test_an_invisible_answer_is_saved_as_no_answer(self):
         encounter = self.generated()
         self.save(encounter, **{'answer_' + self.symptoms: '\u200b\u2800', 'answer_' + self.ros: 'none'})
@@ -1501,7 +1650,8 @@ class TheDecisionIsEnforcedThroughFinalizationAndExport(DocumentWorkflow):
         Encounter.objects.filter(pk=encounter.pk).update(answers=stale)
         encounter.refresh_from_db()
         self.save(encounter, **{'answer_' + self.ros: 'none'})          # a page from before: the box cleared
-        self.assertEqual((encounter.answers[self.symptoms]['status'], encounter.answers[self.symptoms]['text']), ('edited', ''))
+        # Tenth pass: held, exactly as the page that shows it held would save it (it was `edited` and empty).
+        self.assertEqual((encounter.answers[self.symptoms]['status'], encounter.answers[self.symptoms]['text']), ('conflict', ''))
         section = self.section(encounter, 'Symptoms')
         self.assertIn('data-governing-line', section)
         self.assertIn(HEADING, section)

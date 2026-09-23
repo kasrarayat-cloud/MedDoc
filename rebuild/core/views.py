@@ -527,10 +527,14 @@ def save_answers(request,pk):
         # A draft from an earlier release holding a governed answer as `supported` is saved as the page showed it —
         # held — so the clinician's answer is their decision even when it repeats the candidate's words. ⚠️ ONLY WHEN
         # THIS PAGE SHOWED IT HELD (`held_shown_`): a page opened before this release posts the pre-filled text back,
-        # and taking that as a decision is the defect's own gesture. Without the marker it stays `supported`, and
-        # finalization refuses it.
-        if held_shown and supported_context is not None:
-            previous=held_for_decision(previous,[previous.get('text','')],previous['evidence'],supported_context,is_wm,prefilled=True)
+        # and taking that as a decision is the defect's own gesture. Without the marker, text that LOOKS THE SAME
+        # stays `supported` (finalization refuses it); text that visibly differs is the clinician's edit, saved with
+        # the candidate and its governing lines kept beside it, so the next page shows what governs it (tenth pass:
+        # the edit was saved bare, and the heading was never shown again).
+        held_draft=(held_for_decision(previous,[previous.get('text','')],previous['evidence'],supported_context,is_wm,prefilled=True)
+                    if supported_context is not None else None)
+        if held_shown and held_draft is not None:
+            previous=held_draft
         # Browsers post a textarea's line breaks as CRLF. Stored as posted, a multi-line answer was
         # refused by every fillable PDF at finalize (a carriage return is not printable), exported
         # to a Word table cell as two breaks per line, and compared unequal to its own unchanged text.
@@ -545,8 +549,11 @@ def save_answers(request,pk):
         # ⚠️ AND WHAT NOBODY CAN SEE IS NOT A DECISION EITHER: a page from before this release re-posting the pre-filled
         # governed text (or an accepted governed suggestion) with a stray space or invisible character keeps what it
         # re-posts, which finalization refuses.
-        if not held_shown and supported_context is not None and looks_the_same(value,previous.get('text','')):
-            value=previous.get('text','')
+        if not held_shown and held_draft is not None:
+            if looks_the_same(value,previous.get('text','')):
+                value=previous.get('text','')
+            else:
+                previous=held_draft
         if (not held_shown and governed_offer and previous.get('accepted_suggestion')
                 and looks_the_same(value,previous.get('suggestion'))):
             value=str(previous.get('suggestion') or '')

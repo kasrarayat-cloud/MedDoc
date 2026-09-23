@@ -122,7 +122,8 @@ lists every charge; choose a charge's service name to see how it was calculated.
   (a label left empty counts); separately, a heading, a sentence ending on a forward pointer or a
   correction makes the answers it governs a decision on every form (below).
 - **A heading governs what comes after it.** A line ending in a colon (`Review of systems:
-  negative for the following:`, `Family hx: the following conditions:`), even when it is itself
+  negative for the following:`, `Family hx: the following conditions:`; markup or a closing mark
+  after the colon still counts: `**Mother:**`, `(Mother:)`, `Signed by: ____`), even when it is itself
   one of the form's questions, makes every answer written after it, to the end of the notes, a
   decision for you: it is never filled in and never offered for one click. What was read is shown
   beside it, with the lines that govern it (*Written under* above it, *Followed by* below it; up to
@@ -134,7 +135,9 @@ lists every charge; choose a charge's service name to see how it was calculated.
   it as well; at the end of a paragraph it reaches back from its own sentence. A bare label at the
   end does not: one with no other colon in what follows a form question's label (a clock time does
   not count) and no denial, family history, hypothetical or pointer word (`Signed by:`,
-  `Electronically signed on 09/21/2026 at 10:42 by:`, an empty `Allergies:`). `Dictated by: Dr A,
+  `**Signed by:**`, `Signed by: ______`, `Electronically signed on 09/21/2026 at 10:42 by:`, an
+  empty `Allergies:`). A dash after a colon is an answer, not a heading (`Allergies: -`, `Nose: —`
+  mean none). `Dictated by: Dr A,
   reviewed by:` (another colon, unless *Dictated by* is one of the form's questions) and `Dictated
   but not read:` (*not*) are headings. A closing line with words the vocabulary does not know
   (`Ruled out:`) is read as bare: write those as answers.
@@ -197,7 +200,10 @@ lists every charge; choose a charge's service name to see how it was calculated.
   your own answer (its words may be the same) or choose "Leave blank — reviewed"; saving with the
   box empty keeps the earlier acceptance. (On the WM IOV form, which has no "Leave blank —
   reviewed", such an acceptance is replaced by choosing or typing an answer; none exists in the
-  pilot's drafts.)
+  pilot's drafts.) Edited on a page opened before this release, the answer keeps its candidate and
+  the lines that govern it beside your text; cleared there, it stays held. An answer such a draft
+  could only store with the whole note as its source, cleared, needs "Leave blank — reviewed"
+  whenever anything in the note may govern it or withholds suggestions (for example *if* in a plan).
 - **An answer written under a governing line needs a decision.** If you type it and then clear it,
   choose "Leave blank — reviewed" before finalizing: an empty box there is not a decision. (Elsewhere,
   clearing an answer and ticking it reviewed leaves it empty, as before.) Invisible characters count
