@@ -12,6 +12,7 @@ stays `conflict`, so finalization still demands an explicit decision.
 Everything below is offline. No provider call is made by any test in this module.
 """
 import json
+import re
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
@@ -423,7 +424,13 @@ class APolarityOrAttRIBUTIONMarkerSuppressesTheOfferEntirely(TestCase):
         original = ('following|these|those|above|below|listed|family history|'
                     'if|would|could|might|hypothetical|imagine|suppose')
         self.assertEqual(SCOPE_POINTERS + '|' + SCOPE_REFRAMERS, original)
-        self.assertEqual(INHERITED_SCOPE.pattern, r'\b(?:' + original + r')\b')
+        # Ninth pass: letter boundaries instead of `\b` (an underscore is not a letter: `_negative for the following_`).
+        # They only WIDEN: whatever the `\b` form matched, this matches too.
+        self.assertEqual(INHERITED_SCOPE.pattern, generation.LETTER_BEFORE + r'(?:' + original + r')' + generation.LETTER_AFTER)
+        old = re.compile(r'\b(?:' + original + r')\b', re.I)
+        for text in ('see below', '_see below_', 'below2', 'x_below', 'following-up', '(if)', 'would\u2019ve', 'Suppose:'):
+            with self.subTest(text=text):
+                self.assertTrue(not old.search(text) or INHERITED_SCOPE.search(text))
 
 
 class WhatTheRefutationPassFound(AnUnacceptedSuggestionCannotReachAnExport):
@@ -768,7 +775,14 @@ class ADenialThatGovernsOtherLinesSuppressesTheOffer(TestCase):
         self.assertEqual(generation.UNSCOPED_NEGATIVE_HEADING.pattern,
                          r'^[^:]*\b(?:denied|denies|absent|negative|no|not|without|never)\b[^:]*:')
         self.assertEqual(generation.SUPPRESSING_DENIAL_WORDS.split('|')[:8], generation.DENIAL_WORDS.split('|'))
-        self.assertEqual(generation.DENIAL.pattern, r'\b(?:' + generation.SUPPRESSING_DENIAL_WORDS + r')\b')
+        # Ninth pass: letter boundaries, which only widen the `\b` form (an underscore is not a letter).
+        self.assertEqual(generation.DENIAL.pattern,
+                         generation.LETTER_BEFORE + r'(?:' + generation.SUPPRESSING_DENIAL_WORDS + r')' + generation.LETTER_AFTER)
+        old = re.compile(r'\b(?:' + generation.SUPPRESSING_DENIAL_WORDS + r')\b', re.I)
+        for text in ('denies', '_denies_', 'no2', 'x_no', 'non', 'not-tender', '**negative**'):
+            with self.subTest(text=text):
+                self.assertTrue(not old.search(text) or generation.DENIAL.search(text))
+        self.assertTrue(generation.DENIAL.search('_negative_') and not old.search('_negative_'))
 
     def test_a_pointer_beside_a_denial_withholds_offers_even_in_an_ordinary_sentence(self):
         """The documented, deliberate cost: over-suppressing costs a retyped answer."""
@@ -776,27 +790,45 @@ class ADenialThatGovernsOtherLinesSuppressesTheOffer(TestCase):
         self.assertTrue(negative_heading(notes))
         self.assertIsNone(judge(notes, ['the scope reached the cecum'], label='Extent').get('suggestion'))
 
+    def judge_pair(self, value):
+        fields = [{'key': 'f', 'label': 'Findings', 'kind': 'text', 'locator': {'cell': 0}},
+                  {'key': 'i', 'label': 'Impression', 'kind': 'text', 'locator': {'cell': 1}}]
+        chosen = Selections(fields=[Selection(key='f', quotes=[value], conflict=False),
+                                    Selection(key='i', quotes=['Normal venous study.'], conflict=False)])
+        return validate_selections(f'Findings: {value}\nImpression: Normal venous study.', fields, chosen,
+                                   evidence_contract='legacy')
+
     def test_a_denial_beside_an_ordinary_pointer_word_is_still_that_questions_answer(self):
-        """⚠️ A GUARD, NOT A FEATURE. Rounds 4-6 tried to decide a legacy STATUS from denial and pointer
-        words; every version blanked realistic notes (`No reflux below the knee.`, `…mid-thigh or
-        below.`, a WM location `not visualized below` emptied all 90 answers) and was withdrawn. These
-        must stay supported: the gate may withhold an offer, it never decides an answer."""
+        """⚠️ A GUARD, NOT A FEATURE. Rounds 4-6 of the pilot tried to decide a legacy STATUS from the mere
+        co-occurrence of denial and pointer words, and every version blanked realistic notes. A pointer
+        INSIDE a sentence is anatomy or time and governs nothing: both answers stay ready."""
         for value in ('No reflux below the knee.', 'No bleeding following polypectomy.',
                       'No driving for the following 24 hours.', 'Soft, no tenderness above the umbilicus.',
                       'Benign nevi; these are not concerning.', 'Good, without residual stool in the segments listed here.',
-                      'No DVT in the veins listed above.', 'No change from the study above.',
-                      'Reflux at the SFJ, 1200 ms; no reflux at mid-thigh or below.', 'Negative except as noted below.',
-                      'Normal above the knees, absent below.', 'Lateral calf, not visualized below',
-                      'No immediate complications following.'):
+                      'No change from the study above.', 'No DVT in the veins listed above.'):
             with self.subTest(value=value):
-                fields = [{'key': 'f', 'label': 'Findings', 'kind': 'text', 'locator': {'cell': 0}},
-                          {'key': 'i', 'label': 'Impression', 'kind': 'text', 'locator': {'cell': 1}}]
-                chosen = Selections(fields=[Selection(key='f', quotes=[value], conflict=False),
-                                            Selection(key='i', quotes=['Normal venous study.'], conflict=False)])
-                answers = validate_selections(f'Findings: {value}\nImpression: Normal venous study.', fields, chosen,
-                                              evidence_contract='legacy')
+                answers = self.judge_pair(value)
                 self.assertEqual((answers['f']['status'], answers['i']['status']), ('supported', 'supported'))
                 self.assertEqual(answers['f']['text'], value)
+
+    def test_a_denial_that_ends_on_a_forward_pointer_leaves_what_follows_to_a_decision(self):
+        """⚠️ THE DOCUMENTED TRADE of the denial-heading repair (2026-09-23). A sentence that ENDS on
+        `below`/`following` points at what comes next exactly as `negative for the symptoms below.` does, and
+        without grammar the two cannot be told apart — so its words are not read at all (third refutation pass:
+        an `except`, an earlier sentence or the label each decided wrongly). The sentence stays its own question's
+        answer; the answer after it needs a decision (no one-click offer), instead of a denied finding being
+        pre-filled. `…negative except as noted below.` is included: the lines it points at are its exceptions,
+        which the clinician confirms by typing them."""
+        for value in ('Reflux at the SFJ, 1200 ms; no reflux at mid-thigh or below.',
+                      'Normal above the knees, absent below.', 'Lateral calf, not visualized below',
+                      'No immediate complications following.', 'Negative except as noted below.',
+                      'Negative with the exception of the following.', 'See the instructions below.'):
+            with self.subTest(value=value):
+                answers = self.judge_pair(value)
+                self.assertEqual((answers['f']['status'], answers['f']['text']), ('supported', value))
+                self.assertEqual((answers['i']['status'], answers['i']['text']), ('conflict', ''))
+                self.assertNotIn('suggestion', answers['i'])
+                self.assertEqual(answers['i']['held_candidate']['text'], 'Normal venous study.')
 
     def test_a_heading_that_visibly_ends_in_a_colon_counts_on_both_contracts(self):
         """Round 5: the tab contract read only an ASCII colon, and a bidi mark or soft hyphen after the

@@ -58,14 +58,17 @@ def wm_resolve(encounter,actor,decisions=None):
     context={'reviewer_id':str(signer.pk),'revision':encounter.revision,'notes':encounter.notes,
              'signer_name':' '.join(signer.get_full_name().split()) or signer.email,
              'finalized_at':(encounter.finalized_at or timezone.now()).isoformat()}
-    result=resolve_template(original,version.document_backend,wm_review.sdk_answers(encounter,actor),
+    sent=wm_review.sdk_answers(encounter,actor)
+    result=resolve_template(original,version.document_backend,sent,
                             claim_variants=variants,trusted_context=context)
     if (result.get('backend')!=version.document_backend.get('backend')
             or result.get('mapping_digest')!=version.document_backend.get('mapping_digest')
             or result.get('sha256')!=version.template.sha256):
         raise ValidationError('The resolved Word statements differ from the selected mapping version.')
     if result.get('conflicts'):
-        raise ValidationError('The chosen answers and prewritten statement alternatives conflict. Correct their documented choices before review and export.')
+        # The adapter names each conflict; say which statement and which answers, on the page only.
+        from .wm_conflicts import WmConflicts,describe
+        raise WmConflicts(describe(result['conflicts'],version,sent,variants))
     return result['review_requirements']
 
 
@@ -377,6 +380,13 @@ def encounter_detail(request,pk):
     from .tab_review import clinician_identity
     deciders={str(pk):email for pk,email in User.objects.filter(
         pk__in={(row.get('blank_decision') or {}).get('by') for row in rows} - {None}).values_list('pk','email')}
+    if e.status!='finalized' and e.answers:
+        # ⚠️ THE PAGE SHOWS WHAT FINALIZATION WILL REFUSE, BY THE SAME READER. A draft from an earlier release
+        # can hold a governed answer as `supported` or as a one-click offer, accepted or not; each is shown held,
+        # with every line that governs it. A FINALIZED record is never re-described: it shows what was offered.
+        from .generation import as_currently_governed,governance_for
+        governance=governance_for(e.notes,e.template_version.fields,[row['label'] for row in e.template_version.review_requirements])
+        rows=[as_currently_governed(governance,e.notes,row,is_wm) for row in rows]
     for row in rows:
         row['accepted_by_email']=accepters.get(str(row.get('accepted_by') or ''),'')
         row['accepted_by_me']=str(row.get('accepted_by') or '')==str(request.user.pk)
@@ -395,7 +405,7 @@ def encounter_detail(request,pk):
         row['reviewed']=row['stored_reviewed'] and answer.get('reviewed_by')==str(request.user.pk)
         row['reviewed_by_other']=row['stored_reviewed'] and not row['reviewed']
         row['identity']=clinician_identity(row)
-    requirements=[];review_error='';assessment=None;resolved_ok=False
+    requirements=[];review_error='';assessment=None;resolved_ok=False;wm_conflicts=[]
     if is_wm:
         decisions=e.template_review.get('decisions',{})
         try:
@@ -405,6 +415,7 @@ def encounter_detail(request,pk):
                 assessment=wm_review.evaluate_review(e,request.user,decisions,resolved_requirements=requirements)
         except (ValidationError,DocumentError) as exc:
             review_error=error_message(exc)
+            wm_conflicts=getattr(exc,'rows',[])
             requirements=e.template_version.review_requirements
         for row in rows:
             answer=e.answers.get(row['key'],{})
@@ -415,6 +426,7 @@ def encounter_detail(request,pk):
             reasons=assessment['answers'][row['key']]['blockers'] if assessment else []
             if assessment:row['status']=assessment['answers'][row['key']]['status']
             row['review_errors']=[WM_BLOCKERS.get(reason,'Clinical review is incomplete.') for reason in reasons]
+            row['review_errors']+=[conflict['explanation'] for conflict in wm_conflicts if row['key'] in conflict['answer_keys']]
         for row in requirements:
             row['unresolved']=not resolved_ok
             decision=decisions.get(row['key'],{})
@@ -428,6 +440,7 @@ def encounter_detail(request,pk):
                     'variant':row['selected_variant']},salt='wm-statement-review')
             reasons=assessment['assertions'][row['key']]['blockers'] if assessment else []
             row['review_errors']=[WM_BLOCKERS.get(reason,'Clinical review is incomplete.') for reason in reasons]
+            row['review_errors']+=[conflict['explanation'] for conflict in wm_conflicts if row['key'] in conflict['statement_keys']]
     from .generation import maximum_cost,configuration
     try:maximum_charge=maximum_cost(e.notes,e.template_version.fields,context_labels=[row['label'] for row in e.template_version.review_requirements])*Decimal('1.5')
     except ValidationError:maximum_charge=None
@@ -451,7 +464,7 @@ def encounter_detail(request,pk):
                 transcript_reviews.append({'job':job,'raw':raw,'text':transcript,'empty':not (raw or '').strip() and not (transcript or '').strip()})
             except (ValidationError,OSError,ValueError):
                 job.display_error='The retained transcript could not be verified. Contact an administrator; do not resubmit a paid recording.'
-    return render(request,'encounter_detail.html',{'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'wm_requirements':requirements,'wm_review_error':review_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
+    return render(request,'encounter_detail.html',{'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
         'signer_name':' '.join((request.user.get_full_name() or request.user.email).split())})
 
@@ -503,16 +516,47 @@ def save_answers(request,pk):
         membership(request.user,e.department,roles=['owner','clinician'])
     answers={};review_errors=[];newly_accepted=[];withdrawn=[];newly_blank=[];withdrawn_blank=[];target_revision=e.revision+1
     previous_answers=dict(e.answers)
+    # ⚠️ ONCE PER SAVE, NOT PER FIELD: this runs under the row lock, and a 100-field save recomputed it per offer.
+    from .generation import governance_for,governed_supported,held_for_decision,is_empty,looks_the_same,offer_context
+    governance=governance_for(e.notes,e.template_version.fields,[row['label'] for row in e.template_version.review_requirements])
     for field in e.template_version.fields:
         key=field['key'];previous=e.answers.get(key,{'text':'','evidence':[],'status':'missing'})
+        held_shown=request.POST.get('held_shown_'+key)=='1'
+        supported_context=governed_supported(governance,e.notes,previous,field['label'])
+        governed_offer=offer_context(governance,e.notes,previous,field['label']) is not None
+        # A draft from an earlier release holding a governed answer as `supported` is saved as the page showed it —
+        # held — so the clinician's answer is their decision even when it repeats the candidate's words. ⚠️ ONLY WHEN
+        # THIS PAGE SHOWED IT HELD (`held_shown_`): a page opened before this release posts the pre-filled text back,
+        # and taking that as a decision is the defect's own gesture. Without the marker, text that LOOKS THE SAME
+        # stays `supported` (finalization refuses it); text that visibly differs is the clinician's edit, saved with
+        # the candidate and its governing lines kept beside it, so the next page shows what governs it (tenth pass:
+        # the edit was saved bare, and the heading was never shown again).
+        held_draft=(held_for_decision(previous,[previous.get('text','')],previous['evidence'],supported_context,is_wm,prefilled=True)
+                    if supported_context is not None else None)
+        if held_shown and held_draft is not None:
+            previous=held_draft
         # Browsers post a textarea's line breaks as CRLF. Stored as posted, a multi-line answer was
         # refused by every fillable PDF at finalize (a carriage return is not printable), exported
         # to a Word table cell as two breaks per line, and compared unequal to its own unchanged text.
         value=request.POST.get('answer_'+key,'').replace('\r\n','\n').replace('\r','\n')
+        # Refused before it is read character by character (seventh pass: a 20 MB value held the row lock ~10 s).
+        if len(value)>20000:return document_refusal(request,e,'Answer too long; nothing was truncated or saved.',400)
         # ⚠️ WHITESPACE IS NOT AN ANSWER. A space counted as an edit, so one keystroke could clear a
         # generated conflict — or erase a clinician's "Leave blank — reviewed" decision without the
         # authority check or audit that a real withdrawal carries. An answer is its text or nothing.
-        if not value.strip():value=''
+        # Nor are invisible characters or a blank braille cell: they export as a visually empty cell (fifth pass).
+        if not value.strip() or is_empty(value):value=''
+        # ⚠️ AND WHAT NOBODY CAN SEE IS NOT A DECISION EITHER: a page from before this release re-posting the pre-filled
+        # governed text (or an accepted governed suggestion) with a stray space or invisible character keeps what it
+        # re-posts, which finalization refuses.
+        if not held_shown and held_draft is not None:
+            if looks_the_same(value,previous.get('text','')):
+                value=previous.get('text','')
+            else:
+                previous=held_draft
+        if (not held_shown and governed_offer and previous.get('accepted_suggestion')
+                and looks_the_same(value,previous.get('suggestion'))):
+            value=str(previous.get('suggestion') or '')
         # "Leave blank — reviewed": the clinician's explicit decision that no answer belongs here.
         # It is a DECISION, kept apart from an untouched empty field (`missing`), a generated
         # `conflict` and an accepted suggestion, so it may not be combined with either of them.
@@ -533,6 +577,13 @@ def save_answers(request,pk):
         # ordinary save would accept it silently, and so would a reopen, an API read or an
         # export. Accepting takes its own checkbox, and typed text wins over it.
         suggestion=str(previous.get('suggestion') or '')
+        # An accepted offer the notes now show is governed is rendered HELD, with an empty box: an ordinary save
+        # there keeps the recorded act (finalization still refuses it), and only a typed answer or "Leave blank —
+        # reviewed" replaces it. Typing the suggestion's own words on that page is a new decision, not the old act.
+        governed_acceptance=held_shown and governed_offer and bool(previous.get('accepted_suggestion'))
+        kept=False
+        if governed_acceptance and not value.strip() and not blank:
+            value=str(previous.get('text') or '');kept=True
         # ⚠️ AN ACCEPTANCE IS A FACT ABOUT A DECISION ALREADY MADE, SO IT IS CARRIED FORWARD,
         # NOT RECOMPUTED FROM THE POST. Recomputing it withdrew every acceptance on the very next
         # save: once accepted, the page renders the accepted branch, which has NO checkbox to
@@ -541,8 +592,12 @@ def save_answers(request,pk):
         # independent refutation lenses found this within minutes of each other.
         # It survives only while the stored text is still exactly the suggestion; editing away
         # withdraws it, and typing the same words by hand never grants it.
-        accepted=bool(previous.get('accepted_suggestion')) and bool(suggestion) and value==suggestion
+        accepted=bool(previous.get('accepted_suggestion')) and bool(suggestion) and value==suggestion and (kept or not governed_acceptance)
         if not value.strip() and request.POST.get('accept_'+key)=='on' and suggestion:
+            # ⚠️ RECOMPUTED, NOT TRUSTED. An offer stored by an earlier release under a heading the notes now
+            # show governs this line would put the denied or the family's finding in one click.
+            if offer_context(governance,e.notes,previous,field['label']) is not None:
+                return document_refusal(request,e,'The suggestion for "'+field['label']+'" is no longer offered: a heading or a sentence in the notes may change it. Type your own answer'+('' if is_wm else ' or choose "Leave blank — reviewed"')+'. Nothing was saved.',400)
             # ⚠️ GATED LIKE ITS SIBLING. `reviewed` below demands owner/clinician, the template
             # renders this box `disabled` for everyone else, and the server checked nothing — so
             # an employee-role member could clear the conflict gate and have the page state, in
@@ -675,6 +730,13 @@ def finalize(request,pk):
             names={f['key']:f['label'] for f in e.template_version.fields}
             conflicts=[names.get(k,k) for k in sorted((k for k,v in e.answers.items() if v.get('status')=='conflict'),key=lambda k:(order.index(k) if k in order else len(order),k))]
             if conflicts:raise ValidationError('Resolve every conflict before finalizing. Each needs your decision: your own answer, the offered suggestion where there is one, or "Leave blank — reviewed" when no answer belongs there. Still in conflict: '+field_list(conflicts))
+            # ⚠️ RECOMPUTED FROM THE NOTES, NOT TRUSTED FROM THE DRAFT. A draft generated before headings
+            # governed their lines (or by any path that skipped the rule) can still hold a denied finding as
+            # a ready answer; the review tick alone must not finalize it.
+            from .generation import governed_decisions
+            governed=governed_decisions(e.notes,e.template_version.fields,e.answers,
+                                        [row['label'] for row in e.template_version.review_requirements])
+            if governed:raise ValidationError('These answers were read from lines that a heading or a sentence in the notes may change, and still need your decision: '+field_list(governed)+' Each is shown on the document with what governs it (its lines, or the reason that applies to the whole note): enter your own answer there'+('' if e.template_version.document_backend else ' or choose "Leave blank — reviewed"')+'.')
             original=private_path(e.template_version.template.original_path)
             if hashlib.sha256(original.read_bytes()).hexdigest()!=e.template_version.template.sha256:raise ValidationError('Original integrity check failed.')
             relative=f'exports/{secrets.token_hex(24)}.{e.template_version.template.format.lower()}'

@@ -88,13 +88,13 @@ documented — preserve unselected field*; empty measurements stay blank. Below 
 the 14 prewritten statements and signing items. Each needs an approved wording and a review tick,
 and each of the 11 clinical statements also needs a source quotation: its own notes line. If
 finalizing is refused, scroll for the red lines under each answer and statement: they say what
-is missing. One exception: when chosen statement wordings and the answers disagree, the page
-shows a single general message that names no statement. The form page lists, for each wording,
-the answers it needs given or left unanswered, but some combinations conflict even so and are
-not listed there: for example, a side's reflux answer *reflux positive.* with any wording other
-than that side's positive reflux statement; a reflux time over 500 ms with a *No saphenous
-reflux* wording; measurements or locations on a side whose wording says *not assessed*; or the
-indication *Previous vein treatment* while both legs' statements say there was none.
+is missing. When chosen statement wordings and the answers disagree, the notice at the top of
+the page lists each conflict: the statement, its chosen wording, the answers it clashes with and
+why. The same line appears under that statement and under each answer involved. Examples: a
+side's reflux answer *reflux positive.* with any wording other than that side's positive reflux
+statement; a reflux time over 500 ms with a *No saphenous reflux* wording; measurements or
+locations on a side whose wording says *not assessed*; the indication *Previous vein treatment*
+while both legs' statements say there was none.
 
 ## 7. Finalize and download
 
@@ -118,27 +118,138 @@ lists every charge; choose a charge's service name to see how it was calculated.
 - On underlined-Tab forms, a heading line ending in a colon, a quotation, an extra line without
   final punctuation, or a word such as *if*, *would*, *could*, *might*, *these*, *those*, *above*,
   *below*, *following* or *listed* anywhere in the notes sends the generated answers back to you as
-  conflicts to decide. On every other form, only a line that is not a label with its answer does
-  (a label left empty counts).
-- **Write each denial as its own answer** (`Symptoms: no chest pain`), never as a heading over
-  other labelled lines. On question/answer tables, placeholders, fillable PDFs and the WM IOV form,
-  if the heading is itself one of the form's questions (`Review of systems: negative for the
-  following:` on a form with a *Review of systems* question), the labelled lines below it are
-  read as ordinary answers, and a denied finding can come back as a ready answer. Review every
-  answer against the note before you tick it.
-- **Read the whole note before accepting a suggestion.** Suggestions are withheld in three
-  cases: a denial line that governs other lines, meaning a line containing *denied*, *denies*,
+  conflicts to decide. On every other form, a line that is not a label with its answer does
+  (a label left empty counts); separately, a heading, a sentence ending on a forward pointer or a
+  correction makes the answers it governs a decision on every form (below).
+- **A heading governs what comes after it.** A line ending in a colon (`Review of systems:
+  negative for the following:`, `Family hx: the following conditions:`; markup or a closing mark
+  after the colon still counts: `**Mother:**`, `(Mother:)`, `Signed by: ____`), even when it is itself
+  one of the form's questions, makes every answer written after it, to the end of the notes, a
+  decision for you: it is never filled in and never offered for one click. What was read is shown
+  beside it, with the lines that govern it (*Written under* above it, *Followed by* below it; up to
+  15 lines, nearest and denials first, and the rest counted: read the full note then; a line that
+  is the answer's own is shown as *In the same line*; when the same words also appear elsewhere in
+  the notes, the page says where, because a line may govern them there). A question left
+  empty mid-note (`Allergies:`) counts, because it may be a heading (`Pertinent negatives:`). A
+  heading at the very end, or one that contains *above*, *these*, *those* or *listed* (`… all of
+  the above denied:`, and also `Discharge medications as listed below:`), governs the lines before
+  it as well; at the end of a paragraph it reaches back from its own sentence. A bare label at the
+  end does not: one with no other colon in what follows a form question's label (a clock time does
+  not count) and no denial, family history, hypothetical or pointer word (`Signed by:`,
+  `**Signed by:**`, `Signed by: ______`, `Electronically signed on 09/21/2026 at 10:42 by:`, an
+  empty `Allergies:`). A dash after a colon is an answer, not a heading (`Allergies: -`, `Nose: —`
+  mean none), and so is a value in angle brackets (`Allergies: <penicillin>`, `PSA: <0.1>`, a
+  placeholder such as `Time: <time>`, and raw HTML whose colon is followed by an opening tag
+  such as `negative for:<ul>`); only a
+  real HTML tag after the colon (`<br>`, `</b>`, Word's `<o:p></o:p>`), a footnote mark (`¹`), `\`
+  or `~~` is markup; a blank or filled clock (`Time out: __:__`, `__ : __`) is not a heading, but a
+  number before closing markup is (`_Mother, age 72:_`). A sign-off row whose every field is a
+  signature, date, time or signer label (`Signature: ____ Date: ____`, `Signed by: Dr A  Date:`,
+  `Surgeon: ____ Signature: ____`) is a bare label; a row with any other field is not. The signer
+  words read are *signed*, *signature*, *dictated*, *transcribed*, *reviewed by*, *verified by*,
+  *date*, *time*, *surgeon*, *physician*, *clinician*, *provider*, *attending*, *resident*,
+  *nurse*, *name*, *credentials* and *NPI*; a footer such as `Reported by: Dr A  Date:` or
+  `Radiologist:` still governs the answers above it. A bare signature or date row after a closing
+  heading (`Review of systems: negative for:` then `Signed by: ____`) does not stop that heading
+  closing the notes. A sentence break inside brackets does not end a heading's or a pointer's
+  sentence (`… all of the above were denied (per intake form. Reviewed today):`), and markup around a
+  sentence's period does not hide where it ends (`*Negative for the following.* Reviewed today.`).
+  `Dictated by: Dr A, diagnosis:` (another colon that is not a sign-off field, unless *Dictated by*
+  is one of the form's questions) and `Dictated but not read:` (*not*) are headings. A closing line with words the vocabulary does not know
+  (`Ruled out:`) is read as bare: write those as answers.
+- **A sentence that ends by pointing forward works the same way, whatever its words.** A sentence
+  that **ends** on *following*, *below*, *as follows* or *the following* and one more word (`…
+  patient denies the following.`, `Her mother had the following.`, `… is as follows.`, `… the
+  following symptom(s).`, `… the following co-morbidities.`), including after an aside of any
+  length (`… the following (reviewed today).`; an aside left open on its line, nested twice, or in
+  braces `{…}` is not read as one, and the pointer is then missed; a pointer followed on the same
+  line by a wide column gap and more words without a period, as in pasted multi-column text, does
+  not end its sentence either) or before a colon and a list on
+  the same line (`…
+  as follows: polyps.`), makes every answer after it a decision, in the same paragraph and on later
+  lines, whatever non-word characters trail it to the end of its line (`… the following.*`, `…
+  the following.<br>`). A period ends such a sentence only before a new sentence (`… the following
+  wk. at the GP` does not). A form question's own label is not read as a pointer (`Patient was
+  informed of the following risks:` is a question, and its answer is an answer). This
+  includes exception lists (`… negative except as noted below.`: type the positives below it
+  yourself), references (`see the instructions below`), anatomy (`competent below.`) and times
+  (`Do not drive until the following day.`). The same words inside a sentence (`No reflux below
+  the knee.`, `…the following morning; able to bear weight.`, `No driving for the following 24
+  hours.`, `fixes and follows`) do not make later answers a decision (on underlined-Tab forms some
+  of these words still send answers back, above). ⚠️ **Only these words are read.** Two words or
+  more after *the following* (`… the following medical problems.`), *that follow*, *preceding*
+  and *aforementioned* are not: end such a line with a colon, which is read whatever its words. A
+  sentence that refers back without a colon (`… negative except as noted above.`) is not read.
+- **A correction governs what came before it.** The word *correction* where a line, an answer or
+  a sentence starts — after any bullet, bracket, quote or list marker (`● Correction: …`, `1-
+  Correction: …`, `#2 Correction: …`, `(Correction: …)`, `a) Correction: …`, `Addendum: Correction:
+  …`), or after one word before a colon, comma or dash (`Transcription correction: …`, `Physician's
+  correction: …`) — makes every answer before it a decision, in the same paragraph too, whatever
+  follows it (`Correction to my dictation, …`) — except a treatment or a target: `Correction of …`,
+  `Correction scale`, `factor`, `dose` or `insulin`, `Correction (sliding scale)`, `Correction to`
+  a number, `Correction-scale`, `Correction/…`, `Corrections officer` or `facility`. So
+  `Corrections (state prison officer)`, `Correction to no more than 8 mmol/L`, an insulin order line
+  `Correction: 2 units per 50 mg/dL` and `Correction: Bazett` are read as corrections too, and the
+  answers above them need your decision. Only the word *correction* is read (`Erratum:` and
+  `Corrected:` are not), and not when *correction* is part of a form question's own label
+  (`Correction achieved: 10 degrees`, `Refractive correction:`). After a label, a number before the
+  word is a value, not a list marker (`Glucose: 312 correction given` is not a correction), unless
+  it is a list number (`Comments: 1. Correction: …`) or the word is followed by a colon, comma or
+  dash (`Glucose: 312 correction: 4 units` is read as a correction, like `Transcription
+  correction:`). One exception: a correction that opens the whole answer to a
+  question already answered above it (`Pain score: Correction: three out of ten`) corrects that
+  question only, which already needs your decision because it has two answers — on an underlined-Tab
+  form anywhere in a paragraph, on every other form only at the start of its line. ⚠️ So a
+  correction of another question written under a question already answered (`Comments:
+  Correction: the allergy is sulfa`) is NOT applied to that other answer: write it under the
+  question it corrects. A correction after a timestamp, a bracketed number or another word and a
+  dash (`[09/22 14:05] Correction:`, `(9/22) Correction:`, `Addendum - Correction:`,
+  `ADDENDUM/CORRECTION:`) is not read: start the line with the word instead. A note line that starts with the word *Correction* or *Corrections*, after
+  any bullet or list number, also withholds every suggestion (below) — even a treatment line
+  (`Correction scale:`, `Correction insulin:`, `Correction of …`) or a line naming a form question
+  (`Correction achieved: 10 degrees`) — and so does a line that opens with a correction such as
+  `Transcription correction:`.
+- **Write each denial as its own answer** (`Symptoms: no chest pain`) when you can: nothing
+  governs it, so it comes back ready.
+- **On the WM IOV form, labelled lines never govern**: every label there names its own side, vein
+  and measure, so a heading, pointer or correction written inside a labelled answer changes no
+  other answer. An unlabelled line (which already sends every answer back) is read in full: a
+  heading, a sentence ending on a forward pointer or a correction there withholds the suggestions
+  it governs.
+- **A draft from before this release** is shown by the same rule: an answer it filled in from a
+  governed line is shown empty, with its candidate and the lines that govern it, and an accepted
+  suggestion there is shown the same way with a warning. Neither can be finalized as it is. Type
+  your own answer (its words may be the same) or choose "Leave blank — reviewed"; saving with the
+  box empty keeps the earlier acceptance. (On the WM IOV form, which has no "Leave blank —
+  reviewed", such an acceptance is replaced by choosing or typing an answer; none exists in the
+  pilot's drafts.) Edited on a page opened before this release, the answer keeps its candidate and
+  the lines that govern it beside your text; cleared there, it stays held. An answer you typed on a
+  governed line before this release keeps your text and is shown with those lines: check it against
+  them. An answer the note withholds suggestions for (from either release), typed over and cleared,
+  still needs "Leave blank — reviewed", as the page says. An answer such a draft
+  could only store with the whole note as its source, cleared, needs "Leave blank — reviewed"
+  whenever anything in the note may govern it or withholds suggestions (for example *if* in a plan).
+- **An answer written under a governing line needs a decision.** If you type it and then clear it,
+  choose "Leave blank — reviewed" before finalizing: an empty box there is not a decision. (Elsewhere,
+  clearing an answer and ticking it reviewed leaves it empty, as before.) Invisible characters count
+  as empty.
+- **Read the whole note before accepting a suggestion.** Suggestions are never offered for an
+  answer governed by a heading or a governing sentence (above). Otherwise they are withheld in
+  five cases: a denial line that governs other lines, meaning a line containing *denied*, *denies*,
   *deny*, *absent*, *negative*, *negatives*, *no*, *not*, *without* or *never* that ends in a
   colon
   (`ROS: negative for the following:`), points at other lines with *following*, *these*,
   *those*, *above*, *below* or *listed* (`The patient denied each of the symptoms below.`), or
   has the denial word before its first colon (`Not seen: …`); the words *if*, *would*, *could*,
-  *might*, *family history*, *hypothetical*, *imagine* or *suppose* anywhere in the notes; or a
-  quotation. A denial word next to one of those pointer words withholds every suggestion in the
+  *might*, *family history*, *hypothetical*, *imagine* or *suppose* anywhere in the notes; a
+  line that starts with the word *Correction*, even for a treatment (`Correction scale:`), or opens
+  with a correction such as `Transcription correction:`; a line break the page shows inline (pasted
+  text can carry a Unicode line separator that looks like a space); or a quotation. A denial word next to one of those pointer words withholds every suggestion in the
   note even in an ordinary sentence (*no driving for the following 24 hours*); type those answers
   yourself. A denial written any other way (for example *Chest pain was denied.* on one line and
-  *Symptoms: chest pain* on another) can still come with a suggestion that states the opposite of
-  what you meant.
+  *Symptoms: chest pain* on another) is not read as one: on underlined-Tab forms the opposite
+  finding can come back as a ready answer already filled in, and on other forms as a suggestion
+  that states the opposite of what you meant.
 - **WM IOV only:** every non-empty answer must be the exact value under its exact label. A
   dropdown value must match one of the form's own options, and a measurement is the number, a
   space, then its unit (`3.2 mm`, `400 ms`; `3.2mm` and `3,2 mm` are refused). Each of the 11 prewritten statements must also be its own line: its
