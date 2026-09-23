@@ -139,7 +139,8 @@ lists every charge; choose a charge's service name to see how it was calculated.
   `**Signed by:**`, `Signed by: ______`, `Electronically signed on 09/21/2026 at 10:42 by:`, an
   empty `Allergies:`). A dash after a colon is an answer, not a heading (`Allergies: -`, `Nose: —`
   mean none), and so is a value in angle brackets (`Allergies: <penicillin>`, `PSA: <0.1>`, a
-  placeholder such as `Time: <time>`); only a
+  placeholder such as `Time: <time>`, and raw HTML whose colon is followed by an opening tag
+  such as `negative for:<ul>`); only a
   real HTML tag after the colon (`<br>`, `</b>`, Word's `<o:p></o:p>`), a footnote mark (`¹`), `\`
   or `~~` is markup; a blank or filled clock (`Time out: __:__`, `__ : __`) is not a heading, but a
   number before closing markup is (`_Mother, age 72:_`). A sign-off row whose every field is a
@@ -161,7 +162,9 @@ lists every charge; choose a charge's service name to see how it was calculated.
   patient denies the following.`, `Her mother had the following.`, `… is as follows.`, `… the
   following symptom(s).`, `… the following co-morbidities.`), including after an aside of any
   length (`… the following (reviewed today).`; an aside left open on its line, nested twice, or in
-  braces `{…}` is not read as one, and the pointer is then missed) or before a colon and a list on
+  braces `{…}` is not read as one, and the pointer is then missed; a pointer followed on the same
+  line by a wide column gap and more words without a period, as in pasted multi-column text, does
+  not end its sentence either) or before a colon and a list on
   the same line (`…
   as follows: polyps.`), makes every answer after it a decision, in the same paragraph and on later
   lines, whatever non-word characters trail it to the end of its line (`… the following.*`, `…
