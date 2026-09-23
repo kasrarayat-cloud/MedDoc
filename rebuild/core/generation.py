@@ -490,11 +490,18 @@ HTML_TAG = re.compile(r'(?:</[A-Za-z][\w:.\-]*\s*>|<!--[^\n]*?-->'
 CHARACTER_REFERENCE = re.compile(r'&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});$')
 
 
+DIGITS = frozenset('0123456789')
+#: A markdown table's separator row (`|---|---:|`, `| :---: |`): alignment colons, not a heading.
+TABLE_RULE = re.compile(r'^[\s|:\-]*-{3,}[\s|:\-]*$')
+
+
 def heading_colon(text):
     """The offset of the colon `text` visibly ends in, or -1: fullwidth and small colons count, and so does a colon
     followed only by whitespace, invisible characters, markup, closing marks or a short tag (`<br>`). One pass from
     the end. ONE reader for `ends_in_colon` and `bare_label` (tenth pass: `Signed by: ____` was a heading to one and
     had an inner colon to the other)."""
+    if TABLE_RULE.match(text):
+        return -1
     blank = blank_set()
     end = len(text)
     while end:
@@ -517,7 +524,7 @@ def heading_colon(text):
     while right < len(text) and text[right] in ' \t':
         right += 1
     before, after = text[left] if left >= 0 else '', text[right] if right < len(text) else ''
-    if (before.isdigit() and after.isdigit()) or (before == '_' and after == '_'):
+    if (before in DIGITS and after in DIGITS) or (before == '_' and after == '_'):
         return -1
     return end - 1
 
@@ -651,14 +658,18 @@ POINTER = re.compile(LETTER_BEFORE + r"(?:following|below|as[\s\u2800]+follows|t
 ASIDE = r'\s*(?:\((?:[^()\n]|\([^()\n]*\))*\)|\[[^\[\]\n]*\])'
 MANY_ASIDES = re.compile('(?:' + ASIDE + '){5}')
 #: Whatever may trail a sentence to the END of its line: anything that is not a word, and markup (`*`, `<br>`, `_`).
-TRAIL = r'(?:[^\w\n<&]|_|[' + SUPERSCRIPTS + r']|<[^>\n]{0,200}>|<|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});|&)*+'
+MARKUP_UNIT = r'(?:[^\w\n<&]|_|[' + SUPERSCRIPTS + r']|<[^>\n]{0,200}>|<|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});|&)'
+#: Every run below is at most 50 units, so no pointer re-reads a whole line (fourteenth pass: thousands of pointers
+#: inside `<below>` tags did); a pointer followed by 50 units or more ends its sentence (MANY_MARKUP, fail closed).
+TRAIL = MARKUP_UNIT + '{0,50}+'
+MANY_MARKUP = re.compile(MARKUP_UNIT + '{50}')
 #: Between a sentence's period and the next sentence: whitespace and markup, at least one (twelfth pass:
 #: `*Negative for the following.* Reviewed` and `following. **Reviewed**` hid the sentence end). Possessive.
-AFTER_PERIOD = (r'(?:[\s\u2800*_~`]|<[^>\n]{0,200}>|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});)++')
+AFTER_PERIOD = (r'(?:[\s\u2800*_~`]|<[^>\n]{0,200}>|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});){1,50}+')
 #: The same markup before a colon or a sentence's period (`_…as follows_. Next`, `**…following**: fever`, eleventh
 #: pass: only the end of the line skipped it). Possessive; never a colon, a sentence end or a line break.
 MARKUP_RUN = (r'(?:[^\w\n<&.!?\u2026' + ''.join(sorted(COLONS)) + r']|_|[' + SUPERSCRIPTS
-              + r']|<[^>\n]{0,200}>|<|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});|&)*+')
+              + r']|<[^>\n]{0,200}>|<|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});|&){0,50}+')
 SENTENCE_END = re.compile(r'(?:' + ASIDE + r'){0,4}(?:' + MARKUP_RUN + COLON_CLASS + '|' + TRAIL + r'$'
                           + r'|' + MARKUP_RUN + r'[.!?\u2026]+["\'\u201d\u2019)\]]*'
                           + r'(?:' + AFTER_PERIOD + r'(?=[A-Z0-9"\'\u201c(\[])|(?=[A-Z"\'\u201c(\[])))')
@@ -674,13 +685,13 @@ SENTENCE_END = re.compile(r'(?:' + ASIDE + r'){0,4}(?:' + MARKUP_RUN + COLON_CLA
 TREATMENT = r'(?:of|scale|factor|dose|insulin|officers?|facility|facilities)\b'
 #: Not a letter, a digit, a colon, a line break or a sentence end (an underscore is none of those either): possessive,
 #: and never an anchor, so it is linear.
-NON_LETTERS = (r'(?:[^\w\n.!?\u2026<&' + ''.join(sorted(COLONS)) + r']|_|<[^>\n]{0,200}>|<'
-               r'|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});|&)*+')
+NON_LETTERS = (r'(?:[^\w\n.!?\u2026<&' + ''.join(sorted(COLONS)) + r']|_|' + HTML_TAG.pattern + r'|<'
+               r'|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});|&){0,50}+')
 #: At a line's start a number is a list marker (`1.`, `1-`, `2.1`, `#2`); after a colon or a sentence it is a VALUE
 #: (`Glucose: 312 correction given`, `Potassium: 3.1 - correction`), unless it is a list number (`1. `) (seventh pass).
 LINE_MARKER = r'(?:(?:\d+(?:\.\d+)*(?:[.)\-]|(?=\s))|(?:[ivx]{1,4}|[a-z])[.)])' + NON_LETTERS + ')?'
 VALUE_MARKER = r'(?:(?:\d{1,2}[.)](?=\s)|(?:[ivx]{1,4}|[a-z])[.)])' + NON_LETTERS + ')?'
-ERRATUM = re.compile(r'(?:^' + NON_LETTERS + LINE_MARKER + r'|(?:(?<=' + COLON_CLASS + r')(?!\d)|(?<=[.!?\u2026])(?=(?:["\'\u201d\u2019)\]\u2800*_~`]|<[^>\n]{0,200}>|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});)*[\s\u2800]))'
+ERRATUM = re.compile(r'(?:^' + NON_LETTERS + LINE_MARKER + r'|(?:(?<=' + COLON_CLASS + r')(?!\d)|(?<=[.!?\u2026])(?=(?:["\'\u201d\u2019)\]\u2800*_~`]|' + HTML_TAG.pattern + r'|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});){0,50}[\s\u2800]))'
                      + NON_LETTERS + VALUE_MARKER + ')'
                      + '(?:' + ONE_WORD + r'\s+(?=' + CORRECTION + r's?\s*(?:' + COLON_CLASS + r'|[,;\u2013\u2014]|--|\s-\s)))?'
                      + r'(?P<word>' + CORRECTION + r's?)(?![^\W_]|/|[\-\u2010\u2011](?=[^\W_]))'
@@ -753,41 +764,22 @@ def positioned_readings(text):
         yield ''.join(text[index] for index in kept), kept
 
 
-def tag_marks(reading):
-    """The offsets of `<` and of `>` in `reading`, ascending (empty when it has no tag)."""
-    if '<' not in reading:
-        return [], []
-    return ([i for i, character in enumerate(reading) if character == '<'],
-            [i for i, character in enumerate(reading) if character == '>'])
-
-
 def forward_points(line_readings, low=0, high=None):
     """The offsets just after EACH pointer in `[low, high)` of one line that ends its sentence, in either of the line's
     `positioned_readings` (ninth pass: only the first was kept, so `Plan: see below. … The patient denies the
     following.` showed the doctor `see below`). The sentence end is judged on the WHOLE line (tenth pass: a unit cut
     inside an aside, `…as follows (per the checklist. Confirmed).`, never closed the aside)."""
     found = set()
-    for reading, kept, (opens_at, closes_at) in line_readings:
-
-        def in_markup(start):
-            if start and reading[start - 1] == '&':
-                return True
-            opening = bisect.bisect_left(opens_at, start) - 1
-            if opening < 0:
-                return False
-            closing = bisect.bisect_left(closes_at, opens_at[opening])
-            return closing >= len(closes_at) or closes_at[closing] > start
+    for reading, kept, _ in line_readings:
         if kept is None:
             lo, hi = low, len(reading) if high is None else high
         else:
             lo = bisect.bisect_left(kept, low)
             hi = len(reading) if high is None else bisect.bisect_left(kept, high)
         for match in POINTER.finditer(reading, lo, hi):
-            if in_markup(match.start()):
-                continue
             end = match.end()
             # More asides than SENTENCE_END reads (it is bounded, to stay linear) end the sentence: fail closed.
-            if not SENTENCE_END.match(reading, end) and not MANY_ASIDES.match(reading, end):
+            if not SENTENCE_END.match(reading, end) and not MANY_ASIDES.match(reading, end) and not MANY_MARKUP.match(reading, end):
                 continue
             if match.group(1) and reading[end:end + 1] == '.' and ABBREVIATED_WORD.search(reading[max(0, end - 32):end + 1]):
                 continue
@@ -842,7 +834,7 @@ def qualified_word_form(fields):
     return any('sdt_id' in (field.get('locator') or {}) for field in fields)
 
 
-CLOCK = re.compile(r'(?<=\d)' + COLON_CLASS + r'(?=\d)')
+CLOCK = re.compile(r'(?<=[0-9])\s*' + COLON_CLASS + r'\s*(?=[0-9])|(?<=_)\s*' + COLON_CLASS + r'\s*(?=_)')
 
 
 #: A row that signs or dates the note: passed over when finding the heading that closes it (eleventh pass: an empty
@@ -916,8 +908,8 @@ def heading_governance(notes, labels, *, lexical=True, per_sentence=True):
             index, start = len(spans), offset + line.index(stripped)
             end = start + len(stripped)
             parsed = labelled_value(stripped, labels)
-            # Each reading once per line, with where its tags open and close (read by every unit's pointer search).
-            line_readings = [(reading, kept, tag_marks(reading)) for reading, kept in positioned_readings(stripped)]
+            # Each reading once per line (read by every unit's pointer search).
+            line_readings = [(reading, kept, None) for reading, kept in positioned_readings(stripped)]
             for reading, kept, _ in line_readings:
                 opening = ERRATUM.match(reading)
                 if opening and not (parsed and (opening.start('word') if kept is None else kept[opening.start('word')]) < parsed[2]):
@@ -1232,9 +1224,11 @@ def judged_context(governance, notes, index, label, evidence):
     for quote in dict.fromkeys(entry.get('quote') for entry in evidence):
         if not quote:
             continue
-        wanted += [('anywhere', quote), ('own', key, quote)]
+        wanted.append(('anywhere', quote))
+        if quote in own:
+            wanted.append(('own', key, quote))
         canonical = value_of.get(quote)
-        if canonical and canonical[0] == key:
+        if canonical and canonical[0] == key and canonical[1] in own:
             wanted.append(('own', key, canonical[1]))
     others = []
     for part in dict.fromkeys(wanted):
@@ -1455,7 +1449,7 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=()):
         if len(explicit)>1:
             evidence=[{k:unit[k] for k in ('quote','start','end')} for unit in explicit.values()]
         own=evidence
-        governed=judged_context(governance,notes,index,label,own)
+        governed=judged_context(governance,notes,index,field['label'],own)   # the RAW label, normalized once there
         if (inherited or injection) and texts:
             evidence=[{'quote':notes,'start':0,'end':len(notes)}]
         status='conflict' if conflict else 'supported' if texts else 'missing'
@@ -1560,7 +1554,7 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
         if explicit_conflict:
             evidence=[{'quote':q,'start':start,'end':start+len(q)} for q,start in explicit.items()]
         own=evidence
-        governed=judged_context(governance,notes,index,label,own)
+        governed=judged_context(governance,notes,index,field['label'],own)   # the RAW label, normalized once there
         status='conflict' if item.conflict or explicit_conflict or guarded or (inherited_context and texts) else 'supported' if texts else 'missing'
         if inherited_context and texts:
             evidence=[{'quote':notes,'start':0,'end':len(notes)}]

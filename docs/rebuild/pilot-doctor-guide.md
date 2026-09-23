@@ -141,8 +141,9 @@ lists every charge; choose a charge's service name to see how it was calculated.
   mean none), and so is a value in angle brackets (`Allergies: <penicillin>`, `PSA: <0.1>`); only a
   real HTML tag after the colon (`<br>`, `</b>`, Word's `<o:p></o:p>`), a footnote mark (`¹`), `\`
   or `~~` is markup; a blank or filled clock (`Time out: __:__`, `__ : __`) is not a heading, but a
-  number before closing markup is (`_Mother, age 72:_`). A sign-off row of several blank or named
-  fields (`Signature: ____ Date: ____`, `Signed by: Dr A  Date:`) is a bare label. A bare signature or date row after a closing
+  number before closing markup is (`_Mother, age 72:_`). A sign-off row whose every field is a
+  signature, date, time or signer label (`Signature: ____ Date: ____`, `Signed by: Dr A  Date:`,
+  `Surgeon: ____ Signature: ____`) is a bare label; a row with any other field is not. A bare signature or date row after a closing
   heading (`Review of systems: negative for:` then `Signed by: ____`) does not stop that heading
   closing the notes. A sentence break inside brackets does not end a heading's or a pointer's
   sentence (`… all of the above were denied (per intake form. Reviewed today):`), and markup around a

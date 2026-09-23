@@ -1560,7 +1560,7 @@ class WhatTheThirteenthPassFound(ExpectationsMixin, TestCase):
         stored = {'q0': {**answer, 'status': 'edited', 'text': ''}}
         self.assertIn('Symptoms', generation.governed_decisions(notes, fields, stored))
 
-    def test_pointer_words_inside_tags_or_references_are_not_prose_and_cost_stays_linear(self):
+    def test_pointer_words_inside_tags_or_references_cost_stays_linear(self):
         import time
         fields = [{'key': f'k{i}', 'label': f'Question {i}', 'kind': 'text', 'locator': {'cell': i}} for i in range(100)]
         for notes in ('\u200b' + '<below>' * 7142, '\u200b' + '&below;' * 7142, '\u200b' + '<following>' * 4545):
@@ -1580,6 +1580,86 @@ class WhatTheThirteenthPassFound(ExpectationsMixin, TestCase):
         for field in fields:
             generation.as_currently_governed(governance, notes, {**field, **answers[field['label']], 'status': 'supported', 'text': 'x'})
         self.assertLess(time.perf_counter() - started, 20)
+
+
+class WhatTheFourteenthPassFound(ExpectationsMixin, TestCase):
+    """Refutation of the finished diff, fourteenth pass (over e9783330)."""
+    TAB = ['ESTIMATED BLOOD LOSS', 'COMPLICATIONS']
+
+    def not_ready(self, answer):
+        self.assertNotEqual(answer['status'], 'supported', answer)
+        self.assertNotIn('suggestion', answer)
+
+    def test_a_less_than_sign_earlier_on_the_line_hides_no_pointer(self):
+        for line, labels, pick in (
+                ('Review of systems: pain score <5, negative for the following.', ['Review of systems', 'Symptoms'], 'Symptoms'),
+                ('HPI: 68M with heart failure, EF <40%, here for follow-up. He denies the following.', ['HPI', 'Symptoms'], 'Symptoms'),
+                ('HPI: EF <40%. He denies the following. BNP >400 today.', ['HPI', 'Symptoms'], 'Symptoms'),
+                ('Mother <60 at onset had the following.', ['Symptoms'], 'Symptoms')):
+            with self.subTest(line=line):
+                answer = provider_answers(labels, line + '\nSymptoms: chest pain', {pick: ['Symptoms: chest pain']})[pick]
+                self.not_ready(answer)
+        notes = 'ESTIMATED BLOOD LOSS: <5 mL. Events not observed were as follows. COMPLICATIONS: perforation, bleeding.'
+        self.not_ready(tab_answers(self.TAB, notes)[1]['COMPLICATIONS'])
+
+    def test_a_correction_in_angle_brackets_is_a_correction(self):
+        for line in ('<<CORRECTION>>: no polyp was found; the sigmoid lesion is a lipoma.', '<CORRECTION>: no polyp was found.',
+                     '<- Correction: no polyp was found; lesion was a lipoma (>1 cm).'):
+            with self.subTest(line=line):
+                self.assertTrue(generation.erratum_points(line))
+                self.not_ready(tab_answers(['Findings'], 'Findings: sigmoid polyp.\n' + line)[1]['Findings'])
+        # CONTROL: a real tag before the word is still skipped.
+        self.assertTrue(generation.erratum_points('<b>Correction</b>: no polyp was found.'))
+
+    def test_markup_heavy_lines_stay_linear(self):
+        import time
+        fields = [{'key': f'k{i}', 'label': f'Question {i}', 'kind': 'text', 'locator': {'cell': i}} for i in range(100)]
+        tab = [{**field, 'locator': {**field['locator'], 'tab_form': {'version': 1}}} for field in fields]
+        for body in ('<:>' * 16667, '<? >' * 12500, '<\u2026 >' * 12500, '<below>' * 7142, '&below;' * 7142, '<Name: ___> ' * 4200):
+            for lead in ('', '\u200b'):
+                with self.subTest(body=body[:8], lead=repr(lead)):
+                    notes = (lead + body)[:50000]
+                    started = time.perf_counter()
+                    generation.governance_for(notes, fields)
+                    generation.governance_for(notes, tab)
+                    self.assertLess(time.perf_counter() - started, 4)
+
+    def test_a_pointer_followed_by_more_markup_than_is_read_still_governs(self):
+        notes = 'Review of systems: negative for the following' + '<br>' * 60 + '.\nSymptoms: chest pain'
+        answer = provider_answers(['Review of systems', 'Symptoms'], notes, {'Symptoms': ['Symptoms: chest pain']})['Symptoms']
+        self.not_ready(answer)
+
+    def test_a_footnote_mark_after_a_number_is_not_a_clock(self):
+        for heading in ('Mother, age 72:\u00b9', 'Review of systems: negative since 2019:\u00b2'):
+            with self.subTest(heading=heading):
+                self.assertTrue(generation.ends_in_colon(heading))
+        answer = provider_answers(['Review of systems', 'Symptoms'], 'Review of systems: negative since 2019:\u00b2\nSymptoms: chest pain',
+                                  {'Symptoms': ['Symptoms: chest pain']})['Symptoms']
+        self.not_ready(answer)
+
+    def test_a_blank_clock_inside_a_sign_off_row_is_no_inner_colon(self):
+        row = 'Time out: __:__  Signature: ____'
+        self.assertTrue(generation.bare_label(row, None) or not generation.ends_in_colon(row))
+        notes = 'Indication: right knee pain\nFindings: small joint effusion\n' + row
+        answer = provider_answers(['Indication', 'Findings'], notes, {'Findings': ['Findings: small joint effusion']})['Findings']
+        self.assertEqual(answer.get('suggestion'), 'small joint effusion', answer)
+
+    def test_a_markdown_table_separator_row_is_not_a_heading(self):
+        for row in ('|---|---:|', '| :---: |', '|:---|---:|'):
+            with self.subTest(row=row):
+                self.assertFalse(generation.ends_in_colon(row))
+
+    def test_a_label_ending_in_a_spaced_mark_is_judged_at_every_occurrence(self):
+        notes = 'Symptoms ?: chest pain\nReview of systems: negative for the following:\nSymptoms ?: chest pain'
+        fields = [{'key': 'q0', 'label': 'Symptoms ?', 'kind': 'text', 'locator': {'cell': 0}},
+                  {'key': 'q1', 'label': 'Review of systems', 'kind': 'text', 'locator': {'cell': 1}}]
+        chosen = Selections(fields=[Selection(key='q0', quotes=['Symptoms ?: chest pain'], conflict=False),
+                                    Selection(key='q1', quotes=[], conflict=False)])
+        answer = validate_selections(notes, fields, chosen, evidence_contract='legacy')['q0']
+        self.assertNotEqual(answer['status'], 'supported', answer)
+        # Generation, the page and finalization reach the same decision.
+        stored = {'q0': {'status': 'supported', 'text': 'chest pain', 'evidence': answer['evidence']}}
+        self.assertIn('Symptoms ?', generation.governed_decisions(notes, fields, stored))
 
 
 class TheEleventhPassCostsStayLinear(ExpectationsMixin, TestCase):
