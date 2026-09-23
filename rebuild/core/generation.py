@@ -197,8 +197,6 @@ UNSCOPED_NEGATIVE_HEADING = re.compile(r'^[^:]*\b(?:' + DENIAL_WORDS + r')\b[^:]
 SUPPRESSING_DENIAL_WORDS = DENIAL_WORDS + r'|negatives|deny'
 DENIAL = re.compile(r'\b(?:' + SUPPRESSING_DENIAL_WORDS + r')\b', re.I)
 SCOPE_POINTER = re.compile(r'\b(?:' + SCOPE_POINTERS + r')\b', re.I)
-#: A pointer that ENDS a value and looks FORWARD. `listed above` and `below the knee` are answers.
-FORWARD_POINTER_AT_END = re.compile(r'\b(?:following|below)\s*[.:\uff1a\ufe55\ufe13]?\s*$', re.I)
 COLONS = frozenset(':\uff1a\ufe55\ufe13')
 FINITE_STATEMENT = re.compile(r'\b(?:is|are|was|were|has|have|had|denies|reports|reported|showed|revealed|advanced|seen|collected|recommend|received|underwent)\b',re.I)
 
@@ -379,47 +377,57 @@ def negative_heading(notes):
                for line in notes.splitlines())
 
 
+def invisible(character):
+    """Characters nobody can see: every format character (zero-width, bidi marks, soft hyphen) and the
+    default-ignorable marks (combining grapheme joiner, variation selectors) that copied text carries."""
+    return unicodedata.category(character) == 'Cf' or character == '\u034f' or '\ufe00' <= character <= '\ufe0f'
+
+
 def ends_in_colon(text):
     """Whether text visibly ends in a colon: fullwidth and small colons count, and so does a colon
-    followed only by whitespace or characters nobody can see (zero-width, bidi marks, soft hyphen —
-    every Unicode format character), which copied text carries."""
+    followed only by whitespace or invisible characters."""
     end = len(text)
-    while end and (text[end - 1].isspace() or unicodedata.category(text[end - 1]) == 'Cf'):
+    while end and (text[end - 1].isspace() or invisible(text[end - 1])):
         end -= 1
     return bool(end) and text[end - 1] in COLONS
 
 
+def readings(text):
+    """The text as written and, if different, with invisible characters removed.
+
+    ⚠️ BOTH, BECAUSE EITHER ALONE HIDES A DENIAL. Deleting them joins `no` + `ne` into `none`; keeping
+    them splits `de`+`nied`. A check that only withholds may take the union and lose nothing.
+    """
+    yield text
+    visible = ''.join(character for character in text if not invisible(character))
+    if visible != text:
+        yield visible
+
+
 def denial_before_colon(line):
     """A denial word ahead of the line's first colon, of any width. Split once: linear, no backtracking."""
-    for index, character in enumerate(line):
-        if character in COLONS:
-            return bool(DENIAL.search(line, 0, index))
+    for reading in readings(line):
+        for index, character in enumerate(reading):
+            if character in COLONS:
+                if DENIAL.search(reading, 0, index):
+                    return True
+                break
     return False
 
 
 def governs_other_lines(text):
     """A denial that ends in a colon or points at other lines: `negative for the following:`.
 
-    Words are searched in the text AS WRITTEN. Deleting an invisible character first joined `no` and
-    `ne` into `none` and offered what the old rule withheld.
+    Words are searched in every reading of the text (see `readings`), so an invisible character can
+    neither join two words into a non-denial nor split a denial word apart.
 
     ⚠️ DELIBERATELY OVER-INCLUSIVE, AND ONLY EVER READ TO WITHHOLD AN OFFER.
     `Discharge: no driving for the following 24 hours` trips it and withholds every offer in that note.
     That costs a retyped answer; missing a real heading costs a denied finding accepted with one click.
     """
-    return bool(DENIAL.search(text) and (ends_in_colon(text) or SCOPE_POINTER.search(text)))
+    return any(DENIAL.search(reading) and (ends_in_colon(reading) or SCOPE_POINTER.search(reading))
+               for reading in readings(text))
 
-
-def heading_line(line, value):
-    """A labelled line whose value introduces other lines is a heading, not that question's answer.
-
-    ⚠️ NARROWER THAN `governs_other_lines`, BECAUSE THIS ONE DECIDES A STATUS. Co-occurrence turned
-    `Findings: No reflux below the knee.` and `Impression: No DVT in the veins listed above.` into
-    headings, and every answer in the note became an empty conflict that blocked finalization. A
-    heading's value ends in a colon, or the line holds a denial (label or value: `Negative for: the
-    following`) and the value ENDS by pointing forward.
-    """
-    return ends_in_colon(value) or bool(DENIAL.search(line) and FORWARD_POINTER_AT_END.search(value))
 
 
 def _plain_pointer_only(notes):
@@ -530,10 +538,7 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
     injection=bool(INJECTION.search(notes) or any(INJECTION.search(f['label']) for f in fields))
     labels=recognized_labels(fields,context_labels)
     lines=[line.strip() for line in notes.splitlines() if line.strip()]
-    # ⚠️ A LABELLED HEADING IS NOT AN ANSWER. With a `Review of systems` question on the form,
-    # `Review of systems: negative for the following:` above `Symptoms: chest pain` counted as two
-    # scoped answers, and the denied `chest pain` came back SUPPORTED, pre-filled, with no conflict.
-    scoped_lines=all((parsed:=labelled_value(line,labels)) and parsed[1] and not heading_line(line,parsed[1]) for line in lines)
+    scoped_lines=all((parsed:=labelled_value(line,labels)) and parsed[1] for line in lines)
     # `len(lines)>1` is deliberate and is NOT an off-by-one: this rule is about context a
     # PRECEDING line imposes on a later one ("The following findings are denied:"), which a
     # single-line note cannot have. Widening it to every unscoped note was tried and reverted —

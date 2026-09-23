@@ -119,9 +119,13 @@ lists every charge; choose a charge's service name to see how it was calculated.
   final punctuation, or a word such as *if*, *would*, *could*, *might*, *these*, *those*, *above*,
   *below*, *following* or *listed* anywhere in the notes sends the generated answers back to you as
   conflicts to decide. On every other form, only a line that is not a label with its answer does
-  (a label left empty counts, and so does a label that introduces other lines: its answer ends in
-  a colon, or the line holds a denial and its answer ends with *following* or *below*, such as
-  *Negative for: the following* or *Review of systems: negative for the symptoms below.*).
+  (a label left empty counts).
+- **Write each denial as its own answer** (`Symptoms: no chest pain`), never as a heading over
+  other labelled lines. On question/answer tables, placeholders, fillable PDFs and the WM IOV form,
+  if the heading is itself one of the form's questions (`Review of systems: negative for the
+  following:` on a form with a *Review of systems* question), the labelled lines below it are
+  read as ordinary answers, and a denied finding can come back as a ready answer. Review every
+  answer against the note before you tick it.
 - **Read the whole note before accepting a suggestion.** Suggestions are withheld in three
   cases: a denial line that governs other lines, meaning a line containing *denied*, *denies*,
   *deny*, *absent*, *negative*, *negatives*, *no*, *not*, *without* or *never* that ends in a

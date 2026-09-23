@@ -776,21 +776,18 @@ class ADenialThatGovernsOtherLinesSuppressesTheOffer(TestCase):
         self.assertTrue(negative_heading(notes))
         self.assertIsNone(judge(notes, ['the scope reached the cecum'], label='Extent').get('suggestion'))
 
-    def labelled_heading_form(self, notes, heading_quote):
-        fields = [{'key': 'ros', 'label': 'Review of systems', 'kind': 'text', 'locator': {'cell': 0}},
-                  {'key': 'k', 'label': 'Symptoms', 'kind': 'text', 'locator': {'cell': 1}}]
-        chosen = Selections(fields=[Selection(key='ros', quotes=[heading_quote], conflict=False),
-                                    Selection(key='k', quotes=['chest pain'], conflict=False)])
-        return validate_selections(notes, fields, chosen, evidence_contract='legacy')
-
     def test_a_denial_beside_an_ordinary_pointer_word_is_still_that_questions_answer(self):
-        """⚠️ ROUND 5. Co-occurrence decided a STATUS here once: `No reflux below the knee.` made every
-        answer in the note an empty conflict and finalization was refused. Only a value that ENDS by
-        pointing, or ends in a colon, is a heading."""
+        """⚠️ A GUARD, NOT A FEATURE. Rounds 4-6 tried to decide a legacy STATUS from denial and pointer
+        words; every version blanked realistic notes (`No reflux below the knee.`, `…mid-thigh or
+        below.`, a WM location `not visualized below` emptied all 90 answers) and was withdrawn. These
+        must stay supported: the gate may withhold an offer, it never decides an answer."""
         for value in ('No reflux below the knee.', 'No bleeding following polypectomy.',
                       'No driving for the following 24 hours.', 'Soft, no tenderness above the umbilicus.',
                       'Benign nevi; these are not concerning.', 'Good, without residual stool in the segments listed here.',
-                      'No DVT in the veins listed above.', 'No change from the study above.'):
+                      'No DVT in the veins listed above.', 'No change from the study above.',
+                      'Reflux at the SFJ, 1200 ms; no reflux at mid-thigh or below.', 'Negative except as noted below.',
+                      'Normal above the knees, absent below.', 'Lateral calf, not visualized below',
+                      'No immediate complications following.'):
             with self.subTest(value=value):
                 fields = [{'key': 'f', 'label': 'Findings', 'kind': 'text', 'locator': {'cell': 0}},
                           {'key': 'i', 'label': 'Impression', 'kind': 'text', 'locator': {'cell': 1}}]
@@ -801,33 +798,13 @@ class ADenialThatGovernsOtherLinesSuppressesTheOffer(TestCase):
                 self.assertEqual((answers['f']['status'], answers['i']['status']), ('supported', 'supported'))
                 self.assertEqual(answers['f']['text'], value)
 
-    def test_a_denial_in_the_label_with_a_pointer_for_an_answer_does_not_prefill_the_denied_finding(self):
-        """⚠️ ROUND 5, PRE-EXISTING: the denial can be the QUESTION. `Negative for: the following` has no
-        denial word in its answer, so a value-only rule counted it as answered."""
-        def run(label, value):
-            fields = [{'key': 'h', 'label': label, 'kind': 'text', 'locator': {'cell': 0}},
-                      {'key': 'k', 'label': 'Symptoms', 'kind': 'text', 'locator': {'cell': 1}}]
-            chosen = Selections(fields=[Selection(key='h', quotes=[value], conflict=False),
-                                        Selection(key='k', quotes=['chest pain'], conflict=False)])
-            return validate_selections(f'{label}: {value}\nSymptoms: chest pain', fields, chosen, evidence_contract='legacy')
-        for label, value in (('Negative for', 'the following'), ('Pertinent negatives', 'see below'),
-                             ('Denies', 'all of the following'), ('ROS negative for', 'the symptoms listed below')):
-            with self.subTest(label=label):
-                answers = run(label, value)
-                self.assertEqual((answers['k']['status'], answers['k']['text']), ('conflict', ''))
-                self.assertIsNone(answers['k'].get('suggestion'))
-        # CONTROL: only the label changes, to one that asserts no polarity; a plain pointer is an answer.
-        self.assertEqual(run('Reviewed for', 'the following')['k']['status'], 'supported')
-
     def test_a_heading_that_visibly_ends_in_a_colon_counts_on_both_contracts(self):
         """Round 5: the tab contract read only an ASCII colon, and a bidi mark or soft hyphen after the
-        colon hid it from the legacy rule too. Every Unicode format character is invisible."""
-        for tail in ('\uff1a', ':\u200b', ':\u200e', ':\u200f', ':\u00ad', ':\u2063', ':\ufeff'):
+        colon hid it from the gate. Format characters and default-ignorable marks are invisible."""
+        for tail in ('\uff1a', ':\u200b', ':\u200e', ':\u200f', ':\u00ad', ':\u2063', ':\ufeff', ':\u034f', ':\ufe0f'):
             with self.subTest(tail=repr(tail)):
                 self.assertTrue(generation.ends_in_colon('pertinent negatives' + tail))
-                answers = self.labelled_heading_form(f'Review of systems: pertinent negatives{tail}\nSymptoms: chest pain',
-                                                     f'pertinent negatives{tail}')
-                self.assertEqual(answers['k']['status'], 'conflict')
+                self.assertTrue(negative_heading(f'Review of systems: pertinent negatives{tail}\nSymptoms: chest pain'))
                 fields = [{'key': 'ros', 'label': 'Review of systems', 'kind': 'text', 'locator': {'cell': 0, 'tab_form': {'version': 1}}},
                           {'key': 'k', 'label': 'Symptoms', 'kind': 'text', 'locator': {'cell': 1, 'tab_form': {'version': 1}}}]
                 tab, *_ = generation.generate(f'Review of systems: pertinent negatives{tail}\nSymptoms: chest pain.', fields,
@@ -835,24 +812,17 @@ class ADenialThatGovernsOtherLinesSuppressesTheOffer(TestCase):
                 self.assertNotEqual(tab['k']['status'], 'supported')
         self.assertFalse(generation.ends_in_colon('negative for the following'))
 
-    def test_an_invisible_character_inside_a_word_never_widens_an_offer(self):
-        """Round 5: deleting U+200B joined `no` and `ne` into `none` and offered what 81619587 withheld."""
+    def test_an_invisible_character_inside_a_word_can_neither_join_nor_split_a_denial(self):
+        """Round 5: deleting U+200B joined `no` and `ne` into `none`. Round 6: keeping it split `de`+`nied`,
+        and a soft hyphen from copied hyphenated text does the same. Both readings are searched."""
         self.assertTrue(negative_heading('Review of systems: no\u200bne of the following:\nSymptoms: chest pain'))
+        for heading in ('The following findings are de\u200bnied:', 'The following findings are de\u00adnied:',
+                        'Patient de\u200bnies the following', 'Pertinent nega\u200btives: fever'):
+            with self.subTest(heading=repr(heading)):
+                notes = f'Indication: screening colonoscopy\n{heading}\nSymptoms: chest pain'
+                self.assertTrue(negative_heading(notes))
+                self.assertIsNone(judge(notes, ['chest pain'], label='Symptoms').get('suggestion'))
 
-    def test_a_heading_written_as_another_questions_answer_does_not_prefill_the_denied_finding(self):
-        """⚠️ WORSE THAN A SUGGESTION. With `Review of systems` on the form, the heading parsed as that
-        question's answer, every line counted as scoped, and `chest pain` came back SUPPORTED."""
-        for heading in ('negative for the following:', 'patient denies:', 'negative for the symptoms below.'):
-            with self.subTest(heading=heading):
-                answers = self.labelled_heading_form(f'Review of systems: {heading}\nSymptoms: chest pain', heading)
-                self.assertEqual(answers['k']['status'], 'conflict')
-                self.assertEqual(answers['k']['text'], '')
-                self.assertIsNone(answers['k'].get('suggestion'))
-        # CONTROL: an ordinary denial ANSWER under that label stays a scoped, supported answer.
-        # Same two lines, same quotes, only the heading made an ordinary answer: both stay supported.
-        answers = self.labelled_heading_form('Review of systems: negative for fever\nSymptoms: chest pain', 'negative for fever')
-        self.assertEqual((answers['ros']['status'], answers['k']['status']), ('supported', 'supported'))
-        self.assertEqual(answers['k']['text'], 'chest pain')
 
 
 class AnAcceptanceIsAttributedOnThePageAndDefendedFromWithdrawal(
