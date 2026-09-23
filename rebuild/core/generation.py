@@ -188,7 +188,10 @@ SCOPE_REFRAMERS = r'family history|if|would|could|might|hypothetical|imagine|sup
 INHERITED_SCOPE = re.compile(r'\b(?:' + SCOPE_POINTERS + '|' + SCOPE_REFRAMERS + r')\b', re.I)
 REFRAMED_SCOPE = re.compile(r'\b(?:' + SCOPE_REFRAMERS + r')\b', re.I)
 QUOTED_SOURCE = re.compile(r'["“”]|(?<!\w)[\'‘]')
-UNSCOPED_NEGATIVE_HEADING = re.compile(r'^[^:]*\b(?:denied|denies|absent|negative|no|not|without|never)\b[^:]*:',re.I)
+DENIAL_WORDS = r'denied|denies|absent|negative|no|not|without|never'
+UNSCOPED_NEGATIVE_HEADING = re.compile(r'^[^:]*\b(?:' + DENIAL_WORDS + r')\b[^:]*:',re.I)
+DENIAL = re.compile(r'\b(?:' + DENIAL_WORDS + r')\b', re.I)
+SCOPE_POINTER = re.compile(r'\b(?:' + SCOPE_POINTERS + r')\b', re.I)
 FINITE_STATEMENT = re.compile(r'\b(?:is|are|was|were|has|have|had|denies|reports|reported|showed|revealed|advanced|seen|collected|recommend|received|underwent)\b',re.I)
 
 ABBREVIATION = re.compile(r'(?:\b(?:dr|mr|mrs|ms|prof|st|vs|etc|approx)|\b[A-Z]|\be\.g|\bi\.e)\.$', re.I)
@@ -356,8 +359,17 @@ def negative_heading(notes):
     It failed in the other direction too: `[^:]*` spans newlines, so any note with `no`, `not` or
     `never` anywhere before its first colon was treated as a negative heading. Per line, an
     unpunctuated clinical sentence with no colon simply does not match.
+
+    ⚠️ AND A DENIAL CAN GOVERN OTHER LINES WITHOUT STANDING BEFORE THE FIRST COLON. The anchored
+    pattern only sees a denial word ahead of a line's first colon, so `ROS: negative for the
+    following:` (label first), `Patient denies the following` and `The patient denied each of the
+    symptoms below.` (no colon at all) each offered the denied `chest pain` for one-click
+    acceptance. A line holding a denial word that ENDS in a colon, or that POINTS at other lines,
+    is a heading too. Suppression only; `source_units` already sends such notes back as conflicts.
     """
-    return any(UNSCOPED_NEGATIVE_HEADING.search(line) for line in notes.splitlines())
+    return any(UNSCOPED_NEGATIVE_HEADING.search(line)
+               or (DENIAL.search(line) and (line.rstrip().endswith(':') or SCOPE_POINTER.search(line)))
+               for line in notes.splitlines())
 
 
 def _plain_pointer_only(notes):

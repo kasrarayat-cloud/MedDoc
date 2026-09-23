@@ -725,6 +725,48 @@ class WhatTheSecondRefutationPassFound(TestCase):
                          'no chest pain')
 
 
+
+class ADenialThatGovernsOtherLinesSuppressesTheOffer(TestCase):
+    """⚠️ THE SAME ANCHOR, INSIDE ONE LINE. Found by the pilot's third refutation pass.
+
+    `UNSCOPED_NEGATIVE_HEADING` sees a denial word only AHEAD of a line's first colon, so a label in
+    front of the denial (`ROS: negative for the following:`) or no colon at all (`Patient denies the
+    following`) left it blind, and `chest pain` was offered for one-click acceptance under a note
+    that denies it — on both evidence contracts.
+    """
+    GOVERNING = ('ROS: negative for the following:', 'Review of systems: patient denies:',
+                 'Patient denies the following', 'The patient denied each of the symptoms below.',
+                 'Negative for the following')
+
+    def test_each_governing_denial_suppresses_the_offer_on_both_contracts(self):
+        for heading in self.GOVERNING:
+            with self.subTest(heading=heading):
+                self.assertTrue(negative_heading(heading + '\nSymptoms: chest pain'))
+                legacy = judge(heading + '\nSymptoms: chest pain', ['chest pain'], label='Symptoms')
+                self.assertEqual(legacy['status'], 'conflict')
+                self.assertIsNone(legacy.get('suggestion'))
+                tab = judge_tab(heading + '\nSymptoms: chest pain.', ['Symptoms: chest pain.'], label='Symptoms')
+                self.assertEqual(tab['status'], 'conflict')
+                self.assertIsNone(tab.get('suggestion'))
+
+    def test_a_denial_that_governs_no_other_line_still_allows_the_offer(self):
+        """POSITIVE CONTROL: without it every assertion above could pass because nothing is offered.
+        A denial inside a labelled answer, or in prose that neither ends in a colon nor points
+        anywhere, is not a heading; a pointer with no denial is the case this feature exists for."""
+        notes = 'Allergies: no known drug allergies\nSee the findings listed in the report.\nSymptoms: chest pain'
+        self.assertFalse(negative_heading(notes))
+        self.assertEqual(judge(notes, ['chest pain'], label='Symptoms').get('suggestion'), 'chest pain')
+        tab = judge_tab(notes + '.', ['Symptoms: chest pain.'], label='Symptoms')
+        self.assertEqual(tab['status'], 'conflict')
+        self.assertEqual(tab.get('suggestion'), 'chest pain.')
+        self.assertFalse(negative_heading('The patient did not tolerate oral preparation.\nFindings: a 5 mm polyp'))
+
+    def test_the_denial_vocabulary_is_shared_not_changed(self):
+        self.assertEqual(generation.UNSCOPED_NEGATIVE_HEADING.pattern,
+                         r'^[^:]*\b(?:denied|denies|absent|negative|no|not|without|never)\b[^:]*:')
+        self.assertEqual(generation.DENIAL.pattern, r'\b(?:denied|denies|absent|negative|no|not|without|never)\b')
+
+
 class AnAcceptanceIsAttributedOnThePageAndDefendedFromWithdrawal(
         AnUnacceptedSuggestionCannotReachAnExport):
     """Two more from the second pass, both about who owns a clinical decision."""

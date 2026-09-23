@@ -217,7 +217,7 @@ def template_upload(request):
             if relative:private_path(relative).unlink(missing_ok=True)
             form.add_error(None,error_message(exc))
             # The engine's wording names an adapter the doctor cannot choose. Add what they CAN do,
-            # keyed on the refusal code, without changing the refusal itself.
+            # keyed on the refusal's own text, without changing the refusal itself.
             message=error_message(exc)
             hint=next((text for marker,text in UPLOAD_REFUSAL_HINTS if marker in message),None)
             if hint:form.add_error(None,hint)
@@ -231,12 +231,14 @@ UPLOAD_REFUSAL_HINTS=(
      'fields or tracked changes. The only supported form with dropdowns is the qualified WM IOV file, uploaded exactly as '
      'received. Otherwise use a form with two-column question/answer tables, a label followed by an underlined Tab, or '
      '{{Question}} placeholders.'),
-    # One engine sentence covers three causes: the line is in a table cell, or it carries a link, bookmark
-    # or spelling mark. The hint names all of them rather than guessing which.
+    # One engine sentence covers every cause: the line is in a table cell, or its paragraph holds anything
+    # but plain text runs and the Tab. Some of those Word adds invisibly (a spelling mark, a page-break
+    # marker when the line starts a page), so the hint does not pretend to list them all.
     ('underlined answer area crosses an unsupported structure',
-     'An underlined answer line must be an ordinary paragraph, not inside a table cell, holding only the label and an '
-     'underlined Tab: no links, bookmarks or spelling marks. Move such lines out of any table, or use a two-column '
-     'question/answer table instead.'),
+     'An underlined answer line must be an ordinary paragraph, not inside a table cell, holding only plain label text '
+     'and an underlined Tab: no links, bookmarks, comments, symbols, footnotes or line breaks (Shift+Enter). Word can '
+     'also add invisible marks, such as spelling marks or a page-break marker when the line starts a page. Retype such '
+     'a line as a new paragraph, or use a two-column question/answer table instead.'),
     ('PDF text fields only','Every field in the PDF must be a plain text field: remove checkboxes, radio buttons, dropdowns, '
      'signature fields and buttons.'),
     ('Read-only, password, file-select, comb, and rich-text',
@@ -244,7 +246,10 @@ UPLOAD_REFUSAL_HINTS=(
     ('explicit font size','Set every PDF field to a fixed font size (a number, not Auto).'),
     ('Helvetica','Set every PDF field to the standard Helvetica font in its properties, or use a supported Word (.docx) form.'),
     ('Rotated PDF fields','Use unrotated PDF text fields, or a supported Word (.docx) form.'),
-    ('PDF actions','Remove field actions and format scripts (such as Date or Number formats) from the PDF, or use a supported Word (.docx) form.'),
+    ('PDF actions','Remove every link, attachment, document open action, XFA form data, and field action or format script '
+     '(such as Date or Number formats) from the PDF, or use a supported Word (.docx) form.'),
+    ('External links and linked resources','Remove every web or email link and linked image from the form, including in '
+     'the letterhead, header and footer, then upload it again.'),
     ('non-wrapping text','Remove hidden text and turn off fit-text or do-not-wrap formatting in the form, then upload it again.'),
 )
 #: An encrypted Office file is an OLE container, not a ZIP, so the engine can only call it unsupported.
@@ -500,7 +505,10 @@ def save_answers(request,pk):
     previous_answers=dict(e.answers)
     for field in e.template_version.fields:
         key=field['key'];previous=e.answers.get(key,{'text':'','evidence':[],'status':'missing'})
-        value=request.POST.get('answer_'+key,'')
+        # Browsers post a textarea's line breaks as CRLF. Stored as posted, a multi-line answer was
+        # refused by every fillable PDF at finalize (a carriage return is not printable), exported
+        # to a Word table cell as two breaks per line, and compared unequal to its own unchanged text.
+        value=request.POST.get('answer_'+key,'').replace('\r\n','\n').replace('\r','\n')
         # ⚠️ WHITESPACE IS NOT AN ANSWER. A space counted as an edit, so one keystroke could clear a
         # generated conflict — or erase a clinician's "Leave blank — reviewed" decision without the
         # authority check or audit that a real withdrawal carries. An answer is its text or nothing.

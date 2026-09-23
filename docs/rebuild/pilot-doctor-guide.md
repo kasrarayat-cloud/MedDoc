@@ -79,7 +79,8 @@ is always your own. On ordinary forms, if a colleague reviewed an answer earlier
 so and leaves the box for you to tick; saving without ticking it removes their review.
 
 **Signature questions:** type your account name exactly as the page shows it, or leave it empty.
-It is never filled from the notes, and another person's name cannot be signed.
+It is never filled from the notes, and another person's name cannot be signed. A fillable PDF
+holds plain ASCII only, so if your account name has accented letters, leave a PDF signature empty.
 
 **On the WM IOV form** each answer also has a **Source quotation** box: paste the complete notes
 line for that answer, or leave it empty when nothing is documented. Dropdowns offer *No answer
@@ -87,9 +88,13 @@ documented — preserve unselected field*; empty measurements stay blank. Below 
 the 14 prewritten statements and signing items. Each needs an approved wording and a review tick,
 and each of the 11 clinical statements also needs a source quotation: its own notes line. If
 finalizing is refused, scroll for the red lines under each answer and statement: they say what
-is missing. One exception: when a chosen statement wording and the dropdown answers disagree, the
-page shows a single general message that names no statement; check each statement's wording
-against the answers it depends on (the form page lists them).
+is missing. One exception: when chosen statement wordings and the answers disagree, the page
+shows a single general message that names no statement. The form page lists, for each wording,
+the answers it needs given or left unanswered, but some combinations conflict even so and are
+not listed there: for example, a side's reflux answer *reflux positive.* with any wording other
+than that side's positive reflux statement; a reflux time over 500 ms with a *No saphenous
+reflux* wording; measurements or locations on a side whose wording says *not assessed*; or the
+indication *Previous vein treatment* while both legs' statements say there was none.
 
 ## 7. Finalize and download
 
@@ -103,25 +108,31 @@ lists every charge; choose a charge's service name to see how it was calculated.
 
 | form | labelled lines (`Question label: answer`) | ordinary narrative sentences |
 |---|---|---|
-| **Lines with a label and an underlined Tab** | most reliable | can be matched when every sentence is complete (a verb such as *is* or *has*, ending in `.` `!` or `?`); otherwise answers come back for your decision |
-| **Question/answer tables, `{{Question}}` placeholders, multi-column or mixed forms, fillable PDFs** | most reliable | any unlabelled line sends **every** answer back to you as a **conflict** to decide |
+| **Lines with a label and an underlined Tab** | most reliable | can be matched when every sentence is complete: a verb QuillMD recognises (*is*, *are*, *was*, *were*, *has*, *have*, *had*, *denies*, *reports*, *reported*, *showed*, *revealed*, *advanced*, *seen*, *collected*, *recommend*, *received*, *underwent*) and a final `.` `!` or `?`; *The patient has right calf pain.* works, *The patient complains of right calf pain.* does not; otherwise answers come back for your decision |
+| **Question/answer tables, `{{Question}}` placeholders, multi-column or mixed forms, fillable PDFs** | most reliable | any line that is not a label with its answer (a label left empty counts) sends **every** answer back to you as a **conflict** to decide |
 | **The WM IOV form** | **required** | **not supported**: narrative notes cannot be finalized on this form |
 
-- Use the form's own question wording as the label, one fact per line.
+- Use each question's label exactly as the form page lists it, one fact per line. On Word forms
+  that is the printed question; on a fillable PDF it is the field's tooltip or internal name,
+  which can differ from the printed text (rename it under the form's field mapping if needed).
 - On underlined-Tab forms, a heading line ending in a colon, a quotation, an extra line without
   final punctuation, or a word such as *if*, *would*, *could*, *might*, *these*, *those*, *above*,
   *below*, *following* or *listed* anywhere in the notes sends the generated answers back to you as
-  conflicts to decide. On every other form, only an unlabelled line does.
-- **Read the whole note before accepting a suggestion.** Suggestions are withheld only in three
-  cases: a line ending in a colon that contains *denied*, *denies*, *absent*, *negative*, *no*,
-  *not*,
-  *without* or *never*; the words *if*, *would*, *could*, *might*, *family history*,
-  *hypothetical*, *imagine* or *suppose* anywhere in the notes; or a quotation. A denial or
-  condition written any other way (for example *The patient denied each of the symptoms below.*)
-  can still come with a suggestion that states the opposite of what you meant.
+  conflicts to decide. On every other form, only a line that is not a label with its answer does
+  (a label left empty counts).
+- **Read the whole note before accepting a suggestion.** Suggestions are withheld in three
+  cases: a denial line that governs other lines, meaning a line containing *denied*, *denies*,
+  *absent*, *negative*, *no*, *not*, *without* or *never* that ends in a colon
+  (`ROS: negative for the following:`), points at other lines with *following*, *these*,
+  *those*, *above*, *below* or *listed* (`The patient denied each of the symptoms below.`), or
+  has the denial word before its first colon (`Not seen: …`); the words *if*, *would*, *could*,
+  *might*, *family history*, *hypothetical*, *imagine* or *suppose* anywhere in the notes; or a
+  quotation. A denial written any other way (for example *Chest pain was denied.* on one line
+  and *Symptoms: chest pain* on another) can still come with a suggestion that states the
+  opposite of what you meant.
 - **WM IOV only:** every non-empty answer must be the exact value under its exact label. A
-  dropdown value must match one of the form's own options, and a measurement needs its unit
-  (`3.2 mm`, `400 ms`). Each of the 11 prewritten statements must also be its own line: its
+  dropdown value must match one of the form's own options, and a measurement is the number, a
+  space, then its unit (`3.2 mm`, `400 ms`; `3.2mm` and `3,2 mm` are refused). Each of the 11 prewritten statements must also be its own line: its
   label, a colon, then one approved wording from the form page. Some wordings need particular
   questions answered, or left unanswered; the form page says which for each wording. Saving
   changed notes clears the draft, so write the statement lines **before** generating.
@@ -159,12 +170,13 @@ Prewritten statement: Clinical correlation: Clinical correlation with the above 
 | kind | what works | notes |
 |---|---|---|
 | **Word (.docx)** | two-column question/answer tables, `{{Question}}` placeholders, multi-column question rows, mixed layouts, and lines of a label plus an underlined Tab (an ordinary paragraph, not inside a table, nothing typed after the Tab) | typed underscores `____` are not answer fields; answers expand in place, so check every exported page |
-| **Fillable PDF** | every field a visible plain text field with a fixed font size (not Auto), standard Helvetica font, no format scripts, not rotated, read-only, comb or rich-text | answers in plain ASCII only (no curly quotes or apostrophes, long dashes, °, µ or accented letters) and must fit their box; a character outside ASCII is refused at finalize |
+| **Fillable PDF** | every field a visible plain text field with a fixed font size (not Auto), standard Helvetica font, no format scripts, not rotated, read-only, comb or rich-text; no links, attachments or other actions anywhere in the file | answers in plain ASCII only (no curly quotes or apostrophes, long dashes, °, µ or accented letters) and must fit their box; a character outside ASCII is refused at finalize, naming the question |
 | **Qualified WM IOV form** | exactly **one** file, recognised by its fingerprint, with its dropdowns and prewritten statements | labelled notes required; its own *No answer documented* choice replaces *Leave blank — reviewed* |
 
 **Refused at upload:** any other Word file with dropdowns, date pickers or other content controls;
-text boxes, tracked changes, fields or macros; PDFs with checkboxes, radio buttons, dropdown,
-signature or button fields; scanned or flat PDFs; password-protected or encrypted files and old
+text boxes, tracked changes, fields or macros; Word files with web or email links or linked
+images, including in a letterhead, header or footer; PDFs with checkboxes, radio buttons,
+dropdown, signature or button fields, or with links, attachments or actions; scanned or flat PDFs; password-protected or encrypted files and old
 `.doc` files. A
 form with dropdowns is **not** qualified because it resembles the WM IOV form. CPT coding is off
 during the pilot.

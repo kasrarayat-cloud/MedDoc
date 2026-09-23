@@ -500,7 +500,7 @@ def pdf_inspect(path):
 
 def check_pdf_capacity(field, answer):
     if any(ord(character) < 32 and character != "\n" or ord(character) > 126 for character in answer):
-        fail("PDF answers currently require printable ASCII text; use DOCX for Unicode.", "unsupported_characters")
+        fail(f"The answer for {field['label']} has a character a PDF form cannot hold: use plain ASCII letters, digits and punctuation (no curly quotes, long dashes, symbols or accented letters), or use DOCX for Unicode. No export was created.", "unsupported_characters")
     if field["max_length"] and len(answer) > field["max_length"]:
         fail(f"The answer for {field['label']} exceeds the PDF field's character limit. No export was created.", "answer_overflow")
     for capacity in field["capacity"]:
