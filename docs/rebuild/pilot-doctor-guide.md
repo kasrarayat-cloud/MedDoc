@@ -137,7 +137,11 @@ lists every charge; choose a charge's service name to see how it was calculated.
   not count) and no denial, family history, hypothetical or pointer word (`Signed by:`,
   `**Signed by:**`, `Signed by: ______`, `Electronically signed on 09/21/2026 at 10:42 by:`, an
   empty `Allergies:`). A dash after a colon is an answer, not a heading (`Allergies: -`, `Nose: —`
-  mean none). `Dictated by: Dr A,
+  mean none), and so is a value in angle brackets (`Allergies: <penicillin>`, `PSA: <0.1>`); only a
+  real HTML tag after the colon (`<br>`, `</b>`) is markup. A bare signature row after a closing
+  heading (`Review of systems: negative for:` then `Signed by: ____`) does not stop that heading
+  closing the notes. A sentence break inside brackets does not end a heading's or a pointer's
+  sentence (`… all of the above were denied (per intake form. Reviewed today):`). `Dictated by: Dr A,
   reviewed by:` (another colon, unless *Dictated by* is one of the form's questions) and `Dictated
   but not read:` (*not*) are headings. A closing line with words the vocabulary does not know
   (`Ruled out:`) is read as bare: write those as answers.
@@ -218,7 +222,8 @@ lists every charge; choose a charge's service name to see how it was calculated.
   has the denial word before its first colon (`Not seen: …`); the words *if*, *would*, *could*,
   *might*, *family history*, *hypothetical*, *imagine* or *suppose* anywhere in the notes; a
   line that starts with the word *Correction*, even for a treatment (`Correction scale:`), or opens
-  with a correction such as `Transcription correction:`; or a quotation. A denial word next to one of those pointer words withholds every suggestion in the
+  with a correction such as `Transcription correction:`; a line break the page shows inline (pasted
+  text can carry a Unicode line separator that looks like a space); or a quotation. A denial word next to one of those pointer words withholds every suggestion in the
   note even in an ordinary sentence (*no driving for the following 24 hours*); type those answers
   yourself. A denial written any other way (for example *Chest pain was denied.* on one line and
   *Symptoms: chest pain* on another) can still come with a suggestion that states the opposite of

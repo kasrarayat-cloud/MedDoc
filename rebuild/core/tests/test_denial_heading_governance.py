@@ -1273,6 +1273,11 @@ class WhatTheTenthPassFound(ExpectationsMixin, TestCase):
         answer = provider_answers(['Comments', 'Symptoms'], notes, {'Symptoms': ['Symptoms: chest pain']})['Symptoms']
         self.assertEqual([entry['quote'] for entry in answer['held_candidate']['context']], ['Pertinent negatives:'])
 
+    def test_a_meaning_changing_window_is_shown_even_when_plain_pointers_are_nearer(self):
+        line = 'Plan: the patient denies the following. See below. See below.'
+        context = fixture_answers(['Plan', 'Symptoms'], line + '\nSymptoms: chest pain')['Symptoms']['held_candidate']['context']
+        self.assertIn('the patient denies the following.', ' '.join(entry.get('quote', '') for entry in context))
+
     def test_a_ready_answer_on_a_one_line_legacy_note_cleared_finalizes_empty(self):
         notes = 'Mild bilateral ankle edema; patient would like compression stockings.'
         answer = provider_answers(['Findings'], notes, {'Findings': [notes]})['Findings']
@@ -1296,6 +1301,111 @@ class WhatTheTenthPassFound(ExpectationsMixin, TestCase):
                 started = time.perf_counter()
                 generation.governance_for(notes[:50000], fields)
                 self.assertLess(time.perf_counter() - started, 2)
+
+
+class WhatTheEleventhPassFound(ExpectationsMixin, TestCase):
+    """Refutation of the finished diff, eleventh pass (over 00492265)."""
+
+    def held(self, answer):
+        self.assertEqual(answer['status'], 'conflict', answer)
+        self.assertEqual(answer['text'], '')
+        self.assertNotIn('suggestion', answer)
+
+    def test_a_pointer_before_an_aside_holding_a_sentence_break_governs_on_the_tab_contract(self):
+        for frame in ('Pertinent negatives are as follows (per the nursing checklist. Confirmed at withdrawal).',
+                      "Her sister's colonoscopy report listed the following (outside hospital, 2019. Reviewed today).",
+                      'The patient denies the following (see HPI. Unchanged).'):
+            with self.subTest(frame=frame):
+                notes = 'Fictional software test only. ' + frame + ' Complications: perforation.'
+                answer = tab_answers(['Complications'], notes)[1]['Complications']
+                self.assertNotEqual(answer['status'], 'supported', answer)
+                self.assertNotIn('suggestion', answer)
+
+    def test_an_aside_holding_a_sentence_break_does_not_cut_a_colon_heading(self):
+        labels = ['Symptoms', 'Review of systems', 'Indication']
+        for notes in ('Symptoms: chest pain\nReview of systems: all of the above were denied (per intake form. Reviewed today):',
+                      'Symptoms: chest pain\nReview of systems: negative for all of the above (see HPI. Reviewed):\nIndication: screening',
+                      'Symptoms: chest pain\nReview of systems: denied (see HPI. Reviewed):'):
+            with self.subTest(notes=notes):
+                answer = provider_answers(labels, notes, {'Symptoms': ['Symptoms: chest pain']})['Symptoms']
+                self.assertNotEqual(answer['status'], 'supported', answer)
+
+    def test_one_line_means_one_line_as_the_validator_splits_lines(self):
+        for separator in ('\u2028', '\x0b', '\r'):
+            with self.subTest(separator=repr(separator)):
+                notes = 'Indication: screening colonoscopy' + separator + 'Patient denies the following:' + separator + 'Symptoms: chest pain'
+                stored = {'q1': {'status': 'edited', 'text': '', 'reviewed': True,
+                                 'evidence': [{'quote': notes, 'start': 0, 'end': len(notes)}]}}
+                self.assertIn('Symptoms', generation.governed_decisions(notes, form('Indication', 'Symptoms'), stored))
+
+    def test_a_ready_answer_on_a_one_sentence_tab_note_cleared_finalizes_empty(self):
+        fields = [{'key': 'k', 'label': 'Plan', 'kind': 'text', 'locator': {'cell': 0, 'tab_form': {'version': 1}}}]
+        for notes in ('Plan: review in clinic as follows.', 'Plan: review in clinic, correction pending.'):
+            with self.subTest(notes=notes):
+                chosen = Selections(fields=[Selection(key='k', quotes=[notes], conflict=False)])
+                answer = validate_selections(notes, fields, chosen)['k']
+                if answer['status'] != 'supported':
+                    continue
+                self.assertEqual(generation.governed_decisions(notes, fields, {'k': {**answer, 'status': 'edited', 'text': ''}}), [])
+
+    def test_a_value_in_angle_brackets_is_an_answer_not_a_heading(self):
+        for line in ('Allergies: <penicillin>', 'Allergies: <No Known Allergies>', 'GP email: <a.patel@example.nhs.uk>',
+                     'Lesion: < 2 cm >', 'PSA: <0.1>'):
+            with self.subTest(line=line):
+                self.assertFalse(generation.ends_in_colon(line))
+                label = line.split(':')[0]
+                answers = fixture_answers(['Chief complaint', label, 'Plan'], 'Chief complaint: follow-up hypertension\n' + line + '\nPlan: continue')
+                self.assert_ready(answers['Plan'], 'continue')
+        # CONTROL: a real tag after the colon still closes a heading.
+        for heading in ('Mother:<br>', 'Mother:</b>', 'Mother:<br data-mce-bogus="1">'):
+            self.assertTrue(generation.ends_in_colon(heading), heading)
+
+    def test_a_line_break_the_page_draws_inline_hides_no_pointer(self):
+        for notes in ('Pertinent negatives are as\u2028follows.\nSymptoms: chest pain.',
+                      "Her mother reported the following\u2029(by phone).\nSymptoms: chest pain."):
+            with self.subTest(notes=repr(notes)):
+                self.assertNotIn('suggestion', fixture_answers(['Symptoms'], notes)['Symptoms'])
+                self.assertNotIn('suggestion', tab_answers(['Symptoms'], notes)[1]['Symptoms'])
+        answer = tab_answers(['Symptoms'], 'Review of systems was negative for the follo\u001fwing.\nSymptoms: chest pain.')[1]['Symptoms']
+        self.assertNotEqual(answer['status'], 'supported', answer)
+
+    def test_a_trailing_signature_row_does_not_stop_a_closing_heading(self):
+        labels = ['Symptoms', 'Review of systems', 'Signed by']
+        answer = provider_answers(labels, 'Symptoms: chest pain\nReview of systems: negative for:\nSigned by: ____',
+                                  {'Symptoms': ['Symptoms: chest pain']})['Symptoms']
+        self.assertNotEqual(answer['status'], 'supported', answer)
+        # CONTROL: with no heading before the signature row, nothing closes the note.
+        answer = provider_answers(['Symptoms', 'Plan', 'Signed by'], 'Symptoms: chest pain\nPlan: continue\nSigned by: ____',
+                                  {'Symptoms': ['Symptoms: chest pain']})['Symptoms']
+        self.assert_ready(answer, 'chest pain')
+
+
+class TheEleventhPassCostsStayLinear(ExpectationsMixin, TestCase):
+    """Performance lens, eleventh pass: many governors on one line times many occurrences, and many spellings of one
+    value, each held the row lock for a minute or more."""
+
+    def test_many_governors_on_a_line_times_many_occurrences(self):
+        import time
+        labels = [f'Question {i}' for i in range(100)]
+        fields = form(*labels)
+        for notes in ('Below. ' * 3571 + '\n' + 'x\n' * 12499 + 'x', 'x\n' * 12500 + ':correction' * 2272):
+            with self.subTest(notes=notes[-20:]):
+                started = time.perf_counter()
+                answers = provider_answers(labels, notes, {label: ['x'] for label in labels})
+                stored = {field['key']: {**answers[field['label']], 'status': 'edited', 'text': ''} for field in fields}
+                generation.governed_decisions(notes, fields, stored)
+                self.assertLess(time.perf_counter() - started, 20)
+
+    def test_many_spellings_of_one_value(self):
+        import itertools, time
+        spaces = ' \t\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u202f\u205f\u3000'
+        lines = ['Q:' + ''.join(combo) + 'x' for combo in itertools.product(spaces, repeat=3)]
+        notes = '\n'.join(lines)
+        labels = ['Q'] + [f'Other {i}' for i in range(99)]
+        started = time.perf_counter()
+        answer = provider_answers(labels, notes, {'Q': lines})['Q']
+        generation.governed_decisions(notes, form(*labels), {'q0': answer})
+        self.assertLess(time.perf_counter() - started, 10)
 
 
 class TheQualifiedWordFormKeepsItsLabelsSelfContained(ExpectationsMixin, TestCase):
@@ -1655,6 +1765,24 @@ class TheDecisionIsEnforcedThroughFinalizationAndExport(DocumentWorkflow):
         section = self.section(encounter, 'Symptoms')
         self.assertIn('data-governing-line', section)
         self.assertIn(HEADING, section)
+
+    def test_a_draft_cleared_before_this_release_is_shown_with_its_lines_and_refused(self):
+        """The page's own re-description of an answer already `edited` to nothing by the installed release: nothing
+        stored beside it names what governs it, so the page must."""
+        encounter = self.generated()
+        finding = encounter.notes.index('chest pain')
+        cleared = {self.ros: {'text': 'none', 'status': 'edited', 'reviewed': True, 'evidence': []},
+                   self.symptoms: {'text': '', 'status': 'edited', 'reviewed': True,
+                                   'evidence': [{'quote': 'chest pain', 'start': finding, 'end': finding + len('chest pain')}]}}
+        Encounter.objects.filter(pk=encounter.pk).update(answers=cleared)
+        encounter.refresh_from_db()
+        section = self.section(encounter, 'Symptoms')
+        self.assertIn('data-governing-line', section)
+        self.assertIn(HEADING, section)
+        response = self.finalize_attempt(encounter)
+        encounter.refresh_from_db()
+        self.assertNotEqual(encounter.status, 'finalized')
+        self.assertContains(response, 'still need your decision: Symptoms.')
 
     def test_a_stale_page_cannot_make_a_decision_with_an_invisible_character(self):
         encounter = self.generated()
