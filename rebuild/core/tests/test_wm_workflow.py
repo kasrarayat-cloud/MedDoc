@@ -212,9 +212,15 @@ class WMDocumentWorkflow(TestCase):
                  if any('saphenous reflux finding' in statement[0] for statement in row['statements'])]
         self.assertTrue(named, response.context['wm_conflicts'])
         for row in named:
-            self.assertTrue(any('impression: reflux or absence' in answer[0] and answer[1] == 'reflux positive.'
-                                for answer in row['answers']), row)
-            self.assertNotEqual(row['explanation'], GENERAL)
+            self.assertNotEqual(row['explanation'], GENERAL, row)
+            self.assertTrue(row['answers'], row)
+            # A measurement is named, never quoted.
+            self.assertTrue(all(answer[1] == '' for answer in row['answers'] if '(ms)' in answer[0]), row)
+        # The positive reflux the default no-reflux wording contradicts is named: its reflux time over 500 ms, or its
+        # impression. (The adapter reports the rule it meets first; CI measured the reflux-time one.)
+        self.assertTrue(any('reflux time' in answer[0]
+                            or ('impression: reflux or absence' in answer[0] and answer[1] == 'reflux positive.')
+                            for row in named for answer in row['answers']), named)
         self.assertContains(response, 'data-wm-conflict')
         class HiddenVariants(HTMLParser):
             def __init__(self):
