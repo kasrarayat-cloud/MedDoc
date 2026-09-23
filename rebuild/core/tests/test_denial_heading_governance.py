@@ -1380,6 +1380,114 @@ class WhatTheEleventhPassFound(ExpectationsMixin, TestCase):
         self.assert_ready(answer, 'chest pain')
 
 
+class WhatTheTwelfthPassFound(ExpectationsMixin, TestCase):
+    """Refutation of the finished diff, twelfth pass (over be7152b4)."""
+    TAB = ['PATIENT NAME', 'PROCEDURE', 'COMPLICATIONS']
+    HEAD = 'PATIENT NAME: SYNTHETIC TAB PATIENT\nPROCEDURE: Colonoscopy.\n'
+
+    def not_ready(self, answer):
+        self.assertNotEqual(answer['status'], 'supported', answer)
+        self.assertNotIn('suggestion', answer)
+
+    def test_markup_between_a_pointer_and_its_period_still_ends_the_sentence(self):
+        for frame in ('_Pertinent negatives are as follows_.', 'Pertinent negatives are as follows__.',
+                      '<em>Pertinent negatives are as follows</em>.', 'Pertinent negatives are as follows&nbsp;.',
+                      'Pertinent negatives are as follows<br>.', '**Pertinent negatives are as follows**: fever.'):
+            with self.subTest(frame=frame):
+                self.not_ready(tab_answers(self.TAB, self.HEAD + frame + ' COMPLICATIONS: Perforation.')[1]['COMPLICATIONS'])
+        answer = fixture_answers(['Review of systems', 'Diabetes'], 'Review of systems: **negative for the following**: fever, chills\nDiabetes: yes')
+        self.not_ready(answer['Diabetes'])
+
+    def test_editor_html_after_a_colon_still_ends_a_heading(self):
+        for tail in ('<o:p></o:p>', '</dd>', '<!-- -->', '</label>', '<wbr>', '<o:p>&nbsp;</o:p>'):
+            with self.subTest(tail=tail):
+                self.assertTrue(generation.ends_in_colon('Family history:' + tail))
+                self.not_ready(fixture_answers(['Family history', 'Diabetes'], 'Family history:' + tail + '\nDiabetes: yes')['Diabetes'])
+
+    def test_correction_followed_by_a_double_hyphen_is_a_correction(self):
+        notes = self.HEAD + 'COMPLICATIONS: None.\nCorrection-- the patient had a small perforation at the polypectomy site.'
+        self.not_ready(tab_answers(self.TAB, notes)[1]['COMPLICATIONS'])
+        answer = provider_answers(['Symptoms', 'Examination'], 'Symptoms: chest pain\nExamination: Correction-- patient denies chest pain; exam normal',
+                                  {'Symptoms': ['Symptoms: chest pain']})['Symptoms']
+        self.assertNotEqual(answer['status'], 'supported', answer)
+        self.assertTrue(generation.erratum_points("Physician's correction-- severe chest pain."))
+        # CONTROL: a hyphen joined to a word is still the treatment.
+        self.assertFalse(generation.erratum_points('Insulin: Correction-scale lispro with meals.'))
+
+    def test_a_blank_braille_cell_or_a_footnote_mark_hides_no_pointer(self):
+        for frame in ('Pertinent negatives are as\u2800follows.', 'Pertinent negatives are as follows\u00b9.'):
+            with self.subTest(frame=repr(frame)):
+                self.not_ready(tab_answers(self.TAB, self.HEAD + frame + ' COMPLICATIONS: Perforation.')[1]['COMPLICATIONS'])
+        self.not_ready(fixture_answers(['Review of systems', 'Diabetes'],
+                                       'Review of systems: negative for the following\u2800items.\nDiabetes: yes')['Diabetes'])
+
+    def test_the_fifteen_places_are_lines_not_governors(self):
+        line = ' '.join(f'If symptom {n} recurs, use the plan below.' for n in range(1, 17))
+        answer = provider_answers(['Diabetes'], 'Family history:\n' + line + '\nDiabetes: yes', {'Diabetes': ['Diabetes: yes']})['Diabetes']
+        self.assertIn('Family history:', [entry.get('quote') for entry in answer['held_candidate']['context']])
+
+    def test_the_nearest_meaning_changing_window_is_kept_before_earlier_ones(self):
+        line = 'Plan: the patient denies the following. See below. See below. See below. Patient also denies the following.'
+        context = fixture_answers(['Plan', 'Symptoms'], line + '\nSymptoms: chest pain')['Symptoms']['held_candidate']['context']
+        self.assertIn('Patient also denies the following.', ' '.join(entry.get('quote', '') for entry in context))
+
+    def test_a_blank_clock_field_is_not_a_heading(self):
+        self.assertFalse(generation.ends_in_colon('Time out: __:__'))
+        labels = ['Procedure', 'Time out', 'Anesthesia', 'Findings', 'Complications']
+        notes = ('Procedure: ultrasound-guided right knee aspiration\nTime out: __:__\nAnesthesia: 1% lidocaine 5 mL\n'
+                 'Findings: 30 mL straw-coloured fluid aspirated\nComplications: none')
+        self.assert_ready(fixture_answers(labels, notes)['Anesthesia'], '1% lidocaine 5 mL')
+
+    def test_only_a_signature_row_is_passed_over_at_the_end(self):
+        labels = ['Indication', 'Findings', 'Recommendations', 'Pathology', 'Follow-up']
+        notes = 'Indication: screening\nFindings: two polyps removed\nRecommendations: as follows:\nPathology:\nFollow-up:'
+        answers = provider_answers(labels, notes, {'Indication': ['Indication: screening']})
+        self.assertEqual(answers['Indication'].get('suggestion'), 'screening', answers['Indication'])
+
+    def test_a_cleared_stored_offer_the_note_withholds_needs_a_decision(self):
+        notes = '\u25cf Correction of iron deficiency with oral iron\nSymptoms: chest pain'
+        start = notes.index('chest pain')
+        stored = {'q0': {'status': 'edited', 'text': '', 'reviewed': True, 'suggestion': 'chest pain', 'accepted_suggestion': False,
+                         'suggestion_evidence': [{'quote': 'chest pain', 'start': start, 'end': start + 10}],
+                         'evidence': [{'quote': notes, 'start': 0, 'end': len(notes)}]}}
+        self.assertIn('Symptoms', generation.governed_decisions(notes, form('Symptoms'), stored))
+        # CONTROL: nothing withholds it, and nothing governs it: cleared, it finalizes empty.
+        plain = 'Fictional note for review\nSymptoms: chest pain'
+        start = plain.index('chest pain')
+        stored = {'q0': {**stored['q0'], 'suggestion_evidence': [{'quote': 'chest pain', 'start': start, 'end': start + 10}],
+                         'evidence': [{'quote': plain, 'start': 0, 'end': len(plain)}]}}
+        self.assertEqual(generation.governed_decisions(plain, form('Symptoms'), stored), [])
+
+    def test_a_cleared_answer_without_its_own_line_says_why(self):
+        notes = 'Indication: screening colonoscopy\nBowel preparation: good\nRecommendations: as follows:\nRepeat colonoscopy in 5 years'
+        fields = form('Indication', 'Bowel preparation', 'Recommendations')
+        governance = generation.governance_for(notes, fields)
+        row = {**fields[2], 'status': 'edited', 'text': '', 'evidence': [{'quote': notes, 'start': 0, 'end': len(notes)}]}
+        held = generation.as_currently_governed(governance, notes, row)['held_candidate']
+        self.assertEqual(held['reason'], generation.HELD_REASON_UNKNOWN_LINE)
+
+    def test_the_page_says_where_the_same_words_also_appear(self):
+        notes = 'Indication: screening colonoscopy\nComplications: None\nFindings: two small polyps removed\nPrevious procedures:\nNone'
+        answer = provider_answers(['Indication', 'Complications', 'Findings'], notes, {'Complications': ['None']})['Complications']
+        elsewhere = [entry for entry in answer['held_candidate']['context'] if entry.get('elsewhere')]
+        self.assertEqual(elsewhere[0]['elsewhere'][0]['start'], notes.rindex('None'))
+
+    def test_many_questions_quoting_one_repeated_line_are_judged_once(self):
+        import time
+        labels = [f'Field {i}' for i in range(100)]
+        fields = form(*labels)
+        notes = ':\n' * 25000
+        started = time.perf_counter()
+        answers = provider_answers(labels, notes, {label: [':'] for label in labels})
+        stored = {field['key']: {**answers[field['label']], 'status': 'supported', 'text': ':',
+                                 'evidence': [{'quote': ':', 'start': 0, 'end': 1}]} for field in fields}
+        governance = generation.governance_for(notes, fields)
+        for field in fields:
+            generation.as_currently_governed(governance, notes, {**field, **stored[field['key']]})
+        generation.governed_decisions(notes, fields, stored)
+        self.assertLess(time.perf_counter() - started, 20)
+
+
 class TheEleventhPassCostsStayLinear(ExpectationsMixin, TestCase):
     """Performance lens, eleventh pass: many governors on one line times many occurrences, and many spellings of one
     value, each held the row lock for a minute or more."""
@@ -1783,6 +1891,19 @@ class TheDecisionIsEnforcedThroughFinalizationAndExport(DocumentWorkflow):
         encounter.refresh_from_db()
         self.assertNotEqual(encounter.status, 'finalized')
         self.assertContains(response, 'still need your decision: Symptoms.')
+
+    def test_an_answer_edited_before_this_release_is_shown_with_its_lines(self):
+        encounter = self.generated()
+        finding = encounter.notes.index('chest pain')
+        edited = {self.ros: {'text': 'none', 'status': 'edited', 'reviewed': True, 'evidence': []},
+                  self.symptoms: {'text': 'chest pain, mild', 'status': 'edited', 'reviewed': True, 'accepted_suggestion': False,
+                                  'evidence': [{'quote': 'chest pain', 'start': finding, 'end': finding + len('chest pain')}]}}
+        Encounter.objects.filter(pk=encounter.pk).update(answers=edited)
+        encounter.refresh_from_db()
+        section = self.section(encounter, 'Symptoms')
+        self.assertIn('data-governing-line', section)
+        self.assertIn(HEADING, section)
+        self.assertIn('Your answer was typed before this release', section)
 
     def test_a_stale_page_cannot_make_a_decision_with_an_invisible_character(self):
         encounter = self.generated()

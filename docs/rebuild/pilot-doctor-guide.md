@@ -128,7 +128,8 @@ lists every charge; choose a charge's service name to see how it was calculated.
   decision for you: it is never filled in and never offered for one click. What was read is shown
   beside it, with the lines that govern it (*Written under* above it, *Followed by* below it; up to
   15 lines, nearest and denials first, and the rest counted: read the full note then; a line that
-  is the answer's own is shown as *In the same line*). A question left
+  is the answer's own is shown as *In the same line*; when the same words also appear elsewhere in
+  the notes, the page says where, because a line may govern them there). A question left
   empty mid-note (`Allergies:`) counts, because it may be a heading (`Pertinent negatives:`). A
   heading at the very end, or one that contains *above*, *these*, *those* or *listed* (`… all of
   the above denied:`, and also `Discharge medications as listed below:`), governs the lines before
@@ -138,7 +139,8 @@ lists every charge; choose a charge's service name to see how it was calculated.
   `**Signed by:**`, `Signed by: ______`, `Electronically signed on 09/21/2026 at 10:42 by:`, an
   empty `Allergies:`). A dash after a colon is an answer, not a heading (`Allergies: -`, `Nose: —`
   mean none), and so is a value in angle brackets (`Allergies: <penicillin>`, `PSA: <0.1>`); only a
-  real HTML tag after the colon (`<br>`, `</b>`) is markup. A bare signature row after a closing
+  real HTML tag after the colon (`<br>`, `</b>`, Word's `<o:p></o:p>`) is markup, and a blank clock
+  field (`Time out: __:__`) is not a heading. A bare signature or date row after a closing
   heading (`Review of systems: negative for:` then `Signed by: ____`) does not stop that heading
   closing the notes. A sentence break inside brackets does not end a heading's or a pointer's
   sentence (`… all of the above were denied (per intake form. Reviewed today):`). `Dictated by: Dr A,
@@ -205,7 +207,10 @@ lists every charge; choose a charge's service name to see how it was calculated.
   box empty keeps the earlier acceptance. (On the WM IOV form, which has no "Leave blank —
   reviewed", such an acceptance is replaced by choosing or typing an answer; none exists in the
   pilot's drafts.) Edited on a page opened before this release, the answer keeps its candidate and
-  the lines that govern it beside your text; cleared there, it stays held. An answer such a draft
+  the lines that govern it beside your text; cleared there, it stays held. An answer you typed on a
+  governed line before this release keeps your text and is shown with those lines: check it against
+  them. A suggestion such a draft stored under a note that now withholds suggestions, typed over and
+  cleared, still needs "Leave blank — reviewed". An answer such a draft
   could only store with the whole note as its source, cleared, needs "Leave blank — reviewed"
   whenever anything in the note may govern it or withholds suggestions (for example *if* in a plan).
 - **An answer written under a governing line needs a decision.** If you type it and then clear it,
@@ -214,7 +219,7 @@ lists every charge; choose a charge's service name to see how it was calculated.
   as empty.
 - **Read the whole note before accepting a suggestion.** Suggestions are never offered for an
   answer governed by a heading or a governing sentence (above). Otherwise they are withheld in
-  four cases: a denial line that governs other lines, meaning a line containing *denied*, *denies*,
+  five cases: a denial line that governs other lines, meaning a line containing *denied*, *denies*,
   *deny*, *absent*, *negative*, *negatives*, *no*, *not*, *without* or *never* that ends in a
   colon
   (`ROS: negative for the following:`), points at other lines with *following*, *these*,
@@ -226,8 +231,9 @@ lists every charge; choose a charge's service name to see how it was calculated.
   text can carry a Unicode line separator that looks like a space); or a quotation. A denial word next to one of those pointer words withholds every suggestion in the
   note even in an ordinary sentence (*no driving for the following 24 hours*); type those answers
   yourself. A denial written any other way (for example *Chest pain was denied.* on one line and
-  *Symptoms: chest pain* on another) can still come with a suggestion that states the opposite of
-  what you meant.
+  *Symptoms: chest pain* on another) is not read as one: on underlined-Tab forms the opposite
+  finding can come back as a ready answer already filled in, and on other forms as a suggestion
+  that states the opposite of what you meant.
 - **WM IOV only:** every non-empty answer must be the exact value under its exact label. A
   dropdown value must match one of the form's own options, and a measurement is the number, a
   space, then its unit (`3.2 mm`, `400 ms`; `3.2mm` and `3,2 mm` are refused). Each of the 11 prewritten statements must also be its own line: its
