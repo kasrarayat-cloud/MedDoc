@@ -171,14 +171,19 @@ lists every charge; choose a charge's service name to see how it was calculated.
   `Corrected:` are not), and not when *correction* is part of a form question's own label
   (`Correction achieved: 10 degrees`, `Refractive correction:`). After a label, a number before the
   word is a value, not a list marker (`Glucose: 312 correction given` is not a correction), unless
-  it is a list number (`Comments: 1. Correction: …`). One exception: a correction that opens the whole answer to a
+  it is a list number (`Comments: 1. Correction: …`) or the word is followed by a colon, comma or
+  dash (`Glucose: 312 correction: 4 units` is read as a correction, like `Transcription
+  correction:`). One exception: a correction that opens the whole answer to a
   question already answered above it (`Pain score: Correction: three out of ten`) corrects that
   question only, which already needs your decision because it has two answers — on an underlined-Tab
   form anywhere in a paragraph, on every other form only at the start of its line. ⚠️ So a
   correction of another question written under a question already answered (`Comments:
   Correction: the allergy is sulfa`) is NOT applied to that other answer: write it under the
-  question it corrects. A note line that opens with a correction (`Correction:`, `Transcription
-  correction:`, `1. Correction`) also withholds every suggestion (below).
+  question it corrects. A note line that starts with the word *Correction* or *Corrections*, after
+  any bullet or list number, also withholds every suggestion (below) — even a treatment line
+  (`Correction scale:`, `Correction insulin:`, `Correction of …`) or a line naming a form question
+  (`Correction achieved: 10 degrees`) — and so does a line that opens with a correction such as
+  `Transcription correction:`.
 - **Write each denial as its own answer** (`Symptoms: no chest pain`) when you can: nothing
   governs it, so it comes back ready.
 - **On the WM IOV form, labelled lines never govern**: every label there names its own side, vein
@@ -206,7 +211,8 @@ lists every charge; choose a charge's service name to see how it was calculated.
   *those*, *above*, *below* or *listed* (`The patient denied each of the symptoms below.`), or
   has the denial word before its first colon (`Not seen: …`); the words *if*, *would*, *could*,
   *might*, *family history*, *hypothetical*, *imagine* or *suppose* anywhere in the notes; a
-  line that opens with a correction (`Correction:`, `Transcription correction:`); or a quotation. A denial word next to one of those pointer words withholds every suggestion in the
+  line that starts with the word *Correction*, even for a treatment (`Correction scale:`), or opens
+  with a correction such as `Transcription correction:`; or a quotation. A denial word next to one of those pointer words withholds every suggestion in the
   note even in an ordinary sentence (*no driving for the following 24 hours*); type those answers
   yourself. A denial written any other way (for example *Chest pain was denied.* on one line and
   *Symptoms: chest pain* on another) can still come with a suggestion that states the opposite of

@@ -223,8 +223,10 @@ TAB_CONTRACT = 'tab-complete-evidence-v1'
 #: asserts the union still equals the original fourteen words so the two cannot drift.
 SCOPE_POINTERS = r'following|these|those|above|below|listed'
 SCOPE_REFRAMERS = r'family history|if|would|could|might|hypothetical|imagine|suppose'
-INHERITED_SCOPE = re.compile(r'\b(?:' + SCOPE_POINTERS + '|' + SCOPE_REFRAMERS + r')\b', re.I)
-REFRAMED_SCOPE = re.compile(r'\b(?:' + SCOPE_REFRAMERS + r')\b', re.I)
+#: Letter boundaries, not `\b`: an underscore is not a letter (`_negative for the following_`, ninth pass). Widening only.
+LETTER_BEFORE, LETTER_AFTER = r'(?<![^\W_])', r'(?![^\W_])'
+INHERITED_SCOPE = re.compile(LETTER_BEFORE + r'(?:' + SCOPE_POINTERS + '|' + SCOPE_REFRAMERS + r')' + LETTER_AFTER, re.I)
+REFRAMED_SCOPE = re.compile(LETTER_BEFORE + r'(?:' + SCOPE_REFRAMERS + r')' + LETTER_AFTER, re.I)
 QUOTED_SOURCE = re.compile(r'["“”]|(?<!\w)[\'‘]')
 DENIAL_WORDS = r'denied|denies|absent|negative|no|not|without|never'
 UNSCOPED_NEGATIVE_HEADING = re.compile(r'^[^:]*\b(?:' + DENIAL_WORDS + r')\b[^:]*:',re.I)
@@ -232,10 +234,10 @@ UNSCOPED_NEGATIVE_HEADING = re.compile(r'^[^:]*\b(?:' + DENIAL_WORDS + r')\b[^:]
 #: never to decide a status in `source_units`. `\bnegative\b` cannot match `Pertinent negatives:`,
 #: the commonest denial heading there is. Widening only ever suppresses more.
 SUPPRESSING_DENIAL_WORDS = DENIAL_WORDS + r'|negatives|deny'
-DENIAL = re.compile(r'\b(?:' + SUPPRESSING_DENIAL_WORDS + r')\b', re.I)
-SCOPE_POINTER = re.compile(r'\b(?:' + SCOPE_POINTERS + r')\b', re.I)
+DENIAL = re.compile(LETTER_BEFORE + r'(?:' + SUPPRESSING_DENIAL_WORDS + r')' + LETTER_AFTER, re.I)
+SCOPE_POINTER = re.compile(LETTER_BEFORE + r'(?:' + SCOPE_POINTERS + r')' + LETTER_AFTER, re.I)
 #: Colons of every width, and the look-alikes pasted text carries (ratio, modifier letter, Armenian, Hebrew...).
-COLONS = frozenset(':\uff1a\ufe55\ufe13\u2236\ua789\u02f8\u05c3\u0589\u1804\ufe30\u205a\u2982\u1361\u16ec\ua6f4\u17d6')
+COLONS = frozenset(':\uff1a\ufe55\ufe13\u2236\ua789\u02f8\u05c3\u0589\u1804\ufe30\u205a\u2982\u1361\u16ec\ua6f4\u17d6\ua4fd\u02d0\u0703\u0704')
 FINITE_STATEMENT = re.compile(r'\b(?:is|are|was|were|has|have|had|denies|reports|reported|showed|revealed|advanced|seen|collected|recommend|received|underwent)\b',re.I)
 
 ABBREVIATION = re.compile(r'(?:\b(?:dr|mr|mrs|ms|prof|st|vs|etc|approx)|\b[A-Z]|\be\.g|\bi\.e)\.$', re.I)
@@ -443,7 +445,7 @@ def blanks():
     and the blank braille cell (U+2800); as a string for `rstrip` and a table for `translate`. Built once per
     process from the planes that hold them."""
     codes = [code for code in list(range(0x20000)) + list(range(0xE0000, 0xE1000))
-             if chr(code).isspace() or invisible(chr(code)) or code == 0x2800]
+             if chr(code).isspace() or invisible(chr(code)) or code == 0x2800 or unicodedata.category(chr(code)) == 'Cc']
     return ''.join(map(chr, codes)), dict.fromkeys(code for code in codes if not chr(code).isspace())
 
 
@@ -452,11 +454,24 @@ def visible_end(text):
     return text.rstrip(blanks()[0])
 
 
+#: What may close a heading after its colon: markup and closing marks (`**Mother:**`, `_Family hx:_`, `(Mother:)`, ninth pass).
+MARKUP_TAIL = frozenset('*_)]}"\'\u201d\u2019\u00bb\u203a-\u2010\u2011\u2012\u2013\u2014')
+
+
 def ends_in_colon(text):
-    """Whether text visibly ends in a colon: fullwidth and small colons count, and so does a colon
-    followed only by whitespace or invisible characters."""
-    visible = visible_end(text)
-    return bool(visible) and visible[-1] in COLONS
+    """Whether text visibly ends in a colon: fullwidth and small colons count, and so does a colon followed only by
+    whitespace, invisible characters, markup, closing marks or a short tag (`<br>`). One pass from the end."""
+    blank = frozenset(blanks()[0])
+    end = len(text)
+    while end:
+        character = text[end - 1]
+        if character in blank or character in MARKUP_TAIL:
+            end -= 1
+        elif character == '>' and (opening := text.rfind('<', max(0, end - 22), end)) >= 0 and '\n' not in text[opening:end]:
+            end = opening
+        else:
+            break
+    return bool(end) and text[end - 1] in COLONS
 
 
 def readings(text):
@@ -475,8 +490,8 @@ def readings(text):
 
 @functools.lru_cache(maxsize=1)
 def invisibles():
-    """The `translate` table that removes invisible characters (not U+2800, not whitespace)."""
-    return {code: None for code in blanks()[1] if code != 0x2800}
+    """The `translate` table that removes invisible characters (not U+2800, not whitespace, not controls)."""
+    return {code: None for code in blanks()[1] if invisible(chr(code))}
 
 
 def denial_before_colon(line):
@@ -560,7 +575,7 @@ def with_scope_suggestion(answer, notes, texts, own, explicit, context=None, wor
 #: round is the accumulating keyword workaround this rule replaced.
 FORWARD_POINTERS = frozenset(('following', 'below'))
 BACKWARD_POINTERS = frozenset(SCOPE_POINTERS.split('|')) - FORWARD_POINTERS
-WORD = re.compile(r'\w+')
+WORD = re.compile(r'[^\W_]+')
 COLON_CLASS = '[' + ''.join(sorted(COLONS)) + ']'
 #: One word as a doctor writes it (fifth pass): `symptom(s)`, `co-morbidities`, `sx/signs`, `pt's`.
 ONE_WORD = r"(?:[\w'\u2019/\-\u2010\u2011]|\([a-z]{1,3}\))+"
@@ -568,7 +583,10 @@ ONE_WORD = r"(?:[\w'\u2019/\-\u2010\u2011]|\([a-z]{1,3}\))+"
 #: of a heading's colon. No word before it is read: an exception, an earlier sentence, the label or a relative's
 #: name decided nothing reliably (third refutation pass), so none is asked. `follows` only as `as follows`: the
 #: bare verb is an examination finding (`fixes and follows`).
-POINTER = re.compile(r"\b(?:following|below|as\s+follows|the\s+following\s+(" + ONE_WORD + r"))(?![\w'\u2019/\-\u2010\u2011(])", re.I)
+#: The pointer word is not part of a longer word (`following-up`, `following's`), but anything else may touch it
+#: (`_following_`, `following--`, `'…following'`, ninth pass).
+POINTER = re.compile(LETTER_BEFORE + r"(?:following|below|as\s+follows|the\s+following\s+(" + ONE_WORD
+                     + r"))(?![^\W_]|['\u2019/\-\u2010\u2011(](?=[^\W_]))", re.I)
 #: ⚠️ WHERE A SENTENCE ENDS, AS `source_units` READS IT: the end of the line; a colon (`…as follows: polyps.`, which
 #: introduces an inline list); or `.`/`!`/`?`/`…` then whitespace, the end, closing quotes/brackets, or a capital —
 #: optionally after one aside (`… the following (reviewed today).`). NOT a semicolon (`…the following morning; able
@@ -623,9 +641,10 @@ HELD_REASON_WORD = ('Read from the notes but NOT offered as an answer: the line 
                     'means. Choose or type your own answer, and paste its complete source line.')
 #: No single line governs it; something elsewhere in the note withholds the offer.
 HELD_REASON_NOTE = ('Read from the notes but NOT offered as an answer: something elsewhere in the note may change what '
-                    'it means (a word such as if, would or family history, a quotation, a denial heading, or a line '
-                    'that opens with a correction: Correction:, Transcription correction:, 1. Correction). Read the full '
-                    'note, then type your own answer, or choose "Leave blank — reviewed".')
+                    'it means (a word such as if, would or family history, a quotation, a denial heading, a line that '
+                    'starts with the word Correction even for a treatment, or a line that opens with a correction such as '
+                    'Transcription correction:). Read the full note, then type your own answer, or choose "Leave blank — '
+                    'reviewed".')
 HELD_REASON_NOTE_WORD = ('Read from the notes but NOT offered as an answer: something elsewhere in the note may change '
                          'what it means. Read the full note, then choose or type your own answer, and paste its complete '
                          'source line.')
@@ -661,9 +680,10 @@ def positioned_readings(text):
         yield ''.join(text[index] for index in kept), kept
 
 
-def forward_point(text):
-    """The offset in `text` just after the first pointer that ends its sentence, or None."""
-    found = []
+def forward_points(text):
+    """The offsets in `text` just after EACH pointer that ends its sentence, in either reading (ninth pass: only the
+    first was kept, so `Plan: see below. … The patient denies the following.` showed the doctor `see below`)."""
+    found = set()
     for reading, kept in positioned_readings(text):
         for match in POINTER.finditer(reading):
             end = match.end()
@@ -672,9 +692,8 @@ def forward_point(text):
                 continue
             if match.group(1) and reading[end:end + 1] == '.' and ABBREVIATED_WORD.search(reading[max(0, end - 32):end + 1]):
                 continue
-            found.append(end if kept is None else kept[end - 1] + 1)
-            break
-    return min(found) if found else None
+            found.add(end if kept is None else kept[end - 1] + 1)
+    return sorted(found)
 
 
 def erratum_points(text):
@@ -788,29 +807,32 @@ def heading_governance(notes, labels, *, lexical=True, per_sentence=True):
                 # A pointer in a question's VALUE (its own label, `…informed of the following risks:`, is not one), on a
                 # colon-ending line too: `…including the following. COMPLICATIONS: … Findings are as follows:`. On the
                 # tab contract each sentence's own label is skipped, mid-paragraph too (eighth pass).
-                point = None
+                points = []
                 for low, high in units:
                     own_unit = (answered_label if per_sentence else labelled_value)(stripped[low:high], labels) if per_sentence else parsed
                     value_at = low + (own_unit[2] if own_unit else 0)
-                    found = forward_point(stripped[value_at:high])
-                    if found is not None:
-                        point = value_at + found
-                        break
-                if point is not None:
-                    # Shown from the line's start through the pointer's sentence: the label and the frame with it.
-                    through = sentences[bisect.bisect_left([high for _, high in sentences], point)][1] if point <= len(stripped) else len(stripped)
-                    forward.append((start + point, index, start, start + through, changes_meaning(stripped[:through])))
+                    points.extend(value_at + found for found in forward_points(stripped[value_at:high]))
+                sentence_ends = [high for _, high in sentences]
+                for number, point in enumerate(points):
+                    # Each is its own governor: the first shown from the line's start through its sentence (the label
+                    # and the frame with it), each later one as its own sentence.
+                    at = bisect.bisect_left(sentence_ends, point)
+                    through = sentences[at][1] if point <= len(stripped) else len(stripped)
+                    low = 0 if number == 0 else sentences[min(at, len(sentences) - 1)][0]
+                    forward.append((start + point, index, start + low, start + through, changes_meaning(stripped[low:through])))
                 unit_starts = [low for low, _ in units]
                 sentence_starts = [low for low, _ in sentences]
                 owners = {}                       # each unit's own label, parsed once however many errata it holds
                 for at in erratum_points(stripped):
                     low, high = units[max(0, bisect.bisect_right(unit_starts, at) - 1)]
                     if low not in owners:
-                        owners[low] = (answered_label if per_sentence else labelled_value)(stripped[low:high], labels)
-                    own = owners[low]
+                        found = (answered_label if per_sentence else labelled_value)(stripped[low:high], labels)
+                        opening = VALUE_ERRATUM.match(found[1]) if found else None
+                        owners[low] = (found, found[2] + opening.start('word') if opening else None)
+                    own, value_word = owners[low]
                     if own and at - low < own[2]:
                         continue                  # the word is in the question's own label: not an erratum
-                    if corrects_its_own_answer(stripped[low:high], at - low, own, answered, lambda: absorb(start + low)):
+                    if value_word is not None and at - low == value_word and corrects_its_own_answer(own, answered, lambda: absorb(start + low)):
                         continue
                     # Shown from its sentence to the end of the line: what it corrects to follows the word.
                     shown_low = sentences[max(0, bisect.bisect_right(sentence_starts, at) - 1)][0]
@@ -823,16 +845,16 @@ def heading_governance(notes, labels, *, lexical=True, per_sentence=True):
     forward.sort(); backward.sort()
     # Indexes of the governors whose words change meaning, so a held answer finds the nearest ones by bisection.
     meaning = ([i for i, governor in enumerate(forward) if governor[4]], [i for i, governor in enumerate(backward) if governor[4]])
-    # ⚠️ ONE ENTRY PER LINE SHOWS EVERY GOVERNING SPAN ON IT (eighth pass): `…patient denies the following.
-    # Cardiovascular:` has two governors on one line, and showing only the nearest hid the denial.
-    shown = {}
-    for governor in forward + backward:
-        low, high = shown.get(governor[1], (governor[2], governor[3]))
-        shown[governor[1]] = (min(low, governor[2]), max(high, governor[3]))
-    for index, low in headings.items():
-        old = shown.get(index, (low, spans[index][1]))
-        shown[index] = (min(old[0], low), max(old[1], spans[index][1]))
-    return starts, spans, headings, forward, backward, meaning, opens, shown
+    # ⚠️ ONE ENTRY PER LINE SHOWS EACH GOVERNING SPAN ON IT (eighth and ninth passes): `…patient denies the following.
+    # Cardiovascular:` has two governors on one line; showing only the nearest hid the denial, and cutting their
+    # union to 400 characters hid whichever governed. By line: the governors' indexes, each direction.
+    by_line = ({}, {})
+    for side, governors in enumerate((forward, backward)):
+        for index, governor in enumerate(governors):
+            by_line[side].setdefault(governor[1], []).append(index)
+    # Whether this release withholds every offer in the note: once per note, not once per answer (ninth pass).
+    withheld = bool(opens or LINE_INITIAL_CORRECTION.search(notes)) or not _plain_pointer_only(notes)
+    return starts, spans, headings, forward, backward, meaning, opens, by_line, withheld
 
 
 def answered_label(text, labels):
@@ -847,15 +869,10 @@ def answered_label(text, labels):
     return (labels[key], match.group(2), match.start(2)) if key in labels else tab_source_value(text, labels)
 
 
-def corrects_its_own_answer(unit, at, parsed, answered, absorb):
-    """The erratum that corrects only its own question: the one that opens the WHOLE value of a recognized question
-    in its unit (its first word, no list marker), whose question was ANSWERED earlier — a non-empty value that is not
-    itself an erratum. Any other erratum in the same unit is judged by itself, and reaches back."""
-    if not parsed:
-        return False
-    match = VALUE_ERRATUM.match(parsed[1])
-    if not match or at != parsed[2] + match.start('word'):
-        return False
+def corrects_its_own_answer(parsed, answered, absorb):
+    """The erratum that corrects only its own question: the one that opens the WHOLE value of a recognized question in
+    its unit (its first word, no list marker; the caller checks the position once per unit), whose question was
+    ANSWERED earlier — a non-empty value that is not itself an erratum. Any other erratum is judged by itself."""
     absorb()
     return parsed[0] in answered
 
@@ -880,7 +897,7 @@ def governed_context(governance, notes, evidence):
     then 57 MB of quotes): the nearest three each way, then every one whose words change meaning, nearest first;
     the other DISTINCT lines are counted in a final `{'more': n}` entry, never dropped silently.
     """
-    starts, spans, headings, forward, backward, (forward_meaning, backward_meaning), _, line_shown = governance
+    starts, spans, headings, forward, backward, (forward_meaning, backward_meaning), _, by_line, _ = governance
     ats = [entry['start'] for entry in evidence]
     if not ats:
         return None
@@ -912,9 +929,32 @@ def governed_context(governance, notes, evidence):
             governor = forward[before[index]]; take(governor[1], governor[2], governor[3], False)
         if index < len(after):
             governor = backward[after[index]]; take(governor[1], governor[2], governor[3], True)
-    shown = [{'quote': shown_quote(notes, *line_shown[line], later), 'start': line_shown[line][0], 'end': line_shown[line][1],
-              'after': later, 'same': line in own_lines}
-             for line, (low, high, later) in sorted(chosen.items(), key=lambda item: line_shown[item[0]][0])]
+    def changes(meaning, index):
+        at = bisect.bisect_left(meaning, index)
+        return at < len(meaning) and meaning[at] == index
+
+    def windows(line):
+        # Each governing span on the line, at most three: those whose words change meaning first, then the nearest.
+        found = [(not changes(forward_meaning, i), max(ats) - forward[i][0], forward[i][2:4])
+                 for i in by_line[0].get(line, ()) if i < ahead]
+        found += [(not changes(backward_meaning, i), backward[i][0] - min(ats), backward[i][2:4])
+                  for i in by_line[1].get(line, ()) if i >= behind]
+        if line in selves:
+            found.append((False, 0, (headings[line], spans[line][1])))
+        merged = []
+        for low, high in sorted(window for _, _, window in sorted(found)[:3]):
+            if merged and low <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], high))
+            else:
+                merged.append((low, high))
+        return merged
+
+    shown = []
+    for line, (low, high, later) in chosen.items():
+        spans_here = windows(line) or [(low, high)]
+        shown.append({'quote': ' \u2026 '.join(shown_quote(notes, a, b, later) for a, b in spans_here),
+                      'start': spans_here[0][0], 'end': spans_here[-1][1], 'after': later, 'same': line in own_lines})
+    shown.sort(key=lambda entry: entry['start'])
     return shown + ([{'more': len(governing) - len(shown)}] if len(governing) > len(shown) else [])
 
 
@@ -947,8 +987,9 @@ def governance_for(notes, fields, context_labels=()):
 
 
 def withheld_note_wide(governance, notes):
-    """Whether this release withholds every one-click offer in the note, whatever line an answer is on."""
-    return bool(governance[6] or LINE_INITIAL_CORRECTION.search(notes)) or not _plain_pointer_only(notes)
+    """Whether this release withholds every one-click offer in the note, whatever line an answer is on (computed once
+    per note by heading_governance)."""
+    return governance[8]
 
 
 def offer_context(governance, notes, answer):
@@ -972,7 +1013,7 @@ def governed_supported(governance, notes, answer):
 def own_evidence(answer, notes):
     """The lines an answer's candidate was read from, whichever shape stored it — never the whole-note span the
     whole-note rule substitutes for `evidence` (fifth pass: offset 0 made an unrelated answer look governed)."""
-    held = (answer.get('held_candidate') or {}).get('evidence') or answer.get('suggestion_evidence')
+    held = (answer.get('held_candidate') or {}).get('evidence') or answer.get('suggestion_evidence') or answer.get('own_evidence')
     if held:
         return held
     multiline = '\n' in notes.strip()
@@ -984,16 +1025,32 @@ def seen_text(text):
     return str(text or '').translate(blanks()[1]).strip()
 
 
+def looks_the_same(first, second):
+    """Whether a reader could tell two texts apart: compared after invisible characters and blank cells are removed,
+    NFKC-normalized, and every run of whitespace (a no-break space included) read as one space (eighth pass)."""
+    def seen(text):
+        return ' '.join(unicodedata.normalize('NFKC', seen_text(text)).split())
+    return seen(first) == seen(second)
+
+
 def is_empty(text):
     """No answer: nothing but whitespace, invisible characters and blank cells."""
     return not visible_end(str(text or '')).strip()
 
 
 def cleared_governed(governance, notes, answer):
-    """The governing lines of an ordinary-form answer edited to nothing whose own lines are governed, or None."""
+    """The governing lines of an ordinary-form answer edited to nothing whose own lines are governed, or None.
+
+    An answer from an earlier release that carries ONLY the whole-note span (this release keeps `own_evidence` beside
+    it) has no own line to judge, so it fails closed: governed, with no line to name, when anything in the note
+    governs or withholds (eighth pass)."""
     if answer.get('status') != 'edited' or not is_empty(answer.get('text')):
         return None
-    return governed_context(governance, notes, own_evidence(answer, notes))
+    own = own_evidence(answer, notes)
+    if not own and answer.get('evidence') and 'own_evidence' not in answer:
+        starts, spans, headings, forward, backward = governance[:5]
+        return [] if (headings or forward or backward or withheld_note_wide(governance, notes)) else None
+    return governed_context(governance, notes, own)
 
 
 def as_currently_governed(governance, notes, answer, word_form=False):
@@ -1057,7 +1114,7 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=()):
                               'reason':'Signature requires explicit review by the finalizing clinician; it is not generated from notes.'}
             continue
         label=field['label'].strip().rstrip(':?').casefold()
-        allowed={}; explicit={}
+        allowed={}; explicit={}; occurrences={}
         for unit in units:
             quote=unit['quote']; parsed=tab_source_value(quote,labels)
             # Exact source question labels keep their previous cross-field guard.
@@ -1066,6 +1123,7 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=()):
             corrected=corrected_quantity(unit,field)
             if corrected is not None:value=corrected
             allowed[quote]=(unit,value)
+            occurrences.setdefault(quote,[]).append({k:unit[k] for k in ('quote','start','end')})
             if parsed and parsed[1]: explicit.setdefault(value,unit)
         evidence=[]; texts=[]; guarded=False
         choices=[by_id[value] for value in item.unit_ids] if isinstance(item,UnitSelection) else item.quotes
@@ -1093,19 +1151,22 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=()):
         if len(explicit)>1:
             evidence=[{k:unit[k] for k in ('quote','start','end')} for unit in explicit.values()]
         own=evidence
+        judged=own+[entry for entry in (e for q in {e['quote'] for e in own} for e in occurrences.get(q,())) if entry not in own]
         if (inherited or injection) and texts:
             evidence=[{'quote':notes,'start':0,'end':len(notes)}]
         status='conflict' if conflict else 'supported' if texts else 'missing'
         answer={'text':'\n'.join(texts) if status=='supported' else '',
                 'status':status,'evidence':evidence,'reviewed':False}
+        if evidence is not own and texts:
+            answer['own_evidence']=own      # the whole note stands in `evidence`; its own lines are kept beside it
         if inherited and not (item.conflict or len(explicit)>1 or injection or guarded):
             answer=with_scope_suggestion(answer,notes,texts,own,set(explicit),
-                                         governed_context(governance,notes,own),note_erratum=governance[6])
-        elif status=='supported' and (context:=governed_context(governance,notes,own)) is not None:
+                                         governed_context(governance,notes,judged),note_erratum=governance[6])
+        elif status=='supported' and (context:=governed_context(governance,notes,judged)) is not None:
             # ONE RULE for the page and for finalization: what finalization would refuse is held here.
             answer=held_for_decision(answer,texts,own,context)
         elif status=='conflict':
-            answer=with_governing_lines(answer,texts,own,governed_context(governance,notes,own))
+            answer=with_governing_lines(answer,texts,own,governed_context(governance,notes,judged))
         output[item.key]=answer
     return output
 
@@ -1147,6 +1208,7 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
         label=field['label'].strip().rstrip(':?').casefold()
         allowed={}
         explicit={}
+        occurrences={}
         offset=0
         for line in notes.splitlines(keepends=True):
             full=line.strip()
@@ -1159,11 +1221,13 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
                     # parse or shorten it again independently of its source span.
                     text=parsed[1] if parsed and line_label==label else full
                     allowed.setdefault(full,(offset+line.index(full),text))
+                    occurrences.setdefault(full,[]).append(offset+line.index(full))
                 if parsed and line_label==label:
                     value=parsed[1]
                     if value:
                         allowed.setdefault(value,(offset+parsed[2],value))
                         explicit.setdefault(value,offset+parsed[2])
+                        occurrences.setdefault(value,[]).append(offset+parsed[2])
             offset+=len(line)
         selected_texts=[]
         for quote in item.quotes:
@@ -1192,17 +1256,21 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
         if explicit_conflict:
             evidence=[{'quote':q,'start':start,'end':start+len(q)} for q,start in explicit.items()]
         own=evidence
+        judged=own+[entry for entry in ({'quote':q,'start':at,'end':at+len(q)} for q in {e['quote'] for e in own} for at in occurrences.get(q,()))
+                    if entry not in own]
         status='conflict' if item.conflict or explicit_conflict or guarded or (inherited_context and texts) else 'supported' if texts else 'missing'
         if inherited_context and texts:
             evidence=[{'quote':notes,'start':0,'end':len(notes)}]
         answer={'text':'\n'.join(texts) if status=='supported' else '', 'status':status,'evidence':evidence,'reviewed':False}
+        if evidence is not own and texts:
+            answer['own_evidence']=own      # the whole note stands in `evidence`; its own lines are kept beside it
         if inherited_context and not (item.conflict or explicit_conflict or guarded):
             answer=with_scope_suggestion(answer,notes,texts,own,set(explicit),
-                                         governed_context(governance,notes,own),word_form,governance[6])
-        elif status=='supported' and (context:=governed_context(governance,notes,own)) is not None:
+                                         governed_context(governance,notes,judged),word_form,governance[6])
+        elif status=='supported' and (context:=governed_context(governance,notes,judged)) is not None:
             answer=held_for_decision(answer,texts,own,context,word_form)
         elif status=='conflict':
-            answer=with_governing_lines(answer,texts,own,governed_context(governance,notes,own),word_form)
+            answer=with_governing_lines(answer,texts,own,governed_context(governance,notes,judged),word_form)
         output[item.key]=answer
     return output
 

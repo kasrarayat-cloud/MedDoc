@@ -12,6 +12,7 @@ stays `conflict`, so finalization still demands an explicit decision.
 Everything below is offline. No provider call is made by any test in this module.
 """
 import json
+import re
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
@@ -423,7 +424,13 @@ class APolarityOrAttRIBUTIONMarkerSuppressesTheOfferEntirely(TestCase):
         original = ('following|these|those|above|below|listed|family history|'
                     'if|would|could|might|hypothetical|imagine|suppose')
         self.assertEqual(SCOPE_POINTERS + '|' + SCOPE_REFRAMERS, original)
-        self.assertEqual(INHERITED_SCOPE.pattern, r'\b(?:' + original + r')\b')
+        # Ninth pass: letter boundaries instead of `\b` (an underscore is not a letter: `_negative for the following_`).
+        # They only WIDEN: whatever the `\b` form matched, this matches too.
+        self.assertEqual(INHERITED_SCOPE.pattern, generation.LETTER_BEFORE + r'(?:' + original + r')' + generation.LETTER_AFTER)
+        old = re.compile(r'\b(?:' + original + r')\b', re.I)
+        for text in ('see below', '_see below_', 'below2', 'x_below', 'following-up', '(if)', 'would\u2019ve', 'Suppose:'):
+            with self.subTest(text=text):
+                self.assertTrue(not old.search(text) or INHERITED_SCOPE.search(text))
 
 
 class WhatTheRefutationPassFound(AnUnacceptedSuggestionCannotReachAnExport):
@@ -768,7 +775,14 @@ class ADenialThatGovernsOtherLinesSuppressesTheOffer(TestCase):
         self.assertEqual(generation.UNSCOPED_NEGATIVE_HEADING.pattern,
                          r'^[^:]*\b(?:denied|denies|absent|negative|no|not|without|never)\b[^:]*:')
         self.assertEqual(generation.SUPPRESSING_DENIAL_WORDS.split('|')[:8], generation.DENIAL_WORDS.split('|'))
-        self.assertEqual(generation.DENIAL.pattern, r'\b(?:' + generation.SUPPRESSING_DENIAL_WORDS + r')\b')
+        # Ninth pass: letter boundaries, which only widen the `\b` form (an underscore is not a letter).
+        self.assertEqual(generation.DENIAL.pattern,
+                         generation.LETTER_BEFORE + r'(?:' + generation.SUPPRESSING_DENIAL_WORDS + r')' + generation.LETTER_AFTER)
+        old = re.compile(r'\b(?:' + generation.SUPPRESSING_DENIAL_WORDS + r')\b', re.I)
+        for text in ('denies', '_denies_', 'no2', 'x_no', 'non', 'not-tender', '**negative**'):
+            with self.subTest(text=text):
+                self.assertTrue(not old.search(text) or generation.DENIAL.search(text))
+        self.assertTrue(generation.DENIAL.search('_negative_') and not old.search('_negative_'))
 
     def test_a_pointer_beside_a_denial_withholds_offers_even_in_an_ordinary_sentence(self):
         """The documented, deliberate cost: over-suppressing costs a retyped answer."""
