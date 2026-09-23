@@ -6,8 +6,9 @@ recording; nothing in the product can detect real data for you.
 
 **Preview address: https://app.quillmd.com:9443/**
 
-Sessions end after 30 minutes without activity, both the preview gate and your account. Save
-your notes every few minutes; an unsaved page is lost when a session ends.
+Sessions end after 30 minutes without activity, both the preview gate and your account, and
+the preview gate also ends 2 hours after you sign in to it, however active you are. Save your
+notes every few minutes; an unsaved page is lost when a session ends.
 
 ## 1. Sign in
 
@@ -15,8 +16,9 @@ your notes every few minutes; an unsaved page is lost when a session ends.
    preview access details the pilot coordinator gave you.
 2. Then sign in with **your own account** (email and password). If you do not have one, choose
    **Create an account**, fill in your name, email and password, and tick *I will use synthetic
-   test data only*. Open the verification link in the email you receive, then sign in. If the
-   email does not arrive, tell the pilot coordinator; do not create a second account.
+   test data only*. Open the verification link in the email you receive, choose **Confirm and
+   continue**, then sign in. If the email does not arrive, tell the pilot coordinator; do not
+   create a second account.
 3. A new account opens on an empty **Workspace**, with no forms or patients yet.
 
 ## 2. Add a fictional patient
@@ -72,8 +74,8 @@ evidence**, then make one decision:
   This is not offered on signature questions or on the WM IOV form.
 
 Then tick **I reviewed this answer…** and **Save answers and review decisions**. A review tick
-is always your own: if a colleague reviewed an answer earlier, the page says so and leaves the
-box for you to tick.
+is always your own. On ordinary forms, if a colleague reviewed an answer earlier, the page says
+so and leaves the box for you to tick; saving without ticking it removes their review.
 
 **Signature questions:** type your account name exactly as the page shows it, or leave it empty.
 It is never filled from the notes, and another person's name cannot be signed.
@@ -98,18 +100,22 @@ lists every charge; choose a charge's service name to see how it was calculated.
 
 | form | labelled lines (`Question label: answer`) | ordinary narrative sentences |
 |---|---|---|
-| **Labelled underlined blanks** (`Question: ____`) | most reliable | can be matched to the right question; check each one |
-| **Question/answer tables, multi-column or mixed forms** | most reliable | any unlabelled line, even a heading, sends **every** answer back to you as a **conflict** to decide |
+| **A label followed by an underlined Tab** | most reliable | can be matched to the right question; check each one |
+| **Question/answer tables, `{{Question}}` placeholders, multi-column or mixed forms** | most reliable | any unlabelled line sends **every** answer back to you as a **conflict** to decide |
 | **The WM IOV form** | **required** | **not supported**: narrative notes cannot be finalized on this form |
 
 - Use the form's own question wording as the label, one fact per line.
+- On every form, a heading line ending in a colon, a quotation, or a word such as *if*, *would*,
+  *could*, *might*, *these*, *those*, *above*, *below*, *following* or *listed* in the notes can
+  send the generated answers back to you as conflicts to decide.
 - A suggestion is never offered for text under a denial, a hypothetical (*if*, *would*,
   *could*, *might*) or a quotation. You then type the answer yourself.
 - **WM IOV only:** every non-empty answer must be the exact value under its exact label. A
   dropdown value must match one of the form's own options, and a measurement needs its unit
-  (`3.2 mm`, `400 ms`). Each prewritten statement you keep must also be its own line: its label,
-  a colon, then the approved wording from the form page. Saving changed notes clears the draft, so
-  write the statement lines **before** generating.
+  (`3.2 mm`, `400 ms`). Each of the 11 prewritten statements must also be its own line: its
+  label, a colon, then one approved wording from the form page. A *not documented* or *not
+  assessed* wording requires the related questions to be left unanswered. Saving changed notes
+  clears the draft, so write the statement lines **before** generating.
 - Answers come only from your notes; nothing is inferred from outside them.
 
 ## A fictional example
@@ -143,14 +149,15 @@ Prewritten statement: Clinical correlation: Clinical correlation with the above 
 
 | kind | what works | notes |
 |---|---|---|
-| **Word (.docx)** | two-column question/answer tables, labelled underlined blanks, `{{Question}}` placeholders, multi-column question rows, mixed table + underline layouts | answers expand in place; check every exported page |
-| **Fillable PDF** | visible text fields | plain printable characters only |
+| **Word (.docx)** | two-column question/answer tables, a label followed by an underlined Tab, `{{Question}}` placeholders, multi-column question rows, mixed layouts | typed underscores `____` are not answer fields; answers expand in place, so check every exported page |
+| **Fillable PDF** | every field a visible plain text field in the standard Helvetica font | basic characters only: no °, µ or accented letters |
 | **Qualified WM IOV form** | exactly **one** file, recognised by its fingerprint, with its dropdowns and prewritten statements | labelled notes required; its own *No answer documented* choice replaces *Leave blank — reviewed* |
 
 **Refused at upload:** any other Word file with dropdowns, date pickers or other content controls;
-text boxes, tracked changes, fields or macros; scanned or flat PDFs; password-protected or
-encrypted files. A form with dropdowns is **not** qualified because it resembles the WM IOV form.
-CPT coding is off during the pilot.
+text boxes, tracked changes, fields or macros; PDFs with checkboxes, radio buttons or dropdown
+fields; scanned or flat PDFs; password-protected or encrypted files and old `.doc` files. A
+form with dropdowns is **not** qualified because it resembles the WM IOV form. CPT coding is off
+during the pilot.
 
 ## "Leave blank — reviewed"
 

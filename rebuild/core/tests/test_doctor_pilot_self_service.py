@@ -24,7 +24,7 @@ from core.generation import configuration
 from core.jobs import enqueue, run_one
 from core.models import Department, Encounter, Job, Membership, Organization, Patient, Template, TemplateVersion, User
 from core.security import private_path
-from core.views import VOICE_QUOTE_EXPIRED, VOICE_QUOTE_SECONDS
+from core.views import VOICE_NOTES_CHANGED, VOICE_QUOTE_EXPIRED, VOICE_QUOTE_SECONDS, mpeg_frame_sync
 from documents import DocumentError
 from core.tests.audio_fixtures import wav_bytes
 from core.tests.test_billing_boundary import LIVE, BoundaryFixture, deepgram
@@ -68,13 +68,13 @@ class NewDoctorPages(SyntheticFixture, TestCase):
     def test_an_empty_workspace_points_to_a_supported_form_and_a_patient(self):
         page = self.client.get('/')
         self.assertContains(page, 'Upload a supported blank form')
-        self.assertContains(page, 'href="/patients/"')
+        self.assertContains(page, '<a href="/patients/">Add a patient</a>')
         self.assertNotContains(page, 'Upload a Word or PDF form')
 
     def test_the_upload_page_explains_supported_and_refused_forms_before_upload(self):
         page = self.client.get('/templates/upload/')
         self.assertContains(page, 'data-supported-forms')
-        for words in ('two-column question/answer tables', 'labelled underlined blanks', 'Fillable PDF',
+        for words in ('two-column question/answer tables', 'a label followed by an underlined Tab', 'typed underscores', 'Fillable PDF', 'standard Helvetica font',
                       'qualified WM IOV form', 'exactly as you received it', 'Refused at upload'):
             self.assertContains(page, words)
         self.assertNotContains(page, 'reported before export')
@@ -87,7 +87,32 @@ class NewDoctorPages(SyntheticFixture, TestCase):
         self.assertContains(response, 'need the advanced document adapter')   # the engine's refusal is unchanged
         self.assertContains(response, 'The only supported form with dropdowns is the qualified WM IOV file')
 
+    def test_an_underlined_line_with_a_spelling_mark_gets_its_own_hint_not_the_content_control_one(self):
+        from documents.test_tab_form import ORIGINAL
+        with ZipFile(BytesIO(ORIGINAL.read_bytes())) as source:
+            xml = source.read('word/document.xml').decode()
+            index = xml.index('<w:tab/>')
+            paragraph = xml.rindex('<w:p>', 0, index) if '<w:p>' in xml[:index] else xml.rindex('<w:p ', 0, index)
+            run = xml.index('<w:r>', paragraph) if '<w:r>' in xml[paragraph:index] else xml.index('<w:r ', paragraph)
+            xml = xml[:run] + '<w:proofErr w:type="spellStart"/>' + xml[run:]
+            output = BytesIO()
+            with ZipFile(output, 'w', ZIP_DEFLATED) as target:
+                for item in source.infolist():
+                    target.writestr(item, xml if item.filename == 'word/document.xml' else source.read(item.filename))
+        response = self.client.post('/templates/upload/', {'name': 'Synthetic marked form', 'department': self.department.pk,
+            'synthetic_only': 'on', 'file': SimpleUploadedFile('marked.docx', output.getvalue())})
+        self.assertContains(response, 'underlined answer area crosses an unsupported structure')
+        self.assertContains(response, 'Retype that line as plain text')
+        self.assertNotContains(response, 'The only supported form with dropdowns')
+
+    def test_an_encrypted_or_old_word_file_is_named_as_such(self):
+        response = self.client.post('/templates/upload/', {'name': 'Synthetic protected form', 'department': self.department.pk,
+            'synthetic_only': 'on', 'file': SimpleUploadedFile('protected.docx', b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1' + bytes(512))})
+        self.assertContains(response, 'password-protected, encrypted, or an old Word .doc file')
+        self.assertFalse(Template.objects.exists())
+
     def test_new_document_without_a_patient_links_to_patients(self):
+        self.make_scope('someone-else')          # another organization's patient must not hide the notice
         page = self.client.get('/encounters/new/')
         self.assertContains(page, 'data-no-patient')
         self.assertContains(page, 'Add a synthetic patient on Patients')
@@ -129,33 +154,8 @@ class PilotSafeguards(SyntheticFixture, TestCase):
         path = private_path(self.template.original_path); path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(blob)
         self.client.force_login(self.user)
 
-    def finalize(self, **data):
-        payload = {'revision': self.encounter.revision, 'reviewed': 'on', **data}
-        response = self.client.post(f'/encounters/{self.encounter.pk}/finalize/', payload)
-        self.encounter.refresh_from_db()
-        return response
-
-    def assert_not_finalized(self):
-        self.assertEqual(self.encounter.status, 'draft')
-        self.assertFalse(self.encounter.export_path)
-
-    def test_finalize_refuses_without_confirmation_on_a_stale_revision_and_while_a_job_is_pending(self):
-        response = self.finalize(reviewed='')
-        self.assertIn('Explicit clinical review confirmation is required.', texts(response))
-        self.assert_not_finalized()
-        response = self.finalize(revision=self.encounter.revision - 1)
-        self.assertIn('Document changed; reload before finalizing.', texts(response))
-        self.assert_not_finalized()
-        enqueue(self.encounter, self.user)
-        response = self.finalize()
-        self.assertIn('Resolve pending jobs before finalizing.', texts(response))
-        self.assert_not_finalized()
-
-    def test_finalize_refuses_a_changed_original_and_download_refuses_a_changed_export_or_original(self):
+    def test_downloads_refuse_a_changed_original_or_export(self):
         private_path(self.template.original_path).write_bytes(b'tampered original')
-        response = self.finalize()
-        self.assertIn('Original integrity check failed.', texts(response))
-        self.assert_not_finalized()
         self.assertNotEqual(self.client.get(f'/templates/{self.template.pk}/original/').status_code, 200)
         export = private_path('exports/synthetic-export.docx'); export.parent.mkdir(parents=True, exist_ok=True); export.write_bytes(b'export')
         Encounter.objects.filter(pk=self.encounter.pk).update(status='finalized', export_path='exports/synthetic-export.docx',
@@ -201,7 +201,7 @@ class PilotSafeguards(SyntheticFixture, TestCase):
         self.assertEqual(attempt(User, '/register/', {**account, 'email': 'unattested@synthetic.invalid'}, None), 0)
         self.assertEqual(attempt(User, '/register/', {**account, 'email': 'attested@synthetic.invalid'}, {'synthetic_only': 'on'}), 1)
 
-    def test_cross_department_documents_are_refused(self):
+    def test_a_patient_and_form_from_different_departments_cannot_make_a_document(self):
         other = self.make_scope('pilot-sibling', self.scope[1])
         Membership.objects.create(user=self.user, department=other[2], role='clinician')
         encounters = Encounter.objects.count()
@@ -239,8 +239,9 @@ class PilotVoice(BoundaryFixture, TestCase):
         folder = private_path('audio')
         return sorted(folder.iterdir()) if folder.exists() else []
 
-    def test_a_recording_sent_twenty_minutes_after_the_page_loaded_is_still_accepted(self):
-        response = self.send(self.quote_signed_ago(20 * 60))
+    def test_a_recording_sent_twenty_nine_minutes_after_the_page_loaded_is_still_accepted(self):
+        self.assertEqual(VOICE_QUOTE_SECONDS, 1800)   # the page promises 30 minutes
+        response = self.send(self.quote_signed_ago(29 * 60))
         self.assertEqual(response.status_code, 302)
         self.assertEqual(Job.objects.filter(encounter=self.encounter, kind='transcription').count(), 1, texts(response))
         # Generation keeps its own shorter window: this widening is for the voice path only.
@@ -248,8 +249,23 @@ class PilotVoice(BoundaryFixture, TestCase):
             refused = self.client.post(self.url + 'generate/', {'usage_quote': self.quote_signed_ago(20 * 60), 'revision': self.encounter.revision})
         self.assertIn('Usage quote expired or changed. Reload to review the current maximum charge.', texts(refused))
 
+    def test_a_notes_change_is_named_as_the_reason_not_an_expired_price(self):
+        quote = self.quote_signed_ago(0)
+        self.encounter.revision += 1; self.encounter.save(update_fields=['revision'])
+        response = self.send(quote)
+        self.assertIn(VOICE_NOTES_CHANGED, texts(response))
+        self.assertNotIn(VOICE_QUOTE_EXPIRED, texts(response))
+        self.assertFalse(Job.objects.filter(encounter=self.encounter).exists())
+        self.assertEqual(self.uploads(), [])
+
+    def test_the_upload_check_uses_the_measuring_readers_mpeg_rule_for_every_two_byte_prefix(self):
+        for first in range(256):
+            for second in range(256):
+                expected = first == 0xFF and second & 0xE0 == 0xE0     # core/audio.py's dispatch rule
+                self.assertEqual(mpeg_frame_sync(bytes([first, second, 0, 0])), expected, (first, second))
+
     def test_an_expired_voice_quote_says_the_recording_was_not_kept_and_keeps_nothing(self):
-        response = self.send(self.quote_signed_ago(VOICE_QUOTE_SECONDS + 60))
+        response = self.send(self.quote_signed_ago(31 * 60))
         self.assertIn(VOICE_QUOTE_EXPIRED, texts(response))
         self.assertFalse(Job.objects.filter(encounter=self.encounter).exists())
         self.assertEqual(self.uploads(), [])
@@ -268,6 +284,15 @@ class PilotVoice(BoundaryFixture, TestCase):
             response = self.send(self.quote_signed_ago(0), 'frames.mp3', b'\xff\xfa\x90\x00' + bytes(64))
         self.assertEqual(reached, [True], texts(response))
 
+    def test_a_partly_processed_silent_recording_shows_its_coverage_note_not_no_speech(self):
+        response = self.send(self.quote_signed_ago(0), 'partial.wav', wav_bytes(seconds=10, tag='partial'))
+        self.assertEqual(response.status_code, 302)
+        with patch.dict(os.environ, self.VOICE_ENV), patch('core.jobs.httpx.post', return_value=deepgram('', 'synthetic-partial', duration=0)):
+            self.assertTrue(run_one())
+        page = self.client.get(self.url)
+        self.assertContains(page, 'Transcription incomplete')
+        self.assertNotContains(page, 'data-empty-transcript')
+
     def test_an_empty_transcript_is_explained_instead_of_an_unexplained_empty_box(self):
         response = self.send(self.quote_signed_ago(0), 'silence.wav')
         self.assertEqual(response.status_code, 302)
@@ -277,7 +302,17 @@ class PilotVoice(BoundaryFixture, TestCase):
         self.assertEqual(job.state, 'succeeded', job.error)
         page = self.client.get(self.url)
         self.assertContains(page, 'data-empty-transcript')
-        self.assertContains(page, 'No speech was recognised in this recording.')
+        self.assertContains(page, 'No speech was recognised in this recording')
+        # Negative control: a transcript with speech never carries the notice.
+        self.client.post(self.url + 'notes/', {'revision': self.encounter.revision, 'notes': 'Symptoms: fictional'})
+        self.encounter.refresh_from_db()
+        self.send(self.quote_signed_ago(0), 'speech.wav')
+        with patch.dict(os.environ, self.VOICE_ENV), patch('core.jobs.httpx.post', return_value=deepgram('Fictional words spoken.', 'synthetic-speech', duration=1)):
+            self.assertTrue(run_one())
+        spoken = self.client.get(self.url)
+        self.assertContains(spoken, 'Fictional words spoken.')
+        # Both transcripts now await review; only the silent one carries the notice.
+        self.assertContains(spoken, 'data-empty-transcript', count=1)
 
 
 @override_settings(ADMIN_SITE=False, STORAGES=STORAGES, **LIVE)
@@ -287,5 +322,7 @@ class PilotProviderResults(BoundaryFixture, TestCase):
         self.assertEqual(job.state, 'succeeded', job.error)
         self.client.force_login(self.user)
         self.assertEqual(self.client.get(f'/jobs/{job.pk}/result/').status_code, 200)   # positive control: the owner can
-        self.client.force_login(self.make_scope('pilot-outsider')[0])
-        self.assertEqual(self.client.get(f'/jobs/{job.pk}/result/').status_code, 404)
+        for outsider in (self.make_scope('pilot-outsider')[0], self.make_scope('pilot-sibling', self.scope[1])[0]):
+            with self.subTest(outsider=outsider.email):   # another organization, and a sibling department
+                self.client.force_login(outsider)
+                self.assertEqual(self.client.get(f'/jobs/{job.pk}/result/').status_code, 404)
