@@ -1686,8 +1686,9 @@ class WhatTheFifteenthPassFound(ExpectationsMixin, TestCase):
             with self.subTest(line=line):
                 self.assertTrue(generation.erratum_points(line))
         self.not_ready(tab_answers(['Findings'], 'Findings: sigmoid polyp.' + ' ' * 55 + 'Correction: no polyp was found.')[1]['Findings'])
-        # CONTROL: the word inside the brackets is still read as the word.
+        # CONTROL: the word inside the brackets is still read as the word, and a real tag holding a period is skipped.
         self.assertTrue(generation.erratum_points('<CORRECTION>: no polyp was found.'))
+        self.assertTrue(generation.erratum_points('Findings: sigmoid polyp. <span class="a.b">Correction</span>: no polyp was found.'))
 
     def test_comments_counts_and_dash_runs_stay_linear(self):
         import time
@@ -1696,6 +1697,7 @@ class WhatTheFifteenthPassFound(ExpectationsMixin, TestCase):
         notes_list = ['Question 1: chest pain\nPlan.' + '<!--x-->' * 30 + 'Follow up in two weeks.',
                       '\u200b' + '?<!--' * 12500, '\u200b' + '.<!--' * 9999, '\u200b' + ':<!--' * 9999,
                       'Review of systems: negative\nSymptoms: chest pain\nPlan: see below' + '<<>' * 16 + 'x.',
+                      'Review of systems: negative\nSymptoms: chest pain\nPlan: see below' + '<>' * 24 + 'x.',
                       'Review of systems: negative\nSymptoms: chest pain\n' + '-' * 5000 + ' Assessment: stable',
                       ' '.join(['-' * 80] * 20) + ' text']
         for notes in notes_list:
