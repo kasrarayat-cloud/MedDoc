@@ -791,9 +791,7 @@ class ADenialThatGovernsOtherLinesSuppressesTheOffer(TestCase):
         for value in ('No reflux below the knee.', 'No bleeding following polypectomy.',
                       'No driving for the following 24 hours.', 'Soft, no tenderness above the umbilicus.',
                       'Benign nevi; these are not concerning.', 'Good, without residual stool in the segments listed here.',
-                      'No change from the study above.', 'No DVT in the veins listed above.',
-                      # The lines pointed at are the EXCEPTIONS, stated as positives (second refutation pass).
-                      'Negative except as noted below.'):
+                      'No change from the study above.', 'No DVT in the veins listed above.'):
             with self.subTest(value=value):
                 answers = self.judge_pair(value)
                 self.assertEqual((answers['f']['status'], answers['i']['status']), ('supported', 'supported'))
@@ -801,13 +799,16 @@ class ADenialThatGovernsOtherLinesSuppressesTheOffer(TestCase):
 
     def test_a_denial_that_ends_on_a_forward_pointer_leaves_what_follows_to_a_decision(self):
         """⚠️ THE DOCUMENTED TRADE of the denial-heading repair (2026-09-23). A sentence that ENDS on
-        `below`/`following` beside a denial points at what comes next exactly as `negative for the symptoms
-        below.` does, and without grammar the two cannot be told apart. The sentence stays its own question's
+        `below`/`following` points at what comes next exactly as `negative for the symptoms below.` does, and
+        without grammar the two cannot be told apart — so its words are not read at all (third refutation pass:
+        an `except`, an earlier sentence or the label each decided wrongly). The sentence stays its own question's
         answer; the answer after it needs a decision (no one-click offer), instead of a denied finding being
-        pre-filled. `…negative for the symptoms below.` is the case this is for."""
+        pre-filled. `…negative except as noted below.` is included: the lines it points at are its exceptions,
+        which the clinician confirms by typing them."""
         for value in ('Reflux at the SFJ, 1200 ms; no reflux at mid-thigh or below.',
                       'Normal above the knees, absent below.', 'Lateral calf, not visualized below',
-                      'No immediate complications following.'):
+                      'No immediate complications following.', 'Negative except as noted below.',
+                      'Negative with the exception of the following.', 'See the instructions below.'):
             with self.subTest(value=value):
                 answers = self.judge_pair(value)
                 self.assertEqual((answers['f']['status'], answers['f']['text']), ('supported', value))

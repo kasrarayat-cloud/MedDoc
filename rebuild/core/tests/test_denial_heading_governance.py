@@ -87,6 +87,8 @@ class TheReproducedDefect(ExpectationsMixin, TestCase):
             with self.subTest(path=path):
                 self.assert_needs_decision(answers['Symptoms'], 'chest pain', HEADING)
                 self.assert_needs_decision(answers['Review of systems'], 'negative for the following:', HEADING)
+                # The stored evidence is the answer's OWN line; the governing line travels only as context.
+                self.assertNotIn(HEADING, [entry['quote'] for entry in answers['Symptoms']['evidence']])
 
     def test_e2_an_ordinary_labelled_line_before_the_heading_stays_ready_and_does_not_hide_it(self):
         notes = 'Indication: screening colonoscopy\n' + HEADING + '\nSymptoms: chest pain'
@@ -302,15 +304,32 @@ class ValidAnswersStillWork(ExpectationsMixin, TestCase):
         self.assert_needs_decision(answers['Impression'], 'Right GSV insufficiency',
                                    'Right GSV: Reflux at the SFJ, 1200 ms; no reflux at mid-thigh or below.')
 
-    def test_p5_a_reference_without_a_denial_changes_nothing(self):
-        """A pointer alone asserts nothing about polarity: only a denial, family history, hypothetical or
-        correction beside it makes it govern."""
-        notes = ('Findings: Clinical correlation with the above findings is required.\nPlan: see the instructions below\n'
-                 'Follow-up: in two weeks')
+    def test_p5_a_reference_back_or_mid_sentence_changes_nothing(self):
+        """A sentence that refers back is not read, and a pointer inside a sentence governs nothing."""
+        notes = ('Findings: Clinical correlation with the above findings is required.\nPlan: see the instructions below each '
+                 'heading of the leaflet\nFollow-up: in two weeks')
         answers = fixture_answers(['Findings', 'Plan', 'Follow-up'], notes)
         self.assert_ready(answers['Findings'], 'Clinical correlation with the above findings is required.')
-        self.assert_ready(answers['Plan'], 'see the instructions below')
+        self.assert_ready(answers['Plan'], 'see the instructions below each heading of the leaflet')
         self.assert_ready(answers['Follow-up'], 'in two weeks')
+
+    def test_p5b_the_documented_cost_a_sentence_ending_on_a_pointer_governs_whatever_its_words(self):
+        """⚠️ THE TRADE, PINNED (third refutation pass). Reading the words before the pointer (a denial, an `except`,
+        a family word) was refuted three ways: `except` in an earlier clause released a denied list, a denial in
+        the label or an earlier sentence was missed, and `Her mother had the following.` carries no word the
+        vocabulary knows. So position alone decides, and these answers after the pointer need a decision too:
+        a reference (`see the instructions below`), an exception list (`negative except as noted below`), and a
+        time (`until the following day`)."""
+        for pointer in ('Plan: see the instructions below', 'Review of systems: negative except as noted below.',
+                        'Review of systems: Negative with the exception of the following.',
+                        'Discharge instructions: Do not drive or operate machinery until the following day.',
+                        'No. of polyps: 2, described below'):
+            notes = pointer + '\nFollow-up: in two weeks'
+            label = pointer.split(':')[0]
+            with self.subTest(pointer=pointer):
+                answers = fixture_answers([label, 'Follow-up'], notes)
+                self.assert_ready(answers[label], pointer.split(': ', 1)[1])
+                self.assert_needs_decision(answers['Follow-up'], 'in two weeks', pointer)
 
     def test_p4_a_colon_inside_a_value_is_not_a_heading(self):
         notes = 'Plan: review at 10:30\nFollow-up: in 2 weeks: sooner if worse'
@@ -336,7 +355,9 @@ class WhatTheSecondPassFound(ExpectationsMixin, TestCase):
                 ('Indication: Iron deficiency anemia\nRecommendation: Correction of iron deficiency with oral iron',
                  ['Indication', 'Recommendation']),
                 ('Medications: Lisinopril 10 mg daily\nInsulin: Correction scale with meals per protocol', ['Medications', 'Insulin']),
-                ('Findings: Sigmoid diverticulosis\nAddendum: Corrections to the prior report: none', ['Findings', 'Addendum'])):
+                # Third pass: a hyphen attached to the word is the treatment too.
+                ('Medications: Lisinopril 10 mg daily\nInsulin: Correction-scale lispro with meals per protocol', ['Medications', 'Insulin']),
+                ('Medications: Lisinopril 10 mg daily\nInsulin: Correction-dose insulin lispro before meals', ['Medications', 'Insulin'])):
             with self.subTest(notes=notes):
                 answers = fixture_answers(labels, notes)
                 self.assertEqual(answers[labels[0]]['status'], 'supported', answers[labels[0]])
@@ -349,15 +370,11 @@ class WhatTheSecondPassFound(ExpectationsMixin, TestCase):
         answer = fixture_answers(['Indication', 'Symptoms'], notes)['Symptoms']
         self.assertEqual(answer['status'], 'conflict'); self.assertNotIn('suggestion', answer)
 
-    def test_the_numero_abbreviation_in_a_label_is_not_a_denial(self):
-        notes = 'No. of polyps: 2, described below\nPathology: Pending\nRecommendation: Repeat colonoscopy in 3 years'
+    def test_the_numero_abbreviation_in_a_label_governs_nothing(self):
+        notes = 'No. of polyps: 2\nPathology: Pending\nRecommendation: Repeat colonoscopy in 3 years'
         answers = fixture_answers(['No. of polyps', 'Pathology', 'Recommendation'], notes)
         self.assert_ready(answers['Pathology'], 'Pending')
         self.assert_ready(answers['Recommendation'], 'Repeat colonoscopy in 3 years')
-
-    def test_an_exception_points_at_the_positives_so_they_stay_answers(self):
-        notes = 'Review of systems: negative except as noted below.\nSymptoms: chest pain'
-        self.assert_ready(fixture_answers(['Review of systems', 'Symptoms'], notes)['Symptoms'], 'chest pain')
 
     def test_a_bare_trailing_label_is_not_a_closing_heading(self):
         """`Signed by:` at the end governs nothing: the existing offer for an answer above it survives."""
@@ -392,6 +409,128 @@ class WhatTheSecondPassFound(ExpectationsMixin, TestCase):
         self.assertEqual(generation.governed_decisions(notes, fields, stored), [])
 
 
+class WhatTheThirdPassFound(ExpectationsMixin, TestCase):
+    """Refutation of the finished diff, third pass. Each input was demonstrated by a lens against ba9a950a; the
+    expectation is what the note says clinically. Offline: fixture generation and provider-SHAPED selections."""
+
+    def both(self, labels, notes, picks):
+        yield 'fixture', fixture_answers(labels, notes)
+        yield 'provider-shaped', provider_answers(labels, notes, picks)
+
+    def governed_list(self, line, item):
+        label, value = item.split(': ', 1)
+        head = line.split(':')[0]
+        notes = line + '\n' + item
+        for path, answers in self.both([head, label], notes, {head: [line], label: [item]}):
+            with self.subTest(line=line, path=path):
+                self.assert_needs_decision(answers[label], value, line)
+
+    def test_an_exception_elsewhere_in_the_line_never_releases_a_denied_list(self):
+        for line, item in (
+                ('Review of systems: negative except for knee pain; she denies the following.', 'Symptoms: chest pain'),
+                ('Review of systems: All systems negative except as noted in the HPI; specifically denies the following.',
+                 'Symptoms: chest pain, syncope'),
+                ('Family history: noncontributory except that her mother had the following.', 'Diagnoses: breast cancer'),
+                ('Plan: no follow-up needed, except return if she develops any of the following.', 'Symptoms: chest pain, syncope')):
+            self.governed_list(line, item)
+
+    def test_how_sentences_are_split_cannot_release_a_denied_list(self):
+        for line in ('Review of systems: negative except for hepatitis B. She denies the following.',
+                     'Review of systems: negative except for knee pain.She denies the following.',
+                     'Review of systems: negative except for knee pain. \u200bShe denies the following.'):
+            self.governed_list(line, 'Symptoms: chest pain')
+
+    def test_a_denial_or_a_relative_outside_the_pointing_sentence_still_governs(self):
+        for line, item in (('Family history: Reviewed. Her mother had the following.', 'Diagnoses: breast cancer'),
+                           ('Family history: Positive. Mother had the following.', 'Diagnoses: diabetes'),
+                           ('Review of systems: Negative. Specifically the following.', 'Symptoms: chest pain'),
+                           ('Review of systems: Patient denies. See below.', 'Symptoms: chest pain'),
+                           ('Social history: Her mother had the following.', 'Diagnoses: breast cancer'),
+                           ('Social history: Her mother had the following conditions.', 'Diagnoses: breast cancer')):
+            self.governed_list(line, item)
+
+    def test_an_erratum_behind_a_label_the_form_does_not_know_governs_what_came_before(self):
+        correction = 'Addendum: Correction: the patient does report severe crushing chest pain.'
+        answer = fixture_answers(['Symptoms'], 'Symptoms: no chest pain\n' + correction)['Symptoms']
+        self.assert_needs_decision(answer, 'no chest pain', correction)
+        notes = ('EXTENT OF EXAMINATION: The scope was advanced to the cecum.\nCOMPLICATIONS: None.\n'
+                 'ADDENDUM: Correction: a small perforation was identified and clipped.')
+        fields, answers = tab_answers(['EXTENT OF EXAMINATION', 'COMPLICATIONS'], notes)
+        self.assert_needs_decision(answers['COMPLICATIONS'], 'None.', 'ADDENDUM: Correction:')
+        stored = {field['key']: answers[field['label']] for field in fields}
+        self.assertEqual(generation.governed_decisions(notes, fields, stored), [])
+
+    def test_every_erratum_punctuation_governs(self):
+        for correction in ('Addendum: Correction to the above: the patient does report severe crushing chest pain.',
+                           'Addendum: Correction. The patient does report severe crushing chest pain.',
+                           'Addendum: Correction; the patient does report severe crushing chest pain.',
+                           'Addendum: Correction (dictation error): the patient does report severe crushing chest pain.',
+                           'Addendum: Correction - the patient does report severe crushing chest pain.'):
+            notes = 'Symptoms: no chest pain\n' + correction
+            for path, answers in self.both(['Symptoms', 'Addendum'], notes,
+                                           {'Symptoms': ['Symptoms: no chest pain'], 'Addendum': [correction]}):
+                with self.subTest(correction=correction, path=path):
+                    self.assert_needs_decision(answers['Symptoms'], 'no chest pain', correction)
+        for line in ('Correction. A small perforation was identified and clipped.',
+                     'Correction; a small perforation was identified and clipped.'):
+            with self.subTest(line=line):
+                fields, answers = tab_answers(['COMPLICATIONS'], 'COMPLICATIONS: None.\n' + line)
+                self.assert_needs_decision(answers['COMPLICATIONS'], 'None.', line)
+
+    #: The retained synthetic SOAP fixture (`soap-verification-20260920/source-notes.txt`), whose live typed and voice
+    #: responses expected 5 supported, 1 conflict, 2 missing. The erratum restates `Pain score`, already answered.
+    SOAP = ('Symptoms: Left ankle soreness began after twisting the left ankle yesterday.\n'
+            'Pertinent negatives: Denies fever, numbness, and right ankle pain.\nPain score: Six out of ten.\n'
+            'Pain score: Correction: three out of ten; the earlier six out of ten was entered in error.\n'
+            'Examination: Mild swelling over the left lateral ankle. No open wound.\n'
+            'Assessment: The clinician explicitly documents a left ankle sprain.\n'
+            'Plan: The clinician explicitly directs rest, ice wrapped in cloth for fifteen minutes at a time, and follow-up '
+            'in three days. No medication is prescribed.')
+    SOAP_LABELS = ['Symptoms', 'Pertinent negatives', 'Pain score', 'Allergies', 'Examination', 'Vital signs', 'Assessment', 'Plan']
+
+    def test_an_erratum_that_restates_an_answered_question_corrects_that_question_only(self):
+        lines = {line.split(': ', 1)[0]: line for line in self.SOAP.splitlines()}
+        picks = {label: [line for line in self.SOAP.splitlines() if line.startswith(label + ':')] for label in self.SOAP_LABELS}
+        for path, answers in self.both(self.SOAP_LABELS, self.SOAP, picks):
+            with self.subTest(path=path):
+                counts = {}
+                for answer in answers.values():
+                    counts[answer['status']] = counts.get(answer['status'], 0) + 1
+                self.assertEqual(counts, {'supported': 5, 'conflict': 1, 'missing': 2})
+                self.assert_ready(answers['Pertinent negatives'], lines['Pertinent negatives'].split(': ', 1)[1])
+                self.assertEqual(answers['Pain score']['status'], 'conflict')
+        # CONTROL: the same erratum under a question NOT answered before it may correct anything above it.
+        notes = self.SOAP.replace('Pain score: Six out of ten.\n', '')
+        self.assertEqual(fixture_answers(self.SOAP_LABELS, notes)['Symptoms']['status'], 'conflict')
+
+    def test_a_bare_closing_label_is_bare_behind_an_invisible_character(self):
+        for tail in ('\u200b', '\ufeff', ' \u200b'):
+            with self.subTest(tail=repr(tail)):
+                answer = fixture_answers(['Symptoms'], 'Fictional software test only.\nSymptoms: no chest pain\nSigned by:' + tail)['Symptoms']
+                self.assertEqual(answer.get('suggestion'), 'no chest pain')
+
+    def test_an_unanswered_question_at_the_end_is_not_a_closing_heading(self):
+        notes = 'Fictional software test only.\nSymptoms: no chest pain\nAllergies:'
+        self.assertEqual(fixture_answers(['Symptoms', 'Allergies'], notes)['Symptoms'].get('suggestion'), 'no chest pain')
+        # Bareness is decided after the recognized label, which may itself contain a colon.
+        notes = 'Fictional software test only.\nIndication: screening colonoscopy\nBowel prep: quality:'
+        self.assertEqual(fixture_answers(['Indication', 'Bowel prep: quality'], notes)['Indication'].get('suggestion'),
+                         'screening colonoscopy')
+
+    def test_the_documented_costs_of_errata_and_empty_questions(self):
+        """⚠️ TRADES, PINNED. An erratum on no label, or under a label nobody answered before, may correct any line above
+        it, so every answer above it needs a decision (`Corrections: none` included). An unanswered question mid-note
+        may be a denial heading (`Pertinent negatives:`), so the answers after it need a decision."""
+        answers = fixture_answers(['Findings', 'Addendum'], 'Findings: Sigmoid diverticulosis\nAddendum: Corrections to the prior report: none')
+        self.assert_needs_decision(answers['Findings'], 'Sigmoid diverticulosis', 'Addendum: Corrections')
+        notes = 'Symptoms: chest pain\nAllergies:\nExamination: normal heart sounds'
+        answer = fixture_answers(['Symptoms', 'Allergies', 'Examination'], notes)['Examination']
+        self.assert_needs_decision(answer, 'normal heart sounds', 'Allergies:')
+        notes = 'Pertinent negatives:\nSymptoms: chest pain'
+        self.assert_needs_decision(fixture_answers(['Pertinent negatives', 'Symptoms'], notes)['Symptoms'], 'chest pain',
+                                   'Pertinent negatives:')
+
+
 class TheQualifiedWordFormKeepsItsLabelsSelfContained(ExpectationsMixin, TestCase):
     """On the qualified Word form every label names its own side, vein and measure, so a sentence in one value
     cannot re-scope another: only structural headings and corrections govern there. Round 6 of the pilot
@@ -413,14 +552,39 @@ class TheQualifiedWordFormKeepsItsLabelsSelfContained(ExpectationsMixin, TestCas
         self.assert_ready(answers['measurement_15_2'], '700 ms')
         self.assert_ready(answers['sdt_-213273323'], 'reflux positive.')
 
-    def test_a_structural_heading_still_governs_on_the_qualified_form(self):
-        notes = ('Right tributary row 11: anatomical location: none of the following:\n'
+    def test_an_unlabelled_heading_still_withholds_the_offers_below_it_on_the_qualified_form(self):
+        notes = ('Right tributary row 11: anatomical location: lateral calf\nNone of the following:\n'
                  'Left GSV at the SFJ: reflux time (ms): 700 ms')
-        answer = self.answers(notes)['measurement_15_2']
-        self.assert_needs_decision(answer, '700 ms', 'Right tributary row 11: anatomical location: none of the following:')
-        # Second pass: the stored evidence stays the answer's OWN line, which the Word review validates per label;
-        # the governing line is carried only as context.
-        self.assertEqual([entry['quote'] for entry in answer['evidence']], ['700 ms'])
+        answers = self.answers(notes)
+        self.assert_needs_decision(answers['measurement_15_2'], '700 ms', 'None of the following:')
+        # The candidate keeps the answer's OWN line (the Word review validates evidence per label); the governing line
+        # is carried only as context. (`evidence` is the whole note here: the existing whole-note rule, unchanged.)
+        self.assertEqual([entry['quote'] for entry in answers['measurement_15_2']['held_candidate']['evidence']], ['700 ms'])
+        # Above the heading, the existing whole-note rule applies unchanged: a decision, with its one-click offer.
+        self.assertEqual(answers['location_11'].get('suggestion'), 'lateral calf')
+        # Third pass: the Word form's own guidance has no "Leave blank — reviewed".
+        self.assertNotIn('Leave blank', answers['measurement_15_2']['held_candidate']['reason'])
+
+    def test_a_labelled_line_never_governs_on_the_qualified_form(self):
+        """⚠️ THIRD PASS. Its labels carry colons, its signature statement's approved wording ends in `By:`, and an
+        unanswered question ends in a colon: read as headings, each held every one of the 90 answers."""
+        fields = self.FIELDS + [{'key': 'measurement_1_1', 'label': 'Right GSV at the SFJ: diameter (mm)', 'kind': 'measurement',
+                                 'locator': {'row': 1, 'column': 1, 'unit': 'mm'}}]
+        signature = 'Prewritten statement: Signature timestamp: Electronically Signed On <<insert date and time>> By:'
+        base = ('Left GSV at the SFJ: reflux time (ms): 700 ms\nRight impression: reflux or absence: reflux positive.\n'
+                'Right tributary row 11: anatomical location: lateral calf')
+        heading = 'Right tributary row 11: anatomical location: none of the following:'
+        for notes in (base + '\n' + signature, heading + '\n' + base.rsplit('\n', 1)[0]):
+            with self.subTest(notes=notes):
+                answers = generation.generate(notes, fields, FIXTURE, context_labels=['Prewritten statement: Signature timestamp'])[0]
+                self.assert_ready(answers['measurement_15_2'], '700 ms')
+                self.assert_ready(answers['sdt_-213273323'], 'reflux positive.')
+        # An unanswered question already sends every answer back under the whole-note rule; its offers survive.
+        for notes in ('Right GSV at the SFJ: diameter (mm):\n' + base, base + '\nRight GSV at the SFJ: diameter (mm):'):
+            with self.subTest(notes=notes):
+                answers = generation.generate(notes, fields, FIXTURE)[0]
+                self.assertEqual(answers['measurement_15_2'].get('suggestion'), '700 ms', answers['measurement_15_2'])
+                self.assertEqual(answers['sdt_-213273323'].get('suggestion'), 'reflux positive.')
 
     def test_a_correction_value_on_the_qualified_form_corrects_only_its_own_label(self):
         notes = ('Left GSV at the SFJ: reflux time (ms): 700 ms\n'
@@ -522,7 +686,7 @@ class TheDecisionIsEnforcedThroughFinalizationAndExport(DocumentWorkflow):
                                  'evidence': [{'quote': 'chest pain', 'start': finding, 'end': finding + len('chest pain')}]}}
         Encounter.objects.filter(pk=encounter.pk).update(answers=stale)
         encounter.refresh_from_db()
-        # The page posts the pre-filled text back; the tick alone is the defect's whole gesture.
+        # A page opened before this release posts the pre-filled text back; the tick alone is the defect's whole gesture.
         self.save(encounter, **{'answer_' + self.ros: 'negative for the following:', 'answer_' + self.symptoms: 'chest pain'})
         self.assertEqual(encounter.answers[self.symptoms]['status'], 'supported')
         response = self.finalize_attempt(encounter)
@@ -530,12 +694,19 @@ class TheDecisionIsEnforcedThroughFinalizationAndExport(DocumentWorkflow):
         self.assertNotEqual(encounter.status, 'finalized')
         self.assertContains(response, 'still need your decision: Review of systems, Symptoms.')
         self.assertEqual(self.client.get(f'/encounters/{encounter.pk}/export/').status_code, 404)
-        # The remedy the message names: clear and save, then decide.
-        self.save(encounter)
-        self.save(encounter, **{'answer_' + self.symptoms: self.TYPED, 'answer_' + self.ros: 'negative for chest pain'})
+        # Third pass: THIS page shows each one held, as finalization will judge it: nothing pre-filled, the line shown.
+        section = self.section(encounter, 'Symptoms')
+        self.assertIn('data-held-candidate', section)
+        self.assertIn(HEADING, section)
+        self.assertNotIn('>chest pain</textarea>', section)
+        self.assertIn(f'name="held_shown_{self.symptoms}"', section)
+        # Typed on this page, the clinician's answer is their decision even in the candidate's own words.
+        self.save(encounter, **{'answer_' + self.symptoms: self.TYPED, 'answer_' + self.ros: 'negative for the following:',
+                                'held_shown_' + self.symptoms: '1', 'held_shown_' + self.ros: '1'})
+        self.assertEqual(encounter.answers[self.ros]['status'], 'edited')
         exported = self.finalize(encounter)
         cells = [cell.text for row in Document(BytesIO(exported)).tables[0].rows for cell in row.cells]
-        self.assertEqual(cells, ['Review of systems', 'negative for chest pain', 'Symptoms', self.TYPED])
+        self.assertEqual(cells, ['Review of systems', 'negative for the following:', 'Symptoms', self.TYPED])
 
     def stale_offer(self, encounter, accepted=False):
         """What 02c29f99 stored for `Patient reports none of the following:` above `Symptoms: chest pain`: a conflict
@@ -564,6 +735,27 @@ class TheDecisionIsEnforcedThroughFinalizationAndExport(DocumentWorkflow):
         self.assertEqual(response.status_code, 400)
         encounter.refresh_from_db()
         self.assertEqual((encounter.answers[self.symptoms]['status'], encounter.answers[self.symptoms]['text']), ('conflict', ''))
+
+    def test_a_finalized_record_keeps_what_was_actually_offered(self):
+        """Third pass: a finalized record is never re-described by a later release."""
+        self.NOTES = 'Patient reports none of the following:\nSymptoms: chest pain'
+        encounter = self.generated()
+        self.stale_offer(encounter)
+        self.save(encounter, **{'answer_' + self.symptoms: self.TYPED, 'answer_' + self.ros: 'none'})
+        self.finalize(encounter)
+        section = self.section(encounter, 'Symptoms')
+        self.assertIn('This suggestion was offered and was not accepted.', section)
+        self.assertNotIn('data-held-candidate', section)
+        self.assertNotIn('data-governed-acceptance', section)
+
+    def test_a_save_reads_the_notes_governance_once(self):
+        from unittest.mock import patch
+        self.NOTES = 'Patient reports none of the following:\nSymptoms: chest pain'
+        encounter = self.generated()
+        self.stale_offer(encounter)
+        with patch('core.generation.heading_governance', wraps=generation.heading_governance) as reader:
+            self.save(encounter, **{'answer_' + self.symptoms: self.TYPED, 'answer_' + self.ros: 'none'})
+        self.assertEqual(reader.call_count, 1)
 
     def test_a_pre_repair_accepted_offer_under_a_heading_cannot_finalize(self):
         self.NOTES = 'Patient reports none of the following:\nSymptoms: chest pain'

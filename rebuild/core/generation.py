@@ -212,9 +212,6 @@ INLINE_CORRECTION = re.compile(r';\s*' + CORRECTION + r'\s*,\s*(\S.*)$', re.I)
 BULLETS = r'[\s\-*\u2022\u2012\u2013\u2014\u2015\u2023\u2043\u25aa\u25e6\u00b7]*'
 LINE_INITIAL_CORRECTION = re.compile(r'^' + BULLETS + r'(?:\d+[.)]\s*)?' + CORRECTION + r's?\b',
                                      re.I | re.M)
-#: ⚠️ AN ERRATUM, NOT THE NOUN. `Correction: …`, `correction, …`, `Correction — …` revise what came before;
-#: `Correction of iron deficiency` and `Correction scale` are treatments and govern nothing.
-CORRECTION_ERRATUM = re.compile(r'^' + BULLETS + r'(?:\d+[.)]\s*)?' + CORRECTION + r's?\s*[:,\-\u2013\u2014]', re.I)
 QUANTITY = re.compile(r'(?:(?:less than|greater than|about|approximately)\s+|[<>]=?\s*)?'
     r'(?:\d+(?:\.\d+)?|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)'
     r'\s+([a-z]+)\.?$', re.I)
@@ -401,13 +398,19 @@ def invisible(character):
     return any(low <= code <= high for low, high in IGNORABLE_RANGES)
 
 
-def ends_in_colon(text):
-    """Whether text visibly ends in a colon: fullwidth and small colons count, and so does a colon
-    followed only by whitespace or invisible characters."""
+def visible_end(text):
+    """Text with trailing whitespace and invisible characters removed."""
     end = len(text)
     while end and (text[end - 1].isspace() or invisible(text[end - 1])):
         end -= 1
-    return bool(end) and text[end - 1] in COLONS
+    return text[:end]
+
+
+def ends_in_colon(text):
+    """Whether text visibly ends in a colon: fullwidth and small colons count, and so does a colon
+    followed only by whitespace or invisible characters."""
+    visible = visible_end(text)
+    return bool(visible) and visible[-1] in COLONS
 
 
 def readings(text):
@@ -473,7 +476,7 @@ def _plain_pointer_only(notes):
                 or QUOTED_SOURCE.search(notes))
 
 
-def with_scope_suggestion(answer, notes, texts, own, explicit, context=None):
+def with_scope_suggestion(answer, notes, texts, own, explicit, context=None, reason=None):
     """Attach the held candidate and the passage it was read from. Never alters the answer.
 
     `own` is the answer's own evidence, captured BEFORE the whole-note substitution. It is kept
@@ -493,89 +496,81 @@ def with_scope_suggestion(answer, notes, texts, own, explicit, context=None):
         return {**answer, 'suggestion': '\n'.join(texts), 'suggestion_evidence': own,
                 'reason': SCOPE_REVIEW_REASON}
     return {**answer, 'held_candidate': {'text': '\n'.join(texts), 'evidence': own, 'context': context or [],
-                                         'reason': HELD_REASON}}
+                                         'reason': reason or HELD_REASON}}
 
 
-#: ⚠️ WHICH WAY A POINTER LOOKS: a partition of SCOPE_POINTERS, not new words. A line that ENDS on
-#: "following"/"below" introduces what comes next; one that ends on "above"/"these"/"those"/"listed"
-#: refers to what came before. Mid-sentence they are usually anatomy or time ("below the knee",
-#: "following polypectomy") and govern nothing.
+#: ⚠️ WHICH WAY A POINTER LOOKS: a partition of SCOPE_POINTERS, not new words. A sentence that ENDS on
+#: "following"/"below" introduces what comes next; "above"/"these"/"those"/"listed" refer to what came before.
+#: Mid-sentence they are usually anatomy or time ("below the knee", "following polypectomy") and govern nothing.
 FORWARD_POINTERS = frozenset(('following', 'below'))
 BACKWARD_POINTERS = frozenset(SCOPE_POINTERS.split('|')) - FORWARD_POINTERS
 WORD = re.compile(r'\w+')
+#: ⚠️ POSITION, NOT VOCABULARY. A sentence (or the line) that ENDS on a forward pointer, or on `the following
+#: <one word>`, is the prose form of a heading's colon. No word before it is read: an exception, an earlier
+#: sentence, the label or a relative's name decided nothing reliably (third refutation pass), so none is asked.
+FORWARD_END = re.compile(r'\b(?:following|below|the\s+following\s+\w+)\W*?(?:[.!?;]|$)', re.I)
+#: ⚠️ AN ERRATUM, NOT THE NOUN, WHEREVER A VALUE OR A SENTENCE STARTS: at the line's start, after any colon
+#: (a label the form does not know included: `Addendum: Correction: …`), or after a sentence. `correction`
+#: followed by punctuation, a spaced dash or `to` revises what came before. `Correction of …`, `Correction scale`
+#: and a hyphen attached to the word (`Correction-scale`, `Correction-dose`) are treatments and govern nothing.
+#: The inline `…; correction, X` keeps its own binding (`INLINE_CORRECTION`) and is not an erratum here.
+ERRATUM = re.compile(r'(?:^|[:\uff1a\ufe55\ufe13]|[.!?](?=\s))' + BULLETS + r'(?:\d+[.)]\s*)?' + CORRECTION
+                     + r's?(?:\s*(?![\-\u2010\u2011])[^\w\s]|\s+[\-\u2010\u2011]|\s+to\b)', re.I)
 HELD_REASON = ('Read from the notes but NOT offered as an answer: the line shown with it may change what it '
                'means (a heading, a denial, a family history, a hypothetical or a correction). Type your own '
                'answer, or choose "Leave blank — reviewed".')
+#: The qualified Word form has no "Leave blank — reviewed"; its answers are chosen or typed with their source line.
+HELD_REASON_WORD = ('Read from the notes but NOT offered as an answer: the line shown with it may change what it '
+                    'means. Choose or type your own answer, and paste its complete source line.')
 
 
 def changes_meaning(text):
-    """A denial, reframer or correction word, in either reading of the text. The existing vocabularies only."""
+    """A denial or reframer word, in either reading of the text. The existing vocabularies only."""
     return any(DENIAL.search(reading) or REFRAMED_SCOPE.search(reading) for reading in readings(text))
 
 
-#: `No. of polyps` is the numero abbreviation, not a denial.
-NUMERO = re.compile(r'\bno\.(?=\s*[a-z0-9#])', re.I)
-#: `…negative except as noted below.`: the lines pointed at are the EXCEPTIONS, stated as positives.
-EXCEPTION = re.compile(r'\bexcept\b', re.I)
-SENTENCE_BREAK = re.compile(r'[.!?]\s+(?=[A-Z0-9"\'(])')
+def governing_shape(text, parsed, *, lexical=True):
+    """How one line can govern others: (forward, backward, heading, erratum). `parsed` is its recognized label.
 
+    Structure, never meaning: a line that visibly ends in a colon introduces what follows, and one that also
+    names what precedes it (`… all of the above denied:`) reaches back. With `lexical`, a sentence that ENDS on
+    a forward pointer introduces what follows (`FORWARD_END`), and an erratum revises what came before (`ERRATUM`).
 
-def sentences(text):
-    """The sentences of one line, split where `source_units` splits them (abbreviations kept whole)."""
-    parts, start = [], 0
-    for match in SENTENCE_BREAK.finditer(text):
-        end = match.start() + 1
-        if match.group()[0] == '.' and ABBREVIATION.search(text[max(0, end - 32):end]):
-            continue
-        parts.append(text[start:end]); start = match.end()
-    parts.append(text[start:])
-    return [part for part in parts if part.strip()]
-
-
-def points_forward(sentence):
-    """A denial, family-history or hypothetical sentence that ENDS by pointing at what follows."""
-    for reading in readings(sentence):
-        words = [word.lower() for word in WORD.findall(reading[-160:])][-3:]
-        if not words or not (words[-1] in FORWARD_POINTERS or words[-3:-1] == ['the', 'following']):
-            continue
-        if EXCEPTION.search(reading):
-            continue
-        if DENIAL.search(NUMERO.sub(' ', reading)) or REFRAMED_SCOPE.search(reading):
-            return True
-    return False
-
-
-def governing_shape(text, value, *, lexical=True):
-    """How one line can govern others: (forward, backward, heading). `value` is its labelled value, else the line.
-
-    Structure first and without words: a line that visibly ends in a colon introduces what follows, and one that
-    names what precedes it (`… all of the above denied:`) reaches back too. Then, with `lexical`, the existing
-    vocabularies anchored on where the pointer sits, read per SENTENCE in both readings of the text: a denial,
-    family-history or hypothetical sentence that ENDS by pointing forward (`…patient denies the following.`), and
-    a value that is an erratum (`Correction: …`), which revises what came before it.
-
-    ⚠️ A sentence that points BACK is not read (withdrawn in the second refutation pass): its common case is the
-    ROS closing line `…negative except as noted above.`, which names the positives above it, and a reference
-    back rarely negates what it refers to (`No DVT in the veins listed above.`).
+    ⚠️ THE QUALIFIED WORD FORM (`lexical=False`): a LABELLED line there is an answer and never governs. Its
+    labels carry colons and its own signature statement ends in `By:`, and read as headings they held all
+    90 answers (third refutation pass). A heading there is an unlabelled line, which already sends every
+    answer back for a decision; it still withholds the offers below it.
+    ⚠️ A sentence that points BACK is not read: its common case is the ROS closing line `…negative except as
+    noted above.`, which names the positives above it (second refutation pass).
     """
+    if not lexical and parsed:
+        return False, False, False, False
     heading = ends_in_colon(text)
     backward = heading and any(word.lower() in BACKWARD_POINTERS for reading in readings(text) for word in WORD.findall(reading))
     if not lexical:
-        return heading, backward, heading
-    correction = any(CORRECTION_ERRATUM.match(reading) for reading in readings(value))
-    forward = heading or any(points_forward(sentence) for sentence in sentences(text))
-    return forward, backward or correction, heading
+        return heading, backward, heading, False
+    forward = heading or any(FORWARD_END.search(reading) for reading in readings(text))
+    erratum = any(ERRATUM.search(reading) for reading in readings(text))
+    return forward, backward, heading, erratum
 
 
 def qualified_word_form(fields):
     """The qualified Word form: its content-control answers carry `sdt_id` (other content-control forms are
     refused at upload). Every label there names its own side, vein and measure, so a sentence in one value
-    cannot re-scope another; only structural headings and corrections govern on it."""
+    cannot re-scope another; only unlabelled structural headings govern on it."""
     return any('sdt_id' in (field.get('locator') or {}) for field in fields)
 
 
+def bare_label(text, parsed):
+    """A closing line that asserts nothing about the lines above it: an unanswered question (`Allergies:`),
+    or a label with nothing before its colon but words that change nothing (`Signed by:`, the Word form's
+    `… By:`). Decided on what follows a recognized label, after invisible characters are removed."""
+    tail = visible_end(parsed[1] if parsed else text)
+    return not any(character in COLONS for character in tail[:-1]) and not changes_meaning(tail)
+
+
 def heading_governance(notes, labels, *, lexical=True):
-    """⚠️ ONE READER FOR EVERY CONSUMER: both validators and finalization call this, never a copy.
+    """⚠️ ONE READER FOR EVERY CONSUMER: both validators, the page, save and finalization call this, never a copy.
 
     Returns `(starts, spans, headings, governors)` over the note's non-empty lines: their start offsets
     (sorted), their stripped spans, the indexes of lines that visibly end in a colon (a labelled one is
@@ -584,30 +579,32 @@ def heading_governance(notes, labels, *, lexical=True):
     Forward governance runs to the END of the note and backward to its start. Nothing structural bounds
     a list: blank lines do not (pasted text separates items with them, and the app itself joins note
     segments with one), so a later answer is not provably outside a heading's list. A heading that is the
-    last line of the note governs the lines before it. Linear in the note: each line keeps only its
-    nearest governor in each direction.
+    last line of the note governs the lines before it unless it is a bare label. An erratum governs every
+    line before it, except one that is the whole value of a question ALREADY ANSWERED earlier
+    (`Pain score: Correction: three out of ten`): that corrects that question, whose two answers are already
+    a conflict, and a retained live response showed it holding every unrelated answer above it. Linear in the
+    note: each line keeps only its nearest governor in each direction.
     """
-    starts, spans, forward, backward, headings, texts = [], [], [], [], set(), []
-    offset = 0
+    starts, spans, forward, backward, headings, parsed_lines = [], [], [], [], set(), []
+    seen, offset = set(), 0
     for line in notes.splitlines(keepends=True):
         stripped = line.strip()
         if stripped:
             start = offset + line.index(stripped)
             parsed = labelled_value(stripped, labels)
-            value = parsed[1] if parsed else stripped
-            ahead, behind, heading = governing_shape(stripped, value, lexical=lexical)
+            ahead, behind, heading, erratum = governing_shape(stripped, parsed, lexical=lexical)
+            if erratum and not (parsed and parsed[0] in seen and any(ERRATUM.match(r) for r in readings(parsed[1]))):
+                behind = True
             if heading:
                 headings.add(len(spans))
+            if parsed:
+                seen.add(parsed[0])
             starts.append(start); spans.append((start, start + len(stripped)))
-            forward.append(ahead); backward.append(behind); texts.append(stripped)
+            forward.append(ahead); backward.append(behind); parsed_lines.append((stripped, parsed))
         offset += len(line)
-    # A heading that closes the note can only introduce what came before it, unless it is a bare label
-    # (`Signed by:`, `Technologist comments:`) that asserts nothing about the lines above.
-    if headings and max(headings) == len(spans) - 1:
-        closing = texts[-1]
-        bare = not any(character in COLONS for character in closing.rstrip()[:-1])
-        if not bare or changes_meaning(closing):
-            backward[-1] = True
+    # A heading that closes the note can only introduce what came before it, unless it is a bare label.
+    if headings and max(headings) == len(spans) - 1 and not bare_label(*parsed_lines[-1]):
+        backward[-1] = True
     governors = {}
     nearest = None
     for index in range(len(spans)):
@@ -644,14 +641,14 @@ def governed_context(governance, notes, evidence):
     return [{'quote': notes[spans[i][0]:spans[i][1]], 'start': spans[i][0], 'end': spans[i][1]} for i in sorted(found)]
 
 
-def held_for_decision(answer, texts, own, context):
+def held_for_decision(answer, texts, own, context, reason=HELD_REASON):
     """A governed answer: never pre-filled, never offered, the candidate kept beside what governs it.
 
     `evidence` stays the answer's OWN lines: the qualified Word review validates every evidence entry against
     that question's label, and a governing line from another label made the whole Word review fail. The
     governing lines travel only in `held_candidate.context`, which the page shows as "Written under"."""
     return {**answer, 'status': 'conflict', 'text': '', 'evidence': own,
-            'held_candidate': {'text': '\n'.join(texts), 'evidence': own, 'context': context, 'reason': HELD_REASON}}
+            'held_candidate': {'text': '\n'.join(texts), 'evidence': own, 'context': context, 'reason': reason}}
 
 
 def governance_for(notes, fields, context_labels=()):
@@ -660,11 +657,35 @@ def governance_for(notes, fields, context_labels=()):
 
 
 def offer_context(governance, notes, answer):
-    """The governing lines of a stored, not yet accepted one-click offer, or None. An offer made before headings
-    governed their lines (a draft from an earlier release) is recomputed here, never trusted."""
+    """The governing lines of a stored one-click offer, or None. An offer made before headings governed their
+    lines (a draft from an earlier release) is recomputed here, never trusted."""
     if not answer.get('suggestion') or not answer.get('suggestion_evidence'):
         return None
     return governed_context(governance, notes, answer['suggestion_evidence'])
+
+
+def governed_supported(governance, notes, answer):
+    """The governing lines of a stored answer still `supported` on a governed line, or None. Only generation
+    writes `supported` (a clinician's answer is `edited`), so this is a draft from before this rule."""
+    if answer.get('status') != 'supported' or not answer.get('evidence'):
+        return None
+    return governed_context(governance, notes, answer['evidence'])
+
+
+def as_currently_governed(governance, notes, answer, reason=HELD_REASON):
+    """A stored draft answer as this rule would have generated it: a governed `supported` answer or an unaccepted
+    governed offer becomes held (candidate kept, nothing pre-filled, nothing offered). The page and save read
+    this, and finalization refuses exactly the same answers (`governed_decisions`), so the three cannot disagree.
+    An ACCEPTED governed offer is left as it is: it is the clinician's act, and finalization asks for it again."""
+    context = governed_supported(governance, notes, answer)
+    if context is not None:
+        return held_for_decision(answer, [answer.get('text', '')], answer['evidence'], context, reason)
+    context = offer_context(governance, notes, answer)
+    if context is not None and not answer.get('accepted_suggestion'):
+        held = {key: value for key, value in answer.items() if key not in ('suggestion', 'suggestion_evidence')}
+        return {**held, 'held_candidate': {'text': answer['suggestion'], 'evidence': answer['suggestion_evidence'],
+                                           'context': context, 'reason': reason}}
+    return answer
 
 
 def governed_decisions(notes, fields, answers, context_labels=()):
@@ -678,8 +699,7 @@ def governed_decisions(notes, fields, answers, context_labels=()):
     found = []
     for field in fields:
         answer = answers.get(field['key']) or {}
-        if answer.get('status') == 'supported' and answer.get('evidence') and \
-                governed_context(governance, notes, answer['evidence']) is not None:
+        if governed_supported(governance, notes, answer) is not None:
             found.append(field['label'])
         elif answer.get('accepted_suggestion') and offer_context(governance, notes, answer) is not None:
             found.append(field['label'])
@@ -775,7 +795,9 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
     # parsed as two labelled answers, and the denied chest pain came back SUPPORTED, pre-filled, and
     # finalized on a review tick. Every answer whose own line a heading or a governing sentence reaches
     # is now a decision, with the candidate kept beside the line that governs it.
-    governance=heading_governance(notes,labels,lexical=not qualified_word_form(fields))
+    word_form=qualified_word_form(fields)
+    governance=heading_governance(notes,labels,lexical=not word_form)
+    reason=HELD_REASON_WORD if word_form else HELD_REASON
     from .tab_review import clinician_identity
     for item in selections.fields:
         if clinician_identity(next(f for f in fields if f['key']==item.key)):
@@ -840,9 +862,9 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
         answer={'text':'\n'.join(texts) if status=='supported' else '', 'status':status,'evidence':evidence,'reviewed':False}
         if inherited_context and not (item.conflict or explicit_conflict or guarded):
             answer=with_scope_suggestion(answer,notes,texts,own,set(explicit),
-                                         governed_context(governance,notes,own))
+                                         governed_context(governance,notes,own),reason)
         elif status=='supported' and (context:=governed_context(governance,notes,own)) is not None:
-            answer=held_for_decision(answer,texts,own,context)
+            answer=held_for_decision(answer,texts,own,context,reason)
         output[item.key]=answer
     return output
 
