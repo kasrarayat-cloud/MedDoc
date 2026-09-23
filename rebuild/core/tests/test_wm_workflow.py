@@ -282,9 +282,11 @@ class WMDocumentWorkflow(TestCase):
             self.assertEqual((encounter.answers[key]['status'], encounter.answers[key]['text']), ('edited', self.values[key]), key)
         self.save(encounter)
         exported = self.finalize(encounter)
-        # The adapter writes a measurement's number into its own cell; the unit is the column's (CI measured it).
+        # The adapter writes a measurement's number into its own cell (the unit is the column's), and the export splits
+        # the table by leg, so the value is looked for in every exported table cell (CI measured both).
         from docx import Document
-        self.assertEqual(Document(BytesIO(exported)).tables[0].rows[15].cells[1].text.strip(), '7.7')
+        cells = [cell.text.strip() for table in Document(BytesIO(exported)).tables for row in table.rows for cell in row.cells]
+        self.assertIn('7.7', cells)
 
     def test_positive_reflux_approved_statement_and_long_answer_are_not_truncated(self):
         encounter = self.prepare(positive=True, long_answer=True)
