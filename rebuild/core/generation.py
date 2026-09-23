@@ -1043,8 +1043,9 @@ def question_value_heading(parsed, questions):
     `Left GSV at the SFJ: reflux time (ms): 700 ms` under that line came back ready, needing only a review tick. Structural,
     not a word list (round 6 of the pilot: a location `not visualized below` read by its words emptied all 90 answers):
     no option of that form and no date, identity, location or measurement value ends in a colon. A prewritten
-    statement is not a question (its approved signature wording ends in `By:`), and an unanswered question has no value."""
-    return bool(parsed and parsed[0] in questions and seen_text(parsed[1]) and ends_in_colon(parsed[1]))
+    statement is not a question (its approved signature wording ends in `By:`), and an unanswered question has no value
+    (an empty value ends in no colon; every colon `heading_colon` reads is seen text, so none is needed here)."""
+    return bool(parsed and parsed[0] in questions and ends_in_colon(parsed[1]))
 
 
 def answered_label(text, labels):
