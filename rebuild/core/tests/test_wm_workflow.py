@@ -14,6 +14,8 @@ from unittest.mock import patch
 from zipfile import ZipFile
 from io import BytesIO
 from html.parser import HTMLParser
+import html
+import re
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
@@ -211,28 +213,62 @@ class WMDocumentWorkflow(TestCase):
         encounter = self.prepare(heading='location_11', select_variants=False)
         self.assertIn('measurement_15_1', self.governed)
         self.assertEqual(encounter.answers['measurement_1_1']['text'], '3.2 mm')        # above it: ready
+        heading = 'Right tributary row 11: anatomical location: none of the following:'
         page = self.client.get(f'/encounters/{encounter.pk}/')
-        self.assertContains(page, 'data-held-candidate')
-        self.assertContains(page, 'Right tributary row 11: anatomical location: none of the following:')
+        rendered = page.content.decode()
+        sections = {}
+        for part in rendered.split('<section class="answer">')[1:]:
+            for field in self.version.fields:
+                if f'. {field["label"]}</h3>' in part.split('</h3>', 1)[0] + '</h3>':
+                    sections[field['key']] = part.split('</section>')[0]
+        for key in self.governed:
+            section = sections[key]
+            # Held on the page: its own badge, the heading among its GOVERNING lines (the notes box shows every line
+            # anyway), and not the "conflicting values" message the empty held box used to produce.
+            self.assertIn('data-held-candidate', section, key)
+            self.assertIn('class="badge conflict"', section, key)
+            quotes = [html.unescape(q) for q in re.findall(r'data-governing-line><strong>[^<]*</strong> <q>(.*?)</q>', section, re.S)]
+            self.assertIn(heading, quotes, key)
+            self.assertNotIn('The notes contain conflicting values for this question', section, key)
 
-        class Shown(HTMLParser):
+        class SaveForm(HTMLParser):
+            """What a browser posts for this page AS RENDERED: every control of the save form, unchanged."""
             def __init__(self):
-                super().__init__(); self.values = {}
+                super().__init__(); self.values = {}; self.inside = False; self.text = None; self.select = None
             def handle_starttag(self, tag, attrs):
                 attrs = dict(attrs)
-                if tag == 'input' and attrs.get('name', '').startswith('held_shown_'):
-                    self.values[attrs['name']] = attrs.get('value', '')
-        shown = Shown(); shown.feed(page.content.decode())
-        self.assertTrue({'held_shown_' + key for key in self.governed} <= set(shown.values), shown.values)
-        # The page as rendered, every box ticked: the held answers are empty there.
-        payload = self.payload(encounter, reviewed=False)
-        payload.update(shown.values)
+                if tag == 'form':
+                    self.inside = (attrs.get('action') or '').endswith('/save/')
+                if not self.inside or not attrs.get('name') and tag != 'option':
+                    return
+                if tag == 'input':
+                    if attrs.get('type') != 'checkbox' or 'checked' in attrs:
+                        self.values[attrs['name']] = attrs.get('value', 'on' if attrs.get('type') == 'checkbox' else '')
+                elif tag == 'textarea':
+                    self.text = attrs['name']; self.values[self.text] = ''
+                elif tag == 'select':
+                    self.select = attrs['name']; self.values.setdefault(self.select, '')
+                elif tag == 'option' and self.select and 'selected' in attrs:
+                    self.values[self.select] = attrs.get('value', '')
+            def handle_endtag(self, tag):
+                if tag == 'textarea': self.text = None
+                elif tag == 'select': self.select = None
+                elif tag == 'form': self.inside = False
+            def handle_data(self, data):
+                if self.text: self.values[self.text] += data
+        form = SaveForm(); form.feed(rendered)
+        payload = {name: html.unescape(value).lstrip('\n') for name, value in form.values.items()}
         for key in self.governed:
-            payload['answer_' + key] = ''; payload['source_' + key] = ''
+            self.assertEqual(payload.get('answer_' + key, ''), '', key)                 # the held box renders empty
+            self.assertEqual(payload.get('held_shown_' + key), '1', key)
+        shown = {name: value for name, value in payload.items() if name.startswith('held_shown_')}
+        # The page as rendered, and the clinician ticks every box (the statements' sources pasted as the form asks).
         for field in self.version.fields:
             payload['reviewed_' + field['key']] = 'on'
-        for row in self.version.review_requirements:
+        for row in page.context['wm_requirements']:
             payload['claim_reviewed_' + row['key']] = 'on'
+            if row['kind'] == 'assertion' and not payload.get('claim_source_' + row['key']):
+                payload['claim_source_' + row['key']] = row['label'] + ': ' + row['text']
         self.save(encounter, payload=payload)
         self.client.post(f'/encounters/{encounter.pk}/finalize/', {'revision': encounter.revision, 'reviewed': 'on'})
         encounter.refresh_from_db()
@@ -240,7 +276,7 @@ class WMDocumentWorkflow(TestCase):
         self.assertFalse(encounter.export_path)
         # The clinician types each answer on the page (the form accepts only the value under its own label).
         payload = self.payload(encounter, reviewed=False)
-        payload.update(shown.values)
+        payload.update(shown)
         self.save(encounter, payload=payload)
         for key in self.governed:
             self.assertEqual((encounter.answers[key]['status'], encounter.answers[key]['text']), ('edited', self.values[key]), key)

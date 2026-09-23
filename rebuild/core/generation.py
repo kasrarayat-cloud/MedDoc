@@ -702,7 +702,10 @@ NON_LETTERS = (r'(?:[^\S\n]++|[^\w\s.!?\u2026<&' + ''.join(sorted(COLONS)) + r']
 #: (`Glucose: 312 correction given`, `Potassium: 3.1 - correction`), unless it is a list number (`1. `) (seventh pass).
 LINE_MARKER = r'(?:(?:\d+(?:\.\d+)*(?:[.)\-]|(?=\s))|(?:[ivx]{1,4}|[a-z])[.)])' + NON_LETTERS + ')?'
 VALUE_MARKER = r'(?:(?:\d{1,2}[.)](?=\s)|(?:[ivx]{1,4}|[a-z])[.)])' + NON_LETTERS + ')?'
-ERRATUM = re.compile(r'(?:^' + NON_LETTERS + LINE_MARKER + r'|(?:(?<=' + COLON_CLASS + r')(?!\d)|(?<=[.!?\u2026])(?=(?:["\'\u201d\u2019)\]*_~`]|' + HTML_TAG.pattern + r'|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});){0,50}+[\s\u2800]))'
+#: ⚠️ SIXTEENTH PASS: a correction GLUED to the sentence before it (`adenoma.Correction: no polyp.`, a missed space; or
+#: Word's `adenoma.<o:p></o:p>Correction:`) did not start a sentence, so the finding it corrects stayed ready. After
+#: the sentence end the word itself (or one word and the word) now starts one too; nothing else glued does.
+ERRATUM = re.compile(r'(?:^' + NON_LETTERS + LINE_MARKER + r'|(?:(?<=' + COLON_CLASS + r')(?!\d)|(?<=[.!?\u2026])(?=(?:["\'\u201d\u2019)\]*_~`]|' + HTML_TAG.pattern + r'|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});){0,50}+(?:[\s\u2800]|(?:' + ONE_WORD + r'\s+)?' + CORRECTION + r')))'
                      + NON_LETTERS + VALUE_MARKER + ')'
                      + '(?:' + ONE_WORD + r'\s+(?=' + CORRECTION + r's?\s*(?:' + COLON_CLASS + r'|[,;\u2013\u2014]|--|\s-\s)))?'
                      + r'(?P<word>' + CORRECTION + r's?)(?![^\W_]|/|[\-\u2010\u2011](?=[^\W_]))'
@@ -1131,6 +1134,10 @@ def governed_context(governance, notes, evidence, others=()):
         take(forward[index][1], forward[index][2], forward[index][3], False)
     for index in range(behind, min(len(backward), behind + 3)):
         take(backward[index][1], backward[index][2], backward[index][3], True)
+    # The outermost heading the answer is written under (sixteenth pass: `Review of systems: none of the following.`
+    # behind three nearer sub-headings was counted but never shown; `none` is not a word that changes meaning).
+    if ahead:
+        take(forward[0][1], forward[0][2], forward[0][3], False)
     # Then the governors whose words change meaning, nearest first, each way in turn.
     before = forward_meaning[:bisect.bisect_left(forward_meaning, ahead)][::-1][:2 * CONTEXT_SHOWN]
     after = backward_meaning[bisect.bisect_left(backward_meaning, behind):][:2 * CONTEXT_SHOWN]
@@ -1139,6 +1146,16 @@ def governed_context(governance, notes, evidence, others=()):
             governor = forward[before[index]]; take(governor[1], governor[2], governor[3], False)
         if index < len(after):
             governor = backward[after[index]]; take(governor[1], governor[2], governor[3], True)
+    # Then the rest, nearest first, until the places are used: every governing line is shown when they fit. One step per
+    # LINE (`by_line` holds each line's governors in order), so a line of many governors costs one step.
+    index = ahead - 1
+    while index >= 0 and len(chosen) < CONTEXT_SHOWN:
+        take(forward[index][1], forward[index][2], forward[index][3], False)
+        index = by_line[0][forward[index][1]][0][0] - 1
+    index = behind
+    while index < len(backward) and len(chosen) < CONTEXT_SHOWN:
+        take(backward[index][1], backward[index][2], backward[index][3], True)
+        index = by_line[1][backward[index][1]][0][-1] + 1
     def windows(line):
         # Each governing span on the line, at most three: those whose words change meaning first, then the nearest. The
         # candidates are the three nearest of each kind, found by bisection: forward ones before `ahead`, backward ones

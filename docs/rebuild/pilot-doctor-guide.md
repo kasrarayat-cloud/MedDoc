@@ -127,7 +127,9 @@ lists every charge; choose a charge's service name to see how it was calculated.
   one of the form's questions, makes every answer written after it, to the end of the notes, a
   decision for you: it is never filled in and never offered for one click. What was read is shown
   beside it, with the lines that govern it (*Written under* above it, *Followed by* below it; up to
-  15 lines, nearest and denials first, and the rest counted: read the full note then; a line that
+  15 lines: the nearest, the outermost heading it is written under, the denials and family history,
+  then the rest nearest first, so every governing line is shown when there are 15 or fewer; any
+  beyond 15 are counted: read the full note then; a line that
   is the answer's own is shown as *In the same line*; when the same words also appear elsewhere in
   the notes, the page says where, because a line may govern them there). A question left
   empty mid-note (`Allergies:`) counts, because it may be a heading (`Pertinent negatives:`). A
@@ -181,7 +183,8 @@ lists every charge; choose a charge's service name to see how it was calculated.
   and *aforementioned* are not: end such a line with a colon, which is read whatever its words. A
   sentence that refers back without a colon (`… negative except as noted above.`) is not read.
 - **A correction governs what came before it.** The word *correction* where a line, an answer or
-  a sentence starts — after any bullet, bracket, quote or list marker (`● Correction: …`, `1-
+  a sentence starts (also glued to the sentence before it, a missed space: `adenoma.Correction: …`,
+  `adenoma.<o:p></o:p>Correction: …`) — after any bullet, bracket, quote or list marker (`● Correction: …`, `1-
   Correction: …`, `#2 Correction: …`, `(Correction: …)`, `a) Correction: …`, `Addendum: Correction:
   …`), or after one word before a colon, comma or dash (`Transcription correction: …`, `Physician's
   correction: …`) — makes every answer before it a decision, in the same paragraph too, whatever
@@ -215,10 +218,14 @@ lists every charge; choose a charge's service name to see how it was calculated.
   label there names its own side, vein and measure, so a pointer or correction written inside a
   labelled answer changes no other answer. But an answer that ends in a colon
   (`Right tributary row 11: anatomical location: none of the following:`) introduces the lines
-  after it: it and every answer after it come back held, never filled in, and you type each one
-  on the page (the form accepts only the value under its own label) or correct the notes. A stray
-  colon after a value (`lateral calf:`) does the same. A prewritten statement's approved wording
-  (`… By:`) and an unanswered question are not headings. An unlabelled line (which already sends
+  after it: it and every answer after it come back held, never filled in. Type each later answer
+  on the page exactly as it is written under its label (the form accepts nothing else), or correct
+  the notes. For the colon-ending line itself, correct the notes: a measurement or a dropdown answer
+  ending in a colon cannot be accepted, and a text answer is accepted only as written, colon
+  included, which the document then shows. A stray colon after a value (`lateral calf:`), a doubled
+  colon after an unanswered question (`Date of birth::`) and a half-filled time (`10:__`) do the
+  same. A prewritten statement's approved wording (`… By:`) and an unanswered question (its label
+  and one colon) are not headings. An unlabelled line (which already sends
   every answer back) is read in full: a heading, a sentence ending on a forward pointer or a
   correction there withholds the suggestions it governs.
 - **A draft from before this release** is shown by the same rule: an answer it filled in from a

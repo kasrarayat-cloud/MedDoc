@@ -794,11 +794,11 @@ class WhatTheFifthPassFound(ExpectationsMixin, TestCase):
         held = fixture_answers(['Symptoms'], notes)['Symptoms']['held_candidate']
         self.assertEqual(len(held['context']), 16)
         self.assertEqual(held['context'][-1], {'more': 385})
-        # With fewer than the cap, the three nearest ordinary headings are all shown.
+        # With fewer than the cap, every governing line is shown and none is counted (REVISED in the sixteenth pass:
+        # this asserted the three nearest and `more: 2`, which hid a `none of the following.` heading behind them).
         notes = 'Section A:\nSection B:\nSection C:\nSection D:\nSection E:\nSymptoms: chest pain'
         held = fixture_answers(['Symptoms'], notes)['Symptoms']['held_candidate']
-        self.assertEqual([e.get('quote') for e in held['context']], ['Section C:', 'Section D:', 'Section E:', None])
-        self.assertEqual(held['context'][-1], {'more': 2})
+        self.assertEqual([e.get('quote') for e in held['context']], ['Section A:', 'Section B:', 'Section C:', 'Section D:', 'Section E:'])
 
     def test_a_disagreement_says_so_rather_than_pointing_elsewhere(self):
         answer = provider_answers(['Extent', 'Complications'], 'Extent: splenic flexure\nThe scope was advanced to the cecum.\n'
@@ -2389,9 +2389,7 @@ class TheGoverningHeadingIsShownAndEnforcedOnEveryOlderForm(DocumentWorkflow):
                          ('supported', 'annual physical'))            # positive control: above the heading, ready
         last = encounter.answers[keys['Heart disease']]
         self.assertEqual((last['status'], last['text'], last['held_candidate']['text']), ('conflict', '', 'mother'))
-        section = self.section(encounter, 'Heart disease')
-        self.assertIn('data-governing-line', section)
-        self.assertIn(heading, section)
+        self.assertIn(heading, self.governing_lines(self.section(encounter, 'Heart disease')))
         self.assertNotIn('data-held-candidate', self.section(encounter, 'Indication'))
 
     def test_a_denial_heading_beyond_a_full_window_of_sub_headings_is_still_shown(self):
@@ -2402,9 +2400,22 @@ class TheGoverningHeadingIsShownAndEnforcedOnEveryOlderForm(DocumentWorkflow):
         notes = heading + '\n' + '\n'.join(f'{system}:\n{finding}: present' for system, finding in zip(self.SYSTEMS, findings))
         encounter, keys = self.generated(self.table_docx(findings), 'docx', notes)
         section = self.section(encounter, findings[-1])
-        self.assertIn(heading, section)
+        # ⚠️ SIXTEENTH PASS: among the GOVERNING lines, not anywhere in the section (the whole note is shown there as
+        # the source evidence of this note's answers, which made the first version of this test pass vacuously).
+        self.assertIn(heading, self.governing_lines(section))
         self.assertIn('data-governing-more', section)
         self.assertEqual(encounter.answers[keys[findings[-1]]]['text'], '')
+
+    def test_a_heading_without_a_denial_word_beyond_a_full_window_is_shown_as_the_outermost(self):
+        heading = 'Patient reports none of the following:'
+        findings = [system + ' finding' for system in self.SYSTEMS]
+        notes = heading + '\n' + '\n'.join(f'{system}:\n{finding}: present' for system, finding in zip(self.SYSTEMS, findings))
+        encounter, keys = self.generated(self.table_docx(findings), 'docx', notes)
+        self.assertIn(heading, self.governing_lines(self.section(encounter, findings[-1])))
+
+    def governing_lines(self, section):
+        import html, re
+        return [html.unescape(quote) for quote in re.findall(r'data-governing-line><strong>[^<]*</strong> <q>(.*?)</q>', section, re.S)]
 
     def check_older_form(self, data, suffix, exported_value):
         notes = HEADING + '\nSymptoms: chest pain'
@@ -2438,3 +2449,37 @@ class TheGoverningHeadingIsShownAndEnforcedOnEveryOlderForm(DocumentWorkflow):
             self.assertEqual(len(lines), 1, lines)
             return lines[0].split(':', 1)[1].strip()
         self.check_older_form(self.placeholder_docx(['Review of systems', 'Symptoms']), 'docx', value)
+
+
+class WhatTheSixteenthPassFound(ExpectationsMixin, TestCase):
+    """Round 16 over the finish delta (2026-09-23)."""
+    FORM = ['Findings', 'Histology']
+
+    def test_a_correction_glued_to_the_sentence_before_it_is_read(self):
+        """A missed space, or Word markup with none after it: the corrected finding was READY and finalized."""
+        for tail in ('adenoma.Correction: there was no polyp.', 'adenoma.<o:p></o:p>Correction: there was no polyp.',
+                     'adenoma.<w:br/>Correction: there was no polyp.', 'adenoma.<br>Correction: there was no polyp.',
+                     'adenoma.&nbsp;Correction: there was no polyp.', 'adenoma!Correction: no polyp.',
+                     'adenoma.Transcription correction: there was no polyp.'):
+            with self.subTest(tail=tail):
+                answers = fixture_answers(self.FORM, 'Findings: sessile polyp.\nHistology: ' + tail)
+                self.assert_needs_decision(answers['Findings'], 'sessile polyp.', 'Histology: ' + tail)
+
+    def test_nothing_else_glued_to_a_sentence_end_is_read(self):
+        """Positive controls: an ordinary glued sentence, a treatment, and an abbreviation before the word."""
+        for tail in ('adenoma.Margins clear.', 'adenoma.Correction scale per protocol.', 'adenoma, e.g.Correction of the view.'):
+            with self.subTest(tail=tail):
+                self.assert_ready(fixture_answers(self.FORM, 'Findings: sessile polyp.\nHistology: ' + tail)['Findings'],
+                                  'sessile polyp.')
+
+    def test_every_governing_line_is_shown_when_they_fit(self):
+        """`none` is not a word that changes meaning, and three nearer governing lines stood between: the heading was
+        counted and not shown, though only five lines governed the answer."""
+        labels = ['Review of systems', 'Cardiovascular', 'Chest pain', 'Respiratory', 'Cough', 'Gastrointestinal', 'Nausea',
+                  'Neurological', 'Headache']
+        notes = ('Review of systems: none of the following.\nCardiovascular: findings below.\nChest pain: at rest\n'
+                 'Respiratory: findings below.\nCough: productive\nGastrointestinal: findings below.\nNausea: after meals\n'
+                 'Neurological: findings below.\nHeadache: frontal')
+        answer = fixture_answers(labels, notes)['Headache']
+        self.assert_needs_decision(answer, 'frontal', 'Review of systems: none of the following.')
+        self.assertFalse([entry for entry in answer['held_candidate']['context'] if 'more' in entry])
