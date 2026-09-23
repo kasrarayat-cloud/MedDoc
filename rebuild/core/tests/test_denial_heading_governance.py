@@ -296,6 +296,34 @@ class ValidAnswersStillWork(ExpectationsMixin, TestCase):
         self.assert_ready(answers['Follow-up'], 'in 2 weeks: sooner if worse')
 
 
+class TheQualifiedWordFormKeepsItsLabelsSelfContained(ExpectationsMixin, TestCase):
+    """On the qualified Word form every label names its own side, vein and measure, so a sentence in one value
+    cannot re-scope another: only structural headings and corrections govern there. Round 6 of the pilot
+    measured the alternative: one location `not visualized below` emptied all 90 answers."""
+    FIELDS = [{'key': 'location_11', 'label': 'Right tributary row 11: anatomical location', 'kind': 'text',
+               'locator': {'row': 11}},
+              {'key': 'measurement_15_2', 'label': 'Left GSV at the SFJ: reflux time (ms)', 'kind': 'measurement',
+               'locator': {'row': 15, 'column': 2, 'unit': 'ms'}},
+              {'key': 'sdt_-213273323', 'label': 'Right impression: reflux or absence', 'kind': 'choice',
+               'locator': {'part': 'word/document.xml', 'sdt_id': '1'}}]
+
+    def answers(self, notes):
+        return generation.generate(notes, self.FIELDS, FIXTURE)[0]
+
+    def test_a_free_text_value_ending_on_a_pointer_governs_nothing_on_the_qualified_form(self):
+        notes = ('Right tributary row 11: anatomical location: lateral calf, not visualized below\n'
+                 'Left GSV at the SFJ: reflux time (ms): 700 ms\nRight impression: reflux or absence: reflux positive.')
+        answers = self.answers(notes)
+        self.assert_ready(answers['measurement_15_2'], '700 ms')
+        self.assert_ready(answers['sdt_-213273323'], 'reflux positive.')
+
+    def test_a_structural_heading_still_governs_on_the_qualified_form(self):
+        notes = ('Right tributary row 11: anatomical location: none of the following:\n'
+                 'Left GSV at the SFJ: reflux time (ms): 700 ms')
+        self.assert_needs_decision(self.answers(notes)['measurement_15_2'], '700 ms',
+                                   'Right tributary row 11: anatomical location: none of the following:')
+
+
 class TheDecisionIsEnforcedThroughFinalizationAndExport(DocumentWorkflow):
     """E1 on a real Word form, authenticated, through generate -> review -> finalize -> export."""
     NOTES = HEADING + '\nSymptoms: chest pain'
