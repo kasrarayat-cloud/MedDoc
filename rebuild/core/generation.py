@@ -2,6 +2,7 @@
 import json
 import hashlib
 import re
+import unicodedata
 from decimal import Decimal, InvalidOperation, ROUND_DOWN, ROUND_HALF_EVEN
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -194,13 +195,11 @@ UNSCOPED_NEGATIVE_HEADING = re.compile(r'^[^:]*\b(?:' + DENIAL_WORDS + r')\b[^:]
 #: never to decide a status in `source_units`. `\bnegative\b` cannot match `Pertinent negatives:`,
 #: the commonest denial heading there is. Widening only ever suppresses more.
 SUPPRESSING_DENIAL_WORDS = DENIAL_WORDS + r'|negatives|deny'
-COLONS = ':\uff1a\ufe55\ufe13'
 DENIAL = re.compile(r'\b(?:' + SUPPRESSING_DENIAL_WORDS + r')\b', re.I)
-DENIAL_BEFORE_COLON = re.compile(r'^[^' + COLONS + r']*\b(?:' + SUPPRESSING_DENIAL_WORDS + r')\b[^' + COLONS + r']*[' + COLONS + r']', re.I)
-ENDS_IN_COLON = re.compile(r'[' + COLONS + r']\s*$')
 SCOPE_POINTER = re.compile(r'\b(?:' + SCOPE_POINTERS + r')\b', re.I)
-#: Copied text carries characters nobody can see; a heading that visibly ends in a colon must count.
-INVISIBLE = re.compile('[\u200b\u200c\u200d\u2060\ufeff]')
+#: A pointer that ENDS a value and looks FORWARD. `listed above` and `below the knee` are answers.
+FORWARD_POINTER_AT_END = re.compile(r'\b(?:following|below)\s*[.:\uff1a\ufe55\ufe13]?\s*$', re.I)
+COLONS = frozenset(':\uff1a\ufe55\ufe13')
 FINITE_STATEMENT = re.compile(r'\b(?:is|are|was|were|has|have|had|denies|reports|reported|showed|revealed|advanced|seen|collected|recommend|received|underwent)\b',re.I)
 
 ABBREVIATION = re.compile(r'(?:\b(?:dr|mr|mrs|ms|prof|st|vs|etc|approx)|\b[A-Z]|\be\.g|\bi\.e)\.$', re.I)
@@ -257,7 +256,7 @@ def source_units(notes, fields, *, context_labels=()):
             offset+=len(line); continue
         start=offset+line.index(stripped)
         parsed=labelled_value(stripped,labels)
-        if stripped.endswith(':') or INHERITED_SCOPE.search(stripped): inherited=True
+        if ends_in_colon(stripped) or INHERITED_SCOPE.search(stripped): inherited=True
         if not re.search(r'[.!?]["\')\]]?$',stripped) and not (parsed and parsed[1]):
             # A lone unpunctuated statement is still complete under the old
             # contract; multiple fragments can inherit an omitted heading.
@@ -376,24 +375,51 @@ def negative_heading(notes):
     acceptance. A line holding a denial word that ENDS in a colon, or that POINTS at other lines,
     is a heading too. Suppression only; `source_units` already sends such notes back as conflicts.
     """
-    return any(UNSCOPED_NEGATIVE_HEADING.search(line) or DENIAL_BEFORE_COLON.search(INVISIBLE.sub('', line))
-               or governs_other_lines(line) for line in notes.splitlines())
+    return any(UNSCOPED_NEGATIVE_HEADING.search(line) or denial_before_colon(line) or governs_other_lines(line)
+               for line in notes.splitlines())
+
+
+def ends_in_colon(text):
+    """Whether text visibly ends in a colon: fullwidth and small colons count, and so does a colon
+    followed only by whitespace or characters nobody can see (zero-width, bidi marks, soft hyphen —
+    every Unicode format character), which copied text carries."""
+    end = len(text)
+    while end and (text[end - 1].isspace() or unicodedata.category(text[end - 1]) == 'Cf'):
+        end -= 1
+    return bool(end) and text[end - 1] in COLONS
+
+
+def denial_before_colon(line):
+    """A denial word ahead of the line's first colon, of any width. Split once: linear, no backtracking."""
+    for index, character in enumerate(line):
+        if character in COLONS:
+            return bool(DENIAL.search(line, 0, index))
+    return False
 
 
 def governs_other_lines(text):
     """A denial that ends in a colon or points at other lines: `negative for the following:`.
 
-    ⚠️ DELIBERATELY OVER-INCLUSIVE. `Discharge: no driving for the following 24 hours` trips it too and
-    withholds every offer in that note. That costs a retyped answer; missing a real heading costs a
-    denied finding accepted with one click.
+    Words are searched in the text AS WRITTEN. Deleting an invisible character first joined `no` and
+    `ne` into `none` and offered what the old rule withheld.
+
+    ⚠️ DELIBERATELY OVER-INCLUSIVE, AND ONLY EVER READ TO WITHHOLD AN OFFER.
+    `Discharge: no driving for the following 24 hours` trips it and withholds every offer in that note.
+    That costs a retyped answer; missing a real heading costs a denied finding accepted with one click.
     """
-    text = INVISIBLE.sub('', text)
-    return bool(DENIAL.search(text) and (ENDS_IN_COLON.search(text) or SCOPE_POINTER.search(text)))
+    return bool(DENIAL.search(text) and (ends_in_colon(text) or SCOPE_POINTER.search(text)))
 
 
-def heading_value(value):
-    """A labelled value that introduces other lines is a heading, not that question's answer."""
-    return bool(ENDS_IN_COLON.search(INVISIBLE.sub('', value)) or governs_other_lines(value))
+def heading_line(line, value):
+    """A labelled line whose value introduces other lines is a heading, not that question's answer.
+
+    ⚠️ NARROWER THAN `governs_other_lines`, BECAUSE THIS ONE DECIDES A STATUS. Co-occurrence turned
+    `Findings: No reflux below the knee.` and `Impression: No DVT in the veins listed above.` into
+    headings, and every answer in the note became an empty conflict that blocked finalization. A
+    heading's value ends in a colon, or the line holds a denial (label or value: `Negative for: the
+    following`) and the value ENDS by pointing forward.
+    """
+    return ends_in_colon(value) or bool(DENIAL.search(line) and FORWARD_POINTER_AT_END.search(value))
 
 
 def _plain_pointer_only(notes):
@@ -507,7 +533,7 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
     # ⚠️ A LABELLED HEADING IS NOT AN ANSWER. With a `Review of systems` question on the form,
     # `Review of systems: negative for the following:` above `Symptoms: chest pain` counted as two
     # scoped answers, and the denied `chest pain` came back SUPPORTED, pre-filled, with no conflict.
-    scoped_lines=all((parsed:=labelled_value(line,labels)) and parsed[1] and not heading_value(parsed[1]) for line in lines)
+    scoped_lines=all((parsed:=labelled_value(line,labels)) and parsed[1] and not heading_line(line,parsed[1]) for line in lines)
     # `len(lines)>1` is deliberate and is NOT an off-by-one: this rule is about context a
     # PRECEDING line imposes on a later one ("The following findings are denied:"), which a
     # single-line note cannot have. Widening it to every unscoped note was tried and reverted —

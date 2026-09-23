@@ -783,6 +783,62 @@ class ADenialThatGovernsOtherLinesSuppressesTheOffer(TestCase):
                                     Selection(key='k', quotes=['chest pain'], conflict=False)])
         return validate_selections(notes, fields, chosen, evidence_contract='legacy')
 
+    def test_a_denial_beside_an_ordinary_pointer_word_is_still_that_questions_answer(self):
+        """⚠️ ROUND 5. Co-occurrence decided a STATUS here once: `No reflux below the knee.` made every
+        answer in the note an empty conflict and finalization was refused. Only a value that ENDS by
+        pointing, or ends in a colon, is a heading."""
+        for value in ('No reflux below the knee.', 'No bleeding following polypectomy.',
+                      'No driving for the following 24 hours.', 'Soft, no tenderness above the umbilicus.',
+                      'Benign nevi; these are not concerning.', 'Good, without residual stool in the segments listed here.',
+                      'No DVT in the veins listed above.', 'No change from the study above.'):
+            with self.subTest(value=value):
+                fields = [{'key': 'f', 'label': 'Findings', 'kind': 'text', 'locator': {'cell': 0}},
+                          {'key': 'i', 'label': 'Impression', 'kind': 'text', 'locator': {'cell': 1}}]
+                chosen = Selections(fields=[Selection(key='f', quotes=[value], conflict=False),
+                                            Selection(key='i', quotes=['Normal venous study.'], conflict=False)])
+                answers = validate_selections(f'Findings: {value}\nImpression: Normal venous study.', fields, chosen,
+                                              evidence_contract='legacy')
+                self.assertEqual((answers['f']['status'], answers['i']['status']), ('supported', 'supported'))
+                self.assertEqual(answers['f']['text'], value)
+
+    def test_a_denial_in_the_label_with_a_pointer_for_an_answer_does_not_prefill_the_denied_finding(self):
+        """⚠️ ROUND 5, PRE-EXISTING: the denial can be the QUESTION. `Negative for: the following` has no
+        denial word in its answer, so a value-only rule counted it as answered."""
+        def run(label, value):
+            fields = [{'key': 'h', 'label': label, 'kind': 'text', 'locator': {'cell': 0}},
+                      {'key': 'k', 'label': 'Symptoms', 'kind': 'text', 'locator': {'cell': 1}}]
+            chosen = Selections(fields=[Selection(key='h', quotes=[value], conflict=False),
+                                        Selection(key='k', quotes=['chest pain'], conflict=False)])
+            return validate_selections(f'{label}: {value}\nSymptoms: chest pain', fields, chosen, evidence_contract='legacy')
+        for label, value in (('Negative for', 'the following'), ('Pertinent negatives', 'see below'),
+                             ('Denies', 'all of the following'), ('ROS negative for', 'the symptoms listed below')):
+            with self.subTest(label=label):
+                answers = run(label, value)
+                self.assertEqual((answers['k']['status'], answers['k']['text']), ('conflict', ''))
+                self.assertIsNone(answers['k'].get('suggestion'))
+        # CONTROL: only the label changes, to one that asserts no polarity; a plain pointer is an answer.
+        self.assertEqual(run('Reviewed for', 'the following')['k']['status'], 'supported')
+
+    def test_a_heading_that_visibly_ends_in_a_colon_counts_on_both_contracts(self):
+        """Round 5: the tab contract read only an ASCII colon, and a bidi mark or soft hyphen after the
+        colon hid it from the legacy rule too. Every Unicode format character is invisible."""
+        for tail in ('\uff1a', ':\u200b', ':\u200e', ':\u200f', ':\u00ad', ':\u2063', ':\ufeff'):
+            with self.subTest(tail=repr(tail)):
+                self.assertTrue(generation.ends_in_colon('pertinent negatives' + tail))
+                answers = self.labelled_heading_form(f'Review of systems: pertinent negatives{tail}\nSymptoms: chest pain',
+                                                     f'pertinent negatives{tail}')
+                self.assertEqual(answers['k']['status'], 'conflict')
+                fields = [{'key': 'ros', 'label': 'Review of systems', 'kind': 'text', 'locator': {'cell': 0, 'tab_form': {'version': 1}}},
+                          {'key': 'k', 'label': 'Symptoms', 'kind': 'text', 'locator': {'cell': 1, 'tab_form': {'version': 1}}}]
+                tab, *_ = generation.generate(f'Review of systems: pertinent negatives{tail}\nSymptoms: chest pain.', fields,
+                                              {'mode': 'fixture', 'prompt_version': generation.CURRENT_PROMPT_VERSION})
+                self.assertNotEqual(tab['k']['status'], 'supported')
+        self.assertFalse(generation.ends_in_colon('negative for the following'))
+
+    def test_an_invisible_character_inside_a_word_never_widens_an_offer(self):
+        """Round 5: deleting U+200B joined `no` and `ne` into `none` and offered what 81619587 withheld."""
+        self.assertTrue(negative_heading('Review of systems: no\u200bne of the following:\nSymptoms: chest pain'))
+
     def test_a_heading_written_as_another_questions_answer_does_not_prefill_the_denied_finding(self):
         """⚠️ WORSE THAN A SUGGESTION. With `Review of systems` on the form, the heading parsed as that
         question's answer, every line counted as scoped, and `chest pain` came back SUPPORTED."""

@@ -455,3 +455,15 @@ class BrowserLineBreaksReachTheDocumentOnce(DocumentWorkflow):
         response = self.client.post(f'/encounters/{encounter.pk}/finalize/', {'reviewed': 'on', 'revision': encounter.revision}, follow=True)
         self.assertContains(response, 'The answer for Follow-up plan has a character a PDF form cannot hold')
         self.assertNotContains(response, 'The answer for Text1')
+
+
+class ALabelledNoteWithAnatomyFinalizes(DocumentWorkflow):
+    """Round 5, end to end: a vein note's ordinary `below the knee` must not stop a labelled note."""
+
+    def test_no_reflux_below_the_knee_is_an_answer_and_the_document_finalizes(self):
+        template, mapping = self.upload(self.make_docx(), 'docx')
+        encounter = self.create_encounter(mapping, 'Symptoms: No reflux below the knee.\nExamination: Normal venous study.')
+        self.generate(encounter)          # asserts every answer came back supported
+        self.review(encounter)
+        exported = self.finalize(encounter)
+        self.assertEqual(Document(BytesIO(exported)).tables[0].cell(0, 1).text, 'Normal venous study.')

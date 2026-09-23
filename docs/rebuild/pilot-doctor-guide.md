@@ -119,8 +119,9 @@ lists every charge; choose a charge's service name to see how it was calculated.
   final punctuation, or a word such as *if*, *would*, *could*, *might*, *these*, *those*, *above*,
   *below*, *following* or *listed* anywhere in the notes sends the generated answers back to you as
   conflicts to decide. On every other form, only a line that is not a label with its answer does
-  (a label left empty counts, and so does a label whose text introduces other lines: it ends in a
-  colon, or it is a denial pointing at other lines).
+  (a label left empty counts, and so does a label that introduces other lines: its answer ends in
+  a colon, or the line holds a denial and its answer ends with *following* or *below*, such as
+  *Negative for: the following* or *Review of systems: negative for the symptoms below.*).
 - **Read the whole note before accepting a suggestion.** Suggestions are withheld in three
   cases: a denial line that governs other lines, meaning a line containing *denied*, *denies*,
   *deny*, *absent*, *negative*, *negatives*, *no*, *not*, *without* or *never* that ends in a
