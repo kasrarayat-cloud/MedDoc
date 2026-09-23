@@ -791,7 +791,9 @@ class ADenialThatGovernsOtherLinesSuppressesTheOffer(TestCase):
         for value in ('No reflux below the knee.', 'No bleeding following polypectomy.',
                       'No driving for the following 24 hours.', 'Soft, no tenderness above the umbilicus.',
                       'Benign nevi; these are not concerning.', 'Good, without residual stool in the segments listed here.',
-                      'No change from the study above.', 'No DVT in the veins listed above.'):
+                      'No change from the study above.', 'No DVT in the veins listed above.',
+                      # The lines pointed at are the EXCEPTIONS, stated as positives (second refutation pass).
+                      'Negative except as noted below.'):
             with self.subTest(value=value):
                 answers = self.judge_pair(value)
                 self.assertEqual((answers['f']['status'], answers['i']['status']), ('supported', 'supported'))
@@ -802,8 +804,8 @@ class ADenialThatGovernsOtherLinesSuppressesTheOffer(TestCase):
         `below`/`following` beside a denial points at what comes next exactly as `negative for the symptoms
         below.` does, and without grammar the two cannot be told apart. The sentence stays its own question's
         answer; the answer after it needs a decision (no one-click offer), instead of a denied finding being
-        pre-filled. `Negative except as noted below.` is the case this is for."""
-        for value in ('Reflux at the SFJ, 1200 ms; no reflux at mid-thigh or below.', 'Negative except as noted below.',
+        pre-filled. `…negative for the symptoms below.` is the case this is for."""
+        for value in ('Reflux at the SFJ, 1200 ms; no reflux at mid-thigh or below.',
                       'Normal above the knees, absent below.', 'Lateral calf, not visualized below',
                       'No immediate complications following.'):
             with self.subTest(value=value):

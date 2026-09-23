@@ -102,6 +102,11 @@ class EachConflictNamesItsStatementAndAnswers(SimpleTestCase):
         self.assertEqual(row['answers'], [('Right GSV at the SFJ: reflux time (ms)', '')])
         self.assertNotIn('700', str(row))
 
+    def test_reflux_over_500_names_only_the_times_over_500(self):
+        row = self.row("claim_32: a recorded reflux duration exceeds this template's explicit 500 ms positive criterion.",
+                       sent(measurement_1_2='650 ms', measurement_2_2='100 ms'))
+        self.assertEqual([label for label, _ in row['answers']], ['Right GSV at the SFJ: reflux time (ms)'])
+
     def test_a_not_assessed_side_names_its_documented_rows_only(self):
         row = self.row('claim_30: a non-assessed side cannot contain documented measurements or locations.',
                        sent(measurement_1_1='3.2 mm', location_11='lateral calf', measurement_15_2='400 ms'),

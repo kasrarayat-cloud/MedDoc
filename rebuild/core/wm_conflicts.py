@@ -14,6 +14,7 @@ never recomputed from defaults.
 ⚠️ PAGE ONLY. These rows name findings (fixed option texts). They are rendered server-side on the document
 page and never put in a flash message, which Django stores in a signed but readable cookie.
 """
+from decimal import Decimal, InvalidOperation
 import re
 
 from django.core.exceptions import ValidationError
@@ -78,6 +79,15 @@ def _side(fields, claim, unit=None):
             and (unit is None or (field.get('kind') == 'measurement' and field['locator'].get('unit') == unit))]
 
 
+def over_500(text):
+    if not text.endswith(' ms'):
+        return False
+    try:
+        return Decimal(text[:-len(' ms')]) > 500
+    except InvalidOperation:
+        return False
+
+
 def describe(conflicts, version, sent, variants):
     """Rows of {statements: [(label, wording)], answers: [(label, shown value or '')], explanation} or a
     general row for any string this does not know."""
@@ -122,8 +132,12 @@ def describe(conflicts, version, sent, variants):
                 statements, keys = [claim, impression], list(involved)
         elif rule == 'side_not_assessed' and claim in SIDE_ROWS:
             statements, keys = [claim], [key for key in _side(fields, claim) if given(key)]
-        elif rule in ('reflux_not_assessed', 'reflux_over_500') and claim in SIDE_ROWS:
+        elif rule == 'reflux_not_assessed' and claim in SIDE_ROWS:
             statements, keys = [claim], [key for key in _side(fields, claim, 'ms') if given(key)]
+        elif rule == 'reflux_over_500' and claim in SIDE_ROWS:
+            # Only the times the adapter found over 500 ms (its MeasurementValue: the value before " ms").
+            # The number chooses which answer to NAME; it is never quoted.
+            statements, keys = [claim], [key for key in _side(fields, claim, 'ms') if over_500((sent.get(key) or {}).get('text', ''))]
         elif rule == 'asymptomatic':
             keys = [ASYMPTOMATIC] + [key for key in SYMPTOMS if given(key)]
         elif rule == 'previous_treatment':

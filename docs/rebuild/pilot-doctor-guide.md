@@ -124,16 +124,21 @@ lists every charge; choose a charge's service name to see how it was calculated.
   negative for the following:`, `Family hx: the following conditions:`), even when it is itself
   one of the form's questions, makes every answer written after it, to the end of the notes, a
   decision for you: it is never filled in and never offered for one click. What was read is shown
-  beside it, with the line it is written under. A heading at the very end, or one that refers to
-  what came before it (`… all of the above denied:`), governs the lines before it as well. A
-  sentence works the same way when it contains a denial, a family history or a hypothetical and
-  **ends** by pointing: forward (`… negative for the following symptoms.`, `… the symptoms
-  below.`) or back (`… patient denies all of the above.`). So does an answer that begins with
-  *Correction*, for the lines before it. Answers before a forward heading are not affected.
+  beside it, with the line it is written under. A heading at the very end, or one that names what
+  came before it (`… all of the above denied:`), governs the lines before it as well; a bare label
+  at the end with nothing after its colon (`Signed by:`) does not. A sentence works the same way
+  when it contains a denial, a family history or a hypothetical and **ends** by pointing at what
+  follows (`… patient denies the following.`, `… negative for the following symptoms.`, `… the
+  symptoms below.`), unless it makes them exceptions (`… negative except as noted below.`: the lines
+  below are the positives and stay answers). An answer that is an erratum (`Correction: …`,
+  `correction, …`) governs the lines before it; `Correction of iron deficiency` is a treatment and
+  governs nothing. Answers before a forward heading are not affected.
 - **Write each denial as its own answer** (`Symptoms: no chest pain`) when you can: nothing
   governs it, so it comes back ready. A sentence that ends on *below* or *following* next to a
   denial (`… no reflux at mid-thigh or below.`) points like a heading, so the answers after it
-  need your decision; the same words inside a sentence (`No reflux below the knee.`) do not.
+  need your decision; the same words inside a sentence (`No reflux below the knee.`) do not. A
+  sentence that denies what came **before** it without a colon (`… patient denies all of the
+  above.`) is not read as a heading: write the denials as the answers themselves.
 - **Read the whole note before accepting a suggestion.** Suggestions are never offered for an
   answer governed by a heading or a governing sentence (above). Otherwise they are withheld in
   three cases: a denial line that governs other lines, meaning a line containing *denied*, *denies*,

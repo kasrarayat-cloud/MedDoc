@@ -380,7 +380,14 @@ def encounter_detail(request,pk):
     from .tab_review import clinician_identity
     deciders={str(pk):email for pk,email in User.objects.filter(
         pk__in={(row.get('blank_decision') or {}).get('by') for row in rows} - {None}).values_list('pk','email')}
+    from .generation import HELD_REASON,governance_for,offer_context
+    governance=governance_for(e.notes,e.template_version.fields,[row['label'] for row in e.template_version.review_requirements])
     for row in rows:
+        context=offer_context(governance,e.notes,row)
+        if context is not None and not row.get('accepted_suggestion'):
+            row['held_candidate']={'text':row['suggestion'],'evidence':row.get('suggestion_evidence',[]),'context':context,'reason':HELD_REASON}
+            row['suggestion']=''
+        row['governed_acceptance']=context is not None and bool(row.get('accepted_suggestion'))
         row['accepted_by_email']=accepters.get(str(row.get('accepted_by') or ''),'')
         row['accepted_by_me']=str(row.get('accepted_by') or '')==str(request.user.pk)
         # "Leave blank — reviewed" is offered on ordinary forms only: a qualified Word form keeps
@@ -549,6 +556,11 @@ def save_answers(request,pk):
         # withdraws it, and typing the same words by hand never grants it.
         accepted=bool(previous.get('accepted_suggestion')) and bool(suggestion) and value==suggestion
         if not value.strip() and request.POST.get('accept_'+key)=='on' and suggestion:
+            # ⚠️ RECOMPUTED, NOT TRUSTED. An offer stored by an earlier release under a heading the notes now
+            # show governs this line would put the denied or the family's finding in one click.
+            from .generation import governance_for,offer_context
+            if offer_context(governance_for(e.notes,e.template_version.fields,[row['label'] for row in e.template_version.review_requirements]),e.notes,previous) is not None:
+                return document_refusal(request,e,'The suggestion for "'+field['label']+'" is no longer offered: a heading or a sentence in the notes may change it. Type your own answer'+('' if is_wm else ' or choose "Leave blank — reviewed"')+'. Nothing was saved.',400)
             # ⚠️ GATED LIKE ITS SIBLING. `reviewed` below demands owner/clinician, the template
             # renders this box `disabled` for everyone else, and the server checked nothing — so
             # an employee-role member could clear the conflict gate and have the page state, in
@@ -684,10 +696,10 @@ def finalize(request,pk):
             # ⚠️ RECOMPUTED FROM THE NOTES, NOT TRUSTED FROM THE DRAFT. A draft generated before headings
             # governed their lines (or by any path that skipped the rule) can still hold a denied finding as
             # a ready answer; the review tick alone must not finalize it.
-            from .generation import governed_supported
-            governed=governed_supported(e.notes,e.template_version.fields,e.answers,
+            from .generation import governed_decisions
+            governed=governed_decisions(e.notes,e.template_version.fields,e.answers,
                                         [row['label'] for row in e.template_version.review_requirements])
-            if governed:raise ValidationError('These answers were read from lines that a heading or a sentence in the notes may change, and still need your decision: '+field_list(governed)+' Clear each one and save, then type your own answer or choose "Leave blank — reviewed".')
+            if governed:raise ValidationError('These answers were read from lines that a heading or a sentence in the notes may change, and still need your decision: '+field_list(governed)+(' Clear each one and save, then enter your decision.' if e.template_version.document_backend else ' Clear each one and save, then type your own answer or choose "Leave blank — reviewed".'))
             original=private_path(e.template_version.template.original_path)
             if hashlib.sha256(original.read_bytes()).hexdigest()!=e.template_version.template.sha256:raise ValidationError('Original integrity check failed.')
             relative=f'exports/{secrets.token_hex(24)}.{e.template_version.template.format.lower()}'
