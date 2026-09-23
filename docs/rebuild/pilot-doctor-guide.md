@@ -118,35 +118,59 @@ lists every charge; choose a charge's service name to see how it was calculated.
 - On underlined-Tab forms, a heading line ending in a colon, a quotation, an extra line without
   final punctuation, or a word such as *if*, *would*, *could*, *might*, *these*, *those*, *above*,
   *below*, *following* or *listed* anywhere in the notes sends the generated answers back to you as
-  conflicts to decide. On every other form, only a line that is not a label with its answer does
-  (a label left empty counts).
+  conflicts to decide. On every other form, a line that is not a label with its answer does
+  (a label left empty counts); separately, a heading, a sentence ending on a forward pointer or a
+  correction makes the answers it governs a decision on every form (below).
 - **A heading governs what comes after it.** A line ending in a colon (`Review of systems:
   negative for the following:`, `Family hx: the following conditions:`), even when it is itself
   one of the form's questions, makes every answer written after it, to the end of the notes, a
   decision for you: it is never filled in and never offered for one click. What was read is shown
-  beside it, with the line it is written under. A question left empty mid-note (`Allergies:`)
-  counts, because it may be a heading (`Pertinent negatives:`). A heading at the very end, or one
-  that names what came before it (`… all of the above denied:`), governs the lines before it as
-  well; a bare label at the end (`Signed by:`, or a question left empty) does not.
+  beside it, with every line that governs it (*Written under* above it, *Followed by* below it).
+  A question left empty mid-note (`Allergies:`) counts, because it may be a heading (`Pertinent
+  negatives:`). A heading at the very end, or one that names what came before it (`… all of the
+  above denied:`), governs the lines before it as well. A bare label at the end does not: one whose
+  words are not a denial, family history, hypothetical or pointer (`Signed by:`, `Electronically
+  signed on 09/21/2026 at 10:42 by:`, or an empty `Allergies:`). A closing line with words the
+  vocabulary does not know (`Ruled out:`) is read as bare too: write those as answers.
 - **A sentence that ends by pointing forward works the same way, whatever its words.** A sentence
-  that **ends** on *following*, *below* or *the following* and one more word (`… patient denies
-  the following.`, `Her mother had the following.`, `… negative for the following symptoms.`)
-  makes every answer after it a decision. This includes exception lists (`… negative except as
-  noted below.`: type the positives below it yourself), references (`see the instructions below`)
-  and times (`Do not drive until the following day.`). The same words inside a sentence (`No
-  reflux below the knee.`, `No driving for the following 24 hours.`) change nothing. A sentence
-  that refers back without a colon (`… negative except as noted above.`) is not read.
+  that **ends** on *following*, *follows*, *below* or *the following* and exactly one more word (`…
+  patient denies the following.`, `Her mother had the following.`, `… is as follows.`, `…
+  negative for the following symptoms.`) makes every answer after it a decision, in the same
+  paragraph and on later lines. This includes exception lists (`… negative except as noted
+  below.`: type the positives below it yourself), references (`see the instructions below`),
+  anatomy (`competent below.`) and times (`Do not drive until the following day.`). The same words
+  inside a sentence (`No reflux below the knee.`, `…the following morning; able to bear weight.`,
+  `No driving for the following 24 hours.`) do not make later answers a decision (on
+  underlined-Tab forms any of these words still sends answers back, above). Two words or more
+  after *the following* (`… the following medical problems.`) are not read: end such a line with a
+  colon. A sentence that refers back without a colon (`… negative except as noted above.`) is not
+  read.
 - **An erratum governs what came before it.** A correction (`Correction: …`, `correction, …`,
-  `Correction to the above: …`, `Correction. …`, `Correction (dictation error): …`) at the start
-  of a line, after any label (`Addendum: Correction: …`), or after a sentence makes every answer
-  above it a decision. One exception: an erratum written as the answer to a question already
-  answered above it (`Pain score: Correction: three out of ten`) corrects that question only,
-  which already needs your decision because it has two answers. `Correction of iron deficiency`,
-  `Correction scale` and `Correction-dose insulin` are treatments and govern nothing.
+  `Correction to the above: …`, `Correction. …`, `Correction (dictation error): …`, `(Correction:
+  …)`, `a) Correction: …`) at the start of a line, after any label (`Addendum: Correction: …`), or
+  after a sentence, in the same paragraph too, makes every answer before it a decision. Only the
+  word *correction* is read (`Erratum:` and `Corrected:` are not). One exception: an erratum that
+  is the whole answer to a question already answered above it, alone on its line (`Pain score:
+  Correction: three out of ten`), corrects that question only, which already needs your decision
+  because it has two answers. ⚠️ So a correction of another question written under a question
+  already answered (`Comments: Correction: the allergy is sulfa`) is NOT applied to that other
+  answer: write it under the question it corrects. `Correction of iron deficiency`, `Correction
+  scale`, `Correction-dose insulin`, `Correction/sliding scale` and `Correction to 14 degrees` are
+  treatments or targets and do not make other answers a decision, but a note line that starts
+  with the word *Correction* still withholds every suggestion (below). `Corrections, 20 years`
+  and `Correction: Bazett` are read as errata.
 - **Write each denial as its own answer** (`Symptoms: no chest pain`) when you can: nothing
   governs it, so it comes back ready.
 - **On the WM IOV form, labelled lines never govern**: every label there names its own side, vein
-  and measure. An unlabelled heading still withholds the suggestions after it.
+  and measure, so a heading, pointer or correction written inside a labelled answer changes no
+  other answer. An unlabelled line (which already sends every answer back) is read in full: a
+  heading, a sentence ending on a forward pointer or a correction there withholds the suggestions
+  it governs.
+- **An accepted suggestion the notes now show is governed** (a draft from before this release) is
+  shown with the lines that govern it and an empty box: it cannot be finalized as it is. Type your
+  own answer (its words may be the same) or choose "Leave blank — reviewed"; saving with the box
+  empty keeps the earlier acceptance. A governed answer that you type and then clear needs "Leave
+  blank — reviewed" before it can be finalized.
 - **Read the whole note before accepting a suggestion.** Suggestions are never offered for an
   answer governed by a heading or a governing sentence (above). Otherwise they are withheld in
   three cases: a denial line that governs other lines, meaning a line containing *denied*, *denies*,
@@ -155,8 +179,8 @@ lists every charge; choose a charge's service name to see how it was calculated.
   (`ROS: negative for the following:`), points at other lines with *following*, *these*,
   *those*, *above*, *below* or *listed* (`The patient denied each of the symptoms below.`), or
   has the denial word before its first colon (`Not seen: …`); the words *if*, *would*, *could*,
-  *might*, *family history*, *hypothetical*, *imagine* or *suppose* anywhere in the notes; or a
-  quotation. A denial word next to one of those pointer words withholds every suggestion in the
+  *might*, *family history*, *hypothetical*, *imagine* or *suppose* anywhere in the notes; a
+  line that starts with the word *Correction*; or a quotation. A denial word next to one of those pointer words withholds every suggestion in the
   note even in an ordinary sentence (*no driving for the following 24 hours*); type those answers
   yourself. A denial written any other way (for example *Chest pain was denied.* on one line and
   *Symptoms: chest pain* on another) can still come with a suggestion that states the opposite of

@@ -380,15 +380,13 @@ def encounter_detail(request,pk):
     from .tab_review import clinician_identity
     deciders={str(pk):email for pk,email in User.objects.filter(
         pk__in={(row.get('blank_decision') or {}).get('by') for row in rows} - {None}).values_list('pk','email')}
-    if e.status!='finalized':
+    if e.status!='finalized' and e.answers:
         # ⚠️ THE PAGE SHOWS WHAT FINALIZATION WILL REFUSE, BY THE SAME READER. A draft from an earlier release
-        # can hold a governed answer as `supported` or as a one-click offer; both are shown held, with the line
-        # that governs them. A FINALIZED record is never re-described: it shows what was actually offered.
-        from .generation import HELD_REASON,HELD_REASON_WORD,as_currently_governed,governance_for,offer_context
+        # can hold a governed answer as `supported` or as a one-click offer, accepted or not; each is shown held,
+        # with every line that governs it. A FINALIZED record is never re-described: it shows what was offered.
+        from .generation import as_currently_governed,governance_for
         governance=governance_for(e.notes,e.template_version.fields,[row['label'] for row in e.template_version.review_requirements])
-        rows=[{**as_currently_governed(governance,e.notes,row,HELD_REASON_WORD if is_wm else HELD_REASON),
-               'governed_acceptance':bool(row.get('accepted_suggestion')) and offer_context(governance,e.notes,row) is not None}
-              for row in rows]
+        rows=[as_currently_governed(governance,e.notes,row,is_wm) for row in rows]
     for row in rows:
         row['accepted_by_email']=accepters.get(str(row.get('accepted_by') or ''),'')
         row['accepted_by_me']=str(row.get('accepted_by') or '')==str(request.user.pk)
@@ -519,18 +517,20 @@ def save_answers(request,pk):
     answers={};review_errors=[];newly_accepted=[];withdrawn=[];newly_blank=[];withdrawn_blank=[];target_revision=e.revision+1
     previous_answers=dict(e.answers)
     # ⚠️ ONCE PER SAVE, NOT PER FIELD: this runs under the row lock, and a 100-field save recomputed it per offer.
-    from .generation import HELD_REASON,HELD_REASON_WORD,governance_for,governed_supported,held_for_decision,offer_context
+    from .generation import governance_for,governed_supported,held_for_decision,offer_context
     governance=governance_for(e.notes,e.template_version.fields,[row['label'] for row in e.template_version.review_requirements])
     for field in e.template_version.fields:
         key=field['key'];previous=e.answers.get(key,{'text':'','evidence':[],'status':'missing'})
+        held_shown=request.POST.get('held_shown_'+key)=='1'
+        supported_context=governed_supported(governance,e.notes,previous)
+        governed_offer=offer_context(governance,e.notes,previous) is not None
         # A draft from an earlier release holding a governed answer as `supported` is saved as the page showed it —
         # held — so the clinician's answer is their decision even when it repeats the candidate's words. ⚠️ ONLY WHEN
         # THIS PAGE SHOWED IT HELD (`held_shown_`): a page opened before this release posts the pre-filled text back,
         # and taking that as a decision is the defect's own gesture. Without the marker it stays `supported`, and
         # finalization refuses it.
-        if request.POST.get('held_shown_'+key)=='1' and (context:=governed_supported(governance,e.notes,previous)) is not None:
-            previous=held_for_decision(previous,[previous.get('text','')],previous['evidence'],context,
-                                       HELD_REASON_WORD if is_wm else HELD_REASON)
+        if held_shown and supported_context is not None:
+            previous=held_for_decision(previous,[previous.get('text','')],previous['evidence'],supported_context,is_wm)
         # Browsers post a textarea's line breaks as CRLF. Stored as posted, a multi-line answer was
         # refused by every fillable PDF at finalize (a carriage return is not printable), exported
         # to a Word table cell as two breaks per line, and compared unequal to its own unchanged text.
@@ -539,6 +539,10 @@ def save_answers(request,pk):
         # generated conflict — or erase a clinician's "Leave blank — reviewed" decision without the
         # authority check or audit that a real withdrawal carries. An answer is its text or nothing.
         if not value.strip():value=''
+        # ⚠️ AND WHITESPACE IS NOT A DECISION EITHER: a page from before this release re-posting the pre-filled
+        # governed text with one stray space must stay `supported`, which finalization refuses.
+        if not held_shown and supported_context is not None and value.strip()==str(previous.get('text','')).strip():
+            value=previous.get('text','')
         # "Leave blank — reviewed": the clinician's explicit decision that no answer belongs here.
         # It is a DECISION, kept apart from an untouched empty field (`missing`), a generated
         # `conflict` and an accepted suggestion, so it may not be combined with either of them.
@@ -559,6 +563,13 @@ def save_answers(request,pk):
         # ordinary save would accept it silently, and so would a reopen, an API read or an
         # export. Accepting takes its own checkbox, and typed text wins over it.
         suggestion=str(previous.get('suggestion') or '')
+        # An accepted offer the notes now show is governed is rendered HELD, with an empty box: an ordinary save
+        # there keeps the recorded act (finalization still refuses it), and only a typed answer or "Leave blank —
+        # reviewed" replaces it. Typing the suggestion's own words on that page is a new decision, not the old act.
+        governed_acceptance=held_shown and governed_offer and bool(previous.get('accepted_suggestion'))
+        kept=False
+        if governed_acceptance and not value.strip() and not blank:
+            value=str(previous.get('text') or '');kept=True
         # ⚠️ AN ACCEPTANCE IS A FACT ABOUT A DECISION ALREADY MADE, SO IT IS CARRIED FORWARD,
         # NOT RECOMPUTED FROM THE POST. Recomputing it withdrew every acceptance on the very next
         # save: once accepted, the page renders the accepted branch, which has NO checkbox to
@@ -567,7 +578,7 @@ def save_answers(request,pk):
         # independent refutation lenses found this within minutes of each other.
         # It survives only while the stored text is still exactly the suggestion; editing away
         # withdraws it, and typing the same words by hand never grants it.
-        accepted=bool(previous.get('accepted_suggestion')) and bool(suggestion) and value==suggestion
+        accepted=bool(previous.get('accepted_suggestion')) and bool(suggestion) and value==suggestion and (kept or not governed_acceptance)
         if not value.strip() and request.POST.get('accept_'+key)=='on' and suggestion:
             # ⚠️ RECOMPUTED, NOT TRUSTED. An offer stored by an earlier release under a heading the notes now
             # show governs this line would put the denied or the family's finding in one click.
@@ -711,7 +722,7 @@ def finalize(request,pk):
             from .generation import governed_decisions
             governed=governed_decisions(e.notes,e.template_version.fields,e.answers,
                                         [row['label'] for row in e.template_version.review_requirements])
-            if governed:raise ValidationError('These answers were read from lines that a heading or a sentence in the notes may change, and still need your decision: '+field_list(governed)+' Each is shown on the document with the line it was written under: enter your own answer there'+('' if e.template_version.document_backend else ' or choose "Leave blank — reviewed"')+'. A suggestion accepted earlier must first be cleared and saved.')
+            if governed:raise ValidationError('These answers were read from lines that a heading or a sentence in the notes may change, and still need your decision: '+field_list(governed)+' Each is shown on the document with the lines that govern it: enter your own answer there'+('' if e.template_version.document_backend else ' or choose "Leave blank — reviewed"')+'.')
             original=private_path(e.template_version.template.original_path)
             if hashlib.sha256(original.read_bytes()).hexdigest()!=e.template_version.template.sha256:raise ValidationError('Original integrity check failed.')
             relative=f'exports/{secrets.token_hex(24)}.{e.template_version.template.format.lower()}'

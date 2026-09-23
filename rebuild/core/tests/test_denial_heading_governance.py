@@ -531,6 +531,150 @@ class WhatTheThirdPassFound(ExpectationsMixin, TestCase):
                                    'Pertinent negatives:')
 
 
+class WhatTheFourthPassFound(ExpectationsMixin, TestCase):
+    """Refutation of the finished diff, fourth pass (over f99f6d95). Each input was demonstrated by a lens; the
+    expectation is what the note says clinically. Offline: fixture generation and provider-shaped selections."""
+
+    def both(self, labels, notes, picks):
+        yield 'fixture', fixture_answers(labels, notes)
+        yield 'provider-shaped', provider_answers(labels, notes, picks)
+
+    def test_an_erratum_in_the_same_paragraph_governs_the_sentences_before_it(self):
+        """⚠️ Reach is by POSITION IN THE NOTE, not by line: a dictated paragraph is one line on the tab contract."""
+        notes = ('PROCEDURE: diagnostic colonoscopy. COMPLICATIONS: perforation. Correction: there were no complications, '
+                 'the perforation was in the prior patient.')
+        _, answers = tab_answers(['PROCEDURE', 'COMPLICATIONS'], notes)
+        self.assert_needs_decision(answers['COMPLICATIONS'], 'perforation.', 'Correction: there were no complications')
+        answer = fixture_answers(['Fever'], 'Fever: yes. Correction: no fever.')['Fever']
+        self.assertNotEqual(answer['status'], 'supported')
+        self.assertNotIn('suggestion', answer)
+
+    def test_a_forward_pointer_in_the_same_paragraph_governs_the_sentences_after_it(self):
+        notes = ('PROCEDURE: diagnostic colonoscopy. Her colonoscopy in 2019 at another centre had the following. '
+                 'COMPLICATIONS: perforation.')
+        _, answers = tab_answers(['PROCEDURE', 'COMPLICATIONS'], notes)
+        self.assert_needs_decision(answers['COMPLICATIONS'], 'perforation.', 'had the following.')
+
+    def test_the_answered_question_exception_is_exactly_as_narrow_as_stated(self):
+        for labels, notes, held in (
+                (['Allergies', 'Comments'], 'Allergies: penicillin\nComments:\nComments: Correction: the allergy is sulfa, not penicillin.',
+                 'Allergies'),
+                (['Pain score', 'Allergies'], 'Pain score: two out of ten\nAllergies: penicillin\n'
+                 'Pain score: Correction: three out of ten. Correction: the allergy is sulfa, not penicillin.', 'Allergies'),
+                (['Pain score', 'Allergies'], 'Pain score: 2\nAllergies: penicillin\nPain score: 3. Correction: the allergy is sulfa, not penicillin.',
+                 'Allergies'),
+                # The word opens the value but is a treatment; the erratum is later on the line.
+                (['Insulin', 'Allergies'], 'Insulin: glargine 10 units\nAllergies: penicillin\n'
+                 'Insulin: Correction scale with meals. Correction: the allergy is sulfa, not penicillin.', 'Allergies'),
+                # An earlier erratum is not an answer that the later one could be correcting.
+                (['Pain score', 'Allergies'], 'Pain score: Correction: three out of ten\nAllergies: penicillin\n'
+                 'Pain score: Correction: the allergy is sulfa, not penicillin.', 'Allergies')):
+            with self.subTest(notes=notes):
+                answer = fixture_answers(labels, notes)[held]
+                self.assertEqual(answer['status'], 'conflict', answer)
+                self.assertNotIn('suggestion', answer)
+                self.assertEqual(answer['held_candidate']['text'], 'penicillin')
+        # A question first answered in the tab form's own sentence style is answered too.
+        notes = ('Symptoms: Left ankle soreness began yesterday.\nPain score was six out of ten.\n'
+                 'Pain score: Correction: three out of ten; the earlier six out of ten was entered in error.')
+        _, answers = tab_answers(['Symptoms', 'Pain score'], notes)
+        self.assertEqual(answers['Symptoms']['status'], 'supported', answers['Symptoms'])
+
+    def test_an_erratum_behind_a_bracket_a_quote_a_letter_or_an_ellipsis_still_governs(self):
+        for correction in ('(Correction: the allergy is sulfa, not penicillin.)', '[Correction: the allergy is sulfa, not penicillin.]',
+                           'a) Correction: the allergy is sulfa, not penicillin.',
+                           'Comments: Patient said "no other allergies." Correction: the allergy is sulfa, not penicillin.',
+                           'Comments: reviewed\u2026 Correction: the allergy is sulfa, not penicillin.',
+                           'Comments: reviewed (no other allergies.) Correction: the allergy is sulfa, not penicillin.'):
+            notes = 'Allergies: penicillin\n' + correction
+            with self.subTest(correction=correction):
+                answer = fixture_answers(['Allergies', 'Comments'], notes)['Allergies']
+                self.assertEqual(answer['status'], 'conflict', answer)
+                self.assertNotIn('suggestion', answer)
+
+    def test_the_word_correction_in_a_treatment_a_target_or_an_occupation_governs_nothing(self):
+        for line in ('Insulin: Correction/sliding scale lispro with meals', 'Result: Correction to 14 degrees was achieved.',
+                     'Refraction: Correction to 20/20 OU with -1.50 sphere.', 'Occupation: Corrections (state prison officer)',
+                     'Plan: Correction to no more than 8 mmol/L in 24 hours with 3% saline.', 'Insulin: Correction factor 50'):
+            label = line.split(':')[0]
+            with self.subTest(line=line):
+                answers = fixture_answers(['Diagnosis', label], 'Diagnosis: type 2 diabetes\n' + line)
+                self.assert_ready(answers['Diagnosis'], 'type 2 diabetes')
+
+    def test_every_line_that_governs_an_answer_is_shown_with_it_not_only_the_nearest(self):
+        notes = 'Review of systems: negative for the following:\nCardiovascular: see below\nSymptoms: chest pain'
+        answers = fixture_answers(['Review of systems', 'Cardiovascular', 'Symptoms'], notes)
+        quotes = [entry['quote'] for entry in answers['Symptoms']['held_candidate']['context']]
+        self.assertIn(HEADING, quotes)
+        self.assertIn('Cardiovascular: see below', quotes)
+
+    def test_a_pointer_before_a_semicolon_a_decimal_or_an_abbreviation_does_not_end_its_sentence(self):
+        for line, after in (('HPI: Inverted the right ankle playing soccer; swelling appeared the following morning; able to bear weight.',
+                             'Examination: mild swelling'),
+                            ('Left SSV: Competent at the SPJ and below; diameter 3.0 mm.', 'Impression: normal study'),
+                            ('Plan: Repeat chest X-ray the following a.m. before discharge.', 'Follow-up: in two weeks'),
+                            ('Monitoring: Vital signs every 15 minutes for the following 1.5 hours in recovery.', 'Disposition: home'),
+                            ('Plan: Review the scan with the following Dr. Smith next week.', 'Follow-up: in two weeks')):
+            label, other = line.split(':')[0], after.split(':')[0]
+            with self.subTest(line=line):
+                self.assert_ready(fixture_answers([label, other], line + '\n' + after)[other], after.split(': ', 1)[1])
+
+    def test_as_follows_ends_a_sentence_by_pointing_forward(self):
+        line = "Social history: Her mother's history is as follows."
+        answers = fixture_answers(['Social history', 'Diagnoses'], line + '\nDiagnoses: breast cancer')
+        self.assert_needs_decision(answers['Diagnoses'], 'breast cancer', line)
+
+    def test_a_closing_line_is_bare_despite_a_clock_time_and_not_bare_when_its_label_reframes(self):
+        notes = 'Fictional software test only.\nSymptoms: no chest pain\nElectronically signed on 09/21/2026 at 10:42 by:'
+        self.assertEqual(fixture_answers(['Symptoms'], notes)['Symptoms'].get('suggestion'), 'no chest pain')
+        closing = 'Family history: the following conditions:'
+        answers = fixture_answers(['Diagnoses', 'Family history'], 'Diagnoses: diabetes\n' + closing)
+        self.assert_needs_decision(answers['Diagnoses'], 'diabetes', closing)
+        # A pointer at the very end points at what came before it.
+        self.assert_needs_decision(fixture_answers(['Diagnoses'], 'Diagnoses: diabetes\nThe following:')['Diagnoses'],
+                                   'diabetes', 'The following:')
+        # Governors after the answer are marked as such, so the page says "Followed by".
+        self.assertTrue(answers['Diagnoses']['held_candidate']['context'][0]['after'])
+
+    def test_a_colon_look_alike_or_a_blank_braille_cell_still_ends_a_heading(self):
+        for heading in ('Review of systems: negative for\u2236', 'Review of systems: negative for\ua789',
+                        'Review of systems: negative for:\u2800'):
+            with self.subTest(heading=repr(heading)):
+                answers = fixture_answers(['Review of systems', 'Symptoms'], heading + '\nSymptoms: chest pain')
+                self.assertEqual(answers['Symptoms']['status'], 'conflict', answers['Symptoms'])
+                self.assertEqual(answers['Symptoms']['text'], '')
+
+    def test_the_bounded_label_reader_returns_exactly_what_the_unbounded_one_did(self):
+        """The fourth pass measured seconds per request on a line of colons; the bound must not change a result."""
+        import random
+
+        def unbounded(line, labels):
+            candidates = []
+            for index, character in enumerate(line):
+                if character != ':':
+                    continue
+                label = line[:index].strip().casefold()
+                if label in labels:
+                    remainder = line[index + 1:]
+                    candidates.append((labels[label], remainder.strip(), index + 1 + len(remainder) - len(remainder.lstrip())))
+            return candidates[-1] if candidates else None
+
+        labels = generation.recognized_labels(form('Pain score', 'Right GSV at the SFJ: diameter (mm)', 'ß', 'İx', 'A'))
+        pieces = ['Pain score', 'right gsv at the sfj', ': diameter (mm)', ':', '  ', 'ß', 'SS', 'İx', 'a', ' value', '\u00a0', '::']
+        rng = random.Random(20260923)
+        for _ in range(4000):
+            line = ''.join(rng.choice(pieces) for _ in range(rng.randint(1, 8)))
+            with self.subTest(line=line):
+                self.assertEqual(generation.labelled_value(line, labels), unbounded(line, labels))
+
+    def test_a_candidate_held_for_a_reason_elsewhere_in_the_note_says_so(self):
+        notes = 'Symptoms: chest pain\nFever: yes\nIf pain recurs, return to the clinic.'
+        held = fixture_answers(['Symptoms', 'Fever'], notes)['Fever']['held_candidate']
+        self.assertEqual(held['context'], [])
+        self.assertNotIn('the line shown', held['reason'])
+        self.assertIn('elsewhere in the note', held['reason'])
+
+
 class TheQualifiedWordFormKeepsItsLabelsSelfContained(ExpectationsMixin, TestCase):
     """On the qualified Word form every label names its own side, vein and measure, so a sentence in one value
     cannot re-scope another: only structural headings and corrections govern there. Round 6 of the pilot
@@ -564,6 +708,15 @@ class TheQualifiedWordFormKeepsItsLabelsSelfContained(ExpectationsMixin, TestCas
         self.assertEqual(answers['location_11'].get('suggestion'), 'lateral calf')
         # Third pass: the Word form's own guidance has no "Leave blank — reviewed".
         self.assertNotIn('Leave blank', answers['measurement_15_2']['held_candidate']['reason'])
+
+    def test_an_unlabelled_sentence_or_erratum_withholds_the_offers_it_governs_on_the_qualified_form(self):
+        """Fourth pass: an UNLABELLED line is read in full on the qualified form (suppression only: it already sends
+        every answer back); only labelled lines are self-contained there."""
+        line = 'Prior duplex from 2019 at another clinic is below.'
+        answers = self.answers(line + '\nLeft GSV at the SFJ: reflux time (ms): 700 ms')
+        self.assert_needs_decision(answers['measurement_15_2'], '700 ms', line)
+        answers = self.answers('Left GSV at the SFJ: reflux time (ms): 700 ms\nCorrection: sides swapped.')
+        self.assert_needs_decision(answers['measurement_15_2'], '700 ms', 'Correction: sides swapped.')
 
     def test_a_labelled_line_never_governs_on_the_qualified_form(self):
         """⚠️ THIRD PASS. Its labels carry colons, its signature statement's approved wording ends in `By:`, and an
@@ -756,6 +909,72 @@ class TheDecisionIsEnforcedThroughFinalizationAndExport(DocumentWorkflow):
         with patch('core.generation.heading_governance', wraps=generation.heading_governance) as reader:
             self.save(encounter, **{'answer_' + self.symptoms: self.TYPED, 'answer_' + self.ros: 'none'})
         self.assertEqual(reader.call_count, 1)
+
+    def test_an_accepted_governed_offer_is_shown_held_and_decided_again_in_one_save(self):
+        """Fourth pass: the page showed no governing line, and clearing the acceptance left an empty answer that
+        finalized. Now: shown held with the line; an empty save keeps the act (still refused); a typed answer, even
+        in the suggestion's own words, is a new decision; a page from before this release keeps the act."""
+        self.NOTES = 'Patient reports none of the following:\nSymptoms: chest pain'
+        encounter = self.generated()
+        self.stale_offer(encounter, accepted=True)
+        section = self.section(encounter, 'Symptoms')
+        self.assertIn('data-governed-acceptance', section)
+        self.assertIn('data-governing-line', section)
+        self.assertIn('Patient reports none of the following:', section)
+        self.assertNotIn('>chest pain</textarea>', section)
+        marker = {'held_shown_' + self.symptoms: '1'}
+        self.save(encounter, **marker)                         # the empty box, as rendered
+        self.assertTrue(encounter.answers[self.symptoms]['accepted_suggestion'])
+        self.assertContains(self.finalize_attempt(encounter), 'still need your decision: Symptoms.')
+        encounter.refresh_from_db()
+        self.save(encounter, **{'answer_' + self.symptoms: 'chest pain'})    # a page from before this release
+        self.assertTrue(encounter.answers[self.symptoms]['accepted_suggestion'])
+        self.save(encounter, **{'answer_' + self.symptoms: 'chest pain', **marker})
+        self.assertFalse(encounter.answers[self.symptoms]['accepted_suggestion'])
+        self.save(encounter, **{'answer_' + self.ros: 'none', 'answer_' + self.symptoms: 'chest pain'})
+        exported = self.finalize(encounter)
+        cells = [cell.text for row in Document(BytesIO(exported)).tables[0].rows for cell in row.cells]
+        self.assertEqual(cells[-2:], ['Symptoms', 'chest pain'])
+
+    def test_a_line_after_the_answer_is_shown_as_following_it(self):
+        self.NOTES = 'Review of systems: negative for chest pain\nSymptoms: chest pain\nCorrection: the patient has no chest pain.'
+        encounter = self.generated()
+        section = self.section(encounter, 'Symptoms')
+        self.assertIn('<strong>Followed by:</strong> <q>Correction: the patient has no chest pain.</q>', section)
+        self.assertNotIn('>chest pain</textarea>', section)
+
+    def test_a_governed_answer_cleared_to_nothing_needs_leave_blank(self):
+        encounter = self.generated()
+        self.save(encounter, **{'answer_' + self.symptoms: self.TYPED, 'answer_' + self.ros: 'negative for chest pain'})
+        self.save(encounter, **{'answer_' + self.ros: 'negative for chest pain'})             # typed, then cleared
+        self.assertEqual((encounter.answers[self.symptoms]['status'], encounter.answers[self.symptoms]['text']), ('edited', ''))
+        response = self.finalize_attempt(encounter)
+        encounter.refresh_from_db()
+        self.assertNotEqual(encounter.status, 'finalized')
+        self.assertContains(response, 'still need your decision: Symptoms.')
+        self.save(encounter, **{'answer_' + self.ros: 'negative for chest pain', 'blank_' + self.symptoms: 'on',
+                                'blank_shown_' + self.symptoms: '1'})
+        self.assertEqual(encounter.answers[self.symptoms]['status'], 'left_blank')
+        exported = self.finalize(encounter)
+        cells = [cell.text for row in Document(BytesIO(exported)).tables[0].rows for cell in row.cells]
+        self.assertEqual(cells, ['Review of systems', 'negative for chest pain', 'Symptoms', ''])
+
+    def test_a_stale_page_cannot_turn_the_prefilled_governed_text_into_a_decision_with_a_space(self):
+        encounter = self.generated()
+        value = HEADING.index('negative')
+        finding = encounter.notes.index('chest pain')
+        stale = {self.ros: {'text': 'negative for the following:', 'status': 'supported', 'reviewed': False,
+                            'evidence': [{'quote': 'negative for the following:', 'start': value, 'end': len(HEADING)}]},
+                 self.symptoms: {'text': 'chest pain', 'status': 'supported', 'reviewed': False,
+                                 'evidence': [{'quote': 'chest pain', 'start': finding, 'end': finding + len('chest pain')}]}}
+        Encounter.objects.filter(pk=encounter.pk).update(answers=stale)
+        encounter.refresh_from_db()
+        self.save(encounter, **{'answer_' + self.ros: 'negative for the following: ', 'answer_' + self.symptoms: 'chest pain '})
+        self.assertEqual(encounter.answers[self.symptoms]['status'], 'supported')
+        response = self.finalize_attempt(encounter)
+        encounter.refresh_from_db()
+        self.assertNotEqual(encounter.status, 'finalized')
+        self.assertContains(response, 'still need your decision: Review of systems, Symptoms.')
 
     def test_a_pre_repair_accepted_offer_under_a_heading_cannot_finalize(self):
         self.NOTES = 'Patient reports none of the following:\nSymptoms: chest pain'
