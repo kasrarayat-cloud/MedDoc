@@ -78,7 +78,7 @@ def wm_resolve(encounter,actor,decisions=None):
 PREFER_LIMIT=24
 
 
-def source_quote_evidence(notes,label,raw,labels,sentences=None,previous=(),prefer=None):
+def source_quote_evidence(notes,label,raw,labels,sentences=None,previous=(),prefer=None,safe=None):
     """Convert submitted quotations into actual offsets; never accept posted offsets.
 
     `sentences` (the narrative contract's source units, when it is on): a quotation that is one complete sentence of
@@ -86,24 +86,29 @@ def source_quote_evidence(notes,label,raw,labels,sentences=None,previous=(),pref
     sentence occurs more than once, the occurrence this answer already cited (`previous`) is kept: re-posting the page
     must not move a left-leg answer onto the right leg's identical sentence. Two quotations of one sentence text are
     two occurrences, never one twice (round 4); and when a typed sentence occurs more than once, `prefer(unit)` picks
-    the occurrence that carries the answer (the left leg's copy for a left-leg answer): the cited copy is kept only while
-    it carries it, so re-posting can move an answer off a copy that never did (round 5). At most `PREFER_LIMIT` copies
-    are tried."""
+    the occurrence that carries the answer (the left leg's copy for a left-leg answer): the cited copy is kept while it
+    carries it, and one that does not is left only for a copy that carries it with nothing governing it there (`safe`:
+    never a prior study's or a relative's copy, round 6), so re-posting can move an answer off a copy that never did
+    (round 5). The cited copies and at most `PREFER_LIMIT` others are tried."""
     if len(raw)>50000:raise ValidationError('Source quotations exceed the supported limit; nothing was truncated.')
     units,_=wm_review.source_units(notes,label,labels)
-    evidence=[];used=set();carried={}
+    evidence=[];used=set();carried={};clean={}
     def carries(unit):
         if unit['start'] not in carried:carried[unit['start']]=bool(prefer(unit))
         return carried[unit['start']]
+    def safe_copy(unit):
+        if unit['start'] not in clean:clean[unit['start']]=carries(unit) and (safe is None or bool(safe(unit)))
+        return clean[unit['start']]
     for submitted in raw.splitlines():
         quote=submitted.strip()
         if not quote:continue
         cited={item.get('start') for item in previous or () if isinstance(item,dict) and item.get('quote')==quote}
         same=[unit for unit in sentences or () if unit['quote']==quote]
         free=[unit for unit in same if unit['start'] not in used]
-        carrying=[unit for unit in free[:PREFER_LIMIT] if carries(unit)] if prefer and len(same)>1 else None
-        sentence=(next((unit for unit in (carrying if carrying is not None else free) if unit['start'] in cited),None)
-                  or (carrying[0] if carrying else None)
+        tried=[unit for unit in free if unit['start'] in cited]+[unit for unit in free[:PREFER_LIMIT] if unit['start'] not in cited]
+        kept=next((unit for unit in tried if unit['start'] in cited and carries(unit)),None) if prefer and len(same)>1 else None
+        moved=next((unit for unit in tried if safe_copy(unit)),None) if prefer and len(same)>1 and kept is None else None
+        sentence=(kept or moved
                   or next((unit for unit in free if unit['start'] in cited),None)
                   or (free[0] if free else (same[0] if same else None)))
         if sentence is not None:
@@ -595,6 +600,12 @@ def save_answers(request,pk):
     except ValidationError:sentences=None   # past the source limit a sentence cannot be cited; labelled lines still can
     narrative_read=(wm_narrative.stored_reading(e.notes,e.template_version.fields,statement_labels,e.answers)
                     if wm_narrative.active(e.template_version.fields,e.answers) else None)
+    preferred_read=[narrative_read]
+    def prefer_reading():
+        # The reading a repeated sentence's copies are judged with (built once, only when a copy has to be chosen).
+        if preferred_read[0] is None:
+            preferred_read[0]=wm_narrative.stored_reading(e.notes,e.template_version.fields,statement_labels,e.answers)
+        return preferred_read[0]
     for field in e.template_version.fields:
         key=field['key'];previous=e.answers.get(key,{'text':'','evidence':[],'status':'missing'})
         held_shown=request.POST.get('held_shown_'+key)=='1'
@@ -708,7 +719,10 @@ def save_answers(request,pk):
             if len(quote)>50000:return document_refusal(request,e,'Source quotations exceed the supported limit; nothing was saved.',400)
             carries=(lambda unit,field=field,value=value:wm_narrative.support(field,value,[wm_narrative.unit_evidence(unit)],e.notes,
                      recognized,labels) is None) if narrative_on and value else None
-            try:evidence=source_quote_evidence(e.notes,field['label'],quote,labels,sentences,previous.get('evidence') or (),carries)
+            ungoverned=(lambda unit,field=field,value=value:wm_narrative.governing(field,value,[wm_narrative.unit_evidence(unit)],
+                        prefer_reading())[0] is None) if narrative_on and value else None
+            try:evidence=source_quote_evidence(e.notes,field['label'],quote,labels,sentences,previous.get('evidence') or (),carries,
+                                               ungoverned)
             except ValidationError as exc:
                 evidence=[];reviewed=False;review_errors.append(error_message(exc))
             answers[key].update(evidence=evidence,review_quote=quote,reviewed=reviewed,
@@ -756,7 +770,9 @@ def save_answers(request,pk):
             # under each leg resolved to the right leg's for the left statement).
             names=(lambda unit,requirement=requirement:wm_narrative.names_side(requirement,[wm_narrative.unit_evidence(unit)],e.notes)) \
                 if narrative_on and wm_narrative.field_side(requirement) else None
-            try:evidence=source_quote_evidence(e.notes,requirement['label'],quote,labels,sentences,earlier,names)
+            clear_copy=(lambda unit,requirement=requirement:wm_narrative.statement_governed(requirement,[wm_narrative.unit_evidence(unit)],
+                        prefer_reading()) is None) if names else None
+            try:evidence=source_quote_evidence(e.notes,requirement['label'],quote,labels,sentences,earlier,names,clear_copy)
             except ValidationError as exc:
                 evidence=[];reviewed=False;review_errors.append(error_message(exc))
             variant=request.POST.get('claim_variant_'+key,requirement.get('default_variant'))
