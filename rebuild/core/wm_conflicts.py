@@ -21,7 +21,7 @@ from django.core.exceptions import ValidationError
 
 ADAPTER_SOURCES = {
     'documents/sdk_word/Adapter/WmVariants.cs': '75dbfbfd7bb27919eab99aa28743b1abc3626723f35b4a761081233989456f11',
-    'documents/sdk_word/Adapter/WmAdapter.cs': '4884b1591bfd0ba102b956aab4cfce05193ec3a9457c96ec3753751a4d20fa0a',
+    'documents/sdk_word/Adapter/WmAdapter.cs': 'a733c0fa1b11b00b0b970153a08b792814a4a4abe4295ee7d4b5509e7ceafd2a',
 }
 GENERAL = ('The chosen prewritten statement wordings conflict with the answers. Each conflict is listed on the '
            'document page; correct the answers or the wordings before review and export.')

@@ -205,6 +205,23 @@ class Sides(SimpleTestCase):
         self.assertIsNone(narrative.support(field, '6.7 mm', own, notes, read['labels'], read['all_labels']))
         self.assertIsNotNone(narrative.side_verdict(field, '6.7 mm', own, notes, strict=True), 'never a pre-fill (ruling #127)')
 
+    def test_at_review_a_cited_side_after_the_value_is_no_reading(self):
+        notes = 'LEFT LOWER EXTREMITY:\n\n' + PLAIN + '\n\nRIGHT LOWER EXTREMITY:\n\nThe great saphenous vein is competent.'
+        found = {u['quote']: u for u in narrative.units(notes, FIELDS, LABELS)}
+        own = [narrative.unit_evidence(found[PLAIN]), narrative.unit_evidence(found['RIGHT LOWER EXTREMITY:'])]
+        read = narrative.reading(notes, FIELDS, LABELS)
+        self.assertEqual(narrative.support(BY_KEY['measurement_1_1'], '7.4 mm', own, notes, read['labels'], read['all_labels']), 'side')
+        self.assertIsNone(narrative.support(BY_KEY['measurement_15_1'], '7.4 mm', own, notes, read['labels'], read['all_labels']))
+
+    def test_titles_state_nothing_whatever_their_punctuation(self):
+        for text, states in [('RIGHT LOWER EXTREMITY VENOUS DUPLEX.', False), ('EXAM: RIGHT LOWER EXTREMITY VENOUS REFLUX STUDY', False),
+                             ('VENOUS INSUFFICIENCY EVALUATION, RIGHT LEG', False),
+                             ('1. Right great saphenous vein reflux from the saphenofemoral junction to the knee', True),
+                             ('- Right GSV incompetent, SFJ to knee', True), ('GSV SFJ 7.4 mm / 1800 ms', True),
+                             ('right great saphenous vein at the junction measures 7.4 millimeters', True)]:
+            with self.subTest(text):
+                self.assertEqual(narrative.states({'quote': text}), states)
+
     def test_both_legs_support_either_side(self):
         notes = 'Both deep venous systems are without evidence of obstruction or insufficiency.'
         value = 'without evidence of obstruction or insufficiency.'
@@ -449,6 +466,25 @@ class ReviewGate(SimpleTestCase):
         self.assertNotIn('narrative_held', self.evaluate({})['answers']['measurement_1_1']['blockers'])
 
     @override_settings(WM_NARRATIVE=True)
+    def test_review_holds_what_finalization_holds_whatever_the_answer_now_cites(self):
+        # Round 4: a pre-filled answer re-cited to its bare labelled value left the narrative recheck; finalization then
+        # refused it under the labelled rules while review said complete. Review now runs finalization's own function.
+        self.encounter.notes = self.NOTES + '\nFINDINGS:\nRight GSV at the SFJ: diameter (mm): 7.4 mm'
+        start = self.encounter.notes.index('7.4 mm', len(self.NOTES))
+        self.encounter.answers['measurement_1_1'] = {**self.encounter.answers['measurement_1_1'],
+                                                     'evidence': [{'quote': '7.4 mm', 'start': start, 'end': start + 6}]}
+        governed = generation.governed_decisions(self.encounter.notes, FIELDS, self.encounter.answers, LABELS)
+        self.assertIn('Right GSV at the SFJ: diameter (mm)', governed, 'the control: finalization refuses it')
+        self.assertIn('narrative_held', self.evaluate({})['answers']['measurement_1_1']['blockers'])
+
+    def test_a_letter_glued_to_a_correction_word_does_not_break_the_reader(self):
+        notes = ('SYNTHETIC PATIENT Q had a bilateral detailed venous study.\nKnee 3.0 mm. 6\u02d0correction, at the '
+                 'saphenofemoral junction.\nThe right great saphenous vein measures 7.4 mm at the saphenofemoral junction.')
+        answers, _ = decide(notes, {'measurement_1_1': ('7.4 mm', [notes.splitlines()[0], notes.splitlines()[2]], {})})
+        self.assertIn(answers['measurement_1_1']['status'], ('supported', 'conflict'))
+        narrative.held_labels(notes, FIELDS, LABELS, answers)
+
+    @override_settings(WM_NARRATIVE=True)
     def test_a_side_the_text_reads_both_ways_is_held_from_the_pre_fill_but_is_the_clinicians_to_choose(self):
         both = 'The right and left great saphenous veins measure 7.4 mm and 5.0 mm at the saphenofemoral junction.'
         self.encounter.notes = self.NOTES + '\n' + both
@@ -488,6 +524,38 @@ class ReviewGate(SimpleTestCase):
 
 
 @override_settings(WM_NARRATIVE=False)
+class SourceQuotations(SimpleTestCase):
+    """Round 4 (integrity lens): a sentence written twice is two occurrences."""
+
+    NOTES = ('RIGHT LOWER EXTREMITY:\nThe great saphenous vein measures 5.0 mm at the saphenofemoral junction.\n\n'
+             'LEFT LOWER EXTREMITY:\nThe great saphenous vein measures 5.0 mm at the saphenofemoral junction.')
+    SENTENCE = 'The great saphenous vein measures 5.0 mm at the saphenofemoral junction.'
+
+    def resolve(self, raw, previous=(), prefer=None):
+        from core.views import source_quote_evidence
+        sentences = narrative.units(self.NOTES, FIELDS, LABELS)
+        return source_quote_evidence(self.NOTES, 'Technique: venous systems', raw, LABELS, sentences, previous, prefer)
+
+    def test_two_quotations_of_one_text_are_its_two_occurrences(self):
+        found = self.resolve(self.SENTENCE + '\n' + self.SENTENCE)
+        self.assertEqual(len({item['start'] for item in found}), 2)
+
+    def test_a_typed_sentence_goes_to_the_occurrence_that_carries_the_answer(self):
+        read = narrative.reading(self.NOTES, FIELDS, LABELS)
+        field = BY_KEY['measurement_15_1']
+        carries = lambda unit: narrative.support(field, '5.0 mm', [narrative.unit_evidence(unit)], self.NOTES, read['labels'],
+                                                 read['all_labels']) is None
+        found = self.resolve(self.SENTENCE, prefer=carries)
+        self.assertGreater(found[0]['start'], self.NOTES.index('LEFT'))
+        self.assertLess(self.resolve(self.SENTENCE)[0]['start'], self.NOTES.index('LEFT'), 'without a preference: the first')
+
+    def test_a_wording_resting_only_on_its_answers_reviews_past_the_source_limit(self):
+        notes = 'The vein was seen. ' * 1200
+        with self.assertRaises(ValidationError):
+            narrative.units(notes, FIELDS, LABELS)                 # past the limit: no sentence can be cited
+        self.assertEqual(narrative.unit_entries(notes, FIELDS, LABELS, []), [])
+
+
 class OffByDefault(SimpleTestCase):
     def test_the_configuration_and_generation_are_unchanged_with_the_flag_off(self):
         config = generation.configuration()
@@ -825,7 +893,6 @@ ROUND_2_LENSES = [
      for text, key, value in [('R: GSV SFJ 7.4 mm, reflux 1.8 s.', 'measurement_1_1', '7.4 mm'),
                               ('RGSV SFJ 7.4 mm, reflux 1.8 s.', 'measurement_1_1', '7.4 mm'),
                               ('R-GSV SFJ 7.4 mm, reflux 1.8 s.', 'measurement_1_1', '7.4 mm'),
-                              ('(R) GSV SFJ 7.4 mm, reflux 1.8 s.', 'measurement_1_1', '7.4 mm'),
                               ('R-sided GSV SFJ 7.4 mm.', 'measurement_1_1', '7.4 mm'),
                               ('R prox thigh GSV 6.9 mm.', 'measurement_2_1', '6.9 mm'),
                               ('Right below knee GSV measures 4.2 mm.', 'measurement_4_1', '4.2 mm'),
@@ -944,7 +1011,10 @@ ROUND_3 = [
     ('a trademark (R) is no side', *one('measurement_1_1', '4.1 mm', 'The great saphenous vein, treated with ClosureFast(R) in 2019, now '
      'measures 4.1 mm at the saphenofemoral junction.', 'conflict', 'LEFT LEG:\nThe great saphenous vein, treated with ClosureFast(R) in '
      '2019, now measures 4.1 mm at the saphenofemoral junction.')),
-    ('a bracketed (R) is', *one('measurement_1_1', '4.1 mm', 'GSV (R) at the SFJ 4.1 mm.', 'supported')),
+    # (round 4: a bracketed letter also closes a brand name, `ClosureFast (R)`: a reading the clinician may choose,
+    # never a pre-fill)
+    ('a bracketed (R) is a reading, never a pre-fill', *one('measurement_1_1', '4.1 mm', 'GSV (R) at the SFJ 4.1 mm.', 'conflict')),
+    ('side shorthand in brackets is held for the clinician', *one('measurement_1_1', '7.4 mm', '(R) GSV SFJ 7.4 mm, reflux 1.8 s.', 'conflict')),
     ('a correction to a number that is not the last of its unit', *one('measurement_1_1', '7.4 mm', 'The right great saphenous vein '
      'measures 7.4 mm at the saphenofemoral junction and 6.9 mm at the proximal thigh, correction, 7.1 mm at the junction.', 'conflict')),
     ('a correction naming the other leg in comparison', *one('measurement_1_1', '6.1 mm', R61, 'conflict',
@@ -1021,9 +1091,132 @@ ROUND_3 = [
 ]
 
 
+LEFT_LEG_50 = 'LEFT LEG:\nThe great saphenous vein measures 5.0 mm at the saphenofemoral junction.'
+ROUND_4 = [
+    # Round 4 attacked round 3's split readings and corrections (sealed lenses at 5f8270c2): every break and a control.
+] + [('a value-then-side list: ' + text, text, {key: (value, [text], {})}, {key: 'conflict'})
+     for text, key, value in [('SFJ diameter: 7.4 mm left, 5.0 mm right.', 'measurement_15_1', '5.0 mm'),
+                              ('SFJ diameter: 7.4 mm right, 5.0 mm left.', 'measurement_1_1', '5.0 mm'),
+                              ('GSV reflux at the SFJ: 1.8 seconds left, 2.2 seconds right.', 'measurement_15_2', '2200 ms')]
+] + [('a planned treatment is no previous one: ' + heading, *one(key, value, text, 'conflict', heading + '\n' + text))
+     for heading, key, value, text in [
+         ('INDICATION:', 'sdt_1093284141', 'great saphenous vein', 'Evaluation prior to planned left great saphenous vein ablation '
+                                                                   'from the saphenofemoral junction to the knee.'),
+         ('HPI:', 'sdt_1093284141', 'great saphenous vein', 'She is scheduled for ablation of the left great saphenous vein from the '
+                                                            'saphenofemoral junction to the knee.'),
+         ('Assessment and plan:', 'sdt_1093284141', 'great saphenous vein', 'Endovenous ablation of the left great saphenous vein '
+                                                                            'from the saphenofemoral junction to the knee.')]
+] + [
+    ('a correction to a finding with a number concerns a choice', *one('sdt_-170105994', 'without evidence of obstruction or insufficiency.',
+     'The right deep venous system is without evidence of obstruction or insufficiency, correction, an 8 mm thrombus in the common '
+     'femoral vein.', 'conflict')),
+    ('its control: a correction of a measurement only', *one('sdt_-1124008635', 'Leg pain', 'The patient reports aching leg pain.',
+                                                             'supported', 'The patient reports aching leg pain. Correction: the left '
+                                                             'junction diameter is 5.3 mm.')),
+] + [('both over two values: ' + text, text, {'measurement_1_1': ('5.0 mm', [text], {}), 'measurement_15_1': ('7.4 mm', [text], {})},
+      {'measurement_1_1': 'conflict', 'measurement_15_1': 'conflict'})
+     for text in ['Both great saphenous veins measure 7.4 mm and 5.0 mm at the saphenofemoral junction.',
+                  'Bilateral GSV diameters at the SFJ are 7.4 mm and 5.0 mm.', 'R & L GSV at the SFJ measure 7.4 mm and 5.0 mm.']
+] + [
+    ('both over one value', 'Both great saphenous veins measure 7.4 mm at the saphenofemoral junction.',
+     {'measurement_1_1': ('7.4 mm', ['Both great saphenous veins measure 7.4 mm at the saphenofemoral junction.'], {}),
+      'measurement_15_1': ('7.4 mm', ['Both great saphenous veins measure 7.4 mm at the saphenofemoral junction.'], {})},
+     {'measurement_1_1': 'supported', 'measurement_15_1': 'supported'}),
+] + [('a correction naming where it corrects is not placed: ' + text, *one('measurement_1_1', value, text, 'conflict'))
+     for text, value in [('Right GSV: SFJ 7.4 mm, proximal thigh 6.9 mm, correction, SFJ 7.1 mm.', '7.4 mm'),
+                         ('The right great saphenous vein measures 7.4 mm at the saphenofemoral junction and 6.9 mm at the thigh, '
+                          'correction, 7.1 mm at the junction.', '7.4 mm')]
+] + [
+    ('citing a correction and keeping the value it replaced', 'The right great saphenous vein measures 7.4 mm at the saphenofemoral '
+     'junction.\nPlease note the diameter at the junction was entered wrong, correction: 6.9 mm.',
+     {'measurement_1_1': ('7.4 mm', ['The right great saphenous vein measures 7.4 mm at the saphenofemoral junction.',
+                                     'Please note the diameter at the junction was entered wrong, correction: 6.9 mm.'], {})},
+     {'measurement_1_1': 'conflict'}),
+    ('a rival side far after the value in a written sentence', *one('measurement_5_1', '3.9 mm', 'the right great saphenous vein is '
+     'competent and the small saphenous vein measures 3.9 millimeters at the level of the saphenopopliteal junction on the left side',
+     'conflict')),
+    ('a comparison after the value is no reading of it', 'RIGHT LEG:\nThe great saphenous vein measures 7.4 mm which is larger than '
+     'the left.', {'measurement_1_1': ('7.4 mm', ['The great saphenous vein measures 7.4 mm which is larger than the left.'], {}),
+                   'measurement_15_1': ('7.4 mm', ['The great saphenous vein measures 7.4 mm which is larger than the left.'], {})},
+     {'measurement_1_1': 'supported', 'measurement_15_1': 'conflict'}),
+    ('both legs in the paragraph is not a measurement\'s side', 'She reports heaviness in both legs.\n' + PLAIN,
+     {'measurement_1_1': ('7.4 mm', [PLAIN], {}), 'measurement_15_1': ('7.4 mm', [PLAIN], {})},
+     {'measurement_1_1': 'conflict', 'measurement_15_1': 'conflict'}),
+    ('both before singular parts of one leg', *one('measurement_1_1', '5.0 mm', 'In the left leg, tenderness at both knee and ankle; the '
+                                                   'great saphenous vein measures 5.0 mm at the saphenofemoral junction.', 'conflict')),
+    ('either before one limb is both', *one('sdt_-1029175652', 'without evidence of obstruction or insufficiency.', 'There is no '
+                                            'obstruction or insufficiency in the deep veins of either leg.', 'supported')),
+] + [('a dated or worded section before a comma: ' + text, *one(key, value, text, 'conflict'))
+     for text, key, value in [('Prior study 2019, right GSV SFJ: 7.4 mm.', 'measurement_1_1', '7.4 mm'),
+                              ('Outside study from 2019, right GSV SFJ: 7.4 mm.', 'measurement_1_1', '7.4 mm'),
+                              ('Tx plan, left leg: great saphenous vein from the saphenofemoral junction to the knee.',
+                               'sdt_1093284141', 'great saphenous vein')]
+] + [
+    ('a capital adverb Right is held', *one('measurement_4_1', '4.2 mm', 'Right below knee, it measures 4.2 mm.', 'conflict',
+                                            LEFT_LEG_50 + ' Right below knee, it measures 4.2 mm.')),
+    ('the row name with its vein is the right', *one('measurement_4_1', '4.2 mm', 'Right below knee GSV measures 4.2 mm.', 'supported')),
+    ('a spaced trademark is no pre-fill', *one('measurement_1_1', '4.1 mm', 'The great saphenous vein, treated with ClosureFast (R) in '
+     '2019, now measures 4.1 mm at the saphenofemoral junction.', 'conflict', 'LEFT LEG:\nThe great saphenous vein, treated with '
+     'ClosureFast (R) in 2019, now measures 4.1 mm at the saphenofemoral junction.')),
+    ('a relative after the finding in its clause', *one('sdt_-770853925', 'Leg ulcer', 'A chronic leg ulcer is present on the medial '
+                                                       'ankle of her mother.', 'conflict')),
+    ('the legs transposed in a later addendum', 'The left great saphenous vein measures 5.0 mm at the saphenofemoral junction.\n\n'
+     'Addendum: the right and left legs were transposed in the report above.',
+     {'measurement_15_1': ('5.0 mm', ['The left great saphenous vein measures 5.0 mm at the saphenofemoral junction.'], {})},
+     {'measurement_15_1': 'conflict'}),
+    ('findings moved to the other leg in a later paragraph', 'The left great saphenous vein measures 5.0 mm at the saphenofemoral '
+     'junction.\n\nCorrection: the findings above were in the right leg.',
+     {'measurement_15_1': ('5.0 mm', ['The left great saphenous vein measures 5.0 mm at the saphenofemoral junction.'], {})},
+     {'measurement_15_1': 'conflict'}),
+    ('a side after the value in another clause is never the paragraph\'s other side', 'Left GSV SFJ 5.0 mm, competent. GSV SFJ '
+     '7.4 mm, 1.8 s, right leg.', {'measurement_15_2': ('1800 ms', ['GSV SFJ 7.4 mm, 1.8 s, right leg.'], {})},
+     {'measurement_15_2': 'conflict'}),
+    ('a side far after the value in its clause', *one('measurement_15_2', '1800 ms', 'Duplex showed reflux of 1.8 seconds at the '
+     'saphenofemoral junction of the great saphenous vein in the right leg.', 'conflict', 'The left great saphenous vein is competent '
+     'throughout. Duplex showed reflux of 1.8 seconds at the saphenofemoral junction of the great saphenous vein in the right leg.')),
+    ('its control, the right leg', *one('measurement_1_2', '1800 ms', 'Duplex showed reflux of 1.8 seconds at the saphenofemoral '
+     'junction of the great saphenous vein in the right leg.', 'supported')),
+    ('the right before a preposition is the side', *one('measurement_1_2', '1800 ms', 'Reflux is seen on the right in the great '
+                                                        'saphenous vein, measuring 1.8 seconds at the saphenofemoral junction.',
+                                                        'supported')),
+    ('a spoken correction does not strike the later values of its unit', *one('measurement_2_1', '6.2 mm', 'right leg great '
+     'saphenous vein junction 7.4 millimeters sorry 7.6 millimeters proximal thigh 6.2 millimeters knee 5.1 millimeters', 'supported')),
+    ('a denial inside a correction is about its own finding', *one('measurement_3_1', '5.3 mm', 'Correction: the right knee segment '
+                                                                   'shows no reflux and measures 5.3 mm.', 'supported')),
+    ('a header line of fields', *one('date_of_birth', '06/30/1959', 'Patient ID: SYN-1234   DOB: 06/30/1959   DOS: 09/12/2026',
+                                     'supported')),
+    ('an own label whose negation is about something else', *one('sdt_269290727', 'Swelling', 'Swelling: bilateral ankle swelling by '
+                                                                 'evening, no skin changes.', 'supported')),
+    ('a bound side before its vein closes', *one('measurement_1_2', '1800 ms', 'There is reflux of 1.8 seconds in the right great '
+                                                 'saphenous vein at the saphenofemoral junction.', 'supported')),
+    ('an assessment/plan heading is the assessment\'s', *one('sdt_-213273323', 'reflux positive.', 'Right great saphenous vein reflux.',
+                                                             'supported', 'Assessment/Plan:\nRight great saphenous vein reflux.')),
+    # The round-4 mutation proofs: rules no row pinned, and two releases a mutant found wrong.
+    ('a weak side in the value\'s clause competes with the heading', *one('measurement_18_1', '4.2 mm', 'The great saphenous vein '
+     'measures 4.2 mm right below knee.', 'conflict', 'LEFT LEG:\nThe great saphenous vein measures 4.2 mm right below knee.')),
+    ('its control, the heading alone', *one('measurement_18_1', '4.2 mm', 'The great saphenous vein measures 4.2 mm below the knee.',
+                                            'supported', 'LEFT LEG:\nThe great saphenous vein measures 4.2 mm below the knee.')),
+    ('a sentence\'s side against the heading above it', *one('measurement_15_1', '5.0 mm', 'The left great saphenous vein measures '
+     '5.0 mm at the saphenofemoral junction.', 'conflict', 'RIGHT LEG:\nThe left great saphenous vein measures 5.0 mm at the '
+     'saphenofemoral junction.')),
+    ('its control, the heading agreeing', *one('measurement_15_1', '5.0 mm', 'The left great saphenous vein measures 5.0 mm at the '
+     'saphenofemoral junction.', 'supported', 'LEFT LEG:\nThe left great saphenous vein measures 5.0 mm at the saphenofemoral junction.')),
+    ('a spoken correction opening its sentence strikes the side before it',
+     *one('measurement_15_1', '7.4 mm', 'The right sorry left great saphenous vein measures 7.4 mm.', 'supported')),
+    ('its other leg', *one('measurement_1_1', '7.4 mm', 'The right sorry left great saphenous vein measures 7.4 mm.', 'conflict')),
+] + [('a placed correction restating the value: ' + text, *one('measurement_1_1', value, text, 'conflict'))
+     for text in ('Right GSV SFJ 6.1 mm, correction, 6.1 mm should read 7.6 mm.', 'Right GSV SFJ 6.1 mm correction 6.1 mm should read '
+                  '7.6 mm.', 'Right GSV SFJ 6.1 mm, correction, 7.6 mm rather than 6.1 mm.')
+     for value in ('6.1 mm', '7.6 mm')
+] + [
+    ('its control, a placed correction and the next location\'s value', *one('measurement_1_1', '7.6 mm', 'right leg great saphenous '
+     'vein junction 7.4 millimeters sorry 7.6 millimeters proximal thigh 6.2 millimeters', 'supported')),
+]
+
+
 class RefutationRegressions(SimpleTestCase):
     def test_every_demonstrated_break_and_its_control(self):
-        for name, notes, picks, expected in REGRESSIONS + ROUND_2 + ROUND_2_LENSES + ROUND_3:
+        for name, notes, picks, expected in REGRESSIONS + ROUND_2 + ROUND_2_LENSES + ROUND_3 + ROUND_4:
             with self.subTest(name):
                 answers, _ = decide(notes, picks)
                 self.assertEqual({key: answers[key]['status'] for key in expected}, expected)
@@ -1074,6 +1267,149 @@ class ReadingCost(SimpleTestCase):
                 self.read_within_limit(notes, {'measurement_1_1': '7.4 mm'})
         with self.subTest('a long typed text answer'):
             self.read_within_limit('vein ' * (size // 5), {'location_11': ('vein ' * 3900).strip()})
+
+
+class ReviewCost(SimpleTestCase):
+    """Refutation round 4 (cost lens): the round-3 claim covered the reader, not the page, the save and review, which
+    run it once per answer and per statement. Each shape here took from 40 s to over 20 minutes at 12,000-49,000
+    characters (a correction's reach walked per place, governor blocks rescanned per governor, a correction heading's
+    rest of the note re-read per question, the text before every colon copied per label) and must now review in
+    seconds: generation's validation, review of every answer and statement, and finalization's recheck."""
+
+    LIMIT = 20.0
+
+    def setUp(self):
+        patch.object(wm_review, 'membership').start(); self.addCleanup(patch.stopall)
+        self.actor = SimpleNamespace(pk='synthetic-clinician', is_authenticated=True, email='c@synthetic.invalid',
+                                     get_full_name=lambda: 'Synthetic Clinician')
+
+    def review(self, notes, answers, decisions=None):
+        department = SimpleNamespace(pk='synthetic-department')
+        template = SimpleNamespace(department_id=department.pk, sha256=wm_review.ORIGINAL_SHA256)
+        version = SimpleNamespace(pk='synthetic-mapping', number=1, template=template, fields=FIELDS,
+                                  review_requirements=REQUIREMENTS, document_backend=MAPPING['backend'])
+        for answer in answers.values():
+            answer.update(reviewed=True, reviewed_by=self.actor.pk, review_revision=4)
+        encounter = SimpleNamespace(pk='synthetic-encounter', department=department, department_id=department.pk,
+                                    patient=SimpleNamespace(department_id=department.pk), template_version=version,
+                                    revision=4, answers=answers, template_review={}, notes=notes)
+        decisions = decisions or {}
+        assessed = {key: {'text': answer.get('text', '')} for key, answer in answers.items()}
+        rows = []
+        for original in REQUIREMENTS:
+            chosen = (decisions.get(original['key']) or {}).get('variant', original['default_variant'])
+            variant = next(row for row in original['variants'] if row['id'] == chosen)
+            text = wm_review._variant_text(variant, assessed, self.actor)
+            rows.append({**original, 'text': text, 'text_sha256': hashlib.sha256(text.encode()).hexdigest(),
+                         'original_text': original['text'], 'original_text_sha256': original['text_sha256'],
+                         'selected_variant': chosen, 'changed': text != original['text']})
+        return wm_review.evaluate_review(encounter, self.actor, decisions, resolved_requirements=rows)
+
+    def edited(self, notes, picks):
+        """`picks`: key -> (value, [unit indexes]); every other answer reviewed empty."""
+        units = narrative.units(notes, FIELDS, LABELS)
+        answers = {f['key']: {'text': '', 'status': 'missing', 'evidence': []} for f in FIELDS}
+        for key, (value, indexes) in picks.items():
+            answers[key] = {'text': value, 'status': 'edited', 'evidence': [narrative.unit_evidence(units[i]) for i in indexes]}
+        return answers
+
+    def within_limit(self, run):
+        import time
+        for name in dir(narrative):
+            if hasattr(getattr(narrative, name), 'cache_clear'):
+                getattr(narrative, name).cache_clear()
+        start = time.perf_counter()
+        result = run()
+        self.assertLess(time.perf_counter() - start, self.LIMIT)
+        return result
+
+    @override_settings(WM_NARRATIVE=True)
+    def test_many_corrections_in_one_transcript_review_in_seconds(self):
+        notes = 'Right leg.\n' + ('correction the great saphenous vein measures 7.4 mm ' * 900).strip()
+        answers = self.edited(notes, {'location_11': ('great saphenous vein', [0, 1])})
+        result = self.within_limit(lambda: self.review(notes, answers))
+        self.assertEqual(result['answers']['location_11']['text'], 'great saphenous vein')
+        notes = 'Right leg examined today with care ' + 'correction the vein ' * 2400 + 'the vein measures 7.4 mm.'
+        answers = self.edited(notes, {'measurement_1_1': ('7.4 mm', [0])})
+        self.within_limit(lambda: self.review(notes, answers))
+        # A correction reaches at most a run-on sentence's word bound, never the rest of the transcript: the value 40
+        # words on is live, and one written right after it is what it corrected to.
+        notes = 'Right GSV 6.1 mm correction ' + 'the vein was examined ' * 12 + 'the right GSV measures 7.4 mm.'
+        self.assertLess(narrative.corrected_end(notes, notes.index('correction')), notes.index('7.4 mm'))
+
+    @override_settings(WM_NARRATIVE=True)
+    def test_many_governors_and_correction_headings_review_in_seconds(self):
+        measurements = [f for f in FIELDS if f.get('kind') == 'measurement']
+        lines, picks = [], {}
+        for number, field in enumerate(measurements):
+            side = 'Right' if field['label'].startswith('Right') else 'Left'
+            value = f'{number + 1}.{number % 10} mm' if field['locator']['unit'] == 'mm' else f'{(number + 1) * 10} ms'
+            lines.append(f'{side} vein row {number} measures {value}.')
+            picks[field['key']] = (value, [lines[-1]])
+        for notes in ('Varicose tributary noted (see below).\n' * 900 + 'FINDINGS:\n' + '\n'.join(lines) + '\n',
+                      '\n'.join(lines) + '\n\n' + 'CORRECTION:\n' * 400
+                      + 'The study was reviewed with the patient who understood the findings well today. ' * 400):
+            with self.subTest(notes[:30]):
+                response = selections(notes, {key: (value, quotes, {}) for key, (value, quotes) in picks.items()})
+                answers, _ = self.within_limit(lambda: narrative.validate(notes, FIELDS, response, REQUIREMENTS))
+                self.within_limit(lambda: self.review(notes, deepcopy(answers)))
+                self.within_limit(lambda: narrative.held_labels(notes, FIELDS, LABELS, answers))
+
+    @override_settings(WM_NARRATIVE=True)
+    def test_colon_lines_statements_and_side_words_review_in_seconds(self):
+        for notes, picks in (('SFJ: 7.4 mm, ' * 3769, {'measurement_1_1': ('7.4 mm', [0])}),
+                             ('Right GSV at the SFJ measures 7.4 mm.\n' + 'a:' * 24000, {'measurement_1_1': ('7.4 mm', [0])}),
+                             ('right correction left ' * 2180,
+                              {f['key']: (f['options'][1], [0]) for f in FIELDS
+                               if f.get('kind') == 'choice' and narrative.field_side(f)})):
+            with self.subTest(notes[:20]):
+                self.within_limit(lambda: self.review(notes, self.edited(notes, picks)))
+        notes = ('Short line seen.\n' * 996 + 'Right GSV at the SFJ measures 7.4 mm.\nThe right leg shows saphenous reflux.\n'
+                 'The left leg shows no reflux.\n')
+        units = narrative.units(notes, FIELDS, LABELS)
+        sentence = next(u for u in units if u['quote'] == 'The right leg shows saphenous reflux.')
+        decisions = {row['key']: {'variant': row['default_variant'], 'reviewed': True,
+                                  'evidence': [narrative.unit_evidence(sentence)]}
+                     for row in REQUIREMENTS if row.get('kind') == 'assertion'}
+        self.within_limit(lambda: self.review(notes, self.edited(notes, {'measurement_1_1': ('7.4 mm', [996])}), decisions))
+
+    def test_the_colon_reading_is_the_one_it_replaced(self):
+        """`source_units` reads each line's colons in one pass: the labels it finds are exactly those of the text before
+        every colon, `_label`ed, as the labelled contract always read them."""
+        import random
+        def before(notes, label, known_labels):
+            label = wm_review._label(label)
+            known = {wm_review._label(item) for item in known_labels} | {label}
+            found = []
+            for line in notes.splitlines(keepends=True):
+                full = line.strip()
+                if full:
+                    candidates = [(index, wm_review._label(full[:index])) for index, char in enumerate(full)
+                                  if char == ':' and wm_review._label(full[:index]) in known]
+                    found.append(max(candidates, default=(None, None)))
+            return found
+        def after(notes, label, known_labels):
+            label = wm_review._label(label)
+            known = {wm_review._label(item) for item in known_labels} | {label}
+            longest = max(map(len, known))
+            return [max(((index, name) for name, index in wm_review._colon_labels(line.strip(), longest).items()
+                         if name in known), default=(None, None))
+                    for line in notes.splitlines(keepends=True) if line.strip()]
+        labels = ['Swelling', 'Right impression', 'Pain?', 'STRASSE', 'a:b', 'ﬁle', 'x']
+        pieces = ['Swelling', 'swelling', 'SWELLING', 'Right impression', 'Right', 'impression', 'Pain', 'Straße', 'STRASSE',
+                  'ﬁle', 'file', 'a', 'b', 'x', ':', '?', ' ', '\t', '\u00a0', '\u2003', ':?', '? :', 'none', '7.4 mm']
+        chance = random.Random(4)
+        for _ in range(400):
+            notes = '\n'.join(''.join(chance.choice(pieces) for _ in range(chance.randint(1, 12)))
+                               for _ in range(chance.randint(1, 4)))
+            label = chance.choice(labels)
+            self.assertEqual(after(notes, label, labels), before(notes, label, labels), repr(notes))
+
+    @override_settings(WM_NARRATIVE=True)
+    def test_a_text_answer_past_its_limit_is_not_read_as_written(self):
+        written = 'vein ' * 200
+        self.assertTrue(narrative.text_at(written[:narrative.TEXT_VALUE_LIMIT].strip(), written))
+        self.assertEqual(narrative.text_at(written.strip() + ' vein', written + 'vein'), [])
 
 
 class EngineParity(SimpleTestCase):

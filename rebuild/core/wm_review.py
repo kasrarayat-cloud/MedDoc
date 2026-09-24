@@ -5,6 +5,7 @@ the locked encounter and authenticated clinician, then rechecks it inside the
 finalization transaction. Source offsets use Python Unicode character offsets.
 """
 from copy import deepcopy
+import functools
 import hashlib
 import json
 import re
@@ -46,6 +47,7 @@ def source_units(notes, label, known_labels=()):
     require(isinstance(notes, str) and len(notes) <= 50000, 'Source exceeds the supported review limit.')
     label = _label(label)
     known = {_label(item) for item in known_labels} | {label}
+    longest = max(map(len, known))
     units, explicit, offset = {}, [], 0
     for line in notes.splitlines(keepends=True):
         full = line.strip()
@@ -53,9 +55,8 @@ def source_units(notes, label, known_labels=()):
             start = offset + len(line) - len(line.lstrip())
             # Canonical labels can themselves contain colons. Match the entire
             # longest known label, not a prefix such as "Right impression".
-            candidates = [(index, _label(full[:index])) for index, char in enumerate(full)
-                          if char == ':' and _label(full[:index]) in known]
-            delimiter, line_label = max(candidates, default=(None, None))
+            delimiter, line_label = max(((index, name) for name, index in _colon_labels(full, longest).items()
+                                         if name in known), default=(None, None))
             if line_label == label:
                 raw_value = full[delimiter + 1:]
                 value = raw_value.strip()
@@ -68,6 +69,33 @@ def source_units(notes, label, known_labels=()):
                 units[(start, start + len(full), full)] = {'value': full, 'labelled': False}
         offset += len(line)
     return units, explicit
+
+
+def _colon_labels(full, longest):
+    """For one stripped line, `{_label(full[:index]): the last such colon index}` over its colons, for labels of at most
+    `longest` characters (casefolding never shortens one). Read in one pass per line, from where the trailing runs of
+    whitespace and of `:`/`?` before each colon start, never by copying the text before every colon: a long line of
+    colons made that quadratic (round 4's cost lens)."""
+    return (_colon_labels_long if len(full) > 2000 else _colon_labels_short)(full, longest)
+
+
+def _read_colon_labels(full, longest):
+    spaces, marks = [0] * (len(full) + 1), [0] * (len(full) + 1)
+    for at, char in enumerate(full, 1):
+        spaces[at] = spaces[at - 1] if char.isspace() else at      # where the whitespace run ending at `at` starts
+        marks[at] = marks[at - 1] if char in ':?' else at           # ... and the run of `:` and `?`
+    found = {}
+    for index, char in enumerate(full):
+        if char == ':':
+            # `_label`: strip (the line starts with no whitespace), rstrip(':?'), strip, casefold.
+            end = spaces[marks[spaces[index]]]
+            if end <= longest:
+                found[full[:end].casefold()] = index
+    return found
+
+
+_colon_labels_short = functools.lru_cache(maxsize=4096)(_read_colon_labels)
+_colon_labels_long = functools.lru_cache(maxsize=8)(_read_colon_labels)
 
 
 def validate_evidence(notes, label, evidence, known_labels=()):
@@ -204,9 +232,6 @@ def _field_decision(notes, field, answer, actor, labels, revision, narrative=Non
         qualifiers = answer.get('narrative')
         if answer.get('status') == 'supported' and isinstance(qualifiers, dict) and not wm_narrative.qualifiers_fit(field, qualifiers):
             blockers.append('narrative_qualifiers_hold')
-        if (answer.get('status') == 'supported' and narrative.get('read') is not None
-                and wm_narrative.held_now(field, answer, narrative['read']) is not None):
-            blockers.append('narrative_held')
     elif not values or not all(value['labelled'] and value['value'] == text for value in values):
         blockers.append('exact_labelled_source_required')
     if field.get('kind') == 'measurement':
@@ -312,21 +337,31 @@ def narrative_reading(encounter, fields, requirements):
         return None
     from .generation import recognized_labels
     context_labels = [row['label'] for row in requirements]
-    # The reading finalization rechecks pre-filled answers with (`wm_narrative.held_labels`): review applies the same
-    # recheck, so it never reports complete what finalization refuses (round 3: a save changing what cites a correction).
-    read = (wm_narrative.stored_reading(encounter.notes, fields, context_labels, encounter.answers)
-            if wm_narrative.active(fields, encounter.answers) else None)
+    # `read`: the stored reading, built once per review when a statement cites a sentence (`_statement_evidence`).
     return {'fields': fields, 'context_labels': context_labels, 'labels': recognized_labels(fields, context_labels),
-            'read': read}
+            'read': None}
 
 
-def _answer_assessment(encounter, actor, fields, requirements):
+def _answer_assessment(encounter, actor, fields, requirements, narrative=None):
     labels = [row['label'] for row in fields + requirements]
     require(isinstance(encounter.answers, dict) and set(encounter.answers) <= {row['key'] for row in fields},
             'Answers contain unknown mapping keys.')
-    narrative = narrative_reading(encounter, fields, requirements)
-    return {field['key']: _field_decision(encounter.notes, field,
-            encounter.answers.get(field['key'], {}), actor, labels, encounter.revision, narrative) for field in fields}
+    if narrative is None:
+        narrative = narrative_reading(encounter, fields, requirements)
+    assessed = {field['key']: _field_decision(encounter.notes, field,
+                encounter.answers.get(field['key'], {}), actor, labels, encounter.revision, narrative) for field in fields}
+    if narrative is not None:
+        # Finalization's own recheck, run here with the same function (`generation.governed_decisions`), so review never
+        # reports complete what finalization refuses — whatever evidence the answer now cites (round 4: an answer
+        # re-cited to its bare labelled value left the narrative recheck and met the labelled one only at finalize).
+        from .generation import governed_decisions
+        held = set(governed_decisions(encounter.notes, fields, encounter.answers, narrative['context_labels']))
+        for field in fields:
+            row = assessed[field['key']]
+            if field['label'] in held and 'narrative_held' not in row['blockers']:
+                row['blockers'].append('narrative_held')
+                row['status'] = 'conflict'
+    return assessed
 
 
 def sdk_answers(encounter, actor):
@@ -352,8 +387,8 @@ def evaluate_review(encounter, actor, decisions, *, resolved_requirements=None):
     fields, requirements = _mapping(encounter)
     decisions = _normalize_decisions(requirements, decisions)
     labels = [row['label'] for row in fields + requirements]
-    answers = _answer_assessment(encounter, actor, fields, requirements)
     narrative = narrative_reading(encounter, fields, requirements)
+    answers = _answer_assessment(encounter, actor, fields, requirements, narrative)
     requirements = _resolved_requirements(requirements, answers, resolved_requirements, decisions, actor)
     assertions = {}
     signer_name = _space(actor.get_full_name()) or actor.email
@@ -466,7 +501,11 @@ def _statement_evidence(encounter, narrative, requirement, cited, answers, block
         blockers.append('statement_source_is_heading')
     if sentences:
         # The clinician chose these sentences: only the installed denial and reframing vocabulary refuses them here.
-        read = wm_narrative.stored_reading(encounter.notes, narrative['fields'], narrative['context_labels'], encounter.answers)
+        # One reading per review, not one per statement (round 4's cost lens).
+        read = narrative['read']
+        if read is None:
+            read = narrative['read'] = wm_narrative.stored_reading(
+                encounter.notes, narrative['fields'], narrative['context_labels'], encounter.answers)
         if wm_narrative.statement_blocked(requirement, sentences, read) is not None:
             blockers.append('governed_source')
     return result

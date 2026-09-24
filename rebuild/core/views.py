@@ -75,23 +75,29 @@ def wm_resolve(encounter,actor,decisions=None):
     return result['review_requirements']
 
 
-def source_quote_evidence(notes,label,raw,labels,sentences=None,previous=()):
+def source_quote_evidence(notes,label,raw,labels,sentences=None,previous=(),prefer=None):
     """Convert submitted quotations into actual offsets; never accept posted offsets.
 
     `sentences` (the narrative contract's source units, when it is on): a quotation that is one complete sentence of
     the notes is that sentence, found first, so an answer read from a sentence keeps it as its evidence. When the same
     sentence occurs more than once, the occurrence this answer already cited (`previous`) is kept: re-posting the page
-    must not move a left-leg answer onto the right leg's identical sentence."""
+    must not move a left-leg answer onto the right leg's identical sentence. Two quotations of one sentence text are
+    two occurrences, never one twice (round 4); and when a typed sentence occurs more than once and none was cited,
+    `prefer(unit)` picks the occurrence that carries the answer (the left leg's copy for a left-leg answer)."""
     if len(raw)>50000:raise ValidationError('Source quotations exceed the supported limit; nothing was truncated.')
     units,_=wm_review.source_units(notes,label,labels)
-    evidence=[]
+    evidence=[];used=set()
     for submitted in raw.splitlines():
         quote=submitted.strip()
         if not quote:continue
         cited={item.get('start') for item in previous or () if isinstance(item,dict) and item.get('quote')==quote}
-        sentence=next((unit for unit in sentences or () if unit['quote']==quote and unit['start'] in cited),None) or \
-                 next((unit for unit in sentences or () if unit['quote']==quote),None)
+        same=[unit for unit in sentences or () if unit['quote']==quote]
+        free=[unit for unit in same if unit['start'] not in used]
+        sentence=(next((unit for unit in free if unit['start'] in cited),None)
+                  or (next((unit for unit in free if prefer(unit)),None) if prefer and len(same)>1 else None)
+                  or (free[0] if free else (same[0] if same else None)))
         if sentence is not None:
+            used.add(sentence['start'])
             evidence.append({'quote':quote,'start':sentence['start'],'end':sentence['end'],'kind':'unit'});continue
         found=next((item for item in units if item[2]==quote),None)
         if found is None:raise ValidationError('Use a complete source line or the complete value for this exact question label'+(', or one complete sentence of the notes.' if sentences is not None else '.'))
@@ -573,6 +579,8 @@ def save_answers(request,pk):
     statement_labels=[row['label'] for row in e.template_version.review_requirements]
     governance=governance_for(e.notes,e.template_version.fields,statement_labels)
     narrative_on=is_wm and wm_narrative.enabled(e.template_version.fields)
+    from .generation import recognized_labels
+    recognized=recognized_labels(e.template_version.fields,statement_labels) if narrative_on else None
     try:sentences=wm_narrative.units(e.notes,e.template_version.fields,statement_labels) if narrative_on else None
     except ValidationError:sentences=None   # past the source limit a sentence cannot be cited; labelled lines still can
     narrative_read=(wm_narrative.stored_reading(e.notes,e.template_version.fields,statement_labels,e.answers)
@@ -688,7 +696,9 @@ def save_answers(request,pk):
         if is_wm:
             quote=request.POST.get('source_'+key,'')
             if len(quote)>50000:return document_refusal(request,e,'Source quotations exceed the supported limit; nothing was saved.',400)
-            try:evidence=source_quote_evidence(e.notes,field['label'],quote,labels,sentences,previous.get('evidence') or ())
+            carries=(lambda unit,field=field,value=value:wm_narrative.support(field,value,[wm_narrative.unit_evidence(unit)],e.notes,
+                     recognized,labels) is None) if narrative_on and value else None
+            try:evidence=source_quote_evidence(e.notes,field['label'],quote,labels,sentences,previous.get('evidence') or (),carries)
             except ValidationError as exc:
                 evidence=[];reviewed=False;review_errors.append(error_message(exc))
             answers[key].update(evidence=evidence,review_quote=quote,reviewed=reviewed,
