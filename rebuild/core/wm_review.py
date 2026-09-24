@@ -426,7 +426,9 @@ def evaluate_review(encounter, actor, decisions, *, resolved_requirements=None):
 
 def _statement_evidence(encounter, narrative, requirement, cited, answers, blockers):
     """A statement's narrative evidence: source sentences (a fixed wording needs one that names its side), and at most
-    one `answers` entry naming exactly the selected wording's own answers, each complete without a blocker."""
+    one `answers` entry naming exactly the answers the selected wording rests on (`wm_narrative.basis_keys`): its own
+    answers, each complete without a blocker, or for a `not_documented` wording the answers whose absence it states,
+    each reviewed and empty."""
     from . import wm_narrative
     units = [item for item in cited if item.get('kind') == 'unit']
     basis = [item for item in cited if item.get('kind') == 'answers']
@@ -435,13 +437,19 @@ def _statement_evidence(encounter, narrative, requirement, cited, answers, block
     result = wm_narrative.unit_entries(encounter.notes, narrative['fields'], narrative['context_labels'], units)
     require(len(basis) <= 1 and all(set(item) == {'kind', 'answer_keys'} and isinstance(item['answer_keys'], list)
                                     for item in basis), 'Statement evidence names its answers once.')
+    rests = wm_narrative.basis_keys(rule)
+    absent = wm_narrative.rests_on_absence(rule)
     if basis:
-        if not required or basis[0]['answer_keys'] != required:
+        if not rests or basis[0]['answer_keys'] != rests:
             blockers.append('statement_answers_differ_from_wording')
-        elif any(answers[key]['blockers'] or not answers[key]['text'] for key in required):
+        elif absent and any(answers[key]['blockers'] or answers[key]['text'] for key in rests):
+            blockers.append('statement_absence_not_reviewed')
+        elif not absent and any(answers[key]['blockers'] or not answers[key]['text'] for key in rests):
             blockers.append('statement_answers_incomplete')
         result.append({'kind': 'answers', 'answer_keys': list(basis[0]['answer_keys'])})
-    if not required and not result:
+    if not units and not (basis and rests):
+        blockers.append('complete_assertion_source_required')
+    elif required and not wm_narrative.built_from_answers(rule) and not units:
         blockers.append('complete_assertion_source_required')
     if not required and units and not wm_narrative.names_side(requirement, result, encounter.notes):
         blockers.append('side_not_supported')

@@ -609,6 +609,33 @@ def validate(notes, fields, selections, requirements):
 
 
 # ── statements ─────────────────────────────────────────────────────────────────────────────────────────────
+#: A wording is "built from its answers" when it is those answers joined by at most this many words of connecting
+#: text (`Right {vein}{is}{finding}`, `TYPE OF EXAM: {side}`, `The {vein} from the {start} to the {end} was found to
+#: have had previous treatment{outcome}`: 1 to 12 words). The technique paragraph (63 and 81 words) states how the
+#: study was done, which no answer says, so it needs a sentence of the notes.
+CONNECTING_WORDS = 12
+
+
+def built_from_answers(variant):
+    fixed = re.findall(r'[^\W\d_]+', re.sub(r'\{[^{}]+\}', ' ', variant.get('text_template', '')))
+    return bool(variant.get('required_control_keys')) and len(fixed) <= CONNECTING_WORDS
+
+
+def rests_on_absence(variant):
+    """A `not_documented` wording states that its answers are not in the notes: its reviewed EMPTY answers are the
+    support (the engine's own variant id; `none` and `not_assessed` are clinical findings and need a sentence)."""
+    return variant.get('id') == 'not_documented' and bool(variant.get('empty_control_keys'))
+
+
+def basis_keys(variant):
+    """The answers a wording may rest on, or []: its own answers, or the ones whose absence it states."""
+    if built_from_answers(variant):
+        return list(variant['required_control_keys'])
+    if rests_on_absence(variant):
+        return list(variant['empty_control_keys'])
+    return []
+
+
 def filled(answer):
     return bool(answer and answer.get('status') in ('supported', 'edited') and answer.get('text'))
 
@@ -636,9 +663,10 @@ def propose(statements, requirements, answers, indexed, read):
             continue
         if evidence and not required and not names_side(row, evidence, read['notes']):
             continue
-        if required:
-            evidence.append({'kind': 'answers', 'answer_keys': required})
-        if not evidence:
+        if basis_keys(variant):
+            evidence.append({'kind': 'answers', 'answer_keys': basis_keys(variant)})
+        if not evidence or (not required and not rests_on_absence(variant)
+                            and not any(entry['kind'] == 'unit' for entry in evidence)):
             continue
         proposals[item.key] = {'variant': variant['id'], 'evidence': evidence}
     return proposals

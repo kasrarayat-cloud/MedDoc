@@ -100,7 +100,7 @@ public static partial class WmAdapter
                 if (variant.RequiredControlKeys.Any(key => answers[key].Status == "missing"))
                     Fail("missing_assertion_answer", "A reviewed statement still depends on an unanswered content control.");
                 if (decision.Evidence is not null && decision.Evidence.Any(e => e?.Kind is not null))
-                    VerifyNarrativeStatement(requirement, variant, decision.Evidence, trusted.Notes);
+                    VerifyNarrativeStatement(requirement, variant, decision.Evidence, answers, trusted.Notes);
                 else if (decision.Evidence is null || decision.Evidence.Length == 0
                     || decision.Evidence.Any(e => !LabelledSupport(e, trusted.Notes, requirement.Label, requirement.Text))
                     || !LabelValuesConsistent(trusted.Notes, requirement.Label, requirement.Text))
@@ -290,16 +290,22 @@ public static partial class WmAdapter
             Fail("unsupported_answer", "The cited source sentences do not place this answer on its side.");
     }
 
-    private static void VerifyNarrativeStatement(ReviewRequirement requirement, ClaimVariant variant, Evidence[] evidence, string notes)
+    private static void VerifyNarrativeStatement(ReviewRequirement requirement, ClaimVariant variant, Evidence[] evidence,
+        Dictionary<string, Answer> answers, string notes)
     {
         var sentences = new List<(string Quote, int Start, int End)>(); var basis = 0;
+        // A wording rests on the answers it is built from, or a `not_documented` wording on the answers whose absence
+        // it states (the parent also bounds the first kind's connecting text; this is the coarser, implied rule).
+        var absence = variant.RequiredControlKeys.Length == 0 && variant.Id == "not_documented";
+        var rests = variant.RequiredControlKeys.Length > 0 ? variant.RequiredControlKeys : absence ? variant.EmptyControlKeys : [];
         foreach (var entry in evidence) {
             if (entry is null) Fail("unsupported_assertion", "Invalid statement evidence.");
             if (entry.Kind == "answers") {
                 basis++;
-                if (basis > 1 || variant.RequiredControlKeys.Length == 0 || entry.AnswerKeys is null
-                    || !entry.AnswerKeys.SequenceEqual(variant.RequiredControlKeys, StringComparer.Ordinal))
-                    Fail("unsupported_assertion", "A statement rests only on the answers its own wording is built from.");
+                if (basis > 1 || rests.Length == 0 || entry.AnswerKeys is null
+                    || !entry.AnswerKeys.SequenceEqual(rests, StringComparer.Ordinal)
+                    || (absence && entry.AnswerKeys.Any(key => answers[key].Status != "missing")))
+                    Fail("unsupported_assertion", "A statement rests only on the answers its own wording is built from, or whose absence it states.");
             } else if (entry.Kind == "unit") {
                 var slice = Slice(entry, notes);
                 if (slice is null) Fail("unsupported_assertion", "Statement evidence no longer matches the source.");
@@ -309,7 +315,7 @@ public static partial class WmAdapter
             }
         }
         if (variant.RequiredControlKeys.Length == 0) {
-            if (sentences.Count == 0 && !evidence.Any(e => e.Kind is null)) Fail("unsupported_assertion", "A fixed statement wording needs a source sentence.");
+            if (sentences.Count == 0 && basis == 0 && !evidence.Any(e => e.Kind is null)) Fail("unsupported_assertion", "A fixed statement wording needs a source sentence.");
             var side = FieldSide(requirement.Label.Replace("Prewritten statement: ", "", StringComparison.Ordinal));
             if (side is not null && sentences.Count > 0 && !sentences.Any(q => SideWritten(notes, q.Start, q.End, side)))
                 Fail("unsupported_assertion", "The cited source sentences do not name this statement's side.");

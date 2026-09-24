@@ -121,6 +121,7 @@ WM_BLOCKERS={
     'narrative_qualifiers_hold':'The notes state this finding with uncertainty, for someone other than the patient, or at another time. Decide the answer yourself.',
     'statement_answers_differ_from_wording':'This wording is not built from the answers it cites. Save to refresh the statement, then review it.',
     'statement_answers_incomplete':'This wording rests on answers that are still unanswered or need review.',
+    'statement_absence_not_reviewed':'This wording says its answers are not documented. Leave them unanswered and review each one first.',
     'governed_source':'A heading, a pointer or a correction in the notes may change what the cited sentences mean. Check them before relying on this statement.',
 }
 
@@ -455,6 +456,7 @@ def encounter_detail(request,pk):
                 row['status']='conflict'; reasons=[reason for reason in reasons if reason!='conflicting_source']
             row['review_errors']=[WM_BLOCKERS.get(reason,'Clinical review is incomplete.') for reason in reasons]
             row['review_errors']+=[conflict['explanation'] for conflict in wm_conflicts if row['key'] in conflict['answer_keys']]
+        from . import wm_narrative
         proposals=e.template_review.get('proposals',{}) if not decisions else {}
         for row in requirements:
             row['unresolved']=not resolved_ok
@@ -467,6 +469,7 @@ def encounter_detail(request,pk):
             # A wording built from answers may rest on those answers; the page posts that basis back explicitly.
             row['answers_basis']=next((item['answer_keys'] for item in shown or [] if item.get('kind')=='answers'),None)
             row['answers_basis_labels']=[next((f['label'] for f in e.template_version.fields if f['key']==key),key) for key in row['answers_basis'] or []]
+            row['basis_possible']=row.get('kind')=='assertion' and any(wm_narrative.basis_keys(variant) for variant in row.get('variants',[]))
             row['proposed']=bool(proposal) and not decision
             row['selected_variant']=decision.get('variant') or proposal.get('variant') or row.get('selected_variant') or row.get('default_variant')
             if resolved_ok:
@@ -721,10 +724,10 @@ def save_answers(request,pk):
             variant=request.POST.get('claim_variant_'+key,requirement.get('default_variant'))
             if variant not in {item['id'] for item in requirement['variants']}:
                 return document_refusal(request,e,'Choose an approved statement alternative. No changes were saved.',400)
-            # "Rests on its answers": the selected wording's own answers, named from the mapping, never from the post.
+            # "Rests on its answers": the answers the selected wording rests on, named from the mapping, never the post.
             if narrative_on and request.POST.get('claim_basis_'+key)=='answers':
-                required=next(item for item in requirement['variants'] if item['id']==variant).get('required_control_keys',[])
-                evidence.append({'kind':'answers','answer_keys':list(required)})
+                chosen=next(item for item in requirement['variants'] if item['id']==variant)
+                if wm_narrative.basis_keys(chosen):evidence.append({'kind':'answers','answer_keys':wm_narrative.basis_keys(chosen)})
             decisions[key]={'reviewed':reviewed,'evidence':evidence,'variant':variant}
     e.answers=answers;e.revision=target_revision;e.status='review';wm_review.invalidate_review(e)
     if is_wm and Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists():

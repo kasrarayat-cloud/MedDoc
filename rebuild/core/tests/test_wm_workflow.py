@@ -3,6 +3,7 @@
 Requires the separately built qualified SDK runtime. Missing runtime is an
 explicit skip; it is never replaced by a mocked document engine.
 """
+from copy import deepcopy
 from decimal import Decimal
 import hashlib
 import json
@@ -27,7 +28,7 @@ from core.jobs import enqueue, run_one
 from core.models import Department, Encounter, Job, Membership, Organization, Patient, Template, User
 from core.security import private_path
 from core.wm_review import BACKEND, ORIGINAL_SHA256
-from documents import DocumentError, resolve_template
+from documents import DocumentError, fill_template, resolve_template
 from .test_workflow import TEST_SETTINGS
 from core.tests.audio_fixtures import wav_bytes
 
@@ -422,3 +423,157 @@ class WMDocumentWorkflow(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'fixed question labels')
         self.assertEqual(self.template.versions.count(), 2)
+
+
+class RenderedSaveForm(HTMLParser):
+    """What a browser posts for a page AS RENDERED: every control of the save form, unchanged."""
+    def __init__(self):
+        super().__init__(); self.values = {}; self.inside = False; self.text = None; self.select = None
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == 'form':
+            self.inside = (attrs.get('action') or '').endswith('/save/')
+        if not self.inside or not attrs.get('name') and tag != 'option':
+            return
+        if tag == 'input':
+            if attrs.get('type') != 'checkbox' or 'checked' in attrs:
+                self.values[attrs['name']] = attrs.get('value', 'on' if attrs.get('type') == 'checkbox' else '')
+        elif tag == 'textarea':
+            self.text = attrs['name']; self.values[self.text] = ''
+        elif tag == 'select':
+            self.select = attrs['name']; self.values.setdefault(self.select, '')
+        elif tag == 'option' and self.select and 'selected' in attrs:
+            self.values[self.select] = attrs.get('value', '')
+    def handle_endtag(self, tag):
+        if tag == 'textarea': self.text = None
+        elif tag == 'select': self.select = None
+        elif tag == 'form': self.inside = False
+    def handle_data(self, data):
+        if self.text: self.values[self.text] += data
+
+    @classmethod
+    def of(cls, page):
+        form = cls(); form.feed(page.content.decode())
+        return {name: html.unescape(value).lstrip('\n') for name, value in form.values.items()}
+
+
+@skipUnless(WORD_RUNTIME_USABLE,
+            'Live Word document workflow NOT EXERCISED — ' + (WORD_RUNTIME_REASON or 'unknown reason') +
+            '. No claim is made about this path from this run.')
+@override_settings(**TEST_SETTINGS)
+class WMNarrativeWorkflow(TestCase):
+    """Ordinary narrative notes through the real application and the real Word engine (docs/rebuild/wm-narrative-design.md):
+    a RETAINED provider-shaped response (the frozen benchmark's careful set, replayed in fixture mode; not fresh live
+    generation) → generation → the page as rendered → the clinician's decisions → finalization → original export."""
+    setUp = WMDocumentWorkflow.setUp
+
+    def benchmark(self, name):
+        from core.tests.wm_narrative_benchmark import load
+        return load(name)
+
+    def generate(self, case_id):
+        case = {row['id']: row for row in self.benchmark('cases.json')['cases']}[case_id]
+        response = self.benchmark('responses-careful.json')['cases'][case_id]
+        replay = Path(self.directory.name) / 'replay'
+        replay.mkdir(exist_ok=True)
+        (replay / (hashlib.sha256(case['notes'].encode()).hexdigest() + '.json')).write_text(json.dumps(response))
+        self.narrative = self.settings(WM_NARRATIVE=True, AI_REPLAY_DIR=str(replay))
+        self.narrative.enable(); self.addCleanup(self.narrative.disable)
+        created = self.client.post('/encounters/new/', {'patient': self.patient.pk, 'template_version': self.version.pk,
+            'notes': case['notes'], 'service_date': timezone.localdate().isoformat(), 'synthetic_only': 'on'})
+        self.assertEqual(created.status_code, 302)
+        encounter = Encounter.objects.get(template_version=self.version)
+        self.client.post(f'/encounters/{encounter.pk}/generate/')
+        self.assertTrue(run_one())
+        encounter.refresh_from_db()
+        job = Job.objects.get(encounter=encounter)
+        self.assertEqual((job.state, job.config.get('narrative_contract'), job.provider),
+                         ('succeeded', 'wm-narrative-v1', 'synthetic-narrative-replay'))
+        return case, encounter
+
+    def test_the_benchmark_mapping_is_the_engines_own_inspection(self):
+        mapping = self.benchmark('mapping.json')
+        self.assertEqual(self.version.fields, mapping['fields'])
+        self.assertEqual(self.version.review_requirements, mapping['review_requirements'])
+        self.assertEqual(self.version.document_backend, mapping['backend'])
+
+    def test_narrative_notes_are_reviewed_and_exported_into_the_unchanged_original(self):
+        case, encounter = self.generate('C12')
+        answers = encounter.answers
+        for key, expected in case['expected_fields'].items():
+            if expected['outcome'] == 'supported':
+                self.assertEqual((answers[key]['status'], answers[key]['text']), ('supported', expected['value']), key)
+                self.assertTrue(all(entry['kind'] == 'unit' and case['notes'][entry['start']:entry['end']] == entry['quote']
+                                    for entry in answers[key]['evidence']), key)
+        self.assertEqual(set(encounter.template_review), {'proposals'})
+        page = self.client.get(f'/encounters/{encounter.pk}/')
+        self.assertContains(page, 'data-wm-narrative')
+        self.assertContains(page, 'data-statement-proposed')
+        # Only the two statements nothing proposed start on their defaults, and the previous-treatment default needs
+        # answers the notes do not give: the page names exactly those conflicts before anything is reviewed.
+        named = {statement[0] for conflict in page.context['wm_conflicts'] for statement in conflict['statements']}
+        self.assertTrue(named and all('previous treatment' in name for name in named), page.context['wm_conflicts'])
+        payload = RenderedSaveForm.of(page)
+        # The page as rendered carries every generated answer and its sentences.
+        for field in self.version.fields:
+            self.assertEqual(payload.get('answer_' + field['key'], ''), answers[field['key']]['text'], field['key'])
+        # The notes say nothing about previous treatment: the clinician chooses "not documented", resting on those
+        # empty answers. No statement line was added to the notes.
+        for key in ('claim_23', 'claim_27'):
+            payload['claim_variant_' + key] = 'not_documented'
+            payload['claim_basis_' + key] = 'answers'
+        self.client.post(f'/encounters/{encounter.pk}/save/', payload)
+        encounter.refresh_from_db()
+        # The chosen wordings are shown before they can be reviewed: review everything on the page as it now renders.
+        page = self.client.get(f'/encounters/{encounter.pk}/')
+        self.assertFalse(page.context['wm_review_error'], page.context['wm_review_error'])
+        payload = RenderedSaveForm.of(page)
+        self.assertEqual((payload.get('claim_basis_claim_23'), payload.get('claim_variant_claim_23')), ('answers', 'not_documented'))
+        for field in self.version.fields:
+            payload['reviewed_' + field['key']] = 'on'
+        for row in page.context['wm_requirements']:
+            payload['claim_reviewed_' + row['key']] = 'on'
+        self.client.post(f'/encounters/{encounter.pk}/save/', payload)
+        encounter.refresh_from_db()
+        self.assertTrue(encounter.template_review['assessment']['complete'], encounter.template_review['assessment']['blockers'])
+        self.assertEqual(encounter.notes, case['notes'])
+        exported = WMDocumentWorkflow.finalize(self, encounter)
+        from docx import Document
+        document = Document(BytesIO(exported))
+        cells = [cell.text.strip() for table in document.tables for row in table.rows for cell in row.cells]
+        for value in ('6.0', '1600', '6.1', '1300'):
+            self.assertIn(value, cells)
+        with ZipFile(BytesIO(exported)) as zipped:
+            xml = zipped.read('word/document.xml').decode()
+        self.assertIn('Saphenous reflux is present in the right lower extremity.', xml)
+        self.assertIn('Previous treatment history was not documented for the right lower extremity.', xml)
+        self.assertIn('Clinical correlation with the above findings is required.', xml)
+        self.assertNotIn('No saphenous reflux in right lower extremity.', xml)
+        self.assertEqual(xml.count('<w:sdt>') + xml.count('<w:sdt '), 28)
+
+    def test_the_engine_refuses_a_narrative_answer_its_cited_sentences_do_not_support(self):
+        """The second boundary, driven directly with a forged request: a narrative answer on a side its sentence does
+        not name, and one whose value its sentence does not contain, are refused at fill whatever the parent sent. The
+        positive control passes the answer check and stops later, at the unreviewed statements."""
+        notes = 'The right great saphenous vein measures 7.4 mm at the saphenofemoral junction.'
+        unit = {'quote': notes, 'start': 0, 'end': len(notes), 'kind': 'unit'}
+        variants = {row['key']: row['default_variant'] for row in self.version.review_requirements}
+        variants.update(claim_9='original', claim_19='not_documented', claim_23='not_documented', claim_27='not_documented',
+                        claim_30='not_documented', claim_31='not_documented', claim_34='not_documented',
+                        claim_35='not_documented')
+        context = {'reviewer_id': str(self.user.pk), 'revision': 3, 'notes': notes,
+                   'signer_name': self.user.get_full_name(), 'finalized_at': timezone.now().isoformat()}
+        def attempt(key, text):
+            answers = {field['key']: {'text': '', 'status': 'missing', 'reviewed_by': str(self.user.pk), 'revision': 3,
+                                      'evidence': []} for field in self.version.fields}
+            answers[key] = {'text': text, 'status': 'supported', 'reviewed_by': str(self.user.pk), 'revision': 3,
+                            'evidence': [unit]}
+            with self.assertRaises(DocumentError) as refused:
+                fill_template(private_path(self.template.original_path), self.version.fields, answers,
+                              Path(self.directory.name) / ('forged-' + key + text.replace(' ', '') + '.docx'),
+                              document_backend=self.version.document_backend, reviewed_requirements={},
+                              claim_variants=variants, trusted_context=context)
+            return refused.exception.code
+        self.assertEqual(attempt('measurement_15_1', '7.4 mm'), 'unsupported_answer')    # the LEFT row, a right sentence
+        self.assertEqual(attempt('measurement_1_1', '6.9 mm'), 'unsupported_answer')     # a number it does not contain
+        self.assertEqual(attempt('measurement_1_1', '7.4 mm'), 'review_required')        # control: the answer passes
