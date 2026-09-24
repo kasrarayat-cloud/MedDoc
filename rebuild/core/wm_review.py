@@ -204,6 +204,9 @@ def _field_decision(notes, field, answer, actor, labels, revision, narrative=Non
         qualifiers = answer.get('narrative')
         if answer.get('status') == 'supported' and isinstance(qualifiers, dict) and not wm_narrative.qualifiers_fit(field, qualifiers):
             blockers.append('narrative_qualifiers_hold')
+        if (answer.get('status') == 'supported' and narrative.get('read') is not None
+                and wm_narrative.held_now(field, answer, narrative['read']) is not None):
+            blockers.append('narrative_held')
     elif not values or not all(value['labelled'] and value['value'] == text for value in values):
         blockers.append('exact_labelled_source_required')
     if field.get('kind') == 'measurement':
@@ -309,7 +312,12 @@ def narrative_reading(encounter, fields, requirements):
         return None
     from .generation import recognized_labels
     context_labels = [row['label'] for row in requirements]
-    return {'fields': fields, 'context_labels': context_labels, 'labels': recognized_labels(fields, context_labels)}
+    # The reading finalization rechecks pre-filled answers with (`wm_narrative.held_labels`): review applies the same
+    # recheck, so it never reports complete what finalization refuses (round 3: a save changing what cites a correction).
+    read = (wm_narrative.stored_reading(encounter.notes, fields, context_labels, encounter.answers)
+            if wm_narrative.active(fields, encounter.answers) else None)
+    return {'fields': fields, 'context_labels': context_labels, 'labels': recognized_labels(fields, context_labels),
+            'read': read}
 
 
 def _answer_assessment(encounter, actor, fields, requirements):

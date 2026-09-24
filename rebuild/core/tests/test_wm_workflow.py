@@ -615,5 +615,82 @@ class WMNarrativeWorkflow(TestCase):
                               'bothersome.', 'measurement_15_1', '7.4 mm'), ('side_unknown', 'unsupported_answer'))
         self.assertEqual(both('İBRAHİM YILMAZ presents for a venous study.', 'patient_name', 'Ibrahim Yilmaz'),
                          (None, 'review_required'))
-        self.assertEqual(both('KARL GROSS presents for a venous study.', 'patient_name', 'Karl Groß'),
+        self.assertEqual(both('KARL GROSS presents for a venous study.', 'patient_name', 'Karl Gro\u00df'),
                          ('unsupported', 'unsupported_answer'))
+        # A bound read after the value, in place (round 3: the engine no longer copies the rest of the text per number).
+        self.assertEqual(both('The right great saphenous vein measures 7.4 mm or more at the saphenofemoral junction.',
+                              'measurement_1_1', '7.4 mm'), ('unsupported', 'unsupported_answer'))
+        self.assertEqual(both('The right great saphenous vein measures 7.4 mm (approx.) at the saphenofemoral junction.',
+                              'measurement_1_1', '7.4 mm'), ('unsupported', 'unsupported_answer'))
+        self.assertEqual(both('The right great saphenous vein measures 7.4 mm' + ' ' * 4000 + 'at the saphenofemoral junction.',
+                              'measurement_1_1', '7.4 mm'), (None, 'review_required'))
+
+    def generate_from(self, notes, response):
+        """A retained response for notes of the test's own, replayed through the real generation."""
+        replay = Path(self.directory.name) / 'replay'
+        replay.mkdir(exist_ok=True)
+        (replay / (hashlib.sha256(notes.encode()).hexdigest() + '.json')).write_text(json.dumps(response))
+        self.narrative = self.settings(WM_NARRATIVE=True, AI_REPLAY_DIR=str(replay))
+        self.narrative.enable(); self.addCleanup(self.narrative.disable)
+        created = self.client.post('/encounters/new/', {'patient': self.patient.pk, 'template_version': self.version.pk,
+            'notes': notes, 'service_date': timezone.localdate().isoformat(), 'synthetic_only': 'on'})
+        self.assertEqual(created.status_code, 302)
+        encounter = Encounter.objects.get(template_version=self.version)
+        self.client.post(f'/encounters/{encounter.pk}/generate/')
+        self.assertTrue(run_one())
+        encounter.refresh_from_db()
+        return encounter
+
+    def test_the_first_page_reviews_the_proposed_wordings_and_keeps_that_review(self):
+        """Refutation round 3 (integrity lens): the first page resolved the proposed statements but reviewed the
+        defaults, showed an error and the original wordings, and discarded the clinician's statement reviews."""
+        from core import wm_narrative
+        notes = ('SYNTHETIC PATIENT P had a bilateral detailed venous study.\n'
+                 'The right great saphenous vein measures 7.4 mm at the saphenofemoral junction.\n'
+                 'The left great saphenous vein measures 5.0 mm at the saphenofemoral junction.\n'
+                 'Clinical correlation with the above findings is required.')
+        labels = [row['label'] for row in self.version.review_requirements]
+        ids = [unit['id'] for unit in wm_narrative.units(notes, self.version.fields, labels)]
+        picks = {'sdt_1475334564': ('Bilateral Detailed', [ids[0]]), 'measurement_1_1': ('7.4 mm', [ids[1]]),
+                 'measurement_15_1': ('5.0 mm', [ids[2]])}
+        rows = [{'key': field['key'], 'value': picks.get(field['key'], ('', []))[0], 'unit_ids': picks.get(field['key'], ('', []))[1],
+                 'conflict': False, 'subject': 'patient', 'certainty': 'definite',
+                 'timing': 'prior' if wm_narrative.previous_treatment(field) else 'current'} for field in self.version.fields]
+        statements = [{'key': 'claim_9', 'variant': 'exam_choice', 'unit_ids': [ids[0]]},
+                      {'key': 'claim_39', 'variant': 'original', 'unit_ids': [ids[3]]}]
+        statements += [{'key': key, 'variant': 'not_documented', 'unit_ids': []}
+                       for key in ('claim_19', 'claim_23', 'claim_27', 'claim_30', 'claim_31', 'claim_32', 'claim_34',
+                                   'claim_35', 'claim_36')]
+        encounter = self.generate_from(notes, {'fields': rows, 'statements': statements})
+        self.assertEqual(encounter.template_review['proposals']['claim_9']['variant'], 'exam_choice')
+        page = self.client.get(f'/encounters/{encounter.pk}/')
+        self.assertFalse(page.context['wm_review_error'], page.context['wm_review_error'])
+        shown = {row['key']: row for row in page.context['wm_requirements']}
+        self.assertEqual(shown['claim_9']['selected_variant'], 'exam_choice')
+        self.assertIn('Bilateral Detailed', shown['claim_9']['text'])
+        payload = RenderedSaveForm.of(page)
+        for field in self.version.fields:
+            payload['reviewed_' + field['key']] = 'on'
+        for row in page.context['wm_requirements']:
+            payload['claim_reviewed_' + row['key']] = 'on'
+        self.client.post(f'/encounters/{encounter.pk}/save/', payload)
+        encounter.refresh_from_db()
+        reviewed = {key: row['reviewed'] for key, row in encounter.template_review['decisions'].items()}
+        self.assertTrue(reviewed and all(reviewed.values()), reviewed)
+
+    def test_review_is_never_complete_where_finalization_refuses(self):
+        """Refutation round 3 (integrity lens): a save changing which answers cite a correction left review complete
+        while finalization refused the answers the correction now held. Review applies finalization's recheck."""
+        case, encounter = self.generate('C12')
+        answers = dict(encounter.answers)
+        held = {key for key, answer in answers.items() if answer.get('status') == 'supported'}
+        from core import generation, wm_review
+        # A correction the notes gain nobody cites: finalization's recheck holds the measurements it could correct.
+        encounter.notes = case['notes'] + '\n\nCorrection: the knee measurement is 6.1 mm.'
+        governed = generation.governed_decisions(encounter.notes, self.version.fields, answers,
+                                                 [row['label'] for row in self.version.review_requirements])
+        self.assertTrue(governed, 'the control: finalization refuses these answers')
+        assessment = wm_review._answer_assessment(encounter, self.user, self.version.fields, self.version.review_requirements)
+        refused = {field['label'] for field in self.version.fields
+                   if 'narrative_held' in assessment[field['key']]['blockers']}
+        self.assertEqual(refused, set(governed) & {field['label'] for field in self.version.fields if field['key'] in held})

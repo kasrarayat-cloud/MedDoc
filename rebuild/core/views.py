@@ -129,6 +129,7 @@ WM_BLOCKERS={
     'statement_absence_not_reviewed':'This wording says its answers are not documented. Leave them unanswered and review each one first.',
     'governed_source':'A heading, a pointer or a label in the notes denies or reframes what the cited sentences say (a denial, a family history, a hypothetical). Cite a sentence it does not govern.',
     'statement_source_is_heading':'The cited line is a heading or a title, which states nothing. Cite the sentence that states this.',
+    'narrative_held':'Something in the notes may change this pre-filled answer (it is shown beside it). Choose or type the answer yourself.',
 }
 
 #: ⚠️ `data_mode` WAS A HARDCODED LITERAL AND WAS BEING CITED AS PROOF OF THE GUARD.
@@ -443,7 +444,12 @@ def encounter_detail(request,pk):
             requirements=wm_resolve(e,request.user)
             resolved_ok=True
             if can_finalize:
-                assessment=wm_review.evaluate_review(e,request.user,decisions,resolved_requirements=requirements)
+                # Before the first save, the page shows the statements generation proposed (as `wm_resolve` resolved
+                # them): its review reads those wordings, unreviewed, not the defaults (round 3).
+                from . import wm_narrative
+                proposed=e.template_review.get('proposals',{}) if not decisions and wm_narrative.enabled(e.template_version.fields) else {}
+                page_decisions={**{key:{'variant':row['variant'],'evidence':row.get('evidence',[])} for key,row in proposed.items()},**decisions}
+                assessment=wm_review.evaluate_review(e,request.user,page_decisions,resolved_requirements=requirements)
         except (ValidationError,DocumentError) as exc:
             review_error=error_message(exc)
             wm_conflicts=getattr(exc,'rows',[])
@@ -567,7 +573,8 @@ def save_answers(request,pk):
     statement_labels=[row['label'] for row in e.template_version.review_requirements]
     governance=governance_for(e.notes,e.template_version.fields,statement_labels)
     narrative_on=is_wm and wm_narrative.enabled(e.template_version.fields)
-    sentences=wm_narrative.units(e.notes,e.template_version.fields,statement_labels) if narrative_on else None
+    try:sentences=wm_narrative.units(e.notes,e.template_version.fields,statement_labels) if narrative_on else None
+    except ValidationError:sentences=None   # past the source limit a sentence cannot be cited; labelled lines still can
     narrative_read=(wm_narrative.stored_reading(e.notes,e.template_version.fields,statement_labels,e.answers)
                     if wm_narrative.active(e.template_version.fields,e.answers) else None)
     for field in e.template_version.fields:

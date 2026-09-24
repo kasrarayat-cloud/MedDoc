@@ -140,7 +140,7 @@ def payload(notes, fields, requirements):
 # the two regex engines agree; no double quote, so the literal is byte-identical in a C# verbatim string. Each is
 # compiled WITHOUT a global ignore-case flag: case is scoped inside the pattern (`R GSV` is a side, `r` is not). The
 # parent runs them over `view(text)`, which classes every character as .NET does (the engine's `Reading`).
-QUANTITY_PATTERN = (r'(?<![0-9.,])(?<![0-9][\u2009\u202f])([0-9]+(?:\.[0-9]+)?)[ \t\u00a0]*-?[ \t\u00a0]*'
+QUANTITY_PATTERN = (r'(?<![0-9.,])(?<![0-9][\u2009\u202f])([0-9]+(?:\.[0-9]+)?)(?>[ \t\u00a0]*)(?:-(?>[ \t\u00a0]*))?'
                     r'(?i:(mm|millimet(?:er|re)s?|ms|msecs?|millisec(?:ond)?s?|s|secs?|seconds?))(?![^\W\d_])')
 #: A comparator, an approximation, a range or an alternative written against the number: the form's cell takes one
 #: exact value, so a bounded, approximate, ranged or alternative quantity is not that value. Read just before it.
@@ -155,30 +155,38 @@ BOUNDED_BEFORE_PATTERN = (r'(?i:(?:[<>~\u2248\u2264\u2265\u00b1]=?'
                           r'|\bor)\s*)$')
 #: ... or just after it: `+` on the value (`7.4 mm+`, not `7.4 mm + reflux`), `?`, an approximation, a bound closing its
 #: clause (`or more.`; not `and above the knee`), or the other end of a range or an alternative.
-BOUNDED_AFTER_PATTERN = (r'(?i:^(?:\+|\s+\+(?=\s*(?:[,.;:)\]]|$))|\s*\?|\s*\(?\s*(?:approx(?:imately)?\.?|estimated|est\.)(?![^\W\d_])'
+BOUNDED_AFTER_PATTERN = (r'(?i:^(?:\+|\s+\+(?=\s*(?:[,.;:)\]]|$))|\s*\?|(?>\s*)(?:\((?>\s*))?(?:approx(?:imately)?\.?|estimated|est\.)(?![^\W\d_])'
                          r'|\s*(?:or|and)\s+(?:more|less|greater|higher|lower|longer|shorter|larger|smaller|so|above|'
                          r'below|over|under)(?![^\W\d_])(?=\s*(?:[,.;:)\]]|$|\s(?:in|at|on|for|with|and|but)\b))'
                          r'|\s*(?:-|\u2013|\u2014|to\b|or\b)\s*[0-9]))')
-#: The words that put a finding on a side. `right` not as an adverb (`right below the knee`, `right after surgery`; a
-#: row name keeps it: `Right below knee GSV`); `contralateral`, `the other leg` name no side and hold what they touch;
-#: `R`/`L` only as capitals: before an anatomical word (`R GSV`, `R prox thigh`), as a label (`R:`), in brackets
-#: (`(R)`), sided (`R-sided`) or on a vein's abbreviation (`RGSV`, `L-SSV`).
-SIDE_PATTERN = (r'(?<![^\W\d_])((?i:right(?!\s+(?:below|above|at|behind|under|over|near|beside|along|across|around|into|'
-                r'through|up|down|by|to|next|off|past)\s+(?:the|a|an|his|her|its|their|this|that|to|from|of|in|on)(?![^\W\d_])'
-                r'|\s+(?:now|away|there|here|about|then|after|before|when|as)(?![^\W\d_]))|rt|rle|left|lt|lle|'
-                r'(?:both|either)(?=\s+(?:legs?|sides?|lower\s+extremit|limbs?|extremit|ankles?|calf|calves|thighs?|knees?|'
-                r'feet|groins?|deep|superficial|venous|great|small|saphenous|gsvs?|ssvs?|junctions?))|'
+#: The words that put a finding on a side. `right` never as an adverb (`right below the knee`, `right in the groin`,
+#: `right after surgery`, `…, right?`) — but a row name keeps it: capital `Right below knee GSV`, `Right at SFJ` (no
+#: article); `both` only before a limb or a pair each leg has one of (`both legs`, `both deep venous systems`, `both
+#: great saphenous veins`; not `both great and small saphenous veins`, `both saphenous veins`); `contralateral`, `the
+#: other leg` name no side and hold what they touch; `R`/`L` only as capitals: before an anatomical word (`R GSV`, `R.
+#: GSV`, `R prox thigh`), before a number (`R 7.4 mm`), as a label (`R:`), in brackets not closing a word (`(R)`; not
+#: `ClosureFast(R)`), sided (`R-sided`) or on a vein's abbreviation (`RGSV`, `L-SSV`).
+SIDE_PATTERN = (r'(?<![^\W\d_])((?i:right(?!\s*\?|\s+(?:below|above|at|after|before|behind|under|over|near|beside|along|'
+                r'across|around|into|through|up|down|by|to|next|off|past|in|on|within|inside|now|away|there|here|about|'
+                r'then|when|as)(?![^\W\d_]))|rt|rle|left|lt|lle|(?:both|either)(?=\s+(?:legs?|sides?|lower\s+extremit(?:y|ies)|'
+                r'limbs?|extremit(?:y|ies)|ankles?|calf|calves|thighs?|knees?|feet|groins?|gsvs|ssvs|(?:deep|superficial)\s+'
+                r'(?:venous\s+)?systems|(?:great|small)\s+saphenous\s+veins)(?![^\W\d_]))|'
                 r'bilateral(?:ly)?|bilat|ble|b/l|contralateral|ipsilateral|(?:other|opposite)\s+'
-                r'(?:leg|side|limb|extremity))(?![^\W\d_])|R\s*(?:and|&|/|\+)\s*L(?![^\W\d_])|(?<=\()(?:R|L)(?=\))'
+                r'(?:leg|side|limb|extremity))(?![^\W\d_])'
+                r'|(?:Right|RIGHT)(?=\s+(?i:below|above|at)\s+(?!(?i:the|a|an|his|her|its|their|this|that)(?![^\W\d_]))[^\W\d_])'
+                r'|R\s*(?:and|&|/|\+)\s*L(?![^\W\d_])|(?<![^\W\d_]\()(?<=\()(?:R|L)(?=\))'
                 r'|(?:R|L)(?=[ \t]*:|-(?i:sided?)(?![^\W\d_])|-?(?:GSV|SSV|ASV|AASV|PASV|AAGSV|PAGSV|CFV|FV|POP|PTV|SFJ|SPJ)'
-                r'(?![^\W\d_])|\s+(?i:gsv|ssv|asv|aasv|pasv|aagsv|pagsv|great|small|legs?|lower|le|sfj|spj|cfv|fv|pop|ptv|'
-                r'atv|pv|thigh|calf|knee|ankle|foot|groin|side|deep|superficial|accessory|anterior|posterior|saphenous|'
-                r'popliteal|femoral|tibial|peroneal|gastrocnemius|soleal|tributary|tributaries|trib|perforators?|perf|'
-                r'varicose|varicosities|veins?|venous|prox|proximal|mid|distal|medial|lateral|below|above|bk|ak|extremity|'
-                r'limb|junction)(?![^\W\d_])))')
+                r'(?![^\W\d_])|\s+[0-9]|\.?\s+(?i:gsv|ssv|asv|aasv|pasv|aagsv|pagsv|great|small|legs?|lower|le|sfj|spj|cfv|fv|'
+                r'pop|ptv|atv|pv|thigh|calf|knee|ankle|foot|groin|side|deep|superficial|accessory|anterior|posterior|'
+                r'saphenous|popliteal|femoral|tibial|peroneal|gastrocnemius|soleal|tributary|tributaries|trib|perforators?|'
+                r'perf|varicose|varicosities|veins?|venous|prox|proximal|mid|distal|medial|lateral|below|above|bk|ak|'
+                r'extremity|limb|junction)(?![^\W\d_])))')
 QUANTITY = re.compile(QUANTITY_PATTERN)
 BOUNDED_BEFORE = re.compile(BOUNDED_BEFORE_PATTERN)
 BOUNDED_AFTER = re.compile(BOUNDED_AFTER_PATTERN)
+#: The same bound read AT a position of the whole text (`match(text, pos)`), not over a copy of the rest of it: a copy per
+#: quantity made reading a long note quadratic. `^` would not match at `pos`, so this reader drops it; `$` is unchanged.
+BOUNDED_AFTER_AT = re.compile(BOUNDED_AFTER_PATTERN.replace('(?i:^(?:', '(?i:(?:', 1))
 SIDE = re.compile(SIDE_PATTERN)
 MEASUREMENT_VALUE = re.compile(r'(?:0|[1-9][0-9]*)(?:\.[0-9]+)? (mm|ms)')
 RIGHT_WORD = re.compile(r'(?<![^\W\d_])(?i:right)(?![^\W\d_])')
@@ -199,6 +207,8 @@ class _ReadingView(dict):
             value = ASCII_FOLDS[code]
         elif code < 128:
             value = 0 if 0x1c <= code <= 0x1f else code
+        elif code > 0xFFFF:
+            value = 0                # .NET reads an astral character as two surrogates: neither a letter nor a word
         else:
             char = chr(code)
             category = unicodedata.category(char)
@@ -216,9 +226,25 @@ class _ReadingView(dict):
 READING_VIEW = _ReadingView()
 
 
-@functools.lru_cache(maxsize=64)
+def sized_cache(function):
+    """Two bounded caches for one reading: long texts (a whole note, few at a time; each a few MB of positions) and
+    short ones (a sentence, a correction; many). Keys hold the text, so a worker keeps at most a handful of notes."""
+    long_cache, short_cache = functools.lru_cache(maxsize=6)(function), functools.lru_cache(maxsize=2048)(function)
+
+    def cached(text, *args):
+        return (long_cache if len(text) > 2000 else short_cache)(text, *args)
+    cached.cache_clear = lambda: (long_cache.cache_clear(), short_cache.cache_clear())
+    return functools.wraps(function)(cached)
+
+
+@sized_cache
 def view(text):
     return text.translate(READING_VIEW)
+
+
+@sized_cache
+def folded(text):
+    return fold(text)
 
 
 #: Text answers compare with ASCII case folded (and the four letters above) and every other character exactly: the
@@ -234,6 +260,8 @@ def fold(text):
 
 def net_letter(char):
     """What .NET's `[^\\W\\d_]` calls a letter."""
+    if ord(char) > 0xFFFF:
+        return False                 # .NET sees two surrogates
     category = unicodedata.category(char)
     return char != '_' and (category[0] == 'L' or category in ('Mn', 'Pc'))
 
@@ -245,6 +273,11 @@ def _space(text):
 def measurement_at(value, quote):
     """Where `value` ("7.4 mm", "1200 ms") is written in `quote`, exactly and unqualified: the same number with a unit
     word of the column, or for a reflux time the same duration in seconds. Offsets into `quote`."""
+    return list(_measurement_at(value, quote))
+
+
+@functools.lru_cache(maxsize=4096)
+def _measurement_at(value, quote):
     match = MEASUREMENT_VALUE.fullmatch(value or '')
     if not match:
         return []
@@ -255,15 +288,15 @@ def measurement_at(value, quote):
     unit, found_at, read = match.group(1), [], view(quote)
     for found in QUANTITY.finditer(read):
         if (BOUNDED_BEFORE.search(read[max(0, found.start() - 40):found.start()])
-                or BOUNDED_AFTER.search(read[found.end():])):
+                or BOUNDED_AFTER_AT.match(read, found.end())):
             continue
         written = Decimal(found.group(1))
         word = found.group(2).lower()
         if ((unit == 'mm' and word.startswith(('mm', 'millimet')) and written == number)
                 or (unit == 'ms' and word.startswith(('ms', 'msec', 'millisec')) and written == number)
-                or (unit == 'ms' and word.startswith('s') and written * 1000 == number)):
+                or (unit == 'ms' and word.startswith('s') and written.scaleb(3) == number)):
             found_at.append(found.start())
-    return found_at
+    return tuple(found_at)
 
 
 def measurement_supported(value, quotes):
@@ -273,12 +306,16 @@ def measurement_supported(value, quotes):
 WORD_GAP = SPACE + r'+(?:(?:right|left|rt|lt)' + SPACE + r'+)?'
 
 
-def _words(text):
-    """A value's words as a pattern over `fold`ed text: any run of whitespace between them, and a side word may stand
-    inside the phrase (`retained right great saphenous vein` writes the option `retained great saphenous vein` for the
-    right leg). The word boundaries are .NET's (`bounded`)."""
-    words = [word for word in re.split(SPACE + '+', fold(text)) if word]
-    return re.compile('(?=(' + WORD_GAP.join(map(re.escape, words)) + '))') if words else None
+def _words(text, exact=False):
+    """A value's words as a pattern over the reading view of `fold`ed text: any run of whitespace between them, and a
+    side word may stand inside the phrase (`retained right great saphenous vein` writes the option `retained great
+    saphenous vein` for the right leg), bounded where .NET bounds a word. `exact`: the same over the folded text itself,
+    without bounds, to check a match character for character."""
+    words = [word for word in re.split(SPACE + '+', folded(str(text or '')) if exact else view(folded(str(text or '')))) if word]
+    if not words:
+        return None
+    body = WORD_GAP.join(map(re.escape, words))
+    return re.compile(body if exact else r'(?<![^\W\d_])' + body + r'(?![^\W\d_])')
 
 
 def bounded(text, low, high):
@@ -286,11 +323,18 @@ def bounded(text, low, high):
 
 
 def text_at(value, quote):
-    pattern = _words(value)
+    return list(_text_at(value, quote))
+
+
+@functools.lru_cache(maxsize=4096)
+def _text_at(value, quote):
+    """Where a text value is written: found over the reading view of the folded quote, whose classes are .NET's, then
+    checked character for character on the folded quote (the view names every mark alike)."""
+    pattern, exact = _words(value), _words(value, exact=True)
     if pattern is None:
-        return []
-    folded = fold(quote)
-    return [m.start(1) for m in pattern.finditer(folded) if bounded(folded, m.start(1), m.end(1))]
+        return ()
+    source = folded(quote)
+    return tuple(m.start() for m in pattern.finditer(view(source)) if exact.fullmatch(source, m.start(), m.end()))
 
 
 def option_at(value, quote):
@@ -314,9 +358,14 @@ OPTION_FILLER = frozenset('with evidence from that this there been have were int
 def option_words_at(value, quote):
     """Where the words of a choice that is not written as such stand (`reflux` of `reflux positive.`): only to tell
     whether a correction or the other side touches it, never to support it."""
+    return list(_option_words_at(value, quote))
+
+
+@functools.lru_cache(maxsize=4096)
+def _option_words_at(value, quote):
     words = [w for w in re.findall(r'[^\W\d_]{4,}', value.casefold()) if w not in OPTION_FILLER]
-    return sorted(m.start() for w in dict.fromkeys(words)
-                  for m in re.finditer(r'(?<![^\W\d_])' + re.escape(w) + r'(?![^\W\d_])', quote, re.I))
+    return tuple(sorted(m.start() for w in dict.fromkeys(words)
+                        for m in re.finditer(r'(?<![^\W\d_])' + re.escape(w) + r'(?![^\W\d_])', quote, re.I)))
 
 
 def value_supported(field, value, quotes):
@@ -351,7 +400,8 @@ CLAUSE_BREAK = re.compile(r'[,;:]|\b(?i:and|but|while|whereas)\b')
 PARAGRAPH = re.compile(r'\n[ \t\r\f\v]*\n')
 
 
-def sentences(text):
+@sized_cache
+def _sentences(text):
     spans, start = [], 0
     for match in SENTENCE_END.finditer(text):
         end = match.end()
@@ -359,7 +409,99 @@ def sentences(text):
             continue
         spans.append((start, end)); start = end
     spans.append((start, len(text)))
-    return spans
+    return tuple(spans), tuple(a for a, _ in spans)
+
+
+def sentences(text):
+    return list(_sentences(text)[0])
+
+
+def sentence_at(text, at):
+    """The sentence span of `text` containing `at` (the last one for its end)."""
+    spans, starts = _sentences(text)
+    return spans[max(0, bisect.bisect_right(starts, at) - 1)]
+
+
+# ── indexes: every per-place question answered by bisection over positions read once per text ────────────────────
+#: ⚠️ COST. A note may be 50,000 characters of one unpunctuated sentence, and every reading is asked once per place a
+#: value is written, so a reading that rescans the text per place is quadratic (round 3's cost lens: the page and the
+#: save past the 120 s worker timeout). Each index is read once over the WHOLE text (never inside a window: a window
+#: reads a word cut at its edge as a word) and kept by `sized_cache`.
+WORD_RUN = re.compile(r'\S+')
+LETTER_RUN = re.compile(r'[^\W\d_]+')
+
+
+@sized_cache
+def _positions(text, name):
+    """(starts, spans) of one kind of position over the whole text."""
+    if name == 'number':
+        found = sorted(list(NUMBER.finditer(text)) + list(NUMBER_WORD.finditer(text)), key=lambda m: m.start())
+    else:
+        pattern, over = {'clause': (CLAUSE_BREAK, text), 'digit': (DIGIT, text), 'word': (WORD_RUN, text),
+                         'letters': (LETTER_RUN, text), 'quantity': (QUANTITY, view(text)),
+                         'relative': (RELATIVE, text), 'paragraph': (PARAGRAPH, text)}[name]
+        found = pattern.finditer(over)
+    spans = tuple((m.start(), m.end()) for m in found)
+    return tuple(a for a, _ in spans), spans
+
+
+def first_in(text, name, low, high):
+    """The first `name` position wholly inside `low`..`high`, or None."""
+    starts, spans = _positions(text, name)
+    index = bisect.bisect_left(starts, low)
+    while index < len(spans) and spans[index][0] < high:
+        if spans[index][1] <= high:
+            return spans[index]
+        index += 1
+    return None
+
+
+def last_in(text, name, low, high):
+    """The last `name` position wholly inside `low`..`high`, or None."""
+    starts, spans = _positions(text, name)
+    index = bisect.bisect_left(starts, high) - 1
+    while index >= 0 and spans[index][0] >= low:
+        if spans[index][1] <= high:
+            return spans[index]
+        index -= 1
+    return None
+
+
+def count_in(text, name, low, high):
+    """How many `name` positions START inside `low`..`high`."""
+    starts, _ = _positions(text, name)
+    return bisect.bisect_left(starts, high) - bisect.bisect_left(starts, low)
+
+
+def nth_from(text, name, low, n):
+    """The `n`-th (from 0) `name` position starting at or after `low`, or None."""
+    starts, spans = _positions(text, name)
+    index = bisect.bisect_left(starts, low) + n
+    return spans[index] if 0 <= index < len(spans) else None
+
+
+def nth_before(text, name, high, n):
+    """The `n`-th (from 1) `name` position starting before `high`, counting back, or None."""
+    starts, spans = _positions(text, name)
+    index = bisect.bisect_left(starts, high) - n
+    return spans[index] if 0 <= index < len(spans) else None
+
+
+def strikes(spans):
+    """Struck spans merged and sorted, for `is_struck`."""
+    merged = []
+    for a, b in sorted(spans):
+        if merged and a <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], b)
+        else:
+            merged.append([a, b])
+    return tuple(a for a, _ in merged), tuple(b for _, b in merged)
+
+
+def is_struck(struck, at):
+    starts, ends = struck if isinstance(struck, tuple) and len(struck) == 2 and isinstance(struck[0], tuple) else strikes(struck)
+    index = bisect.bisect_right(starts, at) - 1
+    return index >= 0 and at < ends[index]
 
 
 BOTH_WORDS = frozenset('bilateral bilaterally bilat ble b/l'.split())
@@ -379,12 +521,37 @@ def side_word(word):
     return 'unclear'
 
 
-@functools.lru_cache(maxsize=32)
+@sized_cache
 def _side_index(notes):
     """Every side word of the notes, read once over the whole text: a search bounded inside a word would read the
     word's head as a word (`both` of `bothersome`). (start, end, side), in order."""
     found = [(m.start(1), m.end(1), side_word(m.group(1))) for m in SIDE.finditer(view(notes))]
     return [a for a, _, _ in found], found
+
+
+def side_starting_at(notes, at, struck=()):
+    """The side word starting exactly at `at` (and not struck), or None."""
+    starts, found = _side_index(notes)
+    index = bisect.bisect_left(starts, at)
+    return found[index] if index < len(found) and starts[index] == at and not is_struck(struck, at) else None
+
+
+def next_side(notes, low, high, struck=()):
+    """The first side word wholly inside `low`..`high` that no correction struck, or None."""
+    starts, found = _side_index(notes)
+    index = bisect.bisect_left(starts, low)
+    while index < len(found) and found[index][0] < high:
+        if found[index][1] <= high and not is_struck(struck, found[index][0]):
+            return found[index]
+        index += 1
+    return None
+
+
+@sized_cache
+def _adverbial_rights(notes):
+    """Where `right` is written and is no side word (`right below the knee`, `…, right?`)."""
+    sides = set(_side_index(notes)[0])
+    return tuple(m.start() for m in RIGHT_WORD.finditer(view(notes)) if m.start() not in sides)
 
 
 def sides_between(notes, low, high):
@@ -406,13 +573,9 @@ def sides_of(text):
 def adverbial_right(notes, low, high):
     """Whether `low`..`high` writes `right` as an adverb (`Right at the SPJ …`): it may be the side, so it is never
     passed over for the side of the paragraph."""
-    starts = set(_side_index(notes)[0])
-    for m in RIGHT_WORD.finditer(view(notes), low):
-        if m.start() >= high:
-            return False
-        if m.start() not in starts:
-            return True
-    return False
+    rights = _adverbial_rights(notes)
+    index = bisect.bisect_left(rights, low)
+    return index < len(rights) and rights[index] < high
 
 
 def field_side(field):
@@ -421,12 +584,12 @@ def field_side(field):
 
 
 def paragraph_start(notes, at):
-    starts = [m.end() for m in PARAGRAPH.finditer(notes, 0, at)]
-    return starts[-1] if starts else 0
+    last = last_in(notes, 'paragraph', 0, at)
+    return last[1] if last else 0
 
 
 def unstruck(words, struck):
-    return [word for word in words if not any(a <= word[0] < b for a, b in struck)]
+    return [word for word in words if not is_struck(struck, word[0])] if struck else list(words)
 
 
 #: Side words this close together, with nothing numbered or ending between them, are one phrase (`the right and the left`).
@@ -436,6 +599,8 @@ RUN_GAP_WORDS = 3
 def one_phrase(notes, end, start):
     """Whether the text between two side words keeps them in one phrase: a few words, no number, no sentence end or
     line break."""
+    if start - end > 200:
+        return False                 # no three words span that
     between = notes[end:start]
     if DIGIT.search(between) or '\n' in between or len(between.split()) > RUN_GAP_WORDS:
         return False
@@ -447,27 +612,30 @@ def nearest_before(notes, low, at, struck=(), phrase_low=None):
     """The side of the nearest side word in `low`..`at` (outside what a correction struck), or None; `ambiguous` when
     its phrase names both legs (`The right and left great saphenous veins measure 7.4 mm and 5.0 mm`, `right greater
     than left`)."""
-    if not unstruck(sides_between(notes, low, at), struck):
-        return None
-    # The phrase may begin before `low` (a clause starting at `and` in `the right and left veins`).
-    words = unstruck(sides_between(notes, low if phrase_low is None else min(low, phrase_low), at), struck)
-    phrase, index = {words[-1][2]}, len(words) - 1
-    while index > 0 and one_phrase(notes, words[index - 1][1], words[index][0]):
-        index -= 1
-        phrase.add(words[index][2])
-    return 'ambiguous' if {'right', 'left'} <= phrase else words[-1][2]
+    return phrase_side(nearest_phrase(notes, low, at, struck, phrase_low))
 
 
+@sized_cache
+def _lines(notes):
+    """(start, end) of every line, as `str.splitlines` reads them."""
+    spans, at = [], 0
+    for line in notes.splitlines(keepends=True):
+        spans.append((at, at + len(line))); at += len(line)
+    return tuple(spans), tuple(a for a, _ in spans)
+
+
+@sized_cache
 def line_side(notes, before):
     """The side of the nearest side MARKER before `before`: a heading line, or a short line without numbers or a final
     stop (`LEFT LOWER EXTREMITY`, `**LEFT LEG**`). A marker naming no side ends the search with no side, unless it is an
     anatomical sub-heading (`Superficial venous system:` under `RIGHT LOWER EXTREMITY:`), which its side heading
     governs; so does a sentence naming a side (`The left leg was then examined.` does not carry across a paragraph,
     and the older heading above it must not either). Lines carrying findings without a side are passed over."""
-    end = before
-    for line in reversed(notes[:before].splitlines(keepends=True)):
-        start, line_end, end = end - len(line), end, end - len(line)
-        stripped = line.strip()
+    spans, starts = _lines(notes)
+    index = bisect.bisect_left(starts, before) - 1
+    for start, line_end in reversed(spans[:index + 1]):
+        line_end = min(line_end, before)
+        stripped = notes[start:line_end].strip()
         if not stripped:
             continue
         sides = {side for _, _, side in sides_between(notes, start, line_end)}
@@ -484,9 +652,24 @@ def line_side(notes, before):
     return None
 
 
-#: A side bound to the value it follows: `5.0 mm on the left`, `…insufficiency on both sides`, `4.4 mm in the left leg`
-#: (`versus the right side`, `similar to the right leg` are comparisons, not bindings).
-ATTACHED_SIDE = re.compile(r'[ \t]*,?[ \t]*(?:(?i:on|in|of|for)\s+(?:(?i:the)\s+)?)?(?=' + SIDE_PATTERN[len(r'(?<![^\W\d_])'):] + ')')
+#: What binds a side to the value just before it: a preposition (`5.0 mm on the left`, `4.4 mm in the left leg`), a
+#: bracket (`5.0 mm (left)`), a dash (`5.0 mm - left`), or an adverb of both (`…insufficiency bilaterally`). A bare side
+#: word after the value binds nothing: `7.4 mm, left GSV is competent` opens the next clause, `1.2 seconds right and …`
+#: is speech.
+SIDE_TAIL = SIDE_PATTERN[len(r'(?<![^\W\d_])'):]
+ATTACHED_LEAD = (r'(?>[ \t]*)(?:,(?>[ \t]*))?(?:(?i:on|in|of|for)(?>\s+)(?:(?i:the)(?>\s+))?|[(\[](?>[ \t]*)'
+                 r'|[-\u2013\u2014](?>[ \t]*))')
+ATTACHED_SIDE = re.compile(ATTACHED_LEAD + r'(?=' + SIDE_TAIL + r')|(?>[ \t]*)(?:,(?>[ \t]*))?(?=(?i:bilateral(?:ly)?|bilat)(?![^\W\d_]))')
+#: What may follow a bound side and still close its phrase: the end, punctuation, a limb word, or a joining word.
+#: Anything else (`…1.8 seconds on the left the great saphenous vein measures 5.0`) may be the next finding's subject.
+BOUND_CLOSE = re.compile(r'(?>[ \t]*)(?:(?i:legs?|sides?|lower\s+extremit(?:y|ies)|extremit(?:y|ies)|limbs?|le)(?![^\W\d_])(?>[ \t]*))?'
+                         r'(?:$|[^\w\s]|\n|(?i:with|and|but|at|in|of|for|from|to|which|that|where|as|was|is|were|are|'
+                         r'measures?|measuring|shows?|showing|has|had)(?![^\W\d_]))')
+#: A side word that is its own phrase's (`of the right GSV`, `the left leg`), not a bare word in passing.
+NAMED_BEFORE = re.compile(r'(?i:the|on|in|of|for|at)\s+$')
+NAMED_AFTER = re.compile(r'\s+(?i:legs?|sides?|lower|le|extremit(?:y|ies)|limbs?|gsvs?|ssvs?|great|small|saphenous|'
+                         r'accessory|deep|superficial|femoral|popliteal|tibial|thigh|calf|knee|ankle|groin|veins?|venous)'
+                         r'(?![^\W\d_])')
 
 
 def written_length(field, value, notes, at):
@@ -496,41 +679,133 @@ def written_length(field, value, notes, at):
         return found.end() - at if found else 0
     core = re.sub(r'^[,\s]*(?:and\s+|however,?\s+)?|[.\s]+$', '', value or '') if field.get('kind') == 'choice' else value
     pattern = _words(core)
-    found = pattern.match(fold(notes), at) if pattern else None
-    return found.end(1) - at if found else 0
+    found = pattern.match(view(folded(notes)), at) if pattern else None
+    return found.end() - at if found else 0
 
 
-def trusted_after(notes, end, high):
-    """A side word read after a value is that value's when no number follows it in its clause; otherwise it opens the
-    next finding (`…reflux time is 1.8 seconds on the left the great saphenous vein measures 5.0 …`)."""
-    stop = CLAUSE_BREAK.search(notes, end, high)
-    return not DIGIT.search(notes, end, stop.start() if stop else high)
+def nearest_phrase(notes, low, at, struck=(), phrase_low=None):
+    """The nearest side word in `low`..`at` (outside what a correction struck) and the sides of its phrase, or None. The
+    phrase may begin before `low` (a clause starting at `and` in `the right and left veins`)."""
+    starts, found = _side_index(notes)
+    index = bisect.bisect_left(starts, at) - 1
+    while index >= 0 and found[index][0] >= low and (found[index][1] > at or is_struck(struck, found[index][0])):
+        index -= 1
+    if index < 0 or found[index][0] < low:
+        return None
+    last = current = found[index]
+    phrase, floor = {last[2]}, low if phrase_low is None else min(low, phrase_low)
+    index -= 1
+    while index >= 0 and found[index][0] >= floor:
+        word = found[index]
+        index -= 1
+        if is_struck(struck, word[0]):
+            continue
+        if not one_phrase(notes, word[1], current[0]):
+            break
+        phrase.add(word[2]); current = word
+    return last, phrase
 
 
-def sentence_side(notes, at, low, high, length=0, struck=()):
-    """The side the finding's own sentence gives it (`low`..`high`): a side word inside the value as written
-    (`retained right great saphenous vein`), one bound just after it (`5.0 mm on the left`, `…insufficiency
-    bilaterally`) when nothing numbered follows it in its clause, else the nearest before it in its clause and its
-    sentence, else after it before the next number. `ambiguous` when the sentence reads both ways: the words before
-    it name both legs, a side after it opens the next finding with nothing before it, or `right` stands as an adverb."""
+def phrase_side(found):
+    if found is None:
+        return None
+    word, phrase = found
+    return 'ambiguous' if {'right', 'left'} <= phrase else word[2]
+
+
+def bound_to_earlier_value(notes, word_start, low):
+    """Whether a side word is bound to a value just before it (`7.4 mm on the right and 5.0 mm on the left`: the right is
+    7.4's), so it is not a competing reading of a later value."""
+    last = last_in(notes, 'quantity', low, word_start)
+    bound = ATTACHED_SIDE.match(view(notes), last[1]) if last else None
+    return bool(bound) and bound.end() == word_start
+
+
+#: How far after a value a side word is still a reading of it (`7.4 mm at the SFJ of the right GSV`); further on, in a
+#: transcript's unpunctuated run, it is the next finding's.
+AFTER_WORDS = 8
+
+
+def place_reading(notes, at, low, high, length=0, struck=()):
+    """(primary, candidates) for one place a value is written, in its sentence `low`..`high`.
+
+    `primary` is what a PRE-FILL may rest on: a side word inside the value as written; else one bound just after it
+    (`5.0 mm on the left`) when its phrase closes there and nothing before it in the sentence reads otherwise; else the
+    nearest before it in its clause, then its sentence, when no side written after it in its own clause reads otherwise;
+    else one after it in its own clause that is its phrase's own (`of the right GSV`); else the paragraph's, then the
+    nearest side heading's. `ambiguous` when readings compete — a phrase naming both legs, a side after the value against
+    one before it, a bare side word, `right` as an adverb — and None when the text gives none.
+
+    `candidates` is every side a reading of the text gives this place: what the clinician may choose at review. Each is a
+    side word the engine also finds before the sentence ends."""
     if length:
         inside = unstruck(sides_between(notes, at, at + length), struck)
         if inside:
-            return inside[0][2]
-    clause_low = max([low] + [m.end() for m in CLAUSE_BREAK.finditer(notes, low, at)])
-    before = nearest_before(notes, clause_low, at, struck, low) or nearest_before(notes, low, at, struck)
-    bound = ATTACHED_SIDE.match(view(notes), at + length)
-    attached = next((w for w in unstruck(sides_between(notes, bound.end(), high), struck) if w[0] == bound.end()),
-                    None) if bound else None
+            return inside[0][2], {inside[0][2]}
+    read = view(notes)
+    struck = struck if isinstance(struck, tuple) else strikes(struck)
+    last_break = last_in(notes, 'clause', low, at)
+    clause_low = last_break[1] if last_break else low
+    in_clause = nearest_phrase(notes, clause_low, at, struck, low)
+    in_sentence = in_clause or nearest_phrase(notes, low, at, struck)
+    clause_end = first_in(notes, 'clause', at + max(1, length), high)
+    number = first_in(notes, 'digit', at + max(1, length), high)
+    stop = clause_end[0] if clause_end else high
+    # A side written just after the value in its clause is a reading of it — unless another number follows in that
+    # clause: then the side is that number's (`5.0 mm versus the right side at 7.4 mm`).
+    numbered = bool(number) and number[0] < stop
+    beyond = nth_from(notes, 'word', at + length, AFTER_WORDS)
+    if beyond and beyond[0] < stop:
+        stop = nth_from(notes, 'word', at + length, AFTER_WORDS - 1)[1]
+    after = [] if numbered else unstruck(sides_between(notes, at + length, stop), struck)
+    bound = ATTACHED_SIDE.match(read, at + length)
+    attached = side_starting_at(notes, bound.end(), struck) if bound else None
+    attached = attached if attached and attached[1] <= high else None
+    candidates = {side for *_, side in after}
     if attached:
-        return attached[2] if trusted_after(notes, attached[1], high) else (before or 'ambiguous')
-    if before:
-        return before
-    number = DIGIT.search(notes, at + max(1, length), high)
-    after = unstruck(sides_between(notes, at + length, number.start() if number else high), struck)
+        candidates.add(attached[2])
+        before = set(in_clause[1]) if in_clause else set()
+        if in_clause is None and in_sentence and not bound_to_earlier_value(notes, in_sentence[0][0], low):
+            before = set(in_sentence[1])
+        candidates |= before
+        primary = attached[2]
+        # Its own phrase may go on to the other leg (`in the right or left lower extremity`, `5.0 mm and 7.4 mm in the
+        # right and left veins respectively`): which leg the value is is not written.
+        onward = next_side(notes, attached[1], high, struck)
+        joined = {primary} | ({onward[2]} if onward and one_phrase(notes, attached[1], onward[0]) else set())
+        candidates |= joined
+        if (not BOUND_CLOSE.match(read, attached[1]) or {'right', 'left'} <= joined
+                or (primary != 'both' and before - {primary, 'both'})):
+            primary = 'ambiguous'
+        return primary, candidates
+    if in_sentence:
+        candidates |= in_sentence[1]
+        primary = phrase_side(in_sentence)
+        # A side after it competes when it is its own phrase's (`… 7.4 mm at the SFJ of the left GSV`); a bare word
+        # (`… 3.9 millimeters no reflux left side …`, `1.2 seconds right and …`) opens the next thing said.
+        rivals = {side for start, _, side in after if NAMED_BEFORE.search(notes[max(0, start - 6):start])}
+        if primary != 'both' and (rivals | in_sentence[1]) - {primary, 'both'}:
+            primary = 'ambiguous'
+        return primary, candidates
     if after:
-        return after[0][2] if trusted_after(notes, after[0][1], high) else 'ambiguous'
-    return 'ambiguous' if adverbial_right(notes, low, high) else None
+        word = after[0]
+        own = NAMED_BEFORE.search(notes[max(0, word[0] - 6):word[0]]) or NAMED_AFTER.match(read, word[1])
+        primary = word[2] if own and len(candidates - {'both'}) <= 1 else 'ambiguous'
+        return primary, candidates
+    if adverbial_right(notes, low, high):
+        context = context_reading(notes, low)
+        return 'ambiguous', context[1]
+    return context_reading(notes, low)
+
+
+def context_reading(notes, low):
+    """The side around a sentence that names none, as (primary, candidates): its paragraph's nearest phrase, else the
+    nearest side heading."""
+    found = nearest_phrase(notes, paragraph_start(notes, low), low)
+    if found:
+        return phrase_side(found), set(found[1])
+    side = line_side(notes, paragraph_start(notes, low))
+    return side, ({side} if side else set())
 
 
 def paragraph_side(notes, low, struck=()):
@@ -542,27 +817,6 @@ def context_side(notes, low):
     """The side around a sentence that names none: `paragraph_side`, else the nearest side marker line (a heading, or
     a short line without numbers)."""
     return paragraph_side(notes, low) or line_side(notes, paragraph_start(notes, low))
-
-
-def side_at(notes, at, low, high, length=0):
-    """`sentence_side`, else `context_side`; None when the text does not say."""
-    return sentence_side(notes, at, low, high, length) or context_side(notes, low)
-
-
-def cited_side(own, notes, besides=None):
-    """The one side the OTHER cited units name (outside what a correction replaced; not the unit at `besides`), or None:
-    the model is told to cite the sentence naming the side, and a sentence naming both legs says both."""
-    words = set()
-    for entry in own:
-        if besides is not None and entry['start'] <= besides < entry['end']:
-            continue
-        spans = superseded(entry)
-        words |= {side for start, _, side in sides_between(notes, entry['start'], entry['end'])
-                  if not any(a <= start < b for a, b in spans)}
-    words.discard('unclear')
-    if 'both' in words:
-        return 'both'
-    return words.pop() if len(words) == 1 else None
 
 
 def names_side(requirement, own, notes):
@@ -606,61 +860,112 @@ OPENING_WORDS = 3
 
 def correction_points(quote):
     """Where `quote` writes a correction (offsets of its word)."""
-    return sorted(set(generation.erratum_points(quote)) | {m.start() for m in CORRECTION_WORD.finditer(quote)})
+    return list(_correction_points(quote))
+
+
+@sized_cache
+def _correction_points(quote):
+    return tuple(sorted(set(generation.erratum_points(quote)) | {m.start() for m in CORRECTION_WORD.finditer(quote)}))
 
 
 def unit_class(word):
     return 'mm' if word.lower().startswith(('mm', 'millimet')) else 'time'
 
 
-def replaced_from(quote, low, point, spoken):
-    """Where what a correction inside its sentence replaces starts: like with like. Correcting TO a number, it replaces
-    the last number before it of that unit (or with no unit: `6.9 correction 6.6 millimeters`); correcting to words, the
-    clause before it (`Swelling in the right leg, correction, the left leg`). A spoken one never reaches back further
-    than a few words."""
+ADJACENT_WORDS = 3
+CORRECTION_WORD_AT = re.compile(r'(?i:correct(?:ion|ions|ed)|sorry|scratch\s+that|strike\s+that|make\s+that|i\s+mean)')
+
+
+def correction_target(quote, point):
+    """What a correction immediately corrects TO: after its word and separators, up to the next clause break (a few words
+    of speech at most). `correction, at the right medial calf, measures 4.7 mm` corrects to words, not to 4.7 mm."""
+    word = CORRECTION_WORD_AT.match(quote, point)
+    start = word.end() if word else point
+    while start < len(quote) and quote[start] in CORRECTION_LEAD + '.':
+        start += 1
+    end = min(len(quote), start + SPOKEN_REACH)
+    stop = CLAUSE_BREAK.search(quote, start, end)
+    return quote[start:stop.start() if stop else end]
+
+
+#: A number spoken as words (`six point one`): never a value (`measurement_at` reads digits), but it places a spoken
+#: correction as well as digits do.
+NUMBER_WORD = re.compile(r'(?<![^\W\d_])(?i:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|'
+                         r'fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|'
+                         r'eighty|ninety|hundred|thousand)(?![^\W\d_])')
+
+
+def numeric_target(quote, point):
+    """Whether a correction corrects TO a number (one within its first few words, in digits or words)."""
+    words = correction_target(quote, point).split()[:ADJACENT_WORDS]
+    return any(DIGIT.search(word) or NUMBER_WORD.fullmatch(word) for word in words)
+
+
+def struck_from(quote, low, point):
+    """Where what a correction inside its sentence strikes IN PLACE starts: only what it stands right after. Correcting TO
+    a number, the number just before it with at most a few words after it (`6.1 mm, correction, 7.6 mm`, `6.9 correction
+    6.6 millimeters`) when it is of that unit or bare; correcting to words, the few words just before it (`at the knee,
+    correction, at the saphenofemoral junction`). Anything earlier it may concern is HELD, not struck (`own_correction`):
+    which one it replaced is not written."""
     head = point
     while head > low and quote[head - 1] in CORRECTION_LEAD:
         head -= 1
-    clause = max([low] + [m.end() for m in CLAUSE_BREAK.finditer(quote, low, head)])
-    floor = max(low, point - SPOKEN_REACH) if spoken else low
-    after = corrected_to(quote, point)
-    if DIGIT.search(after):
-        read = view(quote)
-        target = QUANTITY.search(view(after))
-        wanted = unit_class(target.group(2)) if target else None
-        for number in reversed(list(NUMBER.finditer(quote, floor, head))):
-            written = QUANTITY.match(read, number.start())
-            if wanted is None or written is None or unit_class(written.group(2)) == wanted:
-                return number.start()
-    return max(clause, floor)
+    read = view(quote)
+    if numeric_target(quote, point):
+        number = last_in(quote, 'number', low, head)
+        if not number:
+            return point
+        written = QUANTITY.match(read, number[0])
+        target = QUANTITY.search(view(correction_target(quote, point)))
+        gap = count_in(quote, 'letters', written.end() if written else number[1], head)
+        if gap <= ADJACENT_WORDS and (target is None or written is None
+                                      or unit_class(written.group(2)) == unit_class(target.group(2))):
+            return number[0]
+        return point
+    if not count_in(quote, 'letters', low, head):
+        return head
+    first = nth_before(quote, 'letters', head, ADJACENT_WORDS)
+    start = first[0] if first and first[0] >= low else first_in(quote, 'letters', low, head)[0]
+    digit = last_in(quote, 'digit', start, head)
+    return max(start, digit[1]) if digit else start
 
 
 def corrections_in(entry):
     """(absolute point, opens its sentence, start of what it replaces) for every correction in one cited unit."""
-    quote, parts, found = entry['quote'], sentences(entry['quote']), []
-    for point in correction_points(quote):
-        low = next((a for a, b in parts if a <= point < b), 0)
+    base = entry['start']
+    return [(base + point, opens, base + start) for point, opens, start in _corrections(entry['quote'])]
+
+
+@sized_cache
+def _corrections(quote):
+    found = []
+    for point in _correction_points(quote):
+        low = sentence_at(quote, point)[0]
         # Opening its sentence: nothing but a few lead-in words before it (`Dictation correction, …`, `Sorry, 900 ms.`).
-        lead = quote[low:point]
-        opens = not DIGIT.search(lead) and len(re.findall(r'[^\W\d_]+', lead)) <= OPENING_WORDS
-        start = low if opens else replaced_from(quote, low, point, bool(SPOKEN_CORRECTION.match(quote, point)))
-        found.append((entry['start'] + point, opens, entry['start'] + start))
-    return found
+        opens = not first_in(quote, 'digit', low, point) and count_in(quote, 'letters', low, point) <= OPENING_WORDS
+        start = low if opens else struck_from(quote, low, point)
+        found.append((point, opens, start))
+    return tuple(found)
 
 
 def corrected_to(quote, point):
     """What a correction at `point` (an offset into `quote`) corrects TO: a spoken one, the next few words (never ending
     inside a word or a number); a written one, the rest of its clause (to the end of its sentence, or the first clause
     break after its first number)."""
+    return _corrected_to(quote, point)
+
+
+@functools.lru_cache(maxsize=8192)
+def _corrected_to(quote, point):
     if SPOKEN_CORRECTION.match(quote, point):
         end = min(len(quote), point + SPOKEN_REACH)
         while end < len(quote) and quote[end].isalnum():
             end += 1
         return quote[point:end]
-    end = next((b for a, b in sentences(quote) if a <= point < b), len(quote))
-    number = DIGIT.search(quote, point, end)
-    stop = CLAUSE_BREAK.search(quote, number.end() if number else point, end) if number else None
-    return quote[point:stop.start() if stop else end]
+    end = sentence_at(quote, point)[1]
+    number = first_in(quote, 'digit', point, end)
+    stop = first_in(quote, 'clause', number[1], end) if number else None
+    return quote[point:stop[0] if stop else end]
 
 
 def restated(field, value, entry):
@@ -677,9 +982,9 @@ def restated(field, value, entry):
 
 
 def superseded(entry):
-    """The spans of a unit its own corrections strike in place: one inside a sentence replaces what it corrects, like with
-    like (`6.1 mm, correction: 7.6 mm`). One opening its sentence points back at something said before it, which only
-    the reader of the whole text can place: it HOLDS what it may concern (`own_correction`), it strikes nothing."""
+    """The spans of a unit its own corrections strike in place: what a correction inside a sentence stands right after
+    (`struck_from`). Everything else a correction may concern — earlier in its sentence, or before one that opens its
+    sentence — it HOLDS (`own_correction`, `correction_context`); it strikes nothing it cannot place."""
     return [(low, point) for point, opens, low in corrections_in(entry) if not opens]
 
 
@@ -698,65 +1003,97 @@ def located(field, value, own, words=False):
     a choice's words (`option_words_at`) where the choice is not written as such."""
     found = []
     for entry in own:
-        spans = superseded(entry)
-        points = [point for point, _, _ in corrections_in(entry)]
-        for at in (option_words_at(value, entry['quote']) if words else value_at(field, value, entry['quote'])):
-            low, high = next(((a, b) for a, b in sentences(entry['quote']) if a <= at < b), (0, len(entry['quote'])))
-            where = entry['start'] + at
+        quote, base = entry['quote'], entry['start']
+        struck = strikes(superseded(entry))
+        # Each correction's reach (what it corrects TO), by position, with the furthest reach so far: a place is looked
+        # up against the few corrections that can reach it, not against all of them.
+        reaches = [(point, point + len(corrected_to(quote, point - base))) for point, _, _ in corrections_in(entry)]
+        points, furthest = [point for point, _ in reaches], []
+        for _, end in reaches:
+            furthest.append(max(end, furthest[-1]) if furthest else end)
+        for at in (option_words_at(value, quote) if words else value_at(field, value, quote)):
+            low, high = sentence_at(quote, at)
+            where = base + at
             # Written in what a correction corrects TO, which denies it (`…, correction, no reflux in the right GSV`):
             # not live. A denial after that reach is another sentence of a transcript, not the correction's.
-            denied = any(point < where < point + len(corrected_to(entry['quote'], point - entry['start']))
-                         and generation.changes_meaning(entry['quote'][point - entry['start']:at]) for point in points)
-            found.append((where, (entry['start'] + low, entry['start'] + high),
-                          denied or any(a <= where < b for a, b in spans)))
+            denied, index = False, bisect.bisect_left(points, where) - 1
+            while index >= 0 and furthest[index] > where and not denied:
+                point, end = reaches[index]
+                denied = where < end and generation.changes_meaning(quote[point - base:at])
+                index -= 1
+            found.append((where, (base + low, base + high), denied or is_struck(struck, where)))
     return found
 
 
-def only_other_side(field, text):
-    """Whether `text` names a side, and only the other one: a correction about the other leg does not concern this one."""
-    mine = field_side(field)
-    sides = sides_of(text) - {'unclear'}
-    return mine is not None and bool(sides) and sides <= {'right', 'left'} and mine not in sides
+UNIT_WORD = re.compile(r'(?<![^\W\d_])((?i:mm|millimet(?:er|re)s?|ms|msecs?|millisec(?:ond)?s?|secs?|seconds?))(?![^\W\d_])')
 
 
 def concerns(field, value, corrected):
-    """Whether what a correction corrects TO may change this answer: a quantity of the answer's own unit, the answer's
-    value or its words, a side for a question about one side — unless it names only the other side — or nothing it can
-    be placed by (`Scratch that.`, `Correction: those were her mother's.`: it may concern anything)."""
-    if only_other_side(field, corrected):
-        return False
-    quantities = [m.group(2) for m in QUANTITY.finditer(view(corrected))]
-    sides = sides_of(corrected)
-    if field.get('kind') == 'measurement' and any(same_unit(field, word) for word in quantities):
-        return True
+    """Whether what a correction corrects TO may change this answer: its value or its words; a side, for a question about
+    one side; for a measurement, a quantity of its unit or a bare number or no quantity at all; for anything else, a
+    correction stating no quantity. Only a correction plainly about another kind of thing (a reflux time for a diameter,
+    a measurement for a symptom) concerns nothing — never a side it names (`larger than on the left`, `that reflux was in
+    the left leg`: a correction naming the other leg may be moving this value there)."""
     if value and (value_at(field, value, corrected) or (field.get('kind') == 'choice' and option_words_at(value, corrected))):
         return True
-    if field_side(field) and sides:
+    if field_side(field) and sides_of(corrected):
         return True
-    return not quantities and not sides and not DIGIT.search(corrected)
+    quantities = [m.group(2) for m in QUANTITY.finditer(view(corrected))] + UNIT_WORD.findall(view(corrected))
+    if field.get('kind') == 'measurement':
+        return not quantities or any(same_unit(field, word) for word in quantities)
+    return not quantities
+
+
+def words_before(text, at, count):
+    """The last `count` words before `at`."""
+    first = nth_before(text, 'word', at, count)
+    return text[first[0] if first else 0:at]
 
 
 def own_correction(field, value, own):
-    """The answer's own cited units whose correction may change it, as governing entries, or None: one opening its
-    sentence that the answer is not what it corrected TO (written after it and not denied by it) — the answer cites it
-    and keeps a value from elsewhere, or is written earlier in that unit and the correction `concerns` it — and, for a
-    choice whose words are nowhere, any correction in what it cites (nobody can tell which it replaced)."""
-    places = [place for place in located(field, value, own) if not place[2]]
-    if not places and field.get('kind') == 'choice':
-        places = [place for place in located(field, value, own, words=True) if not place[2]]
+    """The answer's own cited units whose correction may change it, as governing entries, or None.
+
+    A correction opening its sentence: unless the answer is what it corrected TO (written after it, not denied by it,
+    and not also written before it: `Correction: 6.1 mm belongs to the left leg` restates the old value to move it), it
+    holds the answer when the answer cites it and keeps a value from elsewhere, or when the answer is written earlier in
+    that unit and the correction `concerns` it. A correction inside a sentence holds what it `concerns` earlier in that
+    sentence (only what it stands right after is struck), and a value it reaches past to a denial (`correction, at the 2
+    week follow-up, she denies leg pain`). For a choice whose words are nowhere, any correction it cites holds it."""
+    everywhere, by_words = located(field, value, own), False
+    if not everywhere and field.get('kind') == 'choice':
+        everywhere, by_words = located(field, value, own, words=True), True
+    places = sorted(at for at, _, stale in everywhere if not stale)
+    earliest = min((at for at, _, _ in everywhere), default=None)
+    # A value denied just before it (`she denies leg pain`), for the corrections that reach past it to such a place.
+    denied_places = [at for at in places if not by_words and generation.changes_meaning(
+        words_before(next(e['quote'] for e in own if e['start'] <= at < e['end']),
+                     at - next(e['start'] for e in own if e['start'] <= at < e['end']), ADJACENT_WORDS))]
     found = []
     for entry in own:
-        quote = entry['quote']
-        here = [at for at, _, _ in places if entry['start'] <= at < entry['end']]
-        for point, opens, _ in corrections_in(entry):
-            if not opens:
-                if field.get('kind') == 'choice' and not places:
+        quote, base = entry['quote'], entry['start']
+        here = places[bisect.bisect_left(places, base):bisect.bisect_left(places, entry['end'])]
+        for point, opens, struck in corrections_in(entry):
+            relative = point - base
+            low, high = sentence_at(quote, relative)
+            if opens:
+                # `here` holds only live places: one this correction's reach denies is already struck (`located`).
+                live = [at for at in here if point < at < base + high]
+                if live and not (earliest is not None and earliest < point):
+                    continue             # the answer is what it was corrected TO
+                if not here or here[-1] > point or concerns(field, value, quote[relative:high]):
                     found.append(entry)
                 continue
-            relative = point - entry['start']
-            if any(at > point and not generation.changes_meaning(quote[relative:at - entry['start']]) for at in here):
-                continue             # the answer is what it was corrected TO
-            if not here or any(at > point for at in here) or concerns(field, value, quote[relative:]):
+            if field.get('kind') == 'choice' and not everywhere:
+                found.append(entry)
+                continue
+            corrected = corrected_to(quote, relative)
+            reach = relative + len(corrected)
+            # A number corrected to a number right after it (`6.9 correction 6.6 millimeters`) is PLACED: the earlier
+            # values are not in doubt. Anything else may have replaced any earlier value it concerns.
+            placed = numeric_target(quote, relative) and struck < point
+            earlier = bisect.bisect_left(here, base + low) < bisect.bisect_left(here, point)
+            later = bisect.bisect_left(denied_places, base + reach) < bisect.bisect_left(denied_places, base + high)
+            if (not placed and earlier and concerns(field, value, corrected)) or later:
                 found.append(entry)
     if not found:
         return None
@@ -765,46 +1102,56 @@ def own_correction(field, value, own):
             for _, entry in sorted(unique.items())]
 
 
-def placed_side(notes, own, at, low, high, length, struck):
-    """The side of one place a value is written: its sentence's, else its paragraph's, else the one side the other cited
-    units name, else the nearest side heading. A paragraph whose nearest phrase names both legs (`right greater than
-    left`) gives way only to the cited units, never to a heading above it."""
-    side = sentence_side(notes, at, low, high, length, struck)
-    if side:
-        return side
-    side = paragraph_side(notes, low, struck)
-    if side == 'ambiguous':
-        return cited_side(own, notes, at) or side
-    return side or cited_side(own, notes, at) or line_side(notes, paragraph_start(notes, low))
+def cited_sides(own, notes, besides):
+    """The sides the OTHER cited units name (outside what their corrections struck): a reading the clinician may choose
+    at review (`LEFT:` cited with `Correction: the AAGSV at the SFJ measures 6.7 mm`), never one a pre-fill rests on —
+    the model's choice of what to cite does not place a finding (ruling #127)."""
+    sides = set()
+    for entry in own:
+        if any(entry['start'] <= at < entry['end'] for at in besides):
+            continue
+        spans = superseded(entry)
+        sides |= {side for start, _, side in sides_between(notes, entry['start'], entry['end'])
+                  if not any(a <= start < b for a, b in spans)}
+    return sides - {'unclear'}
 
 
-def side_verdict(field, value, own, notes):
-    """None when the text places this finding on the question's side (or both), else `side` (the other side) or
-    `side_unknown`. Only questions whose label names a side are judged; the document's own label is the question."""
+def side_verdict(field, value, own, notes, strict=False):
+    """None when the text places this finding on the question's side (or both); else `side` (only the other side),
+    `side_unknown` (no side) or, `strict`, `side_ambiguous`. Only questions whose label names a side are judged.
+
+    Lenient (support: review, and what the engine re-checks): some reading of the text gives this side — the clinician
+    who chooses it decides between readings. Strict (the pre-fill): a place's PRIMARY reading gives it, and for a choice
+    not written as such every place its words stand does."""
     mine = field_side(field)
     if mine is None or not own:
         return None
     other = {'right', 'left'} - {mine}
-    struck = [span for entry in own for span in superseded(entry)]
+    mineish = {mine, 'both'}
+    struck = strikes([span for entry in own for span in superseded(entry)])
     places = [place for place in located(field, value, own) if not place[2]] if value else []
+    words = False
+    if not places and field.get('kind') == 'choice' and value:
+        places, words = [place for place in located(field, value, own, words=True) if not place[2]], True
     if places:
-        sides = {placed_side(notes, own, at, low, high, written_length(field, value, notes, at), struck)
-                 for at, (low, high), _ in places}
-        if mine in sides or 'both' in sides:
-            return None
-        return 'side' if sides & other else 'side_unknown'
-    if field.get('kind') == 'choice' and value:
-        # Not written as such: the side of every place its words stand must be this one (or both), and one at least.
-        places = [place for place in located(field, value, own, words=True) if not place[2]]
-        if places:
-            sides = {placed_side(notes, own, at, low, high, 0, struck) for at, (low, high), _ in places}
-            if sides <= {mine, 'both'}:
+        readings = [place_reading(notes, at, low, high, 0 if words else written_length(field, value, notes, at), struck)
+                    for at, (low, high), _ in places]
+        primaries = {primary for primary, _ in readings}
+        seen = set().union(*(candidates for _, candidates in readings)) | (primaries & {'right', 'left', 'both'})
+        if strict:
+            if (primaries <= mineish) if words else (primaries & mineish):
                 return None
-            return 'side' if sides & other and mine not in sides else 'side_unknown'
+            if primaries & {'ambiguous'} or (seen & mineish):
+                return 'side_ambiguous'
+        elif seen & mineish or cited_sides(own, notes, {at for at, _, _ in places}) & mineish:
+            return None
+        return 'side' if seen & other and not seen & mineish else 'side_unknown'
     sides = mentioned_sides(own, notes)
-    if 'unclear' in sides or (mine in sides and sides & other and 'both' not in sides):
-        return 'side_unknown'
-    if mine in sides or ('both' in sides and not sides & other):
+    if strict:
+        if sides and sides <= mineish:
+            return None
+        return 'side' if sides and sides <= other else ('side_ambiguous' if sides & mineish else 'side_unknown')
+    if sides & mineish:
         return None
     return 'side' if sides & other else 'side_unknown'
 
@@ -840,6 +1187,19 @@ def explicit_values(notes, field, all_labels, labels=None):
     return values
 
 
+def usable_units(field, own, labels, all_labels):
+    """The cited units that may carry this answer: a line labelled for ANOTHER question supports nothing here."""
+    mine = _canonical(field['label'])
+    questions = {_canonical(label) for label in all_labels if not label.startswith('Prewritten statement:')}
+    usable = []
+    for entry in own:
+        parsed = generation.labelled_value(entry['quote'], labels)
+        if parsed and parsed[0] != mine and parsed[0] in questions:
+            continue
+        usable.append(entry)
+    return usable
+
+
 def support(field, value, own, notes, labels, all_labels):
     """None when `value` is supported by `own`, else why not: `unsupported`, `labelled`, `correction`, `side` or
     `side_unknown`: whether the cited text CARRIES the value — written there, not struck by its own correction, on
@@ -850,16 +1210,12 @@ def support(field, value, own, notes, labels, all_labels):
     if not value:
         return None
     mine = _canonical(field['label'])
-    questions = {_canonical(label) for label in all_labels if not label.startswith('Prewritten statement:')}
-    usable = []
     for entry in own:
         parsed = generation.labelled_value(entry['quote'], labels)
-        if parsed and parsed[0] == mine:
-            if not agrees(field, parsed[1], value) or (negative_value(parsed[1]) and not negative_value(value)):
-                return 'labelled'
-        elif parsed and parsed[0] in questions:
-            continue                 # a line labelled for ANOTHER question supports nothing here
-        usable.append(entry)
+        if parsed and parsed[0] == mine and (not agrees(field, parsed[1], value)
+                                             or (negative_value(parsed[1]) and not negative_value(value))):
+            return 'labelled'
+    usable = usable_units(field, own, labels, all_labels)
     carrying = [entry for entry in usable if not structural(entry['quote'], NEUTRAL_HEADING_WORDS)]
     if not carrying:
         return 'unsupported'         # nothing it cites can support it (another question's line, a bare heading)
@@ -893,8 +1249,8 @@ def indication(field):
 
 def finding(field):
     """A question about what this examination found: a measurement, a sided answer, the technique."""
-    return (field.get('kind') == 'measurement' or field_side(field) is not None
-            or field['label'].casefold().startswith('technique'))
+    return not previous_treatment(field) and (field.get('kind') == 'measurement' or field_side(field) is not None
+                                              or field['label'].casefold().startswith('technique'))
 
 
 def timings(field):
@@ -920,12 +1276,14 @@ def qualifiers_fit(field, qualifiers):
 #: relative is exactly where that goes wrong. Only ever holds (the model's `subject` is the primary reading).
 RELATIVE = re.compile(r'(?<![^\W\d_])(?i:mother|father|mom|dad|sister|brother|sibling|siblings|parent|parents|son|'
                       r'daughter|aunt|uncle|grandmother|grandfather|grandparent|grandparents|cousin|'
-                      r'family(?!\s+(?:physician|doctor|dr|medicine|practice|practitioner|provider|care|md|np|clinic|health))|'
+                      r'family(?!\s+(?:physician|doctor|dr|medicine|practice|practitioner|provider|md|np|clinic))|'
                       r'relative|relatives|maternal|paternal|twin|husband|wife|spouse|partner|child|children|niece|nephew|'
                       r'grandson|granddaughter|familial|hereditary)(?![^\W\d_])')
-#: How far a relative reaches: the words just before the finding in its sentence (`varicose veins in her mother, leg
-#: swelling and ulcers`), or just after it; not the whole of a transcript's one sentence.
-RELATIVE_WORDS_BEFORE = 12
+#: How far a relative reaches: its whole sentence before the finding (`Her mother, who is now 78 years old and lives with
+#: the patient at home, has a chronic leg ulcer.`), or just after it; only a transcript's run-on sentence (longer than
+#: `RELATIVE_SENTENCE_WORDS`) is read as the words just before the finding.
+RELATIVE_SENTENCE_WORDS = 40
+RELATIVE_WORDS_BEFORE = 25
 RELATIVE_AFTER = 25
 
 
@@ -939,11 +1297,13 @@ def names_a_relative(field, value, own):
         entry = next(e for e in own if e['start'] <= at < e['end'])
         quote, base = entry['quote'], entry['start']
         here, sentence_low, sentence_high = at - base, low - base, high - base
-        words = [m.start() for m in re.finditer(r'\S+', quote[sentence_low:here])]
-        start = sentence_low + (words[-RELATIVE_WORDS_BEFORE] if len(words) >= RELATIVE_WORDS_BEFORE else 0)
+        start = sentence_low
+        if (count_in(quote, 'word', sentence_low, sentence_high) > RELATIVE_SENTENCE_WORDS
+                and count_in(quote, 'word', sentence_low, here) >= RELATIVE_WORDS_BEFORE):
+            start = nth_before(quote, 'word', here, RELATIVE_WORDS_BEFORE)[0]
         after = here + written_length(field, value, quote, here)
         limit = min(sentence_high, after + RELATIVE_AFTER)
-        if any(start <= m.start() < here or after <= m.start() < limit for m in RELATIVE.finditer(quote, start)):
+        if count_in(quote, 'relative', start, here) or count_in(quote, 'relative', after, limit):
             return True
     return False
 
@@ -972,7 +1332,7 @@ def correction_context(field, value, own, corrections, cited, notes):
     the answer's units holds it when it opens its sentence in that unit's paragraph and `concerns` it (it points back at
     what was said: a quantity of the answer's unit, its value, its side, or nothing it can be placed by), when what it
     corrects TO mentions the answer's value (a measurement compared as a quantity: `1.8 seconds` is `1800 ms`), or, when
-    nobody cites it, when it states a quantity of the answer's own unit — never when it names only the other side.
+    nobody cites it, when it states a quantity of the answer's own unit (a side it names never releases it).
     Nothing else: a correction must not send the whole form back. A correction inside the answer's own units is read by
     `support` and `own_correction`."""
     starts = {entry['start'] for entry in own}
@@ -990,8 +1350,6 @@ def correction_context(field, value, own, corrections, cited, notes):
             for entry in own)
         if same and concerns(field, value, corrected):
             found.append(unit)
-            continue
-        if only_other_side(field, corrected):
             continue
         mentioned = bool(value) and bool(value_at(field, value, corrected))
         quantity = (field.get('kind') == 'measurement' and unit['start'] not in cited
@@ -1021,7 +1379,8 @@ def same_unit(field, word):
 #: word fails closed and holds its block like a denial. So `HISTORY:` holds its history and not the `FINDINGS:` after
 #: it; `Negative for the following:` still holds every later answer, a sub-heading under it included.
 NEUTRAL_HEADING_WORDS = frozenset((
-    'right left bilateral both rt lt rle lle ble b/l side sides leg legs lower upper extremity extremities limb limbs '
+    'right left r l bilateral bilat both rt lt rle lle ble b/l rgsv lgsv rssv lssv side sides leg legs lower upper '
+    'extremity extremities limb limbs on vessel vessels color colour times time comments comment today prone obtained '
     'great small saphenous accessory anterior posterior retained duplicate vein veins venous deep superficial system '
     'systems perforator perforators tributary tributaries trib varicosities varicose junction junctions saphenofemoral '
     'saphenopopliteal popliteal femoral common tibial sfj spj gsv ssv asv aasv pasv aagsv pagsv cfv fv pop ptv proximal '
@@ -1110,7 +1469,8 @@ def section_holds(words, field):
     if demographic(field):
         return False
     if words & PLAN_WORDS:
-        return True
+        # `Assessment and plan:`, `Impression and recommendations:`: the assessment is written there too.
+        return not words & {'assessment', 'a', 'impression', 'impressions', 'findings', 'finding', 'diagnosis', 'dx'}
     if words & PAST_WORDS:
         return not previous_treatment(field) and not indication(field)
     if words & PROCEDURE_WORDS:
@@ -1234,8 +1594,8 @@ def own_section(text, field):
 def label_holds(quote, labels, field, value='', meaning_only=False):
     """Whether a cited unit carries, before a colon in any of its sentences (clock times aside, and past the form's own
     question label), a label that may change what follows it. A LABEL is short (at most four words): the question's
-    own section holds only a denying value that is not the answer (`Swelling: none.`; not `GSV SFJ: 7.4 mm, no
-    reflux`); one of section words holds what that section cannot answer (`section_holds`); a structural one holds
+    own section holds only a denying value that is not the answer (`Swelling: none.`, `Leg pain: denies leg pain.`; not
+    `Right GSV SFJ: 7.4 mm, no reflux`, where the measurement is written); one of section words holds what that section cannot answer (`section_holds`); a structural one holds
     nothing; any other fails closed. Longer text before a colon is prose (`…scanned on 09/18/2026: a detailed
     study…`), held only by the installed denial and reframing vocabulary. `meaning_only`: only that vocabulary."""
     parsed = generation.labelled_value(quote, labels)
@@ -1250,15 +1610,23 @@ def label_holds(quote, labels, field, value='', meaning_only=False):
                 # follows the last wide gap or comma; the vocabulary still reads all of it.
                 if generation.changes_meaning(text) or RULE_OUT.search(text):
                     return True
-                text = re.split(r'\s{2,}|[,;]', text)[-1]
+                text = re.split(r'\s{2,}', text)[-1]
+                # After a comma the label is the last part; a part before it that is itself label words is part of the
+                # label (`Plan, right leg:`, `Prior study, right GSV:`); any other is the previous field's value.
+                pieces = [piece.strip() for piece in re.split(r'[,;]', text)]
+                prefix = [piece for piece in pieces[:-1] if piece and structural(piece, SECTION_WORDS, heading=False)]
+                if not meaning_only and prefix and section_holds(label_words(' '.join(prefix)), field):
+                    return True
+                text = pieces[-1]
                 if meaning_only or CORRECTION_WORD.fullmatch(text.strip()):
                     pass                 # `correction:` is read as a correction, by `superseded`
                 elif len(text.split()) <= LABEL_WORDS:
-                    rest = quote[at + 1:high]
+                    # The label's own value: up to the next label, not the rest of a sentence of labels.
+                    rest = quote[at + 1:next((i for i in range(at + 1, high) if quote[i] in generation.COLONS), high)]
                     if own_section(text, field):
                         # The question's own label with a denying value (`Swelling: none.`, `Leg pain: denies.`).
                         if (negative_value(rest) and not negative_value(value)
-                                and not (value and value_at(field, value, rest))):
+                                and not (value and field.get('kind') == 'measurement' and value_at(field, value, rest))):
                             return True
                     elif text.strip().casefold() in SOAP_LABELS or structural(text, SECTION_WORDS, heading=False):
                         if section_holds(label_words(text) or [text.strip().casefold()], field):
@@ -1346,8 +1714,8 @@ BARE_NEGATIVE_WORDS = 3
 def governing(field, value, own, read):
     """What holds a candidate on its source, as (governing entries, reason), or (None, None): a cited heading line,
     the installed governors (`narrative_governors`), a cited sentence's own label or an earlier denying label in its
-    paragraph (`own_frame`), a correction in its own units (`own_correction`), then a correction in another unit
-    (`correction_context`)."""
+    paragraph (`own_frame`), a side only some readings give it (`side_verdict`, strict), a correction in its own units
+    (`own_correction`), then a correction in another unit (`correction_context`)."""
     notes = read['notes']
     headed = [entry for entry in own if generation.ends_in_colon(entry['quote'])
               and not structural(entry['quote'], NEUTRAL_HEADING_WORDS)]
@@ -1370,6 +1738,11 @@ def governing(field, value, own, read):
     found = own_frame(own, read, field, value)
     if found is not None:
         return found, generation.held_reason(found, True)
+    usable = usable_units(field, own, read['labels'], read['all_labels'])
+    placed = side_verdict(field, value, usable, notes, strict=True) if value and usable else None
+    if placed is not None:
+        return ([{'quote': e['quote'], 'start': e['start'], 'end': e['end'], 'after': False, 'same': True} for e in usable],
+                HELD[placed])
     found = own_correction(field, value, own) if value else None
     if found is not None:
         return found, HELD['correction']
@@ -1398,6 +1771,8 @@ HELD = {
              'yourself.'),
     'side_unknown': ('Read from the notes but NOT used: the notes do not say which side this finding is on, and the '
                      'side is never assumed. Decide the answer yourself.'),
+    'side_ambiguous': ('Read from the notes but NOT used: the notes can be read as placing this finding on either side, '
+                       'and the side is never assumed. Decide the answer yourself.'),
 }
 NOT_PATIENT = 'Not used: the notes attribute this finding to someone other than the patient.'
 
@@ -1546,16 +1921,15 @@ def statement_blocked(requirement, evidence, read):
     return narrative_governors(read, own, requirement, meaning_only=True) or own_frame(own, read, requirement, meaning_only=True)
 
 
-#: The words of a title line: which study, which legs (`BILATERAL LOWER EXTREMITY VENOUS DUPLEX`). It asserts nothing.
-TITLE_WORDS = frozenset(('right left bilateral both rt lt rle lle ble b/l side sides leg legs lower upper extremity '
-                         'extremities limb limbs venous vein veins duplex doppler ultrasound study exam examination '
-                         'screening detailed limited unilateral report and of the').split())
-
-
-def heading_only(entry):
-    """A cited unit that is a heading or a title: it names a side and asserts nothing about it."""
+def states(entry):
+    """Whether a cited unit STATES something: it ends as a sentence, has a finite verb or a denial, or labels a value.
+    A heading or a title (`RIGHT LOWER EXTREMITY VENOUS REFLUX STUDY`) does not — fail closed on any wording."""
     quote = entry['quote'].strip()
-    return generation.ends_in_colon(quote) or structural(quote, TITLE_WORDS, heading=False)
+    if generation.ends_in_colon(quote):
+        return False
+    body = LIST_MARKER.sub('', quote).strip().strip('*_#~`')
+    return (body[-1:] in '.!?' or bool(generation.FINITE_STATEMENT.search(body)) or generation.changes_meaning(body)
+            or any(char in generation.COLONS for char in body))
 
 
 def rests_on_titles(requirement, evidence):
@@ -1563,7 +1937,7 @@ def rests_on_titles(requirement, evidence):
     `BILATERAL LOWER EXTREMITY VENOUS DUPLEX`). A statement about the study itself may rest on its title
     (`Right leg detailed, left leg screening.` is the exam type)."""
     sentences = [entry for entry in evidence if entry.get('kind') == 'unit']
-    return field_side(requirement) is not None and bool(sentences) and all(map(heading_only, sentences))
+    return field_side(requirement) is not None and bool(sentences) and not any(map(states, sentences))
 
 
 # ── review, page and finalization: the same reader over stored answers ───────────────────────────────────────

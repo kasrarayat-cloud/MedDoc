@@ -64,27 +64,34 @@ Two kinds of rule, and the difference is who can overrule them:
 | `subject` family or other | missing (the candidate is shown as someone else's finding) |
 | **support:** nothing it cites can carry it (only another question's labelled line, only a structural heading) | held |
 | **support:** the value is not written in a cited unit: a measurement's number with a unit word of its column (a reflux time may be in seconds), not approximate, bounded, ranged or an alternative (`7.4 mm+`, not `7.4 mm + reflux`); text copied (ASCII case folded, every other character exact, as the engine compares it); a choice is an option | held |
-| **support:** the value's own sentence strikes it: a correction inside a sentence replaces what it corrects, like with like — correcting to a number, the last number of that unit before it (or a bare one: `6.9 correction 6.6 millimeters`); correcting to words, the clause before it; a spoken one never more than a few words back — or it restates two values of its unit (`6.1 mm should read 7.6 mm`) | held |
+| **support:** the value's own sentence strikes it in place: a correction inside a sentence strikes only what it stands right after — correcting to a number, the number just before it (with at most a few words after it) when of that unit or bare (`6.1 mm, correction, 7.6 mm`, `6.9 correction 6.6 millimeters`, spoken numbers too); correcting to words, the few words just before it — or it restates two values of its unit (`6.1 mm should read 7.6 mm`) | held |
 | **support:** a line labelled with this question disagrees, at a line start or after a bullet (prose under a choice's label is interpretation); a unit labelled for another question supports nothing | held |
-| **support:** a Right/Left question whose value the text does not place on that side — see *Sides* below; ruling #127: the model never asserts laterality | held |
-| `subject` unclear, a relative in the dozen words before it in its sentence or just after it (`family physician` is not one), `certainty` uncertain, `conflict`, or a timing that does not fit the question (previous treatment: prior, its outcome also current; a clinical indication: current or prior; demographics: any; everything else: this examination) | held |
+| **support:** a Right/Left question whose value NO reading of the text places on that side (or both) — see *Sides* below; ruling #127: the model never asserts laterality | held |
+| **governing:** a Right/Left question whose PRIMARY reading is not that side — the readings compete, or the side comes only from another cited unit | held (the clinician may choose any side a reading gives) |
+| `subject` unclear, a relative before it in its sentence (in a transcript's run-on sentence, the 25 words before it) or just after it (`family physician` is not one), `certainty` uncertain, `conflict`, or a timing that does not fit the question (previous treatment: prior, its outcome also current; a clinical indication: current or prior; demographics: any; everything else: this examination) | held |
 | **governing:** a heading or pointer the installed vocabulary says changes meaning (a denial, a family history, a hypothetical) holds its block, sub-headings and a spaced list included, to a new prose paragraph; any heading with a word nobody listed fails closed the same way | held with the governing lines |
-| **governing:** a SECTION heading or label (`section_holds`) holds only what its content cannot answer: a plan holds everything; a history or prior study holds all but a previous treatment and a clinical indication; a treatment/procedure section that does not say it was before holds a previous treatment; a complaint section (`HPI:`, `CC:`, `REASON FOR EXAM:`, `S:`) holds this examination's findings; demographics are never held by a section; a structural heading (sides, limbs, this form's veins and rows, report sections) holds nothing, and one naming the question's own section does not hold that question | held with the governing lines |
+| **governing:** a SECTION heading or label (`section_holds`) holds only what its content cannot answer: a plan holds everything (a plan joined to the assessment, `Assessment and plan:`, is the assessment's); a history or prior study holds all but a previous treatment and a clinical indication; a treatment/procedure section that does not say it was before holds a previous treatment; a complaint section (`HPI:`, `CC:`, `REASON FOR EXAM:`, `S:`) holds this examination's findings; demographics are never held by a section; a structural heading (sides, limbs, this form's veins and rows, report sections) holds nothing, and one naming the question's own section does not hold that question | held with the governing lines |
 | **governing:** a cited sentence's own short label (up to four words) that is unknown, the question's own label with a denying value that is not the answer (`Swelling: none.`; not `Right GSV SFJ: 7.4 mm, no reflux`), longer text before a colon with the denial vocabulary or a rule-out, or a fragment under a denying label (`Denies: leg pain. Swelling.`) | held |
-| **governing:** a correction opening its sentence in the answer's own unit or paragraph that `concerns` it (a quantity of its unit, its value or words, a side for a one-sided question, or nothing it can be placed by, `Scratch that.`) — never one naming only the other leg; a later correction whose corrected text mentions the value; an uncited one stating a quantity of its unit; the answer citing a correction and keeping a value from elsewhere | held |
+| **governing:** a correction that may have replaced the value without striking it: one inside its sentence, after the value, that `concerns` it (unless it is a number placed right after a number); one opening its sentence in the answer's own unit or paragraph that concerns it; a later one whose corrected text mentions the value; an uncited one stating a quantity of its unit; the answer citing a correction and keeping a value from elsewhere, or a correction restating the value (`6.1 mm belongs to the left leg`). `concerns`: its value or words, a side for a one-sided question, a quantity of its unit (or a bare number, or none) for a measurement, no quantity for anything else — a side it names never releases it | held |
 | otherwise | supported (pre-filled; the clinician still reviews every answer) |
 
-**Sides.** Read from the text over a whole-text index (a search cut inside a word would read `both` in `bothersome`), in
-order: a side word inside the value as written; one bound just after it (`5.0 mm on the left`) when no number follows it
-in its clause — otherwise it opens the next finding and the side before the value decides; the nearest before it in its
-clause, then its sentence; after it before the next number. A phrase naming both legs (`the right and left great
-saphenous veins measure 7.4 mm and 5.0 mm`, `right greater than left`) is ambiguous and holds; so does `right` as an
-adverb (`Right at the SPJ …`, `right below the knee`; a row name keeps it: `Right below knee GSV`). Then the paragraph's
-nearest side word (an ambiguous paragraph gives way only to the other cited units), the one side the other cited units
-name, and the nearest side heading, walking up past anatomical sub-headings (`Superficial venous system:` under `RIGHT
-LOWER EXTREMITY:`) and stopping at a report or unknown heading or a sentence naming a side. `R`/`L` count as capitals
-before an anatomical word, as a label (`R:`), in brackets, sided (`R-sided`) or on a vein's abbreviation (`RGSV`); an
-unforeseen form names no side (never "both").
+**Sides.** Read from the text over a whole-text index (a search cut inside a word would read `both` in `bothersome`).
+Each place a value is written has a PRIMARY reading and a set of CANDIDATE readings. The pre-fill needs the primary
+reading to be the question's side (or both); review accepts the clinician's answer when any candidate is (every
+candidate is a side word the engine also finds). The primary reading: a side word inside the value as written; else one
+bound just after it by a preposition, bracket or dash (`5.0 mm on the left`, `(left)`, `- left`, `bilaterally`) whose
+phrase closes there and that nothing before it in its sentence contradicts; else the nearest side before it in its
+clause, then its sentence, unless a side just after it in its clause is its own phrase's and says otherwise; else such
+a side after it; else the paragraph's nearest phrase, then the nearest side heading, walking up past anatomical
+sub-headings. It is `ambiguous` — no pre-fill — when a phrase names both legs (`the right and left veins measure 7.4
+and 5.0 mm`, `right greater than left`, `in the right or left lower extremity`), when a bound side runs on into the next
+finding (`1.8 seconds on the left the great saphenous vein measures 5.0`), when a bare side word is all there is
+(`1.2 seconds right and …`), and when `right` stands as an adverb (`right below the knee`, `right in the groin`,
+`…, right?`; a capital row name keeps it: `Right below knee GSV`). Another cited unit's side is a candidate only: the
+model's choice of what to cite never places a pre-fill. `R`/`L` count as capitals before an anatomical word or a
+number, as a label, in brackets not closing a word (`(R)`, not `ClosureFast(R)`), sided or on a vein's abbreviation;
+`both` only before a limb or a pair each leg has one of (`both deep venous systems`, not `both great and small
+saphenous veins`); an unforeseen form names no side.
 
 **Parity with the engine.** The four shared patterns are read over `wm_narrative.view(text)`, which classes every
 character as .NET's regex does: the four letters Python's ignore-case folds onto ASCII (`İ ı ſ K`, measured over every
@@ -147,12 +154,20 @@ complete sentence of the unchanged notes, so that needs a compromised parent.
   after the implementation by an author who did not read it — headed reports, raw transcripts, shorthand, a letter,
   a SOAP note. Scored on the implementation as it stood: 201 correct, **0 wrong**, **70 unnecessary holds**. After the
   first refutation round's repairs: 253 correct, 2 wrong (choices whose only option overstates the note), 18
-  unnecessary holds; after the second round's: **256 correct, the same 2 wrong, 15 unnecessary holds** (8 are unitless
-  shorthand, `6.8/1.9s`, held by design), 84 statement proposals correct. The repairs were checked against this set, so
-  it is now a development set too.
-- **Refutation.** Two rounds of four sealed, write-disabled lenses over the finished diff (data loss, false rejection,
-  parity and integrity, correction and side reading). Every demonstrated break is a regression row in
+  unnecessary holds; after the second round's: 256 correct, the same 2 wrong, 15 unnecessary holds; after the third
+  round's: **254 correct, the same 2 wrong, 17 unnecessary holds** (8 are unitless shorthand, `6.8/1.9s`, held by
+  design; most of the rest are pre-fill holds the clinician clears at review), 83 statement proposals correct. Round 3
+  closed fourteen classes of wrong pre-fill that round 2's releases had opened; the price is two pre-fills that now read
+  both ways. The repairs were checked against this set, so it is now a development set too.
+- **Refutation.** Three rounds of four sealed, write-disabled lenses over the finished diff (false green, false
+  rejection, parity and integrity, corrections and sides, cost). Every demonstrated break is a regression row in
   `test_wm_narrative.RefutationRegressions` beside a control of its class.
+- **Cost.** The reader answers every per-place question by bisection over positions read once per text (sides, clause
+  breaks, digits, words, numbers, relatives, paragraphs, lines), the backtracking patterns are atomic, and per-unit
+  corrections are read once. Adversarial shapes at the 50,000-character note limit (a correction in every finding, a
+  value followed by 49,000 spaces, one sentence of repeated values, colons, a 20,000-character typed answer) read in
+  under a second each (`ReadingCost`); before round 3, 16,000 characters took the page and the save past the worker's
+  120 s timeout.
 - **The real workflow**: `test_wm_workflow.WMNarrativeWorkflow` (CI, real Word runtime): retained narrative response
   → generation → the page as rendered → decisions → finalization → export into the unchanged original; forged
   narrative answers refused at fill.
@@ -178,8 +193,11 @@ Every one of these fails closed (a hold, or a statement the clinician must sourc
   (`six point one` — so a voice transcript's numbers must arrive as digits; Deepgram with `smart_format=false` is
   UNVERIFIED on that), a spoken `I mean`/`sorry` that is filler (it holds the value just before it), `right` used as an
   adverb (`Right at the SPJ`), a phrase naming both legs.
-- **Corrections** are read by rule (like with like inside a sentence; a sentence-opening one holds what it may
-  concern); a correction that names nothing identifiable holds every answer in its paragraph.
+- **Corrections** are read by rule: only what a correction stands right after is struck; everything else it may
+  concern is held for the clinician (in a transcript's one sentence, every earlier value of its kind), and one that
+  names nothing identifiable holds every answer in its paragraph.
+- **Sides that read both ways** are never pre-filled (`respectively`, a bound side running into the next finding, an
+  adverb `right`): the clinician chooses among the readings the text gives.
 - **Text answers** compare ASCII case-insensitively and every other character exactly (`JOSÉ` ≠ `José`): the clinician
   types a name as the notes write it.
 - **Engine floor**, above; a pasted control character in a typed answer (`medial\x0bthigh`) is refused at finalize.
