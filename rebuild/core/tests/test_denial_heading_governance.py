@@ -2673,3 +2673,30 @@ class WhatTheTwentiethPassFound(ExpectationsMixin, TestCase):
         quote = self.context(tab_answers(['Chest pain', 'Cough'], notes)[1]['Chest pain'])
         self.assertIn('Correction:', quote)
         self.assertTrue(quote.rstrip().endswith('…'), quote[-40:])
+
+
+class WhatTheTwentyFirstPassFound(ExpectationsMixin, TestCase):
+    """Round 21 over the twentieth-pass repairs (2026-09-24)."""
+
+    def test_a_heading_that_names_what_precedes_it_keeps_its_frame(self):
+        notes = ('Diabetes: yes\nColon cancer: yes\nBreast cancer: yes\nFamily history, as given by her daughter today because the '
+                 'patient has advanced dementia and could not answer for herself: the daughter was describing her own mother and '
+                 "grandmother throughout, and she confirmed each diagnosis against the discharge letters and the family doctor's "
+                 'records that she brought with her, which were reviewed in full with her at this visit, and the dates were checked '
+                 'against the letters. The above history was provided by:\nDaughter\nPlan: colonoscopy in one year.')
+        answer = fixture_answers(['Diabetes', 'Colon cancer', 'Breast cancer', 'Plan'], notes)['Colon cancer']
+        shown = ' '.join(entry.get('quote', '') for entry in answer['held_candidate']['context'])
+        self.assertIn('Family history, as given by her daughter', shown)
+
+    def test_comma_grouped_digits_of_any_script_are_read(self):
+        for line in ('Platelets: ２０,０００ correction: ２００,０００', 'Potassium: ٣,١ correction: ٤,١'):
+            with self.subTest(line=line):
+                answers = fixture_answers(['Assessment', line.split(':')[0]], 'Assessment: thrombocytopenia, transfusion arranged.\n' + line)
+                self.assert_needs_decision(answers['Assessment'], 'thrombocytopenia, transfusion arranged.', line)
+
+    def test_a_line_start_chain_or_a_run_of_letter_colons_is_read_once(self):
+        import time
+        for text in ('1.' * 25000, '1​.' * 16000, 'Sa' + 'ː' * 49000, 'Sa' + 'ꓽ' * 49000):
+            started = time.perf_counter()
+            generation.erratum_points(text)
+            self.assertLess(time.perf_counter() - started, 2.0, repr(text[:6]))

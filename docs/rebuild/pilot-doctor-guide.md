@@ -130,7 +130,8 @@ lists every charge; choose a charge's service name to see how it was calculated.
   15 lines: the nearest, the first governing line of the note, the lines with the denial,
   family-history and hypothetical words listed in this guide and the corrections that govern the
   lines before them, then the rest nearest
-  first, so every governing line is shown when there are 15 or fewer; any beyond 15 are counted,
+  first, so every governing line is shown when there are 15 or fewer (a governing line longer than
+  400 characters is shown cut, marked `…`, from the end that governs); any beyond 15 are counted,
   and a heading among them in other words (`none of the following`) may be one of those: read the
   full note then; a line that
   is the answer's own is shown as *In the same line*; when the same words also appear elsewhere in

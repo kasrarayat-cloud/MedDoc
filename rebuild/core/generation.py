@@ -700,7 +700,7 @@ NON_LETTERS = (r'(?:[^\S\n]++|[^\w\s.!?\u2026<&' + ''.join(sorted(COLONS)) + r']
                r'|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});|&){0,50}+')
 #: At a line's start a number is a list marker (`1.`, `1-`, `2.1`, `#2`); after a colon or a sentence it is a VALUE
 #: (`Glucose: 312 correction given`, `Potassium: 3.1 - correction`), unless it is a list number (`1. `) (seventh pass).
-LINE_MARKER = r'(?:(?:\d+(?:\.\d+)*(?:[.)\-]|(?=\s))|(?:[ivx]{1,4}|[a-z])[.)])' + NON_LETTERS + ')?'
+LINE_MARKER = r'(?:(?:(?>\d+(?:\.\d+)*)(?:[.)\-]|(?=\s))|(?:[ivx]{1,4}|[a-z])[.)])' + NON_LETTERS + ')?'
 VALUE_MARKER = r'(?:(?:\d{1,2}[.)](?=\s)|(?:[ivx]{1,4}|[a-z])[.)])' + NON_LETTERS + ')?'
 #: Glued to a sentence end only a marker closed by `)` (`adenoma.a) Correction:`): a letter and a period there is an
 #: abbreviation's (`i.e. correction`, seventeenth pass).
@@ -712,7 +712,7 @@ GLUED_MARKER = r'(?:(?:\d{1,2}|[ivx]{1,4}|[a-z])\)' + NON_LETTERS + ')?'
 #: ASCII digits only, like the glued guard (twentieth pass: Unicode digits bridged every period, 16 s at 50,000); and a
 #: value's own sign and unit characters (`88%`, `38.9°C`, `1.2×0.8`, `1.5–2.0`). A spaced unit (`3.1 mmol/L correction:`)
 #: is two words, like its integer twin, and is not read.
-BEFORE_THE_WORD = r"(?:(?>[0-9]+(?:[.,][0-9]+)*)|[\w'\u2019/\-\u2010\u2011%\u00b0\u2103\u2109\u00d7\u2013\u00b1]|\([a-z]{1,3}\))++"
+BEFORE_THE_WORD = r"(?:(?>[0-9]+(?:[.,][0-9]+)*)|(?>\d+(?:,\d+)+)|[^\W" + ''.join(sorted(COLONS)) + r"]|['\u2019/\-\u2010\u2011%\u00b0\u2103\u2109\u00d7\u2013\u00b1]|\([a-z]{1,3}\))++"
 #: ⚠️ SIXTEENTH PASS: a correction GLUED to the sentence before it (`adenoma.Correction: no polyp.`, a missed space; or
 #: Word's `adenoma.<o:p></o:p>Correction:`) did not start a sentence, so the finding it corrects stayed ready. After
 #: the sentence end the word itself (or one word and the word) now starts one too, after the same bracket, bullet, quote
@@ -1203,7 +1203,11 @@ def governed_context(governance, notes, evidence, others=()):
         for indexes in by_line[1].get(line, ((), ())):
             cut = bisect.bisect_left(indexes, behind)
             near.update(indexes[cut:cut + 3])
-        found += [(not backward[i][4], backward[i][0] - first_at, from_the_word(backward[i])) for i in near]
+        # Only a correction's window is bounded from its word (twenty-first pass: a heading naming what precedes it,
+        # shown from its line's start for its frame, lost that frame when it was bounded too).
+        found += [(not backward[i][4], backward[i][0] - first_at,
+                   from_the_word(backward[i]) if notes[backward[i][0]:backward[i][0] + 10].casefold() == 'correction'
+                   else backward[i][2:4]) for i in near]
         if line in selves:
             found.append((False, 0, (headings[line], spans[line][1])))
         best = {}                                       # one place per distinct window (eighteenth pass: a duplicate
@@ -1227,7 +1231,8 @@ def governed_context(governance, notes, evidence, others=()):
     for line, (low, high, later) in chosen.items():
         spans_here = windows(line) or [(low, high)]
         same = line in own_lines or any(line in other.lines for other in others)
-        shown.append({'quote': ' \u2026 '.join(shown_quote(notes, a, b, later) + (' \u2026' if b in cut_at and b - a <= QUOTE_SHOWN else '')
+        shown.append({'quote': ' \u2026 '.join(shown_quote(notes, a, b, later)
+                                                + (' \u2026' if b in cut_at and not (later and b - a > QUOTE_SHOWN) else '')
                                                 for a, b in spans_here),
                       'start': spans_here[0][0], 'end': spans_here[-1][1], 'after': later, 'same': same})
     shown.sort(key=lambda entry: entry['start'])
