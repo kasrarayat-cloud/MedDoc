@@ -88,17 +88,31 @@ def source_quote_evidence(notes,label,raw,labels,sentences=None,previous=(),pref
     two occurrences, never one twice (round 4); and when a typed sentence occurs more than once, `prefer(unit)` picks
     the occurrence that carries the answer (the left leg's copy for a left-leg answer): the cited copy is kept while it
     carries it, and one that does not is left only for a copy that carries it with nothing governing it there (`safe`:
-    never a prior study's or a relative's copy, round 6), so re-posting can move an answer off a copy that never did
-    (round 5). The cited copies and at most `PREFER_LIMIT` others are tried."""
+    never a prior study's or a relative's copy, round 6) — or for one in the paragraph of another line the clinician
+    posted that occurs once (its heading: the clinician's own choice of that copy, round 7) — so re-posting can move an
+    answer off a copy that never did (round 5). The cited copies and at most `PREFER_LIMIT` others are tried, and at
+    most `PREFER_LIMIT` copies are judged by `safe` per call (round 7's cost lens: a copy judged per posted line made a
+    save of 500 repeated lines per field quadratic, 120 s)."""
     if len(raw)>50000:raise ValidationError('Source quotations exceed the supported limit; nothing was truncated.')
+    from . import wm_narrative
     units,_=wm_review.source_units(notes,label,labels)
-    evidence=[];used=set();carried={};clean={}
+    evidence=[];used=set();carried={};clean={};judged=[0]
     def carries(unit):
         if unit['start'] not in carried:carried[unit['start']]=bool(prefer(unit))
         return carried[unit['start']]
     def safe_copy(unit):
-        if unit['start'] not in clean:clean[unit['start']]=carries(unit) and (safe is None or bool(safe(unit)))
+        if unit['start'] not in clean:
+            if not carries(unit):clean[unit['start']]=False
+            elif safe is None:clean[unit['start']]=True
+            elif judged[0]>=PREFER_LIMIT:clean[unit['start']]=False
+            else:
+                judged[0]+=1;clean[unit['start']]=bool(safe(unit))
         return clean[unit['start']]
+    counts={}
+    for unit in sentences or ():counts[unit['quote']]=counts.get(unit['quote'],0)+1
+    posted={line.strip() for line in raw.splitlines() if line.strip()}
+    anchors={wm_narrative.paragraph_start(notes,unit['start']) for unit in sentences or ()
+             if unit['quote'] in posted and counts[unit['quote']]==1} if prefer else set()
     for submitted in raw.splitlines():
         quote=submitted.strip()
         if not quote:continue
@@ -108,6 +122,8 @@ def source_quote_evidence(notes,label,raw,labels,sentences=None,previous=(),pref
         tried=[unit for unit in free if unit['start'] in cited]+[unit for unit in free[:PREFER_LIMIT] if unit['start'] not in cited]
         kept=next((unit for unit in tried if unit['start'] in cited and carries(unit)),None) if prefer and len(same)>1 else None
         moved=next((unit for unit in tried if safe_copy(unit)),None) if prefer and len(same)>1 and kept is None else None
+        if moved is None and kept is None and anchors and len(same)>1:
+            moved=next((unit for unit in tried if carries(unit) and wm_narrative.paragraph_start(notes,unit['start']) in anchors),None)
         sentence=(kept or moved
                   or next((unit for unit in free if unit['start'] in cited),None)
                   or (free[0] if free else (same[0] if same else None)))
