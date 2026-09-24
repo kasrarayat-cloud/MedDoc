@@ -2649,6 +2649,13 @@ class WhatTheTwentiethPassFound(ExpectationsMixin, TestCase):
                  'Correction: the 2019 bleeding followed a haemorrhoid banding, not a polypectomy.')
         answer = tab_answers(['Procedure', 'Complications'], notes)[1]['Complications']
         self.assertIn('Correction: the 2019 bleeding', self.context(answer))
+        # Glued to its sentence, the correction's sentence starts four hundred characters before its word.
+        glued = notes.replace('grade I. Correction:', 'grade I, and the scope was withdrawn slowly with careful inspection of every '
+                              'fold, the photographs were taken at each landmark and reviewed with the endoscopy nurse.Correction:')
+        at = glued.index('Correction:')
+        self.assertGreater(at - glued.index('The procedure was performed'), 400)
+        answer = tab_answers(['Procedure', 'Complications'], glued)[1]['Complications']
+        self.assertIn('Correction: the 2019 bleeding', self.context(answer))
 
     def test_a_pointer_shown_from_its_line_start_keeps_its_frame(self):
         notes = ('Complications: none.\nFamily history: her mother was diagnosed in her sixties after a long illness with several '
