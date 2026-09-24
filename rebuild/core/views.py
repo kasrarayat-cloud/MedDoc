@@ -75,6 +75,9 @@ def wm_resolve(encounter,actor,decisions=None):
     return result['review_requirements']
 
 
+PREFER_LIMIT=24
+
+
 def source_quote_evidence(notes,label,raw,labels,sentences=None,previous=(),prefer=None):
     """Convert submitted quotations into actual offsets; never accept posted offsets.
 
@@ -82,19 +85,26 @@ def source_quote_evidence(notes,label,raw,labels,sentences=None,previous=(),pref
     the notes is that sentence, found first, so an answer read from a sentence keeps it as its evidence. When the same
     sentence occurs more than once, the occurrence this answer already cited (`previous`) is kept: re-posting the page
     must not move a left-leg answer onto the right leg's identical sentence. Two quotations of one sentence text are
-    two occurrences, never one twice (round 4); and when a typed sentence occurs more than once and none was cited,
-    `prefer(unit)` picks the occurrence that carries the answer (the left leg's copy for a left-leg answer)."""
+    two occurrences, never one twice (round 4); and when a typed sentence occurs more than once, `prefer(unit)` picks
+    the occurrence that carries the answer (the left leg's copy for a left-leg answer): the cited copy is kept only while
+    it carries it, so re-posting can move an answer off a copy that never did (round 5). At most `PREFER_LIMIT` copies
+    are tried."""
     if len(raw)>50000:raise ValidationError('Source quotations exceed the supported limit; nothing was truncated.')
     units,_=wm_review.source_units(notes,label,labels)
-    evidence=[];used=set()
+    evidence=[];used=set();carried={}
+    def carries(unit):
+        if unit['start'] not in carried:carried[unit['start']]=bool(prefer(unit))
+        return carried[unit['start']]
     for submitted in raw.splitlines():
         quote=submitted.strip()
         if not quote:continue
         cited={item.get('start') for item in previous or () if isinstance(item,dict) and item.get('quote')==quote}
         same=[unit for unit in sentences or () if unit['quote']==quote]
         free=[unit for unit in same if unit['start'] not in used]
-        sentence=(next((unit for unit in free if unit['start'] in cited),None)
-                  or (next((unit for unit in free if prefer(unit)),None) if prefer and len(same)>1 else None)
+        carrying=[unit for unit in free[:PREFER_LIMIT] if carries(unit)] if prefer and len(same)>1 else None
+        sentence=(next((unit for unit in (carrying if carrying is not None else free) if unit['start'] in cited),None)
+                  or (carrying[0] if carrying else None)
+                  or next((unit for unit in free if unit['start'] in cited),None)
                   or (free[0] if free else (same[0] if same else None)))
         if sentence is not None:
             used.add(sentence['start'])
@@ -742,7 +752,11 @@ def save_answers(request,pk):
             if len(quote)>50000:return document_refusal(request,e,'Source quotations exceed the supported limit; nothing was saved.',400)
             reviewed=request.POST.get('claim_reviewed_'+key)=='on'
             earlier=(e.template_review.get('decisions',{}).get(key) or e.template_review.get('proposals',{}).get(key) or {}).get('evidence') or ()
-            try:evidence=source_quote_evidence(e.notes,requirement['label'],quote,labels,sentences,earlier)
+            # A one-leg statement's typed sentence goes to the copy that names its side (round 5: `No saphenous reflux.`
+            # under each leg resolved to the right leg's for the left statement).
+            names=(lambda unit,requirement=requirement:wm_narrative.names_side(requirement,[wm_narrative.unit_evidence(unit)],e.notes)) \
+                if narrative_on and wm_narrative.field_side(requirement) else None
+            try:evidence=source_quote_evidence(e.notes,requirement['label'],quote,labels,sentences,earlier,names)
             except ValidationError as exc:
                 evidence=[];reviewed=False;review_errors.append(error_message(exc))
             variant=request.POST.get('claim_variant_'+key,requirement.get('default_variant'))

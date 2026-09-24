@@ -95,7 +95,7 @@ def _read_colon_labels(full, longest):
 
 
 _colon_labels_short = functools.lru_cache(maxsize=4096)(_read_colon_labels)
-_colon_labels_long = functools.lru_cache(maxsize=8)(_read_colon_labels)
+_colon_labels_long = functools.lru_cache(maxsize=64)(_read_colon_labels)
 
 
 def validate_evidence(notes, label, evidence, known_labels=()):
