@@ -1,0 +1,2403 @@
+{
+  "version": 1,
+  "authored_by": "independent benchmark author",
+  "cases": [
+    {
+      "id": "C01",
+      "pair": "P1",
+      "contract": "labelled",
+      "categories": [
+        "pair",
+        "positive_reflux",
+        "reflux_times",
+        "denial",
+        "no_prior_treatment"
+      ],
+      "notes": "Date of service: 09/21/2026\nPatient ID: SYN-A-1001\nPatient name: SYNTHETIC PATIENT A\nExam side: Bilateral Detailed\nClinical indication: leg pain: Leg pain\nClinical indication: heaviness: Heaviness\nTechnique: venous systems: deep and superficial\nRight GSV at the SFJ: diameter (mm): 7.4 mm\nRight GSV at the SFJ: reflux time (ms): 1800 ms\nRight GSV at the Proximal Thigh: diameter (mm): 6.2 mm\nRight GSV at the Proximal Thigh: reflux time (ms): 1500 ms\nLeft GSV at the SFJ: diameter (mm): 4.6 mm\nRight impression: vein: great saphenous vein\nRight impression: reflux or absence: reflux positive.\nRight deep venous system: without evidence of obstruction or insufficiency.\nLeft deep venous system: without evidence of obstruction or insufficiency.\nDiagnosis: Varicose veins of lower extremity with other complications of right lower extremity\nPrewritten statement: Technique: A duplex Doppler color flow ultrasound study was performed in the upright position with and without manual augmentation of flow and/or Valsalva maneuver, documenting the condition of the deep and superficial venous systems of the extremity, including the saphenofemoral junction, saphenopopliteal junction, great saphenous vein, small saphenous vein and perforator veins, as well as the precise location and extent of the varicosities to be treated. This study documents reflux as lasting more than 500 milliseconds in either the saphenous veins or the perforator veins.\nPrewritten statement: Right previous treatment: No previous treatment in the right lower extremity.\nPrewritten statement: Left previous treatment: No previous treatment in the left lower extremity.\nPrewritten statement: Right saphenous reflux finding: Saphenous reflux is present in the right lower extremity.\nPrewritten statement: Left saphenous reflux finding: No saphenous reflux in left lower extremity.",
+      "expected_fields": {
+        "patient_name": {
+          "outcome": "supported",
+          "value": "SYNTHETIC PATIENT A"
+        },
+        "patient_id": {
+          "outcome": "supported",
+          "value": "SYN-A-1001"
+        },
+        "date_of_service": {
+          "outcome": "supported",
+          "value": "09/21/2026"
+        },
+        "sdt_1475334564": {
+          "outcome": "supported",
+          "value": "Bilateral Detailed"
+        },
+        "sdt_-1124008635": {
+          "outcome": "supported",
+          "value": "Leg pain"
+        },
+        "sdt_722175654": {
+          "outcome": "supported",
+          "value": "Heaviness"
+        },
+        "sdt_429781496": {
+          "outcome": "supported",
+          "value": "deep and superficial"
+        },
+        "measurement_1_1": {
+          "outcome": "supported",
+          "value": "7.4 mm"
+        },
+        "measurement_1_2": {
+          "outcome": "supported",
+          "value": "1800 ms"
+        },
+        "measurement_2_1": {
+          "outcome": "supported",
+          "value": "6.2 mm"
+        },
+        "measurement_2_2": {
+          "outcome": "supported",
+          "value": "1500 ms"
+        },
+        "measurement_15_1": {
+          "outcome": "supported",
+          "value": "4.6 mm"
+        },
+        "sdt_-892962961": {
+          "outcome": "supported",
+          "value": "great saphenous vein"
+        },
+        "sdt_-213273323": {
+          "outcome": "supported",
+          "value": "reflux positive."
+        },
+        "sdt_-170105994": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "sdt_-1029175652": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "sdt_-1316494373": {
+          "outcome": "supported",
+          "value": "Varicose veins of lower extremity with other complications of right lower extremity"
+        },
+        "sdt_269290727": {
+          "outcome": "missing"
+        },
+        "measurement_15_2": {
+          "outcome": "missing"
+        },
+        "sdt_2001841928": {
+          "outcome": "missing"
+        },
+        "sdt_605543147": {
+          "outcome": "missing"
+        }
+      },
+      "expected_statements": {
+        "claim_9": "exam_choice",
+        "claim_19": "original",
+        "claim_23": "none",
+        "claim_27": "none",
+        "claim_30": "selected",
+        "claim_31": "selected",
+        "claim_32": "positive",
+        "claim_34": null,
+        "claim_35": "selected",
+        "claim_36": "negative",
+        "claim_39": null
+      },
+      "rationale": "Reflux times stated in seconds in the narrative (1.8 s, 1.5 s) are 1800 ms and 1500 ms. The left GSV has a diameter and no reflux, so its reflux time is missing (never 0 ms). The left impression fields are missing because 'is absent.' states that the vein itself is absent, not that reflux is absent; claim_34 is therefore null and the normal left leg is carried by claim_36 negative. claim_19 is 'original' because saphenous reflux over 500 ms is documented with the stated technique. 'No previous vein treatment in either leg' selects 'none' for claim_23 and claim_27."
+    },
+    {
+      "id": "C02",
+      "pair": "P1",
+      "contract": "narrative",
+      "categories": [
+        "pair",
+        "positive_reflux",
+        "reflux_times",
+        "reflux_seconds_conversion",
+        "denial",
+        "no_prior_treatment"
+      ],
+      "notes": "SYNTHETIC PATIENT A (ID SYN-A-1001) was seen on 09/21/2026 for a bilateral detailed venous insufficiency study. She reports aching leg pain and a feeling of heaviness in her legs by the end of the day. She has had no previous vein treatment in either leg.\n\nA duplex Doppler color flow ultrasound study was performed in the upright position with and without manual augmentation and Valsalva, documenting the deep and superficial venous systems of both legs, including the saphenofemoral and saphenopopliteal junctions, the great and small saphenous veins, the perforator veins and the varicosities to be treated.\n\nOn the right, the great saphenous vein measures 7.4 mm at the saphenofemoral junction with reflux lasting 1.8 seconds, and 6.2 mm in the proximal thigh with reflux lasting 1.5 seconds. On the left, the great saphenous vein measures 4.6 mm at the saphenofemoral junction, and there is no saphenous reflux in the left leg. The deep venous system is without evidence of obstruction or insufficiency on both sides.\n\nImpression: the right great saphenous vein is reflux positive, so saphenous reflux is present in the right lower extremity. Diagnosis: varicose veins of lower extremity with other complications of right lower extremity.",
+      "expected_fields": {
+        "patient_name": {
+          "outcome": "supported",
+          "value": "SYNTHETIC PATIENT A"
+        },
+        "patient_id": {
+          "outcome": "supported",
+          "value": "SYN-A-1001"
+        },
+        "date_of_service": {
+          "outcome": "supported",
+          "value": "09/21/2026"
+        },
+        "sdt_1475334564": {
+          "outcome": "supported",
+          "value": "Bilateral Detailed"
+        },
+        "sdt_-1124008635": {
+          "outcome": "supported",
+          "value": "Leg pain"
+        },
+        "sdt_722175654": {
+          "outcome": "supported",
+          "value": "Heaviness"
+        },
+        "sdt_429781496": {
+          "outcome": "supported",
+          "value": "deep and superficial"
+        },
+        "measurement_1_1": {
+          "outcome": "supported",
+          "value": "7.4 mm"
+        },
+        "measurement_1_2": {
+          "outcome": "supported",
+          "value": "1800 ms"
+        },
+        "measurement_2_1": {
+          "outcome": "supported",
+          "value": "6.2 mm"
+        },
+        "measurement_2_2": {
+          "outcome": "supported",
+          "value": "1500 ms"
+        },
+        "measurement_15_1": {
+          "outcome": "supported",
+          "value": "4.6 mm"
+        },
+        "sdt_-892962961": {
+          "outcome": "supported",
+          "value": "great saphenous vein"
+        },
+        "sdt_-213273323": {
+          "outcome": "supported",
+          "value": "reflux positive."
+        },
+        "sdt_-170105994": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "sdt_-1029175652": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "sdt_-1316494373": {
+          "outcome": "supported",
+          "value": "Varicose veins of lower extremity with other complications of right lower extremity"
+        },
+        "sdt_269290727": {
+          "outcome": "missing"
+        },
+        "measurement_15_2": {
+          "outcome": "missing"
+        },
+        "sdt_2001841928": {
+          "outcome": "missing"
+        },
+        "sdt_605543147": {
+          "outcome": "missing"
+        }
+      },
+      "expected_statements": {
+        "claim_9": "exam_choice",
+        "claim_19": "original",
+        "claim_23": "none",
+        "claim_27": "none",
+        "claim_30": "selected",
+        "claim_31": "selected",
+        "claim_32": "positive",
+        "claim_34": null,
+        "claim_35": "selected",
+        "claim_36": "negative",
+        "claim_39": null
+      },
+      "rationale": "Reflux times stated in seconds in the narrative (1.8 s, 1.5 s) are 1800 ms and 1500 ms. The left GSV has a diameter and no reflux, so its reflux time is missing (never 0 ms). The left impression fields are missing because 'is absent.' states that the vein itself is absent, not that reflux is absent; claim_34 is therefore null and the normal left leg is carried by claim_36 negative. claim_19 is 'original' because saphenous reflux over 500 ms is documented with the stated technique. 'No previous vein treatment in either leg' selects 'none' for claim_23 and claim_27."
+    },
+    {
+      "id": "C03",
+      "pair": "P2",
+      "contract": "labelled",
+      "categories": [
+        "pair",
+        "prior_treatment",
+        "prior_ablation_vs_current",
+        "positive_reflux",
+        "reflux_times",
+        "missing_information"
+      ],
+      "notes": "Date of service: 09/22/2026\nPatient name: SYNTHETIC PATIENT B\nExam side: Bilateral Detailed\nClinical indication: history or skin changes: Previous vein treatment\nRight previous treatment: vein: great saphenous vein\nRight previous treatment: start: saphenofemoral junction\nRight previous treatment: end: knee\nRight previous treatment: outcome: and is absent.\nLeft previous treatment: vein: small saphenous vein\nLeft previous treatment: start: saphenopopliteal junction\nLeft previous treatment: end: mid calf\nLeft previous treatment: outcome: , however, there has been a recurrence.\nRight AAGSV at the SFJ: diameter (mm): 5.8 mm\nRight AAGSV at the SFJ: reflux time (ms): 1300 ms\nLeft SSV at the SPJ: reflux time (ms): 900 ms\nRight impression: vein: anterior accessory great saphenous vein\nRight impression: reflux or absence: reflux positive.\nLeft impression: vein: small saphenous vein\nLeft impression: reflux or absence: reflux positive.\nPrewritten statement: Right saphenous reflux finding: Saphenous reflux is present in the right lower extremity.\nPrewritten statement: Left saphenous reflux finding: Saphenous reflux is present in the left lower extremity.",
+      "expected_fields": {
+        "patient_name": {
+          "outcome": "supported",
+          "value": "SYNTHETIC PATIENT B"
+        },
+        "date_of_service": {
+          "outcome": "supported",
+          "value": "09/22/2026"
+        },
+        "sdt_1475334564": {
+          "outcome": "supported",
+          "value": "Bilateral Detailed"
+        },
+        "sdt_-770853925": {
+          "outcome": "supported",
+          "value": "Previous vein treatment"
+        },
+        "sdt_-1287346867": {
+          "outcome": "supported",
+          "value": "great saphenous vein"
+        },
+        "sdt_-346030703": {
+          "outcome": "supported",
+          "value": "saphenofemoral junction"
+        },
+        "sdt_599910328": {
+          "outcome": "supported",
+          "value": "knee"
+        },
+        "sdt_1706206184": {
+          "outcome": "supported",
+          "value": "and is absent."
+        },
+        "sdt_1093284141": {
+          "outcome": "supported",
+          "value": "small saphenous vein"
+        },
+        "sdt_-505521617": {
+          "outcome": "supported",
+          "value": "saphenopopliteal junction"
+        },
+        "sdt_519430350": {
+          "outcome": "supported",
+          "value": "mid calf"
+        },
+        "sdt_-1268837810": {
+          "outcome": "supported",
+          "value": ", however, there has been a recurrence."
+        },
+        "measurement_7_1": {
+          "outcome": "supported",
+          "value": "5.8 mm"
+        },
+        "measurement_7_2": {
+          "outcome": "supported",
+          "value": "1300 ms"
+        },
+        "measurement_19_2": {
+          "outcome": "supported",
+          "value": "900 ms"
+        },
+        "sdt_-892962961": {
+          "outcome": "supported",
+          "value": "anterior accessory great saphenous vein"
+        },
+        "sdt_-213273323": {
+          "outcome": "supported",
+          "value": "reflux positive."
+        },
+        "sdt_2001841928": {
+          "outcome": "supported",
+          "value": "small saphenous vein"
+        },
+        "sdt_605543147": {
+          "outcome": "supported",
+          "value": "reflux positive."
+        },
+        "measurement_1_1": {
+          "outcome": "missing"
+        },
+        "measurement_1_2": {
+          "outcome": "missing"
+        },
+        "measurement_19_1": {
+          "outcome": "missing"
+        },
+        "sdt_-170105994": {
+          "outcome": "missing"
+        },
+        "sdt_429781496": {
+          "outcome": "missing"
+        }
+      },
+      "expected_statements": {
+        "claim_9": "exam_choice",
+        "claim_19": null,
+        "claim_23": "original",
+        "claim_27": "original",
+        "claim_30": "selected",
+        "claim_31": null,
+        "claim_32": "positive",
+        "claim_34": "selected",
+        "claim_35": null,
+        "claim_36": "positive",
+        "claim_39": null
+      },
+      "rationale": "The absent right GSV is the OUTCOME of the previous treatment ('and is absent.'); the current right impression is the refluxing AAGSV, so the impression vein is not the GSV and the right GSV table rows stay empty. The left SSV was treated and has recurred (', however, there has been a recurrence.'); its SPJ diameter is not given, so only its reflux time is supported. Technique and the deep systems are not documented, so claim_19, claim_31 and claim_35 are null."
+    },
+    {
+      "id": "C04",
+      "pair": "P2",
+      "contract": "narrative",
+      "categories": [
+        "pair",
+        "prior_treatment",
+        "prior_ablation_vs_current",
+        "positive_reflux",
+        "reflux_times",
+        "missing_information"
+      ],
+      "notes": "SYNTHETIC PATIENT B was seen on 09/22/2026 for a bilateral detailed venous study, referred because of previous vein treatment.\n\nThe right great saphenous vein was previously treated from the saphenofemoral junction to the knee and is absent on today's study. The left small saphenous vein was previously treated from the saphenopopliteal junction to the mid calf; however, there has been a recurrence.\n\nToday the right anterior accessory great saphenous vein measures 5.8 mm at the saphenofemoral junction with reflux of 1300 ms. The left small saphenous vein shows reflux of 900 ms at the saphenopopliteal junction.\n\nImpression: the right anterior accessory great saphenous vein is reflux positive and the left small saphenous vein is reflux positive. Saphenous reflux is present in both lower extremities.",
+      "expected_fields": {
+        "patient_name": {
+          "outcome": "supported",
+          "value": "SYNTHETIC PATIENT B"
+        },
+        "date_of_service": {
+          "outcome": "supported",
+          "value": "09/22/2026"
+        },
+        "sdt_1475334564": {
+          "outcome": "supported",
+          "value": "Bilateral Detailed"
+        },
+        "sdt_-770853925": {
+          "outcome": "supported",
+          "value": "Previous vein treatment"
+        },
+        "sdt_-1287346867": {
+          "outcome": "supported",
+          "value": "great saphenous vein"
+        },
+        "sdt_-346030703": {
+          "outcome": "supported",
+          "value": "saphenofemoral junction"
+        },
+        "sdt_599910328": {
+          "outcome": "supported",
+          "value": "knee"
+        },
+        "sdt_1706206184": {
+          "outcome": "supported",
+          "value": "and is absent."
+        },
+        "sdt_1093284141": {
+          "outcome": "supported",
+          "value": "small saphenous vein"
+        },
+        "sdt_-505521617": {
+          "outcome": "supported",
+          "value": "saphenopopliteal junction"
+        },
+        "sdt_519430350": {
+          "outcome": "supported",
+          "value": "mid calf"
+        },
+        "sdt_-1268837810": {
+          "outcome": "supported",
+          "value": ", however, there has been a recurrence."
+        },
+        "measurement_7_1": {
+          "outcome": "supported",
+          "value": "5.8 mm"
+        },
+        "measurement_7_2": {
+          "outcome": "supported",
+          "value": "1300 ms"
+        },
+        "measurement_19_2": {
+          "outcome": "supported",
+          "value": "900 ms"
+        },
+        "sdt_-892962961": {
+          "outcome": "supported",
+          "value": "anterior accessory great saphenous vein"
+        },
+        "sdt_-213273323": {
+          "outcome": "supported",
+          "value": "reflux positive."
+        },
+        "sdt_2001841928": {
+          "outcome": "supported",
+          "value": "small saphenous vein"
+        },
+        "sdt_605543147": {
+          "outcome": "supported",
+          "value": "reflux positive."
+        },
+        "measurement_1_1": {
+          "outcome": "missing"
+        },
+        "measurement_1_2": {
+          "outcome": "missing"
+        },
+        "measurement_19_1": {
+          "outcome": "missing"
+        },
+        "sdt_-170105994": {
+          "outcome": "missing"
+        },
+        "sdt_429781496": {
+          "outcome": "missing"
+        }
+      },
+      "expected_statements": {
+        "claim_9": "exam_choice",
+        "claim_19": null,
+        "claim_23": "original",
+        "claim_27": "original",
+        "claim_30": "selected",
+        "claim_31": null,
+        "claim_32": "positive",
+        "claim_34": "selected",
+        "claim_35": null,
+        "claim_36": "positive",
+        "claim_39": null
+      },
+      "rationale": "The absent right GSV is the OUTCOME of the previous treatment ('and is absent.'); the current right impression is the refluxing AAGSV, so the impression vein is not the GSV and the right GSV table rows stay empty. The left SSV was treated and has recurred (', however, there has been a recurrence.'); its SPJ diameter is not given, so only its reflux time is supported. Technique and the deep systems are not documented, so claim_19, claim_31 and claim_35 are null."
+    },
+    {
+      "id": "C05",
+      "pair": "P3",
+      "contract": "labelled",
+      "categories": [
+        "pair",
+        "asymptomatic",
+        "denial",
+        "family_history",
+        "conditional_instruction",
+        "unrelated_sentence",
+        "no_prior_treatment"
+      ],
+      "notes": "Date of service: 09/23/2026\nPatient ID: SYN-C-1003\nPatient name: SYNTHETIC PATIENT C\nExam side: Bilateral Screening\nExam location: Encino, CA\nClinical indication: asymptomatic or itching: Asymptomatic\nTechnique: venous systems: deep and superficial\nRight GSV at the SFJ: diameter (mm): 4.2 mm\nLeft GSV at the SFJ: diameter (mm): 4.0 mm\nRight deep venous system: without evidence of obstruction or insufficiency.\nLeft deep venous system: without evidence of obstruction or insufficiency.\nPrewritten statement: Technique: A duplex Doppler color flow ultrasound study was performed in the upright position with and without manual augmentation of flow and/or Valsalva maneuver, documenting the condition of the deep and superficial venous systems of the extremity, including the saphenofemoral junction, saphenopopliteal junction, great saphenous vein, small saphenous vein and perforator veins, as well as the precise location and extent of the varicosities to be treated.\nPrewritten statement: Right previous treatment: No previous treatment in the right lower extremity.\nPrewritten statement: Left previous treatment: No previous treatment in the left lower extremity.\nPrewritten statement: Right saphenous reflux finding: No saphenous reflux in right lower extremity.\nPrewritten statement: Left saphenous reflux finding: No saphenous reflux in left lower extremity.\nFamily history: mother has varicose veins and had a leg ulcer.\nSocial history: works as a flight attendant; runs three times a week.\nPlan: return sooner if leg pain or swelling develops.",
+      "expected_fields": {
+        "patient_name": {
+          "outcome": "supported",
+          "value": "SYNTHETIC PATIENT C"
+        },
+        "patient_id": {
+          "outcome": "supported",
+          "value": "SYN-C-1003"
+        },
+        "date_of_service": {
+          "outcome": "supported",
+          "value": "09/23/2026"
+        },
+        "sdt_1475334564": {
+          "outcome": "supported",
+          "value": "Bilateral Screening"
+        },
+        "sdt_143014188": {
+          "outcome": "supported",
+          "value": "Encino, CA"
+        },
+        "sdt_2005853103": {
+          "outcome": "supported",
+          "value": "Asymptomatic"
+        },
+        "sdt_429781496": {
+          "outcome": "supported",
+          "value": "deep and superficial"
+        },
+        "measurement_1_1": {
+          "outcome": "supported",
+          "value": "4.2 mm"
+        },
+        "measurement_15_1": {
+          "outcome": "supported",
+          "value": "4.0 mm"
+        },
+        "sdt_-170105994": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "sdt_-1029175652": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "sdt_-1124008635": {
+          "outcome": "missing"
+        },
+        "sdt_269290727": {
+          "outcome": "missing"
+        },
+        "sdt_-770853925": {
+          "outcome": "missing"
+        },
+        "sdt_1519045110": {
+          "outcome": "missing"
+        },
+        "measurement_1_2": {
+          "outcome": "missing"
+        },
+        "measurement_15_2": {
+          "outcome": "missing"
+        },
+        "sdt_-213273323": {
+          "outcome": "missing"
+        },
+        "sdt_605543147": {
+          "outcome": "missing"
+        }
+      },
+      "expected_statements": {
+        "claim_9": "exam_choice",
+        "claim_19": "technique_only",
+        "claim_23": "none",
+        "claim_27": "none",
+        "claim_30": null,
+        "claim_31": "selected",
+        "claim_32": "negative",
+        "claim_34": null,
+        "claim_35": "selected",
+        "claim_36": "negative",
+        "claim_39": null
+      },
+      "rationale": "The patient is asymptomatic: leg pain and swelling appear only in a conditional return instruction, and the mother's varicose veins and leg ulcer are family history, so those indication fields are missing. Encino, CA is the exam location; no practice address is stated (two Encino addresses exist). With no reflux the impression fields are missing ('is absent.' would say the vein is absent), claim_30/claim_34 are null, and claim_19 is technique_only because no positive reflux is documented. Occupation and exercise fill nothing."
+    },
+    {
+      "id": "C06",
+      "pair": "P3",
+      "contract": "narrative",
+      "categories": [
+        "pair",
+        "asymptomatic",
+        "denial",
+        "family_history",
+        "conditional_instruction",
+        "unrelated_sentence",
+        "no_prior_treatment"
+      ],
+      "notes": "SYNTHETIC PATIENT C (ID SYN-C-1003) had a bilateral screening venous study in Encino, CA on 09/23/2026. She is asymptomatic and asked for screening because her mother has varicose veins and had a leg ulcer. She has had no previous vein treatment in either leg. She works as a flight attendant and runs three times a week.\n\nA duplex Doppler color flow study was performed standing, with and without manual augmentation and Valsalva, covering the deep and superficial venous systems of both legs, including the junctions, the great and small saphenous veins, the perforator veins and any varicosities. The right great saphenous vein measures 4.2 mm and the left 4.0 mm at the saphenofemoral junction. There is no saphenous reflux in either lower extremity. The deep venous system is without evidence of obstruction or insufficiency bilaterally.\n\nReturn sooner if leg pain or swelling develops.",
+      "expected_fields": {
+        "patient_name": {
+          "outcome": "supported",
+          "value": "SYNTHETIC PATIENT C"
+        },
+        "patient_id": {
+          "outcome": "supported",
+          "value": "SYN-C-1003"
+        },
+        "date_of_service": {
+          "outcome": "supported",
+          "value": "09/23/2026"
+        },
+        "sdt_1475334564": {
+          "outcome": "supported",
+          "value": "Bilateral Screening"
+        },
+        "sdt_143014188": {
+          "outcome": "supported",
+          "value": "Encino, CA"
+        },
+        "sdt_2005853103": {
+          "outcome": "supported",
+          "value": "Asymptomatic"
+        },
+        "sdt_429781496": {
+          "outcome": "supported",
+          "value": "deep and superficial"
+        },
+        "measurement_1_1": {
+          "outcome": "supported",
+          "value": "4.2 mm"
+        },
+        "measurement_15_1": {
+          "outcome": "supported",
+          "value": "4.0 mm"
+        },
+        "sdt_-170105994": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "sdt_-1029175652": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "sdt_-1124008635": {
+          "outcome": "missing"
+        },
+        "sdt_269290727": {
+          "outcome": "missing"
+        },
+        "sdt_-770853925": {
+          "outcome": "missing"
+        },
+        "sdt_1519045110": {
+          "outcome": "missing"
+        },
+        "measurement_1_2": {
+          "outcome": "missing"
+        },
+        "measurement_15_2": {
+          "outcome": "missing"
+        },
+        "sdt_-213273323": {
+          "outcome": "missing"
+        },
+        "sdt_605543147": {
+          "outcome": "missing"
+        }
+      },
+      "expected_statements": {
+        "claim_9": "exam_choice",
+        "claim_19": "technique_only",
+        "claim_23": "none",
+        "claim_27": "none",
+        "claim_30": null,
+        "claim_31": "selected",
+        "claim_32": "negative",
+        "claim_34": null,
+        "claim_35": "selected",
+        "claim_36": "negative",
+        "claim_39": null
+      },
+      "rationale": "The patient is asymptomatic: leg pain and swelling appear only in a conditional return instruction, and the mother's varicose veins and leg ulcer are family history, so those indication fields are missing. Encino, CA is the exam location; no practice address is stated (two Encino addresses exist). With no reflux the impression fields are missing ('is absent.' would say the vein is absent), claim_30/claim_34 are null, and claim_19 is technique_only because no positive reflux is documented. Occupation and exercise fill nothing."
+    },
+    {
+      "id": "C07",
+      "pair": "P4",
+      "contract": "labelled",
+      "categories": [
+        "pair",
+        "superficial_only",
+        "not_assessed",
+        "positive_reflux",
+        "reflux_times",
+        "tributary",
+        "denial"
+      ],
+      "notes": "Date of service: 09/18/2026\nPatient ID: SYN-D-1004\nPatient name: SYNTHETIC PATIENT D\nExam side: Unilateral - Left Leg Detailed; Right Leg Screening\nUltrasound machine: Mindray M8, L12-4s MHz Transducer\nClinical indication: swelling: Leg edema\nClinical indication: asymptomatic or itching: Itching\nTechnique: venous systems: superficial\nLeft GSV at the SFJ: diameter (mm): 8.1 mm\nLeft GSV at the SFJ: reflux time (ms): 2400 ms\nLeft GSV at the Proximal Thigh: diameter (mm): 7.0 mm\nLeft GSV at the Proximal Thigh: reflux time (ms): 2100 ms\nLeft tributary row 25: anatomical location: anterolateral thigh\nLeft tributary row 25: diameter (mm): 4.4 mm\nLeft tributary row 25: reflux time (ms): 1200 ms\nRight GSV at the SFJ: diameter (mm): 4.8 mm\nLeft impression: vein: great saphenous vein\nLeft impression: reflux or absence: reflux positive.\nDiagnosis: Varicose veins of lower extremity with other complications of left lower extremity\nPrewritten statement: Technique: A duplex Doppler color flow ultrasound study was performed in the upright position with and without manual augmentation of flow and/or Valsalva maneuver, documenting the condition of the superficial venous systems of the extremity, including the saphenofemoral junction, saphenopopliteal junction, great saphenous vein, small saphenous vein and perforator veins, as well as the precise location and extent of the varicosities to be treated. This study documents reflux as lasting more than 500 milliseconds in either the saphenous veins or the perforator veins.\nPrewritten statement: Right deep venous system: Right deep venous system was not assessed.\nPrewritten statement: Left deep venous system: Left deep venous system was not assessed.\nPrewritten statement: Right saphenous reflux finding: No saphenous reflux in right lower extremity.\nPrewritten statement: Left saphenous reflux finding: Saphenous reflux is present in the left lower extremity.",
+      "expected_fields": {
+        "patient_name": {
+          "outcome": "supported",
+          "value": "SYNTHETIC PATIENT D"
+        },
+        "patient_id": {
+          "outcome": "supported",
+          "value": "SYN-D-1004"
+        },
+        "date_of_service": {
+          "outcome": "supported",
+          "value": "09/18/2026"
+        },
+        "sdt_1475334564": {
+          "outcome": "supported",
+          "value": "Unilateral - Left Leg Detailed; Right Leg Screening"
+        },
+        "sdt_-388341802": {
+          "outcome": "supported",
+          "value": "Mindray M8, L12-4s MHz Transducer"
+        },
+        "sdt_269290727": {
+          "outcome": "supported",
+          "value": "Leg edema"
+        },
+        "sdt_2005853103": {
+          "outcome": "supported",
+          "value": "Itching"
+        },
+        "sdt_429781496": {
+          "outcome": "supported",
+          "value": "superficial"
+        },
+        "measurement_15_1": {
+          "outcome": "supported",
+          "value": "8.1 mm"
+        },
+        "measurement_15_2": {
+          "outcome": "supported",
+          "value": "2400 ms"
+        },
+        "measurement_16_1": {
+          "outcome": "supported",
+          "value": "7.0 mm"
+        },
+        "measurement_16_2": {
+          "outcome": "supported",
+          "value": "2100 ms"
+        },
+        "location_25": {
+          "outcome": "supported",
+          "value": "anterolateral thigh"
+        },
+        "measurement_25_1": {
+          "outcome": "supported",
+          "value": "4.4 mm"
+        },
+        "measurement_25_2": {
+          "outcome": "supported",
+          "value": "1200 ms"
+        },
+        "measurement_1_1": {
+          "outcome": "supported",
+          "value": "4.8 mm"
+        },
+        "sdt_2001841928": {
+          "outcome": "supported",
+          "value": "great saphenous vein"
+        },
+        "sdt_605543147": {
+          "outcome": "supported",
+          "value": "reflux positive."
+        },
+        "sdt_-1316494373": {
+          "outcome": "supported",
+          "value": "Varicose veins of lower extremity with other complications of left lower extremity"
+        },
+        "sdt_-170105994": {
+          "outcome": "missing"
+        },
+        "sdt_-1029175652": {
+          "outcome": "missing"
+        },
+        "measurement_1_2": {
+          "outcome": "missing"
+        },
+        "location_11": {
+          "outcome": "missing"
+        }
+      },
+      "expected_statements": {
+        "claim_9": "exam_choice",
+        "claim_19": "original",
+        "claim_23": null,
+        "claim_27": null,
+        "claim_30": null,
+        "claim_31": "not_assessed",
+        "claim_32": "negative",
+        "claim_34": "selected",
+        "claim_35": "not_assessed",
+        "claim_36": "positive",
+        "claim_39": null
+      },
+      "rationale": "Superficial-only study: technique 'superficial', and the deep systems were explicitly not assessed, so both deep fields are missing and claim_31/claim_35 are not_assessed. Seconds convert to ms (2.4 s -> 2400 ms, 2.1 s -> 2100 ms, 1.2 s -> 1200 ms). The tributary is on the left, so it fills the first LEFT tributary row (25) with location 'anterolateral thigh'; 'Leg edema' (not 'Swelling') matches the documented edema. The right screening documents no saphenous reflux: claim_32 negative, right impression missing, claim_30 null. Prior treatment is not mentioned: claim_23/claim_27 null."
+    },
+    {
+      "id": "C08",
+      "pair": "P4",
+      "contract": "narrative",
+      "categories": [
+        "pair",
+        "superficial_only",
+        "not_assessed",
+        "positive_reflux",
+        "reflux_times",
+        "reflux_seconds_conversion",
+        "tributary",
+        "denial"
+      ],
+      "notes": "SYNTHETIC PATIENT D (ID SYN-D-1004) was scanned on 09/18/2026: a detailed study of the left leg with screening of the right, on the Mindray M8, L12-4s MHz Transducer. He has left leg edema and itching over the left shin.\n\nThis was a superficial venous study only: a duplex Doppler color flow examination in the upright position with and without manual augmentation and Valsalva, covering the saphenofemoral and saphenopopliteal junctions, the great and small saphenous veins, the perforator veins and the varicosities to be treated. The deep venous system was not assessed on either side.\n\nThe left great saphenous vein measures 8.1 mm at the saphenofemoral junction with reflux of 2.4 seconds and 7.0 mm in the proximal thigh with reflux of 2.1 seconds. A varicose tributary in the left anterolateral thigh measures 4.4 mm with reflux of 1.2 seconds. On the right screening views the great saphenous vein measures 4.8 mm at the saphenofemoral junction and there is no saphenous reflux in the right leg.\n\nImpression: left great saphenous vein reflux positive; saphenous reflux is present in the left lower extremity. Diagnosis: varicose veins of lower extremity with other complications of left lower extremity.",
+      "expected_fields": {
+        "patient_name": {
+          "outcome": "supported",
+          "value": "SYNTHETIC PATIENT D"
+        },
+        "patient_id": {
+          "outcome": "supported",
+          "value": "SYN-D-1004"
+        },
+        "date_of_service": {
+          "outcome": "supported",
+          "value": "09/18/2026"
+        },
+        "sdt_1475334564": {
+          "outcome": "supported",
+          "value": "Unilateral - Left Leg Detailed; Right Leg Screening"
+        },
+        "sdt_-388341802": {
+          "outcome": "supported",
+          "value": "Mindray M8, L12-4s MHz Transducer"
+        },
+        "sdt_269290727": {
+          "outcome": "supported",
+          "value": "Leg edema"
+        },
+        "sdt_2005853103": {
+          "outcome": "supported",
+          "value": "Itching"
+        },
+        "sdt_429781496": {
+          "outcome": "supported",
+          "value": "superficial"
+        },
+        "measurement_15_1": {
+          "outcome": "supported",
+          "value": "8.1 mm"
+        },
+        "measurement_15_2": {
+          "outcome": "supported",
+          "value": "2400 ms"
+        },
+        "measurement_16_1": {
+          "outcome": "supported",
+          "value": "7.0 mm"
+        },
+        "measurement_16_2": {
+          "outcome": "supported",
+          "value": "2100 ms"
+        },
+        "location_25": {
+          "outcome": "supported",
+          "value": "anterolateral thigh"
+        },
+        "measurement_25_1": {
+          "outcome": "supported",
+          "value": "4.4 mm"
+        },
+        "measurement_25_2": {
+          "outcome": "supported",
+          "value": "1200 ms"
+        },
+        "measurement_1_1": {
+          "outcome": "supported",
+          "value": "4.8 mm"
+        },
+        "sdt_2001841928": {
+          "outcome": "supported",
+          "value": "great saphenous vein"
+        },
+        "sdt_605543147": {
+          "outcome": "supported",
+          "value": "reflux positive."
+        },
+        "sdt_-1316494373": {
+          "outcome": "supported",
+          "value": "Varicose veins of lower extremity with other complications of left lower extremity"
+        },
+        "sdt_-170105994": {
+          "outcome": "missing"
+        },
+        "sdt_-1029175652": {
+          "outcome": "missing"
+        },
+        "measurement_1_2": {
+          "outcome": "missing"
+        },
+        "location_11": {
+          "outcome": "missing"
+        }
+      },
+      "expected_statements": {
+        "claim_9": "exam_choice",
+        "claim_19": "original",
+        "claim_23": null,
+        "claim_27": null,
+        "claim_30": null,
+        "claim_31": "not_assessed",
+        "claim_32": "negative",
+        "claim_34": "selected",
+        "claim_35": "not_assessed",
+        "claim_36": "positive",
+        "claim_39": null
+      },
+      "rationale": "Superficial-only study: technique 'superficial', and the deep systems were explicitly not assessed, so both deep fields are missing and claim_31/claim_35 are not_assessed. Seconds convert to ms (2.4 s -> 2400 ms, 2.1 s -> 2100 ms, 1.2 s -> 1200 ms). The tributary is on the left, so it fills the first LEFT tributary row (25) with location 'anterolateral thigh'; 'Leg edema' (not 'Swelling') matches the documented edema. The right screening documents no saphenous reflux: claim_32 negative, right impression missing, claim_30 null. Prior treatment is not mentioned: claim_23/claim_27 null."
+    },
+    {
+      "id": "C09",
+      "pair": "P5",
+      "contract": "labelled",
+      "categories": [
+        "pair",
+        "deep_dvt",
+        "not_assessed",
+        "missing_information",
+        "plan_sentence"
+      ],
+      "notes": "Date of service: 09/19/2026\nPatient ID: SYN-E-1005\nPatient name: SYNTHETIC PATIENT E\nDate of birth: 05/22/1970\nExam side: Bilateral Limited\nExam location: Rancho Cucamonga, CA\nClinical indication: leg pain: Leg pain\nClinical indication: swelling: Leg edema\nRight deep venous system: without evidence of obstruction or insufficiency.\nLeft deep venous system: with evidence of an acute DVT of CFV, FV, POP V, PTV.\nPrewritten statement: Right impression: Right saphenous veins were not assessed.\nPrewritten statement: Left impression: Left saphenous veins were not assessed.\nPrewritten statement: Right saphenous reflux finding: Saphenous reflux was not assessed in the right lower extremity.\nPrewritten statement: Left saphenous reflux finding: Saphenous reflux was not assessed in the left lower extremity.\nPlan: sent to the emergency department today for anticoagulation.",
+      "expected_fields": {
+        "patient_name": {
+          "outcome": "supported",
+          "value": "SYNTHETIC PATIENT E"
+        },
+        "patient_id": {
+          "outcome": "supported",
+          "value": "SYN-E-1005"
+        },
+        "date_of_birth": {
+          "outcome": "supported",
+          "value": "05/22/1970"
+        },
+        "date_of_service": {
+          "outcome": "supported",
+          "value": "09/19/2026"
+        },
+        "sdt_1475334564": {
+          "outcome": "supported",
+          "value": "Bilateral Limited"
+        },
+        "sdt_143014188": {
+          "outcome": "supported",
+          "value": "Rancho Cucamonga, CA"
+        },
+        "sdt_-1124008635": {
+          "outcome": "supported",
+          "value": "Leg pain"
+        },
+        "sdt_269290727": {
+          "outcome": "supported",
+          "value": "Leg edema"
+        },
+        "sdt_-170105994": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "sdt_-1029175652": {
+          "outcome": "supported",
+          "value": "with evidence of an acute DVT of CFV, FV, POP V, PTV."
+        },
+        "sdt_429781496": {
+          "outcome": "missing"
+        },
+        "sdt_-1316494373": {
+          "outcome": "missing"
+        },
+        "sdt_605543147": {
+          "outcome": "missing"
+        },
+        "sdt_2001841928": {
+          "outcome": "missing"
+        },
+        "measurement_15_1": {
+          "outcome": "missing"
+        }
+      },
+      "expected_statements": {
+        "claim_9": "exam_choice",
+        "claim_19": null,
+        "claim_23": null,
+        "claim_27": null,
+        "claim_30": "not_assessed",
+        "claim_31": "selected",
+        "claim_32": "not_assessed",
+        "claim_34": "not_assessed",
+        "claim_35": "selected",
+        "claim_36": "not_assessed",
+        "claim_39": null
+      },
+      "rationale": "The left thrombus involves all four named segments (CFV, FV, popliteal, posterior tibial), so the acute DVT option applies exactly. The study was limited to the deep system: saphenous veins and saphenous reflux were explicitly not assessed, so claim_30/32/34/36 are not_assessed and no impression or table field is filled. The technique options ('deep and superficial', 'superficial') cannot describe a deep-only study, so technique is missing and claim_19 is null; no listed diagnosis describes DVT, so diagnosis is missing. The emergency-department sentence fills nothing."
+    },
+    {
+      "id": "C10",
+      "pair": "P5",
+      "contract": "narrative",
+      "categories": [
+        "pair",
+        "deep_dvt",
+        "not_assessed",
+        "missing_information",
+        "plan_sentence"
+      ],
+      "notes": "SYNTHETIC PATIENT E (ID SYN-E-1005, date of birth 05/22/1970) had a limited bilateral venous duplex in Rancho Cucamonga, CA on 09/19/2026 for left leg pain and leg edema.\n\nThe left common femoral, femoral, popliteal and posterior tibial veins are non-compressible and filled with hypoechoic thrombus, consistent with an acute DVT of the CFV, FV, POP V and PTV. The right deep venous system is without evidence of obstruction or insufficiency. The saphenous veins were not assessed in either leg, and saphenous reflux was not assessed, because the study was limited to the deep system.\n\nShe was sent to the emergency department today for anticoagulation.",
+      "expected_fields": {
+        "patient_name": {
+          "outcome": "supported",
+          "value": "SYNTHETIC PATIENT E"
+        },
+        "patient_id": {
+          "outcome": "supported",
+          "value": "SYN-E-1005"
+        },
+        "date_of_birth": {
+          "outcome": "supported",
+          "value": "05/22/1970"
+        },
+        "date_of_service": {
+          "outcome": "supported",
+          "value": "09/19/2026"
+        },
+        "sdt_1475334564": {
+          "outcome": "supported",
+          "value": "Bilateral Limited"
+        },
+        "sdt_143014188": {
+          "outcome": "supported",
+          "value": "Rancho Cucamonga, CA"
+        },
+        "sdt_-1124008635": {
+          "outcome": "supported",
+          "value": "Leg pain"
+        },
+        "sdt_269290727": {
+          "outcome": "supported",
+          "value": "Leg edema"
+        },
+        "sdt_-170105994": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "sdt_-1029175652": {
+          "outcome": "supported",
+          "value": "with evidence of an acute DVT of CFV, FV, POP V, PTV."
+        },
+        "sdt_429781496": {
+          "outcome": "missing"
+        },
+        "sdt_-1316494373": {
+          "outcome": "missing"
+        },
+        "sdt_605543147": {
+          "outcome": "missing"
+        },
+        "sdt_2001841928": {
+          "outcome": "missing"
+        },
+        "measurement_15_1": {
+          "outcome": "missing"
+        }
+      },
+      "expected_statements": {
+        "claim_9": "exam_choice",
+        "claim_19": null,
+        "claim_23": null,
+        "claim_27": null,
+        "claim_30": "not_assessed",
+        "claim_31": "selected",
+        "claim_32": "not_assessed",
+        "claim_34": "not_assessed",
+        "claim_35": "selected",
+        "claim_36": "not_assessed",
+        "claim_39": null
+      },
+      "rationale": "The left thrombus involves all four named segments (CFV, FV, popliteal, posterior tibial), so the acute DVT option applies exactly. The study was limited to the deep system: saphenous veins and saphenous reflux were explicitly not assessed, so claim_30/32/34/36 are not_assessed and no impression or table field is filled. The technique options ('deep and superficial', 'superficial') cannot describe a deep-only study, so technique is missing and claim_19 is null; no listed diagnosis describes DVT, so diagnosis is missing. The emergency-department sentence fills nothing."
+    },
+    {
+      "id": "C11",
+      "pair": "P6",
+      "contract": "labelled",
+      "categories": [
+        "pair",
+        "positive_reflux",
+        "reflux_times",
+        "bilateral_positive",
+        "clinical_correlation"
+      ],
+      "notes": "Date of service: 09/17/2026\nPatient name: SYNTHETIC PATIENT F\nExam side: Bilateral Detailed\nExam location: Irvine, CA\nClinical indication: swelling: Swelling\nClinical indication: history or skin changes: Skin changes or dermatitis\nClinical indication: sensory symptoms: Cramping\nTechnique: venous systems: deep and superficial\nRight SSV at the SPJ: diameter (mm): 6.0 mm\nRight SSV at the SPJ: reflux time (ms): 1600 ms\nLeft GSV at the Knee: diameter (mm): 6.1 mm\nLeft GSV at the Knee: reflux time (ms): 1300 ms\nRight impression: vein: small saphenous vein\nRight impression: reflux or absence: reflux positive.\nLeft impression: vein: great saphenous vein\nLeft impression: reflux or absence: reflux positive.\nRight deep venous system: without evidence of obstruction or insufficiency.\nLeft deep venous system: without evidence of obstruction or insufficiency.\nDiagnosis: Chronic venous hypertension with other complications of bilateral lower extremities\nPrewritten statement: Technique: A duplex Doppler color flow ultrasound study was performed in the upright position with and without manual augmentation of flow and/or Valsalva maneuver, documenting the condition of the deep and superficial venous systems of the extremity, including the saphenofemoral junction, saphenopopliteal junction, great saphenous vein, small saphenous vein and perforator veins, as well as the precise location and extent of the varicosities to be treated. This study documents reflux as lasting more than 500 milliseconds in either the saphenous veins or the perforator veins.\nPrewritten statement: Right saphenous reflux finding: Saphenous reflux is present in the right lower extremity.\nPrewritten statement: Left saphenous reflux finding: Saphenous reflux is present in the left lower extremity.\nPrewritten statement: Clinical correlation: Clinical correlation with the above findings is required.",
+      "expected_fields": {
+        "patient_name": {
+          "outcome": "supported",
+          "value": "SYNTHETIC PATIENT F"
+        },
+        "date_of_service": {
+          "outcome": "supported",
+          "value": "09/17/2026"
+        },
+        "sdt_1475334564": {
+          "outcome": "supported",
+          "value": "Bilateral Detailed"
+        },
+        "sdt_143014188": {
+          "outcome": "supported",
+          "value": "Irvine, CA"
+        },
+        "sdt_269290727": {
+          "outcome": "supported",
+          "value": "Swelling"
+        },
+        "sdt_-770853925": {
+          "outcome": "supported",
+          "value": "Skin changes or dermatitis"
+        },
+        "sdt_-49312682": {
+          "outcome": "supported",
+          "value": "Cramping"
+        },
+        "sdt_429781496": {
+          "outcome": "supported",
+          "value": "deep and superficial"
+        },
+        "measurement_5_1": {
+          "outcome": "supported",
+          "value": "6.0 mm"
+        },
+        "measurement_5_2": {
+          "outcome": "supported",
+          "value": "1600 ms"
+        },
+        "measurement_17_1": {
+          "outcome": "supported",
+          "value": "6.1 mm"
+        },
+        "measurement_17_2": {
+          "outcome": "supported",
+          "value": "1300 ms"
+        },
+        "sdt_-892962961": {
+          "outcome": "supported",
+          "value": "small saphenous vein"
+        },
+        "sdt_-213273323": {
+          "outcome": "supported",
+          "value": "reflux positive."
+        },
+        "sdt_2001841928": {
+          "outcome": "supported",
+          "value": "great saphenous vein"
+        },
+        "sdt_605543147": {
+          "outcome": "supported",
+          "value": "reflux positive."
+        },
+        "sdt_-170105994": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "sdt_-1029175652": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "sdt_-1316494373": {
+          "outcome": "supported",
+          "value": "Chronic venous hypertension with other complications of bilateral lower extremities"
+        },
+        "sdt_-1124008635": {
+          "outcome": "missing"
+        },
+        "measurement_18_1": {
+          "outcome": "missing"
+        },
+        "measurement_18_2": {
+          "outcome": "missing"
+        }
+      },
+      "expected_statements": {
+        "claim_9": "exam_choice",
+        "claim_19": "original",
+        "claim_23": null,
+        "claim_27": null,
+        "claim_30": "selected",
+        "claim_31": "selected",
+        "claim_32": "positive",
+        "claim_34": "selected",
+        "claim_35": "selected",
+        "claim_36": "positive",
+        "claim_39": "original"
+      },
+      "rationale": "'Ankle swelling' is 'Swelling'; calf cramping is 'Cramping' (it is not leg pain); stasis dermatitis is 'Skin changes or dermatitis'. The left GSV measurement is AT the knee (row 17), not below the knee (row 18). Both legs are reflux positive, so both impressions are selected and both reflux statements positive; clinical correlation is explicitly stated, so claim_39 is original. Prior treatment is not mentioned: claim_23/claim_27 null."
+    },
+    {
+      "id": "C12",
+      "pair": "P6",
+      "contract": "narrative",
+      "categories": [
+        "pair",
+        "positive_reflux",
+        "reflux_times",
+        "bilateral_positive",
+        "clinical_correlation"
+      ],
+      "notes": "SYNTHETIC PATIENT F was seen in Irvine, CA on 09/17/2026 for a bilateral detailed venous study. He describes ankle swelling and night-time calf cramping, and there are skin changes with stasis dermatitis around both ankles.\n\nA duplex Doppler color flow ultrasound study was performed standing, with and without manual augmentation and Valsalva, documenting the deep and superficial venous systems, including both junctions, the great and small saphenous veins, the perforator veins and the varicosities to be treated.\n\nThe right small saphenous vein measures 6.0 mm at the saphenopopliteal junction with reflux of 1600 ms. The left great saphenous vein measures 6.1 mm at the knee with reflux of 1300 ms. The deep venous system is without evidence of obstruction or insufficiency in both legs.\n\nImpression: right small saphenous vein reflux positive and left great saphenous vein reflux positive, so saphenous reflux is present in both lower extremities. Diagnosis: chronic venous hypertension with other complications of bilateral lower extremities. Clinical correlation with the above findings is required.",
+      "expected_fields": {
+        "patient_name": {
+          "outcome": "supported",
+          "value": "SYNTHETIC PATIENT F"
+        },
+        "date_of_service": {
+          "outcome": "supported",
+          "value": "09/17/2026"
+        },
+        "sdt_1475334564": {
+          "outcome": "supported",
+          "value": "Bilateral Detailed"
+        },
+        "sdt_143014188": {
+          "outcome": "supported",
+          "value": "Irvine, CA"
+        },
+        "sdt_269290727": {
+          "outcome": "supported",
+          "value": "Swelling"
+        },
+        "sdt_-770853925": {
+          "outcome": "supported",
+          "value": "Skin changes or dermatitis"
+        },
+        "sdt_-49312682": {
+          "outcome": "supported",
+          "value": "Cramping"
+        },
+        "sdt_429781496": {
+          "outcome": "supported",
+          "value": "deep and superficial"
+        },
+        "measurement_5_1": {
+          "outcome": "supported",
+          "value": "6.0 mm"
+        },
+        "measurement_5_2": {
+          "outcome": "supported",
+          "value": "1600 ms"
+        },
+        "measurement_17_1": {
+          "outcome": "supported",
+          "value": "6.1 mm"
+        },
+        "measurement_17_2": {
+          "outcome": "supported",
+          "value": "1300 ms"
+        },
+        "sdt_-892962961": {
+          "outcome": "supported",
+          "value": "small saphenous vein"
+        },
+        "sdt_-213273323": {
+          "outcome": "supported",
+          "value": "reflux positive."
+        },
+        "sdt_2001841928": {
+          "outcome": "supported",
+          "value": "great saphenous vein"
+        },
+        "sdt_605543147": {
+          "outcome": "supported",
+          "value": "reflux positive."
+        },
+        "sdt_-170105994": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "sdt_-1029175652": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "sdt_-1316494373": {
+          "outcome": "supported",
+          "value": "Chronic venous hypertension with other complications of bilateral lower extremities"
+        },
+        "sdt_-1124008635": {
+          "outcome": "missing"
+        },
+        "measurement_18_1": {
+          "outcome": "missing"
+        },
+        "measurement_18_2": {
+          "outcome": "missing"
+        }
+      },
+      "expected_statements": {
+        "claim_9": "exam_choice",
+        "claim_19": "original",
+        "claim_23": null,
+        "claim_27": null,
+        "claim_30": "selected",
+        "claim_31": "selected",
+        "claim_32": "positive",
+        "claim_34": "selected",
+        "claim_35": "selected",
+        "claim_36": "positive",
+        "claim_39": "original"
+      },
+      "rationale": "'Ankle swelling' is 'Swelling'; calf cramping is 'Cramping' (it is not leg pain); stasis dermatitis is 'Skin changes or dermatitis'. The left GSV measurement is AT the knee (row 17), not below the knee (row 18). Both legs are reflux positive, so both impressions are selected and both reflux statements positive; clinical correlation is explicitly stated, so claim_39 is original. Prior treatment is not mentioned: claim_23/claim_27 null."
+    },
+    {
+      "id": "C13",
+      "pair": null,
+      "contract": "narrative",
+      "categories": [
+        "correction_measurement",
+        "positive_reflux",
+        "reflux_times",
+        "reflux_seconds_conversion",
+        "unrelated_sentence",
+        "denial"
+      ],
+      "notes": "SYNTHETIC PATIENT G (ID SYN-G-1007) was seen on 09/16/2026 for a bilateral detailed venous insufficiency study. He reports heaviness in both legs and restless legs in the evening. He is a retired carpenter and walks his dog every day.\n\nThe deep and superficial venous systems were evaluated standing, with and without manual augmentation and Valsalva, including the junctions, the great and small saphenous veins, the perforator veins and the varicosities to be treated.\n\nThe right great saphenous vein measures 6.1 mm at the saphenofemoral junction, correction: 7.6 mm, with reflux of 1.3 seconds. At the knee it measures 5.0 mm with reflux of 900 ms. The left great saphenous vein measures 4.4 mm at the saphenofemoral junction, and there is no saphenous reflux in the left leg. Both deep venous systems are without evidence of obstruction or insufficiency.\n\nImpression: right great saphenous vein reflux positive.",
+      "expected_fields": {
+        "patient_name": {
+          "outcome": "supported",
+          "value": "SYNTHETIC PATIENT G"
+        },
+        "patient_id": {
+          "outcome": "supported",
+          "value": "SYN-G-1007"
+        },
+        "date_of_service": {
+          "outcome": "supported",
+          "value": "09/16/2026"
+        },
+        "sdt_1475334564": {
+          "outcome": "supported",
+          "value": "Bilateral Detailed"
+        },
+        "sdt_722175654": {
+          "outcome": "supported",
+          "value": "Heaviness"
+        },
+        "sdt_-49312682": {
+          "outcome": "supported",
+          "value": "Restless Legs"
+        },
+        "sdt_429781496": {
+          "outcome": "supported",
+          "value": "deep and superficial"
+        },
+        "measurement_1_1": {
+          "outcome": "supported",
+          "value": "7.6 mm"
+        },
+        "measurement_1_2": {
+          "outcome": "supported",
+          "value": "1300 ms"
+        },
+        "measurement_3_1": {
+          "outcome": "supported",
+          "value": "5.0 mm"
+        },
+        "measurement_3_2": {
+          "outcome": "supported",
+          "value": "900 ms"
+        },
+        "measurement_15_1": {
+          "outcome": "supported",
+          "value": "4.4 mm"
+        },
+        "sdt_-892962961": {
+          "outcome": "supported",
+          "value": "great saphenous vein"
+        },
+        "sdt_-213273323": {
+          "outcome": "supported",
+          "value": "reflux positive."
+        },
+        "sdt_-170105994": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "sdt_-1029175652": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "measurement_15_2": {
+          "outcome": "missing"
+        },
+        "sdt_605543147": {
+          "outcome": "missing"
+        },
+        "sdt_-1316494373": {
+          "outcome": "missing"
+        }
+      },
+      "expected_statements": {
+        "claim_9": "exam_choice",
+        "claim_19": "original",
+        "claim_23": null,
+        "claim_27": null,
+        "claim_30": "selected",
+        "claim_31": "selected",
+        "claim_32": "positive",
+        "claim_34": null,
+        "claim_35": "selected",
+        "claim_36": "negative",
+        "claim_39": null
+      },
+      "rationale": "The SFJ diameter is explicitly corrected from 6.1 mm to 7.6 mm, so the corrected value is supported; 1.3 s is 1300 ms. The occupation and dog-walking sentence fills nothing. The left GSV has no reflux, so its reflux time and the left impression are missing (claim_34 null, claim_36 negative). Prior treatment and diagnosis are not stated: missing/null. A GSV reflux-positive impression makes claim_32 positive."
+    },
+    {
+      "id": "C14",
+      "pair": null,
+      "contract": "narrative",
+      "categories": [
+        "correction_side",
+        "tributary",
+        "positive_reflux",
+        "reflux_times",
+        "denial"
+      ],
+      "notes": "SYNTHETIC PATIENT H (ID SYN-H-1008) had a right leg detailed and left leg screening venous study on 09/15/2026. She has right leg pain and last month had an episode of bleeding from a ruptured varicose vein at the right ankle.\n\nThe deep and superficial venous systems were examined in the upright position with and without manual augmentation and Valsalva, including the junctions, the great and small saphenous veins, the perforator veins and the varicosities to be treated.\n\nThe right great saphenous vein measures 6.6 mm in the proximal thigh with reflux of 2000 ms and 5.2 mm below the knee with reflux of 1500 ms. A varicose tributary at the left medial calf, correction, at the right medial calf, measures 4.7 mm with reflux of 1100 ms. The right deep venous system is without evidence of obstruction or insufficiency. On the left screening views there is no saphenous reflux.\n\nImpression: right great saphenous vein reflux positive.",
+      "expected_fields": {
+        "patient_name": {
+          "outcome": "supported",
+          "value": "SYNTHETIC PATIENT H"
+        },
+        "patient_id": {
+          "outcome": "supported",
+          "value": "SYN-H-1008"
+        },
+        "date_of_service": {
+          "outcome": "supported",
+          "value": "09/15/2026"
+        },
+        "sdt_1475334564": {
+          "outcome": "supported",
+          "value": "Unilateral - Right Leg Detailed; Left Leg Screening"
+        },
+        "sdt_-1124008635": {
+          "outcome": "supported",
+          "value": "Leg pain"
+        },
+        "sdt_-770853925": {
+          "outcome": "supported",
+          "value": "Vein rupture"
+        },
+        "sdt_429781496": {
+          "outcome": "supported",
+          "value": "deep and superficial"
+        },
+        "measurement_2_1": {
+          "outcome": "supported",
+          "value": "6.6 mm"
+        },
+        "measurement_2_2": {
+          "outcome": "supported",
+          "value": "2000 ms"
+        },
+        "measurement_4_1": {
+          "outcome": "supported",
+          "value": "5.2 mm"
+        },
+        "measurement_4_2": {
+          "outcome": "supported",
+          "value": "1500 ms"
+        },
+        "location_11": {
+          "outcome": "supported",
+          "value": "medial calf"
+        },
+        "measurement_11_1": {
+          "outcome": "supported",
+          "value": "4.7 mm"
+        },
+        "measurement_11_2": {
+          "outcome": "supported",
+          "value": "1100 ms"
+        },
+        "sdt_-892962961": {
+          "outcome": "supported",
+          "value": "great saphenous vein"
+        },
+        "sdt_-213273323": {
+          "outcome": "supported",
+          "value": "reflux positive."
+        },
+        "sdt_-170105994": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "location_25": {
+          "outcome": "missing"
+        },
+        "measurement_25_1": {
+          "outcome": "missing"
+        },
+        "measurement_25_2": {
+          "outcome": "missing"
+        },
+        "sdt_-1029175652": {
+          "outcome": "missing"
+        }
+      },
+      "expected_statements": {
+        "claim_9": "exam_choice",
+        "claim_19": "original",
+        "claim_23": null,
+        "claim_27": null,
+        "claim_30": "selected",
+        "claim_31": "selected",
+        "claim_32": "positive",
+        "claim_34": null,
+        "claim_35": null,
+        "claim_36": "negative",
+        "claim_39": null
+      },
+      "rationale": "The tributary's side is explicitly corrected from left to right, so it fills the first RIGHT tributary row (11) with location 'medial calf', and every left tributary field is missing. Bleeding from a ruptured varicose vein is 'Vein rupture'. The left deep system is not mentioned (missing, claim_35 null); the left screening documents no saphenous reflux, so claim_36 is negative and the left impression is missing."
+    },
+    {
+      "id": "C15",
+      "pair": null,
+      "contract": "narrative",
+      "categories": [
+        "conflict",
+        "positive_reflux",
+        "reflux_times",
+        "reflux_seconds_conversion",
+        "denial"
+      ],
+      "notes": "SYNTHETIC PATIENT I (ID SYN-I-1009) was examined in Long Beach, CA on 09/14/2026 with a bilateral detailed venous study for left leg pain and swelling.\n\nThe deep and superficial venous systems were evaluated standing with manual augmentation and Valsalva, including the junctions, the great and small saphenous veins, the perforator veins and the varicosities to be treated.\n\nThe left great saphenous vein measures 6.9 mm at the saphenofemoral junction with reflux of 1.6 seconds. The right great saphenous vein measures 4.9 mm at the saphenofemoral junction and there is no saphenous reflux on the right. The deep venous system is without evidence of obstruction or insufficiency bilaterally.\n\nSummary: left GSV at the SFJ 9.6 mm with reflux; impression left great saphenous vein reflux positive.",
+      "expected_fields": {
+        "patient_name": {
+          "outcome": "supported",
+          "value": "SYNTHETIC PATIENT I"
+        },
+        "patient_id": {
+          "outcome": "supported",
+          "value": "SYN-I-1009"
+        },
+        "date_of_service": {
+          "outcome": "supported",
+          "value": "09/14/2026"
+        },
+        "sdt_1475334564": {
+          "outcome": "supported",
+          "value": "Bilateral Detailed"
+        },
+        "sdt_143014188": {
+          "outcome": "supported",
+          "value": "Long Beach, CA"
+        },
+        "sdt_-1124008635": {
+          "outcome": "supported",
+          "value": "Leg pain"
+        },
+        "sdt_269290727": {
+          "outcome": "supported",
+          "value": "Swelling"
+        },
+        "sdt_429781496": {
+          "outcome": "supported",
+          "value": "deep and superficial"
+        },
+        "measurement_15_1": {
+          "outcome": "decision",
+          "reason": "The left GSV SFJ diameter is 6.9 mm in the findings and 9.6 mm in the summary, with no correction; the clinician must decide which is right."
+        },
+        "measurement_15_2": {
+          "outcome": "supported",
+          "value": "1600 ms"
+        },
+        "measurement_1_1": {
+          "outcome": "supported",
+          "value": "4.9 mm"
+        },
+        "sdt_2001841928": {
+          "outcome": "supported",
+          "value": "great saphenous vein"
+        },
+        "sdt_605543147": {
+          "outcome": "supported",
+          "value": "reflux positive."
+        },
+        "sdt_-170105994": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "sdt_-1029175652": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "measurement_1_2": {
+          "outcome": "missing"
+        },
+        "sdt_-213273323": {
+          "outcome": "missing"
+        }
+      },
+      "expected_statements": {
+        "claim_9": "exam_choice",
+        "claim_19": "original",
+        "claim_23": null,
+        "claim_27": null,
+        "claim_30": null,
+        "claim_31": "selected",
+        "claim_32": "negative",
+        "claim_34": "selected",
+        "claim_35": "selected",
+        "claim_36": "positive",
+        "claim_39": null
+      },
+      "rationale": "6.9 mm versus 9.6 mm for the same segment, with no correction, is a genuine conflict (a plausible transposition) and needs a clinician. The reflux time (1.6 s -> 1600 ms) is stated once and the summary only says 'with reflux', so it is supported; the diameter conflict does not affect the reflux-positive impression, claim_34 or claim_36."
+    },
+    {
+      "id": "C16",
+      "pair": null,
+      "contract": "narrative",
+      "categories": [
+        "conflict",
+        "deep_dvt",
+        "positive_reflux",
+        "reflux_times",
+        "reflux_seconds_conversion",
+        "denial"
+      ],
+      "notes": "SYNTHETIC PATIENT J (ID SYN-J-1010) was seen on 09/13/2026 for a bilateral detailed venous study. She has a venous leg ulcer above the right medial malleolus and leg edema.\n\nThe deep and superficial venous systems were evaluated in the upright position with and without manual augmentation and Valsalva, including the junctions, the great and small saphenous veins, the perforator veins and the varicosities to be treated.\n\nFindings: the right deep venous system is without evidence of obstruction or insufficiency. The right great saphenous vein measures 6.4 mm in the proximal thigh with reflux of 900 ms. The left great saphenous vein measures 4.5 mm at the saphenofemoral junction, there is no saphenous reflux in the left leg, and the left deep venous system is without evidence of obstruction or insufficiency.\n\nImpression: chronic DVT of the right CFV, FV, POP V and PTV. Right great saphenous vein reflux positive, with reflux of 2.1 seconds in the proximal thigh.",
+      "expected_fields": {
+        "patient_name": {
+          "outcome": "supported",
+          "value": "SYNTHETIC PATIENT J"
+        },
+        "patient_id": {
+          "outcome": "supported",
+          "value": "SYN-J-1010"
+        },
+        "date_of_service": {
+          "outcome": "supported",
+          "value": "09/13/2026"
+        },
+        "sdt_1475334564": {
+          "outcome": "supported",
+          "value": "Bilateral Detailed"
+        },
+        "sdt_-770853925": {
+          "outcome": "supported",
+          "value": "Leg ulcer"
+        },
+        "sdt_269290727": {
+          "outcome": "supported",
+          "value": "Leg edema"
+        },
+        "sdt_429781496": {
+          "outcome": "supported",
+          "value": "deep and superficial"
+        },
+        "sdt_-170105994": {
+          "outcome": "decision",
+          "reason": "The findings call the right deep system normal and the impression reports a chronic DVT of CFV, FV, POP V and PTV, with no correction."
+        },
+        "measurement_2_1": {
+          "outcome": "supported",
+          "value": "6.4 mm"
+        },
+        "measurement_2_2": {
+          "outcome": "decision",
+          "reason": "The right GSV proximal-thigh reflux time is 900 ms in the findings and 2.1 seconds (2100 ms) in the impression, with no correction."
+        },
+        "sdt_-892962961": {
+          "outcome": "supported",
+          "value": "great saphenous vein"
+        },
+        "sdt_-213273323": {
+          "outcome": "supported",
+          "value": "reflux positive."
+        },
+        "sdt_-1029175652": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "measurement_15_1": {
+          "outcome": "supported",
+          "value": "4.5 mm"
+        },
+        "measurement_15_2": {
+          "outcome": "missing"
+        },
+        "sdt_605543147": {
+          "outcome": "missing"
+        },
+        "sdt_-1316494373": {
+          "outcome": "missing"
+        }
+      },
+      "expected_statements": {
+        "claim_9": "exam_choice",
+        "claim_19": "original",
+        "claim_23": null,
+        "claim_27": null,
+        "claim_30": "selected",
+        "claim_31": null,
+        "claim_32": "positive",
+        "claim_34": null,
+        "claim_35": "selected",
+        "claim_36": "negative",
+        "claim_39": null
+      },
+      "rationale": "Two genuine conflicts: the right deep system (normal in the findings, chronic DVT in the impression) and the right GSV proximal-thigh reflux time (900 ms versus 2.1 s). The deep answer needs a decision, so claim_31 is null. Both reflux times exceed 500 ms, so the reflux-positive impression, claim_32 positive and claim_19 original are supported whichever time is right. The ulcer is 'Leg ulcer'; no diagnosis is stated."
+    },
+    {
+      "id": "C17",
+      "pair": null,
+      "contract": "narrative",
+      "categories": [
+        "uncertainty",
+        "denial",
+        "clinical_correlation"
+      ],
+      "notes": "SYNTHETIC PATIENT K (ID SYN-K-1011) had a bilateral detailed venous study on 09/12/2026 for heaviness in both legs. There is a tender cord in the left calf; superficial thrombophlebitis cannot be excluded.\n\nThe deep and superficial venous systems were evaluated standing with and without manual augmentation and Valsalva, including the junctions, the great and small saphenous veins, the perforator veins and the varicosities to be treated.\n\nThe right small saphenous vein measures 5.3 mm at the saphenopopliteal junction with possible reflux of approximately 550 ms; this is questionable and may be artifact from weak augmentation. The left great saphenous vein measures 4.7 mm at the saphenofemoral junction and there is no saphenous reflux in the left leg. Both deep venous systems are without evidence of obstruction or insufficiency.\n\nImpression: questionable right small saphenous vein reflux; repeat study suggested. Clinical correlation with the above findings is required.",
+      "expected_fields": {
+        "patient_name": {
+          "outcome": "supported",
+          "value": "SYNTHETIC PATIENT K"
+        },
+        "patient_id": {
+          "outcome": "supported",
+          "value": "SYN-K-1011"
+        },
+        "date_of_service": {
+          "outcome": "supported",
+          "value": "09/12/2026"
+        },
+        "sdt_1475334564": {
+          "outcome": "supported",
+          "value": "Bilateral Detailed"
+        },
+        "sdt_722175654": {
+          "outcome": "supported",
+          "value": "Heaviness"
+        },
+        "sdt_-770853925": {
+          "outcome": "decision",
+          "reason": "Superficial thrombophlebitis 'cannot be excluded': the clinician must decide whether to record it as an indication."
+        },
+        "sdt_429781496": {
+          "outcome": "supported",
+          "value": "deep and superficial"
+        },
+        "measurement_5_1": {
+          "outcome": "supported",
+          "value": "5.3 mm"
+        },
+        "measurement_5_2": {
+          "outcome": "decision",
+          "reason": "The right SSV reflux of about 550 ms is 'possible', 'questionable' and 'may be artifact'."
+        },
+        "sdt_-892962961": {
+          "outcome": "decision",
+          "reason": "The only right impression is a questionable SSV reflux; whether the SSV belongs in the impression depends on accepting that finding."
+        },
+        "sdt_-213273323": {
+          "outcome": "decision",
+          "reason": "Reflux in the right SSV is explicitly questionable."
+        },
+        "measurement_15_1": {
+          "outcome": "supported",
+          "value": "4.7 mm"
+        },
+        "sdt_-170105994": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "sdt_-1029175652": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "measurement_15_2": {
+          "outcome": "missing"
+        },
+        "sdt_2001841928": {
+          "outcome": "missing"
+        },
+        "sdt_605543147": {
+          "outcome": "missing"
+        }
+      },
+      "expected_statements": {
+        "claim_9": "exam_choice",
+        "claim_19": "technique_only",
+        "claim_23": null,
+        "claim_27": null,
+        "claim_30": null,
+        "claim_31": "selected",
+        "claim_32": null,
+        "claim_34": null,
+        "claim_35": "selected",
+        "claim_36": "negative",
+        "claim_39": "original"
+      },
+      "rationale": "Explicit uncertainty ('cannot be excluded', 'possible', 'questionable', 'may be artifact') makes the thrombophlebitis indication, the SSV reflux time and the right impression clinician decisions, so claim_30 and claim_32 are null; the SSV diameter was measured definitely and is supported. With no definite reflux over 500 ms, claim_19 is technique_only. Clinical correlation is explicitly required: claim_39 original. The repeat-study suggestion fills nothing."
+    },
+    {
+      "id": "C18",
+      "pair": null,
+      "contract": "narrative",
+      "categories": [
+        "timing_planned",
+        "side_ambiguous",
+        "positive_reflux",
+        "reflux_times",
+        "no_prior_treatment",
+        "missing_information"
+      ],
+      "notes": "SYNTHETIC PATIENT L (ID SYN-L-1012) had a bilateral detailed venous study on 09/11/2026 for leg pain and swelling. She has had no previous vein treatment.\n\nThe deep and superficial venous systems were evaluated standing, with and without manual augmentation and Valsalva, including the junctions, the great and small saphenous veins, the perforator veins and the varicosities to be treated.\n\nThe left great saphenous vein measures 7.9 mm at the saphenofemoral junction with reflux of 1700 ms and 7.1 mm in the proximal thigh with reflux of 1400 ms. The right great saphenous vein measures 4.3 mm at the saphenofemoral junction without reflux. A varicose tributary at the medial calf measures 3.8 mm with reflux of 800 ms.\n\nImpression: left great saphenous vein reflux positive. Plan: radiofrequency ablation of the left great saphenous vein from the saphenofemoral junction to the knee is scheduled for next month.",
+      "expected_fields": {
+        "patient_name": {
+          "outcome": "supported",
+          "value": "SYNTHETIC PATIENT L"
+        },
+        "patient_id": {
+          "outcome": "supported",
+          "value": "SYN-L-1012"
+        },
+        "date_of_service": {
+          "outcome": "supported",
+          "value": "09/11/2026"
+        },
+        "sdt_1475334564": {
+          "outcome": "supported",
+          "value": "Bilateral Detailed"
+        },
+        "sdt_-1124008635": {
+          "outcome": "supported",
+          "value": "Leg pain"
+        },
+        "sdt_269290727": {
+          "outcome": "supported",
+          "value": "Swelling"
+        },
+        "sdt_429781496": {
+          "outcome": "supported",
+          "value": "deep and superficial"
+        },
+        "measurement_15_1": {
+          "outcome": "supported",
+          "value": "7.9 mm"
+        },
+        "measurement_15_2": {
+          "outcome": "supported",
+          "value": "1700 ms"
+        },
+        "measurement_16_1": {
+          "outcome": "supported",
+          "value": "7.1 mm"
+        },
+        "measurement_16_2": {
+          "outcome": "supported",
+          "value": "1400 ms"
+        },
+        "sdt_2001841928": {
+          "outcome": "supported",
+          "value": "great saphenous vein"
+        },
+        "sdt_605543147": {
+          "outcome": "supported",
+          "value": "reflux positive."
+        },
+        "measurement_1_1": {
+          "outcome": "supported",
+          "value": "4.3 mm"
+        },
+        "location_11": {
+          "outcome": "decision",
+          "reason": "The medial calf tributary has no side in a bilateral study; it may belong to the right row (11) or the left row (25)."
+        },
+        "measurement_11_1": {
+          "outcome": "decision",
+          "reason": "Side of the 3.8 mm tributary is not stated."
+        },
+        "measurement_11_2": {
+          "outcome": "decision",
+          "reason": "Side of the 800 ms tributary reflux is not stated."
+        },
+        "location_25": {
+          "outcome": "decision",
+          "reason": "The medial calf tributary has no side in a bilateral study; it may belong to the right row (11) or the left row (25)."
+        },
+        "measurement_25_1": {
+          "outcome": "decision",
+          "reason": "Side of the 3.8 mm tributary is not stated."
+        },
+        "measurement_25_2": {
+          "outcome": "decision",
+          "reason": "Side of the 800 ms tributary reflux is not stated."
+        },
+        "sdt_1093284141": {
+          "outcome": "missing"
+        },
+        "sdt_-505521617": {
+          "outcome": "missing"
+        },
+        "sdt_519430350": {
+          "outcome": "missing"
+        },
+        "measurement_1_2": {
+          "outcome": "missing"
+        },
+        "sdt_-170105994": {
+          "outcome": "missing"
+        }
+      },
+      "expected_statements": {
+        "claim_9": "exam_choice",
+        "claim_19": "original",
+        "claim_23": "none",
+        "claim_27": "none",
+        "claim_30": null,
+        "claim_31": null,
+        "claim_32": null,
+        "claim_34": "selected",
+        "claim_35": null,
+        "claim_36": "positive",
+        "claim_39": null
+      },
+      "rationale": "The left GSV ablation is PLANNED, not previous: the left previous-treatment fields are missing and the explicit 'no previous vein treatment' selects 'none' for both legs. The medial calf tributary has no side in a bilateral study, so its row is a clinician decision (right row 11 or left row 25). Only one right segment is described, without reflux; that does not document the whole right leg, so claim_32 is null. No deep findings are reported: deep fields missing, claim_31/claim_35 null."
+    },
+    {
+      "id": "C19",
+      "pair": null,
+      "contract": "transcript",
+      "categories": [
+        "transcript",
+        "positive_reflux",
+        "reflux_seconds_conversion",
+        "denial",
+        "conditional_instruction",
+        "no_prior_treatment"
+      ],
+      "notes": "ok this is synthetic patient m id syn m 1013 date of service 09/10/2026 bilateral detailed study she complains of leg pain and swelling worse at the end of the day and she gets night cramps no prior vein treatment in either leg we looked at the deep and superficial systems standing with augmentation and valsalva including the junctions the great and small saphenous the perforators and the varicosities right great saphenous at the sfj 6.8 millimeters reflux 1.4 seconds proximal thigh 6.0 millimeters reflux 1.1 seconds right small saphenous at the spj 3.9 millimeters no reflux left side no saphenous reflux left great saphenous at the sfj 4.4 millimeters deep veins both legs without evidence of obstruction or insufficiency impression right great saphenous vein reflux positive diagnosis varicose veins of lower extremity with other complications of right lower extremity she should wear compression stockings and come back if the pain gets worse",
+      "expected_fields": {
+        "patient_name": {
+          "outcome": "supported",
+          "value": "synthetic patient m"
+        },
+        "patient_id": {
+          "outcome": "supported",
+          "value": "syn m 1013"
+        },
+        "date_of_service": {
+          "outcome": "supported",
+          "value": "09/10/2026"
+        },
+        "sdt_1475334564": {
+          "outcome": "supported",
+          "value": "Bilateral Detailed"
+        },
+        "sdt_-1124008635": {
+          "outcome": "supported",
+          "value": "Leg pain"
+        },
+        "sdt_269290727": {
+          "outcome": "supported",
+          "value": "Swelling"
+        },
+        "sdt_-49312682": {
+          "outcome": "supported",
+          "value": "Cramping"
+        },
+        "sdt_429781496": {
+          "outcome": "supported",
+          "value": "deep and superficial"
+        },
+        "measurement_1_1": {
+          "outcome": "supported",
+          "value": "6.8 mm"
+        },
+        "measurement_1_2": {
+          "outcome": "supported",
+          "value": "1400 ms"
+        },
+        "measurement_2_1": {
+          "outcome": "supported",
+          "value": "6.0 mm"
+        },
+        "measurement_2_2": {
+          "outcome": "supported",
+          "value": "1100 ms"
+        },
+        "measurement_5_1": {
+          "outcome": "supported",
+          "value": "3.9 mm"
+        },
+        "measurement_15_1": {
+          "outcome": "supported",
+          "value": "4.4 mm"
+        },
+        "sdt_-892962961": {
+          "outcome": "supported",
+          "value": "great saphenous vein"
+        },
+        "sdt_-213273323": {
+          "outcome": "supported",
+          "value": "reflux positive."
+        },
+        "sdt_-170105994": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "sdt_-1029175652": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "sdt_-1316494373": {
+          "outcome": "supported",
+          "value": "Varicose veins of lower extremity with other complications of right lower extremity"
+        },
+        "measurement_5_2": {
+          "outcome": "missing"
+        },
+        "measurement_15_2": {
+          "outcome": "missing"
+        },
+        "sdt_605543147": {
+          "outcome": "missing"
+        }
+      },
+      "expected_statements": {
+        "claim_9": "exam_choice",
+        "claim_19": "original",
+        "claim_23": "none",
+        "claim_27": "none",
+        "claim_30": "selected",
+        "claim_31": "selected",
+        "claim_32": "positive",
+        "claim_34": null,
+        "claim_35": "selected",
+        "claim_36": "negative",
+        "claim_39": null
+      },
+      "rationale": "Reviewed-transcript form: 1.4 s -> 1400 ms and 1.1 s -> 1100 ms; 'proximal thigh' continues the right GSV run. Night cramps are 'Cramping'. Demographic text is copied as transcribed (lower case). The right SSV and left GSV have no reflux, so their reflux times and the left impression are missing. 'come back if the pain gets worse' is a conditional instruction and fills nothing further."
+    },
+    {
+      "id": "C20",
+      "pair": null,
+      "contract": "narrative",
+      "categories": [
+        "almost_empty",
+        "missing_information"
+      ],
+      "notes": "SYNTHETIC PATIENT N. Venous duplex performed today; images saved for review. Formal interpretation to follow once the reading physician has reviewed the study. Patient tolerated the exam well.",
+      "expected_fields": {
+        "patient_name": {
+          "outcome": "supported",
+          "value": "SYNTHETIC PATIENT N"
+        },
+        "date_of_service": {
+          "outcome": "missing"
+        },
+        "sdt_1475334564": {
+          "outcome": "missing"
+        },
+        "sdt_429781496": {
+          "outcome": "missing"
+        },
+        "sdt_-170105994": {
+          "outcome": "missing"
+        },
+        "sdt_-1029175652": {
+          "outcome": "missing"
+        },
+        "sdt_-213273323": {
+          "outcome": "missing"
+        },
+        "sdt_605543147": {
+          "outcome": "missing"
+        }
+      },
+      "expected_statements": {
+        "claim_9": null,
+        "claim_19": null,
+        "claim_23": null,
+        "claim_27": null,
+        "claim_30": null,
+        "claim_31": null,
+        "claim_32": null,
+        "claim_34": null,
+        "claim_35": null,
+        "claim_36": null,
+        "claim_39": null
+      },
+      "rationale": "Only the patient name is documented. 'today' is not a date of service, and no exam side, technique, finding, treatment history or statement is documented, so every other field is missing and every statement null."
+    },
+    {
+      "id": "C21",
+      "pair": null,
+      "contract": "narrative",
+      "categories": [
+        "prior_treatment_dates",
+        "prior_ablation_vs_current",
+        "positive_reflux",
+        "reflux_seconds_conversion",
+        "denial"
+      ],
+      "notes": "SYNTHETIC PATIENT O was seen on 09/09/2026 for a right leg detailed and left leg screening venous study because of previous vein treatment.\n\nHistory: in June 2015 the right great saphenous vein was stripped from the saphenofemoral junction to the knee; however, there has been a recurrence. On 04/08/2025 the left small saphenous vein was ablated from the saphenopopliteal junction to the mid calf.\n\nToday a retained right great saphenous vein segment below the knee measures 5.4 mm with reflux of 1.9 seconds. On the left screening views the treated small saphenous vein is absent and there is no saphenous reflux in the left leg.\n\nImpression: retained right great saphenous vein reflux positive; left small saphenous vein is absent.",
+      "expected_fields": {
+        "patient_name": {
+          "outcome": "supported",
+          "value": "SYNTHETIC PATIENT O"
+        },
+        "date_of_service": {
+          "outcome": "supported",
+          "value": "09/09/2026"
+        },
+        "sdt_1475334564": {
+          "outcome": "supported",
+          "value": "Unilateral - Right Leg Detailed; Left Leg Screening"
+        },
+        "sdt_-770853925": {
+          "outcome": "supported",
+          "value": "Previous vein treatment"
+        },
+        "sdt_-1287346867": {
+          "outcome": "supported",
+          "value": "great saphenous vein"
+        },
+        "sdt_-346030703": {
+          "outcome": "supported",
+          "value": "saphenofemoral junction"
+        },
+        "sdt_599910328": {
+          "outcome": "supported",
+          "value": "knee"
+        },
+        "sdt_1706206184": {
+          "outcome": "supported",
+          "value": ", however, there has been a recurrence."
+        },
+        "sdt_1093284141": {
+          "outcome": "supported",
+          "value": "small saphenous vein"
+        },
+        "sdt_-505521617": {
+          "outcome": "supported",
+          "value": "saphenopopliteal junction"
+        },
+        "sdt_519430350": {
+          "outcome": "supported",
+          "value": "mid calf"
+        },
+        "sdt_-1268837810": {
+          "outcome": "supported",
+          "value": "and is absent."
+        },
+        "measurement_4_1": {
+          "outcome": "supported",
+          "value": "5.4 mm"
+        },
+        "measurement_4_2": {
+          "outcome": "supported",
+          "value": "1900 ms"
+        },
+        "sdt_-892962961": {
+          "outcome": "supported",
+          "value": "retained great saphenous vein"
+        },
+        "sdt_-213273323": {
+          "outcome": "supported",
+          "value": "reflux positive."
+        },
+        "sdt_2001841928": {
+          "outcome": "supported",
+          "value": "small saphenous vein"
+        },
+        "sdt_605543147": {
+          "outcome": "supported",
+          "value": "is absent."
+        },
+        "measurement_1_1": {
+          "outcome": "missing"
+        },
+        "measurement_1_2": {
+          "outcome": "missing"
+        },
+        "measurement_19_1": {
+          "outcome": "missing"
+        },
+        "measurement_19_2": {
+          "outcome": "missing"
+        },
+        "sdt_429781496": {
+          "outcome": "missing"
+        }
+      },
+      "expected_statements": {
+        "claim_9": "exam_choice",
+        "claim_19": null,
+        "claim_23": "original",
+        "claim_27": "original",
+        "claim_30": "selected",
+        "claim_31": null,
+        "claim_32": "positive",
+        "claim_34": "selected",
+        "claim_35": null,
+        "claim_36": "negative",
+        "claim_39": null
+      },
+      "rationale": "The treatment dates (June 2015, 04/08/2025) are history and never fill the date of service. Right: stripping SFJ to knee with recurrence; the CURRENT finding is a retained below-knee GSV segment with reflux (row 4; 1.9 s -> 1900 ms), so the impression vein is 'retained great saphenous vein' and the treated SFJ rows stay empty. Left: the ablated SSV is absent today, which is both the treatment outcome ('and is absent.') and the current impression ('small saphenous vein' 'is absent.'), consistent with claim_36 negative. Technique and deep systems are not documented: claim_19/31/35 null."
+    },
+    {
+      "id": "C22",
+      "pair": null,
+      "contract": "narrative",
+      "categories": [
+        "family_history",
+        "denial",
+        "conditional_instruction",
+        "unrelated_sentence",
+        "no_prior_treatment"
+      ],
+      "notes": "SYNTHETIC PATIENT P (ID SYN-P-1016) had a limited bilateral venous duplex on 09/08/2026 for numbness in the left leg. She denies leg swelling or pain. She has never had vein treatment herself; her father had vein stripping in both legs and her sister had a DVT after knee surgery. She is a software engineer with a sedentary job.\n\nThe deep and superficial venous systems were evaluated standing, with and without manual augmentation and Valsalva, including the junctions, the great and small saphenous veins, the perforator veins and the varicosities to be treated. The right great saphenous vein measures 3.8 mm and the left 3.6 mm at the saphenofemoral junction. There is no saphenous reflux in either lower extremity. Both deep venous systems are without evidence of obstruction or insufficiency.\n\nIf the numbness persists, a neurology referral is suggested.",
+      "expected_fields": {
+        "patient_name": {
+          "outcome": "supported",
+          "value": "SYNTHETIC PATIENT P"
+        },
+        "patient_id": {
+          "outcome": "supported",
+          "value": "SYN-P-1016"
+        },
+        "date_of_service": {
+          "outcome": "supported",
+          "value": "09/08/2026"
+        },
+        "sdt_1475334564": {
+          "outcome": "supported",
+          "value": "Bilateral Limited"
+        },
+        "sdt_-49312682": {
+          "outcome": "supported",
+          "value": "Numbness in leg"
+        },
+        "sdt_429781496": {
+          "outcome": "supported",
+          "value": "deep and superficial"
+        },
+        "measurement_1_1": {
+          "outcome": "supported",
+          "value": "3.8 mm"
+        },
+        "measurement_15_1": {
+          "outcome": "supported",
+          "value": "3.6 mm"
+        },
+        "sdt_-170105994": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "sdt_-1029175652": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "sdt_269290727": {
+          "outcome": "missing"
+        },
+        "sdt_-1124008635": {
+          "outcome": "missing"
+        },
+        "sdt_-770853925": {
+          "outcome": "missing"
+        },
+        "sdt_-1287346867": {
+          "outcome": "missing"
+        },
+        "sdt_1093284141": {
+          "outcome": "missing"
+        },
+        "measurement_1_2": {
+          "outcome": "missing"
+        },
+        "measurement_15_2": {
+          "outcome": "missing"
+        }
+      },
+      "expected_statements": {
+        "claim_9": "exam_choice",
+        "claim_19": "technique_only",
+        "claim_23": "none",
+        "claim_27": "none",
+        "claim_30": null,
+        "claim_31": "selected",
+        "claim_32": "negative",
+        "claim_34": null,
+        "claim_35": "selected",
+        "claim_36": "negative",
+        "claim_39": null
+      },
+      "rationale": "The father's stripping and the sister's DVT are family history: they fill neither the previous-treatment fields nor the patient's deep system, which is normal on her own study. Swelling and pain are denied and those fields have no denial option, so they are missing. No reflux means no impression (claim_30/34 null) and technique_only; the occupation and the conditional neurology suggestion fill nothing."
+    },
+    {
+      "id": "C23",
+      "pair": null,
+      "contract": "narrative",
+      "categories": [
+        "deep_dvt",
+        "history_indication",
+        "positive_reflux",
+        "reflux_times",
+        "denial"
+      ],
+      "notes": "SYNTHETIC PATIENT Q (ID SYN-Q-1017) had a left leg detailed, right leg screening venous study on 09/07/2026 using the GE Versana, L6-12 MHz Transducer. She reports heaviness in the left leg and had superficial thrombophlebitis of a left thigh varicosity in July 2026, treated with compression and anti-inflammatories.\n\nThe deep and superficial venous systems were evaluated in the upright position with and without manual augmentation and Valsalva, including the junctions, the great and small saphenous veins, the perforator veins and the varicosities to be treated.\n\nThe left common femoral, femoral, popliteal and posterior tibial veins show chronic post-thrombotic wall thickening with partial recanalization, consistent with a chronic DVT of the CFV, FV, POP V and PTV. The left posterior accessory great saphenous vein measures 5.0 mm at the saphenofemoral junction with reflux of 1500 ms and 4.6 mm in the proximal thigh with reflux of 1200 ms. On the right screening views the deep venous system is without evidence of obstruction or insufficiency and there is no saphenous reflux.\n\nImpression: left posterior accessory great saphenous vein reflux positive. Diagnosis: chronic venous hypertension with other complications of left lower extremity.",
+      "expected_fields": {
+        "patient_name": {
+          "outcome": "supported",
+          "value": "SYNTHETIC PATIENT Q"
+        },
+        "patient_id": {
+          "outcome": "supported",
+          "value": "SYN-Q-1017"
+        },
+        "date_of_service": {
+          "outcome": "supported",
+          "value": "09/07/2026"
+        },
+        "sdt_1475334564": {
+          "outcome": "supported",
+          "value": "Unilateral - Left Leg Detailed; Right Leg Screening"
+        },
+        "sdt_-388341802": {
+          "outcome": "supported",
+          "value": "GE Versana, L6-12 MHz Transducer"
+        },
+        "sdt_-770853925": {
+          "outcome": "supported",
+          "value": "Thrombophlebitis"
+        },
+        "sdt_722175654": {
+          "outcome": "supported",
+          "value": "Heaviness"
+        },
+        "sdt_429781496": {
+          "outcome": "supported",
+          "value": "deep and superficial"
+        },
+        "sdt_-1029175652": {
+          "outcome": "supported",
+          "value": "with evidence of a chronic DVT of CFV, FV, POP V, PTV."
+        },
+        "measurement_23_1": {
+          "outcome": "supported",
+          "value": "5.0 mm"
+        },
+        "measurement_23_2": {
+          "outcome": "supported",
+          "value": "1500 ms"
+        },
+        "measurement_24_1": {
+          "outcome": "supported",
+          "value": "4.6 mm"
+        },
+        "measurement_24_2": {
+          "outcome": "supported",
+          "value": "1200 ms"
+        },
+        "sdt_2001841928": {
+          "outcome": "supported",
+          "value": "posterior accessory great saphenous vein"
+        },
+        "sdt_605543147": {
+          "outcome": "supported",
+          "value": "reflux positive."
+        },
+        "sdt_-170105994": {
+          "outcome": "supported",
+          "value": "without evidence of obstruction or insufficiency."
+        },
+        "sdt_-1316494373": {
+          "outcome": "supported",
+          "value": "Chronic venous hypertension with other complications of left lower extremity"
+        },
+        "measurement_9_1": {
+          "outcome": "missing"
+        },
+        "measurement_9_2": {
+          "outcome": "missing"
+        },
+        "measurement_15_1": {
+          "outcome": "missing"
+        },
+        "sdt_-213273323": {
+          "outcome": "missing"
+        },
+        "sdt_1093284141": {
+          "outcome": "missing"
+        }
+      },
+      "expected_statements": {
+        "claim_9": "exam_choice",
+        "claim_19": "original",
+        "claim_23": null,
+        "claim_27": null,
+        "claim_30": null,
+        "claim_31": "selected",
+        "claim_32": "negative",
+        "claim_34": "selected",
+        "claim_35": "selected",
+        "claim_36": "positive",
+        "claim_39": null
+      },
+      "rationale": "A superficial thrombophlebitis two months earlier is a documented history indication ('Thrombophlebitis'); conservative care is not previous vein treatment, so the left previous-treatment fields are missing and claim_27 null. The left chronic DVT involves all four named segments, so the chronic DVT option applies. The refluxing vein is the LEFT PAGSV (rows 23 and 24), not the right PAGSV rows 9 and 10; accessory saphenous reflux over 500 ms supports claim_19 original."
+    }
+  ]
+}
