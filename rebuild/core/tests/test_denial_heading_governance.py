@@ -2618,3 +2618,51 @@ class WhatTheNineteenthPassFound(ExpectationsMixin, TestCase):
         answer = fixture_answers(['Pain score'], notes)['Pain score']
         shown = ' '.join(entry.get('quote', '') for entry in answer['held_candidate']['context'])
         self.assertIn('Correction: the triage pain score', shown)
+
+
+class WhatTheTwentiethPassFound(ExpectationsMixin, TestCase):
+    """Round 20 over the nineteenth-pass repairs (2026-09-24)."""
+
+    def context(self, answer):
+        return ' '.join(entry.get('quote', '') for entry in answer['held_candidate']['context'])
+
+    def test_a_value_with_its_sign_or_unit_character_is_read(self):
+        for label, line in (('SpO2', 'SpO2: 88% correction: 94%'), ('Temperature', 'Temperature: 38.9°C correction: 36.9°C'),
+                            ('Polyp size', 'Polyp size: 1.2×0.8 correction: 0.6×0.4 cm'), ('Size', 'Size: 1.5–2.0 correction: 2.5')):
+            with self.subTest(line=line):
+                answers = fixture_answers(['Assessment', label], 'Assessment: hypoxaemia, oxygen started.\n' + line)
+                self.assert_needs_decision(answers['Assessment'], 'hypoxaemia, oxygen started.', line)
+
+    def test_a_run_of_other_scripts_digits_is_read_once(self):
+        """The nineteenth-pass word read Unicode digits across every period (16 s at 50,000 characters)."""
+        import time
+        for text in ('Size: ' + 'a١.١' * 12000, 'Size: ' + 'a1.١' * 12490, 'K ' + '3.١mmol/L' * 5000):
+            started = time.perf_counter()
+            generation.erratum_points(text)
+            self.assertLess(time.perf_counter() - started, 2.0, text[:12])
+
+    def test_a_correction_deep_in_a_long_sentence_is_shown_from_its_word(self):
+        notes = ('Procedure: diagnostic colonoscopy. Prior procedures were reviewed as follows. Complications: bleeding after a 2019 '
+                 'polypectomy. The procedure was performed under propofol sedation with continuous monitoring and the bowel '
+                 'preparation was graded as good, the cecum was identified by the appendiceal orifice and the ileocecal valve, '
+                 'withdrawal time was nine minutes, and retroflexion in the rectum showed small internal haemorrhoids, grade I. '
+                 'Correction: the 2019 bleeding followed a haemorrhoid banding, not a polypectomy.')
+        answer = tab_answers(['Procedure', 'Complications'], notes)[1]['Complications']
+        self.assertIn('Correction: the 2019 bleeding', self.context(answer))
+
+    def test_a_pointer_shown_from_its_line_start_keeps_its_frame(self):
+        notes = ('Complications: none.\nFamily history: her mother was diagnosed in her sixties after a long illness with several '
+                 'admissions for anaemia, weight loss and fatigue, and her records from two hospitals and the family doctor were '
+                 'obtained from the patient and were reviewed in full at this visit, and she had the following. Correction: the '
+                 'diagnosis was made at 58, not 60.\nReview of systems: the patient denies the following:\nAbdominal pain: yes\n'
+                 'Examination findings are as follows.\nAbdomen: soft, non-tender.\nPlan: see below.\nComplications: perforation.')
+        answer = fixture_answers(['Complications', 'Family history', 'Review of systems', 'Abdominal pain', 'Abdomen', 'Plan'],
+                                 notes)['Complications']
+        self.assertIn('Family history: her mother', self.context(answer))
+
+    def test_a_cut_correction_window_is_marked(self):
+        notes = ('Chest pain: exertional. Cough: dry. Correction: '
+                 + 'the medication history was taken again from the pharmacy list and the family, ' * 6 + 'The cough is productive.')
+        quote = self.context(tab_answers(['Chest pain', 'Cough'], notes)[1]['Chest pain'])
+        self.assertIn('Correction:', quote)
+        self.assertTrue(quote.rstrip().endswith('…'), quote[-40:])

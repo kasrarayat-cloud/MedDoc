@@ -709,7 +709,10 @@ GLUED_MARKER = r'(?:(?:\d{1,2}|[ivx]{1,4}|[a-z])\)' + NON_LETTERS + ')?'
 #: twin (eighteenth and nineteenth passes: `12.5 correction:`, `3.1mmol/L correction:`, `1.2x0.8`, `1.5-2.0`, `3,1`;
 #: `12 correction: 8 mm` was always read). A digit run with its decimal parts is ONE atomic step and the word is
 #: possessive, so a long run is read once (nineteenth pass: the first form backtracked quadratically, 40 s at 50,000).
-BEFORE_THE_WORD = r"(?:(?>\d+(?:[.,]\d+)*)|[\w'\u2019/\-\u2010\u2011]|\([a-z]{1,3}\))++"
+#: ASCII digits only, like the glued guard (twentieth pass: Unicode digits bridged every period, 16 s at 50,000); and a
+#: value's own sign and unit characters (`88%`, `38.9°C`, `1.2×0.8`, `1.5–2.0`). A spaced unit (`3.1 mmol/L correction:`)
+#: is two words, like its integer twin, and is not read.
+BEFORE_THE_WORD = r"(?:(?>[0-9]+(?:[.,][0-9]+)*)|[\w'\u2019/\-\u2010\u2011%\u00b0\u2103\u2109\u00d7\u2013\u00b1]|\([a-z]{1,3}\))++"
 #: ⚠️ SIXTEENTH PASS: a correction GLUED to the sentence before it (`adenoma.Correction: no polyp.`, a missed space; or
 #: Word's `adenoma.<o:p></o:p>Correction:`) did not start a sentence, so the finding it corrects stayed ready. After
 #: the sentence end the word itself (or one word and the word) now starts one too, after the same bracket, bullet, quote
@@ -1171,14 +1174,21 @@ def governed_context(governance, notes, evidence, others=()):
     while index < len(backward) and len(chosen) < CONTEXT_SHOWN:
         take(backward[index][1], backward[index][2], backward[index][3], True)
         index = by_line[1][backward[index][1]][0][-1] + 1
-    def bounded(window, keep_end):
-        # A window longer than a quote is cut at its governing end BEFORE it is merged (nineteenth pass: a correction's
-        # window ran to the end of a paragraph, swallowed the denial and family-history windows in the merge, and the
-        # cut quote then kept only its tail): a heading or pointer above keeps its end, a correction its start.
-        low, high = window
+    cut_at = set()
+
+    def from_the_word(governor):
+        # A correction's window runs to the end of its line: longer than a quote, it is cut from the correction's WORD
+        # before it is merged, and the cut is marked (nineteenth pass: it swallowed the denial and family-history windows
+        # in the merge and the cut quote kept only its tail; twentieth: cut from its sentence start, a long sentence lost
+        # the word). Every other window is shown as before.
+        low, high = governor[2:4]
         if high - low <= QUOTE_SHOWN:
-            return window
-        return (high - QUOTE_SHOWN, high) if keep_end else (low, low + QUOTE_SHOWN)
+            return (low, high)
+        start = min(max(low, governor[0]), high)
+        if high - start > QUOTE_SHOWN:
+            cut_at.add(start + QUOTE_SHOWN)
+            return (start, start + QUOTE_SHOWN)
+        return (start, high)
 
     def windows(line):
         # Each governing span on the line, at most three: those whose words change meaning first, then the nearest. The
@@ -1188,14 +1198,14 @@ def governed_context(governance, notes, evidence, others=()):
         for indexes in by_line[0].get(line, ((), ())):
             cut = bisect.bisect_left(indexes, ahead)
             near.update(indexes[max(0, cut - 3):cut])
-        found = [(not forward[i][4], last_at - forward[i][0], bounded(forward[i][2:4], True)) for i in near]
+        found = [(not forward[i][4], last_at - forward[i][0], forward[i][2:4]) for i in near]
         near = set()
         for indexes in by_line[1].get(line, ((), ())):
             cut = bisect.bisect_left(indexes, behind)
             near.update(indexes[cut:cut + 3])
-        found += [(not backward[i][4], backward[i][0] - first_at, bounded(backward[i][2:4], False)) for i in near]
+        found += [(not backward[i][4], backward[i][0] - first_at, from_the_word(backward[i])) for i in near]
         if line in selves:
-            found.append((False, 0, bounded((headings[line], spans[line][1]), False)))
+            found.append((False, 0, (headings[line], spans[line][1])))
         best = {}                                       # one place per distinct window (eighteenth pass: a duplicate
         for first, second, window in found:             # took two of the three places)
             if window not in best or (first, second) < best[window]:
@@ -1203,9 +1213,8 @@ def governed_context(governance, notes, evidence, others=()):
         windows_shown = sorted(best, key=best.get)[:3]
         # The outermost heading's own sentence is shown IN ADDITION to the three (seventeenth pass: three nearer sentences
         # on its line dropped it; eighteenth: taking one of the three places dropped a correction or a denial instead).
-        outermost = bounded(forward[0][2:4], True) if ahead else None
-        if ahead and line == forward[0][1] and outermost not in windows_shown:
-            windows_shown.append(outermost)
+        if ahead and line == forward[0][1] and forward[0][2:4] not in windows_shown:
+            windows_shown.append(forward[0][2:4])
         merged = []
         for low, high in sorted(windows_shown):
             if merged and low <= merged[-1][1]:
@@ -1218,7 +1227,8 @@ def governed_context(governance, notes, evidence, others=()):
     for line, (low, high, later) in chosen.items():
         spans_here = windows(line) or [(low, high)]
         same = line in own_lines or any(line in other.lines for other in others)
-        shown.append({'quote': ' \u2026 '.join(shown_quote(notes, a, b, later) for a, b in spans_here),
+        shown.append({'quote': ' \u2026 '.join(shown_quote(notes, a, b, later) + (' \u2026' if b in cut_at and b - a <= QUOTE_SHOWN else '')
+                                                for a, b in spans_here),
                       'start': spans_here[0][0], 'end': spans_here[-1][1], 'after': later, 'same': same})
     shown.sort(key=lambda entry: entry['start'])
     # Counted from the lines chosen, before anything else is appended (twelfth pass: the `elsewhere` entry was counted

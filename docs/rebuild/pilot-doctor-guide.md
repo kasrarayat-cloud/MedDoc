@@ -204,11 +204,14 @@ lists every charge; choose a charge's service name to see how it was calculated.
   word is a value, not a list marker (`Glucose: 312 correction given` is not a correction), unless
   it is a list number (`Comments: 1. Correction: …`) or the word is followed by a colon, comma,
   semicolon or dash (`Glucose: 312 correction: 4 units`, `Potassium: 3.1 correction: 3.4` and
-  `Potassium: 3.1mmol/L correction: 4.1mmol/L` are read as corrections, like `Transcription
+  `Potassium: 3.1mmol/L correction: 4.1mmol/L`, `SpO2: 88% correction: 94%` and `Temperature:
+  38.9°C correction: 36.9°C` are read as corrections, like `Transcription correction:`; a unit
+  after a space, `3.1 mmol/L correction:`, is a second word and is not read, like `3 mmol/L
   correction:`). So a value written that way that is NOT a correction holds every answer above it
   too: spectacles `Glasses: -2.50 correction, worn full time`, an albumin-corrected calcium
   `Calcium: 7.8 correction: 8.6`, a correction dose `BGL: 15.2 correction, 2 units given`; type
-  those answers yourself. A dotted abbreviation (`q.h.s.`, `t.i.d.`, `a.m.`) ends a sentence here,
+  those answers yourself. A dotted abbreviation other than `e.g.`, `i.e.` and `vs.` (`q.h.s.`, `t.i.d.`,
+  `a.m.`, `Dr.`) ends a sentence here,
   so `Lantus 10u q.h.s. 1.5u correction, …` is read as a correction as well. One exception: a correction that opens the whole answer to a
   question already answered above it (`Pain score: Correction: three out of ten`) corrects that
   question only, which already needs your decision because it has two answers — on an underlined-Tab
