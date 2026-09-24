@@ -72,9 +72,9 @@ def score_case(case, answers, proposals, requirements):
     return counts, rows
 
 
-def run(model, shaped=None):
+def run(model, shaped=None, cases_file='cases.json'):
     from core import wm_narrative
-    mapping, cases = load('mapping.json'), load('cases.json')['cases']
+    mapping, cases = load('mapping.json'), load(cases_file)['cases']
     fields, requirements = mapping['fields'], mapping['review_requirements']
     shaped = shaped or responses(model)
     total, rows = Counter(), []
@@ -99,8 +99,10 @@ def passes(total, gate=CAREFUL_GATE):
 
 def report():
     out = []
-    for model in ('careful', 'weak'):
-        total, rows = run(model)
+    runs = [('careful', None, 'cases.json'), ('weak', None, 'cases.json'),
+            ('held-out careful', load('heldout-responses-careful.json')['cases'], 'heldout-cases.json')]
+    for model, shaped, cases_file in runs:
+        total, rows = run(model, shaped, cases_file)
         out.append(f'== {model}: ' + ', '.join(f'{k}={total[k]}' for k in sorted(total)))
         out.extend('   ' + json.dumps(row, ensure_ascii=False) for row in rows)
     return '\n'.join(out)

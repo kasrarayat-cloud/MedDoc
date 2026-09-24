@@ -53,14 +53,21 @@ writes the document; finalized exports are never re-rendered.
 | a cited unit is not a unit of the notes, a choice is not an original option, a value has no unit, a key is missing/duplicated/unknown | the response is refused |
 | instruction-like text in the notes or a label | every answer held |
 | `subject` family or other | missing (the candidate is shown as someone else's finding) |
-| the value is not written in a cited unit: a measurement's number with a unit word of its column (or a reflux time in seconds), not approximate, bounded or ranged; text copied; a choice is an option | held |
-| a unit labelled with this question gives another value, or any line labelled with this question disagrees (prose under a choice's label is interpretation, not disagreement); a unit labelled for another question supports nothing | held |
-| a Right/Left question whose value the text does not place on that side (nearest side word before it in its sentence, else after it in the sentence, else before it in its paragraph; `both`, `bilateral`, `either` count for both) — ruling #127: the model never asserts laterality | held |
-| `subject` unclear, `certainty` uncertain, `conflict`, or a timing that does not fit the question (previous-treatment questions ask about prior treatment; every other one about this examination; demographics have no timing) | held |
-| an installed governor (a heading line or a pointer, read per sentence) governs the cited unit, unless every governor is a heading made only of structural words (sides, limbs, this form's veins, report sections) | held with the governing lines |
-| the cited unit's own label (before its first colon) denies or reframes (`Denies:`, `Family history:`), by the installed vocabulary | held |
-| a correction: inside the answer's own sentence it supersedes the text before it; any correction mentioning a measurement's number holds that measurement; a correction no answer cites holds the answers before it **in its paragraph** | held |
+| nothing it cites can carry it: only another question's labelled line, or only a structural heading | held |
+| the value is not written in a cited unit where no correction replaced it: a measurement's number with a unit word of its column (a reflux time may be in seconds), not approximate, bounded, ranged or an alternative; text copied; a choice is an option (and, where its wording or its words are written, not replaced by a correction) | held |
+| it cites a correction that opens a sentence but keeps the old value, or the correction denies what follows it | held |
+| a unit labelled with this question gives another value, or any line labelled with this question disagrees, at a line start or after a bullet (prose under a choice's label is interpretation); a unit labelled for another question supports nothing | held |
+| a Right/Left question whose value the text does not place on that side: the nearest side word in its clause (before it, then just after it), its sentence, its paragraph, then the nearest heading; `both`/`bilateral` count for both, `the other leg` for neither; `R GSV`, `RLE` are sides, `right below the knee` is not — ruling #127: the model never asserts laterality | held |
+| `subject` unclear, a relative named in its sentence (before it, or just after it), `certainty` uncertain, `conflict`, or a timing that does not fit the question (previous treatment: prior, its outcome also current; a clinical indication: current or prior; demographics: any; everything else: this examination) | held |
+| an installed governor holds the cited unit: a heading or pointer whose words change meaning (the installed denial and reframing vocabulary) holds its block to a new prose paragraph, sub-headings and a spaced list included; any other heading or pointer holds its block up to the next heading; a heading made only of structural words (sides, limbs, this form's veins and rows, report sections) holds nothing, and one naming the question's own section does not hold that question | held with the governing lines |
+| a cited sentence's own short label (before a colon, up to four words) that is neither structural nor the question's own section, the question's own label with a negative value (`Swelling: none.`), longer text before a colon with the denial vocabulary, or a fragment under a denying label (`Denies: leg pain. Swelling.`) | held |
+| a correction in another unit after the answer: one opening its sentence, in the answer's paragraph; one whose corrected text mentions the value (a quantity compared as a quantity); one nobody cites that states a quantity of the answer's unit | held |
 | otherwise | supported (pre-filled; the clinician still reviews every answer) |
+
+A correction is the word `correction` (or `corrected`) anywhere, the installed erratum places, and spoken
+self-corrections (`sorry`, `I mean`, `make that`, `scratch that`). Inside a unit, a written correction replaces its
+sentence up to the word, or everything before it when it opens its sentence; a spoken one replaces what was just
+said (from the last number within reach, else its clause, never more than a few words).
 
 No whole-note rule: an unrelated sentence, a correction elsewhere or a conditional instruction affects nothing else.
 
@@ -105,7 +112,12 @@ implied by the parent's (never stricter), so the export never refuses what revie
   information and genuine conflicts; expectations by an independent author (`d6c661a1`), provider-shaped responses
   by a second author blind to the expectations (`17483cc1`): a careful set and a weak set with named injected errors.
   ⚠️ The validator's rules were iterated against it over five scoring rounds, so it is a development set.
-- **Held-out benchmark**: written after the implementation by an author who did not read it; reported separately.
+- **Held-out benchmark** (`heldout-cases.json`, `3af6e471`; blind careful responses `d92cc499`): 12 cases written
+  after the implementation by an author who did not read it — headed reports, raw transcripts, shorthand, a letter,
+  a SOAP note. Scored on the implementation as it stood: 201 correct, **0 wrong**, **70 unnecessary holds**. After the
+  refutation round's repairs: 253 correct, 2 wrong (choices whose only option overstates the note), 18 unnecessary
+  holds (8 are unitless shorthand, `6.8/1.9s`, held by design). The repairs were checked against this set, so it is
+  now a development set too.
 - **The real workflow**: `test_wm_workflow.WMNarrativeWorkflow` (CI, real Word runtime): retained narrative response
   → generation → the page as rendered → decisions → finalization → export into the unchanged original; forged
   narrative answers refused at fill.

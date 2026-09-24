@@ -249,7 +249,22 @@ public static partial class WmAdapter
         }
         return null;
     }
-    private static IEnumerable<string> ExplicitLabelValues(string notes, string label) => notes.Split('\n').Select(line => LabelValue(line, label)).Where(value => !string.IsNullOrEmpty(value)).Select(value => value!);
+    private static IEnumerable<string> ExplicitLabelValues(string notes, string label) => SplitLines(notes).Select(line => LabelValue(line, label)).Where(value => !string.IsNullOrEmpty(value)).Select(value => value!);
+    // The line breaks Python's `str.splitlines` reads, so the parent and the engine see the same labelled lines.
+    private static string[] SplitLines(string text) => Regex.Split(text, "\r\n|[\n\r\u000b\u000c\u001c\u001d\u001e\u0085\u2028\u2029]");
+    // Text compared after compatibility decomposition, without combining marks, in invariant lower case with the
+    // dotless i folded: never stricter than the parent's case-insensitive reading (a ligature, İ/ı, a decomposed é).
+    private static string Fold(string text)
+    {
+        var decomposed = text.Normalize(NormalizationForm.FormKD);
+        var kept = new StringBuilder(decomposed.Length);
+        foreach (var c in decomposed) {
+            var category = CharUnicodeInfo.GetUnicodeCategory(c);
+            if (category is UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark or UnicodeCategory.EnclosingMark) continue;
+            kept.Append(c);
+        }
+        return kept.ToString().ToLowerInvariant().Replace('\u0131', 'i');
+    }
     private static bool LabelValuesConsistent(string notes, string label, string expected) => ExplicitLabelValues(notes, label).All(value => Normalize(value) == Normalize(expected));
     // ── the narrative contract's second boundary ──────────────────────────────────────────────────────────────
     // These four patterns are core/wm_narrative.py's, verbatim (a parent test asserts it). Every check below is
@@ -257,17 +272,17 @@ public static partial class WmAdapter
     // may use and the side of each place; this reads any place in any cited sentence and any side word from the
     // paragraph's start to the sentence's end. So an answer review accepted is never refused here, and an answer
     // with no support at all, or none for its side, never reaches the document.
-    private const string QuantityPattern = @"(?<![0-9.,])([0-9]+(?:\.[0-9]+)?)[ \t\u00a0]*-?[ \t\u00a0]*(mm|millimet(?:er|re)s?|ms|msecs?|milliseconds?|s|secs?|seconds?)(?![^\W\d_])";
-    private const string BoundedBeforePattern = @"(?:[<>~\u2248\u2264\u2265\u00b1]=?|\b(?:less|greater|more|fewer)\s+than|\b(?:under|over|below|above|about|around|approximately|approx\.?|roughly|nearly|almost|circa|ca\.|up\s+to|at\s+(?:least|most))|[0-9]\s*(?:-|\u2013|\u2014|to)|\bor)\s*$";
-    private const string BoundedAfterPattern = @"^\s*(?:\+|or\s+(?:more|less|greater|so|above|below)|and\s+(?:above|over|greater|more))";
-    private const string SidePattern = @"(?<![^\W\d_])(right|rt|left|lt|both|bilateral(?:ly)?|either)(?![^\W\d_])";
+    private const string QuantityPattern = @"(?<![0-9.,])(?<![0-9][\u2009\u202f])([0-9]+(?:\.[0-9]+)?)[ \t\u00a0]*-?[ \t\u00a0]*(?i:(mm|millimet(?:er|re)s?|ms|msecs?|millisec(?:ond)?s?|s|secs?|seconds?))(?![^\W\d_])";
+    private const string BoundedBeforePattern = @"(?i:(?:[<>~\u2248\u2264\u2265\u00b1]=?|\b(?:less|greater|more|fewer|longer|shorter|higher|lower|larger|smaller)\s+than(?:\s+or\s+equal\s+to)?|\b(?:equal\s+to|in\s+excess\s+of|close\s+to|not\s+exceeding|exceeding|under|over|below|above|beyond|about|around|approximately|approx\.?|roughly|nearly|almost|circa|ca\.|estimated|est\.|up\s+to|at\s+(?:least|most)|at\s+or\s+(?:above|below))|\bbetween\s+[0-9][0-9.,]*\s*(?:[^\W\d_]+\s*)?and|[0-9]\s*(?:[^\W\d_]{1,12}\.?\s*)?(?:-|\u2013|\u2014|\bto|\bor)|\bor)\s*)$";
+    private const string BoundedAfterPattern = @"(?i:^(?:\s*\+|\s*\?|\s*\(?\s*(?:approx(?:imately)?\.?|estimated|est\.)(?![^\W\d_])|\s*(?:or|and)\s+(?:more|less|greater|higher|lower|longer|shorter|larger|smaller|so|above|below|over|under)(?![^\W\d_])(?=\s*(?:[,.;:)\]]|$|\s(?:in|at|on|for|with|and|but)\b))|\s*(?:-|\u2013|\u2014|to\b|or\b)\s*[0-9]))";
+    private const string SidePattern = @"(?<![^\W\d_])((?i:right(?!\s+(?:below|above|at|after|before|behind|under|over|next|near|beside|along|across|around|into|through|up|down|now|away|there|here|about)(?![^\W\d_]))|rt|rle|left|lt|lle|both|bilateral(?:ly)?|bilat|either|ble|b/l|contralateral|ipsilateral|(?:other|opposite)\s+(?:leg|side|limb|extremity))|R\s*(?:and|&|/|\+)\s*L|(?:R|L)(?=\s+(?i:gsv|ssv|aagsv|pagsv|great|small|leg|lower|le|sfj|spj|cfv|fv|pop|thigh|calf|knee|ankle|side|deep|superficial|accessory|anterior|posterior|saphenous|popliteal|femoral|tributary|perforator)(?![^\W\d_])))(?![^\W\d_])";
+    // The four shared patterns scope their own case (as the parent compiles them); only the value words ignore it.
     private static readonly RegexOptions Reading = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
-    private static readonly Regex Quantity = new(QuantityPattern, Reading);
-    private static readonly Regex BoundedBefore = new(BoundedBeforePattern, Reading);
-    private static readonly Regex BoundedAfter = new(BoundedAfterPattern, Reading);
-    private static readonly Regex SideWord = new(SidePattern, Reading);
+    private static readonly Regex Quantity = new(QuantityPattern, RegexOptions.CultureInvariant);
+    private static readonly Regex BoundedBefore = new(BoundedBeforePattern, RegexOptions.CultureInvariant);
+    private static readonly Regex BoundedAfter = new(BoundedAfterPattern, RegexOptions.CultureInvariant);
+    private static readonly Regex SideWord = new(SidePattern, RegexOptions.CultureInvariant);
     private static readonly Regex MeasurementForm = new(@"^(?:0|[1-9][0-9]*)(?:\.[0-9]+)? (mm|ms)$");
-    private static readonly Regex Paragraph = new(@"\n[ \t]*\n");
 
     private static void VerifyNarrativeAnswer(Field field, Answer answer, string notes)
     {
@@ -281,7 +296,7 @@ public static partial class WmAdapter
         var written = field.Kind switch {
             "choice" => field.Options.Contains(answer.Text, StringComparer.Ordinal),
             "measurement" => quotes.Any(q => MeasurementWritten(answer.Text, q.Quote)),
-            _ => quotes.Any(q => WordsPattern(answer.Text).IsMatch(q.Quote)),
+            _ => quotes.Any(q => WordsPattern(Fold(answer.Text)).IsMatch(Fold(q.Quote))),
         };
         if (!written || !ExplicitLabelValues(notes, field.Label).All(value => Agrees(field, value, answer.Text)))
             Fail("unsupported_answer", "Answer is not written in its cited source sentences.");
@@ -341,8 +356,8 @@ public static partial class WmAdapter
             if (!decimal.TryParse(found.Groups[1].Value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var stated)) continue;
             var word = found.Groups[2].Value.ToLowerInvariant();
             if ((unit == "mm" && (word.StartsWith("mm", StringComparison.Ordinal) || word.StartsWith("millimet", StringComparison.Ordinal)) && stated == number)
-                || (unit == "ms" && (word.StartsWith("ms", StringComparison.Ordinal) || word.StartsWith("msec", StringComparison.Ordinal) || word.StartsWith("millisecond", StringComparison.Ordinal)) && stated == number)
-                || (unit == "ms" && word.StartsWith('s') && stated * 1000 == number))
+                || (unit == "ms" && (word.StartsWith("ms", StringComparison.Ordinal) || word.StartsWith("msec", StringComparison.Ordinal) || word.StartsWith("millisec", StringComparison.Ordinal)) && stated == number)
+                || (unit == "ms" && word.StartsWith('s') && stated <= decimal.MaxValue / 1000m && stated * 1000 == number))
                 return true;
         }
         return false;
@@ -358,18 +373,20 @@ public static partial class WmAdapter
     private static bool Agrees(Field field, string labelled, string value) => field.Kind switch {
         "choice" => !field.Options.Contains(labelled, StringComparer.Ordinal) || labelled == value,
         "measurement" => Normalize(labelled) == Normalize(value) || MeasurementWritten(value, labelled),
-        _ => Normalize(labelled).Contains(Normalize(value), StringComparison.OrdinalIgnoreCase),
+        _ => Fold(Normalize(labelled)).Contains(Fold(Normalize(value)), StringComparison.Ordinal),
     };
 
     private static string? FieldSide(string label) => label.StartsWith("Right ", StringComparison.Ordinal) ? "right" : label.StartsWith("Left ", StringComparison.Ordinal) ? "left" : null;
 
+    // Any side word of this side (or both legs) from the start of the notes to the end of the cited sentence: the
+    // parent reads the clause, the sentence, the paragraph and the nearest heading, all inside that range.
     private static bool SideWritten(string notes, int start, int end, string side)
     {
-        var from = 0;
-        foreach (Match gap in Paragraph.Matches(notes[..start])) from = gap.Index + gap.Length;
-        foreach (Match word in SideWord.Matches(notes[from..end])) {
-            var name = word.Groups[1].Value.ToLowerInvariant();
-            if (name is "both" or "bilateral" or "bilaterally" or "either" || (side == "right" ? name is "right" or "rt" : name is "left" or "lt")) return true;
+        foreach (Match word in SideWord.Matches(notes[..end])) {
+            var name = string.Join(" ", word.Groups[1].Value.ToLowerInvariant().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+            var named = name is "right" or "rt" or "rle" or "r" ? "right" : name is "left" or "lt" or "lle" or "l" ? "left"
+                : name is "contralateral" or "ipsilateral" || name.StartsWith("other", StringComparison.Ordinal) || name.StartsWith("opposite", StringComparison.Ordinal) ? "unclear" : "both";
+            if (named == side || named == "both") return true;
         }
         return false;
     }

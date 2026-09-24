@@ -1386,7 +1386,9 @@ def governance_for(notes, fields, context_labels=(), narrative=False):
         except ValidationError:
             units = []
     word_form = qualified_word_form(fields)
-    governance = heading_governance(notes, labels, lexical=not word_form, per_sentence=per_sentence,
+    # The narrative contract reads labelled lines for headings and pointers too: its answers are sentences, and a
+    # pointer after a question's label (`Exam side: Bilateral Detailed. The patient denies the following.`) governs.
+    governance = heading_governance(notes, labels, lexical=not word_form or narrative, per_sentence=per_sentence,
                                     questions=question_labels(fields) if word_form else frozenset(), errata=not narrative)
     return (*governance, occurrence_index(notes, labels, units))
 

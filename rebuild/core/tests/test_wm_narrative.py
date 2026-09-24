@@ -108,6 +108,26 @@ class TheFrozenBenchmark(SimpleTestCase):
             self.assertTrue(filled[0], pair)
 
 
+class TheHeldOutBenchmark(SimpleTestCase):
+    """Written after the implementation by an author who did not read it (3af6e471), with blind careful responses
+    (d92cc499); scored first on the implementation as it stood (201 correct, 0 wrong, 70 unnecessary holds), then
+    after the refutation round's repairs. Its two wrong pre-filled answers are choices whose only option overstates
+    the note (a recanalized vein, a popliteal-only clot): wording the clinician must judge, which no rule can see."""
+
+    def test_its_files_are_the_committed_ones(self):
+        for name, digest in {'heldout-cases.json': '0cd5e5a0ffa0bfc0912b478c456725e9e42d6eb0cdbe4a7db4abb87ade752442',
+                             'heldout-responses-careful.json': 'a72480fe14540f56ed831dc80296dcb3299971fef0eb4b6c5840e8cff414b730'}.items():
+            self.assertEqual(hashlib.sha256((benchmark.HERE / name).read_bytes()).hexdigest(), digest, name)
+
+    def test_the_held_out_careful_responses(self):
+        total, rows = benchmark.run('held-out', benchmark.load('heldout-responses-careful.json')['cases'], 'heldout-cases.json')
+        wrong = {(row['case'], row['key']) for row in rows if row['kind'] in ('wrong_value', 'supported_when_missing',
+                                                                              'supported_when_decision')}
+        self.assertLessEqual(wrong, {('H06', 'sdt_-892962961'), ('H06', 'sdt_-170105994')}, rows)
+        self.assertGreaterEqual(total['correct_supported'], 253, dict(total))
+        self.assertLessEqual(total['unnecessary_hold'], 18, [row for row in rows if row['kind'] == 'unnecessary_hold'])
+
+
 class ValueSupport(SimpleTestCase):
     def test_a_measurement_is_its_number_and_unit_as_written_or_a_reflux_time_in_seconds(self):
         field = BY_KEY['measurement_1_2']
@@ -191,14 +211,17 @@ class Corrections(SimpleTestCase):
         answers, _ = decide(moved, {'location_25': ('medial calf', [moved], {}), 'location_11': ('medial calf', [moved], {})})
         self.assertEqual((status(answers, 'location_25')[0], status(answers, 'location_11')[0]), ('conflict', 'supported'))
 
-    def test_a_correction_nobody_cites_holds_its_paragraph_only(self):
+    def test_a_correction_nobody_cites_holds_its_paragraph_and_the_measurements_it_could_correct(self):
         first = 'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction.'
         correction = 'Correction: it measures 7.6 mm.'
         left = 'The left great saphenous vein measures 4.4 mm at the saphenofemoral junction.'
-        notes = left + '\n\n' + first + '\n' + correction
-        answers, _ = decide(notes, {'measurement_1_1': ('6.1 mm', [first], {}), 'measurement_15_1': ('4.4 mm', [left], {})})
-        self.assertEqual(status(answers, 'measurement_1_1')[0], 'conflict')
-        self.assertEqual(status(answers, 'measurement_15_1')[0], 'supported')      # another paragraph: untouched
+        heaviness = 'She reports heaviness in both legs.'
+        notes = heaviness + '\n' + left + '\n\n' + first + '\n' + correction
+        answers, _ = decide(notes, {'measurement_1_1': ('6.1 mm', [first], {}), 'measurement_15_1': ('4.4 mm', [left], {}),
+                                    'sdt_722175654': ('Heaviness', [heaviness], {})})
+        self.assertEqual(status(answers, 'measurement_1_1')[0], 'conflict')         # its paragraph
+        self.assertEqual(status(answers, 'measurement_15_1')[0], 'conflict')        # a diameter it could correct
+        self.assertEqual(status(answers, 'sdt_722175654')[0], 'supported')          # nothing it could correct
         answers, _ = decide(notes, {'measurement_1_1': ('7.6 mm', [first, correction], {}),
                                     'measurement_15_1': ('4.4 mm', [left], {})})
         self.assertEqual((status(answers, 'measurement_1_1')[0], status(answers, 'measurement_15_1')[0]), ('supported',) * 2)
@@ -460,6 +483,155 @@ class GenerationAndReplay(SimpleTestCase):
                            Decimal('0'))
 
 
+SPACED = '\n\n'
+LP = ('Leg pain', ['Leg pain.'], {})
+REGRESSIONS = [
+    # (name, notes, {key: (value, [quoted units], qualifiers)}, {key: expected status}) — every break the first
+    # refutation round demonstrated, and a control beside each class.
+    ('a pointer after a question label', 'Exam side: Bilateral Detailed. The patient denies the following.\nLeg pain.\n' + SFJ,
+     {'sdt_-1124008635': LP}, {'sdt_-1124008635': 'conflict'}),
+    ('a correction opening a sentence the splitter did not cut',
+     'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction. correction: it measures 7.6 mm.',
+     {'measurement_1_1': ('6.1 mm', ['The right great saphenous vein measures 6.1 mm at the saphenofemoral junction. correction: it measures 7.6 mm.'], {})},
+     {'measurement_1_1': 'conflict'}),
+    ('its corrected value', 'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction. correction: it measures 7.6 mm.',
+     {'measurement_1_1': ('7.6 mm', ['The right great saphenous vein measures 6.1 mm at the saphenofemoral junction. correction: it measures 7.6 mm.'], {})},
+     {'measurement_1_1': 'supported'}),
+    ('a correction that denies what follows it', 'The patient reports leg pain. correction: she denies leg pain.',
+     {'sdt_-1124008635': ('Leg pain', ['The patient reports leg pain. correction: she denies leg pain.'], {})}, {'sdt_-1124008635': 'conflict'}),
+    ('a choice its own sentence corrects', 'Impression: right great saphenous vein reflux positive at the saphenofemoral junction: '
+     'correction: no reflux in the right great saphenous vein.',
+     {'sdt_-213273323': ('reflux positive.', ['Impression: right great saphenous vein reflux positive at the saphenofemoral junction: '
+                                             'correction: no reflux in the right great saphenous vein.'], {})}, {'sdt_-213273323': 'conflict'}),
+    ('a choice corrected to another option', 'Acute DVT of the right femoral vein, correction, the right deep venous system is without '
+     'evidence of obstruction or insufficiency.',
+     {'sdt_-170105994': ('with evidence of an acute DVT of CFV, FV, POP V, PTV.', ['Acute DVT of the right femoral vein, correction, the '
+      'right deep venous system is without evidence of obstruction or insufficiency.'], {}),
+      'sdt_-1029175652': ('without evidence of obstruction or insufficiency.', ['Acute DVT of the right femoral vein, correction, the '
+      'right deep venous system is without evidence of obstruction or insufficiency.'], {})},
+     {'sdt_-170105994': 'conflict', 'sdt_-1029175652': 'conflict'}),
+    ('the corrected option', 'Acute DVT of the right femoral vein, correction, the right deep venous system is without evidence of '
+     'obstruction or insufficiency.', {'sdt_-170105994': ('without evidence of obstruction or insufficiency.', ['Acute DVT of the right '
+      'femoral vein, correction, the right deep venous system is without evidence of obstruction or insufficiency.'], {})},
+     {'sdt_-170105994': 'supported'}),
+    ('citing more evidence does not release a correction',
+     'The right great saphenous vein measures 7.4 mm at the saphenofemoral junction.' + SPACED + 'At the junction the right diameter '
+     'is 7.4 mm.\nCorrection: the diameter there is 6.9 mm.',
+     {'measurement_1_1': ('7.4 mm', ['The right great saphenous vein measures 7.4 mm at the saphenofemoral junction.',
+                                     'At the junction the right diameter is 7.4 mm.'], {})}, {'measurement_1_1': 'conflict'}),
+    ('citing the correction and keeping the old value',
+     'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction.\nCorrection: it measures 7.6 mm.',
+     {'measurement_1_1': ('6.1 mm', ['The right great saphenous vein measures 6.1 mm at the saphenofemoral junction.',
+                                     'Correction: it measures 7.6 mm.'], {})}, {'measurement_1_1': 'conflict'}),
+    ('a semicolon correction', 'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction; correction, 7.6 mm.',
+     {'measurement_1_1': ('6.1 mm', ['The right great saphenous vein measures 6.1 mm at the saphenofemoral junction; correction, 7.6 mm.'], {})},
+     {'measurement_1_1': 'conflict'}),
+    ('an ms-joined correction', 'The right great saphenous vein shows reflux of 1500 ms. Correction: the reflux time there is 900 ms.',
+     {'measurement_1_2': ('1500 ms', ['The right great saphenous vein shows reflux of 1500 ms. Correction: the reflux time there is 900 ms.'], {})},
+     {'measurement_1_2': 'conflict'}),
+    ('a correction in seconds of an answer in ms', 'The right great saphenous vein shows reflux of 1.8 seconds at the saphenofemoral '
+     'junction.\nCorrection: the reflux of 1.8 seconds was in the left great saphenous vein at the saphenofemoral junction, not the right.',
+     {'measurement_1_2': ('1800 ms', ['The right great saphenous vein shows reflux of 1.8 seconds at the saphenofemoral junction.'], {}),
+      'measurement_15_2': ('1800 ms', ['Correction: the reflux of 1.8 seconds was in the left great saphenous vein at the '
+                                       'saphenofemoral junction, not the right.'], {})},
+     {'measurement_1_2': 'conflict', 'measurement_15_2': 'supported'}),
+    ('an unpunctuated spoken correction', 'the right great saphenous vein measures 6.1 millimeters correction 7.6 millimeters',
+     {'measurement_1_1': ('6.1 mm', ['the right great saphenous vein measures 6.1 millimeters correction 7.6 millimeters'], {})},
+     {'measurement_1_1': 'conflict'}),
+    ('a spoken correction replaces what was just said', 'left side the great saphenous vein at the junction measures 5.9 millimeters '
+     'with reflux of 950 milliseconds sorry make that 1950 milliseconds',
+     {'measurement_15_1': ('5.9 mm', ['left side the great saphenous vein at the junction measures 5.9 millimeters with reflux of 950 '
+                                      'milliseconds sorry make that 1950 milliseconds'], {}),
+      'measurement_15_2': ('950 ms', ['left side the great saphenous vein at the junction measures 5.9 millimeters with reflux of 950 '
+                                      'milliseconds sorry make that 1950 milliseconds'], {})},
+     {'measurement_15_1': 'supported', 'measurement_15_2': 'conflict'}),
+    ('1.8 s. ends a sentence', 'The right great saphenous vein shows reflux of 1.8 s. The great saphenous vein diameter at the '
+     'saphenofemoral junction is 5.0 mm on the left.',
+     {'measurement_1_1': ('5.0 mm', ['The right great saphenous vein shows reflux of 1.8 s. The great saphenous vein diameter at the '
+                                     'saphenofemoral junction is 5.0 mm on the left.'], {}),
+      'measurement_15_1': ('5.0 mm', ['The right great saphenous vein shows reflux of 1.8 s. The great saphenous vein diameter at the '
+                                      'saphenofemoral junction is 5.0 mm on the left.'], {})},
+     {'measurement_1_1': 'conflict', 'measurement_15_1': 'supported'}),
+    ('a browser blank line', 'Right leg examined first.\r\n\r\nThe great saphenous vein measures 7.4 mm at the saphenofemoral junction.',
+     {'measurement_1_1': ('7.4 mm', ['The great saphenous vein measures 7.4 mm at the saphenofemoral junction.'], {})},
+     {'measurement_1_1': 'conflict'}),
+    ('both legs and the other side do not make this side', 'A bilateral lower extremity venous duplex study was performed.\n'
+     'There is an acute DVT in the left femoral vein.',
+     {'sdt_-170105994': ('with evidence of an acute DVT of CFV, FV, POP V, PTV.', ['A bilateral lower extremity venous duplex study was '
+      'performed.', 'There is an acute DVT in the left femoral vein.'], {})}, {'sdt_-170105994': 'conflict'}),
+    ('a side written after the value', 'The great saphenous veins measure 7.4 mm on the right and 5.0 mm on the left at the '
+     'saphenofemoral junction.',
+     {'measurement_1_1': ('7.4 mm', ['The great saphenous veins measure 7.4 mm on the right and 5.0 mm on the left at the saphenofemoral junction.'], {}),
+      'measurement_15_1': ('5.0 mm', ['The great saphenous veins measure 7.4 mm on the right and 5.0 mm on the left at the saphenofemoral junction.'], {}),
+      'measurement_2_1': ('5.0 mm', ['The great saphenous veins measure 7.4 mm on the right and 5.0 mm on the left at the saphenofemoral junction.'], {})},
+     {'measurement_1_1': 'supported', 'measurement_15_1': 'supported', 'measurement_2_1': 'conflict'}),
+    ('RLE and LLE are sides', 'LLE: the great saphenous vein measures 5.0 mm at the saphenofemoral junction.',
+     {'measurement_1_1': ('5.0 mm', ['LLE: the great saphenous vein measures 5.0 mm at the saphenofemoral junction.'], {}),
+      'measurement_15_1': ('5.0 mm', ['LLE: the great saphenous vein measures 5.0 mm at the saphenofemoral junction.'], {})},
+     {'measurement_1_1': 'conflict', 'measurement_15_1': 'supported'}),
+    ('R GSV is the right', 'R GSV at SFJ 7.4 mm, reflux 1.8 s.',
+     {'measurement_1_1': ('7.4 mm', ['R GSV at SFJ 7.4 mm, reflux 1.8 s.'], {})}, {'measurement_1_1': 'supported'}),
+    ('a side heading reaches over a blank line', 'RIGHT LOWER EXTREMITY:' + SPACED + '- GSV at SFJ 7.4 mm, reflux 1.8 s',
+     {'measurement_1_1': ('7.4 mm', ['- GSV at SFJ 7.4 mm, reflux 1.8 s'], {})}, {'measurement_1_1': 'supported'}),
+    ('a dated heading is not structure', 'Ultrasound 03/2021:\n' + SFJ, {'measurement_1_1': ('7.4 mm', [SFJ], {})},
+     {'measurement_1_1': 'conflict'}),
+    ('a negation symbol in a heading', 'Right GSV (\u2212):\n' + SFJ, {'measurement_1_1': ('7.4 mm', [SFJ], {})}, {'measurement_1_1': 'conflict'}),
+    ('a heading too long to show', 'Denies the following' + ' ' * 400 + 'right leg:\n' + SFJ, {'measurement_1_1': ('7.4 mm', [SFJ], {})},
+     {'measurement_1_1': 'conflict'}),
+    ('a section heading holds its section only', 'HISTORY:\nPrior sclerotherapy 2019.' + SPACED + 'FINDINGS:\n' + SFJ,
+     {'measurement_1_1': ('7.4 mm', [SFJ], {})}, {'measurement_1_1': 'supported'}),
+    ('an indication section holds a finding, not an indication', 'INDICATION:\nReflux in the right great saphenous vein.\nAching leg pain.',
+     {'sdt_-213273323': ('reflux positive.', ['Reflux in the right great saphenous vein.'], {}),
+      'sdt_-1124008635': ('Leg pain', ['Aching leg pain.'], {})}, {'sdt_-213273323': 'conflict', 'sdt_-1124008635': 'supported'}),
+    ('a family heading ends with its paragraph', 'Family history:\nMother had a venous leg ulcer.' + SPACED + SFJ,
+     {'measurement_1_1': ('7.4 mm', [SFJ], {}), 'sdt_-770853925': ('Leg ulcer', ['Mother had a venous leg ulcer.'], {})},
+     {'measurement_1_1': 'supported', 'sdt_-770853925': 'conflict'}),
+    ('a label in a later sentence', 'Right SFJ: reflux of 1500 ms. Denies: leg pain.',
+     {'sdt_-1124008635': ('Leg pain', ['Right SFJ: reflux of 1500 ms. Denies: leg pain.'], {})}, {'sdt_-1124008635': 'conflict'}),
+    ('a label after a clock time', 'Seen at 10:30, the patient denies: leg pain.',
+     {'sdt_-1124008635': ('Leg pain', ['Seen at 10:30, the patient denies: leg pain.'], {})}, {'sdt_-1124008635': 'conflict'}),
+    ('the items of a denial list', 'Denies: leg pain. Swelling. Heaviness.', {'sdt_269290727': ('Swelling', ['Swelling.'], {})},
+     {'sdt_269290727': 'conflict'}),
+    ('a negative value under its own label', 'Swelling: none.', {'sdt_269290727': ('Swelling', ['Swelling: none.'], {})},
+     {'sdt_269290727': 'conflict'}),
+    ('a positive value under its own label', 'Swelling: both ankles, worse at night.',
+     {'sdt_269290727': ('Swelling', ['Swelling: both ankles, worse at night.'], {})}, {'sdt_269290727': 'supported'}),
+    ('a header line of fields', 'SYNTHETIC PATIENT M     ID: SYN-M-2003     DOB: 06/30/1959',
+     {'patient_id': ('SYN-M-2003', ['SYNTHETIC PATIENT M     ID: SYN-M-2003     DOB: 06/30/1959'], {})}, {'patient_id': 'supported'}),
+    ('a bulleted labelled line disagrees', SFJ + '\n- Right GSV at the SFJ: diameter (mm): 6.1 mm',
+     {'measurement_1_1': ('7.4 mm', [SFJ], {})}, {'measurement_1_1': 'conflict'}),
+    ('another question\'s line alone supports nothing', 'A bilateral study.\nLeft deep venous system: with evidence of an acute DVT of '
+     'CFV, FV, POP V, PTV.',
+     {'sdt_-170105994': ('with evidence of an acute DVT of CFV, FV, POP V, PTV.', ['Left deep venous system: with evidence of an acute '
+      'DVT of CFV, FV, POP V, PTV.'], {})}, {'sdt_-170105994': 'conflict'}),
+    ('a relative named before the finding', 'Her mother has varicose veins and had a leg ulcer.',
+     {'sdt_-770853925': ('Leg ulcer', ['Her mother has varicose veins and had a leg ulcer.'], {})}, {'sdt_-770853925': 'conflict'}),
+    ('a relative named well after the finding', 'She is asymptomatic and asked for screening because her mother has varicose veins.',
+     {'sdt_2005853103': ('Asymptomatic', ['She is asymptomatic and asked for screening because her mother has varicose veins.'], {})},
+     {'sdt_2005853103': 'supported'}),
+    ('anatomy after a number is not a bound', 'The right great saphenous vein measures 4.1 mm and greater saphenous vein diameter 7.4 mm '
+     'at the saphenofemoral junction.',
+     {'measurement_1_1': ('4.1 mm', ['The right great saphenous vein measures 4.1 mm and greater saphenous vein diameter 7.4 mm at the '
+                                     'saphenofemoral junction.'], {})}, {'measurement_1_1': 'supported'}),
+] + [('a bounded value: ' + phrase, 'The right great saphenous vein at the saphenofemoral junction shows ' + phrase + '.',
+      {'measurement_1_2': ('550 ms', ['The right great saphenous vein at the saphenofemoral junction shows ' + phrase + '.'], {})},
+      {'measurement_1_2': 'conflict'})
+     for phrase in ['reflux of 550 ms to 700 ms', 'reflux between 400 and 550 ms', 'reflux of 550 ms or 700 ms',
+                    'an estimated 550 ms of reflux', 'reflux of 550 ms (approx.)', 'reflux longer than 550 ms',
+                    'reflux exceeding 550 ms', 'reflux of 550 ms?', 'reflux in excess of 550 ms']
+] + [('a label that is not structure: ' + label, label + ': leg ulcer.',
+      {'sdt_-770853925': ('Leg ulcer', [label + ': leg ulcer.'], {})}, {'sdt_-770853925': 'conflict'})
+     for label in ['Family hx', 'FHx', 'FH', 'Mother', 'Ruled out', 'Neg', 'ROS neg for']]
+
+
+class RefutationRegressions(SimpleTestCase):
+    def test_every_demonstrated_break_and_its_control(self):
+        for name, notes, picks, expected in REGRESSIONS:
+            with self.subTest(name):
+                answers, _ = decide(notes, picks)
+                self.assertEqual({key: answers[key]['status'] for key in expected}, expected)
+
+
 class EngineParity(SimpleTestCase):
     def test_the_engine_reads_quantities_and_sides_with_the_parents_own_patterns(self):
         source = (REPOSITORY / 'rebuild/documents/sdk_word/Adapter/WmAdapter.cs').read_text()
@@ -479,7 +651,7 @@ class JobPageAndSave(TestCase):
 
     NOTES = ('SYNTHETIC PATIENT T had a bilateral detailed venous study.\n' + SFJ + '\n'
              'Denies: leg swelling.\n'
-             'Saphenous reflux is present in the right lower extremity.')
+             'Saphenous reflux is present in the right lower extremity.')     # a full sentence ends the denial list
 
     def setUp(self):
         from core.billing import welcome_credit

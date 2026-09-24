@@ -51,7 +51,8 @@ def wm_resolve(encounter,actor,decisions=None):
     original=private_path(version.template.original_path)
     if hashlib.sha256(original.read_bytes()).hexdigest()!=version.template.sha256:
         raise ValidationError('Original integrity check failed.')
-    proposals=encounter.template_review.get('proposals',{}) if decisions is None else {}
+    from . import wm_narrative
+    proposals=(encounter.template_review.get('proposals',{}) if decisions is None and wm_narrative.enabled(version.fields) else {})
     decisions=decisions if decisions is not None else encounter.template_review.get('decisions',{})
     # A generation's statement proposal pre-selects a wording until the clinician's first save records a decision.
     variants={row['key']:decisions.get(row['key'],{}).get('variant',(proposals.get(row['key']) or {}).get('variant',row['default_variant']))
@@ -74,18 +75,22 @@ def wm_resolve(encounter,actor,decisions=None):
     return result['review_requirements']
 
 
-def source_quote_evidence(notes,label,raw,labels,sentences=None):
+def source_quote_evidence(notes,label,raw,labels,sentences=None,previous=()):
     """Convert submitted quotations into actual offsets; never accept posted offsets.
 
     `sentences` (the narrative contract's source units, when it is on): a quotation that is one complete sentence of
-    the notes is that sentence, found first, so an answer read from a sentence keeps it as its evidence."""
+    the notes is that sentence, found first, so an answer read from a sentence keeps it as its evidence. When the same
+    sentence occurs more than once, the occurrence this answer already cited (`previous`) is kept: re-posting the page
+    must not move a left-leg answer onto the right leg's identical sentence."""
     if len(raw)>50000:raise ValidationError('Source quotations exceed the supported limit; nothing was truncated.')
     units,_=wm_review.source_units(notes,label,labels)
     evidence=[]
     for submitted in raw.splitlines():
         quote=submitted.strip()
         if not quote:continue
-        sentence=next((unit for unit in sentences or () if unit['quote']==quote),None)
+        cited={item.get('start') for item in previous or () if isinstance(item,dict) and item.get('quote')==quote}
+        sentence=next((unit for unit in sentences or () if unit['quote']==quote and unit['start'] in cited),None) or \
+                 next((unit for unit in sentences or () if unit['quote']==quote),None)
         if sentence is not None:
             evidence.append({'quote':quote,'start':sentence['start'],'end':sentence['end'],'kind':'unit'});continue
         found=next((item for item in units if item[2]==quote),None)
@@ -457,7 +462,7 @@ def encounter_detail(request,pk):
             row['review_errors']=[WM_BLOCKERS.get(reason,'Clinical review is incomplete.') for reason in reasons]
             row['review_errors']+=[conflict['explanation'] for conflict in wm_conflicts if row['key'] in conflict['answer_keys']]
         from . import wm_narrative
-        proposals=e.template_review.get('proposals',{}) if not decisions else {}
+        proposals=e.template_review.get('proposals',{}) if not decisions and wm_narrative.enabled(e.template_version.fields) else {}
         for row in requirements:
             row['unresolved']=not resolved_ok
             decision=decisions.get(row['key'],{})
@@ -675,7 +680,7 @@ def save_answers(request,pk):
         if is_wm:
             quote=request.POST.get('source_'+key,'')
             if len(quote)>50000:return document_refusal(request,e,'Source quotations exceed the supported limit; nothing was saved.',400)
-            try:evidence=source_quote_evidence(e.notes,field['label'],quote,labels,sentences)
+            try:evidence=source_quote_evidence(e.notes,field['label'],quote,labels,sentences,previous.get('evidence') or ())
             except ValidationError as exc:
                 evidence=[];reviewed=False;review_errors.append(error_message(exc))
             answers[key].update(evidence=evidence,review_quote=quote,reviewed=reviewed,
@@ -718,7 +723,8 @@ def save_answers(request,pk):
             key=requirement['key'];quote=request.POST.get('claim_source_'+key,'')
             if len(quote)>50000:return document_refusal(request,e,'Source quotations exceed the supported limit; nothing was saved.',400)
             reviewed=request.POST.get('claim_reviewed_'+key)=='on'
-            try:evidence=source_quote_evidence(e.notes,requirement['label'],quote,labels,sentences)
+            earlier=(e.template_review.get('decisions',{}).get(key) or e.template_review.get('proposals',{}).get(key) or {}).get('evidence') or ()
+            try:evidence=source_quote_evidence(e.notes,requirement['label'],quote,labels,sentences,earlier)
             except ValidationError as exc:
                 evidence=[];reviewed=False;review_errors.append(error_message(exc))
             variant=request.POST.get('claim_variant_'+key,requirement.get('default_variant'))
