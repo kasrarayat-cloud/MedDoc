@@ -2532,3 +2532,38 @@ class WhatTheSeventeenthPassFound(ExpectationsMixin, TestCase):
                  'Chest pain: at rest\nCough: productive\nHeadache: frontal')
         answer = fixture_answers(labels, notes)['Headache']
         self.assert_needs_decision(answer, 'frontal', 'Review of systems: none of the following.')
+
+
+class WhatTheEighteenthPassFound(ExpectationsMixin, TestCase):
+    """Round 18 over the seventeenth-pass repairs (2026-09-24)."""
+
+    def test_a_correction_after_a_decimal_value_is_read_like_its_integer_twin(self):
+        for line in ('Polyp size: 12.5 correction: 8.5 mm', 'Polyp size: 1.5 correction: 2.5 cm', 'Potassium: 3.1 correction: 3.4',
+                     'Potassium: 3.1 correction, 3.4', 'INR: 1.2 correction - 2.1', 'Polyp size: 12 correction: 8 mm'):
+            with self.subTest(line=line):
+                label = line.split(':')[0]
+                answers = fixture_answers(['Findings', label], 'Findings: 12.5 mm sessile polyp, removed.\n' + line)
+                self.assert_needs_decision(answers['Findings'], '12.5 mm sessile polyp, removed.', line)
+        answers = fixture_answers(['Findings'], 'Findings: 1.5 cm sessile polyp. 1.5 correction: 2.5 cm.')
+        self.assertEqual(answers['Findings']['status'], 'conflict')
+
+    def test_a_dose_that_is_not_the_first_word_stays_a_dose(self):
+        for tail in ('lispro 1.5u correction, ICR 1:15', 'BGL 15.2 correction, 2u given.', 'Near add +2.50 correction; lenses.'):
+            with self.subTest(tail=tail):
+                answers = fixture_answers(['Findings', 'Plan'], 'Findings: sessile polyp.\nPlan: ' + tail)
+                self.assert_ready(answers['Findings'], 'sessile polyp.')
+
+    def test_each_window_on_a_line_takes_one_place_and_the_outermost_is_extra(self):
+        notes = ('Past medical history negative for the following: hypertension, asthma. Family history as follows. Diabetes: '
+                 'mother, diagnosed at 50. She lives with her husband and works as a teacher. Correction: the patient herself, '
+                 'not her mother, was diagnosed with diabetes at 50.')
+        answer = tab_answers(['Diabetes'], notes)[1]['Diabetes']              # a dictated paragraph: the tab contract
+        shown = ' '.join(entry.get('quote', '') for entry in answer['held_candidate']['context'])
+        self.assertIn('Correction: the patient herself', shown)
+        self.assertIn('Past medical history negative for the following', shown)
+        notes = ('Review of systems: negative for the following. Cardiac as below. Pulmonary as below.\n'
+                 'Chest pain: at rest\nCough: productive\nHeadache: frontal')
+        shown = ' '.join(entry.get('quote', '') for entry in fixture_answers(
+            ['Review of systems', 'Chest pain', 'Cough', 'Headache'], notes)['Headache']['held_candidate']['context'])
+        for sentence in ('negative for the following.', 'Cardiac as below.', 'Pulmonary as below.'):
+            self.assertIn(sentence, shown)

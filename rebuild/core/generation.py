@@ -705,14 +705,18 @@ VALUE_MARKER = r'(?:(?:\d{1,2}[.)](?=\s)|(?:[ivx]{1,4}|[a-z])[.)])' + NON_LETTER
 #: Glued to a sentence end only a marker closed by `)` (`adenoma.a) Correction:`): a letter and a period there is an
 #: abbreviation's (`i.e. correction`, seventeenth pass).
 GLUED_MARKER = r'(?:(?:\d{1,2}|[ivx]{1,4}|[a-z])\)' + NON_LETTERS + ')?'
+#: The one word a doctor writes before the word and its separator, or a decimal value with its unit (eighteenth pass:
+#: `Polyp size: 12.5 correction: 8.5 mm` was read only through a decimal point taken as a sentence end, which the
+#: seventeenth pass rightly stopped; `12 correction: 8 mm` was always read).
+BEFORE_THE_WORD = r'(?:\d+(?:\.\d+)+[^\W_]*|' + ONE_WORD + ')'
 #: ⚠️ SIXTEENTH PASS: a correction GLUED to the sentence before it (`adenoma.Correction: no polyp.`, a missed space; or
 #: Word's `adenoma.<o:p></o:p>Correction:`) did not start a sentence, so the finding it corrects stayed ready. After
 #: the sentence end the word itself (or one word and the word) now starts one too, after the same bracket, bullet, quote
 #: or list marker a sentence start allows (seventeenth pass: `adenoma.(Correction: …)`), but never after a decimal point
 #: (`1.5u correction,` is a dose). A full-width sentence end (`。`, `．`, `！`, `？`) is one too.
-ERRATUM = re.compile(r'(?:^' + NON_LETTERS + LINE_MARKER + r'|(?:(?<=' + COLON_CLASS + r')(?!\d)|(?<=[.!?\u2026\u3002\uff0e\uff01\uff1f\uff61])(?=(?:["\'\u201d\u2019)\]*_~`]|' + HTML_TAG.pattern + r'|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});){0,50}+(?:[\s\u2800]|(?!(?<=[0-9][.])[0-9])' + NON_LETTERS + GLUED_MARKER + r'(?:' + ONE_WORD + r'\s+)?' + CORRECTION + r')))'
+ERRATUM = re.compile(r'(?:^' + NON_LETTERS + LINE_MARKER + r'|(?:(?<=' + COLON_CLASS + r')(?!\d)|(?<=[.!?\u2026\u3002\uff0e\uff01\uff1f\uff61])(?=(?:["\'\u201d\u2019)\]*_~`]|' + HTML_TAG.pattern + r'|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});){0,50}+(?:[\s\u2800]|(?!(?<=[0-9][.])[0-9])' + NON_LETTERS + GLUED_MARKER + r'(?:' + BEFORE_THE_WORD + r'\s+)?' + CORRECTION + r')))'
                      + NON_LETTERS + VALUE_MARKER + ')'
-                     + '(?:' + ONE_WORD + r'\s+(?=' + CORRECTION + r's?\s*(?:' + COLON_CLASS + r'|[,;\u2013\u2014]|--|\s-\s)))?'
+                     + '(?:' + BEFORE_THE_WORD + r'\s+(?=' + CORRECTION + r's?\s*(?:' + COLON_CLASS + r'|[,;\u2013\u2014]|--|\s-\s)))?'
                      + r'(?P<word>' + CORRECTION + r's?)(?![^\W_]|/|[\-\u2010\u2011](?=[^\W_]))'
                      + r'(?!\s+' + TREATMENT + r'|\s+to\s+\d|\s*\(\s*(?:sliding|scale))', re.I)
 #: A period that is an abbreviation's, not a sentence's: `vs. correction`, `i.e. correction`, `the following Dr. Smith`.
@@ -1182,10 +1186,17 @@ def governed_context(governance, notes, evidence, others=()):
         found += [(not backward[i][4], backward[i][0] - first_at, backward[i][2:4]) for i in near]
         if line in selves:
             found.append((False, 0, (headings[line], spans[line][1])))
-        if ahead and line == forward[0][1]:
-            found.append((False, -1, forward[0][2:4]))    # the outermost heading's own sentence, first (seventeenth pass)
+        best = {}                                       # one place per distinct window (eighteenth pass: a duplicate
+        for first, second, window in found:             # took two of the three places)
+            if window not in best or (first, second) < best[window]:
+                best[window] = (first, second)
+        windows_shown = sorted(best, key=best.get)[:3]
+        # The outermost heading's own sentence is shown IN ADDITION to the three (seventeenth pass: three nearer sentences
+        # on its line dropped it; eighteenth: taking one of the three places dropped a correction or a denial instead).
+        if ahead and line == forward[0][1] and forward[0][2:4] not in windows_shown:
+            windows_shown.append(forward[0][2:4])
         merged = []
-        for low, high in sorted(window for _, _, window in sorted(found)[:3]):
+        for low, high in sorted(windows_shown):
             if merged and low <= merged[-1][1]:
                 merged[-1] = (merged[-1][0], max(merged[-1][1], high))
             else:

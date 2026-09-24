@@ -128,7 +128,8 @@ lists every charge; choose a charge's service name to see how it was calculated.
   decision for you: it is never filled in and never offered for one click. What was read is shown
   beside it, with the lines that govern it (*Written under* above it, *Followed by* below it; up to
   15 lines: the nearest, the first governing line of the note, the lines with the denial,
-  family-history, hypothetical and correction words listed in this guide, then the rest nearest
+  family-history and hypothetical words listed in this guide and the corrections that govern the
+  lines before them, then the rest nearest
   first, so every governing line is shown when there are 15 or fewer; any beyond 15 are counted,
   and a heading among them in other words (`none of the following`) may be one of those: read the
   full note then; a line that
@@ -186,8 +187,9 @@ lists every charge; choose a charge's service name to see how it was calculated.
   sentence that refers back without a colon (`… negative except as noted above.`) is not read.
 - **A correction governs what came before it.** The word *correction* where a line, an answer or
   a sentence starts (also glued to the sentence before it, a missed space: `adenoma.Correction: …`,
-  `adenoma.(Correction: …)`, `adenoma.<o:p></o:p>Correction: …`, but not after a decimal point:
-  `1.5u correction` is a dose; a full-width `。` ends a sentence too) — after any bullet, bracket, quote or list marker (`● Correction: …`, `1-
+  `adenoma.(Correction: …)`, `adenoma.<o:p></o:p>Correction: …`; a list number glued on both sides,
+  `adenoma.1)Correction:`, is not read; in running text a decimal point is not a sentence end, so
+  `lispro 1.5u correction` is a dose; a full-width `。` ends a sentence too) — after any bullet, bracket, quote or list marker (`● Correction: …`, `1-
   Correction: …`, `#2 Correction: …`, `(Correction: …)`, `a) Correction: …`, `Addendum: Correction:
   …`), or after one word before a colon, comma or dash (`Transcription correction: …`, `Physician's
   correction: …`) — makes every answer before it a decision, in the same paragraph too, whatever
@@ -201,8 +203,8 @@ lists every charge; choose a charge's service name to see how it was calculated.
   (`Correction achieved: 10 degrees`, `Refractive correction:`). After a label, a number before the
   word is a value, not a list marker (`Glucose: 312 correction given` is not a correction), unless
   it is a list number (`Comments: 1. Correction: …`) or the word is followed by a colon, comma or
-  dash (`Glucose: 312 correction: 4 units` is read as a correction, like `Transcription
-  correction:`). One exception: a correction that opens the whole answer to a
+  dash (`Glucose: 312 correction: 4 units` and `Potassium: 3.1 correction: 3.4` are read as
+  corrections, like `Transcription correction:`). One exception: a correction that opens the whole answer to a
   question already answered above it (`Pain score: Correction: three out of ten`) corrects that
   question only, which already needs your decision because it has two answers — on an underlined-Tab
   form anywhere in a paragraph, on every other form only at the start of its line. ⚠️ So a
