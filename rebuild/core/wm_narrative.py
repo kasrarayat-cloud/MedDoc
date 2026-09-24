@@ -11,8 +11,9 @@ decided here, deterministically, from the notes, the cited units and the model's
 - a finding about someone other than the patient is not the patient's answer (missing);
 - uncertainty, a conflict, an unclear subject and a timing that does not fit the question hold THAT answer;
 - the installed protections still apply to the answers they govern (headings and pointers, read per
-  sentence); a correction is scoped: it holds the answers whose value it mentions, and one no answer cites
-  holds every answer read before it (fail closed);
+  sentence, structural headings released); a correction is scoped: it supersedes what precedes it in its own
+  sentence, holds the measurements whose number it mentions, and one no answer cites holds the answers read
+  before it in its paragraph (fail closed);
 - nothing else in the note affects an answer: no whole-note rule.
 
 Flag: `settings.WM_NARRATIVE` (QUILLMD_WM_NARRATIVE), off by default. With it off nothing here is reachable:
@@ -433,12 +434,13 @@ def cited_starts(answers):
             if isinstance(entry, dict) and entry.get('kind') == 'unit' and type(entry.get('start')) is int}
 
 
-def correction_context(value, own, corrections, cited):
+def correction_context(value, own, corrections, cited, notes):
     """The corrections that hold this answer, as governing entries, or None.
 
-    A correction that no answer cites, written after the answer's first unit, holds it (fail closed: nobody said
-    what it changes). A cited correction holds the measurements whose number it mentions, other than its own; a
-    correction inside the answer's own sentence is read by `superseded`."""
+    Any correction holds the measurements whose number it mentions, other than its own unit. A correction that no
+    answer cites also holds every answer read before it IN ITS PARAGRAPH (fail closed: nobody said what it changes),
+    and nothing beyond that paragraph: a correction must not send the whole form back. A correction inside the
+    answer's own sentence is read by `superseded`."""
     starts = {entry['start'] for entry in own}
     first = min(starts) if starts else None
     tokens = value_tokens(value)
@@ -446,12 +448,11 @@ def correction_context(value, own, corrections, cited):
     for unit in corrections:
         if unit['start'] in starts:
             continue
-        if unit['start'] not in cited:
-            if first is not None and unit['start'] > first:
-                found.append(unit)
-            continue
         quote = _space(unit['quote']).casefold()
         if any(re.search(r'(?<![0-9.])' + re.escape(token.casefold()) + r'(?![0-9])', quote) for token in tokens):
+            found.append(unit)
+        elif (unit['start'] not in cited and first is not None and first < unit['start']
+              and paragraph_start(notes, first) == paragraph_start(notes, unit['start'])):
             found.append(unit)
     if not found:
         return None
@@ -525,7 +526,7 @@ def governing(field, value, own, read):
     found = own_frame(own)
     if found is not None:
         return found, generation.held_reason(found, True)
-    found = correction_context(value, own, read['corrections'], read['cited'])
+    found = correction_context(value, own, read['corrections'], read['cited'], read['notes'])
     return (found, HELD['correction']) if found is not None else (None, None)
 
 

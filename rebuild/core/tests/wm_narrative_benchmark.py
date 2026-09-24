@@ -72,11 +72,11 @@ def score_case(case, answers, proposals, requirements):
     return counts, rows
 
 
-def run(model):
+def run(model, shaped=None):
     from core import wm_narrative
     mapping, cases = load('mapping.json'), load('cases.json')['cases']
     fields, requirements = mapping['fields'], mapping['review_requirements']
-    shaped = responses(model)
+    shaped = shaped or responses(model)
     total, rows = Counter(), []
     for case in cases:
         selections = wm_narrative.NarrativeSelections.model_validate(shaped[case['id']])
@@ -85,6 +85,16 @@ def run(model):
         total.update(counts)
         rows.extend(found)
     return total, rows
+
+
+#: The gate the careful set must meet (and a regression in either direction is visible): no wrong pre-filled answer,
+#: no correct answer sent back, and at least this many correct answers pre-filled. Refusing everything fails it.
+CAREFUL_GATE = {'wrong_supported': 0, 'unnecessary_hold': 0, 'correct_supported': 338}
+
+
+def passes(total, gate=CAREFUL_GATE):
+    return (total['wrong_supported'] <= gate['wrong_supported'] and total['unnecessary_hold'] <= gate['unnecessary_hold']
+            and total['correct_supported'] >= gate['correct_supported'])
 
 
 def report():
