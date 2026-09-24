@@ -1764,7 +1764,7 @@ def generate_narrative(notes,fields,config,requirements):
     from anthropic import Anthropic
     r=rates(config)
     request=json.dumps(wm_narrative.payload(notes,fields,requirements))
-    client=Anthropic(timeout=90,max_retries=0)
+    client=Anthropic(timeout=wm_narrative.PROVIDER_TIMEOUT_SECONDS,max_retries=0)
     response=client.messages.create(model=config['model'],max_tokens=wm_narrative.PROVIDER_MAX_TOKENS,
         system=wm_narrative.INSTRUCTIONS,messages=[{'role':'user','content':request}],
         output_config={'format':{'type':'json_schema','schema':wm_narrative.NarrativeSelections.model_json_schema()}})

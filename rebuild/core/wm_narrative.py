@@ -30,7 +30,11 @@ from pydantic import BaseModel, ConfigDict, StrictInt
 from . import generation
 
 CONTRACT = generation.NARRATIVE_CONTRACT
-PROVIDER_MAX_TOKENS = 8000
+#: A careful response to the 90-field form measured ~13.7 KB (~4,500 tokens) on the frozen benchmark; a truncated one
+#: is charged and never adopted, so the ceiling keeps well over twice that. The charge is by actual usage.
+PROVIDER_MAX_TOKENS = 12000
+#: Under the worker's five-minute stale-job threshold (`jobs.mark_stale`), so a slow answer is never left in doubt.
+PROVIDER_TIMEOUT_SECONDS = 240
 
 
 class NarrativeField(BaseModel):
