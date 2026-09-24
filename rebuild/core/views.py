@@ -51,8 +51,10 @@ def wm_resolve(encounter,actor,decisions=None):
     original=private_path(version.template.original_path)
     if hashlib.sha256(original.read_bytes()).hexdigest()!=version.template.sha256:
         raise ValidationError('Original integrity check failed.')
+    proposals=encounter.template_review.get('proposals',{}) if decisions is None else {}
     decisions=decisions if decisions is not None else encounter.template_review.get('decisions',{})
-    variants={row['key']:decisions.get(row['key'],{}).get('variant',row['default_variant'])
+    # A generation's statement proposal pre-selects a wording until the clinician's first save records a decision.
+    variants={row['key']:decisions.get(row['key'],{}).get('variant',(proposals.get(row['key']) or {}).get('variant',row['default_variant']))
               for row in version.review_requirements}
     signer=encounter.finalized_by if encounter.status=='finalized' else actor
     context={'reviewer_id':str(signer.pk),'revision':encounter.revision,'notes':encounter.notes,
@@ -72,18 +74,24 @@ def wm_resolve(encounter,actor,decisions=None):
     return result['review_requirements']
 
 
-def source_quote_evidence(notes,label,raw,labels):
-    """Convert submitted quotations into actual offsets; never accept posted offsets."""
+def source_quote_evidence(notes,label,raw,labels,sentences=None):
+    """Convert submitted quotations into actual offsets; never accept posted offsets.
+
+    `sentences` (the narrative contract's source units, when it is on): a quotation that is one complete sentence of
+    the notes is that sentence, found first, so an answer read from a sentence keeps it as its evidence."""
     if len(raw)>50000:raise ValidationError('Source quotations exceed the supported limit; nothing was truncated.')
     units,_=wm_review.source_units(notes,label,labels)
     evidence=[]
     for submitted in raw.splitlines():
         quote=submitted.strip()
         if not quote:continue
+        sentence=next((unit for unit in sentences or () if unit['quote']==quote),None)
+        if sentence is not None:
+            evidence.append({'quote':quote,'start':sentence['start'],'end':sentence['end'],'kind':'unit'});continue
         found=next((item for item in units if item[2]==quote),None)
-        if found is None:raise ValidationError('Use a complete source line or the complete value for this exact question label.')
+        if found is None:raise ValidationError('Use a complete source line or the complete value for this exact question label'+(', or one complete sentence of the notes.' if sentences is not None else '.'))
         evidence.append({'quote':quote,'start':found[0],'end':found[1]})
-    wm_review.validate_evidence(notes,label,evidence,labels)
+    wm_review.validate_evidence(notes,label,[item for item in evidence if 'kind' not in item],labels)
     return evidence
 
 
@@ -104,6 +112,16 @@ WM_BLOCKERS={
     'selected_answer_conflicts_with_fixed_assertion':'The selected reflux finding contradicts this fixed negative statement. Export is blocked.',
     'symptom_conflicts_with_asymptomatic':'This symptom conflicts with the selected asymptomatic finding.',
     'asymptomatic_conflicts_with_documented_symptom':'Asymptomatic conflicts with another selected symptom.',
+    'narrative_evidence_disabled':'This answer cites a sentence of the notes, and reading answers from sentences is switched off. Quote the labelled source line instead.',
+    'narrative_value_not_in_source':'The cited sentence does not contain this value exactly as written. Cite the sentence that states it, or correct the answer.',
+    'labelled_value_differs':'A line labelled with this question gives a different value. Correct the notes or the answer.',
+    'superseded_by_correction':'A correction in the cited sentence replaces this value. Use the corrected value.',
+    'side_not_supported':'The cited sentences place this finding on the other side.',
+    'side_not_stated':'The cited sentences do not say which side this finding is on. Cite the sentence that names the side.',
+    'narrative_qualifiers_hold':'The notes state this finding with uncertainty, for someone other than the patient, or at another time. Decide the answer yourself.',
+    'statement_answers_differ_from_wording':'This wording is not built from the answers it cites. Save to refresh the statement, then review it.',
+    'statement_answers_incomplete':'This wording rests on answers that are still unanswered or need review.',
+    'governed_source':'A heading, a pointer or a correction in the notes may change what the cited sentences mean. Check them before relying on this statement.',
 }
 
 #: ⚠️ `data_mode` WAS A HARDCODED LITERAL AND WAS BEING CITED AS PROOF OF THE GUARD.
@@ -385,8 +403,14 @@ def encounter_detail(request,pk):
         # can hold a governed answer as `supported` or as a one-click offer, accepted or not; each is shown held,
         # with every line that governs it. A FINALIZED record is never re-described: it shows what was offered.
         from .generation import as_currently_governed,governance_for
-        governance=governance_for(e.notes,e.template_version.fields,[row['label'] for row in e.template_version.review_requirements])
-        rows=[as_currently_governed(governance,e.notes,row,is_wm) for row in rows]
+        from . import wm_narrative
+        statement_labels=[row['label'] for row in e.template_version.review_requirements]
+        governance=governance_for(e.notes,e.template_version.fields,statement_labels)
+        # An answer read from a sentence is judged by the narrative reader, exactly as finalization will judge it.
+        narrative_read=(wm_narrative.stored_reading(e.notes,e.template_version.fields,statement_labels,e.answers)
+                        if wm_narrative.active(e.template_version.fields,e.answers) else None)
+        rows=[wm_narrative.as_currently_held(row,row,narrative_read) if narrative_read and wm_narrative.has_unit_evidence(row)
+              else as_currently_governed(governance,e.notes,row,is_wm) for row in rows]
     for row in rows:
         row['accepted_by_email']=accepters.get(str(row.get('accepted_by') or ''),'')
         row['accepted_by_me']=str(row.get('accepted_by') or '')==str(request.user.pk)
@@ -431,13 +455,20 @@ def encounter_detail(request,pk):
                 row['status']='conflict'; reasons=[reason for reason in reasons if reason!='conflicting_source']
             row['review_errors']=[WM_BLOCKERS.get(reason,'Clinical review is incomplete.') for reason in reasons]
             row['review_errors']+=[conflict['explanation'] for conflict in wm_conflicts if row['key'] in conflict['answer_keys']]
+        proposals=e.template_review.get('proposals',{}) if not decisions else {}
         for row in requirements:
             row['unresolved']=not resolved_ok
             decision=decisions.get(row['key'],{})
+            proposal=proposals.get(row['key']) or {}
             row['reviewed']=bool(decision.get('reviewed') and e.template_review.get('reviewer_id')==str(request.user.pk)
                                   and e.template_review.get('binding',{}).get('source_revision')==e.revision)
-            row['source_quote']='\n'.join(item['quote'] for item in decision.get('evidence',[]))
-            row['selected_variant']=decision.get('variant') or row.get('selected_variant') or row.get('default_variant')
+            shown=decision.get('evidence') if decision else proposal.get('evidence',[])
+            row['source_quote']='\n'.join(item['quote'] for item in shown or [] if item.get('quote'))
+            # A wording built from answers may rest on those answers; the page posts that basis back explicitly.
+            row['answers_basis']=next((item['answer_keys'] for item in shown or [] if item.get('kind')=='answers'),None)
+            row['answers_basis_labels']=[next((f['label'] for f in e.template_version.fields if f['key']==key),key) for key in row['answers_basis'] or []]
+            row['proposed']=bool(proposal) and not decision
+            row['selected_variant']=decision.get('variant') or proposal.get('variant') or row.get('selected_variant') or row.get('default_variant')
             if resolved_ok:
                 row['review_token']=signing.dumps({'encounter':str(e.pk),'revision':e.revision,
                     'actor':str(request.user.pk),'key':row['key'],'text_sha256':row['text_sha256'],
@@ -446,7 +477,7 @@ def encounter_detail(request,pk):
             row['review_errors']=[WM_BLOCKERS.get(reason,'Clinical review is incomplete.') for reason in reasons]
             row['review_errors']+=[conflict['explanation'] for conflict in wm_conflicts if row['key'] in conflict['statement_keys']]
     from .generation import maximum_cost,configuration
-    try:maximum_charge=maximum_cost(e.notes,e.template_version.fields,context_labels=[row['label'] for row in e.template_version.review_requirements])*Decimal('1.5')
+    try:maximum_charge=maximum_cost(e.notes,e.template_version.fields,context_labels=[row['label'] for row in e.template_version.review_requirements],requirements=e.template_version.review_requirements)*Decimal('1.5')
     except ValidationError:maximum_charge=None
     audit(request.user,'encounter.view',e.pk,department=e.department)
     # Billing boundary: earlier charged requests (successes, and successes the user's own state declined) stay charged, so a
@@ -468,7 +499,8 @@ def encounter_detail(request,pk):
                 transcript_reviews.append({'job':job,'raw':raw,'text':transcript,'empty':not (raw or '').strip() and not (transcript or '').strip()})
             except (ValidationError,OSError,ValueError):
                 job.display_error='The retained transcript could not be verified. Contact an administrator; do not resubmit a paid recording.'
-    return render(request,'encounter_detail.html',{'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
+    from . import wm_narrative
+    return render(request,'encounter_detail.html',{'wm_narrative':is_wm and wm_narrative.enabled(e.template_version.fields),'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
         'signer_name':' '.join((request.user.get_full_name() or request.user.email).split())})
 
@@ -522,11 +554,23 @@ def save_answers(request,pk):
     previous_answers=dict(e.answers)
     # ⚠️ ONCE PER SAVE, NOT PER FIELD: this runs under the row lock, and a 100-field save recomputed it per offer.
     from .generation import governance_for,governed_supported,held_for_decision,is_empty,looks_the_same,offer_context
-    governance=governance_for(e.notes,e.template_version.fields,[row['label'] for row in e.template_version.review_requirements])
+    from . import wm_narrative
+    statement_labels=[row['label'] for row in e.template_version.review_requirements]
+    governance=governance_for(e.notes,e.template_version.fields,statement_labels)
+    narrative_on=is_wm and wm_narrative.enabled(e.template_version.fields)
+    sentences=wm_narrative.units(e.notes,e.template_version.fields,statement_labels) if narrative_on else None
+    narrative_read=(wm_narrative.stored_reading(e.notes,e.template_version.fields,statement_labels,e.answers)
+                    if wm_narrative.active(e.template_version.fields,e.answers) else None)
     for field in e.template_version.fields:
         key=field['key'];previous=e.answers.get(key,{'text':'','evidence':[],'status':'missing'})
         held_shown=request.POST.get('held_shown_'+key)=='1'
-        supported_context=governed_supported(governance,e.notes,previous,field['label'])
+        narrative_held=None
+        if narrative_read is not None and wm_narrative.has_unit_evidence(previous):
+            narrative_held=wm_narrative.as_currently_held(field,previous,narrative_read)
+            narrative_held=narrative_held if narrative_held is not previous else None
+            supported_context=narrative_held['held_candidate']['context'] if narrative_held else None
+        else:
+            supported_context=governed_supported(governance,e.notes,previous,field['label'])
         governed_offer=offer_context(governance,e.notes,previous,field['label']) is not None
         # A draft from an earlier release holding a governed answer as `supported` is saved as the page showed it —
         # held — so the clinician's answer is their decision even when it repeats the candidate's words. ⚠️ ONLY WHEN
@@ -535,7 +579,8 @@ def save_answers(request,pk):
         # stays `supported` (finalization refuses it); text that visibly differs is the clinician's edit, saved with
         # the candidate and its governing lines kept beside it, so the next page shows what governs it (tenth pass:
         # the edit was saved bare, and the heading was never shown again).
-        held_draft=(held_for_decision(previous,[previous.get('text','')],previous['evidence'],supported_context,is_wm,prefilled=True)
+        held_draft=(narrative_held if narrative_held is not None else
+                    held_for_decision(previous,[previous.get('text','')],previous['evidence'],supported_context,is_wm,prefilled=True)
                     if supported_context is not None else None)
         if held_shown and held_draft is not None:
             previous=held_draft
@@ -627,7 +672,7 @@ def save_answers(request,pk):
         if is_wm:
             quote=request.POST.get('source_'+key,'')
             if len(quote)>50000:return document_refusal(request,e,'Source quotations exceed the supported limit; nothing was saved.',400)
-            try:evidence=source_quote_evidence(e.notes,field['label'],quote,labels)
+            try:evidence=source_quote_evidence(e.notes,field['label'],quote,labels,sentences)
             except ValidationError as exc:
                 evidence=[];reviewed=False;review_errors.append(error_message(exc))
             answers[key].update(evidence=evidence,review_quote=quote,reviewed=reviewed,
@@ -670,12 +715,16 @@ def save_answers(request,pk):
             key=requirement['key'];quote=request.POST.get('claim_source_'+key,'')
             if len(quote)>50000:return document_refusal(request,e,'Source quotations exceed the supported limit; nothing was saved.',400)
             reviewed=request.POST.get('claim_reviewed_'+key)=='on'
-            try:evidence=source_quote_evidence(e.notes,requirement['label'],quote,labels)
+            try:evidence=source_quote_evidence(e.notes,requirement['label'],quote,labels,sentences)
             except ValidationError as exc:
                 evidence=[];reviewed=False;review_errors.append(error_message(exc))
             variant=request.POST.get('claim_variant_'+key,requirement.get('default_variant'))
             if variant not in {item['id'] for item in requirement['variants']}:
                 return document_refusal(request,e,'Choose an approved statement alternative. No changes were saved.',400)
+            # "Rests on its answers": the selected wording's own answers, named from the mapping, never from the post.
+            if narrative_on and request.POST.get('claim_basis_'+key)=='answers':
+                required=next(item for item in requirement['variants'] if item['id']==variant).get('required_control_keys',[])
+                evidence.append({'kind':'answers','answer_keys':list(required)})
             decisions[key]={'reviewed':reviewed,'evidence':evidence,'variant':variant}
     e.answers=answers;e.revision=target_revision;e.status='review';wm_review.invalidate_review(e)
     if is_wm and Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists():

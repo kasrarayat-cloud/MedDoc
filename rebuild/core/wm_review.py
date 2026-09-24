@@ -140,12 +140,40 @@ def _reviewed(answer, actor, revision):
             and type(answer.get('review_revision')) is int and answer['review_revision'] == revision)
 
 
-def _field_decision(notes, field, answer, actor, labels, revision):
+def _narrative_kind(item):
+    return type(item) is dict and item.get('kind') in ('unit', 'answers')
+
+
+def _split_evidence(evidence):
+    """(labelled entries, narrative entries). Narrative entries are refused unless the narrative contract is on."""
+    require(isinstance(evidence, list) and len(evidence) <= 100, 'Evidence must be a bounded list of complete source quotations.')
+    return [item for item in evidence if not _narrative_kind(item)], [item for item in evidence if _narrative_kind(item)]
+
+
+#: Narrative support verdicts (`wm_narrative.support`) as review blockers.
+NARRATIVE_BLOCKERS = {'unsupported': 'narrative_value_not_in_source', 'labelled': 'labelled_value_differs',
+                      'correction': 'superseded_by_correction', 'side': 'side_not_supported',
+                      'side_unknown': 'side_not_stated'}
+
+
+def _narrative_units(notes, narrative, entries):
+    from . import wm_narrative
+    require(all(item.get('kind') == 'unit' for item in entries), 'Answers cite source sentences only.')
+    return wm_narrative.unit_entries(notes, narrative['fields'], narrative['context_labels'], entries)
+
+
+def _field_decision(notes, field, answer, actor, labels, revision, narrative=None):
     require(isinstance(answer, dict), 'Invalid answer review record.')
     text = answer.get('text', '')
     require(isinstance(text, str) and len(text) <= 20000, 'Answer exceeds the supported limit; nothing was truncated.')
-    evidence, values, conflict = validate_evidence(notes, field['label'], answer.get('evidence', []), labels)
+    labelled, cited = _split_evidence(answer.get('evidence', []))
+    evidence, values, conflict = validate_evidence(notes, field['label'], labelled, labels)
     blockers = []
+    if cited:
+        if narrative is None:
+            blockers.append('narrative_evidence_disabled')
+        else:
+            evidence = evidence + _narrative_units(notes, narrative, cited)
     if not _reviewed(answer, actor, revision):
         blockers.append('clinician_review_required')
     if answer.get('status') == 'conflict' or conflict:
@@ -166,7 +194,17 @@ def _field_decision(notes, field, answer, actor, labels, revision):
                 'The original dropdown options are unavailable.')
         if text not in options or text == 'Choose an item.':
             blockers.append('not_an_original_option')
-    if not values or not all(value['labelled'] and value['value'] == text for value in values):
+    if cited and narrative is not None:
+        # The narrative contract: the same deterministic support generation applied (`wm_narrative.support`), over
+        # every cited sentence and labelled line, and the model's qualifiers for an answer it pre-filled.
+        from . import wm_narrative
+        verdict = wm_narrative.support(field, text, evidence, notes, narrative['labels'], labels)
+        if verdict:
+            blockers.append(NARRATIVE_BLOCKERS[verdict])
+        qualifiers = answer.get('narrative')
+        if answer.get('status') == 'supported' and isinstance(qualifiers, dict) and not wm_narrative.qualifiers_fit(field, qualifiers):
+            blockers.append('narrative_qualifiers_hold')
+    elif not values or not all(value['labelled'] and value['value'] == text for value in values):
         blockers.append('exact_labelled_source_required')
     if field.get('kind') == 'measurement':
         unit = field.get('locator', {}).get('unit')
@@ -264,12 +302,23 @@ def _resolved_requirements(requirements, answers, resolved, decisions, actor):
     return result
 
 
+def narrative_reading(encounter, fields, requirements):
+    """What the narrative review reads, or None when the contract is off (narrative evidence is then refused)."""
+    from . import wm_narrative
+    if not wm_narrative.enabled(fields):
+        return None
+    from .generation import recognized_labels
+    context_labels = [row['label'] for row in requirements]
+    return {'fields': fields, 'context_labels': context_labels, 'labels': recognized_labels(fields, context_labels)}
+
+
 def _answer_assessment(encounter, actor, fields, requirements):
     labels = [row['label'] for row in fields + requirements]
     require(isinstance(encounter.answers, dict) and set(encounter.answers) <= {row['key'] for row in fields},
             'Answers contain unknown mapping keys.')
+    narrative = narrative_reading(encounter, fields, requirements)
     return {field['key']: _field_decision(encounter.notes, field,
-            encounter.answers.get(field['key'], {}), actor, labels, encounter.revision) for field in fields}
+            encounter.answers.get(field['key'], {}), actor, labels, encounter.revision, narrative) for field in fields}
 
 
 def sdk_answers(encounter, actor):
@@ -296,6 +345,7 @@ def evaluate_review(encounter, actor, decisions, *, resolved_requirements=None):
     decisions = _normalize_decisions(requirements, decisions)
     labels = [row['label'] for row in fields + requirements]
     answers = _answer_assessment(encounter, actor, fields, requirements)
+    narrative = narrative_reading(encounter, fields, requirements)
     requirements = _resolved_requirements(requirements, answers, resolved_requirements, decisions, actor)
     assertions = {}
     signer_name = _space(actor.get_full_name()) or actor.email
@@ -308,8 +358,14 @@ def evaluate_review(encounter, actor, decisions, *, resolved_requirements=None):
         require(isinstance(requirement.get('text'), str)
                 and requirement.get('text_sha256') == hashlib.sha256(requirement['text'].encode()).hexdigest(),
                 'The fixed requirement text differs from its versioned hash.')
-        evidence, values, conflict = validate_evidence(encounter.notes, requirement['label'], decision['evidence'], labels)
+        labelled, cited = _split_evidence(decision['evidence'])
+        evidence, values, conflict = validate_evidence(encounter.notes, requirement['label'], labelled, labels)
         blockers = []
+        if cited:
+            if narrative is None:
+                blockers.append('narrative_evidence_disabled')
+            else:
+                evidence = evidence + _statement_evidence(encounter, narrative, requirement, cited, answers, blockers)
         if not decision['reviewed']:
             blockers.append('clinician_review_required')
         if conflict or INJECTION.search(encounter.notes):
@@ -322,6 +378,9 @@ def evaluate_review(encounter, actor, decisions, *, resolved_requirements=None):
         if kind == 'assertion':
             if 'Choose an item.' in statement:
                 blockers.append('missing_dependent_choice')
+            elif cited and narrative is not None:
+                if values and not all(value['labelled'] and _space(value['value']) == _space(statement) for value in values):
+                    blockers.append('complete_assertion_source_required')
             elif not values or not all(value['labelled'] and _space(value['value']) == _space(statement)
                                        for value in values):
                 blockers.append('complete_assertion_source_required')
@@ -363,6 +422,34 @@ def evaluate_review(encounter, actor, decisions, *, resolved_requirements=None):
                 for key, row in rows.items() for reason in row['blockers']]
     return {'answers': answers, 'assertions': assertions, 'blockers': blockers,
             'complete': not blockers, 'decisions': decisions}
+
+
+def _statement_evidence(encounter, narrative, requirement, cited, answers, blockers):
+    """A statement's narrative evidence: source sentences (a fixed wording needs one that names its side), and at most
+    one `answers` entry naming exactly the selected wording's own answers, each complete without a blocker."""
+    from . import wm_narrative
+    units = [item for item in cited if item.get('kind') == 'unit']
+    basis = [item for item in cited if item.get('kind') == 'answers']
+    rule = requirement['selected_rule']
+    required = list(rule['required_control_keys'])
+    result = wm_narrative.unit_entries(encounter.notes, narrative['fields'], narrative['context_labels'], units)
+    require(len(basis) <= 1 and all(set(item) == {'kind', 'answer_keys'} and isinstance(item['answer_keys'], list)
+                                    for item in basis), 'Statement evidence names its answers once.')
+    if basis:
+        if not required or basis[0]['answer_keys'] != required:
+            blockers.append('statement_answers_differ_from_wording')
+        elif any(answers[key]['blockers'] or not answers[key]['text'] for key in required):
+            blockers.append('statement_answers_incomplete')
+        result.append({'kind': 'answers', 'answer_keys': list(basis[0]['answer_keys'])})
+    if not required and not result:
+        blockers.append('complete_assertion_source_required')
+    if not required and units and not wm_narrative.names_side(requirement, result, encounter.notes):
+        blockers.append('side_not_supported')
+    if units:
+        read = wm_narrative.stored_reading(encounter.notes, narrative['fields'], narrative['context_labels'], encounter.answers)
+        if wm_narrative.statement_governed(requirement, [item for item in result if item.get('kind') == 'unit'], read) is not None:
+            blockers.append('governed_source')
+    return result
 
 
 def build_review(encounter, actor, decisions, *, resolved_requirements=None):

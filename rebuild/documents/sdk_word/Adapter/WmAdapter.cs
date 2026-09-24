@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Aspose.Words;
 using Aspose.Words.Markup;
 using Aspose.Words.Tables;
@@ -16,7 +17,9 @@ public sealed class WordAdapterException(string code, string message) : Exceptio
 // Constructed by the authenticated parent, never by model output or form JSON.
 public sealed record TrustedClinicalContext(string ReviewerId, int Revision,
     string Notes, string SignerName, DateTimeOffset FinalizedAt);
-public sealed record Evidence(string Quote, int Start, int End);
+// `Kind`: null for a labelled line (the original contract), "unit" for one sentence of the notes and "answers" for a
+// statement wording that rests on its own answers (the narrative contract, docs/rebuild/wm-narrative-design.md).
+public sealed record Evidence(string Quote, int Start, int End, string? Kind = null, string[]? AnswerKeys = null);
 public sealed record Answer(string Text, string Status, string ReviewedBy, int Revision, Evidence[] Evidence);
 public sealed record ReviewDecision(string TextSha256, string ReviewedBy, int Revision, Evidence[] Evidence);
 public sealed record Field(string Key, string Label, string Kind, Dictionary<string, object> Locator, string[] Options);
@@ -96,7 +99,9 @@ public static partial class WmAdapter
                 var variant = requirement.Variants.Single(v => v.Id == requirement.SelectedVariant);
                 if (variant.RequiredControlKeys.Any(key => answers[key].Status == "missing"))
                     Fail("missing_assertion_answer", "A reviewed statement still depends on an unanswered content control.");
-                if (decision.Evidence is null || decision.Evidence.Length == 0
+                if (decision.Evidence is not null && decision.Evidence.Any(e => e?.Kind is not null))
+                    VerifyNarrativeStatement(requirement, variant, decision.Evidence, trusted.Notes);
+                else if (decision.Evidence is null || decision.Evidence.Length == 0
                     || decision.Evidence.Any(e => !LabelledSupport(e, trusted.Notes, requirement.Label, requirement.Text))
                     || !LabelValuesConsistent(trusted.Notes, requirement.Label, requirement.Text))
                     Fail("unsupported_assertion", "A statement requires complete, consistent source evidence under its own exact label and side.");
@@ -216,6 +221,7 @@ public static partial class WmAdapter
             if (ExplicitLabelValues(notes, field.Label).Any()) Fail("missing_documented_answer", "A documented field cannot be marked missing.");
             return;
         }
+        if (answer.Evidence is not null && answer.Evidence.Any(e => e?.Kind is not null)) { VerifyNarrativeAnswer(field, answer, notes); return; }
         if (answer.Evidence is null || answer.Evidence.Length == 0
             || answer.Evidence.Any(e => !LabelledSupport(e, notes, field.Label, answer.Text))
             || !LabelValuesConsistent(notes, field.Label, answer.Text))
@@ -245,6 +251,123 @@ public static partial class WmAdapter
     }
     private static IEnumerable<string> ExplicitLabelValues(string notes, string label) => notes.Split('\n').Select(line => LabelValue(line, label)).Where(value => !string.IsNullOrEmpty(value)).Select(value => value!);
     private static bool LabelValuesConsistent(string notes, string label, string expected) => ExplicitLabelValues(notes, label).All(value => Normalize(value) == Normalize(expected));
+    // ── the narrative contract's second boundary ──────────────────────────────────────────────────────────────
+    // These four patterns are core/wm_narrative.py's, verbatim (a parent test asserts it). Every check below is
+    // IMPLIED by the parent's rule, never stricter: the parent reads only unsuperseded places in the sentences it
+    // may use and the side of each place; this reads any place in any cited sentence and any side word from the
+    // paragraph's start to the sentence's end. So an answer review accepted is never refused here, and an answer
+    // with no support at all, or none for its side, never reaches the document.
+    private const string QuantityPattern = @"(?<![0-9.,])([0-9]+(?:\.[0-9]+)?)[ \t\u00a0]*-?[ \t\u00a0]*(mm|millimet(?:er|re)s?|ms|msecs?|milliseconds?|s|secs?|seconds?)(?![^\W\d_])";
+    private const string BoundedBeforePattern = @"(?:[<>~\u2248\u2264\u2265\u00b1]=?|\b(?:less|greater|more|fewer)\s+than|\b(?:under|over|below|above|about|around|approximately|approx\.?|roughly|nearly|almost|circa|ca\.|up\s+to|at\s+(?:least|most))|[0-9]\s*(?:-|\u2013|\u2014|to)|\bor)\s*$";
+    private const string BoundedAfterPattern = @"^\s*(?:\+|or\s+(?:more|less|greater|so|above|below)|and\s+(?:above|over|greater|more))";
+    private const string SidePattern = @"(?<![^\W\d_])(right|rt|left|lt|both|bilateral(?:ly)?|either)(?![^\W\d_])";
+    private static readonly RegexOptions Reading = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
+    private static readonly Regex Quantity = new(QuantityPattern, Reading);
+    private static readonly Regex BoundedBefore = new(BoundedBeforePattern, Reading);
+    private static readonly Regex BoundedAfter = new(BoundedAfterPattern, Reading);
+    private static readonly Regex SideWord = new(SidePattern, Reading);
+    private static readonly Regex MeasurementForm = new(@"^(?:0|[1-9][0-9]*)(?:\.[0-9]+)? (mm|ms)$");
+    private static readonly Regex Paragraph = new(@"\n[ \t]*\n");
+
+    private static void VerifyNarrativeAnswer(Field field, Answer answer, string notes)
+    {
+        var quotes = new List<(string Quote, int Start, int End)>();
+        foreach (var evidence in answer.Evidence) {
+            if (evidence is null || evidence.Kind is not (null or "unit")) Fail("unsupported_answer", "An answer rests on source sentences only.");
+            var slice = Slice(evidence, notes);
+            if (slice is null) Fail("unsupported_answer", "Answer evidence no longer matches the source.");
+            quotes.Add(slice.Value);
+        }
+        var written = field.Kind switch {
+            "choice" => field.Options.Contains(answer.Text, StringComparer.Ordinal),
+            "measurement" => quotes.Any(q => MeasurementWritten(answer.Text, q.Quote)),
+            _ => quotes.Any(q => WordsPattern(answer.Text).IsMatch(q.Quote)),
+        };
+        if (!written || !ExplicitLabelValues(notes, field.Label).All(value => Agrees(field, value, answer.Text)))
+            Fail("unsupported_answer", "Answer is not written in its cited source sentences.");
+        var side = FieldSide(field.Label);
+        if (side is not null && !quotes.Any(q => SideWritten(notes, q.Start, q.End, side)))
+            Fail("unsupported_answer", "The cited source sentences do not place this answer on its side.");
+    }
+
+    private static void VerifyNarrativeStatement(ReviewRequirement requirement, ClaimVariant variant, Evidence[] evidence, string notes)
+    {
+        var sentences = new List<(string Quote, int Start, int End)>(); var basis = 0;
+        foreach (var entry in evidence) {
+            if (entry is null) Fail("unsupported_assertion", "Invalid statement evidence.");
+            if (entry.Kind == "answers") {
+                basis++;
+                if (basis > 1 || variant.RequiredControlKeys.Length == 0 || entry.AnswerKeys is null
+                    || !entry.AnswerKeys.SequenceEqual(variant.RequiredControlKeys, StringComparer.Ordinal))
+                    Fail("unsupported_assertion", "A statement rests only on the answers its own wording is built from.");
+            } else if (entry.Kind == "unit") {
+                var slice = Slice(entry, notes);
+                if (slice is null) Fail("unsupported_assertion", "Statement evidence no longer matches the source.");
+                sentences.Add(slice.Value);
+            } else if (entry.Kind is not null || !LabelledSupport(entry, notes, requirement.Label, requirement.Text)) {
+                Fail("unsupported_assertion", "A statement requires complete, consistent source evidence.");
+            }
+        }
+        if (variant.RequiredControlKeys.Length == 0) {
+            if (sentences.Count == 0 && !evidence.Any(e => e.Kind is null)) Fail("unsupported_assertion", "A fixed statement wording needs a source sentence.");
+            var side = FieldSide(requirement.Label.Replace("Prewritten statement: ", "", StringComparison.Ordinal));
+            if (side is not null && sentences.Count > 0 && !sentences.Any(q => SideWritten(notes, q.Start, q.End, side)))
+                Fail("unsupported_assertion", "The cited source sentences do not name this statement's side.");
+        }
+    }
+
+    // The cited slice in UTF-16 indices, or null when it is not exactly the notes' text at its code-point offsets.
+    private static (string Quote, int Start, int End)? Slice(Evidence evidence, string notes)
+    {
+        if (evidence.Quote is null || evidence.Start < 0 || evidence.End <= evidence.Start) return null;
+        var start = CodePointOffset(notes, evidence.Start); var end = CodePointOffset(notes, evidence.End);
+        if (start < 0 || end < 0 || notes[start..end] != evidence.Quote) return null;
+        return (evidence.Quote, start, end);
+    }
+
+    private static bool MeasurementWritten(string value, string quote)
+    {
+        var form = MeasurementForm.Match(value);
+        if (!form.Success || !decimal.TryParse(value.Split(' ')[0], NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var number)) return false;
+        var unit = form.Groups[1].Value;
+        foreach (Match found in Quantity.Matches(quote)) {
+            if (BoundedBefore.IsMatch(quote[Math.Max(0, found.Index - 40)..found.Index]) || BoundedAfter.IsMatch(quote[(found.Index + found.Length)..])) continue;
+            if (!decimal.TryParse(found.Groups[1].Value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var stated)) continue;
+            var word = found.Groups[2].Value.ToLowerInvariant();
+            if ((unit == "mm" && (word.StartsWith("mm", StringComparison.Ordinal) || word.StartsWith("millimet", StringComparison.Ordinal)) && stated == number)
+                || (unit == "ms" && (word.StartsWith("ms", StringComparison.Ordinal) || word.StartsWith("msec", StringComparison.Ordinal) || word.StartsWith("millisecond", StringComparison.Ordinal)) && stated == number)
+                || (unit == "ms" && word.StartsWith('s') && stated * 1000 == number))
+                return true;
+        }
+        return false;
+    }
+
+    // A value's words with any whitespace between them, a side word allowed inside the phrase (core/wm_narrative._words).
+    private static Regex WordsPattern(string value)
+    {
+        var words = value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        return new Regex(@"(?<![^\W\d_])" + string.Join(@"\s+(?:(?:right|left|rt|lt)\s+)?", words.Select(Regex.Escape)) + @"(?![^\W\d_])", Reading);
+    }
+
+    private static bool Agrees(Field field, string labelled, string value) => field.Kind switch {
+        "choice" => !field.Options.Contains(labelled, StringComparer.Ordinal) || labelled == value,
+        "measurement" => Normalize(labelled) == Normalize(value) || MeasurementWritten(value, labelled),
+        _ => Normalize(labelled).Contains(Normalize(value), StringComparison.OrdinalIgnoreCase),
+    };
+
+    private static string? FieldSide(string label) => label.StartsWith("Right ", StringComparison.Ordinal) ? "right" : label.StartsWith("Left ", StringComparison.Ordinal) ? "left" : null;
+
+    private static bool SideWritten(string notes, int start, int end, string side)
+    {
+        var from = 0;
+        foreach (Match gap in Paragraph.Matches(notes[..start])) from = gap.Index + gap.Length;
+        foreach (Match word in SideWord.Matches(notes[from..end])) {
+            var name = word.Groups[1].Value.ToLowerInvariant();
+            if (name is "both" or "bilateral" or "bilaterally" or "either" || (side == "right" ? name is "right" or "rt" : name is "left" or "lt")) return true;
+        }
+        return false;
+    }
+
     private static int CodePointOffset(string text, int offset) {
         var codePoints = 0; var utf16 = 0;
         foreach (var rune in text.EnumerateRunes()) { if (codePoints++ == offset) return utf16; utf16 += rune.Utf16SequenceLength; }

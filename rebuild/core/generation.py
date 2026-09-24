@@ -42,6 +42,9 @@ PREVIOUS_PROMPT_VERSION = 'extractive-v5-tab-independent-sections'
 CURRENT_PROMPT_VERSION = 'extractive-v6-source-scope-attestation'
 TAB_PROMPT_VERSIONS = frozenset(('extractive-v4-tab-evidence-units', PREVIOUS_PROMPT_VERSION,
                                  CURRENT_PROMPT_VERSION))
+#: The narrative contract for the qualified WM IOV form (`wm_narrative`). A job carries it in its write-once config
+#: only when the flag was on when it was quoted, so its attribution names the instructions it was actually sent.
+NARRATIVE_CONTRACT = 'wm-narrative-v1'
 
 # The tab contract has carried this since v4; the LEGACY contract — the one a table,
 # multi-column or mixed mapping selects — never did. Defined once because it must reach BOTH
@@ -80,7 +83,24 @@ def configuration():
     price={k:config[k] for k in ('provider','model','input_rate','output_rate','cached_rate','voice_rate_minute','voice_rate_second','discount_rate')}
     price.update(cost_basis='configured_usd_rates',voice_provider='deepgram:nova-3-medical',voice_cost_quantum='0.0000000001',voice_rounding='half_even',multiplier='1.5')
     config['pricing_version']='configured-v1:'+hashlib.sha256(json.dumps(price,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    # Absent unless the flag is on: with it off the configuration, and so every quote and job, is unchanged.
+    if getattr(settings,'WM_NARRATIVE',False): config['narrative_contract']=NARRATIVE_CONTRACT
     return config
+
+
+def narrative_contract(fields,config):
+    """Whether THIS job runs the narrative contract: quoted with it, and the qualified Word form."""
+    return (config or {}).get('narrative_contract')==NARRATIVE_CONTRACT and qualified_word_form(fields)
+
+
+def narrative_refusal(fields,config):
+    """Why a narrative job may not reach the provider, or None. Read before any request is made."""
+    if not narrative_contract(fields,config): return None
+    if not getattr(settings,'WM_NARRATIVE',False):
+        return 'Narrative filling was switched off after this was quoted. Nothing was sent or charged; generate again.'
+    if config.get('mode')=='live' and config.get('provider')!='anthropic':
+        return 'Narrative filling runs only on the approved clinical provider. Nothing was sent or charged.'
+    return None
 
 # Settlement-safe precision: eleven decimals, so the exact 1.5× charge always fits the twelve-decimal ledger.
 COST_QUANTUM=Decimal('0.00000000001')
@@ -119,10 +139,14 @@ def rates(config=None):
         return values
     except Exception: raise ValidationError('Provider rates are not configured. No billable request can run.')
 
-def maximum_cost(notes,fields,config=None,*,context_labels=()):
+def maximum_cost(notes,fields,config=None,*,context_labels=(),requirements=None):
     config=config or configuration()
     if config['mode']!='live': return Decimal('0')
     r=rates(config)
+    if narrative_contract(fields,config):
+        from . import wm_narrative
+        sent=json.dumps(wm_narrative.payload(notes,fields,requirements or []))+wm_narrative.INSTRUCTIONS+json.dumps(wm_narrative.NarrativeSelections.model_json_schema())
+        return Decimal(len(sent.encode())+12000)*r['input_per_million']/1000000+Decimal(wm_narrative.PROVIDER_MAX_TOKENS)*r['output_per_million']/1000000
     # UTF-8 bytes bound text token count conservatively; include schema/instruction overhead.
     return Decimal(len(json.dumps({'notes':notes,'fields':fields,'context_labels':list(context_labels),
         'source_units':source_units(notes,fields,context_labels=context_labels)[0] if tab_evidence_contract(fields) else []}).encode())+12000)*r['input_per_million']/1000000+Decimal(6000)*r['output_per_million']/1000000
@@ -897,7 +921,7 @@ def bare_label(text, parsed):
             and not any(SCOPE_POINTER.search(reading) or POINTER.search(reading) for reading in readings(text)))
 
 
-def heading_governance(notes, labels, *, lexical=True, per_sentence=True, questions=frozenset()):
+def heading_governance(notes, labels, *, lexical=True, per_sentence=True, questions=frozenset(), errata=True):
     """⚠️ ONE READER FOR EVERY CONSUMER: both validators, the page, save and finalization call this, never a copy.
 
     Returns `(starts, spans, headings, forward, backward, meaning)`: the note's non-empty lines' start offsets (sorted)
@@ -999,7 +1023,8 @@ def heading_governance(notes, labels, *, lexical=True, per_sentence=True, questi
                 unit_starts = [low for low, _ in units]
                 sentence_starts = [low for low, _ in sentences]
                 owners = {}                       # each unit's own label, parsed once however many errata it holds
-                for at in erratum_points(stripped):
+                # The narrative WM contract scopes corrections itself (`wm_narrative.correction_hold`): no reach here.
+                for at in (erratum_points(stripped) if errata else ()):
                     low, high = units[max(0, bisect.bisect_right(unit_starts, at) - 1)]
                     if low not in owners:
                         found = (answered_label if per_sentence else labelled_value)(stripped[low:high], labels)
@@ -1347,12 +1372,13 @@ def judged_context(governance, notes, index, label, evidence):
     return None if found is None else list(found)
 
 
-def governance_for(notes, fields, context_labels=()):
+def governance_for(notes, fields, context_labels=(), narrative=False):
     """The note's governance for this form, computed once: on the qualified Word form labelled lines never govern,
     and the answered-question exception reads answers the way this form's validator does. Its last element is the
     occurrence index, so the page judges a stored answer over every occurrence exactly as generation does."""
     labels = recognized_labels(fields, context_labels)
-    per_sentence = tab_evidence_contract(fields)
+    # The narrative WM contract (`wm_narrative`) reads its answers per sentence, like the tab contract.
+    per_sentence = tab_evidence_contract(fields) or narrative
     units = None
     if per_sentence:
         try:
@@ -1361,7 +1387,7 @@ def governance_for(notes, fields, context_labels=()):
             units = []
     word_form = qualified_word_form(fields)
     governance = heading_governance(notes, labels, lexical=not word_form, per_sentence=per_sentence,
-                                    questions=question_labels(fields) if word_form else frozenset())
+                                    questions=question_labels(fields) if word_form else frozenset(), errata=not narrative)
     return (*governance, occurrence_index(notes, labels, units))
 
 
@@ -1492,6 +1518,12 @@ def governed_decisions(notes, fields, answers, context_labels=()):
     governance = governance_for(notes, fields, context_labels)
     word_form = qualified_word_form(fields)
     found = []
+    from . import wm_narrative
+    if wm_narrative.active(fields, answers):
+        # The narrative contract's own reader for every answer resting on source sentences (headings and pointers per
+        # sentence, corrections scoped); an answer resting on labelled lines is judged below as it always was.
+        found = wm_narrative.held_labels(notes, fields, context_labels, answers)
+        answers = {key: answer for key, answer in answers.items() if not wm_narrative.has_unit_evidence(answer)}
     for field in fields:
         answer = answers.get(field['key']) or {}
         if governed_supported(governance, notes, answer, field['label']) is not None:
@@ -1679,9 +1711,94 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
         output[item.key]=answer
     return output
 
-def generate(notes,fields,config=None,*,context_labels=()):
+def anthropic_settlement(response,r,config):
+    """(cost, usage units, recorded rates) of one Anthropic response: the ONE formula every Anthropic branch settles by."""
+    u=response.usage
+    cached=getattr(u,'cache_read_input_tokens',0) or 0
+    written=getattr(u,'cache_creation_input_tokens',0) or 0
+    units={'input_tokens':u.input_tokens,'cached_input_tokens':cached,'cache_creation_tokens':written,'output_tokens':u.output_tokens}
+    list_cost=(u.input_tokens*r['input_per_million']+cached*r['cached_per_million']+written*r['input_per_million']*Decimal('1.25')+u.output_tokens*r['output_per_million'])/1000000
+    discount=discount_rate(config);cost=discounted_cost(list_cost,discount)
+    return cost,units,cost_rates(r,list_cost,discount)
+
+
+REPLAY_LIMIT=2*1024*1024
+
+def narrative_fixture(notes,fields,requirements):
+    """The synthetic provider for the narrative contract (fixture mode only, never live): a retained provider-shaped
+    response for exactly these notes (`AI_REPLAY_DIR/<sha256 of the notes>.json`), else the labelled lines read the
+    way the labelled fixture reads them. Either way the same validator judges it as it would a live response."""
+    from pathlib import Path
+    folder=getattr(settings,'AI_REPLAY_DIR','')
+    if folder:
+        path=Path(folder)/(hashlib.sha256(notes.encode()).hexdigest()+'.json')
+        if path.is_file() and not path.is_symlink():
+            if path.stat().st_size>REPLAY_LIMIT: raise ValidationError('Retained response exceeds its limit.')
+            return path.read_text(encoding='utf-8'),'replay'
+    from . import wm_narrative
+    labels_=[row['label'] for row in requirements]
+    labels=recognized_labels(fields,labels_)
+    unit_list=source_units(notes,fields,context_labels=labels_)[0]
+    rows=[]
+    for f in fields:
+        mine=f['label'].strip().rstrip(':?').casefold()
+        found=[(u['id'],p[1]) for u in unit_list if (p:=labelled_value(u['quote'],labels)) and p[0]==mine and p[1]]
+        values=list(dict.fromkeys(value for _,value in found))
+        value=values[0] if values else ''
+        if f.get('kind')=='choice' and value not in (f.get('options') or []): value=''
+        if f.get('kind')=='measurement' and not wm_narrative.MEASUREMENT_VALUE.fullmatch(value): value=''
+        rows.append({'key':f['key'],'value':value,'unit_ids':[i for i,v in found if v==value] if value else [],
+                     'conflict':len(values)>1,'subject':'patient','certainty':'definite',
+                     'timing':'prior' if wm_narrative.previous_treatment(f) else 'current'})
+    return json.dumps({'fields':rows,'statements':[]}),'fixture'
+
+
+def generate_narrative(notes,fields,config,requirements):
+    from . import wm_narrative
+    refusal=narrative_refusal(fields,config)
+    if refusal: raise ValidationError(refusal)
+    raw={'notes':notes,'fields':fields,'requirements':requirements,'evidence_contract':NARRATIVE_CONTRACT}
+    if config['mode']!='live':
+        content,source=narrative_fixture(notes,fields,requirements)
+        return {**raw,'narrative_replay':content,'replay_source':source},Decimal('0'),{},{},'synthetic-narrative-'+source,'',True
+    from anthropic import Anthropic
+    r=rates(config)
+    request=json.dumps(wm_narrative.payload(notes,fields,requirements))
+    client=Anthropic(timeout=90,max_retries=0)
+    response=client.messages.create(model=config['model'],max_tokens=wm_narrative.PROVIDER_MAX_TOKENS,
+        system=wm_narrative.INSTRUCTIONS,messages=[{'role':'user','content':request}],
+        output_config={'format':{'type':'json_schema','schema':wm_narrative.NarrativeSelections.model_json_schema()}})
+    cost,units,recorded=anthropic_settlement(response,r,config)
+    return {**raw,'anthropic_response':response},cost,units,recorded,f"anthropic:{config['model']}",getattr(response,'_request_id',None) or '',False
+
+
+def narrative_validated(result):
+    """(answers, statement proposals) of a narrative result, live or synthetic, through the one validator."""
+    from . import wm_narrative
+    if 'anthropic_response' in result:
+        response=result['anthropic_response']
+        if response.stop_reason!='end_turn': raise ValidationError('Provider output incomplete; no answers adopted.')
+        content=''.join(block.text for block in response.content if block.type=='text')
+    else:
+        content=result['narrative_replay']
+    selections=wm_narrative.NarrativeSelections.model_validate_json(content)
+    return wm_narrative.validate(result['notes'],result['fields'],selections,result['requirements'])
+
+
+def adoption(result):
+    """(answers, the template review to start from) of a generation result: the narrative contract's statement
+    proposals pre-select the page and nothing else; every other contract starts from an empty review."""
+    if isinstance(result,dict) and result.get('evidence_contract')==NARRATIVE_CONTRACT:
+        answers,proposals=narrative_validated(result)
+        return answers,({'proposals':proposals} if proposals else {})
+    return validated(result),{}
+
+
+def generate(notes,fields,config=None,*,context_labels=(),requirements=None):
     config=config or configuration()
     if len(notes)>50000 or len(fields)>100: raise ValidationError('Source exceeds supported limits; split explicitly. Nothing was truncated.')
+    if narrative_contract(fields,config):
+        return generate_narrative(notes,fields,config,list(requirements or []))
     if config['mode']!='live':
         contract=None if config.get('prompt_version') in TAB_PROMPT_VERSIONS else 'legacy'
         return validate_selections(notes,fields,fixture(notes,fields,context_labels=context_labels,evidence_contract=contract),context_labels=context_labels,evidence_contract=contract),Decimal('0'),{}, {},'synthetic-extractive-fixture','',True
@@ -1718,15 +1835,10 @@ def generate(notes,fields,config=None,*,context_labels=()):
             system=instructions,
             messages=[{'role':'user','content':json.dumps(payload)}],
             output_config={'format':{'type':'json_schema','schema':schema.model_json_schema()}})
-        u=response.usage
-        cached=getattr(u,'cache_read_input_tokens',0) or 0
-        written=getattr(u,'cache_creation_input_tokens',0) or 0
-        units={'input_tokens':u.input_tokens,'cached_input_tokens':cached,'cache_creation_tokens':written,'output_tokens':u.output_tokens}
-        list_cost=(u.input_tokens*r['input_per_million']+cached*r['cached_per_million']+written*r['input_per_million']*Decimal('1.25')+u.output_tokens*r['output_per_million'])/1000000
-        discount=discount_rate(config);cost=discounted_cost(list_cost,discount)
+        cost,units,recorded=anthropic_settlement(response,r,config)
         raw={'anthropic_response':response,'notes':notes,'fields':fields,'context_labels':list(context_labels),
              'evidence_contract':TAB_CONTRACT if natural else 'legacy'}
-        return raw,cost,units,cost_rates(r,list_cost,discount),f"anthropic:{config['model']}",getattr(response,'_request_id',None) or '',False
+        return raw,cost,units,recorded,f"anthropic:{config['model']}",getattr(response,'_request_id',None) or '',False
     from openai import OpenAI
     client=OpenAI(timeout=60,max_retries=0)
     r=rates(config)
@@ -1744,6 +1856,8 @@ def generate(notes,fields,config=None,*,context_labels=()):
     return raw,cost,units,cost_rates(r,list_cost,discount),f"openai:{config['model']}",getattr(response,'_request_id',None) or '',False
 
 def validated(result):
+    if isinstance(result,dict) and result.get('evidence_contract')==NARRATIVE_CONTRACT:
+        return narrative_validated(result)[0]
     if isinstance(result,dict) and 'anthropic_response' in result:
         response=result['anthropic_response']
         if response.stop_reason!='end_turn': raise ValidationError('Provider output incomplete; no answers adopted.')
