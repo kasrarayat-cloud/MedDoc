@@ -88,6 +88,14 @@ prisma_real() {
 }
 prisma_real
 
+# ── rebuild/.venv: THE SHARED VENV, LINKED ONCE AND VALIDATED (2026-09-24). ──
+# A second plain `ln -s` onto an existing directory link writes INSIDE the target: it planted `.venv/.venv` in the
+# shared production venv, and the activation's readability gate refused an install 18 hours later. The pre-push hook
+# needs this link, so it is made here, by the one script that reuses a correct link and refuses anything else.
+if [ -d "$TARGET/rebuild" ]; then
+  bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/link-worktree-venv.sh" "$TARGET"
+fi
+
 echo
 # ⚠️ THE CHECKER IS INVOKED FROM THIS SCRIPT'S OWN DIRECTORY, NOT FROM $TARGET.
 # A worktree being repaired is often on a branch that PREDATES this harness, so
