@@ -95,6 +95,10 @@ def source_quote_evidence(notes,label,raw,labels,sentences=None,previous=(),pref
     save of 500 repeated lines per field quadratic, 120 s)."""
     if len(raw)>50000:raise ValidationError('Source quotations exceed the supported limit; nothing was truncated.')
     from . import wm_narrative
+    if sentences is not None and sum(1 for line in raw.splitlines() if line.strip())>wm_narrative.EVIDENCE_LIMIT:
+        # (review's bound, before anything is resolved or stored: round 8 — posted sentences were stored without one, and
+        # each later save matched every posted line against all of them, 190 s)
+        raise ValidationError(f'Cite at most {wm_narrative.EVIDENCE_LIMIT} source sentences for one answer; nothing was truncated.')
     units,_=wm_review.source_units(notes,label,labels)
     evidence=[];used=set();carried={};clean={};judged=[0]
     def carries(unit):

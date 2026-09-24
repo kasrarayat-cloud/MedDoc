@@ -340,7 +340,7 @@ def source_units(notes, fields, *, context_labels=()):
         for end,next_start in boundaries+[(len(stripped),len(stripped))]:
             quote=stripped[local:end]
             if quote:
-                if UNSCOPED_NEGATIVE_HEADING.search(quote): inherited=True
+                if ':' in quote and UNSCOPED_NEGATIVE_HEADING.search(quote): inherited=True   # (it needs a colon: without one it backtracked per denial word)
                 if len(units)>=1000: raise ValidationError('Source exceeds 1,000 complete statements; split explicitly. Nothing was truncated.')
                 correction=INLINE_CORRECTION.search(quote)
                 units.append({'id':len(units)+1,'quote':quote,'start':start+local,'end':start+end,
@@ -451,7 +451,7 @@ def negative_heading(notes):
 
     A property of the whole note, asked once per FIELD: cached, so a 100-field form pays for it once.
     """
-    return any(UNSCOPED_NEGATIVE_HEADING.search(line) or denial_before_colon(line) or governs_other_lines(line)
+    return any((':' in line and UNSCOPED_NEGATIVE_HEADING.search(line)) or denial_before_colon(line) or governs_other_lines(line)
                for line in notes.splitlines())
 
 
