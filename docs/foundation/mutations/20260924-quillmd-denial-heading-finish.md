@@ -35,8 +35,19 @@ The clinical-context milestone (owner, 2026-09-23), finished:
 4. **The governing heading is on the review page** when it lies far from the answer: a family-history
    heading twenty lines above, and a denial heading beyond a full window of sub-headings (the rest are
    counted), each asserted on the rendered page.
+5. **Refutation rounds 16-19 over this PR's own diff**, each HIGH fixed and pinned:
+   - a correction glued to the sentence before it (a missed space, Word markup, a bracket, bullet,
+     quote or `)`-list marker in between) is read; never after a decimal point in running text;
+     a full-width sentence end starts one too;
+   - a correction after a value in any shape (`12.5`, `3.1mmol/L`, `1.2x0.8`, `1.5-2.0`, `3,1`) is
+     read like its integer twin, in linear time;
+   - the review page shows every governing line when there are fifteen or fewer, the note's
+     first governing line always, each window bounded at its governing end (a correction's
+     window can no longer swallow a denial in one cut quote);
+   - the qualified Word form's page shows a held row as a conflict, without the "conflicting
+     values" message; the CI-only WM workflow test posts the page exactly as rendered.
 
-Read-only count at 2026-09-23T22:37:43Z, judged by the target's own page and finalization readers:
+Read-only count at 2026-09-24T00:51:15Z, judged by the target's own page and finalization readers:
 29 encounters (9 draft, 3 review, 17 finalized), 3 non-finalized with answers (51 answers, none on
 the qualified Word form); **0** newly shown held and **0** refused at finalization.
 
@@ -164,5 +175,7 @@ leaves release `02c29f99` serving.
 PR #1284: fifteen rounds of adversarial refutation, mutation proofs and the retained-response
 replay; the owner's 2026-09-23 decisions (ship after a pre-merge round with no HIGH on plausible
 clinical text; crafted-input cost edges and the listed reading limits documented) stand. The finish
-PR's clinical change (the qualified-form value heading) gets its own refutation pass over the
-finished diff before merge, and mutation proofs for each of its conditions.
+PR's diff had its own refutation passes (rounds 16-20, three read-only lenses each: inversion,
+false rejection with the retained-response replay, and state or performance), a mutation proof
+for every condition it adds (each caught, or equivalent by construction and removed), and the
+WM workflow test run in CI with the Word runtime.

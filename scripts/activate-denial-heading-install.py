@@ -34,7 +34,7 @@ SOURCE = Path(__file__).resolve().parents[1]
 APP = ROOT / 'rebuild'
 SELF = 'scripts/activate-denial-heading-install.py'
 DECL = 'docs/foundation/mutations/20260924-quillmd-denial-heading-finish.md'
-DECL_SHA256 = 'b1e5aa57d847b99c204a49a34c82cbdc38aa68f00c6bacb1eb362c6beb45c99a'
+DECL_SHA256 = '2c2c959048bd321b54275733f8c8ec4b6fc3db5cb7f64d502f89c498bf9a73b4'
 #: The tree commit and the configured release AGREE here, which is the normal case and is
 #: asserted rather than assumed: the 2026-09-22 repair exists because they once did not.
 BASELINE = '02c29f991e50327525ebc6b4498f5cde08f78bbb'
