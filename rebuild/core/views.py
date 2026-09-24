@@ -425,6 +425,10 @@ def encounter_detail(request,pk):
             row['source_quote']=answer.get('review_quote','\n'.join(item['quote'] for item in row.get('evidence',[])))
             reasons=assessment['answers'][row['key']]['blockers'] if assessment else []
             if assessment:row['status']=assessment['answers'][row['key']]['status']
+            # A held answer is a decision the page shows beside its governing lines: its badge says so, and "conflicting
+            # values" (the stored record's status, or the empty held box) is not its reason (sixteenth pass).
+            if e.status!='finalized' and row.get('held_candidate') and not row.get('text'):
+                row['status']='conflict'; reasons=[reason for reason in reasons if reason!='conflicting_source']
             row['review_errors']=[WM_BLOCKERS.get(reason,'Clinical review is incomplete.') for reason in reasons]
             row['review_errors']+=[conflict['explanation'] for conflict in wm_conflicts if row['key'] in conflict['answer_keys']]
         for row in requirements:

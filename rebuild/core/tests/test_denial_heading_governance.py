@@ -794,11 +794,11 @@ class WhatTheFifthPassFound(ExpectationsMixin, TestCase):
         held = fixture_answers(['Symptoms'], notes)['Symptoms']['held_candidate']
         self.assertEqual(len(held['context']), 16)
         self.assertEqual(held['context'][-1], {'more': 385})
-        # With fewer than the cap, the three nearest ordinary headings are all shown.
+        # With fewer than the cap, every governing line is shown and none is counted (REVISED in the sixteenth pass:
+        # this asserted the three nearest and `more: 2`, which hid a `none of the following.` heading behind them).
         notes = 'Section A:\nSection B:\nSection C:\nSection D:\nSection E:\nSymptoms: chest pain'
         held = fixture_answers(['Symptoms'], notes)['Symptoms']['held_candidate']
-        self.assertEqual([e.get('quote') for e in held['context']], ['Section C:', 'Section D:', 'Section E:', None])
-        self.assertEqual(held['context'][-1], {'more': 2})
+        self.assertEqual([e.get('quote') for e in held['context']], ['Section A:', 'Section B:', 'Section C:', 'Section D:', 'Section E:'])
 
     def test_a_disagreement_says_so_rather_than_pointing_elsewhere(self):
         answer = provider_answers(['Extent', 'Complications'], 'Extent: splenic flexure\nThe scope was advanced to the cecum.\n'
@@ -1809,14 +1809,18 @@ class TheQualifiedWordFormKeepsItsLabelsSelfContained(ExpectationsMixin, TestCas
 
     def test_a_labelled_line_never_governs_on_the_qualified_form(self):
         """⚠️ THIRD PASS. Its labels carry colons, its signature statement's approved wording ends in `By:`, and an
-        unanswered question ends in a colon: read as headings, each held every one of the 90 answers."""
+        unanswered question ends in a colon: read as headings, each held every one of the 90 answers.
+
+        ⚠️ REVISED 2026-09-23, when the older-form case was followed through review: this test also asserted that
+        `…anatomical location: none of the following:` above the measurements left them READY, which is the documented
+        defect itself. A question whose own value is a heading now governs (`TheOlderFormCaseFollowedThrough`); the
+        statement, mid-note too, and the unanswered question still do not."""
         fields = self.FIELDS + [{'key': 'measurement_1_1', 'label': 'Right GSV at the SFJ: diameter (mm)', 'kind': 'measurement',
                                  'locator': {'row': 1, 'column': 1, 'unit': 'mm'}}]
         signature = 'Prewritten statement: Signature timestamp: Electronically Signed On <<insert date and time>> By:'
         base = ('Left GSV at the SFJ: reflux time (ms): 700 ms\nRight impression: reflux or absence: reflux positive.\n'
                 'Right tributary row 11: anatomical location: lateral calf')
-        heading = 'Right tributary row 11: anatomical location: none of the following:'
-        for notes in (base + '\n' + signature, heading + '\n' + base.rsplit('\n', 1)[0]):
+        for notes in (base + '\n' + signature, signature + '\n' + base):
             with self.subTest(notes=notes):
                 answers = generation.generate(notes, fields, FIXTURE, context_labels=['Prewritten statement: Signature timestamp'])[0]
                 self.assert_ready(answers['measurement_15_2'], '700 ms')
@@ -2233,3 +2237,466 @@ class TheDecisionIsEnforcedThroughFinalizationAndExport(DocumentWorkflow):
         encounter.refresh_from_db()
         self.assertNotEqual(encounter.status, 'finalized')
         self.assertContains(response, 'still need your decision: Symptoms.')
+
+
+class TheOlderFormCaseFollowedThrough(ExpectationsMixin, TestCase):
+    """The case the pilot guide documented as open ("on question/answer tables, placeholders, fillable PDFs and the WM
+    IOV form, a heading that is itself one of the form's questions ... a denied finding can come back as a ready
+    answer"), followed through review, finalization and export on each form (2026-09-23). Tables, placeholders and
+    PDFs hold it (their end-to-end tests are below and above); the qualified Word form did not: there a labelled line
+    never governed, so a question whose own VALUE is a heading left every answer after it ready."""
+    FIELDS = TheQualifiedWordFormKeepsItsLabelsSelfContained.FIELDS + [
+        {'key': 'measurement_1_1', 'label': 'Right GSV at the SFJ: diameter (mm)', 'kind': 'measurement',
+         'locator': {'row': 1, 'column': 1, 'unit': 'mm'}}]
+    HEADING = 'Right tributary row 11: anatomical location: none of the following:'
+    SIGNATURE = 'Prewritten statement: Signature timestamp: Electronically Signed On <<insert date and time>> By:'
+
+    def answers(self, notes):
+        return generation.generate(notes, self.FIELDS, FIXTURE, context_labels=['Prewritten statement: Signature timestamp'])[0]
+
+    def test_a_question_whose_value_is_a_heading_governs_what_follows_on_the_qualified_form(self):
+        notes = (self.HEADING + '\nLeft GSV at the SFJ: reflux time (ms): 700 ms\n'
+                 'Right impression: reflux or absence: reflux positive.')
+        answers = self.answers(notes)
+        self.assert_needs_decision(answers['measurement_15_2'], '700 ms', self.HEADING)
+        self.assert_needs_decision(answers['sdt_-213273323'], 'reflux positive.', self.HEADING)
+        # Its own value introduces the lines after it; it is not a location.
+        self.assert_needs_decision(answers['location_11'], 'none of the following:', self.HEADING)
+        # The Word review validates evidence per label: the candidate keeps its OWN line, the heading travels as context.
+        self.assertEqual([entry['quote'] for entry in answers['measurement_15_2']['held_candidate']['evidence']], ['700 ms'])
+        self.assertNotIn('Leave blank', answers['measurement_15_2']['held_candidate']['reason'])
+
+    def test_what_comes_before_it_stays_ready(self):
+        answers = self.answers('Left GSV at the SFJ: reflux time (ms): 700 ms\n' + self.HEADING +
+                               '\nRight impression: reflux or absence: reflux positive.')
+        self.assert_ready(answers['measurement_15_2'], '700 ms')
+        self.assert_needs_decision(answers['sdt_-213273323'], 'reflux positive.', self.HEADING)
+
+    def test_a_statement_an_unanswered_question_or_an_ordinary_value_still_governs_nothing(self):
+        """Positive controls: the approved signature wording ends in `By:` (anywhere in the note), an unanswered
+        question is only its label, and words in a value are not read on this form (round 6 of the pilot)."""
+        tail = 'Left GSV at the SFJ: reflux time (ms): 700 ms\nRight impression: reflux or absence: reflux positive.'
+        for line in (self.SIGNATURE, 'Right tributary row 11: anatomical location: lateral calf, not visualized below',
+                     'Right tributary row 11: anatomical location: lateral calf 10:30',
+                     'Right tributary row 11: anatomical location: lateral calf -'):
+            with self.subTest(line=line):
+                answers = self.answers(line + '\n' + tail)
+                self.assert_ready(answers['measurement_15_2'], '700 ms')
+                self.assert_ready(answers['sdt_-213273323'], 'reflux positive.')
+        answers = self.answers('Right GSV at the SFJ: diameter (mm):\n' + tail)
+        self.assertEqual(answers['measurement_15_2'].get('suggestion'), '700 ms', answers['measurement_15_2'])
+        self.assertNotIn('held_candidate', answers['measurement_15_2'])
+
+    def test_a_value_ending_in_a_colon_fails_closed(self):
+        """The documented cost: a stray colon after a value (`lateral calf:`) holds what follows it, which the clinician
+        types or corrects in the note; it never pre-fills."""
+        answers = self.answers('Right tributary row 11: anatomical location: lateral calf:\n'
+                               'Left GSV at the SFJ: reflux time (ms): 700 ms')
+        self.assert_needs_decision(answers['measurement_15_2'], '700 ms', 'lateral calf:')
+
+    def test_the_page_and_finalization_read_the_same_rule(self):
+        notes = self.HEADING + '\nLeft GSV at the SFJ: reflux time (ms): 700 ms'
+        at = notes.index('700 ms')
+        stale = {'measurement_15_2': {'text': '700 ms', 'status': 'supported', 'reviewed': True,
+                                      'evidence': [{'quote': '700 ms', 'start': at, 'end': at + 6}]}}
+        self.assertEqual(generation.governed_decisions(notes, self.FIELDS, stale, ['Prewritten statement: Signature timestamp']),
+                         ['Left GSV at the SFJ: reflux time (ms)'])
+        governance = generation.governance_for(notes, self.FIELDS, ['Prewritten statement: Signature timestamp'])
+        row = generation.as_currently_governed(governance, notes, {**self.FIELDS[1], **stale['measurement_15_2']}, True)
+        self.assertEqual((row['status'], row['text']), ('conflict', ''))
+        self.assertIn(self.HEADING, [entry['quote'] for entry in row['held_candidate']['context']])
+
+
+class TheSurvivingMutantIsSeparated(ExpectationsMixin, TestCase):
+    """M184 survived the fifteenth-pass mutation run: dropping the namespaced-tag alternative (`<o:p>`, `<w:br>`) from
+    `HTML_TAG` changed no test. A correction after a period and Word's own markup is still a correction: without that
+    alternative the whole line, correction included, came back as a READY answer (measured on the mutant)."""
+
+    def test_a_correction_after_a_namespaced_word_tag_is_read(self):
+        for notes, label, candidate in (
+                ('Findings: sessile polyp.<o:p> Correction: no polyp seen.', 'Findings',
+                 'sessile polyp.<o:p> Correction: no polyp seen.'),
+                ('Chest pain: yes.<w:br> correction, no chest pain', 'Chest pain', 'yes.<w:br> correction, no chest pain')):
+            with self.subTest(notes=notes):
+                answer = fixture_answers([label], notes)[label]
+                self.assert_needs_decision(answer, candidate, notes)
+
+
+class TheGoverningHeadingIsShownAndEnforcedOnEveryOlderForm(DocumentWorkflow):
+    """Stored mappings from real uploads, authenticated, generate -> page -> finalize -> export (2026-09-23)."""
+    CONDITIONS = ['Diabetes', 'Hypertension', 'Asthma', 'Stroke', 'Glaucoma', 'Gout', 'Migraine', 'Epilepsy', 'Anemia',
+                  'Arthritis', 'Osteoporosis', 'Psoriasis', 'Eczema', 'Thyroid disease', 'Kidney stones', 'Colon polyps',
+                  'Breast cancer', 'Melanoma', 'Glaucoma suspect', 'Heart disease']
+    SYSTEMS = ['Constitutional', 'Eyes', 'Ears', 'Nose', 'Throat', 'Cardiovascular', 'Respiratory', 'Gastrointestinal',
+               'Genitourinary', 'Musculoskeletal', 'Skin', 'Neurological', 'Psychiatric', 'Endocrine', 'Hematologic',
+               'Allergic', 'Immunologic', 'Breast']
+
+    def table_docx(self, labels):
+        document = Document()
+        table = document.add_table(rows=len(labels), cols=2)
+        for row, label in enumerate(labels):
+            table.cell(row, 0).text = label
+        buffer = BytesIO(); document.save(buffer)
+        return buffer.getvalue()
+
+    def placeholder_docx(self, labels):
+        document = Document()
+        for label in labels:
+            document.add_paragraph(label + ': {{' + label + '}}')
+        buffer = BytesIO(); document.save(buffer)
+        return buffer.getvalue()
+
+    def fillable_pdf(self, labels):
+        from reportlab.pdfgen import canvas
+        buffer = BytesIO()
+        document = canvas.Canvas(buffer)
+        for index, label in enumerate(labels):
+            document.drawString(30, 780 - 60 * index, label + ':')
+            document.acroForm.textfield(name=label, tooltip=label, x=30, y=740 - 60 * index, width=300, height=30,
+                                        fontName='Helvetica', fontSize=10)
+        document.showPage(); document.save()
+        return buffer.getvalue()
+
+    def generated(self, data, suffix, notes):
+        template, mapping = self.upload(data, suffix)
+        encounter = self.create_encounter(mapping, notes)
+        self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/generate/').status_code, 302)
+        self.assertTrue(run_one())
+        encounter.refresh_from_db()
+        return encounter, {f['label'].rstrip(':'): f['key'] for f in mapping.fields}
+
+    def section(self, encounter, label):
+        page = self.client.get(f'/encounters/{encounter.pk}/').content.decode()
+        sections = [part.split('</section>')[0] for part in page.split('<section class="answer">') if f'{label}</h3>' in part]
+        self.assertEqual(len(sections), 1, f'expected exactly one {label} section')
+        return sections[0]
+
+    def post(self, encounter, keys, **extra):
+        payload = {'revision': encounter.revision}
+        for key in keys:
+            payload['answer_' + key] = ''
+            payload['reviewed_' + key] = 'on'
+        payload.update(extra)
+        self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/save/', payload).status_code, 302)
+        encounter.refresh_from_db()
+
+    def test_a_family_history_heading_twenty_lines_above_is_shown_with_the_last_answer(self):
+        heading = 'Family history: the following conditions:'
+        labels = ['Indication', 'Family history'] + self.CONDITIONS
+        notes = 'Indication: annual physical\n' + heading + '\n' + '\n'.join(c + ': mother' for c in self.CONDITIONS)
+        encounter, keys = self.generated(self.table_docx(labels), 'docx', notes)
+        self.assertEqual((encounter.answers[keys['Indication']]['status'], encounter.answers[keys['Indication']]['text']),
+                         ('supported', 'annual physical'))            # positive control: above the heading, ready
+        last = encounter.answers[keys['Heart disease']]
+        self.assertEqual((last['status'], last['text'], last['held_candidate']['text']), ('conflict', '', 'mother'))
+        self.assertIn(heading, self.governing_lines(self.section(encounter, 'Heart disease')))
+        self.assertNotIn('data-held-candidate', self.section(encounter, 'Indication'))
+
+    def test_a_denial_heading_beyond_a_full_window_of_sub_headings_is_still_shown(self):
+        """Eighteen sub-headings sit between the answer and the denial heading, so more lines govern it than are shown
+        (the page counts the rest); the denial is shown among them because words that change meaning come first."""
+        heading = 'Review of systems: negative for the following:'
+        findings = [system + ' finding' for system in self.SYSTEMS]
+        notes = heading + '\n' + '\n'.join(f'{system}:\n{finding}: present' for system, finding in zip(self.SYSTEMS, findings))
+        encounter, keys = self.generated(self.table_docx(findings), 'docx', notes)
+        section = self.section(encounter, findings[-1])
+        # ⚠️ SIXTEENTH PASS: among the GOVERNING lines, not anywhere in the section (the whole note is shown there as
+        # the source evidence of this note's answers, which made the first version of this test pass vacuously).
+        self.assertIn(heading, self.governing_lines(section))
+        self.assertIn('data-governing-more', section)
+        self.assertEqual(encounter.answers[keys[findings[-1]]]['text'], '')
+
+    def test_a_heading_without_a_denial_word_beyond_a_full_window_is_shown_as_the_outermost(self):
+        heading = 'Patient reports none of the following:'
+        findings = [system + ' finding' for system in self.SYSTEMS]
+        notes = heading + '\n' + '\n'.join(f'{system}:\n{finding}: present' for system, finding in zip(self.SYSTEMS, findings))
+        encounter, keys = self.generated(self.table_docx(findings), 'docx', notes)
+        self.assertIn(heading, self.governing_lines(self.section(encounter, findings[-1])))
+
+    def governing_lines(self, section):
+        import html, re
+        return [html.unescape(quote) for quote in re.findall(r'data-governing-line><strong>[^<]*</strong> <q>(.*?)</q>', section, re.S)]
+
+    def check_older_form(self, data, suffix, exported_value):
+        notes = HEADING + '\nSymptoms: chest pain'
+        encounter, keys = self.generated(data, suffix, notes)
+        ros, symptoms = keys['Review of systems'], keys['Symptoms']
+        answer = encounter.answers[symptoms]
+        self.assertEqual((answer['status'], answer['text'], answer['held_candidate']['text']), ('conflict', '', 'chest pain'))
+        self.assertNotIn('suggestion', answer)
+        self.assertIn(HEADING, self.section(encounter, 'Symptoms'))
+        self.post(encounter, (ros, symptoms))                                   # the tick alone
+        response = self.client.post(f'/encounters/{encounter.pk}/finalize/', {'reviewed': 'on', 'revision': encounter.revision},
+                                    follow=True)
+        encounter.refresh_from_db()
+        self.assertNotEqual(encounter.status, 'finalized')
+        self.assertContains(response, 'Symptoms')
+        self.assertEqual(self.client.get(f'/encounters/{encounter.pk}/export/').status_code, 404)
+        self.post(encounter, (ros, symptoms), **{'answer_' + ros: 'negative for chest pain', 'answer_' + symptoms: 'denies chest pain'})
+        exported = self.finalize(encounter)
+        self.assertEqual(exported_value(exported, 'Symptoms'), 'denies chest pain')
+        return exported
+
+    def test_a_fillable_pdf_holds_the_denied_finding_through_finalization_and_export(self):
+        from pypdf import PdfReader
+        exported = self.check_older_form(self.fillable_pdf(['Review of systems', 'Symptoms']), 'pdf',
+                                         lambda data, name: PdfReader(BytesIO(data)).get_form_text_fields()[name])
+        self.assertNotIn('chest pain', PdfReader(BytesIO(exported)).get_form_text_fields()['Symptoms'].replace('denies chest pain', ''))
+
+    def test_a_placeholder_form_holds_the_denied_finding_through_finalization_and_export(self):
+        def value(data, name):
+            lines = [p.text for p in Document(BytesIO(data)).paragraphs if p.text.startswith(name + ':')]
+            self.assertEqual(len(lines), 1, lines)
+            return lines[0].split(':', 1)[1].strip()
+        self.check_older_form(self.placeholder_docx(['Review of systems', 'Symptoms']), 'docx', value)
+
+
+class WhatTheSixteenthPassFound(ExpectationsMixin, TestCase):
+    """Round 16 over the finish delta (2026-09-23)."""
+    FORM = ['Findings', 'Histology']
+
+    def test_a_correction_glued_to_the_sentence_before_it_is_read(self):
+        """A missed space, or Word markup with none after it: the corrected finding was READY and finalized."""
+        for tail in ('adenoma.Correction: there was no polyp.', 'adenoma.<o:p></o:p>Correction: there was no polyp.',
+                     'adenoma.<w:br/>Correction: there was no polyp.', 'adenoma.<br>Correction: there was no polyp.',
+                     'adenoma.&nbsp;Correction: there was no polyp.', 'adenoma!Correction: no polyp.',
+                     'adenoma.Transcription correction: there was no polyp.'):
+            with self.subTest(tail=tail):
+                answers = fixture_answers(self.FORM, 'Findings: sessile polyp.\nHistology: ' + tail)
+                self.assert_needs_decision(answers['Findings'], 'sessile polyp.', 'Histology: ' + tail)
+
+    def test_nothing_else_glued_to_a_sentence_end_is_read(self):
+        """Positive controls: an ordinary glued sentence, a treatment, and an abbreviation before the word."""
+        for tail in ('adenoma.Margins clear.', 'adenoma.Correction scale per protocol.', 'adenoma, e.g.Correction of the view.'):
+            with self.subTest(tail=tail):
+                self.assert_ready(fixture_answers(self.FORM, 'Findings: sessile polyp.\nHistology: ' + tail)['Findings'],
+                                  'sessile polyp.')
+
+    def test_every_governing_line_is_shown_when_they_fit(self):
+        """`none` is not a word that changes meaning, and three nearer governing lines stood between: the heading was
+        counted and not shown, though only five lines governed the answer."""
+        labels = ['Review of systems', 'Cardiovascular', 'Chest pain', 'Respiratory', 'Cough', 'Gastrointestinal', 'Nausea',
+                  'Neurological', 'Headache']
+        notes = ('Review of systems: none of the following.\nCardiovascular: findings below.\nChest pain: at rest\n'
+                 'Respiratory: findings below.\nCough: productive\nGastrointestinal: findings below.\nNausea: after meals\n'
+                 'Neurological: findings below.\nHeadache: frontal')
+        answer = fixture_answers(labels, notes)['Headache']
+        self.assert_needs_decision(answer, 'frontal', 'Review of systems: none of the following.')
+        self.assertFalse([entry for entry in answer['held_candidate']['context'] if 'more' in entry])
+
+    def test_every_line_that_governs_from_below_is_shown_when_they_fit(self):
+        """Five headings after the answer that name what precedes them, none with words that change meaning: the three
+        nearest were shown and the other two counted (the mutation run of the sixteenth-pass repair)."""
+        lines = ['See the above:', 'As listed above:', 'Those above:', 'All of the above:', 'Items listed:']
+        answer = fixture_answers(['Symptoms'], 'Symptoms: chest pain\n' + '\n'.join(lines))['Symptoms']
+        quotes = [entry.get('quote') for entry in answer['held_candidate']['context']]
+        self.assertEqual(quotes, lines)
+
+
+class WhatTheSeventeenthPassFound(ExpectationsMixin, TestCase):
+    """Round 17 over the sixteenth-pass repairs (2026-09-23)."""
+    FORM = ['Findings', 'Histology']
+
+    def notes(self, tail):
+        return 'Findings: sessile polyp.\nHistology: ' + tail
+
+    def test_a_glued_correction_behind_a_bracket_bullet_quote_or_list_marker_is_read(self):
+        for tail in ('adenoma.(Correction: there was no polyp.)', 'adenoma.[Correction: no polyp.]',
+                     'adenoma.<br>• Correction: no polyp.', 'adenoma.a) Correction: no polyp.', 'adenoma.“Correction: no polyp.”',
+                     'adenoma.– Correction: no polyp.', 'adenoma.1) Correction: no polyp.',
+                     '6.2 mm.Correction: 5.2 mm', 'Temp 37.8.Correction: 38.7'):
+            with self.subTest(tail=tail):
+                self.assert_needs_decision(fixture_answers(self.FORM, self.notes(tail))['Findings'], 'sessile polyp.',
+                                           'Histology: ' + tail)
+
+    def test_a_decimal_point_before_the_word_is_not_a_sentence_end(self):
+        """The sixteenth-pass repair read `1.5u correction,` (a dose) as a correction and held every earlier answer."""
+        for tail in ('adenoma, lispro 1.5u correction, ICR 1:15', 'BGL 15.2 correction, 2u given.',
+                     'At 14.30 correction, 2 units given.', 'Near add +2.50 correction; progressive lenses.'):
+            with self.subTest(tail=tail):
+                self.assert_ready(fixture_answers(self.FORM, self.notes(tail))['Findings'], 'sessile polyp.')
+
+    def test_a_full_width_sentence_end_starts_a_correction(self):
+        for tail in ('adenoma。 Correction: there was no polyp.', 'adenoma。Correction: no polyp.', 'adenoma．Correction: no polyp.'):
+            with self.subTest(tail=tail):
+                self.assert_needs_decision(fixture_answers(self.FORM, self.notes(tail))['Findings'], 'sessile polyp.',
+                                           'Histology: ' + tail)
+
+    def test_a_skipped_abbreviation_does_not_hide_a_correction_it_overlaps(self):
+        tail = 'adenoma vs.<a href="mailto:">Correction: there was no polyp.</a>'
+        self.assert_needs_decision(fixture_answers(self.FORM, self.notes(tail))['Findings'], 'sessile polyp.', 'Histology: ' + tail)
+
+    def test_the_outermost_heading_is_shown_on_a_line_of_nearer_governing_sentences(self):
+        labels = ['Review of systems', 'Chest pain', 'Cough', 'Headache']
+        notes = ('Review of systems: none of the following. Cardiac as below. Pulmonary as below. Neuro as below.\n'
+                 'Chest pain: at rest\nCough: productive\nHeadache: frontal')
+        answer = fixture_answers(labels, notes)['Headache']
+        self.assert_needs_decision(answer, 'frontal', 'Review of systems: none of the following.')
+
+
+class WhatTheEighteenthPassFound(ExpectationsMixin, TestCase):
+    """Round 18 over the seventeenth-pass repairs (2026-09-24)."""
+
+    def test_a_correction_after_a_decimal_value_is_read_like_its_integer_twin(self):
+        for line in ('Polyp size: 12.5 correction: 8.5 mm', 'Polyp size: 1.5 correction: 2.5 cm', 'Potassium: 3.1 correction: 3.4',
+                     'Potassium: 3.1 correction, 3.4', 'INR: 1.2 correction - 2.1', 'Polyp size: 12 correction: 8 mm'):
+            with self.subTest(line=line):
+                label = line.split(':')[0]
+                answers = fixture_answers(['Findings', label], 'Findings: 12.5 mm sessile polyp, removed.\n' + line)
+                self.assert_needs_decision(answers['Findings'], '12.5 mm sessile polyp, removed.', line)
+        answers = fixture_answers(['Findings'], 'Findings: 1.5 cm sessile polyp. 1.5 correction: 2.5 cm.')
+        self.assertEqual(answers['Findings']['status'], 'conflict')
+
+    def test_a_dose_that_is_not_the_first_word_stays_a_dose(self):
+        for tail in ('lispro 1.5u correction, ICR 1:15', 'BGL 15.2 correction, 2u given.', 'Near add +2.50 correction; lenses.'):
+            with self.subTest(tail=tail):
+                answers = fixture_answers(['Findings', 'Plan'], 'Findings: sessile polyp.\nPlan: ' + tail)
+                self.assert_ready(answers['Findings'], 'sessile polyp.')
+
+    def test_each_window_on_a_line_takes_one_place_and_the_outermost_is_extra(self):
+        notes = ('Past medical history negative for the following: hypertension, asthma. Family history as follows. Diabetes: '
+                 'mother, diagnosed at 50. She lives with her husband and works as a teacher. Correction: the patient herself, '
+                 'not her mother, was diagnosed with diabetes at 50.')
+        answer = tab_answers(['Diabetes'], notes)[1]['Diabetes']              # a dictated paragraph: the tab contract
+        shown = ' '.join(entry.get('quote', '') for entry in answer['held_candidate']['context'])
+        self.assertIn('Correction: the patient herself', shown)
+        self.assertIn('Past medical history negative for the following', shown)
+        notes = ('Review of systems: negative for the following. Cardiac as below. Pulmonary as below.\n'
+                 'Chest pain: at rest\nCough: productive\nHeadache: frontal')
+        shown = ' '.join(entry.get('quote', '') for entry in fixture_answers(
+            ['Review of systems', 'Chest pain', 'Cough', 'Headache'], notes)['Headache']['held_candidate']['context'])
+        for sentence in ('negative for the following.', 'Cardiac as below.', 'Pulmonary as below.'):
+            self.assertIn(sentence, shown)
+
+
+class WhatTheNineteenthPassFound(ExpectationsMixin, TestCase):
+    """Round 19 over the eighteenth-pass repairs (2026-09-24)."""
+
+    def test_a_value_in_any_shape_is_read_like_its_integer_twin(self):
+        for label, line in (('Potassium', 'Potassium: 3.1mmol/L correction: 4.1mmol/L'), ('Polyp size', 'Polyp size: 1.2x0.8 correction: 0.6x0.4 cm'),
+                            ('Polyp size', 'Polyp size: 1.5-2.0 correction: 2.5 cm'), ('Polyp size', 'Polyp size: 12.5-mm correction: 8 mm'),
+                            ('Polyp size', 'Polyp size: 1,5 correction: 2 cm'), ('Pain score', 'Pain score: 3.5/10 correction: 7/10'),
+                            ('Glucose', 'Glucose: 5.6mmol/L correction: 6.5')):
+            with self.subTest(line=line):
+                answers = fixture_answers(['Assessment', label], 'Assessment: hypokalemia, oral KCl started.\n' + line)
+                self.assert_needs_decision(answers['Assessment'], 'hypokalemia, oral KCl started.', line)
+
+    def test_a_long_digit_run_is_read_once(self):
+        """The eighteenth-pass decimal form backtracked quadratically: 40 s at 50,000 characters, on every page and save."""
+        import time
+        for text in ('Size: 1.' + '2' * 49000, 'Size: ' + '2' * 49000 + ' x', 'Size: ' + '1.' * 24000 + '1 x',
+                     'adenoma.1.' + '2' * 49000, 'Seen' + '。' * 49 + ' 1.' + '2' * 5000):
+            started = time.perf_counter()
+            generation.erratum_points(text)
+            self.assertLess(time.perf_counter() - started, 2.0, text[:20])
+
+    def test_a_long_correction_window_does_not_swallow_the_denial_in_one_cut_quote(self):
+        tail = ('She recovered in the unit without incident and was observed for sixty minutes. Vital signs remained stable '
+                'throughout the recovery period. She tolerated oral fluids and was ambulating independently before discharge. '
+                'Written instructions were reviewed with the patient and her husband, including diet, activity and warning signs. '
+                'Her husband will drive her home, and a follow-up call is planned for tomorrow morning; the surveillance interval '
+                'will be decided then.')
+        notes = ('Procedure: diagnostic colonoscopy. Prior procedures were reviewed as follows. Complications: bleeding after a 2019 '
+                 'polypectomy. She is accompanied by her daughter, who helped with the history, and the consent form was signed in '
+                 'the unit. Correction: the 2019 procedure was a flexible sigmoidoscopy. Family history as follows. Mother: colon '
+                 "cancer at 60. After today's procedure the patient denies the following. Complications: perforation. " + tail)
+        answer = tab_answers(['Procedure', 'Complications', 'Mother'], notes)[1]['Complications']
+        shown = ' '.join(entry.get('quote', '') for entry in answer['held_candidate']['context'])
+        for sentence in ("After today's procedure the patient denies the following.", 'Family history as follows.',
+                         'Correction: the 2019 procedure was a flexible sigmoidoscopy.'):
+            self.assertIn(sentence, shown)
+
+    def test_two_governors_with_one_window_take_one_place(self):
+        notes = ('Review of systems: patient denies the following. Cardiac as below. Pulmonary as below. Negative for the following:\n'
+                 'Headache: frontal')
+        answer = fixture_answers(['Review of systems', 'Headache'], notes)['Headache']
+        shown = ' '.join(entry.get('quote', '') for entry in answer['held_candidate']['context'])
+        self.assertIn('Pulmonary as below.', shown)
+        notes = ('Pain score: six out of ten, reported at triage by the patient while waiting in the emergency department with her '
+                 'daughter.\nCardiac: negative as below. Correction: the triage pain score was entered for another patient. '
+                 'Pulmonary: negative for the following:\nPain score: three out of ten.')
+        answer = fixture_answers(['Pain score'], notes)['Pain score']
+        shown = ' '.join(entry.get('quote', '') for entry in answer['held_candidate']['context'])
+        self.assertIn('Correction: the triage pain score', shown)
+
+
+class WhatTheTwentiethPassFound(ExpectationsMixin, TestCase):
+    """Round 20 over the nineteenth-pass repairs (2026-09-24)."""
+
+    def context(self, answer):
+        return ' '.join(entry.get('quote', '') for entry in answer['held_candidate']['context'])
+
+    def test_a_value_with_its_sign_or_unit_character_is_read(self):
+        for label, line in (('SpO2', 'SpO2: 88% correction: 94%'), ('Temperature', 'Temperature: 38.9°C correction: 36.9°C'),
+                            ('Polyp size', 'Polyp size: 1.2×0.8 correction: 0.6×0.4 cm'), ('Size', 'Size: 1.5–2.0 correction: 2.5')):
+            with self.subTest(line=line):
+                answers = fixture_answers(['Assessment', label], 'Assessment: hypoxaemia, oxygen started.\n' + line)
+                self.assert_needs_decision(answers['Assessment'], 'hypoxaemia, oxygen started.', line)
+
+    def test_a_run_of_other_scripts_digits_is_read_once(self):
+        """The nineteenth-pass word read Unicode digits across every period (16 s at 50,000 characters)."""
+        import time
+        for text in ('Size: ' + 'a١.١' * 12000, 'Size: ' + 'a1.١' * 12490, 'K ' + '3.١mmol/L' * 5000):
+            started = time.perf_counter()
+            generation.erratum_points(text)
+            self.assertLess(time.perf_counter() - started, 2.0, text[:12])
+
+    def test_a_correction_deep_in_a_long_sentence_is_shown_from_its_word(self):
+        notes = ('Procedure: diagnostic colonoscopy. Prior procedures were reviewed as follows. Complications: bleeding after a 2019 '
+                 'polypectomy. The procedure was performed under propofol sedation with continuous monitoring and the bowel '
+                 'preparation was graded as good, the cecum was identified by the appendiceal orifice and the ileocecal valve, '
+                 'withdrawal time was nine minutes, and retroflexion in the rectum showed small internal haemorrhoids, grade I. '
+                 'Correction: the 2019 bleeding followed a haemorrhoid banding, not a polypectomy.')
+        answer = tab_answers(['Procedure', 'Complications'], notes)[1]['Complications']
+        self.assertIn('Correction: the 2019 bleeding', self.context(answer))
+        # Glued to its sentence, the correction's sentence starts four hundred characters before its word.
+        glued = notes.replace('grade I. Correction:', 'grade I, and the scope was withdrawn slowly with careful inspection of every '
+                              'fold, the photographs were taken at each landmark and reviewed with the endoscopy nurse.Correction:')
+        at = glued.index('Correction:')
+        self.assertGreater(at - glued.index('The procedure was performed'), 400)
+        answer = tab_answers(['Procedure', 'Complications'], glued)[1]['Complications']
+        self.assertIn('Correction: the 2019 bleeding', self.context(answer))
+
+    def test_a_pointer_shown_from_its_line_start_keeps_its_frame(self):
+        notes = ('Complications: none.\nFamily history: her mother was diagnosed in her sixties after a long illness with several '
+                 'admissions for anaemia, weight loss and fatigue, and her records from two hospitals and the family doctor were '
+                 'obtained from the patient and were reviewed in full at this visit, and she had the following. Correction: the '
+                 'diagnosis was made at 58, not 60.\nReview of systems: the patient denies the following:\nAbdominal pain: yes\n'
+                 'Examination findings are as follows.\nAbdomen: soft, non-tender.\nPlan: see below.\nComplications: perforation.')
+        answer = fixture_answers(['Complications', 'Family history', 'Review of systems', 'Abdominal pain', 'Abdomen', 'Plan'],
+                                 notes)['Complications']
+        self.assertIn('Family history: her mother', self.context(answer))
+
+    def test_a_cut_correction_window_is_marked(self):
+        notes = ('Chest pain: exertional. Cough: dry. Correction: '
+                 + 'the medication history was taken again from the pharmacy list and the family, ' * 6 + 'The cough is productive.')
+        quote = self.context(tab_answers(['Chest pain', 'Cough'], notes)[1]['Chest pain'])
+        self.assertIn('Correction:', quote)
+        self.assertTrue(quote.rstrip().endswith('…'), quote[-40:])
+
+
+class WhatTheTwentyFirstPassFound(ExpectationsMixin, TestCase):
+    """Round 21 over the twentieth-pass repairs (2026-09-24)."""
+
+    def test_a_heading_that_names_what_precedes_it_keeps_its_frame(self):
+        notes = ('Diabetes: yes\nColon cancer: yes\nBreast cancer: yes\nFamily history, as given by her daughter today because the '
+                 'patient has advanced dementia and could not answer for herself: the daughter was describing her own mother and '
+                 "grandmother throughout, and she confirmed each diagnosis against the discharge letters and the family doctor's "
+                 'records that she brought with her, which were reviewed in full with her at this visit, and the dates were checked '
+                 'against the letters. The above history was provided by:\nDaughter\nPlan: colonoscopy in one year.')
+        answer = fixture_answers(['Diabetes', 'Colon cancer', 'Breast cancer', 'Plan'], notes)['Colon cancer']
+        shown = ' '.join(entry.get('quote', '') for entry in answer['held_candidate']['context'])
+        self.assertIn('Family history, as given by her daughter', shown)
+
+    def test_comma_grouped_digits_of_any_script_are_read(self):
+        for line in ('Platelets: ２０,０００ correction: ２００,０００', 'Potassium: ٣,١ correction: ٤,١'):
+            with self.subTest(line=line):
+                answers = fixture_answers(['Assessment', line.split(':')[0]], 'Assessment: thrombocytopenia, transfusion arranged.\n' + line)
+                self.assert_needs_decision(answers['Assessment'], 'thrombocytopenia, transfusion arranged.', line)
+
+    def test_a_line_start_chain_or_a_run_of_letter_colons_is_read_once(self):
+        import time
+        for text in ('1.' * 25000, '1​.' * 16000, 'Sa' + 'ː' * 49000, 'Sa' + 'ꓽ' * 49000):
+            started = time.perf_counter()
+            generation.erratum_points(text)
+            self.assertLess(time.perf_counter() - started, 2.0, repr(text[:6]))

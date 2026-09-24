@@ -4,8 +4,9 @@
 A heading (a line that visibly ends in a colon), or a denial, family-history, hypothetical or correction
 sentence that ends by pointing at other lines, now governs the answers it introduces: each is a decision
 for the clinician, never pre-filled and never offered for one click, with the candidate kept beside the
-line that governs it; finalization re-checks this from the notes. The qualified Word form's
-wording/answer conflicts name their statement, wording and answers on the page.
+line that governs it; finalization re-checks this from the notes. On the qualified Word form a question
+whose own value ends in a colon governs the answers after it. The qualified Word form's wording/answer
+conflicts name their statement, wording and answers on the page.
 
 No migration, no unit, no model, prompt or schema change, and no static source change: the driver's
 static transition must leave every public asset identical. No Word adapter (C#) change, so the installed
@@ -32,8 +33,8 @@ ROOT = Path('/opt/meddoc-pro')
 SOURCE = Path(__file__).resolve().parents[1]
 APP = ROOT / 'rebuild'
 SELF = 'scripts/activate-denial-heading-install.py'
-DECL = 'docs/foundation/mutations/20260923-quillmd-denial-heading-install.md'
-DECL_SHA256 = 'd4e8ceab288a2c5a4487471ee7d541d64c97a082df5002a307597477f3fbe991'
+DECL = 'docs/foundation/mutations/20260924-quillmd-denial-heading-finish.md'
+DECL_SHA256 = 'fe0c78f387fe9cf643d2fac7489b4f5e1a2b1ba71b506c7d8b9e173bef21ecd9'
 #: The tree commit and the configured release AGREE here, which is the normal case and is
 #: asserted rather than assumed: the 2026-09-22 repair exists because they once did not.
 BASELINE = '02c29f991e50327525ebc6b4498f5cde08f78bbb'
@@ -42,17 +43,22 @@ EVIDENCE = ROOT / 'rebuild/.runtime/denial-heading-install-20260923'
 DRIVER = 'scripts/activate-typed-voice.py'
 DRIVER_SHA256 = '4e2efda2357fa2c33262eb2f747ac7201eadbc94875528cde2b7fe9040ebba18'
 MIGRATION = '0018_servicehealth'
-#: ⚠️ REUSED, NOT REPEATED. The retained capture and the independent-key restore proof are the
-#: ones qualified on 2026-09-22. `assert_retained_capture` pins the run id, the backed-up files'
-#: digests, the table POPULATION and the financial invariants — none of which this release moves,
-#: and none of which depend on the capture's source commit. A fresh capture or a repeat drill
-#: would be work done to make a check pass, which is the opposite of what the check is for.
+#: ⚠️ REUSED, NOT REPEATED — TWO RETAINED RECORDS, EACH ALREADY QUALIFIED. The independent-key
+#: restore proof is the 2026-09-22 drill (`RESTORED_*`). The retained capture is the SCHEDULED
+#: 2026-09-23 04:30Z one, the capture the 30-hour window applies to: the 09-22 capture this adapter
+#: first pinned was 40 h old at the rehearsal, which refused, as it should. A later authenticated
+#: capture of the same mechanism beside an earlier independent restore is the shape the
+#: business-readiness (09-20 19:39Z beside 09-20 09:53Z), admin-console and Word-multicolumn
+#: activations used; the driver requires the same container, table set and invariants. Nothing is
+#: re-dated or re-run: a fresh capture or a repeat drill would be work done to make a check pass.
 RESTORE_RESULT = APP / '.runtime/recovery-custody-handoff-20260922/return-evidence/independent-key-restore/result.json'
 RESTORE_RESULT_SHA256 = 'f2df7c56486b5d09de254ee7ab69c30697ca2b6487b84b700fe06c7fa7f49d0f'
+RESTORED_RUN = '20260922T043002Z-7d766ca1'
+RESTORED_RELEASE = 'eb37c7846f3ef634c16b4da46456663b88217a60'
 RESTORED_MANIFEST_SHA256 = 'c3c4994fa4b50c51e75197e2ba57f8e2427daaf5929539c01498548da2083011'
-CAPTURE_RUN = '20260922T043002Z-7d766ca1'
-CAPTURE_SOURCE = 'eb37c7846f3ef634c16b4da46456663b88217a60'
-CAPTURE_MANIFEST_SHA256 = 'c3c4994fa4b50c51e75197e2ba57f8e2427daaf5929539c01498548da2083011'
+CAPTURE_RUN = '20260923T043000Z-2031049f'
+CAPTURE_SOURCE = 'd9660e34f9d3217369212ffc7d0d8302d4ad568c'
+CAPTURE_MANIFEST_SHA256 = 'a6617fd69f4f7da84f6f4c40a52bec53b32dc9cc77300736caaa66052ad3c987'
 #: ⚠️ THE INHERITED STATIC ALLOWLIST IS STALE AND REJECTS THE LIVE TREE.
 #: `activate-word-export.static_inventory` carries `allowed_dirs = {'.'}`, so the five OTP asset
 #: directories that have been installed for releases — `django_otp/`, `django_otp/css/`,
@@ -136,7 +142,7 @@ for module in (driver, driver.a, driver.b):
                         'MIGRATION': MIGRATION, 'CAPTURE_RUN': CAPTURE_RUN,
                         'CAPTURE_SOURCE': CAPTURE_SOURCE,
                         'CAPTURE_MANIFEST_SHA256': CAPTURE_MANIFEST_SHA256,
-                        'RESTORED_RUN': CAPTURE_RUN, 'RESTORED_RELEASE': CAPTURE_SOURCE,
+                        'RESTORED_RUN': RESTORED_RUN, 'RESTORED_RELEASE': RESTORED_RELEASE,
                         'RESTORED_MANIFEST_SHA256': RESTORED_MANIFEST_SHA256,
                         'RESTORE_RESULT': RESTORE_RESULT,
                         'RESTORE_RESULT_SHA256': RESTORE_RESULT_SHA256}.items():

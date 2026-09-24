@@ -700,11 +700,27 @@ NON_LETTERS = (r'(?:[^\S\n]++|[^\w\s.!?\u2026<&' + ''.join(sorted(COLONS)) + r']
                r'|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});|&){0,50}+')
 #: At a line's start a number is a list marker (`1.`, `1-`, `2.1`, `#2`); after a colon or a sentence it is a VALUE
 #: (`Glucose: 312 correction given`, `Potassium: 3.1 - correction`), unless it is a list number (`1. `) (seventh pass).
-LINE_MARKER = r'(?:(?:\d+(?:\.\d+)*(?:[.)\-]|(?=\s))|(?:[ivx]{1,4}|[a-z])[.)])' + NON_LETTERS + ')?'
+LINE_MARKER = r'(?:(?:(?>\d+(?:\.\d+)*)(?:[.)\-]|(?=\s))|(?:[ivx]{1,4}|[a-z])[.)])' + NON_LETTERS + ')?'
 VALUE_MARKER = r'(?:(?:\d{1,2}[.)](?=\s)|(?:[ivx]{1,4}|[a-z])[.)])' + NON_LETTERS + ')?'
-ERRATUM = re.compile(r'(?:^' + NON_LETTERS + LINE_MARKER + r'|(?:(?<=' + COLON_CLASS + r')(?!\d)|(?<=[.!?\u2026])(?=(?:["\'\u201d\u2019)\]*_~`]|' + HTML_TAG.pattern + r'|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});){0,50}+[\s\u2800]))'
+#: Glued to a sentence end only a marker closed by `)` (`adenoma.a) Correction:`): a letter and a period there is an
+#: abbreviation's (`i.e. correction`, seventeenth pass).
+GLUED_MARKER = r'(?:(?:\d{1,2}|[ivx]{1,4}|[a-z])\)' + NON_LETTERS + ')?'
+#: The one word a doctor writes before the word and its separator, a value in any of its shapes read like its integer
+#: twin (eighteenth and nineteenth passes: `12.5 correction:`, `3.1mmol/L correction:`, `1.2x0.8`, `1.5-2.0`, `3,1`;
+#: `12 correction: 8 mm` was always read). A digit run with its decimal parts is ONE atomic step and the word is
+#: possessive, so a long run is read once (nineteenth pass: the first form backtracked quadratically, 40 s at 50,000).
+#: ASCII digits only, like the glued guard (twentieth pass: Unicode digits bridged every period, 16 s at 50,000); and a
+#: value's own sign and unit characters (`88%`, `38.9°C`, `1.2×0.8`, `1.5–2.0`). A spaced unit (`3.1 mmol/L correction:`)
+#: is two words, like its integer twin, and is not read.
+BEFORE_THE_WORD = r"(?:(?>[0-9]+(?:[.,][0-9]+)*)|(?>\d+(?:,\d+)+)|[^\W" + ''.join(sorted(COLONS)) + r"]|['\u2019/\-\u2010\u2011%\u00b0\u2103\u2109\u00d7\u2013\u00b1]|\([a-z]{1,3}\))++"
+#: ⚠️ SIXTEENTH PASS: a correction GLUED to the sentence before it (`adenoma.Correction: no polyp.`, a missed space; or
+#: Word's `adenoma.<o:p></o:p>Correction:`) did not start a sentence, so the finding it corrects stayed ready. After
+#: the sentence end the word itself (or one word and the word) now starts one too, after the same bracket, bullet, quote
+#: or list marker a sentence start allows (seventeenth pass: `adenoma.(Correction: …)`), but never after a decimal point
+#: (`1.5u correction,` is a dose). A full-width sentence end (`。`, `．`, `！`, `？`) is one too.
+ERRATUM = re.compile(r'(?:^' + NON_LETTERS + LINE_MARKER + r'|(?:(?<=' + COLON_CLASS + r')(?!\d)|(?<=[.!?\u2026\u3002\uff0e\uff01\uff1f\uff61])(?=(?:["\'\u201d\u2019)\]*_~`]|' + HTML_TAG.pattern + r'|&(?:[A-Za-z]{2,8}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});){0,50}+(?:[\s\u2800]|(?!(?<=[0-9][.])[0-9])' + NON_LETTERS + GLUED_MARKER + r'(?:' + BEFORE_THE_WORD + r'\s+)?' + CORRECTION + r')))'
                      + NON_LETTERS + VALUE_MARKER + ')'
-                     + '(?:' + ONE_WORD + r'\s+(?=' + CORRECTION + r's?\s*(?:' + COLON_CLASS + r'|[,;\u2013\u2014]|--|\s-\s)))?'
+                     + '(?:' + BEFORE_THE_WORD + r'\s+(?=' + CORRECTION + r's?\s*(?:' + COLON_CLASS + r'|[,;\u2013\u2014]|--|\s-\s)))?'
                      + r'(?P<word>' + CORRECTION + r's?)(?![^\W_]|/|[\-\u2010\u2011](?=[^\W_]))'
                      + r'(?!\s+' + TREATMENT + r'|\s+to\s+\d|\s*\(\s*(?:sliding|scale))', re.I)
 #: A period that is an abbreviation's, not a sentence's: `vs. correction`, `i.e. correction`, `the following Dr. Smith`.
@@ -803,13 +819,18 @@ def erratum_points(text):
     """The offsets in `text` of every erratum's word `correction`, in either reading."""
     found = set()
     for reading, kept in positioned_readings(text):
-        for match in ERRATUM.finditer(reading):
+        at = 0
+        while (match := ERRATUM.search(reading, at)):
             before = match.start()
             while before and reading[before - 1] in '”’)]':
                 before -= 1
             if before and reading[before - 1] == '.' and NOT_A_SENTENCE_END.search(reading[max(0, before - 32):before]):
+                # Searched again from the next character, not after the skipped match (seventeenth pass: a glued match
+                # after `vs.` hid a correction read from a colon inside it).
+                at = match.start() + 1
                 continue
             found.add(match.start('word') if kept is None else kept[match.start('word')])
+            at = max(match.end(), match.start() + 1)
     return sorted(found)
 
 
@@ -876,7 +897,7 @@ def bare_label(text, parsed):
             and not any(SCOPE_POINTER.search(reading) or POINTER.search(reading) for reading in readings(text)))
 
 
-def heading_governance(notes, labels, *, lexical=True, per_sentence=True):
+def heading_governance(notes, labels, *, lexical=True, per_sentence=True, questions=frozenset()):
     """⚠️ ONE READER FOR EVERY CONSUMER: both validators, the page, save and finalization call this, never a copy.
 
     Returns `(starts, spans, headings, forward, backward, meaning)`: the note's non-empty lines' start offsets (sorted)
@@ -899,8 +920,9 @@ def heading_governance(notes, labels, *, lexical=True, per_sentence=True):
     pass: a mid-line exemption on the legacy form left the corrected value supported). That erratum corrects that
     question, whose two answers the validator already makes a conflict. Earlier answers are read lazily, once each.
 
-    ⚠️ THE QUALIFIED WORD FORM (`lexical=False`): a LABELLED line there is an answer and never governs. An unlabelled
-    line is read in full; it already sends every answer back, so there it only withholds offers.
+    ⚠️ THE QUALIFIED WORD FORM (`lexical=False`): a LABELLED line there is an answer and never governs, except one whose
+    own VALUE is a heading (`question_value_heading`), which governs what follows it. An unlabelled line is read in
+    full; it already sends every answer back, so there it only withholds offers.
     ⚠️ A sentence that points BACK is not read: its common case is the ROS closing line `…negative except as noted
     above.`, which names the positives above it (second refutation pass).
     """
@@ -991,6 +1013,11 @@ def heading_governance(notes, labels, *, lexical=True, per_sentence=True):
                     # Shown from its sentence to the end of the line: what it corrects to follows the word.
                     shown_low = sentences[max(0, bisect.bisect_right(sentence_starts, at) - 1)][0]
                     backward.append((start + at, index, start + shown_low, end, True))
+            elif question_value_heading(parsed, questions):
+                # Its own value is held, and every answer after it: forward only (a closing value introduces nothing),
+                # shown from the line's start so its label is read with it.
+                headings[index] = start
+                forward.append((end, index, start, end, changes_meaning(stripped)))
         offset += len(line)
     # A heading that closes the note can only introduce what came before it, unless it is a bare label. Trailing bare
     # headings (`Signed by: ____`) are passed over when the line before them is a heading too (tenth pass: a signature
@@ -1022,6 +1049,24 @@ def heading_governance(notes, labels, *, lexical=True, per_sentence=True):
     # Whether this release withholds every offer in the note: once per note, not once per answer (ninth pass).
     withheld = opens or bool(INLINE_BREAK.search(notes)) or not _plain_pointer_only(notes)
     return starts, spans, headings, forward, backward, meaning, opens, by_line, withheld, per_sentence
+
+
+def question_labels(fields):
+    """The canonical labels of the form's own questions, as `labelled_value` returns them (not a statement's)."""
+    return frozenset(recognized_labels(fields).values())
+
+
+def question_value_heading(parsed, questions):
+    """On the qualified Word form, a question whose own value ends in a colon: `Right tributary row 11: anatomical
+    location: none of the following:` introduces the lines after it; it does not answer.
+
+    ⚠️ FOUND WHEN THE OLDER-FORM CASE WAS FOLLOWED THROUGH REVIEW (2026-09-23): with labelled lines never governing,
+    `Left GSV at the SFJ: reflux time (ms): 700 ms` under that line came back ready, needing only a review tick. Structural,
+    not a word list (round 6 of the pilot: a location `not visualized below` read by its words emptied all 90 answers):
+    no option of that form and no date, identity, location or measurement value ends in a colon. A prewritten
+    statement is not a question (its approved signature wording ends in `By:`), and an unanswered question has no value
+    (an empty value ends in no colon; every colon `heading_colon` reads is seen text, so none is needed here)."""
+    return bool(parsed and parsed[0] in questions and ends_in_colon(parsed[1]))
 
 
 def answered_label(text, labels):
@@ -1107,6 +1152,10 @@ def governed_context(governance, notes, evidence, others=()):
         take(forward[index][1], forward[index][2], forward[index][3], False)
     for index in range(behind, min(len(backward), behind + 3)):
         take(backward[index][1], backward[index][2], backward[index][3], True)
+    # The outermost heading the answer is written under (sixteenth pass: `Review of systems: none of the following.`
+    # behind three nearer sub-headings was counted but never shown; `none` is not a word that changes meaning).
+    if ahead:
+        take(forward[0][1], forward[0][2], forward[0][3], False)
     # Then the governors whose words change meaning, nearest first, each way in turn.
     before = forward_meaning[:bisect.bisect_left(forward_meaning, ahead)][::-1][:2 * CONTEXT_SHOWN]
     after = backward_meaning[bisect.bisect_left(backward_meaning, behind):][:2 * CONTEXT_SHOWN]
@@ -1115,6 +1164,32 @@ def governed_context(governance, notes, evidence, others=()):
             governor = forward[before[index]]; take(governor[1], governor[2], governor[3], False)
         if index < len(after):
             governor = backward[after[index]]; take(governor[1], governor[2], governor[3], True)
+    # Then the rest, nearest first, until the places are used: every governing line is shown when they fit. One step per
+    # LINE (`by_line` holds each line's governors in order), so a line of many governors costs one step.
+    index = ahead - 1
+    while index >= 0 and len(chosen) < CONTEXT_SHOWN:
+        take(forward[index][1], forward[index][2], forward[index][3], False)
+        index = by_line[0][forward[index][1]][0][0] - 1
+    index = behind
+    while index < len(backward) and len(chosen) < CONTEXT_SHOWN:
+        take(backward[index][1], backward[index][2], backward[index][3], True)
+        index = by_line[1][backward[index][1]][0][-1] + 1
+    cut_at = set()
+
+    def from_the_word(governor):
+        # A correction's window runs to the end of its line: longer than a quote, it is cut from the correction's WORD
+        # before it is merged, and the cut is marked (nineteenth pass: it swallowed the denial and family-history windows
+        # in the merge and the cut quote kept only its tail; twentieth: cut from its sentence start, a long sentence lost
+        # the word). Every other window is shown as before.
+        low, high = governor[2:4]
+        if high - low <= QUOTE_SHOWN:
+            return (low, high)
+        start = min(max(low, governor[0]), high)
+        if high - start > QUOTE_SHOWN:
+            cut_at.add(start + QUOTE_SHOWN)
+            return (start, start + QUOTE_SHOWN)
+        return (start, high)
+
     def windows(line):
         # Each governing span on the line, at most three: those whose words change meaning first, then the nearest. The
         # candidates are the three nearest of each kind, found by bisection: forward ones before `ahead`, backward ones
@@ -1128,11 +1203,24 @@ def governed_context(governance, notes, evidence, others=()):
         for indexes in by_line[1].get(line, ((), ())):
             cut = bisect.bisect_left(indexes, behind)
             near.update(indexes[cut:cut + 3])
-        found += [(not backward[i][4], backward[i][0] - first_at, backward[i][2:4]) for i in near]
+        # Only a correction's window is bounded from its word (twenty-first pass: a heading naming what precedes it,
+        # shown from its line's start for its frame, lost that frame when it was bounded too).
+        found += [(not backward[i][4], backward[i][0] - first_at,
+                   from_the_word(backward[i]) if notes[backward[i][0]:backward[i][0] + 10].casefold() == 'correction'
+                   else backward[i][2:4]) for i in near]
         if line in selves:
             found.append((False, 0, (headings[line], spans[line][1])))
+        best = {}                                       # one place per distinct window (eighteenth pass: a duplicate
+        for first, second, window in found:             # took two of the three places)
+            if window not in best or (first, second) < best[window]:
+                best[window] = (first, second)
+        windows_shown = sorted(best, key=best.get)[:3]
+        # The outermost heading's own sentence is shown IN ADDITION to the three (seventeenth pass: three nearer sentences
+        # on its line dropped it; eighteenth: taking one of the three places dropped a correction or a denial instead).
+        if ahead and line == forward[0][1] and forward[0][2:4] not in windows_shown:
+            windows_shown.append(forward[0][2:4])
         merged = []
-        for low, high in sorted(window for _, _, window in sorted(found)[:3]):
+        for low, high in sorted(windows_shown):
             if merged and low <= merged[-1][1]:
                 merged[-1] = (merged[-1][0], max(merged[-1][1], high))
             else:
@@ -1143,7 +1231,9 @@ def governed_context(governance, notes, evidence, others=()):
     for line, (low, high, later) in chosen.items():
         spans_here = windows(line) or [(low, high)]
         same = line in own_lines or any(line in other.lines for other in others)
-        shown.append({'quote': ' \u2026 '.join(shown_quote(notes, a, b, later) for a, b in spans_here),
+        shown.append({'quote': ' \u2026 '.join(shown_quote(notes, a, b, later)
+                                                + (' \u2026' if b in cut_at and not (later and b - a > QUOTE_SHOWN) else '')
+                                                for a, b in spans_here),
                       'start': spans_here[0][0], 'end': spans_here[-1][1], 'after': later, 'same': same})
     shown.sort(key=lambda entry: entry['start'])
     # Counted from the lines chosen, before anything else is appended (twelfth pass: the `elsewhere` entry was counted
@@ -1269,7 +1359,9 @@ def governance_for(notes, fields, context_labels=()):
             units = source_units(notes, fields, context_labels=context_labels)[0]
         except ValidationError:
             units = []
-    governance = heading_governance(notes, labels, lexical=not qualified_word_form(fields), per_sentence=per_sentence)
+    word_form = qualified_word_form(fields)
+    governance = heading_governance(notes, labels, lexical=not word_form, per_sentence=per_sentence,
+                                    questions=question_labels(fields) if word_form else frozenset())
     return (*governance, occurrence_index(notes, labels, units))
 
 
@@ -1509,7 +1601,8 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
     # finalized on a review tick. Every answer whose own line a heading or a governing sentence reaches
     # is now a decision, with the candidate kept beside the line that governs it.
     word_form=qualified_word_form(fields)
-    governance=heading_governance(notes,labels,lexical=not word_form,per_sentence=False)
+    governance=heading_governance(notes,labels,lexical=not word_form,per_sentence=False,
+                                  questions=question_labels(fields) if word_form else frozenset())
     index=occurrence_index(notes,labels)
     from .tab_review import clinician_identity
     for item in selections.fields:

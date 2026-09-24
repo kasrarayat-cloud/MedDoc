@@ -127,7 +127,13 @@ lists every charge; choose a charge's service name to see how it was calculated.
   one of the form's questions, makes every answer written after it, to the end of the notes, a
   decision for you: it is never filled in and never offered for one click. What was read is shown
   beside it, with the lines that govern it (*Written under* above it, *Followed by* below it; up to
-  15 lines, nearest and denials first, and the rest counted: read the full note then; a line that
+  15 lines: the nearest, the first governing line of the note, the lines with the denial,
+  family-history and hypothetical words listed in this guide and the corrections that govern the
+  lines before them, then the rest nearest
+  first, so every governing line is shown when there are 15 or fewer (a governing line longer than
+  400 characters is shown cut, marked `…`, from the end that governs); any beyond 15 are counted,
+  and a heading among them in other words (`none of the following`) may be one of those: read the
+  full note then; a line that
   is the answer's own is shown as *In the same line*; when the same words also appear elsewhere in
   the notes, the page says where, because a line may govern them there). A question left
   empty mid-note (`Allergies:`) counts, because it may be a heading (`Pertinent negatives:`). A
@@ -181,9 +187,12 @@ lists every charge; choose a charge's service name to see how it was calculated.
   and *aforementioned* are not: end such a line with a colon, which is read whatever its words. A
   sentence that refers back without a colon (`… negative except as noted above.`) is not read.
 - **A correction governs what came before it.** The word *correction* where a line, an answer or
-  a sentence starts — after any bullet, bracket, quote or list marker (`● Correction: …`, `1-
+  a sentence starts (also glued to the sentence before it, a missed space: `adenoma.Correction: …`,
+  `adenoma.(Correction: …)`, `adenoma.<o:p></o:p>Correction: …`; a list number glued on both sides,
+  `adenoma.1)Correction:`, is not read; in running text a decimal point is not a sentence end, so
+  `lispro 1.5u correction` is a dose; a full-width `。` ends a sentence too) — after any bullet, bracket, quote or list marker (`● Correction: …`, `1-
   Correction: …`, `#2 Correction: …`, `(Correction: …)`, `a) Correction: …`, `Addendum: Correction:
-  …`), or after one word before a colon, comma or dash (`Transcription correction: …`, `Physician's
+  …`), or after one word before a colon, comma, semicolon or dash (`Transcription correction: …`, `Physician's
   correction: …`) — makes every answer before it a decision, in the same paragraph too, whatever
   follows it (`Correction to my dictation, …`) — except a treatment or a target: `Correction of …`,
   `Correction scale`, `factor`, `dose` or `insulin`, `Correction (sliding scale)`, `Correction to`
@@ -194,9 +203,17 @@ lists every charge; choose a charge's service name to see how it was calculated.
   `Corrected:` are not), and not when *correction* is part of a form question's own label
   (`Correction achieved: 10 degrees`, `Refractive correction:`). After a label, a number before the
   word is a value, not a list marker (`Glucose: 312 correction given` is not a correction), unless
-  it is a list number (`Comments: 1. Correction: …`) or the word is followed by a colon, comma or
-  dash (`Glucose: 312 correction: 4 units` is read as a correction, like `Transcription
-  correction:`). One exception: a correction that opens the whole answer to a
+  it is a list number (`Comments: 1. Correction: …`) or the word is followed by a colon, comma,
+  semicolon or dash (`Glucose: 312 correction: 4 units`, `Potassium: 3.1 correction: 3.4` and
+  `Potassium: 3.1mmol/L correction: 4.1mmol/L`, `SpO2: 88% correction: 94%` and `Temperature:
+  38.9°C correction: 36.9°C` are read as corrections, like `Transcription correction:`; a unit
+  after a space, `3.1 mmol/L correction:`, is a second word and is not read, like `3 mmol/L
+  correction:`). So a value written that way that is NOT a correction holds every answer above it
+  too: spectacles `Glasses: -2.50 correction, worn full time`, an albumin-corrected calcium
+  `Calcium: 7.8 correction: 8.6`, a correction dose `BGL: 15.2 correction, 2 units given`; type
+  those answers yourself. A dotted abbreviation other than `e.g.`, `i.e.` and `vs.` (`q.h.s.`, `t.i.d.`,
+  `a.m.`, `Dr.`) ends a sentence here,
+  so `Lantus 10u q.h.s. 1.5u correction, …` is read as a correction as well. One exception: a correction that opens the whole answer to a
   question already answered above it (`Pain score: Correction: three out of ten`) corrects that
   question only, which already needs your decision because it has two answers — on an underlined-Tab
   form anywhere in a paragraph, on every other form only at the start of its line. ⚠️ So a
@@ -211,11 +228,20 @@ lists every charge; choose a charge's service name to see how it was calculated.
   `Transcription correction:`.
 - **Write each denial as its own answer** (`Symptoms: no chest pain`) when you can: nothing
   governs it, so it comes back ready.
-- **On the WM IOV form, labelled lines never govern**: every label there names its own side, vein
-  and measure, so a heading, pointer or correction written inside a labelled answer changes no
-  other answer. An unlabelled line (which already sends every answer back) is read in full: a
-  heading, a sentence ending on a forward pointer or a correction there withholds the suggestions
-  it governs.
+- **On the WM IOV form, labelled lines govern only when the answer itself is a heading**: every
+  label there names its own side, vein and measure, so a pointer or correction written inside a
+  labelled answer changes no other answer. But an answer that ends in a colon
+  (`Right tributary row 11: anatomical location: none of the following:`) introduces the lines
+  after it: it and every answer after it come back held, never filled in. Type each later answer
+  on the page exactly as it is written under its label (the form accepts nothing else), or correct
+  the notes. For the colon-ending line itself, correct the notes: a measurement or a dropdown answer
+  ending in a colon cannot be accepted, and a text answer is accepted only as written, colon
+  included, which the document then shows. A stray colon after a value (`lateral calf:`), a doubled
+  colon after an unanswered question (`Date of birth::`) and a half-filled time (`10:__`) do the
+  same. A prewritten statement's approved wording (`… By:`) and an unanswered question (its label
+  and one colon) are not headings. An unlabelled line (which already sends
+  every answer back) is read in full: a heading, a sentence ending on a forward pointer or a
+  correction there withholds the suggestions it governs.
 - **A draft from before this release** is shown by the same rule: an answer it filled in from a
   governed line is shown empty, with its candidate and the lines that govern it, and an accepted
   suggestion there is shown the same way with a warning. Neither can be finalized as it is. Type
