@@ -191,7 +191,7 @@ lists every charge; choose a charge's service name to see how it was calculated.
   `adenoma.1)Correction:`, is not read; in running text a decimal point is not a sentence end, so
   `lispro 1.5u correction` is a dose; a full-width `。` ends a sentence too) — after any bullet, bracket, quote or list marker (`● Correction: …`, `1-
   Correction: …`, `#2 Correction: …`, `(Correction: …)`, `a) Correction: …`, `Addendum: Correction:
-  …`), or after one word before a colon, comma or dash (`Transcription correction: …`, `Physician's
+  …`), or after one word before a colon, comma, semicolon or dash (`Transcription correction: …`, `Physician's
   correction: …`) — makes every answer before it a decision, in the same paragraph too, whatever
   follows it (`Correction to my dictation, …`) — except a treatment or a target: `Correction of …`,
   `Correction scale`, `factor`, `dose` or `insulin`, `Correction (sliding scale)`, `Correction to`
@@ -202,9 +202,14 @@ lists every charge; choose a charge's service name to see how it was calculated.
   `Corrected:` are not), and not when *correction* is part of a form question's own label
   (`Correction achieved: 10 degrees`, `Refractive correction:`). After a label, a number before the
   word is a value, not a list marker (`Glucose: 312 correction given` is not a correction), unless
-  it is a list number (`Comments: 1. Correction: …`) or the word is followed by a colon, comma or
-  dash (`Glucose: 312 correction: 4 units` and `Potassium: 3.1 correction: 3.4` are read as
-  corrections, like `Transcription correction:`). One exception: a correction that opens the whole answer to a
+  it is a list number (`Comments: 1. Correction: …`) or the word is followed by a colon, comma,
+  semicolon or dash (`Glucose: 312 correction: 4 units`, `Potassium: 3.1 correction: 3.4` and
+  `Potassium: 3.1mmol/L correction: 4.1mmol/L` are read as corrections, like `Transcription
+  correction:`). So a value written that way that is NOT a correction holds every answer above it
+  too: spectacles `Glasses: -2.50 correction, worn full time`, an albumin-corrected calcium
+  `Calcium: 7.8 correction: 8.6`, a correction dose `BGL: 15.2 correction, 2 units given`; type
+  those answers yourself. A dotted abbreviation (`q.h.s.`, `t.i.d.`, `a.m.`) ends a sentence here,
+  so `Lantus 10u q.h.s. 1.5u correction, …` is read as a correction as well. One exception: a correction that opens the whole answer to a
   question already answered above it (`Pain score: Correction: three out of ten`) corrects that
   question only, which already needs your decision because it has two answers — on an underlined-Tab
   form anywhere in a paragraph, on every other form only at the start of its line. ⚠️ So a

@@ -2567,3 +2567,54 @@ class WhatTheEighteenthPassFound(ExpectationsMixin, TestCase):
             ['Review of systems', 'Chest pain', 'Cough', 'Headache'], notes)['Headache']['held_candidate']['context'])
         for sentence in ('negative for the following.', 'Cardiac as below.', 'Pulmonary as below.'):
             self.assertIn(sentence, shown)
+
+
+class WhatTheNineteenthPassFound(ExpectationsMixin, TestCase):
+    """Round 19 over the eighteenth-pass repairs (2026-09-24)."""
+
+    def test_a_value_in_any_shape_is_read_like_its_integer_twin(self):
+        for label, line in (('Potassium', 'Potassium: 3.1mmol/L correction: 4.1mmol/L'), ('Polyp size', 'Polyp size: 1.2x0.8 correction: 0.6x0.4 cm'),
+                            ('Polyp size', 'Polyp size: 1.5-2.0 correction: 2.5 cm'), ('Polyp size', 'Polyp size: 12.5-mm correction: 8 mm'),
+                            ('Polyp size', 'Polyp size: 1,5 correction: 2 cm'), ('Pain score', 'Pain score: 3.5/10 correction: 7/10'),
+                            ('Glucose', 'Glucose: 5.6mmol/L correction: 6.5')):
+            with self.subTest(line=line):
+                answers = fixture_answers(['Assessment', label], 'Assessment: hypokalemia, oral KCl started.\n' + line)
+                self.assert_needs_decision(answers['Assessment'], 'hypokalemia, oral KCl started.', line)
+
+    def test_a_long_digit_run_is_read_once(self):
+        """The eighteenth-pass decimal form backtracked quadratically: 40 s at 50,000 characters, on every page and save."""
+        import time
+        for text in ('Size: 1.' + '2' * 49000, 'Size: ' + '2' * 49000 + ' x', 'Size: ' + '1.' * 24000 + '1 x',
+                     'adenoma.1.' + '2' * 49000, 'Seen' + '。' * 49 + ' 1.' + '2' * 5000):
+            started = time.perf_counter()
+            generation.erratum_points(text)
+            self.assertLess(time.perf_counter() - started, 2.0, text[:20])
+
+    def test_a_long_correction_window_does_not_swallow_the_denial_in_one_cut_quote(self):
+        tail = ('She recovered in the unit without incident and was observed for sixty minutes. Vital signs remained stable '
+                'throughout the recovery period. She tolerated oral fluids and was ambulating independently before discharge. '
+                'Written instructions were reviewed with the patient and her husband, including diet, activity and warning signs. '
+                'Her husband will drive her home, and a follow-up call is planned for tomorrow morning; the surveillance interval '
+                'will be decided then.')
+        notes = ('Procedure: diagnostic colonoscopy. Prior procedures were reviewed as follows. Complications: bleeding after a 2019 '
+                 'polypectomy. She is accompanied by her daughter, who helped with the history, and the consent form was signed in '
+                 'the unit. Correction: the 2019 procedure was a flexible sigmoidoscopy. Family history as follows. Mother: colon '
+                 "cancer at 60. After today's procedure the patient denies the following. Complications: perforation. " + tail)
+        answer = tab_answers(['Procedure', 'Complications', 'Mother'], notes)[1]['Complications']
+        shown = ' '.join(entry.get('quote', '') for entry in answer['held_candidate']['context'])
+        for sentence in ("After today's procedure the patient denies the following.", 'Family history as follows.',
+                         'Correction: the 2019 procedure was a flexible sigmoidoscopy.'):
+            self.assertIn(sentence, shown)
+
+    def test_two_governors_with_one_window_take_one_place(self):
+        notes = ('Review of systems: patient denies the following. Cardiac as below. Pulmonary as below. Negative for the following:\n'
+                 'Headache: frontal')
+        answer = fixture_answers(['Review of systems', 'Headache'], notes)['Headache']
+        shown = ' '.join(entry.get('quote', '') for entry in answer['held_candidate']['context'])
+        self.assertIn('Pulmonary as below.', shown)
+        notes = ('Pain score: six out of ten, reported at triage by the patient while waiting in the emergency department with her '
+                 'daughter.\nCardiac: negative as below. Correction: the triage pain score was entered for another patient. '
+                 'Pulmonary: negative for the following:\nPain score: three out of ten.')
+        answer = fixture_answers(['Pain score'], notes)['Pain score']
+        shown = ' '.join(entry.get('quote', '') for entry in answer['held_candidate']['context'])
+        self.assertIn('Correction: the triage pain score', shown)
