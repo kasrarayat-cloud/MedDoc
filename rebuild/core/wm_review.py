@@ -453,9 +453,13 @@ def _statement_evidence(encounter, narrative, requirement, cited, answers, block
         blockers.append('complete_assertion_source_required')
     if not required and units and not wm_narrative.names_side(requirement, result, encounter.notes):
         blockers.append('side_not_supported')
-    if units:
+    sentences = [item for item in result if item.get('kind') == 'unit']
+    if not basis and wm_narrative.rests_on_titles(requirement, sentences):
+        blockers.append('statement_source_is_heading')
+    if sentences:
+        # The clinician chose these sentences: only the installed denial and reframing vocabulary refuses them here.
         read = wm_narrative.stored_reading(encounter.notes, narrative['fields'], narrative['context_labels'], encounter.answers)
-        if wm_narrative.statement_governed(requirement, [item for item in result if item.get('kind') == 'unit'], read) is not None:
+        if wm_narrative.statement_blocked(requirement, sentences, read) is not None:
             blockers.append('governed_source')
     return result
 

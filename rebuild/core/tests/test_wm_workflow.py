@@ -577,3 +577,43 @@ class WMNarrativeWorkflow(TestCase):
         self.assertEqual(attempt('measurement_15_1', '7.4 mm'), 'unsupported_answer')    # the LEFT row, a right sentence
         self.assertEqual(attempt('measurement_1_1', '6.9 mm'), 'unsupported_answer')     # a number it does not contain
         self.assertEqual(attempt('measurement_1_1', '7.4 mm'), 'review_required')        # control: the answer passes
+
+    def test_the_engine_reads_characters_as_the_parent_does(self):
+        """Refutation round 2 (parity lens): the engine and the parent read a side, a quantity and a text answer over the
+        same classes of character, so the export never refuses what review accepted, and neither reads a side the
+        other does not. Each note is judged by the parent first, then the engine gets the same answer."""
+        from core import generation, wm_narrative
+        variants = {row['key']: row['default_variant'] for row in self.version.review_requirements}
+        variants.update(claim_9='original', claim_19='not_documented', claim_23='not_documented', claim_27='not_documented',
+                        claim_30='not_documented', claim_31='not_documented', claim_34='not_documented',
+                        claim_35='not_documented')
+        fields = {field['key']: field for field in self.version.fields}
+        labels = [row['label'] for row in self.version.review_requirements]
+
+        def both(notes, key, text):
+            unit = next(u for u in wm_narrative.units(notes, self.version.fields, labels) if u['end'] - u['start'] > 1)
+            unit = {'quote': unit['quote'], 'start': unit['start'], 'end': unit['end'], 'kind': 'unit'}
+            recognized = generation.recognized_labels(self.version.fields, labels)
+            parent = wm_narrative.support(fields[key], text, [unit], notes, recognized,
+                                          [field['label'] for field in self.version.fields] + labels)
+            context = {'reviewer_id': str(self.user.pk), 'revision': 3, 'notes': notes,
+                       'signer_name': self.user.get_full_name(), 'finalized_at': timezone.now().isoformat()}
+            answers = {field['key']: {'text': '', 'status': 'missing', 'reviewed_by': str(self.user.pk), 'revision': 3,
+                                      'evidence': []} for field in self.version.fields}
+            answers[key] = {'text': text, 'status': 'supported', 'reviewed_by': str(self.user.pk), 'revision': 3,
+                            'evidence': [unit]}
+            with self.assertRaises(DocumentError) as refused:
+                fill_template(private_path(self.template.original_path), self.version.fields, answers,
+                              Path(self.directory.name) / 'parity.docx', document_backend=self.version.document_backend,
+                              reviewed_requirements={}, claim_variants=variants, trusted_context=context)
+            return parent, refused.exception.code
+
+        # `review_required`: the answer check passed and the fill stopped later, at the unreviewed statements.
+        self.assertEqual(both('The RİGHT great saphenous vein measures 7.4 mm at the saphenofemoral junction.',
+                              'measurement_1_1', '7.4 mm'), (None, 'review_required'))
+        self.assertEqual(both('The great saphenous vein at the saphenofemoral junction measures 7.4 mm and the legs are '
+                              'bothersome.', 'measurement_15_1', '7.4 mm'), ('side_unknown', 'unsupported_answer'))
+        self.assertEqual(both('İBRAHİM YILMAZ presents for a venous study.', 'patient_name', 'Ibrahim Yilmaz'),
+                         (None, 'review_required'))
+        self.assertEqual(both('KARL GROSS presents for a venous study.', 'patient_name', 'Karl Groß'),
+                         ('unsupported', 'unsupported_answer'))

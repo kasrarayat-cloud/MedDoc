@@ -111,7 +111,7 @@ class TheFrozenBenchmark(SimpleTestCase):
 class TheHeldOutBenchmark(SimpleTestCase):
     """Written after the implementation by an author who did not read it (3af6e471), with blind careful responses
     (d92cc499); scored first on the implementation as it stood (201 correct, 0 wrong, 70 unnecessary holds), then
-    after the refutation round's repairs. Its two wrong pre-filled answers are choices whose only option overstates
+    after each refutation round's repairs (round 1: 253 / 18 holds; round 2: 256 / 15). Its two wrong pre-filled answers are choices whose only option overstates
     the note (a recanalized vein, a popliteal-only clot): wording the clinician must judge, which no rule can see."""
 
     def test_its_files_are_the_committed_ones(self):
@@ -124,8 +124,9 @@ class TheHeldOutBenchmark(SimpleTestCase):
         wrong = {(row['case'], row['key']) for row in rows if row['kind'] in ('wrong_value', 'supported_when_missing',
                                                                               'supported_when_decision')}
         self.assertLessEqual(wrong, {('H06', 'sdt_-892962961'), ('H06', 'sdt_-170105994')}, rows)
-        self.assertGreaterEqual(total['correct_supported'], 253, dict(total))
-        self.assertLessEqual(total['unnecessary_hold'], 18, [row for row in rows if row['kind'] == 'unnecessary_hold'])
+        self.assertGreaterEqual(total['correct_supported'], 256, dict(total))
+        self.assertLessEqual(total['unnecessary_hold'], 15, [row for row in rows if row['kind'] == 'unnecessary_hold'])
+        self.assertGreaterEqual(total['statement_correct'], 84, dict(total))
 
 
 class ValueSupport(SimpleTestCase):
@@ -424,6 +425,26 @@ class ReviewGate(SimpleTestCase):
         self.assertEqual(assertions['claim_27']['blockers'], [])
 
 
+    @override_settings(WM_NARRATIVE=True)
+    def test_a_clinicians_sentence_is_refused_only_by_the_denial_vocabulary_or_for_being_a_bare_title(self):
+        self.encounter.notes = self.NOTES + ('\n\nREASON FOR EXAM:\nGreat saphenous reflux is present on the right.'
+                                             '\n\nDenies the following:\nSaphenous reflux on the left.'
+                                             '\n\nBILATERAL LOWER EXTREMITY VENOUS DUPLEX')
+        found = {u['quote']: u for u in narrative.units(self.encounter.notes, FIELDS, LABELS)}
+        right, left = found['Great saphenous reflux is present on the right.'], found['Saphenous reflux on the left.']
+        title = found['BILATERAL LOWER EXTREMITY VENOUS DUPLEX']
+        read = narrative.stored_reading(self.encounter.notes, FIELDS, LABELS, self.encounter.answers)
+        self.assertIsNotNone(narrative.statement_governed(STATEMENTS['claim_32'], [narrative.unit_evidence(right)], read),
+                             'the section heading holds the proposal')
+        decisions = {'claim_32': {'variant': 'positive', 'reviewed': True, 'evidence': [narrative.unit_evidence(right)]},
+                     'claim_36': {'variant': 'positive', 'reviewed': True, 'evidence': [narrative.unit_evidence(left)]},
+                     'claim_23': {'variant': 'none', 'reviewed': True, 'evidence': [narrative.unit_evidence(title)]}}
+        assertions = self.evaluate(decisions)['assertions']
+        self.assertEqual(assertions['claim_32']['blockers'], [], 'and is the clinician\'s to read at review')
+        self.assertIn('governed_source', assertions['claim_36']['blockers'], 'the installed denial protection stands')
+        self.assertIn('statement_source_is_heading', assertions['claim_23']['blockers'])
+
+
 @override_settings(WM_NARRATIVE=False)
 class OffByDefault(SimpleTestCase):
     def test_the_configuration_and_generation_are_unchanged_with_the_flag_off(self):
@@ -624,9 +645,231 @@ REGRESSIONS = [
      for label in ['Family hx', 'FHx', 'FH', 'Mother', 'Ruled out', 'Neg', 'ROS neg for']]
 
 
+DVT = 'with evidence of an acute DVT of CFV, FV, POP V, PTV.'
+RIGHT_61 = 'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction.'
+RIGHT_76 = 'The right great saphenous vein measures 7.6 mm at the saphenofemoral junction.'
+
+
+def one(key, value, quote, want, notes=None):
+    """A regression row whose answer cites one unit."""
+    return (notes or quote, {key: (value, [quote], {})}, {key: want})
+
+
+ROUND_2 = [
+    # Round 2 attacked round 1's repairs (sealed lenses at b1780faa): every break and a control beside each class.
+    ('spaced fragments stay in a denial list', 'The patient denies the following:\n\nLeg pain.\n\nSwelling.\n\nHeaviness.',
+     {'sdt_269290727': ('Swelling', ['Swelling.'], {}), 'sdt_722175654': ('Heaviness', ['Heaviness.'], {})},
+     {'sdt_269290727': 'conflict', 'sdt_722175654': 'conflict'}),
+    ('any bullet stays in a denial list', *one('sdt_269290727', 'Swelling', '\u25e6 Swelling.', 'conflict',
+                                               'Negative for the following:\n\u25e6 Leg pain.\n\n\u25e6 Swelling.')),
+    ('a list sentence still open', *one('sdt_269290727', 'Swelling', 'swelling.', 'conflict', 'Negative for:\nleg pain, heaviness,\n\nswelling.')),
+    ('a spaced family list', *one('sdt_-770853925', 'Leg ulcer', 'Leg ulcer.', 'conflict', 'Family history:\n\nVaricose veins.\n\nLeg ulcer.')),
+    ('a sub-heading after a blank line stays under a denial', *one('sdt_-1029175652', DVT, '- Acute DVT of the femoral vein.', 'conflict',
+     'Negative for the following:\nRight leg:\n- Acute DVT of the femoral vein.\n\nLeft leg:\n- Acute DVT of the femoral vein.')),
+    ('a family heading ends at a new paragraph of prose', 'Family history:\nMother had a venous leg ulcer.\n\n' + SFJ,
+     {'measurement_1_1': ('7.4 mm', [SFJ], {})}, {'measurement_1_1': 'supported'}),
+] + [('an unlisted heading fails closed: ' + heading, *one('sdt_-170105994', DVT, 'Acute DVT in the femoral vein.', 'conflict',
+      heading + '\nRight leg:\nAcute DVT in the femoral vein.'))
+     for heading in ['Ruled out:', 'Excluded:', 'R/O:', 'Suspected:', 'Concern for:', 'Free of:', 'Pending:', 'Mother:',
+                     'FHx:', 'Hypothetically:', 'Should symptoms recur:']
+] + [
+    ('a report section ends even an unlisted heading', 'Ruled out:\n\nFINDINGS:\n' + SFJ, {'measurement_1_1': ('7.4 mm', [SFJ], {})},
+     {'measurement_1_1': 'supported'}),
+    ('R/O is not two structural letters', *one('sdt_-170105994', DVT, 'R/O: acute DVT of the right femoral vein.', 'conflict')),
+    ('A/P is not two structural letters', *one('sdt_-170105994', DVT, 'A/P: acute DVT of the right femoral vein.', 'conflict')),
+    ('a bare negative under its own heading', 'Leg pain:\nNo\n\nSwelling:\nYes, both ankles',
+     {'sdt_-1124008635': ('Leg pain', ['No'], {}), 'sdt_269290727': ('Swelling', ['Yes, both ankles'], {})},
+     {'sdt_-1124008635': 'conflict', 'sdt_269290727': 'supported'}),
+    ('a bare negative under a previous-treatment heading', *one('sdt_-1287346867', 'great saphenous vein', 'None.', 'conflict',
+                                                                'Right previous treatment:\nNone.')),
+    ('a bare negative is a negative option\'s answer', *one('sdt_-170105994', 'without evidence of obstruction or insufficiency.',
+                                                            'Negative.', 'supported', 'Right deep venous system:\nNegative.')),
+    ('a prior study over a current question', *one('measurement_1_1', '7.4 mm', 'Prior study: the right great saphenous vein measures '
+                                                   '7.4 mm at the saphenofemoral junction.', 'conflict')),
+    ('a past history over a current question', *one('sdt_-170105994', DVT, 'Past medical history: acute DVT of the right femoral vein.', 'conflict')),
+    ('a rule-out before a long colon', *one('sdt_-170105994', DVT, 'Study ordered to rule out DVT: acute DVT of the right femoral vein.', 'conflict')),
+    ('a side heading without a colon', 'RIGHT LOWER EXTREMITY:\n\nGSV at the SFJ 7.4 mm, reflux 1.8 s.\n\nLEFT LOWER EXTREMITY\n\nGSV at the '
+     'SFJ 5.0 mm, reflux 0.9 s.', {'measurement_1_1': ('5.0 mm', ['GSV at the SFJ 5.0 mm, reflux 0.9 s.'], {}),
+                                   'measurement_15_1': ('5.0 mm', ['GSV at the SFJ 5.0 mm, reflux 0.9 s.'], {})},
+     {'measurement_1_1': 'conflict', 'measurement_15_1': 'supported'}),
+    ('a side sentence between stops an older heading', *one('measurement_1_1', '5.0 mm', 'GSV at the SFJ 5.0 mm, reflux 0.9 s.', 'conflict',
+     'RIGHT LOWER EXTREMITY:\n\nGSV at the SFJ 7.4 mm, reflux 1.8 s.\n\nThe left leg was then examined.\n\nGSV at the SFJ 5.0 mm, reflux 0.9 s.')),
+    ('a comparison is not a bound side', 'On the left, the great saphenous vein measures 5.0 mm versus the right side at 7.4 mm at the '
+     'saphenofemoral junction.',
+     {'measurement_1_1': ('5.0 mm', ['On the left, the great saphenous vein measures 5.0 mm versus the right side at 7.4 mm at the saphenofemoral junction.'], {}),
+      'measurement_15_1': ('5.0 mm', ['On the left, the great saphenous vein measures 5.0 mm versus the right side at 7.4 mm at the saphenofemoral junction.'], {})},
+     {'measurement_1_1': 'conflict', 'measurement_15_1': 'supported'}),
+    ('a timing section keeps its prose paragraphs', 'HISTORY:\nShe had sclerotherapy of the left leg in 2019.\n\nOutside ultrasound in '
+     '2021 showed reflux of 2500 ms in the right great saphenous vein at the saphenofemoral junction.\n\nFINDINGS:\n' + SFJ,
+     {'measurement_1_2': ('2500 ms', ['Outside ultrasound in 2021 showed reflux of 2500 ms in the right great saphenous vein at the '
+                                      'saphenofemoral junction.'], {}), 'measurement_1_1': ('7.4 mm', [SFJ], {})},
+     {'measurement_1_2': 'conflict', 'measurement_1_1': 'supported'}),
+    ('a treatment heading is not a previous one', *one('sdt_-1287346867', 'great saphenous vein', 'Endovenous ablation of the right great '
+     'saphenous vein from the saphenofemoral junction to the knee.', 'conflict',
+     'TREATMENT:\nEndovenous ablation of the right great saphenous vein from the saphenofemoral junction to the knee.')),
+    ('a spoken correction opening its sentence', 'The right great saphenous vein shows reflux of 1500 milliseconds at the saphenofemoral '
+     'junction. Sorry, 900 milliseconds.', {'measurement_1_2': ('1500 ms', ['The right great saphenous vein shows reflux of 1500 '
+      'milliseconds at the saphenofemoral junction.', 'Sorry, 900 milliseconds.'], {})}, {'measurement_1_2': 'conflict'}),
+    ('scratch that', *one('measurement_1_1', '6.1 mm', RIGHT_61, 'conflict', RIGHT_61 + ' Scratch that. ' + RIGHT_76)),
+    ('a correction naming both values', RIGHT_61 + '\nCorrection: 6.1 mm should read 7.6 mm.',
+     {'measurement_1_1': ('6.1 mm', [RIGHT_61, 'Correction: 6.1 mm should read 7.6 mm.'], {})}, {'measurement_1_1': 'conflict'}),
+    ('a correction naming both values the other way', RIGHT_61 + '\nCorrection: it measures 7.6 mm rather than 6.1 mm.',
+     {'measurement_1_1': ('6.1 mm', [RIGHT_61, 'Correction: it measures 7.6 mm rather than 6.1 mm.'], {})}, {'measurement_1_1': 'conflict'}),
+    ('a correction after lead-in words', RIGHT_61 + ' Dictation correction, it measures 7.6 mm.',
+     {'measurement_1_1': ('6.1 mm', [RIGHT_61, 'Dictation correction, it measures 7.6 mm.'], {})}, {'measurement_1_1': 'conflict'}),
+    ('a mid-sentence correction to a denial', *one('sdt_-213273323', 'reflux positive.', 'Reflux in the right great saphenous vein at '
+     'the junction, correction, no reflux in the right great saphenous vein.', 'conflict')),
+    ('a correction written as a heading', *one('measurement_1_1', '6.1 mm', RIGHT_61, 'conflict', RIGHT_61 + '\n\nCORRECTION:\n' + RIGHT_76)),
+    ('the corrected value under a correction heading', *one('measurement_1_1', '7.6 mm', RIGHT_76, 'supported',
+                                                            RIGHT_61 + '\n\nCORRECTION:\n' + RIGHT_76)),
+] + [('the form\'s own labelled line with a negative value: ' + text, *one(key, value, text, 'conflict'))
+     for text, key, value in [('Clinical indication: swelling: none.', 'sdt_269290727', 'Swelling'),
+                              ('Clinical indication: leg pain: denies.', 'sdt_-1124008635', 'Leg pain'),
+                              ('Clinical indication: heaviness: no.', 'sdt_722175654', 'Heaviness')]
+] + [('negative shorthand: ' + text, *one('sdt_-1124008635', 'Leg pain', text, 'conflict'))
+     for text in ['Leg pain: (-).', 'Leg pain: -ve.', 'Leg pain: N.', 'Leg pain: \u2212.', 'Leg pain: 0/10.']
+] + [
+    ('an inline plan', *one('sdt_-1287346867', 'great saphenous vein', 'Plan: endovenous ablation of the right great saphenous vein from '
+                            'the saphenofemoral junction to the knee.', 'conflict')),
+    ('an inline P:', *one('sdt_-346030703', 'saphenofemoral junction', 'P: right GSV ablation SFJ to knee.', 'conflict')),
+    ('longer denial-list items', 'Denies: leg pain. Swelling of both ankles at night. Heaviness or aching in the legs.',
+     {'sdt_269290727': ('Swelling', ['Swelling of both ankles at night.'], {}),
+      'sdt_722175654': ('Heaviness', ['Heaviness or aching in the legs.'], {})},
+     {'sdt_269290727': 'conflict', 'sdt_722175654': 'conflict'}),
+    ('both as a determiner is not both legs', *one('measurement_1_1', '5.0 mm', 'In the left leg, both the great saphenous vein and the '
+     'small saphenous vein are incompetent; the great saphenous vein measures 5.0 mm at the saphenofemoral junction.', 'conflict')),
+] + [('a relative: ' + text, *one('sdt_-770853925', 'Leg ulcer', text, 'conflict'))
+     for text in ['Maternal history of venous leg ulcer.', 'Leg ulcer in her twin.', 'Her husband had a leg ulcer.']]
+
+
+SPOKEN = ('okay this is synthetic patient x she is here for aching leg pain and swelling in the right leg on the right the great '
+          'saphenous vein at the junction measures 7.4 millimeters with reflux of 1.8 seconds the proximal thigh measures 6.9 '
+          'correction 6.6 millimeters')
+AFTER = ('on the right the great saphenous vein at the junction measures 7.4 millimeters and the reflux time is 1.8 seconds on the '
+         'left the great saphenous vein at the junction measures 5.0 millimeters')
+JOINED = ('The right great saphenous vein shows reflux of 1800 ms. At the proximal thigh the right great saphenous vein measures '
+          '6.9 mm with reflux of 1200 ms. Correction: the proximal thigh diameter is 6.6 mm.')
+PARAGRAPH_FIX = ('The patient reports aching leg pain. The right great saphenous vein measures 7.4 mm at the saphenofemoral junction. '
+                 'The left great saphenous vein measures 5.0 mm at the saphenofemoral junction. Correction: the left junction '
+                 'diameter is 5.3 mm.')
+PLAIN = 'The great saphenous vein measures 7.4 mm at the saphenofemoral junction.'
+SUBHEADED = ('RIGHT LOWER EXTREMITY:\nDeep venous system:\nNo deep venous thrombosis.\n\nSuperficial venous system:\n' + PLAIN)
+RESPECTIVELY = 'The right and left great saphenous veins measure 7.4 mm and 5.0 mm at the saphenofemoral junction, respectively.'
+ROUND_2_LENSES = [
+    # Round 2's false-rejection and parity lenses (sealed, at b1780faa): every break, and a control beside each class.
+    ('a transcript correction replaces only what it corrects', SPOKEN,
+     {'sdt_-1124008635': ('Leg pain', [SPOKEN], {}), 'measurement_1_1': ('7.4 mm', [SPOKEN], {}),
+      'measurement_1_2': ('1800 ms', [SPOKEN], {}), 'measurement_2_1': ('6.9 mm', [SPOKEN], {})},
+     {'sdt_-1124008635': 'supported', 'measurement_1_1': 'supported', 'measurement_1_2': 'supported', 'measurement_2_1': 'conflict'}),
+    ('its corrected value', *one('measurement_2_1', '6.6 mm', SPOKEN, 'supported')),
+    ('a side after the value opens the next finding', AFTER,
+     {'measurement_1_2': ('1800 ms', [AFTER], {}), 'measurement_15_2': ('1800 ms', [AFTER], {})},
+     {'measurement_1_2': 'supported', 'measurement_15_2': 'conflict'}),
+    ('a compared side opens the next finding', 'The right great saphenous vein at the saphenofemoral junction measures 7.4 mm and has '
+     '1.8 s of reflux compared with the left great saphenous vein at 5.0 mm.',
+     {'measurement_1_2': ('1800 ms', ['The right great saphenous vein at the saphenofemoral junction measures 7.4 mm and has 1.8 s of '
+                                      'reflux compared with the left great saphenous vein at 5.0 mm.'], {}),
+      'measurement_15_2': ('1800 ms', ['The right great saphenous vein at the saphenofemoral junction measures 7.4 mm and has 1.8 s of '
+                                       'reflux compared with the left great saphenous vein at 5.0 mm.'], {})},
+     {'measurement_1_2': 'supported', 'measurement_15_2': 'conflict'}),
+    ('a side heading over its sub-headings', SUBHEADED, {'measurement_1_1': ('7.4 mm', [PLAIN], {}), 'measurement_15_1': ('7.4 mm', [PLAIN], {})},
+     {'measurement_1_1': 'supported', 'measurement_15_1': 'conflict'}),
+    ('a side heading without a colon over a sub-heading', *one('measurement_1_1', '7.4 mm', PLAIN, 'supported',
+                                                               'RIGHT LOWER EXTREMITY\n\nSuperficial venous system:\n\n' + PLAIN)),
+    ('a report heading between stops the side', *one('measurement_1_1', '7.4 mm', PLAIN, 'conflict', 'RIGHT LOWER EXTREMITY:\n\nIMPRESSION:\n\n' + PLAIN)),
+    ('an unknown heading between stops the side', *one('measurement_1_1', '7.4 mm', PLAIN, 'conflict', 'RIGHT LOWER EXTREMITY:\n\nPatient tolerated well:\n\n' + PLAIN)),
+] + [('side shorthand: ' + text, *one(key, value, text, 'supported'))
+     for text, key, value in [('R: GSV SFJ 7.4 mm, reflux 1.8 s.', 'measurement_1_1', '7.4 mm'),
+                              ('RGSV SFJ 7.4 mm, reflux 1.8 s.', 'measurement_1_1', '7.4 mm'),
+                              ('R-GSV SFJ 7.4 mm, reflux 1.8 s.', 'measurement_1_1', '7.4 mm'),
+                              ('(R) GSV SFJ 7.4 mm, reflux 1.8 s.', 'measurement_1_1', '7.4 mm'),
+                              ('R-sided GSV SFJ 7.4 mm.', 'measurement_1_1', '7.4 mm'),
+                              ('R prox thigh GSV 6.9 mm.', 'measurement_2_1', '6.9 mm'),
+                              ('Right below knee GSV measures 4.2 mm.', 'measurement_4_1', '4.2 mm'),
+                              ('RİGHT GSV at the SFJ measures 7.4 mm.', 'measurement_1_1', '7.4 mm')]
+] + [
+    ('an adverb right is never passed over for the paragraph\'s side',
+     *one('measurement_18_1', '4.2 mm', 'Right below the knee the great saphenous vein measures 4.2 mm.', 'conflict',
+          'Left great saphenous vein at the saphenofemoral junction measures 5.0 mm. Right below the knee the great saphenous vein '
+          'measures 4.2 mm.')),
+    ('the row name is the right', *one('measurement_18_1', '4.2 mm', 'Right below knee GSV measures 4.2 mm.', 'conflict',
+                                       'Left GSV at the SFJ measures 5.0 mm. Right below knee GSV measures 4.2 mm.')),
+    ('respectively', RESPECTIVELY, {'measurement_1_1': ('7.4 mm', [RESPECTIVELY], {}), 'measurement_15_1': ('7.4 mm', [RESPECTIVELY], {})},
+     {'measurement_1_1': 'conflict', 'measurement_15_1': 'conflict'}),
+    ('two legs in one phrase', *one('measurement_1_1', '7.4 mm', 'The right and left great saphenous veins measure 7.4 mm and 5.0 mm at '
+                                    'the saphenofemoral junction.', 'conflict')),
+    ('two legs in two clauses', *one('measurement_15_1', '5.0 mm', 'The right great saphenous vein measures 7.4 mm and the left great '
+                                     'saphenous vein measures 5.0 mm at the saphenofemoral junction.', 'supported')),
+    ('a side word cut inside a word is no side', *one('measurement_15_1', '7.4 mm', 'The great saphenous vein at the saphenofemoral '
+                                                      'junction measures 7.4 mm and she finds the legs aching very bothersome at night.',
+                                                      'conflict')),
+] + [('a side word inside a word: ' + word, *one('measurement_1_1', '7.4 mm', 'The great saphenous vein at the saphenofemoral junction '
+                                                 'measures 7.4 mm with ' + word + '.', 'conflict'))
+     for word in ['distant bleeding', 'leftover thrombus', 'rightly noted', 'bothersome pain']
+] + [
+    ('an unforeseen side form is not both legs', *one('measurement_15_1', '7.4 mm', 'The OPPOSİTE LEG great saphenous vein measures '
+                                                      '7.4 mm at the saphenofemoral junction.', 'conflict',
+                                                      'Bilateral study.\nThe OPPOSİTE LEG great saphenous vein measures 7.4 mm at '
+                                                      'the saphenofemoral junction.')),
+    ('an opening correction holds only what it concerns', JOINED,
+     {'measurement_1_2': ('1800 ms', [JOINED], {}), 'measurement_2_2': ('1200 ms', [JOINED], {}),
+      'measurement_2_1': ('6.9 mm', [JOINED], {})},
+     {'measurement_1_2': 'supported', 'measurement_2_2': 'supported', 'measurement_2_1': 'conflict'}),
+    ('a correction in the paragraph holds only what it concerns', PARAGRAPH_FIX,
+     {'sdt_-1124008635': ('Leg pain', ['The patient reports aching leg pain.'], {}),
+      'measurement_1_1': ('7.4 mm', ['The right great saphenous vein measures 7.4 mm at the saphenofemoral junction.'], {}),
+      'measurement_15_1': ('5.0 mm', ['The left great saphenous vein measures 5.0 mm at the saphenofemoral junction.'], {})},
+     {'sdt_-1124008635': 'supported', 'measurement_1_1': 'supported', 'measurement_15_1': 'conflict'}),
+    ('a correction about the other leg', *one('sdt_2001841928', 'great saphenous vein', 'The left great saphenous vein is incompetent.',
+                                              'supported', 'The left great saphenous vein is incompetent.\n\nCorrection: the right great '
+                                              'saphenous vein measures 7.6 mm at the saphenofemoral junction, not 7.4 mm.')),
+    ('a correction whose denial is past its reach', 'The patient reports aching leg pain. Sorry, I misspoke about the side of '
+     'the swelling earlier, she denies leg pain.',
+     {'sdt_-1124008635': ('Leg pain', ['The patient reports aching leg pain.', 'Sorry, I misspoke about the side of the swelling '
+                                       'earlier, she denies leg pain.'], {})}, {'sdt_-1124008635': 'conflict'}),
+    ('a correction that places nothing still holds its paragraph', *one('sdt_-1124008635', 'Leg pain', 'The patient reports aching leg pain.',
+                                                                        'conflict', 'The patient reports aching leg pain. Scratch that.')),
+] + [('a SOAP or section heading over a complaint: ' + heading, *one('sdt_-1124008635', 'Leg pain', 'Aching leg pain.', 'supported',
+                                                                    heading + '\nAching leg pain.'))
+     for heading in ['S:', 'SUBJECTIVE:', 'HPI:', 'CC:', 'CHIEF COMPLAINT:', 'REASON FOR EXAM:', 'CLINICAL HISTORY:', 'SYMPTOMS:']
+] + [('a section heading over a finding: ' + heading, *one('measurement_1_1', '7.4 mm', RIGHT_61.replace('6.1', '7.4'), want,
+                                                          heading + '\n' + RIGHT_61.replace('6.1', '7.4')))
+     for heading, want in [('O:', 'supported'), ('OBJECTIVE:', 'supported'), ('A:', 'supported'), ('ASSESSMENT:', 'supported'),
+                           ('REASON FOR EXAM:', 'conflict'), ('HPI:', 'conflict'), ('HISTORY:', 'conflict'), ('PLAN:', 'conflict')]
+] + [('a history heading over a previous treatment: ' + heading, *one('sdt_-1287346867', 'great saphenous vein', 'Endovenous ablation '
+      'of the right great saphenous vein from the saphenofemoral junction to the knee in 2019.', want, heading + '\nEndovenous ablation '
+      'of the right great saphenous vein from the saphenofemoral junction to the knee in 2019.'))
+     for heading, want in [('SURGICAL HISTORY:', 'supported'), ('PSH:', 'supported'), ('Hx:', 'supported'),
+                           ('PRIOR PROCEDURES:', 'supported'), ('PLAN:', 'conflict'), ('PROCEDURE:', 'conflict')]
+] + [('a label that is metadata or a row: ' + text, *one(key, value, text, 'supported'))
+     for text, key, value in [('D.O.B.: 06/30/1959', 'date_of_birth', '06/30/1959'), ('Visit date: 09/10/2026', 'date_of_service', '09/10/2026'),
+                              ('Pt ID: SYN-Q-1001', 'patient_id', 'SYN-Q-1001'), ('Right GSV prox thigh: 6.9 mm.', 'measurement_2_1', '6.9 mm'),
+                              ('Right SSV prox calf: 3.2 mm.', 'measurement_6_1', '3.2 mm'),
+                              ('Right leg, superficial system: the great saphenous vein measures 7.4 mm at the saphenofemoral junction.',
+                               'measurement_1_1', '7.4 mm'),
+                              ('Right GSV SFJ: 7.4 mm, no reflux.', 'measurement_1_1', '7.4 mm'),
+                              ('Right GSV SFJ 7.4 mm + reflux 1.8 s.', 'measurement_1_1', '7.4 mm')]
+] + [
+    ('a bound plus on the value', *one('measurement_1_1', '7.4 mm', 'Right GSV SFJ 7.4 mm+.', 'conflict')),
+    ('a relative early in a transcript', *one('sdt_-1124008635', 'Leg pain', 'okay she came in with her daughter today for a venous study '
+                                              'of both legs after a long week at work on her feet all day and she reports aching leg pain '
+                                              'at night', 'supported')),
+    ('a family physician is not a relative', *one('sdt_-1124008635', 'Leg pain', 'She was referred by her family physician for leg pain '
+                                                  'and swelling.', 'supported')),
+    ('a relative just before the finding', *one('sdt_-770853925', 'Leg ulcer', 'Family history is significant for varicose veins in her '
+                                                'mother, leg ulcer and swelling.', 'conflict')),
+    ('a text answer folded as the engine folds it', *one('patient_name', 'Ibrahim Yilmaz', 'İBRAHİM YILMAZ presents for a '
+                                                         'venous study today.', 'supported')),
+    ('a text answer the engine cannot fold', *one('patient_name', 'Νικος Παπας',
+                                                  'ΝΙΚΟΣ ΠΑΠΑΣ presents today.', 'conflict')),
+    ('a labelled line the engine reads apart', *one('patient_name', 'Karl Groß', 'Karl Groß presents today.', 'conflict',
+                                                    'Patient name: KARL GROSS\nKarl Groß presents today.')),
+]
+
+
 class RefutationRegressions(SimpleTestCase):
     def test_every_demonstrated_break_and_its_control(self):
-        for name, notes, picks, expected in REGRESSIONS:
+        for name, notes, picks, expected in REGRESSIONS + ROUND_2 + ROUND_2_LENSES:
             with self.subTest(name):
                 answers, _ = decide(notes, picks)
                 self.assertEqual({key: answers[key]['status'] for key in expected}, expected)
@@ -639,8 +882,56 @@ class EngineParity(SimpleTestCase):
             pattern = getattr(narrative, name)
             self.assertNotIn('"', pattern)
             self.assertIn('@"' + pattern + '"', source, name)
+        # The value words: the same gap (the parent spells .NET's `\s`), compared case-sensitively over folded text.
         self.assertIn(r'\s+(?:(?:right|left|rt|lt)\s+)?', source)
-        self.assertIn(r'\s+(?:(?:right|left|rt|lt)\s+)?', narrative._words('a b').pattern)
+        self.assertEqual(narrative.WORD_GAP.replace(narrative.SPACE, r'\s'), r'\s+(?:(?:right|left|rt|lt)\s+)?')
+        self.assertIn(narrative.WORD_GAP, narrative._words('a b').pattern)
+        self.assertIn('@"(?![^\\W\\d_])", RegexOptions.CultureInvariant);', source)
+        # The four letters both boundaries fold, in both of the engine's readings.
+        reading = dict(re.findall(r"Replace\('\\u([0-9a-f]{4})', '(.)'\)", source.split('string Reading(')[1].split('\n')[0]))
+        folding = dict(re.findall(r"Replace\('\\u([0-9a-f]{4})', '(.)'\)", source.split('string Fold(')[1].split('ToCharArray')[0]))
+        self.assertEqual({int(code, 16): letter for code, letter in reading.items()}, narrative.ASCII_FOLDS)
+        self.assertEqual({int(code, 16): letter for code, letter in folding.items()},
+                         {code: letter.lower() for code, letter in narrative.ASCII_FOLDS.items()})
+        self.assertEqual({code: chr(value) if isinstance(value, int) else value for code, value in narrative.TEXT_FOLD.items()
+                          if code > 127}, {code: letter.lower() for code, letter in narrative.ASCII_FOLDS.items()})
+
+    def test_the_engine_reads_the_text_as_the_parent_does_and_its_labelled_path_is_mains(self):
+        source = (REPOSITORY / 'rebuild/documents/sdk_word/Adapter/WmAdapter.cs').read_text()
+        # The labelled contract's line reading is byte-identical to main's (80fb591b): flag off changes nothing.
+        self.assertIn("private static IEnumerable<string> ExplicitLabelValues(string notes, string label) => notes.Split('\\n')"
+                      ".Select(line => LabelValue(line, label)).Where(value => !string.IsNullOrEmpty(value)).Select(value => value!);",
+                      source)
+        fold = source.split('private static string Fold(')[1].split('\n    }')[0]
+        self.assertIn("is >= 'A' and <= 'Z'", fold)
+        self.assertNotIn('ToLower', fold)                       # ASCII case only, as `wm_narrative.fold`
+        self.assertNotIn('Normalize', fold)
+        self.assertIn('quote = Reading(quote);', source)        # quantities over the reading view
+        self.assertIn('SideWord.Matches(Reading(notes))', source)
+        self.assertIn('if (word.Index + word.Length > end) break;', source)
+        side_name = source.split('private static string SideName(')[1].split('\n    }')[0]
+        self.assertTrue(side_name.rstrip().endswith('return "unclear";'), side_name)
+
+    def test_a_side_word_is_read_from_the_whole_text_never_inside_a_window(self):
+        # Mutant M23 (a windowed search) is equivalent under today's callers, whose windows all end at a non-letter;
+        # this pins the invariant for the next caller: a search cut inside a word reads its head as a word.
+        notes = 'She has distant bleeding and leftover tenderness.'
+        for word in ('ble', 'left'):
+            end = notes.index(word) + len(word)
+            self.assertEqual(narrative.sides_between(notes, 0, end), [], word)
+        self.assertEqual([side for *_, side in narrative.sides_between('the left leg', 0, 12)], ['left'])
+
+    def test_the_parent_reads_the_patterns_over_what_net_calls_each_character(self):
+        view = narrative.view
+        self.assertEqual(view('R\u0130GHT \u0131 \u017f \u212a'), 'RIGHT i s K')
+        self.assertEqual(view('e\u0301\u203f'), 'e\u0436\u0436')          # a combining mark, a connector: letters
+        self.assertEqual(view('mm\u00b2 \u2163'), 'mm\x00 \x00')            # numerics .NET does not call words
+        self.assertEqual(view('R\x1fGSV'), 'R\x00GSV')                        # not space in .NET
+        self.assertEqual(len(view('\U0001d400 x')), len('\U0001d400 x'))
+        self.assertEqual(narrative.side_word('r\u0131ght'), 'unclear')        # an unforeseen form names no side
+        self.assertEqual(narrative.text_at('Ibrahim Yilmaz', '\u0130BRAH\u0130M YILMAZ presents.'), [0])
+        self.assertEqual(narrative.text_at('Karl Gro\u00df', 'KARL GROSS presents.'), [])
+        self.assertEqual(narrative.text_at('Jose', 'Jose\u0301 Garcia presents.'), [])
 
 
 @override_settings(AI_MODE='fixture', ADMIN_SITE=False, WM_NARRATIVE=True,

@@ -249,21 +249,22 @@ public static partial class WmAdapter
         }
         return null;
     }
-    private static IEnumerable<string> ExplicitLabelValues(string notes, string label) => SplitLines(notes).Select(line => LabelValue(line, label)).Where(value => !string.IsNullOrEmpty(value)).Select(value => value!);
-    // The line breaks Python's `str.splitlines` reads, so the parent and the engine see the same labelled lines.
+    // ⚠️ The labelled contract splits on '\n' only, exactly as it always has: its behaviour with the flag off is unchanged.
+    private static IEnumerable<string> ExplicitLabelValues(string notes, string label) => notes.Split('\n').Select(line => LabelValue(line, label)).Where(value => !string.IsNullOrEmpty(value)).Select(value => value!);
+    // The narrative contract reads the line breaks Python's `str.splitlines` reads, so the parent and the engine see
+    // the same labelled lines.
+    private static IEnumerable<string> NarrativeLabelValues(string notes, string label) => SplitLines(notes).Select(line => LabelValue(line, label)).Where(value => !string.IsNullOrEmpty(value)).Select(value => value!);
     private static string[] SplitLines(string text) => Regex.Split(text, "\r\n|[\n\r\u000b\u000c\u001c\u001d\u001e\u0085\u2028\u2029]");
-    // Text compared after compatibility decomposition, without combining marks, in invariant lower case with the
-    // dotless i folded: never stricter than the parent's case-insensitive reading (a ligature, İ/ı, a decomposed é).
+    // What the shared patterns read (core/wm_narrative.view): the four letters Python's ignore-case folds onto ASCII
+    // become that letter, so `RİGHT` is the right here too. Length-preserving (all four are one UTF-16 unit).
+    private static string Reading(string text) => text.Replace('\u0130', 'I').Replace('\u0131', 'i').Replace('\u017f', 's').Replace('\u212a', 'K');
+    // Text compared with ASCII case folded (and those four letters) and every other character exactly, as the parent
+    // compares it (core/wm_narrative.fold): the invariant runtime has no normalisation for the two sides to agree on.
     private static string Fold(string text)
     {
-        var decomposed = text.Normalize(NormalizationForm.FormKD);
-        var kept = new StringBuilder(decomposed.Length);
-        foreach (var c in decomposed) {
-            var category = CharUnicodeInfo.GetUnicodeCategory(c);
-            if (category is UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark or UnicodeCategory.EnclosingMark) continue;
-            kept.Append(c);
-        }
-        return kept.ToString().ToLowerInvariant().Replace('\u0131', 'i');
+        var chars = text.Replace('\u0130', 'i').Replace('\u0131', 'i').Replace('\u017f', 's').Replace('\u212a', 'k').ToCharArray();
+        for (var i = 0; i < chars.Length; i++) if (chars[i] is >= 'A' and <= 'Z') chars[i] = (char)(chars[i] + 32);
+        return new string(chars);
     }
     private static bool LabelValuesConsistent(string notes, string label, string expected) => ExplicitLabelValues(notes, label).All(value => Normalize(value) == Normalize(expected));
     // ── the narrative contract's second boundary ──────────────────────────────────────────────────────────────
@@ -274,10 +275,9 @@ public static partial class WmAdapter
     // with no support at all, or none for its side, never reaches the document.
     private const string QuantityPattern = @"(?<![0-9.,])(?<![0-9][\u2009\u202f])([0-9]+(?:\.[0-9]+)?)[ \t\u00a0]*-?[ \t\u00a0]*(?i:(mm|millimet(?:er|re)s?|ms|msecs?|millisec(?:ond)?s?|s|secs?|seconds?))(?![^\W\d_])";
     private const string BoundedBeforePattern = @"(?i:(?:[<>~\u2248\u2264\u2265\u00b1]=?|\b(?:less|greater|more|fewer|longer|shorter|higher|lower|larger|smaller)\s+than(?:\s+or\s+equal\s+to)?|\b(?:equal\s+to|in\s+excess\s+of|close\s+to|not\s+exceeding|exceeding|under|over|below|above|beyond|about|around|approximately|approx\.?|roughly|nearly|almost|circa|ca\.|estimated|est\.|up\s+to|at\s+(?:least|most)|at\s+or\s+(?:above|below))|\bbetween\s+[0-9][0-9.,]*\s*(?:[^\W\d_]+\s*)?and|[0-9]\s*(?:[^\W\d_]{1,12}\.?\s*)?(?:-|\u2013|\u2014|\bto|\bor)|\bor)\s*)$";
-    private const string BoundedAfterPattern = @"(?i:^(?:\s*\+|\s*\?|\s*\(?\s*(?:approx(?:imately)?\.?|estimated|est\.)(?![^\W\d_])|\s*(?:or|and)\s+(?:more|less|greater|higher|lower|longer|shorter|larger|smaller|so|above|below|over|under)(?![^\W\d_])(?=\s*(?:[,.;:)\]]|$|\s(?:in|at|on|for|with|and|but)\b))|\s*(?:-|\u2013|\u2014|to\b|or\b)\s*[0-9]))";
-    private const string SidePattern = @"(?<![^\W\d_])((?i:right(?!\s+(?:below|above|at|after|before|behind|under|over|next|near|beside|along|across|around|into|through|up|down|now|away|there|here|about)(?![^\W\d_]))|rt|rle|left|lt|lle|both|bilateral(?:ly)?|bilat|either|ble|b/l|contralateral|ipsilateral|(?:other|opposite)\s+(?:leg|side|limb|extremity))|R\s*(?:and|&|/|\+)\s*L|(?:R|L)(?=\s+(?i:gsv|ssv|aagsv|pagsv|great|small|leg|lower|le|sfj|spj|cfv|fv|pop|thigh|calf|knee|ankle|side|deep|superficial|accessory|anterior|posterior|saphenous|popliteal|femoral|tributary|perforator)(?![^\W\d_])))(?![^\W\d_])";
-    // The four shared patterns scope their own case (as the parent compiles them); only the value words ignore it.
-    private static readonly RegexOptions Reading = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
+    private const string BoundedAfterPattern = @"(?i:^(?:\+|\s+\+(?=\s*(?:[,.;:)\]]|$))|\s*\?|\s*\(?\s*(?:approx(?:imately)?\.?|estimated|est\.)(?![^\W\d_])|\s*(?:or|and)\s+(?:more|less|greater|higher|lower|longer|shorter|larger|smaller|so|above|below|over|under)(?![^\W\d_])(?=\s*(?:[,.;:)\]]|$|\s(?:in|at|on|for|with|and|but)\b))|\s*(?:-|\u2013|\u2014|to\b|or\b)\s*[0-9]))";
+    private const string SidePattern = @"(?<![^\W\d_])((?i:right(?!\s+(?:below|above|at|behind|under|over|near|beside|along|across|around|into|through|up|down|by|to|next|off|past)\s+(?:the|a|an|his|her|its|their|this|that|to|from|of|in|on)(?![^\W\d_])|\s+(?:now|away|there|here|about|then|after|before|when|as)(?![^\W\d_]))|rt|rle|left|lt|lle|(?:both|either)(?=\s+(?:legs?|sides?|lower\s+extremit|limbs?|extremit|ankles?|calf|calves|thighs?|knees?|feet|groins?|deep|superficial|venous|great|small|saphenous|gsvs?|ssvs?|junctions?))|bilateral(?:ly)?|bilat|ble|b/l|contralateral|ipsilateral|(?:other|opposite)\s+(?:leg|side|limb|extremity))(?![^\W\d_])|R\s*(?:and|&|/|\+)\s*L(?![^\W\d_])|(?<=\()(?:R|L)(?=\))|(?:R|L)(?=[ \t]*:|-(?i:sided?)(?![^\W\d_])|-?(?:GSV|SSV|ASV|AASV|PASV|AAGSV|PAGSV|CFV|FV|POP|PTV|SFJ|SPJ)(?![^\W\d_])|\s+(?i:gsv|ssv|asv|aasv|pasv|aagsv|pagsv|great|small|legs?|lower|le|sfj|spj|cfv|fv|pop|ptv|atv|pv|thigh|calf|knee|ankle|foot|groin|side|deep|superficial|accessory|anterior|posterior|saphenous|popliteal|femoral|tibial|peroneal|gastrocnemius|soleal|tributary|tributaries|trib|perforators?|perf|varicose|varicosities|veins?|venous|prox|proximal|mid|distal|medial|lateral|below|above|bk|ak|extremity|limb|junction)(?![^\W\d_])))";
+    // The four shared patterns scope their own case (as the parent compiles them); value words are compared folded.
     private static readonly Regex Quantity = new(QuantityPattern, RegexOptions.CultureInvariant);
     private static readonly Regex BoundedBefore = new(BoundedBeforePattern, RegexOptions.CultureInvariant);
     private static readonly Regex BoundedAfter = new(BoundedAfterPattern, RegexOptions.CultureInvariant);
@@ -298,7 +298,7 @@ public static partial class WmAdapter
             "measurement" => quotes.Any(q => MeasurementWritten(answer.Text, q.Quote)),
             _ => quotes.Any(q => WordsPattern(Fold(answer.Text)).IsMatch(Fold(q.Quote))),
         };
-        if (!written || !ExplicitLabelValues(notes, field.Label).All(value => Agrees(field, value, answer.Text)))
+        if (!written || !NarrativeLabelValues(notes, field.Label).All(value => Agrees(field, value, answer.Text)))
             Fail("unsupported_answer", "Answer is not written in its cited source sentences.");
         var side = FieldSide(field.Label);
         if (side is not null && !quotes.Any(q => SideWritten(notes, q.Start, q.End, side)))
@@ -351,6 +351,7 @@ public static partial class WmAdapter
         var form = MeasurementForm.Match(value);
         if (!form.Success || !decimal.TryParse(value.Split(' ')[0], NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var number)) return false;
         var unit = form.Groups[1].Value;
+        quote = Reading(quote);
         foreach (Match found in Quantity.Matches(quote)) {
             if (BoundedBefore.IsMatch(quote[Math.Max(0, found.Index - 40)..found.Index]) || BoundedAfter.IsMatch(quote[(found.Index + found.Length)..])) continue;
             if (!decimal.TryParse(found.Groups[1].Value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var stated)) continue;
@@ -367,7 +368,7 @@ public static partial class WmAdapter
     private static Regex WordsPattern(string value)
     {
         var words = value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-        return new Regex(@"(?<![^\W\d_])" + string.Join(@"\s+(?:(?:right|left|rt|lt)\s+)?", words.Select(Regex.Escape)) + @"(?![^\W\d_])", Reading);
+        return new Regex(@"(?<![^\W\d_])" + string.Join(@"\s+(?:(?:right|left|rt|lt)\s+)?", words.Select(Regex.Escape)) + @"(?![^\W\d_])", RegexOptions.CultureInvariant);
     }
 
     private static bool Agrees(Field field, string labelled, string value) => field.Kind switch {
@@ -379,16 +380,29 @@ public static partial class WmAdapter
     private static string? FieldSide(string label) => label.StartsWith("Right ", StringComparison.Ordinal) ? "right" : label.StartsWith("Left ", StringComparison.Ordinal) ? "left" : null;
 
     // Any side word of this side (or both legs) from the start of the notes to the end of the cited sentence: the
-    // parent reads the clause, the sentence, the paragraph and the nearest heading, all inside that range.
+    // parent reads the clause, the sentence, the paragraph and the nearest heading, all inside that range. Read over the
+    // whole text and kept when it ends by then (a search cut inside a word would read `both` in `bothersome`).
     private static bool SideWritten(string notes, int start, int end, string side)
     {
-        foreach (Match word in SideWord.Matches(notes[..end])) {
-            var name = string.Join(" ", word.Groups[1].Value.ToLowerInvariant().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
-            var named = name is "right" or "rt" or "rle" or "r" ? "right" : name is "left" or "lt" or "lle" or "l" ? "left"
-                : name is "contralateral" or "ipsilateral" || name.StartsWith("other", StringComparison.Ordinal) || name.StartsWith("opposite", StringComparison.Ordinal) ? "unclear" : "both";
+        foreach (Match word in SideWord.Matches(Reading(notes))) {
+            if (word.Index + word.Length > end) break;
+            var named = SideName(word.Groups[1].Value);
             if (named == side || named == "both") return true;
         }
         return false;
+    }
+
+    // core/wm_narrative.side_word: an unforeseen form names no side.
+    private static readonly Regex BothLegs = new(@"^r ?(?:and|&|/|\+) ?l$", RegexOptions.CultureInvariant);
+    private static string SideName(string word)
+    {
+        var name = string.Join(" ", word.ToLowerInvariant().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        if (name is "right" or "rt" or "rle" or "r") return "right";
+        if (name is "left" or "lt" or "lle" or "l") return "left";
+        if (name is "bilateral" or "bilaterally" or "bilat" or "ble" or "b/l" or "both" or "either"
+            || name.StartsWith("both ", StringComparison.Ordinal) || name.StartsWith("either ", StringComparison.Ordinal)
+            || BothLegs.IsMatch(name)) return "both";
+        return "unclear";
     }
 
     private static int CodePointOffset(string text, int offset) {

@@ -127,7 +127,8 @@ WM_BLOCKERS={
     'statement_answers_differ_from_wording':'This wording is not built from the answers it cites. Save to refresh the statement, then review it.',
     'statement_answers_incomplete':'This wording rests on answers that are still unanswered or need review.',
     'statement_absence_not_reviewed':'This wording says its answers are not documented. Leave them unanswered and review each one first.',
-    'governed_source':'A heading, a pointer or a correction in the notes may change what the cited sentences mean. Check them before relying on this statement.',
+    'governed_source':'A heading, a pointer or a label in the notes denies or reframes what the cited sentences say (a denial, a family history, a hypothetical). Cite a sentence it does not govern.',
+    'statement_source_is_heading':'The cited line is a heading or a title, which states nothing. Cite the sentence that states this.',
 }
 
 #: ⚠️ `data_mode` WAS A HARDCODED LITERAL AND WAS BEING CITED AS PROOF OF THE GUARD.
