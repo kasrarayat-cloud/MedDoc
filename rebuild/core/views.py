@@ -105,6 +105,14 @@ def source_quote_evidence(notes,label,raw,labels,sentences=None,previous=(),pref
     def carries(unit):
         if unit['start'] not in carried:carried[unit['start']]=bool(prefer(unit))
         return carried[unit['start']]
+    governed={}
+    def ungoverned_copy(unit):
+        if unit['start'] not in governed:
+            if safe is None:governed[unit['start']]=True
+            elif judged[0]>=PREFER_LIMIT:governed[unit['start']]=False
+            else:
+                judged[0]+=1;governed[unit['start']]=bool(safe(unit))
+        return governed[unit['start']]
     def safe_copy(unit):
         if unit['start'] not in clean:
             if not carries(unit):clean[unit['start']]=False
@@ -133,8 +141,9 @@ def source_quote_evidence(notes,label,raw,labels,sentences=None,previous=(),pref
         if moved is None and kept is None and marks and len(same)>1:
             # (else the copy nearest after a line cited once, across paragraphs: `LEFT LEG:` over a blank line and
             # `Measurements:` resolved a sentence written under both legs to the right leg's copy — round 11)
+            # (never a copy something governs: a relative's, a prior study's — round 12)
             placed=[(unit['start']-marks[index-1],unit) for unit in tried
-                    for index in [bisect.bisect_left(marks,unit['start'])] if index]
+                    for index in [bisect.bisect_left(marks,unit['start'])] if index and ungoverned_copy(unit)]
             moved=min(placed,key=lambda item:item[0])[1] if placed else None
         sentence=(kept or moved
                   or next((unit for unit in free if unit['start'] in cited),None)
