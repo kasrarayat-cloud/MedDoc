@@ -3923,15 +3923,116 @@ def _round_15():
 ROUND_15, ROUND_15_EXTRA = _round_15()
 
 
+def _round_16():
+    """Refutation round 16 (a focused pass over round 15's diff, at d90f45ef): round 15's releases wrong again — a finding on
+    the other leg read as a dictated leg change, a list of both legs' lines or labels releasing under a one-leg study's
+    title, a remark on the leg (`Left leg N/A`) read as its heading, a remark calling the value unreliable carried, a
+    sentence's tail across a wrap read apart — and the edges of older rules (a sibling label over a prior finding, the
+    acceptance rule's `underwent`, a comma, a compared value's other leg past a comma, `and/or`, a stray `The left`)."""
+    rows, extra = [], {}
+    L, R = 'measurement_17_1', 'measurement_3_1'
+    k = 'GSV at the knee 5.1 mm.'
+    head = 'RIGHT LEG:\nGSV SFJ 7.2 mm, reflux 2.0 s.\n'
+    for line in ('Varicosities in the left leg.', 'Reflux in the left leg.', 'Varicose veins in the left leg.', 'Reflux on the left.',
+                 'Left leg N/A', 'Left leg declined', 'LEFT LEG N/A', 'Left leg asymptomatic'):
+        rows.append(('R16L1 ' + line + ', left row', head + line + '\n' + k, L, '5.1 mm', k, 'conflict', '*'))
+        rows.append(('R16L1 ' + line + ', right row', head + line + '\n' + k, R, '5.1 mm', k, 'conflict', None))
+    n = ('Exam: right lower extremity venous duplex.\n\nDEEP VENOUS SYSTEM:\nRight: Deep veins patent, no DVT.\nLeft: No DVT in the '
+         'common femoral vein. The great saphenous vein measures 7.2 mm at the saphenofemoral junction.')
+    q = 'The great saphenous vein measures 7.2 mm at the saphenofemoral junction.'
+    rows.append(('R16L1 a system list under a one-leg exam line, left row', n, 'measurement_15_1', '7.2 mm', q, 'conflict', '*'))
+    rows.append(('R16L1 a system list under a one-leg exam line, right row', n, 'measurement_1_1', '7.2 mm', q, 'conflict', None))
+    n = ('RIGHT LOWER EXTREMITY VENOUS DUPLEX\n\nFINDINGS:\nLeft: No DVT in the common femoral vein.\nGSV SFJ: 7.2 mm, reflux 2.3 s\n'
+         'GSV knee: 5.0 mm, reflux 1.1 s\nRight: No DVT in the common femoral vein.')
+    rows.append(('R16L1 value rows under a one-leg title, left row', n, 'measurement_15_1', '7.2 mm', 'GSV SFJ: 7.2 mm, reflux 2.3 s',
+                 'conflict', '*'))
+    for item in ('patient declined; prior DVT.', 'previously treated for reflux in 2019.', 'normal per outside report.',
+                 'DVT ruled out in 2019.', 's/p ablation, previously incompetent.'):
+        n = 'FINDINGS:\nRight leg: No DVT.\nGSV SFJ 7.2 mm, reflux 2.0 s.\nLeft leg: ' + item + '\n' + k
+        rows.append(('R16L1 a sibling over ' + item + ', left row', n, L, '5.1 mm', k, 'conflict', '*'))
+    n = 'RIGHT LOWER EXTREMITY VENOUS DUPLEX\n\nFINDINGS:\nRight leg: No DVT.\nGSV SFJ 7.2 mm, reflux 2.0 s.\nLeft leg: No DVT in the common femoral vein.\n' + k
+    rows.append(('R16L1 a sibling CFV check under a one-leg title, left row', n, L, '5.1 mm', k, 'conflict', '*'))
+    rows.append(('R16L1 a sibling CFV check under a one-leg title, right row', n, R, '5.1 mm', k, 'conflict', None))
+    for n in ('right leg deep veins compress normally no clot the left leg underwent ablation in 2021 the great saphenous vein at the '
+              'knee measures 5.1 millimeters',
+              'right leg the deep veins are compressible, the left leg had ablation last year the great saphenous vein at the knee '
+              'measures 5.1 millimeters',
+              'right leg the deep veins are compressible and the left leg had ablation last year the great saphenous vein at the knee '
+              'measures 5.1 millimeters',
+              'right leg deep veins compress normally no clot the left leg was done in 2021 per the outside study the great saphenous '
+              'vein at the knee measures 5.1 millimeters',
+              'Right leg: the deep veins are compressible. She had left GSV ablation in 2019 and today the great saphenous vein measures '
+              '5.1 mm at the knee.'):
+        q = [u['quote'] for u in narrative.units(n, FIELDS, LABELS) if '5.1' in u['quote']][0]
+        rows.append(('R16L1 ' + n[40:90] + ', left row', n, L, '5.1 mm', q, 'conflict', '*'))
+        rows.append(('R16L1 ' + n[40:90] + ', right row', n, R, '5.1 mm', q, 'conflict', None))
+    for n in ('Right GSV knee 7.2 mm vs 5.0 mm, other leg.',
+              'The right great saphenous vein measures 7.2 mm at the knee, compared with 5.0 mm, contralaterally.',
+              'The right great saphenous vein measures 7.2 mm at the knee, compared to 5.0 mm, opposite side.'):
+        rows.append(('R16L1 ' + n[-30:] + ', right row', n, R, '5.0 mm', n, 'conflict', 'refuse'))
+    for n in ('right leg:\ngsv sfj 7.4 mm, reflux 2.1 s. she had a prior ablation in the\nleft leg.\ngsv knee 5.2 mm, reflux 1.1 s',
+              'RIGHT LEG:\nGSV SFJ 7.2 mm, reflux 2.0 s. She had prior treatment in the right and/or\nleft leg.\nGSV knee 5.2 mm, reflux 1.1 s'):
+        q = n.split('\n')[-1]
+        rows.append(('R16L1 a sentence\'s tail across a wrap, ' + n[-60:-30] + ', left row', n, L, '5.2 mm', q, 'conflict', '*'))
+    for line, key, value in (('Right GSV at the SFJ: diameter (mm): 7.4 mm (not reliable due to thrombus)', 'measurement_1_1', '7.4 mm'),
+                             ('Right GSV at the SFJ: diameter (mm): 7.4 mm, not measurable due to thrombus', 'measurement_1_1', '7.4 mm'),
+                             ('Date of birth: 06/30/1959 - typo, DOB is 06/03/1959', 'date_of_birth', '06/30/1959'),
+                             ('Date of service: 09/22/2026 (amended to 09/23/2026)', 'date_of_service', '09/22/2026')):
+        rows.append(('R16L1 ' + line[-40:], line, key, value, line, 'conflict', 'refuse'))
+    n = 'Right GSV at the SFJ: diameter (mm): 7.4 mm, no evidence of thrombus'
+    rows.append(('R16L1 control: a remark denying a finding', n, 'measurement_1_1', '7.4 mm', n, 'supported', None))
+    # lens 2: the clause rule read the whole paragraph's legs; a list's line above over its leg's values; a wrap into the
+    # sentence's own tail; a stray line end read as a heading; `opposite` and `other` refusing written sides
+    n = ('Right leg: No DVT. The GSV measures 7.1 mm at the SFJ with reflux of 2.0 seconds.\nLeft leg: No DVT. The left leg is less '
+         'symptomatic, and the GSV measures 5.2 mm at the SFJ without reflux.')
+    q = 'The left leg is less symptomatic, and the GSV measures 5.2 mm at the SFJ without reflux.'
+    rows.append(('R16L2 the clause rule reads the sentence, left row', n, 'measurement_15_1', '5.2 mm', q, 'supported', None))
+    rows.append(('R16L2 the clause rule reads the sentence, right row', n, 'measurement_1_1', '5.2 mm', q, 'conflict', 'refuse'))
+    n = ('RLE: CFV/FV/POP compressible, no DVT. GSV SFJ 7.8 mm, reflux 2.6 s. GSV\nprox thigh 6.6 mm, reflux 2.0 s.\nLLE: CFV/FV/POP '
+         'compressible, no DVT. GSV SFJ 5.0 mm, no reflux. SSV\nSPJ 3.0 mm, no reflux.')
+    rows.append(('R16L2 a label over its values is a block, left row', n, 'measurement_19_1', '3.0 mm', 'SPJ 3.0 mm, no reflux.',
+                 'supported', None))
+    rows.append(('R16L2 a label over its values is a block, right row', n, 'measurement_5_1', '3.0 mm', 'SPJ 3.0 mm, no reflux.',
+                 'conflict', 'refuse'))
+    n = ('The great saphenous vein measures 7.1 mm at the saphenofemoral junction in the right leg.\nThe small saphenous vein measures '
+         '3.2 mm at the saphenopopliteal junction without reflux in the\nleft leg.\nThe great saphenous vein measures 5.0 mm at the '
+         'saphenofemoral junction.')
+    rows.append(('R16L2 a wrap into the tail, right row', n, 'measurement_5_1', '3.2 mm', n.split('\n')[1], 'conflict', '*'))
+    n = 'RIGHT LEG:\nSymptoms are in the right leg. The left\nleg is asymptomatic.\nThe great saphenous vein measures 7.2 mm at the saphenofemoral junction.'
+    q = 'The great saphenous vein measures 7.2 mm at the saphenofemoral junction.'
+    rows.append(('R16L2 a stray line end, left row', n, 'measurement_15_1', '7.2 mm', q, 'conflict', '*'))
+    for n in ('The right great saphenous vein at the saphenofemoral junction measures 7.4 mm with flow in the opposite direction for '
+              '2.1 seconds.',
+              'The right great saphenous vein measures 7.4 mm at the saphenofemoral junction with thickening of the opposite wall.',
+              'The right great saphenous vein measures 7.4 mm at the saphenofemoral junction, larger than any other great saphenous vein '
+              'segment.',
+              'starting with the right leg the great saphenous vein at the saphenofemoral junction measures 6.8 millimeters with reflux '
+              'of 2 seconds the left leg has no dvt the great saphenous vein at the knee measures 7.4 millimeters'):
+        key = 'measurement_17_1' if 'left leg has' in n else 'measurement_1_1'
+        rows.append(('R16L2 a written side stands: ' + n[-50:], n, key, '7.4 mm', n, 'supported', None))
+    for n, key, value in (('The right great saphenous vein measures 7.4 mm at the knee and 5.0 mm on the opposite side.', R, '5.0 mm'),
+                          ('The right great saphenous vein measures 7.4 mm at the knee and the other GSV measures 5.0 mm.', R, '5.0 mm')):
+        rows.append(('R16L2 control: ' + n[-40:], n, key, value, n, 'conflict', 'refuse'))
+    seen = {}
+    for index, row in enumerate(rows):
+        seen[row[0]] = seen.get(row[0], 0) + 1
+        if seen[row[0]] > 1:
+            rows[index] = (f'{row[0]} ({seen[row[0]]})',) + row[1:]
+    return rows, extra
+
+
+ROUND_16, ROUND_16_EXTRA = _round_16()
+
+
 class RefutationRegressions(SimpleTestCase):
     def test_every_row_reads_the_same_whatever_line_break_the_notes_carry(self):
         """Round 10 (every lens): round 9's own line-break repair read a lone `\\r\\n` — what a browser posts for each typed
         line — as a blank line, and nine rows here read differently under it. Every row of every round is read again with
         its line breaks written as `\\r\\n`, a lone `\\r` and U+2028, and must read exactly as with `\\n`."""
         tables = REGRESSIONS + ROUND_2 + ROUND_2_LENSES + ROUND_3 + ROUND_4
-        rows = ROUND_5 + ROUND_6 + ROUND_7 + ROUND_8 + ROUND_9 + ROUND_10 + ROUND_11 + ROUND_12 + ROUND_13 + ROUND_14 + ROUND_15
+        rows = ROUND_5 + ROUND_6 + ROUND_7 + ROUND_8 + ROUND_9 + ROUND_10 + ROUND_11 + ROUND_12 + ROUND_13 + ROUND_14 + ROUND_15 + ROUND_16
         extra = {**ROUND_5_EXTRA, **ROUND_6_EXTRA, **ROUND_7_EXTRA, **ROUND_9_EXTRA, **ROUND_10_EXTRA, **ROUND_11_EXTRA,
-                 **ROUND_12_EXTRA, **ROUND_13_EXTRA, **ROUND_14_EXTRA, **ROUND_15_EXTRA}
+                 **ROUND_12_EXTRA, **ROUND_13_EXTRA, **ROUND_14_EXTRA, **ROUND_15_EXTRA, **ROUND_16_EXTRA}
 
         def outcomes(eol):
             def written(text):                   # (a row already written with `\r\n` is read as its `\n` form first)
@@ -4113,13 +4214,13 @@ class RefutationRegressions(SimpleTestCase):
         """Round 5's cases carry the review verdict too: the pre-fill holding is only half of each one — a wrong side the
         lenient review still accepts is the other (`(L) GSV SFJ 5.0 mm, reflux 1.1 s` on the right row)."""
         for name, notes, key, value, quote, want, review in (ROUND_5 + ROUND_6 + ROUND_7 + ROUND_8 + ROUND_9 + ROUND_10 + ROUND_11
-                                                             + ROUND_12 + ROUND_13 + ROUND_14 + ROUND_15):
+                                                             + ROUND_12 + ROUND_13 + ROUND_14 + ROUND_15 + ROUND_16):
             quotes = quote if isinstance(quote, list) else [quote or notes]
             with self.subTest(name):
                 picks = {key: (value, quotes, {}), **ROUND_5_EXTRA.get(name, {}), **ROUND_6_EXTRA.get(name, {}),
                          **ROUND_7_EXTRA.get(name, {}), **ROUND_9_EXTRA.get(name, {}),
                          **ROUND_10_EXTRA.get(name, {}), **ROUND_11_EXTRA.get(name, {}), **ROUND_12_EXTRA.get(name, {}),
-                         **ROUND_13_EXTRA.get(name, {}), **ROUND_14_EXTRA.get(name, {}), **ROUND_15_EXTRA.get(name, {})}
+                         **ROUND_13_EXTRA.get(name, {}), **ROUND_14_EXTRA.get(name, {}), **ROUND_15_EXTRA.get(name, {}), **ROUND_16_EXTRA.get(name, {})}
                 answers, _ = decide(notes, picks)
                 if want != '*':
                     self.assertEqual(answers[key]['status'], want)
@@ -4601,6 +4702,27 @@ class ReviewCost(SimpleTestCase):
         long = max(narrative.units(mention, FIELDS, LABELS), key=lambda unit: len(unit['quote']))['quote']
         self.assertTrue(long.startswith('GSV'))
         self.within_limit(lambda: decide(mention, {right[0]['key']: ('7 mm', [long], {})}), 5.0)
+
+    @override_settings(WM_NARRATIVE=True)
+    def test_round_16_a_compared_other_leg_and_a_legs_predicate_read_linearly(self):
+        """Round 16's cost lens: whether every other-leg phrase of a clause is a compared thing was scanned per place (the
+        page 146 s at 13,000 characters; the round-15 accepted sentence 78 s at 49,000), and a leg's predicate re-read a run
+        of spaces after its side word per place (26 s)."""
+        measurements = [f for f in FIELDS if f.get('kind') == 'measurement' and f['locator']['unit'] == 'mm']
+        right = [f for f in measurements if f['label'].startswith('Right')]
+        left = [f for f in measurements if f['label'].startswith('Left')]
+        for notes, fields in (('The right GSV ' + '7mm ' * 3010 + 'compared with' + ' opposite' * 100 + '.', right),
+                              ('The right GSV ' + '7mm ' * 12232 + 'compared with the contralateral side.', right),
+                              ('RIGHT LEG:\nGSV ' + '7mm ' * 12240 + 'as on the opposite.', right),
+                              ('The left' + ' ' * 24500 + ' 7mm' * 6120 + '.', left)):
+            with self.subTest(notes[:30]):
+                long = max(narrative.units(notes, FIELDS, LABELS), key=lambda unit: len(unit['quote']))['quote']
+
+                def generation_and_finalization():
+                    answers, _ = decide(notes, {f['key']: ('7 mm', [long], {}) for f in fields})
+                    self.assertIn('supported', {answers[f['key']]['status'] for f in fields})    # (the path is taken)
+                    return narrative.held_labels(notes, FIELDS, LABELS, answers)
+                self.within_limit(generation_and_finalization, 5.0)
 
     @override_settings(WM_NARRATIVE=True)
     def test_round_15_runs_of_spaces_long_lines_and_a_far_side_read_linearly(self):
