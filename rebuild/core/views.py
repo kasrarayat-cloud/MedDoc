@@ -788,7 +788,7 @@ def save_answers(request,pk):
             earlier=(e.template_review.get('decisions',{}).get(key) or e.template_review.get('proposals',{}).get(key) or {}).get('evidence') or ()
             # A one-leg statement's typed sentence goes to the copy that names its side (round 5: `No saphenous reflux.`
             # under each leg resolved to the right leg's for the left statement).
-            names=(lambda unit,requirement=requirement:wm_narrative.names_side(requirement,[wm_narrative.unit_evidence(unit)],e.notes)) \
+            names=(lambda unit,requirement=requirement:wm_narrative.names_side(requirement,[wm_narrative.unit_evidence(unit)],e.notes,strict=False)) \
                 if narrative_on and wm_narrative.field_side(requirement) else None
             clear_copy=(lambda unit,requirement=requirement:wm_narrative.statement_governed(requirement,[wm_narrative.unit_evidence(unit)],
                         prefer_reading()) is None) if names else None

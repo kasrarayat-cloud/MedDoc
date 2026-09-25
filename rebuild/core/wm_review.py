@@ -494,7 +494,7 @@ def _statement_evidence(encounter, narrative, requirement, cited, answers, block
         blockers.append('complete_assertion_source_required')
     elif required and not wm_narrative.built_from_answers(rule) and not units:
         blockers.append('complete_assertion_source_required')
-    if not required and units and not wm_narrative.names_side(requirement, result, encounter.notes):
+    if not required and units and not wm_narrative.names_side(requirement, result, encounter.notes, strict=False):
         blockers.append('side_not_supported')
     sentences = [item for item in result if item.get('kind') == 'unit']
     if not basis and wm_narrative.rests_on_titles(requirement, sentences):
