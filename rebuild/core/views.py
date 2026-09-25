@@ -757,7 +757,7 @@ def save_answers(request,pk):
             carries=(lambda unit,field=field,value=value:wm_narrative.support(field,value,[wm_narrative.unit_evidence(unit)],e.notes,
                      recognized,labels) is None) if narrative_on and value else None
             ungoverned=(lambda unit,field=field,value=value:wm_narrative.governing(field,value,[wm_narrative.unit_evidence(unit)],
-                        prefer_reading())[0] is None) if narrative_on and value else None
+                        prefer_reading(),sides=False)[0] is None) if narrative_on and value else None
             try:evidence=source_quote_evidence(e.notes,field['label'],quote,labels,sentences,previous.get('evidence') or (),carries,
                                                ungoverned)
             except ValidationError as exc:
