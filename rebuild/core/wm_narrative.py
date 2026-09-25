@@ -1084,13 +1084,29 @@ def _place_tables(notes):
 PLACE_READINGS = 1 << 16
 
 
+#: How far back a place reads the hard-wrapped lines its sentence began on (round 13: a transcript's `right leg …` three
+#: lines up).
+WRAP_REACH = 1200
+
+
+def sentence_origin(notes, at, low):
+    """Where the sentence of the place at `at` begins, its hard-wrapped lines included, however few `WRAP_REACH` let
+    the place read: its context is read from there (round 14: read from the reach, the sentence's own earlier lines
+    were its paragraph's)."""
+    return min(low, sentence_in_line(notes, at)[0])
+
+
 def place_reading(notes, at, low, high, length=0, struck=()):
     """`_place_reading`, read once per note for each place and strikes: every question citing a unit reads the same
     places (round 6's cost lens: 26 questions of one unit over a run-on transcript of 1,600 places). A sentence begins
     where its hard-wrapped lines do (round 13: a wrapped transcript's `right leg …` three lines up was no reading of the
     small saphenous vein's value, and the left written after it was); it still ends with the cited unit, as the engine
     reads it."""
-    low = min(low, sentence_in_line(notes, at)[0])
+    wrapped = sentence_in_line(notes, at)[0]
+    if wrapped < low:
+        # (at most `WRAP_REACH` back, from a line's start — round 14's cost lens: every unit of a hard-wrapped run read the
+        # run from its start, per answer's strikes, 92 s at 49,000 characters; beyond it the paragraph's reading reads it)
+        low = max(wrapped, line_start(notes, max(wrapped, low - WRAP_REACH)))
     struck = struck if isinstance(struck, Struck) else strikes(struck if not (isinstance(struck, tuple) and len(struck) == 2
                                                                             and isinstance(struck[0], tuple))
                                                                else list(zip(*struck)))
@@ -1171,13 +1187,17 @@ def _place_reading(notes, at, low, high, length=0, struck=()):
         primary, candidates = sentence_rivals(notes, at, low, high, struck, primary, candidates)
     if primary in ('right', 'left', 'both') and wrapped_rival(notes, at, high, struck, primary):
         primary = 'ambiguous'
-    if source == 'context' and primary in ('right', 'left') and names_the_other_leg(notes, low, high):
-        primary = 'ambiguous'        # (`RIGHT LOWER EXTREMITY:` / `The opposite great saphenous vein measures …` — round 13)
+    if primary in ('right', 'left') and (names_the_other_leg(notes, low, high) if source == 'context'
+                                          else names_the_other_leg(notes, *clause_span(notes, at, low, high))):
+        # (`RIGHT LOWER EXTREMITY:` / `The opposite great saphenous vein measures …` — round 13; in the value's own clause
+        # too, `The right GSV measures 7.4 mm …, and the opposite GSV measures 5.0 mm …` — round 14): which leg is not
+        # written, and no side the engine reads is its; the clinician writes it
+        return 'ambiguous', set(), source
     if primary in marks['compared_only'] and not compared:
         # Its only side word in the sentence is one a comparison introduces (`Compared with the left, the GSV measures 7.4
         # mm`, but also `Compared to prior the right GSV measures 7.4 mm`): which leg it is, is not written; the side and
         # the paragraph's are both the clinician's to choose. (Struck, the paragraph's side would have spoken for it.)
-        primary, candidates = 'ambiguous', candidates | context_reading(notes, low)[1]
+        primary, candidates = 'ambiguous', candidates | context_reading(notes, sentence_origin(notes, at, low))[1]
     if source == 'context' and marks['corrected_side']:
         # The sentence named a side its own correction struck and gives this value none: which leg it is, is not written
         # there, so the paragraph's side is no pre-fill. (A weak form elsewhere in the sentence leaves the paragraph's side
@@ -1301,7 +1321,7 @@ def _primary_reading(notes, at, low, high, length, struck, compared=False):
         # which leg the value is is not written; either is the clinician's to choose. (A side bound just after it, `on
         # the left`, returned above.)
         if primary in ('right', 'left'):
-            context = context_reading(notes, low)
+            context = context_reading(notes, sentence_origin(notes, at, low))
             if context[0] in ('right', 'left') and context[0] != primary:
                 # (no pre-fill; the paragraph's side is no reading to offer at review, the sentence names its own — round
                 # 8: `RIGHT LEG:` a paragraph above `… 4.1 mm over the lower half of the left calf` let review accept the
@@ -1309,7 +1329,7 @@ def _primary_reading(notes, at, low, high, length, struck, compared=False):
                 primary = 'ambiguous'
         return primary, candidates, 'sentence'
     if adverbial_right(notes, low, high):
-        context = context_reading(notes, low)
+        context = context_reading(notes, sentence_origin(notes, at, low))
         return 'ambiguous', context[1], 'context'
     # The sentence names a side where its reading of this value is not written (another clause, after another number:
     # `GSV SFJ 7.4 mm, 1.8 s, right leg.`, `7.4 mm with 1.8 seconds of reflux in the right leg`): never the context's
@@ -1334,7 +1354,7 @@ def _primary_reading(notes, at, low, high, length, struck, compared=False):
         # (a copy: the caller adds to it, and the stored set is every later place's in the sentence — round 9's integrity
         # lens: one answer's weak forms decided another's review)
         return 'ambiguous', set(live), 'sentence'
-    context = context_reading(notes, low)
+    context = context_reading(notes, sentence_origin(notes, at, low))
     if denied:
         # A side named in a denying clause may be the leg that is denied (`…, and the left leg was not examined today`,
         # round 8) or this value's own (`…, with no reflux in the right leg.` — round 9: dropped, the paragraph's left was
@@ -1355,12 +1375,15 @@ def sentence_rivals(notes, at, low, high, struck, primary, candidates):
     if primary != 'both':
         own = clause_span(notes, at, low, high)
         phrase = nearest_phrase(notes, low, at, struck)
-        if phrase and phrase[0][2] == primary and not own[0] <= phrase[0][0] < own[1]:
+        if phrase and phrase[0][2] == primary:
             clause = clause_span(notes, phrase[0][0], low, high)
+            # (in the value's own clause too — round 14: an unpunctuated transcript, `the left leg was not examined the
+            # great saphenous vein measures 7.4 millimeters …`, or `examined.The great …`, pre-filled the left)
             if exam_denied_near(notes, phrase[0], clause):
-                context = context_reading(notes, low)
+                context = context_reading(notes, sentence_origin(notes, at, low))
                 if context[0] != primary:
                     return 'ambiguous', candidates | context[1]
+        if phrase and phrase[0][2] == primary and not own[0] <= phrase[0][0] < own[1]:
             # (its clause names the other leg too, not in one phrase with it: `right leg she had the left leg treated in
             # 2021 and today …` — not an earlier clause's scope, `… right leg detailed left leg screening … on the right the
             # common femoral …`, nor a side its correction struck)
@@ -1394,8 +1417,11 @@ def wrapped_rival(notes, at, high, struck, primary):
 
 
 #: A sentence speaking of the other leg without naming it (`The opposite great saphenous vein …`, `the other leg`).
-OTHER_LEG = re.compile(r'(?<![^\W\d_])(?i:opposite|other|contralateral)(?:[ \t]+[^\W\d_]+){0,2}?[ \t]+(?i:legs?|limbs?|sides?|'
-                       r'extremity|extremities|great|small|gsv|ssv|saphenous|veins?)(?![^\W\d_])')
+OTHER_LEG = re.compile(r'(?<![^\W\d_])(?:(?i:the|this|that)[ \t]+(?i:other)|(?i:opposite|contralateral))(?:[ \t]+[^\W\d_]+){0,2}?'
+                       r'[ \t]+(?i:leg|limb|side|extremity|one|knee|thigh|calf|ankle|groin|foot|junction|sfj|spj|gsv|ssv|cfv|'
+                       r'great|small|saphenous|vein)(?![^\W\d_])')
+#   (round 14: `the other knee`, `The opposite SFJ`, `the opposite one`; a singular noun — `the other veins are patent`,
+#   `no other findings` are no leg)
 
 
 def names_the_other_leg(notes, low, high):
@@ -1582,14 +1608,28 @@ def _context_rest(notes, low, start, kinds, own, struck):
         cut = own or impression_between(notes, found[0][0], low)
         inner = inner_label(notes, found[0][0], start, low)
         if inner is not None:
-            return 'ambiguous', set(found[1]) | inner
+            # (and the side heading above the paragraph a reading too: `RIGHT LOWER EXTREMITY VENOUS DUPLEX` / blank /
+            # `Deep veins: …` / `Left CFV: …` / … — round 14: review refused the study's own leg)
+            return 'ambiguous', set(found[1]) | inner | heading_reading(notes, start, low)[1]
         weak = _weak_sides(notes)
         index = bisect.bisect_left(weak, (found[0][0],))
         if index < len(weak) and weak[index][0] == found[0][0]:
             return 'ambiguous', set(found[1]) | heading_reading(notes, start, low)[1]   # (`ClosureFast (R) in 2019.`)
         if cut:
             return 'ambiguous', set(found[1])
-        return phrase_side(found), set(found[1])
+        side = phrase_side(found)
+        if side in ('right', 'left') and ITEM_END.search(notes, found[0][0], low) and mentions_a_leg(notes, found[0][0]):
+            # (a sentence of its own — not the value's, `The left small saphenous vein was previously treated …;
+            # however, there has been a recurrence.`)
+            # (a leg a sentence only mentions — no value of it written, no label or heading of its block — inside another
+            # leg's block lends later sentences only a reading: `RIGHT LEG:` / … / `Left leg to be scanned next week.` /
+            # `GSV at the knee 5.1 mm.`, `She had left GSV ablation in 2019.` — round 14)
+            heading = heading_reading(notes, start, low)
+            others = (legs_between(notes, start, found[0][0])
+                      | ({heading[0]} if heading[0] in ('right', 'left') else set())) - {side}
+            if others:
+                return 'ambiguous', {side} | others
+        return side, set(found[1])
     if 'heading' in kinds:
         return None, set()
     primary, candidates = heading_reading(notes, start, low)
@@ -1603,6 +1643,21 @@ def _context_rest(notes, low, start, kinds, own, struck):
     if 'unsure' in kinds or own:
         return 'ambiguous', candidates
     return primary, candidates
+
+
+def mentions_a_leg(notes, at):
+    """Whether the side word at `at` is in a sentence that only mentions its leg: it writes no quantity, it is no limb
+    label opening its sentence (`Left: No DVT.` — `inner_label`'s), and neither the sentence nor its line is a limb's
+    heading (`Left leg.`, `LEFT LEG`)."""
+    low, high = sentence_in_line(notes, at)
+    table, key = _sentence_tables(notes), ('mention', low, high)
+    if key not in table:
+        text = notes[low:high].strip()
+        opening = low + len(notes[low:high]) - len(notes[low:high].lstrip())
+        line = notes[line_start(notes, at):line_end(notes, at)].strip()
+        table[key] = not (first_in(notes, 'quantity', low, high) or label_item_side(notes, opening)
+                          or limb_label(text.rstrip('.!?:;- \u2013\u2014')) or heading_shaped(line))
+    return table[key]
 
 
 def label_item_side(notes, low):
@@ -1620,8 +1675,10 @@ def inner_label(notes, at, start, sentence):
     paragraph named before it, beside it as candidates: an item of a list, or a note on the other leg inside a leg's
     block, heads nothing after it (round 12: a list of both legs; round 13: a sentence before it, a line between, one leg
     twice, the other leg's heading above). A label opening its paragraph heads it (`RIGHT LOWER EXTREMITY: No evidence of
-    DVT.`), and a label heads the rest of its own line (`Left: GSV at the SFJ 6.9 mm …; GSV proximal thigh 6.1 mm …`).
-    None when it is no such label."""
+    DVT.`), and a label heads its own item — to its first full stop or the end of the lines it wraps into (`Left: GSV at
+    the SFJ 6.9 mm …; GSV proximal thigh 6.1 mm …`; round 14: `Left: No DVT in the common femoral vein. The great
+    saphenous vein measures …` on one line, the other leg's common femoral vein checked, was read as the left's). None
+    when it is no such label."""
     low = sentence_on_line(notes, at)[0]
     low += len(notes[low:at]) - len(notes[low:at].lstrip())
     if not label_item_side(notes, low):
@@ -1630,19 +1687,49 @@ def inner_label(notes, at, start, sentence):
     if not notes[label.end():line_end(notes, low)].strip(' \t*_' + LINE_BREAKS):
         return None                  # (a heading with nothing after it heads its block: `RIGHT GSV:` — round 13)
     line = line_start(notes, low)
-    if line == line_start(notes, start) and not notes[line:low].strip() or line <= sentence < wrapped_line_end(notes, low):
-        return None                  # (its own line, and the lines its sentence wraps into, as unwrapped — round 13's triage)
-    named = {side for *_, side in sides_between(notes, start, low) if side in ('right', 'left')}
-    if not named and not system_item(notes, start):
+    if line == line_start(notes, start) and not notes[line:low].strip():
+        return None                  # (it opens its paragraph)
+    system = system_item(notes, start)
+    stop = ITEM_END.search(notes, label.end(), wrapped_line_end(notes, low))
+    if not system and not notes[line:low].strip():
+        stop = None                  # (a label opening its line heads the line: `L: GSV SFJ 5.6 nl, prox thigh 4.7 nl.
+        #   SSV SPJ 5.9/2.3s, …` — round 14's triage; in a system's list, or in mid-line, its item ends at a full stop)
+    if sentence < (stop.start() if stop else wrapped_line_end(notes, low)):
+        return None                  # (the value is in its own item, wrapped or not — round 13's triage)
+    if not system and not notes[line:low].strip() and LIMB_WORD.search(label.group(1)):
+        # (a limb's own label opening its line heads its leg's block, the system's and veins' sub-headings under it with
+        # it: `FINDINGS:` / `RIGHT LOWER EXTREMITY: Deep veins patent and compressible.` / `Superficial venous system:` /
+        # …, `Right leg: No DVT.` / `Great saphenous vein:` / … / `Left leg: No DVT.` / … — round 14's triage, which round
+        # 13 held; but not as the second of a list of both legs' labels, `Right leg: No DVT.` / `Left leg: No DVT.` / … —
+        # round 12. A bare side's label or a vein's, `Left: No DVT in the common femoral vein.`, `Left CFV: …`, is an item)
+        spans, starts = _lines(notes)
+        index = bisect.bisect_right(starts, line) - 2
+        while index >= 0 and not generation.seen_text(notes[slice(*spans[index])]):
+            index -= 1
+        above = spans[index][0] if index >= 0 and spans[index][0] >= start else None
+        if above is not None:
+            above += len(notes[above:spans[index][1]]) - len(notes[above:spans[index][1]].lstrip())
+        other = label_item_side(notes, above) if above is not None else None
+        return {other} if other and other != label_item_side(notes, low) else None
+    named = legs_between(notes, start, low, examined=True)      # (a leg named only to say it was not examined is none:
+    #   `The right leg was not examined.` / `Left leg: Deep veins compressible, no DVT.` / … — round 14)
+    if not named and not system:
         # (nothing before it in its paragraph named a leg, and the paragraph is no system's or vein's list: it heads its
         # block, `FINDINGS:` / `RIGHT LOWER EXTREMITY: No DVT.` / `The great saphenous vein measures …` — which round 13
         # held — unless a heading ends that block before the sentence, `FINDINGS:` / `Left: No DVT in the common femoral
         # vein.` / `SUPERFICIAL VENOUS SYSTEM:` / …; round 13's triage)
-        heads = _heading_line_starts(notes)
+        heads = _block_end_starts(notes)
         index = bisect.bisect_left(heads, wrapped_line_end(notes, low))     # (a line's end may be the next one's start)
-        if not (index < len(heads) and heads[index] < line_start(notes, sentence)):
-            return None
+        if not (index < len(heads) and heads[index] <= line_start(notes, sentence)):
+            return None              # (the value's own line opening with a system's label ends it too: `Superficial
+            #   venous system: The great saphenous vein measures …` — round 14)
     return named
+
+
+#: A limb's word in a side's label (`RIGHT LOWER EXTREMITY:`, `Left leg:`, `LLE:`), not a bare side or a vein's.
+LIMB_WORD = re.compile(r'(?<![^\W\d_])(?i:legs?|limbs?|extremity|extremities|le|lle|rle|lue|rue)(?![^\W\d_])')
+#: Where a limb label's item ends: a full stop (`Left: No DVT in the common femoral vein.`), never a decimal point.
+ITEM_END = re.compile(r'[.!?](?=\s)')
 
 
 def system_item(notes, start):
@@ -1651,15 +1738,61 @@ def system_item(notes, start):
     checked in a one-leg study), never the heading of what follows it."""
     first = notes[start:line_end(notes, start)].strip()
     bare = first.strip('*_#~` ').rstrip(' :-\u2013\u2014').strip()
-    return bool(bare) and heading_line(first) and heading_kind(bare + ':') == 'anatomical'
+    if sides_between(notes, start, line_end(notes, start)):
+        return False                 # (a limb's heading is a leg's block, `RIGHT LOWER EXTREMITY:` — round 14)
+    return bool(bare) and heading_line(first) and heading_kind(bare + ':') == 'anatomical' or anatomical_label(notes, start)
 
 
-def _heading_line_starts(notes):
-    """Where every line written as a heading starts (`heading_line`), in order: what ends a limb label's block inside
-    its paragraph. Read per context reading, uncached: a note of more than 1,000 statements is refused, so it is at most
-    that many lines (round 13's mutation proofs: 0.97 s either way at 932 lines)."""
+def anatomical_label(notes, at):
+    """Whether the line at `at` opens with a label of anatomy naming no side, over what it found or not (`DEEP VENOUS
+    SYSTEM: No DVT.`, `Superficial venous system: …`, `Deep veins: compressible …` — round 14: with a finding after its
+    colon the line was no heading, and the list under it was read as a leg's block)."""
+    label = SENTENCE_LABEL.match(notes, line_start(notes, at))
+    return bool(label) and heading_kind(label.group(1) + ':') == 'anatomical' and not sides_between(notes, *label.span(1))
+
+
+@sized_cache
+def _block_end_starts(notes):
+    """Where every line written as a heading (`heading_line`) or opening with an anatomical label naming no side
+    (`anatomical_label`) starts, in order: what ends a limb label's block inside its paragraph. Read once per note
+    (round 14's cost lens: uncached, it was read per context reading — a unit of `;`-separated findings is thousands of
+    sentences, and the page took 169 s; round 13 had removed the cache as costing nothing at a legal size, and was
+    wrong: the 1,000-statement limit bounds lines, not sentences)."""
     spans, _ = _lines(notes)
-    return tuple(a for a, b in spans if heading_line(notes[a:b].strip()))
+    return tuple(a for a, b in spans if heading_line(notes[a:b].strip()) or anatomical_label(notes, a))
+
+
+@sized_cache
+def _examined_leg_counts(notes):
+    """`_leg_counts` over the side words no sentence of a leg unexamined names (`leg_unexamined`, once per sentence)."""
+    rights, lefts = [0], [0]
+    for start, _, side in _side_index(notes)[1]:
+        standing = side not in ('right', 'left') or not leg_unexamined(notes, start, {side})
+        rights.append(rights[-1] + (standing and side == 'right'))
+        lefts.append(lefts[-1] + (standing and side == 'left'))
+    return rights, lefts
+
+
+@sized_cache
+def _leg_counts(notes):
+    """Running counts of the `right` and `left` side words, in `_side_index` order."""
+    rights, lefts = [0], [0]
+    for _, _, side in _side_index(notes)[1]:
+        rights.append(rights[-1] + (side == 'right'))
+        lefts.append(lefts[-1] + (side == 'left'))
+    return rights, lefts
+
+
+def legs_between(notes, low, high, examined=False):
+    """The legs (`right`, `left`) the side words wholly inside `low`..`high` name — with `examined`, not those of a
+    sentence saying only that the leg was not examined (`leg_unexamined`) — by bisection (round 14: listed, the words
+    before each context reading's phrase were read per sentence)."""
+    starts, found = _side_index(notes)
+    first, last = bisect.bisect_left(starts, low), bisect.bisect_left(starts, high)
+    if last > first and found[last - 1][1] > high:
+        last -= 1                    # (side words never overlap: only the last one starting inside can run past)
+    rights, lefts = _examined_leg_counts(notes) if examined else _leg_counts(notes)
+    return ({'right'} if rights[last] > rights[first] else set()) | ({'left'} if lefts[last] > lefts[first] else set())
 
 
 #: The only words of a sentence saying a whole leg was not examined, besides its side word (`Left leg not imaged
@@ -1668,10 +1801,11 @@ def _heading_line_starts(notes):
 #: leg: not examined for reflux.`, `… not imaged because of a cast`).
 UNEXAMINED_WORDS = frozenset('the a his her their leg limb lower extremity side was is were has been had not no never wasn '
                              'weren isn t examined imaged scanned evaluated studied assessed interrogated performed imaging '
-                             'exam examination scan study today at this time visit on during'.split())
-UNEXAMINED_EXAM = frozenset('examined imaged scanned evaluated studied assessed interrogated performed imaging exam '
-                            'examination scan study'.split())
-UNEXAMINED_SIDE_WORDS = frozenset('right left rt lt r l'.split())
+                             'exam examination scan study today at this time visit on during per physician physician s '
+                             'order orders request requested protocol unilateral'.split())
+#   (round 14: why it was not, `per physician order`, `(unilateral study)` — no finding, no part of the leg)
+UNEXAMINED_SIDE_WORDS = frozenset('right left rt lt r l rle lle rue lue le'.split())    # (round 14: `LLE not examined.`,
+#   `Left LE not examined.`)
 
 
 def leg_unexamined(notes, at, legs):
@@ -1685,9 +1819,10 @@ def leg_unexamined(notes, at, legs):
         if len(legs) == 1 and {side for *_, side in sides_between(notes, low, high)} == legs:
             words = [word.casefold() for word in LETTER_RUN.findall(notes, low, high)]
             rest = [word for word in words if word not in UNEXAMINED_WORDS]
-            # (no negation is asked for: the sentence denies — its side is struck — and the only denials among these
-            # words are `not`, `no`, `never` and `n't`; an examination's word is, `Left leg: no.` may deny a finding)
-            found = set(rest) <= UNEXAMINED_SIDE_WORDS and bool(UNEXAMINED_EXAM & set(words))
+            # (its examination denied, `not examined`, `no left leg imaging` — round 13's mutation proofs called a
+            # negation check redundant, and round 14 refuted it: `No, the left leg was examined.` was read so; `Left leg:
+            # no.` may deny a finding)
+            found = set(rest) <= UNEXAMINED_SIDE_WORDS and bool(EXAM_DENIED.search(notes, low, high))
         table[key] = found
     return table[key]
 
@@ -1826,7 +1961,13 @@ def limb_label(text):
     """A limb's label with no colon (`Right leg`, `LEFT LOWER EXTREMITY`): a few anatomy words, not opening with an
     article."""
     words = LETTER_RUN.findall(text)
-    return 0 < len(words) <= 4 and words[0].casefold() not in ARTICLES and all(anatomy_word(word.casefold()) for word in words)
+    return (0 < len(words) <= 4 and words[0].casefold() not in ARTICLES and words[0].casefold() not in PREPOSITIONS
+            and all(anatomy_word(word.casefold()) for word in words))
+
+
+#: Words that open a phrase continuing a sentence, never a limb's label (`in the left leg.`, `on the right.` — round 14: a
+#: wrapped sentence's own side phrase read as a heading, and the value took the side of the sentence before).
+PREPOSITIONS = frozenset('in on of at to for from with by into within over under'.split())
 LIST_NUMBER = re.compile(r'[0-9]{1,2}[.)](?:\s|$)')
 
 
@@ -1852,7 +1993,9 @@ def _wrapped_lines(notes):
         # over a finding, `Right leg` / `no DVT`, it heads its block — round 12)
         heads = heading_shaped(before) and not (limb_label(before) and EXAM_DENIED.match(text))
         joined[index] = (bool(word and word.group(1).casefold() in WRAP_WORDS) or (opens and not heads)) \
-            and not heading_shaped(text)     # (never into a heading: `Reflux: no` / `IMPRESSION` — round 13)
+            and not (heading_shaped(text) and not (text[0].islower() and text.rstrip()[-1:] in '.!?'))
+        #   (never into a heading: `Reflux: no` / `IMPRESSION` — round 13; a small letter ending its sentence is none,
+        #   `… without reflux` / `left leg.` — round 14)
     firsts, lasts = list(range(len(spans))), list(range(len(spans)))
     for index in range(1, len(spans)):
         if joined[index]:
@@ -1876,7 +2019,13 @@ def _context_strikes(notes):
         # examined and` / `the great saphenous vein measures 7.4 mm …` wrote a quantity and lent the left — round 12; not
         # the physical line, which cuts a wrapped transcript anywhere — round 13)
         sentence = sentence_in_line(notes, start)
-        for scope in {sentence, clause_span(notes, start, *sentence)}:
+        scopes = {sentence, clause_span(notes, start, *sentence)}
+        line = line_start(notes, start)
+        if sentence[0] < line and sentence[1] <= line_end(notes, start):
+            # (and the side's own line where a sentence joined from above ends on it — round 14: `GSV at the SFJ 7.4 mm,
+            # reflux 1.8 s` / `left leg not imaged today.` joined wrote a quantity, and the left was lent to the next line)
+            scopes.add((line + len(notes[line:start]) - len(notes[line:start].lstrip()), sentence[1]))
+        for scope in scopes:
             if scope not in denying:
                 denying[scope] = generation.changes_meaning(notes[slice(*scope)])
             if denying[scope] and (side == 'both' or not first_in(notes, 'quantity', *scope)) \
@@ -1955,13 +2104,13 @@ DENIAL_THROUGH_WORDS = frozenset('evidence signs sign of for any significant acu
 @functools.lru_cache(maxsize=1)
 def finding_denial():
     """A finding's denial (`No DVT`, `no evidence of deep venous thrombosis`, `negative for reflux`, `without
-    thrombus`: `no`/`without`/`negative for`, at most three words of `DENIAL_THROUGH_WORDS` or anatomy, then a finding
+    thrombus`: `no`/`without`/`negative for`, at most four words of `DENIAL_THROUGH_WORDS` or anatomy, then a finding
     word), or a finding word said absent (`reflux absent`, `DVT negative`)."""
     through = sorted(DENIAL_THROUGH_WORDS | {word for word in NEUTRAL_HEADING_WORDS if anatomy_word(word) and '/' not in word},
                      key=len, reverse=True)
     word = r'(?i:' + '|'.join(re.escape(w) for w in through) + r')(?![^\W\d_])'
     space = '[ \\t' + LINE_BREAKS + ']+'           # (a wrap between them: `No evidence of` / `DVT.`)
-    gap = r'(?:' + space + word + r'){0,3}?' + space
+    gap = r'(?:' + space + word + r'){0,4}?' + space     # (four: `No evidence of deep venous thrombosis` — round 14)
     # (no examination named after it is read here: the label's whole text was cleared of one, `EXAM_NOUN`, before any
     # piece of it is — round 12's mutation proofs found the check unreachable, and it was removed)
     return re.compile(r'(?<![^\W\d_])(?:(?i:no|without|negative[ \t]+for)(?![^\W\d_])' + gap + r'(?:' + FINDING_WORD_PATTERN
@@ -3063,7 +3212,7 @@ def support(field, value, own, notes, labels, all_labels):
     for entry in own:
         parsed = generation.labelled_value(entry['quote'], labels)
         if parsed and parsed[0] == mine and (not agrees(field, parsed[1], value)
-                                             or (negative_value(own_value(parsed[1], field)) and not negative_value(value))):
+                                             or (negative_value(own_value(parsed[1], field, labels)) and not negative_value(value))):
             return 'labelled'
     usable = usable_units(field, own, labels, all_labels)
     carrying = [entry for entry in usable if not structural(entry['quote'], NEUTRAL_HEADING_WORDS)]
@@ -3388,11 +3537,20 @@ def stale_after(notes, end):
     previously is superseded` — round 12; `… 6.1 mm, as previously reported, is incorrect;` — round 13: a comma ended it;
     not `7.6 mm (previously 6.1 mm)`, nor `… 6.1 mm …, and the previously treated small saphenous vein …`)."""
     high = min(wrapped_line_end(notes, end), end + WINDOW_CHARS, sentence_at(notes, end)[1])
-    value = first_in(notes, 'quantity', end, high)
+    listed = end
+    for _ in range(LISTED_VALUES):
+        # (a list of values the words after it all concern: `the 6.1 mm and 5.0 mm values above are incorrect`, `6.1 mm
+        # (SFJ) and 5.0 mm (knee) … in error` — round 14: only the list's last value was read as old)
+        joint = VALUE_LIST_JOINT.match(notes, listed, high)
+        after = first_in(notes, 'quantity', joint.end(), high) if joint else None
+        if not (after and after[0] == joint.end()):
+            break
+        listed = after[1]
+    value = first_in(notes, 'quantity', listed, high)
     stop = value[0] if value else high
-    joined = JOINED_CLAUSE.search(notes, end, stop)
+    joined = JOINED_CLAUSE.search(notes, listed, stop)
     stop = joined.start() if joined else stop
-    bracket = notes.find('(', end, stop)
+    bracket = notes.find('(', listed, stop)
     if bracket >= 0 and value:
         close = notes.find(')', bracket, high)
         if close < 0 or value[0] < close:
@@ -3401,6 +3559,8 @@ def stale_after(notes, end):
 
 
 JOINED_CLAUSE = re.compile(r'(?<![^\W\d_])(?i:and|but|while|whereas)(?![^\W\d_])|;')
+VALUE_LIST_JOINT = re.compile(r'(?:[ \t]*\([^()\n]{0,40}\))?[ \t]*(?:,[ \t]*(?:(?i:and|or)[ \t]+)?|(?i:and|or|&)[ \t]+)')
+LISTED_VALUES = 8
 STALE_AFTER = re.compile(r'(?<![^\W\d_])(?i:disregard\w*|erroneously|mistakenly|incorrectly|misdictated|misreported|'
                          r'superseded|incorrect|wrong|error|erroneous|mistaken|inaccurate)(?![^\W\d_])')
 #   (not `prior`, `previously` after it: `… 6.1 mm, unchanged from the prior exam` — round 13)
@@ -3813,14 +3973,28 @@ def negative_value(text):
 #: (`Patient name: SYNTHETIC PATIENT B    DOB: 06/30/1959    Allergies: none` — round 12: the line's other label's
 #: `none` refused the name at support, and review could not complete); for demographics a bracket too (`06/30/1959 (not
 #: verified by patient)`). Never the value's own words after it (round 13: `Leg pain (-)`, `Swelling    denies`).
-LABEL_AFTER_RUN = re.compile(r'(?:[ \u00a0]{2,}|\t|[ \u00a0]*[,|;/][ \u00a0]*|[ \u00a0]+[-\u2013\u2014][ \u00a0]+|[ \u00a0])'
+LABEL_AFTER_RUN = re.compile(r'(?<![ \u00a0\t])(?:[ \u00a0\t]*[,|;/][ \u00a0\t]*|[ \u00a0\t]+[-\u2013\u2014][ \u00a0\t]+|[ \u00a0\t]+)'
                              r'(?=[^\W\d_][^:\n,|;/]{0,40}:(?![0-9]))')     # (round 13: `…, DOB: …`, `… | Indication: …`)
-BRACKET = re.compile(r'[(\[]|[ \t]+[-\u2013\u2014][ \t]+')     # (a demographic's remark after it, `09/22/2026 - no prior study …`)
+#   (tried only where a run of spaces or tabs starts — round 14's cost lens: tried at every space of a run, a name with
+#   49,900 spaces in it took the page 106 s)
+SPACE_RUN = re.compile(r'(?<![ \u00a0\t])(?:[ \u00a0]{2,}|\t)')
+BRACKET = re.compile(r'[(\[]|(?<![ \t])[ \t]+[-\u2013\u2014][ \t]+')     # (a demographic's remark after it, `09/22/2026 - no prior
+#   study …`; tried only where a run starts — round 14's cost lens)
 
 
-def own_value(text, field=None):
+def own_value(text, field=None, labels=None):
+    """A labelled line's own value when more follows on its line: for demographics, to another label after it
+    (`LABEL_AFTER_RUN`) or a bracket or a spaced dash; for any other question only to a label of this form's (`labels`)
+    — round 14: `Swelling, today: denies` lost its own denial to a label nobody listed."""
     text = text.strip()
-    ends = [m.start() for m in (LABEL_AFTER_RUN.search(text), BRACKET.search(text) if field and demographic(field) else None) if m]
+    if field and demographic(field):
+        # (and a run of spaces or a tab: `06/30/1959    not verified` — round 14: round 13 read the remark as the value's)
+        ends = [m.start() for m in (LABEL_AFTER_RUN.search(text), BRACKET.search(text), SPACE_RUN.search(text)) if m]
+    elif labels is not None:
+        ends = [next((m.start() for m in LABEL_AFTER_RUN.finditer(text) if generation.labelled_value(text[m.end():], labels)), 0)]
+        #   (`labelled_value` reads no further than the longest label: 12,400 would-be labels on one line, 0.1 s — round 14)
+    else:
+        ends = []
     end = min(ends) if ends else 0
     return text[:end] if end else text
 
@@ -4009,15 +4183,43 @@ BARE_NEGATIVE_WORDS = 3
 
 
 #: An invisible character between letters (a soft hyphen, a zero-width space or joiner, a word joiner, a byte-order mark).
-HIDDEN_IN_WORD = re.compile(r'[^\W\d_][\u00ad\u180e\u200b-\u200f\u2060-\u2064\ufeff]+[^\W\d_]')
+#: Unicode's default-ignorable code points, as a character class's body: a soft hyphen, the combining grapheme joiner,
+#: zero-width spaces and joiners, bidirectional marks, embeddings and isolates, variation selectors, fillers and tags.
+DEFAULT_IGNORABLE = (r'\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e\u2060-\u206f\u3164'
+                     r'\ufe00-\ufe0f\ufeff\uffa0\ufff0-\ufff8\U0001bca0-\U0001bca3\U0001d173-\U0001d17a\U000e0000-\U000e0fff')
+INVISIBLE = re.compile('[' + DEFAULT_IGNORABLE + ']')
+#   (Unicode's default-ignorable code points — round 14: the bidi isolates, U+034F, the variation selectors and the tags
+#   were not listed, and `sor\u2066ry` hid a correction)
 
 
 @sized_cache
 def hidden_in_words(notes):
-    return bool(HIDDEN_IN_WORD.search(notes))
+    """Whether an invisible character (`INVISIBLE`, Unicode's default-ignorable code points) stands in the text of a
+    line that shows anything — inside a word, or beside one (round 14: `The left leg is asymptomatic.\\u200b` read as an
+    unstopped line, a side heading). Lines of nothing else are blank."""
+    index = 0
+    while True:
+        found = INVISIBLE.search(notes, index)
+        if not found:
+            return False
+        low, high = line_start(notes, found.start()), line_end(notes, found.start())
+        if generation.seen_text(notes[low:high]):
+            return True
+        index = max(high, found.end())
 
 
-def governing(field, value, own, read, sides=True):
+def copy_rank(field, value, unit, read):
+    """How cleanly one copy of a sentence holds an answer, for the save's choice among copies: 2 when nothing governs it,
+    1 when nothing but its side does (the clinician's posted heading gives the side — round 13: every copy of a sentence
+    under both legs was held for its side), else 0. The note-wide `hidden` hold is not asked: it says nothing about any
+    one copy (round 14: every copy read as governed, and an answer went to a prior study's copy)."""
+    own = [unit_evidence(unit)]
+    if governing(field, value, own, read, hidden=False)[0] is None:
+        return 2
+    return 1 if governing(field, value, own, read, sides=False, hidden=False)[0] is None else 0
+
+
+def governing(field, value, own, read, sides=True, hidden=True):
     """What holds a candidate on its source, as (governing entries, reason), or (None, None): a cited heading line,
     the installed governors (`narrative_governors`), a cited sentence's own label or an earlier denying label in its
     paragraph (`own_frame`), a side only some readings give it (`side_verdict`, strict — not with `sides=False`: the
@@ -4025,9 +4227,11 @@ def governing(field, value, own, read, sides=True):
     sentence written under both legs read as governed, and the first, the other leg's, was stored), a correction in its
     own units (`own_correction`), then a correction in another unit (`correction_context`)."""
     notes = read['notes']
-    if hidden_in_words(notes):
+    if hidden and hidden_in_words(notes):
         # (round 13: `sor\u00adry`, `rever\u00adsed`, `mo\u00adther`, `le\u00adft` hid a correction, a transposition, a relative
-        # and a side from the reader's words — and from the engine's; the clinician reads them)
+        # and a side from the reader's words — and from the engine's; the clinician reads them. Not with `hidden=False`:
+        # the save asks which copy of a sentence to keep, and a hold of the whole note says nothing about any one — round
+        # 14: every copy read as governed, and the answer went to a prior study's)
         return [], HELD['hidden']
     headed = [entry for entry in own if generation.ends_in_colon(entry['quote'])
               and not structural(entry['quote'], NEUTRAL_HEADING_WORDS)]

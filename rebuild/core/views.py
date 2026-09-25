@@ -115,12 +115,22 @@ def source_quote_evidence(notes,label,raw,labels,sentences=None,previous=(),pref
         return governed[unit['start']]
     def safe_copy(unit):
         if unit['start'] not in clean:
-            if not carries(unit):clean[unit['start']]=False
-            elif safe is None:clean[unit['start']]=True
-            elif judged[0]>=PREFER_LIMIT:clean[unit['start']]=False
+            if not carries(unit):clean[unit['start']]=0
+            elif safe is None:clean[unit['start']]=2
+            elif judged[0]>=PREFER_LIMIT:clean[unit['start']]=0
             else:
-                judged[0]+=1;clean[unit['start']]=bool(safe(unit))
+                judged[0]+=1;rank=safe(unit)
+                clean[unit['start']]=2 if rank is True else rank if isinstance(rank,int) else 0   # (`safe` may say yes or no)
         return clean[unit['start']]
+    def cleanest(units):
+        # (a copy nothing governs before one only its side does: round 14 — `RIGHT LEG:` / `No DVT in the left leg.` / S
+        # and `LEFT LEG:` / S kept the right block's S for the left answer)
+        second=None
+        for unit in units:
+            rank=safe_copy(unit)
+            if rank>=2:return unit
+            if rank and second is None:second=unit
+        return second
     counts={}
     for unit in sentences or ():counts[unit['quote']]=counts.get(unit['quote'],0)+1
     posted={line.strip() for line in raw.splitlines() if line.strip()}
@@ -135,7 +145,7 @@ def source_quote_evidence(notes,label,raw,labels,sentences=None,previous=(),pref
         free=[unit for unit in same if unit['start'] not in used]
         tried=[unit for unit in free if unit['start'] in cited]+[unit for unit in free[:PREFER_LIMIT] if unit['start'] not in cited]
         kept=next((unit for unit in tried if unit['start'] in cited and carries(unit)),None) if prefer and len(same)>1 else None
-        moved=next((unit for unit in tried if safe_copy(unit)),None) if prefer and len(same)>1 and kept is None else None
+        moved=cleanest(tried) if prefer and len(same)>1 and kept is None else None
         if moved is None and kept is None and anchors and len(same)>1:
             moved=next((unit for unit in tried if carries(unit) and wm_narrative.paragraph_start(notes,unit['start']) in anchors),None)
         if moved is None and kept is None and marks and len(same)>1:
@@ -756,8 +766,9 @@ def save_answers(request,pk):
             if len(quote)>50000:return document_refusal(request,e,'Source quotations exceed the supported limit; nothing was saved.',400)
             carries=(lambda unit,field=field,value=value:wm_narrative.support(field,value,[wm_narrative.unit_evidence(unit)],e.notes,
                      recognized,labels) is None) if narrative_on and value else None
-            ungoverned=(lambda unit,field=field,value=value:wm_narrative.governing(field,value,[wm_narrative.unit_evidence(unit)],
-                        prefer_reading(),sides=False)[0] is None) if narrative_on and value else None
+            # (how clean a copy is — round 14: the other leg's copy was as good as the leg's own)
+            ungoverned=(lambda unit,field=field,value=value:wm_narrative.copy_rank(field,value,unit,prefer_reading())
+                        ) if narrative_on and value else None
             try:evidence=source_quote_evidence(e.notes,field['label'],quote,labels,sentences,previous.get('evidence') or (),carries,
                                                ungoverned)
             except ValidationError as exc:
