@@ -801,7 +801,12 @@ def save_answers(request,pk):
             # "Rests on its answers": the answers the selected wording rests on, named from the mapping, never the post.
             if narrative_on and request.POST.get('claim_basis_'+key)=='answers':
                 chosen=next(item for item in requirement['variants'] if item['id']==variant)
-                if wm_narrative.basis_keys(chosen):evidence.append({'kind':'answers','answer_keys':wm_narrative.basis_keys(chosen)})
+                # (within review's bound, the answers' entry included: at 100 sentences it made 101, and review refused the
+                # whole page — round 9's integrity lens)
+                if wm_narrative.basis_keys(chosen) and len(evidence)>=wm_narrative.EVIDENCE_LIMIT:
+                    evidence=[];reviewed=False
+                    review_errors.append(f'Cite at most {wm_narrative.EVIDENCE_LIMIT-1} source sentences for a statement resting on its answers; nothing was truncated.')
+                elif wm_narrative.basis_keys(chosen):evidence.append({'kind':'answers','answer_keys':wm_narrative.basis_keys(chosen)})
             decisions[key]={'reviewed':reviewed,'evidence':evidence,'variant':variant}
     e.answers=answers;e.revision=target_revision;e.status='review';wm_review.invalidate_review(e)
     if is_wm and Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists():
