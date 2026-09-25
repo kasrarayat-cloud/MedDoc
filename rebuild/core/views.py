@@ -819,7 +819,7 @@ def save_answers(request,pk):
             names=(lambda unit,requirement=requirement:wm_narrative.names_side(requirement,[wm_narrative.unit_evidence(unit)],e.notes,strict=False)) \
                 if narrative_on and wm_narrative.field_side(requirement) else None
             clear_copy=(lambda unit,requirement=requirement:wm_narrative.statement_governed(requirement,[wm_narrative.unit_evidence(unit)],
-                        prefer_reading()) is None) if names else None
+                        prefer_reading(),hidden=False) is None) if names else None
             try:evidence=source_quote_evidence(e.notes,requirement['label'],quote,labels,sentences,earlier,names,clear_copy)
             except ValidationError as exc:
                 evidence=[];reviewed=False;review_errors.append(error_message(exc))
