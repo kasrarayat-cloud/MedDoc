@@ -738,6 +738,25 @@ class SourceQuotations(SimpleTestCase):
                                               LABELS, sentences, earlier, names, clear)
                 self.assertIn(today, [item['start'] for item in found])
 
+    def test_a_sentence_under_both_legs_goes_to_the_copy_after_the_cited_heading(self):
+        """Round 11 (false-rejection lens): posting `LEFT LEG:` with a sentence written identically under both legs, over a
+        blank line and `Measurements:`, resolved the sentence to the right leg's copy, and review could never complete."""
+        from core.views import source_quote_evidence
+        block = '\n\nMeasurements:\nGSV SFJ 4.5 mm, no reflux.\nGSV knee {} mm, no reflux.'
+        notes = 'RIGHT LEG:' + block.format('3.9') + '\n\nLEFT LEG:' + block.format('3.6')
+        field = BY_KEY['measurement_15_1']
+        sentences = narrative.units(notes, FIELDS, LABELS)
+        read = narrative.reading(notes, FIELDS, LABELS)
+        carries = lambda unit: narrative.support(field, '4.5 mm', [narrative.unit_evidence(unit)], notes, read['labels'],
+                                                 read['all_labels']) is None
+        for posted in ('LEFT LEG:\nGSV SFJ 4.5 mm, no reflux.', 'GSV SFJ 4.5 mm, no reflux.\nLEFT LEG:',
+                       'LEFT LEG:\nMeasurements:\nGSV SFJ 4.5 mm, no reflux.'):
+            with self.subTest(posted):
+                found = source_quote_evidence(notes, field['label'], posted, LABELS, sentences, (), carries)
+                sentence = next(item for item in found if item['quote'].startswith('GSV'))
+                self.assertGreater(sentence['start'], notes.index('LEFT LEG:'))
+                self.assertIsNone(narrative.support(field, '4.5 mm', found, notes, read['labels'], read['all_labels']))
+
     def test_a_one_leg_statement_goes_to_the_copy_naming_its_side(self):
         notes = 'RIGHT LEG:\nNo saphenous reflux.\n\nLEFT LEG:\nNo saphenous reflux.'
         from core.views import source_quote_evidence
@@ -2215,7 +2234,8 @@ ROUND_7.append(('R7L1#1 IMPRESSION, right impression refused unless its heading 
 ROUND_7.append(('R7L1#1 ADDITIONAL FINDINGS', BLOCKS + 'ADDITIONAL FINDINGS\n' + IMP, 'sdt_605543147', 'reflux positive.', IMP, 'conflict', 'refuse'))
 ROUND_7.append(('R7L2 control: Findings label inside a leg block', 'RIGHT LEG:\nFindings: GSV at the SFJ 7.4 mm with reflux of 1.8 seconds.', 'measurement_1_1', '7.4 mm', 'Findings: GSV at the SFJ 7.4 mm with reflux of 1.8 seconds.', 'supported', None))
 for label in ('Measurements', 'Duplex', 'Impression', 'Note', 'Assessment'):
-    ROUND_7.append((f'R7L2 control: {label} label inside a leg block', f'RIGHT LEG:\n{label}: GSV at the SFJ 7.4 mm with reflux of 1.8 seconds.', 'measurement_1_1', '7.4 mm', f'{label}: GSV at the SFJ 7.4 mm with reflux of 1.8 seconds.', 'supported', None))
+    # (round 11: an impression inside a leg's block may be the report's — the leg only a reading, held; review accepts it)
+    ROUND_7.append((f'R7L2 control: {label} label inside a leg block', f'RIGHT LEG:\n{label}: GSV at the SFJ 7.4 mm with reflux of 1.8 seconds.', 'measurement_1_1', '7.4 mm', f'{label}: GSV at the SFJ 7.4 mm with reflux of 1.8 seconds.', 'conflict' if label == 'Impression' else 'supported', None))
 ROUND_7.append(('R7L2 control: a finding line opening the paragraph', 'RIGHT LOWER EXTREMITY:\n\nDeep venous system: normal\nThe great saphenous vein measures 7.4 mm at the saphenofemoral junction.', 'measurement_1_1', '7.4 mm', 'The great saphenous vein measures 7.4 mm at the saphenofemoral junction.', '*', '*'))
 L2 = S7 + '\nA residual segment was left below the knee and measures 4.1 mm.'
 ROUND_7.append(('R7L1#2 left below the knee, left row', L2, 'measurement_18_1', '4.1 mm', 'A residual segment was left below the knee and measures 4.1 mm.', 'conflict', '*'))
@@ -2536,8 +2556,9 @@ def _round_9():
     rows.append(('R9M a denying sentence that writes a value lends its side',
                  'The left great saphenous vein measures 5.0 mm with no reflux. It measures 4.0 mm at the knee.',
                  'measurement_17_1', '4.0 mm', 'It measures 4.0 mm at the knee.', 'supported', None))
+    # (round 11: the line runs on into the next, one sentence denying a finding of the left leg — the leg a candidate, held)
     rows.append(('R9M a denial on the next line leaves a side line its side', 'The left leg was imaged\nno reflux seen.\n' + left,
-                 'measurement_15_1', '5.0 mm', left, 'supported', None))
+                 'measurement_15_1', '5.0 mm', left, 'conflict', None))
     rows.append(('R9M a side only a denying sentence names is the clinician\'s to choose', 'No DVT in the left leg.\n' + left,
                  'measurement_15_1', '5.0 mm', left, 'conflict', None))
     for lead in ('Additional findings. ', 'Also noted - '):
@@ -2728,14 +2749,205 @@ def _round_10():
 ROUND_10, ROUND_10_EXTRA = _round_10()
 
 
+def _round_11():
+    """Refutation round 11 (at 9f8a2727): round 10's own relaxations released what round 9 held (a correction naming its
+    replaced value, flow words, a leg label over a denial, finding words in a heading, line-bound readings), and older
+    gaps: a leg named only in a denying sentence, an addendum above the report, a sentence's first value read as denied."""
+    rows, extra = [], {}
+    blocks = 'RIGHT:\nGSV at SFJ 7.2 mm, reflux 2.2 s.\n\nLEFT:\nGSV at SFJ 4.4 mm, competent.\n\n'
+    imp = 'Great saphenous vein reflux positive.'
+    g = 'The great saphenous vein measures 7.4 mm at the saphenofemoral junction.'
+    g18 = 'The great saphenous vein measures 6.1 mm at the saphenofemoral junction with reflux of 1.8 seconds.'
+    r61 = 'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction.'
+    s7 = 'The right great saphenous vein measures 7.4 mm at the saphenofemoral junction.'
+    l5 = 'The left great saphenous vein measures 5.0 mm at the saphenofemoral junction.'
+    # lenses 1 and 3: a correction naming the value it replaces moved the findings to the other leg and released them
+    n = 'RIGHT LOWER EXTREMITY:\n' + g18 + ('\n\nCorrection: the SFJ diameter is 7.6 mm, not 6.1 mm, and all of the above '
+                                          'findings are in the left leg.')
+    rows.append(('R11L1#1 a correction naming its replaced value moves the findings to the left', n, 'measurement_1_2',
+                 '1800 ms', ['RIGHT LOWER EXTREMITY:', g18], 'conflict', '*'))
+    k = 'The great saphenous vein measures 5.0 mm at the knee with reflux of 1.2 seconds.'
+    n = ('RIGHT LEG:\nThe great saphenous vein measures 6.1 mm at the saphenofemoral junction.\n' + k + '\n\nCorrection: the '
+         'great saphenous vein at the saphenofemoral junction measures 7.6 mm, not 6.1 mm, and all of the findings above were '
+         'in the left leg.')
+    rows.append(('R11L3#1 the knee values under a correction moving the findings to the left', n, 'measurement_3_1', '5.0 mm',
+                 ['RIGHT LEG:', k], 'conflict', '*'))
+    n = 'RIGHT LEG:\n' + r61 + '\n\nCorrection: the right great saphenous vein at the saphenofemoral junction measures 7.6 mm, not 6.1 mm.'
+    rows.append(('R11L1#1 control: a correction of one leg\'s value names only that leg', n + '\nLEFT LEG:\n' + l5,
+                 'measurement_15_1', '5.0 mm', ['LEFT LEG:', l5], 'supported', None))
+    # lens 1: flow words excused data swapped
+    for tail in ('The flow values above are reversed.', 'The flow measurements of both legs were reversed.',
+                 'The flow values were reversed between the two legs.', 'Flow values above were reversed between legs.',
+                 'The flow data for the two sides were reversed.'):
+        rows.append(('R11L1#2 ' + tail, s7 + ' ' + l5 + '\n\n' + tail, 'measurement_1_1', '7.4 mm', s7, 'conflict', '*'))
+    for tail in ('Flow in the great saphenous vein is reversed.', 'Flow is reversed in the left great saphenous vein for 2.1 seconds.'):
+        rows.append(('R11L1#2 control: ' + tail, s7 + ' ' + l5 + '\n\n' + tail, 'measurement_1_1', '7.4 mm', s7, 'supported', None))
+    # lens 3: a wrapped flow reversal is reflux (fails closed at 9f8a2727)
+    rows.append(('R11L3#7 a wrapped flow reversal is reflux', s7 + '\n\nFlow in the great saphenous vein is\nreversed for 1.8 '
+                 'seconds.', 'measurement_1_1', '7.4 mm', s7, 'supported', None))
+    # lens 1: citing a transposition released its own hold
+    for tail in ('The sides in the dictation above are reversed.', 'The legs above were transposed.',
+                 'The right and left measurements were swapped.'):
+        n = s7 + '\n' + l5 + '\n\n' + tail
+        rows.append(('R11L1#3 citing ' + tail, n, 'measurement_1_1', '7.4 mm', [s7, tail], 'conflict', '*'))
+    # lens 1: a leg not examined read as a label over a finding's denial
+    ss = 'The small saphenous vein measures 4.1 mm at the saphenopopliteal junction.'
+    for line in ('Left lower extremity: not evaluated for DVT or reflux.', 'Left leg: not examined for reflux.',
+                 'Left: not imaged, no DVT symptoms.'):
+        n = 'RIGHT LOWER EXTREMITY:\n' + s7 + '\n' + line + '\n' + ss
+        rows.append(('R11L1#4 ' + line + ', left row', n, 'measurement_19_1', '4.1 mm', ss, 'conflict', 'refuse'))
+    for head in ('LEFT LEG - NOT EXAMINED FOR REFLUX', 'LEFT LEG: NOT EVALUATED FOR DVT'):
+        rows.append(('R11L1#4 ' + head, head + '\nGSV at the knee 5.1 mm.', 'measurement_17_1', '5.1 mm', 'GSV at the knee 5.1 mm.',
+                     'conflict', '*'))
+    rows.append(('R11L1#4 control: a leg label over a finding\'s denial', 'RIGHT LOWER EXTREMITY: No evidence of DVT.\n' + g,
+                 'measurement_1_1', '7.4 mm', g, 'supported', None))
+    # lens 1: the walk up and the first line read a heading with a finding word as a finding line
+    for heading in ('DVT evaluation', 'Reflux evaluation', 'Venous insufficiency evaluation'):
+        rows.append(('R11L1#5 ' + heading + ' between blank lines', blocks + heading + '\n\n' + imp, 'sdt_605543147',
+                     'reflux positive.', imp, 'conflict', '*'))
+        rows.append(('R11L1#5 ' + heading + ' opening the impression', blocks + heading + '\n' + imp, 'sdt_605543147',
+                     'reflux positive.', imp, 'conflict', '*'))
+    # lens 1: a long side-less heading without a colon
+    for heading in ('SUMMARY OF THE FINDINGS OF THIS STUDY', "FINAL IMPRESSION BASED ON TODAY'S DUPLEX FINDINGS",
+                    'Summary of the findings of this study'):
+        rows.append(('R11L1#9 ' + heading, blocks + heading + '\n' + imp, 'sdt_605543147', 'reflux positive.', imp, 'conflict', '*'))
+    # lens 1: an impression label within the left block's paragraph
+    left = 'RIGHT:\nGSV at SFJ 7.2 mm, reflux 2.2 s.\n\nLEFT:\nGSV at SFJ 4.4 mm, competent.\n'
+    for tail in ('IMPRESSION: ' + imp, 'IMPRESSION:\n' + imp, 'IMPRESSION\n' + imp):
+        rows.append(('R11L1#10 ' + tail.split(imp)[0].replace('\n', ' / ') + ' with no blank line', left + tail, 'sdt_605543147',
+                     'reflux positive.', imp if '\n' in tail else tail, 'conflict', '*'))
+    # lenses 1 and 3: a wrapped comparison and a wrapped denial read one line at a time
+    for n, q in (('The great saphenous vein is larger than\nthe left. It measures 7.4 mm at the saphenofemoral junction.',
+                  'It measures 7.4 mm at the saphenofemoral junction.'),
+                 ('The great saphenous vein is dilated compared with\nthe left. It measures 7.4 mm at the saphenofemoral junction.',
+                  'It measures 7.4 mm at the saphenofemoral junction.')):
+        rows.append(('R11L1#6 ' + n.split('\n')[0], n, 'measurement_15_1', '7.4 mm', q, 'conflict', 'refuse'))
+    n = 'The right great saphenous vein is larger than\nthe left, measuring 7.4 mm at the saphenofemoral junction.'
+    # (the value may be either vein's, as unwrapped: held, and either leg the clinician's)
+    rows.append(('R11L3#3 a wrapped comparison, left row', n, 'measurement_15_1', '7.4 mm', n.split('\n'), 'conflict', None))
+    rows.append(('R11L3#3 a wrapped comparison, right row', n, 'measurement_1_1', '7.4 mm', n.split('\n'), 'conflict', None))
+    rows.append(('R11L3#3 control: a comparison on the line above compares nothing here', 'Compared with prior\n' + l5,
+                 'measurement_15_1', '5.0 mm', l5, 'supported', None))
+    for n in ('Only the right leg was imaged today; the left leg was\nnot imaged. ' + g,
+              'The left leg was\nnot scanned today. ' + g, 'The left leg\nwas not examined today.\n' + g):
+        rows.append(('R11L1#12 ' + n.split('\n')[0] + ' / ' + n.split('\n')[1][:20], n, 'measurement_15_1', '7.4 mm', g,
+                     'conflict', 'refuse'))
+    rows.append(('R11L3#4 a side-less denial line under the left block', 'LEFT LEG:\nNot examined.\n\n' + g, 'measurement_15_1',
+                 '7.4 mm', g, 'conflict', '*'))
+    # lens 2: a leg named only in a denying sentence let an earlier sentence's leg win
+    r79 = 'The right great saphenous vein measures 7.9 mm at the saphenofemoral junction with reflux of 2.2 seconds.'
+    q50 = 'The great saphenous vein measures 5.0 mm at the saphenofemoral junction without reflux.'
+    for denial in ('The left lower extremity demonstrates no evidence of deep venous thrombosis.', 'No DVT on the left.',
+                   'The left leg shows no DVT.'):
+        n = r79 + '\n' + denial + ' ' + q50
+        # (the denied leg a candidate beside the leg the reading gave: held, and the clinician's to choose)
+        rows.append(('R11L2#1 ' + denial + ', right row', n, 'measurement_1_1', '5.0 mm', q50, 'conflict', None))
+        rows.append(('R11L2#1 ' + denial + ', left row', n, 'measurement_15_1', '5.0 mm', q50, 'conflict', None))
+    n = ('RIGHT LOWER EXTREMITY: The common femoral, femoral and popliteal veins are compressible without thrombus. ' + r79[4:].capitalize()
+         .replace('right ', '') + '\nLEFT LOWER EXTREMITY: No significant abnormality of the deep veins. ' + q50)
+    rows.append(('R11L2#1 a left label over a denial the finding list does not name, right row', n, 'measurement_1_1', '5.0 mm',
+                 q50, 'conflict', None))
+    rows.append(('R11L2#1 a left label over a denial the finding list does not name, left row', n, 'measurement_15_1', '5.0 mm',
+                 q50, 'conflict', None))
+    rows.append(('R11L2#1 control: an examination\'s denial is read past', 'Only the right leg was imaged today. The left leg was '
+                 'not imaged. ' + g, 'measurement_1_1', '7.4 mm', g, 'supported', None))
+    # lens 1 (LOW): a denied `right or left` lends no leg
+    for denial in ('No DVT in the right or left leg.', 'No DVT in the right and left legs.'):
+        rows.append(('R11L1#14 ' + denial, denial + ' ' + g, 'measurement_15_1', '7.4 mm', g, 'conflict', 'refuse'))
+    # (`neither … nor` is no denial to generation's shared vocabulary: a sentence naming both legs — held)
+    rows.append(('R11L1#14 Neither the right nor the left leg shows DVT.', 'Neither the right nor the left leg shows DVT. ' + g,
+                 'measurement_15_1', '7.4 mm', g, 'conflict', '*'))
+    rows.append(('R11L3#6 control: a label over a finding said absent', 'Right: reflux absent.\n' + g, 'measurement_1_1', '7.4 mm',
+                 g, 'supported', None))
+    # lens 1: a cited sentence saying its own value is wrong; an addendum's denial cited with the value
+    body = 'RIGHT LOWER EXTREMITY:\n' + r61
+    for n, q in ((body + '\nAddendum: The previously reported right GSV SFJ diameter of 6.1 mm is incorrect; the correct '
+                  'measurement is 7.6 mm.', ['RIGHT LOWER EXTREMITY:', r61, 'Addendum: The previously reported right GSV SFJ '
+                                             'diameter of 6.1 mm is incorrect; the correct measurement is 7.6 mm.']),):
+        rows.append(('R11L1#7 an addendum denying the value, cited with it', n, 'measurement_1_1', '6.1 mm', q, 'conflict', '*'))
+    for s in ('Right GSV SFJ 6.1 mm is not correct.', 'The right GSV SFJ diameter of 6.1 mm is incorrect.',
+              'The right GSV SFJ 6.1 mm was a dictation error.'):
+        rows.append(('R11L1#7 ' + s, s, 'measurement_1_1', '6.1 mm', s, 'conflict', 'refuse'))
+    # lens 1: a correction heading over a value other than the answer's
+    n = 'CORRECTION:\nThe right GSV SFJ diameter is 7.6 mm.\n\nRIGHT LOWER EXTREMITY:\n' + g18.replace('The great', 'The right great')
+    rows.append(('R11L1#8 a correction heading over another value, all cited', n, 'measurement_1_1', '6.1 mm',
+                 ['The right GSV SFJ diameter is 7.6 mm.', 'RIGHT LOWER EXTREMITY:', g18.replace('The great', 'The right great')],
+                 'conflict', '*'))
+    # lens 1: a site written two ways
+    t = ('right leg great saphenous vein at the saphenofemoral junction 7.1 millimeters small saphenous vein 6.3 millimeters '
+         'correction 7.4 millimeters at the SFJ with reflux of 1.2 seconds')
+    rows.append(('R11L1#11 SFJ and saphenofemoral junction are one site', t, 'measurement_1_1', '7.1 mm', t, 'conflict', '*'))
+    # lens 1: `report` read as what the value is corrected to
+    n = r61 + '\nCorrection: the right GSV SFJ diameter in the report is 6.1 mm. It should be 7.6 mm.'
+    rows.append(('R11L1#13 a correction naming the value in the report', n, 'measurement_1_1', '6.1 mm',
+                 'Correction: the right GSV SFJ diameter in the report is 6.1 mm.', 'conflict', '*'))
+    # lens 2: an addendum above the report saying `corrected`
+    for top in ('Addendum: Right GSV SFJ diameter corrected to 7.6 mm.', 'Addendum: Right GSV SFJ diameter corrected to 7.6 mm '
+                '(previously 6.1 mm).', 'Addendum: the right GSV SFJ diameter has been corrected to 7.6 mm.'):
+        n = top + '\n\nRIGHT LOWER EXTREMITY:\n' + r61
+        rows.append(('R11L2#2 ' + top, n, 'measurement_1_1', '6.1 mm', ['RIGHT LOWER EXTREMITY:', r61], 'conflict', '*'))
+    # lens 3: a value opening its sentence read as denied by the sentence before
+    n = ('RIGHT LEG:\nThe right great saphenous vein measures 6.1 mm at the saphenofemoral junction with reflux of 1.8 seconds.'
+         '\n\nCORRECTION:\nIn the right leg, reflux is absent.\n7.6 mm is the diameter at the saphenofemoral junction.')
+    q = 'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction with reflux of 1.8 seconds.'
+    rows.append(('R11L3#2 a correction heading over a value opening its sentence', n, 'measurement_1_1', '6.1 mm',
+                 ['RIGHT LEG:', q], 'conflict', '*'))
+    for c in ('Correction for the right leg: reflux is absent; 7.6 mm at the saphenofemoral junction.',
+              'Correction for the right leg: reflux negative; 7.6 mm at the saphenofemoral junction.'):
+        rows.append(('R11L3#2 ' + c, 'RIGHT LEG:\n' + q + '\n\n' + c, 'measurement_1_1', '6.1 mm', ['RIGHT LEG:', q], 'conflict', '*'))
+    # lens 2: an addendum with no correction word
+    for top in ('Please disregard the prior right SFJ diameter of 6.1 mm; the correct value is 7.6 mm.',
+                'Addendum: right GSV SFJ diameter 7.6 mm (previously 6.1 mm).'):
+        for n in (top + '\n\nRIGHT LOWER EXTREMITY:\n' + r61, 'RIGHT LOWER EXTREMITY:\n' + r61 + '\n\n' + top):
+            rows.append(('R11L2#2 ' + top + (' above' if n.startswith(top) else ' below'), n, 'measurement_1_1', '6.1 mm',
+                         ['RIGHT LOWER EXTREMITY:', r61], 'conflict', '*'))
+    n = 'History: prior ablation of the left great saphenous vein.\n' + s7
+    rows.append(('R11L2#2 control: a prior treatment in another clause', n, 'measurement_1_1', '7.4 mm', s7, 'supported', None))
+    s = 'Right GSV at the SFJ: reflux absent; 6.1 mm diameter.'
+    rows.append(('R11L3#6 a live value after a semicolon', s, 'measurement_1_1', '6.1 mm', s, 'supported', None))
+    # mutation proofs: `above` points at the data; a bare junction may be the SFJ; a wrap word before a capital
+    rows.append(('R11M the flow above is reversed', s7 + ' ' + l5 + '\n\nThe flow above is reversed.', 'measurement_1_1', '7.4 mm', s7,
+                 'conflict', '*'))
+    t = ('right leg great saphenous vein at the junction 7.1 millimeters small saphenous vein 6.3 millimeters correction 7.4 '
+         'millimeters at the SFJ with reflux of 1.2 seconds')
+    rows.append(('R11M a bare junction corrected at the SFJ', t, 'measurement_1_1', '7.1 mm', t, 'conflict', '*'))
+    rows.append(('R11M a line ending in a wrap word runs on before a capital', 'The left leg was\nNot scanned today. ' + g,
+                 'measurement_15_1', '7.4 mm', g, 'conflict', 'refuse'))
+    # mutation proofs (round 11's survivors): a wrapped side line, a label's second denial, a capitals heading, an
+    # anatomical label, study words, a sided first line, a same-line correction, the side cap, an addendum's line
+    c = 'Correction: ' + '; '.join(f'right {site} {a} mm, not {b} mm' for site, a, b in (
+        ('GSV SFJ', '7.6', '6.1'), ('GSV proximal thigh', '6.6', '6.0'), ('GSV mid thigh', '6.2', '5.8'), ('GSV distal thigh', '5.9', '5.5'),
+        ('GSV knee', '5.4', '5.0'), ('GSV calf', '4.8', '4.4'), ('SSV SPJ', '4.2', '3.8'), ('SSV mid calf', '3.9', '3.5'),
+        ('SSV distal calf', '3.4', '3.0'))) + '.'
+    rows.append(('R11M a wrapped side line is a sentence in the walk up', 'The left leg\nis normal.\n\nGSV at the knee 5.1 mm.', 'measurement_17_1', '5.1 mm', 'GSV at the knee 5.1 mm.', 'conflict', '*'))
+    rows.append(('R11M a leg label whose finding denial is followed by another denial', 'RIGHT LOWER EXTREMITY:\n' + s7 + '\nLeft: No DVT, not imaged for reflux.\n' + ss, 'measurement_19_1', '4.1 mm', ss, 'conflict', 'refuse'))
+    rows.append(('R11M a long capitals heading lends the impression no leg', blocks + 'SUMMARY OF THE FINDINGS OF THIS STUDY' + '\n' + imp, 'sdt_605543147', 'reflux positive.', imp, 'conflict', 'refuse'))
+    rows.append(('R11M a long lowercase report line leaves the leg a candidate', blocks + 'Summary of the findings of this study' + '\n' + imp, 'sdt_605543147', 'reflux positive.', imp, 'conflict', None))
+    rows.append(('R11M an anatomical label over what it found is walked past', 'RIGHT LEG:\nGSV at SFJ 7.4 mm.\n\nDeep veins: unremarkable.\n\nGSV at the knee 5.1 mm.', 'measurement_3_1', '5.1 mm', 'GSV at the knee 5.1 mm.', 'supported', None))
+    rows.append(('R11M a line of study words is no vein heading', 'RIGHT LEG:\nGSV at SFJ 7.4 mm.\n\nStanding views\n\nGSV at the knee 5.1 mm.', 'measurement_3_1', '5.1 mm', 'GSV at the knee 5.1 mm.', 'conflict', '*'))
+    rows.append(('R11M a first line denying a finding of its leg lends the side above nothing', 'RIGHT LEG:\nGSV at SFJ 7.4 mm.\n\nThe left leg shows no DVT.\nGSV at the knee 5.1 mm.', 'measurement_3_1', '5.1 mm', 'GSV at the knee 5.1 mm.', 'conflict', 'refuse'))
+    rows.append(("R11M an earlier sentence's correction on the line corrects that sentence", 'Right great saphenous vein at the saphenofemoral junction 7.1 millimeters correction at the junction it is 7.4 millimeters. The knee measures 5.2 millimeters.', 'measurement_3_1', '5.2 mm', 'The knee measures 5.2 millimeters.', 'supported', None))
+    rows.append(('R11M past the side cap a correction naming its values holds the other leg', 'LEFT LEG:\nGSV at SFJ 4.1 mm.\n\n' + c, 'measurement_15_1', '4.1 mm', ['LEFT LEG:', 'GSV at SFJ 4.1 mm.'], 'conflict', '*'))
+    rows.append(('R11M an addendum on the line above the report, no blank line', 'Addendum: Right GSV SFJ diameter corrected to 7.6 mm.\nRIGHT LOWER EXTREMITY:\n' + r61, 'measurement_1_1', '6.1 mm', ['RIGHT LOWER EXTREMITY:', r61], 'conflict', '*'))
+    seen = {}
+    for index, row in enumerate(rows):
+        seen[row[0]] = seen.get(row[0], 0) + 1
+        if seen[row[0]] > 1:
+            rows[index] = (f'{row[0]} ({seen[row[0]]})',) + row[1:]
+    return rows, extra
+
+
+ROUND_11, ROUND_11_EXTRA = _round_11()
+
+
 class RefutationRegressions(SimpleTestCase):
     def test_every_row_reads_the_same_whatever_line_break_the_notes_carry(self):
         """Round 10 (every lens): round 9's own line-break repair read a lone `\\r\\n` — what a browser posts for each typed
         line — as a blank line, and nine rows here read differently under it. Every row of every round is read again with
         its line breaks written as `\\r\\n`, a lone `\\r` and U+2028, and must read exactly as with `\\n`."""
         tables = REGRESSIONS + ROUND_2 + ROUND_2_LENSES + ROUND_3 + ROUND_4
-        rows = ROUND_5 + ROUND_6 + ROUND_7 + ROUND_8 + ROUND_9 + ROUND_10
-        extra = {**ROUND_5_EXTRA, **ROUND_6_EXTRA, **ROUND_7_EXTRA, **ROUND_9_EXTRA, **ROUND_10_EXTRA}
+        rows = ROUND_5 + ROUND_6 + ROUND_7 + ROUND_8 + ROUND_9 + ROUND_10 + ROUND_11
+        extra = {**ROUND_5_EXTRA, **ROUND_6_EXTRA, **ROUND_7_EXTRA, **ROUND_9_EXTRA, **ROUND_10_EXTRA, **ROUND_11_EXTRA}
 
         def outcomes(eol):
             def written(text):                   # (a row already written with `\r\n` is read as its `\n` form first)
@@ -2809,7 +3021,10 @@ class RefutationRegressions(SimpleTestCase):
                       'Scan of the right leg shows GSV reflux.', 'Duplex scan today shows right GSV reflux.'):   # (round 10)
             self.assertTrue(narrative.states({'quote': quote}), quote)
         for quote in ('RIGHT LOWER EXTREMITY VENOUS DUPLEX', 'Right lower extremity venous duplex ultrasound', 'Venous duplex study',
-                      'Ultrasound: right lower extremity positive for venous reflux'):     # (a label: round 8)
+                      'Ultrasound: right lower extremity positive for venous reflux',     # (a label: round 8)
+                      'RIGHT LOWER EXTREMITY VENOUS DUPLEX TO CONFIRM REFLUX',            # (round 11: an infinitive, a noun,
+                      'RIGHT LOWER EXTREMITY VENOUS DUPLEX FOR CONFIRMATION OF REFLUX',   # another noun's adjective)
+                      'Right lower extremity venous duplex, history positive for DVT'):
             self.assertFalse(narrative.states({'quote': quote}), quote)
 
     def test_a_signalling_nan_is_refused_not_raised(self):
@@ -2826,12 +3041,12 @@ class RefutationRegressions(SimpleTestCase):
     def test_round_5_every_case_pre_fills_and_reviews_as_the_notes_read(self):
         """Round 5's cases carry the review verdict too: the pre-fill holding is only half of each one — a wrong side the
         lenient review still accepts is the other (`(L) GSV SFJ 5.0 mm, reflux 1.1 s` on the right row)."""
-        for name, notes, key, value, quote, want, review in ROUND_5 + ROUND_6 + ROUND_7 + ROUND_8 + ROUND_9 + ROUND_10:
+        for name, notes, key, value, quote, want, review in ROUND_5 + ROUND_6 + ROUND_7 + ROUND_8 + ROUND_9 + ROUND_10 + ROUND_11:
             quotes = quote if isinstance(quote, list) else [quote or notes]
             with self.subTest(name):
                 picks = {key: (value, quotes, {}), **ROUND_5_EXTRA.get(name, {}), **ROUND_6_EXTRA.get(name, {}),
                          **ROUND_7_EXTRA.get(name, {}), **ROUND_9_EXTRA.get(name, {}),
-                         **ROUND_10_EXTRA.get(name, {})}
+                         **ROUND_10_EXTRA.get(name, {}), **ROUND_11_EXTRA.get(name, {})}
                 answers, _ = decide(notes, picks)
                 if want != '*':
                     self.assertEqual(answers[key]['status'], want)
@@ -3188,6 +3403,9 @@ class ReviewCost(SimpleTestCase):
         memos missed (283 s, 251 s and 121 s at 50,000 characters; 72 s, 64 s and 31 s at half). A sentence's context is
         read once per note, a line start from the side table, and the compared reading's strikes once per sentence."""
         self.reviewed_in('Technique ' + 'a ' * 6250 + '\nGSV ' + '7mm ' * 3120 + 'noted.', 5.0)
+        # (round 11: that first line ends in `a`, so it runs on into the next and is no first line to read; the same with
+        # a first line that stays one)
+        self.reviewed_in('Technique ' + 'b ' * 6250 + '\nGSV ' + '7mm ' * 3120 + 'noted.', 5.0)
         self.reviewed_in('Technique ' + 'a ' * 6245 + 'as follows:\nRight GSV ' + '7mm ' * 3120 + 'noted.', 5.0)
         self.reviewed_in('RIGHT LEG:\nGSV ' + '7mm vs rt, ' * 1135 + ' and so on and on ' + 'R:' * 6240 + ' end.', 5.0)
 
@@ -3197,6 +3415,40 @@ class ReviewCost(SimpleTestCase):
         every side word it joined, per call (195 s and 125 s at 50,000 characters)."""
         self.reviewed_in('RIGHT LEG:\nNo DVT ' + 'R:' * 6240 + ' seen.\nGSV ' + '7mm' * 4160 + ' then, vs rt.', 5.0)
         self.reviewed_in('Scan of the GSV ' + 'R:' * 6245 + 'seen.\nGSV ' + '7 mm ' * 2495 + 'noted.', 5.0)
+
+    @override_settings(WM_NARRATIVE=True)
+    def test_round_11_a_long_first_line_and_a_one_leg_run_are_read_once(self):
+        """Round 11's cost lens: every sentence re-read its paragraph's whole first line (`first_line_kind`: 52 s at 25,000
+        characters, 199 s at 50,000), and a run of one leg's side words was walked back whole per value and per sentence
+        (31 s and 127 s). A line's kind is read once per text, and a phrase at most a few side words back."""
+        # (`b`, not the lens's `a`: a line ending in `a` now runs on into the next as a hard wrap, and is read as a
+        # sentence, never by `first_line_kind` — the mutation proofs found this test vacuous)
+        self.reviewed_in('RIGHT LOWER EXTREMITY:\n\n' + ('Technique ' + 'b ' * 12500)[:12500].rstrip() + '\nGSV '
+                         + '7 mm; ' * 2200 + 'end.', 5.0)
+        self.reviewed_in('GSV ' + 'R:' * 6240 + ' ' + '7 mm ' * 2494 + 'end.', 5.0)
+        self.reviewed_in('rt ' * 4160 + '\nGSV ' + '7 mm; ' * 2080 + 'end.', 5.0)
+
+    @override_settings(WM_NARRATIVE=True)
+    def test_round_11_a_note_of_one_sentence_keeps_no_copy_of_its_side_words_per_line(self):
+        """Round 11's cost lens: a note with no stop is one sentence over every line, each line's weak form its own strike
+        set, and each set kept its own copy of every side word of the note (201 MB for one note)."""
+        import tracemalloc
+        lines = [f'GSV 7 mm ClosureFast (R), view {n}' for n in range(300)]
+        notes = 'RIGHT LEG\n' + 'R:' * 6000 + '\n' + '\n'.join(lines)
+        units = narrative.units(notes, FIELDS, LABELS)
+        quotes = [u['quote'] for u in units if u['quote'].startswith('GSV')]
+        measurements = [f for f in FIELDS if f.get('kind') == 'measurement' and f['locator']['unit'] == 'mm'][:6]
+        picks = {f['key']: ('7 mm', quotes[50 * i:50 * i + 50], {}) for i, f in enumerate(measurements)}
+        for name in dir(narrative):
+            if hasattr(getattr(narrative, name), 'cache_clear'):
+                getattr(narrative, name).cache_clear()
+        tracemalloc.start()
+        try:
+            decide(notes, picks)
+            peak = tracemalloc.get_traced_memory()[1]
+        finally:
+            tracemalloc.stop()
+        self.assertLess(peak, 15 * 1024 * 1024)        # (34 MB at 9f8a2727, 5 MB now)
 
     def test_round_10_a_glued_run_is_read_within_a_window(self):
         """Round 10's cost lens: a glued run of values is one word, so every place copied it as `the words before` and

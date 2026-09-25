@@ -1,3 +1,4 @@
+import bisect
 import hashlib
 import json
 import os
@@ -117,6 +118,7 @@ def source_quote_evidence(notes,label,raw,labels,sentences=None,previous=(),pref
     posted={line.strip() for line in raw.splitlines() if line.strip()}
     anchors={wm_narrative.paragraph_start(notes,unit['start']) for unit in sentences or ()
              if unit['quote'] in posted and counts[unit['quote']]==1} if prefer else set()
+    marks=sorted(unit['start'] for unit in sentences or () if unit['quote'] in posted and counts[unit['quote']]==1) if prefer else []
     for submitted in raw.splitlines():
         quote=submitted.strip()
         if not quote:continue
@@ -128,6 +130,12 @@ def source_quote_evidence(notes,label,raw,labels,sentences=None,previous=(),pref
         moved=next((unit for unit in tried if safe_copy(unit)),None) if prefer and len(same)>1 and kept is None else None
         if moved is None and kept is None and anchors and len(same)>1:
             moved=next((unit for unit in tried if carries(unit) and wm_narrative.paragraph_start(notes,unit['start']) in anchors),None)
+        if moved is None and kept is None and marks and len(same)>1:
+            # (else the copy nearest after a line cited once, across paragraphs: `LEFT LEG:` over a blank line and
+            # `Measurements:` resolved a sentence written under both legs to the right leg's copy — round 11)
+            placed=[(unit['start']-marks[index-1],unit) for unit in tried
+                    for index in [bisect.bisect_left(marks,unit['start'])] if index]
+            moved=min(placed,key=lambda item:item[0])[1] if placed else None
         sentence=(kept or moved
                   or next((unit for unit in free if unit['start'] in cited),None)
                   or (free[0] if free else (same[0] if same else None)))
