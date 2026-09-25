@@ -181,7 +181,7 @@ def _split_evidence(evidence):
 #: Narrative support verdicts (`wm_narrative.support`) as review blockers.
 NARRATIVE_BLOCKERS = {'unsupported': 'narrative_value_not_in_source', 'labelled': 'labelled_value_differs',
                       'correction': 'superseded_by_correction', 'side': 'side_not_supported',
-                      'side_unknown': 'side_not_stated'}
+                      'side_unknown': 'side_not_stated', 'row': 'row_not_supported'}
 
 
 def _narrative_units(notes, narrative, entries):

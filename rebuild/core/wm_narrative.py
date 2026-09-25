@@ -3446,8 +3446,437 @@ def _digest(text):
     return hashlib.blake2b(text.encode('utf-8', 'surrogatepass'), digest_size=16).digest()
 
 
+# ── the measurement row a value is written for ────────────────────────────────────────────────────────────
+#: The row a measurement question fills, from its label as the qualified mapping names it (`Right GSV at the SFJ:
+#: diameter (mm)`, `Left tributary row 25: reflux time (ms)`), the same way `field_side` reads its side: (vein, site),
+#: the site None on a tributary row. Any other label names no row, and nothing here applies to it.
+FIELD_ROW = re.compile(r'(?:Right|Left) (GSV|SSV|AAGSV|PAGSV) (?:at the )?(SFJ|Proximal Thigh|Knee|Below Knee|SPJ|Proximal Calf):')
+FIELD_TRIBUTARY = re.compile(r'(?:Right|Left) tributary row [0-9]+:')
+FIELD_SITES = {'SFJ': 'sfj', 'Proximal Thigh': 'pt', 'Knee': 'knee', 'Below Knee': 'bk', 'SPJ': 'spj', 'Proximal Calf': 'pc'}
+
+
+def field_row(field):
+    if field.get('kind') != 'measurement':
+        return None
+    found = FIELD_ROW.match(field['label'])
+    if found:
+        return found.group(1), FIELD_SITES[found.group(2)]
+    return ('TRIB', None) if FIELD_TRIBUTARY.match(field['label']) else None
+
+
+_GAP = SPACE + '++'                  # (a name may wrap onto the next line: `The great` / `saphenous vein`)
+_VEINS = r'(?:' + _GAP + r'veins?)?+'
+#: The words that name a row's vein or its level (read over `view`, case scoped): each is one kind — a trunk (`GSV`,
+#: `great saphenous vein`), an accessory whose side is unwritten (`ACC`), a tributary (`TRIB`), a vein no row of the form
+#: measures (`OTHER`: deep veins, perforators) — or one site: a row's own (`sfj spj pt pc bk knee`), one near a row
+#: (`near`: mid thigh, above the knee, the ankle), or one only a vein places (`junction`) or no row (`thigh`, `calf`).
+ROW_VEIN = (r'(?P<AAGSV>(?i:anterior(?:' + SPACE + r'|-)++accessory(?:' + _GAP + r'great)?+' + _GAP + r'saphenous' + _VEINS
+            + r'|anterior(?:' + SPACE + r'|-)++accessory' + _GAP + r'gsv|aagsv|aasv))'
+            r'|(?P<PAGSV>(?i:posterior(?:' + SPACE + r'|-)++accessory(?:' + _GAP + r'great)?+' + _GAP + r'saphenous' + _VEINS
+            + r'|posterior(?:' + SPACE + r'|-)++accessory' + _GAP + r'gsv|pagsv|pasv))'
+            r'|(?P<ACC>(?i:accessory(?:' + _GAP + r'great)?+' + _GAP + r'saphenous' + _VEINS + r'|accessory' + _GAP + r'gsv|asv))'
+            r'|(?P<GSV>(?i:great(?:er)?+' + _GAP + r'saphenous' + _VEINS + r'|long' + _GAP + r'saphenous' + _VEINS + r'|(?:rt|lt|r|l)?+gsvs?+|lsv))'
+            r'|(?P<SSV>(?i:(?:small|short|lesser)' + _GAP + r'saphenous' + _VEINS + r'|(?:rt|lt|r|l)?+ssvs?+))'
+            r'|(?P<TRIB>(?i:tributar(?:y|ies)|tribs?+|branch(?:es)?+|varicos[^\W\d_]*+|varices|varicosit[^\W\d_]*+))'
+            r'|(?P<OTHER>(?i:common' + _GAP + r'femoral' + _VEINS + r'|cfv|femoral' + _GAP + r'veins?+|fv|popliteal' + _GAP + r'veins?+|'
+            r'pop' + _GAP + r'v|posterior' + _GAP + r'tibial' + _VEINS + r'|ptv|perforat[^\W\d_]*+|perfs?+|deep' + _GAP + r'veins?+|'
+            r'giacomini[^\W\d_]*+))')
+ROW_SITE = (r'(?P<sfj>(?i:saphenofemoral(?:' + _GAP + r'junction)?+|sfj|groin|femoral' + _GAP + r'junction))'
+            r'|(?P<spj>(?i:saphenopopliteal(?:' + _GAP + r'junction)?+|spj|popliteal' + _GAP + r'(?:fossa|junction)))'
+            r'|(?P<pt>(?i:prox(?:imal)?+\.?+' + _GAP + r'thigh|upper' + _GAP + r'thigh|high' + _GAP + r'thigh))'
+            r'|(?P<pc>(?i:prox(?:imal)?+\.?+' + _GAP + r'calf|upper' + _GAP + r'calf))'
+            r'|(?P<bk>(?i:below(?:' + _GAP + r'the)?+(?:' + SPACE + r'|-)++knee|bk))'
+            r'|(?P<near>(?i:mid(?:' + SPACE + r'|-)*+thigh|distal' + _GAP + r'thigh|lower' + _GAP + r'thigh|above(?:' + _GAP + r'the)?+(?:' + SPACE + r'|-)++knee|ak|'
+            r'mid(?:' + SPACE + r'|-)*+calf|distal' + _GAP + r'calf|lower' + _GAP + r'calf|ankle))'
+            r'|(?P<knee>(?i:knee))|(?P<junction>(?i:junction))|(?P<thigh>(?i:thigh))|(?P<calf>(?i:calf))')
+ROW_WORD = re.compile(r'(?<![^\W\d_])(?:' + ROW_VEIN + '|' + ROW_SITE + r')(?![^\W\d_])')
+ROW_VEIN_NAMES = ('AAGSV', 'PAGSV', 'ACC', 'GSV', 'SSV', 'TRIB', 'OTHER')
+ROW_SITE_NAMES = ('sfj', 'spj', 'pt', 'pc', 'bk', 'near', 'knee', 'junction', 'thigh', 'calf')
+#: A branch of a trunk is the branch (`a tributary of the GSV measures 4.1 mm`), not the trunk.
+BRANCH_OF = re.compile(r'(?<![^\W\d_])(?:(?P<TRIB>(?i:tributar(?:y|ies)|tribs?+|branch(?:es)?+))|(?P<OTHER>(?i:perforat[^\W\d_]*+|'
+                       r'perfs?+)))' + _GAP + r'(?i:of|off|from)' + _GAP + r'(?:(?i:the)' + _GAP + r')?$')
+#: What stands between a value and a site written right after it (`6.8 mm at the SFJ`, `6.8 mm, in the proximal thigh`,
+#: `2.1 seconds of reflux at the SFJ`, `6.8 mm SFJ`): `prep` when a preposition binds them.
+#: A side written between a value and its site (`7.4 mm on the right and 5.0 mm on the left at the SFJ`, `5.0 mm (left)`).
+_ROW_SIDE = (r'(?:' + SPACE + r'*+(?:(?:(?i:on|in|of|for)' + _GAP + r'(?i:the)' + _GAP + r')?+(?i:right|left)(?:' + _GAP
+             + r'(?i:side|leg|limb|lower' + _GAP + r'extremity))?+|\(' + SPACE + r'*+(?i:right|left|rt|lt|r|l)' + SPACE
+             + r'*+\)|[-\u2013\u2014]' + SPACE + r'*+(?i:right|left))(?![^\W\d_]))?+')
+ROW_SIDE_AFTER = re.compile(_ROW_SIDE)
+ROW_BINDING = re.compile(_ROW_SIDE + SPACE + r'*+(?:,' + SPACE + r'*+)?(?:(?:(?i:of)' + _GAP + r')?(?i:reflux|retrograde' + _GAP + r'flow|'
+                         r'reversed' + _GAP + r'flow|flow' + _GAP + r'reversal)' + _GAP + r'(?=(?i:at|in|over|near|within|along)(?![^\W\d_])))?+'
+                         r'(?P<prep>(?i:at|in|of|on|over|near|across|within|along|just|around)'
+                         r'(?:' + _GAP + r'(?i:the|its|level|of|at|in|region|area)(?![^\W\d_]))*+' + _GAP + r')?')
+#: ... and between a value and a vein written right after it as the vein the value is found in (`reflux of 1.6 seconds
+#: is seen in the great saphenous vein at the proximal thigh`).
+VEIN_BINDING = re.compile(SPACE + r'*+(?:,' + SPACE + r'*+)?(?:(?i:is|was|are|were)' + _GAP + r'(?:(?i:seen|noted|found|present|'
+                          r'demonstrated|identified|documented|detected|observed|measured)' + _GAP + r')?)?'
+                          r'(?i:in|of|within|along|involving|throughout)' + _GAP + r'(?:(?i:the|its)' + _GAP + r')?'
+                          r'(?:(?i:right|left)' + _GAP + r')?')
+#: What makes a site written right after a value open the NEXT value's item, when the value's own item already has a
+#: site (`… 1.9 seconds at the knee it's 4.8 mm`, `… 1950 milliseconds in the proximal thigh 5.1 millimeters`, `…, at
+#: the knee the GSV measures …`).
+ROW_OPENER = re.compile(r'(?:' + SPACE + r'*+,?' + SPACE + r'*+(?i:it[\'’]s|its|it|is|was|measures|measure|measured|measuring|'
+                        r'diameter|there|the|vein|reflux|of|about|approximately|approx|a|showing|shows|has|had|with)(?![^\W\d_]))'
+                        r'{1,5}+(?:' + SPACE + r'|[,:])*+(?=[0-9])|' + SPACE + r'*+,?' + SPACE + r'*+(?=[0-9])')
+ROW_VEIN_NEXT = re.compile(SPACE + r'*+,?' + SPACE + r'*+(?:(?i:the)' + _GAP + r')?(?:' + re.sub(r'\(\?P<[^>]+>', '(?:', ROW_VEIN)
+                           + r')(?![^\W\d_])')
+#: A worksheet's row written as the form abbreviates it, right after its vein (`R GSV PT 6.8 mm`, `R GSV K 5.6 mm`,
+#: `SSV PC 3.1 mm`): only there, since `PT` and `K` alone are other words.
+ROW_ABBREVIATION = re.compile(r'[ \t]++((?i:pt|prox|k|pc))(?![^\W\d_])(?![ \t.]*+(?i:thigh|calf|knee)(?![^\W\d_]))')
+ROW_ABBREVIATIONS = {'GSV': {'pt': 'pt', 'prox': 'pt', 'k': 'knee'}, 'AAGSV': {'pt': 'pt', 'prox': 'pt'},
+                     'PAGSV': {'pt': 'pt', 'prox': 'pt'}, 'SSV': {'prox': 'pc', 'pc': 'pc'}}
+#: What makes a later value of an item the one that replaces an earlier one (with `CORRECTION_WORD`).
+ROW_REPLACES = re.compile(r'(?<![^\W\d_])(?i:should' + _GAP + r'(?:read|be)|corrected' + _GAP + r'to|rather' + _GAP + r'than|'
+                          r'instead' + _GAP + r'of)(?![^\W\d_])')
+JUNCTION_OF = {'GSV': 'sfj', 'AAGSV': 'sfj', 'PAGSV': 'sfj', 'ACC': 'sfj', 'SSV': 'spj'}
+#: The form's only row of a vein in a region, which a site naming only the region is (`GSV thigh 5.9 mm`, `SSV calf`).
+ONLY_ROW_IN = {('GSV', 'thigh'): 'pt', ('AAGSV', 'thigh'): 'pt', ('PAGSV', 'thigh'): 'pt', ('GSV', 'calf'): 'bk',
+               ('SSV', 'calf'): 'pc'}
+ROW_NAMED_SITES = frozenset('sfj spj pt knee bk pc'.split())
+ACCESSORY_VEINS = frozenset(('AAGSV', 'PAGSV'))
+#: The saphenofemoral junction's veins: a junction the sentence names with no vein of its own is theirs only.
+SFJ_VEINS = frozenset(('GSV', 'AAGSV', 'PAGSV', 'ACC'))
+#: The trunk a row's level is where no vein is written in its sentence or paragraph (an accessory is always named).
+TRUNK_OF_SITE = {'pt': 'GSV', 'knee': 'GSV', 'bk': 'GSV', 'pc': 'SSV'}
+
+
+def _group_name(match, names):
+    return next(name for name in names if match.group(name) is not None)
+
+
+@sized_cache
+def _row_words(notes):
+    """Every vein and site word of the note, and every value, in order: (starts, (kind, start, end, name)); a value's
+    name is its unit class (`mm`, `time`), from the reader's own quantities (`_positions`), so a place read here is
+    where `located` found it."""
+    read = view(notes)
+    found = []
+    for m in ROW_WORD.finditer(read):
+        if any(m.group(name) is not None for name in ROW_VEIN_NAMES):
+            name = _group_name(m, ROW_VEIN_NAMES)
+            branch = BRANCH_OF.search(read, max(0, m.start() - 40), m.start())
+            found.append(('vein', m.start(), m.end(), _group_name(branch, ('TRIB', 'OTHER')) if branch else name))
+        else:
+            found.append(('site', m.start(), m.end(), _group_name(m, ROW_SITE_NAMES)))
+            continue
+        abbreviation = ROW_ABBREVIATION.match(read, m.end())
+        site = ROW_ABBREVIATIONS.get(found[-1][3], {}).get(abbreviation.group(1).casefold()) if abbreviation else None
+        if site:
+            found.append(('site', abbreviation.start(1), abbreviation.end(1), site))
+    for unit in ('mm', 'time'):
+        found += [('value', a, b, unit) for a, b in _positions(notes, 'quantity:' + unit)[1]]
+    found.sort(key=lambda token: token[1])
+    return tuple(token[1] for token in found), tuple(found)
+
+
+#: A word naming a vein this reader does not know (`AAV`, `SFV`, `the accessory`): it stops an earlier vein carrying.
+VEIN_LIKE = re.compile(r'(?<![^\W\d_])(?:[A-Z]{2,4}V|(?i:saphenous|accessory|perforat[^\W\d_]*+|tributar[^\W\d_]*+))(?![^\W\d_])')
+
+
+@sized_cache
+def _unknown_veins(notes):
+    """The starts of the vein words no vein name of `_row_words` covers."""
+    starts, found = _row_words(notes)
+    known = [(token[1], token[2]) for token in found if token[0] == 'vein']
+    known_starts = [a for a, _ in known]
+    result = []
+    for m in VEIN_LIKE.finditer(view(notes)):
+        index = bisect.bisect_right(known_starts, m.start()) - 1
+        if not (index >= 0 and known[index][0] <= m.start() < known[index][1]):
+            result.append(m.start())
+    return tuple(result)
+
+
+@sized_cache
+def _row_veins(notes):
+    starts, found = _row_words(notes)
+    veins = [token for token in found if token[0] == 'vein']
+    return tuple(token[1] for token in veins), tuple(veins)
+
+
+def sides_changed(notes, low, high):
+    """Whether a side word (a leg, or both) is written wholly inside `low`..`high`."""
+    starts, found = _side_index(notes)
+    index = bisect.bisect_left(starts, low)
+    while index < len(found) and found[index][0] < high:
+        if found[index][1] <= high and found[index][2] in ('right', 'left', 'both'):
+            return True
+        index += 1
+    return False
+
+
+def row_origin(notes, at, low):
+    """Where a place's sentence begins for its row: where its hard-wrapped lines begin, at most `WRAP_REACH` back from a
+    line start (as `place_reading` reads its side)."""
+    wrapped = sentence_in_line(notes, at)[0]
+    if wrapped >= low:
+        return low
+    target = max(wrapped, low - WRAP_REACH)
+    lines = _lines(notes)[1]
+    index = bisect.bisect_left(lines, target)
+    return target if target == wrapped else lines[index] if index < len(lines) and lines[index] <= low else low
+
+
+def row_reading(notes, at, low, high, struck=()):
+    """The row the value written at `at` is read for, as (vein, vein strength, site, site strength, other readings) —
+    a strength `explicit` (its own item), `carried` (earlier in its sentence, or a parallel item's) or `context` (earlier
+    in its paragraph); other readings: the other sites or veins its words may give it — or None where no value of the
+    reader's is written there."""
+    struck = struck if isinstance(struck, Struck) else strikes(struck)
+    origin, found = _row_reading(notes, at, low, high, struck)
+    if found is not None and found[2] is None and found[1] != 'explicit' and first_in(notes, 'quantity', origin, at) is None \
+            and CORRECTION_WORD.search(notes, origin, at):
+        # A correction sentence writing no row of its own corrects the value just said (`… 6.1 mm at the saphenofemoral
+        # junction. correction: it measures 7.6 mm.`): it is read for that value's row, carried, from the sentence before
+        # it in its paragraph (that sentence's own reading only: a run of corrections is not followed back).
+        before = last_in(notes, 'quantity', paragraph_start(notes, origin), origin)
+        if before is not None:
+            earlier = _row_reading(notes, before[0], sentence_at(notes, before[0])[0], origin, strikes(()))[1]
+            if earlier is not None and earlier[2] is not None:
+                found = (earlier[0], 'carried' if earlier[0] else None, earlier[2], 'carried', frozenset(), found[5])
+    if found is not None and found[2] is None:
+        found = line_row(notes, at, origin, found)
+    return found
+
+
+def line_row(notes, at, origin, found):
+    """A reading with no site of its own takes the site (and a vein it lacks) written earlier on its line before its
+    sentence, carried, where no value of its unit stands between (`Right GSV at the SFJ: reflux absent; 6.1 mm diameter.`;
+    not `GSV at the SFJ 6.8 mm; 6.1 mm`)."""
+    start = line_start(notes, origin)
+    if start >= origin:
+        return found
+    starts, tokens = _row_words(notes)
+    unit = next((token[3] for token in tokens[bisect.bisect_left(starts, at):bisect.bisect_right(starts, at)]
+                 if token[0] == 'value'), None)
+    site = vein = None
+    for kind, token_start, _, name in reversed(tokens[bisect.bisect_left(starts, start):bisect.bisect_left(starts, origin)]):
+        if kind == 'value' and name == unit:
+            return found
+        if kind == 'site' and site is None:
+            site = name
+        elif kind == 'vein' and vein is None:
+            vein = name
+        if site is not None and vein is not None:
+            break
+    if site is None:
+        return found
+    if vein is not None and found[1] != 'explicit':
+        return (vein, 'carried', site, 'carried', found[4], found[5])
+    return (found[0], found[1], site, 'carried', found[4], found[5])
+
+
+@sized_cache(long=2, short=128)
+def _row_tables(notes):
+    return {}, {}
+
+
+def _row_reading(notes, at, low, high, struck):
+    # (its own tables, bounded as `place_reading`'s: the sentence memo shared a table of 4,096 with every other per-note
+    # reading, and a run of 5,400 `;`-sentences emptied it per question; keyed by the strikes inside the sentence only,
+    # so questions citing different units read a sentence's rows once — round 7's cost lens shape)
+    bounds, sentences_read = _row_tables(notes)
+    found = bounds.get((at, low, high))
+    if found is None:
+        if len(bounds) >= PLACE_READINGS:
+            bounds.clear()
+        # (a site the hard wrap put on the next line: `… 6.9 mm at the` / `saphenofemoral junction`)
+        found = bounds[(at, low, high)] = (row_origin(notes, at, low), max(high, sentence_in_line(notes, at)[1]))
+    origin, high = found
+    struck = sentence_strikes(notes, struck, origin, high)
+    rows = sentences_read.get((origin, high, struck))
+    if rows is None:
+        if len(sentences_read) >= PLACE_READINGS:
+            sentences_read.clear()
+        rows = sentences_read[(origin, high, struck)] = _rows_of_sentence(notes, origin, high, struck)
+    return origin, rows.get(at)
+
+
+def _rows_of_sentence(notes, low, high, struck):
+    """Each value of one sentence read for its row, as ITEMS left to right: a site or a vein opens one, and the values
+    after it are its own until another opens (`GSV at the SFJ 6.8 mm with reflux of 1.2 s, proximal thigh 6.1 mm …`).
+    A site written right after a value is its item's when the item has none (`6.8 mm at the SFJ with reflux of 1.2 s`,
+    `6.8 mm with reflux of 1.2 s at the SFJ`); after an item that has one, it opens the next item where a value follows
+    it (`… 1.9 seconds at the knee it's 4.8 mm`), else it is another reading of the value. A vein written right after a
+    value is the value's (`reflux of 1.6 seconds is seen in the GSV at the proximal thigh`). A second value of one unit
+    in an item opens an item with no site of its own — unless it corrects the first (`6.1 mm at the SFJ, correction:
+    7.6 mm`), or a side is written between them, which makes it the other leg's parallel (`the right … 6.8 mm and the left
+    6.1 mm`): its site is then carried from the first, or back to it (`4.2 mm and the left 4.0 mm at the SFJ`)."""
+    read = view(notes)
+    starts, found = _row_words(notes)
+    tokens = [token for token in found[bisect.bisect_left(starts, low):bisect.bisect_left(starts, high)]
+              if not is_struck(struck, token[1])]
+    vein_starts, veins = _row_veins(notes)
+    index = bisect.bisect_left(vein_starts, low) - 1
+    context = veins[index][3] if index >= 0 and veins[index][1] >= paragraph_start(notes, low) else None
+
+    def item(vein=None):
+        return {'vein': vein, 'site': None, 'strength': 'explicit', 'units': {}, 'firsts': {}, 'values': [], 'parallel': None,
+                'alts': set(), 'site_at': -1, 'vein_at': -1}
+
+    readings, current, sentence_vein, last, bound, vein_bound = {}, item(), None, None, None, None
+    named, vein_end, unknown = set(), low, _unknown_veins(notes)
+    for kind, start, end, name in tokens:
+        if kind != 'value':
+            named.add(name)
+            vein_end = end if kind == 'vein' else vein_end
+        if kind == 'vein':
+            if vein_bound == start and current['values']:
+                # (the vein the value just written is found in: its item's where it has none, else another reading)
+                if current['vein'] is None:
+                    current['vein'] = name
+                    for at in current['values']:
+                        if readings[at]['vein'][1] != 'explicit':
+                            readings[at]['vein'] = (name, 'explicit')
+                elif current['vein'] != name:
+                    readings[last]['others'].add(name)
+                sentence_vein, vein_bound = name, None
+                binding = ROW_BINDING.match(read, end)
+                bound = (binding.end(), binding.group('prep') is not None)
+                continue
+            sentence_vein = name
+            if current['values']:
+                current = item(name)
+            else:
+                current['vein'] = name
+            current['vein_at'] = start
+            bound = vein_bound = None
+            continue
+        if kind == 'site':
+            if bound is not None and bound[0] == start:
+                owner = readings[last]['item']
+                if owner['site'] is None:
+                    owner['site'], owner['strength'] = name, 'explicit'
+                    for at in owner['values']:
+                        readings[at]['site'] = (name, 'explicit')
+                    parallel = owner['parallel']
+                    while parallel is not None and parallel['site'] is None:
+                        for at in parallel['values']:
+                            readings[at]['site'] = (name, 'carried')
+                        parallel = parallel['parallel']
+                    bound = vein_bound = None
+                    continue
+                with_prep = bound[1] or name in ('bk', 'near')
+                opens = ROW_OPENER.match(read, end) or ROW_VEIN_NEXT.match(read, end)
+                if not opens and owner['site'] != name:
+                    readings[last]['others'].add(name)
+                if not opens:
+                    bound = vein_bound = None
+                    continue
+            # (two levels before one value are two readings of it: `the GSV at the SFJ and the proximal thigh measures …`)
+            alts = (current['alts'] | ({current['site']} - {None, name})
+                    if not current['values'] and current['site_at'] > current['vein_at'] else set())
+            current = item(current['vein'] if not current['values'] else None)
+            current['site'], current['alts'], current['site_at'] = name, alts, start
+            bound = vein_bound = None
+            continue
+        if name in current['units'] and not (CORRECTION_WORD.search(notes, current['firsts'][name], start)
+                                             or ROW_REPLACES.search(read, current['firsts'][name], start)):
+            before = current
+            current = item()
+            # (a side between the two, or bound right after this one: `7.4 mm at the SFJ, compared with 5.0 mm on the left`)
+            if sides_changed(notes, before['units'][name], max(start, ROW_SIDE_AFTER.match(read, end).end())):
+                current['parallel'], current['vein'] = before, before['vein']
+                if before['site'] is not None:
+                    current['site'], current['strength'] = before['site'], 'carried'
+        current['units'][name] = start
+        current['firsts'].setdefault(name, start)
+        current['values'].append(start)
+        vein = ((current['vein'], 'explicit') if current['vein'] else (sentence_vein, 'carried') if sentence_vein
+                else (context, 'context') if context else (None, None))
+        if vein[1] != 'explicit' and starts_within(unknown, vein_end, start):
+            # (a vein word this reader does not know since the last it does: `The AAV measures … at the SFJ` is no GSV's,
+            # and no junction places a vein there)
+            vein = ('UNKNOWN', 'explicit')
+        site = (current['site'], current['strength']) if current['site'] else (None, None)
+        readings[start] = {'vein': vein, 'site': site, 'others': set(current['alts']), 'item': current, 'seen': frozenset(named)}
+        binding = ROW_BINDING.match(read, end)
+        last, bound = start, (binding.end(), binding.group('prep') is not None)
+        vein_bound = VEIN_BINDING.match(read, end)
+        vein_bound = vein_bound.end() if vein_bound else None
+    return {at: reading['vein'] + reading['site'] + (frozenset(reading['others']), reading['seen'])
+            for at, reading in readings.items()}
+
+
+def _row_vein_verdict(want, name, strength):
+    if name is None or name == 'UNKNOWN':
+        return 'unknown'
+    if name == want:
+        return 'consistent'
+    if (name == 'ACC' and want in ACCESSORY_VEINS) or (name == 'OTHER' and want == 'TRIB'):
+        return 'unknown'             # (an accessory with no side written; a perforator a tributary row may carry)
+    return 'contradicted' if strength == 'explicit' else 'unknown'
+
+
+def _row_site_verdict(want, name, strength, vein):
+    if name == 'junction':
+        name = JUNCTION_OF.get(vein, 'junction')
+    elif name in ('thigh', 'calf'):
+        name = ONLY_ROW_IN.get((vein, name), name)     # (the vein's only row there: `GSV thigh 5.9 mm`)
+    if name == want:
+        return 'consistent'
+    if name in ROW_NAMED_SITES and {name, want} != {'bk', 'pc'}:
+        return 'contradicted' if strength == 'explicit' else 'unknown'
+    return 'unknown'
+
+
+def row_verdict(row, reading):
+    """`consistent` when the place is read for this row (its vein, and its level), `contradicted` when its own item
+    names another row's, else `unknown` (nothing written, only a sentence's or a paragraph's earlier vein, a level near
+    the row or one only a vein places, or two readings). A junction the item names places its vein where the item names
+    none: the saphenopopliteal is the small saphenous vein's (`At the saphenopopliteal junction it measures 3.0 mm`
+    after a sentence about the great saphenous vein); the saphenofemoral is the great saphenous vein's (`SFJ: right 7.4
+    mm`), unless the sentence or paragraph reads an accessory there; and a trunk's level, where no vein is written at all,
+    is that trunk's (`Proximal thigh: right 6.2 mm`)."""
+    if reading is None:
+        return 'unknown'
+    want_vein, want_site = row
+    vein, vein_strength, site, site_strength, others, seen = reading
+    if site_strength is not None and vein_strength != 'explicit':
+        if site == 'spj':
+            vein, vein_strength = 'SSV', site_strength
+        elif site == 'sfj' and vein not in SFJ_VEINS:
+            vein, vein_strength = 'GSV', site_strength
+        elif vein is None and site in TRUNK_OF_SITE:
+            vein, vein_strength = TRUNK_OF_SITE[site], site_strength     # (`Proximal thigh: right 6.2 mm`, no vein written)
+    verdict = _row_vein_verdict(want_vein, vein, vein_strength)
+    if any(other in ROW_VEIN_NAMES and _row_vein_verdict(want_vein, other, 'explicit') != verdict for other in others):
+        verdict = 'unknown'
+    verdicts = [verdict]
+    if want_site is not None:
+        placed_by = vein or want_vein
+        verdict = _row_site_verdict(want_site, site, site_strength, placed_by) if site else 'unknown'
+        if any(other in ROW_SITE_NAMES and _row_site_verdict(want_site, other, 'explicit', placed_by) != verdict
+               for other in others):
+            verdict = 'unknown'
+        verdicts.append(verdict)
+    # (a refusal is final at review, so it is kept for a place whose sentence names the row's vein and level nowhere
+    # before it: `At the SFJ the GSV, which receives the AAGSV, measures 6.8 mm` is only uncertain)
+    if verdicts[0] == 'contradicted' and (want_vein in seen or (want_vein == 'SSV' and 'spj' in seen)):
+        verdicts[0] = 'unknown'
+    if want_site is not None and verdicts[1] == 'contradicted' and (
+            want_site in seen or ('junction' in seen and want_site in ('sfj', 'spj'))):
+        verdicts[1] = 'unknown'
+    return 'contradicted' if 'contradicted' in verdicts else 'unknown' if 'unknown' in verdicts else 'consistent'
+
+
+def row_places(field, places, notes, struck, strict, key=None):
+    """The places a measurement's row admits: strict (the pre-fill) only those read for its row; lenient (review) all
+    but those whose own item names another row. None: no row to read (not a measurement row of the form). `key`: what
+    the places are the places of (the value and its cited units), so every row's question reads them once."""
+    row = field_row(field)
+    if row is None:
+        return None
+    read = lambda: tuple(row_reading(notes, at, low, high, struck) for at, (low, high), _ in places)
+    readings = note_memo(notes, ('row_readings',) + key, read) if key is not None else read()
+    verdicts = [row_verdict(row, reading) for reading in readings]
+    kept = [place for place, verdict in zip(places, verdicts) if verdict == 'consistent' or (not strict and verdict == 'unknown')]
+    return kept, all(verdict == 'contradicted' for verdict in verdicts)
+
+
 def side_verdict(field, value, own, notes, strict=False):
-    key = ('side_verdict', field_side(field), field.get('kind'), unit_kind(field), value, _own_key(own), strict)
+    key = ('side_verdict', field_side(field), field.get('kind'), unit_kind(field), field_row(field), value, _own_key(own),
+           strict)
     return note_memo(notes, key, lambda: _side_verdict(field, value, own, notes, strict))
 
 
@@ -3467,6 +3896,13 @@ def _side_verdict(field, value, own, notes, strict=False):
     struck = note_memo(notes, ('own_strikes', _own_key(own)),
                        lambda: strikes([span for entry in own for span in superseded(entry)]))
     places = [place for place in located(field, value, own) if not place[2]] if value else []
+    rows = row_places(field, places, notes, struck, strict, (unit_kind(field), value, _own_key(own))) if places else None
+    if rows is not None:
+        # The same place must be this row's AND this side's: a value the other leg writes for another row is not this
+        # row's (`LEFT: … the SSV at the SPJ measures 5.4 mm` is no reading of the left GSV at the knee's 5.4 mm).
+        places, contradicted = rows
+        if not places:
+            return 'row' if contradicted else 'row_unknown'
     words = False
     if not places and field.get('kind') == 'choice' and value:
         places, words = [place for place in located(field, value, own, words=True) if not place[2]], True
@@ -4719,6 +5155,10 @@ def governing(field, value, own, read, sides=True, hidden=True):
     found = own_frame(own, read, field, value)
     if found is not None:
         return found, generation.held_reason(found, True)
+    held = option_reason(field, value, own) if field.get('kind') == 'choice' and value else None
+    if held is not None:
+        return ([{'quote': e['quote'], 'start': e['start'], 'end': e['end'], 'after': False, 'same': True} for e in own],
+                HELD[held])
     usable = usable_units(field, own, read['labels'], read['all_labels'])
     placed = side_verdict(field, value, usable, notes, strict=True) if sides and value and usable else None
     if placed is not None:
@@ -4736,6 +5176,122 @@ def governing(field, value, own, read, sides=True, hidden=True):
         memo[key] = correction_context(field, value, own, read['corrections'], notes)
     found = [dict(entry) for entry in memo[key]] if memo[key] is not None else None
     return (found, HELD['correction']) if found is not None else (None, None)
+
+
+# ── what an option's own words claim ──────────────────────────────────────────────────────────────────────────
+#: The deep veins an option may list as where its finding is (`with evidence of an acute DVT of CFV, FV, POP V, PTV.`),
+#: by the names a note writes them with (read over `view`): a `common femoral vein` is the CFV, never the FV.
+LISTED_VEIN = re.compile(r'(?<![^\W\d_])(?:(?P<cfv>(?i:cfvs?+|common' + _GAP + r'femoral(?:' + _GAP + r'veins?+)?+))'
+                         r'|(?P<fv>(?i:s?+fvs?+|(?:superficial' + _GAP + r')?+femoral(?:' + _GAP + r'veins?+|(?!' + _GAP
+                         + r'(?i:arter[^\W\d_]*+|junction|nerve|head|neck|condyle|canal|triangle|region))(?![^\W\d_]))))'
+                         r'|(?P<pop>(?i:pop(?:' + _GAP + r'v)?+|popliteal(?!' + _GAP + r'(?i:fossa|junction))(?:' + _GAP
+                         + r'veins?+)?+))'
+                         r'|(?P<ptv>(?i:ptvs?+|posterior' + _GAP + r'tibial(?:' + _GAP + r'veins?+)?+)))(?![^\W\d_])')
+LISTED_VEIN_NAMES = ('cfv', 'fv', 'pop', 'ptv')
+#: What states a deep-vein finding there (`Acute occlusive thrombus in the popliteal vein.`), and what calls a vein normal
+#: or denies the finding in its sentence (`CFV and FV compressible with normal flow.`, `no DVT`).
+VEIN_FINDING = re.compile(r'(?<![^\W\d_])(?i:thromb[^\W\d_]*+|dvt|clots?+|occlu[^\W\d_]*+|non-?compressib[^\W\d_]*+|'
+                          r'obstruct[^\W\d_]*+)(?![^\W\d_])')
+VEIN_NORMAL = re.compile(r'(?<![^\W\d_])(?i:(?<!non)(?<!non-)compressib[^\W\d_]*+|patent|normal|no|not|without|negative|free|'
+                         r'absent)(?![^\W\d_])')
+#: A qualified option beside the plain one (`retained small saphenous vein` / `small saphenous vein`): what a cited
+#: sentence says for the qualifier to be the vein's (read over `view`).
+QUALIFIER_EVIDENCE = {
+    'retained': re.compile(r'(?<![^\W\d_])(?i:treated|ablated|ablation|stripped|stripping|ligated|ligation|closed|closure|'
+                           r'injected|sclerosed|sclerotherapy|glued|evla|evlt|rfa|laser|radiofrequency|venaseal|clarivein|'
+                           r'recanali[sz][^\W\d_]*+|retained|residual|recurren[^\W\d_]*+|s/p|status' + _GAP + r'post)'
+                           r'(?![^\W\d_])'),
+    'duplicate': re.compile(r'(?<![^\W\d_])(?i:duplicat[^\W\d_]*+|double[^\W\d_]*+|bifid|paired|two' + _GAP
+                            + r'(?:great|small|gsvs?+|ssvs?+|trunks?+))(?![^\W\d_])'),
+}
+
+
+#: What may stand between a deep-vein finding and the veins it is in (`thrombus in the popliteal vein`, `DVT of the common
+#: femoral, femoral, popliteal and posterior tibial veins`, `CFV, FV and popliteal vein thrombosis`): anything else — a
+#: normal finding, `with`, `unremarkable` — ends the list, so a word this reader does not know holds the option.
+VEIN_LIST_WORDS = frozenset('of in within involving into from to through the right left and or both extending extends '
+                            'vein veins segment segments'.split())
+
+
+@sized_cache
+def veins_with_finding(quote):
+    """The deep veins a quote states a finding in (`VEIN_FINDING`, not denied just before it), each joined to it only by
+    `VEIN_LIST_WORDS`, commas and other listed veins. (Each finding walks its list from where it stands, by bisection,
+    and stops at the first word of another kind: every walk is as long as its own list.)"""
+    stated = set()
+    veins = list(LISTED_VEIN.finditer(quote))
+    starts = [m.start() for m in veins]
+    for finding in VEIN_FINDING.finditer(quote):
+        low = sentence_at(quote, finding.start())[0]
+        if VEIN_NORMAL.search(quote, max(low, finding.start() - 40), finding.start()):
+            continue                 # (`no DVT in the CFV`, `without thrombus`)
+        for direction in (1, -1):
+            edge = finding.end() if direction == 1 else finding.start()
+            index = bisect.bisect_left(starts, edge) if direction == 1 else bisect.bisect_left(starts, edge) - 1
+            while 0 <= index < len(veins):
+                m = veins[index]
+                if direction == -1 and m.end() > edge:
+                    index -= 1
+                    continue
+                gap = quote[edge:m.start()] if direction == 1 else quote[m.end():edge]
+                if len(gap) > 200 or re.search(r'[.;:!?]', gap) or any(
+                        word.casefold() not in VEIN_LIST_WORDS for word in LETTER_RUN.findall(gap)):
+                    break
+                stated.add(_group_name(m, LISTED_VEIN_NAMES))
+                edge = m.end() if direction == 1 else m.start()
+                index += direction
+    return frozenset(stated)
+
+
+def option_reason(field, value, own):
+    """Why a choice's option says more than its cited units, for the pre-fill (the clinician may still choose it): an
+    option listing the deep veins its finding is in needs each of them stated by a cited sentence (`overstated`: the
+    popliteal alone, the CFV and FV compressible, is not `an acute DVT of CFV, FV, POP V, PTV`); a qualified option needs
+    its qualifier (`overstated`), and the plain one beside it is a wording decision where the cited units describe the
+    qualifier (`wording`: a previously ablated, recanalized SSV is `small saphenous vein` or `retained small saphenous
+    vein`). It reads the option and the cited units only."""
+    listed = {_group_name(m, LISTED_VEIN_NAMES) for m in LISTED_VEIN.finditer(view(value))}
+    if len(listed) >= 2:
+        stated = set()
+        for entry in own:
+            stated |= veins_with_finding(view(entry['quote']))
+        if not listed <= stated:
+            return 'overstated'
+    options = field.get('options') or []
+    for qualifier, evidence in QUALIFIER_EVIDENCE.items():
+        plain = value[len(qualifier) + 1:] if value.startswith(qualifier + ' ') else value
+        if not (plain != value and plain in options) and qualifier + ' ' + value not in options:
+            continue
+        described = qualifier_described(evidence, plain, own)
+        if plain != value and not described:
+            return 'overstated'
+        if plain == value and described:
+            return 'wording'
+    return None
+
+
+def qualifier_described(evidence, plain, own):
+    """Whether a cited unit describes the option's own vein with the qualifier: in the clause that names that vein
+    (`Previously treated SSV has recanalized`, `the previously ablated right small saphenous vein`), not another vein's
+    (`retained right great saphenous vein reflux positive; left small saphenous vein is absent`)."""
+    named = ROW_WORD.search(view(plain))
+    vein = _group_name(named, ROW_VEIN_NAMES) if named and any(named.group(n) is not None for n in ROW_VEIN_NAMES) else None
+    if vein is None:
+        return False
+    for entry in own:
+        quote = view(entry['quote'])
+        searched = set()             # (each clause once: a clause naming the vein a thousand times was searched per name)
+        for m in ROW_WORD.finditer(quote):
+            if not any(m.group(n) is not None for n in ROW_VEIN_NAMES) or _group_name(m, ROW_VEIN_NAMES) != vein:
+                continue
+            low, high = sentence_at(quote, m.start())
+            before, after = last_in(quote, 'clause', low, m.start()), first_in(quote, 'clause', m.end(), high)
+            start, end = before[1] if before else low, after[0] if after else high
+            if (start, end) not in searched:
+                searched.add((start, end))
+                if evidence.search(quote, start, end):
+                    return True
+    return False
 
 
 # ── the per-answer decision ─────────────────────────────────────────────────────────────────────────────────
@@ -4761,6 +5317,14 @@ HELD = {
                      'side is never assumed. Decide the answer yourself.'),
     'side_ambiguous': ('Read from the notes but NOT used: the notes can be read as placing this finding on either side, '
                        'and the side is never assumed. Decide the answer yourself.'),
+    'row': ('Read from the notes but NOT used: the notes give this value for another measurement row (another vein or '
+            'level). Decide the answer yourself.'),
+    'row_unknown': ('Read from the notes but NOT used: the notes do not say clearly which measurement row (vein and '
+                    'level) this value belongs to, and the row is never assumed. Decide the answer yourself.'),
+    'overstated': ('Read from the notes but NOT used: this option says more than the cited notes do (a vein or a '
+                   'qualifier they do not state). Choose the answer yourself; leaving it blank is an answer.'),
+    'wording': ('Read from the notes but NOT used: the form also offers a qualified option for this vein (such as '
+                '"retained" or "duplicate"), and the cited notes describe it that way. Choose the wording yourself.'),
     'hidden': ('Read from the notes but NOT used: the notes have an invisible character inside a word, which can hide a '
                'correction, a side or someone else\'s finding from this reading. Read the notes and decide the answer yourself.'),
 }
@@ -4825,7 +5389,7 @@ def validate(notes, fields, selections, requirements):
                                      'reason': 'Signature requires explicit review by the finalizing clinician; it is not generated from notes.'}
             continue
         answers[field['key']] = decide(field, value, qualifiers, own, read)
-    return answers, propose(selections.statements, requirements, answers, indexed, read)
+    return answers, propose(selections.statements, requirements, answers, indexed, read, fields)
 
 
 # ── statements ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -4860,10 +5424,11 @@ def filled(answer):
     return bool(answer and answer.get('status') in ('supported', 'edited') and answer.get('text'))
 
 
-def propose(statements, requirements, answers, indexed, read):
+def propose(statements, requirements, answers, indexed, read, fields=()):
     """A model's statement proposal is kept only when its variant exists, every required answer is supported,
     every omitted answer is empty, and no cited unit is held. A fixed wording needs a cited unit; a wording made
-    from answers may rest on those answers. It only pre-selects the page: the clinician chooses and ticks."""
+    from answers may rest on those answers. It only pre-selects the page: the clinician chooses and ticks. A wording
+    that states the study documents reflux past a threshold is the one its answers give (`threshold_wording`)."""
     by_key = {row['key']: row for row in requirements}
     proposals = {}
     for item in statements:
@@ -4871,6 +5436,14 @@ def propose(statements, requirements, answers, indexed, read):
         if row is None or row.get('kind') != 'assertion' or item.key in proposals:
             continue
         variant = next((v for v in row.get('variants', []) if v['id'] == item.variant), None)
+        extra = []
+        if variant is not None:
+            decided = threshold_wording(row, variant, answers, fields)
+            if decided is not None:
+                variant, extra, held = decided
+                if variant is None:
+                    proposals[item.key] = {'held': held}
+                    continue
         # (one under review's bound: a wording resting on its answers adds their entry)
         if (variant is None or len(set(item.unit_ids)) != len(item.unit_ids) or len(item.unit_ids) >= EVIDENCE_LIMIT
                 or any(i not in indexed for i in item.unit_ids)):
@@ -4883,6 +5456,9 @@ def propose(statements, requirements, answers, indexed, read):
                for key in variant.get('empty_control_keys', [])):
             continue
         evidence = [unit_evidence(indexed[i]) for i in sorted(item.unit_ids, key=lambda i: indexed[i]['start'])]
+        cited = {(entry['start'], entry['end']) for entry in evidence}
+        evidence = sorted(evidence + [entry for entry in extra if (entry['start'], entry['end']) not in cited],
+                          key=lambda entry: entry['start'])
         if evidence and (statement_governed(row, evidence, read) is not None or rests_on_titles(row, evidence)):
             continue
         if evidence and not required and not names_side(row, evidence, read['notes']):
@@ -4894,6 +5470,63 @@ def propose(statements, requirements, answers, indexed, read):
             continue
         proposals[item.key] = {'variant': variant['id'], 'evidence': evidence}
     return proposals
+
+
+#: A wording's sentence stating that the study documents reflux past a threshold (the technique statement's `… This
+#: study documents reflux as lasting more than 500 milliseconds in either the saphenous veins or the perforator veins.`).
+THRESHOLD_SENTENCE = re.compile(r'[ \t]*This study documents reflux as lasting more than ([0-9]+) milliseconds in either the '
+                                r'saphenous veins or the perforator veins\.[ \t]*$')
+SAPHENOUS_VEINS = frozenset(('GSV', 'SSV', 'AAGSV', 'PAGSV'))
+THRESHOLD_HELD = ('Not pre-selected: the notes give a saphenous reflux time over {} ms that is held for your decision above, '
+                  'so whether this statement documents it is yours to choose.')
+THRESHOLD_UNSUPPORTED = ('Not pre-selected: no answer above documents a saphenous reflux time over {} ms, which this '
+                         'statement\'s reflux sentence states; whether the notes document it (a perforator, say) is yours to '
+                         'choose.')
+
+
+def threshold_wording(row, variant, answers, fields):
+    """(variant, extra evidence, held reason) for a wording that is one of a pair differing only by the threshold
+    sentence (`original` / `technique_only`), else None. The pair's choice is the reflux answers': the wording that states
+    the threshold where a pre-filled saphenous reflux time is past it (its sentence added to the evidence), the one
+    without it where none is and none held is; where only a HELD answer is past it, or the model chose the wording
+    stating it and no answer does, nothing is pre-selected and the page says why. The model's choice between the two is not what decides: the careful response chose the wording without
+    the sentence on notes documenting reflux of 1.8 seconds."""
+    variants = row.get('variants', [])
+    pairs = []
+    for stated in variants:
+        found = THRESHOLD_SENTENCE.search(stated.get('text_template', ''))
+        if not found:
+            continue
+        for plain in variants:
+            if (plain is not stated and plain.get('required_control_keys') == stated.get('required_control_keys')
+                    and plain.get('empty_control_keys') == stated.get('empty_control_keys')
+                    and stated['text_template'][:found.start()].rstrip() == plain.get('text_template', '').rstrip()):
+                pairs.append((stated, plain, int(found.group(1))))
+    pair = next((pair for pair in pairs if variant is pair[0] or variant is pair[1]), None)
+    if pair is None:
+        return None
+    stated, plain, limit = pair
+    past, held = [], False
+    for field in fields:
+        row_of = field_row(field)
+        if not row_of or row_of[0] not in SAPHENOUS_VEINS or unit_kind(field) != 'time':
+            continue
+        answer = answers.get(field['key']) or {}
+        if filled(answer):
+            if Decimal(answer['text'].split()[0]) > limit:
+                past.append(answer)
+        elif answer.get('held_candidate'):
+            candidate = MEASUREMENT_VALUE.fullmatch(answer['held_candidate'].get('text') or '')
+            held = held or bool(candidate and Decimal(candidate.group(0).split()[0]) > limit)
+    if past:
+        extra = [dict(entry) for answer in past for entry in answer.get('evidence') or []
+                 if isinstance(entry, dict) and entry.get('kind') == 'unit']
+        return stated, extra, None
+    if held:
+        return None, [], THRESHOLD_HELD.format(limit)
+    if variant is stated:
+        return None, [], THRESHOLD_UNSUPPORTED.format(limit)     # (the form has no perforator row to read it from)
+    return plain, [], None
 
 
 def statement_governed(requirement, evidence, read, hidden=True):

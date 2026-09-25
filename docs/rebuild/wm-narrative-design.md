@@ -69,12 +69,41 @@ Two kinds of rule, and the difference is who can overrule them:
 | **support:** a line labelled with this question disagrees, at a line start or after a bullet (prose under a choice's label is interpretation) — its value read to the next label on the line, after a run of spaces, a tab, a separator (`,` `|` `;` `/`), a spaced dash or a space (`Patient name: SYNTHETIC PATIENT B    DOB: …    Allergies: none`, `Patient name: SYNTHETIC PATIENT B, DOB: 06/30/1959, Allergies: none`, `Date of service: 09/22/2026 | Indication: …`), and for demographics to a bracket, a spaced dash or a run of spaces or a tab too (`06/30/1959 (not verified by patient)`, `09/22/2026 - no prior study for comparison`, `06/30/1959    not verified`); for any other question only to a label of this form's (round 14: `Swelling, today: denies`, `Leg pain, Note: patient denies leg pain` lost their own denial to a label nobody listed), never short of the value's own words (`Leg pain (-)`, `Swelling    denies`, `7.4 mm (not measured today, prior study)` disagree) — for a measurement its value is negative only in its own clause or in a remark with a negative clause that is not nothing but a finding's denial, or names the question's own (round 16: `(not reliable due to thrombus)`, `, not measurable due to thrombus` deny the value) (`Right GSV at the SFJ: diameter (mm): 7.4 mm, reflux: none`, `7.4 mm (no reflux)`, `7.4 mm, no thrombus`, `7.4 mm - competent, no reflux` carry it; `reflux time (ms): 2100 ms, no reflux`, `7.4 mm (no reflux, not confirmed)`, `7.4 mm, no, 6.1 mm` do not — round 15: the diameter was refused at review, which could not complete); a demographic's remark calling its value wrong or replaced after it (`Date of birth: 06/30/1959 - incorrect, DOB is 06/03/1959`, `Patient ID: SYN-0042    old ID, now SYN-0043` — round 15; `typo`, `amended`, `duplicate`, `changed` — round 16) disagrees too; a unit labelled for another question supports nothing | held |
 | **support:** a Right/Left question whose value NO reading of the text places on that side (or both) — see *Sides* below; ruling #127: the model never asserts laterality | held |
 | **governing:** a Right/Left question whose PRIMARY reading is not that side — the readings compete, or the side comes only from another cited unit | held (the clinician may choose any side a reading gives) |
+| **support:** a measurement ROW's value that every place it is written is read for another row: its own item names another vein or level, and its sentence names the row's own nowhere before it (`LEFT LEG:` / `The small saphenous vein measures 5.4 mm at the saphenopopliteal junction.` is no reading of the left GSV at the knee's 5.4 mm) — see *Rows* below (round 17) | held (`row`; review refuses it too) |
+| **governing:** a measurement row's value no place of which is read for the row: no level written for it, a level only near the row (`mid thigh`, `above the knee`), two readings, or only a vein the sentence or paragraph wrote earlier where a vein word this reader does not know stands between (`The AAV measures …`) | held (`row_unknown`, its sentences shown; review accepts the clinician's choice) |
+| **governing:** a choice whose option says more than its cited units (`option_reason`): an option listing the deep veins its finding is in (`with evidence of an acute DVT of CFV, FV, POP V, PTV.`) needs each of them joined to a finding by nothing but list words (`thrombus in the popliteal vein`, `DVT of the common femoral, femoral, popliteal and posterior tibial veins`; not `CFV and FV compressible`, nor `… with CFV unremarkable`); a qualified option (`retained small saphenous vein`, `duplicate …`) needs its qualifier described in the clause naming that vein, and the plain one beside it is a wording decision where it is (`Previously treated SSV has recanalized`; not `retained right great saphenous vein …; left small saphenous vein is absent`) — round 17, the held-out H06 | held (`overstated`, `wording`; the original template is unchanged, and leaving it blank is an answer) |
 | `subject` unclear, a relative before it in its sentence (in a transcript's run-on sentence, the 25 words before it) or after it within its sentence and 12 words (`Leg ulcer, per mother, not the patient.`; not one with a finding of its own there, `… because her mother has varicose veins` — its own verb that is not a copula, nothing tying it back to the value: `a leg ulcer that her mother has had`, `her mother has it`/`this`/`these`, `her mother is actually the affected person` and the value's words again all hold; `family physician` is not one; a relative in the NEXT sentence is the model's `subject` to read), `certainty` uncertain, `conflict`, a timing that does not fit the question (previous treatment: prior, its outcome also current; a clinical indication: current or prior; demographics: any; everything else: this examination), or a previous treatment written as planned (`scheduled for ablation`, `recs: EVLA`) | held |
 | **governing:** a heading or pointer the installed vocabulary says changes meaning (a denial, a family history, a hypothetical) holds its block, sub-headings and a spaced list included, to a new prose paragraph; any heading with a word nobody listed fails closed the same way | held with the governing lines |
 | **governing:** a SECTION heading or label (`section_holds`) holds only what its content cannot answer: a plan holds everything (a plan joined to the assessment, `Assessment and plan:`, is the assessment's); a history or prior study holds all but a previous treatment and a clinical indication; a treatment/procedure section that does not say it was before holds a previous treatment; a complaint section (`HPI:`, `CC:`, `REASON FOR EXAM:`, `S:`) holds this examination's findings; demographics are never held by a section; a structural heading (sides, limbs, this form's veins and rows, report sections) holds nothing, and one naming the question's own section does not hold that question | held with the governing lines |
 | **governing:** a cited sentence's own short label (up to four words) that is unknown, a section word before a comma in it (`Prior study 2019, right GSV:`) or anywhere in a longer label (`Prior study 2019 right GSV SFJ:`, `Previous right GSV SFJ diameter:`), the question's own label with a denying value unless the answer is written there with no denial right before it (`Swelling: none.`, `Leg pain: denies leg pain.`; not `Right GSV SFJ: 7.4 mm, no reflux`), longer text before a colon with the denial vocabulary or a rule-out, or a fragment under a denying label (`Denies: leg pain. Swelling.`) | held |
 | **governing:** a correction that may have replaced the value without striking it: one inside its sentence, after the value, that `concerns` it (unless it is PLACED: a number corrected to a number that opens what it corrects to, with no location of its own in its few words, or a location bound to it that is the same site as the number it stands after — `6.9 correction 6.6 millimeters`, `7.9mm, correction, 8.3mm at the SFJ`; not `…correction, SFJ 7.1 mm`, not `… proximal thigh 6.3 millimeters correction 7.4 millimeters at the junction …`, nor — where the number it stands after names no site — a location at the site of the number before that one: `… SFJ 7.1 millimeters small saphenous vein 6.3 millimeters correction 7.4 millimeters at the SFJ …`); one opening its sentence in the answer's own unit or paragraph that concerns it, unless the answer is what it corrects TO — for a measurement, its FIRST quantity after it, with no later quantity of its unit in the unit but a denied one, and every other word of its sentence saying only where and what the value is — an inclusion list, so an unlisted word holds (`Correction: the right SFJ diameter is 7.6 mm.`, `Correction: right GSV SFJ 7.6 mm, not 6.1 mm.` correct to 7.6, never to 6.1; not `Correction: 6.1 mm at the SFJ is wrong.`, `disregard 6.1 mm`, `6.1 mm was misdictated`, `6.1 mm should read 7.6`); a correction whose reach writes more than one quantity of the answer's unit, the answer's value among them (`6.1 mm should read 7.6 mm`, `Correction: 6.1 mm at the saphenofemoral junction should be 7.6 mm`; a placed correction's reach ends at the next location after its first number) — for the pre-fill only, the clinician who reads it may choose either; a later one whose corrected text mentions the value — and one opening its sentence BEFORE the answer (on a line above the answer's, anywhere in its sentence unless placed: `Addendum: Right GSV SFJ diameter corrected to 7.6 mm.` above the report), read the same way, unless its reach holds the answer's own sentence, writes its value, and writes no other quantity of its unit nor a denied one (`Correction: the right GSV at the SFJ measures 6.9 mm, not 7.4 mm.` above the report holds 7.4; `CORRECTION:` over the value it corrects to does not; `CORRECTION:` / `… 7.6 mm, not 6.1 mm.` / `… 6.1 mm …` holds 6.1); a cited correction unit that does not write the value, a correction restating the value (`6.1 mm belongs to the left leg`); a later one that replaced this very value where it stands (`Right GSV SFJ 7.4, correction, 7.9 mm.` below `… 7.4 mm at the SFJ.`); a later one stating a quantity of the answer's unit, unless it is placed in its sentence (resolved where it stands), this answer cites it, or it says which values it replaces — as many of the quantities it writes denied as not (`… measures 6.7 mm, not 6.1 mm`: then only the values it writes; not `… is 4.4 mm, not 4.0 mm, and the GSV at the SFJ is 6.9 mm`) — never because another answer cites it (the model's choice of what to cite decides nothing); for a one-sided question, a sentence saying the legs were swapped, before or after the answer, cited or not (`transposed`, `mislabeled`, `reversed` — `The sides in the dictation above are reversed.`; with or without a side word; not `reversed flow`; flow or its direction reversed is reflux only when its sentence names at most one leg and speaks only of flow, veins, the patient's position and the manoeuvre — `flow … is reversed for 1.8 seconds`, `Flow is reversed in both great saphenous veins`, `Flow is reversed in the great saphenous veins of both legs with Valsalva.`, `… with the Valsalva maneuver`, `With the patient standing, …`, `…, consistent with reflux.`; not `The flow values above are reversed.`, `The flow measurements of both legs were reversed.`, `… between the two legs`, `The flow above is reversed.`, `The diameters and flow of both legs were reversed.`, `Flow and reflux in both legs were reversed.`: an inclusion list, so an unlisted word holds; `reflux` reversed is data swapped, for one leg or both: `The reflux times for the right and left legs were reversed.`, `The reflux values for the left leg were reversed.`, `The reflux values above are reversed.`; read within its line, joined across a hard wrap) or a correction in another paragraph naming a side, a quantity with it or not, unless it says which values it replaces and every side it names is written before a value in its clause (`Correction: the right GSV at the SFJ measures 7.6 mm, not 6.1 mm.`: then only those; not `Correction: the SFJ diameter is 7.6 mm, not 6.1 mm, and all of the above findings are in the left leg.`, `…, and the above findings with reflux of 1.8 seconds are all in the left leg.`); and a sentence anywhere — a cited one too — that denies the value where it writes it, says it is wrong right after it, or calls it the old one in its clause on its line — within six words before it (`previously`, `prior`, `originally` …), or after it in its sentence before its next value, a joined clause (`and`, `but`, `while`, `whereas`, `;`) or a bracket holding the next value, commas included, and through a list of values it heads (`the 6.1 mm and 5.0 mm values above are incorrect`, `6.1 mm (SFJ) and 5.0 mm (knee) … in error`, `6.1 mm, 5.0 mm above are wrong` — round 14; a few words between the values too, `the SFJ 6.1 mm and knee 5.0 mm values`, `6.1 mm at the SFJ and 5.0 mm at the knee above were dictated in error`, `6.1 mm / 5.0 mm above are wrong` — round 15) (`disregard`, `superseded`, `erroneously`, `incorrect`, `wrong`, `error`, `misdictated` …; not `prior` or `previously` after it, `… 6.1 mm, unchanged from the prior exam`: inclusion lists that only ever hold) — with or without a correction word (`…, not 6.1 mm as originally dictated`, `… 6.1 mm is incorrect; …`, `… 6.1 mm was reported in error`, `Please disregard the prior right SFJ diameter of 6.1 mm; …`, `… corrected to 7.6 mm (previously 6.1 mm)`, `the 6.1 mm right SFJ diameter above should be disregarded`, `… 6.1 mm dictated previously is superseded`, `… of 6.1 mm, as previously reported, is incorrect; …`). `concerns`: its value or words, a side for a one-sided question, a quantity of its unit (or a bare number, or none) for a measurement, and for anything else everything except a correction stating only a measurement (`Correction: it measures 7.6 mm there.`) of a symptom or history — never of this examination's findings (`… without evidence of … insufficiency. Correction: reflux of 1.5 seconds in the common femoral vein.`) — and a side it names never releases it. What a written correction corrects TO ends at the first clause break after its first number, or its sentence's end, and in a run-on sentence after 40 words. At most eight governing lines are kept | held |
 | otherwise | supported (pre-filled; the clinician still reviews every answer) |
+
+**Rows** (round 17). A measurement question of the form's table names its row in its label (`Right GSV at the SFJ:
+diameter (mm)`, `Left tributary row 25: reflux time (ms)`): a vein, and a level except on a tributary row
+(`field_row`, read as `field_side` reads the side; no stored mapping changes). Each place a value is written is read for
+its row, per sentence, as ITEMS left to right (`_rows_of_sentence`): a vein or a level opens an item and the values
+after it are its own until another opens (`GSV SFJ 6.8 mm with 1.2 s reflux, proximal thigh 6.1 mm …`); a level written
+right after a value (after a preposition, a reflux phrase or a side: `6.8 mm at the SFJ`, `2.1 seconds of reflux at
+the saphenofemoral junction`, `5.0 mm on the left at the SFJ`) is its item's where the item has none, and where it has
+one it opens the next item when a value follows it (`… 1.9 seconds at the knee it's 4.8 millimeters`, `… 1950
+milliseconds in the proximal thigh 5.1 millimeters`) and is otherwise a second reading; a vein written right after a
+value is the value's (`reflux of 1.6 seconds is seen in the great saphenous vein at the proximal thigh`). A second value
+of one unit in an item opens an item with no level — unless it corrects the first (`6.1 mm at the SFJ, correction: 7.6
+mm`, `6.1 mm should read 7.6 mm`, `7.6 mm rather than 6.1 mm`), or a side written between them or right after it makes
+it the other leg's parallel (`4.2 mm and the left 4.0 mm at the SFJ`, `7.4 mm at the SFJ, compared with 5.0 mm on the
+left`), which shares its level either way. A junction places its vein where the item names none (the saphenopopliteal
+is the small saphenous vein's: `At the saphenopopliteal junction it measures 3.0 mm` after a sentence about the great
+saphenous vein; the saphenofemoral the great saphenous vein's unless an accessory is read there), a trunk's level with
+no vein written anywhere is that trunk's (`Proximal thigh: right 6.2 mm`), a region with one row of the vein is that row
+(`GSV thigh 5.9 mm`), a worksheet's abbreviation right after its vein is its row (`R GSV PT 6.8 mm`, `GSV K`), a
+correction sentence with no row of its own takes the row of the value it corrects (`… 6.1 mm at the saphenofemoral
+junction. Correction: it measures 7.6 mm.`), and a line's own label names the row of a value after its `;` where no
+value of that unit stands between (`Right GSV at the SFJ: reflux absent; 6.1 mm diameter.`). A sentence runs over its
+hard-wrapped lines, as the side does. The pre-fill needs a place read for the row (and then its side is read from that
+place only); review refuses only a value every place of which is another row's and whose sentence names the row's vein
+and level nowhere before it — a refusal is final, so anything less certain is the clinician's. The same reading serves
+generation, the page, the save, review and finalization (`side_verdict`, which every one of them calls).
 
 **Sides.** Read from the text over a whole-text index (a search cut inside a word would read `both` in `bothersome`);
 lines and paragraphs split at every break `str.splitlines` reads, as units do (U+2028, VT, FF, NEL, U+2029, FS, CR;
@@ -357,6 +386,16 @@ What a statement may rest on at review (and at fill):
   answers, each complete and reviewed;
 - a `not_documented` wording on the answers whose absence it states, each reviewed and empty.
 
+**The technique wording is its answers'** (round 17, `threshold_wording`). Claim 19's two wordings differ by one
+sentence — `This study documents reflux as lasting more than 500 milliseconds in either the saphenous veins or the
+perforator veins.` — and the careful response chose the wording without it on ten notes documenting saphenous reflux well past
+500 ms (1.5–2.4 seconds at most). The pair's choice is the reflux answers': the wording stating the threshold where a pre-filled saphenous
+reflux time is past it (that answer's sentences join the evidence), the one without it where none is past it and none
+is held; where only a HELD answer is past it (`possible reflux of approximately 550 ms … may be artifact`, a value
+written twice), or the model chose the wording stating it and no answer does (the form has no perforator row to read),
+nothing is pre-selected and the page says why (`data-statement-held`). The pair is found by the variants' own text, so a
+mapping whose wording differs keeps the model's proposal as before.
+
 The technique paragraph (63 and 81 words of its own claims), `none`, `not_assessed`, the reflux findings and
 clinical correlation need a sentence of the notes (the paragraph-39 recommendation keeps its recorded rule: it needs
 support). The page offers "rests on its answers" as an explicit tick; the answer keys are named from the mapping,
@@ -405,24 +444,26 @@ notes, so that needs a compromised parent.
   information and genuine conflicts; expectations by an independent author (`d6c661a1`), provider-shaped responses
   by a second author blind to the expectations (`17483cc1`): a careful set and a weak set with named injected errors.
   ⚠️ The validator's rules were iterated against it over five scoring rounds, so it is a development set.
-- **Scores as they stand (round 15, `wm_narrative_benchmark.run`), every category the scorer counts.** An ANSWER is
+- **Scores as they stand (round 17, `wm_narrative_benchmark.run`), every category the scorer counts.** An ANSWER is
   scored against the case's expected outcome — a value (`supported`), blank (`missing`) or the clinician's decision
   (`decision`); `wrong_supported` counts every pre-filled answer that is not the expected value, a pre-fill where a
-  decision or a blank was expected included. A STATEMENT is scored by the variant the proposal pre-selects.
+  decision or a blank was expected included. A STATEMENT is scored by the variant the proposal pre-selects; one not
+  pre-selected (`{'held': reason}`) counts as missed.
   | set | answers pre-filled correct | wrong pre-filled | unnecessary holds | other | statements correct / wrong / missed |
   |---|---|---|---|---|---|
-  | frozen, careful (the gate) | **338** | **0** | **0** | 7 correct holds; 6 decisions shown as missing (C18) | 153 / 10 / 0 |
-  | frozen, weak (injected model errors) | 330 | **11** (2 wrong values, 5 where a decision was expected, 4 where a blank was) | 0 | 2 correct holds; 6 decisions shown as missing; 3 missed; 8 held where a blank was expected; 3 held with the wrong value | 151 / 11 / 3 |
-  | held-out, careful | **254** | **2** | **17** | 12 correct holds; 6 decisions shown as missing | 83 / 2 / 10 |
-  The careful gate is `wrong_supported 0, unnecessary_hold 0, correct_supported ≥ 338` (`CAREFUL_GATE`), and it passes.
-  What remains wrong, named: the careful set's 10 wrong statements are one statement, claim 19 (`Technique`), pre-set
-  to the mapping's default `technique_only` wording where the benchmark's author expected `original` — a pre-selection
-  the clinician reviews, not an answer; the weak set's 11 wrong answers are the injected interpretation errors no
-  text signals (*Known limits*); the held-out set's 2 wrong answers are both H06, a choice whose only option
-  overstates the note (`small saphenous vein` for a recanalized one; `acute DVT of CFV, FV, POP V, PTV` for a
-  popliteal-only clot), its 2 wrong statements claims 30 and 31 proposed as `selected` where no proposal was expected,
-  and its 17 unnecessary holds are H12's 8 unitless shorthand values (`6.8/1.9s`, held by design) and 9 pre-fill holds in
-  H02 (3), H03 (1), H05 (3) and H11 (2) that review accepts. No category moved in rounds 4 to 16.
+  | frozen, careful (the gate) | **338** | **0** | **0** | 7 correct holds; 6 decisions shown as missing (C18) | 161 / **0** / 2 |
+  | frozen, weak (injected model errors) | 330 | **9** (5 where a decision was expected, 4 where a blank was) | 0 | 2 correct holds; 6 decisions shown as missing; 3 missed; 8 held where a blank was expected; 5 held with the wrong value | 158 / 2 / 5 |
+  | held-out, careful (a regression set now) | **254** | **0** | **17** | 14 correct holds; 6 decisions shown as missing | 83 / **0** / 10 |
+  (Round 16: careful statements 153 / 10 / 0; weak 11 wrong, 2 of them wrong values; held-out 2 wrong answers and 2
+  wrong statements.) The careful gate is `wrong_supported 0, unnecessary_hold 0, correct_supported ≥ 338`
+  (`CAREFUL_GATE`), and it passes. What remains, named: the careful set's 2 statements not pre-selected are claim 19 on
+  C16 (reflux of 900 ms and 2.1 s for one row, held as a conflict) and C17 (`possible reflux of approximately 550 ms …
+  may be artifact`, held), each shown with its reason; the weak set's 9 wrong answers are the injected interpretation
+  errors no text signals (*Known limits*) — its 2 wrong values, another row's, are now held with the wrong value; the
+  held-out set's H06 answers are held (`overstated`, `wording`) and claims 30 and 31 are no longer proposed; its 17
+  unnecessary holds are H12's 8 unitless shorthand values (`6.8/1.9s`, held by design) and 9 pre-fill holds in H02 (3),
+  H03 (1), H05 (3) and H11 (2) that review accepts, unchanged since round 3. Every held-out case has now been read
+  while repairing, so it measures regressions, not generalisation.
 - **Held-out benchmark** (`heldout-cases.json`, `3af6e471`; blind careful responses `d92cc499`): 12 cases written after
   the implementation by an author who did not read it — headed reports, raw transcripts, shorthand, a letter, a SOAP
   note. Scored on the implementation as it stood: 201 correct, **0 wrong**, **70 unnecessary holds**. After the first
@@ -697,6 +738,21 @@ notes, so that needs a compromised parent.
   marker the harness asserts, so they never ran — the harness reported them unapplied — and, re-marked, both are killed;
   one, a per-note memo of a leg's predicate, was measured as not needed at the note limit (1.76 s against 1.35 s: the
   possessive runs carry it) and removed. Every restoration verified by sha256; the unmutated module passes.
+  Round 17 (rows, option scope, the technique wording; the known wrong pre-fills): lens 2's wrapped generator (16,655
+  answers, each mirrored onto the other leg's row) — wrong-leg pre-fills 80 → 0, correct pre-fills 10,549 → 10,539:
+  the 10 own values whose number the hard wrap splits from its unit (`… measures 6.9` / `mm without reflux.`),
+  pre-filled before from the other row's identical value, are held (8) or refused (2), and 8 such values are refused at
+  review (*Known limits*). Every battery pre-fills nothing it did not, and holds
+  11 more (`row_unknown`): 9 small saphenous diameters written with no level, which the form's two SSV rows could each
+  take, and 2 `mid thigh` values, which no row is (round 12's battery 237/270, battery 3 100/132, battery 4 140/212,
+  lens 2's round-15 battery 111/213; the generated 2,216/2,272 and gen2 1,175/2,115 unchanged). 32 mutants over round
+  17's rules, run with the unmutated module FIRST (a first batch ran it last, and it failed: every one of its 30 "kills"
+  had stopped at that failure, so none counted — the harness now aborts on a failing baseline and names the test that
+  kills each mutant): 29 killed at once; two survived for want of a test (the review refusal kept for a row named
+  before the value; a denied finding stating veins) and one was killed only by a time limit (any word joining a vein
+  to its finding) — each now killed by a test of its own; one, the deep-vein list walked per finding over every vein,
+  is quadratic but 1.57 s at the note limit (0.48 s at half), measured as not material, and the bisection kept. Every
+  restoration verified by sha256; the unmutated module passes.
 - **Cost.** The reader answers every per-place question by bisection over positions read once per text (sides, clause
   breaks, digits, words, numbers, quantities by unit, relatives, paragraphs, lines), the backtracking patterns are
   atomic, a correction's reach, its struck spans and the governors' blocks are read once per unit or note, what a
@@ -789,11 +845,20 @@ Every one of these fails closed (a hold, or a statement the clinician must sourc
   invents a choice, leaves a real conflict unflagged, misses hedging or reads a plan as the past can still pre-fill a
   wrong answer where no deterministic signal exists (the weak benchmark set: 11 such answers). Every pre-filled answer
   is reviewed by the clinician; that review is the control, and live verification measures how often it is needed.
-- **Which row, not only which side.** The reader verifies that a value is written in the cited sentence and on the
-  question's side, not which vein or segment it belongs to (`left GSV 5.0 mm, left SSV 7.4 mm` can pre-fill 7.4 on
-  the left GSV row if the model puts it there).
-- **Choices whose only option overstates the note** (a recanalized vein, a popliteal-only clot: the held-out set's two
-  wrong answers) — wording the clinician judges.
+- **Rows (round 17), what they do not read.** A value's trunk diameter written with no level (`the small saphenous vein
+  measures 3.2 mm with no reflux`) is held, since the form has two rows for it; so is a level only near a row (`mid
+  thigh`). A value the hard wrap splits (`… measures 6.9` / `mm without reflux.`) is written in no one cited unit, so it
+  is not found; where the other row's identical value is (`6.9 mm at the saphenofemoral junction`), it is now held or
+  refused as that row's, where before it was accepted from it — the same limit as any split value, surfaced (10 lost
+  pre-fills of the wrapped mirror's 16,655 answers, 8 refused at review). Within one item the last vein named is its vein (`At the SFJ the GSV, which receives the AAGSV,
+  measures 6.8 mm` is read for the AAGSV, and held for the GSV — never refused, since the GSV is named before it). The
+  vein and level words are closed lists; a word they lack reads as no row, which holds, and a vein-like word they lack
+  (`AAV`, `SFV`, `the accessory`) stops an earlier vein carrying — but a level word they lack after a value in an item
+  with a level (`… with reflux in the distal segment`) is read as that item's level.
+- **Options (round 17), what they read.** The deep-vein list reads CFV, FV, the popliteal and posterior tibial veins by
+  name and abbreviation; an option listing others is not read as a list. The qualifier evidence is a closed list of
+  treatment and duplication words in the vein's clause: a qualifier the notes describe otherwise leaves the plain option
+  pre-filled. H06 is a regression case now, not fresh evidence.
 - **Statement polarity.** A proposal's cited sentence is checked for its side and its governors, not for saying the
   variant (a `negative` wording on a sentence stating reflux is not refused); the clinician's review is the control.
   A one-leg statement cannot rest on a sentence naming both legs and the other one (`bilateral reflux, worse on the

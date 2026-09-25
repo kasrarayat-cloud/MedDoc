@@ -71,9 +71,10 @@ class TheFrozenBenchmark(SimpleTestCase):
     def test_the_careful_responses_fill_without_a_wrong_answer_or_an_unnecessary_hold(self):
         total, rows = benchmark.run('careful')
         self.assertTrue(benchmark.passes(total), (dict(total), rows))
-        # The only statement disagreements are the more conservative technique wording.
-        wrong = [row for row in rows if row['kind'] == 'statement_wrong']
-        self.assertTrue(all((row['key'], row['got']) == ('claim_19', 'technique_only') for row in wrong), wrong)
+        # (round 17: the ten technique wordings the careful response chose without its documented reflux sentence are
+        # the answers' now — `threshold_wording`: no statement disagrees)
+        self.assertEqual(total['statement_wrong'], 0, [row for row in rows if row['kind'] == 'statement_wrong'])
+        self.assertGreaterEqual(total['statement_correct'], 161, dict(total))
 
     def test_refusing_everything_does_not_pass(self):
         shaped = deepcopy(benchmark.responses('careful'))
@@ -87,7 +88,7 @@ class TheFrozenBenchmark(SimpleTestCase):
     def test_the_weak_responses_are_measured_and_the_catchable_errors_are_held(self):
         total, rows = benchmark.run('weak')
         # The residual is measured, not hidden: never more wrong pre-filled answers than when this was written.
-        self.assertLessEqual(total['wrong_supported'], 14, rows)
+        self.assertLessEqual(total['wrong_supported'], 9, rows)      # (14 when written; 11 at round 16; 9 at round 17)
         wrong = {(row['case'], row['key']) for row in rows if row['kind'] in ('wrong_value', 'supported_when_missing',
                                                                               'supported_when_decision')}
         # A superseded corrected value, a finding moved to the other side, an approximate reflux time: held.
@@ -113,8 +114,10 @@ class TheHeldOutBenchmark(SimpleTestCase):
     (d92cc499); scored first on the implementation as it stood (201 correct, 0 wrong, 70 unnecessary holds), then
     after each refutation round's repairs (round 1: 253 / 18 holds; round 2: 256 / 15; round 3: 254 / 17 — round 3
     closed fourteen classes of wrong pre-fill that round 2's releases had opened, and the price is two pre-fills that
-    now read both ways and are the clinician's to choose). Its two wrong pre-filled answers are choices whose only option overstates
-    the note (a recanalized vein, a popliteal-only clot): wording the clinician must judge, which no rule can see."""
+    now read both ways and are the clinician's to choose). Its two wrong pre-filled answers were choices whose only option
+    overstates the note (a recanalized vein, a popliteal-only clot); round 17 holds both (`option_reason`), and with them
+    the two statements built from them. Every case here has been read while repairing: it is a regression set now, not
+    fresh evidence."""
 
     def test_its_files_are_the_committed_ones(self):
         for name, digest in {'heldout-cases.json': '0cd5e5a0ffa0bfc0912b478c456725e9e42d6eb0cdbe4a7db4abb87ade752442',
@@ -125,7 +128,8 @@ class TheHeldOutBenchmark(SimpleTestCase):
         total, rows = benchmark.run('held-out', benchmark.load('heldout-responses-careful.json')['cases'], 'heldout-cases.json')
         wrong = {(row['case'], row['key']) for row in rows if row['kind'] in ('wrong_value', 'supported_when_missing',
                                                                               'supported_when_decision')}
-        self.assertLessEqual(wrong, {('H06', 'sdt_-892962961'), ('H06', 'sdt_-170105994')}, rows)
+        self.assertEqual(wrong, set(), rows)
+        self.assertEqual(total['statement_wrong'], 0, dict(total))
         self.assertGreaterEqual(total['correct_supported'], 254, dict(total))
         self.assertLessEqual(total['unnecessary_hold'], 17, [row for row in rows if row['kind'] == 'unnecessary_hold'])
         self.assertGreaterEqual(total['statement_correct'], 83, dict(total))
@@ -201,11 +205,13 @@ class Sides(SimpleTestCase):
     """Ruling #127: the model never asserts laterality; the side is read from the text, and fails closed."""
 
     def test_a_finding_on_the_other_side_or_on_no_stated_side_is_held(self):
-        notes = 'On the right, the great saphenous vein measures 7.4 mm; on the left it measures 4.6 mm.'
-        answers, _ = decide(notes, {'measurement_1_1': ('7.4 mm', [notes], {}), 'measurement_15_1': ('4.6 mm', [notes], {}),
+        # (each value's row written, so what is read here is its side — round 17: a value's row is read before its side)
+        notes = ('On the right, the great saphenous vein measures 7.4 mm at the saphenofemoral junction; on the left it '
+                 'measures 4.6 mm in the proximal thigh.')
+        answers, _ = decide(notes, {'measurement_1_1': ('7.4 mm', [notes], {}), 'measurement_16_1': ('4.6 mm', [notes], {}),
                                     'measurement_2_1': ('4.6 mm', [notes], {})})
         self.assertEqual(status(answers, 'measurement_1_1'), ('supported', '7.4 mm'))
-        self.assertEqual(status(answers, 'measurement_15_1'), ('supported', '4.6 mm'))
+        self.assertEqual(status(answers, 'measurement_16_1'), ('supported', '4.6 mm'))
         self.assertEqual(status(answers, 'measurement_2_1'), ('conflict', '4.6 mm'))
         self.assertEqual(answers['measurement_2_1']['held_candidate']['reason'], narrative.HELD['side'])
         unsided = 'The great saphenous vein measures 7.4 mm at the saphenofemoral junction.'
@@ -251,6 +257,196 @@ class Sides(SimpleTestCase):
         value = 'without evidence of obstruction or insufficiency.'
         answers, _ = decide(notes, {'sdt_-170105994': (value, [notes], {}), 'sdt_-1029175652': (value, [notes], {})})
         self.assertEqual((status(answers, 'sdt_-170105994')[0], status(answers, 'sdt_-1029175652')[0]), ('supported',) * 2)
+
+
+class MeasurementRows(SimpleTestCase):
+    """The same value on the right leg is not enough: the place it is written must be read for the question's measurement
+    ROW, its vein and level (round 17). A value the notes give another row is refused, since no reading of the text
+    carries it (`row`, which review repeats); one whose row the notes do not establish is held for the clinician
+    (`row_unknown`, with its cited sentences shown), and review accepts the clinician's choice of it."""
+
+    LEFT = 'LEFT LEG:\nThe small saphenous vein measures 5.4 mm at the saphenopopliteal junction.'
+    NOTES = 'RIGHT LEG:\nThe great saphenous vein measures 5.4 mm at the knee.\n\n' + LEFT
+
+    def setUp(self):
+        patch.object(wm_review, 'membership').start(); self.addCleanup(patch.stopall)
+        self.actor = SimpleNamespace(pk='synthetic-clinician', is_authenticated=True, email='c@synthetic.invalid',
+                                     get_full_name=lambda: 'Synthetic Clinician')
+
+    def review(self, notes, answers):
+        return ReviewCost.review(self, notes, answers)['answers']
+
+    def reviewed(self, notes, key, value, quotes):
+        units = narrative.units(notes, FIELDS, LABELS)
+        answers = {f['key']: {'text': '', 'status': 'missing', 'evidence': []} for f in FIELDS}
+        answers[key] = {'text': value, 'status': 'edited',
+                        'evidence': [narrative.unit_evidence(next(u for u in units if u['quote'] == q)) for q in quotes]}
+        return self.review(notes, answers)[key]['blockers']
+
+    @override_settings(WM_NARRATIVE=True)
+    def test_a_value_the_other_leg_writes_for_another_row_is_refused_and_review_refuses_it_too(self):
+        """The wrong-leg pre-fill class of round 16's wrapped mirror (80 answers): the left's 5.4 mm is the small saphenous
+        vein's at the SPJ, which the right's 5.4 mm at the knee made look like the left knee's."""
+        sentence = self.LEFT.splitlines()[1]
+        answers, _ = decide(self.NOTES, {'measurement_17_1': ('5.4 mm', [sentence], {}),
+                                         'measurement_19_1': ('5.4 mm', [sentence], {})})
+        self.assertEqual(status(answers, 'measurement_17_1'), ('conflict', '5.4 mm'))
+        self.assertEqual(answers['measurement_17_1']['held_candidate']['reason'], narrative.HELD['row'])
+        self.assertEqual(status(answers, 'measurement_19_1'), ('supported', '5.4 mm'))       # its own row
+        self.assertIn('row_not_supported', self.reviewed(self.NOTES, 'measurement_17_1', '5.4 mm', [sentence]))
+        self.assertEqual(self.reviewed(self.NOTES, 'measurement_19_1', '5.4 mm', [sentence]), [])
+
+    @override_settings(WM_NARRATIVE=True)
+    def test_a_value_whose_row_is_not_written_is_held_and_the_clinician_may_choose_it(self):
+        notes = 'RIGHT LEG:\nThe great saphenous vein measures 6.8 mm with reflux of 1.2 seconds.'
+        sentence = notes.splitlines()[1]
+        answers, _ = decide(notes, {'measurement_1_1': ('6.8 mm', [sentence], {}), 'measurement_1_2': ('1200 ms', [sentence], {})})
+        for key in ('measurement_1_1', 'measurement_1_2'):
+            self.assertEqual(answers[key]['status'], 'conflict')
+            held = answers[key]['held_candidate']
+            self.assertEqual(held['reason'], narrative.HELD['row_unknown'])
+            self.assertEqual([entry['quote'] for entry in held['context']], [sentence])       # its governing sentence shown
+        self.assertIsNone(narrative.support(BY_KEY['measurement_1_1'], '6.8 mm', answers['measurement_1_1']['evidence'],
+                                            notes, narrative.reading(notes, FIELDS, LABELS)['labels'],
+                                            narrative.reading(notes, FIELDS, LABELS)['all_labels']))
+        self.assertEqual(self.reviewed(notes, 'measurement_1_1', '6.8 mm', [sentence]), [])   # the clinician's choice
+        # and finalization re-checks a stored pre-fill with the same reader
+        stored = {**answers['measurement_1_1']['held_candidate'], 'status': 'supported', 'text': '6.8 mm',
+                  'evidence': answers['measurement_1_1']['evidence']}
+        self.assertEqual(narrative.held_labels(notes, FIELDS, LABELS, {'measurement_1_1': stored}),
+                         [BY_KEY['measurement_1_1']['label']])
+
+    def test_a_run_on_dictation_is_read_as_items(self):
+        """A site opens an item and the values after it are its own; one written right after a value is its item's, or
+        opens the next item where a value follows it (`… 1.9 seconds at the knee it's 4.8 millimeters`)."""
+        notes = ('on the right the great saphenous at the junction is 7.4 millimeters with reflux of 1.4 seconds the proximal '
+                 'thigh is 7.6 millimeters with reflux of 1.9 seconds at the knee it\'s 4.8 millimeters and there\'s no reflux there')
+        rows = {'measurement_1_1': '7.4 mm', 'measurement_1_2': '1400 ms', 'measurement_2_1': '7.6 mm',
+                'measurement_2_2': '1900 ms', 'measurement_3_1': '4.8 mm'}
+        answers, _ = decide(notes, {key: (value, [notes], {}) for key, value in rows.items()})
+        self.assertEqual({key: status(answers, key) for key in rows}, {key: ('supported', value) for key, value in rows.items()})
+        # the knee's own row does not take the thigh's reflux (refused: nothing before it names the knee), nor the
+        # junction the knee's diameter (held, not refused: the junction is named before it, and a refusal is final)
+        answers, _ = decide(notes, {'measurement_3_2': ('1900 ms', [notes], {}), 'measurement_1_1': ('4.8 mm', [notes], {})})
+        self.assertEqual(answers['measurement_3_2']['held_candidate']['reason'], narrative.HELD['row'])
+        self.assertEqual(answers['measurement_1_1']['held_candidate']['reason'], narrative.HELD['row_unknown'])
+
+    def test_a_site_is_its_items_and_a_parallel_reading_shares_it(self):
+        for notes, rows in (
+                ('The right great saphenous vein measures 6.8 mm at the saphenofemoral junction with reflux of 1.2 seconds.',
+                 {'measurement_1_1': '6.8 mm', 'measurement_1_2': '1200 ms'}),
+                ('The right great saphenous vein measures 4.2 mm and the left 4.0 mm at the saphenofemoral junction.',
+                 {'measurement_1_1': '4.2 mm', 'measurement_15_1': '4.0 mm'}),
+                ('Reflux of 1.6 seconds is seen in the right great saphenous vein at the proximal thigh.',
+                 {'measurement_2_2': '1600 ms'}),
+                ('Right GSV at the SFJ: reflux absent; 6.1 mm diameter.', {'measurement_1_1': '6.1 mm'}),
+                ('R GSV PT 6.8 mm', {'measurement_2_1': '6.8 mm'}),
+                ('Right: GSV thigh 5.9 mm, reflux 1.5 s.', {'measurement_2_1': '5.9 mm', 'measurement_2_2': '1500 ms'}),
+                ('Proximal thigh: right 6.2 mm (reflux 1.6 s), left 5.0 mm (no reflux)',
+                 {'measurement_2_1': '6.2 mm', 'measurement_16_1': '5.0 mm'}),
+                ('The right great saphenous vein has 2.1 seconds of reflux at the saphenofemoral junction.',
+                 {'measurement_1_2': '2100 ms'}),
+                ('The great saphenous vein measures 7.4 mm on the right and 5.0 mm on the left at the saphenofemoral junction.',
+                 {'measurement_1_1': '7.4 mm', 'measurement_15_1': '5.0 mm'}),
+                ('LEFT LEG:\nThe left great saphenous vein measures 6.9 mm at the\nsaphenofemoral junction with reflux of 2.2 '
+                 'seconds.', {'measurement_15_1': '6.9 mm', 'measurement_15_2': '2200 ms'}),
+                ('In the right leg, the great saphenous vein measures 7.6 mm at the proximal thigh. At the saphenopopliteal '
+                 'junction it measures 3.0 mm.', {'measurement_2_1': '7.6 mm', 'measurement_5_1': '3.0 mm'})):
+            with self.subTest(notes):
+                cited = [u['quote'] for u in narrative.units(notes, FIELDS, LABELS)]
+                answers, _ = decide(notes, {key: (value, cited, {}) for key, value in rows.items()})
+                self.assertEqual({key: status(answers, key) for key in rows}, {key: ('supported', v) for key, v in rows.items()})
+
+    def test_what_does_not_establish_a_row_holds_and_a_second_value_is_not_the_first_rows(self):
+        for notes, key, value in (
+                ('The right great saphenous vein measures 7.4 mm at the saphenofemoral junction and 6.1 mm.', 'measurement_1_1', '6.1 mm'),
+                ('The right small saphenous vein measures 3.2 mm with no reflux.', 'measurement_5_1', '3.2 mm'),
+                ('Right: GSV mid thigh 6.1 mm with 1.8 s reflux.', 'measurement_2_1', '6.1 mm'),
+                ('The right great saphenous vein at the saphenofemoral junction measures 6.8 mm; 6.1 mm.', 'measurement_1_1', '6.1 mm'),
+                ('RIGHT LEG:\nThe great saphenous vein measures 6.8 mm at the saphenofemoral junction. The AAV measures 5.1 mm '
+                 'at the saphenofemoral junction.', 'measurement_1_1', '5.1 mm'),
+                ('RIGHT LEG:\nThe great saphenous vein at the saphenofemoral junction and the proximal thigh measures 6.8 mm.',
+                 'measurement_2_1', '6.8 mm')):
+            with self.subTest(notes):
+                cited = [u['quote'] for u in narrative.units(notes, FIELDS, LABELS) if value.split()[0] in u['quote']]
+                answers, _ = decide(notes, {key: (value, cited, {})})
+                self.assertEqual(answers[key]['status'], 'conflict')
+                self.assertIn(answers[key]['held_candidate']['reason'], (narrative.HELD['row_unknown'], narrative.HELD['side_unknown']))
+
+    @override_settings(WM_NARRATIVE=True)
+    def test_a_refusal_is_final_so_a_row_its_sentence_names_before_is_only_held(self):
+        """The last vein named in an item is its vein, so a relative clause names another one (`… the great saphenous vein,
+        which receives the anterior accessory saphenous vein, measures 6.8 mm`): refused, the clinician could never
+        choose the right row, so a value whose sentence names the row's vein before it is held, never refused."""
+        notes = ('RIGHT LEG:\nAt the saphenofemoral junction the great saphenous vein, which receives the anterior accessory '
+                 'saphenous vein, measures 6.8 mm.')
+        sentence = notes.splitlines()[1]
+        answers, _ = decide(notes, {'measurement_1_1': ('6.8 mm', [sentence], {})})
+        self.assertEqual(answers['measurement_1_1']['held_candidate']['reason'], narrative.HELD['row_unknown'])
+        self.assertEqual(self.reviewed(notes, 'measurement_1_1', '6.8 mm', [sentence]), [])
+
+    def test_rows_are_read_only_for_the_forms_measurement_rows(self):
+        self.assertEqual(narrative.field_row(BY_KEY['measurement_1_1']), ('GSV', 'sfj'))
+        self.assertEqual(narrative.field_row(BY_KEY['measurement_20_2']), ('SSV', 'pc'))
+        self.assertEqual(narrative.field_row(BY_KEY['measurement_25_1']), ('TRIB', None))
+        self.assertIsNone(narrative.field_row(BY_KEY['location_25']))
+        self.assertIsNone(narrative.field_row({'key': 'x', 'kind': 'measurement', 'label': 'Right CFV: diameter (mm)'}))
+        rows = {f['key']: narrative.field_row(f) for f in FIELDS if f.get('kind') == 'measurement'}
+        self.assertEqual(sum(row is not None for row in rows.values()), 52)     # every measurement of the mapping has one
+
+
+class OptionScope(SimpleTestCase):
+    """An option saying more than its cited sentences is held for the clinician, not chosen for being the only one
+    (round 17, the held-out H06): the original template is unchanged, and leaving it blank is an answer."""
+
+    def test_an_option_listing_deep_veins_needs_each_stated(self):
+        notes = ('RIGHT:\nAcute occlusive thrombus in the popliteal vein. CFV and FV compressible with normal flow. '
+                 'Posterior tibial veins compressible.')
+        units = [u['quote'] for u in narrative.units(notes, FIELDS, LABELS)]
+        option = 'with evidence of an acute DVT of CFV, FV, POP V, PTV.'
+        answers, _ = decide(notes, {'sdt_-170105994': (option, units, {})}, [('claim_31', 'selected', units)])
+        self.assertEqual(status(answers, 'sdt_-170105994'), ('conflict', option))
+        self.assertEqual(answers['sdt_-170105994']['held_candidate']['reason'], narrative.HELD['overstated'])
+        full = 'RIGHT:\nAcute DVT of the common femoral, femoral, popliteal and posterior tibial veins.'
+        units = [u['quote'] for u in narrative.units(full, FIELDS, LABELS)]
+        answers, proposals = decide(full, {'sdt_-170105994': (option, units, {})}, [('claim_31', 'selected', units)])
+        self.assertEqual(status(answers, 'sdt_-170105994'), ('supported', option))
+        self.assertEqual(proposals['claim_31']['variant'], 'selected')
+
+    def test_a_vein_is_stated_only_by_a_finding_that_is_not_denied_and_governs_it(self):
+        option = 'with evidence of an acute DVT of CFV, FV, POP V, PTV.'
+        for notes in ('RIGHT:\nAcute DVT of the popliteal vein; no DVT in the CFV, FV or posterior tibial veins.',
+                      'RIGHT:\nAcute DVT in the popliteal vein with CFV, FV and posterior tibial veins unremarkable.'):
+            with self.subTest(notes):
+                units = [u['quote'] for u in narrative.units(notes, FIELDS, LABELS)]
+                answers, _ = decide(notes, {'sdt_-170105994': (option, units, {})})
+                self.assertEqual(answers['sdt_-170105994']['held_candidate']['reason'], narrative.HELD['overstated'])
+
+    def test_a_qualified_option_and_its_plain_sibling(self):
+        treated = 'Recurrent reflux in the previously ablated right small saphenous vein.'
+        plain = 'Reflux in the right small saphenous vein.'
+        other = 'Retained right great saphenous vein reflux positive; right small saphenous vein reflux positive.'
+        for notes, value, reason in ((treated, 'small saphenous vein', 'wording'),
+                                     (treated, 'retained small saphenous vein', None),
+                                     (plain, 'retained small saphenous vein', 'overstated'),
+                                     (plain, 'small saphenous vein', None),
+                                     (other, 'small saphenous vein', None)):      # the other vein's qualifier
+            with self.subTest(notes=notes, value=value):
+                answers, _ = decide(notes, {'sdt_-892962961': (value, [notes], {})})
+                answer = answers['sdt_-892962961']
+                if reason is None:
+                    self.assertEqual(status(answers, 'sdt_-892962961'), ('supported', value))
+                else:
+                    self.assertEqual(answer['held_candidate']['reason'], narrative.HELD[reason])
+
+    def test_the_held_out_overstatements_are_held_and_their_statements_not_proposed(self):
+        total, rows = benchmark.run('held-out', benchmark.load('heldout-responses-careful.json')['cases'], 'heldout-cases.json')
+        kinds = {(row['case'], row['key']): row['kind'] for row in rows}
+        self.assertNotIn(('H06', 'sdt_-892962961'), kinds)       # correct_hold rows are not listed
+        self.assertNotIn(('H06', 'sdt_-170105994'), kinds)
+        self.assertNotIn(('H06', 'claim_30'), kinds)
+        self.assertNotIn(('H06', 'claim_31'), kinds)
+        self.assertEqual((total['wrong_supported'], total['statement_wrong']), (0, 0))
 
 
 class Corrections(SimpleTestCase):
@@ -418,6 +614,39 @@ class StatementProposals(SimpleTestCase):
         self.assertEqual(proposals['claim_9']['evidence'], [{'kind': 'answers', 'answer_keys': ['sdt_1475334564']}])
         self.assertEqual(proposals['claim_23']['evidence'][0]['answer_keys'],
                          STATEMENTS['claim_23']['variants'][2]['empty_control_keys'])
+
+    def test_the_technique_wording_is_the_one_its_reflux_answers_give(self):
+        """Claim 19's two wordings differ by one sentence, `This study documents reflux as lasting more than 500
+        milliseconds …`: the careful response chose the wording without it on notes documenting reflux of 1.8 seconds
+        (ten of its proposals, round 17). The pre-filled saphenous reflux times decide it; where only a held one is past the
+        threshold nothing is pre-selected, and the page says why."""
+        cases = {case['id']: case for case in benchmark.load('cases.json')['cases']}
+        shaped = benchmark.responses('careful')
+        for case_id, want in (('C02', 'original'), ('C05', 'technique_only'), ('C17', None)):
+            with self.subTest(case_id):
+                picked = next(row['variant'] for row in shaped[case_id]['statements'] if row['key'] == 'claim_19')
+                self.assertEqual(picked, 'technique_only')
+                answers, proposals = narrative.validate(cases[case_id]['notes'], FIELDS,
+                                                        narrative.NarrativeSelections.model_validate(shaped[case_id]),
+                                                        REQUIREMENTS)
+                if want is None:
+                    self.assertEqual(proposals['claim_19'], {'held': narrative.THRESHOLD_HELD.format(500)})
+                    continue
+                self.assertEqual(proposals['claim_19']['variant'], want)
+                if want == 'original':
+                    reflux = answers['measurement_1_2']
+                    self.assertEqual(reflux['status'], 'supported')
+                    self.assertIn(reflux['evidence'][0]['quote'], [e.get('quote') for e in proposals['claim_19']['evidence']])
+        stated = deepcopy(shaped['C05'])
+        next(row for row in stated['statements'] if row['key'] == 'claim_19')['variant'] = 'original'
+        _, proposals = narrative.validate(cases['C05']['notes'], FIELDS, narrative.NarrativeSelections.model_validate(stated),
+                                          REQUIREMENTS)
+        self.assertEqual(proposals['claim_19'], {'held': narrative.THRESHOLD_UNSUPPORTED.format(500)})   # none documented
+
+    def test_only_the_threshold_pair_is_decided_by_the_answers(self):
+        pairs = {(row['key'], variant['id']) for row in REQUIREMENTS for variant in row['variants']
+                 if narrative.threshold_wording(row, variant, {}, FIELDS) is not None}
+        self.assertEqual(pairs, {('claim_19', 'original'), ('claim_19', 'technique_only')})
 
     def test_which_wordings_rest_on_their_answers_is_the_measured_table(self):
         built = {(row['key'], variant['id']) for row in REQUIREMENTS for variant in row['variants']
@@ -1034,9 +1263,9 @@ REGRESSIONS = [
     ('a relative named well after the finding', 'She is asymptomatic and asked for screening because her mother has varicose veins.',
      {'sdt_2005853103': ('Asymptomatic', ['She is asymptomatic and asked for screening because her mother has varicose veins.'], {})},
      {'sdt_2005853103': 'supported'}),
-    ('anatomy after a number is not a bound', 'The right great saphenous vein measures 4.1 mm and greater saphenous vein diameter 7.4 mm '
+    ('anatomy after a number is not a bound', 'The right great saphenous vein at the saphenofemoral junction measures 4.1 mm and greater saphenous vein diameter 7.4 mm '
      'at the saphenofemoral junction.',
-     {'measurement_1_1': ('4.1 mm', ['The right great saphenous vein measures 4.1 mm and greater saphenous vein diameter 7.4 mm at the '
+     {'measurement_1_1': ('4.1 mm', ['The right great saphenous vein at the saphenofemoral junction measures 4.1 mm and greater saphenous vein diameter 7.4 mm at the '
                                      'saphenofemoral junction.'], {})}, {'measurement_1_1': 'supported'}),
 ] + [('a bounded value: ' + phrase, 'The right great saphenous vein at the saphenofemoral junction shows ' + phrase + '.',
       {'measurement_1_2': ('550 ms', ['The right great saphenous vein at the saphenofemoral junction shows ' + phrase + '.'], {})},
@@ -1151,7 +1380,7 @@ SPOKEN = ('okay this is synthetic patient x she is here for aching leg pain and 
           'correction 6.6 millimeters')
 AFTER = ('on the right the great saphenous vein at the junction measures 7.4 millimeters and the reflux time is 1.8 seconds on the '
          'left the great saphenous vein at the junction measures 5.0 millimeters')
-JOINED = ('The right great saphenous vein shows reflux of 1800 ms. At the proximal thigh the right great saphenous vein measures '
+JOINED = ('The right great saphenous vein at the saphenofemoral junction shows reflux of 1800 ms. At the proximal thigh the right great saphenous vein measures '
           '6.9 mm with reflux of 1200 ms. Correction: the proximal thigh diameter is 6.6 mm.')
 PARAGRAPH_FIX = ('The patient reports aching leg pain. The right great saphenous vein measures 7.4 mm at the saphenofemoral junction. '
                  'The left great saphenous vein measures 5.0 mm at the saphenofemoral junction. Correction: the left junction '
@@ -1289,8 +1518,8 @@ ROUND_3 = [
       'measurement_1_2': ('1200 ms', ['okay now the left leg the great saphenous vein at the junction is 5.0 millimeters with reflux '
                                       'of 1.2 seconds right and at the proximal thigh it measures 4.8 millimeters'], {})},
      {'measurement_15_2': 'supported', 'measurement_1_2': 'conflict'}),
-    ('a question-tag right', *one('measurement_1_1', '5.1 mm', 'The left great saphenous vein measures 5.1 mm, right?', 'conflict')),
-    ('its control', *one('measurement_15_1', '5.1 mm', 'The left great saphenous vein measures 5.1 mm, right?', 'supported')),
+    ('a question-tag right', *one('measurement_1_1', '5.1 mm', 'The left great saphenous vein at the saphenofemoral junction measures 5.1 mm, right?', 'conflict')),
+    ('its control', *one('measurement_15_1', '5.1 mm', 'The left great saphenous vein at the saphenofemoral junction measures 5.1 mm, right?', 'supported')),
 ] + [('an adverb right is no side: ' + text, *one(key, value, text, 'conflict', notes))
      for text, key, value, notes in [
          ('The left great saphenous vein measures 4.2 mm right below knee.', 'measurement_4_1', '4.2 mm', None),
@@ -1430,9 +1659,9 @@ ROUND_4 = [
     ('a rival side far after the value in a written sentence', *one('measurement_5_1', '3.9 mm', 'the right great saphenous vein is '
      'competent and the small saphenous vein measures 3.9 millimeters at the level of the saphenopopliteal junction on the left side',
      'conflict')),
-    ('a comparison after the value is no reading of it', 'RIGHT LEG:\nThe great saphenous vein measures 7.4 mm which is larger than '
-     'the left.', {'measurement_1_1': ('7.4 mm', ['The great saphenous vein measures 7.4 mm which is larger than the left.'], {}),
-                   'measurement_15_1': ('7.4 mm', ['The great saphenous vein measures 7.4 mm which is larger than the left.'], {})},
+    ('a comparison after the value is no reading of it', 'RIGHT LEG:\nThe great saphenous vein at the saphenofemoral junction measures 7.4 mm which is larger than '
+     'the left.', {'measurement_1_1': ('7.4 mm', ['The great saphenous vein at the saphenofemoral junction measures 7.4 mm which is larger than the left.'], {}),
+                   'measurement_15_1': ('7.4 mm', ['The great saphenous vein at the saphenofemoral junction measures 7.4 mm which is larger than the left.'], {})},
      {'measurement_1_1': 'supported', 'measurement_15_1': 'conflict'}),
     ('both legs in the paragraph is not a measurement\'s side', 'She reports heaviness in both legs.\n' + PLAIN,
      {'measurement_1_1': ('7.4 mm', [PLAIN], {}), 'measurement_15_1': ('7.4 mm', [PLAIN], {})},
@@ -1497,8 +1726,8 @@ ROUND_4 = [
     ('its control, the heading agreeing', *one('measurement_15_1', '5.0 mm', 'The left great saphenous vein measures 5.0 mm at the '
      'saphenofemoral junction.', 'supported', 'LEFT LEG:\nThe left great saphenous vein measures 5.0 mm at the saphenofemoral junction.')),
     ('a spoken correction opening its sentence strikes the side before it',
-     *one('measurement_15_1', '7.4 mm', 'The right sorry left great saphenous vein measures 7.4 mm.', 'supported')),
-    ('its other leg', *one('measurement_1_1', '7.4 mm', 'The right sorry left great saphenous vein measures 7.4 mm.', 'conflict')),
+     *one('measurement_15_1', '7.4 mm', 'The right sorry left great saphenous vein at the saphenofemoral junction measures 7.4 mm.', 'supported')),
+    ('its other leg', *one('measurement_1_1', '7.4 mm', 'The right sorry left great saphenous vein at the saphenofemoral junction measures 7.4 mm.', 'conflict')),
 ] + [('a placed correction restating the value: ' + text + ' ' + value, *one('measurement_1_1', value, text, want))
      for text, value, want in (
          # The old number repeated before the new one is struck with it (round 5): the new one is what it corrects to.
@@ -1624,10 +1853,10 @@ ROUND_5 = [
      'conflict',
      'refuse'),
     ('M3b control right sorry left',
-     'The right sorry left great saphenous vein measures 7.4 mm.',
+     'The right sorry left great saphenous vein at the saphenofemoral junction measures 7.4 mm.',
      'measurement_15_1',
      '7.4 mm',
-     'The right sorry left great saphenous vein measures 7.4 mm.',
+     'The right sorry left great saphenous vein at the saphenofemoral junction measures 7.4 mm.',
      'supported',
      None),
     ('L1#1 right below knee transcript',
@@ -2338,8 +2567,12 @@ for fix in ('Correction: 6.1 mm is wrong; the right SFJ diameter is 7.6 mm.', 'C
     ROUND_7.append(('R7L1#12 old value from ' + fix, 'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction.\n' + fix, 'measurement_1_1', '6.1 mm', fix, 'conflict', '*'))
 # (round 8 removed `exceeds`/`double` from the comparisons — they hid real sides, `the lower half of the left calf` — so
 # these read the left again: the comparison vocabulary is not complete, a documented limit)
+# (round 17: written without its row they are held for the row — `row_unknown`; with the row written the documented limit
+# stands, and the left is read again)
 for text in ('The great saphenous vein measures 7.4 mm which exceeds the left.', 'The great saphenous vein measures 7.4 mm which is double the left.'):
-    ROUND_7.append(('R7L1#13 ' + text, text, 'measurement_15_1', '7.4 mm', None, 'supported', '*'))
+    ROUND_7.append(('R7L1#13 ' + text, text, 'measurement_15_1', '7.4 mm', None, 'conflict', '*'))
+    sited = text.replace('vein measures', 'vein at the saphenofemoral junction measures')
+    ROUND_7.append(('R7L1#13 ' + sited, sited, 'measurement_15_1', '7.4 mm', None, 'supported', '*'))
 T = 'right great saphenous vein junction measures 6.1 {} 7.6 millimeters with reflux of 1.8 seconds'
 for lead in ('no I mean', 'no sorry', 'no make that', 'no scratch that', 'uh no I mean'):
     ROUND_7.append(('R7L2 denial in a spoken lead: ' + lead, T.format(lead), 'measurement_1_1', '7.6 mm', None, '*', None))
@@ -2651,9 +2884,9 @@ def _round_9():
     rows.append(('R9M a spoken no strikes the value before it', s, 'measurement_1_1', '6.1 mm', s, 'conflict', 'refuse'))
     rows.append(('R9M a spoken no corrects to the value after it', s, 'measurement_1_1', '7.6 mm', s, 'supported', None))
     for name, sep in (('a newline', '\n'), ('U+2028', '\u2028')):
-        n = 'The great saphenous vein measures 7.4 mm on the right' + sep + 'Left great saphenous vein 5.0 mm.'
+        n = 'The great saphenous vein at the saphenofemoral junction measures 7.4 mm on the right' + sep + 'Left great saphenous vein 5.0 mm.'
         rows.append(('R9M a side bound on one line is no phrase with the next line\'s, ' + name, n, 'measurement_1_1', '7.4 mm',
-                     'The great saphenous vein measures 7.4 mm on the right', 'supported', None))
+                     'The great saphenous vein at the saphenofemoral junction measures 7.4 mm on the right', 'supported', None))
         n = 'Varicosities on the left' + sep + 'right great saphenous vein examined\n' + g18
         rows.append(('R9M side words on two lines are no one phrase, ' + name, n, 'measurement_1_1', '7.4 mm', g18, 'supported',
                      None))
@@ -3070,8 +3303,8 @@ def _round_12():
                  '7.4 mm', d, 'conflict', '*'))
     rows.append(('R12L3#6 a denying clause\'s side before the value under RIGHT, right row', 'RIGHT LEG:\n' + d, 'measurement_1_1',
                  '7.4 mm', d, 'conflict', None))
-    rows.append(('R12L3#6 control: a side in the value\'s own clause', 'The left great saphenous vein measures 5.0 mm with no reflux.',
-                 'measurement_15_1', '5.0 mm', 'The left great saphenous vein measures 5.0 mm with no reflux.', 'supported', None))
+    rows.append(('R12L3#6 control: a side in the value\'s own clause', 'The left great saphenous vein at the saphenofemoral junction measures 5.0 mm with no reflux.',
+                 'measurement_15_1', '5.0 mm', 'The left great saphenous vein at the saphenofemoral junction measures 5.0 mm with no reflux.', 'supported', None))
     # lens 3 (older): `respectively` with a location between the values and the legs
     for s in ('The great saphenous veins measure 7.4 mm and 5.0 mm at the saphenofemoral junction in the right and left legs '
               'respectively.', 'The great saphenous veins measure 7.4 mm and 5.0 mm at the SFJ on the right and left, respectively.'):
@@ -3694,7 +3927,7 @@ def _round_15():
               'The right great saphenous vein measures 7.4 mm at the knee and the other GSV measures 5.0 mm.'):
         q = [u['quote'] for u in narrative.units(n, FIELDS, LABELS) if '5.0 mm' in u['quote']][0]
         rows.append(('R15L1#4 ' + n[-44:], n, 'measurement_3_1', '5.0 mm', q, 'conflict', 'refuse'))
-    n = 'RIGHT LEG:\nThe great saphenous vein measures 7.2 mm; on the other hand, the small saphenous vein measures 3.0 mm.'
+    n = 'RIGHT LEG:\nThe great saphenous vein measures 7.2 mm; on the other hand, the small saphenous vein at the saphenopopliteal junction measures 3.0 mm.'
     rows.append(('R15L1#4 control: on the other hand', n, 'measurement_5_1', '3.0 mm', n.split('\n')[1], 'supported', None))
     # lens 1: a list of old values with words between them
     body = 'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction and 5.0 mm at the knee.'
@@ -3910,7 +4143,7 @@ def _round_15():
               'right leg gsv 6.8 millimeters the left leg was 7.2 millimeters at the junction the great saphenous vein at the knee '
               'measures 5.1 millimeters'):
         rows.append(('R15T control: ' + n[-60:], n, 'measurement_17_1', '5.1 mm', n, 'supported', None))
-    n = 'right leg gsv 6.8 millimeters left leg gsv is dilated the small saphenous vein measures 5.1 millimeters'
+    n = 'right leg gsv 6.8 millimeters left leg gsv is dilated the small saphenous vein at the saphenopopliteal junction measures 5.1 millimeters'
     rows.append(('R15T control: a vein before the verb is no leg\'s predicate', n, 'measurement_19_1', '5.1 mm', n, 'supported', None))
     seen = {}
     for index, row in enumerate(rows):
@@ -4647,8 +4880,8 @@ class ReviewCost(SimpleTestCase):
     def test_round_13_a_whole_leg_unexamined_is_read_once_per_sentence(self):
         """Round 13's triage: a sentence saying only that a leg was not examined is read once, not per sentence under it
         (unmemoized, 11.5 s at 49,000 characters — the round-13 review test's 26,000 did not reach 5 s)."""
-        notes = 'RIGHT LEG:\nThe left leg ' + 'no  ' * 6125 + 'not examined.\n' + ('7mm; ' * 4900).rstrip('; ') + '.'
-        quote = next(u['quote'] for u in narrative.units(notes, FIELDS, LABELS) if u['quote'].startswith('7mm'))
+        notes = 'RIGHT LEG:\nThe left leg ' + 'no  ' * 6125 + 'not examined.\nSFJ ' + ('7mm; ' * 4900).rstrip('; ') + '.'
+        quote = next(u['quote'] for u in narrative.units(notes, FIELDS, LABELS) if u['quote'].startswith('SFJ 7mm'))
         self.assertGreater(len(quote), 20000)       # (the values' run-on unit, never the denial)
         measurements = [f for f in FIELDS if f.get('kind') == 'measurement' and f['locator']['unit'] == 'mm']
         picks = {f['key']: ('7 mm', [quote], {}) for f in measurements}
@@ -4667,7 +4900,7 @@ class ReviewCost(SimpleTestCase):
         run read the run from its start per answer's strikes (92 s)."""
         measurements = [f for f in FIELDS if f.get('kind') == 'measurement' and f['locator']['unit'] == 'mm']
         right = [f for f in measurements if f['label'].startswith('Right')]
-        notes = 'Venous duplex.\n' + '\n' * 12000 + 'Findings:\nRight: GSV seen.\n' + ('GSV 7mm; ' * 1330).rstrip('; ') + '.'
+        notes = 'Venous duplex.\n' + '\n' * 12000 + 'Findings:\nRight: GSV seen.\n' + ('GSV SFJ 7mm; ' * 1330).rstrip('; ') + '.'
         quote = max(narrative.units(notes, FIELDS, LABELS), key=lambda unit: len(unit['quote']))['quote']
         self.assertGreater(len(quote), 10000)
 
@@ -4711,10 +4944,11 @@ class ReviewCost(SimpleTestCase):
         measurements = [f for f in FIELDS if f.get('kind') == 'measurement' and f['locator']['unit'] == 'mm']
         right = [f for f in measurements if f['label'].startswith('Right')]
         left = [f for f in measurements if f['label'].startswith('Left')]
-        for notes, fields in (('The right GSV ' + '7mm ' * 3010 + 'compared with' + ' opposite' * 100 + '.', right),
-                              ('The right GSV ' + '7mm ' * 12232 + 'compared with the contralateral side.', right),
-                              ('RIGHT LEG:\nGSV ' + '7mm ' * 12240 + 'as on the opposite.', right),
-                              ('The left' + ' ' * 24500 + ' 7mm' * 6120 + '.', left)):
+        # (round 17: each note writes its values' row once, so the path is still taken: a value's row is read first)
+        for notes, fields in (('The right GSV SFJ ' + '7mm ' * 3010 + 'compared with' + ' opposite' * 100 + '.', right),
+                              ('The right GSV SFJ ' + '7mm ' * 12232 + 'compared with the contralateral side.', right),
+                              ('RIGHT LEG:\nGSV SFJ ' + '7mm ' * 12240 + 'as on the opposite.', right),
+                              ('The left' + ' ' * 24500 + ' SFJ' + ' 7mm' * 6120 + '.', left)):
             with self.subTest(notes[:30]):
                 long = max(narrative.units(notes, FIELDS, LABELS), key=lambda unit: len(unit['quote']))['quote']
 
@@ -4723,6 +4957,29 @@ class ReviewCost(SimpleTestCase):
                     self.assertIn('supported', {answers[f['key']]['status'] for f in fields})    # (the path is taken)
                     return narrative.held_labels(notes, FIELDS, LABELS, answers)
                 self.within_limit(generation_and_finalization, 5.0)
+
+    @override_settings(WM_NARRATIVE=True)
+    def test_round_17_rows_an_option_list_and_a_qualifier_read_linearly(self):
+        """Round 17's readers at a legal size: every measurement question over one run-on of 1,600 values each with its own
+        level; a deep-vein option over 3,200 findings and veins (each finding walks only its own list); a qualified
+        vein named 9,600 times in one clause (each clause searched once)."""
+        rows = 'RIGHT LEG:\nGSV at the SFJ ' + ', '.join('%d.%d mm at the knee' % (5 + k % 3, k % 10) for k in range(1600)) + '.'
+        run_on = max(narrative.units(rows, FIELDS, LABELS), key=lambda unit: len(unit['quote']))['quote']
+        measured = [f for f in FIELDS if f.get('kind') == 'measurement' and f['locator']['unit'] == 'mm']
+
+        def generation_and_finalization():
+            answers, _ = decide(rows, {f['key']: ('5.1 mm', [run_on], {}) for f in measured})
+            self.assertEqual(answers['measurement_3_1']['status'], 'supported')        # (the row is read: the path is taken)
+            return narrative.held_labels(rows, FIELDS, LABELS, answers)
+        self.within_limit(generation_and_finalization, 5.0)
+        option = 'with evidence of an acute DVT of CFV, FV, POP V, PTV.'
+        veins = 'RIGHT:\n' + 'thrombus CFV ' * 3200 + '.'
+        quote = max(narrative.units(veins, FIELDS, LABELS), key=lambda unit: len(unit['quote']))['quote']
+        answers, _ = self.within_limit(lambda: decide(veins, {'sdt_-170105994': (option, [quote], {})}), 5.0)
+        self.assertEqual(answers['sdt_-170105994']['held_candidate']['reason'], narrative.HELD['overstated'])
+        named = 'Right: ' + 'SSV ' * 9600 + 'reflux.'
+        quote = max(narrative.units(named, FIELDS, LABELS), key=lambda unit: len(unit['quote']))['quote']
+        self.within_limit(lambda: decide(named, {'sdt_-892962961': ('small saphenous vein', [quote], {})}), 5.0)
 
     @override_settings(WM_NARRATIVE=True)
     def test_round_15_runs_of_spaces_long_lines_and_a_far_side_read_linearly(self):
@@ -4992,6 +5249,18 @@ class JobPageAndSave(TestCase):
         self.assertEqual((rows['claim_32']['selected_variant'], rows['claim_9']['selected_variant']), ('positive', 'exam_choice'))
         self.assertEqual(rows['claim_32']['source_quote'], 'Saphenous reflux is present in the right lower extremity.')
         self.assertEqual(rows['claim_9']['answers_basis'], ['sdt_1475334564'])
+
+    def test_a_wording_not_pre_selected_says_why_on_the_page(self):
+        self.generate()
+        held = narrative.THRESHOLD_HELD.format(500)
+        self.encounter.template_review = {'proposals': {**self.encounter.template_review['proposals'], 'claim_19': {'held': held}}}
+        self.encounter.save()
+        page = self.client.get(f'/encounters/{self.encounter.pk}/')
+        self.assertContains(page, 'data-statement-held')
+        self.assertContains(page, held)
+        rows = {row['key']: row for row in page.context['wm_requirements']}
+        self.assertFalse(rows['claim_19']['proposed'])
+        self.assertEqual(rows['claim_19']['selected_variant'], STATEMENTS['claim_19']['default_variant'])
 
     def test_save_keeps_sentences_as_sentences_and_names_a_basis_from_the_mapping(self):
         self.generate()

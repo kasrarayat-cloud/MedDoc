@@ -550,7 +550,9 @@ def encounter_detail(request,pk):
             row['answers_basis']=next((item['answer_keys'] for item in shown or [] if item.get('kind')=='answers'),None)
             row['answers_basis_labels']=[next((f['label'] for f in e.template_version.fields if f['key']==key),key) for key in row['answers_basis'] or []]
             row['basis_possible']=row.get('kind')=='assertion' and any(wm_narrative.basis_keys(variant) for variant in row.get('variants',[]))
-            row['proposed']=bool(proposal) and not decision
+            row['proposed']=bool(proposal.get('variant')) and not decision
+            # (a wording the reader would not pre-select, and why: the page's default is not a proposal)
+            row['proposal_held']=proposal.get('held') if not decision else None
             row['selected_variant']=decision.get('variant') or proposal.get('variant') or row.get('selected_variant') or row.get('default_variant')
             if resolved_ok:
                 row['review_token']=signing.dumps({'encounter':str(e.pk),'revision':e.revision,
