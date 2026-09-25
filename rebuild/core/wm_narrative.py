@@ -1430,9 +1430,38 @@ def sentence_rivals(notes, at, low, high, struck, primary, candidates):
                           | ({heading[0]} if heading[0] in ('right', 'left') else set())) - {primary}
                 if others:
                     return 'ambiguous', candidates | others
+        elif phrase and phrase[0][2] == primary and leg_predicate(notes, phrase[0][1], at):
+            # (in the value's own clause, an unpunctuated run: the leg named with a predicate of its own that is no
+            # examination's, the other leg named before it — `right leg deep veins compress normally no clot the left leg
+            # was done in 2021 by doctor synthetic the great saphenous vein at the knee measures 5.1 millimeters` — round
+            # 15, documented as not failing closed until then; not `… now the left leg the great saphenous vein …`, nor
+            # `… the left leg was examined next the great saphenous vein …`)
+            other = clause_other_legs(notes, own[0], phrase[0][0], struck) - {primary}
+            if other:
+                return 'ambiguous', candidates | other
     if respectively(notes, low, high):
         return 'ambiguous', candidates | {side for side in _named_sides((low, high), notes) if side in ('right', 'left')}
     return primary, candidates
+
+
+#: A leg's own predicate after its limb word: within two words, a finite verb (`generation.FINITE_STATEMENT`'s).
+LEG_PREDICATE = re.compile(r'((?:[ \t]+[^\W\d_]+){0,2}?)[ \t]+((?i:is|are|was|were|has|have|had))(?![^\W\d_])')
+
+
+def leg_predicate(notes, end, at):
+    """Whether the side word ending at `end` is a leg's (its limb word right after it) that has a predicate of its own
+    before the value at `at`: a finite verb within two words that name no anatomy (not `left leg gsv is 5.1 mm`),
+    whose words then reach the value's own subject — a vein, not a site (`the left leg has reflux and at the knee it
+    measures …` is the leg's) — with no quantity between (not `left leg was 5.1 millimeters`), and that is no examination's (`the left leg was examined next the great saphenous vein …` is the
+    leg's reading)."""
+    limb = LIMB_AFTER.match(notes, end, at)
+    verb = LEG_PREDICATE.match(notes, limb.end(), at) if limb else None
+    if not verb or any(anatomy_word(word.casefold()) for word in LETTER_RUN.findall(verb.group(1))):
+        return False
+    high = min(at, verb.end() + WINDOW_CHARS * 4)             # (a window, never the run to the value: read per place)
+    if first_in(notes, 'quantity', verb.end(), high) or EXAM_NOUN.search(notes, verb.end(), min(high, verb.end() + 40)):
+        return False
+    return bool(VEIN_SUBJECT.search(notes, verb.end(), high))
 
 
 def mention_clause(notes, low, high):
@@ -1935,6 +1964,12 @@ def sibling_legs_only(notes, start, line):
 
 #: A limb's word in a side's label (`RIGHT LOWER EXTREMITY:`, `Left leg:`, `LLE:`), not a bare side or a vein's.
 LIMB_WORD = re.compile(r'(?<![^\W\d_])(?i:legs?|limbs?|extremity|extremities|le|lle|rle|lue|rue)(?![^\W\d_])')
+#: A limb word right after a side word (`left leg`, `right lower extremity`): the leg itself named (`leg_predicate`).
+#: A vein named as a subject (the form's rows: `vein`, `GSV`, `SSV`, `AAGSV`, `CFV`, perforators, tributaries) — not a site
+#: (`at the knee`): what a leg's own predicate must reach before the value to be no reading of it (`leg_predicate`).
+VEIN_SUBJECT = re.compile(r'(?<![^\W\d_])(?i:veins?|gsv|ssv|asv|aasv|pasv|aagsv|pagsv|cfv|perforators?|tributar(?:y|ies))'
+                          r'(?![^\W\d_])')
+LIMB_AFTER = re.compile(r'[ \t]+(?:(?i:lower|upper)[ \t]+)?' + LIMB_WORD.pattern)
 #: Where a limb label's item ends: a full stop (`Left: No DVT in the common femoral vein.`), never a decimal point.
 ITEM_END = re.compile(r'[.!?](?=\s)')
 

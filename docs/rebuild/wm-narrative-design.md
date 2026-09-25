@@ -384,6 +384,24 @@ notes, so that needs a compromised parent.
   information and genuine conflicts; expectations by an independent author (`d6c661a1`), provider-shaped responses
   by a second author blind to the expectations (`17483cc1`): a careful set and a weak set with named injected errors.
   ⚠️ The validator's rules were iterated against it over five scoring rounds, so it is a development set.
+- **Scores as they stand (round 15, `wm_narrative_benchmark.run`), every category the scorer counts.** An ANSWER is
+  scored against the case's expected outcome — a value (`supported`), blank (`missing`) or the clinician's decision
+  (`decision`); `wrong_supported` counts every pre-filled answer that is not the expected value, a pre-fill where a
+  decision or a blank was expected included. A STATEMENT is scored by the variant the proposal pre-selects.
+  | set | answers pre-filled correct | wrong pre-filled | unnecessary holds | other | statements correct / wrong / missed |
+  |---|---|---|---|---|---|
+  | frozen, careful (the gate) | **338** | **0** | **0** | 7 correct holds; 6 decisions shown as missing (C18) | 153 / 10 / 0 |
+  | frozen, weak (injected model errors) | 330 | **11** (2 wrong values, 5 where a decision was expected, 4 where a blank was) | 0 | 2 correct holds; 6 decisions shown as missing; 3 missed; 8 held where a blank was expected; 3 held with the wrong value | 151 / 11 / 3 |
+  | held-out, careful | **254** | **2** | **17** | 12 correct holds; 6 decisions shown as missing | 83 / 2 / 10 |
+  The careful gate is `wrong_supported 0, unnecessary_hold 0, correct_supported ≥ 338` (`CAREFUL_GATE`), and it passes.
+  What remains wrong, named: the careful set's 10 wrong statements are one statement, claim 19 (`Technique`), pre-set
+  to the mapping's default `technique_only` wording where the benchmark's author expected `original` — a pre-selection
+  the clinician reviews, not an answer; the weak set's 11 wrong answers are the injected interpretation errors no
+  text signals (*Known limits*); the held-out set's 2 wrong answers are both H06, a choice whose only option
+  overstates the note (`small saphenous vein` for a recanalized one; `acute DVT of CFV, FV, POP V, PTV` for a
+  popliteal-only clot), its 2 wrong statements claims 30 and 31 proposed as `selected` where no proposal was expected,
+  and its 17 unnecessary holds are H12's 8 unitless shorthand values (`6.8/1.9s`, held by design) and 9 pre-fill holds in
+  H02 (3), H03 (1), H05 (3) and H11 (2) that review accepts. No category moved in rounds 4 to 15.
 - **Held-out benchmark** (`heldout-cases.json`, `3af6e471`; blind careful responses `d92cc499`): 12 cases written after
   the implementation by an author who did not read it — headed reports, raw transcripts, shorthand, a letter, a SOAP
   note. Scored on the implementation as it stood: 201 correct, **0 wrong**, **70 unnecessary holds**. After the first
@@ -393,7 +411,7 @@ notes, so that needs a compromised parent.
   rest are pre-fill holds the clinician clears at review), 83 statement proposals correct; the same after the fourth to
   fifteenth rounds'. Round 3 closed fourteen classes of wrong pre-fill that round 2's releases had opened; the price is
   two pre-fills that now read both ways. The repairs were checked against this set, so it is now a development set too.
-- **Refutation.** Fourteen rounds of four sealed, write-disabled lenses over the finished diff (false green, false
+- **Refutation.** Fifteen rounds of four sealed, write-disabled lenses over the finished diff (false green, false
   rejection, parity and integrity, corrections and sides, cost). Every demonstrated break is a regression row in
   `test_wm_narrative.RefutationRegressions` (or a review, quotation or cost test) beside a control of its class. Round 4
   found wrong pre-fills from weak side forms, a heading against its sentence, `both` read for one value, corrections
@@ -877,13 +895,19 @@ Every one of these fails closed (a hold, or a statement the clinician must sourc
   denied (`left leg not examined right leg great saphenous vein junction measures 7.1 millimeters …`) is held, review
   accepting either leg; so is a limb's label written in mid-line in a dictated paragraph (`Right leg. … without reflux.
   LEFT LEG: The deep veins are compressible. The great saphenous vein measures 4.6 mm …` on one line).
-- **An unpunctuated run mentioning the other leg in the value's own clause is NOT held — this one does not fail
-  closed.** `right leg deep veins compress normally no clot the left leg was done in 2021 by doctor synthetic the great
-  saphenous vein at the knee measures 5.1 millimeters` pre-fills the left (round 15's false-rejection lens: 1 of its 7
-  phrasings; the other six, with a comma, `and` or a stop, are held). With no punctuation the nearest side in the value's
-  own clause is its reading, which is what lets `… now the left leg the great saphenous vein …` pre-fill its correct
-  leg; telling the two apart needs the words' meaning (`was done in 2021`), which the reader does not decide. The model's
-  timing and the clinician's review are the control.
+- **Held by design since round 15's acceptance repair:** an unpunctuated run naming the other leg, then this leg with a
+  predicate of its own — a finite verb within two words of its limb word, naming no anatomy before it, no examination
+  (`was examined`, `was scanned`) and no quantity after it — that reaches a vein as a new subject before the value
+  (`right leg deep veins compress normally no clot the left leg was done in 2021 by doctor synthetic the great
+  saphenous vein at the knee measures 5.1 millimeters`, `… the left leg had ablation last year the great saphenous vein
+  …`) reads both ways, review accepting either leg. This closed the one case round 15's false-rejection lens found that
+  pre-filled the other leg (it had been documented here as not failing closed). Still the left's: `… now the left leg the
+  great saphenous vein …`, `… the left leg was examined next the great saphenous vein …`, `left leg gsv at the knee is
+  5.1 millimeters`, `left leg was 5.1 millimeters`, `the left leg has reflux measuring 5.1 millimeters`, `the left leg
+  was 7.2 millimeters at the junction the great saphenous vein …`, `left leg gsv is dilated the small saphenous vein …`,
+  and a run naming one leg only. A leg's predicate in words the rule does not see — a finite verb further than two words
+  on, or a site instead of a vein as the new subject — is still read as that leg's: the model's timing and the
+  clinician's review remain the control there.
 - **What review cannot complete without the notes edited, most common first (round 15's false-rejection lens, 147
   hand-written notes and 300 generated reports):** a one-leg study that never names the other leg — that leg's reflux
   statement (claim 36 or 32) has no source: 36 of 147 notes (24%) and 58 of 300 reports (19%), the one owner-shaped

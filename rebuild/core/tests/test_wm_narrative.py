@@ -3890,6 +3890,28 @@ def _round_15():
              'Right: No DVT in the common femoral vein.')
         rows.append(('R15M a system\'s prose ends the first label\'s block, ' + line[:20], n, 'measurement_15_1', '7.2 mm',
                      'GSV SFJ: 7.2 mm, reflux 2.3 s', 'conflict', '*'))
+    # the documented limit closed: an unpunctuated run naming the other leg, then this leg with a predicate of its own that
+    # is no examination's, before the value's own subject (round 15's false-rejection lens, 1 of its 7 phrasings)
+    for n in ('right leg deep veins compress normally no clot the left leg was done in 2021 by doctor synthetic the great '
+              'saphenous vein at the knee measures 5.1 millimeters',
+              'right leg the deep veins are compressible the left leg had ablation last year the great saphenous vein at the '
+              'knee measures 5.1 millimeters'):
+        rows.append(('R15T a leg\'s own predicate, left row: ' + n[40:80], n, 'measurement_17_1', '5.1 mm', n, 'conflict', '*'))
+        rows.append(('R15T a leg\'s own predicate, right row: ' + n[40:80], n, 'measurement_3_1', '5.1 mm', n, 'conflict', None))
+    for n in ('starting with the right leg the great saphenous vein at the saphenofemoral junction measures 6.8 millimeters now '
+              'the left leg the great saphenous vein at the knee measures 5.1 millimeters',
+              'right leg the great saphenous vein measures 6.8 millimeters the left leg was examined next the great saphenous '
+              'vein at the knee measures 5.1 millimeters',
+              'right leg gsv at the knee is 6.8 millimeters left leg gsv at the knee is 5.1 millimeters',
+              'right leg knee was 6.8 millimeters left leg was 5.1 millimeters at the knee',
+              'the left leg was done in 2021 the great saphenous vein at the knee measures 5.1 millimeters',
+              'right leg gsv 6.8 millimeters the left leg has reflux measuring 5.1 millimeters at the knee',
+              'right leg gsv 6.8 millimeters the left leg is dilated measuring 5.1 millimeters at the knee',
+              'right leg gsv 6.8 millimeters the left leg was 7.2 millimeters at the junction the great saphenous vein at the knee '
+              'measures 5.1 millimeters'):
+        rows.append(('R15T control: ' + n[-60:], n, 'measurement_17_1', '5.1 mm', n, 'supported', None))
+    n = 'right leg gsv 6.8 millimeters left leg gsv is dilated the small saphenous vein measures 5.1 millimeters'
+    rows.append(('R15T control: a vein before the verb is no leg\'s predicate', n, 'measurement_19_1', '5.1 mm', n, 'supported', None))
     seen = {}
     for index, row in enumerate(rows):
         seen[row[0]] = seen.get(row[0], 0) + 1
