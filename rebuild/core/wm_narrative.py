@@ -3452,32 +3452,164 @@ def _own_correction(field, value, own):
 
 
 def cited_sentence(own, notes, at, span):
-    """The sentence a cited value is read in, as far as the cited units carry it: its sentence in the notes (a
-    hard-wrapped sentence runs over its lines), cut to the run of cited units around the value that nothing but white
-    space with at most one line break separates (a wrap, not a blank line). A sentence the wrap put on three lines, all cited (`The great saphenous vein measures 6.1 mm at the`
+    """The sentence a cited value is read in, as far as the cited units carry it: its sentence in the notes, cut to the
+    run of cited units around the value that nothing but white space with at most one line break separates, and to the
+    value's own block — never into a later line that opens a block of its own (`_opens_block`), nor back past the line
+    that opens the value's. A sentence the wrap put on three lines, all cited (`The great saphenous vein measures 6.1 mm at the`
     / `saphenofemoral junction with 2.1 seconds of reflux in` / `the left leg.`), is read as its unwrapped note is —
     round 17c: its row and side were read in the first line alone, and review refused the left leg's value as the
-    right's; a line not cited is not read (the cited text carries the side, ruling #127). Never less than `span`."""
+    right's; a line not cited is not read (the cited text carries the side, ruling #127). Rows with no stop run on into
+    the next block's label (`SSV SPJ 3.9 mm, no reflux` / `Left lower extremity: Deep veins normal.`, both cited, read the
+    left for a value of the right's block — round 17c's own review); the reader's wrapped-line run is no bound either (a
+    transcript's line may be heading-shaped, and the sentence was cut before its unit, `… measures 4.0` / `millimeters`).
+    Never less than `span`."""
     low, high = span
     whole_low, whole_high = sentence_at(notes, at)
     if whole_low >= low and whole_high <= high:
         return span
-    runs = sorted((entry['start'], entry['end']) for entry in own)
-    around = next(((start, end) for start, end in runs if start <= at < end), None)
-    if around is None:
+    runs, starts, ends, forward, backward = note_memo(notes, ('cited_chains', _own_key(own)), lambda: _cited_chains(own, notes))
+    index = bisect.bisect_right(starts, at) - 1
+    if index < 0 or at >= ends[index]:
         return span
-    start, end = around
-    for next_start, next_end in runs:
-        if end <= next_start < whole_high and _wrapped_gap(notes[end:next_start]):
-            end = max(end, next_end)
-    for before_start, before_end in reversed(runs):
-        if whole_low < before_end <= start and _wrapped_gap(notes[before_end:start]):
-            start = min(start, before_start)
+    # (the chain of cited units on from the value's, read once per citation: per value, every cited unit was walked —
+    # round 14's cost shape, a hundred cited lines per answer, past its limit)
+    last = bisect.bisect_left(starts, whole_high, index + 1, forward[index] + 1) - 1
+    first = bisect.bisect_right(ends, whole_low, backward[index], index)
+    start, end = starts[first], ends[max(last, index)]
     return min(low, max(whole_low, start)), max(high, min(whole_high, end))
+
+
+def _cited_chains(own, notes):
+    """The cited units in order, and for each the last one it runs on to (`forward`) and the first one that runs on to it
+    (`backward`): nothing but white space with at most one line break between, never into a later unit that opens a block,
+    nor back past one that opens the value's."""
+    runs = sorted({(entry['start'], entry['end']) for entry in own})
+    starts, ends = [a for a, _ in runs], [b for _, b in runs]
+    size = len(runs)
+    joins = [index + 1 < size and ends[index] <= starts[index + 1] and _wrapped_gap(notes[ends[index]:starts[index + 1]])
+             for index in range(size)]
+    opens = [_opens_block(notes, start) for start in starts]
+    forward, backward = list(range(size)), list(range(size))
+    for index in range(size - 2, -1, -1):
+        if joins[index] and not opens[index + 1]:
+            forward[index] = forward[index + 1]
+    for index in range(1, size):
+        if joins[index - 1] and not opens[index]:
+            backward[index] = backward[index - 1]
+    return runs, starts, ends, forward, backward
+
+
+#: A label before a colon opening a line (`Left lower extremity:`, `Results:`, `Right:`); not a clock time (`at 10:30`).
+LINE_LABEL = re.compile(r'[^\W\d_][^\n:\uff1a]{0,40}?(?<![0-9])[:\uff1a]')
+
+
+def _opens_block(notes, at):
+    """Whether the line a cited unit begins opens a block of its own: a heading line, a limb's label, or a label before a
+    colon. (A unit that begins inside a line opens none.)"""
+    if at > 0 and not LINE_BREAK.match(notes, at - 1):
+        return False
+    spans, starts = _lines(notes)
+    index = bisect.bisect_right(starts, at) - 1
+    line = notes[at:line_end(notes, at)]
+    if index > 0 and _wrapped_lines(notes)[0][index] != index:
+        # (the wrap joins it to the line above: `… reflux in the` / `left leg.` ends that sentence — unless it is itself
+        # a labelled line, which a line ending in `no` or a name's initial `A` was joined to: `… reflux: no` / `L GSV SFJ
+        # 4.7 mm, reflux: no`, `Patient name: SYNTHETIC PATIENT A` / `Indication: …`)
+        text = generation.seen_text(line).strip()
+        return bool(text) and (heading_line(text) or LINE_LABEL.match(text) is not None)
+    return _block_line(line)
+
+
+def _block_line(line):
+    text = generation.seen_text(line).strip()
+    return bool(text) and (heading_line(text) or limb_label(text) or LINE_LABEL.match(text) is not None)
+
+
+def sentence_block(notes, at):
+    """The value's sentence as the reader wraps it (`sentence_in_line`), within its block: never into a later line that
+    opens a block of its own (`_opens_block`), nor back past the line that opens the value's. What the readers that only
+    ever hold read, whether cited or not (`whole_sentence_entries`, `own_sentence_other_side`). (By bisection over the
+    block lines, read once per note: per value, a wrapped transcript's lines were walked for each of its values.)"""
+    low, high = sentence_in_line(notes, at)
+    spans, starts = _lines(notes)
+    index = bisect.bisect_right(starts, at) - 1
+    if index < 0 or at >= spans[index][1]:
+        return low, high
+    blocks = _block_lines(notes)
+    later = bisect.bisect_right(blocks, index)
+    if later < len(blocks) and spans[blocks[later]][0] < high:
+        high = spans[blocks[later]][0]
+    if later > 0 and spans[blocks[later - 1]][0] > low:
+        low = spans[blocks[later - 1]][0]
+    while high > low and notes[high - 1] in LINE_BREAKS + ' \t':
+        high -= 1
+    return low, high
+
+
+@sized_cache
+def _block_lines(notes):
+    """The lines of a note that open a block of their own (`_opens_block`), by index."""
+    return tuple(index for index, (start, _) in enumerate(_lines(notes)[0]) if _opens_block(notes, start))
+
+
+def whole_sentence_entries(field, value, own, read):
+    """The value's own sentence where it runs on past what was cited (a hard-wrapped sentence cited a line at a time,
+    `Her mother's right great saphenous vein at the saphenofemoral junction measures` / `6.1 mm.` with only the second
+    line cited): one entry spanning the units its sentence touches (`sentence_in_line`: a break inside a sentence,
+    never into a heading or after a stop, a colon or a blank line) within its block (`sentence_block`), with the other cited units. For the readers that
+    only ever hold — citation limits what can support an answer, never what can govern it (round 17c's review: a
+    relative, a denial, a plan, a hedge and a prior study on the uncited line all pre-filled). None where every such
+    sentence was cited whole."""
+    notes = read['notes']
+    places = located(field, value, own) or (located(field, value, own, words=True) if field.get('kind') == 'choice' else [])
+    units = read['units']
+    unit_starts = read.setdefault('_unit_starts', [u['start'] for u in units])
+    spans, done = set(), set()
+    for at, span, _ in places:
+        if span in done:
+            continue                 # (each sentence once: a clause of thousands of values was read per value)
+        done.add(span)
+        entry = next((e for e in own if e['start'] <= at < e['end']), None)
+        if entry is None:
+            continue
+        sentence_low, sentence_high = sentence_block(notes, at)
+        first = max(0, bisect.bisect_right(unit_starts, sentence_low) - 1)
+        touched = [u for u in units[first:bisect.bisect_left(unit_starts, sentence_high)]
+                   if u['start'] < sentence_high and sentence_low < u['end']]
+        low = min([u['start'] for u in touched] + [entry['start']])
+        high = max([u['end'] for u in touched] + [entry['end']])
+        if low < entry['start'] or high > entry['end']:
+            spans.add((low, high))
+    if not spans:
+        return None
+    wider = [{'quote': notes[low:high], 'start': low, 'end': high, 'kind': 'unit'} for low, high in sorted(spans)]
+    return wider + [e for e in own if not any(low <= e['start'] and e['end'] <= high for low, high in spans)]
 
 
 def _wrapped_gap(between):
     return not between.strip() and len(re.findall(BREAK, between)) <= 1
+
+
+def own_sentence_other_side(field, value, notes, places, struck, words, mineish):
+    """Whether a value's own sentence, read whole whether cited or not (`sentence_block`), places it on the other side
+    only: review refuses what the unwrapped note refuses, however little of the sentence was cited (round 17c's review:
+    `The great saphenous vein measures 6.1 mm at the` cited alone, its `… in the left leg.` on the next line, was
+    accepted for the right from the sentence before it). Only ever refuses; the side a review accepts is still the cited
+    text's."""
+    covered = {}                     # (per cited sentence: every value in it shares its whole — round 17c's cost shapes)
+    for at, (low, high), _ in places:
+        if (low, high) not in covered:
+            whole = sentence_block(notes, at)
+            covered[low, high] = whole if whole[0] < low or whole[1] > high else None
+        if covered[low, high] is None:
+            continue
+        whole_low, whole_high = covered[low, high]
+        length = 0 if words else written_length(field, value, notes, at)
+        primary, candidates, source = place_reading(notes, at, whole_low, whole_high, length, struck)
+        named = set(candidates) | ({primary} & {'right', 'left', 'both'})
+        if source == 'sentence' and named and not named & mineish:
+            return True              # (every side the sentence itself gives it is the other: `ambiguous`, `{left}`)
+    return False
 
 
 def cited_sides(own, notes, besides):
@@ -3791,10 +3923,10 @@ def _rows_of_sentence(notes, low, high, struck):
 
     def item(vein=None):
         return {'vein': vein, 'site': None, 'strength': 'explicit', 'units': {}, 'firsts': {}, 'values': [], 'parallel': None,
-                'alts': set(), 'site_at': -1, 'vein_at': -1}
+                'alts': set(), 'site_at': -1, 'vein_at': -1, 'after_value': False}
 
     readings, current, sentence_vein, last, bound, vein_bound = {}, item(), None, None, None, None
-    named, vein_end, unknown = set(), low, _unknown_veins(notes)
+    named, named_all, vein_end, unknown = set(), set(), low, _unknown_veins(notes)
     inserted = set()                 # (the vein words of an insertion that holds no value: named, never the item's)
     token_starts = [token[1] for token in tokens]
     for m in ROW_INSERTION.finditer(read, low, high):
@@ -3811,6 +3943,7 @@ def _rows_of_sentence(notes, low, high, struck):
             continue                 # (read as what the subject is compared with or joined by: not even named before)
         if kind != 'value':
             named.add(name)
+            named_all.add(name)
             vein_end = end if kind == 'vein' else vein_end
         if kind == 'vein':
             if vein_bound == start and current['values']:
@@ -3822,6 +3955,7 @@ def _rows_of_sentence(notes, low, high, struck):
                             readings[at]['vein'] = (name, 'explicit')
                 elif current['vein'] != name:
                     readings[last]['others'].add(name)
+                named.discard(name)          # (the value's, bound after it: not named before the next one)
                 sentence_vein, vein_bound = name, None
                 binding = ROW_BINDING.match(read, end)
                 bound = (binding.end(), binding.group('prep') is not None)
@@ -3835,9 +3969,11 @@ def _rows_of_sentence(notes, low, high, struck):
             bound = vein_bound = None
             continue
         if kind == 'site':
-            if bound is not None and bound[0] == start:
+            after_value = bound is not None and bound[0] == start
+            if after_value:
                 owner = readings[last]['item']
                 if owner['site'] is None:
+                    named.discard(name)      # (the value's, bound after it: not named before the next one)
                     owner['site'], owner['strength'] = name, 'explicit'
                     for at in owner['values']:
                         readings[at]['site'] = (name, 'explicit')
@@ -3860,6 +3996,7 @@ def _rows_of_sentence(notes, low, high, struck):
                     if not current['values'] and current['site_at'] > current['vein_at'] else set())
             current = item(current['vein'] if not current['values'] else None)
             current['site'], current['alts'], current['site_at'] = name, alts, start
+            current['after_value'] = after_value     # (a level right after a value opening this item: it may be that one's)
             bound = vein_bound = None
             continue
         if name in current['units'] and not (CORRECTION_WORD.search(notes, current['firsts'][name], start)
@@ -3881,7 +4018,14 @@ def _rows_of_sentence(notes, low, high, struck):
             # and no junction places a vein there)
             vein = ('UNKNOWN', 'explicit')
         site = (current['site'], current['strength']) if current['site'] else (None, None)
-        readings[start] = {'vein': vein, 'site': site, 'others': set(current['alts']), 'item': current, 'seen': frozenset(named)}
+        # (named before it means since the value before it: in a run-on transcript every earlier item's vein and level
+        # were `seen`, a contradiction was relaxed for each, and review took any row's value for any row named earlier —
+        # round 17c's review, 1,355 wrong rows accepted in the row mirror's transcripts. Only an item whose level came right
+        # after the value before it keeps the whole sentence's: that level may be the other value's, and the value then has
+        # none — `… reflux of 1.9 seconds at the knee it's 4.8 millimeters` is held for the junction, never refused)
+        seen = named_all if current['after_value'] else named
+        readings[start] = {'vein': vein, 'site': site, 'others': set(current['alts']), 'item': current, 'seen': frozenset(seen)}
+        named = set()
         binding = ROW_BINDING.match(read, end)
         last, bound = start, (binding.end(), binding.group('prep') is not None)
         vein_bound = VEIN_BINDING.match(read, end)
@@ -3987,8 +4131,9 @@ def _side_verdict(field, value, own, notes, strict=False):
     # (one strike table per cited units, shared by every question citing them: `place_reading`'s memo is keyed by it)
     struck = note_memo(notes, ('own_strikes', _own_key(own)),
                        lambda: strikes([span for entry in own for span in superseded(entry)]))
-    places = [(at, cited_sentence(own, notes, at, span), gone) for at, span, gone in located(field, value, own)
-              if not gone] if value else []
+    reach = {}                       # (per cited sentence: every value in it has the same reach — round 17c's cost shapes)
+    places = [(at, reach[span] if span in reach else reach.setdefault(span, cited_sentence(own, notes, at, span)), gone)
+              for at, span, gone in located(field, value, own) if not gone] if value else []
     rows = row_places(field, places, notes, struck, strict, (unit_kind(field), value, _own_key(own))) if places else None
     if rows is not None:
         # The same place must be this row's AND this side's: a value the other leg writes for another row is not this
@@ -3998,7 +4143,7 @@ def _side_verdict(field, value, own, notes, strict=False):
             return 'row' if contradicted else 'row_unknown'
     words = False
     if not places and field.get('kind') == 'choice' and value:
-        places, words = [(at, cited_sentence(own, notes, at, span), gone)
+        places, words = [(at, reach[span] if span in reach else reach.setdefault(span, cited_sentence(own, notes, at, span)), gone)
                          for at, span, gone in located(field, value, own, words=True) if not gone], True
     if places:
         readings = []
@@ -4020,6 +4165,8 @@ def _side_verdict(field, value, own, notes, strict=False):
         # with a correction sentence), never against it (`The right leg is asymptomatic.` cited with `The left GSV
         # measures 5.0 mm`).
         definite = any(source == 'sentence' and primary in ('right', 'left') for primary, _, source in readings)
+        if not strict and own_sentence_other_side(field, value, notes, places, struck, words, mineish):
+            return 'side'
         if strict:
             if (primaries <= mineish) if words else (primaries & mineish):
                 return None
@@ -5225,7 +5372,7 @@ def copy_rank(field, value, unit, read):
     return 1 if governing(field, value, own, read, sides=False, hidden=False)[0] is None else 0
 
 
-def governing(field, value, own, read, sides=True, hidden=True, rivals=True):
+def governing(field, value, own, read, sides=True, hidden=True, rivals=True, whole=True):
     """What holds a candidate on its source, as (governing entries, reason), or (None, None): a cited heading line,
     the installed governors (`narrative_governors`), a cited sentence's own label or an earlier denying label in its
     paragraph (`own_frame`), a side only some readings give it (`side_verdict`, strict — not with `sides=False`: the
@@ -5289,10 +5436,27 @@ def governing(field, value, own, read, sides=True, hidden=True, rivals=True):
     found = [dict(entry) for entry in memo[key]] if memo[key] is not None else None
     if found is not None:
         return found, HELD['correction']
+    held = measurement_context(field, value, own) if value and field.get('kind') == 'measurement' else None
+    if held is not None:
+        return ([{'quote': e['quote'], 'start': e['start'], 'end': e['end'], 'after': False, 'same': True} for e in own],
+                HELD[held])
     if sides and rivals and value and field_row(field) and field_row(field)[1] is not None:
         found = row_rivals(field, value, own, read)
         if found:
             return found, HELD['conflict']
+    wider = whole_sentence_entries(field, value, own, read) if whole and value else None
+    if wider is not None:
+        # (the value's whole sentence, cited or not: only ever holds — its side is not read here, support reads that)
+        found, reason = governing(field, value, wider, read, sides=False, hidden=False, rivals=False, whole=False)
+        if found is None:
+            held = ('subject' if names_a_relative(field, value, wider)
+                    else 'timing' if planned_treatment(field, value, wider) else None)
+            if held is not None:
+                found, reason = wider, HELD[held]
+        if found is not None:
+            return ([{'quote': e['quote'], 'start': e['start'], 'end': e['end'], 'after': False,
+                      'same': any(o['start'] <= e['start'] < o['end'] or e['start'] <= o['start'] < e['end'] for o in own)}
+                     for e in found if 'quote' in e] or found), reason
     return None, None
 
 
@@ -5372,6 +5536,62 @@ FINDING_DENIED = re.compile(r'(?<![^\W\d_])(?i:denies|denied|denying|no|not|with
                             + r'of|never|absent)(?![^\W\d_])')
 #: An option that is itself a finding's absence (`reflux negative.`, `without evidence of …`, `and is absent.`).
 NEGATIVE_OPTION = re.compile(r'(?<![^\W\d_])(?i:no|not|without|negative|absent|none|normal)(?![^\W\d_])')
+
+
+#: A measurement written as an earlier study's, in its own clause (`… 6.1 mm at the saphenofemoral junction on the prior
+#: study`, `the previous duplex showed 6.1 mm`, `previously measured 6.1 mm`) — not one stating today's against it
+#: (`unchanged from the prior study`, `compared with the previous exam`, `the same as on the prior study`).
+PRIOR_STUDY = re.compile(r'(?<![^\W\d_])(?<!(?i:as) )(?i:(?:on|in|at|per)' + _GAP + r'(?:(?:the|her|his|their|an?)' + _GAP
+                         + r')?(?:prior|previous|earlier|last|old|outside|baseline)' + _GAP
+                         + r'(?:study|studies|exam|examination|scan|ultrasound|duplex|report|imaging|visit)'
+                         + r'|(?:prior|previous|earlier|last|old|outside|baseline)' + _GAP
+                         + r'(?:study|exam|examination|scan|ultrasound|duplex|report|imaging)' + _GAP
+                         + r'(?:showed|shows|demonstrated|measured|revealed|documented|reported|found)'
+                         + r'|previously' + _GAP + r'(?:measured|measuring|recorded|documented|reported))(?![^\W\d_])')
+
+
+def measurement_context(field, value, own):
+    """Why a measurement's own clause does not give it as today's definite value, for the pre-fill: a hedge before it in
+    its clause (`uncertain`: `possibly measures 6.1 mm`; not C17's `… 5.3 mm at the saphenopopliteal junction with possible
+    reflux`, the reflux's) or an earlier study's (`timing`: `PRIOR_STUDY`, where the question is
+    today's). The model's qualifiers read these first; this is what holds a model that missed them (round 17c's review:
+    `possibly measures` / `6.1 mm` and `… on the` / `prior study from 2023` both pre-filled). Only ever holds."""
+    today, prior_clauses = timings(field) == {'current'}, set()
+    for at, _, _ in located(field, value, own):
+        entry = next((e for e in own if e['start'] <= at < e['end']), None)
+        if entry is None:
+            continue
+        quote, here = entry['quote'], at - entry['start']
+        low, high = _clause_around(quote, here)
+        if _first_within(_hedge_spans(quote), low, here):
+            return 'uncertain'      # (before it: `possibly measures 6.1 mm`; not the next finding's, `6.1 mm with possible reflux`)
+        if today and (entry['start'], low, high) not in prior_clauses:
+            prior_clauses.add((entry['start'], low, high))       # (each clause once)
+            if _first_within(_prior_spans(quote), low, high):
+                return 'timing'
+    return None
+
+
+@sized_cache
+def _hedge_spans(quote):
+    """Every hedge of a quote, in order: read once, each value asking by bisection (per value, a clause of thousands of
+    values was searched thousands of times — round 17c's review, the round-16 cost shapes past 300 s)."""
+    spans = tuple((m.start(), m.end()) for m in HEDGE.finditer(quote))
+    return spans, tuple(start for start, _ in spans)
+
+
+@sized_cache
+def _prior_spans(quote):
+    spans = tuple((m.start(), m.end()) for m in PRIOR_STUDY.finditer(view(quote)))
+    return spans, tuple(start for start, _ in spans)
+
+
+def _first_within(table, low, high):
+    """Whether a match of `table` lies wholly within `low`..`high` (matches do not overlap: the first one starting at or
+    after `low` decides)."""
+    spans, starts = table
+    index = bisect.bisect_left(starts, low)
+    return index < len(spans) and spans[index][1] <= high
 
 
 def _clause_around(quote, at):

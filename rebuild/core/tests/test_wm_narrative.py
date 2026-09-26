@@ -273,6 +273,68 @@ class Sides(SimpleTestCase):
         spaced = notes.replace('at the\nsaphenofemoral junction without', 'at the\n\nsaphenofemoral junction without')
         self.assertEqual(review(spaced, 'measurement_1_1', '8.5 mm', right), 'side_unknown')    # (a blank line between)
 
+    def test_a_wrapped_tail_is_its_sentences_and_joined_labels_are_not_one_sentence(self):
+        """`… reflux in the` / `right leg.` ends its sentence (a limb's words on their own line, but the wrap joins them —
+        round 17c: stopped there, review refused 215 of the wrapped mirror's correct values); a label line the wrap joins
+        only because it ends in `A` or `no` is its own (`Patient name: SYNTHETIC PATIENT A` / `Indication: …`,
+        `… reflux: no` / `L GSV SFJ 4.7 mm, reflux: no` — read as one sentence, each held the other's answer)."""
+        tail = 'The great saphenous vein measures 8.5 mm at the saphenofemoral junction without reflux in the\nright leg.'
+        read, units = narrative.reading(tail, FIELDS, LABELS), narrative.units(tail, FIELDS, LABELS)
+        own = [narrative.unit_evidence(u) for u in units]
+        self.assertIsNone(narrative.support(BY_KEY['measurement_1_1'], '8.5 mm', own, tail, read['labels'], read['all_labels']))
+        self.assertEqual(narrative.support(BY_KEY['measurement_15_1'], '8.5 mm', own, tail, read['labels'], read['all_labels']),
+                         'side')
+        for notes, key, value, line in (
+                ('Patient name: SYNTHETIC PATIENT A\nIndication: Bilateral leg pain and swelling.', 'patient_name',
+                 'SYNTHETIC PATIENT A', 'Patient name: SYNTHETIC PATIENT A'),
+                ('Patient name: SYNTHETIC PATIENT A\nIndication: Bilateral leg pain and swelling.', 'sdt_-1124008635',
+                 'Leg pain', 'Indication: Bilateral leg pain and swelling.'),
+                ('Venous worksheet\nR SSV SPJ 3.5 mm, reflux: no\nL GSV SFJ 4.7 mm, reflux: no\nL SSV SPJ 3.0 mm, reflux: no',
+                 'measurement_15_1', '4.7 mm', 'L GSV SFJ 4.7 mm, reflux: no')):
+            with self.subTest(line):
+                answers, _ = decide(notes, {key: (value, [line], {})})
+                self.assertEqual(status(answers, key), ('supported', value))
+
+    def test_a_cited_label_of_the_next_block_gives_a_value_no_side(self):
+        """Round 17c's own review: rows with no stop run on, as the notes' sentence, into the next block's label, and the
+        cited sentence was read through it — review accepted the left for a value of the right's block."""
+        notes = ('Venous duplex, standing.\nRight lower extremity: Negative for DVT.\nGSV SFJ 3.2 mm, reflux 1.6 s\n'
+                 'GSV knee 7.3 mm, reflux 1.7 s\nSSV SPJ 3.9 mm, no reflux\nLeft lower extremity: Deep veins normal.\n'
+                 'GSV SFJ 4.9 mm, reflux 2.1 s\nSSV SPJ 3.9 mm, no reflux')
+        read, units = narrative.reading(notes, FIELDS, LABELS), narrative.units(notes, FIELDS, LABELS)
+        right_line = next(u for u in units if u['quote'] == 'SSV SPJ 3.9 mm, no reflux')        # (the right block's copy)
+        label = next(u for u in units if u['quote'].startswith('Left lower extremity'))
+        own = [narrative.unit_evidence(label), narrative.unit_evidence(right_line)]
+        self.assertEqual(narrative.support(BY_KEY['measurement_19_1'], '3.9 mm', own, notes, read['labels'], read['all_labels']),
+                         'side')
+        self.assertIsNone(narrative.support(BY_KEY['measurement_5_1'], '3.9 mm', own, notes, read['labels'], read['all_labels']))
+
+    def test_a_wrapped_transcript_cited_whole_is_read_as_its_unwrapped_note(self):
+        """A transcript line the reader may take for a heading (`… measures 4.0` / `millimeters`) is no bound on the cited
+        sentence: bounded there, review took the right from an earlier cited line and accepted the left's 4.0 mm for the
+        right, which the unwrapped note refuses."""
+        text = ('starting with the right leg the great saphenous vein at the proximal thigh measures 7.5 millimeters with '
+                'reflux of 1.4 seconds the great saphenous vein at the knee measures 6.1 millimeters with reflux of 1.5 '
+                'seconds the left leg has some spider veins the great saphenous vein at the saphenofemoral junction measures '
+                '8.1 millimeters with reflux of 2.7 seconds the great saphenous vein at the proximal thigh measures 7.4 '
+                'millimeters with reflux of 3.9 seconds the small saphenous vein at the saphenopopliteal junction measures '
+                '4.0 millimeters')
+        words, lines, line = text.split(), [], ''
+        for word in words:                                  # (wrapped at 60 characters)
+            if line and len(line) + 1 + len(word) > 60:
+                lines.append(line); line = word
+            else:
+                line = (line + ' ' + word).strip()
+        wrapped = '\n'.join(lines + [line])
+        for notes in (text, wrapped):
+            with self.subTest(wrapped=notes is wrapped):
+                read, units = narrative.reading(notes, FIELDS, LABELS), narrative.units(notes, FIELDS, LABELS)
+                own = [narrative.unit_evidence(u) for u in units]
+                self.assertIsNone(narrative.support(BY_KEY['measurement_19_1'], '4.0 mm', own, notes, read['labels'],
+                                                    read['all_labels']))
+                self.assertEqual(narrative.support(BY_KEY['measurement_5_1'], '4.0 mm', own, notes, read['labels'],
+                                                   read['all_labels']), 'side')
+
     def test_titles_state_nothing_whatever_their_punctuation(self):
         for text, states in [('RIGHT LOWER EXTREMITY VENOUS DUPLEX.', False), ('EXAM: RIGHT LOWER EXTREMITY VENOUS REFLUX STUDY', False),
                              ('VENOUS INSUFFICIENCY EVALUATION, RIGHT LEG', False),
@@ -360,6 +422,31 @@ class MeasurementRows(SimpleTestCase):
         answers, _ = decide(notes, {'measurement_3_2': ('1900 ms', [notes], {}), 'measurement_1_1': ('4.8 mm', [notes], {})})
         self.assertEqual(answers['measurement_3_2']['held_candidate']['reason'], narrative.HELD['row'])
         self.assertEqual(answers['measurement_1_1']['held_candidate']['reason'], narrative.HELD['row_unknown'])
+
+    def test_a_run_on_transcripts_explicit_item_is_refused_for_another_row(self):
+        """Round 17c's review, the row mirror: a vein and level named earlier in a run-on sentence — another item's, with
+        values between — relaxed every contradiction, and review took any row's value for any row named before it (1,355
+        of the transcripts' wrong-row offers). Named before a value is now since the value before it."""
+        notes = ('on the right the great saphenous vein at the proximal thigh measures 6.4 millimeters with reflux of 1.1 '
+                 'seconds the great saphenous vein at the knee measures 5.2 millimeters with reflux of 1.9 seconds the small '
+                 'saphenous vein at the saphenopopliteal junction measures 5.6 millimeters')
+        read = narrative.reading(notes, FIELDS, LABELS)
+        own = [narrative.unit_evidence(u) for u in narrative.units(notes, FIELDS, LABELS)]
+        for key, value, verdict in (('measurement_3_1', '5.6 mm', 'row'), ('measurement_2_1', '5.2 mm', 'row'),
+                                    ('measurement_3_1', '6.4 mm', 'row'), ('measurement_2_1', '6.4 mm', None),
+                                    ('measurement_3_1', '5.2 mm', None), ('measurement_5_1', '5.6 mm', None)):
+            with self.subTest((key, value)):
+                self.assertEqual(narrative.support(BY_KEY[key], value, own, notes, read['labels'], read['all_labels']),
+                                 verdict)
+        # (a vein bound right after a value is that value's: not named before the next one — `… is seen in the anterior
+        # accessory saphenous vein, and the great saphenous vein measures 5.6 mm …` is no reading of the accessory's)
+        notes = ('Reflux of 1.2 seconds is seen in the right anterior accessory saphenous vein, and the great saphenous vein '
+                 'measures 5.6 mm at the saphenofemoral junction.')
+        read = narrative.reading(notes, FIELDS, LABELS)
+        own = [narrative.unit_evidence(u) for u in narrative.units(notes, FIELDS, LABELS)]
+        self.assertEqual(narrative.support(BY_KEY['measurement_7_1'], '5.6 mm', own, notes, read['labels'], read['all_labels']),
+                         'row')
+        self.assertIsNone(narrative.support(BY_KEY['measurement_1_1'], '5.6 mm', own, notes, read['labels'], read['all_labels']))
 
     def test_a_site_is_its_items_and_a_parallel_reading_shares_it(self):
         for notes, rows in (
@@ -674,6 +761,79 @@ class WeakSetEvidence(SimpleTestCase):
                 notes = time_now + '\n\nSummary: left GSV at the SFJ reflux ' + other + '.'
                 answers, _ = decide(notes, {'measurement_15_2': ('900 ms', [time_now], {})})
                 self.assertEqual(answers['measurement_15_2']['status'] == 'conflict', held, answers['measurement_15_2'])
+
+
+class UncitedGoverning(SimpleTestCase):
+    """Round 17c's review, acceptance question 3: citation limits what can support an answer, never what can govern it.
+    A hard-wrapped sentence cited only at the line holding the value is governed by the whole of it; a measurement's own
+    clause is read for a hedge before it and for an earlier study's attribution."""
+
+    WRAPPED = (
+        ('The right great saphenous vein measures 6.1 mm at the saphenofemoral junction on the\nprior study from 2023; it '
+         'was not re-measured today.', 'measurement_1_1', '6.1 mm',
+         'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction on the'),
+        ('The patient reports ankle swelling but denies\nleg pain and heaviness.', 'sdt_-1124008635', 'Leg pain',
+         'leg pain and heaviness.'),
+        ('The right great saphenous vein at the saphenofemoral junction possibly measures\n6.1 mm; image quality was poor.',
+         'measurement_1_1', '6.1 mm', '6.1 mm; image quality was poor.'),
+        ("Her mother's right great saphenous vein at the saphenofemoral junction measures\n6.1 mm.", 'measurement_1_1',
+         '6.1 mm', '6.1 mm.'),
+        ('Plan: repeat the study; the right great saphenous vein at the saphenofemoral junction is expected at\n6.1 mm.',
+         'measurement_1_1', '6.1 mm', '6.1 mm.'),
+    )
+
+    def test_a_wrapped_sentence_cited_at_its_value_is_governed_whole(self):
+        for notes, key, value, line in self.WRAPPED:
+            for text, cited in ((notes, line), (notes.replace('\n', ' '), None)):
+                with self.subTest(text):
+                    quote = cited or next(u['quote'] for u in narrative.units(text, FIELDS, LABELS)
+                                          if value.split()[0].lower() in u['quote'].lower())
+                    answers, _ = decide(text, {key: (value, [quote], {})})
+                    self.assertEqual(answers[key]['status'], 'conflict', answers[key])
+
+    def test_the_governing_words_must_govern_the_value(self):
+        for notes in ('Unchanged from the prior study, the right great saphenous vein measures 6.1 mm at the saphenofemoral '
+                      'junction.',
+                      'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction, the same as on the '
+                      'prior study.',
+                      'Compared with the previous exam, the right great saphenous vein measures 6.1 mm at the saphenofemoral '
+                      'junction.',
+                      'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction as on the prior study.',
+                      'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction; a possible thrombus is '
+                      'seen in a tributary.',
+                      'The right small saphenous vein measures 5.3 mm at the saphenopopliteal junction with possible reflux '
+                      'of approximately 550 ms.',
+                      'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction, unchanged from the\n'
+                      'prior study.'):
+            with self.subTest(notes):
+                key = 'measurement_5_1' if 'small' in notes else 'measurement_1_1'
+                value = '5.3 mm' if 'small' in notes else '6.1 mm'
+                quote = next(u['quote'] for u in narrative.units(notes, FIELDS, LABELS) if value.split()[0] in u['quote'])
+                answers, _ = decide(notes, {key: (value, [quote], {})})
+                self.assertEqual(status(answers, key), ('supported', value))
+
+    def test_a_measurement_attributed_to_an_earlier_study_or_hedged_is_held(self):
+        for notes, reason in (('The right great saphenous vein measures 6.1 mm at the saphenofemoral junction on the prior '
+                               'study.', 'timing'),
+                              ('The prior duplex showed the right great saphenous vein measuring 6.1 mm at the '
+                               'saphenofemoral junction.', 'timing'),
+                              ('The right great saphenous vein possibly measures 6.1 mm at the saphenofemoral junction.',
+                               'uncertain')):
+            with self.subTest(notes):
+                answers, _ = decide(notes, {'measurement_1_1': ('6.1 mm', [notes], {})})
+                self.assertEqual(answers['measurement_1_1']['held_candidate']['reason'], narrative.HELD[reason])
+
+    def test_review_refuses_the_other_leg_when_the_uncited_rest_of_the_sentence_names_it(self):
+        notes = ('The right great saphenous vein measures 7.0 mm at the saphenofemoral junction.\n'
+                 'The great saphenous vein measures 6.1 mm at the\nsaphenofemoral junction in the left leg.')
+        read, units = narrative.reading(notes, FIELDS, LABELS), narrative.units(notes, FIELDS, LABELS)
+
+        def review(key, lines):
+            own = [narrative.unit_evidence(u) for u in units if u['quote'] in lines]
+            return narrative.support(BY_KEY[key], '6.1 mm', own, notes, read['labels'], read['all_labels'])
+        first = ['The great saphenous vein measures 6.1 mm at the']
+        self.assertEqual(review('measurement_1_1', first), 'side')      # (the right, from the sentence before: refused)
+        self.assertIsNone(review('measurement_15_1', first + ['saphenofemoral junction in the left leg.']))
 
 
 class Corrections(SimpleTestCase):

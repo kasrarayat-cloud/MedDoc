@@ -74,6 +74,9 @@ Two kinds of rule, and the difference is who can overrule them:
 | **governing:** a choice whose option says more than its cited units (`option_reason`): an option listing the deep veins its finding is in (`with evidence of an acute DVT of CFV, FV, POP V, PTV.`) needs each of them joined to a finding by nothing but list words (`thrombus in the popliteal vein`, `DVT of the common femoral, femoral, popliteal and posterior tibial veins`; not `CFV and FV compressible`, nor `… with CFV unremarkable`); a qualified option (`retained small saphenous vein`, `duplicate …`) needs its qualifier described in the clause naming that vein, and the plain one beside it is a wording decision where it is (`Previously treated SSV has recanalized`; not `retained right great saphenous vein …; left small saphenous vein is absent`) — round 17, the held-out H06 | held (`overstated`, `wording`; the original template is unchanged, and leaving it blank is an answer) |
 | **governing:** a choice whose cited sentences name nothing clinical at all — no vein, level, side or finding, nor the option's own words (`Venous duplex performed today; images saved for review.` for `Bilateral Detailed`); whose finding is denied, directly (within four words, no number between) and at every place its words are written (`She denies leg swelling or pain.` for `Leg pain`; not `…, reflux is absent; … with reflux of 1.4 seconds`, nor an option that is itself an absence); or hedged in its clause at every place it is written (`possible reflux …; this is questionable` for `reflux positive.`; not one plain statement of it) — `choice_evidence_reason`, round 17 | held (`absent`, `negative`, `uncertain`) |
 | **governing:** a rival: another live value the notes give this measurement's row on this side, in another sentence or the cited one (`The left great saphenous vein measures 6.9 mm at the saphenofemoral junction.` against `Summary: left GSV at the SFJ 9.6 mm`; in the cited sentence also one of the row's vein with no level written, `…, repeat measurement 9.6 mm`; not a value a correction replaces, a prior study's or a plan's — the correction and governing readers decide those; a bound is one where the answer is outside it, `less than 3 mm` against 6.9 mm, and not where it is within, `less than 10 mm`; an estimate, a range or an alternative that is not the answer is one, `about 7 mm`, `6-8 mm`), or, for a sided choice, another option of four or more words that states a finding, written as such on this side (`the right deep venous system is without evidence of obstruction or insufficiency` against `chronic DVT of the right CFV, FV, POP V and PTV`) — `row_rivals`, `option_rivals`, round 17 | held (`conflict`, the rival shown) |
+| **governing:** the value's whole sentence as the reader wraps it, within its block, where only part of it was cited (`whole_sentence_entries`): every governing reader above, and the relative and planned-treatment backstops, read over it as well — citation limits what can support an answer, never what can govern it (`Her mother's right great saphenous vein … measures` / `6.1 mm.`, `… but denies` / `leg pain and heaviness.`, `Plan: … is expected at` / `6.1 mm.`, each with only the value's line cited) — round 17c's review | held |
+| **governing:** a measurement's own clause: a hedge before the value (`possibly measures 6.1 mm`; not the next finding's, `… 5.3 mm … with possible reflux`) or the value attributed to an earlier study (`… 6.1 mm on the prior study`, `the prior duplex showed …`, `previously measured …`; not `unchanged from the prior study`, `compared with the previous exam`, `the same as on the prior study`) — `measurement_context`; the model's qualifiers read these first, this holds a model that missed them | held (`uncertain`, `timing`) |
+| **support:** the value's whole sentence, cited or not, gives it only the other side (`The great saphenous vein measures 6.1 mm at the` cited alone, `saphenofemoral junction in the left leg.` on the next line, for the right) — `own_sentence_other_side`, round 17c's review | refused at review (`side`) |
 | `subject` unclear, a relative before it in its sentence (in a transcript's run-on sentence, the 25 words before it) or after it within its sentence and 12 words (`Leg ulcer, per mother, not the patient.`; not one with a finding of its own there, `… because her mother has varicose veins` — its own verb that is not a copula, nothing tying it back to the value: `a leg ulcer that her mother has had`, `her mother has it`/`this`/`these`, `her mother is actually the affected person` and the value's words again all hold; `family physician` is not one; a relative in the NEXT sentence is the model's `subject` to read), `certainty` uncertain, `conflict`, a timing that does not fit the question (previous treatment: prior, its outcome also current; a clinical indication: current or prior; demographics: any; everything else: this examination), or a previous treatment written as planned (`scheduled for ablation`, `recs: EVLA`) | held |
 | **governing:** a heading or pointer the installed vocabulary says changes meaning (a denial, a family history, a hypothetical) holds its block, sub-headings and a spaced list included, to a new prose paragraph; any heading with a word nobody listed fails closed the same way | held with the governing lines |
 | **governing:** a SECTION heading or label (`section_holds`) holds only what its content cannot answer: a plan holds everything (a plan joined to the assessment, `Assessment and plan:`, is the assessment's); a history or prior study holds all but a previous treatment and a clinical indication; a treatment/procedure section that does not say it was before holds a previous treatment; a complaint section (`HPI:`, `CC:`, `REASON FOR EXAM:`, `S:`) holds this examination's findings; demographics are never held by a section; a structural heading (sides, limbs, this form's veins and rows, report sections) holds nothing, and one naming the question's own section does not hold that question | held with the governing lines |
@@ -110,7 +113,13 @@ unit's line (`… it measures 6.9` / `mm without reflux.`) is one quantity (the 
 break between them, in the parent and the engine alike) in one unit (the narrative units join the two lines; the
 labelled and tab contracts' units are unchanged). The pre-fill needs a place read for the row (and then its side is read from that
 place only); review refuses only a value every place of which is another row's and whose sentence names the row's vein
-and level nowhere before it — a refusal is final, so anything less certain is the clinician's. The same reading serves
+and level nowhere before it — a refusal is final, so anything less certain is the clinician's. Named before it means since the value
+before it — in its own item or an insertion — not anywhere earlier in its sentence: in a run-on transcript every
+earlier item's vein and level were, each contradiction was relaxed, and review took any row's value for any row named
+before it (round 17c's review: 1,355 wrong-row offers accepted in the row mirror's transcripts). An item whose level
+came right after the value before it keeps the whole sentence's (`… reflux of 1.9 seconds at the knee it's 4.8
+millimeters`: that level may be the other value's, and the value then has none — held for the junction, never
+refused). The same reading serves
 generation, the page, the save, review and finalization (`side_verdict`, which every one of them calls).
 
 **Sides.** Read from the text over a whole-text index (a search cut inside a word would read `both` in `bothersome`);
@@ -154,7 +163,12 @@ the last of them (`The great saphenous vein measures 6.1 mm at the` / `saphenofe
 reflux in` / `the left leg.`, all cited, is read as its unwrapped note is; round 17c: read in the value's line alone,
 review refused 1,209 of the wrapped mirror's answers with their whole sentence cited, the left leg's value as the
 right's, and accepted it on the right's row; a line not cited, or one after a blank line, is still not read:
-`cited_sentence`) — as the engine reads it. A side word of the sentence further back, with none within the
+`cited_sentence`), within the value's block — never into a later cited line that opens a block of its own (a heading, a
+limb's label, a label before a colon: `SSV SPJ 3.9 mm, no reflux` / `Left lower extremity: Deep veins normal.`, both
+cited, read the left for a value of the right's block — round 17c's own review) unless the wrap joins it to the line
+above (`… reflux in the` / `right leg.`), nor back past the line opening the value's — as the engine reads it. Only the
+cited text carries a side to acceptance; the value's whole sentence, cited or not, can still refuse it
+(`own_sentence_other_side`) and govern it (`whole_sentence_entries`). A side word of the sentence further back, with none within the
 reach, is read once where it stands: the value is only held, that word's reading its candidates — the paragraph's too
 where that reading is no side (round 15: `… now moving to the left leg the deep veins are compressible` / 18 lines / `…
 5.1 millimeters` was read by neither the place nor its context, and the paragraph's right was pre-filled); the
@@ -775,14 +789,45 @@ notes, so that needs a compromised parent.
   their unwrapped notes are — a side after the value, *Known limits*), refused at review 1,209 → 17 and none newly
   refused (the 17 are one answer at 17 widths whose citation the generator maps to the other leg's copy of a sentence
   both legs write word for word — a refusal that is right), wrong-leg pre-fills 0, the other leg's value accepted at
-  review 11,932 → 11,525 (413 fewer, 6 more: unpunctuated transcripts whose cited lines name both legs, which their
-  unwrapped notes already accept — review's side rule is that some reading gives it). Batteries: battery 3 100 → 102
-  and lens 2's round-15 battery 111 → 112 (the side a cited line of the value's sentence names), gen2 1,175 → 1,191;
-  the rest unchanged. The bound, cited-sentence rival and cost changes moved no answer of any of these. Mutation
+  review 11,932 → 11,525 (**corrected by round 17d: those two figures counted every mirror the generator never
+  evaluated — the other leg's row already had an answer of its own — as accepted; over the 5,795 it did evaluate, 1,072
+  → 665**). Batteries: battery 3 100 → 102 and lens 2's round-15 battery 111 → 112 (the side a cited line of the
+  value's sentence names — **round 17d: battery 3's two were read across a heading, and went back to held**), gen2
+  1,175 → 1,191; the rest unchanged. The bound, cited-sentence rival and cost changes moved no answer of any of these. Mutation
   proofs, the unmutated module FIRST: 14 mutants over the bound, cited-sentence and index rules, all killed (a first
   batch stopped at its baseline, which a pinned row the new rival rule had legitimately changed failed — no kill was
   counted); and 3 over the cited wrapped sentence (read in the value's line only; every line of the notes' sentence read, cited or not — killed by round 17's other-row refusal; a blank line joining), all killed. Each refactor was also compared against the old reader on 28,000-30,000 random inputs: 0 differences
   (planted controls: 267-673).
+  Round 17d (the independent review's acceptance questions, answered on the round-17c candidate `3b943982` by the
+  author while the review itself was blocked — not independent): **(1) rows.** A row mirror offered each generated value,
+  with its own citation, to every other named row of its leg and column (34,466 offers, unwrapped and at four widths):
+  0 wrong-row pre-fills on `3b943982` and now; review accepted 2,315, since a vein and level named anywhere earlier in a
+  run-on sentence relaxed every contradiction — now 359, all one generator style (a vein carried from a sub-heading,
+  offered to the accessory's row at the same level: the clinician's, *Known limits*). **(2) Review.** A clinician's own
+  answer is stored `edited`, generation's `supported`, and the page badge shows which; review never records the other
+  leg's value as `supported`. Of 5,795 mirrored answers evaluated, 0 are pre-filled on the wrong leg and 580 are
+  accepted at review as the clinician's choice (561 letters whose sentence compares the legs, `The left leg is more
+  swollen, and the great saphenous vein measures …`; transcripts with a side after the value, `… measures 5.1
+  millimeters on the right leg there is no reflux …`, or the same value on both legs; 2 labelled). **(3) Uncited lines.**
+  A relative, a denial, a plan, a hedge and a prior study on the uncited part of the value's own wrapped sentence all
+  pre-filled; each now holds (`whole_sentence_entries`, `measurement_context`), and review refuses the other leg where
+  the uncited rest of the sentence names it (`own_sentence_other_side`). `3b943982`'s own cited-sentence rule was wrong
+  twice and is repaired: it read across worksheet rows into the next block's label (review accepted the left for a
+  value of the right's block), and, bounded by the reader's wrapped-line run instead, it lost transcripts whose lines
+  the reader takes for headings. **(4) The 17 harness refusals.** The generator's citation mapping takes the first unit
+  a needle's text matches; four picks in two notes name a sentence both legs write word for word, and for the left
+  leg's two the first copy is the right leg's. The original results are kept (`g16-r34`); replayed with an
+  order-aware mapping (the first copy after the previous needle's unit), the left SSV of `G096 letter` is pre-filled at
+  16 of 18 variants (2 held by the bare-negative rule on `The left leg is asymptomatic,`) and accepted at review at all
+  18, and `G097 labelled`'s is pre-filled and accepted; with the original mapping both are refused — right for the copy
+  cited, and `G097`'s had been ACCEPTED on `3b943982` (the next block's label read into the cited sentence), the
+  review defect repaired above. Benchmarks unchanged in every category; batteries as round 17c's less battery 3's two;
+  the wrapped mirror 13,531 pre-filled and 17 refused as round 17c; cost at or below round 17c's on every ReviewCost
+  shape once the new readers index their spans and each cited sentence's reach is read once per citation (the round-16
+  and round-14 shapes had passed their limits: 7.0 s on the latter). Mutation proofs, the unmutated module first: 15 mutants over these rules,
+  all killed — two only after a test was added for the shape they changed (a comparison in the value's own clause; a
+  vein bound after one value, then another value). Each new test was shown to fail without its repair (on the
+  earlier reader, or on the mutant that reverts it).
 - **Cost.** The reader answers every per-place question by bisection over positions read once per text (sides, clause
   breaks, digits, words, numbers, quantities by unit, relatives, paragraphs, lines), the backtracking patterns are
   atomic, a correction's reach, its struck spans and the governors' blocks are read once per unit or note, what a
@@ -902,6 +947,14 @@ Every one of these fails closed (a hold, or a statement the clinician must sourc
   be another finding's): an unnecessary hold, older than round 17, which review accepts. Round 17's wrapped-value join
   made 87 wrapped answers read as their unwrapped note already did (the wrap had cut that side off the unit), and round
   17c's cited wrapped sentence 341 more (their side had been taken from a neighbouring sentence).
+- **Round 17d, what is not read.** A label line whose value runs on to the next line (`Clinical indication: she
+  denies` / `leg pain and swelling.`) is a label, not a wrapped sentence, so its denial does not reach the line after it.
+  A hedge after the value (`6.1 mm (possibly artifact)`) and a year alone (`9.6 mm in 2023`) are not read by
+  `measurement_context`; its earlier-study wording is a closed list of attributions. A vein carried from a sub-heading
+  (`Great saphenous vein` / `SFJ 5.6 mm`) is not refused for the accessory's row at the same level: review accepts the
+  clinician's choice there (359 of the row mirror's 34,466 wrong-row offers); none is pre-filled. Review accepts the
+  other leg where a reading gives it — a sentence comparing the legs, a side after the value in a run-on — as the
+  clinician's decision, stored `edited`.
 - **Options (round 17), what they read.** The deep-vein list reads CFV, FV, the popliteal and posterior tibial veins by
   name and abbreviation; an option listing others is not read as a list. The qualifier evidence is a closed list of
   treatment and duplication words in the vein's clause: a qualifier the notes describe otherwise leaves the plain option
