@@ -976,6 +976,34 @@ notes, so that needs a compromised parent.
   now open with it. Ten rules no test separated are now pinned by the notes that do; one is equivalent by
   construction and kept as a second guard (an employee's statement ticks are refused by the role check before the
   save's own `reviewed=False`). Rerun: the other 45 killed, each by an assertion, none by a crash.
+  Round 19 — a focused refutation pass over round 18's repairs (`f01107aa..207a26a8`, tag `wmn-candidate-r18-207a26a8`):
+  four sealed read-only lenses (reader releases; the page; cost; the campaign runner), every finding verified by a separate
+  agent and reproduced here. 23 findings, every one confirmed (11 HIGH, 10 MEDIUM, 2 LOW as the verifiers assessed them), and most were round 18's own
+  repairs: setting a side apart by changing where a value is PLACED dropped a rival that named it (`Repeat (the right leg
+  was re-examined standing): great saphenous vein 9.6 mm …` let the right's 7.4 mm pre-fill) and refused correct values
+  at review (`except the right great saphenous vein, which measures 9.6 mm`); the side-item split's list of what names a
+  limb leaked (`… without reflux` / `left thigh.` gave the value the right leg); dropping the check beside the value
+  released `6.1 mm maybe, reflux 2.1 s`; stopping each value's row window at the next value put an accessory vein's 1.8 s
+  two lines on onto the great saphenous vein's row; narrowing what is no vein released `9.6 mm, oval lymph node`; the
+  title-date rule skipped a real title with a subtitle and took an earlier study's date; a bare `(left).` below the value
+  was an item's marker (older); and `finding_context` read one window per located word over every date of the unit
+  (211 s at 49,578 characters). Repaired, each toward a hold: a set-apart side places what it placed on `f01107aa`, and
+  the sentence is held instead (measurements, sided choices and statements) with its value a rival for either leg — an
+  exclusion or contrast that owns its clause keeps its side; the side-item split is reverted; `maybe`/`perhaps` first
+  after a value holds it; a line's values share the window of its LAST value; the loose not-a-vein form holds the value's
+  own row while only the narrow one drops a rival; a title-shaped date later than every certain one makes the study's
+  date unknown; a side bracket marks an item only when a value follows it on its line; windows deduplicated, dates
+  bisected, the unexamined rule read once per sentence (211 s → 0.6 s, 37 s → 1.0 s, 7.4 s → 1.5 s at 50,000
+  characters, against `f01107aa`'s 0.4–1.3 s). The page: an employee's save keeps the clinician's decision whole where
+  the wording is unchanged (a browser posts nothing for the disabled basis box — the rendered-form test helper posted it,
+  so the round-18 test could not see the loss; a browser-faithful form now drives it); the `&` blocker names a spelling
+  that completes; a cleared answer reads `emptied by`. The runner: see *Live verification* and the offline bullet below.
+  Measured, row for row against `f01107aa`: benchmarks, all six batteries (battery 4's ten shorthand pre-fills are held
+  again with the split reverted), both generators, the wrapped-leg mirror and the row mirror are IDENTICAL; review dead
+  ends are `f01107aa`'s 40 of 289 probe rows, none new (round 18's reduction went with its reverted placement). On
+  `207a26a8` the round-19 class fails 31 rows; on `f01107aa` only the five bare side brackets, which it also
+  pre-filled. Mutation proofs: 22 mutants (reader, page, runner), the unmutated suites first, all 22 killed by an
+  assertion.
 - **Cost.** The reader answers every per-place question by bisection over positions read once per text (sides, clause
   breaks, digits, words, numbers, quantities by unit, relatives, paragraphs, lines), the backtracking patterns are
   atomic, a correction's reach, its struck spans and the governors' blocks are read once per unit or note, what a
@@ -1059,6 +1087,40 @@ notes, so that needs a compromised parent.
 - **The real workflow**: `test_wm_workflow.WMNarrativeWorkflow` (CI, real Word runtime): retained narrative response
   → generation → the page as rendered → decisions → finalization → export into the unchanged original; forged
   narrative answers refused at fill.
+- **The local 5 s guard (round 18's reconciliation; the failed result is kept, the threshold unchanged).** On this
+  shared host the full core suite of `f01107aa` failed `ReviewCost.test_round_13_a_whole_leg_unexamined_is_read_once_per_sentence`
+  at 5.634 s against its 5.0 s wall limit; CI's GitHub-hosted runners passed it. A controlled comparison — the test's
+  own workload in fresh processes, interleaved and order-rotated, 24 samples per commit, CPU and wall time recorded —
+  gave `f01107aa` 4.38 s CPU median (4.08–4.89), its CI-green predecessor `538d7dae` 4.46 s (4.20–4.94), `3a6f88a4`
+  4.32 s, no sample over 5 s at host loads of 3 to 13; the two full suites run side by side in one window BOTH failed
+  the guard (`538d7dae` 5.94 s, `f01107aa` 5.58 s). The candidate is not slower than the commit before it; the
+  failure is contention (co-tenant test runs, swap full) against a guard with about 12% headroom in isolation — spent
+  before this candidate (`e95bab90`: 3.44 s). That capacity limit stays: on this host under load the 5 s guard (and
+  the 0.25 s title guard, 0.21–0.30 s on a first call for every commit) is not a reliable measure; CI is.
+  Round 18's tree (`207a26a8`) against `f01107aa` the same way in one interleaved window: 4.25 s CPU median (4.01–4.65)
+  against 4.32 s (4.05–4.74); round 19's (`f920f7ab`): 4.40 s (4.14–4.75) against 4.40 s (4.20–4.66), 24 samples each,
+  none over 5 s — the repairs cost this shape nothing. Their full core suites on this host failed the same guard at
+  5.20 s and 5.35 s (the latter beside this session's own mutation batch, row-diff and runner validation, load 8); the
+  whole reader module run alone passed it.
+- **The live campaign's runner, offline (no provider request possible).** `ops/wm_narrative_campaign_offline.py` on `f920f7ab`
+  drives the real runner through the candidate's product path (the blank form uploaded through the page, the page's
+  quote, Generate, `run_one`, settlement, the validator, the page) against the loopback mock with retained careful
+  responses and a fixed non-secret marker: all 18 scenarios pass and no scenario database is left (14 on `207a26a8`;
+  round 19 added the four interruptions its focused pass found mishandled — a kill after Generate queued the job and
+  before the worker, which now cancels that job through the product so it can never run under the next attempt; a
+  wrong-model answer and a 401, each followed by a kill, now recovered with the model and the error class the product
+  recorded; and a SIGTERM as the answer lands, after which the draft is scored before the verdict). A clean stage: 5
+  requests, provider exposure $0.502 (with the 1.1 margin), wallet $0.685, a replay file and a score per answer. A wrong
+  answer stops after its case is scored; one transport failure is retried once, the failed attempt counted at its $0.329 maximum; two consecutive
+  transport failures, or a third with both retries used, stop (three unsettled attempts: exposure $1.19); a 401 stops
+  without retry; an unusable answer is settled and absorbed (the provider paid, the customer not); a cost above the
+  quoted maximum, another model, and key-shaped text in evidence each stop. A kill mid-request is recorded on restart
+  as `interrupted_unknown` with its job and counted at its maximum, its case then retried as a retry; a kill after
+  the worker adopted is recovered from the job record and scored, nothing resent. Live mode without its committed
+  declaration or outside its fixed evidence place, stage 2 before a stage-1 PASS, a re-run of a stage with a verdict
+  and a non-loopback offline provider are refused before any request. Every received request was a ledger attempt
+  carrying only the offline marker, the declared model and `max_tokens`; exposure and wallet recompute exactly from
+  the ledger and the exported database rows.
 
 ## Known limits (this candidate does not solve them)
 
@@ -1343,7 +1405,8 @@ Every one of these fails closed (a hold, or a statement the clinician must sourc
     vein measures 6.8 mm (AASV competent)`, it pre-fills); a hedge before a cause (`likely from chronic reflux`); a label
     whose not-today word is not its first (`Her prior study:`); and a choice or statement sentence carrying any date where
     the study's own date cannot be read. (Each verified on `207a26a8`.)
-  - *Review dead ends (all already on `f01107aa`):* a line opening with a small letter goes on from the line above
+  - *Review dead ends — 40 of the 289 rows of round 18's clinician-decision probe, the same 40 as on `f01107aa`:* a line
+    opening with a small letter goes on from the line above
     when that line has no stop, so a sentence about a leg or a side item on the next line (`GSV SFJ 7.4 mm, reflux 2.1 s`
     / `lt. leg not examined.`, `left leg scanned last month.`, `rt. GSV SFJ 7.4 mm, reflux 2.1 s` / `lt. GSV SFJ 5.0 mm`)
     is read with it, and review refuses the right value it now names the left beside. The pre-fill holds. Ending the
