@@ -348,7 +348,7 @@ def special_cases(args, admin, number):
             ('its case retried as a retry', rows[1][0]['case'] == rows[0][0]['case'] and rows[1][0]['kind'] == 'retry',
              [r[0]['kind'] for r in rows]),
             ('the resumed stage completed', code == 0, code),
-        ]
+        ] + evidence_checks(s)       # (the killed attempt's request was captured before it was sent; recovery wrote its entry)
     except Exception as error:
         checks.append(('scenario ran', False, f'{type(error).__name__}: {error}'))
     finally:
@@ -374,7 +374,7 @@ def special_cases(args, admin, number):
             ('scored and stopped as a wrong answer', code == 3 and any('WRONG' in x for x in verdict['stops']), verdict['stops']),
             ('nothing resent', len(s.requests()) == 1 and len(rows) == 1, (len(s.requests()), len(rows))),
             ('its wallet charge is in the ledger', Decimal(first.get('wallet_charged') or '0') > 0, first.get('wallet_charged')),
-        ]
+        ] + evidence_checks(s)       # (the adopted answer's request, response and replay, retained by recovery)
     except Exception as error:
         checks.append(('scenario ran', False, f'{type(error).__name__}: {error}'))
     finally:
