@@ -5519,9 +5519,12 @@ def threshold_wording(row, variant, answers, fields):
             candidate = MEASUREMENT_VALUE.fullmatch(answer['held_candidate'].get('text') or '')
             held = held or bool(candidate and Decimal(candidate.group(0).split()[0]) > limit)
     if past:
-        extra = [dict(entry) for answer in past for entry in answer.get('evidence') or []
-                 if isinstance(entry, dict) and entry.get('kind') == 'unit']
-        return stated, extra, None
+        extra = {}
+        for answer in past:           # (each sentence once: two reflux answers may cite one line — a leg's heading)
+            for entry in answer.get('evidence') or []:
+                if isinstance(entry, dict) and entry.get('kind') == 'unit':
+                    extra.setdefault((entry['start'], entry['end']), dict(entry))
+        return stated, list(extra.values()), None
     if held:
         return None, [], THRESHOLD_HELD.format(limit)
     if variant is stated:

@@ -643,6 +643,21 @@ class StatementProposals(SimpleTestCase):
                                           REQUIREMENTS)
         self.assertEqual(proposals['claim_19'], {'held': narrative.THRESHOLD_UNSUPPORTED.format(500)})   # none documented
 
+    def test_a_proposal_cites_each_sentence_once(self):
+        """Two reflux answers citing one line (a leg's heading) put it into the technique wording's evidence twice, and the
+        page's save refused the whole review (`Duplicate source evidence was supplied.` — CI's real-engine workflow on
+        C12, round 17)."""
+        for model, shaped, cases_file in (('careful', None, 'cases.json'), ('weak', None, 'cases.json'),
+                                          ('held-out', benchmark.load('heldout-responses-careful.json')['cases'],
+                                           'heldout-cases.json')):
+            shaped = shaped or benchmark.responses(model)
+            for case in benchmark.load(cases_file)['cases']:
+                _, proposals = narrative.validate(case['notes'], FIELDS,
+                                                  narrative.NarrativeSelections.model_validate(shaped[case['id']]), REQUIREMENTS)
+                for key, proposal in proposals.items():
+                    spans = [(e['start'], e['end']) for e in proposal.get('evidence', []) if e.get('kind') == 'unit']
+                    self.assertEqual(len(spans), len(set(spans)), (model, case['id'], key))
+
     def test_only_the_threshold_pair_is_decided_by_the_answers(self):
         pairs = {(row['key'], variant['id']) for row in REQUIREMENTS for variant in row['variants']
                  if narrative.threshold_wording(row, variant, {}, FIELDS) is not None}
