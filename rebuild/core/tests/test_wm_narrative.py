@@ -5913,3 +5913,295 @@ class JobPageAndSave(TestCase):
                                            for entry in row.get('evidence', [])]} for key, row in answers.items()}
         self.assertEqual(notes[moved['measurement_1_1']['evidence'][0]['start']:][:len(SFJ)], SFJ)
         self.assertIn(BY_KEY['measurement_1_1']['label'], generation.governed_decisions(notes, FIELDS, moved, LABELS))
+
+
+class ReviewRound17e(SimpleTestCase):
+    """The bounded independent review of 538d7dae (round 17e's repairs): every reader break it reproduced, pinned with
+    the controls that must stay (a careless model: the patient's, definite, current, citing the value's own unit)."""
+
+    PAIN, SWELLING, ULCER = 'sdt_-1124008635', 'sdt_269290727', 'sdt_-770853925'
+
+    def held(self, notes, key, value, cited=None):
+        needle = value.split()[0].lower() if key.startswith('sdt') else str(float(value.split()[0]) / (1000 if value.endswith('ms') else 1)).rstrip('0').rstrip('.')
+        cited = cited or [u['quote'] for u in narrative.units(notes, FIELDS, LABELS) if needle in u['quote'].lower()]
+        self.assertTrue(cited, 'the control: the value is written in a unit')
+        return decide(notes, {key: (value, cited, {})})[0][key]['status'] != 'supported'
+
+    def check(self, rows):
+        for notes, key, value, held in rows:
+            with self.subTest(notes=notes, key=key):
+                self.assertEqual(self.held(notes, key, value), held)
+
+    def test_a_value_is_not_given_a_vein_the_notes_do_not_give_it(self):
+        right = 'RIGHT LEG:\nThe great saphenous vein is competent. '
+        self.check([
+            (right + 'At the saphenofemoral junction, a 6.8 mm anterior accessory saphenous vein is seen.', 'measurement_1_1', '6.8 mm', True),
+            ('RIGHT LEG:\nThe great saphenous vein measures 5.1 mm at the knee. In the proximal thigh a 4.4 mm varicose tributary '
+             'branches off.', 'measurement_2_1', '4.4 mm', True),
+            (right + 'At the SFJ, reflux of 1.8 seconds is demonstrated only in the anterior accessory saphenous vein.',
+             'measurement_1_2', '1800 ms', True),
+            (right + 'At the SFJ, the dominant refluxing vein (anterior accessory saphenous vein) measures 6.8 mm.', 'measurement_1_1', '6.8 mm', True),
+            ('RIGHT LEG:\nThe great saphenous vein measures 5.1 mm at the knee. The circumflex vein measures 4.2 mm at the '
+             'saphenofemoral junction.', 'measurement_1_1', '4.2 mm', True),
+            (right + 'The superficial epigastric vein measures 3.1 mm at the saphenofemoral junction.', 'measurement_1_1', '3.1 mm', True),
+            ('RIGHT LEG:\nThe small saphenous vein is competent. The intersaphenous vein measures 3.1 mm at the saphenopopliteal '
+             'junction.', 'measurement_5_1', '3.1 mm', True),
+            ('right leg: the great saphenous vein is competent. the aav measures 6.1 mm at the sfj.', 'measurement_1_1', '6.1 mm', True),
+            ('The right great saphenous vein is varicose and measures 7.4 mm at the saphenofemoral junction.', 'measurement_11_1', '7.4 mm', True),
+            # (the controls: a vein named, a vein pointed back at, a varicose trunk's own row, a transcript's next item)
+            ('The right great saphenous vein is varicose and measures 7.4 mm at the saphenofemoral junction.', 'measurement_1_1', '7.4 mm', False),
+            ('RIGHT LEG:\nThe great saphenous vein measures 6.8 mm at the saphenofemoral junction.', 'measurement_1_1', '6.8 mm', False),
+            ('The right anterior accessory saphenous vein measures 6.8 mm at the saphenofemoral junction.', 'measurement_7_1', '6.8 mm', False),
+            ('The right great saphenous vein measures 6.8 mm at the saphenofemoral junction, and the vein is incompetent.',
+             'measurement_1_1', '6.8 mm', False),
+            ('right great saphenous at the sfj 6.8 millimeters reflux 1.4 seconds proximal thigh 6.0 millimeters reflux 1.1 seconds '
+             'right small saphenous at the spj 3.9 millimeters no reflux', 'measurement_2_2', '1100 ms', False),
+        ])
+
+    def test_a_dated_value_is_held_wherever_its_sentence_dates_it(self):
+        gsv = 'the right great saphenous vein measured 9.6 mm at the saphenofemoral junction'
+        self.check([(notes, 'measurement_1_1', '9.6 mm', True) for notes in (
+            'On the duplex from 2023 ' + gsv + '.', 'The right great saphenous vein measured 9.6 mm at the saphenofemoral '
+            'junction on imaging from 03/14/2023.', 'Prior exam date: 03/14/2023.\n' + gsv[0].upper() + gsv[1:] + ' in 2023.',
+            'Date of service: 09/25/2026.\n' + gsv[0].upper() + gsv[1:] + ' on 03/14/2026.', gsv[0].upper() + gsv[1:] + ' on 3/14/23.',
+            'Back in 2023 ' + gsv + '.', 'In January of 2023 ' + gsv + '.', 'At her 2023 visit ' + gsv + '.',
+            'In 2023 the now-ablated right great saphenous vein measured 9.6 mm at the saphenofemoral junction.',
+            'In 2023, ' + gsv + '.', 'An ultrasound was performed in 2023 and ' + gsv + '.')] + [
+            ('Date of service: 09/25/2026.\nThe right great saphenous vein measures 6.1 mm at the saphenofemoral junction on '
+             '09/25/2026.', 'measurement_1_1', '6.1 mm', False),
+            ('History of left great saphenous vein ablation in 2021, right great saphenous vein measures 6.1 mm at the '
+             'saphenofemoral junction.', 'measurement_1_1', '6.1 mm', False),
+            ('The treated right great saphenous vein measures 3.1 mm at the knee after ablation in 2019.', 'measurement_3_1', '3.1 mm', False),
+            # (a prior study's phrase is its own value's: today's compared with it stands, the compared one is held)
+            ('The right great saphenous vein measures 7.4 mm at the saphenofemoral junction compared with 6.1 mm on the previous '
+             'exam.', 'measurement_1_1', '7.4 mm', False),
+            ('The right great saphenous vein measures 7.4 mm at the saphenofemoral junction compared with 6.1 mm on the previous '
+             'exam.', 'measurement_1_1', '6.1 mm', True),
+        ])
+
+    def test_another_value_held_for_itself_is_still_a_rival(self):
+        first = 'LEFT LEG:\nThe great saphenous vein measures 6.9 mm at the saphenofemoral junction.\n'
+        self.check([(first + second, 'measurement_15_1', '6.9 mm', True) for second in (
+            'On repeat imaging the great saphenous vein measures 9.6 mm at the saphenofemoral junction with reflux in the left leg.',
+            'Repeat measurement at the saphenofemoral junction: 9.6 mm (2026).',
+            'On repeat imaging it measures 9.6 mm there, possibly more accurate.', 'On repeat imaging it measures 9.6 mm there.')] + [
+            ('The great saphenous vein measures 7.4 mm on the right and 5.0 mm on the left at the saphenofemoral junction.',
+             'measurement_1_1', '7.4 mm', False),
+            ('The great saphenous vein measures 7.4 mm on the right and 5.0 mm on the left at the saphenofemoral junction.',
+             'measurement_15_1', '5.0 mm', False),
+            (first + 'The great saphenous vein measures 5.0 mm at the knee.', 'measurement_15_1', '6.9 mm', False),
+            ('The right great saphenous vein measures 7.4 mm at the saphenofemoral junction.\nThe left leg is more swollen, and '
+             'the great saphenous vein measures 5.1 mm at the saphenofemoral junction.', 'measurement_1_1', '7.4 mm', False),
+        ])
+
+    def test_a_denial_reaches_its_whole_list_and_stops_where_the_list_does(self):
+        self.check([
+            ('She denies fever, chills, chest pain, shortness of breath, calf tenderness or swelling.', self.SWELLING, 'Swelling', True),
+            ('She denies any history of leg pain, heaviness, cramping, itching, numbness or swelling.', self.SWELLING, 'Swelling', True),
+            ('She denies pain with walking or swelling.', self.SWELLING, 'Swelling', True),
+            ('She denies ulcers but endorses leg pain and swelling.', self.SWELLING, 'Swelling', False),
+            ('Negative for chest pain, positive for leg pain and swelling.', self.SWELLING, 'Swelling', False),
+            ('She denies DVT, with a history of leg ulcer on the right.', self.ULCER, 'Leg ulcer', False),
+            ('She denies leg pain and complains of swelling.', self.SWELLING, 'Swelling', False),
+        ])
+
+    def test_a_label_left_open_governs_the_lines_it_runs_on_to_and_only_from_its_last_sentence(self):
+        self.check([
+            ('Clinical indication: she denies\nLeg pain and swelling.', self.PAIN, 'Leg pain', True),
+            ('Clinical indication: she denies\n- leg pain\n- swelling', self.SWELLING, 'Swelling', True),
+            ('- Clinical indication: she denies\nleg pain and swelling.', self.SWELLING, 'Swelling', True),
+            ('Clinical indication: no ulcer since 2024. Now\nreports leg pain and swelling.', self.PAIN, 'Leg pain', False),
+            ('Symptoms: none\nLeg pain and swelling are reported by her sister.', self.PAIN, 'Leg pain', True),
+        ])
+        notes = ('LEFT LOWER EXTREMITY:\nHistory: right GSV ablation in 2019. Today\nthe great saphenous vein measures 5.4 mm '
+                 'at the saphenofemoral junction.')
+        # (held at the pre-fill — the block names the other leg — and accepted at review, never refused: round 17e's
+        # continuation read from the label, and `own_sentence_other_side` refused it for every citation)
+        own = [narrative.unit_evidence(u) for u in narrative.units(notes, FIELDS, LABELS) if '5.4' in u['quote']]
+        read = narrative.reading(notes, FIELDS, LABELS)
+        self.assertIsNone(narrative.support(BY_KEY['measurement_15_1'], '5.4 mm', own, notes, read['labels'], read['all_labels']))
+
+    def test_a_hedge_after_a_value_is_its_own_unless_it_is_a_cause_or_another_subject(self):
+        gsv = 'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction'
+        self.check([(notes, 'measurement_1_1', '6.1 mm', True) for notes in (
+            gsv + '?', gsv + ', questionable due to thrombus.', gsv + ' and 5.0 mm at the knee, both possibly artifact.',
+            'The right great saphenous vein at the saphenofemoral junction measures 6.1 mm\n(possibly artifact).',
+            'The right great saphenous vein measures maybe 6.1 mm at the saphenofemoral junction.')] + [
+            (gsv + ', correct?', 'measurement_1_1', '6.1 mm', False),
+            (gsv + ', likely the source of her symptoms.', 'measurement_1_1', '6.1 mm', False),
+            ('The right great saphenous vein at the saphenofemoral junction has 2.1 seconds of reflux, and she would likely '
+             'benefit from ablation.', 'measurement_1_2', '2100 ms', False),
+            ('She reports leg pain and numbness in the right calf, no swelling, and maybe some skin discoloration at the ankle.',
+             'sdt_-49312682', 'Numbness in leg', False),
+        ])
+
+    def test_a_measurement_in_another_columns_unit_is_not_supported(self):
+        self.check([
+            ('The right great saphenous vein measures 7.4 mm at the saphenofemoral junction.', 'measurement_1_2', '7.4 mm', True),
+            ('The right great saphenous vein at the saphenofemoral junction has reflux of 1.8 seconds.', 'measurement_1_1', '1800 ms', True),
+            ('The right great saphenous vein at the saphenofemoral junction has reflux of 1.8 seconds.', 'measurement_1_2', '1800 ms', False),
+        ])
+
+    def test_a_label_after_a_stop_on_a_wrapped_line_keeps_the_sentence_above_its_side(self):
+        line = 'The great saphenous vein measures 5.0 mm at the saphenofemoral junction without reflux in the'
+        for eol in ('\n', '\r\n'):
+            notes = ('VENOUS DUPLEX' + eol + 'Date of service: 09/25/2026' + eol + eol + 'FINDINGS: The right great saphenous '
+                     'vein measures 7.4 mm at the saphenofemoral junction with 2.1 seconds of reflux.' + eol + line + eol
+                     + 'left leg. IMPRESSION: Right GSV reflux.')
+            own = [narrative.unit_evidence(u) for u in narrative.units(notes, FIELDS, LABELS)
+                   if '5.0 mm' in u['quote'] or u['quote'].startswith('left leg.')]
+            with self.subTest(eol=eol):
+                self.assertEqual(len(own), 2)
+                read = narrative.reading(notes, FIELDS, LABELS)
+                self.assertIsNone(narrative.support(BY_KEY['measurement_15_1'], '5.0 mm', own, notes, read['labels'],
+                                                    read['all_labels']))
+
+    def test_finalization_holds_what_generation_holds_on_the_stored_evidence(self):
+        notes = ("SYNTHETIC PATIENT P had a bilateral detailed venous study.\nHer mother's right great saphenous vein measures "
+                 "7.4 mm at the saphenofemoral junction.")
+        unit = next(u for u in narrative.units(notes, FIELDS, LABELS) if 'mother' in u['quote'])
+        answer = {'text': '7.4 mm', 'status': 'supported', 'evidence': [narrative.unit_evidence(unit)]}
+        read = narrative.stored_reading(notes, FIELDS, LABELS, {'measurement_1_1': answer})
+        self.assertEqual(narrative.held_now(BY_KEY['measurement_1_1'], answer, read)[1], narrative.HELD['subject'])
+        self.assertEqual(narrative.held_labels(notes, FIELDS, LABELS, {'measurement_1_1': answer}),
+                         [BY_KEY['measurement_1_1']['label']])
+        edited = {**answer, 'status': 'edited'}      # (the clinician's own decision is theirs: not rechecked)
+        self.assertIsNone(narrative.held_now(BY_KEY['measurement_1_1'], edited, read))
+
+    def test_the_mutation_proofs_shapes(self):
+        """The shapes round 17e's review's mutation proofs showed no test separated (each surviving mutant's rule)."""
+        transcript = ('right leg deep veins compressible no clot great saphenous vein at the junction 6.9 millimeters no sorry '
+                      '7.2 reflux 2.4 seconds at the knee 5.1 millimeters reflux 1.2 seconds small saphenous vein 3.3 '
+                      'millimeters no reflux')
+        dictation = ('right leg the great saphenous vein at the junction measures 7.4 millimeters with 2.1 seconds of reflux '
+                     'compared to 6.1 millimeters on the prior study in the proximal thigh it measures 6.2 millimeters with 1.8 '
+                     'seconds of reflux')
+        self.check([
+            # (an unknown vein after the item's own vein, in its sentence — the author's probe after the review)
+            ('The right great saphenous vein is competent and the circumflex vein measures 4.2 mm at the saphenofemoral '
+             'junction.', 'measurement_1_1', '4.2 mm', True),
+            # (an unknown vein written after the value)
+            ('RIGHT LEG:\nThe great saphenous vein is competent. At the saphenofemoral junction, a 4.2 mm circumflex vein is '
+             'seen.', 'measurement_1_1', '4.2 mm', True),
+            # (a transcript's next vein opening its own value: lens 2's E03)
+            (transcript, 'measurement_3_2', '1200 ms', False),
+            # (a date past a `;` is another statement's)
+            ('The right great saphenous vein measures 6.1 mm at the saphenofemoral junction; the left leg was imaged in 2021.',
+             'measurement_1_1', '6.1 mm', False),
+            # (today's value compared with a dated one, no study date: the dated one is no rival)
+            ('The right great saphenous vein measures 6.1 mm at the saphenofemoral junction, compared with 9.6 mm in 2023.',
+             'measurement_1_1', '6.1 mm', False),
+            # (an option affirmed after a denied list: lens 2's impression)
+            ('IMPRESSION: Negative for DVT, right great saphenous vein reflux positive.', 'sdt_-213273323', 'reflux positive.',
+             False),
+            # (an option affirmed after it: the impression's vein, `… reflux positive`)
+            ('IMPRESSION: Negative for DVT, right great saphenous vein reflux positive.', 'sdt_-892962961',
+             'great saphenous vein', False),
+            # (a hedge after another subject: `…, and she would possibly prefer …`)
+            ('The right great saphenous vein at the saphenofemoral junction has 2.1 seconds of reflux, and she would possibly '
+             'prefer compression stockings.', 'measurement_1_2', '2100 ms', False),
+            # (a prior study's phrase right after another value is that value's: lens 2's dictation)
+            (dictation, 'measurement_2_1', '6.2 mm', False),
+            # (an absence option is not denied by the list before it)
+            ('Patient denies pain or swelling, asymptomatic.', 'sdt_2005853103', 'Asymptomatic', False),
+        ])
+        # (a label's open value continues for the readers that hold, never for the one that refuses)
+        notes = ('LEFT LOWER EXTREMITY:\nIndication: right leg, she denies\nLeg pain and the great saphenous vein measures 5.4 '
+                 'mm at the saphenofemoral junction.')
+        own = [narrative.unit_evidence(u) for u in narrative.units(notes, FIELDS, LABELS) if '5.4' in u['quote']]
+        read = narrative.reading(notes, FIELDS, LABELS)
+        self.assertIsNone(narrative.support(BY_KEY['measurement_15_1'], '5.4 mm', own, notes, read['labels'], read['all_labels']))
+
+class ReviewRound17eCost(SimpleTestCase):
+    """The cost lens of round 17e's review: per-place and per-value work that rescanned a clause, rebuilt a unit's strike
+    table, re-read a wrapped sentence from every line, or re-judged every governor per call. Each at 25,000 characters or
+    more, where each took 9 to 68 s on 538d7dae; generation's validation and finalization's recheck each within 5 s."""
+
+    def within(self, run, limit=5.0):
+        import time
+        for name in dir(narrative):
+            if hasattr(getattr(narrative, name), 'cache_clear'):
+                getattr(narrative, name).cache_clear()
+        start = time.perf_counter()
+        result = run()
+        self.assertLess(time.perf_counter() - start, limit)
+        return result
+
+    def answers_by_id(self, notes, picks):
+        """`picks`: key -> (value, [unit ids]) — a response citing particular copies of repeated lines."""
+        rows = [{'key': field['key'], 'value': picks.get(field['key'], ('', []))[0], 'unit_ids': picks.get(field['key'], ('', []))[1],
+                 'conflict': False, 'subject': 'patient', 'certainty': 'definite',
+                 'timing': 'prior' if narrative.previous_treatment(field) else 'current'} for field in FIELDS]
+        response = narrative.NarrativeSelections.model_validate({'fields': rows, 'statements': []})
+        return narrative.validate(notes, FIELDS, response, REQUIREMENTS)[0]
+
+    def generation_and_finalization(self, notes, picks):
+        answers = self.within(lambda: self.answers_by_id(notes, picks))
+        self.within(lambda: narrative.held_labels(notes, FIELDS, LABELS, answers))
+        return answers
+
+    @override_settings(WM_NARRATIVE=True)
+    def test_an_option_written_at_every_place_of_a_clause_reads_its_hedges_once(self):
+        notes = 'The right great saphenous vein was previously treated at the ' + ('knee ' * 5000).strip() + ' level.'
+        big = max(narrative.units(notes, FIELDS, LABELS), key=lambda u: len(u['quote']))
+        keys = ('sdt_-346030703', 'sdt_599910328')         # (the right leg's previous-treatment start and end)
+        answers = self.generation_and_finalization(notes, {key: ('knee', [big['id']]) for key in keys})
+        self.assertIn('supported', {answers[key]['status'] for key in keys})     # (the reading is taken)
+
+    @override_settings(WM_NARRATIVE=True)
+    def test_a_rival_search_builds_each_units_strikes_once(self):
+        rows = [('great saphenous vein', 'saphenofemoral junction', 'GSV at the SFJ'),
+                ('great saphenous vein', 'proximal thigh', 'GSV at the Proximal Thigh'),
+                ('great saphenous vein', 'knee', 'GSV at the Knee'), ('small saphenous vein', 'saphenopopliteal junction', 'SSV at the SPJ')]
+        keys = {field['label']: field['key'] for field in FIELDS}
+        clean, wanted = [], {}
+        for n, (vein, site, label) in enumerate(rows):
+            for side in ('Right', 'Left'):
+                clean.append(f'The {side.lower()} {vein} measures {4 + n}.{n} mm at the {site} with reflux of {900 + 100 * n} ms.')
+                wanted[keys[f'{side} {label}: diameter (mm)']] = (f'{4 + n}.{n} mm', clean[-1])
+                wanted[keys[f'{side} {label}: reflux time (ms)']] = (f'{900 + 100 * n} ms', clean[-1])
+        body, k = 'Dictation: ', 0
+        while len(body) < 24000:
+            body += ('%d mm no %d mm ' % (3 + k % 6, 4 + k % 5)) if k % 2 == 0 else ('%d s no %d s ' % (1 + k % 3, 2 + k % 3))
+            k += 1
+        notes = body.rstrip() + '.\n' + '\n'.join(clean)
+        ids = {u['quote']: u['id'] for u in narrative.units(notes, FIELDS, LABELS)}
+        answers = self.generation_and_finalization(notes, {key: (value, [ids[quote]]) for key, (value, quote) in wanted.items()})
+        self.assertIn('supported', {answer['status'] for answer in answers.values()})
+
+    @override_settings(WM_NARRATIVE=True)
+    def test_a_wrapped_sentences_rows_are_read_once_per_line_and_kept_small(self):
+        content = 'gsv sfj 4.0 mm 1.0 s gsv knee 5.1 mm 2.1 s ssv spj 6.2 mm 3.2 s and'
+        corrections = [f'{9 - n % 3} mm sorry {5 + n % 3} mm and' for n in range(6)]
+        notes = '\n'.join(['RIGHT LEG:'] + [content] * 330 + corrections + ['the study is complete.'])
+        units = narrative.units(notes, FIELDS, LABELS)
+        lines = [u['id'] for u in units if u['quote'] == content][:196:2]
+        extra = [u['id'] for u in units if u['quote'] in corrections]
+        picks = {key: (value, lines + [extra[n]]) for n, (key, value) in enumerate((
+            ('measurement_1_1', '4.0 mm'), ('measurement_1_2', '1000 ms'), ('measurement_3_1', '5.1 mm'),
+            ('measurement_3_2', '2100 ms'), ('measurement_5_1', '6.2 mm'), ('measurement_5_2', '3200 ms')))}
+        self.generation_and_finalization(notes, picks)
+        kept = narrative._row_tables(notes)[1]
+        self.assertLess(sum(len(rows) for rows in kept.values()), 50000)    # (538d7dae kept 942,942 values at 40,000)
+
+    @override_settings(WM_NARRATIVE=True)
+    def test_a_rival_under_each_of_many_headings_judges_each_governor_once(self):
+        today = 'The right great saphenous vein measures 7.0 mm at the saphenofemoral junction with reflux of 900 ms.'
+        lines = []
+        for k in range(495):
+            lines += ['Prior study:', f'Both great saphenous veins at the SFJ {3 + k % 5}.{k % 100:02d} mm and {1 + k % 3}.{k % 100:02d} seconds.']
+        left = 'The left great saphenous vein measures 6.0 mm at the saphenofemoral junction with reflux of 800 ms.'
+        notes = today + '\n' + left + '\n\n' + '\n'.join(lines)
+        ids = {u['quote']: u['id'] for u in narrative.units(notes, FIELDS, LABELS)}
+        answers = self.generation_and_finalization(notes, {'measurement_1_1': ('7.0 mm', [ids[today]]),
+                                                           'measurement_1_2': ('900 ms', [ids[today]]),
+                                                           'measurement_15_1': ('6.0 mm', [ids[left]]),
+                                                           'measurement_15_2': ('800 ms', [ids[left]])})
+        self.assertEqual(answers['measurement_1_1']['status'], 'supported')
+
+    @override_settings(WM_NARRATIVE=True)
+    def test_a_dated_value_s_bounds_are_read_by_bisection(self):
+        notes = ('Date of service: 09/25/2020\nThe right great saphenous vein at the saphenofemoral junction was measured today, '
+                 + '=' * 24000 + ' ' + ' 2023 today 7.4 mm' * 1300 + '.')
+        cited = max(narrative.units(notes, FIELDS, LABELS), key=lambda u: len(u['quote']))
+        self.generation_and_finalization(notes, {'measurement_1_1': ('7.4 mm', [cited['id']])})

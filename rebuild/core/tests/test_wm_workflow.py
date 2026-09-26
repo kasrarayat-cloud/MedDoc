@@ -698,3 +698,140 @@ class WMNarrativeWorkflow(TestCase):
         refused = {field['label'] for field in self.version.fields
                    if 'narrative_held' in assessment[field['key']]['blockers']}
         self.assertEqual(refused, set(governed) & {field['label'] for field in self.version.fields if field['key'] in held})
+
+    # ── round 17e's review: provenance through the page, the save, finalization and export ──────────────────────────
+    PROVENANCE_NOTES = ('SYNTHETIC PATIENT P had a bilateral detailed venous study.\n'
+                        'The right great saphenous vein measures 7.4 mm at the saphenofemoral junction.\n'
+                        "Her mother's right great saphenous vein measures 7.4 mm at the saphenofemoral junction.\n"
+                        'The left leg is more swollen, and the great saphenous vein measures 5.1 mm at the saphenofemoral junction.\n'
+                        'There is no saphenous reflux in the right lower extremity.\n'
+                        'There is no saphenous reflux in the left lower extremity.\n'
+                        'Clinical correlation with the above findings is required.')
+    PROVENANCE_PICKS = {'sdt_1475334564': ('Bilateral Detailed', [0]), 'measurement_1_1': ('7.4 mm', [1]),
+                        'measurement_15_1': ('5.1 mm', [3])}
+    PROVENANCE_STATEMENTS = ([('claim_9', 'exam_choice', [0]), ('claim_32', 'negative', [4]), ('claim_36', 'negative', [5]),
+                              ('claim_39', 'original', [6])]
+                             + [(key, 'not_documented', []) for key in ('claim_19', 'claim_23', 'claim_27', 'claim_30',
+                                                                        'claim_31', 'claim_34', 'claim_35')])
+
+    def replayed(self, notes, picks, statements, qualifiers=None):
+        """A careless model's response for notes of the test's own (the patient's, definite, current), picks and
+        statements by unit index, replayed through the real generation."""
+        from core import wm_narrative
+        labels = [row['label'] for row in self.version.review_requirements]
+        ids = [unit['id'] for unit in wm_narrative.units(notes, self.version.fields, labels)]
+        rows = []
+        for field in self.version.fields:
+            value, indexes = picks.get(field['key'], ('', []))
+            row = {'key': field['key'], 'value': value, 'unit_ids': [ids[i] for i in indexes], 'conflict': False,
+                   'subject': 'patient', 'certainty': 'definite',
+                   'timing': 'prior' if wm_narrative.previous_treatment(field) else 'current'}
+            row.update((qualifiers or {}).get(field['key'], {}))
+            rows.append(row)
+        return self.generate_from(notes, {'fields': rows, 'statements': [
+            {'key': key, 'variant': variant, 'unit_ids': [ids[i] for i in indexes]} for key, variant, indexes in statements]})
+
+    def post_page(self, encounter, edits=(), sources=(), review=True):
+        page = self.client.get(f'/encounters/{encounter.pk}/')
+        self.assertEqual(page.status_code, 200)
+        payload = RenderedSaveForm.of(page)
+        if review:
+            payload.update({'reviewed_' + field['key']: 'on' for field in self.version.fields})
+            payload.update({'claim_reviewed_' + row['key']: 'on' for row in page.context['wm_requirements']})
+        payload.update({'answer_' + key: value for key, value in dict(edits).items()})
+        payload.update({'source_' + key: value for key, value in dict(sources).items()})
+        self.client.post(f'/encounters/{encounter.pk}/save/', payload)
+        encounter.refresh_from_db()
+        return page
+
+    def member(self, name, role):
+        user = User.objects.create_user(username=name, email=name + '@synthetic.invalid', verified_at=timezone.now())
+        Membership.objects.create(user=user, department=self.department, role=role)
+        return user
+
+    def test_a_held_statement_proposal_opens_the_page(self):
+        """Round 17e's review (provenance lens): a proposal `threshold_wording` held is `{'held': reason}`, and the page
+        raised on it (`KeyError: 'variant'`) for every owner and clinician."""
+        notes = ('SYNTHETIC PATIENT P had a bilateral detailed venous study.\n'
+                 'The deep and superficial venous systems were examined.\n'
+                 'The right great saphenous vein measures 7.4 mm at the saphenofemoral junction, with possible reflux of '
+                 'approximately 550 ms.\n'
+                 'The left great saphenous vein measures 5.0 mm at the saphenofemoral junction.\n'
+                 'Clinical correlation with the above findings is required.')
+        picks = {'sdt_1475334564': ('Bilateral Detailed', [0]), 'sdt_429781496': ('deep and superficial', [1]),
+                 'measurement_1_1': ('7.4 mm', [2]), 'measurement_1_2': ('550 ms', [2]), 'measurement_15_1': ('5.0 mm', [3])}
+        statements = ([('claim_9', 'exam_choice', [0]), ('claim_39', 'original', [4]), ('claim_19', 'technique_only', [1])]
+                      + [(key, 'not_documented', []) for key in ('claim_23', 'claim_27', 'claim_30', 'claim_31', 'claim_32',
+                                                                 'claim_34', 'claim_35', 'claim_36')])
+        encounter = self.replayed(notes, picks, statements, {'measurement_1_2': {'certainty': 'uncertain'}})
+        self.assertIn('held', encounter.template_review['proposals']['claim_19'])      # (the control: it is held)
+        page = self.client.get(f'/encounters/{encounter.pk}/')
+        self.assertEqual(page.status_code, 200)
+        self.assertIn('data-statement-held', page.content.decode())
+
+    def test_an_answer_cited_to_other_sentences_is_the_clinicians_and_stays_so_through_export(self):
+        """Round 17e's review (provenance lens): `7.4 mm`, re-cited by the clinician to the mother's sentence with its
+        text unchanged, stayed `supported` — shown as read from the notes, finalized and exported as source-supported."""
+        encounter = self.replayed(self.PROVENANCE_NOTES, self.PROVENANCE_PICKS, self.PROVENANCE_STATEMENTS)
+        self.assertEqual(encounter.answers['measurement_1_1']['status'], 'supported')     # (the control)
+        mother = "Her mother's right great saphenous vein measures 7.4 mm at the saphenofemoral junction."
+        self.post_page(encounter, edits={'measurement_15_1': '5.1 mm'}, sources={'measurement_1_1': mother})
+        answer = encounter.answers['measurement_1_1']
+        self.assertEqual((answer['text'], answer['status'], answer['edited_by']), ('7.4 mm', 'edited', str(self.user.pk)))
+        self.assertEqual([entry['quote'] for entry in answer['evidence']], [mother])
+        page = self.client.get(f'/encounters/{encounter.pk}/').content.decode()
+        section = page.split('Right GSV at the SFJ: diameter (mm)</h3>')[1].split('</section>')[0]
+        self.assertIn('entered by ' + self.user.email + ', not read from the notes', section)
+        self.assertNotIn('data-narrative-reading', section)          # (no "read from the notes as" beside it)
+        # (an answer the clinician left as generated keeps generation's evidence and status)
+        self.post_page(encounter)
+        self.assertEqual(encounter.answers['measurement_1_1']['status'], 'edited')
+        self.assertEqual(encounter.answers['sdt_1475334564']['status'], 'supported')
+
+    def test_an_employees_answer_names_the_employee_and_keeps_the_proposals(self):
+        """Round 17e's review (provenance lens): an employee's choice for a held value was stored with no author and read
+        as the reviewing clinician's; and the employee's save dropped generation's statement proposals."""
+        encounter = self.replayed(self.PROVENANCE_NOTES, self.PROVENANCE_PICKS, self.PROVENANCE_STATEMENTS)
+        self.assertNotEqual(encounter.answers['measurement_15_1']['status'], 'supported')   # (held: the legs compared)
+        proposals = encounter.template_review['proposals']
+        employee = self.member('wm-employee', 'employee')
+        self.client.force_login(employee)
+        self.post_page(encounter, edits={'measurement_15_1': '5.1 mm'}, review=False)
+        answer = encounter.answers['measurement_15_1']
+        self.assertEqual((answer['status'], answer['edited_by'], answer['reviewed']), ('edited', str(employee.pk), False))
+        self.assertEqual(encounter.template_review, {'proposals': proposals})
+        self.client.force_login(self.user)
+        page = self.client.get(f'/encounters/{encounter.pk}/').content.decode()
+        self.assertIn('entered by wm-employee@synthetic.invalid, not read from the notes', page)
+        self.post_page(encounter)
+        answer = encounter.answers['measurement_15_1']
+        self.assertEqual((answer['status'], answer['edited_by'], answer['reviewed_by']),
+                         ('edited', str(employee.pk), str(self.user.pk)))
+
+    def test_generation_is_refused_over_a_clinicians_decisions(self):
+        """Round 17e's review (provenance lens): a POST to generate, which the page never offers once answers exist,
+        replaced a clinician's reviewed decisions with a new draft."""
+        encounter = self.replayed(self.PROVENANCE_NOTES, self.PROVENANCE_PICKS, self.PROVENANCE_STATEMENTS)
+        self.post_page(encounter, edits={'measurement_15_1': '5.1 mm'})
+        before = (dict(encounter.answers), Job.objects.filter(encounter=encounter).count())
+        employee = self.member('wm-employee-2', 'employee')
+        self.client.force_login(employee)
+        self.client.post(f'/encounters/{encounter.pk}/generate/', {'revision': encounter.revision})
+        self.assertFalse(run_one())
+        encounter.refresh_from_db()
+        self.assertEqual((encounter.answers, Job.objects.filter(encounter=encounter).count()), before)
+
+    def test_the_save_keeps_the_copy_the_next_posted_line_runs_on_to(self):
+        """Round 17e's review (false-rejection lens): one line written under both legs with the side only on the line
+        after it — the save kept the right leg's copy for a left answer, and an unchanged re-save moved a correct right
+        answer onto the left leg's copy."""
+        line = 'The great saphenous vein measures 5.0 mm at the saphenofemoral junction without reflux in the'
+        notes = 'VENOUS DUPLEX\n\n' + line + '\nright leg.\n\n' + line + '\nleft leg.'
+        encounter = self.replayed(notes, {}, [])
+        for key, side in (('measurement_15_1', 'left leg.'), ('measurement_1_1', 'right leg.')):
+            self.post_page(encounter, edits={key: '5.0 mm'}, sources={key: line + '\n' + side}, review=False)
+            cited = [entry['start'] for entry in encounter.answers[key]['evidence']]
+            self.assertEqual(cited, [notes.index(line + '\n' + side), notes.index(side, notes.index(line + '\n' + side))])
+        self.post_page(encounter, review=False)          # (an unchanged re-save moves neither)
+        self.assertEqual(encounter.answers['measurement_1_1']['evidence'][0]['start'], notes.index(line + '\nright leg.'))
+        self.assertEqual(encounter.answers['measurement_15_1']['evidence'][0]['start'], notes.index(line + '\nleft leg.'))

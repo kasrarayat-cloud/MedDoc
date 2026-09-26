@@ -64,20 +64,20 @@ Two kinds of rule, and the difference is who can overrule them:
 | **governing:** an invisible character inside a word of the notes (see *Sides*) | every pre-fill held (`hidden`) |
 | `subject` family or other | missing (the candidate is shown as someone else's finding) |
 | **support:** nothing it cites can carry it (only another question's labelled line, only a structural heading) | held |
-| **support:** the value is not written in a cited unit: a measurement's number (at most 12 characters, as the engine reads one: `1800.00000000 ms` is none) with a unit word of its column (a reflux time may be in seconds), not approximate, bounded, ranged or an alternative (`7.4 mm+`, not `7.4 mm + reflux`); text copied (ASCII case folded, every other character exact, as the engine compares it); a choice is an option | held |
+| **support:** the value is not written in a cited unit: a measurement's number (at most 12 characters, as the engine reads one: `1800.00000000 ms` is none) in its column's own unit (a diameter in a reflux-time column is no answer: round 17e's review, `7.4 mm` pre-filled as a reflux time and refused only by the engine) with a unit word of that column (a reflux time may be in seconds), not approximate, bounded, ranged or an alternative (`7.4 mm+`, not `7.4 mm + reflux`); text copied (ASCII case folded, every other character exact, as the engine compares it); a choice is an option | held |
 | **support:** the value's own sentence strikes it in place: a correction inside a sentence strikes only what it stands right after — correcting to a number, the number just before it (with at most a few words after it) when of that unit or bare (`6.1 mm, correction, 7.6 mm`, `6.9 correction 6.6 millimeters`, spoken numbers too); correcting to a number, only that number's quantity (`7.4 mm right, correction, 7.6 mm` keeps the right); correcting to words, the few words just before it, never the side said with them unless it corrects to a side (`Left leg, I mean, the great saphenous vein …` keeps the left; `The right sorry left …` strikes the right); a SPOKEN correction opening its sentence still strikes what it stands right after; a bare number only when written as the correction's number is (`6.9 correction 6.6 millimeters`; not `grade 2 reflux, correction, 6.9 mm`); a correction that first repeats the old number strikes the repeat too only when it says right after it that it is wrong (`6.1 mm, correction, 6.1 mm is wrong, 7.6 mm`) — any other repeat is held for the pre-fill (`7.4 mm, I mean 7.4 mm, at the SFJ with reflux of 1.8 seconds`, `6.1 mm, correction, 6.1 mm was misdictated`; review accepts it) and is no rival of the value it corrects to (`6.1 mm, correction, 6.1 mm should read 7.6 mm` corrects to 7.6); a spoken `no` between two numbers corrects the first (`6.1 no 7.6 millimeters`); `sorry, make that` is one correction. A measurement is denied WHEREVER it is written by a denial in its own clause that reaches it through intensifiers only (`not 6.1 mm`, `no longer 6.1 mm`, `is not really 6.1 mm`, `rather than 6.1 mm`, `instead of 6.1 mm`; `… 7.6 mm at the saphenofemoral junction, not 6.1 mm as previously reported`; not `without reflux, 5.3 mm`, `without reflux measures 4.4 mm`, `6.1 no I mean 7.6`, `6.1 no 7.6 millimeters`), and never from the sentence before (`…, reflux is absent.` / `7.6 mm is the diameter …` denies nothing); a value its own sentence says is wrong right after it is not live either (`6.1 mm is incorrect`, `… 6.1 mm was a dictation error`) | held |
 | **support:** a line labelled with this question disagrees, at a line start or after a bullet (prose under a choice's label is interpretation) — its value read to the next label on the line, after a run of spaces, a tab, a separator (`,` `|` `;` `/`), a spaced dash or a space (`Patient name: SYNTHETIC PATIENT B    DOB: …    Allergies: none`, `Patient name: SYNTHETIC PATIENT B, DOB: 06/30/1959, Allergies: none`, `Date of service: 09/22/2026 | Indication: …`), and for demographics to a bracket, a spaced dash or a run of spaces or a tab too (`06/30/1959 (not verified by patient)`, `09/22/2026 - no prior study for comparison`, `06/30/1959    not verified`); for any other question only to a label of this form's (round 14: `Swelling, today: denies`, `Leg pain, Note: patient denies leg pain` lost their own denial to a label nobody listed), never short of the value's own words (`Leg pain (-)`, `Swelling    denies`, `7.4 mm (not measured today, prior study)` disagree) — for a measurement its value is negative only in its own clause or in a remark with a negative clause that is not nothing but a finding's denial, or names the question's own (round 16: `(not reliable due to thrombus)`, `, not measurable due to thrombus` deny the value) (`Right GSV at the SFJ: diameter (mm): 7.4 mm, reflux: none`, `7.4 mm (no reflux)`, `7.4 mm, no thrombus`, `7.4 mm - competent, no reflux` carry it; `reflux time (ms): 2100 ms, no reflux`, `7.4 mm (no reflux, not confirmed)`, `7.4 mm, no, 6.1 mm` do not — round 15: the diameter was refused at review, which could not complete); a demographic's remark calling its value wrong or replaced after it (`Date of birth: 06/30/1959 - incorrect, DOB is 06/03/1959`, `Patient ID: SYN-0042    old ID, now SYN-0043` — round 15; `typo`, `amended`, `duplicate`, `changed` — round 16) disagrees too; a unit labelled for another question supports nothing | held |
 | **support:** a Right/Left question whose value NO reading of the text places on that side (or both) — see *Sides* below; ruling #127: the model never asserts laterality | held |
 | **governing:** a Right/Left question whose PRIMARY reading is not that side — the readings compete, or the side comes only from another cited unit | held (the clinician may choose any side a reading gives) |
 | **support:** a measurement ROW's value that every place it is written is read for another row: its own item names another vein or level, and its sentence names the row's own nowhere before it (`LEFT LEG:` / `The small saphenous vein measures 5.4 mm at the saphenopopliteal junction.` is no reading of the left GSV at the knee's 5.4 mm) — see *Rows* below (round 17) | held (`row`; review refuses it too) |
-| **governing:** a measurement row's value no place of which is read for the row: no level written for it, a level only near the row (`mid thigh`, `above the knee`), two readings, or only a vein the sentence or paragraph wrote earlier where a vein word this reader does not know stands between (`The AAV measures …`) | held (`row_unknown`, its sentences shown; review accepts the clinician's choice) |
+| **governing:** a measurement row's value no place of which is read for the row: no level written for it, a level only near the row (`mid thigh`, `above the knee`), two readings, or only a vein the sentence or paragraph wrote earlier where a vein word this reader does not know stands between (`The AAV measures …`, the word before `vein` in `the circumflex vein`, `the superficial epigastric vein`, `the intersaphenous vein`, a lower-case `aav`; not a word pointing back, `the vein`, `the refluxing vein` — and such a word after the item's own vein, in its sentence, is another reading of it: `The right great saphenous vein is competent and the circumflex vein measures 4.2 mm at the saphenofemoral junction`), or where a vein written after the value names it too: right after it (`a 6.8 mm anterior accessory saphenous vein`, `4.4 mm (AAGSV)`; not after a side word or `no reflux`, nor a vein whose own value comes right after it, `… reflux 1.2 seconds small saphenous vein 3.3 millimeters`) or anywhere after the sentence's last value (`reflux of 1.8 seconds is demonstrated only in the anterior accessory saphenous vein`), or in a bracket naming no comparison (`the dominant refluxing vein (anterior accessory saphenous vein) measures 6.8 mm`; `(not the AAGSV)` is an insertion); `varicose` said of the vein before it (`… is varicose and measures 7.4 mm`) is no tributary — round 17e's review | held (`row_unknown`, its sentences shown; review accepts the clinician's choice) |
 | **governing:** a choice whose option says more than its cited units (`option_reason`): an option listing the deep veins its finding is in (`with evidence of an acute DVT of CFV, FV, POP V, PTV.`) needs each of them joined to a finding by nothing but list words (`thrombus in the popliteal vein`, `DVT of the common femoral, femoral, popliteal and posterior tibial veins`; not `CFV and FV compressible`, nor `… with CFV unremarkable`); a qualified option (`retained small saphenous vein`, `duplicate …`) needs its qualifier described in the clause naming that vein, and the plain one beside it is a wording decision where it is (`Previously treated SSV has recanalized`; not `retained right great saphenous vein …; left small saphenous vein is absent`) — round 17, the held-out H06 | held (`overstated`, `wording`; the original template is unchanged, and leaving it blank is an answer) |
 | **governing:** a choice whose cited sentences name nothing clinical at all — no vein, level, side or finding, nor the option's own words (`Venous duplex performed today; images saved for review.` for `Bilateral Detailed`); whose finding is denied, directly (within four words, no number between) and at every place its words are written (`She denies leg swelling or pain.` for `Leg pain`; not `…, reflux is absent; … with reflux of 1.4 seconds`, nor an option that is itself an absence); or hedged in its clause at every place it is written (`possible reflux …; this is questionable` for `reflux positive.`; not one plain statement of it) — `choice_evidence_reason`, round 17 | held (`absent`, `negative`, `uncertain`) |
-| **governing:** a rival: another live value the notes give this measurement's row on this side, in another sentence or the cited one (`The left great saphenous vein measures 6.9 mm at the saphenofemoral junction.` against `Summary: left GSV at the SFJ 9.6 mm`; in the cited sentence also one of the row's vein with no level written, `…, repeat measurement 9.6 mm`; not a value a correction replaces, a prior study's or a plan's — the correction and governing readers decide those; a bound is one where the answer is outside it, `less than 3 mm` against 6.9 mm, and not where it is within, `less than 10 mm`; an estimate, a range or an alternative that is not the answer is one, `about 7 mm`, `6-8 mm`), or, for a sided choice, another option of four or more words that states a finding, written as such on this side (`the right deep venous system is without evidence of obstruction or insufficiency` against `chronic DVT of the right CFV, FV, POP V and PTV`) — `row_rivals`, `option_rivals`, round 17 | held (`conflict`, the rival shown) |
+| **governing:** a rival: another live value the notes give this measurement's row on this side, in another sentence or the cited one (`The left great saphenous vein measures 6.9 mm at the saphenofemoral junction.` against `Summary: left GSV at the SFJ 9.6 mm`; in the cited sentence also one of the row's vein with no level written, `…, repeat measurement 9.6 mm`; not a value a correction replaces, a prior study's or a plan's — the correction and governing readers decide those; a bound is one where the answer is outside it, `less than 3 mm` against 6.9 mm, and not where it is within, `less than 10 mm`; an estimate, a range or an alternative that is not the answer is one, `about 7 mm`, `6-8 mm`), or, for a sided choice, another option of four or more words that states a finding, written as such on this side (`the right deep venous system is without evidence of obstruction or insufficiency` against `chronic DVT of the right CFV, FV, POP V and PTV`) ; a value held for itself without being another study's, a plan's, a correction's or someone else's is still a rival — a hedge, a side or row read two ways, a date not told apart from the study's (`… 9.6 mm there, possibly more accurate`, `… 9.6 mm … with reflux in the left leg` under `LEFT LEG:`, `9.6 mm (2026)` with no study date; not a side read two ways under the other leg's heading, nor where only an earlier sentence names this leg), and so is a value in the answer's paragraph whose level points back at one just written (`On repeat imaging it measures 9.6 mm there.`) — `row_rivals`, `option_rivals`, round 17; round 17e's review | held (`conflict`, the rival shown) |
 | **governing:** the value's whole sentence as the reader wraps it, within its block, where only part of it was cited (`whole_sentence_entries`): every governing reader above, and the relative and planned-treatment backstops, read over it as well — citation limits what can support an answer, never what can govern it (`Her mother's right great saphenous vein … measures` / `6.1 mm.`, `… but denies` / `leg pain and heaviness.`, `Plan: … is expected at` / `6.1 mm.`, each with only the value's line cited) — round 17c's review | held |
-| **governing:** a measurement's own clause: a hedge before the value (`possibly measures 6.1 mm`; not the next finding's, `… 5.3 mm … with possible reflux`), or after it before a `;`, the next value or the next vein, not followed by a finding word (`6.1 mm (possibly artifact)`, `…, possibly artifact`, `…, which may be artifact`; not `… with possible thrombus in a tributary` — round 17e, `hedged_after`); the value attributed to an earlier study (`… 6.1 mm on the prior study`, `the prior duplex showed …`, `previously measured …`; not `unchanged from the prior study`, `compared with the previous exam`, `the same as on the prior study`); or a year in its clause with no other value between them, earlier than the note's own study date, or any year where the note gives none (`9.6 mm in 2023`, `In 2023 the …`, `(2023)`; not a comparison's year, `Compared with the prior study of 03/2025 … now measures`, `since 2023`, nor one a word of today stands after, `… in 2021 today the right great saphenous vein … measures`; and a current value compared with a dated one stands, `6.1 mm …, compared with 9.6 mm in 2023` — round 17e, `dated_before_study`) — `measurement_context`; the model's qualifiers read these first, this holds a model that missed them | held (`uncertain`, `timing`) |
-| **governing:** a choice's finding denied by a denial verb before a list it is in, with nothing but list words between (`She denies leg pain and swelling.`, `…, heaviness and swelling`; not `denies leg pain and reports swelling`, and not a bare `no`/`without`: `… but no restless legs, and aching leg pain`) — round 17e, in `choice_evidence_reason` | held (`negative`) |
-| **governing:** a line that goes on with the unfinished value of a label line above it (`Clinical indication: she denies` / `leg pain and swelling.`) is read with that label by the readers that only ever hold — round 17e, `_continues_label` | held |
+| **governing:** a measurement's own clause: a hedge before the value (`possibly measures 6.1 mm`; not the next finding's, `… 5.3 mm … with possible reflux`), or after it before a `;`, the next value or the next vein, not followed by a finding word (`6.1 mm (possibly artifact)`, `…, possibly artifact`, `…, which may be artifact`; not `… with possible thrombus in a tributary` — round 17e, `hedged_after`); the value attributed to an earlier study (`… 6.1 mm on the prior study`, `the prior duplex showed …`, `previously measured …`; not `unchanged from the prior study`, `compared with the previous exam`, `the same as on the prior study`); or a date in its SENTENCE (not only its clause: `In 2023, the …`, `… performed in 2023 and the …` — round 17e's review), the nearest before or after it with no other value nor `;` between, read to the day it gives (`03/14/2023`, `3/14/23`, `2023-03-14`, `March 14, 2023`, `03/2023`), earlier than the note's own study date (`Date of service`, `Exam date`, `DOS`; never a prior study's, `Prior exam date:`), or any date where the note gives none (`9.6 mm in 2023`, `In 2023 the …`, `(2023)`, `Back in 2023 the …`, `At her 2023 visit …`, `On the duplex from 2023 …`; not a date before the value whose own predicate is present, `History of … ablation in 2021, right great saphenous vein measures 6.1 mm`, `… was done in 2021 the great saphenous vein at the knee measures …`; not a treatment's date after a value stated in the present, `… measures 3.1 mm at the knee after ablation in 2019`; not a comparison's year, `Compared with the prior study of 03/2025 … now measures`, `since 2023`, nor one a word of today stands after, `… in 2021 today the right great saphenous vein … measures`; and a current value compared with a dated one stands, `6.1 mm …, compared with 9.6 mm in 2023`, the compared one held as another study's — round 17e, `dated_before_study`); a hedge after it is also a question ending its sentence (`… at the saphenofemoral junction?`, not a tag question `…, correct?`), one before `due to` (`questionable due to thrombus`), one said of several values (`…, both possibly artifact`), `maybe`/`perhaps`, and one on a wrapped line opening with a bracket; not a cause's (`…, likely the source of her symptoms`, `possibly worth treating`) nor another subject's (`…, and she would likely benefit`) — round 17e's review; and a prior study's phrase is its own value's only, the nearest one with no other value between (`7.4 mm … compared with 6.1 mm on the previous exam` holds the 6.1, not the 7.4) — `measurement_context`; the model's qualifiers read these first, this holds a model that missed them | held (`uncertain`, `timing`; `dated` where a date cannot be told from the study's) |
+| **governing:** a choice's finding denied by a denial verb before a list it is in, with nothing but list words between, however long the list (`She denies leg pain and swelling.`, `…, heaviness and swelling`, a review of systems of nine findings — round 17e's review: eight words were the reach); the list ends at a verb, a contrast, a positive finding or another vein named, a `;`, a number, `, with …` or `, history of …` (`denies leg pain and reports swelling`, `… but endorses …`, `negative for chest pain, positive for …`, `denies DVT, with a history of leg ulcer`), and an option affirmed right after it in its clause is not denied (`… right great saphenous vein reflux positive.`); not a bare `no`/`without`: `… but no restless legs, and aching leg pain` — round 17e, in `choice_evidence_reason` | held (`negative`) |
+| **governing:** a line that goes on with the unfinished value of a label line above it (`Clinical indication: she denies` / `leg pain and swelling.`), or left open on a denial whatever the next line or the list under it opens with (`… she denies` / `Leg pain and swelling.`, `… she denies` / `- leg pain` / `- swelling`, a bulleted label), is read with that label by the readers that only ever hold, from the label value's last sentence (`History: right GSV ablation in 2019. Today` / `the great saphenous vein measures …` goes on from `Today`); never by the refusal-only reader of a value's own sentence (round 17e's review: read from the label, the other leg's treatment refused the value for every citation) — round 17e, `_continues_label` | held |
 | **support:** the value's whole sentence, cited or not, gives it only the other side (`The great saphenous vein measures 6.1 mm at the` cited alone, `saphenofemoral junction in the left leg.` on the next line, for the right) — `own_sentence_other_side`, round 17c's review | refused at review (`side`) |
 | `subject` unclear, a relative before it in its sentence (in a transcript's run-on sentence, the 25 words before it) or after it within its sentence and 12 words (`Leg ulcer, per mother, not the patient.`; not one with a finding of its own there, `… because her mother has varicose veins` — its own verb that is not a copula, nothing tying it back to the value: `a leg ulcer that her mother has had`, `her mother has it`/`this`/`these`, `her mother is actually the affected person` and the value's words again all hold; `family physician` is not one; a relative in the NEXT sentence is the model's `subject` to read), `certainty` uncertain, `conflict`, a timing that does not fit the question (previous treatment: prior, its outcome also current; a clinical indication: current or prior; demographics: any; everything else: this examination), or a previous treatment written as planned (`scheduled for ablation`, `recs: EVLA`) | held |
 | **governing:** a heading or pointer the installed vocabulary says changes meaning (a denial, a family history, a hypothetical) holds its block, sub-headings and a spaced list included, to a new prose paragraph; any heading with a word nobody listed fails closed the same way | held with the governing lines |
@@ -452,6 +452,24 @@ what governs them. A response citing more than 100 sentences for one answer (rev
 wording citing 100 or more is not proposed, and a save posting more than 100 sentences for one answer is refused before
 any is resolved or stored; a statement resting on its answers is saved with at most 99, its answers' entry being the
 hundredth (round 9: 101 made review refuse the whole page).
+
+**Who gave an answer (round 17e's review).** Generation writes `supported`, and only an answer generation wrote on its
+own evidence stays so: an answer the clinician (or anyone) types, chooses from a held candidate, or cites to other
+sentences is stored `edited` with `edited_by` — whoever made that change, carried forward until someone changes it
+again — and `reviewed_by` is only who ticked its review. The page names the author beside every `edited` answer
+("entered by …, not read from the notes") and shows the reader's qualifiers ("Read from the notes as: …") only beside a
+`supported` one; its badge is the review's (`conflict` until reviewed). Finalization's recheck (`held_now`) holds on
+the stored evidence everything generation's `decide` holds besides `governing` — someone else's finding, a planned
+treatment — so an answer whose evidence came to be `Her mother has a leg ulcer.` is refused, never finalized as
+supported; an `edited` answer is the clinician's decision and is not rechecked. A generation request over answers a
+clinician has reviewed or decided is refused (the page offers generation only before any answer exists; a new draft
+follows a source edit, which clears the answers); an employee's save keeps generation's statement proposals for the
+clinician's page (pre-selections still to be reviewed and ticked); a finalized record is not re-reviewed by whoever
+views it. Where one posted line is written under both legs with the side only on the line after it, the save keeps
+the copy that runs straight on to the clinician's next (or previous) posted line. Reproduced before repair: `7.4 mm`
+re-cited to the mother's sentence stayed `supported` through finalization and export; an employee's choice of leg read
+as the reviewing clinician's; a held statement proposal (`{'held': …}`) raised on the first page for every owner and
+clinician.
 
 ### The engine (`WmAdapter.cs`)
 
@@ -841,6 +859,47 @@ notes, so that needs a compromised parent.
   mirror and the row mirror are identical to d3733330; ReviewCost 32/32. Mutation proofs: 17 mutants, 13 killed at once,
   4 after a test for their shape; one equivalent by construction (a year-shaped quantity — the no-value-between bounds
   already exclude it).
+  Round 17e's review — the bounded independent review of the frozen `538d7dae` (tag `wmn-candidate-r17e-538d7dae`):
+  four read-only lenses in sealed checkouts, no concurrent edits. Every finding was reproduced on `538d7dae` before any
+  repair. The false-green lens: 32 careless answers pre-filled and passed finalization's recheck — a value given a vein
+  the notes did not give it (a vein written after the value, in a bracket, or named by a word the reader lacked; a
+  predicate `varicose` read as a tributary), a dated value released (a date past a comma or an `and`, `from 2023`, a
+  prior exam's date read as the study's, a day of the study's own year, `3/14/23`, `Back in 2023`, `now-ablated`), a
+  rival exempted because it was held for a hedge, a side or a date, a ninth finding past the list denial's eight words, a
+  label's open denial over a capital or a bullet, a question mark, `due to`, `both …`, a bracketed or `maybe` hedge, and a
+  diameter in a reflux-time column. The false-rejection lens: three review dead ends (a wrapped line carrying a label
+  after a stop lost the sentence above its side; a line written under both legs saved to the other leg's copy; a label's
+  continuation read from before a stop refused the value) and four over-holding readers (the list denial, a cause's
+  hedge, a treatment's year, a prior study's phrase over its whole clause). The provenance lens: a held statement proposal
+  raised on the first page for every owner and clinician; an answer re-cited to a relative's sentence stayed `supported`
+  through finalization and export; an employee's answer carried no author; plus four lower findings (an employee's save
+  dropped the proposals, a generation request replaced reviewed decisions, a finalized record was re-reviewed by its
+  viewer, the reader's qualifiers were shown beside a typed answer). All are repaired and pinned (`ReviewRound17e`, and
+  five workflow tests through the real page, save and engine); each new test was run on `538d7dae`'s code and fails there
+  (50 subtests and 5 errors across the 14 tests). Benchmarks, every battery, the wrapped mirror (13,531 pre-filled, 0
+  wrong-leg) and the row mirror (0 wrong-row, 359 accepted at review) are identical to `538d7dae`; the second generator
+  holds 2 more of 2,115 (the `mention` notes H092 and H158, see *Known limits*). The cost lens: two shapes past the
+  worker's 120 s timeout on the page — a choice's hedge searched over its whole clause per place of its option (`knee`
+  repeated: validation 244 s, the page 243 s at 49,000 characters) and a rival search rebuilding a unit's strike table
+  per value (272 s) — and four over 5 s: a year before the value read by a backtracking pattern per place (20.6 s; that
+  reader is gone), a wrapped sentence's rows re-read from every line to its end (55.5 s, and 528 MB of row readings kept
+  — a worker's RSS 1,218 MB over six notes), and a rival's governors re-judged per call (9.1 s). Each now reads once per
+  quote, unit, line window or question: the same shapes take 0.2 to 4.1 s at the limit, a worker's RSS over six such
+  notes plateaus at 171 MB, and `ReviewRound17eCost` pins five of them (each 8 to 32 s on `538d7dae`, 0.2 to 2.6 s now).
+  Finalization's new relative recheck reuses generation's reading of the same cited text (kept per field kind, unit,
+  value and text), so the round-13 and round-16 `ReviewCost` shapes read at or below `538d7dae`'s
+  (3.2 to 4.1 s against 4.1 to 4.5 s on this host).
+  The author's own probe after the review found one more of the lens's class and it is repaired with them: an unknown
+  vein word after the item's own vein, in its sentence (`The right great saphenous vein is competent and the circumflex
+  vein measures 4.2 mm at the saphenofemoral junction` pre-filled the GSV at the SFJ). Mutation proofs, the unmutated
+  classes first and every restore checked by hash: 53 mutants over the new rules, the page, the save and the cost
+  repairs, all killed — 8 only after a test for the shape they changed (a transcript's next vein opening its own value,
+  an unknown vein after the value, today's value against a compared dated one with no study date, an affirmed option
+  after a denied list, a label's continuation kept from the refusal reader, a hedge after another subject, a prior
+  study's phrase after another value, an absence option after a denied list), and 4 only once their form was corrected
+  to change the rule at all (a mutant that edits a rule into an equivalent is no proof); two further mutants were
+  dropped, one vacuous in form (its real form is killed) and one equivalent by construction (a `;` bound the sentence
+  already gives — that code is removed).
 - **Cost.** The reader answers every per-place question by bisection over positions read once per text (sides, clause
   breaks, digits, words, numbers, quantities by unit, relatives, paragraphs, lines), the backtracking patterns are
   atomic, a correction's reach, its struck spans and the governors' blocks are read once per unit or note, what a
@@ -961,14 +1020,33 @@ Every one of these fails closed (a hold, or a statement the clinician must sourc
   made 87 wrapped answers read as their unwrapped note already did (the wrap had cut that side off the unit), and round
   17c's cited wrapped sentence 341 more (their side had been taken from a neighbouring sentence).
 - **Rounds 17d and 17e, what is not read.** `measurement_context`'s earlier-study wording is a closed list of
-  attributions; a year is read only in the value's own clause (`In 2023, the great saphenous vein measured 9.6 mm` — the
-  comma ends it — is not held); a year with no study date in the note holds its value even where it is this study's (the
-  clinician decides). A bare `no` or `without` is not read across a list (`no reflux and swelling`), only a denial verb.
-  A hedge after the value that a finding word follows is read as the finding's. A vein carried from a sub-heading
+  attributions, and a prior study's phrase is read as the nearest value's only (in an unpunctuated run, one right after
+  another value is that value's). A date is read in the value's own sentence only — the nearest before it and after it,
+  not past another value or a `;` — so a date in the sentence before (`The 2023 study: … . The great saphenous vein
+  measured 9.6 mm.`) and a date in words (`last year`, `two years ago`) are not read; a date before the value is not the
+  value's where the value's own predicate is in the present (`In 2023, the great saphenous vein measures 9.6 mm` is not
+  held — the wording is read as today's), nor a treatment's date after a value stated in the present; a date with no study
+  date in the note holds its value even where it is this study's (the clinician decides), and only the note's own
+  labelled study date is read as the study's (`Date of service`, `Exam date`, `DOS`; a date written in prose is none). A
+  bare `no` or `without` is not read across a list (`no reflux and swelling`), only a denial verb, and a list ends at
+  its first verb, contrast, positive finding, vein, number, `;`, `, with …` or `, history of …` (`She denies numbness, with
+  nocturnal cramping` pre-fills `Cramping`). A hedge after the value that a finding word follows is read as the finding's
+  (`… 6.1 mm with possible reflux`), and one of a cause or a management (`likely the source of her symptoms`, `possibly
+  worth treating`) or after another subject (`…, and she would likely benefit`) is not the value's; a tag question
+  (`…, right?`, `…, correct?`) is none. A rival is a value read for the row, or one with no level in the cited sentence
+  or pointing back at a level in its paragraph (`there`, `at that level`): another value whose row the reader cannot read
+  (`It measures 9.6 mm as well.`) is no rival, and one read two ways under the other leg's heading is none either — while
+  one read two ways under this leg's heading is (the generated `mention` notes H092 and H158, a `Right leg: see separate
+  report.` line inside the left block, now hold 2 of 2,115 answers). A vein word the reader does not know is read only as
+  the word before `vein` or a known abbreviation: a vein named otherwise, with no `vein` after it and no carried vein's
+  name, leaves the paragraph's vein carried. A label's open value continues onto at most 40 list items under it. A vein carried from a sub-heading
   (`Great saphenous vein` / `SFJ 5.6 mm`) is not refused for the accessory's row at the same level: review accepts the
   clinician's choice there (359 of the row mirror's 34,466 wrong-row offers); none is pre-filled. Review accepts the
   other leg where a reading gives it — a sentence comparing the legs, a side after the value in a run-on — as the
-  clinician's decision, stored `edited`.
+  clinician's decision, stored `edited` with who made it. A label line whose own sentence names the other leg and runs on
+  by a wrap to the value's line (`Comment: the right leg is the treated one, and` / `the great saphenous vein measures …`
+  under `LEFT LOWER EXTREMITY:`) is refused for the left unless that comment line is cited too (lens 2 of round 17e's
+  review: not a dead end, a citation completes it).
 - **Options (round 17), what they read.** The deep-vein list reads CFV, FV, the popliteal and posterior tibial veins by
   name and abbreviation; an option listing others is not read as a list. The qualifier evidence is a closed list of
   treatment and duplication words in the vein's clause: a qualifier the notes describe otherwise leaves the plain option
@@ -1179,26 +1257,51 @@ Every one of these fails closed (a hold, or a statement the clinician must sourc
 
 ## Live verification (NOT run; needs the owner's authorization)
 
-**One campaign:** the 17 narrative and transcript cases of the frozen benchmark, then the held-out cases, through the
-live provider on the synthetic account (`QUILLMD_WM_NARRATIVE=1` on the QA stack or a synthetic encounter; never a real
-visit), scored by the same scorer (`core/tests/wm_narrative_benchmark.py`), with each response retained as a replay
-file so every later run can be reproduced offline.
+**What it measures.** How the real model's answers fare through the frozen candidate's product path — the pre-send
+quote, the wallet hold, one request, the validator, the page — scored by the frozen scorer
+(`core/tests/wm_narrative_benchmark.score_case`) against expectations written before any live response existed. Each
+response is kept as a replay file, so every later run can be reproduced offline.
 
-**Size, measured on the frozen cases:** 468,149 input bytes (27.5 KB per request: payload, instructions, schema) and,
-from the careful responses, ~13.7 KB of output per request. The application reserves per request (input bytes +
-12,000) input tokens and 12,000 output tokens at the configured rates and shows that maximum before sending.
+**Model and pricing, as the application itself last recorded them** (the private environment was not read): the billing
+verification of the last live WM job (`rebuild/.runtime/wm-live-document-billing-verification-20260917.json`, 2026-09-17)
+records provider `anthropic:claude-sonnet-4-6` at $3 input / $15 output / $0.30 cached per million tokens, pricing
+version `configured-v1:48bd430d…`. **Stage 0 confirms both from the application's own pre-send quote before anything is
+sent**; any other model or pricing version stops the plan until the figures below are recomputed.
 
-**Cost** (the configured rates are in the private environment and were not read; three list-price assumptions):
+**Per request, fixed by the code** (`core/generation.py`, `core/wm_narrative.py`): one `messages.create`,
+`max_tokens=12000`, `timeout=240 s`, `max_retries=0` (no SDK retry); refused before sending unless the provider is
+anthropic and the flag is on; a truncated response (`stop_reason` other than `end_turn`) adopts nothing. The wallet holds
+`maximum_cost × 1.5` before the request and refuses it when the balance is short ("No provider request was made").
+Measured on the 29 narrative and transcript cases (17 frozen, 12 held-out; 26.2–30.2 KB sent each) at those rates: a
+hold of $0.2946–$0.3035 per request (list), $0.44–$0.46 at 1.5×; expected spend ≈ $0.10 per request (≈ 8.3k input and
+≈ 4.6k output tokens).
 
-| assumed $/M tokens (in / out) | expected, 17 requests | reservation bound | ×1.5 customer limit |
-|---|---|---|---|
-| 3 / 15 | ≈ $1.56 | $5.08 | $7.62 |
-| 5 / 25 | ≈ $2.60 | $8.46 | $12.69 |
-| 15 / 75 | ≈ $7.81 | $25.38 | $38.07 |
+**Stage 1 — small and representative, 5 requests:** C14 (a side correction), C18 (a planned treatment and an ambiguous
+side), C19 (a transcript), H05 (a held-out transcript: approximate and bounded values, a mid-sentence correction,
+uncertainty, an ambiguous side), H12 (held-out shorthand: diameter/reflux pairs, abbreviations). Bound $1.50 list, $2.24
+at 1.5×; expected ≈ $0.50 list.
 
-(expected = input bytes/3.5 and output bytes/3 tokens; the bound is what is held, not what is charged; add the
-held-out cases at the same per-request figures.)
+- Ceilings: 5 requests, plus at most 2 transport retries in the stage (a timeout, 429 or 5xx only — never for a bad
+  answer), each after 60 s; two consecutive transport failures stop the stage. At most 7 requests, one O_EXCL attempt
+  marker per case (as the existing live runner does).
+- **Cost cap: a synthetic wallet funded with $3.50 and nothing else.** The product refuses any request whose hold
+  exceeds what is left, so the stage cannot charge more than $3.50 even if every request were charged its full hold
+  (7 × $0.455 = $3.19). Holds settle to the actual charge, so the wallet caps money and the markers cap requests.
+- Stop at once on: any wrong pre-filled answer or wrong pre-selected statement; a charge above its hold; a request the
+  runner did not initiate; any model or pricing version other than stage 0's.
+- Pass: 0 wrong pre-filled answers and 0 wrong statements; unnecessary holds and missed answers reported per row.
 
-**Pass criteria, fixed before the run:** on the narrative/transcript cases, no wrong pre-filled answer; unnecessary
-holds and missed answers reported separately with every row; any wrong pre-filled answer stops the campaign and is
-analysed before anything else. Enabling the flag for doctors is a separate owner decision after it.
+**Stage 2 — only after stage 1 passes and the owner approves it:** the other 24 cases (14 frozen, 10 held-out), same
+per-request ceilings, at most 4 transport retries (28 requests). Bound $7.20 list, $10.80 at 1.5×; wallet funded with
+$13.00 (28 full holds = $12.75). Same stop rules and pass criteria; any wrong pre-filled answer stops the campaign and is
+analysed before anything else.
+
+**Total cap: $16.50 charged at 1.5× (≈ $11 list), 35 requests; expected ≈ $2.75 list, ≈ $4.10 charged.**
+
+**Where it runs:** a separate, localhost-only instance of the frozen candidate with its own networkless synthetic
+database, one synthetic clinician and one funded synthetic wallet, `QUILLMD_WM_NARRATIVE=1` in that process only, and the
+provider configured as production is. Production, its flag, public maintenance, MFA and records are not touched. The
+provider key reaches that process from the owner, through a file this session cannot read.
+
+**External dependencies:** the owner's authorization of stage 1 and its $3.50 cap (and later stage 2), and the provider
+key supplied to the isolated instance. Enabling the flag for doctors stays a separate owner decision after the campaign.
