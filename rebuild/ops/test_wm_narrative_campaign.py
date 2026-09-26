@@ -157,12 +157,13 @@ class Credentials(unittest.TestCase):
         self.assertEqual(c.offline_provider(self.private(json.dumps(good)))['ANTHROPIC_API_KEY'], c.OFFLINE_KEY)
 
     def test_live_mode_is_refused_before_the_protected_configuration_is_opened(self):
-        campaign = tempfile.mkdtemp()
-        os.chmod(campaign, 0o700)
+        root = tempfile.mkdtemp()                 # 0700, ours: the stand-in for the live evidence root
+        campaign = os.path.join(root, 'wm-narrative-test-campaign')
         args = SimpleNamespace(stage=1, mode='live', campaign_dir=campaign, declaration=None, provider=None,
                                db='unused', engine='unused', offline_timeout=5, offline_retry_wait=1,
                                expectation_override=None)
         with patch.object(c, 'candidate_identity', return_value={'commit': 'x' * 40, 'runner_sha256': 'y'}), \
+                patch.object(c, 'LIVE_ROOT', Path(campaign).parent), patch.object(c, 'CAMPAIGN', Path(campaign).name), \
                 patch.object(c, 'provider_fields_from', side_effect=AssertionError('opened')) as opened:
             with self.assertRaisesRegex(c.Refused, 'declaration'):
                 c.outer(args)
@@ -210,6 +211,21 @@ class Credentials(unittest.TestCase):
         Path(uncommitted.declaration).write_text(Path(uncommitted.declaration).read_text() + 'edited after commit\n')
         with self.assertRaisesRegex(c.Refused, 'committed and unmodified'):
             c.declared(uncommitted)
+
+    def test_one_runner_per_campaign(self):
+        directory = Path(tempfile.mkdtemp())
+        first = c.hold_lock(directory)
+        self.addCleanup(os.close, first)
+        with self.assertRaisesRegex(c.Refused, 'Another runner'):
+            c.hold_lock(directory)
+
+    def test_live_evidence_has_one_place_per_campaign(self):
+        args = SimpleNamespace(stage=1, mode='live', campaign_dir=tempfile.mkdtemp(), declaration=None, provider=None,
+                               db='unused', engine='unused', offline_timeout=5, offline_retry_wait=1,
+                               expectation_override=None)
+        with patch.object(c, 'provider_fields_from', side_effect=AssertionError('opened')):
+            with self.assertRaisesRegex(c.Refused, 'nowhere else'):
+                c.outer(args)
 
     def test_key_shaped_text_is_found_in_evidence(self):
         directory = Path(tempfile.mkdtemp())

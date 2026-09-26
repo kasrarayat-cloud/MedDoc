@@ -91,6 +91,8 @@ PROVIDER_FIELDS = ('ANTHROPIC_API_KEY', 'QUILLMD_AI_PROVIDER', 'QUILLMD_AI_MODEL
 OPTIONAL_PROVIDER_FIELDS = {'QUILLMD_PROVIDER_DISCOUNT_RATE', 'QUILLMD_DEEPGRAM_RATE_PER_SECOND',
                             'QUILLMD_DEEPGRAM_RATE_PER_MINUTE'}
 OFFLINE_KEY = 'offline-mock-provider-no-credential'
+#: Live evidence has ONE place per campaign, so a second directory cannot restart the campaign's totals.
+LIVE_ROOT = Path('/opt/meddoc-pro/rebuild/.runtime/wm-narrative-campaign')
 KEY_SHAPE = re.compile(r'sk-ant-[A-Za-z0-9_\-]{8,}')
 
 EXIT = {'PASS': 0, 'FAIL': 3, 'STOPPED': 4, 'INCOMPLETE': 5}
@@ -321,6 +323,10 @@ def candidate_identity():
 def outer(args):
     """Validate, build the scrubbed environment, and re-execute as the process that makes requests."""
     require(args.stage in STAGES, 'Unknown stage.')
+    if args.mode == 'live':
+        require(Path(args.campaign_dir).resolve() == LIVE_ROOT / CAMPAIGN,
+                f'Live evidence lives in {LIVE_ROOT / CAMPAIGN} and nowhere else.')
+        private_directory(LIVE_ROOT)
     campaign_dir = private_directory(Path(args.campaign_dir).resolve())
     for name in ('ledger', 'responses', 'replay', 'scores', 'state', 'home', 'tmp'):
         private_directory(campaign_dir / name)
@@ -358,6 +364,7 @@ def inner():
     os.umask(0o077)                 # as the production units run: nothing this process writes is readable by others
     context = json.loads(os.environ['WMN_CAMPAIGN_CONTEXT'])
     campaign_dir, stage, mode = Path(context['campaign_dir']), context['stage'], context['mode']
+    lock = hold_lock(campaign_dir)  # one runner per campaign: two could otherwise both pass the same limit check
     key = os.environ.get('ANTHROPIC_API_KEY', '')
     sys.path.insert(0, str(REBUILD))
     import django
@@ -431,6 +438,18 @@ def inner():
         os.environ.pop('ANTHROPIC_API_KEY', None)
         print(json.dumps({'verdict': verdict, 'stops': report['stops'], 'totals_stage': report.get('totals_stage')}, indent=1))
     return EXIT[verdict]
+
+
+def hold_lock(campaign_dir):
+    """An exclusive lock on the campaign for this process's whole life (released by the kernel on any exit)."""
+    import fcntl
+    fd = os.open(campaign_dir / 'campaign.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        os.close(fd)
+        raise Refused('Another runner holds this campaign.')
+    return fd
 
 
 def campaign_record(campaign_dir, context):
