@@ -6739,3 +6739,120 @@ class ReviewRound18(SimpleTestCase):
         start = time.process_time()
         narrative.validate(notes, FIELDS, response, REQUIREMENTS)
         self.assertLess(time.process_time() - start, 15.0)
+
+
+R19 = 'The right great saphenous vein measures 7.4 mm at the saphenofemoral junction.'
+L19 = 'The left great saphenous vein measures 6.9 mm at the saphenofemoral junction.'
+RR19 = 'RIGHT LEG:\nThe great saphenous vein is competent. '
+HELD_19 = [  # (id, notes, key, value, cite-first-unit-with) — each must be HELD at pre-fill
+    ('L1-02a', 'Right GSV SFJ 6.1 mm maybe, reflux 2.1 s.', 'measurement_1_1', '6.1 mm'),
+    ('L1-02b', 'The right great saphenous vein measures 6.1 mm perhaps, with reflux of 2.1 seconds at the saphenofemoral junction.', 'measurement_1_1', '6.1 mm'),
+    ('L1-02c', 'The right great saphenous vein at the saphenofemoral junction measures 6.1 mm maybe, and reflux is 2.1 seconds.', 'measurement_1_1', '6.1 mm'),
+    ('L1-02d', 'Right GSV SFJ 6.1 mm, maybe, reflux 2.1 s.', 'measurement_1_1', '6.1 mm'),
+    ('L1-02e', 'Right GSV SFJ 6.1 mm perhaps, no thrombus.', 'measurement_1_1', '6.1 mm'),
+    ('L1-02f', 'Right GSV SFJ reflux 2.1 s maybe, diameter 6.1 mm.', 'measurement_1_2', '2100 ms'),
+    ('L1-03a', RR19 + 'At the saphenofemoral junction reflux of 1.8 seconds and a diameter of 6.8 mm\nare measured in the\nanterior accessory saphenous vein.', 'measurement_1_2', '1800 ms'),
+    ('L1-03b', 'RIGHT LEG:\nAt the saphenofemoral junction 6.8 mm with reflux of 1.8 seconds\nand 2.0 seconds on repeat, all in the\nanterior accessory saphenous vein.', 'measurement_1_1', '6.8 mm'),
+    ('L1-04a', R19 + '\nRepeat (the right leg was re-examined standing): great saphenous vein 9.6 mm at the saphenofemoral junction.', 'measurement_1_1', '7.4 mm'),
+    ('L1-04b', R19 + ' Great saphenous vein 9.6 mm at the saphenofemoral junction (right leg, measured standing).', 'measurement_1_1', '7.4 mm'),
+    ('L1-04c', R19 + ' On standing (the right great saphenous vein was re-measured) it is 9.6 mm at the saphenofemoral junction.', 'measurement_1_1', '7.4 mm'),
+    ('L1-04d', R19 + ' Standing, apart from the right, nothing changed; the great saphenous vein measures 9.6 mm at the saphenofemoral junction.', 'measurement_1_1', '7.4 mm'),
+    ('L1-04e', L19 + '\nAll veins are normal excluding the left great saphenous vein, which measures 9.6 mm at the saphenofemoral junction on repeat.', 'measurement_15_1', '6.9 mm'),
+    ('L1-05a', RR19 + 'At the saphenofemoral junction a 9.6 mm, oval lymph node is seen.', 'measurement_1_1', '9.6 mm'),
+    ('L1-05b', RR19 + 'At the saphenofemoral junction there is a 9.6 mm, reactive lymph node.', 'measurement_1_1', '9.6 mm'),
+    ('L1-05c', RR19 + 'At the saphenofemoral junction 9.6 mm, lymph node.', 'measurement_1_1', '9.6 mm'),
+    ('L1-05d', RR19 + 'At the saphenofemoral junction 9.6 mm in a lymph node.', 'measurement_1_1', '9.6 mm'),
+    ('L1-06d-careless', 'The right great saphenous vein measures 7.4 mm at the saphenofemoral junction, unlike the left great saphenous vein, which measures 5.0 mm at the saphenofemoral junction.', 'measurement_1_1', '5.0 mm'),
+    ('L1-08', 'Bilateral venous duplex 09/25/2026 - follow-up after ablation\nRight venous duplex performed 03/14/2023\nThe right great saphenous vein measured 9.6 mm at the saphenofemoral junction on 03/14/2023.\nToday the right great saphenous vein is occluded.', 'measurement_1_1', '9.6 mm'),
+]
+HELD_19 += [  # (a sided choice in a sentence that sets a leg apart: held — round 19 moved the set-apart side to a hold)
+    ('M19-choice-except', 'Saphenous reflux is present in the great saphenous vein except on the right.', 'sdt_-213273323', 'reflux positive.'),
+    ('M19-choice-opposed', 'Saphenous reflux is present, as opposed to the right side, in the great saphenous vein.', 'sdt_-213273323', 'reflux positive.'),
+]
+for tag in ('(left).', '(L).', '(l)', '(lt)', '(left) - repeat'):
+    HELD_19.append(('L1-07 ' + tag, 'RIGHT LEG:\nThe great saphenous vein measures 6.1 mm at the saphenofemoral junction\n' + tag, 'measurement_1_1', '6.1 mm'))
+REVIEW_19 = [  # (id, notes, key, value) — the correct answer must be ACCEPTED at review (support None)
+    ('L1-06a', 'All veins are competent except the right great saphenous vein, which measures 9.6 mm at the saphenofemoral junction with reflux of 2.1 seconds.', 'measurement_1_1', '9.6 mm'),
+    ('L1-06b', 'Great saphenous vein at the saphenofemoral junction 9.6 mm (right leg, measured standing).', 'measurement_1_1', '9.6 mm'),
+    ('L1-06c', 'The right great saphenous vein measures 7.4 mm at the saphenofemoral junction, as opposed to the left at 9.6 mm.', 'measurement_15_1', '9.6 mm'),
+    ('L1-06d', 'The right great saphenous vein measures 7.4 mm at the saphenofemoral junction, unlike the left great saphenous vein, which measures 5.0 mm at the saphenofemoral junction.', 'measurement_15_1', '5.0 mm'),
+    ('L2-02', 'Great saphenous vein at the saphenofemoral junction 9.0 mm (left leg, measured standing).', 'measurement_15_1', '9.0 mm'),
+    ('L2-03', 'All veins are competent except the left great saphenous vein, which measures 9.0 mm at the saphenofemoral junction.', 'measurement_15_1', '9.0 mm'),
+    ('ctl-R14M', 'The small saphenous vein measures 3.5 mm at the saphenopopliteal junction without reflux\nright leg.\nThe great saphenous vein measures 5.0 mm at the saphenofemoral junction without reflux\nleft leg.', 'measurement_15_1', '5.0 mm'),
+]
+CONTROLS_19 = [  # (id, notes, key, value) — must PRE-FILL
+    ('ctl-maybe-next-value', 'The right great saphenous vein measures 7.4 millimeters reflux maybe 2 seconds at the saphenofemoral junction.', 'measurement_1_1', '7.4 mm'),
+    ('ctl-L2H1', 'SYNTHETIC PATIENT P had a bilateral detailed venous study.\n(R) GSV SFJ 7.4 mm, reflux 1.8 s\n(L) GSV SFJ 5.0 mm, reflux 1.1 s\nSaphenous reflux is present in both lower extremities.', 'measurement_1_2', '1800 ms'),
+    ('ctl-unlike-where', 'The right great saphenous vein measures 7.4 mm at the saphenofemoral junction, unlike the left, where it is 5.0 mm.', 'measurement_1_1', '7.4 mm'),
+    ('ctl-title', 'Venous duplex 09/25/2026\nThe right great saphenous vein measures 7.4 mm at the saphenofemoral junction.', 'measurement_1_1', '7.4 mm'),
+    ('ctl-plain', R19, 'measurement_1_1', '7.4 mm'),
+]
+CONTROLS_19 += [
+    # (an exclusion or a contrast owning its clause keeps its side: pre-filled as on f01107aa — round 19)
+    ('ctl-except-which', 'All veins are competent except the right great saphenous vein, which measures 9.6 mm at the saphenofemoral junction with reflux of 2.1 seconds.', 'measurement_1_1', '9.6 mm'),
+    ('ctl-unlike-vein-which', 'The right great saphenous vein measures 7.4 mm at the saphenofemoral junction, unlike the left great saphenous vein, which measures 5.0 mm at the saphenofemoral junction.', 'measurement_1_1', '7.4 mm'),
+]
+
+
+class ReviewRound19(SimpleTestCase):
+    """Round 19: the focused refutation pass over round 18's repairs (four sealed read-only lenses; every finding verified
+    by a separate agent and reproduced here). Round 18's side-set-apart placement, side-item split, row window, not-a-vein
+    narrowing and value-hedge removal each released or blocked what f01107aa held or completed; its new readers were
+    quadratic. On 207a26a8, 31 rows fail (23 held rows pre-filled, 6 review rows refused, 2 controls held); on f01107aa,
+    only the five bare side brackets, `(left).` below the value, which f01107aa also pre-filled."""
+
+    def units_with(self, notes, value):
+        number = value.split()[0]
+        forms = {number} | ({'%g' % (int(number) / 1000)} if value.endswith(' ms') else set())
+        return [u for u in narrative.units(notes, FIELDS, LABELS) if any(f in u['quote'] for f in forms)]
+
+    def test_every_careless_answer_the_pass_reproduced_is_held(self):
+        for name, notes, key, value in HELD_19:
+            with self.subTest(name):
+                status = decide(notes, {key: (value, [self.units_with(notes, value)[0]['quote']], {})})[0][key]['status']
+                self.assertNotEqual(status, 'supported')
+
+    def test_every_correct_answer_it_refused_completes_at_review(self):
+        for name, notes, key, value in REVIEW_19:
+            with self.subTest(name):
+                own = [narrative.unit_evidence(u) for u in narrative.units(notes, FIELDS, LABELS)]
+                read = narrative.reading(notes, FIELDS, LABELS)
+                self.assertIsNone(narrative.support(BY_KEY[key], value, own, notes, read['labels'], read['all_labels']))
+
+    def test_its_controls_still_pre_fill(self):
+        for name, notes, key, value in CONTROLS_19:
+            with self.subTest(name):
+                status = decide(notes, {key: (value, [self.units_with(notes, value)[0]['quote']], {})})[0][key]['status']
+                self.assertEqual(status, 'supported')
+
+    def cold_cpu(self, run):
+        import time
+        for name in dir(narrative):
+            if hasattr(getattr(narrative, name), 'cache_clear'):
+                getattr(narrative, name).cache_clear()
+        start = time.process_time()
+        run()
+        return time.process_time() - start
+
+    @override_settings(WM_NARRATIVE=True)
+    def test_its_new_readers_stay_linear(self):
+        """Round 19's cost lens on round 18's readers: finding_context read one window per located word, each over every
+        date of the unit (211 s at 49,578 characters, 36 s at 20,000); statement windows the same (37 s); the
+        unexamined-leg rule was read per value over the whole sentence (7.4 s). Repaired: 0.6 s, 1.0 s and 1.5 s at 50,000."""
+        head = 'Date of study: 09/25/2026\nRIGHT LEG:\n'
+        k = 2000
+        notes = head + 'The great saphenous vein ' + 'vein ' * k + '2027 ' * k + 'reflux positive.'
+        line = notes.split('\n')[2]
+        self.assertLess(self.cold_cpu(lambda: decide(notes, {'sdt_-892962961': ('great saphenous vein', [line], {})},
+                                                     [('claim_32', 'positive', [line]), ('claim_30', 'selected', [line])])), 3.0)
+        body = 'reflux 2027; ' * ((20000 - len(head)) // 13) + 'great saphenous vein reflux positive without obstruction or insufficiency.'
+        notes = head + body
+        line = notes.split('\n')[2]
+        picks = {'sdt_-892962961': ('great saphenous vein', [line], {}), 'sdt_-213273323': ('reflux positive.', [line], {}),
+                 'sdt_-170105994': ('without evidence of obstruction or insufficiency.', [line], {})}
+        self.assertLess(self.cold_cpu(lambda: decide(notes, picks, [('claim_30', 'selected', [line]), ('claim_31', 'selected', [line]),
+                                                                   ('claim_32', 'positive', [line])])), 3.0)
+        notes = ('Date of study: 09/25/2026\nThe right great saphenous vein at the saphenofemoral junction measures 7.4 mm.\n'
+                 'The left great saphenous vein at the saphenofemoral junction measures' + ' 5 mm lt' * 6000 + '.')
+        line = notes.split('\n')[1]
+        self.assertLess(self.cold_cpu(lambda: decide(notes, {'measurement_1_1': ('7.4 mm', [line], {})})), 5.0)
