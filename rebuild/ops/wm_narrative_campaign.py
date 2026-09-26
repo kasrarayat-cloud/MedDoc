@@ -354,6 +354,7 @@ class Stop(Exception):
 
 
 def inner():
+    os.umask(0o077)                 # as the production units run: nothing this process writes is readable by others
     context = json.loads(os.environ['WMN_CAMPAIGN_CONTEXT'])
     campaign_dir, stage, mode = Path(context['campaign_dir']), context['stage'], context['mode']
     key = os.environ.get('ANTHROPIC_API_KEY', '')
@@ -513,7 +514,8 @@ class Synthetic:
         from core.billing import available_balance
         available = available_balance(self.user, self.department)
         fund = STAGES[stage]['wallet_limit'] - available
-        if fund > 0:
+        # Funded ONCE per stage. A resumed stage is not topped up again: holds its unknown outcomes keep stay held.
+        if fund > 0 and not LedgerEntry.objects.filter(key=f'campaign:{CAMPAIGN}:stage:{stage}').exists():
             wallet.balance += fund
             wallet.save(update_fields=['balance'])
             LedgerEntry.objects.create(wallet=wallet, amount=fund, kind='campaign_grant',
