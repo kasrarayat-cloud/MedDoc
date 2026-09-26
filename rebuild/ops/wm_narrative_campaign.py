@@ -388,7 +388,9 @@ def inner():
         report['stops'].append(str(stop))
         verdict = 'FAIL' if str(stop).startswith('WRONG') else 'STOPPED'
     except Exception as error:      # fail closed: an unexpected runner error sends nothing further
+        import traceback
         report['stops'].append(f'runner error: {type(error).__name__}')
+        report['runner_traceback'] = traceback.format_exc()[-4000:]
         verdict = 'STOPPED'
     finally:
         rows = load_ledger(ledger)

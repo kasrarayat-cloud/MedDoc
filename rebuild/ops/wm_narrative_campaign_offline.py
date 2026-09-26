@@ -186,7 +186,7 @@ def check(scenario, expected, code):
     out.append(('database records exported', bool(records), [p.name for p in records]))
     if records:
         db = json.loads(records[0].read_text())
-        debits = -sum(Decimal(str(e['amount'])) for e in db['ledger'] if e['kind'] != 'campaign_grant')
+        debits = -sum((Decimal(str(e['amount'])) for e in db['ledger'] if e['kind'] != 'campaign_grant'), Decimal('0'))
         charged = Decimal(report.get('totals_stage', {}).get('wallet_charged', '-1'))
         out.append(('wallet charged == ledger debits net of reversals', charged == debits.quantize(campaign.CENT),
                     f'{charged} vs {debits}'))
