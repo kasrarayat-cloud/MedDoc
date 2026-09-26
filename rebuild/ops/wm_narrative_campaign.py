@@ -302,8 +302,9 @@ def declared(args):
                  f'wallet_limit_usd: {plan["wallet_limit"]}', f'model: {EXPECTED_MODEL}',
                  f'pricing_version: {EXPECTED_PRICING_VERSION}'):
         require(line in text, f'The declaration does not state `{line}`.')
-    authorization = re.search(r'^authorization: (\S.{7,})$', text, re.M)
-    require(authorization, 'The declaration names no owner authorization.')
+    authorization = re.search(r'^authorization: (owner \S.{11,})$', text, re.M)
+    require(authorization and not re.search(r'pending|tbd|todo|placeholder|<|>|\?', authorization.group(1), re.I),
+            'The declaration names no owner authorization (a line `authorization: owner <date and words>`, no placeholder).')
     return {'declaration': str(path), 'sha256': hashlib.sha256(text.encode()).hexdigest(),
             'authorization': authorization.group(1).strip()}
 
@@ -625,6 +626,11 @@ def run_stage(world, ledger, stage, context, report):
         if Usage.objects.count() != with_receipt:
             raise Stop('A usage row exists that no attempt accounts for.')
         cls = outcome['class']
+        # An adopted draft is scored (and its page rendered) BEFORE any stop below, so a stopped stage keeps the evidence
+        # of what the stopping answer said.
+        score = score_attempt(world, encounter, case_id, number, override) if cls == 'adopted' else None
+        if score:
+            report['cases'][case_id] = score
         if outcome.get('provider_actual_cost') not in (None, '') and Decimal(outcome['provider_actual_cost']) > maximum:
             raise Stop(f'Attempt {number}: provider cost {outcome["provider_actual_cost"]} above its maximum {maximum}.')
         if outcome.get('absorbed_over_limit'):
@@ -633,8 +639,6 @@ def run_stage(world, ledger, stage, context, report):
             raise Stop(f'Attempt {number}: the provider answered as {outcome["response_model"]}.')
         if cls == 'adopted':
             consecutive = 0
-            score = score_attempt(world, encounter, case_id, number, override)
-            report['cases'][case_id] = score
             if score['counts'].get('wrong_supported') or score['counts'].get('statement_wrong'):
                 raise Stop(f'WRONG ANSWER: case {case_id} pre-filled {score["counts"].get("wrong_supported", 0)} wrong '
                            f'answer(s) and {score["counts"].get("statement_wrong", 0)} wrong statement(s).')

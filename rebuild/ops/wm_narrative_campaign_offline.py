@@ -18,7 +18,7 @@ import socket
 import subprocess
 import sys
 import time
-from decimal import Decimal
+from decimal import Decimal, ROUND_UP
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -188,7 +188,7 @@ def check(scenario, expected, code):
         db = json.loads(records[0].read_text())
         debits = -sum((Decimal(str(e['amount'])) for e in db['ledger'] if e['kind'] != 'campaign_grant'), Decimal('0'))
         charged = Decimal(report.get('totals_stage', {}).get('wallet_charged', '-1'))
-        out.append(('wallet charged == ledger debits net of reversals', charged == debits.quantize(campaign.CENT),
+        out.append(('wallet charged == ledger debits net of reversals', charged == debits.quantize(campaign.CENT, rounding=ROUND_UP),
                     f'{charged} vs {debits}'))
         grants = [e for e in db['ledger'] if e['kind'] == 'campaign_grant']
         out.append(('wallet funded once, to the stage limit', len(grants) == 1

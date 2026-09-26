@@ -186,6 +186,31 @@ class Credentials(unittest.TestCase):
         with self.assertRaisesRegex(c.Refused, 'quillmd_wmn_campaign'):
             c.scrubbed_environment(args, {}, directory)
 
+    def declaration(self, authorization):
+        import subprocess
+        repo = Path(tempfile.mkdtemp())
+        subprocess.run(['git', 'init', '-q', str(repo)], check=True)
+        plan = c.STAGES[1]
+        (repo / 'd.md').write_text(f'campaign: {c.CAMPAIGN}\nstage: 1\nprovider_limit_usd: {plan["provider_limit"]}\n'
+                                   f'wallet_limit_usd: {plan["wallet_limit"]}\nmodel: {c.EXPECTED_MODEL}\n'
+                                   f'pricing_version: {c.EXPECTED_PRICING_VERSION}\n{authorization}\n')
+        subprocess.run(['git', '-C', str(repo), 'add', 'd.md'], check=True)
+        subprocess.run(['git', '-C', str(repo), '-c', 'user.name=t', '-c', 'user.email=t@synthetic.invalid',
+                        '-c', 'core.hooksPath=/dev/null', 'commit', '-q', '-m', 'd'], check=True)
+        return SimpleNamespace(declaration=str(repo / 'd.md'), stage=1)
+
+    def test_live_mode_needs_a_committed_declaration_with_a_real_owner_authorization(self):
+        for placeholder in ('authorization: PENDING-OWNER-APPROVAL', 'authorization: owner <quote the approval here>',
+                            'authorization: owner TBD after the owner answers', 'authorization: owner 2026-09-26?'):
+            with self.assertRaisesRegex(c.Refused, 'no owner authorization'):
+                c.declared(self.declaration(placeholder))
+        ok = c.declared(self.declaration('authorization: owner 2026-09-26 approved stage 1 at the stated limits'))
+        self.assertTrue(ok['authorization'].startswith('owner 2026-09-26'))
+        uncommitted = self.declaration('authorization: owner 2026-09-26 approved stage 1 at the stated limits')
+        Path(uncommitted.declaration).write_text(Path(uncommitted.declaration).read_text() + 'edited after commit\n')
+        with self.assertRaisesRegex(c.Refused, 'committed and unmodified'):
+            c.declared(uncommitted)
+
     def test_key_shaped_text_is_found_in_evidence(self):
         directory = Path(tempfile.mkdtemp())
         (directory / 'a.json').write_text('{"x": "sk-ant-api03-AbCdEfGh123"}')
