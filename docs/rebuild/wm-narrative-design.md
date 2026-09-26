@@ -1110,7 +1110,10 @@ notes, so that needs a compromised parent.
   5.20 s and 5.35 s (the latter beside this session's own mutation batch, row-diff and runner validation, load 8); the
   whole reader module run alone passed it.
 - **The live campaign's runner, offline (no provider request possible).** `ops/wm_narrative_campaign_offline.py` on `f920f7ab`,
-  and again on `c2e2511c` after the ledger fix,
+  again on `c2e2511c` after the ledger fix, and on `72283bc5` with the request capture and the replay manifest (18 of 18,
+  323 checks: in every scenario each request the provider received was captured before it was sent, canonically
+  identical, and every attempt — a recovered one included — has a manifest entry whose files exist and match their
+  sha256; re-checked after the synthetic database was dropped),
   drives the real runner through the candidate's product path (the blank form uploaded through the page, the page's
   quote, Generate, `run_one`, settlement, the validator, the page) against the loopback mock with retained careful
   responses and a fixed non-secret marker: all 18 scenarios pass and no scenario database is left (14 on `207a26a8`;
@@ -1473,7 +1476,10 @@ every provider figure is configured-rate arithmetic over provider-reported token
 **Every attempt is accounted for.** The runner (`rebuild/ops/wm_narrative_campaign.py`) writes an O_EXCL, synced
 attempt record BEFORE the hold and the request and an O_EXCL outcome after. An attempt with no outcome (a kill, a crash)
 is recorded on the next start as `interrupted_unknown`, linked to the job the product created, counted at its maximum,
-and never forgotten; a retried case always counts against the stage's retries. Before each attempt the worst case of
+and never forgotten; every ORIGINAL request is captured as the product passes it to the SDK — in the campaign process
+only, O_EXCL, before it is sent, with its canonical sha256 and the client's timeout and retries (a second request inside
+one attempt fails on that record and is never sent) — and a replay manifest entry per attempt links the case, job,
+notes hash, request, response and replay files by sha256 with the model, usage, costs and failure; a retried case always counts against the stage's retries. Before each attempt the worst case of
 the whole ledger plus this attempt's maximum must fit the stage's and the campaign's limits. One runner per campaign
 (an exclusive lock); live evidence has one fixed place per campaign id; a stage with a verdict is never re-run.
 
