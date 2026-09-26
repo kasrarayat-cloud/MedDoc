@@ -632,8 +632,9 @@ def generate_view(request,pk):
         if 'revision' in request.POST and request.POST['revision']!=str(e.revision):raise ValidationError('Source notes changed. Reload before generating answers.')
         # (the page offers generation only before any answer exists; a draft a clinician has reviewed or decided is not
         # replaced by a request — round 17e's review. A new draft follows a source edit, which clears the answers.)
-        if any(isinstance(a,dict) and (a.get('reviewed') or a.get('status') in ('edited','left_blank') or a.get('accepted_suggestion'))
-               for a in (e.answers or {}).values()):
+        if (any(isinstance(a,dict) and (a.get('reviewed') or a.get('status') in ('edited','left_blank') or a.get('accepted_suggestion'))
+                for a in (e.answers or {}).values())
+                or any(isinstance(d,dict) and d.get('reviewed') for d in ((e.template_review or {}).get('decisions') or {}).values())):
             raise ValidationError('These answers include a clinician\'s review or decisions. Edit and save the source notes to generate a new draft. Nothing was sent or charged.')
         quoted=usage_quote(request,e)
         job=enqueue(e,request.user,config=quoted,expected_revision=e.revision)

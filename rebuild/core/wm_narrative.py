@@ -494,6 +494,8 @@ def agrees(field, labelled, value):
 SENTENCE_END = re.compile(r'[.!?;](?=\s)')
 NOT_AN_END = re.compile(r'(?:\b(?i:dr|mr|mrs|prof|st|vs|etc|approx)|\b[A-Z]|\b(?i:e\.g|i\.e))\.$')
 CLAUSE_BREAK = re.compile(r'[,;:]|\b(?i:and|but|while|whereas)\b')
+MONTH_ABBREVIATION = re.compile(r'(?<![^\W\d_])(?i:jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\.$')
+DIGIT_NEXT = re.compile(r'[ \t]*+[0-9]')
 #: Every line break `str.splitlines` reads, as units and `line_side` do (round 9's integrity lens: U+2028, VT, FF and
 #: NEL joined what the rest of the reader splits, and a side-less block took the side of the block above it).
 LINE_BREAKS = '\n\r\x0b\x0c\x1c\x1d\x1e\x85  '
@@ -515,6 +517,8 @@ def _sentences(text):
         end = match.end()
         if text[end - 1] == '.' and NOT_AN_END.search(text[max(0, end - 12):end]):
             continue
+        if text[end - 1] == '.' and MONTH_ABBREVIATION.search(text, max(0, end - 6), end) and DIGIT_NEXT.match(text, end):
+            continue                 # (`in Jan. 2023`, `on Mar. 14, 2023`: a date, not a sentence's end — the focused pass)
         spans.append((start, end)); start = end
     spans.append((start, len(text)))
     return tuple(spans), tuple(a for a, _ in spans)
@@ -2363,9 +2367,24 @@ def heading_shaped(text):
             or text.rstrip()[-1:] in '-\u2013\u2014' or section_label(text) is not None
             # (a limb's label with no colon: `Right leg` / `no DVT` — round 12; not `The left leg` / `was not examined`)
             or limb_label(text)
-            # (a short unstopped line that may head a section: `Other`, `Also noted`, `Update 09/25/2026` — round 13)
-            or (len(words) <= FIRST_LINE_WORDS and text.rstrip('*_ ')[-1:] not in '.!?'
+            # (a short unstopped line that may head a section: `Other`, `Also noted`, `Update 09/25/2026` — round 13; not
+            # one left open on a word or a comma no heading ends in, `measured on B-mode imaging, but` — the focused pass of
+            # round 17e's review: read as a heading, it cut the sentence from the vein two lines on)
+            or (len(words) <= FIRST_LINE_WORDS and text.rstrip('*_ ')[-1:] not in '.!?' and not ends_open(text)
                 and first_line_kind(text) in ('heading', 'unsure')))
+
+
+#: Words a line cannot end its sentence on besides `WRAP_WORDS`, for a line's shape only.
+OPEN_ENDINGS = WRAP_WORDS | frozenset('but so yet nor because while if when although though whereas'.split())
+
+
+def ends_open(text):
+    """Whether a line is left open on a comma or on a word no sentence ends in (`…, but`, `… and`, `… of the`)."""
+    stripped = text.rstrip()
+    if stripped.endswith(','):
+        return True
+    word = LAST_WORD.search(stripped[-60:])
+    return bool(word) and word.group(1).casefold() in OPEN_ENDINGS
 
 
 ARTICLES = frozenset('the a an this that these those his her their its'.split())
@@ -2394,7 +2413,6 @@ ROW_VERB = re.compile(generation.FINITE_STATEMENT.pattern + r'|(?<![^\W\d_])(?i:
                       generation.FINITE_STATEMENT.flags)
 
 
-OPEN_BRACKET = re.compile(r'\((?![ \t]*+(?i:right|left|rt|lt|r|l|bilateral|both|b/l)(?![^\W\d_]))[ \t]*+[a-z]')
 
 
 @sized_cache
@@ -2414,10 +2432,9 @@ def _wrapped_lines(notes):
         # (a small letter opens a wrapped line only after a line that is no heading: `IMPRESSION` / `great saphenous vein
         # reflux positive.` was one sentence, and the impression took the leg above — round 12)
         # (a line opening with a value goes on too, `… measures` / `7.6 millimeters …` — round 13; not a list's number)
-        # (a bracket opening a line goes on too, `… measures 6.1 mm` / `(possibly artifact).` — round 17e's review; not a
-        # side's, `(R) GSV SFJ 7.4 mm`)
-        opens = (text[0].islower() or (text[0].isdigit() and not LIST_NUMBER.match(text))
-                 or OPEN_BRACKET.match(text) is not None)
+        # (not a bracket: `(the left leg was scanned last month)` / `(a) Left GSV …` read with the line above refused its
+        # value — the focused pass of round 17e's review; a hedge in a bracket on the next line is `measurement_context`'s)
+        opens = text[0].islower() or (text[0].isdigit() and not LIST_NUMBER.match(text))
         # (a limb's label over the denial of its examination is one sentence: `Right leg` / `not examined.` — round 13;
         # over a finding, `Right leg` / `no DVT`, it heads its block — round 12)
         # (a line ending a sentence in its middle is no heading: `Symptoms are in the right leg. The left` / `leg is
@@ -3529,7 +3546,8 @@ def _opens_block(notes, at):
     return _block_line(line)
 
 
-LABEL_BREAK = re.compile(r'[.!?;][ \t]|[()]')
+LABEL_BREAK = re.compile(r'(?<![^\W\d_](?<=(?i:lt|rt|dr|mr|st|vs|no)))(?<!(?<![^\W\d_])(?i:l|r))[.!?;][ \t]|[()]')
+#   (not after an abbreviation: `lt. leg: not examined.` is a label — the focused pass of round 17e's review)
 
 
 def _block_line(line):
@@ -3554,13 +3572,17 @@ def sentence_block(notes, at, label=True):
     if later > 0 and spans[blocks[later - 1]][0] > low:
         low = spans[blocks[later - 1]][0]
     first = bisect.bisect_right(starts, low) - 1
-    if first > 0 and not notes[spans[first][0]:low].strip():
+    lead = notes[spans[first][0]:low] if first >= 0 else ''
+    if first > 0 and (not lead.strip() or LIST_MARK.fullmatch(lead)):   # (a numbered item's `2.` ends no sentence of it)
         above = first - 1
         while (above > 0 and first - above <= LABEL_LIST_ITEMS
                and BULLET_LINE.match(generation.seen_text(notes[slice(*spans[first])]))
                and BULLET_LINE.match(generation.seen_text(notes[slice(*spans[above])]))
                and not LINE_LABEL.match(generation.seen_text(notes[slice(*spans[above])]).lstrip(BULLETS))):
             above -= 1               # (a list under the label: `Clinical indication: she denies` / `- leg pain` / `- swelling`)
+        if (above > 0 and BULLET_LINE.match(generation.seen_text(notes[slice(*spans[first])]))
+                and not generation.seen_text(notes[slice(*spans[above])]).strip()):
+            above -= 1               # (and one blank line between the label and its list — the focused pass)
         begin = _continues_label(notes, spans[above], spans[first], bullets=above < first - 1) if label else None
         if begin is not None:
             low = begin              # (`Clinical indication: she denies` / `leg pain and swelling.`: one sentence to govern)
@@ -3574,10 +3596,12 @@ def sentence_block(notes, at, label=True):
 LABEL_LIST_ITEMS = 40
 #: A list item's mark opening a line (`- leg pain`, `* swelling`, `• heaviness`).
 BULLETS = '-*\u2022\u2023\u25e6\u2043\u2219 \t'
-BULLET_LINE = re.compile(r'[ \t]*+[-*\u2022\u2023\u25e6\u2043\u2219][ \t]++\S')
+LIST_MARK = re.compile(r'[ \t]*+(?:[-*\u2022\u2023\u25e6\u2043\u2219]|[0-9]{1,2}[.)])[ \t]*+')
+BULLET_LINE = re.compile(r'[ \t]*+(?:[-*\u2022\u2023\u25e6\u2043\u2219]|[0-9]{1,2}[.)])[ \t]++\S')
 #: A label's value left open on a word that needs what follows (`she denies`, `negative for`, `no`, `possible`).
 OPEN_DENIAL = re.compile(r'(?<![^\W\d_])(?i:denies|denied|denying|without|negative' + SPACE + r'+for|free' + SPACE
-                         + r'+of|no' + SPACE + r'+(?:evidence|signs?|history)' + SPACE + r'+of)[ \t]*+$')
+                         + r'+of|no' + SPACE + r'+(?:evidence|signs?|history)' + SPACE + r'+of)(?:[ \t]++(?i:any|all|of|the|a|'
+                         r'an|recent|history|new))*+[ \t]*+[:,]?[ \t]*+$')
 #: (not a value that is itself an answer: `reflux: no`, `Reflux: possible`)
 
 
@@ -3817,12 +3841,16 @@ BRACKET_INSERTION = re.compile(r'\(' + SPACE + r'*+(?i:which|that|who|whose|wher
                                r'instead' + _GAP + r'of|including|excluding|except|besides|as' + _GAP + r'(?:well' + _GAP
                                + r'as|does|do|with)|and' + _GAP + r'not|but' + _GAP + r'not|similar' + _GAP + r'to|'
                                r'compared' + _GAP + r'(?:with|to)|versus|vs|no|without)(?![^\W\d_])')
-#: What may stand between a value and a vein written right after it for the vein to be what the value measures (`a 6.8 mm
-#: anterior accessory saphenous vein`, `4.4 mm (AAGSV)`, `a 4.4 mm varicose tributary`): up to three words, none a
-#: preposition, a verb or a conjunction.
-VEIN_RIGHT_AFTER = re.compile(r'[ \t\-(]*+(?:(?!(?i:at|in|of|on|over|near|within|along|and|or|but|with|without|to|from|by|'
-                              r'is|are|was|were|has|had|measures?|measured|measuring|the|right|left|rt|lt|r|l|bilateral|'
-                              r'both|no|not|without|reflux)(?![^\W\d_]))[^\W\d_]++[ \t\-]++){0,3}$')
+#: An insertion that names the subject itself (`, which is the anterior accessory saphenous vein,`, `(that is, the AAGSV)`,
+#: `(i.e. the AAGSV)`): its vein is another reading of the item's (the focused pass of round 17e's review).
+APPOSITION = re.compile(r'[,(]' + SPACE + r'*+(?i:(?:which|that)' + _GAP + r'(?:is|was|are|were)|i\.?e\.?|namely|aka|also'
+                        + _GAP + r'(?:called|known' + _GAP + r'as)|known' + _GAP + r'as|that' + _GAP + r'is)(?![^\W\d_])')
+#: A vein named after a value with a finding of its own (`…, and the small saphenous vein is competent`, `(SSV normal)`,
+#: `(AASV competent)`, `AAGSV not seen`): its own statement, not the value's (the focused pass of round 17e's review).
+VEIN_OWN_FINDING = re.compile(r'[ \t)]*+(?:(?i:is|are|was|were|appears?|remains?|looks?)[ \t]++)?(?:(?i:also|otherwise|again)'
+                              r'[ \t]++)?(?i:competent|incompetent|normal|patent|compressible|unremarkable|absent|not'
+                              r'[ \t]++(?:seen|visuali[sz]ed|identified|imaged|examined)|without' + SPACE + r'++reflux|no'
+                              + SPACE + r'++reflux)(?![^\W\d_])')
 #: What may stand between a vein and a value right after it for the vein to open that value's item (`… reflux 1.2 seconds
 #: small saphenous vein 3.3 millimeters`, `… no reflux small saphenous vein 3.0 millimeters`: lens 2's E03 and W23).
 VEIN_OPENS_NEXT = re.compile(r'[ \t,:]*+(?:(?i:measures|measuring|measured|is|was|diameter|of|at|about|approximately)[ \t]++)'
@@ -3846,9 +3874,9 @@ def _group_name(match, names):
 #: `varicose` said of the vein before it (`The right great saphenous vein is varicose and measures 7.4 mm`, `… tortuous and
 #: varicose, measuring …`) is no tributary: only a varicose vein, a varicosity or varices is. Round 17e's review: the
 #: tributary row took the trunk's diameter and reflux.
-VARICOSE_PREDICATE = re.compile(r'(?<![^\W\d_])(?i:is|are|was|were|be|been|being|appears?|remains?|looks?|seems?|and|or|'
-                                r'mildly|markedly|very|diffusely|extensively|somewhat|focally|quite|not|also)[ \t,]++'
-                                r'(?:[^\W\d_]+ly[ \t]++)?$')
+VARICOSE_PREDICATE = re.compile(r'[ \t,]*+(?:(?i:which|that)[ \t]++)?(?:(?i:is|are|was|were|appears?|remains?|looks?|seems?)'
+                                r'[ \t]++)?(?:(?i:[^\W\d_]+ly|very|quite|also|not|tortuous|dilated|enlarged|ectatic|'
+                                r'incompetent|refluxing|and)[ \t,]++)*+')
 VARICOSE_NOUN = re.compile(SPACE + r'++(?i:veins?+|tributar[^\W\d_]*+|branch(?:es)?+|segments?+|clusters?+)(?![^\W\d_])')
 
 
@@ -3858,15 +3886,18 @@ def _row_words(notes):
     name is its unit class (`mm`, `time`), from the reader's own quantities (`_positions`), so a place read here is
     where `located` found it."""
     read = view(notes)
-    found = []
+    found, last_vein = [], None
     for m in ROW_WORD.finditer(read):
         if any(m.group(name) is not None for name in ROW_VEIN_NAMES):
             name = _group_name(m, ROW_VEIN_NAMES)
             if (name == 'TRIB' and m.group().casefold() == 'varicose' and not VARICOSE_NOUN.match(read, m.end())
-                    and VARICOSE_PREDICATE.search(read, max(0, m.start() - 40), m.start())):
-                continue             # (said of the vein before it, `the great saphenous vein is varicose and measures …`)
+                    and last_vein is not None and m.start() - last_vein <= 80
+                    and VARICOSE_PREDICATE.fullmatch(read, last_vein, m.start())):
+                continue             # (said of the vein right before it, `the great saphenous vein is varicose and measures
+                #   …`; not `there are varicose vessels`, a tributary's — the focused pass of round 17e's review)
             branch = BRANCH_OF.search(read, max(0, m.start() - 40), m.start())
             found.append(('vein', m.start(), m.end(), _group_name(branch, ('TRIB', 'OTHER')) if branch else name))
+            last_vein = m.end()
         else:
             found.append(('site', m.start(), m.end(), _group_name(m, ROW_SITE_NAMES)))
             continue
@@ -3881,13 +3912,13 @@ def _row_words(notes):
 
 
 #: A word naming a vein this reader does not know (`AAV`, `SFV`, `the accessory`, the word before `vein` in `the circumflex
-#: vein`, `the superficial epigastric vein`, `the intersaphenous vein`, `the aav`): it stops an earlier vein carrying. Not a
-#: word that points back at a vein already named (`the vein`, `this vein`, `the refluxing vein`). Round 17e's review: a
-#: vein named only by a word the reader lacked took the paragraph's great saphenous vein, and its row was pre-filled.
+#: vein`, `the superficial epigastric vein`, `the intersaphenous vein`, `the aav`, `a dilated vein`): it stops an earlier vein
+#: carrying. Not a word that only points back at a vein already named (`the vein`, `this vein`); an adjective names a vein
+#: of its own (`a dilated vein`, `an incompetent vein` — the focused pass). Round 17e's review: a vein named only by a word
+#: the reader lacked took the paragraph's great saphenous vein, and its row was pre-filled.
 VEIN_LIKE = re.compile(r'(?<![^\W\d_])(?:[A-Z]{2,4}V|(?i:saphenous|accessory|perforat[^\W\d_]*+|tributar[^\W\d_]*+|aav|pav|sfv|'
-                       r'atv|pfv|dfv|gcv)|(?!(?i:the|this|that|these|those|same|said|a|an|its|their|his|her|each|either|'
-                       r'both|any|one|main|dominant|refluxing|incompetent|competent|dilated|enlarged|tortuous|treated|'
-                       r'index|target|affected|involved|visualized|imaged|such|which|what|whose)(?![^\W\d_]))[^\W\d_]++'
+                       r'atv|pfv|dfv|gcv)|(?!(?i:the|this|that|these|those|same|said|its|their|his|her|which|whose)'
+                       r'(?![^\W\d_]))[^\W\d_]++'
                        r'(?=' + SPACE + r'++(?i:veins?+)(?![^\W\d_])))(?![^\W\d_])')
 
 
@@ -3999,9 +4030,10 @@ def _row_reading(notes, at, low, high, struck):
         if len(bounds) >= PLACE_READINGS:
             bounds.clear()
         # (a site the hard wrap put on the next line: `… 6.9 mm at the` / `saphenofemoral junction`)
-        # (to the end of the line after the value's at most: round 17e's review, each line's reading ran to the end of a
-        # wrapped sentence of 970 lines, re-read from every origin — 55 s, and 528 MB kept)
-        reach = line_end(notes, min(len(notes), line_end(notes, at)))
+        # (to `WRAP_REACH` after the value at most, as the side reader reaches back: round 17e's review, each line's reading
+        # ran to the end of a wrapped sentence of 970 lines, re-read from every origin — 55 s, and 528 MB kept; its focused
+        # pass: bounded at the next line, a vein two lines on went unread)
+        reach = max(line_end(notes, min(len(notes), line_end(notes, at))), at + WRAP_REACH)
         found = bounds[(at, low, high)] = (row_origin(notes, at, low),
                                            max(high, min(sentence_in_line(notes, at)[1], reach)))
     origin, high = found
@@ -4050,7 +4082,8 @@ def _rows_of_sentence(notes, low, high, struck):
         follows = tokens[bisect.bisect_left(token_starts, m.end()):bisect.bisect_left(token_starts, after.end())] if after else []
         if inside and not any(token[0] == 'value' for token in inside + follows):
             veins_inside = {token[1] for token in inside if token[0] == 'vein'}
-            if read.startswith('(', m.start()) and not BRACKET_INSERTION.match(read, m.start()):
+            if ((read.startswith('(', m.start()) and not BRACKET_INSERTION.match(read, m.start()))
+                    or APPOSITION.match(read, m.start())):
                 bracketed |= veins_inside
             else:
                 inserted |= veins_inside
@@ -4148,41 +4181,45 @@ def _rows_of_sentence(notes, low, high, struck):
         seen = named_all if current['after_value'] else named
         # (and after the item's own vein, it is another reading of it: `The right great saphenous vein is competent and the
         # circumflex vein measures 4.2 mm at the saphenofemoral junction` — round 17e's review, the author's probe)
-        others = set(current['alts']) | ({'UNKNOWN'} if unknown_after and vein[0] != 'UNKNOWN' else set())
+        others = set(current['alts']) | ({'UNKNOWN'} if (unknown_after and vein[0] != 'UNKNOWN')
+                                         or NOT_A_VEIN_AFTER.match(read, end) else set())
+        #   (and a value of what is no vein, `a 9 mm lymph node at the SFJ`, is no vein's row either)
         readings[start] = {'vein': vein, 'site': site, 'others': others, 'item': current, 'seen': frozenset(seen)}
         named = set()
         binding = ROW_BINDING.match(read, end)
         last, bound = start, (binding.end(), binding.group('prep') is not None)
         vein_bound = VEIN_BINDING.match(read, end)
         vein_bound = vein_bound.end() if vein_bound else None
-    # A vein written after a value whose own vein is only carried, before the next value, is another reading of it: right
-    # after it (`a 6.8 mm anterior accessory saphenous vein`, `4.4 mm (AAGSV)`), or anywhere after the sentence's last value
-    # (`reflux of 1.8 seconds is demonstrated only in the anterior accessory saphenous vein`). Round 17e's review: the
-    # paragraph's great saphenous vein took all three, and its row was pre-filled.
+    # A vein written anywhere after a value whose own vein is only carried, in its sentence, is another reading of it
+    # (`a 6.8 mm anterior accessory saphenous vein`, `4.4 mm (AAGSV)`, `reflux of 1.8 seconds is demonstrated only in the
+    # anterior accessory saphenous vein`, `6.8 mm and 1.2 seconds of reflux in the anterior accessory saphenous vein`) —
+    # unless it opens an item of its own: a value right after it (`… reflux 1.2 seconds small saphenous vein 3.3
+    # millimeters`, lens 2's E03), or a level between it and the next value (`… reflux 1.1 seconds right small saphenous at
+    # the spj 3.9 millimeters`, C19). Round 17e's review: the paragraph's great saphenous vein took all of them; its focused
+    # pass: only the sentence's last value read the vein after it.
     values = [(token[1], token[2]) for token in tokens if token[0] == 'value' and token[1] in readings]
     if values and any(readings[at]['vein'][1] != 'explicit' for at, _ in values):
         after = sorted([(token[1], token[3]) for token in tokens if token[0] == 'vein' and token[1] not in inserted]
                        + [(at, 'UNKNOWN') for at in unknown[bisect.bisect_left(unknown, low):bisect.bisect_left(unknown, high)]])
-        after_starts = [at for at, _ in after]
-        for index, (at, until) in enumerate(values):
+        after_starts, value_starts, opens = [at for at, _ in after], [at for at, _ in values], {}
+        for at, until in values:
             if readings[at]['vein'][1] == 'explicit':
                 continue
-            following = values[index + 1][0] if index + 1 < len(values) else high
             where = bisect.bisect_left(after_starts, until)
-            vein_end = None
-            if where < len(after):
-                found = bisect.bisect_left(token_starts, after[where][0])
-                vein_end = (tokens[found][2] if found < len(tokens) and tokens[found][1] == after[where][0]
-                            else after[where][0])       # (an unknown vein's end is not read: its words stay between)
-            if where < len(after) and after[where][0] < following and (
-                    following == high or (VEIN_RIGHT_AFTER.match(read[until:after[where][0]]) is not None
-                                          and not VEIN_OPENS_NEXT.fullmatch(read[vein_end:following])
-                                          and not any(token[0] == 'site' and after[where][0] < token[1] < following
-                                                      for token in tokens[bisect.bisect_left(token_starts, after[where][0]):
-                                                                          bisect.bisect_left(token_starts, following)]))):
-                # (not a vein opening the next value's item: `… reflux 1.1 seconds right small saphenous at the spj 3.9
-                # millimeters`, C19 — a side before it, or a level between it and the next value)
-                readings[at]['others'].add(after[where][1])
+            if where >= len(after):
+                continue
+            vein_at, name = after[where]
+            if vein_at not in opens:         # (once per vein: every value before it asks the same)
+                found = bisect.bisect_left(token_starts, vein_at)
+                vein_end = tokens[found][2] if found < len(tokens) and tokens[found][1] == vein_at else vein_at
+                following = bisect.bisect_left(value_starts, vein_end)
+                following = value_starts[following] if following < len(value_starts) else None
+                opens[vein_at] = VEIN_OWN_FINDING.match(read, vein_end) is not None or (following is not None and (
+                    VEIN_OPENS_NEXT.fullmatch(read, vein_end, following) is not None
+                    or any(token[0] == 'site' for token in tokens[bisect.bisect_left(token_starts, vein_end):
+                                                                 bisect.bisect_left(token_starts, following)])))
+            if not opens[vein_at]:
+                readings[at]['others'].add(name)
     return {at: reading['vein'] + reading['site'] + (frozenset(reading['others']), reading['seen'])
             for at, reading in readings.items()}
 
@@ -4524,6 +4561,8 @@ RELATIVE_AFTER_WORDS = 12
 
 
 _RELATIVE_MEMO = {}
+#: (small: its keys hold a digest per cited unit — the focused pass measured 12.6 KB an entry; this bounds it near 26 MB)
+RELATIVE_MEMO_SIZE = 2048
 
 
 def names_a_relative(field, value, own):
@@ -4533,7 +4572,7 @@ def names_a_relative(field, value, own):
     added the recheck, and each walked every place of a 12,000-value unit again.)"""
     key = (field.get('kind'), unit_kind(field) if field.get('kind') == 'measurement' else None, value, _own_key(own))
     if key not in _RELATIVE_MEMO:
-        if len(_RELATIVE_MEMO) >= PLACE_READINGS:
+        if len(_RELATIVE_MEMO) >= RELATIVE_MEMO_SIZE:
             _RELATIVE_MEMO.clear()
         _RELATIVE_MEMO[key] = _names_a_relative(field, value, own)
     return _RELATIVE_MEMO[key]
@@ -5746,14 +5785,45 @@ def measurement_context(field, value, own, notes):
             continue
         quote, here = entry['quote'], at - entry['start']
         low, high = _clause_around(quote, here)
-        if _first_within(_hedge_spans(quote), low, here) or hedged_after(field, value, quote, here):
+        if (_first_within(_hedge_spans(quote), low, here) or hedged_after(field, value, quote, here)
+                or _value_hedge_beside(field, value, quote, here) or _bracket_hedge_below(field, value, quote, here, entry, notes)):
             return 'uncertain'      # (before it: `possibly measures 6.1 mm`; not the next finding's, `6.1 mm with possible reflux`)
-        dated = dated_before_study(quote, here, low, high, notes) if today else None
+        if today and _prior_study_of(quote, here, low, high):
+            return 'timing'          # (an earlier study's phrase first: its date says no more — the focused pass)
+        dated = dated_before_study(quote, here, low, high, notes, field_side(field)) if today else None
         if dated:
             return dated             # (`timing` before the study's own date; `dated` where that cannot be told)
-        if today and _prior_study_of(quote, here, low, high):
-            return 'timing'
     return None
+
+
+def _value_hedge_beside(field, value, quote, here):
+    """`maybe`/`perhaps` right beside the value, within two words (`measures maybe 6.1 mm`, `6.1 mm perhaps`): only there is
+    it the value's (the focused pass of round 17e's review: `… 7.4 millimeters reflux maybe 2 seconds` held the 7.4)."""
+    end = here + written_length(field, value, quote, here)
+    before = nth_before(quote, 'word', here, 2)
+    after = nth_from(quote, 'word', end, 0)
+    if VALUE_HEDGE.search(quote, before[0] if before else 0, here) is not None:
+        return True
+    hedge = VALUE_HEDGE.search(quote, end, after[1] if after else len(quote))
+    following = nth_from(quote, 'word', hedge.end(), 1) if hedge else None
+    return hedge is not None and not first_in(quote, 'quantity', hedge.end(), following[1] if following else hedge.end())
+
+
+BRACKET_BELOW = re.compile(r'[ \t]*+\(')
+
+
+def _bracket_hedge_below(field, value, quote, here, entry, notes):
+    """A hedge in a bracket opening the line right after the value's own line, where nothing follows the value on it
+    (`… measures 6.1 mm` / `(possibly artifact).` — round 17e's review; read here, not by joining the lines)."""
+    end = entry['start'] + here + written_length(field, value, quote, here)
+    line = line_end(notes, end)
+    if notes[end:line].strip(' \t.\r\n,'):
+        return False
+    below = notes[line:line_end(notes, line)] if line < len(notes) else ''
+    if not BRACKET_BELOW.match(below):
+        return False
+    close = below.find(')')
+    return HEDGE.search(below, 0, close if close >= 0 else len(below)) is not None
 
 
 #: What may stand between a value and a phrase written right after it as its own (`6.1 millimeters on the prior study`).
@@ -5796,9 +5866,6 @@ def hedged_after(field, value, quote, here):
     after = first_in(quote, 'quantity', end, sentence_high)
     if after is not None:
         stop.append(after[0])
-    subject = NEW_SUBJECT.search(quote, end, min(stop))
-    if subject is not None:
-        stop.append(subject.start())  # (`…, and she would likely benefit from ablation`: another statement's)
     limit = min(stop)
     spans, starts = _hedge_spans(quote)
     for index in range(bisect.bisect_left(starts, end), len(spans)):
@@ -5811,30 +5878,37 @@ def hedged_after(field, value, quote, here):
             return True
         following = nth_from(quote, 'word', stop_at, HEDGE_AFTER_WORDS - 1)
         reach = min(limit, following[1] if following else limit)
-        if HEDGE_OF_CAUSE.search(quote, stop_at, reach):
-            continue                 # (a cause's hedge: `…, likely the source of her symptoms`)
+        if after is not None and count_in(quote, 'word', stop_at, after[0]) <= 1:
+            continue                 # (the next value's own: `… 7.4 millimeters reflux probably 2 seconds`)
+        if HEDGE_OF_CAUSE.match(quote, stop_at):
+            continue                 # (a cause's or a treatment's hedge right after it: `…, likely the source of her symptoms`,
+            #   `… possibly worth treating`; not `likely explained by …`, `possibly worth repeating` — the focused pass)
         found = FINDING_WORD.search(quote, stop_at, reach)
-        if not found or HEDGE_CAUSE.search(quote, stop_at, found.start()):
-            return True              # (`questionable due to thrombus`: the value is what is questioned)
+        if not found or (EVALUATING_HEDGE.fullmatch(quote, start, stop_at) and HEDGE_CAUSE.search(quote, stop_at, found.start())):
+            return True              # (`questionable due to thrombus`: the value is what is questioned; not `likely from chronic
+            #   reflux`, `probably secondary to reflux`: the finding's cause — the focused pass)
     if after is not None:
         # (a hedge said of several values at once, after the last: `6.1 mm at the SFJ and 5.0 mm at the knee, both
         # possibly artifact`)
         index = bisect.bisect_left(semicolons, end)
         high = min(sentence_high, semicolons[index]) if index < len(semicolons) else sentence_high
         index = bisect.bisect_left(starts, limit)       # (the first hedge past the next value only: one per value)
-        if index < len(spans) and spans[index][1] <= high and COLLECTIVE.search(quote, max(end, spans[index][0] - 30),
-                                                                                    spans[index][0]):
+        if (index < len(spans) and spans[index][1] <= high and COLLECTIVE.search(quote, max(end, spans[index][0] - 30),
+                                                                                  spans[index][0])
+                and not HEDGE_OF_CAUSE.match(quote, spans[index][1])):
             return True
     return False
 
 
 #: A clause with a subject of its own after a value (`…, and she would likely benefit`), and a hedge of a cause (`likely the
 #: source of her symptoms`): neither hedges the value (round 17e's review, lens 2).
-NEW_SUBJECT = re.compile(r'(?:[,;]|(?<![^\W\d_])and(?![^\W\d_]))[ \t]*+(?:and[ \t]++)?(?i:she|he|they|we|i|the[ \t]++patient|'
-                         r'patient|this[ \t]++patient)(?![^\W\d_])')
-HEDGE_OF_CAUSE = re.compile(r'(?<![^\W\d_])(?i:source|sources|cause|causes|causing|culprit|responsible|contribut[^\W\d_]*+|'
-                            r'explain[^\W\d_]*+|etiology|aetiology|benefit[^\W\d_]*+|worth|candidate|intervention|'
-                            r'treatment|treating|treat|accounts?|accounting)(?![^\W\d_])')
+HEDGE_OF_CAUSE = re.compile(r'[ \t,]*+(?:(?i:the|a|an)[ \t]++)?(?i:(?:source|cause|culprit|etiology|aetiology)[ \t]++of|'
+                            r'(?:responsible|candidate)[ \t]++for|contribut[^\W\d_]*+[ \t]++to|accounts?[ \t]++for|'
+                            r'accounting[ \t]++for|benefit[^\W\d_]*+[ \t]++from|worth[ \t]++(?:treating|treatment|ablation|'
+                            r'intervention))(?![^\W\d_])')
+#: A hedge that evaluates what it follows (`questionable`, `equivocal`): with a cause after it, it is still that value's.
+EVALUATING_HEDGE = re.compile(r'[ \t,]*+(?i:questionable|questionably|equivocal|indeterminate|uncertain|unclear|suspicious|'
+                              r'suspected)')
 #: A tag question after a value (`… 5.1 mm, right?`, `…, correct?`): the speaker checking, not a question of the value.
 TAG_QUESTION = re.compile(r',[ \t]*+(?i:right|correct|ok|okay|yes|yeah|huh|no)[ \t]*+$')
 #: What makes a hedge before a finding word the value's own (`6.1 mm, questionable due to thrombus`).
@@ -5862,7 +5936,9 @@ MONTHS = {name: number for number, name in enumerate('jan feb mar apr may jun ju
 DATE = re.compile(r'(?<![0-9.,/\-])(?:(?P<iy>(?:19|20)[0-9]{2})-(?P<im>0?[1-9]|1[0-2])-(?P<id>0?[1-9]|[12][0-9]|3[01])'
                   r'|(?P<nm>0?[1-9]|1[0-2])[/\-](?P<nd>0?[1-9]|[12][0-9]|3[01])[/\-](?P<ny>(?:19|20)?[0-9]{2})'
                   r'|(?P<dm>0?[1-9]|1[0-2])\.(?P<dd>0?[1-9]|[12][0-9]|3[01])\.(?P<dy>(?:19|20)[0-9]{2})'
-                  r'|(?P<mm>0?[1-9]|1[0-2])/(?P<my>(?:19|20)[0-9]{2}))(?![0-9]|[.,/\-][0-9])'
+                  r'|(?P<mm>0?[1-9]|1[0-2])/(?P<my>(?:19|20)[0-9]{2})'
+                  r'|(?P<ed>1[3-9]|2[0-9]|3[01])[/.\-](?P<em>0?[1-9]|1[0-2])[/.\-](?P<ey>(?:19|20)?[0-9]{2}))'
+                  r'(?![0-9]|[.,/\-][0-9])'
                   r'|(?<![^\W\d_])(?P<wm>(?i:' + _MONTH + r'))[^\W\d_]*\.?[ \t]+(?:(?P<wd>[0-9]{1,2})(?:st|nd|rd|th)?,?[ \t]+)?'
                   r'(?:(?i:of)[ \t]+)?(?P<wy>(?:19|20)[0-9]{2})(?![0-9])'
                   r'|(?<![0-9.,])(?P<vd>[0-9]{1,2})(?:st|nd|rd|th)?[ \t]+(?P<vm>(?i:' + _MONTH + r'))[^\W\d_]*\.?,?[ \t]+'
@@ -5870,16 +5946,20 @@ DATE = re.compile(r'(?<![0-9.,/\-])(?:(?P<iy>(?:19|20)[0-9]{2})-(?P<im>0?[1-9]|1
 #: The study's own date, as a note labels it (`Date of service: 09/25/2026`, `Exam date 09/25/2026`, `DOS: …`); never a
 #: prior study's (`Prior exam date: 03/14/2023` — round 17e's review: read as the study's, it released a 2023 value).
 STUDY_DATE = re.compile(r'(?i:date[ \t]+of[ \t]+(?:service|study|exam(?:ination)?)|(?:exam(?:ination)?|study|service)[ \t]+date|dos)'
-                        r'(?![^\W\d_])')
-PRIOR_LABEL = re.compile(r'(?<![^\W\d_])(?i:prior|previous|last|earlier|old|comparison|baseline|outside|initial|original|'
-                         r'reference|index|former)[ \t]*+(?:[^\W\d_]++[ \t]++)?$')
+                        r'(?![^\W\d_])|(?:(?<=^)|(?<=[\n\r]))[ \t]*+(?i:(?:venous|lower' + SPACE + r'+extremity|bilateral|right|left)'
+                        + SPACE + r'++)*+(?i:duplex|ultrasound|doppler|reflux' + SPACE + r'++study|venous' + SPACE + r'++study)'
+                        r'(?:' + SPACE + r'++(?i:performed|done|dated|on|of))?+(?![^\W\d_])')
+#   (and a title's, opening its line: `Venous duplex 09/25/2026` — the focused pass of round 17e's review)
+#: A word anywhere on a study-date label's line that makes it a prior study's.
+PRIOR_WORD = re.compile(r'(?<![^\W\d_])(?i:prior|previous|last|earlier|old|comparison|compared|baseline|outside|initial|'
+                        r'original|reference|index|former)(?![^\W\d_])')
 
 
 def _date_of(m):
     """(year, month or None, day or None) of a `DATE` or `YEAR` match."""
     groups = m.groupdict() if m.re is DATE else {}
-    for y, mo, d in (('iy', 'im', 'id'), ('ny', 'nm', 'nd'), ('dy', 'dm', 'dd'), ('my', 'mm', None), ('wy', 'wm', 'wd'),
-                     ('vy', 'vm', 'vd')):
+    for y, mo, d in (('iy', 'im', 'id'), ('ny', 'nm', 'nd'), ('dy', 'dm', 'dd'), ('my', 'mm', None), ('ey', 'em', 'ed'),
+                     ('wy', 'wm', 'wd'), ('vy', 'vm', 'vd')):
         if groups.get(y):
             year = int(groups[y]) if len(groups[y]) == 4 else 2000 + int(groups[y])
             month = groups[mo]
@@ -5922,7 +6002,7 @@ def _dated_before(date, study):
     return 'before' if date[2] < study[2] else None
 
 
-def dated_before_study(quote, here, low, high, notes):
+def dated_before_study(quote, here, low, high, notes, side=None):
     """Whether a measurement's sentence dates it before the study (`The right great saphenous vein measured 9.6 mm at the
     saphenofemoral junction in 2023.`, `In 2023, the …`, `… on 3/14/23`, `Back in 2023 the …`): the date nearest before
     it and the one nearest after it, with no other quantity nor `;` between it and the value, earlier than the note's
@@ -5942,14 +6022,14 @@ def dated_before_study(quote, here, low, high, notes):
     near = []
     index = bisect.bisect_left(starts, here) - 1
     if (index >= 0 and spans[index][0] >= max(s_low, before[1] if before else s_low)
-            and not PRESENT_PREDICATE.search(quote, spans[index][1], here)):
+            and not _another_statements_date(quote, spans[index], here, max(s_low, before[1] if before else s_low))):
         near.append(spans[index])
     index = bisect.bisect_left(starts, here + 1)
     if (index < len(spans) and spans[index][1] <= min(s_high, after[0] if after else s_high)
-            and not (QUALIFIER_EVIDENCE['retained'].search(view(quote), here, spans[index][0])
-                     and PRESENT_PREDICATE.search(quote, max(s_low, before[1] if before else s_low), here))):
-        near.append(spans[index])    # (not a treatment's, after a value stated in the present: `The treated great saphenous
-        #   vein measures 3.1 mm at the knee after ablation in 2019` — round 17e's review)
+            and not _other_legs_treatment(quote, here, spans[index][0], side)):
+        near.append(spans[index])    # (after the value, a date is its own: `… 3.1 mm at the knee after ablation in 2019` is
+        #   held too — the focused pass of round 17e's review: a treatment's year released `… on the pre-ablation duplex of
+        #   2023`; not the other leg's treatment, `…, and the left great saphenous vein was ablated in 2021`)
     found = {_dated_before(date, study) for start, end, date in near if not _year_elsewhere(quote, start, end, here)}
     if 'unclear' in found and COMPARED_VALUE.search(quote, max(s_low, here - 60), here):
         return 'timing'              # (the dated value a current one is compared with: `…, compared with 9.6 mm in 2023`)
@@ -5959,13 +6039,37 @@ def dated_before_study(quote, here, low, high, notes):
 #: A value written as what another is compared with (`…, compared with 9.6 mm in 2023`, `… versus 9.6 mm`, `previously 9.6
 #: mm`): dated, it is the earlier one whatever the study's date.
 COMPARED_VALUE = re.compile(r'(?<![^\W\d_])(?i:compared' + SPACE + r'+(?:with|to)|comparison' + SPACE + r'+(?:with|to)|versus|'
-                            r'vs\.?|than|previously|formerly|down' + SPACE + r'+from|up' + SPACE + r'+from|from)(?:' + SPACE
+                            r'vs\.?|than|previously|formerly|down' + SPACE + r'+from|up' + SPACE + r'+from)(?:' + SPACE
                             + r'++[^\W\d_]++){0,4}?' + SPACE + r'*+$')
 
 
-#: A value's own predicate in the present, between a date before it and the value: that date is another statement's
-#: (`… was done in 2021 the great saphenous vein at the knee measures 4.1 mm`).
-PRESENT_PREDICATE = re.compile(r'(?<![^\W\d_])(?i:measures|is|are|shows|demonstrates|reveals|remains|has)(?![^\W\d_])')
+def _other_legs_treatment(quote, here, date_start, side):
+    """Whether what stands between a value and a date after it names the other leg and a treatment (`… 2.1 s, s/p left GSV
+    RFA 2019`, `…, and the left great saphenous vein was ablated in 2021`): that date is the other leg's."""
+    other = OTHER_SIDE.get(side)
+    if other is None or date_start - here > 240:
+        return False
+    between = quote[here:date_start]
+    return other in sides_of(between) and QUALIFIER_EVIDENCE['retained'].search(view(between)) is not None
+
+
+def _another_statements_date(quote, date, here, low):
+    """Whether a date before a value is another statement's: the value's own predicate is a measurement in the present
+    right before it (`… measures 4.1 mm`, `… is 6.1 mm`), and the words before the date name a leg or a treatment of their
+    own (`the left leg was done in 2021 the great saphenous vein at the knee measures 4.1 mm` — round 15's R15T; `History
+    of left great saphenous vein ablation in 2021, right great saphenous vein measures 6.1 mm`). Not any present word
+    between (`The 2023 duplex shows the right great saphenous vein at 9.6 mm`, `…, which has since been ablated, measured
+    9.6 mm` — the focused pass of round 17e's review)."""
+    if not VALUE_PRESENT.search(quote, max(low, here - 48), here):
+        return False
+    prefix = max(0, date[0] - 200)
+    return bool(sides_of(quote[prefix:date[0]]) - {'unclear'}) or QUALIFIER_EVIDENCE['retained'].search(
+        view(quote), prefix, date[0]) is not None
+
+
+#: A measurement's own predicate in the present, right before the value (`measures 4.1 mm`, `is approximately 6.1 mm`).
+VALUE_PRESENT = re.compile(r'(?<![^\W\d_])(?i:measures|is|are)(?:' + SPACE + r'++(?i:about|approximately|approx\.?|roughly|'
+                           r'still|now|currently|today))?+' + SPACE + r'*+$')
 
 
 #: What makes a year another thing's than the value's: a comparison it is the object of (`Compared with the prior study of
@@ -5983,10 +6087,20 @@ CURRENT_WORD = re.compile(r'(?<![^\W\d_])(?i:today|now(?![ \t]*-)|currently|pres
 
 
 def _year_elsewhere(quote, start, end, here):
-    if YEAR_COMPARED.search(quote, max(0, start - 60), start):
-        return True
+    if YEAR_COMPARED.search(quote, max(0, start - 60), start) or BIRTH_DATE.search(quote, max(0, start - 24), start):
+        return True                  # (and a date of birth: `date of birth 01/02/1960 right leg …` — the focused pass)
     between = (end, here) if start < here else (here, start)
-    return CURRENT_WORD.search(quote, between[0], between[1]) is not None
+    # (a word of today says so only where it is not said of what was done or of a time before: not `now ablated`,
+    # `currently occluded`, `before this study` — the focused pass of round 17e's review)
+    return any(not NOT_TODAY_AFTER.match(quote, m.end()) and not NOT_TODAY_BEFORE.search(quote, max(0, m.start() - 16),
+                                                                                        m.start())
+               for m in CURRENT_WORD.finditer(quote, between[0], between[1]))
+
+
+BIRTH_DATE = re.compile(r'(?<![^\W\d_])(?i:date' + SPACE + r'+of' + SPACE + r'+birth|d\.?o\.?b\.?|born(?:' + SPACE
+                        + r'+(?:on|in))?|birth' + SPACE + r'*+date)[ \t:,]*+$')
+NOT_TODAY_AFTER = re.compile(r'[ \t,\-]*+(?:[^\W\d_]*ed|(?i:occluded|closed|absent|gone|resolved|healed|treated))(?![^\W\d_])')
+NOT_TODAY_BEFORE = re.compile(r'(?<![^\W\d_])(?i:before|prior' + SPACE + r'+to|until|than|since|after|pre)' + SPACE + r'*+$')
 
 
 @sized_cache
@@ -5996,10 +6110,14 @@ def _study_date(notes):
     dates = []
     spans, starts = _date_spans(notes)
     for m in STUDY_DATE.finditer(notes):
-        if PRIOR_LABEL.search(notes, max(0, m.start() - 30), m.start()):
-            continue
         index = bisect.bisect_left(starts, m.end())
         if index < len(spans) and spans[index][0] - m.end() <= 24 and not LINE_BREAK.search(notes, m.end(), spans[index][0]):
+            line_low = line_start(notes, m.start())
+            if PRIOR_WORD.search(notes, max(line_low, m.start() - 40), min(line_end(notes, m.start()), spans[index][1] + 12)):
+                continue             # (a prior word around the label: `Prior exam date: …`, `Comparison: exam date …`,
+                #   `Study date (prior): …`, `DOS of prior exam: …` — the focused pass of round 17e's review, whose mutation
+                #   proofs found a second check of the words before the label redundant; not one elsewhere on a one-line
+                #   transcript, C19's `no prior vein treatment`)
             dates.append(spans[index][2])
     return max(dates, key=lambda d: (d[0], d[1] or 0, d[2] or 0)) if dates else None
 
@@ -6008,7 +6126,7 @@ def _study_date(notes):
 def _hedge_spans(quote):
     """Every hedge of a quote, in order: read once, each value asking by bisection (per value, a clause of thousands of
     values was searched thousands of times — round 17c's review, the round-16 cost shapes past 300 s)."""
-    spans = tuple(sorted({(m.start(), m.end()) for pattern in (HEDGE, VALUE_HEDGE) for m in pattern.finditer(quote)}))
+    spans = tuple((m.start(), m.end()) for m in HEDGE.finditer(quote))       # (`maybe` is `_value_hedge_beside`'s)
     return spans, tuple(start for start, _ in spans)
 
 
@@ -6047,15 +6165,23 @@ LIST_DENIAL_WORDS = 60
 DENIAL_VERB = re.compile(r'(?i:denies|denied|denying|negative' + SPACE + r'+for|free' + SPACE + r'+of)')
 #: What ends a denied list before a finding (with `ROW_VERB`, a number and a `;`): a contrast, or a verb that states
 #: another finding (`denies leg pain but has swelling`, `… and endorses swelling`, `… other than swelling`).
+#: The denial's own phrase before its list (`denies any history of`, `denies experiencing any`, `denies complaints of`,
+#: `denies that there is any`): not the list's words.
+DENIAL_LEAD = re.compile(r'(?:[ \t,]*+(?i:any|all|recent|prior|previous|history|of|that|there|is|are|was|were|having|'
+                         r'experiencing|complaints?|symptoms?|feeling|noticing|the|a|an|new|significant|further|problems?|'
+                         r'issues?)(?![^\W\d_]))*+')
 LIST_DENIAL_STOP = re.compile(r'(?<![^\W\d_])(?i:but|however|although|though|yet|except|excluding|besides|while|whereas|'
                               r'other' + SPACE + r'+than|apart' + SPACE + r'+from|aside' + SPACE + r'+from|endorses|endorsed|'
                               r'endorsing|complains|complained|complaining|notes|noted|describes|described|presents|'
                               r'presented|admits|admitted|experiences|experienced|reports|reporting|has|had|having|does|did|is|'
-                              r'are|was|were|positive|c/o|complaints?|symptomatic|s/p|status' + SPACE + r'+post|gsvs?|'
-                              r'ssvs?|aagsv|pagsv|lsv|(?:great|small|short|lesser|accessory)' + SPACE + r'+saphenous)(?![^\W\d_])'
+                              r'are|was|were|positive|c/o|complaints?|symptomatic|s/p|status' + SPACE + r'+post)(?![^\W\d_])'
+                              r'|(?<![^\W\d_])(?i:she|he|they|the' + SPACE + r'+patient)' + SPACE + r'++(?!(?i:denies|denied))'
+                              r'[^\W\d_]+s(?![^\W\d_])|(?<![^\W\d_])(?i:her|his|their)' + SPACE + r'++(?i:legs?|feet|ankles?|'
+                              r'calves|calf)' + SPACE + r'++(?i:ache|aches|hurt|hurts|feel|feels|are|swell|swells|get|gets)'
+                              r'(?![^\W\d_])'
                               r'|[,;][ \t]*+(?i:with|(?:an?[ \t]++)?(?:history|hx|h/o))(?![^\W\d_])')
 #: A finding affirmed after it in its own clause (`…, right great saphenous vein reflux positive.`): not the denied list's.
-AFFIRMED_AFTER = re.compile(r'(?<![^\W\d_])(?i:positive|present)(?![^\W\d_])')
+AFFIRMED_AFTER = re.compile(r'(?<![^\W\d_])(?<!(?i:at) )(?i:positive|present)(?![^\W\d_])')     # (not `at present`)
 
 
 def choice_evidence_reason(field, value, own):
@@ -6078,19 +6204,31 @@ def choice_evidence_reason(field, value, own):
             low, high = _clause_around(quote, at)
             denial = last_in(quote, 'denial', low, at)
             reach = 4
-            if denial is None:
-                # (a denial before a list reaches each finding in it — `She denies leg pain and swelling.` — where
-                # nothing between is more than list words: no verb, number or `;`. Round 17d: the `and` ended the clause
-                # and `Swelling` pre-filled; `denies leg pain and reports swelling` still stops at the verb)
-                denial = last_in(quote, 'denial', sentence_at(quote, at)[0], at)
-                if denial is not None and (not DENIAL_VERB.fullmatch(quote[denial[0]:denial[1]])
-                                           or count_in(quote, 'letters', denial[1], at) > LIST_DENIAL_WORDS
-                                           or ROW_VERB.search(quote, denial[1], at) or ';' in quote[denial[1]:at]
-                                           or LIST_DENIAL_STOP.search(quote, denial[1], at)
-                                           or AFFIRMED_AFTER.search(quote, at, min(_clause_around(quote, at)[1], at + 80))):
-                    denial = None            # (a bare `no`/`without` is not read across the list: `… but no restless legs,
-                    #   and aching leg pain`, `with and without manual augmentation and Valsalva, documenting the deep and
-                    #   superficial venous systems` — the benchmarks' C02, C06, C12 and H11)
+            if denial is not None and (count_in(quote, 'letters', denial[1], at) > reach
+                                       or first_in(quote, 'digit', denial[1], at)):
+                # (past a denial's own four words, only a denial verb reaches on: `She denies any history of leg pain or
+                # swelling.` — the focused pass of round 17e's review, the reach in the value's own clause was four words)
+                denial = denial if DENIAL_VERB.fullmatch(quote[denial[0]:denial[1]]) else None
+                listed = True
+            else:
+                listed = denial is None
+            if listed:
+                # (a denial verb before a list reaches each finding in it — `She denies leg pain and swelling.` — where
+                # nothing between is more than list words: no verb, number or `;` after the denial's own phrase. Round
+                # 17d: the `and` ended the clause and `Swelling` pre-filled; `denies leg pain and reports swelling` still
+                # stops at the verb)
+                if denial is None:
+                    denial = last_in(quote, 'denial', sentence_at(quote, at)[0], at)
+                if denial is not None:
+                    lead = DENIAL_LEAD.match(quote, denial[1]).end()
+                    if (not DENIAL_VERB.fullmatch(quote[denial[0]:denial[1]])
+                            or count_in(quote, 'letters', denial[1], at) > LIST_DENIAL_WORDS
+                            or ROW_VERB.search(quote, lead, at) or ';' in quote[lead:at]
+                            or LIST_DENIAL_STOP.search(quote, lead, at)
+                            or AFFIRMED_AFTER.search(quote, at, min(_clause_around(quote, at)[1], at + 80))):
+                        denial = None        # (a bare `no`/`without` is not read across the list: `… but no restless legs,
+                        #   and aching leg pain`, `with and without manual augmentation and Valsalva, documenting the deep
+                        #   and superficial venous systems` — the benchmarks' C02, C06, C12 and H11)
                 reach = LIST_DENIAL_WORDS
             if (denial and not NEGATIVE_OPTION.search(value) and count_in(quote, 'letters', denial[1], at) <= reach
                     and not first_in(quote, 'digit', denial[1], at)):
@@ -6145,43 +6283,62 @@ def row_rivals(field, value, own, read):
         return []
     wanted = Decimal(value.split()[0])
     cited = [(entry['start'], entry['end']) for entry in own]
+    cited_paragraphs = {paragraph_start(notes, a) for a, _ in cited}      # (once per call, not per value and unit)
+    anaphora = _anaphora_spans(notes)
+    unit_strikes = read.setdefault('_unit_strikes', {})
+    rival_holds = read.setdefault('_rival_holds', {})
     for unit in _value_units(read, unit_kind(field)):
         start, end, quote, places = unit
-        unit_struck = None
+        unit_struck = unit_strikes.get(start)
         for at, until, written in places:   # (the cited units' other values too: `… 6.9 mm at the SFJ and 9.6 mm at the SFJ.`)
             if written == wanted:
-                continue
+                continue             # (a value of what is no vein, `9 mm lymph node`, is no row's: the row reader's, one rule —
+                #   a second check of it here was found redundant by the focused pass's mutation proofs)
             standing = _value_standing(read, quote, start, at, until)
             if (standing == 'struck' or (standing == 'at most' and wanted <= written)
                     or (standing == 'at least' and wanted >= written)):
                 continue             # (struck by its own correction; a bound the answer is within: `less than 10 mm`)
             low, high = sentence_at(notes, start + at)
             if unit_struck is None:
-                unit_struck = strikes(superseded({'quote': quote, 'start': start}))    # (once per unit, not per value:
-                #   round 17e's review, 1,601 rebuilds of one unit's table for one answer, 272 s at 49,000 characters)
+                unit_struck = unit_strikes[start] = strikes(superseded({'quote': quote, 'start': start}))
+                #   (once per unit and reading, not per value nor per answer: round 17e's review, 1,601 rebuilds of one unit's
+                #   table for one answer, 272 s at 49,000 characters; its focused pass, equal tables rebuilt per answer)
             reading = row_reading(notes, start + at, low, high, unit_struck)
             verdict = row_verdict(row, reading)
             unwritten = (verdict == 'unknown' and _level_unwritten(row, reading)
                          and (any(a <= start and end <= b for a, b in cited)
-                              or (LEVEL_ANAPHORA.search(notes, low, high) is not None
-                                  and any(paragraph_start(notes, a) == paragraph_start(notes, start) for a, b in cited))))
+                              or (paragraph_start(notes, start) in cited_paragraphs
+                                  and _first_within(anaphora, low, high))))
+            #   (the pointing-back word by bisection: the focused pass of round 17e's review, a sentence of 4,000 values
+            #   searched per value per answer, the page 183 s)
             if verdict != 'consistent' and not unwritten:
                 continue             # (in the cited sentence, the row's vein with no level written is the row's too; in its
                                      # paragraph, one whose level is the one just named: `… 6.9 mm at the saphenofemoral
                                      # junction.` / `On repeat imaging it measures 9.6 mm there.` — round 17e's review)
-            primary = place_reading(notes, start + at, low, high)[0]
-            if primary == 'ambiguous' and heading_reading(notes, start + at, low)[0] in (mine, 'both'):
-                pass                 # (read two ways under this leg's heading is still this leg's rival — round 17e's review:
-                                     # `LEFT LEG:` / `… 9.6 mm at the saphenofemoral junction with reflux in the left leg`
-                                     # let the other value pre-fill; not under the other leg's, R15L2c's `right leg.`, nor
-                                     # where only an earlier sentence names this leg, `The left leg is more swollen, and the
-                                     # great saphenous vein measures 5.1 mm …` after the right's own sentence)
+            primary, candidates = place_reading(notes, start + at, low, high)[:2]
+            if primary == 'ambiguous':
+                # (read two ways, a value whose every reading is this leg is still this leg's rival — round 17e's review:
+                # `… 9.6 mm at the saphenofemoral junction with reflux in the left leg` let the other value pre-fill, under a
+                # heading or not (its focused pass); however the reading was reached: its mutation proofs, `LEFT LEG:` / … /
+                # `Right after augmentation the great saphenous vein at the saphenofemoral junction measures 9.6 mm.` read
+                # from its paragraph let the left's 6.9 mm pre-fill. Not where its paragraph is the other leg's, R15L2c's
+                # `right leg.`, nor where its block reads the other leg too — `LEFT LEG:` / `She had right GSV ablation in
+                # 2019.` / values, the generated `mention` notes)
+                readings = set(candidates or ()) - {'unclear'}
+                if (not readings or not readings <= {mine, 'both'}
+                        or OTHER_SIDE.get(mine) in (context_reading(notes, low)[0], heading_reading(notes, start + at, low)[0])):
+                    continue         # (nor under the other leg's heading: `RIGHT LEG:` / `She had left GSV ablation in
+                    #   2019. GSV SFJ 8.5 mm …`)
             elif primary not in (mine, 'both'):
                 continue
             entry = {'quote': quote, 'start': start, 'end': end, 'kind': 'unit'}
             rival = '{:f} {}'.format(written.normalize(), 'mm' if unit_kind(field) == 'mm' else 'ms')
-            held = governing(field, rival, [entry], read, sides=not unwritten, rivals=False)
-            if held[0] is not None and held[1] not in STILL_RIVALS:
+            key = (field['key'], rival, start, end, unwritten)
+            if key not in rival_holds:       # (once per value and unit: every place of one value asks the same — the focused
+                #   pass, 2,000 places of `4.1 mm` in one unit each walked every place again, the page 217 s)
+                rival_holds[key] = governing(field, rival, [entry], read, sides=not unwritten, rivals=False)
+            held = rival_holds[key]
+            if held[0] is not None and not_todays_value(held, notes):
                 continue             # (a prior study's value, a plan's, one a correction replaces: not a rival — the
                                      # governors and correction readers decide those, `… 6.1 mm at the SFJ.` / `Correction:
                                      # … 7.6 mm at the SFJ.`; round 17's mutation proofs found a second check of it
@@ -6192,9 +6349,22 @@ def row_rivals(field, value, own, read):
     return []
 
 
+@sized_cache
+def _anaphora_spans(notes):
+    spans = tuple((m.start(), m.end()) for m in LEVEL_ANAPHORA.finditer(notes))
+    return spans, tuple(start for start, _ in spans)
+
+
 #: A level named by pointing back at one just written (`it measures 9.6 mm there`, `at that level`, `at the same site`).
-LEVEL_ANAPHORA = re.compile(r'(?<![^\W\d_])(?i:there|at' + SPACE + r'+(?:that|this|the' + SPACE + r'+same)' + SPACE
+LEVEL_ANAPHORA = re.compile(r'(?<![^\W\d_])(?i:there(?!' + SPACE + r'++(?:is|are|was|were|appears?|seems?)(?![^\W\d_]))|at'
+                            + SPACE + r'+(?:that|this|the' + SPACE + r'+same)' + SPACE
                             + r'+(?:level|site|location|point|spot))(?![^\W\d_])')
+
+
+#: A value measuring what is no vein (`9 mm lymph node`, `3 mm echogenic focus`, `5 mm nodule`).
+NOT_A_VEIN_AFTER = re.compile(r'[ \t,]*+(?:[^\W\d_]++[ \t]++){0,2}?(?i:lymph|nodes?|nodules?|cysts?|mass|masses|focus|foci|'
+                              r'lesions?|plaques?|calcifications?|hematomas?|seromas?|collections?|stones?|lipomas?)'
+                              r'(?![^\W\d_])')
 
 
 def _level_unwritten(row, reading):
@@ -6343,12 +6513,28 @@ HELD = {
                'correction, a side or someone else\'s finding from this reading. Read the notes and decide the answer yourself.'),
 }
 NOT_PATIENT = 'Not used: the notes attribute this finding to someone other than the patient.'
-#: What holds a value without saying it is not today's value of this row — a hedge, a side or a row read two ways, a date
-#: not told apart from the study's: such a value is still a rival (round 17e's review: `… 9.6 mm there, possibly more
-#: accurate`, `… 9.6 mm … with reflux in the left leg`, `9.6 mm (2026)` with no study date each let the other value
-#: pre-fill).
-STILL_RIVALS = frozenset(HELD[key] for key in ('uncertain', 'dated', 'side_unknown', 'side_ambiguous', 'row', 'row_unknown',
-                                               'conflict'))
+#: What holds a value AS not today's value of this row: an earlier study's or a plan's, a correction's, someone else's, a
+#: denied one, or a heading that says one of those. Any other hold — a hedge, a side or a row read two ways, a date not told
+#: apart from the study's, a heading the reader cannot classify (`Repeat measurements:`, `Second look:`) — leaves the value
+#: a rival (round 17e's review, and its focused pass: an exempted `Repeat measurements:` value let the other pre-fill).
+NOT_TODAYS = frozenset(HELD[key] for key in ('timing', 'correction', 'subject', 'negative', 'side', 'row'))
+#: (and one placed on the other leg or another row outright — `side`, `row`: not this row's value on this leg)
+NOT_TODAYS_FRAME = re.compile(r'(?<![^\W\d_])(?i:prior|previous|past|history|historical|last|earlier|old|outside|baseline|'
+                              r'comparison|compared|plan|planned|recommend[^\W\d_]*+|scheduled|future|follow' + SPACE
+                              + r'*+-?up|family|mother|father|sister|brother|daughter|son|aunt|uncle|denies|denied|negative|'
+                              r'no|not|pre|post)(?![^\W\d_])')
+OTHER_SIDE = {'right': 'left', 'left': 'right'}
+
+
+def not_todays_value(held, notes):
+    """Whether what holds a rival says it is not today's value (`NOT_TODAYS`, or a governing line of that kind: read from
+    the line's own start, where its label is — the shown quote may be an excerpt, `… , 8.001 mm, 8.002 mm`)."""
+    entries, reason = held
+    if reason in NOT_TODAYS:
+        return True
+    return reason not in HELD.values() and any(
+        isinstance(e, dict) and type(e.get('start')) is int
+        and NOT_TODAYS_FRAME.search(notes, e['start'], min(e.get('end', e['start']), e['start'] + 80)) for e in entries)
 
 
 def decide(field, value, qualifiers, own, read):

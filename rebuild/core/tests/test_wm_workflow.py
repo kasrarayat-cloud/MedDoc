@@ -731,12 +731,13 @@ class WMNarrativeWorkflow(TestCase):
         return self.generate_from(notes, {'fields': rows, 'statements': [
             {'key': key, 'variant': variant, 'unit_ids': [ids[i] for i in indexes]} for key, variant, indexes in statements]})
 
-    def post_page(self, encounter, edits=(), sources=(), review=True):
+    def post_page(self, encounter, edits=(), sources=(), review=True, statements=None):
         page = self.client.get(f'/encounters/{encounter.pk}/')
         self.assertEqual(page.status_code, 200)
         payload = RenderedSaveForm.of(page)
         if review:
             payload.update({'reviewed_' + field['key']: 'on' for field in self.version.fields})
+        if review if statements is None else statements:
             payload.update({'claim_reviewed_' + row['key']: 'on' for row in page.context['wm_requirements']})
         payload.update({'answer_' + key: value for key, value in dict(edits).items()})
         payload.update({'source_' + key: value for key, value in dict(sources).items()})
@@ -816,6 +817,33 @@ class WMNarrativeWorkflow(TestCase):
         before = (dict(encounter.answers), Job.objects.filter(encounter=encounter).count())
         employee = self.member('wm-employee-2', 'employee')
         self.client.force_login(employee)
+        self.client.post(f'/encounters/{encounter.pk}/generate/', {'revision': encounter.revision})
+        self.assertFalse(run_one())
+        encounter.refresh_from_db()
+        self.assertEqual((encounter.answers, Job.objects.filter(encounter=encounter).count()), before)
+
+    def test_generation_is_refused_over_reviewed_statement_decisions(self):
+        """The focused pass of round 17e's review: the refusal read only the answers, so statement reviews alone — the 14
+        wordings ticked, no answer — were replaced by a second, billed draft."""
+        encounter = self.replayed(self.PROVENANCE_NOTES, self.PROVENANCE_PICKS, self.PROVENANCE_STATEMENTS)
+        self.post_page(encounter, review=False, statements=True)
+        self.assertTrue(any(d.get('reviewed') for d in encounter.template_review.get('decisions', {}).values()))   # (the control)
+        self.assertFalse(any(a.get('reviewed') for a in encounter.answers.values()))
+        before = (dict(encounter.answers), dict(encounter.template_review), Job.objects.filter(encounter=encounter).count())
+        self.client.post(f'/encounters/{encounter.pk}/generate/', {'revision': encounter.revision})
+        self.assertFalse(run_one())
+        encounter.refresh_from_db()
+        self.assertEqual((encounter.answers, encounter.template_review, Job.objects.filter(encounter=encounter).count()), before)
+
+    def test_generation_is_refused_over_an_answer_a_person_entered(self):
+        """The focused pass's mutation proofs: the refusal's reading of the answers was reached by no test — each one's
+        clinician had also ticked the statements. An answer typed with nothing ticked is a person's decision too."""
+        encounter = self.replayed(self.PROVENANCE_NOTES, self.PROVENANCE_PICKS, self.PROVENANCE_STATEMENTS)
+        self.post_page(encounter, edits={'measurement_15_1': '5.1 mm'}, review=False)
+        self.assertEqual(encounter.answers['measurement_15_1']['status'], 'edited')          # (the controls: typed,
+        self.assertFalse(any(a.get('reviewed') for a in encounter.answers.values()))          # nothing ticked)
+        self.assertFalse(any(d.get('reviewed') for d in (encounter.template_review or {}).get('decisions', {}).values()))
+        before = (dict(encounter.answers), Job.objects.filter(encounter=encounter).count())
         self.client.post(f'/encounters/{encounter.pk}/generate/', {'revision': encounter.revision})
         self.assertFalse(run_one())
         encounter.refresh_from_db()
