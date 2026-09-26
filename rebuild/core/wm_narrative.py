@@ -118,8 +118,36 @@ def units(notes, fields, labels=()):
     key = (tuple(field['label'] for field in fields), tuple(labels))
     found = table.get(key)
     if found is None:
-        found = table[key] = tuple(generation.source_units(notes, fields, context_labels=labels)[0])
+        found = table[key] = tuple(_joined_values(notes, generation.source_units(notes, fields, context_labels=labels)[0]))
     return [dict(unit) for unit in found]
+
+
+def _joined_values(notes, unit_list):
+    """The source units, with a unit whose last value's unit word the hard wrap put on the next line joined to that line's
+    unit (`… it measures 6.9` / `mm without reflux.`): a value is written in one unit, as the parent and the engine read it
+    (round 17: 10 wrapped values lost, 8 refused at review, the other row's identical value having carried them before).
+    Only the narrative contract's units: the labelled and tab contracts are unchanged."""
+    starts, spans = _positions(notes, 'quantity')
+    joined = []
+    for unit in unit_list:
+        if joined:
+            last = joined[-1]
+            index = bisect.bisect_left(starts, last['start'])
+            while index < len(spans) and spans[index][0] < last['end']:
+                if spans[index][1] > last['end'] and spans[index][1] <= unit['end'] and unit['start'] >= last['end']:
+                    quote = notes[last['start']:unit['end']]
+                    correction = generation.INLINE_CORRECTION.search(quote)
+                    joined[-1] = {**last, 'quote': quote, 'end': unit['end'],
+                                  'correction_value': correction.group(1) if correction else None}
+                    break
+                index += 1
+            else:
+                joined.append(dict(unit))
+            continue
+        joined.append(dict(unit))
+    for number, unit in enumerate(joined, 1):
+        unit['id'] = number
+    return joined
 
 
 @functools.lru_cache(maxsize=8)
@@ -155,7 +183,7 @@ def payload(notes, fields, requirements):
 # the two regex engines agree; no double quote, so the literal is byte-identical in a C# verbatim string. Each is
 # compiled WITHOUT a global ignore-case flag: case is scoped inside the pattern (`R GSV` is a side, `r` is not). The
 # parent runs them over `view(text)`, which classes every character as .NET does (the engine's `Reading`).
-QUANTITY_PATTERN = (r'(?<![0-9.,])(?<![0-9][\u2009\u202f])([0-9]+(?:\.[0-9]+)?)(?>[ \t\u00a0]*)(?:-(?>[ \t\u00a0]*))?'
+QUANTITY_PATTERN = (r'(?<![0-9.,])(?<![0-9][\u2009\u202f])([0-9]+(?:\.[0-9]+)?)(?>[ \t\u00a0]*)(?:(?:\r\n|[\n\r\x0b\x0c\x85\u2028\u2029])(?>[ \t\u00a0]*))?(?:-(?>[ \t\u00a0]*))?'
                     r'(?i:(mm|millimet(?:er|re)s?|ms|msecs?|millisec(?:ond)?s?|s|secs?|seconds?))(?![^\W\d_])')
 #: A comparator, an approximation, a range or an alternative written against the number: the form's cell takes one
 #: exact value, so a bounded, approximate, ranged or alternative quantity is not that value. Read just before it.
@@ -334,18 +362,31 @@ def _measurement_at(value, quote):
         number = Decimal(value.split()[0])
     except InvalidOperation:
         return []
-    unit, found_at, read = match.group(1), [], view(quote)
+    return _quantities(quote).get((match.group(1), number), ())
+
+
+@sized_cache
+def _quantities(quote):
+    """Where a quote writes each exact, unqualified quantity, by its column's unit and value (`('mm', 7.4)`; a reflux
+    time in seconds read in ms, `('ms', 1500)`), in order: read once per quote, not once per value asked of it (round
+    17: a rival search asks for each of a sentence's values)."""
+    table, read = {}, view(quote)
     for found in QUANTITY.finditer(read):
         if (BOUNDED_BEFORE.search(read[max(0, found.start() - 40):found.start()])
                 or BOUNDED_AFTER_AT.match(read, found.end())):
             continue
         written = Decimal(found.group(1))
         word = found.group(2).lower()
-        if ((unit == 'mm' and word.startswith(('mm', 'millimet')) and written == number)
-                or (unit == 'ms' and word.startswith(('ms', 'msec', 'millisec')) and written == number)
-                or (unit == 'ms' and word.startswith('s') and written.scaleb(3) == number)):
-            found_at.append(found.start())
-    return tuple(found_at)
+        if word.startswith(('mm', 'millimet')):
+            key = ('mm', written)
+        elif word.startswith(('ms', 'msec', 'millisec')):
+            key = ('ms', written)
+        elif word.startswith('s'):
+            key = ('ms', written.scaleb(3))
+        else:
+            continue
+        table.setdefault(key, []).append(found.start())
+    return {key: tuple(starts) for key, starts in table.items()}
 
 
 def measurement_supported(value, quotes):
@@ -510,6 +551,8 @@ def _positions(text, name):
     (`concerns`). Up to sixteen kinds are read per note, so the long cache keeps 32 (two notes)."""
     if name == 'number':
         found = sorted(list(NUMBER.finditer(text)) + list(NUMBER_WORD.finditer(text)), key=lambda m: m.start())
+    elif name == 'denial':
+        found = FINDING_DENIED.finditer(text)
     elif name == 'nonprose':
         found = [m for m in LETTER_RUN.finditer(text)
                  if m.group().casefold() not in QUANTITY_PROSE and m.group().casefold() not in NEUTRAL_HEADING_WORDS]
@@ -3408,6 +3451,35 @@ def _own_correction(field, value, own):
             for _, entry in sorted(unique.items())]
 
 
+def cited_sentence(own, notes, at, span):
+    """The sentence a cited value is read in, as far as the cited units carry it: its sentence in the notes (a
+    hard-wrapped sentence runs over its lines), cut to the run of cited units around the value that nothing but white
+    space with at most one line break separates (a wrap, not a blank line). A sentence the wrap put on three lines, all cited (`The great saphenous vein measures 6.1 mm at the`
+    / `saphenofemoral junction with 2.1 seconds of reflux in` / `the left leg.`), is read as its unwrapped note is —
+    round 17c: its row and side were read in the first line alone, and review refused the left leg's value as the
+    right's; a line not cited is not read (the cited text carries the side, ruling #127). Never less than `span`."""
+    low, high = span
+    whole_low, whole_high = sentence_at(notes, at)
+    if whole_low >= low and whole_high <= high:
+        return span
+    runs = sorted((entry['start'], entry['end']) for entry in own)
+    around = next(((start, end) for start, end in runs if start <= at < end), None)
+    if around is None:
+        return span
+    start, end = around
+    for next_start, next_end in runs:
+        if end <= next_start < whole_high and _wrapped_gap(notes[end:next_start]):
+            end = max(end, next_end)
+    for before_start, before_end in reversed(runs):
+        if whole_low < before_end <= start and _wrapped_gap(notes[before_end:start]):
+            start = min(start, before_start)
+    return min(low, max(whole_low, start)), max(high, min(whole_high, end))
+
+
+def _wrapped_gap(between):
+    return not between.strip() and len(re.findall(BREAK, between)) <= 1
+
+
 def cited_sides(own, notes, besides):
     """The sides the OTHER cited units name (outside what their corrections struck): a reading the clinician may choose
     at review (`LEFT:` cited with `Correction: the AAGSV at the SFJ measures 6.7 mm`), never one a pre-fill rests on —
@@ -3528,6 +3600,13 @@ ROW_ABBREVIATIONS = {'GSV': {'pt': 'pt', 'prox': 'pt', 'k': 'knee'}, 'AAGSV': {'
 #: What makes a later value of an item the one that replaces an earlier one (with `CORRECTION_WORD`).
 ROW_REPLACES = re.compile(r'(?<![^\W\d_])(?i:should' + _GAP + r'(?:read|be)|corrected' + _GAP + r'to|rather' + _GAP + r'than|'
                           r'instead' + _GAP + r'of)(?![^\W\d_])')
+#: An insertion that names a vein only as what the subject is compared with or joined by (`the great saphenous vein, which
+#: receives the anterior accessory saphenous vein, measures 6.8 mm`, `…, not the AAGSV, …`, `(not the AAGSV)`): a vein
+#: in it is not the item's where it holds no value of its own (`…, which is larger than the AAGSV at 5.1 mm` does).
+ROW_INSERTION = re.compile(r',' + SPACE + r'*+(?i:which|that|who|whose|where|not|like|unlike|rather' + _GAP + r'than|'
+                           r'instead' + _GAP + r'of|including|excluding|except|besides|as' + _GAP + r'(?:well' + _GAP
+                           + r'as|does|do|with)|and' + _GAP + r'not|but' + _GAP + r'not|similar' + _GAP + r'to|'
+                           r'compared' + _GAP + r'(?:with|to)|versus|vs)(?![^\W\d_])[^,;()]*+|\([^()]*+\)')
 JUNCTION_OF = {'GSV': 'sfj', 'AAGSV': 'sfj', 'PAGSV': 'sfj', 'ACC': 'sfj', 'SSV': 'spj'}
 #: The form's only row of a vein in a region, which a site naming only the region is (`GSV thigh 5.9 mm`, `SSV calf`).
 ONLY_ROW_IN = {('GSV', 'thigh'): 'pt', ('AAGSV', 'thigh'): 'pt', ('PAGSV', 'thigh'): 'pt', ('GSV', 'calf'): 'bk',
@@ -3716,7 +3795,20 @@ def _rows_of_sentence(notes, low, high, struck):
 
     readings, current, sentence_vein, last, bound, vein_bound = {}, item(), None, None, None, None
     named, vein_end, unknown = set(), low, _unknown_veins(notes)
+    inserted = set()                 # (the vein words of an insertion that holds no value: named, never the item's)
+    token_starts = [token[1] for token in tokens]
+    for m in ROW_INSERTION.finditer(read, low, high):
+        # (the tokens inside by bisection: a run of 7,000 bracketed side letters was scanned token by token per bracket)
+        inside = tokens[bisect.bisect_left(token_starts, m.start()):bisect.bisect_left(token_starts, m.end())]
+        # (nor where a relative clause right after it holds a value: that value is the named vein's — `…, which is
+        # larger than the AAGSV, which measures 5.1 mm at the SFJ`)
+        after = ROW_INSERTION.match(read, m.end())
+        follows = tokens[bisect.bisect_left(token_starts, m.end()):bisect.bisect_left(token_starts, after.end())] if after else []
+        if inside and not any(token[0] == 'value' for token in inside + follows):
+            inserted |= {token[1] for token in inside if token[0] == 'vein'}
     for kind, start, end, name in tokens:
+        if kind == 'vein' and start in inserted:
+            continue                 # (read as what the subject is compared with or joined by: not even named before)
         if kind != 'value':
             named.add(name)
             vein_end = end if kind == 'vein' else vein_end
@@ -3895,7 +3987,8 @@ def _side_verdict(field, value, own, notes, strict=False):
     # (one strike table per cited units, shared by every question citing them: `place_reading`'s memo is keyed by it)
     struck = note_memo(notes, ('own_strikes', _own_key(own)),
                        lambda: strikes([span for entry in own for span in superseded(entry)]))
-    places = [place for place in located(field, value, own) if not place[2]] if value else []
+    places = [(at, cited_sentence(own, notes, at, span), gone) for at, span, gone in located(field, value, own)
+              if not gone] if value else []
     rows = row_places(field, places, notes, struck, strict, (unit_kind(field), value, _own_key(own))) if places else None
     if rows is not None:
         # The same place must be this row's AND this side's: a value the other leg writes for another row is not this
@@ -3905,7 +3998,8 @@ def _side_verdict(field, value, own, notes, strict=False):
             return 'row' if contradicted else 'row_unknown'
     words = False
     if not places and field.get('kind') == 'choice' and value:
-        places, words = [place for place in located(field, value, own, words=True) if not place[2]], True
+        places, words = [(at, cited_sentence(own, notes, at, span), gone)
+                         for at, span, gone in located(field, value, own, words=True) if not gone], True
     if places:
         readings = []
         for at, (low, high), _ in places:
@@ -4926,61 +5020,72 @@ def label_holds(quote, labels, field, value='', meaning_only=False):
     study…`), held only by the installed denial and reframing vocabulary. `meaning_only`: only that vocabulary."""
     parsed = generation.labelled_value(quote, labels)
     after_label = parsed[2] if parsed else 0
-    clock = {m.start() + i for m in generation.CLOCK.finditer(quote) for i in range(len(m.group()))}
+    every, labelling = _colons(quote)
     for low, high in sentences(quote):
         segment = max(low, after_label)
-        for at in range(segment, high):
-            if quote[at] in generation.COLONS and at not in clock:
-                text = quote[segment:at]
-                # A header line of fields (`SYNTHETIC PATIENT M     ID: SYN-M-2003     DOB: …`): the label is what
-                # follows the last wide gap or comma; the vocabulary still reads all of it.
-                if generation.changes_meaning(text) or RULE_OUT.search(text):
+        for at in labelling[bisect.bisect_left(labelling, segment):bisect.bisect_left(labelling, high)]:
+            text = quote[segment:at]
+            # A header line of fields (`SYNTHETIC PATIENT M     ID: SYN-M-2003     DOB: …`): the label is what
+            # follows the last wide gap or comma; the vocabulary still reads all of it.
+            if generation.changes_meaning(text) or RULE_OUT.search(text):
+                return True
+            text = re.split(r'\s{2,}', text)[-1]
+            # After a comma the label is the last part; a part before it that is itself label words is part of the
+            # label (`Plan, right leg:`, `Prior study, right GSV:`); any other is the previous field's value.
+            pieces = [piece.strip() for piece in re.split(r'[,;]', text)]
+            # A part before the comma holds by any section word it has, whatever else it says (`Prior study 2019,
+            # right GSV:`, `Tx plan, left leg:`); without one it is taken as the previous field's value.
+            prefix = [word for piece in pieces[:-1] for word in label_words(piece)
+                      if word in PLAN_WORDS | PAST_WORDS | COMPLAINT_WORDS | PROCEDURE_WORDS]
+            if not meaning_only and prefix and section_holds(prefix, field):
+                return True
+            text = pieces[-1]
+            if not meaning_only and len(text.split()) > LABEL_WORDS:
+                # A longer label with a section word of its own is that section's too (`Prior study 2019 right GSV
+                # SFJ:`, `Previous right GSV SFJ diameter:`), as it is before a comma.
+                own_words = [word for word in label_words(text) if len(word) > 1   # (not the `p` of `A/P diameter`)
+                             and word in PLAN_WORDS | PAST_WORDS | COMPLAINT_WORDS | PROCEDURE_WORDS]
+                if own_words and section_holds(own_words, field):
                     return True
-                text = re.split(r'\s{2,}', text)[-1]
-                # After a comma the label is the last part; a part before it that is itself label words is part of the
-                # label (`Plan, right leg:`, `Prior study, right GSV:`); any other is the previous field's value.
-                pieces = [piece.strip() for piece in re.split(r'[,;]', text)]
-                # A part before the comma holds by any section word it has, whatever else it says (`Prior study 2019,
-                # right GSV:`, `Tx plan, left leg:`); without one it is taken as the previous field's value.
-                prefix = [word for piece in pieces[:-1] for word in label_words(piece)
-                          if word in PLAN_WORDS | PAST_WORDS | COMPLAINT_WORDS | PROCEDURE_WORDS]
-                if not meaning_only and prefix and section_holds(prefix, field):
+            if meaning_only or CORRECTION_WORD.fullmatch(text.strip()):
+                pass                 # `correction:` is read as a correction, by `superseded`
+            elif len(text.split()) <= LABEL_WORDS:
+                # The label's own value: up to the next label, not the rest of a sentence of labels.
+                rest = quote[at + 1:next(iter(every[bisect.bisect_right(every, at):bisect.bisect_left(every, high)]), high)]
+                if own_section(text, field):
+                    # The question's own label with a denying value (`Swelling: none.`, `Leg pain: denies.`).
+                    written = value_at(field, value, rest) if value else []
+                    if field.get('kind') != 'measurement':
+                        written = [w for w in written if not generation.changes_meaning(words_before(rest, w, ADJACENT_WORDS))]
+                    if negative_value(rest) and not negative_value(value) and not written:
+                        return True
+                elif text.strip().casefold() in SOAP_LABELS or structural(text, SECTION_WORDS, heading=False):
+                    if section_holds(label_words(text) or [text.strip().casefold()], field):
+                        return True
+                else:
                     return True
-                text = pieces[-1]
-                if not meaning_only and len(text.split()) > LABEL_WORDS:
-                    # A longer label with a section word of its own is that section's too (`Prior study 2019 right GSV
-                    # SFJ:`, `Previous right GSV SFJ diameter:`), as it is before a comma.
-                    own_words = [word for word in label_words(text) if len(word) > 1   # (not the `p` of `A/P diameter`)
-                                 and word in PLAN_WORDS | PAST_WORDS | COMPLAINT_WORDS | PROCEDURE_WORDS]
-                    if own_words and section_holds(own_words, field):
-                        return True
-                if meaning_only or CORRECTION_WORD.fullmatch(text.strip()):
-                    pass                 # `correction:` is read as a correction, by `superseded`
-                elif len(text.split()) <= LABEL_WORDS:
-                    # The label's own value: up to the next label, not the rest of a sentence of labels.
-                    rest = quote[at + 1:next((i for i in range(at + 1, high) if quote[i] in generation.COLONS), high)]
-                    if own_section(text, field):
-                        # The question's own label with a denying value (`Swelling: none.`, `Leg pain: denies.`).
-                        written = value_at(field, value, rest) if value else []
-                        if field.get('kind') != 'measurement':
-                            written = [w for w in written if not generation.changes_meaning(words_before(rest, w, ADJACENT_WORDS))]
-                        if negative_value(rest) and not negative_value(value) and not written:
-                            return True
-                    elif text.strip().casefold() in SOAP_LABELS or structural(text, SECTION_WORDS, heading=False):
-                        if section_holds(label_words(text) or [text.strip().casefold()], field):
-                            return True
-                    else:
-                        return True
-                segment = at + 1
+            segment = at + 1
     return False
 
 
 LIST_FRAGMENT_WORDS = 10
+COLON_CHARACTER = re.compile('[' + ''.join(re.escape(c) for c in sorted(generation.COLONS)) + ']')
+
+
+@sized_cache
+def _colons(quote):
+    """Where a quote's colons are, in order: every one, and those a label may end at (not in a clock time, `10:30`) —
+    read once per quote, not once per value asked of it (a rival search asks for each)."""
+    clock = {m.start() + i for m in generation.CLOCK.finditer(quote) for i in range(len(m.group()))}
+    every = tuple(m.start() for m in COLON_CHARACTER.finditer(quote))
+    return every, tuple(at for at in every if at not in clock)
 
 
 def fragment(quote):
-    """A list item rather than a sentence: a few words and no finite verb (`Swelling.`, `Leg pain.`)."""
-    return len(quote.split()) <= LIST_FRAGMENT_WORDS and not generation.FINITE_STATEMENT.search(quote)
+    """A list item rather than a sentence: a few words and no finite verb (`Swelling.`, `Leg pain.`). (Its words are
+    counted only up to one past the limit.)"""
+    return (len(quote.split(None, LIST_FRAGMENT_WORDS)) <= LIST_FRAGMENT_WORDS
+            and not generation.FINITE_STATEMENT.search(quote))
 
 
 def denying_list_head(entry, read):
@@ -5120,7 +5225,7 @@ def copy_rank(field, value, unit, read):
     return 1 if governing(field, value, own, read, sides=False, hidden=False)[0] is None else 0
 
 
-def governing(field, value, own, read, sides=True, hidden=True):
+def governing(field, value, own, read, sides=True, hidden=True, rivals=True):
     """What holds a candidate on its source, as (governing entries, reason), or (None, None): a cited heading line,
     the installed governors (`narrative_governors`), a cited sentence's own label or an earlier denying label in its
     paragraph (`own_frame`), a side only some readings give it (`side_verdict`, strict — not with `sides=False`: the
@@ -5141,7 +5246,8 @@ def governing(field, value, own, read, sides=True, hidden=True):
     if headed:
         return ([{'quote': generation.shown_quote(notes, e['start'], e['end'], False), 'start': e['start'],
                   'end': e['end'], 'after': False, 'same': True} for e in headed], HELD['heading'])
-    negative = [entry for entry in own if len(entry['quote'].split()) <= BARE_NEGATIVE_WORDS and negative_value(entry['quote'])]
+    negative = [entry for entry in own if len(entry['quote'].split(None, BARE_NEGATIVE_WORDS)) <= BARE_NEGATIVE_WORDS
+                and negative_value(entry['quote'])]    # (its words counted only up to one past the limit)
     if negative and value and not negative_value(value):
         return ([{'quote': e['quote'], 'start': e['start'], 'end': e['end'], 'after': False, 'same': True} for e in negative],
                 HELD['negative'])
@@ -5156,9 +5262,15 @@ def governing(field, value, own, read, sides=True, hidden=True):
     if found is not None:
         return found, generation.held_reason(found, True)
     held = option_reason(field, value, own) if field.get('kind') == 'choice' and value else None
+    if held is None and field.get('kind') == 'choice' and value:
+        held = choice_evidence_reason(field, value, own)
     if held is not None:
         return ([{'quote': e['quote'], 'start': e['start'], 'end': e['end'], 'after': False, 'same': True} for e in own],
                 HELD[held])
+    if sides and rivals and field.get('kind') == 'choice' and value and field_side(field):
+        found = option_rivals(field, value, own, read)
+        if found:
+            return found, HELD['conflict']
     usable = usable_units(field, own, read['labels'], read['all_labels'])
     placed = side_verdict(field, value, usable, notes, strict=True) if sides and value and usable else None
     if placed is not None:
@@ -5175,7 +5287,13 @@ def governing(field, value, own, read, sides=True, hidden=True):
     if key not in memo:
         memo[key] = correction_context(field, value, own, read['corrections'], notes)
     found = [dict(entry) for entry in memo[key]] if memo[key] is not None else None
-    return (found, HELD['correction']) if found is not None else (None, None)
+    if found is not None:
+        return found, HELD['correction']
+    if sides and rivals and value and field_row(field) and field_row(field)[1] is not None:
+        found = row_rivals(field, value, own, read)
+        if found:
+            return found, HELD['conflict']
+    return None, None
 
 
 # ── what an option's own words claim ──────────────────────────────────────────────────────────────────────────
@@ -5241,6 +5359,184 @@ def veins_with_finding(quote):
                 edge = m.end() if direction == 1 else m.start()
                 index += direction
     return frozenset(stated)
+
+
+#: Words that make a finding uncertain in the clause stating it (`possible reflux`, `questionable right small saphenous vein
+#: reflux`, `may be artifact`): the model's own certainty is not the only reading of it.
+HEDGE = re.compile(r'(?<![^\W\d_])(?i:possible|possibly|probable|probably|questionable|questionably|equivocal|indeterminate|'
+                   r'suspected|suspicious|uncertain|unclear|likely|unlikely|artifact|artefact|cannot' + _GAP + r'be' + _GAP
+                   + r'excluded|not' + _GAP + r'excluded|may' + _GAP + r'be|might' + _GAP + r'be|could' + _GAP
+                   + r'be)(?![^\W\d_])|(?<=[^\W\d_])[ \t]*+\?')
+#: What denies the finding an option names, before it in its clause (`She denies leg swelling or pain.`).
+FINDING_DENIED = re.compile(r'(?<![^\W\d_])(?i:denies|denied|denying|no|not|without|negative' + _GAP + r'for|free' + _GAP
+                            + r'of|never|absent)(?![^\W\d_])')
+#: An option that is itself a finding's absence (`reflux negative.`, `without evidence of …`, `and is absent.`).
+NEGATIVE_OPTION = re.compile(r'(?<![^\W\d_])(?i:no|not|without|negative|absent|none|normal)(?![^\W\d_])')
+
+
+def _clause_around(quote, at):
+    low, high = sentence_at(quote, at)
+    before, after = last_in(quote, 'clause', low, at), first_in(quote, 'clause', at + 1, high)
+    return (before[1] if before else low), (after[0] if after else high)
+
+
+def choice_evidence_reason(field, value, own):
+    """Why a choice's cited sentences do not carry it, for the pre-fill (round 17, the weak set's model errors): they
+    name nothing clinical at all — no vein, level, side or finding, nor the option's own words (`absent`: `Venous duplex
+    performed today; images saved for review.` for `Bilateral Detailed`); the finding the option names is denied before
+    it in its clause (`negative`: `She denies leg swelling or pain.` for `Leg pain`); or the clause stating it is hedged
+    (`uncertain`: `possible reflux of approximately 550 ms; this is questionable` for `reflux positive.`). It reads the
+    cited units only; the clinician may still choose the answer."""
+    quotes = [entry['quote'] for entry in own if entry.get('kind', 'unit') == 'unit']
+    if quotes and not any(ROW_WORD.search(view(quote)) or sides_of(quote) or FINDING_WORD.search(quote)
+                          or option_at(value, quote) or option_words_at(value, quote) for quote in quotes):
+        return 'absent'
+    # Every place the option's words are written must say it so for the answer to rest on them: one plain statement of
+    # it anywhere cited carries it (`there's no deep reflux … with reflux of 1.4 seconds` states reflux).
+    denied = hedged = total = 0
+    for quote in quotes:
+        for at in option_at(value, quote) or option_words_at(value, quote):
+            total += 1
+            low, high = _clause_around(quote, at)
+            denial = last_in(quote, 'denial', low, at)
+            if (denial and not NEGATIVE_OPTION.search(value) and count_in(quote, 'letters', denial[1], at) <= 4
+                    and not first_in(quote, 'digit', denial[1], at)):
+                denied += 1
+            elif HEDGE.search(quote, low, high):
+                hedged += 1
+    if total and denied == total:
+        return 'negative'
+    if total and denied + hedged == total and hedged:
+        return 'uncertain'
+    return None
+
+
+def option_rivals(field, value, own, read):
+    """Another option of a sided choice written as such in a sentence of the notes on the question's side, where the chosen
+    one is cited (`Findings: the right deep venous system is without evidence of obstruction or insufficiency.` against
+    `Impression: chronic DVT of the right CFV, FV, POP V and PTV.`): the notes say both, and the clinician decides. Only
+    wordings of four or more words are read (a short option is written in passing)."""
+    mine = field_side(field)
+    cited = {(entry['start'], entry['end']) for entry in own}
+    notes, shown = read['notes'], []
+    for option in field.get('options') or []:
+        if (option == value or option == 'Choose an item.' or len(re.findall(r'[^\W\d_]{2,}', option)) < 4
+                or not (FINDING_WORD.search(option) or NEGATIVE_OPTION.search(option))):
+            continue                 # (a vein's name is no finding: `anterior accessory great saphenous vein`)
+        for unit in read['units']:
+            if (unit['start'], unit['end']) in cited:
+                continue
+            for at in option_at(option, unit['quote']):
+                low, high = sentence_at(unit['quote'], at)
+                named = sides_of(unit['quote'][low:high]) - {'unclear'}
+                if named and named <= {mine, 'both'}:
+                    shown.append({'quote': unit['quote'], 'start': unit['start'], 'end': unit['end'], 'after': False,
+                                  'same': False})
+                    break
+    return shown[:GOVERNING_SHOWN]
+
+
+def row_rivals(field, value, own, read):
+    """Another value the notes give this measurement's row on this side, live where it stands (not struck by its own
+    correction, not one a correction replaces, not held as a prior study's or a plan's): `The left great saphenous vein
+    measures 6.9 mm at the saphenofemoral junction` against `Summary: left GSV at the SFJ 9.6 mm with reflux`; `… with
+    reflux of 900 ms` against `… with reflux of 2.1 seconds in the proximal thigh`; a second value of the row in the cited
+    sentence itself (`… 6.9 mm at the saphenofemoral junction and 9.6 mm at the saphenofemoral junction`), or the row's
+    vein's with no level written there (`Left GSV at the SFJ 6.9 mm, repeat measurement 9.6 mm`); a bound the
+    answer is outside (`less than 3 mm`), or an estimate, range or alternative that is not the answer (`_value_standing`).
+    The notes say both, and the clinician decides (round 17, the weak set)."""
+    row, mine, notes = field_row(field), field_side(field), read['notes']
+    number = MEASUREMENT_VALUE.fullmatch(value or '')
+    if not number:
+        return []
+    wanted = Decimal(value.split()[0])
+    cited = [(entry['start'], entry['end']) for entry in own]
+    for unit in _value_units(read, unit_kind(field)):
+        start, end, quote, places = unit
+        for at, until, written in places:   # (the cited units' other values too: `… 6.9 mm at the SFJ and 9.6 mm at the SFJ.`)
+            if written == wanted:
+                continue
+            standing = _value_standing(read, quote, start, at, until)
+            if (standing == 'struck' or (standing == 'at most' and wanted <= written)
+                    or (standing == 'at least' and wanted >= written)):
+                continue             # (struck by its own correction; a bound the answer is within: `less than 10 mm`)
+            low, high = sentence_at(notes, start + at)
+            reading = row_reading(notes, start + at, low, high, strikes(superseded({'quote': quote, 'start': start})))
+            verdict = row_verdict(row, reading)
+            unwritten = (verdict == 'unknown' and _level_unwritten(row, reading)
+                         and any(a <= start and end <= b for a, b in cited))
+            if verdict != 'consistent' and not unwritten:
+                continue             # (in the cited sentence, the row's vein with no level written is the row's too)
+            primary = place_reading(notes, start + at, low, high)[0]
+            if primary not in (mine, 'both'):
+                continue
+            entry = {'quote': quote, 'start': start, 'end': end, 'kind': 'unit'}
+            rival = '{:f} {}'.format(written.normalize(), 'mm' if unit_kind(field) == 'mm' else 'ms')
+            if governing(field, rival, [entry], read, sides=not unwritten, rivals=False)[0] is not None:
+                continue             # (a prior study's value, a plan's, one a correction replaces: not a rival — the
+                                     # governors and correction readers decide those, `… 6.1 mm at the SFJ.` / `Correction:
+                                     # … 7.6 mm at the SFJ.`; round 17's mutation proofs found a second check of it
+                                     # redundant. A value with no level written is asked without the row reader, which
+                                     # would hold it for that alone; its side is its primary reading's, as above)
+            return [{'quote': quote, 'start': start, 'end': end, 'after': start > cited[0][0] if cited else False,
+                     'same': any(a <= start and end <= b for a, b in cited)}]    # (one is enough to hold, and shown)
+    return []
+
+
+def _level_unwritten(row, reading):
+    """A place read for the row's vein (named in its item, its sentence or its paragraph), with no level written for it
+    and no other reading (`Left GSV at the SFJ 6.9 mm, repeat measurement 9.6 mm`: the 9.6; a cited `It measures 9.6 mm.`
+    after it)."""
+    return row[1] is not None and reading is not None and reading[2] is None and not reading[4] and reading[0] == row[0]
+
+
+def _value_units(read, kind):
+    """Per note and unit class, every unit writing a value of that class as the form takes one, with where and the value
+    in the field's unit (a reflux time written in seconds is read in ms): read once per reading. (Whether a value is live
+    where it stands is `_value_standing`'s, asked only of a value that differs from the answer.)"""
+    memo = read.setdefault('_value_units', {})
+    if kind not in memo:
+        found = []
+        for unit in read['units']:
+            places = []
+            for m in QUANTITY.finditer(view(unit['quote'])):
+                word = m.group(2).lower()
+                if not word.startswith(UNIT_PREFIXES[kind]) or (kind == 'mm') != word.startswith(('mm', 'millimet')):
+                    continue
+                written = Decimal(m.group(1))
+                if kind == 'time' and word.startswith('s'):
+                    written = written.scaleb(3)
+                places.append((m.start(), m.end(), written))
+            if places:
+                found.append((unit['start'], unit['end'], unit['quote'], tuple(places)))
+        memo[kind] = tuple(found)
+    return memo[kind]
+
+
+#: A bound's direction, read in the words `BOUNDED_BEFORE`/`BOUNDED_AFTER` found against a number (`at most` first, so
+#: `not exceeding` is not read as `exceeding`).
+AT_MOST = re.compile(r'(?i:<|\u2264|\b(?:less|fewer|shorter|lower|smaller)\s+than|\bnot\s+exceeding|\bunder|\bbelow|\bup\s+to'
+                     r'|\bat\s+most|\bat\s+or\s+below|\b(?:or|and)\s+(?:less|lower|shorter|smaller|below|under)(?![^\W\d_]))')
+AT_LEAST = re.compile(r'(?i:>|\u2265|\+|\b(?:greater|more|longer|higher|larger)\s+than|\bin\s+excess\s+of|\bexceeding|\bover'
+                      r'|\babove|\bbeyond|\bat\s+least|\bat\s+or\s+above'
+                      r'|\b(?:or|and)\s+(?:more|greater|higher|longer|larger|above|over)(?![^\W\d_]))')
+
+
+def _value_standing(read, quote, start, at, until):
+    """How a unit's value at `at` stands: `struck` by its own correction; a `value`; a bound `at most` or `at least` it
+    (`less than 3 mm`, `3 mm or more`); or `uncertain` — an estimate, a range, an alternative, or bounds both ways (`about
+    3 mm`, `3-4 mm`, `3 or 4 mm`). Once per value per reading."""
+    memo = read.setdefault('_value_standings', {})
+    key = (start, at)
+    if key not in memo:
+        read_value = view(quote)
+        bounds = [m.group() for m in (BOUNDED_BEFORE.search(read_value[max(0, at - 40):at]),
+                                      BOUNDED_AFTER_AT.match(read_value, until)) if m]
+        kinds = {'at most' if AT_MOST.search(bound) else 'at least' if AT_LEAST.search(bound) else 'uncertain'
+                 for bound in bounds}
+        memo[key] = ('struck' if is_struck(unit_strikes(quote), at) else 'value' if not kinds
+                     else kinds.pop() if len(kinds) == 1 else 'uncertain')
+    return memo[key]
 
 
 def option_reason(field, value, own):
@@ -5321,6 +5617,8 @@ HELD = {
             'level). Decide the answer yourself.'),
     'row_unknown': ('Read from the notes but NOT used: the notes do not say clearly which measurement row (vein and '
                     'level) this value belongs to, and the row is never assumed. Decide the answer yourself.'),
+    'absent': ('Read from the notes but NOT used: the cited sentences name no vein, level, side or finding this answer '
+               'could rest on. Choose the answer yourself; leaving it blank is an answer.'),
     'overstated': ('Read from the notes but NOT used: this option says more than the cited notes do (a vein or a '
                    'qualifier they do not state). Choose the answer yourself; leaving it blank is an answer.'),
     'wording': ('Read from the notes but NOT used: the form also offers a qualified option for this vein (such as '

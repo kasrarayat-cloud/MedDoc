@@ -611,6 +611,10 @@ class WMNarrativeWorkflow(TestCase):
         # `review_required`: the answer check passed and the fill stopped later, at the unreviewed statements.
         self.assertEqual(both('The RİGHT great saphenous vein measures 7.4 mm at the saphenofemoral junction.',
                               'measurement_1_1', '7.4 mm'), (None, 'review_required'))
+        # A number the hard wrap put before its unit's line is one quantity in one unit, for both (round 17).
+        for eol in ('\n', '\r\n'):
+            self.assertEqual(both('The right great saphenous vein measures 7.4' + eol + 'mm at the saphenofemoral junction.',
+                                  'measurement_1_1', '7.4 mm'), (None, 'review_required'))
         self.assertEqual(both('The great saphenous vein at the saphenofemoral junction measures 7.4 mm and the legs are '
                               'bothersome.', 'measurement_15_1', '7.4 mm'), ('side_unknown', 'unsupported_answer'))
         self.assertEqual(both('İBRAHİM YILMAZ presents for a venous study.', 'patient_name', 'Ibrahim Yilmaz'),
