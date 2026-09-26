@@ -232,6 +232,35 @@ class Credentials(unittest.TestCase):
         with patch.object(c, 'REBUILD', rebuild), self.assertRaisesRegex(c.Refused, 'committed and unmodified'):
             c.declared(args)
 
+    def test_every_request_is_captured_before_it_is_sent(self):
+        """The owner's stage-1 condition: the original requests survive. The capture sits at the SDK boundary in the
+        campaign process only; its record is written BEFORE the call goes through, a second request inside one attempt
+        fails on that record and is never sent, and a request outside an attempt is refused."""
+        from anthropic.resources.messages import Messages
+        directory = Path(tempfile.mkdtemp())
+        (directory / 'requests').mkdir()
+        sent = []
+        fake = SimpleNamespace(_client=SimpleNamespace(base_url='http://127.0.0.1:1', timeout=240, max_retries=0))
+        try:
+            with patch.object(Messages, 'create', lambda self, **kw: sent.append(sorted(os.listdir(directory / 'requests'))) or 'r'):
+                c.install_request_capture(directory)
+                with self.assertRaisesRegex(c.Refused, 'outside an attempt'):
+                    Messages.create(fake, model='m', max_tokens=1, messages=[])
+                self.assertEqual(sent, [])
+                c.CURRENT_ATTEMPT.update(number=1, case='C14')
+                arguments = {'model': c.EXPECTED_MODEL, 'max_tokens': 12000, 'system': 's',
+                             'messages': [{'role': 'user', 'content': '{"notes": "synthetic"}'}]}
+                self.assertEqual(Messages.create(fake, **arguments), 'r')
+                self.assertEqual(sent, [['001-C14-request.json']])                  # (recorded before it was sent)
+                record = json.loads((directory / 'requests' / '001-C14-request.json').read_text())
+                self.assertEqual((record['arguments'], record['arguments_sha256']), (arguments, c.canonical_sha256(arguments)))
+                self.assertEqual(record['client']['max_retries'], 0)
+                with self.assertRaises(FileExistsError):
+                    Messages.create(fake, **arguments)
+                self.assertEqual(len(sent), 1)                                      # (the second request never sent)
+        finally:
+            c.CURRENT_ATTEMPT.clear()
+
     def test_a_record_is_published_whole_or_not_at_all(self):
         """Round 19's focused pass: a kill between the O_EXCL create and the write left a 0-byte outcome, and every
         restart failed on it. A record is written to a private temporary file and linked to its name."""

@@ -141,6 +141,77 @@ def read_json(path):
     return json.loads(Path(path).read_text(encoding='utf-8'))
 
 
+def canonical_sha256(value):
+    """One hash for a request however it was spelled: sorted keys, no whitespace (the mock hashes what it received the same
+    way, so a captured request and a received one compare exactly)."""
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'), default=str).encode()).hexdigest()
+
+
+def file_sha256(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+#: The attempt a provider request belongs to, set by `run_stage` around its ONE request (the capture refuses any other).
+CURRENT_ATTEMPT = {}
+
+
+def install_request_capture(campaign_dir):
+    """Every provider request is recorded BEFORE it is sent, exactly as the product's code passes it to the SDK (the
+    owner's condition for stage 1: the original requests survive). Installed in this process only — the product is not
+    changed, and production never stores a request. The record is O_EXCL per attempt, so a second request inside one
+    attempt fails on it and is never sent; a request outside an attempt is refused. The key is never in the arguments."""
+    from anthropic.resources.messages import Messages
+    original = Messages.create
+    if getattr(original, '_wmn_capture', False):
+        return
+    requests_dir = Path(campaign_dir) / 'requests'
+
+    def create(self, *args, **kwargs):
+        require(CURRENT_ATTEMPT.get('number') and not args, 'A provider request outside an attempt was refused.')
+        client = getattr(self, '_client', None)
+        arguments = json.loads(json.dumps(kwargs, default=str))
+        write_new(requests_dir / f'{CURRENT_ATTEMPT["number"]:03d}-{CURRENT_ATTEMPT["case"]}-request.json', {
+            'attempt': CURRENT_ATTEMPT['number'], 'case': CURRENT_ATTEMPT['case'], 'captured_at': now(),
+            'endpoint': 'messages.create', 'arguments': arguments, 'arguments_sha256': canonical_sha256(arguments),
+            'client': {'base_url': str(getattr(client, 'base_url', '')), 'timeout': str(getattr(client, 'timeout', '')),
+                       'max_retries': getattr(client, 'max_retries', None)}})
+        return original(self, *args, **kwargs)
+
+    create._wmn_capture = True
+    Messages.create = create
+
+
+def write_manifest(campaign_dir, attempt, outcome, notes=None):
+    """The replay manifest: one O_EXCL entry per attempt linking its case, job, notes (by sha256), request, response,
+    replay file, model, usage, costs and failure — every file named with its own sha256, so the set can be re-checked
+    offline after the database is gone."""
+    campaign_dir = Path(campaign_dir)
+    number, case = attempt['number'], attempt['case']
+
+    def named(relative):
+        path = campaign_dir / relative if relative else None
+        return {'file': relative, 'sha256': file_sha256(path)} if path and path.exists() else None
+
+    request = named(f'requests/{number:03d}-{case}-request.json')
+    response = named(outcome.get('response_file'))
+    body = read_json(campaign_dir / outcome['response_file']) if response else {}
+    write_new(campaign_dir / 'manifest' / f'{number:03d}-{case}.json', {
+        'attempt': number, 'stage': attempt['stage'], 'case': case, 'kind': attempt['kind'],
+        'encounter': attempt.get('encounter'), 'job': outcome.get('job'), 'class': outcome['class'],
+        'recovered': bool(outcome.get('recovered')), 'error_class': outcome.get('error_class', ''),
+        'error': outcome.get('error', ''), 'stop': outcome.get('stop', ''),
+        'notes_sha256': hashlib.sha256(notes.encode()).hexdigest() if notes is not None else None,
+        'request': request, 'request_arguments_sha256': read_json(campaign_dir / request['file'])['arguments_sha256']
+        if request else None,
+        'response': response, 'replay': named(outcome.get('replay_file')), 'replay_written_by_this_attempt':
+        bool(outcome.get('replay_written')),
+        'response_model': outcome.get('response_model', ''), 'stop_reason': outcome.get('stop_reason', ''),
+        'usage': body.get('usage'), 'provider_request_id': outcome.get('provider_request_id', ''),
+        'maximum_cost': attempt['maximum_cost'], 'provider_bound': attempt['provider_bound'], 'hold': attempt['hold'],
+        'provider_actual_cost': outcome.get('provider_actual_cost'), 'wallet_charged': outcome.get('wallet_charged'),
+        'recorded_at': now()})
+
+
 def private_directory(path):
     path = Path(path)
     path.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -359,7 +430,7 @@ def outer(args):
                 f'Live evidence lives in {LIVE_ROOT / CAMPAIGN} and nowhere else.')
         private_directory(LIVE_ROOT)
     campaign_dir = private_directory(Path(args.campaign_dir).resolve())
-    for name in ('ledger', 'responses', 'replay', 'scores', 'state', 'home', 'tmp'):
+    for name in ('ledger', 'requests', 'responses', 'replay', 'manifest', 'scores', 'state', 'home', 'tmp'):
         private_directory(campaign_dir / name)
     identity = candidate_identity()
     require(not (campaign_dir / f'stage-{args.stage}-verdict.json').exists(),
@@ -414,6 +485,7 @@ def inner():
     require(settings.AI_MODE == 'live' and settings.WM_NARRATIVE and settings.SYNTHETIC_ONLY, 'Live synthetic narrative mode required.')
     require(str(settings.STATE_DIR).startswith(str(campaign_dir)), 'The state directory must be the campaign\'s.')
     require(settings.DATABASES['default']['NAME'].startswith('quillmd_wmn_campaign'), 'Wrong database.')
+    install_request_capture(campaign_dir)       # (before anything can reach the provider)
     if mode == 'offline':
         require(key == OFFLINE_KEY and os.environ.get('ANTHROPIC_BASE_URL', '').startswith('http://127.0.0.1:'),
                 'Offline mode reached a non-loopback provider.')
@@ -464,6 +536,7 @@ def inner():
         rows = load_ledger(ledger)
         report['totals_stage'] = {k: (money(v) if isinstance(v, Decimal) else v) for k, v in totals(rows, stage).items()}
         report['totals_campaign'] = {k: (money(v) if isinstance(v, Decimal) else v) for k, v in totals(rows).items()}
+        report['manifest'] = [read_json(p) for p in sorted((campaign_dir / 'manifest').glob('[0-9]*.json'))]
         report['limits'] = {'stage_provider': str(STAGES[stage]['provider_limit']),
                             'stage_wallet': str(STAGES[stage]['wallet_limit']),
                             'campaign_provider': str(CAMPAIGN_PROVIDER_LIMIT), 'campaign_wallet': str(CAMPAIGN_WALLET_LIMIT)}
@@ -564,6 +637,9 @@ def recover_interrupted(ledger, world=None, report=None, context=None):
             if record['class'] == 'adopted' and not record.get('response_model'):
                 record['stop'] = f'Attempt {attempt["number"]}: the recovered answer carries no provider model to check.'
         write_new(ledger / f'{attempt["number"]:03d}-{attempt["case"]}-outcome.json', record)
+        from core.models import Encounter
+        encounter = Encounter.objects.filter(pk=attempt.get('encounter')).first() if attempt.get('encounter') else None
+        write_manifest(Path(ledger).parent, attempt, record, encounter.notes if encounter else None)
 
 
 def now():
@@ -772,8 +848,13 @@ def run_stage(world, ledger, stage, context, report):
         attempt.update(encounter=str(encounter.pk), quoted_model=quoted['model'],
                        quoted_pricing_version=quoted['pricing_version'], shown_maximum_charge=str(shown))
         write_new(ledger / f'{number:03d}-{case_id}-attempt.json', attempt)      # BEFORE the hold and the request
-        outcome = one_request(world, encounter, token, revision, quoted)
+        CURRENT_ATTEMPT.update(number=number, case=case_id)
+        try:
+            outcome = one_request(world, encounter, token, revision, quoted)
+        finally:
+            CURRENT_ATTEMPT.clear()
         write_new(ledger / f'{number:03d}-{case_id}-outcome.json', outcome)
+        write_manifest(Path(ledger).parent, attempt, outcome, encounter.notes)
         if outcome['class'] == 'transport_failure':
             used = totals(load_ledger(ledger), stage)['retries']
             if trailing + 1 < 2 and used >= plan['max_retries']:
@@ -847,12 +928,15 @@ def retain_response(world, job, encounter):
     number = len([p for p in (base / 'responses').glob('*.json') if not p.name.startswith('.')]) + 1
     write_new(base / 'responses' / f'{number:03d}-{job.pk}.json', output)
     replay = base / 'replay' / f'{digest}.json'
+    written = bool(text) and not replay.exists()
     if text and not replay.exists():
         fd = os.open(replay, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, 'w', encoding='utf-8') as handle:
             handle.write(text)
     return {'response_model': output.get('model', ''), 'stop_reason': output.get('stop_reason', ''),
-            'response_sha256': hashlib.sha256(text.encode()).hexdigest() if text else ''}
+            'response_sha256': hashlib.sha256(text.encode()).hexdigest() if text else '',
+            'response_file': f'responses/{number:03d}-{job.pk}.json', 'replay_file': f'replay/{digest}.json' if text else None,
+            'replay_written': written}
 
 
 def score_attempt(world, encounter, case_id, number, override):

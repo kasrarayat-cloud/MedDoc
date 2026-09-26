@@ -222,6 +222,41 @@ def check(scenario, expected, code):
     return out
 
 
+def evidence_checks(scenario, label=''):
+    """The owner's retention condition, re-checkable from the files alone: every request the provider received was
+    captured before it was sent (canonically identical), and every attempt has a manifest entry whose request, response
+    and replay files exist and match their recorded sha256."""
+    c = scenario.campaign
+    out = []
+    rows = campaign.load_ledger(c / 'ledger') if (c / 'ledger').exists() else []
+    captured = [json.loads(p.read_text()) for p in sorted((c / 'requests').glob('[0-9]*-request.json'))]
+    received = scenario.requests()
+    out.append((f'{label}a captured request per request received, identical',
+                sorted(r['arguments_sha256'] for r in captured) == sorted(r.get('request_canonical_sha256') for r in received)
+                and all(r['arguments'].get('model') and r['arguments'].get('messages') for r in captured),
+                (len(captured), len(received))))
+    entries = {p.name: json.loads(p.read_text()) for p in sorted((c / 'manifest').glob('[0-9]*.json'))}
+    missing = [a['number'] for a, _ in rows if f'{a["number"]:03d}-{a["case"]}.json' not in entries]
+    out.append((f'{label}a manifest entry per attempt', not missing and len(entries) == len(rows), (len(entries), missing)))
+    bad = []
+    for name, entry in entries.items():
+        for part in ('request', 'response', 'replay'):
+            ref = entry.get(part)
+            if ref and (not (c / ref['file']).exists() or campaign.file_sha256(c / ref['file']) != ref['sha256']):
+                bad.append((name, part))
+        if entry['class'] == 'adopted' and not (entry.get('response_model') and entry.get('usage') and entry.get('request')):
+            bad.append((name, 'adopted without model, usage or request'))
+        if entry.get('request') and entry.get('request_arguments_sha256') not in {r['arguments_sha256'] for r in captured}:
+            bad.append((name, 'request hash'))
+    out.append((f'{label}every manifest file present and hash-matched', not bad, bad[:5]))
+    outcomes = {a['number']: o for a, o in rows}
+    disagree = [n for n, e in ((e['attempt'], e) for e in entries.values())
+                if outcomes.get(n) and (e['class'] != outcomes[n]['class']
+                                        or e.get('provider_actual_cost') != outcomes[n].get('provider_actual_cost'))]
+    out.append((f'{label}the manifest agrees with the ledger', not disagree, disagree))
+    return out
+
+
 CHILDREN = []
 
 
@@ -258,11 +293,16 @@ def main():
                 extra = ['--expectation-override', json.dumps(
                     {'case': extras['override'], 'key': key, 'expected': {'outcome': 'missing'}})]
             code, seconds = s.run(extra=extra)
-            checks = check(s, expected, code)
+            checks = check(s, expected, code) + evidence_checks(s)
         except Exception as error:
             checks, seconds = [('scenario ran', False, f'{type(error).__name__}: {error}')], None
         finally:
             s.finish()
+        if seconds is not None:      # (and it all survives the synthetic database's removal and the mock's end)
+            dropped = not admin_sql(admin, f"SELECT 1 FROM pg_database WHERE datname = '{s.db_name}'")
+            checks += [('the synthetic database is gone', dropped, s.db_name)] + evidence_checks(s, 'after cleanup: ')
+            checks.append(('after cleanup: the database records export survives',
+                           bool(sorted(s.campaign.glob('db-records-stage-1*.json'))), s.campaign.name))
         results.append({'scenario': name, 'seconds': seconds, 'passed': all(ok for _, ok, _ in checks),
                         'checks': [{'check': n, 'passed': ok, 'detail': str(d)[:300]} for n, ok, d in checks]})
         print(f'{"PASS" if results[-1]["passed"] else "FAIL"}  {name}  ({seconds}s)', flush=True)
@@ -358,6 +398,7 @@ def special_cases(args, admin, number):
             verdict = json.loads((s.campaign / 'stage-1-verdict.json').read_text())
             checks += [(label, test(code, rows, first, verdict, s), detail(code, rows, first, verdict, s))
                        for label, test, detail in expect['checks']]
+            checks += evidence_checks(s)
         except Exception as error:
             checks.append(('scenario ran', False, f'{type(error).__name__}: {error}'))
         finally:

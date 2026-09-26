@@ -65,6 +65,8 @@ def handler_for(state):
             state.record({'number': number, 'at': time.time(), 'path': self.path, 'behaviour': behaviour['kind'],
                           'model': request.get('model'), 'max_tokens': request.get('max_tokens'),
                           'body_sha256': hashlib.sha256(body).hexdigest(), 'body_bytes': len(body),
+                          'request_canonical_sha256': hashlib.sha256(json.dumps(
+                              request, sort_keys=True, separators=(',', ':'), default=str).encode()).hexdigest(),
                           'has_output_config': 'output_config' in request,
                           'credential_is_offline_marker': self.headers.get('x-api-key') == 'offline-mock-provider-no-credential'})
             kind = behaviour['kind']
