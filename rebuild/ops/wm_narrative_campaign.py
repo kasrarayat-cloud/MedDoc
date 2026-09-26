@@ -276,27 +276,36 @@ def scrubbed_environment(args, provider, campaign_dir):
         'QUILLMD_WORD_QUALIFICATION': '1',
         'WMN_CAMPAIGN_MODE': args.mode,
     }
-    env.update({name: value for name, value in provider.items() if value})
+    env.update({name: provider[name] for name in PROVIDER_FIELDS if provider.get(name)})
     if args.mode == 'offline':
         env['ANTHROPIC_BASE_URL'] = provider['ANTHROPIC_BASE_URL']
+        if getattr(args, 'offline_crash', None):
+            env['WMN_OFFLINE_CRASH'] = args.offline_crash
     return env
 
 
 def offline_provider(path):
+    """The loopback mock's settings: ONLY the provider fields and its URL (a proxy, a token or anything else in the file
+    is never taken — the runner's review: `HTTP_PROXY` and `ANTHROPIC_AUTH_TOKEN` passed straight through)."""
     value = read_json(path)
     require(value.get('ANTHROPIC_API_KEY') == OFFLINE_KEY, 'Offline mode uses the fixed offline marker, never a key.')
     require(re.fullmatch(r'http://127\.0\.0\.1:\d{2,5}', value.get('ANTHROPIC_BASE_URL', '')),
             'Offline mode needs a loopback mock provider.')
-    return value
+    return {name: str(value.get(name) or '') for name in PROVIDER_FIELDS + ('ANTHROPIC_BASE_URL',)}
 
 
 def declared(args):
     """Live mode: a committed, unmodified declaration that names this campaign, this stage and these limits."""
     require(args.declaration, 'Live mode requires --declaration (a committed declaration naming the authorization).')
     path = Path(args.declaration).resolve()
-    tracked = subprocess.run(['git', '-C', str(path.parent), 'ls-files', '--error-unmatch', path.name],
+    root = Path(subprocess.run(['git', '-C', str(REBUILD), 'rev-parse', '--show-toplevel'], capture_output=True,
+                               text=True).stdout.strip() or '/nonexistent')
+    require(path.parent == root / 'docs' / 'foundation' / 'mutations',
+            'The declaration must be in this checkout\'s docs/foundation/mutations/.')
+    relative = str(path.relative_to(root))
+    tracked = subprocess.run(['git', '-C', str(root), 'ls-files', '--error-unmatch', relative],
                              capture_output=True).returncode == 0
-    clean = subprocess.run(['git', '-C', str(path.parent), 'diff', '--quiet', 'HEAD', '--', path.name]).returncode == 0
+    clean = subprocess.run(['git', '-C', str(root), 'diff', '--quiet', 'HEAD', '--', relative]).returncode == 0
     require(tracked and clean, 'The declaration must be tracked, committed and unmodified.')
     text = path.read_text(encoding='utf-8')
     plan = STAGES[args.stage]
@@ -304,11 +313,15 @@ def declared(args):
                  f'wallet_limit_usd: {plan["wallet_limit"]}', f'model: {EXPECTED_MODEL}',
                  f'pricing_version: {EXPECTED_PRICING_VERSION}'):
         require(line in text, f'The declaration does not state `{line}`.')
-    authorization = re.search(r'^authorization: (owner \S.{11,})$', text, re.M)
-    require(authorization and not re.search(r'pending|tbd|todo|placeholder|<|>|\?', authorization.group(1), re.I),
-            'The declaration names no owner authorization (a line `authorization: owner <date and words>`, no placeholder).')
+    authorization = re.search(r'^authorization: (owner (\d{4}-\d{2}-\d{2}) approved stage (\d) at the stated limits)(.*)$',
+                              text, re.M)
+    require(authorization and authorization.group(3) == str(args.stage)
+            and not re.search(r'\b(?:not|no|never|declin\w*|refus\w*|reject\w*|withh\w*|pending|later|will|would|tbd|todo|'
+                              r'placeholder|unless|if|but|except)\b|[<>?]', authorization.group(4), re.I),
+            'The declaration names no owner authorization of this stage (a line `authorization: owner <YYYY-MM-DD> approved '
+            'stage <n> at the stated limits`, then only the owner\'s own words, no condition or placeholder).')
     return {'declaration': str(path), 'sha256': hashlib.sha256(text.encode()).hexdigest(),
-            'authorization': authorization.group(1).strip()}
+            'authorization': (authorization.group(1) + authorization.group(4)).strip()}
 
 
 def candidate_identity():
@@ -323,6 +336,8 @@ def candidate_identity():
 def outer(args):
     """Validate, build the scrubbed environment, and re-execute as the process that makes requests."""
     require(args.stage in STAGES, 'Unknown stage.')
+    require(args.mode == 'live' or not str(Path(args.campaign_dir).resolve()).startswith(str(LIVE_ROOT)),
+            'Offline validation never writes into the live evidence place.')
     if args.mode == 'live':
         require(Path(args.campaign_dir).resolve() == LIVE_ROOT / CAMPAIGN,
                 f'Live evidence lives in {LIVE_ROOT / CAMPAIGN} and nowhere else.')
@@ -360,11 +375,21 @@ class Stop(Exception):
     """A stop condition: record it and send nothing further."""
 
 
+def _interrupted(signum, frame):
+    raise SystemExit(f'signal {signum}')
+
+
 def inner():
     os.umask(0o077)                 # as the production units run: nothing this process writes is readable by others
+    import signal
+    signal.signal(signal.SIGTERM, _interrupted)     # (a kill or a Ctrl-C ends through `finally`, recording the attempt
+    signal.signal(signal.SIGINT, _interrupted)      #  in flight — the runner's review: SIGINT left it without an outcome)
     context = json.loads(os.environ['WMN_CAMPAIGN_CONTEXT'])
     campaign_dir, stage, mode = Path(context['campaign_dir']), context['stage'], context['mode']
     lock = hold_lock(campaign_dir)  # one runner per campaign: two could otherwise both pass the same limit check
+    # (checked again under the lock: the outer check and the lock were not one step — the runner's review)
+    require(not (campaign_dir / f'stage-{stage}-verdict.json').exists(),
+            f'Stage {stage} of this campaign already has a verdict; it is never re-run in place.')
     key = os.environ.get('ANTHROPIC_API_KEY', '')
     sys.path.insert(0, str(REBUILD))
     import django
@@ -389,24 +414,30 @@ def inner():
     call_command('migrate', interactive=False, verbosity=0)
     ledger = campaign_dir / 'ledger'
     record = campaign_record(campaign_dir, context)
-    recover_interrupted(ledger)
     report = {'campaign': CAMPAIGN, 'stage': stage, 'mode': mode, 'candidate': context['commit'],
               'authorization': context['authorization'], 'cases': {}, 'stops': []}
     verdict = 'INCOMPLETE'
+    world = None
     try:
         world = Synthetic(campaign_dir, stage)
-        stage_zero = world.stage_zero()
-        report['stage_zero'] = stage_zero
+        report['stage_zero'] = world.stage_zero()
         verdict = run_stage(world, ledger, stage, context, report)
     except (Stop, Refused) as stop:
         report['stops'].append(str(stop))
         verdict = 'FAIL' if str(stop).startswith('WRONG') else 'STOPPED'
-    except Exception as error:      # fail closed: an unexpected runner error sends nothing further
+    except BaseException as error:  # fail closed: an unexpected error, a kill or a Ctrl-C sends nothing further
         import traceback
         report['stops'].append(f'runner error: {type(error).__name__}')
         report['runner_traceback'] = traceback.format_exc()[-4000:]
         verdict = 'STOPPED'
     finally:
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        try:
+            recover_interrupted(ledger, world, report, context)   # (an attempt in flight is recorded, never lost)
+        except Exception as error:
+            report['stops'].append(f'recording the attempt in flight failed: {type(error).__name__}')
+            verdict = 'STOPPED'
         rows = load_ledger(ledger)
         report['totals_stage'] = {k: (money(v) if isinstance(v, Decimal) else v) for k, v in totals(rows, stage).items()}
         report['totals_campaign'] = {k: (money(v) if isinstance(v, Decimal) else v) for k, v in totals(rows).items()}
@@ -470,19 +501,27 @@ def campaign_record(campaign_dir, context):
     return stored
 
 
-def recover_interrupted(ledger):
-    """An attempt with no outcome is an UNKNOWN provider outcome, recorded once and counted at its maximum. The job the
-    product created for it (if any) is named, so it is accounted for rather than read as a request nobody made."""
-    from core.models import Job, ProviderReceipt
+def recover_interrupted(ledger, world=None, report=None, context=None):
+    """An attempt with no outcome, recorded from what the product recorded for its job (the runner's review: a job the
+    product had ADOPTED was recorded `interrupted_unknown`, its case resent, its wrong answer never scored and the stage
+    PASSED; its wallet charge was left out). A job that settled is the provider's answer — adopted or unusable — and is
+    never resent; a job with no receipt is an unknown provider outcome, counted at its maximum."""
+    from core.models import Job, LedgerEntry, ProviderReceipt
     for attempt, outcome in load_ledger(ledger):
-        if outcome is None:
-            job = Job.objects.filter(encounter_id=attempt.get('encounter')).first() if attempt.get('encounter') else None
-            receipt = ProviderReceipt.objects.filter(job=job).first() if job else None
-            write_new(ledger / f'{attempt["number"]:03d}-{attempt["case"]}-outcome.json',
-                      {'class': 'interrupted_unknown', 'recorded_at': now(), 'job': str(job.pk) if job else None,
-                       'state': job.state if job else None, 'worker_ran': bool(job and job.state != 'queued'),
-                       'provider_actual_cost': str(receipt.actual_cost) if receipt else None,
-                       'note': 'No outcome was written: the provider may have received and billed this request.'})
+        if outcome is not None:
+            continue
+        job = Job.objects.filter(encounter_id=attempt.get('encounter')).first() if attempt.get('encounter') else None
+        receipt = ProviderReceipt.objects.filter(job=job).first() if job else None
+        charged = -sum((e.amount for e in LedgerEntry.objects.filter(job=job)), Decimal('0')) if job else Decimal('0')
+        state = job.state if job else None
+        cls = ('adopted' if state == 'succeeded' else 'output_unusable' if receipt and state == 'failed'
+               else 'settlement_reconciliation' if receipt else 'interrupted_unknown')
+        write_new(ledger / f'{attempt["number"]:03d}-{attempt["case"]}-outcome.json',
+                  {'class': cls, 'recovered': True, 'recorded_at': now(), 'job': str(job.pk) if job else None,
+                   'state': state, 'worker_ran': bool(job and state != 'queued'),
+                   'provider_actual_cost': str(receipt.actual_cost) if receipt else None,
+                   'wallet_charged': str(charged), 'error': job.error if job else '',
+                   'note': 'Recorded after an interruption from the product\'s own job record.'})
 
 
 def now():
@@ -599,23 +638,82 @@ class Synthetic:
         return token, revision, Decimal(shown.group(1)), quoted
 
 
+TRANSPORT_LIKE = ('transport_failure', 'interrupted_unknown')
+
+
+def ledger_stops(world, ledger, stage, context, report):
+    """Every stop the durable ledger shows, re-derived (a restart knows what an interrupted run knew — the runner's
+    review: stops, the consecutive-failure count and an adopted answer's score lived only in memory). Scores an adopted
+    draft that has none. Returns the stage's rows."""
+    from core.models import Encounter, Job, ProviderReceipt, Usage
+    override = context.get('expectation_override') if context['mode'] == 'offline' else None
+    rows = load_ledger(ledger)
+    mine = [(a, o) for a, o in rows if a['stage'] == stage]
+    for attempt, outcome in mine:
+        number, cls = attempt['number'], outcome['class']
+        if cls == 'adopted':
+            path = Path(ledger).parent / 'scores' / f'{number:03d}-{attempt["case"]}.json'
+            if path.exists():
+                score = read_json(path)
+            else:
+                job = Job.objects.get(pk=outcome['job'])
+                score = score_attempt(world, Encounter.objects.get(pk=job.encounter_id), attempt['case'], number, override)
+            report['cases'][attempt['case']] = score
+            if score['counts'].get('wrong_supported') or score['counts'].get('statement_wrong'):
+                raise Stop(f'WRONG ANSWER: case {attempt["case"]} pre-filled {score["counts"].get("wrong_supported", 0)} '
+                           f'wrong answer(s) and {score["counts"].get("statement_wrong", 0)} wrong statement(s).')
+        elif cls == 'output_unusable':
+            report['cases'][attempt['case']] = {'outcome': 'output_unusable', 'error': outcome.get('error')}
+        if outcome.get('stop'):
+            raise Stop(outcome['stop'])
+        if outcome.get('provider_actual_cost') not in (None, '') and Decimal(outcome['provider_actual_cost']) > Decimal(attempt['maximum_cost']):
+            raise Stop(f'Attempt {number}: provider cost {outcome["provider_actual_cost"]} above its maximum {attempt["maximum_cost"]}.')
+        if outcome.get('absorbed_over_limit'):
+            raise Stop(f'Attempt {number}: a charge above its hold was absorbed.')
+        if outcome.get('response_model') and outcome['response_model'] != EXPECTED_MODEL:
+            raise Stop(f'Attempt {number}: the provider answered as {outcome["response_model"]}.')
+        if cls == 'not_sent':
+            raise Stop(f'Attempt {number} was refused before any request: {outcome.get("error")}')
+        if cls not in ('adopted', 'output_unusable') + TRANSPORT_LIKE:
+            raise Stop(f'Attempt {number} ended {cls}: {outcome.get("error_class") or outcome.get("error")}')
+    # Nothing but the runner's own attempts may have reached the provider or this database's ledger.
+    with_job = sum(1 for _, o in rows if o and o.get('job'))
+    with_receipt = sum(1 for _, o in rows if o and o.get('provider_actual_cost') not in (None, ''))
+    if (Job.objects.count(), ProviderReceipt.objects.count(), Usage.objects.count()) != (with_job, with_receipt, with_receipt):
+        raise Stop(f'Uninitiated request: {Job.objects.count()} jobs / {ProviderReceipt.objects.count()} receipts / '
+                   f'{Usage.objects.count()} usage rows against {with_job} / {with_receipt} attempts.')
+    trailing = 0
+    for _, outcome in reversed(mine):
+        if outcome['class'] not in TRANSPORT_LIKE:
+            break
+        trailing += 1
+    if trailing >= 2:
+        raise Stop('Two consecutive transport failures.')
+    return mine, trailing
+
+
 def run_stage(world, ledger, stage, context, report):
-    from core.models import Job, ProviderReceipt, Usage
     plan = STAGES[stage]
-    consecutive = 0
     offline = context['mode'] == 'offline'
     retry_wait = float(context['offline_retry_wait']) if offline else RETRY_WAIT_SECONDS
-    override = context.get('expectation_override') if offline else None
-    queue = list(plan['cases'])
-    done = {a['case'] for a, o in load_ledger(ledger) if a['stage'] == stage and o and o['class'] in ('adopted', 'output_unusable')}
-    queue = [c for c in queue if c not in done]
-    while queue:
+    recover_interrupted(ledger)
+    while True:
+        mine, trailing = ledger_stops(world, ledger, stage, context, report)
+        done = {a['case'] for a, o in mine if o['class'] in ('adopted', 'output_unusable')}
+        queue = [case for case in plan['cases'] if case not in done]
+        if not queue:
+            break
         case_id = queue[0]
         rows = load_ledger(ledger)
         # Any earlier attempt of this case in this stage (a transport failure, an interrupted run) makes this a retry.
-        kind = 'retry' if any(a['stage'] == stage and a['case'] == case_id for a, _ in rows) else 'initial'
+        kind = 'retry' if any(a['case'] == case_id for a, _ in mine) else 'initial'
         if kind == 'retry' and totals(rows, stage)['retries'] >= plan['max_retries']:
             raise Stop(f'Case {case_id} needs a retry and all {plan["max_retries"]} stage retries are used.')
+        if trailing:                 # (after a transport failure, the wait is kept across a restart too)
+            from datetime import datetime
+            last = datetime.fromisoformat(mine[-1][1]['recorded_at'])
+            elapsed = (datetime.fromisoformat(now()) - last).total_seconds()
+            time.sleep(max(0.0, retry_wait - elapsed))
         maximum = world.maximum_cost(case_id)
         next_attempt_allowed(rows, stage, maximum)
         number = len(rows) + 1
@@ -633,51 +731,10 @@ def run_stage(world, ledger, stage, context, report):
         write_new(ledger / f'{number:03d}-{case_id}-attempt.json', attempt)      # BEFORE the hold and the request
         outcome = one_request(world, encounter, token, revision, quoted)
         write_new(ledger / f'{number:03d}-{case_id}-outcome.json', outcome)
-        if outcome.get('stop'):
-            raise Stop(outcome['stop'])
-        # Nothing but the runner's own attempts may have reached the provider or the ledger of this database.
-        recorded = load_ledger(ledger)
-        with_job = sum(1 for _, o in recorded if o and o.get('job'))
-        with_receipt = sum(1 for _, o in recorded if o and o.get('provider_actual_cost') not in (None, ''))
-        if (Job.objects.count(), ProviderReceipt.objects.count()) != (with_job, with_receipt):
-            raise Stop(f'Uninitiated request: {Job.objects.count()} jobs / {ProviderReceipt.objects.count()} receipts '
-                       f'against {with_job} / {with_receipt} attempts.')
-        if Usage.objects.count() != with_receipt:
-            raise Stop('A usage row exists that no attempt accounts for.')
-        cls = outcome['class']
-        # An adopted draft is scored (and its page rendered) BEFORE any stop below, so a stopped stage keeps the evidence
-        # of what the stopping answer said.
-        score = score_attempt(world, encounter, case_id, number, override) if cls == 'adopted' else None
-        if score:
-            report['cases'][case_id] = score
-        if outcome.get('provider_actual_cost') not in (None, '') and Decimal(outcome['provider_actual_cost']) > maximum:
-            raise Stop(f'Attempt {number}: provider cost {outcome["provider_actual_cost"]} above its maximum {maximum}.')
-        if outcome.get('absorbed_over_limit'):
-            raise Stop(f'Attempt {number}: a charge above its hold was absorbed.')
-        if outcome.get('response_model') and not outcome['response_model'].startswith(EXPECTED_MODEL):
-            raise Stop(f'Attempt {number}: the provider answered as {outcome["response_model"]}.')
-        if cls == 'adopted':
-            consecutive = 0
-            if score['counts'].get('wrong_supported') or score['counts'].get('statement_wrong'):
-                raise Stop(f'WRONG ANSWER: case {case_id} pre-filled {score["counts"].get("wrong_supported", 0)} wrong '
-                           f'answer(s) and {score["counts"].get("statement_wrong", 0)} wrong statement(s).')
-            queue.pop(0)
-        elif cls == 'output_unusable':
-            consecutive = 0
-            report['cases'][case_id] = {'outcome': 'output_unusable', 'error': outcome.get('error')}
-            queue.pop(0)
-        elif cls == 'transport_failure':
-            consecutive += 1
+        if outcome['class'] == 'transport_failure':
             used = totals(load_ledger(ledger), stage)['retries']
-            if consecutive >= 2:
-                raise Stop('Two consecutive transport failures.')
-            if used >= plan['max_retries']:
+            if trailing + 1 < 2 and used >= plan['max_retries']:
                 raise Stop(f'Transport failure with all {plan["max_retries"]} stage retries used.')
-            time.sleep(retry_wait)
-        elif cls == 'not_sent':
-            raise Stop(f'Attempt {number} was refused before any request: {outcome.get("error")}')
-        else:
-            raise Stop(f'Attempt {number} ended {cls}: {outcome.get("error_class") or outcome.get("error")}')
     complete = all(case in report['cases'] and report['cases'][case].get('outcome') == 'adopted' for case in plan['cases'])
     return 'PASS' if complete else 'INCOMPLETE'
 
@@ -698,6 +755,8 @@ def one_request(world, encounter, token, revision, quoted):
         return {'class': 'not_sent', 'job': str(job.pk), 'held': str(held), 'recorded_at': now(),
                 'stop': 'The queued job does not carry the quoted model and pricing; the worker was not run.'}
     worked = run_one()
+    if os.environ.get('WMN_CAMPAIGN_MODE') == 'offline' and os.environ.get('WMN_OFFLINE_CRASH') == 'after_worker':
+        os._exit(137)                # (offline validation only: a kill after the worker, before the outcome is written)
     job.refresh_from_db()
     receipt = ProviderReceipt.objects.filter(job=job).first()
     usage = Usage.objects.filter(job=job).first()
@@ -798,6 +857,12 @@ def leaked(campaign_dir, key):
 
 def plan(args):
     """Per-case maxima at the declared rates, from the frozen notes and mapping; no database, no request."""
+    # (never where a configuration file would be loaded whole — the runner's review: `plan` in the application's own
+    # checkout ran settings' `load_dotenv` over the protected configuration; nothing here needs a secret or a database)
+    require(not (REBUILD / '.env').exists(), 'plan runs only in a candidate checkout with no .env.')
+    for name, value in (('QUILLMD_SECRET_KEY', secrets.token_urlsafe(32)), ('QUILLMD_DB_PASSWORD', 'unused-by-plan'),
+                        ('QUILLMD_AI_MODE', 'fixture'), ('QUILLMD_ENV_MANAGED', '1')):
+        os.environ[name] = value
     sys.path.insert(0, str(REBUILD))
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'quillmd.settings')
     import django
@@ -847,13 +912,15 @@ def main(argv=None):
     parser.add_argument('--offline-timeout', type=float, default=5.0)
     parser.add_argument('--offline-retry-wait', type=float, default=1.0)
     parser.add_argument('--expectation-override', type=json.loads, default=None)
+    parser.add_argument('--offline-crash', choices=['after_worker'], default=None, help='offline validation only')
     args = parser.parse_args(argv)
     try:
         if args.command == 'plan':
             return plan(args)
         require(args.campaign_dir and args.db and args.engine, 'run needs --campaign-dir, --db and --engine.')
-        require(args.mode == 'offline' or (args.provider is None and args.expectation_override is None),
-                'Live mode takes no mock provider and no expectation override.')
+        require(args.mode == 'offline' or (args.provider is None and args.expectation_override is None
+                                           and args.offline_crash is None),
+                'Live mode takes no mock provider, expectation override or fault injection.')
         outer(args)
     except Refused as refused:
         print('REFUSED: ' + str(refused), file=sys.stderr)

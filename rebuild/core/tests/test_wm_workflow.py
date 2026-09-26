@@ -731,7 +731,7 @@ class WMNarrativeWorkflow(TestCase):
         return self.generate_from(notes, {'fields': rows, 'statements': [
             {'key': key, 'variant': variant, 'unit_ids': [ids[i] for i in indexes]} for key, variant, indexes in statements]})
 
-    def post_page(self, encounter, edits=(), sources=(), review=True, statements=None):
+    def post_page(self, encounter, edits=(), sources=(), review=True, statements=None, extra=()):
         page = self.client.get(f'/encounters/{encounter.pk}/')
         self.assertEqual(page.status_code, 200)
         payload = RenderedSaveForm.of(page)
@@ -741,6 +741,7 @@ class WMNarrativeWorkflow(TestCase):
             payload.update({'claim_reviewed_' + row['key']: 'on' for row in page.context['wm_requirements']})
         payload.update({'answer_' + key: value for key, value in dict(edits).items()})
         payload.update({'source_' + key: value for key, value in dict(sources).items()})
+        payload.update(dict(extra))
         self.client.post(f'/encounters/{encounter.pk}/save/', payload)
         encounter.refresh_from_db()
         return page
@@ -848,6 +849,95 @@ class WMNarrativeWorkflow(TestCase):
         self.assertFalse(run_one())
         encounter.refresh_from_db()
         self.assertEqual((encounter.answers, Job.objects.filter(encounter=encounter).count()), before)
+
+    # ── round 18's review: clinician decisions and provenance through the page ─────────────────────────────────────
+    def generation_is_refused_after(self, extra, edits, by=None):
+        encounter = self.replayed(self.PROVENANCE_NOTES, self.PROVENANCE_PICKS, self.PROVENANCE_STATEMENTS)
+        clinician = self.user
+        if by is not None:
+            self.client.force_login(by)
+        self.post_page(encounter, edits=edits, review=False, extra=extra)
+        self.client.force_login(clinician)
+        self.assertFalse(any(a.get('reviewed') for a in encounter.answers.values()))     # (nothing ticked)
+        before = (dict(encounter.answers), dict(encounter.template_review), Job.objects.filter(encounter=encounter).count())
+        self.client.post(f'/encounters/{encounter.pk}/generate/', {'revision': encounter.revision})
+        self.assertFalse(run_one())
+        encounter.refresh_from_db()
+        self.assertEqual((encounter.answers, encounter.template_review, Job.objects.filter(encounter=encounter).count()), before)
+        return encounter
+
+    def test_round_18_generation_is_refused_over_an_unticked_statement_choice(self):
+        """Round 18 (clinician-decision and provenance lenses): a statement wording chosen and saved without its tick was
+        replaced by a second generation."""
+        encounter = self.generation_is_refused_after({'claim_variant_claim_32': 'not_assessed'}, {})
+        self.assertEqual(encounter.template_review['decisions']['claim_32']['variant'], 'not_assessed')
+
+    def test_round_18_generation_is_refused_over_a_cleared_answer(self):
+        """Round 18: an answer a person cleared (`missing`, with its `edited_by`) was re-filled by a second generation.
+        Cleared by an employee, whose save records no statement decisions: the clearing alone refuses (the mutation proofs
+        found a clinician's save refused by its decisions whatever the answers said)."""
+        encounter = self.generation_is_refused_after({}, {'measurement_1_1': ''}, by=self.member('wm-employee-r18g', 'employee'))
+        self.assertFalse((encounter.template_review or {}).get('decisions'))
+        self.assertEqual((encounter.answers['measurement_1_1']['status'],
+                          bool(encounter.answers['measurement_1_1'].get('edited_by'))), ('missing', True))
+
+    def test_round_18_an_employees_save_keeps_the_clinicians_statement_decisions(self):
+        """Round 18 (clinician-decision and provenance lenses): an employee's ordinary save emptied the review, and the
+        clinician's page fell back to the mapping's defaults (`No saphenous reflux …` the clinician had rejected)."""
+        encounter = self.replayed(self.PROVENANCE_NOTES, self.PROVENANCE_PICKS, self.PROVENANCE_STATEMENTS)
+        self.post_page(encounter, review=False, extra={'claim_variant_claim_32': 'not_assessed'})   # (the clinician decides,
+        self.post_page(encounter)                                                         #  sees the wording, ticks all)
+        self.assertEqual(encounter.template_review['decisions']['claim_32'], {**encounter.template_review['decisions']['claim_32'],
+                                                                              'variant': 'not_assessed', 'reviewed': True})
+        clinician = self.user
+        employee = self.member('wm-employee-r18', 'employee')
+        self.client.force_login(employee)
+        self.post_page(encounter, review=False)                                           # (the employee's plain save)
+        self.assertIn('claim_32', encounter.template_review.get('decisions') or {})
+        decision = encounter.template_review['decisions']['claim_32']
+        self.assertEqual((decision['variant'], decision['reviewed']), ('not_assessed', False))
+        from core.models import AuditEvent
+        withdrawn = AuditEvent.objects.filter(action='encounter.answers_saved', target=str(encounter.pk)).latest('created_at')
+        self.assertIn('claim_32', withdrawn.details['withdrawn_statement_reviews'])
+        self.client.force_login(clinician)
+        page = self.client.get(f'/encounters/{encounter.pk}/')
+        self.assertEqual(RenderedSaveForm.of(page)['claim_variant_claim_32'], 'not_assessed')
+        # (and it is never finalized as it stands: the kept decisions are unreviewed and incomplete)
+        self.assertEqual(encounter.template_review.get('schema'), 0)
+        # (and an employee's statement ticks are refused before anything is read — the role guard — so the kept decisions
+        # stay unreviewed: the save's own `reviewed=False` is a second guard, equivalent under the first, which the
+        # mutation proofs could not separate)
+        self.client.force_login(employee)
+        revision = encounter.revision
+        self.post_page(encounter, review=False, statements=True)
+        self.assertEqual(encounter.revision, revision)
+        self.assertFalse(any(d.get('reviewed') for d in encounter.template_review['decisions'].values()))
+        self.assertEqual(encounter.template_review['decisions']['claim_32']['variant'], 'not_assessed')
+
+    def test_round_18_a_cleared_answer_names_who_cleared_it(self):
+        """Round 18 (provenance lens): a value the model read and a person deleted showed as a plain `missing`, as if the
+        notes gave nothing."""
+        encounter = self.replayed(self.PROVENANCE_NOTES, self.PROVENANCE_PICKS, self.PROVENANCE_STATEMENTS)
+        employee = self.member('wm-employee-r18c', 'employee')
+        self.client.force_login(employee)
+        self.post_page(encounter, edits={'measurement_1_1': ''}, review=False)
+        self.client.force_login(self.user)
+        page = self.client.get(f'/encounters/{encounter.pk}/')
+        self.assertContains(page, 'data-cleared-by')
+        self.assertContains(page, 'cleared by wm-employee-r18c@synthetic.invalid')
+
+    def test_round_18_review_refuses_text_the_engine_would_rewrite_in_a_cell(self):
+        """Round 18 (provenance lens): the engine writes a table cell through a replace that reads `&p`, `&l`, `&m`, `&b`
+        and `&&` as breaks — `thigh&mid calf` exported as `thigh`, a page break and `id calf`."""
+        from core import wm_review
+        encounter = self.replayed(self.PROVENANCE_NOTES, self.PROVENANCE_PICKS, self.PROVENANCE_STATEMENTS)
+        self.post_page(encounter, edits={'location_11': 'thigh&mid calf'}, review=False)
+        fields, requirements = wm_review._mapping(encounter)
+        assessed = wm_review._answer_assessment(encounter, self.user, fields, requirements)
+        self.assertIn('text_the_form_rewrites', assessed['location_11']['blockers'])
+        self.post_page(encounter, edits={'location_11': 'thigh and mid calf'}, review=False)
+        assessed = wm_review._answer_assessment(encounter, self.user, fields, requirements)
+        self.assertNotIn('text_the_form_rewrites', assessed['location_11']['blockers'])
 
     def test_the_save_keeps_the_copy_the_next_posted_line_runs_on_to(self):
         """Round 17e's review (false-rejection lens): one line written under both legs with the side only on the line

@@ -342,6 +342,10 @@ def narrative_reading(encounter, fields, requirements):
             'read': None}
 
 
+#: What the Word engine's cell replace reads as a break or an ampersand escape (lowercase only; `&L` is written as is).
+ENGINE_REWRITES = re.compile(r'&[plmb&]')
+
+
 def _answer_assessment(encounter, actor, fields, requirements, narrative=None):
     labels = [row['label'] for row in fields + requirements]
     require(isinstance(encounter.answers, dict) and set(encounter.answers) <= {row['key'] for row in fields},
@@ -350,6 +354,13 @@ def _answer_assessment(encounter, actor, fields, requirements, narrative=None):
         narrative = narrative_reading(encounter, fields, requirements)
     assessed = {field['key']: _field_decision(encounter.notes, field,
                 encounter.answers.get(field['key'], {}), actor, labels, encounter.revision, narrative) for field in fields}
+    for field in fields:
+        # (the engine writes a table cell's answer through a replace that reads `&p`, `&l`, `&m`, `&b` and `&&` as
+        # breaks: the export would differ from the reviewed answer — round 18's provenance lens, `thigh&mid calf`)
+        row = assessed[field['key']]
+        if ('body_paragraph' not in (field.get('locator') or {}) and ENGINE_REWRITES.search(row.get('text') or '')
+                and 'text_the_form_rewrites' not in row['blockers']):
+            row['blockers'].append('text_the_form_rewrites')
     if narrative is not None:
         # Finalization's own recheck, run here with the same function (`generation.governed_decisions`), so review never
         # reports complete what finalization refuses — whatever evidence the answer now cites (round 4: an answer

@@ -187,30 +187,55 @@ class Credentials(unittest.TestCase):
         with self.assertRaisesRegex(c.Refused, 'quillmd_wmn_campaign'):
             c.scrubbed_environment(args, {}, directory)
 
-    def declaration(self, authorization):
+    def declaration(self, authorization, where='docs/foundation/mutations'):
+        """A declaration committed in a scratch repository that stands in for the candidate checkout."""
         import subprocess
         repo = Path(tempfile.mkdtemp())
         subprocess.run(['git', 'init', '-q', str(repo)], check=True)
+        (repo / 'rebuild').mkdir()
+        (repo / where).mkdir(parents=True, exist_ok=True)
         plan = c.STAGES[1]
-        (repo / 'd.md').write_text(f'campaign: {c.CAMPAIGN}\nstage: 1\nprovider_limit_usd: {plan["provider_limit"]}\n'
-                                   f'wallet_limit_usd: {plan["wallet_limit"]}\nmodel: {c.EXPECTED_MODEL}\n'
-                                   f'pricing_version: {c.EXPECTED_PRICING_VERSION}\n{authorization}\n')
-        subprocess.run(['git', '-C', str(repo), 'add', 'd.md'], check=True)
+        path = repo / where / 'd.md'
+        path.write_text(f'campaign: {c.CAMPAIGN}\nstage: 1\nprovider_limit_usd: {plan["provider_limit"]}\n'
+                        f'wallet_limit_usd: {plan["wallet_limit"]}\nmodel: {c.EXPECTED_MODEL}\n'
+                        f'pricing_version: {c.EXPECTED_PRICING_VERSION}\n{authorization}\n')
+        subprocess.run(['git', '-C', str(repo), 'add', '-A'], check=True)
         subprocess.run(['git', '-C', str(repo), '-c', 'user.name=t', '-c', 'user.email=t@synthetic.invalid',
                         '-c', 'core.hooksPath=/dev/null', 'commit', '-q', '-m', 'd'], check=True)
-        return SimpleNamespace(declaration=str(repo / 'd.md'), stage=1)
+        return SimpleNamespace(declaration=str(path), stage=1), repo / 'rebuild'
+
+    def declared(self, authorization, where='docs/foundation/mutations'):
+        args, rebuild = self.declaration(authorization, where)
+        with patch.object(c, 'REBUILD', rebuild):
+            return c.declared(args)
 
     def test_live_mode_needs_a_committed_declaration_with_a_real_owner_authorization(self):
-        for placeholder in ('authorization: PENDING-OWNER-APPROVAL', 'authorization: owner <quote the approval here>',
-                            'authorization: owner TBD after the owner answers', 'authorization: owner 2026-09-26?'):
-            with self.assertRaisesRegex(c.Refused, 'no owner authorization'):
-                c.declared(self.declaration(placeholder))
-        ok = c.declared(self.declaration('authorization: owner 2026-09-26 approved stage 1 at the stated limits'))
-        self.assertTrue(ok['authorization'].startswith('owner 2026-09-26'))
-        uncommitted = self.declaration('authorization: owner 2026-09-26 approved stage 1 at the stated limits')
-        Path(uncommitted.declaration).write_text(Path(uncommitted.declaration).read_text() + 'edited after commit\n')
-        with self.assertRaisesRegex(c.Refused, 'committed and unmodified'):
-            c.declared(uncommitted)
+        # (the runner's review: a refusal, a condition or a bare word were accepted as an authorization)
+        for refused in ('authorization: PENDING-OWNER-APPROVAL', 'authorization: owner <quote the approval here>',
+                        'authorization: owner has NOT authorized this run', 'authorization: owner declined 2026-09-26',
+                        'authorization: owner will authorize later', 'authorization: owner xxxxxxxxxxxx',
+                        'authorization: owner 2026-09-26 approved stage 2 at the stated limits',
+                        'authorization: owner 2026-09-26 approved stage 1 at the stated limits, but not today',
+                        'authorization: owner 2026-09-26 approved stage 1 at the stated limits if the balance allows',
+                        'authorization: owner 2026-09-26 approved stage 1 at the stated limits?'):
+            with self.subTest(refused), self.assertRaisesRegex(c.Refused, 'no owner authorization'):
+                self.declared(refused)
+        ok = self.declared('authorization: owner 2026-09-26 approved stage 1 at the stated limits. "Go ahead." (chat)')
+        self.assertTrue(ok['authorization'].startswith('owner 2026-09-26 approved stage 1'))
+        # (committed, unmodified, and in this checkout's mutations directory — not a scratch repository elsewhere)
+        with self.assertRaisesRegex(c.Refused, 'mutations'):
+            self.declared('authorization: owner 2026-09-26 approved stage 1 at the stated limits', where='elsewhere')
+        args, rebuild = self.declaration('authorization: owner 2026-09-26 approved stage 1 at the stated limits')
+        Path(args.declaration).write_text(Path(args.declaration).read_text() + 'edited after commit\n')
+        with patch.object(c, 'REBUILD', rebuild), self.assertRaisesRegex(c.Refused, 'committed and unmodified'):
+            c.declared(args)
+
+    def test_offline_takes_only_the_provider_fields_from_its_file(self):
+        value = c.offline_provider(self.private(json.dumps({
+            'ANTHROPIC_API_KEY': c.OFFLINE_KEY, 'ANTHROPIC_BASE_URL': 'http://127.0.0.1:55999',
+            'HTTP_PROXY': 'http://127.0.0.1:1', 'ANTHROPIC_AUTH_TOKEN': 'x', 'QUILLMD_AI_MODEL': c.EXPECTED_MODEL})))
+        self.assertEqual(set(value), set(c.PROVIDER_FIELDS) | {'ANTHROPIC_BASE_URL'})
+        self.assertNotIn('HTTP_PROXY', value)
 
     def test_one_runner_per_campaign(self):
         directory = Path(tempfile.mkdtemp())

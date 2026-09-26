@@ -939,6 +939,43 @@ notes, so that needs a compromised parent.
   the next value, a new subject's verb and the legs' own predicate ending a denied list, the pointing-back cost shape
   moved into the cited paragraph where its search is asked, and generation refused over an answer typed with nothing
   ticked. Rerun with the tests and the repair: all 85 remaining mutants killed, every restore checked by hash.
+  Round 18 — the bounded independent review of the finished `f01107aa` (tag `wmn-candidate-r17g-f01107aa`): five sealed,
+  write-disabled lenses, each on its own checkout and throwaway database and given the claims rather than the intent
+  (clinical attribution; sides and governing context; clinician decisions; finalization and export provenance; cost),
+  every finding verified by a separate agent and reproduced here before any repair. 48 findings: 36 confirmed, 8
+  reproduced but classed as known limits, 1 refuted (the engine's own `<<insert location>>` marker in a reviewed-missing
+  cell, `main`'s pinned behaviour), and the cost lens's 3. Most HIGH findings were the focused pass's own releases, and
+  each is repaired by restoring the hold, never by a new exemption: a vein's own finding released its other-vein rival
+  (`At the saphenofemoral junction a 6.8 mm anterior accessory saphenous vein is incompetent.`), a date after the value
+  was exempted when the other leg's treatment stood between, `born in 2023` read as a birth date, a title-shaped history
+  sentence (`Ultrasound 03/14/2023 showed …`) read as the study's date, `varicose` said of something unnamed, a rival
+  dropped when a `no lesion` or `lymph node` stood near it, `maybe`/`perhaps` read only beside the value, a hedge before
+  a cause (`likely artifact from thrombus`), a leg's own label before a date, an existential `There is` rival, and the
+  not-today label list (`post`, `pre`, `no`, `not`, `last`, `compared` exempted today's rival). The older gaps: a side
+  after `except`/`excluding`/`as opposed to` or in a bracketed statement placed the value on that leg; a leg named only
+  as unexamined placed it; a bracketed remark on the next line (`(on the prior study)`, `(left leg)`, `(in error)`) was
+  not read; and choices and statements had no order, relative, prior-study or date reader (`Rule out right great
+  saphenous vein reflux.`, `Her mother has reflux …` pre-selected). Through the page: a statement wording saved without
+  its tick, and an answer a person cleared, were replaced by a second generation; an employee's save emptied the
+  clinician's statement decisions (now kept, unreviewed, with the withdrawn reviews audited); a cleared answer showed as
+  a plain `missing` (now `cleared by …`); `&p`, `&l`, `&m`, `&b`, `&&` in a table cell, which the engine's replace
+  writes as breaks, are refused at review. Cost: the row window reached `WRAP_REACH` from every value — the save 101 s
+  and 3.1 GB at 49,623 characters; a line's values now share one window (the pinned shape: a 15 s CPU limit). Every reproduced careless answer — 204, among them 26 bracketed remarks under two heads at two positions — is
+  held; the benchmarks, batteries 1–3, 5 and 6, both generators, the wrapped-leg mirror (0 wrong-leg
+  pre-fills of 16,655) and the row mirror (0 wrong-row pre-fills of 34,466) read row for row as `f01107aa`, except
+  battery 4's ten lowercase shorthand answers (`rt gsv sfj 7.4 mm, reflux 2.1 s` / … / `lt gsv sfj 5.0 mm`) now
+  pre-filled correctly instead of held both ways; review dead ends 40 → 15, every one already on `f01107aa`.
+  Its mutation proofs — 46 mutants over the repairs, loaded in memory in their own process (no file written), the
+  unmutated suites first — found three repairs of the repairs, each reproduced first. The first form of the side-item
+  rule split `… without reflux` / `left leg.`, and the value took the right leg of the line above (round 14's pinned
+  `R14M`; the full suite found it): a side naming a limb goes on as before, which returns nine older dead ends
+  (`GSV SFJ 7.4 mm` / `lt. leg not examined.`). The dated-study pattern's possessive modifiers ate `duplex` in `2023
+  duplex shows`, and the other leg's words were searched across a `;` into another sentence: `The left leg was normal;
+  the 2023 duplex shows the right great saphenous vein measures 9.6 mm` pre-filled a 2023 value (as on `f01107aa`). A
+  label exempted its rival for a not-today word anywhere in it (`Mapping, family history reviewed:`): the label must
+  now open with it. Ten rules no test separated are now pinned by the notes that do; one is equivalent by
+  construction and kept as a second guard (an employee's statement ticks are refused by the role check before the
+  save's own `reviewed=False`). Rerun: the other 45 killed, each by an assertion, none by a crash.
 - **Cost.** The reader answers every per-place question by bisection over positions read once per text (sides, clause
   breaks, digits, words, numbers, quantities by unit, relatives, paragraphs, lines), the backtracking patterns are
   atomic, a correction's reach, its struck spans and the governors' blocks are read once per unit or note, what a
@@ -1297,54 +1334,101 @@ Every one of these fails closed (a hold, or a statement the clinician must sourc
 - **The engine's labelled-line reading is `main`'s** and is unchanged: it compares the text before every colon of every
   line with each missing field's label, so a note of 24,000 colons on one line runs to the engine's time limit and is
   refused (`advanced_processor_unavailable`, fails closed). The parent's reading of the same lines is linear.
+- **Round 18's review, what remains (each reproduced; none a wrong pre-fill).**
+  - *Held for the clinician by design — the repairs restore holds rather than add exemptions, so these are held and
+    accepted at review:* an existential `There is 9.6 mm on the repeat image.` read as a rival; a date after the value
+    that belongs to the other leg's treatment (`…, s/p left GSV RFA 2019`, `…, and the left GSV was ablated in 2021`);
+    a bracket naming another vein's own finding right after the value (`6.8 mm (AASV competent)`), and `… and the SSV
+    is competent`; a hedge before a cause (`likely from chronic reflux`); a label whose not-today word is not its first
+    (`Her prior study:`); and a choice or statement sentence carrying any date where the study's own date cannot be read.
+  - *Review dead ends, 15 (all already on `f01107aa`, which had 40):* a sentence about a leg on the line after a value
+    line with no stop (`GSV SFJ 7.4 mm, reflux 2.1 s` / `lt. leg not examined.`, `left leg scanned last month.`) is read
+    with that line, so review refuses the right value it now names the left beside. The pre-fill holds. Ending the value
+    line with a stop completes it — a note edit, which clears the draft and needs a second generation. (A side written as an item's, `lt. GSV SFJ
+    5.0 mm`, is its own line since round 18; a side naming a limb is not, because `… without reflux` / `left leg.` is
+    that sentence's leg.)
+  - *LOW (as on `f01107aa`):* `… without reflux in the` / `lt. IMPRESSION: Right GSV reflux.` — the pre-fill is held,
+    but review accepts a clinician-typed 5.0 mm on the right row and refuses it on the left.
+  - *MEDIUM, provenance (as on `f01107aa`):* a pre-fill citing a number and its unit joined across a hard wrap (`… 7.4`
+    / `mm at …`) is rendered with its line break; an unchanged save re-posts it as the two physical lines, so
+    generation's answer becomes the saver's `edited` entry (the page says "entered by …") and review asks for an exact
+    labelled source that the page cannot re-post — the value can only be left blank, or the notes edited (which clears
+    every decision and needs a second, billed generation). The value is right; nothing wrong is exported: a dead end.
+  - *MEDIUM, cost (older; linear):* at 45,000–50,000 characters of dense hard-wrapped values the save takes 6.9–8 s CPU,
+    the page 6.5–10.9 s and finalization's recheck 5.7 s — above the 5 s review target, far below the 120 s request
+    limit (the cost lens's L5-02 and L5-03; round 18's own widening of the row window, 101 s, is repaired).
 
 ## Live verification (NOT run; needs the owner's authorization)
 
-**What it measures.** How the real model's answers fare through the frozen candidate's product path — the pre-send
-quote, the wallet hold, one request, the validator, the page — scored by the frozen scorer
-(`core/tests/wm_narrative_benchmark.score_case`) against expectations written before any live response existed. Each
-response is kept as a replay file, so every later run can be reproduced offline.
+**What it measures.** How the real model's answers fare through the frozen candidate's product path — the page's own
+quote, the doctor's Generate request and its hold, ONE provider request by the worker's own `run_one`, settlement, the
+validator, the page — scored by the frozen scorer (`core/tests/wm_narrative_benchmark.score_case`) against
+expectations written before any live response existed. Every response is kept with a replay file keyed by the notes'
+sha256, so each result can be reproduced offline.
 
-**Model and pricing, as the application itself last recorded them** (the private environment was not read): the billing
-verification of the last live WM job (`rebuild/.runtime/wm-live-document-billing-verification-20260917.json`, 2026-09-17)
-records provider `anthropic:claude-sonnet-4-6` at $3 input / $15 output / $0.30 cached per million tokens, pricing
-version `configured-v1:48bd430d…`. **Stage 0 confirms both from the application's own pre-send quote before anything is
-sent**; any other model or pricing version stops the plan until the figures below are recomputed.
+**Model and pricing, verified 2026-09-26 without reading the private environment.** Anthropic's live pricing and
+model-status pages: `claude-sonnet-4-6` is Active (retirement not before 2027-02-17), $3 input / $15 output / $3.75
+5-minute cache write / $0.30 cache read per MTok, 1M context at standard price, structured outputs (`output_config`
+JSON schema) GA on it, and US-only inference (`inference_geo`) 1.1 × on Claude 4.6+. The application's own records
+(jobs of 2026-09-21 and 2026-09-22) carry provider `anthropic:claude-sonnet-4-6` and pricing version
+`configured-v1:fcc80267…` — recomputed exactly from those records' non-secret fields (anthropic, claude-sonnet-4-6,
+$3 / $15 / $0.30, discount 0, Deepgram $0.0043 per minute). The 2026-09-17 record's `48bd430d…` differs only in the
+voice-rate field; generation rates are unchanged. The runner stops before any request if the application's
+configuration, the page's quote, the queued job or the provider's answer names another model or pricing version.
 
 **Per request, fixed by the code** (`core/generation.py`, `core/wm_narrative.py`): one `messages.create`,
-`max_tokens=12000`, `timeout=240 s`, `max_retries=0` (no SDK retry); refused before sending unless the provider is
-anthropic and the flag is on; a truncated response (`stop_reason` other than `end_turn`) adopts nothing. The wallet holds
-`maximum_cost × 1.5` before the request and refuses it when the balance is short ("No provider request was made").
-Measured on the 29 narrative and transcript cases (17 frozen, 12 held-out; 26.2–30.2 KB sent each) at those rates: a
-hold of $0.2946–$0.3035 per request (list), $0.44–$0.46 at 1.5×; expected spend ≈ $0.10 per request (≈ 8.3k input and
-≈ 4.6k output tokens).
+`max_tokens=12000`, `timeout=240 s`, `max_retries=0`; a truncated answer adopts nothing. The quoted maximum is
+`(bytes sent + 12,000) × input rate + 12,000 × output rate`: $0.2978–$0.2999 for the stage-1 cases, $0.2975–$0.3066
+for all 29 (`ops/wm_narrative_campaign.py plan`); the hold is 1.5 × that.
 
-**Stage 1 — small and representative, 5 requests:** C14 (a side correction), C18 (a planned treatment and an ambiguous
-side), C19 (a transcript), H05 (a held-out transcript: approximate and bounded values, a mid-sentence correction,
-uncertainty, an ambiguous side), H12 (held-out shorthand: diameter/reflux pairs, abbreviations). Bound $1.50 list, $2.24
-at 1.5×; expected ≈ $0.50 list.
+**Two money limits, enforced separately, because one does not bound the other.** The wallet cannot bound what the
+provider bills QuillMD: an answer the validator cannot use is settled and then ABSORBED (the customer's charge is
+reversed, the provider is still paid), a timeout leaves the outcome unknown with the hold kept, and a cost above the
+hold is absorbed. So:
 
-- Ceilings: 5 requests, plus at most 2 transport retries in the stage (a timeout, 429 or 5xx only — never for a bad
-  answer), each after 60 s; two consecutive transport failures stop the stage. At most 7 requests, one O_EXCL attempt
-  marker per case (as the existing live runner does).
-- **Cost cap: a synthetic wallet funded with $3.50 and nothing else.** The product refuses any request whose hold
-  exceeds what is left, so the stage cannot charge more than $3.50 even if every request were charged its full hold
-  (7 × $0.455 = $3.19). Holds settle to the actual charge, so the wallet caps money and the markers cap requests.
-- Stop at once on: any wrong pre-filled answer or wrong pre-selected statement; a charge above its hold; a request the
-  runner did not initiate; any model or pricing version other than stage 0's.
-- Pass: 0 wrong pre-filled answers and 0 wrong statements; unnecessary holds and missed answers reported per row.
+| | stage 1 | stage 2 | campaign |
+| --- | --- | --- | --- |
+| requests | 5 cases + ≤ 2 transport retries = **7** | 24 + ≤ 4 = **28** | 35 |
+| **provider expenditure** — every attempt at its settled cost, or unsettled at its maximum, × 1.1 (US-inference multiplier this key's workspace cannot be checked for) | **$2.40** (worst case 7 × $0.3299 = $2.309) | **$9.60** (28 × $0.3373 = $9.444) | **$12.00** |
+| **wallet charges** — 1.5 × cost, never above a hold; the synthetic wallet is funded to the stage limit once | **$3.50** (7 × $0.4498 = $3.149) | **$13.00** (28 × $0.4598 = $12.878) | **$16.50** |
+| expected | ≈ $0.50 provider, ≈ $0.75 charged | ≈ $2.40 / $3.60 | ≈ $2.90 / $4.35 |
 
-**Stage 2 — only after stage 1 passes and the owner approves it:** the other 24 cases (14 frozen, 10 held-out), same
-per-request ceilings, at most 4 transport retries (28 requests). Bound $7.20 list, $10.80 at 1.5×; wallet funded with
-$13.00 (28 full holds = $12.75). Same stop rules and pass criteria; any wrong pre-filled answer stops the campaign and is
-analysed before anything else.
+Provider-side billing cannot be read with the generation key (the organization cost API refused it, 2026-09-17), so
+every provider figure is configured-rate arithmetic over provider-reported token counts, never an invoice.
 
-**Total cap: $16.50 charged at 1.5× (≈ $11 list), 35 requests; expected ≈ $2.75 list, ≈ $4.10 charged.**
+**Every attempt is accounted for.** The runner (`rebuild/ops/wm_narrative_campaign.py`) writes an O_EXCL, synced
+attempt record BEFORE the hold and the request and an O_EXCL outcome after. An attempt with no outcome (a kill, a crash)
+is recorded on the next start as `interrupted_unknown`, linked to the job the product created, counted at its maximum,
+and never forgotten; a retried case always counts against the stage's retries. Before each attempt the worst case of
+the whole ledger plus this attempt's maximum must fit the stage's and the campaign's limits. One runner per campaign
+(an exclusive lock); live evidence has one fixed place per campaign id; a stage with a verdict is never re-run.
 
-**Where it runs:** a separate, localhost-only instance of the frozen candidate with its own networkless synthetic
-database, one synthetic clinician and one funded synthetic wallet, `QUILLMD_WM_NARRATIVE=1` in that process only, and the
-provider configured as production is. Production, its flag, public maintenance, MFA and records are not touched. The
-provider key reaches that process from the owner, through a file this session cannot read.
+**Stops (nothing further is sent):** a wrong pre-filled answer or wrong pre-selected statement; a settled cost above its
+quoted maximum or a charge above its hold; a job, receipt or usage row no attempt accounts for; another model or pricing
+version; a configuration failure (400/401/403/404); two consecutive transport failures, or one once the retries are
+used; any runner error. Retries only for a timeout, connection failure, 429 or 5xx, each after 60 s, never for an
+answer. An adopted draft is scored and its page rendered before any stop, so a stopped stage keeps its evidence.
+Pass: 0 wrong pre-filled answers and 0 wrong statements over every case; unnecessary holds and misses are reported.
 
-**External dependencies:** the owner's authorization of stage 1 and its $3.50 cap (and later stage 2), and the provider
-key supplied to the isolated instance. Enabling the flag for doctors stays a separate owner decision after the campaign.
+**Where it runs:** one process, localhost only, from a clean detached checkout of the candidate with no `.env`, its own
+throwaway synthetic Postgres (`quillmd_wmn_campaign*`), its own state directory, `QUILLMD_WM_NARRATIVE=1` in that
+process only, umask 077. Production (`dedac162`, which carries no narrative code), public maintenance, MFA, records and
+financial history are not touched.
+
+**The key — no new key is needed.** The existing authorized delivery is the protected application configuration
+(`/opt/meddoc-pro/rebuild/.env`), given to the hardened production units by systemd `EnvironmentFile=`; the recorded
+precedent for reusing it elsewhere is `ops/backup_alerts.py`, a reviewed reader that takes only its allowlisted fields
+under a declared act. Its recorded scope is the private services' own synthetic generation; nothing on record authorizes
+a separate candidate process, so the reuse is part of the owner's authorization. The runner takes ONLY the provider
+fields (key, provider, model, rates) into a scrubbed environment for its own process, refuses live mode BEFORE opening
+the configuration unless a committed, unmodified declaration (`docs/foundation/mutations/`, run through
+`scripts/run-ruled-mutation.sh`) names the campaign, stage, limits, model, pricing version and an `authorization: owner …`
+line (placeholders refused), never prints or copies the key, and scans every evidence file for the key and key-shaped
+text before and after its report.
+
+**Offline validation (no provider request possible):** `rebuild/ops/wm_narrative_campaign_offline.py` drives the real
+runner end to end through the candidate's product path against a loopback mock (`ops/wm_narrative_mock_provider.py`,
+retained careful responses) with a fixed non-secret marker instead of a key — see *Qualification* for its results.
+
+**Stage 2** is a separate declaration and a separate authorization; the runner refuses it unless stage 1's verdict in
+the same campaign is PASS. Enabling the flag for doctors stays a separate owner decision after the campaign.

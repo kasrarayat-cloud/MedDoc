@@ -213,6 +213,7 @@ WM_BLOCKERS={
     'narrative_qualifiers_hold':'The notes state this finding with uncertainty, for someone other than the patient, or at another time. Decide the answer yourself.',
     'statement_answers_differ_from_wording':'This wording is not built from the answers it cites. Save to refresh the statement, then review it.',
     'statement_answers_incomplete':'This wording rests on answers that are still unanswered or need review.',
+    'text_the_form_rewrites':'The form writes "&p", "&l", "&m", "&b" and "&&" in this table cell as breaks, so it would print differently. Write "and" instead.',
     'statement_absence_not_reviewed':'This wording says its answers are not documented. Leave them unanswered and review each one first.',
     'governed_source':'A heading, a pointer or a label in the notes denies or reframes what the cited sentences say (a denial, a family history, a hypothetical). Cite a sentence it does not govern.',
     'statement_source_is_heading':'The cited line is a heading or a title, which states nothing. Cite the sentence that states this.',
@@ -520,6 +521,10 @@ def encounter_detail(request,pk):
         row['entered_by_person']=row.get('status')=='edited'
         row['read_from_notes']=row.get('status')=='supported'
         row['edited_by_email']=editors.get(str(row.get('edited_by') or ''),'') if row['entered_by_person'] else ''
+        # (and an answer a person emptied is theirs too, not "nothing in the notes" — round 18: a value generation read and
+        # an employee deleted showed as a plain `missing`, with no author)
+        row['cleared_by_person']=row.get('status')=='missing' and bool(row.get('edited_by'))
+        row['cleared_by_email']=editors.get(str(row.get('edited_by') or ''),'') if row['cleared_by_person'] else ''
         # ⚠️ "I REVIEWED THIS ANSWER" IS THE READER'S OWN STATEMENT, SO IT IS NEVER PRE-TICKED FROM
         # SOMEBODY ELSE'S REVIEW. Rendering the stored flag let a second clinician's plain Save
         # re-post every box and re-stamp reviewed_by to themselves — the signature row included,
@@ -632,9 +637,12 @@ def generate_view(request,pk):
         if 'revision' in request.POST and request.POST['revision']!=str(e.revision):raise ValidationError('Source notes changed. Reload before generating answers.')
         # (the page offers generation only before any answer exists; a draft a clinician has reviewed or decided is not
         # replaced by a request — round 17e's review. A new draft follows a source edit, which clears the answers.)
-        if (any(isinstance(a,dict) and (a.get('reviewed') or a.get('status') in ('edited','left_blank') or a.get('accepted_suggestion'))
+        # (round 18: a statement wording chosen and saved without its tick, and an answer a person cleared — `missing`
+        # with its `edited_by` — were replaced by a second generation)
+        if (any(isinstance(a,dict) and (a.get('reviewed') or a.get('status') in ('edited','left_blank') or a.get('accepted_suggestion')
+                                        or a.get('edited_by'))
                 for a in (e.answers or {}).values())
-                or any(isinstance(d,dict) and d.get('reviewed') for d in ((e.template_review or {}).get('decisions') or {}).values())):
+                or (e.template_review or {}).get('decisions')):
             raise ValidationError('These answers include a clinician\'s review or decisions. Edit and save the source notes to generate a new draft. Nothing was sent or charged.')
         quoted=usage_quote(request,e)
         job=enqueue(e,request.user,config=quoted,expected_revision=e.revision)
@@ -892,9 +900,17 @@ def save_answers(request,pk):
     # (generation's statement proposals are only pre-selections the clinician still reviews and ticks: an employee's save
     # keeps them for the clinician's page — round 17e's review, they were dropped and the defaults shown)
     kept_proposals=(e.template_review or {}).get('proposals') if is_wm and not (e.template_review or {}).get('decisions') else None
+    previous_decisions=dict((e.template_review or {}).get('decisions') or {}) if is_wm else {}
     e.answers=answers;e.revision=target_revision;e.status='review';wm_review.invalidate_review(e)
     if kept_proposals:e.template_review={'proposals':kept_proposals}
-    if is_wm and Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists():
+    clinician=is_wm and Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists()
+    if is_wm and not clinician and previous_decisions:
+        # (round 18: an employee's save kept nothing of a clinician's statement decisions and the page fell back to the
+        # defaults. The choices it posts — the page's, the clinician's among them — are kept, each unreviewed: a review is
+        # its reader's own. The incomplete form is never accepted by finalization.)
+        e.template_review={'schema':0,'decisions':{key:dict(decision,reviewed=False) for key,decision in decisions.items()},
+                           'binding':wm_review.binding(e),'reviewer_id':str(request.user.pk)}
+    if clinician:
         try:
             resolved=wm_resolve(e,request.user,decisions)
             for requirement in resolved:
@@ -919,10 +935,14 @@ def save_answers(request,pk):
             review_errors.append(error_message(exc))
     # A review is the reader's own, so saving without a tick removes a colleague's; record which.
     withdrawn_reviews=sorted(key for key,answer in answers.items() if (previous_answers.get(key) or {}).get('reviewed') and not answer.get('reviewed'))
+    stored=(e.template_review or {}).get('decisions') or {}
+    withdrawn_statement_reviews=sorted(key for key,decision in previous_decisions.items()
+                                       if isinstance(decision,dict) and decision.get('reviewed') and not (stored.get(key) or {}).get('reviewed'))
     e.save(update_fields=['answers','revision','status','template_review'])
     audit(request.user,'encounter.answers_saved',e.pk,department=e.department,revision=e.revision,
           accepted_suggestions=sorted(newly_accepted),withdrawn_acceptances=sorted(withdrawn),
-          left_blank=sorted(newly_blank),withdrawn_blank_decisions=sorted(withdrawn_blank),withdrawn_reviews=withdrawn_reviews)
+          left_blank=sorted(newly_blank),withdrawn_blank_decisions=sorted(withdrawn_blank),withdrawn_reviews=withdrawn_reviews,
+          withdrawn_statement_reviews=withdrawn_statement_reviews)
     if is_wm:audit(request.user,'encounter.template_review_saved',e.pk,department=e.department,revision=e.revision,complete=e.template_review.get('assessment',{}).get('complete',False))
     messages.success(request,'Edits saved. Review every answer before finalizing.')
     for message in dict.fromkeys(review_errors):messages.warning(request,'Review remains incomplete: '+message)

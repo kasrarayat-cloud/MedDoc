@@ -103,6 +103,7 @@ class Scenario:
         self.mock = subprocess.Popen([sys.executable, '-B', str(MOCK), '--port', str(self.port), '--script',
                                       str(self.dir / 'script.json'), '--log', str(self.dir / 'mock-requests.jsonl')],
                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        CHILDREN.append(self.mock)
         for _ in range(100):
             try:
                 socket.create_connection(('127.0.0.1', self.port), timeout=0.2).close()
@@ -124,10 +125,17 @@ class Scenario:
 
     def run(self, stage=1, mode='offline', extra=(), timeout=1200):
         started = time.time()
-        result = subprocess.run(self.command(stage, mode, extra), capture_output=True, text=True, timeout=timeout,
-                                start_new_session=True, env={'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8'})
-        (self.dir / f'runner-stage{stage}-{mode}.log').write_text(result.stdout + '\n--- stderr ---\n' + result.stderr)
-        return result.returncode, round(time.time() - started, 1)
+        runner = subprocess.Popen(self.command(stage, mode, extra), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                  start_new_session=True, env={'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8'})
+        CHILDREN.append(runner)
+        try:
+            out, err = runner.communicate(timeout=timeout)
+        finally:
+            if runner.poll() is None:
+                os.killpg(runner.pid, signal.SIGKILL)
+                runner.wait(timeout=30)
+        (self.dir / f'runner-stage{stage}-{mode}.log').write_text(out + '\n--- stderr ---\n' + err)
+        return runner.returncode, round(time.time() - started, 1)
 
     def stop_mock(self):
         if self.mock and self.mock.poll() is None:
@@ -136,6 +144,13 @@ class Scenario:
         self.mock = None
 
     def finish(self):
+        for child in CHILDREN:
+            if child.poll() is None:
+                try:
+                    os.killpg(child.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                child.wait(timeout=30)
         self.stop_mock()
         admin_sql(self.admin, f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{self.db_name}'")
         admin_sql(self.admin, f'DROP DATABASE IF EXISTS {self.db_name}')
@@ -207,7 +222,16 @@ def check(scenario, expected, code):
     return out
 
 
+CHILDREN = []
+
+
+def _terminate(signum, frame):
+    raise SystemExit(f'signal {signum}')
+
+
 def main():
+    signal.signal(signal.SIGTERM, _terminate)      # (a killed driver still stops its mock, its runner and drops its
+    signal.signal(signal.SIGINT, _terminate)       #  database — the runner's review: all three outlived a SIGTERM)
     parser = argparse.ArgumentParser()
     parser.add_argument('--out', required=True)
     parser.add_argument('--engine', required=True)
@@ -292,14 +316,41 @@ def special_cases(args, admin, number):
     results.append({'scenario': 'interrupted-run-resumes', 'passed': all(ok for _, ok, _ in checks),
                     'checks': [{'check': n, 'passed': ok, 'detail': str(d)[:300]} for n, ok, d in checks]})
     print(f'{"PASS" if results[-1]["passed"] else "FAIL"}  interrupted-run-resumes')
+    # Killed after the worker ADOPTED a wrong draft and before its outcome was written (the runner's review: recorded as
+    # unknown, the case was resent, the wrong answer never scored and the stage PASSED). The restart must record it as
+    # adopted, score it, stop FAIL, and resend nothing.
+    s = Scenario(args.out, admin, args.engine, 'killed-after-adoption', number + 3)
+    checks = []
+    try:
+        s.start([{'kind': 'replay', 'case': 'C18'}] + replay(*ALL))       # (C14 answered with C18's response: wrong)
+        code, _ = s.run(extra=['--offline-crash', 'after_worker'])
+        checks.append(('the first run died after the worker', code == 137, code))
+        code, _ = s.run()
+        rows = campaign.load_ledger(s.campaign / 'ledger')
+        first = rows[0][1] or {}
+        verdict = json.loads((s.campaign / 'stage-1-verdict.json').read_text())
+        checks += [
+            ('recovered as adopted, from the job record', first.get('class') == 'adopted' and first.get('recovered'), first.get('class')),
+            ('scored and stopped as a wrong answer', code == 3 and any('WRONG' in x for x in verdict['stops']), verdict['stops']),
+            ('nothing resent', len(s.requests()) == 1 and len(rows) == 1, (len(s.requests()), len(rows))),
+            ('its wallet charge is in the ledger', Decimal(first.get('wallet_charged') or '0') > 0, first.get('wallet_charged')),
+        ]
+    except Exception as error:
+        checks.append(('scenario ran', False, f'{type(error).__name__}: {error}'))
+    finally:
+        s.finish()
+    results.append({'scenario': 'killed-after-adoption', 'passed': all(ok for _, ok, _ in checks),
+                    'checks': [{'check': n, 'passed': ok, 'detail': str(d)[:300]} for n, ok, d in checks]})
+    print(f'{"PASS" if results[-1]["passed"] else "FAIL"}  killed-after-adoption')
     # Gates that refuse (exit 2) before any database, configuration or request is touched.
-    s = Scenario(args.out, admin, args.engine, 'gates-refuse', number + 2)
+    s = Scenario(args.out, admin, args.engine, 'gates-refuse', number + 4)
     checks = []
     try:
         s.start(replay(*ALL))
         code, _ = s.run(mode='live')
         log = (s.dir / 'runner-stage1-live.log').read_text()
-        checks.append(('live mode without a committed declaration is refused', code == 2 and 'declaration' in log, log[-200:]))
+        checks.append(('live mode outside its fixed evidence place, or without a committed declaration, is refused',
+                       code == 2 and ('declaration' in log or 'nowhere else' in log), log[-200:]))
         checks.append(('no request was made', not s.requests(), len(s.requests())))
         code, _ = s.run(stage=2)
         log = (s.dir / 'runner-stage2-offline.log').read_text()

@@ -5971,11 +5971,12 @@ class ReviewRound17e(SimpleTestCase):
              '09/25/2026.', 'measurement_1_1', '6.1 mm', False),
             ('History of left great saphenous vein ablation in 2021, right great saphenous vein measures 6.1 mm at the '
              'saphenofemoral junction.', 'measurement_1_1', '6.1 mm', False),
-            # (a date after the value is its own, a treatment's too: the clinician decides — the focused pass; the other
-            # leg's treatment is not this one's, `…, and the left great saphenous vein was ablated in 2021`)
+            # (a date after the value is its own, a treatment's too: the clinician decides — the focused pass; and the other
+            # leg's treatment too — round 18 reverted its release, `…, measured before left GSV ablation on 03/14/2023`
+            # dates this leg's value)
             ('The treated right great saphenous vein measures 3.1 mm at the knee after ablation in 2019.', 'measurement_3_1', '3.1 mm', True),
             ('The right great saphenous vein measures 7.4 mm at the saphenofemoral junction with 2.1 seconds of reflux, and the '
-             'left great saphenous vein was ablated in 2021.', 'measurement_1_2', '2100 ms', False),
+             'left great saphenous vein was ablated in 2021.', 'measurement_1_2', '2100 ms', True),
             # (a prior study's phrase is its own value's: today's compared with it stands, the compared one is held)
             ('The right great saphenous vein measures 7.4 mm at the saphenofemoral junction compared with 6.1 mm on the previous '
              'exam.', 'measurement_1_1', '7.4 mm', False),
@@ -6352,10 +6353,15 @@ class FocusedPass17e(SimpleTestCase):
         header = 'Date of service: 09/25/2026\n'
         c1 = 'The right great saphenous vein measures 7.4 mm at the saphenofemoral junction with 2.1 seconds of reflux.'
         self.check([
+            # (round 18's review reverted three of the pass's releases, each of which pre-filled a wrong value in a shape
+            # these share — a vein after a value with a finding of its own (`a 6.8 mm anterior accessory saphenous vein is
+            # incompetent`), the other leg's treatment dating a value of its own (`measured before left GSV ablation on
+            # 03/14/2023`) and a non-evaluating hedge before a cause (`likely artifact from thrombus`). These are HELD for
+            # the clinician, who accepts them at review: an over-hold, not a dead end)
             (header + 'RIGHT LOWER EXTREMITY:\nThe great saphenous vein is dilated and incompetent.\nAt the saphenofemoral junction '
-             'it measures 7.4 mm with 2.1 seconds of reflux, and the small saphenous vein is competent.', 'measurement_1_1', '7.4 mm', False),
-            (header + 'RIGHT GSV:\nSFJ 7.4 mm, reflux 2.1 s (AASV competent)', 'measurement_1_1', '7.4 mm', False),
-            (header + 'Right GSV SFJ 7.4 mm with reflux 2.1 s, s/p left GSV RFA 2019.', 'measurement_1_2', '2100 ms', False),
+             'it measures 7.4 mm with 2.1 seconds of reflux, and the small saphenous vein is competent.', 'measurement_1_1', '7.4 mm', True),
+            (header + 'RIGHT GSV:\nSFJ 7.4 mm, reflux 2.1 s (AASV competent)', 'measurement_1_1', '7.4 mm', True),
+            (header + 'Right GSV SFJ 7.4 mm with reflux 2.1 s, s/p left GSV RFA 2019.', 'measurement_1_2', '2100 ms', True),
             ('Exam date: 09/25/2026\nthis is a venous reflux study for synthetic patient date of birth 01/02/1960 right leg great '
              'saphenous vein at the saphenofemoral junction 7.4 millimeters reflux 2.1 seconds knee 5.2 millimeters', 'measurement_1_1', '7.4 mm', False),
             ('Venous duplex 09/25/2026\n' + c1 + '\nIn 2023 the right great saphenous vein at the saphenofemoral junction measured '
@@ -6370,7 +6376,7 @@ class FocusedPass17e(SimpleTestCase):
             (header + 'the right great saphenous vein at the saphenofemoral junction measures 7.4 millimeters reflux probably 2 '
              'seconds', 'measurement_1_1', '7.4 mm', False),
             (header + 'The right great saphenous vein is dilated to 7.4 mm at the saphenofemoral junction, likely from chronic '
-             'reflux.', 'measurement_1_1', '7.4 mm', False),
+             'reflux.', 'measurement_1_1', '7.4 mm', True),         # (round 18: held, as above)
             (header + 'The right great saphenous vein has reflux of 2.1 seconds at the saphenofemoral junction and 1.6 seconds at '
              'the proximal thigh, both likely the source of her symptoms.', 'measurement_1_2', '2100 ms', False),
             # (and what is no vein's value is no vein's row)
@@ -6408,9 +6414,10 @@ class FocusedPass17e(SimpleTestCase):
             # (a `maybe` right before the next value is that value's)
             ('The right great saphenous vein at the saphenofemoral junction measures 7.4 mm, maybe 2 seconds of reflux on '
              'Valsalva.', 'measurement_1_1', '7.4 mm', False),
-            # (an existential `there is` points back at no level)
+            # (an existential `there is` points back too — round 18 reverted the pass's narrowing: `There is 9.6 mm on the
+            # repeat image.` let the other value pre-fill; a second value of the vein with no level written is its rival)
             ('RIGHT LEG:\nThe great saphenous vein measures 7.4 mm at the saphenofemoral junction. There is a great saphenous vein '
-             'diameter of 4.2 mm as well.', 'measurement_1_1', '7.4 mm', False),
+             'diameter of 4.2 mm as well.', 'measurement_1_1', '7.4 mm', True),
             ('RIGHT LEG:\nThe great saphenous vein measures 7.4 mm at the saphenofemoral junction. On repeat imaging it measures '
              '4.2 mm there.', 'measurement_1_1', '7.4 mm', True),
             # (a denied list ends at a new subject's verb, or at the legs' own predicate)
@@ -6427,3 +6434,309 @@ class FocusedPass17e(SimpleTestCase):
                 own = [narrative.unit_evidence(u) for u in narrative.units(notes, FIELDS, LABELS) if value.split()[0] in u['quote']]
                 read = narrative.reading(notes, FIELDS, LABELS)
                 self.assertIsNone(narrative.support(BY_KEY[key], value, own, notes, read['labels'], read['all_labels']))
+
+
+def round_18_held():
+    """Every careless answer round 18's independent review reproduced on f01107aa (lenses 1-4), as (id, notes, key,
+    value): each must be HELD."""
+    DOS = 'Date of service: 09/25/2026\n'
+    L = 'LEFT LEG:\nThe great saphenous vein measures 6.9 mm at the saphenofemoral junction.\n'
+    L2 = 'LEFT LEG:\nThe great saphenous vein measures 6.9 mm at the saphenofemoral junction.\n\n'
+    V = 'Left great saphenous vein at the saphenofemoral junction 9.6 mm.'
+    S = 'The great saphenous vein measures 6.9 mm at the saphenofemoral junction.'
+    R = 'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction'
+    RR = 'RIGHT LEG:\nThe great saphenous vein is competent. '
+    HELD = [
+        # lens 1
+        ('L1-A1', 'RIGHT LEG:\nThe great saphenous vein is competent. At the saphenofemoral junction a 6.8 mm anterior accessory saphenous vein is incompetent.', 'measurement_1_1', '6.8 mm'),
+        ('L1-A2', 'RIGHT LEG:\nGSV competent throughout. SFJ: 6.8 mm AASV incompetent, reflux 1.8 s.', 'measurement_1_1', '6.8 mm'),
+        ('L1-A3', 'RIGHT LEG:\nGSV SFJ 7.4 mm, reflux 2.1 s.\nProximal thigh 6.0 mm AAGSV incompetent, reflux 1.5 s.', 'measurement_2_1', '6.0 mm'),
+        ('L1-A4', 'RIGHT LEG:\nGreat saphenous vein 5.1 mm at the knee. Below the knee, a 4.4 mm perforator is incompetent.', 'measurement_4_1', '4.4 mm'),
+        ('L1-A5', 'RIGHT LEG:\nGreat saphenous vein 5.1 mm at the knee. Below the knee 4.4 mm SSV is competent.', 'measurement_4_1', '4.4 mm'),
+        ('L1-A6', 'RIGHT LEG:\nThe great saphenous vein is competent. At the saphenofemoral junction reflux of 1.8 seconds, anterior accessory saphenous vein incompetent.', 'measurement_1_2', '1800 ms'),
+        ('L1-A7', 'LEFT LEG:\nThe great saphenous vein is competent. At the saphenofemoral junction a 6.8 mm posterior accessory saphenous vein is incompetent.', 'measurement_15_1', '6.8 mm'),
+        ('L1-B1', 'Right GSV SFJ 9.6 mm, measured before left GSV ablation on 03/14/2023.', 'measurement_1_1', '9.6 mm'),
+        ('L1-B2', DOS + 'Right GSV SFJ 9.6 mm on the study done before the left GSV RFA in 2023.', 'measurement_1_1', '9.6 mm'),
+        ('L1-B3', 'Right GSV SFJ 9.6 mm when she had the left GSV treated in 2023.', 'measurement_1_1', '9.6 mm'),
+        ('L1-B4', 'The right great saphenous vein measured 9.6 mm at the saphenofemoral junction on the duplex before her left great saphenous vein ablation in 2023.', 'measurement_1_1', '9.6 mm'),
+        ('L1-I1', 'Ultrasound 03/14/2023 showed right GSV SFJ 9.6 mm with reflux, and she had RFA in 2024. Today the right great saphenous vein is occluded.', 'measurement_1_1', '9.6 mm'),
+        ('L1-I2', 'Doppler 03/14/2023 right GSV SFJ 9.6 mm; RFA 2024; now occluded.', 'measurement_1_1', '9.6 mm'),
+        ('L1-I3', 'Right lower extremity venous duplex on 03/14/2023 showed the great saphenous vein at 9.6 mm at the saphenofemoral junction; she then had ablation.', 'measurement_1_1', '9.6 mm'),
+        ('L1-J1', 'The right great saphenous vein measured 9.6 mm at the saphenofemoral junction in pregnancy, before the baby was born in 2023.', 'measurement_1_1', '9.6 mm'),
+        ('L1-V1', 'RIGHT LEG:\nThe great saphenous vein measures 5.1 mm at the knee and is varicose below it at 4.4 mm.', 'measurement_11_1', '4.4 mm'),
+        ('L1-V2', 'RIGHT LEG:\nThe great saphenous vein measures 5.1 mm at the knee; below the knee, dilated and varicose, 4.4 mm.', 'measurement_11_1', '4.4 mm'),
+        ('L1-E1', L + 'On repeat imaging the great saphenous vein measures 9.6 mm at the saphenofemoral junction, and the right leg was not scanned.', 'measurement_15_1', '6.9 mm'),
+        ('L1-E2', L + 'On repeat imaging the great saphenous vein measures 9.6 mm at the saphenofemoral junction (the right leg was normal).', 'measurement_15_1', '6.9 mm'),
+        ('L1-E3', 'Left GSV SFJ 6.9 mm.\nRepeat GSV SFJ 9.6 mm, right leg not done.', 'measurement_15_1', '6.9 mm'),
+        ('L1-L1', 'LEFT LEG:\nGSV SFJ 6.9 mm.\nRepeat GSV SFJ 9.6 mm, no focal lesion.', 'measurement_15_1', '6.9 mm'),
+        ('L1-C1', 'Maybe the right great saphenous vein measures 6.1 mm at the saphenofemoral junction; the image was poor.', 'measurement_1_1', '6.1 mm'),
+        ('L1-C2', 'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction, perhaps an overestimate.', 'measurement_1_1', '6.1 mm'),
+        ('L1-C3', 'the right great saphenous vein at the saphenofemoral junction is 6.1 millimeters but maybe that is off because she moved', 'measurement_1_1', '6.1 mm'),
+        ('L1-F1', L + '\nPost-augmentation measurements:\nLeft great saphenous vein at the saphenofemoral junction 9.6 mm.', 'measurement_15_1', '6.9 mm'),
+        ('L1-F2', 'The left great saphenous vein measures 6.9 mm at the saphenofemoral junction.\nPre-procedure mapping today: left GSV at the SFJ 9.6 mm.', 'measurement_15_1', '6.9 mm'),
+        ('L1-F3', 'The left great saphenous vein measures 6.9 mm at the saphenofemoral junction.\nFindings (not the prior study): left GSV at the SFJ 9.6 mm.', 'measurement_15_1', '6.9 mm'),
+        ('L1-F4', 'The left great saphenous vein measures 6.9 mm at the saphenofemoral junction.\nNo compression: left GSV at the SFJ 9.6 mm.', 'measurement_15_1', '6.9 mm'),
+        ('L1-W1', 'The great saphenous vein measures 9.6 mm at the saphenofemoral junction except on the right.', 'measurement_1_1', '9.6 mm'),
+        ('L1-W2', 'Left leg: the GSV, as opposed to the right side, measures 9.6 mm at the SFJ.', 'measurement_1_1', '9.6 mm'),
+        ('L1-W3', 'Both legs were scanned; excluding the right leg, the great saphenous vein measures 7.4 mm at the saphenofemoral junction.', 'measurement_1_1', '7.4 mm'),
+        ('L1-W4', 'The left great saphenous vein measures 6.9 mm at the saphenofemoral junction. On repeat imaging, as opposed to the right side, the great saphenous vein measures 9.6 mm at the saphenofemoral junction.', 'measurement_1_1', '9.6 mm'),
+        ('L1-K1', 'Right leg: on her 2023 study the great saphenous vein measures 9.6 mm at the saphenofemoral junction.', 'measurement_1_1', '9.6 mm'),
+        ('L1-K2', 'In the right leg, the 2023 ultrasound report says the great saphenous vein is 9.6 mm at the saphenofemoral junction.', 'measurement_1_1', '9.6 mm'),
+        ('L1-D1', 'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction, likely artifactual from thrombus.', 'measurement_1_1', '6.1 mm'),
+        ('L1-G1', 'LEFT LEG:\nThe great saphenous vein measures 6.9 mm at the saphenofemoral junction. There is 9.6 mm on the repeat image.', 'measurement_15_1', '6.9 mm'),
+        # lens 2
+        ('L2-F1a', 'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction, artifact from reflux.', 'measurement_1_1', '6.1 mm'),
+        ('L2-F1b', 'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction, may be artifact from thrombus.', 'measurement_1_1', '6.1 mm'),
+        ('L2-F1c', 'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction, likely artifact from thrombus.', 'measurement_1_1', '6.1 mm'),
+        ('L2-F2a', 'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction, maybe overestimated.', 'measurement_1_1', '6.1 mm'),
+        ('L2-F2b', 'Maybe the right great saphenous vein measures 6.1 mm at the saphenofemoral junction.', 'measurement_1_1', '6.1 mm'),
+        ('L2-F3', 'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction\n(possibly artifact).', 'measurement_1_1', '6.1 mm'),
+        ('L2-F4a', 'Ultrasound on 03/14/2023 showed the right great saphenous vein at 9.6 mm at the saphenofemoral junction.', 'measurement_1_1', '9.6 mm'),
+        ('L2-F4b', 'Date of service: 09/25/2026 (compared with the prior study)\nUltrasound on 03/14/2023 showed the right great saphenous vein at 9.6 mm at the saphenofemoral junction.', 'measurement_1_1', '9.6 mm'),
+        ('L2-F4c', 'Venous duplex on 03/14/2023 showed right great saphenous vein reflux of 2.4 seconds at the saphenofemoral junction.', 'measurement_1_2', '2400 ms'),
+        ('L2-F5a', 'The right great saphenous vein measured 9.6 mm at the saphenofemoral junction on the duplex before her left GSV ablation in 2023.', 'measurement_1_1', '9.6 mm'),
+        ('L2-F5b', 'Right GSV 9.6 mm at the SFJ on the mapping study prior to left GSV RFA in 2023.', 'measurement_1_1', '9.6 mm'),
+        ('L2-F6a', L + '\nPost-augmentation:\nLeft great saphenous vein at the saphenofemoral junction 9.6 mm.', 'measurement_15_1', '6.9 mm'),
+        ('L2-F6b', L + '\nPre-ablation mapping:\nLeft great saphenous vein at the saphenofemoral junction 9.6 mm.', 'measurement_15_1', '6.9 mm'),
+        ('L2-F6c', L + 'Last image: the great saphenous vein measures 9.6 mm at the saphenofemoral junction.', 'measurement_15_1', '6.9 mm'),
+        ('L2-F7', L + 'On repeat imaging the great saphenous vein at the saphenofemoral junction measures 9.6 mm, no enlarged lymph nodes.', 'measurement_15_1', '6.9 mm'),
+        ('L2-F8a', 'RIGHT LEG:\nThe great saphenous vein is competent. At the saphenofemoral junction, a 6.8 mm anterior accessory saphenous vein is incompetent.', 'measurement_1_1', '6.8 mm'),
+        ('L2-F8b', 'RIGHT LEG:\nThe great saphenous vein is competent. At the SFJ reflux of 1.8 seconds, anterior accessory saphenous vein incompetent.', 'measurement_1_2', '1800 ms'),
+        ('L2-F9', 'She denies she gets leg pain, heaviness or swelling.', 'sdt_269290727', 'Swelling'),
+        ('L2-O1a', 'Right leg duplex from 2023: the great saphenous vein is 9.6 mm at the saphenofemoral junction.', 'measurement_1_1', '9.6 mm'),
+        ('L2-O1b', 'right leg in 2023 the great saphenous vein measures 9.6 millimeters at the saphenofemoral junction', 'measurement_1_1', '9.6 mm'),
+        ('L2-O2a', 'She denies ever having leg pain or swelling.', 'sdt_269290727', 'Swelling'),
+        ('L2-O2b', 'She denies currently having leg pain or swelling.', 'sdt_269290727', 'Swelling'),
+        # lens 4 (r1-r6)
+        ('L4-r1-post', L2 + 'Repeat measurements post Valsalva:\n' + V, 'measurement_15_1', '6.9 mm'),
+        ('L4-r1-postaug', L2 + 'Post-augmentation:\n' + V, 'measurement_15_1', '6.9 mm'),
+        ('L4-r1-nocomp', L2 + 'Repeat measurements, no compression:\n' + V, 'measurement_15_1', '6.9 mm'),
+        ('L4-r1-notstanding', L2 + 'Repeat measurements, patient not standing:\n' + V, 'measurement_15_1', '6.9 mm'),
+        ('L4-r1-last', L2 + 'Last measurement of the session:\n' + V, 'measurement_15_1', '6.9 mm'),
+        ('L4-r1-compared', L2 + 'Repeat measurements compared with the first:\n' + V, 'measurement_15_1', '6.9 mm'),
+        ('L4-r1-pre', L2 + 'Pre-Valsalva measurements:\n' + V, 'measurement_15_1', '6.9 mm'),
+        ('L4-r1-second', L2 + 'Second look, no change in probe position:\n' + V, 'measurement_15_1', '6.9 mm'),
+        ('L4-r1-inline', 'LEFT LEG:\nThe great saphenous vein measures 6.9 mm at the saphenofemoral junction.\nRepeat with no augmentation: left great saphenous vein at the saphenofemoral junction 9.6 mm.', 'measurement_15_1', '6.9 mm'),
+        ('L4-r1-baseline', L2 + 'Baseline:\n' + V, 'measurement_15_1', '6.9 mm'),
+        ('L4-r1-tech', L2 + 'Tech worksheet (not yet reviewed):\n' + V, 'measurement_15_1', '6.9 mm'),
+        ('L4-r2-noreflux', L2 + 'Repeat measurements:\nLeft great saphenous vein at the saphenofemoral junction 9.6 mm with no reflux.', 'measurement_15_1', '6.9 mm'),
+        ('L4-r2-notcomp', L2 + 'Repeat measurements:\nLeft great saphenous vein at the saphenofemoral junction 9.6 mm, not compressed.', 'measurement_15_1', '6.9 mm'),
+        ('L4-r2-V4', L2 + 'Second look:\nLeft great saphenous vein at the saphenofemoral junction 9.6 mm, no reflux.', 'measurement_15_1', '6.9 mm'),
+        ('L4-r2-V5', L2 + 'Tech worksheet:\nLeft great saphenous vein at the saphenofemoral junction 9.6 mm without reflux, no DVT.', 'measurement_15_1', '6.9 mm'),
+        ('L4-r2-V6', 'LEFT LEG:\nThe great saphenous vein measures 6.9 mm at the saphenofemoral junction.\nRepeat: left great saphenous vein at the saphenofemoral junction 9.6 mm, no reflux.', 'measurement_15_1', '6.9 mm'),
+        ('L4-r2-V7', 'The left great saphenous vein measures 6.9 mm at the saphenofemoral junction.\nOn repeat imaging the great saphenous vein measures 9.6 mm at the saphenofemoral junction with reflux in the left leg, not the right.', 'measurement_15_1', '6.9 mm'),
+        ('L4-r2-followup', L2 + 'Follow-up images:\nLeft great saphenous vein at the saphenofemoral junction 9.6 mm.', 'measurement_15_1', '6.9 mm'),
+        ('L4-r2-addendum', L2 + 'Addendum (no change to impression):\nLeft great saphenous vein at the saphenofemoral junction 9.6 mm.', 'measurement_15_1', '6.9 mm'),
+        ('L4-r3-earlier', 'LEFT LEG:\n' + S + '\nEarlier in this study the left great saphenous vein measured 9.6 mm at the saphenofemoral junction.', 'measurement_15_1', '6.9 mm'),
+        ('L4-r3-last', 'LEFT LEG:\n' + S + '\nOn the last image the left great saphenous vein measures 9.6 mm at the saphenofemoral junction.', 'measurement_15_1', '6.9 mm'),
+        ('L4-r3-standing', 'LEFT LEG:\n' + S + '\nStanding, not supine: left great saphenous vein at the saphenofemoral junction 9.6 mm.', 'measurement_15_1', '6.9 mm'),
+        ('L4-r3-postval', 'LEFT LEG:\n' + S + '\nPost-Valsalva, the left great saphenous vein measures 9.6 mm at the saphenofemoral junction.', 'measurement_15_1', '6.9 mm'),
+        ('L4-r3-compared', 'LEFT LEG:\n' + S + '\nCompared with the first image, the left great saphenous vein measures 9.6 mm at the saphenofemoral junction.', 'measurement_15_1', '6.9 mm'),
+        ('L4-r3-nodvt', 'LEFT LEG:\n' + S + '\nNo DVT. The left great saphenous vein measures 9.6 mm at the saphenofemoral junction on repeat.', 'measurement_15_1', '6.9 mm'),
+        ('L4-r4-left', 'The right great saphenous vein is 9.6 mm at the saphenofemoral junction on the study done prior to left GSV closure in March 2023.', 'measurement_1_1', '9.6 mm'),
+        ('L4-r4-before', 'The right great saphenous vein measured 9.6 mm at the saphenofemoral junction before the left GSV ablation in 2023.', 'measurement_1_1', '9.6 mm'),
+        ('L4-r4-time', 'The right great saphenous vein was 9.6 mm at the saphenofemoral junction at the time of her left GSV RFA in 2023.', 'measurement_1_1', '9.6 mm'),
+        ('L4-r4-when', 'The right great saphenous vein was 9.6 mm at the saphenofemoral junction when the left GSV was ablated in 2023.', 'measurement_1_1', '9.6 mm'),
+        ('L4-r5-maybe', R + ', maybe.', 'measurement_1_1', '6.1 mm'),
+        ('L4-r5-perhaps', R + ', perhaps an overestimate.', 'measurement_1_1', '6.1 mm'),
+        ('L4-r5-giveortake', R + ' give or take, maybe.', 'measurement_1_1', '6.1 mm'),
+        ('L4-r5-born', 'The right great saphenous vein measured 6.1 mm at the saphenofemoral junction before her daughter was born in 2023.', 'measurement_1_1', '6.1 mm'),
+        ('L4-r5-born2', 'The right great saphenous vein measured 6.1 mm at the saphenofemoral junction when her son was born in 2023.', 'measurement_1_1', '6.1 mm'),
+        ('L4-r5-nocollection', R + '.\nRepeat: right great saphenous vein at the saphenofemoral junction 9.6 mm, no collection.', 'measurement_1_1', '6.1 mm'),
+        ('L4-r5-nomass', R + '.\nRepeat: right great saphenous vein at the saphenofemoral junction 9.6 mm without mass.', 'measurement_1_1', '6.1 mm'),
+        ('L4-r6-collection', L2 + 'Repeat measurements:\nLeft great saphenous vein at the saphenofemoral junction 9.6 mm, small collection.', 'measurement_15_1', '6.9 mm'),
+        ('L4-r6-mass', L2 + 'Repeat measurements:\nLeft great saphenous vein at the saphenofemoral junction 9.6 mm beside a mass.', 'measurement_15_1', '6.9 mm'),
+        ('L4-r6-lymph', L2 + 'Repeat measurements:\nLeft great saphenous vein at the saphenofemoral junction 9.6 mm with lymph node nearby.', 'measurement_15_1', '6.9 mm'),
+        ('L4-r6-aagsv-after', RR + 'At the saphenofemoral junction 6.8 mm, anterior accessory saphenous vein incompetent.', 'measurement_1_1', '6.8 mm'),
+        ('L4-r6-aagsv-is', RR + 'At the saphenofemoral junction, 6.8 mm, the anterior accessory saphenous vein is incompetent.', 'measurement_1_1', '6.8 mm'),
+        ('L4-r6-aagsv-bracket', RR + 'At the saphenofemoral junction 6.8 mm (AAGSV incompetent) with reflux of 1.2 seconds.', 'measurement_1_1', '6.8 mm'),
+    ]
+    # lens 3's bracket remarks on the next line, under two heads, the value mid-line and at the line's end
+    BASE = 'The great saphenous vein measures 6.1 mm at the saphenofemoral junction'
+    for i, below in enumerate(['(possibly artifact).', '(on the prior study).', "(her mother's study).", '(in the left leg).',
+                               '(left leg).', '(prior to ablation in 2019).', '(previously 7.4 mm).', '(per the 2023 report).',
+                               '(not today).', '(from the 2023 duplex).', '(corrected to 7.4 mm).', '(correction: 7.4 mm).',
+                               '(disregard, see below).', '(in error).', '(misdictated).', '(left, not right).', '(wrong leg).',
+                               '(for comparison only).', '(historical).', '(outside study).', '(family history).',
+                               '(not measured today).', '(estimated).', '(approx.).', '(or more).', '(at least).']):
+        for tag, head in (('R', 'RIGHT LEG:\n'), ('r', 'The right leg was examined.\n')):
+            HELD.append((f'L3-br{i:02d}{tag}', head + BASE + '\n' + below, 'measurement_1_1', '6.1 mm'))
+            HELD.append((f'L3-be{i:02d}{tag}', head + 'The great saphenous vein at the saphenofemoral junction measures 6.1 mm\n' + below,
+                         'measurement_1_1', '6.1 mm'))
+    # round 18's mutation proofs over its own repairs: each row fails with one mutant restored (the rest of this list
+    # did not separate them), and three are repairs of the repairs
+    RD = 'the right great saphenous vein measures 9.6 mm at the saphenofemoral junction.'
+    HELD += [
+        # (a dated study after another leg's words is the value's study: `DATED_STUDY`)
+        ('M18-K-study', 'After left great saphenous vein ablation, on her 2023 study ' + RD, 'measurement_1_1', '9.6 mm'),
+        ('M18-K-report', 'History of left great saphenous vein ablation, the 2023 duplex report says ' + RD, 'measurement_1_1', '9.6 mm'),
+        # (repairs: `2023 duplex shows` — the pattern's possessive modifiers ate `duplex` — and a leg named before a `;`,
+        # in another sentence of the unit, made the date another statement's)
+        ('M18-K-duplex-shows', 'After left great saphenous vein ablation, the 2023 duplex shows ' + RD, 'measurement_1_1', '9.6 mm'),
+        ('M18-K-semicolon', 'The left leg was normal; the 2023 duplex shows ' + RD, 'measurement_1_1', '9.6 mm'),
+        ('M18-K-semicolon-unexamined', 'The left leg was not examined; the 2023 duplex shows ' + RD, 'measurement_1_1', '9.6 mm'),
+        # (a side item after a line left open joins it, as f01107aa read it: `ends_open`)
+        ('M18-S-comma', 'RIGHT LEG:\ngsv sfj 7.4 mm, reflux 2.1 s,\nlt gsv sfj 5.0 mm, no reflux', 'measurement_1_1', '7.4 mm'),
+        # (repair: a label exempts its rival only when it opens with what says it is not today's)
+        ('M18-I-family-mid-label', L + 'Mapping, family history reviewed: left great saphenous vein at the saphenofemoral junction 9.6 mm.',
+         'measurement_15_1', '6.9 mm'),
+        ('M18-I-her-prior', L + 'Measured again, prior to ablation: left great saphenous vein at the saphenofemoral junction 9.6 mm.',
+         'measurement_15_1', '6.9 mm'),
+        # (a leg named before a `;` is another sentence's, whatever follows the date)
+        ('M18-K-semicolon-year', 'The left leg was normal; in 2023 ' + RD, 'measurement_1_1', '9.6 mm'),
+        ('M18-K-semicolon-year-unexamined', 'The left leg was not examined; in 2023 ' + RD, 'measurement_1_1', '9.6 mm'),
+        # (a label opening with its frame still says today's where it says so: `NOT_TODAYS_BLOCK`)
+        ('M18-I-todays-study', L + "Comparison with today's study: left great saphenous vein at the saphenofemoral junction 9.6 mm.",
+         'measurement_15_1', '6.9 mm'),
+        ('M18-I-not-today', L + 'Prior study, not today: left great saphenous vein at the saphenofemoral junction 9.6 mm.',
+         'measurement_15_1', '6.9 mm'),
+    ]
+    return HELD
+
+
+class ReviewRound18(SimpleTestCase):
+    """Round 18: the bounded independent review of the frozen f01107aa (five sealed read-only lenses, each finding
+    verified by a separate agent and reproduced here before its repair). Most HIGH findings were the focused pass's own
+    releases — a narrowed hold, a new exemption — and are repaired by restoring the hold (the clinician resolves it at
+    review); the rest were older gaps: sides set apart by an exclusion, a bracketed remark on the next line, and
+    choices and statements with no timing, order or relative reader."""
+
+    held = ReviewRound17e.held
+    check = ReviewRound17e.check
+
+    def test_every_careless_answer_the_review_reproduced_is_held(self):
+        for name, notes, key, value in round_18_held():
+            number = value.split()[0]
+            forms = {number.lower()} | ({'%g' % (int(number) / 1000)} if value.endswith(' ms') else set())
+            cited = [u['quote'] for u in narrative.units(notes, FIELDS, LABELS) if any(f in u['quote'].lower() for f in forms)]
+            with self.subTest(name):
+                self.assertTrue(self.held(notes, key, value, cited))
+
+    def test_its_controls_still_pre_fill(self):
+        self.check([
+            ('The right great saphenous vein measures 6.1 mm at the saphenofemoral junction.', 'measurement_1_1', '6.1 mm', False),
+            ('RIGHT LEG:\nThe great saphenous vein measures 6.1 mm at the saphenofemoral junction.', 'measurement_1_1', '6.1 mm', False),
+            # (a value on the other leg, contrasted in its own clause, is no rival: the generated `compare` notes)
+            ('Venous duplex, both legs.\nThe right great saphenous vein measures 8.5 mm at the saphenofemoral junction vs 3.7 mm on '
+             'the opposite side.\nThe left great saphenous vein measures 3.7 mm at the saphenofemoral junction without reflux.',
+             'measurement_1_1', '8.5 mm', False),
+            # (a leg named with a predicate of its own before a date: that statement's — round 15's R15T)
+            ('the left leg was done in 2021 the great saphenous vein at the knee measures 5.1 millimeters', 'measurement_17_1',
+             '5.1 mm', False),
+            # (and a title's date is the study's: `Venous duplex 09/25/2026` alone on its line)
+            # (a label that opens with what says its values are not today's still exempts them)
+            ('LEFT LEG:\nThe great saphenous vein measures 6.9 mm at the saphenofemoral junction.\nPrior study: left great '
+             'saphenous vein at the saphenofemoral junction 9.6 mm.', 'measurement_15_1', '6.9 mm', False),
+            # (the label is read, not the value's words after it: `…, no reflux` is the prior study's)
+            ('LEFT LEG:\nThe great saphenous vein measures 6.9 mm at the saphenofemoral junction.\nPrior study: left great '
+             'saphenous vein at the saphenofemoral junction 9.6 mm, no reflux.', 'measurement_15_1', '6.9 mm', False),
+            ('Venous duplex 09/25/2026\nThe right great saphenous vein measures 7.4 mm at the saphenofemoral junction with 2.1 '
+             'seconds of reflux.\nIn 2023 the right great saphenous vein at the saphenofemoral junction measured 6.1 mm.',
+             'measurement_1_1', '7.4 mm', False),
+        ])
+
+    def test_a_contrast_that_owns_its_clause_keeps_its_side(self):
+        """`unlike the left, where it is 5.0 mm` gives the left its value; `as opposed to the right side, measures …` sets
+        the right apart."""
+        notes = 'The right great saphenous vein measures 7.4 mm at the saphenofemoral junction, unlike the left, where it is 5.0 mm.'
+        read = narrative.reading(notes, FIELDS, LABELS)
+        own = [narrative.unit_evidence(narrative.units(notes, FIELDS, LABELS)[0])]
+        self.assertIsNone(narrative.support(BY_KEY['measurement_15_1'], '5.0 mm', own, notes, read['labels'], read['all_labels']))
+        self.assertTrue(self.held('Left leg: the GSV, as opposed to the right side, measures 9.6 mm at the SFJ.',
+                                  'measurement_1_1', '9.6 mm'))
+
+    def test_a_choice_is_read_for_orders_prior_studies_dates_and_relatives(self):
+        for notes in ('Rule out right great saphenous vein reflux.', 'Evaluate for right great saphenous vein reflux.',
+                      'Referred to evaluate right great saphenous vein reflux.',
+                      'The prior study showed reflux in the right great saphenous vein.',
+                      'In 2023 there was right great saphenous vein reflux.',
+                      'Right great saphenous vein reflux was present on the 2023 duplex.'):
+            with self.subTest(notes):
+                self.assertTrue(self.held(notes, 'sdt_-213273323', 'reflux positive.', [notes]))
+        self.assertFalse(self.held('Saphenous reflux is present in the right great saphenous vein.', 'sdt_-213273323',
+                                   'reflux positive.', ['Saphenous reflux is present in the right great saphenous vein.']))
+        # (controls the mutation proofs asked for: a quantity is no year, `1950 milliseconds`; a choice that is no finding —
+        # the exam's side and type — is not read for orders or dates)
+        for notes, key, value in (('Saphenous reflux is present in the right great saphenous vein, 1950 milliseconds.',
+                                   'sdt_-213273323', 'reflux positive.'),
+                                  ('A bilateral detailed venous duplex was performed to evaluate for reflux.', 'sdt_1475334564',
+                                   'Bilateral Detailed'),
+                                  ('On 03/14/2023 a bilateral detailed venous duplex was performed.', 'sdt_1475334564',
+                                   'Bilateral Detailed'),
+                                  # (a date a study label gives is the study's, even where no study date can be read)
+                                  ('No prior exam. Exam date 09/25/2026 saphenous reflux is present in the right great '
+                                   'saphenous vein.', 'sdt_-213273323', 'reflux positive.')):
+            with self.subTest(notes):
+                cited = [u['quote'] for u in narrative.units(notes, FIELDS, LABELS) if value.split()[0].lower() in u['quote'].lower()]
+                self.assertEqual(len(cited), 1)
+                self.assertFalse(self.held(notes, key, value, cited))
+
+    def test_a_statement_is_pre_selected_only_from_a_sentence_that_affirms_it_today(self):
+        for variant, notes in (('positive', "Her mother has reflux in the right great saphenous vein."),
+                               ('positive', 'Possible reflux in the right great saphenous vein.'),
+                               ('positive', 'The prior study showed reflux in the right great saphenous vein.'),
+                               ('positive', 'Evaluate for right great saphenous vein reflux.'),
+                               ('positive', 'Rule out reflux in the right great saphenous vein.'),
+                               ('negative', 'On the prior study there was no reflux in the right great saphenous vein.')):
+            with self.subTest(notes):
+                self.assertIsNone(decide(notes, {}, [('claim_32', variant, [notes])])[1].get('claim_32'))
+        notes = 'Saphenous reflux is present in the right great saphenous vein.'
+        self.assertEqual(decide(notes, {}, [('claim_32', 'positive', [notes])])[1]['claim_32']['variant'], 'positive')
+        # (read in the sentences that name a finding: another sentence of the unit, after a `;`, is not the finding's)
+        for notes in ('Saphenous reflux is present in the right great saphenous vein; the 2023 study is not available.',
+                      'Saphenous reflux is present in the right great saphenous vein; her mother had surgery.'):
+            with self.subTest(notes):
+                self.assertEqual((decide(notes, {}, [('claim_32', 'positive', [notes])])[1].get('claim_32') or {}).get('variant'),
+                                 'positive')
+        # (a dictated transcript's stray `maybe`, far from any finding, holds nothing: the held-out H05)
+        notes = ('dictating a venous study there is maybe some skin discoloration hard to tell and there is no saphenous reflux '
+                 'in the right lower extremity')
+        self.assertEqual(decide(notes, {}, [('claim_32', 'negative', [notes])])[1]['claim_32']['variant'], 'negative')
+
+    def test_a_side_item_on_the_next_line_is_no_continuation(self):
+        """Round 18's clinician-decision lens: `rt. …` / `lt. …` read as one sentence named both legs, and the correct
+        right value was refused at review — a dead end the clinician could not complete."""
+        for notes, key, value in (('rt. GSV SFJ 7.4 mm, reflux 2.1 s\nlt. GSV SFJ 5.0 mm, reflux 0.3 s', 'measurement_1_1', '7.4 mm'),
+                                  ('Rt. GSV SFJ: 7.4 mm, reflux 2.1 s\nlt. GSV (AK): 4.8 mm', 'measurement_1_1', '7.4 mm')):
+            with self.subTest(notes=notes):
+                own = [narrative.unit_evidence(u) for u in narrative.units(notes, FIELDS, LABELS) if value.split()[0] in u['quote']]
+                read = narrative.reading(notes, FIELDS, LABELS)
+                self.assertIsNone(narrative.support(BY_KEY[key], value, own, notes, read['labels'], read['all_labels']))
+        # (a hard wrap still goes on: `… without reflux in the` / `left leg.`; and a side naming a limb goes on after any
+        # line — `… without reflux` / `left leg.` is that sentence's leg: this rule's first form split it, and the value
+        # took the right leg of the line above, round 14's pinned `R14M`)
+        for notes in ('The great saphenous vein measures 5.0 mm at the saphenofemoral junction without reflux in the\nleft leg.',
+                      'The great saphenous vein measures 5.0 mm at the saphenofemoral junction without reflux\nleft leg.',
+                      'The small saphenous vein measures 3.5 mm at the saphenopopliteal junction without reflux\nright leg.\n'
+                      'The great saphenous vein measures 5.0 mm at the saphenofemoral junction without reflux\nleft leg.'):
+            with self.subTest(notes=notes):
+                own = [narrative.unit_evidence(u) for u in narrative.units(notes, FIELDS, LABELS)
+                       if '5.0 mm' in u['quote'] or u['quote'].strip() == 'left leg.']
+                self.assertEqual(len(own), 2)
+                read = narrative.reading(notes, FIELDS, LABELS)
+                self.assertIsNone(narrative.support(BY_KEY['measurement_15_1'], '5.0 mm', own, notes, read['labels'], read['all_labels']))
+                self.assertIsNotNone(narrative.support(BY_KEY['measurement_1_1'], '5.0 mm', own, notes, read['labels'], read['all_labels']))
+                self.assertTrue(self.held(notes, 'measurement_1_1', '5.0 mm', [e['quote'] for e in own]))
+        # (a sentence about a leg on the next line, `left leg scanned last month.`, still joins the value line above, and
+        # review refuses that line's right value as f01107aa did: a dead end recorded in Known limits)
+
+    @override_settings(WM_NARRATIVE=True)
+    def test_the_row_window_is_shared_by_a_lines_values(self):
+        """Round 18's cost lens: reaching `WRAP_REACH` from every value gave each its own row window — generation 42 s and
+        1.15 GB, the save 101 s and 3.1 GB at 49,623 characters (3a6f88a4: 3.5 s and 8 s)."""
+        import time
+        notes = 'RIGHT LEG:\n' + '\n'.join(['gsv sfj' + ' 4 mm' * 15 + ' and'] * 570) + '\nthe study is complete.'
+        units = narrative.units(notes, FIELDS, LABELS)
+        ids = [u['id'] for u in units if u['quote'].startswith('gsv sfj')]
+        keys = [f['key'] for f in FIELDS if f.get('kind') == 'measurement' and f['locator']['unit'] == 'mm'][:6]
+        chosen = {key: ids[i * 90:(i + 1) * 90] for i, key in enumerate(keys)}
+        response = narrative.NarrativeSelections.model_validate({'statements': [], 'fields': [
+            {'key': f['key'], 'value': '4 mm' if f['key'] in chosen else '', 'unit_ids': chosen.get(f['key'], []),
+             'conflict': False, 'subject': 'patient', 'certainty': 'definite',
+             'timing': 'prior' if narrative.previous_treatment(f) else 'current'} for f in FIELDS]})
+        for name in dir(narrative):
+            if hasattr(getattr(narrative, name), 'cache_clear'):
+                getattr(narrative, name).cache_clear()
+        start = time.process_time()
+        narrative.validate(notes, FIELDS, response, REQUIREMENTS)
+        self.assertLess(time.process_time() - start, 15.0)
