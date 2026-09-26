@@ -194,7 +194,9 @@ def exposure(attempt, outcome):
 def load_ledger(ledger):
     """[(attempt, outcome or None)] in attempt order, from the O_EXCL records."""
     rows = []
-    for path in sorted(Path(ledger).glob('*-attempt.json')):
+    # (records only: `write_new`'s temporary `.partial-…` file, left by a kill before its link, is never a record — round
+    # 20's self-check: `Path.glob` matches dotfiles, and one stale temporary failed every restart)
+    for path in sorted(p for p in Path(ledger).glob('*-attempt.json') if re.fullmatch(r'\d{3}-[A-Za-z0-9]+-attempt\.json', p.name)):
         outcome_path = path.with_name(path.name.replace('-attempt.json', '-outcome.json'))
         rows.append((read_json(path), read_json(outcome_path) if outcome_path.exists() else None))
     numbers = [attempt['number'] for attempt, _ in rows]
@@ -842,7 +844,7 @@ def retain_response(world, job, encounter):
     text = ''.join(block.get('text', '') for block in output.get('content', []) if block.get('type') == 'text')
     base = Path(os.environ['QUILLMD_STATE_DIR']).parent
     digest = hashlib.sha256(encounter.notes.encode()).hexdigest()
-    number = len(list((base / 'responses').glob('*.json'))) + 1
+    number = len([p for p in (base / 'responses').glob('*.json') if not p.name.startswith('.')]) + 1
     write_new(base / 'responses' / f'{number:03d}-{job.pk}.json', output)
     replay = base / 'replay' / f'{digest}.json'
     if text and not replay.exists():

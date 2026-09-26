@@ -245,6 +245,14 @@ class Credentials(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             c.write_new(target, {'class': 'unknown'})                   # (never rewritten)
         self.assertEqual([p.name for p in directory.iterdir()], [target.name])
+        # (and a temporary a kill left before its link is never read as a record — round 20's self-check)
+        ledger = Path(tempfile.mkdtemp())
+        c.write_new(ledger / '001-C14-attempt.json', {'number': 1, 'stage': 1, 'case': 'C14', 'kind': 'initial',
+                                                     'maximum_cost': '0.3'})
+        (ledger / '.partial-999-002-C18-attempt.json').write_text('')
+        (ledger / '.partial-999-001-C14-outcome.json').write_text('{"class": "adopted"}')
+        rows = c.load_ledger(ledger)
+        self.assertEqual([(a['number'], o) for a, o in rows], [(1, None)])
 
     def test_offline_takes_only_the_provider_fields_from_its_file(self):
         value = c.offline_provider(self.private(json.dumps({
