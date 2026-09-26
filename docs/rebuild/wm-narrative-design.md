@@ -1003,7 +1003,14 @@ notes, so that needs a compromised parent.
   ends are `f01107aa`'s 40 of 289 probe rows, none new (round 18's reduction went with its reverted placement). On
   `207a26a8` the round-19 class fails 31 rows; on `f01107aa` only the five bare side brackets, which it also
   pre-filled. Mutation proofs: 22 mutants (reader, page, runner), the unmutated suites first, all 22 killed by an
-  assertion.
+  assertion. ⚠️ **Round 19's own repairs have had NO independent pass**: a two-lens pass over them was prepared and not
+  started, because the host's disk stood over the preflight's 90% line after this session's own sandboxes were reaped
+  (report `docs/preflight-reports/preflight-20260926T212542Z.md`). A self-check instead — not independent — fuzzed the
+  one reader change that could release against `f01107aa` (a line's values sharing its last value's window) over 62,088
+  answers on short and 1,300–2,600-character lines: 0 differences from `f01107aa`; and read the runner's recovery delta
+  adversarially, which found one defect of its own — a kill between a record's temporary file and its link left
+  `.partial-…-attempt.json`, which `Path.glob` matches, so every restart failed; the ledger now reads only
+  `NNN-<case>-attempt.json` records (reproduced, then pinned). An independent pass over round 19 remains due before merge.
 - **Cost.** The reader answers every per-place question by bisection over positions read once per text (sides, clause
   breaks, digits, words, numbers, quantities by unit, relatives, paragraphs, lines), the backtracking patterns are
   atomic, a correction's reach, its struck spans and the governors' blocks are read once per unit or note, what a
@@ -1102,7 +1109,8 @@ notes, so that needs a compromised parent.
   none over 5 s — the repairs cost this shape nothing. Their full core suites on this host failed the same guard at
   5.20 s and 5.35 s (the latter beside this session's own mutation batch, row-diff and runner validation, load 8); the
   whole reader module run alone passed it.
-- **The live campaign's runner, offline (no provider request possible).** `ops/wm_narrative_campaign_offline.py` on `f920f7ab`
+- **The live campaign's runner, offline (no provider request possible).** `ops/wm_narrative_campaign_offline.py` on `f920f7ab`,
+  and again on `c2e2511c` after the ledger fix,
   drives the real runner through the candidate's product path (the blank form uploaded through the page, the page's
   quote, Generate, `run_one`, settlement, the validator, the page) against the loopback mock with retained careful
   responses and a fixed non-secret marker: all 18 scenarios pass and no scenario database is left (14 on `207a26a8`;
