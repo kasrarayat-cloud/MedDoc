@@ -6693,32 +6693,31 @@ class ReviewRound18(SimpleTestCase):
                  'in the right lower extremity')
         self.assertEqual(decide(notes, {}, [('claim_32', 'negative', [notes])])[1]['claim_32']['variant'], 'negative')
 
-    def test_a_side_item_on_the_next_line_is_no_continuation(self):
-        """Round 18's clinician-decision lens: `rt. …` / `lt. …` read as one sentence named both legs, and the correct
-        right value was refused at review — a dead end the clinician could not complete."""
-        for notes, key, value in (('rt. GSV SFJ 7.4 mm, reflux 2.1 s\nlt. GSV SFJ 5.0 mm, reflux 0.3 s', 'measurement_1_1', '7.4 mm'),
-                                  ('Rt. GSV SFJ: 7.4 mm, reflux 2.1 s\nlt. GSV (AK): 4.8 mm', 'measurement_1_1', '7.4 mm')):
+    def test_a_side_on_the_next_line_joins_the_line_above(self):
+        """Round 18 split a side item on the next line (`rt. …` / `lt. …`) to end a review dead end, and its list of what
+        names a limb leaked: `… without reflux` / `left thigh.` gave the value the right leg, pre-filled and accepted at
+        review (round 19's focused pass, L1-01; its first form had done the same with `left leg.`, round 14's `R14M`).
+        Reverted: a lowercase line goes on as on `f01107aa`; the value is held both ways, the right refused at review and
+        the left accepted. The item shape's review dead end is recorded in Known limits."""
+        SSV = 'The small saphenous vein measures 3.5 mm at the saphenopopliteal junction without reflux\n'
+        GSV = 'The great saphenous vein measures 5.0 mm at the saphenofemoral junction without reflux'
+        cases = [(SSV + right + '\n' + GSV + '\n' + left, left) for right, left in (
+            ('right leg.', 'left leg.'), ('right leg.', 'left thigh.'), ('right calf.', 'left thigh.'), ('right leg.', 'left groin.'),
+            ('rt LE.', 'lt LE.'))]
+        cases += [(GSV + ' in the\nleft leg.', 'left leg.'), (GSV + '\nleft leg.', 'left leg.'),
+                  ('Right leg: normal.\nGreat saphenous vein 5.0 mm at the saphenofemoral junction with reflux of 2.1 seconds\n'
+                   'left thigh.', 'left thigh.')]
+        for notes, side_line in cases:
             with self.subTest(notes=notes):
-                own = [narrative.unit_evidence(u) for u in narrative.units(notes, FIELDS, LABELS) if value.split()[0] in u['quote']]
+                units = narrative.units(notes, FIELDS, LABELS)
+                own = [narrative.unit_evidence(u) for u in units if '5.0 mm' in u['quote'] or u['quote'].strip() == side_line]
                 read = narrative.reading(notes, FIELDS, LABELS)
-                self.assertIsNone(narrative.support(BY_KEY[key], value, own, notes, read['labels'], read['all_labels']))
-        # (a hard wrap still goes on: `… without reflux in the` / `left leg.`; and a side naming a limb goes on after any
-        # line — `… without reflux` / `left leg.` is that sentence's leg: this rule's first form split it, and the value
-        # took the right leg of the line above, round 14's pinned `R14M`)
-        for notes in ('The great saphenous vein measures 5.0 mm at the saphenofemoral junction without reflux in the\nleft leg.',
-                      'The great saphenous vein measures 5.0 mm at the saphenofemoral junction without reflux\nleft leg.',
-                      'The small saphenous vein measures 3.5 mm at the saphenopopliteal junction without reflux\nright leg.\n'
-                      'The great saphenous vein measures 5.0 mm at the saphenofemoral junction without reflux\nleft leg.'):
-            with self.subTest(notes=notes):
-                own = [narrative.unit_evidence(u) for u in narrative.units(notes, FIELDS, LABELS)
-                       if '5.0 mm' in u['quote'] or u['quote'].strip() == 'left leg.']
-                self.assertEqual(len(own), 2)
-                read = narrative.reading(notes, FIELDS, LABELS)
-                self.assertIsNone(narrative.support(BY_KEY['measurement_15_1'], '5.0 mm', own, notes, read['labels'], read['all_labels']))
-                self.assertIsNotNone(narrative.support(BY_KEY['measurement_1_1'], '5.0 mm', own, notes, read['labels'], read['all_labels']))
                 self.assertTrue(self.held(notes, 'measurement_1_1', '5.0 mm', [e['quote'] for e in own]))
-        # (a sentence about a leg on the next line, `left leg scanned last month.`, still joins the value line above, and
-        # review refuses that line's right value as f01107aa did: a dead end recorded in Known limits)
+                self.assertIsNotNone(narrative.support(BY_KEY['measurement_1_1'], '5.0 mm', own, notes, read['labels'], read['all_labels']))
+                self.assertIsNone(narrative.support(BY_KEY['measurement_15_1'], '5.0 mm', own, notes, read['labels'], read['all_labels']))
+        # (the item shape round 18 split is held both ways again: never a wrong leg, a dead end at review)
+        notes = 'rt. GSV SFJ 7.4 mm, reflux 2.1 s\nlt. GSV SFJ 5.0 mm, reflux 0.3 s'
+        self.assertTrue(self.held(notes, 'measurement_1_1', '7.4 mm'))
 
     @override_settings(WM_NARRATIVE=True)
     def test_the_row_window_is_shared_by_a_lines_values(self):

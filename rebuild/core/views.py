@@ -213,7 +213,7 @@ WM_BLOCKERS={
     'narrative_qualifiers_hold':'The notes state this finding with uncertainty, for someone other than the patient, or at another time. Decide the answer yourself.',
     'statement_answers_differ_from_wording':'This wording is not built from the answers it cites. Save to refresh the statement, then review it.',
     'statement_answers_incomplete':'This wording rests on answers that are still unanswered or need review.',
-    'text_the_form_rewrites':'The form writes "&p", "&l", "&m", "&b" and "&&" in this table cell as breaks, so it would print differently. Write "and" instead.',
+    'text_the_form_rewrites':'The form writes "&p", "&l", "&m", "&b" and "&&" in this table cell as breaks, so it would print differently. Write the letter after "&" as a capital (for example "thigh&Mid calf"), which the form prints as written, or leave the answer blank.',
     'statement_absence_not_reviewed':'This wording says its answers are not documented. Leave them unanswered and review each one first.',
     'governed_source':'A heading, a pointer or a label in the notes denies or reframes what the cited sentences say (a denial, a family history, a hypothetical). Cite a sentence it does not govern.',
     'statement_source_is_heading':'The cited line is a heading or a title, which states nothing. Cite the sentence that states this.',
@@ -908,7 +908,13 @@ def save_answers(request,pk):
         # (round 18: an employee's save kept nothing of a clinician's statement decisions and the page fell back to the
         # defaults. The choices it posts — the page's, the clinician's among them — are kept, each unreviewed: a review is
         # its reader's own. The incomplete form is never accepted by finalization.)
-        e.template_review={'schema':0,'decisions':{key:dict(decision,reviewed=False) for key,decision in decisions.items()},
+        # (a decision the employee left at the clinician's wording is the clinician's, kept whole — the page disables the
+        # "rests on its answers" box for an employee, so a browser posts nothing for it: round 19's focused pass, the
+        # basis was lost and the clinician's page pointed at a source it had never needed)
+        e.template_review={'schema':0,'decisions':{key:dict(previous_decisions[key] if isinstance(previous_decisions.get(key),dict)
+                                                            and previous_decisions[key].get('variant')==decision.get('variant')
+                                                            else decision,reviewed=False)
+                                                   for key,decision in decisions.items()},
                            'binding':wm_review.binding(e),'reviewer_id':str(request.user.pk)}
     if clinician:
         try:

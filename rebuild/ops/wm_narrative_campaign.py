@@ -40,6 +40,7 @@ import hashlib
 import io
 import json
 import os
+import signal
 import re
 import secrets
 import stat
@@ -114,13 +115,21 @@ def money(value):
 # ── private files ────────────────────────────────────────────────────────────────────────────────────────────────
 
 def write_new(path, document):
-    """O_EXCL + fsync: a record is written once and never rewritten."""
+    """Written once and never rewritten, and published whole: the bytes go to a private temporary file (O_EXCL, synced),
+    which is then hard-linked to its name — a link fails if the name exists, and a kill leaves either no record or a
+    complete one (round 19's focused pass: a kill between create and write left a 0-byte outcome, and every restart
+    failed on it)."""
     path = Path(path)
-    fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(fd, 'w', encoding='utf-8') as handle:
-        handle.write(json.dumps(document, indent=2, sort_keys=True, default=str) + '\n')
-        handle.flush()
-        os.fsync(handle.fileno())
+    temporary = path.with_name(f'.partial-{os.getpid()}-{path.name}')
+    fd = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as handle:
+            handle.write(json.dumps(document, indent=2, sort_keys=True, default=str) + '\n')
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.link(temporary, path)
+    finally:
+        os.unlink(temporary)
     directory = os.open(path.parent, os.O_RDONLY)
     try:
         os.fsync(directory)
@@ -175,8 +184,8 @@ def exposure(attempt, outcome):
     """What one attempt may have cost at the provider, worst case. Only a product-proven 'not sent' is zero."""
     if outcome is None:
         return attempt_bound(attempt['maximum_cost'])
-    if outcome['class'] == 'not_sent':
-        return Decimal('0')
+    if outcome['class'] in ('not_sent', 'not_run'):
+        return Decimal('0')          # (`not_run`: no job, or a queued job cancelled through the product before any worker)
     if outcome.get('provider_actual_cost') not in (None, ''):
         return max(attempt_bound(outcome['provider_actual_cost']), Decimal('0'))
     return attempt_bound(attempt['maximum_cost'])
@@ -312,16 +321,21 @@ def declared(args):
     for line in (f'campaign: {CAMPAIGN}', f'stage: {args.stage}', f'provider_limit_usd: {plan["provider_limit"]}',
                  f'wallet_limit_usd: {plan["wallet_limit"]}', f'model: {EXPECTED_MODEL}',
                  f'pricing_version: {EXPECTED_PRICING_VERSION}'):
-        require(line in text, f'The declaration does not state `{line}`.')
-    authorization = re.search(r'^authorization: (owner (\d{4}-\d{2}-\d{2}) approved stage (\d) at the stated limits)(.*)$',
-                              text, re.M)
-    require(authorization and authorization.group(3) == str(args.stage)
-            and not re.search(r'\b(?:not|no|never|declin\w*|refus\w*|reject\w*|withh\w*|pending|later|will|would|tbd|todo|'
-                              r'placeholder|unless|if|but|except)\b|[<>?]', authorization.group(4), re.I),
-            'The declaration names no owner authorization of this stage (a line `authorization: owner <YYYY-MM-DD> approved '
-            'stage <n> at the stated limits`, then only the owner\'s own words, no condition or placeholder).')
+        require(re.search(rf'^{re.escape(line)}[ \t]*$', text, re.M), f'The declaration does not state `{line}`.')
+    # (round 19's focused pass: a word list over the owner's words accepted `— REVOKED`, `only once the quote is checked`,
+    # placeholders, and refused ordinary approvals. The authorization is now ONE EXACT LINE, written by the session only
+    # from the owner's own approval; the owner's words go on their own `owner_words:` line, recorded and never parsed. A
+    # revocation is a `revoked:` line, or the declaration removed.)
+    lines = re.findall(r'^authorization:.*$', text, re.M)
+    authorization = re.fullmatch(r'authorization: owner (\d{4}-\d{2}-\d{2}) approved stage (\d) at the stated limits',
+                                 lines[0].rstrip()) if len(lines) == 1 else None
+    require(authorization and authorization.group(2) == str(args.stage),
+            'The declaration names no owner authorization of this stage (exactly one line, exactly `authorization: owner '
+            '<YYYY-MM-DD> approved stage <n> at the stated limits`, nothing after it).')
+    require(not re.search(r'^[ \t>*-]*revok', text, re.M | re.I), 'The declaration carries a revocation.')
+    words = re.search(r'^owner_words:(.*)$', text, re.M)
     return {'declaration': str(path), 'sha256': hashlib.sha256(text.encode()).hexdigest(),
-            'authorization': (authorization.group(1) + authorization.group(4)).strip()}
+            'authorization': lines[0].split(':', 1)[1].strip(), 'owner_words': words.group(1).strip() if words else ''}
 
 
 def candidate_identity():
@@ -435,6 +449,13 @@ def inner():
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         try:
             recover_interrupted(ledger, world, report, context)   # (an attempt in flight is recorded, never lost)
+            if world is not None:
+                ledger_stops(world, ledger, stage, context, report)  # (and an adopted draft scored before any verdict,
+                #   whatever ended the run — round 19's focused pass: a SIGTERM as the answer landed left it unscored)
+        except Stop as stop:
+            if str(stop) not in report['stops']:
+                report['stops'].append(str(stop))
+            verdict = 'FAIL' if str(stop).startswith('WRONG') else 'STOPPED'
         except Exception as error:
             report['stops'].append(f'recording the attempt in flight failed: {type(error).__name__}')
             verdict = 'STOPPED'
@@ -502,26 +523,45 @@ def campaign_record(campaign_dir, context):
 
 
 def recover_interrupted(ledger, world=None, report=None, context=None):
-    """An attempt with no outcome, recorded from what the product recorded for its job (the runner's review: a job the
-    product had ADOPTED was recorded `interrupted_unknown`, its case resent, its wrong answer never scored and the stage
-    PASSED; its wallet charge was left out). A job that settled is the provider's answer — adopted or unusable — and is
-    never resent; a job with no receipt is an unknown provider outcome, counted at its maximum."""
-    from core.models import Job, LedgerEntry, ProviderReceipt
+    """An attempt with no outcome, recorded from what the product recorded for its job, classified exactly as a finished
+    attempt is (`classify`, from the job, its receipt and its audit row's error class and billing) — the runner's review:
+    an ADOPTED job was recorded unknown and resent; round 19's focused pass: a 401 was resent, a wrong-model answer was
+    recorded without its model and PASSED, and a job still queued was left to run under the next attempt. A job still
+    queued is cancelled through the product (no request was ever made: `not_run`, zero), as is an attempt with no job; an
+    answer is retained and its model checked; a job with no receipt and no classifiable error is an unknown provider
+    outcome, counted at its maximum."""
+    from django.db import transaction
+    from core.jobs import cancel
+    from core.models import AuditEvent, Job, LedgerEntry, ProviderReceipt
     for attempt, outcome in load_ledger(ledger):
         if outcome is not None:
             continue
         job = Job.objects.filter(encounter_id=attempt.get('encounter')).first() if attempt.get('encounter') else None
-        receipt = ProviderReceipt.objects.filter(job=job).first() if job else None
-        charged = -sum((e.amount for e in LedgerEntry.objects.filter(job=job)), Decimal('0')) if job else Decimal('0')
-        state = job.state if job else None
-        cls = ('adopted' if state == 'succeeded' else 'output_unusable' if receipt and state == 'failed'
-               else 'settlement_reconciliation' if receipt else 'interrupted_unknown')
-        write_new(ledger / f'{attempt["number"]:03d}-{attempt["case"]}-outcome.json',
-                  {'class': cls, 'recovered': True, 'recorded_at': now(), 'job': str(job.pk) if job else None,
-                   'state': state, 'worker_ran': bool(job and state != 'queued'),
-                   'provider_actual_cost': str(receipt.actual_cost) if receipt else None,
-                   'wallet_charged': str(charged), 'error': job.error if job else '',
-                   'note': 'Recorded after an interruption from the product\'s own job record.'})
+        record = {'recovered': True, 'recorded_at': now(), 'job': str(job.pk) if job else None,
+                  'note': 'Recorded after an interruption from the product\'s own job record.'}
+        if job is not None and job.state == 'queued':
+            with transaction.atomic():
+                cancel(job, job.user)        # (never run: the product's own cancellation, its hold released)
+            job.refresh_from_db()
+        if job is None or job.state == 'cancelled':
+            record.update({'class': 'not_run', 'state': job.state if job else None, 'worker_ran': False,
+                           'provider_actual_cost': None, 'wallet_charged': '0', 'error': job.error if job else ''})
+        else:
+            receipt = ProviderReceipt.objects.filter(job=job).first()
+            audit = AuditEvent.objects.filter(target=str(job.pk), action__in=(
+                'job.failed', 'job.reconciliation', 'job.succeeded')).order_by('-created_at').first()
+            details = audit.details if audit else {}
+            cls = classify(job.state, details.get('error_class', ''), receipt is not None, details.get('billing', ''))
+            record.update({'class': 'interrupted_unknown' if cls == 'unknown' else cls, 'state': job.state,
+                           'worker_ran': True, 'error_class': details.get('error_class', ''),
+                           'billing': details.get('billing', ''), 'error': job.error,
+                           'provider_actual_cost': str(receipt.actual_cost) if receipt else None,
+                           'wallet_charged': str(-sum((e.amount for e in LedgerEntry.objects.filter(job=job)), Decimal('0')))})
+            if job.result_path:
+                record.update(retain_response(world, job, job.encounter))
+            if record['class'] == 'adopted' and not record.get('response_model'):
+                record['stop'] = f'Attempt {attempt["number"]}: the recovered answer carries no provider model to check.'
+        write_new(ledger / f'{attempt["number"]:03d}-{attempt["case"]}-outcome.json', record)
 
 
 def now():
@@ -674,7 +714,7 @@ def ledger_stops(world, ledger, stage, context, report):
             raise Stop(f'Attempt {number}: the provider answered as {outcome["response_model"]}.')
         if cls == 'not_sent':
             raise Stop(f'Attempt {number} was refused before any request: {outcome.get("error")}')
-        if cls not in ('adopted', 'output_unusable') + TRANSPORT_LIKE:
+        if cls not in ('adopted', 'output_unusable', 'not_run') + TRANSPORT_LIKE:
             raise Stop(f'Attempt {number} ended {cls}: {outcome.get("error_class") or outcome.get("error")}')
     # Nothing but the runner's own attempts may have reached the provider or this database's ledger.
     with_job = sum(1 for _, o in rows if o and o.get('job'))
@@ -700,6 +740,7 @@ def run_stage(world, ledger, stage, context, report):
     while True:
         mine, trailing = ledger_stops(world, ledger, stage, context, report)
         done = {a['case'] for a, o in mine if o['class'] in ('adopted', 'output_unusable')}
+        #   (a `not_run` attempt's case is sent again, as a retry: it counts against the stage's retries)
         queue = [case for case in plan['cases'] if case not in done]
         if not queue:
             break
@@ -754,9 +795,18 @@ def one_request(world, encounter, token, revision, quoted):
     if job.config.get('pricing_version') != quoted['pricing_version'] or job.config.get('model') != EXPECTED_MODEL:
         return {'class': 'not_sent', 'job': str(job.pk), 'held': str(held), 'recorded_at': now(),
                 'stop': 'The queued job does not carry the quoted model and pricing; the worker was not run.'}
+    crash = os.environ.get('WMN_OFFLINE_CRASH') if os.environ.get('WMN_CAMPAIGN_MODE') == 'offline' else None
+    if crash == 'before_worker':
+        os._exit(137)                # (offline validation only: a kill after Generate queued the job, before the worker)
+    queued = list(Job.objects.filter(state='queued').values_list('pk', flat=True))
+    if queued != [job.pk]:           # (the worker takes the OLDEST queued job: only this attempt's may be waiting)
+        return {'class': 'not_sent', 'job': str(job.pk), 'held': str(held), 'recorded_at': now(),
+                'stop': f'Another queued job would run first ({len(queued)} queued); the worker was not run.'}
     worked = run_one()
-    if os.environ.get('WMN_CAMPAIGN_MODE') == 'offline' and os.environ.get('WMN_OFFLINE_CRASH') == 'after_worker':
+    if crash == 'after_worker':
         os._exit(137)                # (offline validation only: a kill after the worker, before the outcome is written)
+    if crash == 'term_after_worker':
+        os.kill(os.getpid(), signal.SIGTERM)    # (offline validation only: a SIGTERM or Ctrl-C as the answer lands)
     job.refresh_from_db()
     receipt = ProviderReceipt.objects.filter(job=job).first()
     usage = Usage.objects.filter(job=job).first()
@@ -912,7 +962,8 @@ def main(argv=None):
     parser.add_argument('--offline-timeout', type=float, default=5.0)
     parser.add_argument('--offline-retry-wait', type=float, default=1.0)
     parser.add_argument('--expectation-override', type=json.loads, default=None)
-    parser.add_argument('--offline-crash', choices=['after_worker'], default=None, help='offline validation only')
+    parser.add_argument('--offline-crash', choices=['before_worker', 'after_worker', 'term_after_worker'], default=None,
+                        help='offline validation only')
     args = parser.parse_args(argv)
     try:
         if args.command == 'plan':

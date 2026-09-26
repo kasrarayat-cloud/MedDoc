@@ -457,6 +457,15 @@ class RenderedSaveForm(HTMLParser):
         return {name: html.unescape(value).lstrip('\n') for name, value in form.values.items()}
 
 
+class BrowserSaveForm(RenderedSaveForm):
+    """As a browser submits the page: a `disabled` control is never posted (round 19's focused pass: the rendered form
+    posted the disabled "rests on its answers" box, and a test built on it could not see an employee's save losing it)."""
+    def handle_starttag(self, tag, attrs):
+        if 'disabled' in dict(attrs) and tag in ('input', 'select', 'textarea'):
+            return
+        super().handle_starttag(tag, attrs)
+
+
 @skipUnless(WORD_RUNTIME_USABLE,
             'Live Word document workflow NOT EXERCISED — ' + (WORD_RUNTIME_REASON or 'unknown reason') +
             '. No claim is made about this path from this run.')
@@ -914,6 +923,28 @@ class WMNarrativeWorkflow(TestCase):
         self.assertFalse(any(d.get('reviewed') for d in encounter.template_review['decisions'].values()))
         self.assertEqual(encounter.template_review['decisions']['claim_32']['variant'], 'not_assessed')
 
+    def test_round_19_an_employees_browser_save_keeps_the_clinicians_basis(self):
+        """Round 19's focused pass: the page disables the "rests on its answers" box for an employee, a browser posts
+        nothing for it, and the employee's save kept the clinician's wording without its basis — the clinician's page then
+        pointed at a source the decision had never needed. A decision left at the clinician's wording is kept whole."""
+        encounter = self.replayed(self.PROVENANCE_NOTES, self.PROVENANCE_PICKS, self.PROVENANCE_STATEMENTS)
+        extra = {'claim_variant_claim_23': 'not_documented', 'claim_basis_claim_23': 'answers',
+                 'claim_variant_claim_27': 'not_documented', 'claim_basis_claim_27': 'answers'}
+        self.post_page(encounter, review=False, extra=extra)
+        self.post_page(encounter)
+        kinds = lambda key: [e.get('kind') for e in encounter.template_review['decisions'][key]['evidence']]
+        self.assertIn('answers', kinds('claim_23'))                                     # (the control: the clinician's basis)
+        self.client.force_login(self.member('wm-employee-r19b', 'employee'))
+        page = self.client.get(f'/encounters/{encounter.pk}/')
+        payload = BrowserSaveForm.of(page)
+        self.assertNotIn('claim_basis_claim_23', payload)                               # (the control: a browser omits it)
+        self.client.post(f'/encounters/{encounter.pk}/save/', payload)
+        encounter.refresh_from_db()
+        for key in ('claim_23', 'claim_27'):
+            decision = encounter.template_review['decisions'][key]
+            self.assertEqual((decision['variant'], decision['reviewed']), ('not_documented', False))
+            self.assertIn('answers', kinds(key))
+
     def test_round_18_a_cleared_answer_names_who_cleared_it(self):
         """Round 18 (provenance lens): a value the model read and a person deleted showed as a plain `missing`, as if the
         notes gave nothing."""
@@ -924,7 +955,8 @@ class WMNarrativeWorkflow(TestCase):
         self.client.force_login(self.user)
         page = self.client.get(f'/encounters/{encounter.pk}/')
         self.assertContains(page, 'data-cleared-by')
-        self.assertContains(page, 'cleared by wm-employee-r18c@synthetic.invalid')
+        self.assertContains(page, 'emptied by wm-employee-r18c@synthetic.invalid')
+        self.assertNotContains(page, 'not left empty by the notes')     # (round 19: the notes may have given nothing)
 
     def test_round_18_review_refuses_text_the_engine_would_rewrite_in_a_cell(self):
         """Round 18 (provenance lens): the engine writes a table cell through a replace that reads `&p`, `&l`, `&m`, `&b`
@@ -935,9 +967,12 @@ class WMNarrativeWorkflow(TestCase):
         fields, requirements = wm_review._mapping(encounter)
         assessed = wm_review._answer_assessment(encounter, self.user, fields, requirements)
         self.assertIn('text_the_form_rewrites', assessed['location_11']['blockers'])
-        self.post_page(encounter, edits={'location_11': 'thigh and mid calf'}, review=False)
+        # (round 19: the advice names a spelling that completes — a capital after `&`, which the form prints as written)
+        self.post_page(encounter, edits={'location_11': 'thigh&Mid calf'}, review=False)
         assessed = wm_review._answer_assessment(encounter, self.user, fields, requirements)
         self.assertNotIn('text_the_form_rewrites', assessed['location_11']['blockers'])
+        from core.views import WM_BLOCKERS
+        self.assertIn('thigh&Mid calf', WM_BLOCKERS['text_the_form_rewrites'])
 
     def test_the_save_keeps_the_copy_the_next_posted_line_runs_on_to(self):
         """Round 17e's review (false-rejection lens): one line written under both legs with the side only on the line

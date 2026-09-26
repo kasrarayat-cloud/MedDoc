@@ -342,6 +342,64 @@ def special_cases(args, admin, number):
     results.append({'scenario': 'killed-after-adoption', 'passed': all(ok for _, ok, _ in checks),
                     'checks': [{'check': n, 'passed': ok, 'detail': str(d)[:300]} for n, ok, d in checks]})
     print(f'{"PASS" if results[-1]["passed"] else "FAIL"}  killed-after-adoption')
+    # Round 19's focused pass over the runner: each interruption is recorded from the product's own records, exactly as a
+    # finished attempt would be, and nothing is resent that the provider already answered.
+    def interrupted(name, offset, script, crash, expect):
+        s = Scenario(args.out, admin, args.engine, name, number + offset)
+        checks = []
+        try:
+            s.start(script)
+            code, _ = s.run(extra=['--offline-crash', crash])
+            checks.append((f'the first run ended ({crash})', code == expect['first_exit'], code))
+            if expect.get('restart', True):
+                code, _ = s.run()
+            rows = campaign.load_ledger(s.campaign / 'ledger')
+            first = rows[0][1] or {}
+            verdict = json.loads((s.campaign / 'stage-1-verdict.json').read_text())
+            checks += [(label, test(code, rows, first, verdict, s), detail(code, rows, first, verdict, s))
+                       for label, test, detail in expect['checks']]
+        except Exception as error:
+            checks.append(('scenario ran', False, f'{type(error).__name__}: {error}'))
+        finally:
+            s.finish()
+        results.append({'scenario': name, 'passed': all(ok for _, ok, _ in checks),
+                        'checks': [{'check': n, 'passed': ok, 'detail': str(d)[:300]} for n, ok, d in checks]})
+        print(f'{"PASS" if results[-1]["passed"] else "FAIL"}  {name}')
+
+    interrupted('killed-before-the-worker', 5, replay(*ALL), 'before_worker', {'first_exit': 137, 'checks': [
+        ('recorded as never run, from the product', lambda c, r, f, v, s: f.get('class') == 'not_run' and f.get('recovered'),
+         lambda c, r, f, v, s: f.get('class')),
+        ('its queued job was cancelled, never run by the next attempt', lambda c, r, f, v, s: f.get('state') == 'cancelled',
+         lambda c, r, f, v, s: f.get('state')),
+        ('counted at zero, provably', lambda c, r, f, v, s: campaign.exposure(*r[0]) == 0, lambda c, r, f, v, s: str(campaign.exposure(*r[0]))),
+        ('its case resent as a retry, and the stage passed', lambda c, r, f, v, s: r[1][0]['kind'] == 'retry' and c == 0
+         and r[1][1]['class'] == 'adopted', lambda c, r, f, v, s: (c, [x[0]['kind'] for x in r])),
+        ('the provider saw only the five answered requests', lambda c, r, f, v, s: len(s.requests()) == 5,
+         lambda c, r, f, v, s: len(s.requests())),
+    ]})
+    interrupted('wrong-model-then-killed', 6, [{'kind': 'model', 'case': 'C14', 'model': 'claude-other-model'}]
+                + replay('C18', 'C19', 'H05', 'H12'), 'after_worker', {'first_exit': 137, 'checks': [
+        ('recovered with the model the provider answered as', lambda c, r, f, v, s: f.get('response_model') == 'claude-other-model',
+         lambda c, r, f, v, s: f.get('response_model')),
+        ('the model stop fires', lambda c, r, f, v, s: c == 4 and any('answered as' in x for x in v['stops']),
+         lambda c, r, f, v, s: (c, v['stops'])),
+        ('nothing resent', lambda c, r, f, v, s: len(s.requests()) == 1, lambda c, r, f, v, s: len(s.requests())),
+    ]})
+    interrupted('configuration-failure-then-killed', 7, [{'kind': 'status', 'code': 401}] * 3, 'after_worker',
+                {'first_exit': 137, 'checks': [
+        ('recovered as a configuration failure, from the audit row', lambda c, r, f, v, s: f.get('class') == 'configuration_failure',
+         lambda c, r, f, v, s: (f.get('class'), f.get('error_class'))),
+        ('stopped without a retry', lambda c, r, f, v, s: c == 4 and len(s.requests()) == 1 and len(r) == 1,
+         lambda c, r, f, v, s: (c, len(s.requests()), len(r))),
+    ]})
+    interrupted('sigterm-as-the-answer-lands', 8, [{'kind': 'replay', 'case': 'C18'}] + replay(*ALL), 'term_after_worker',
+                {'first_exit': 3, 'restart': False, 'checks': [
+        ('the adopted draft was scored before the verdict', lambda c, r, f, v, s: any('WRONG' in x for x in v['stops']),
+         lambda c, r, f, v, s: v['stops']),
+        ('its score is kept', lambda c, r, f, v, s: any((s.campaign / 'scores').glob('001-*.json')),
+         lambda c, r, f, v, s: sorted(p.name for p in (s.campaign / 'scores').glob('*.json'))),
+        ('nothing further sent', lambda c, r, f, v, s: len(s.requests()) == 1, lambda c, r, f, v, s: len(s.requests())),
+    ]})
     # Gates that refuse (exit 2) before any database, configuration or request is touched.
     s = Scenario(args.out, admin, args.engine, 'gates-refuse', number + 4)
     checks = []

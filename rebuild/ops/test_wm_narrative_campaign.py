@@ -210,25 +210,41 @@ class Credentials(unittest.TestCase):
             return c.declared(args)
 
     def test_live_mode_needs_a_committed_declaration_with_a_real_owner_authorization(self):
-        # (the runner's review: a refusal, a condition or a bare word were accepted as an authorization)
+        # (round 19's focused pass: a word list over the owner's words accepted a revocation, a condition and placeholders,
+        # and refused ordinary approvals. One exact line; the owner's words on their own line, recorded, never parsed.)
+        line = 'authorization: owner 2026-09-26 approved stage 1 at the stated limits'
         for refused in ('authorization: PENDING-OWNER-APPROVAL', 'authorization: owner <quote the approval here>',
-                        'authorization: owner has NOT authorized this run', 'authorization: owner declined 2026-09-26',
-                        'authorization: owner will authorize later', 'authorization: owner xxxxxxxxxxxx',
-                        'authorization: owner 2026-09-26 approved stage 2 at the stated limits',
-                        'authorization: owner 2026-09-26 approved stage 1 at the stated limits, but not today',
-                        'authorization: owner 2026-09-26 approved stage 1 at the stated limits if the balance allows',
-                        'authorization: owner 2026-09-26 approved stage 1 at the stated limits?'):
-            with self.subTest(refused), self.assertRaisesRegex(c.Refused, 'no owner authorization'):
+                        line + ' — REVOKED 2026-09-27.', line + " — don't run it yet.", line + ' — only once the quote is checked.',
+                        line + ', provided the wallet is funded first.', line + ' — [owner to confirm]', line + ' — …',
+                        line + '. Go ahead.', 'authorization: owner 2026-09-26 approved stage 2 at the stated limits',
+                        line + '\nauthorization: owner 2026-09-27 approved stage 1 at the stated limits',
+                        line + '\nRevoked by the owner 2026-09-27.', line + '\nrevoked: 2026-09-27 hold everything'):
+            with self.subTest(refused), self.assertRaisesRegex(c.Refused, 'authorization|revocation'):
                 self.declared(refused)
-        ok = self.declared('authorization: owner 2026-09-26 approved stage 1 at the stated limits. "Go ahead." (chat)')
-        self.assertTrue(ok['authorization'].startswith('owner 2026-09-26 approved stage 1'))
+        ok = self.declared(line + '\nowner_words: "No objection — go ahead. Why not? Run it, but keep me posted."')
+        self.assertEqual(ok['authorization'], 'owner 2026-09-26 approved stage 1 at the stated limits')
+        self.assertIn('keep me posted', ok['owner_words'])
         # (committed, unmodified, and in this checkout's mutations directory — not a scratch repository elsewhere)
         with self.assertRaisesRegex(c.Refused, 'mutations'):
-            self.declared('authorization: owner 2026-09-26 approved stage 1 at the stated limits', where='elsewhere')
-        args, rebuild = self.declaration('authorization: owner 2026-09-26 approved stage 1 at the stated limits')
+            self.declared(line, where='elsewhere')
+        args, rebuild = self.declaration(line)
         Path(args.declaration).write_text(Path(args.declaration).read_text() + 'edited after commit\n')
         with patch.object(c, 'REBUILD', rebuild), self.assertRaisesRegex(c.Refused, 'committed and unmodified'):
             c.declared(args)
+
+    def test_a_record_is_published_whole_or_not_at_all(self):
+        """Round 19's focused pass: a kill between the O_EXCL create and the write left a 0-byte outcome, and every
+        restart failed on it. A record is written to a private temporary file and linked to its name."""
+        directory = Path(tempfile.mkdtemp())
+        target = directory / '001-C14-outcome.json'
+        with patch.object(c.os, 'link', side_effect=OSError('killed')), self.assertRaises(OSError):
+            c.write_new(target, {'class': 'adopted'})
+        self.assertEqual(list(directory.iterdir()), [])                 # (no record, no partial left behind)
+        c.write_new(target, {'class': 'adopted'})
+        self.assertEqual(json.loads(target.read_text())['class'], 'adopted')
+        with self.assertRaises(FileExistsError):
+            c.write_new(target, {'class': 'unknown'})                   # (never rewritten)
+        self.assertEqual([p.name for p in directory.iterdir()], [target.name])
 
     def test_offline_takes_only_the_provider_fields_from_its_file(self):
         value = c.offline_provider(self.private(json.dumps({

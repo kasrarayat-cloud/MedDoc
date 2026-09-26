@@ -1336,17 +1336,20 @@ Every one of these fails closed (a hold, or a statement the clinician must sourc
   refused (`advanced_processor_unavailable`, fails closed). The parent's reading of the same lines is linear.
 - **Round 18's review, what remains (each reproduced; none a wrong pre-fill).**
   - *Held for the clinician by design — the repairs restore holds rather than add exemptions, so these are held and
-    accepted at review:* an existential `There is 9.6 mm on the repeat image.` read as a rival; a date after the value
-    that belongs to the other leg's treatment (`…, s/p left GSV RFA 2019`, `…, and the left GSV was ablated in 2021`);
-    a bracket naming another vein's own finding right after the value (`6.8 mm (AASV competent)`), and `… and the SSV
-    is competent`; a hedge before a cause (`likely from chronic reflux`); a label whose not-today word is not its first
-    (`Her prior study:`); and a choice or statement sentence carrying any date where the study's own date cannot be read.
-  - *Review dead ends, 15 (all already on `f01107aa`, which had 40):* a sentence about a leg on the line after a value
-    line with no stop (`GSV SFJ 7.4 mm, reflux 2.1 s` / `lt. leg not examined.`, `left leg scanned last month.`) is read
-    with that line, so review refuses the right value it now names the left beside. The pre-fill holds. Ending the value
-    line with a stop completes it — a note edit, which clears the draft and needs a second generation. (A side written as an item's, `lt. GSV SFJ
-    5.0 mm`, is its own line since round 18; a side naming a limb is not, because `… without reflux` / `left leg.` is
-    that sentence's leg.)
+    accepted at review:* an existential `There is 9.6 mm on the repeat image.` read as a rival; a date right after the
+    value that belongs to the other leg's treatment (`Right GSV SFJ 7.4 mm, s/p left GSV RFA 2019.`, `…, and the left
+    GSV was ablated in 2021`); a value with no vein of its own before another vein's finding (`At the saphenofemoral
+    junction 6.8 mm (AASV competent).`, `… 6.8 mm and the SSV is competent.` — with its vein named, `the great saphenous
+    vein measures 6.8 mm (AASV competent)`, it pre-fills); a hedge before a cause (`likely from chronic reflux`); a label
+    whose not-today word is not its first (`Her prior study:`); and a choice or statement sentence carrying any date where
+    the study's own date cannot be read. (Each verified on `207a26a8`.)
+  - *Review dead ends (all already on `f01107aa`):* a line opening with a small letter goes on from the line above
+    when that line has no stop, so a sentence about a leg or a side item on the next line (`GSV SFJ 7.4 mm, reflux 2.1 s`
+    / `lt. leg not examined.`, `left leg scanned last month.`, `rt. GSV SFJ 7.4 mm, reflux 2.1 s` / `lt. GSV SFJ 5.0 mm`)
+    is read with it, and review refuses the right value it now names the left beside. The pre-fill holds. Ending the
+    value line with a stop completes it — a note edit, which clears the draft and needs a second generation. (Round 18
+    split side items onto their own line; its list of what names a limb leaked — `… without reflux` / `left thigh.`
+    gave the value the right leg — and round 19 reverted it.)
   - *LOW (as on `f01107aa`):* `… without reflux in the` / `lt. IMPRESSION: Right GSV reflux.` — the pre-fill is held,
     but review accepts a clinician-typed 5.0 mm on the right row and refuses it on the left.
   - *MEDIUM, provenance (as on `f01107aa`):* a pre-fill citing a number and its unit joined across a hard wrap (`… 7.4`
@@ -1422,9 +1425,10 @@ under a declared act. Its recorded scope is the private services' own synthetic 
 a separate candidate process, so the reuse is part of the owner's authorization. The runner takes ONLY the provider
 fields (key, provider, model, rates) into a scrubbed environment for its own process, refuses live mode BEFORE opening
 the configuration unless a committed, unmodified declaration (`docs/foundation/mutations/`, run through
-`scripts/run-ruled-mutation.sh`) names the campaign, stage, limits, model, pricing version and an `authorization: owner …`
-line (placeholders refused), never prints or copies the key, and scans every evidence file for the key and key-shaped
-text before and after its report.
+`scripts/run-ruled-mutation.sh`) names the campaign, stage, limits, model, pricing version and exactly one line
+`authorization: owner <YYYY-MM-DD> approved stage <n> at the stated limits` with nothing after it (the owner's own words
+go on an `owner_words:` line, recorded and never parsed; any line starting `revok…` refuses), never prints or copies the
+key, and scans every evidence file for the key and key-shaped text before and after its report.
 
 **Offline validation (no provider request possible):** `rebuild/ops/wm_narrative_campaign_offline.py` drives the real
 runner end to end through the candidate's product path against a loopback mock (`ops/wm_narrative_mock_provider.py`,
