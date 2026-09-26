@@ -836,6 +836,95 @@ class UncitedGoverning(SimpleTestCase):
         self.assertIsNone(review('measurement_15_1', first + ['saphenofemoral junction in the left leg.']))
 
 
+class SourceContextGaps(SimpleTestCase):
+    """Round 17d's three reported gaps, each reproduced first (a careless model's qualifiers: the patient's, definite,
+    current), with the controls that must stay: a denial split after a label, uncertainty following a measurement, a
+    historical date governing one. Valid current findings compared with prior studies are kept."""
+
+    PAIN, SWELLING, GSV_SFJ = 'sdt_-1124008635', 'sdt_269290727', 'measurement_1_1'
+
+    def held(self, notes, key, value, cited=None):
+        cited = cited or [u['quote'] for u in narrative.units(notes, FIELDS, LABELS)
+                          if value.split()[0].lower() in u['quote'].lower()]
+        return decide(notes, {key: (value, cited, {})})[0][key]['status'] != 'supported'
+
+    def test_a_denial_split_after_a_label_governs_the_line_it_runs_on_to(self):
+        notes = 'Clinical indication: she denies\nleg pain and swelling.'
+        for key, value in ((self.PAIN, 'Leg pain'), (self.SWELLING, 'Swelling')):
+            with self.subTest(value):
+                self.assertTrue(self.held(notes, key, value, ['leg pain and swelling.']))
+        # (and a denial reaches each finding of a list, not past a verb)
+        for notes, held in (('She denies leg pain and swelling.', True), ('She denies leg pain, heaviness and swelling.', True),
+                            ('She denies leg pain and reports swelling.', False),
+                            ('She denies leg pain but has swelling of both ankles.', False),
+                            ('No DVT is seen and she reports swelling.', False), ('She has leg pain and swelling.', False)):
+            with self.subTest(notes):
+                self.assertEqual(self.held(notes, self.SWELLING, 'Swelling', [notes]), held)
+        # (a bare `no` or `without` is not read across a list: the benchmarks' H11 and C02)
+        notes = 'She reports nightly cramping in both calves, but no restless legs, and aching leg pain after standing at work.'
+        self.assertFalse(self.held(notes, self.PAIN, 'Leg pain', [notes]))
+        notes = ('A duplex study was performed in the upright position with and without manual augmentation and Valsalva, '
+                 'documenting the deep and superficial venous systems of both legs.')
+        self.assertFalse(self.held(notes, 'sdt_429781496', 'deep and superficial', [notes]))
+        for notes, line in (('Clinical indication: she reports\nleg pain and swelling.', 'leg pain and swelling.'),
+                            ('Clinical indication: leg pain\nNo swelling.', 'Clinical indication: leg pain'),
+                            ('Clinical indication: she denies swelling but reports\nleg pain in both legs.', 'leg pain in both legs.')):
+            with self.subTest(notes):
+                self.assertFalse(self.held(notes, self.PAIN, 'Leg pain', [line]))
+
+    def test_uncertainty_following_a_measurement_holds_it(self):
+        for notes in ('The right great saphenous vein measures 6.1 mm (possibly artifact) at the saphenofemoral junction.',
+                      'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction, possibly artifact.',
+                      'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction, which may be artifact.'):
+            with self.subTest(notes):
+                self.assertTrue(self.held(notes, self.GSV_SFJ, '6.1 mm'))
+        for notes, key, value in (
+                ('The right small saphenous vein measures 5.3 mm at the saphenopopliteal junction with possible reflux of '
+                 'approximately 550 ms.', 'measurement_5_1', '5.3 mm'),
+                ('The right great saphenous vein measures 6.1 mm at the saphenofemoral junction with possible thrombus in a '
+                 'tributary.', self.GSV_SFJ, '6.1 mm')):
+            with self.subTest(notes):                   # (a finding's own hedge, not the measurement's)
+                self.assertFalse(self.held(notes, key, value))
+        notes = 'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction. Image quality was possibly limited.'
+        self.assertFalse(self.held(notes, self.GSV_SFJ, '6.1 mm', [notes.split('. ')[0] + '.']))
+        # (a hedge after the next value is that value's: `… and 5.0 mm at the knee, possibly artifact`)
+        notes = 'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction and 5.0 mm at the knee, possibly artifact.'
+        self.assertFalse(self.held(notes, self.GSV_SFJ, '6.1 mm', [notes]))
+        self.assertTrue(self.held(notes, 'measurement_3_1', '5.0 mm', [notes]))
+
+    def test_a_historical_date_governs_a_measurement_and_a_current_one_compared_with_it_stands(self):
+        for notes in ('The right great saphenous vein measured 9.6 mm at the saphenofemoral junction in 2023.',
+                      'In 2023 the right great saphenous vein measured 9.6 mm at the saphenofemoral junction.',
+                      'The right great saphenous vein measures 9.6 mm (2023) at the saphenofemoral junction.',
+                      'Date of service: 09/25/2026. The right great saphenous vein measured 9.6 mm at the saphenofemoral '
+                      'junction on 03/14/2023.'):
+            with self.subTest(notes):
+                self.assertTrue(self.held(notes, self.GSV_SFJ, '9.6 mm'))
+        for notes in ('The right great saphenous vein measures 6.1 mm at the saphenofemoral junction, compared with 9.6 mm in '
+                      '2023.',
+                      'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction versus 9.6 mm in 2023.',
+                      'Unchanged since 2023, the right great saphenous vein measures 6.1 mm at the saphenofemoral junction.',
+                      'The right great saphenous vein, ablated in 2023, measures 6.1 mm at the saphenofemoral junction.',
+                      'Date of service: 09/25/2026. The right great saphenous vein measures 6.1 mm at the saphenofemoral '
+                      'junction in 2026.',
+                      'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction with reflux of 2000 ms.',
+                      # (a year that is a comparison's, or one a word of today stands after: lens 2's B37 and B24)
+                      'Compared with the prior study of 03/2025 the right great saphenous vein now measures 6.1 mm at the '
+                      'saphenofemoral junction.',
+                      'she had a prior ablation of the left great saphenous vein in 2021 today the right great saphenous vein '
+                      'at the saphenofemoral junction measures 6.1 mm',
+                      # (a year another value stands after; a comparison's year after the value; a word of today between)
+                      'in 2023 the right small saphenous vein measured 4.0 millimeters the right great saphenous vein at the '
+                      'saphenofemoral junction measures 6.1 mm',
+                      'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction unchanged since 2023.',
+                      'In 2021 she had an ablation of the left great saphenous vein today the right great saphenous vein '
+                      'measures 6.1 mm at the saphenofemoral junction.'):
+            with self.subTest(notes):
+                self.assertFalse(self.held(notes, self.GSV_SFJ, '6.1 mm'))
+        notes = 'The right great saphenous vein measures 6.1 mm at the saphenofemoral junction, compared with 9.6 mm in 2023.'
+        self.assertTrue(self.held(notes, self.GSV_SFJ, '9.6 mm'))       # (the 2023 value itself: not today's)
+
+
 class Corrections(SimpleTestCase):
     def test_the_models_citation_never_decides_what_a_correction_concerns(self):
         """Round 7 (false-green lens): another answer citing a correction, and a location it named, released the rest —

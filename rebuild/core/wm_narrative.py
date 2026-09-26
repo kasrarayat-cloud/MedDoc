@@ -3541,9 +3541,29 @@ def sentence_block(notes, at):
         high = spans[blocks[later]][0]
     if later > 0 and spans[blocks[later - 1]][0] > low:
         low = spans[blocks[later - 1]][0]
+    first = bisect.bisect_right(starts, low) - 1
+    if (first > 0 and not notes[spans[first][0]:low].strip()
+            and _continues_label(notes, spans[first - 1], spans[first])):
+        low = spans[first - 1][0]    # (`Clinical indication: she denies` / `leg pain and swelling.`: one sentence to govern)
     while high > low and notes[high - 1] in LINE_BREAKS + ' \t':
         high -= 1
     return low, high
+
+
+def _continues_label(notes, above, line):
+    """Whether a line goes on with the value of the label line above it: that line is a label with a value after its colon
+    and no stop closing it, and this one opens with a small letter (`Clinical indication: she denies` / `leg pain and
+    swelling.`), for a value whose sentence begins there (not `Left: No DVT in the common femoral` / `vein. The small
+    saphenous vein measures 4.1 mm`: that sentence began after the stop — round 13's R13T). The reader keeps a label line
+    apart from the line under it — right for a heading — so its denial did not reach it, and `Leg pain` pre-filled from
+    the second line (round 17e)."""
+    label = generation.seen_text(notes[slice(*above)]).strip()
+    text = generation.seen_text(notes[slice(*line)]).lstrip()
+    match = LINE_LABEL.match(label)
+    if not match or not text[:1].islower():
+        return False
+    rest = label[match.end():].strip()
+    return bool(rest) and rest[-1:] not in '.!?;:'
 
 
 @sized_cache
@@ -5436,7 +5456,7 @@ def governing(field, value, own, read, sides=True, hidden=True, rivals=True, who
     found = [dict(entry) for entry in memo[key]] if memo[key] is not None else None
     if found is not None:
         return found, HELD['correction']
-    held = measurement_context(field, value, own) if value and field.get('kind') == 'measurement' else None
+    held = measurement_context(field, value, own, notes) if value and field.get('kind') == 'measurement' else None
     if held is not None:
         return ([{'quote': e['quote'], 'start': e['start'], 'end': e['end'], 'after': False, 'same': True} for e in own],
                 HELD[held])
@@ -5550,7 +5570,7 @@ PRIOR_STUDY = re.compile(r'(?<![^\W\d_])(?<!(?i:as) )(?i:(?:on|in|at|per)' + _GA
                          + r'|previously' + _GAP + r'(?:measured|measuring|recorded|documented|reported))(?![^\W\d_])')
 
 
-def measurement_context(field, value, own):
+def measurement_context(field, value, own, notes):
     """Why a measurement's own clause does not give it as today's definite value, for the pre-fill: a hedge before it in
     its clause (`uncertain`: `possibly measures 6.1 mm`; not C17's `… 5.3 mm at the saphenopopliteal junction with possible
     reflux`, the reflux's) or an earlier study's (`timing`: `PRIOR_STUDY`, where the question is
@@ -5563,13 +5583,127 @@ def measurement_context(field, value, own):
             continue
         quote, here = entry['quote'], at - entry['start']
         low, high = _clause_around(quote, here)
-        if _first_within(_hedge_spans(quote), low, here):
+        if _first_within(_hedge_spans(quote), low, here) or hedged_after(field, value, quote, here):
             return 'uncertain'      # (before it: `possibly measures 6.1 mm`; not the next finding's, `6.1 mm with possible reflux`)
+        if today and dated_before_study(quote, here, low, high, notes):
+            return 'timing'
         if today and (entry['start'], low, high) not in prior_clauses:
             prior_clauses.add((entry['start'], low, high))       # (each clause once)
             if _first_within(_prior_spans(quote), low, high):
                 return 'timing'
     return None
+
+
+#: How far after a measurement a hedge may be its own: up to a `;`, the next quantity or the next vein named.
+HEDGE_AFTER_WORDS = 3
+
+
+def hedged_after(field, value, quote, here):
+    """A hedge after a measurement that is the measurement's (`6.1 mm (possibly artifact)`, `…, possibly artifact`, `…,
+    which may be artifact`): after it in its sentence, before a `;`, another quantity or another vein, and not a finding's
+    own (`… with possible reflux of approximately 550 ms`, `… with possible thrombus in a tributary`: a finding word within
+    a few words after it). Round 17d: `6.1 mm, possibly artifact` pre-filled as definite."""
+    end = here + written_length(field, value, quote, here)
+    sentence_high = sentence_at(quote, here)[1]
+    semicolons, veins = _stops_after(quote)
+    stop = [sentence_high]
+    for starts in (semicolons, veins):
+        index = bisect.bisect_left(starts, end)
+        if index < len(starts):
+            stop.append(starts[index])
+    after = first_in(quote, 'quantity', end, sentence_high)
+    if after is not None:
+        stop.append(after[0])
+    limit = min(stop)
+    spans, starts = _hedge_spans(quote)
+    for index in range(bisect.bisect_left(starts, end), len(spans)):
+        start, stop_at = spans[index]
+        if stop_at > limit:
+            break
+        if not any(char.isalpha() for char in quote[start:stop_at]):
+            continue                 # (a `?` after a word is a tag question there, `… 5.1 mm, right?`; on the value it is a bound)
+        following = nth_from(quote, 'word', stop_at, HEDGE_AFTER_WORDS - 1)
+        if not FINDING_WORD.search(quote, stop_at, min(limit, following[1] if following else limit)):
+            return True
+    return False
+
+
+@sized_cache
+def _stops_after(quote):
+    """Where a quote's `;` and its vein words start, in order (read once per quote, each value asking by bisection)."""
+    semicolons = tuple(m.start() for m in re.finditer(';', quote))
+    veins = tuple(m.start() for m in ROW_WORD.finditer(view(quote))
+                  if any(m.group(name) is not None for name in ROW_VEIN_NAMES))
+    return semicolons, veins
+
+
+#: A year written against a measurement (`9.6 mm in 2023`, `(2023)`, `on 03/14/2023`); not a quantity (`2000 ms`).
+YEAR = re.compile(r'(?<![0-9.,])(?:19[5-9][0-9]|20[0-9]{2})(?![0-9]|[.,][0-9])(?![ \t]*(?i:mm|ms|msec|milli|sec|s|seconds?|cm)(?![^\W\d_]))')
+#: The study's own date, as a note labels it (`Date of service: 09/25/2026`, `Exam date 09/25/2026`, `DOS: …`).
+STUDY_DATE = re.compile(r'(?i:date[ \t]+of[ \t]+(?:service|study|exam(?:ination)?)|(?:exam(?:ination)?|study|service)[ \t]+date|dos)'
+                        r'(?![^\W\d_])[^\n]{0,24}?((?:19|20)[0-9]{2})(?![0-9])')
+
+
+def dated_before_study(quote, here, low, high, notes):
+    """Whether a measurement's clause dates it to a year before the study (`The right great saphenous vein measured 9.6 mm
+    at the saphenofemoral junction in 2023.`, `In 2023 the …`): a year there with no other quantity between it and the
+    value, earlier than the year the note gives its own study date — or, where it gives none, any year (the clinician
+    decides). Not a year in another clause (`…, compared with 9.6 mm in 2023` is the 2023 value's; `Unchanged since 2023,
+    …`), nor one past another value (`6.1 mm … versus 9.6 mm in 2023`). Round 17d: `9.6 mm in 2023` pre-filled as today's,
+    and its value, live, made `… 6.1 mm …, compared with 9.6 mm in 2023` a conflict."""
+    study = _study_year(notes)
+    spans, starts = _year_spans(quote)
+    before = last_in(quote, 'quantity', low, here)          # (only the years no other value stands between)
+    after = first_in(quote, 'quantity', here + 1, high)
+    index = bisect.bisect_left(starts, here) - 1
+    near = []
+    if (index >= 0 and starts[index] >= max(low, before[1] if before else low)
+            and YEAR_OPENS.match(quote[low:starts[index]])):
+        near.append(spans[index])    # (before it only where it opens the clause: `In 2023 the …`; not `the left leg was
+        #   done in 2021 the great saphenous vein at the knee measures …`, the treatment's — round 15's R15T control)
+    index = bisect.bisect_left(starts, here + 1)
+    if index < len(spans) and spans[index][1] <= min(high, after[0] if after else high):
+        near.append(spans[index])
+    return any((study is None or year < study) and not _year_elsewhere(quote, start, end, here) for start, end, year in near)
+
+
+#: What may stand before a year that opens a measurement's clause (`In 2023`, `On the prior study of 03/14/2023`, `In March
+#: 2023`): nothing that makes it a predicate's.
+YEAR_OPENS = re.compile(r'\W*(?:(?i:in|on|during|dated|as' + SPACE + r'+of|by)' + SPACE + r'+)?(?:(?i:the|a)' + SPACE + r'+)?'
+                        r'(?:(?i:prior|previous|earlier|last|outside|baseline)' + SPACE + r'+)?'
+                        r'(?:(?i:study|exam|examination|scan|duplex|ultrasound|report)' + SPACE + r'+)?'
+                        r'(?:(?i:of|on|in|dated|from)' + SPACE + r'+)?'
+                        r'(?:(?i:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[^\W\d_]*\.?' + SPACE + r'+)?'
+                        r'(?:[0-9]{1,2}[/.\-])*$')
+
+
+#: What makes a year another thing's than the value's: a comparison it is the object of (`Compared with the prior study of
+#: 03/2025 the great saphenous vein now measures 7.9 mm`, `since 2023`), or a word saying the value is today's between the
+#: two (`… a prior ablation of the left great saphenous vein in 2021 today the right great saphenous vein … measures 7.2
+#: millimeters`). Round 17d: both, in lens 2's batteries, held as dated.
+YEAR_COMPARED = re.compile(r'(?i:compared' + SPACE + r'+(?:with|to)|comparison' + SPACE + r'+(?:with|to)|since|versus|vs\.?|than|'
+                           r'from|relative' + SPACE + r'+to)(?:' + SPACE + r'+[^\W\d_]+){0,5}?' + SPACE + r'+[0-9/.\-]*$')
+CURRENT_WORD = re.compile(r'(?<![^\W\d_])(?i:today|now|currently|presently|at' + SPACE + r'+present|this' + SPACE
+                          + r'+(?:study|exam(?:ination)?|visit|scan))(?![^\W\d_])')
+
+
+def _year_elsewhere(quote, start, end, here):
+    if YEAR_COMPARED.search(quote, max(0, start - 60), start):
+        return True
+    between = (end, here) if start < here else (here, start)
+    return CURRENT_WORD.search(quote, between[0], between[1]) is not None
+
+
+@sized_cache
+def _year_spans(quote):
+    spans = tuple((m.start(), m.end(), int(m.group())) for m in YEAR.finditer(quote))
+    return spans, tuple(start for start, _, _ in spans)
+
+
+@sized_cache
+def _study_year(notes):
+    years = [int(m.group(1)) for m in STUDY_DATE.finditer(notes)]
+    return max(years) if years else None
 
 
 @sized_cache
@@ -5600,6 +5734,12 @@ def _clause_around(quote, at):
     return (before[1] if before else low), (after[0] if after else high)
 
 
+#: How many words a denial reaches through a list of findings (`denies leg pain, heaviness and swelling`), and the denials
+#: that do: a verb's, whose object is the list.
+LIST_DENIAL_WORDS = 8
+DENIAL_VERB = re.compile(r'(?i:denies|denied|denying|negative' + SPACE + r'+for|free' + SPACE + r'+of)')
+
+
 def choice_evidence_reason(field, value, own):
     """Why a choice's cited sentences do not carry it, for the pre-fill (round 17, the weak set's model errors): they
     name nothing clinical at all — no vein, level, side or finding, nor the option's own words (`absent`: `Venous duplex
@@ -5619,7 +5759,20 @@ def choice_evidence_reason(field, value, own):
             total += 1
             low, high = _clause_around(quote, at)
             denial = last_in(quote, 'denial', low, at)
-            if (denial and not NEGATIVE_OPTION.search(value) and count_in(quote, 'letters', denial[1], at) <= 4
+            reach = 4
+            if denial is None:
+                # (a denial before a list reaches each finding in it — `She denies leg pain and swelling.` — where
+                # nothing between is more than list words: no verb, number or `;`. Round 17d: the `and` ended the clause
+                # and `Swelling` pre-filled; `denies leg pain and reports swelling` still stops at the verb)
+                denial = last_in(quote, 'denial', sentence_at(quote, at)[0], at)
+                if denial is not None and (not DENIAL_VERB.fullmatch(quote[denial[0]:denial[1]])
+                                           or count_in(quote, 'letters', denial[1], at) > LIST_DENIAL_WORDS
+                                           or ROW_VERB.search(quote, denial[1], at) or ';' in quote[denial[1]:at]):
+                    denial = None            # (a bare `no`/`without` is not read across the list: `… but no restless legs,
+                    #   and aching leg pain`, `with and without manual augmentation and Valsalva, documenting the deep and
+                    #   superficial venous systems` — the benchmarks' C02, C06, C12 and H11)
+                reach = LIST_DENIAL_WORDS
+            if (denial and not NEGATIVE_OPTION.search(value) and count_in(quote, 'letters', denial[1], at) <= reach
                     and not first_in(quote, 'digit', denial[1], at)):
                 denied += 1
             elif HEDGE.search(quote, low, high):
