@@ -372,6 +372,11 @@ def inner():
     else:
         require(key and not os.environ.get('ANTHROPIC_BASE_URL'), 'Live mode needs the provider key and no redirect.')
     from django.core.management import call_command
+    from django.test.utils import override_settings
+    # Static assets as the test suite serves them (production's hashed manifest needs collectstatic in the checkout);
+    # nothing the campaign measures depends on an asset URL.
+    override_settings(STORAGES={'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+                                'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}}).enable()
     call_command('migrate', interactive=False, verbosity=0)
     ledger = campaign_dir / 'ledger'
     record = campaign_record(campaign_dir, context)
