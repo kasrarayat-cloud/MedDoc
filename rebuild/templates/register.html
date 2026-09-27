@@ -6,7 +6,7 @@
     <a class="brand" href="{% url 'login' %}"><span class="brand-mark" aria-hidden="true">Q</span>QuillMD</a>
     <h1>A workspace for the way you document.</h1>
     <p>Upload a form, add your notes, and review supported answers before you export.</p>
-    <div class="auth-principle"><strong>$10 personal welcome credit</strong><p>Every newly verified user receives one welcome credit, including invited employees. Paid balances and promotional credit stay separate.</p></div>
+    {% if welcome_credit_label %}<div class="auth-principle"><strong>{{ welcome_credit_label }} personal welcome credit</strong><p>Every newly verified user receives one welcome credit, including invited employees. Paid balances and promotional credit stay separate.</p></div>{% endif %}
   </aside>
   <main class="auth-main" id="main"><div class="auth-form">
     <div class="eyebrow">Individual account</div><h2>{% if invitation %}Join {{ invitation.department.name }}{% else %}Create your account{% endif %}</h2>

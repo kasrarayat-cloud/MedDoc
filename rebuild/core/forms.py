@@ -125,3 +125,8 @@ class JobResolutionForm(forms.Form):
         data=super().clean()
         if data.get('outcome')=='absorb_platform_failure' and data.get('actual_cost') is None: raise forms.ValidationError('Absorbing a platform failure requires the evidenced provider cost.')
         return data
+class ClinicInvitationForm(forms.Form):
+    email=forms.EmailField(label='Clinic owner email')
+    organization_name=forms.CharField(max_length=140,label='Clinic (organization) name')
+    department_name=forms.CharField(max_length=120,label='First department name',initial='Main practice')
+    def clean_email(self): return self.cleaned_data['email'].lower().strip()

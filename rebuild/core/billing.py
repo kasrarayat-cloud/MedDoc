@@ -9,12 +9,22 @@ from django.utils import timezone
 from .models import User, Wallet, LedgerEntry, Reservation, Usage, Membership, Organization, Payment, Refund, WebhookEvent, CostReconciliation, PlatformCost
 from .security import audit, membership
 from .stripe_validation import validate_event_environment
+from quillmd.application_profile import dollars
 ZERO=Decimal('0')
 MULTIPLIER=Decimal('1.5')
 
 def stripe_test_key_configured(key):
     """Recognize sandbox server keys; this does not validate provider access."""
     return isinstance(key,str) and re.fullmatch(r'(?:sk|rk)_test_[A-Za-z0-9_]+',key) is not None
+
+def welcome_credit_amount():
+    from django.conf import settings
+    return Decimal(getattr(settings,'QUILLMD_WELCOME_CREDIT',Decimal('10')))
+
+def welcome_credit_label():
+    """'$10' at the default; '' when QUILLMD_WELCOME_CREDIT=0, so no screen promises a grant that is not made."""
+    amount=welcome_credit_amount()
+    return dollars(amount) if amount>0 else ''
 
 def checkout_form(user,data=None):
     from .forms import CheckoutForm
@@ -45,8 +55,12 @@ def welcome_credit(user):
     wallet=Wallet.objects.select_for_update().get(pk=wallet.pk)
     key=f'welcome:{user.pk}'
     if LedgerEntry.objects.filter(key=key).exists(): return wallet
-    wallet.balance+=Decimal('10'); wallet.save(update_fields=['balance'])
-    LedgerEntry.objects.create(wallet=wallet,amount=10,kind='welcome',key=key,description='One $10 personal welcome credit after verification',balance_after=wallet.balance)
+    # QUILLMD_WELCOME_CREDIT (default 10). Zero grants nothing and writes no entry. Entries already
+    # written keep the amount they record; changing the setting never revisits them.
+    amount=welcome_credit_amount()
+    if amount<=0: return wallet
+    wallet.balance+=amount; wallet.save(update_fields=['balance'])
+    LedgerEntry.objects.create(wallet=wallet,amount=amount,kind='welcome',key=key,description=f'One {dollars(amount)} personal welcome credit after verification',balance_after=wallet.balance)
     audit(user,'credit.welcome',wallet.pk)
     return wallet
 

@@ -20,9 +20,12 @@ from . import admin_console
 from .admin_queries import page_for, searched
 from django.utils import timezone
 
-from .models import (AuditEvent, Department, Invitation, Membership, Organization, Usage,
+from django.conf import settings
+
+from .forms import ClinicInvitationForm
+from .models import (AuditEvent, ClinicInvitation, Department, Invitation, Membership, Organization, Usage,
                      User, Wallet)
-from .security import audit
+from .security import audit, rate_limit
 
 
 def gate(request):
@@ -237,6 +240,65 @@ def admin_invitation_revoke(request, pk):
     audit(request.user, 'admin.invitation_revoked', invite.pk, department=invite.department)
     messages.success(request, 'Invitation revoked. The link no longer grants access.')
     return redirect(back_to(request, '/console/organizations/'))
+
+
+# --------------------------------------------------------------------------------------
+# Clinic-owner invitations (QUILLMD_REGISTRATION=invite)
+# --------------------------------------------------------------------------------------
+
+def admin_clinic_invitations(request):
+    """'Invite clinic owner': the only way a NEW organization comes into being in invite mode.
+
+    Creating is available only when QUILLMD_REGISTRATION=invite, the setting that closed self-service
+    registration. Listing and revoking stay available in either mode, so an invitation issued before the
+    setting changed back can still be withdrawn.
+    """
+    gate(request)
+    invite_mode = settings.QUILLMD_REGISTRATION == 'invite'
+    form = ClinicInvitationForm(request.POST or None) if invite_mode else None
+    if request.method == 'POST':
+        if not invite_mode:
+            raise Http404
+        if form.is_valid():
+            if not rate_limit('clinic-invite:' + str(request.user.pk), limit=30):
+                return HttpResponse('Invitation limit reached. Try again later.', status=429)
+            from .clinic_invitations import issue
+            from .email_delivery import deliver_account_email
+            with transaction.atomic():
+                invitation, raw = issue(request.user, form.cleaned_data['email'],
+                                        form.cleaned_data['organization_name'], form.cleaned_data['department_name'])
+            delivery = deliver_account_email(request.user, invitation.pk, invitation.email, 'owner_invitation', raw)
+            if delivery.status == 'outbox':
+                messages.success(request, 'Clinic owner invitation saved in the private development outbox.')
+            elif delivery.status == 'accepted':
+                messages.success(request, 'Clinic owner invitation submitted to the email provider. Inbox delivery is not yet confirmed.')
+            else:
+                messages.warning(request, 'Invitation saved, but email delivery could not be confirmed. Revoke it and send a new one after delivery is repaired.')
+            return redirect('admin_clinic_invitations')
+    navigation = page_for(request, ClinicInvitation.objects.select_related('invited_by', 'organization')
+                          .order_by('-created_at', 'pk'), anchor='clinic-invitations', size=25)
+    now = timezone.now()
+    audit(request.user, 'admin.clinic_invitations_read')
+    return render(request, 'admin_clinic_invitations.html', {
+        'form': form, 'invite_mode': invite_mode, 'navigation': navigation,
+        'rows': [{'invitation': row, 'status': row.status(now)} for row in navigation['page']]})
+
+
+@require_POST
+@transaction.atomic
+def admin_clinic_invitation_revoke(request, pk):
+    gate(request)
+    invitation = get_object_or_404(ClinicInvitation.objects.select_for_update(of=('self',)), pk=pk)
+    if invitation.accepted_at:
+        return HttpResponse('Invitation already accepted. Change the organization\'s memberships to remove access.', status=409)
+    if not invitation.revoked_at:
+        now = timezone.now()
+        invitation.revoked_at = now
+        invitation.expires_at = min(invitation.expires_at, now)
+        invitation.save(update_fields=['revoked_at', 'expires_at'])
+        audit(request.user, 'admin.clinic_invitation_revoked', invitation.pk)
+    messages.success(request, 'Clinic owner invitation revoked. The link no longer grants access.')
+    return redirect(back_to(request, '/console/clinic-invitations/'))
 
 
 # --------------------------------------------------------------------------------------

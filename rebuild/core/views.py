@@ -25,7 +25,7 @@ from .models import *
 from . import field_location
 from .forms import *
 from .security import audit,departments,scoped,membership,digest,token,store_upload,private_path,rate_limit,client_address
-from .billing import welcome_credit,credit_payment,reconcile_refund,reconciliation,stripe_test_key_configured,reconcile_usage,release
+from .billing import welcome_credit,welcome_credit_label,credit_payment,reconcile_refund,reconciliation,stripe_test_key_configured,reconcile_usage,release
 from .context import integration_status
 from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outcome,may_cancel,ended_key,deliverable,RecordingOverLimit,transcription_quote,seconds_text,standard_voice_limit,UPLOAD_NAME,notes_full
 from .billing import available_balance
@@ -155,7 +155,9 @@ def verification_mail(user,raw,verification):
 
 @require_http_methods(['GET','POST'])
 def register(request):
-    if settings.ADMIN_SITE: raise Http404
+    # QUILLMD_REGISTRATION=invite closes self-service sign-up entirely: accounts arrive only through a
+    # department invitation or an administrator's clinic-owner invitation.
+    if settings.ADMIN_SITE or settings.QUILLMD_REGISTRATION!='open': raise Http404
     form=RegisterForm(request.POST or None)
     if request.method=='POST' and form.is_valid():
         if not rate_limit('register:'+client_address(request),limit=5):return HttpResponse('Try again later.',status=429)
@@ -173,18 +175,27 @@ def register(request):
 @require_http_methods(['GET','POST'])
 def verify(request,raw):
     v=get_object_or_404(Verification,token_hash=digest(raw),expires_at__gt=timezone.now(),used_at__isnull=True)
-    if request.method=='GET':return render(request,'confirm.html',{'title':'Verify your test account','description':'Confirm ownership of this email to activate your personal $10 welcome credit.'})
+    if request.method=='GET':
+        label=welcome_credit_label() if settings.QUILLMD_REGISTRATION=='open' else ''
+        return render(request,'confirm.html',{'title':'Verify your test account' if settings.SYNTHETIC_ONLY else 'Verify your account','description':f'Confirm ownership of this email to activate your personal {label} welcome credit.' if label else 'Confirm ownership of this email to activate your account.'})
     with transaction.atomic():
         user=User.objects.select_for_update().get(pk=v.user_id)
         v=Verification.objects.select_for_update().get(pk=v.pk)
         if v.used_at or v.expires_at<=timezone.now() or user.verified_at or not user.is_active: raise Http404
         user.verified_at=timezone.now();user.save(update_fields=['verified_at'])
         v.used_at=timezone.now();v.save(update_fields=['used_at'])
+        if settings.QUILLMD_REGISTRATION!='open':
+            # Invite-only: a verification link can only belong to an account registered before sign-up closed.
+            # It proves the mailbox and nothing more. A personal organization is self-service onboarding, which
+            # this mode closed; the account joins a clinic by invitation, and receives the credit when it does.
+            audit(user,'account.verified',user.pk,workspace_created=False)
+            messages.success(request,'Email verified. Sign in to accept the invitation your clinic sends you.');return redirect('login')
         org=Organization.objects.create(name=f'{user.first_name or "Personal"} workspace')
         dept=Department.objects.create(organization=org,name='Personal practice')
         Membership.objects.create(user=user,department=dept,role='owner')
         welcome_credit(user);audit(user,'account.verified',user.pk)
-    messages.success(request,'Email verified. Your $10 personal welcome credit is available.');return redirect('login')
+    label=welcome_credit_label()
+    messages.success(request,f'Email verified. Your {label} personal welcome credit is available.' if label else 'Email verified.');return redirect('login')
 
 @require_http_methods(['GET','POST'])
 def mfa_setup(request):
@@ -998,7 +1009,7 @@ def invite_accept(request,raw):
                     Membership.objects.get_or_create(user=user,department=invite.department,defaults={'role':invite.role})
                     welcome_credit(user);invite.accepted_at=timezone.now();invite.save(update_fields=['accepted_at'])
                     audit(user,'department.invitation_accepted',invite.pk,department=invite.department)
-                messages.success(request,'Invitation accepted; your personal welcome credit is available.');return redirect('login')
+                messages.success(request,'Invitation accepted; your personal welcome credit is available.' if welcome_credit_label() else 'Invitation accepted.');return redirect('login')
     return render(request,'register.html',{'form':form,'invitation':invite,'existing_invited_account':existing_account})
 
 @require_POST

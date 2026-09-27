@@ -1,11 +1,13 @@
 import os
 from django.conf import settings
 from .models import Membership, CodeSet
-from .billing import stripe_test_key_configured
+from .billing import stripe_test_key_configured,welcome_credit_label
 from .coding import cpt_licensed
 
 def common(request):
-    return {'synthetic_only':settings.SYNTHETIC_ONLY,'is_admin_site':settings.ADMIN_SITE,'admin_surface':settings.ADMIN_SITE,'current_memberships':Membership.objects.filter(user=request.user,active=True).select_related('department__organization') if request.user.is_authenticated else [],'integrations':integration_status()}
+    return {'synthetic_only':settings.SYNTHETIC_ONLY,'is_admin_site':settings.ADMIN_SITE,'admin_surface':settings.ADMIN_SITE,'current_memberships':Membership.objects.filter(user=request.user,active=True).select_related('department__organization') if request.user.is_authenticated else [],'integrations':integration_status(),
+            'registration_open':settings.QUILLMD_REGISTRATION=='open','clinic_invitations_enabled':settings.QUILLMD_REGISTRATION=='invite',
+            'welcome_credit_label':welcome_credit_label()}
 
 def integration_status():
     """What is CONFIGURED. Deliberately not a health report — see the console Services page.

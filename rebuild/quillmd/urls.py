@@ -26,4 +26,11 @@ urlpatterns += [
     path('console/invitations/<uuid:pk>/revoke/', a.admin_invitation_revoke, name='admin_invitation_revoke'),
     path('console/services/', a.admin_services, name='admin_services'),
     path('console/usage.csv', a.admin_usage_export, name='admin_usage_export'),
+    path('console/clinic-invitations/', a.admin_clinic_invitations, name='admin_clinic_invitations'),
+    path('console/clinic-invitations/<uuid:pk>/revoke/', a.admin_clinic_invitation_revoke, name='admin_clinic_invitation_revoke'),
 ]
+
+# Clinic-owner invitation acceptance (QUILLMD_REGISTRATION=invite). Public through the '/invite/' prefix, like
+# department invitations; the str converter cannot match '/', so it never shadows 'invite/<raw>/'.
+from core import clinic_invitations
+urlpatterns += [path('invite/clinic/<str:raw>/', clinic_invitations.accept, name='clinic_invite_accept')]
