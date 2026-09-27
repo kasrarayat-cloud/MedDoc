@@ -1,0 +1,97 @@
+{
+  "generation_sha256": "b5db05756ee413bcccee6686b1dd7e8e2bbf10d422b245f1b4f986d314a118ea",
+  "cases": [
+    {
+      "id": "C01-stitches-in-chart",
+      "expected": "supported",
+      "status": "conflict",
+      "text": "",
+      "forced_refusals": [
+        "Allergies"
+      ]
+    },
+    {
+      "id": "C02-record-physical-in-chart",
+      "expected": "supported",
+      "status": "conflict",
+      "text": "",
+      "forced_refusals": [
+        "Allergies"
+      ]
+    },
+    {
+      "id": "C03-strikes-entry",
+      "expected": "conflict",
+      "status": "supported",
+      "text": "No known drug allergies.",
+      "forced_refusals": []
+    },
+    {
+      "id": "C04-invalidates-entry",
+      "expected": "conflict",
+      "status": "supported",
+      "text": "No known drug allergies.",
+      "forced_refusals": []
+    },
+    {
+      "id": "C05-amendments-entry",
+      "expected": "conflict",
+      "status": "supported",
+      "text": "No known drug allergies.",
+      "forced_refusals": []
+    },
+    {
+      "id": "C06-struck-entry",
+      "expected": "conflict",
+      "status": "supported",
+      "text": "No known drug allergies.",
+      "forced_refusals": []
+    },
+    {
+      "id": "C07-withdrew-across-paragraph",
+      "expected": "conflict",
+      "status": "supported",
+      "text": "No known drug allergies.",
+      "forced_refusals": []
+    },
+    {
+      "id": "C08-withdrew-same-paragraph-control",
+      "expected": "conflict",
+      "status": "conflict",
+      "text": "",
+      "forced_refusals": [
+        "Allergies"
+      ]
+    },
+    {
+      "id": "C09-corrections-entry",
+      "expected": "conflict",
+      "status": "supported",
+      "text": "No known drug allergies.",
+      "forced_refusals": []
+    },
+    {
+      "id": "C10-invalidations-entry",
+      "expected": "conflict",
+      "status": "supported",
+      "text": "No known drug allergies.",
+      "forced_refusals": []
+    },
+    {
+      "id": "C11-literal-removal-control",
+      "expected": "conflict",
+      "status": "conflict",
+      "text": "",
+      "forced_refusals": [
+        "Allergies"
+      ]
+    },
+    {
+      "id": "C12-physical-document-control",
+      "expected": "supported",
+      "status": "supported",
+      "text": "No known drug allergies.",
+      "forced_refusals": []
+    }
+  ]
+}

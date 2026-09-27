@@ -1,0 +1,22 @@
+..F
+======================================================================
+FAIL: test_record_retractions_govern_generation_and_old_supported_values (core.tests.test_v3_record_retraction.RecordRetraction.test_record_retractions_govern_generation_and_old_supported_values) (label='Allergies', tail='penicillin avoidance for documented anaphylaxis.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_record_retraction.py", line 26, in test_record_retractions_govern_generation_and_old_supported_values
+    self.assertEqual((answer['status'],answer['text']),('conflict',''))
+AssertionError: Tuples differ: ('supported', 'No known drug allergies.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'No known drug allergies.')
++ ('conflict', '')
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.278s
+
+FAILED (failures=1)
+Found 3 test(s).
+System check identified no issues (0 silenced).

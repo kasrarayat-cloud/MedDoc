@@ -1,0 +1,65 @@
+{
+  "generation_sha256": "923439aed9bde6eba34a26bf551b2d583a247a6bec7ba00e8679b2632d6c6f41",
+  "cases": [
+    {
+      "notes": "No known drug allergies.\nPlan: removal of erroneous NKA entry.",
+      "answers": {
+        "Allergies": {
+          "text": "No known drug allergies.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "removal of erroneous NKA entry.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: removal of erroneous NKA entry.",
+              "start": 25,
+              "end": 62
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "forced_refusals": []
+    },
+    {
+      "notes": "Neurological examination is normal.\nPlan: deletion of erroneous normal neurological entry.",
+      "answers": {
+        "Examination": {
+          "text": "Neurological examination is normal.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Neurological examination is normal.",
+              "start": 0,
+              "end": 35
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "deletion of erroneous normal neurological entry.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: deletion of erroneous normal neurological entry.",
+              "start": 36,
+              "end": 90
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "forced_refusals": []
+    }
+  ]
+}

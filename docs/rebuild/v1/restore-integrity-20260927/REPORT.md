@@ -1,6 +1,6 @@
 # Production restore integrity checker — 2026-09-27
 
-Prepared repair; independent review pending. The former checker accepted nine invented, enabled
+Prepared repair; independent review completed (source `a300f7f8`). The former checker accepted nine invented, enabled
 trigger names as a valid restore. Root reproduced the false green before changing the checker.
 Its own positive fixture had represented integrity by a count alone.
 
@@ -29,3 +29,11 @@ backup drill remains its original count-only instrument and is not reclassified 
 Current target restores must use the artifact's own checker/contract; legacy revision's nine
 triggers cannot certify this candidate. Production target, backup pairing, actual recovery and
 independent custody are still unverified.
+
+## Independent closure
+
+The separate reviewer derived the17-trigger/10-function contract from migration SQL and ran38
+probes: four positive controls and34 concrete rejects. No demonstrated counterexample remained.
+AST comparison confirmed the non-trigger restore checks were unchanged. This review used no
+production database and does not replace the separate root fresh-PostgreSQL proof or target drill.
+See `restore-integrity-independent-refutation-a300f7f8-20260927.md`.
