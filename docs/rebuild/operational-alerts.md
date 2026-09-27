@@ -36,6 +36,14 @@ healthy and unhealthy cannot send more than once a day. Inside an open incident:
 - a still-open incident is re-announced 24 hours after its last notice (subject
   `REMINDER`), naming how long it has been open and its current condition.
 
+When an incident has ended and a new one opens inside the 24-hour interval, its
+first notice is still sent (subject `ESCALATION`) if it is more severe than every
+notice of the last 24 hours; otherwise the interval holds. A notice the state
+records but the sidecar does not describe counts as a failure for this purpose,
+so it can only hold the interval. Flapping at the same or a lower severity
+therefore sends nothing extra, and healthy/failure flapping after a warning sends
+at most one extra notice a day.
+
 A healthy check ends the incident. The pending record is
 written before a provider request; a timeout or interruption is uncertain and
 must not be retried automatically, even after provider idempotency expires. An
@@ -103,13 +111,16 @@ bash scripts/run-ruled-mutation.sh \
 
 Rollback disables only the alert timer and stops only its service; both are
 checked inactive. All units, configuration and receipts remain for diagnosis.
-The monitor state `.runtime/backup-alerts/status.json` is format 2 since the
-escalation change: format 2 keeps every format-1 key and adds the incident's
-opening time, notice count, last notice kind and condition, and the conditions it
-has announced. The current monitor upgrades a format-1 file in place on its first
-check. A release older than that change refuses format 2 as invalid
-(`monitoring_state_unavailable`, no email) until the file holds format 1's six
-keys again; reverting the source alone is therefore not a working rollback.
+The monitor state `.runtime/backup-alerts/status.json` stays format 1 with
+exactly its six keys; `incident_attempt` names the incident's latest notice. The
+escalation change keeps its extension (when the incident opened, the last
+notice's kind and condition, the notice count, the conditions announced, and
+when each severity was last announced) in a sidecar,
+`.runtime/backup-alerts/incident-notices.json` (0600, atomic writes, created on
+first need, refused if malformed). A release without the sidecar never opens it,
+so reverting `backup_alerts.py` is a complete rollback: no state repair. The
+current monitor adopts whatever an earlier release leaves behind, reading what an
+unrecorded first notice announced from that notice's own receipt.
 An in-flight send stopped during rollback remains uncertain. If source has moved
 since installation, the exact-source gate requires a new reviewed scope; do not
 bypass it or apply an old declaration to different source.

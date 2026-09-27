@@ -374,7 +374,14 @@ class IncidentNotificationTests(unittest.TestCase):
     setUp = BackupAlertsTests.setUp
 
     def state(self):
-        return json.loads((self.alerts / 'status.json').read_text())
+        """The merged view this release works from, after asserting that status.json is still
+        exactly what the previous release reads: format 1, its six keys, nothing else."""
+        raw = json.loads((self.alerts / 'status.json').read_text())
+        self.assertEqual((set(raw), raw['format']), (set(a.STATUS_KEYS), 1))
+        return a.read_state()
+
+    def ledger(self):
+        return json.loads((self.alerts / a.NOTICES_FILE).read_text())
 
     def sent(self):
         return [call.args[1:] for call in self.sender.call_args_list]
@@ -654,11 +661,11 @@ class IncidentNotificationTests(unittest.TestCase):
         status_before = (self.alerts / 'status.json').read_bytes()
         self.assertEqual(a.status(later - timedelta(minutes=1))[0]['condition'], 'monitoring_stale')
         self.assertEqual((self.alerts / 'status.json').read_bytes(), status_before, 'status stays read-only')
+        self.assertFalse((self.alerts / a.NOTICES_FILE).exists(), 'the previous release keeps no ledger')
         result, code = a.check(later)
-        state = self.state()
+        state = self.state()                                   # asserts status.json stayed six keys
         self.assertEqual((code, self.sender.call_count), (1, 1))
-        self.assertEqual(state['format'], 2)
-        self.assertEqual(set(state) - a.LEGACY_KEYS, set(a.closed_incident()) - a.LEGACY_KEYS)
+        self.assertEqual(self.ledger()['incident']['incident_attempt'], state['incident_attempt'])
         self.assertEqual((state['incident_id'], state['incident_opened_at'], state['incident_attempt_count'],
                           state['incident_conditions_announced']),
                          (identity, self.at.isoformat(), 2, ['offsite_policy_renewal_due', 'offsite_policy_expired']))
@@ -676,7 +683,7 @@ class IncidentNotificationTests(unittest.TestCase):
         self.sender.assert_called_once()
 
     def test_inconsistent_previous_release_state_fails_closed_without_email(self):
-        # Each has a readable receipt, so only the format-2 invariants can refuse it.
+        # Each has a readable receipt, so only the incident invariants can refuse it.
         for changes in ({'incident_attempt': 'd' * 32},
                         {'incident_attempt': None, 'last_attempt_at': None, 'last_check_at': None}):
             with self.subTest(changes=changes):
@@ -688,11 +695,20 @@ class IncidentNotificationTests(unittest.TestCase):
         self.sender.assert_not_called()
 
     def test_invalid_incident_records_fail_closed_without_email_or_disclosure(self):
+        """Each case tampers ONE file and leaves the other exactly as written, so a refusal can only
+        come from the check that case is aimed at (status.json alone would refuse everything)."""
         self.health.return_value = 'backup_failed'
         a.check(self.at)
         self.health.return_value = 'backup_stale'
         a.check(self.at + timedelta(hours=2))
-        original = self.state()
+        status = json.loads((self.alerts / 'status.json').read_text())
+        ledger = self.ledger()
+        self.assertEqual(a.read_state()['incident_attempt_notice'], 'escalation', 'the untampered pair is valid')
+        cases = [('status', {'incident_opened_at': status['last_check_at']}),     # the format-2 shape
+                 ('status', {'format': 2}), ('status', {'incident_id': None}),
+                 ('ledger', {'format': 2}), ('ledger', {'unexpected': 'private-canary'}),
+                 ('ledger', {'announced_at': {'warning': None}}),
+                 ('ledger', {'announced_at': {'warning': 'private-canary', 'failure': None}})]
         for changes in ({'incident_conditions_announced': ['private-clinical-canary', 'backup_stale']},
                         {'incident_conditions_announced': ['backup_stale', 'backup_stale']},
                         {'incident_conditions_announced': ['healthy', 'backup_stale']},
@@ -703,9 +719,15 @@ class IncidentNotificationTests(unittest.TestCase):
                         {'incident_attempt_notice': 'initial'},
                         {'incident_attempt': None, 'incident_attempt_count': 0, 'incident_conditions_announced': [],
                          'incident_attempt_condition': None},
-                        {'format': 1}, {'unexpected': 'private-canary'}):
-            with self.subTest(changes=changes):
-                (self.alerts / 'status.json').write_text(json.dumps(dict(original, **changes)))
+                        {'unexpected': 'private-canary'}):
+            cases.append(('record', changes))
+        for where, changes in cases:
+            with self.subTest(where=where, changes=changes):
+                (self.alerts / 'status.json').write_text(json.dumps(
+                    dict(status, **changes) if where == 'status' else status))
+                (self.alerts / a.NOTICES_FILE).write_text(json.dumps(
+                    dict(ledger, incident=dict(ledger['incident'], **changes)) if where == 'record'
+                    else dict(ledger, **changes) if where == 'ledger' else ledger))
                 result, code = a.check(self.at + timedelta(days=2))
                 self.assertEqual((code, result['condition']), (1, 'monitoring_state_unavailable'))
                 self.assertNotIn('canary', json.dumps(result))
@@ -751,7 +773,9 @@ class IncidentNotificationTests(unittest.TestCase):
                                                 'delivery_confirmed', 'inbox_receipt_confirmed'})
         self.assertIs(result['clinical_content_included'], False)
         self.assertEqual(result['incident']['conditions_announced'], ['backup_failed', 'backup_stale'])
-        self.assertLessEqual(a.LEGACY_KEYS, set(self.state()))
+        raw = json.loads((self.alerts / 'status.json').read_text())
+        self.assertEqual(tuple(sorted(raw)), tuple(sorted(a.STATUS_KEYS)))
+        self.assertEqual(raw['format'], 1)
 
 
 #: ⚠️ THE PREVIOUS RELEASE IS PINNED BY COMMIT AND CONTENT, NOT READ FROM `release/v1`. That ref
@@ -780,6 +804,8 @@ class PreviousReleaseCompatibilityTests(unittest.TestCase):
 
     def setUp(self):
         self.setUp_alerts()
+        # The previous release still inserts into sys.path on every check; never let it accumulate.
+        self.addCleanup(sys.path.__setitem__, slice(None), list(sys.path))
         source = previous_release_source()
         if source is None:
             if os.environ.get('CI') == 'true':
@@ -884,11 +910,241 @@ class CrossIncidentSeverityTests(unittest.TestCase):
         self.assertEqual((code, self.sender.call_count), (1, 2),
                          'a failure opening two hours after a warning notice was held by the cooldown')
         self.assertTrue(result['alert']['provider_accepted'])
+        subject, body = self.sender.call_args.args[1:]
+        self.assertEqual(subject, '[QuillMD operations] ESCALATION: a more severe backup incident opened')
+        for text in ('Condition: backup_failed', 'more severe (failure)', '(highest: warning)',
+                     'inside the 24-hour interval between incidents'):
+            self.assertIn(text, body)
+        self.assertEqual(json.loads((self.alerts / 'status.json').read_text())['incident_attempt'],
+                         json.loads((self.alerts / 'status.json').read_text())['incident_id'])
         # Healthy <-> failure flapping for the rest of the day: nothing more.
         for step in range(1, 264):
             self.health.return_value = 'healthy' if step % 2 else 'backup_failed'
             a.check(self.at + timedelta(hours=2, minutes=5 * step))
         self.assertEqual(self.sender.call_count, 2)
+
+    def test_same_or_lower_severity_flapping_after_a_notice_sends_nothing_extra(self):
+        for first, flap in (('offsite_capacity_low', 'offsite_capacity_low'),       # warning, warning
+                            ('backup_failed', 'offsite_capacity_low'),              # failure, then a warning
+                            ('backup_failed', 'backup_stale')):                     # failure, failure
+            with self.subTest(first=first, flap=flap):
+                self.sender.reset_mock()
+                for path in self.alerts.iterdir():
+                    path.unlink()
+                for step in range(288):                                              # one day, every 5 min
+                    condition = (first if step == 0 else flap) if step % 2 == 0 else 'healthy'
+                    local = condition if condition.startswith('backup') else 'healthy'
+                    self.health.return_value = local
+                    self.recovery.return_value['condition'] = 'healthy' if local != 'healthy' else condition
+                    a.check(self.at + timedelta(minutes=5 * step))
+                self.assertEqual(self.sender.call_count, 1)
+
+    def test_warning_then_healthy_failure_flapping_is_at_most_one_extra_notice_a_day(self):
+        self.recovery.return_value['condition'] = 'offsite_capacity_low'
+        a.check(self.at)
+        self.recovery.return_value['condition'] = 'healthy'
+        for step in range(1, 288):
+            self.health.return_value = 'backup_failed' if step % 2 else 'healthy'
+            a.check(self.at + timedelta(minutes=5 * step))
+        self.assertEqual(self.sender.call_count, 2)            # the warning, and ONE lifted failure
+        self.health.return_value = 'backup_failed'
+        a.check(self.at + timedelta(minutes=5 * 289))          # a day after the lifted failure, not before
+        self.assertEqual(self.sender.call_count, 3)
+
+    def test_a_held_incident_that_rises_above_the_recent_notices_is_announced_when_it_rises(self):
+        self.recovery.return_value['condition'] = 'offsite_capacity_low'
+        a.check(self.at)
+        self.recovery.return_value['condition'] = 'healthy'
+        a.check(self.at + timedelta(hours=1))
+        self.recovery.return_value['condition'] = 'offsite_next_run_budget_low'      # another warning: held
+        result, _ = a.check(self.at + timedelta(hours=2))
+        self.assertEqual(result['alert']['outcome'], 'cooldown_suppressed')
+        self.health.return_value = 'backup_failed'                                   # the SAME incident rises
+        a.check(self.at + timedelta(hours=3))
+        self.assertEqual(self.sender.call_count, 2)
+        self.assertIn('Condition: backup_failed', self.sender.call_args.args[2])
+
+    def test_the_window_is_the_last_24_hours_not_the_incident_history(self):
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)                                                             # failure notice at t
+        self.health.return_value = 'healthy'
+        self.recovery.return_value['condition'] = 'offsite_capacity_low'
+        a.check(self.at + timedelta(hours=23))                                       # warning notice at t+23h
+        self.assertEqual(self.sender.call_count, 2)
+        self.recovery.return_value['condition'] = 'healthy'
+        a.check(self.at + timedelta(hours=23, minutes=30))
+        self.health.return_value = 'backup_stale'
+        a.check(self.at + timedelta(hours=25))       # the t failure is 25 h old: only the warning is recent
+        self.assertEqual(self.sender.call_count, 3)
+        self.assertIn('(highest: warning)', self.sender.call_args.args[2])
+
+    def test_an_unknown_recent_notice_holds_the_cooldown(self):
+        """The previous release sent something an hour ago and kept no ledger: it may have been a
+        failure, so a failure now is held exactly as today."""
+        a.backup.write_private(self.alerts / 'status.json', json.dumps({
+            'format': 1, 'last_check_at': self.at.isoformat(), 'condition': 'healthy', 'incident_id': None,
+            'incident_attempt': None, 'last_attempt_at': (self.at - timedelta(hours=1)).isoformat()}).encode())
+        self.health.return_value = 'backup_failed'
+        result, _ = a.check(self.at + timedelta(minutes=5))
+        self.assertEqual(result['alert']['outcome'], 'cooldown_suppressed')
+        self.sender.assert_not_called()
+
+    def test_the_previous_releases_own_recent_notice_is_known_by_its_receipt(self):
+        """...but a notice whose receipt the previous release left behind is known, and a warning
+        it announced an hour ago does not hold a failure."""
+        IncidentNotificationTests.legacy(self)                    # warning incident, notice at t, no ledger
+        self.recovery.return_value['condition'] = 'healthy'
+        a.check(self.at + timedelta(hours=1))                     # closes; the notice is read from its receipt
+        self.health.return_value = 'backup_failed'
+        a.check(self.at + timedelta(hours=2))
+        self.assertEqual(self.sender.call_count, 1)
+        self.assertIn('(highest: warning)', self.sender.call_args.args[2])
+
+
+class TransportImportPathTests(unittest.TestCase):
+    """⚠️ configured_transport() inserted rebuild/ into sys.path on EVERY call, unconditionally.
+
+    Harmless under the unit (each tick is a fresh process), but a long-lived process accumulates
+    one entry per check: one run of this module took sys.path from 5 entries to 2,271 (6
+    distinct). A multiprocessing `spawn` child inherits that path, so the offsite-audit watchdog
+    tests that run later in the same process timed out before their worker started (2 failures,
+    only after this module, never alone).
+    """
+    setUp = BackupAlertsTests.setUp
+
+    def test_repeated_checks_do_not_grow_the_import_path(self):
+        self.addCleanup(sys.path.__setitem__, slice(None), list(sys.path))
+        a.check(self.at)
+        before = list(sys.path)
+        for minutes in range(5, 255, 5):
+            a.check(self.at + timedelta(minutes=minutes))
+        self.assertEqual(sys.path, before)
+
+
+class IncidentLedgerTests(unittest.TestCase):
+    """The sidecar ledger: created on first need, private, and consistent across a crash."""
+    setUp = BackupAlertsTests.setUp
+    state = IncidentNotificationTests.state
+    ledger = IncidentNotificationTests.ledger
+
+    def crash_on_second_write(self):
+        real, calls = a.scheduled.atomic_status, []
+
+        def write(path, value):
+            calls.append(path.name)
+            if len(calls) == 2:
+                raise KeyboardInterrupt
+            return real(path, value)
+        return patch.object(a.scheduled, 'atomic_status', side_effect=write), calls
+
+    def test_created_on_first_need_only(self):
+        for minutes in range(0, 60, 5):
+            a.check(self.at + timedelta(minutes=minutes))
+        self.assertFalse((self.alerts / a.NOTICES_FILE).exists(), 'a monitor that announced nothing keeps no ledger')
+        self.health.return_value = 'backup_failed'
+        a.check(self.at + timedelta(hours=1))
+        self.assertEqual(self.ledger()['incident']['incident_id'], self.state()['incident_id'])
+        self.assertEqual((self.alerts / a.NOTICES_FILE).stat().st_mode & 0o777, 0o600)
+        self.health.return_value = 'healthy'
+        a.check(self.at + timedelta(hours=2))
+        self.assertIsNone(self.ledger()['incident'])
+        self.assertEqual(self.ledger()['announced_at']['failure'], (self.at + timedelta(hours=1)).isoformat())
+
+    def test_unsafe_or_malformed_ledger_fails_closed_without_email(self):
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        path = self.alerts / a.NOTICES_FILE
+        preserved = self.root / 'preserved-ledger'
+        path.rename(preserved)
+        path.symlink_to(preserved)
+        self.assertEqual(a.check(self.at + timedelta(days=2))[0]['condition'], 'monitoring_state_unavailable')
+        path.unlink()
+        a.backup.write_private(path, b'private-clinical-canary')
+        result, _ = a.check(self.at + timedelta(days=2))
+        self.assertEqual(result['condition'], 'monitoring_state_unavailable')
+        self.assertNotIn('canary', json.dumps(result))
+        self.sender.assert_called_once()
+
+    def test_lost_status_with_the_ledger_still_present_refuses(self):
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        for path in self.alerts.glob('incident-*-*.json'):
+            path.unlink()
+        (self.alerts / 'status.json').unlink()
+        self.assertTrue((self.alerts / a.NOTICES_FILE).exists())
+        self.assertEqual(a.check(self.at + timedelta(days=2))[0]['condition'], 'monitoring_state_unavailable')
+        self.sender.assert_called_once()
+
+    def test_crash_between_the_two_writes_of_a_notice_after_a_first_notice_recovers(self):
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        first = self.state()['incident_attempt']
+        self.health.return_value = 'backup_stale'
+        crash, calls = self.crash_on_second_write()
+        with crash, self.assertRaises(KeyboardInterrupt):
+            a.check(self.at + timedelta(hours=2))
+        self.assertEqual(calls, [a.NOTICES_FILE, 'status.json'], 'the ledger leads while an incident is open')
+        phantom = self.ledger()['incident']['incident_attempt']
+        self.assertEqual(json.loads((self.alerts / 'status.json').read_text())['incident_attempt'], first)
+        self.assertFalse(list(self.alerts.glob(f'incident-{phantom}-*')), 'no request began for it')
+        result, code = a.check(self.at + timedelta(hours=3))
+        self.assertEqual((code, result['condition'], self.sender.call_count), (1, 'backup_stale', 2))
+        self.assertNotEqual(self.state()['incident_attempt'], phantom)
+        self.assertEqual(self.state()['incident_conditions_announced'], ['backup_failed', 'backup_stale'])
+
+    def test_crash_between_the_two_writes_of_a_later_notice_fails_closed_without_email(self):
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        self.health.return_value = 'backup_stale'
+        a.check(self.at + timedelta(hours=2))
+        self.health.return_value = 'backup_timeout'
+        crash, _ = self.crash_on_second_write()
+        with crash, self.assertRaises(KeyboardInterrupt):
+            a.check(self.at + timedelta(hours=4))
+        for hours in (5, 30):
+            self.assertEqual(a.check(self.at + timedelta(hours=hours))[0]['condition'],
+                             'monitoring_state_unavailable')
+        self.assertEqual(self.sender.call_count, 2)
+
+    def test_crash_between_the_two_writes_of_a_close_leaves_a_working_monitor(self):
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        self.health.return_value = 'backup_stale'
+        a.check(self.at + timedelta(hours=2))                 # a later notice: the hard case to close
+        self.health.return_value = 'healthy'
+        crash, calls = self.crash_on_second_write()
+        with crash, self.assertRaises(KeyboardInterrupt):
+            a.check(self.at + timedelta(hours=3))
+        self.assertEqual(calls, ['status.json', a.NOTICES_FILE], 'status.json leads once the incident is closed')
+        self.assertEqual(a.check(self.at + timedelta(hours=4))[0]['condition'], 'healthy')
+        self.health.return_value = 'backup_timeout'
+        result, _ = a.check(self.at + timedelta(hours=30))
+        self.assertEqual((result['condition'], self.sender.call_count), ('backup_timeout', 3))
+
+    def test_an_incident_this_release_opened_keeps_its_opening_when_the_previous_release_notifies(self):
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        self.health.return_value = 'healthy'
+        a.check(self.at + timedelta(hours=1))
+        self.health.return_value = 'backup_stale'
+        a.check(self.at + timedelta(hours=2))                 # opened, held by the cooldown
+        held = self.state()['incident_id']
+        # The previous release's check, as after a rollback: its first notice for the same incident.
+        status = json.loads((self.alerts / 'status.json').read_text())
+        receipt = {'format': 1, 'kind': 'operational', 'condition': 'backup_stale',
+                   'attempted_at': (self.at + timedelta(hours=25)).isoformat(), 'outcome': 'provider_accepted',
+                   'provider_message_id': 'previous-release-id', 'provider_accepted': True,
+                   'delivery_confirmed': False, 'inbox_receipt_confirmed': False}
+        a.backup.write_private(self.alerts / f'incident-{held}-result.json', json.dumps(receipt).encode())
+        (self.alerts / 'status.json').write_text(json.dumps(dict(
+            status, incident_attempt=held, last_attempt_at=receipt['attempted_at'])))
+        result, _ = a.check(self.at + timedelta(hours=25, minutes=5))
+        state = self.state()
+        self.assertEqual((state['incident_opened_at'], state['incident_attempt_count'], self.sender.call_count),
+                         ((self.at + timedelta(hours=2)).isoformat(), 1, 1))
+        self.assertEqual(result['alert']['provider_message_id'], 'previous-release-id')
+
+
 
 
 class RecoveryStageTests(unittest.TestCase):

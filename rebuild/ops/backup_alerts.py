@@ -766,59 +766,33 @@ def closed_incident():
             'incident_attempt_count': 0, 'incident_conditions_announced': []}
 
 
+#: ⚠️ status.json IS FORMAT 1, EXACTLY THESE SIX KEYS, FOREVER. Every release reads it, including
+#: the one a rollback restores, and that one refuses any other key set. `incident_attempt` names
+#: the incident's LATEST notice; its first notice keeps the incident's own identity, exactly as the
+#: previous release names it, and a previous release replays whichever receipt it names.
+STATUS_KEYS = ('format', 'last_check_at', 'condition', 'incident_id', 'incident_attempt', 'last_attempt_at')
+#: The extension lives in a sidecar the previous release never opens. Named `incident-*` so every
+#: release's lost-state guard (status.json missing while incident evidence remains) covers it.
+NOTICES_FILE = 'incident-notices.json'
+RECORD_KEYS = tuple(closed_incident())
+
+
+def no_announcements():
+    return {level: None for level in SEVERITY_RANK}
+
+
 def initial_state():
-    # Format 2 EXTENDS format 1: every format-1 key keeps its name and meaning, with
-    # `incident_attempt` now naming the incident's LATEST notice (its first notice keeps the
-    # incident's own identity, exactly as format 1 wrote it).
-    return {'format': 2, 'last_check_at': None, 'condition': 'monitoring_stale',
-            'incident_id': None, 'last_attempt_at': None, **closed_incident()}
+    return {'format': 1, 'last_check_at': None, 'condition': 'monitoring_stale', 'last_attempt_at': None,
+            **closed_incident(), 'announced_at': no_announcements()}
 
 
-LEGACY_KEYS = frozenset({'format', 'last_check_at', 'condition', 'incident_id',
-                         'incident_attempt', 'last_attempt_at'})
-
-
-def upgrade_legacy_state(value):
-    """Read the six-key state the previous release wrote, without inventing anything.
-
-    Its one attempt becomes this incident's first notice, and WHAT that attempt announced is
-    read from the attempt's own durable record rather than assumed. An unreadable record fails
-    closed here exactly as its replay would have. The result is then held to every format-2
-    invariant by the caller, so a legacy attempt not named by its incident, or an incident
-    without a check time, fails closed there rather than by a second, drifting copy here.
-    """
-    state = dict(initial_state(), **{key: value[key] for key in LEGACY_KEYS - {'format'}})
-    if value['incident_attempt']:
-        record = attempt_record('incident-' + value['incident_attempt'])
-        state.update(incident_opened_at=record['attempted_at'],
-                     incident_attempt_condition=record['condition'], incident_attempt_notice='initial',
-                     incident_attempt_count=1, incident_conditions_announced=[record['condition']])
-    elif value['incident_id']:
-        # Opened no later than the last check that persisted it; durations are stated as "at least".
-        state['incident_opened_at'] = value['last_check_at']
-    return state
-
-
-def read_state():
-    path = DIRECTORY / 'status.json'
-    if not path.exists() and not path.is_symlink():
-        # Partial recovery may lose mutable state while retaining a durable
-        # request record. Do not invent a fresh incident and send again.
-        backup.require(not any(DIRECTORY.glob('incident-*')), 'Incident state is missing.')
-        return initial_state()
-    value = json.loads(backup.read_private(path, 65536))
-    backup.require(type(value) is dict and type(value.get('format')) is int, 'Invalid monitor state.')
-    legacy = set(value) == LEGACY_KEYS and value['format'] == 1
-    backup.require((legacy or (set(value) == set(initial_state()) and value['format'] == 2))
-                   and value['condition'] in ERRORS, 'Invalid monitor state.')
-    for key in ('last_check_at', 'last_attempt_at', 'incident_opened_at'):
-        if value.get(key) is not None:
-            timestamp(value[key])
+def validate_incident(value):
+    """The incident invariants, over a ledger record or the state it is merged into."""
     for key in ('incident_id', 'incident_attempt'):
         backup.require(value[key] is None or isinstance(value[key], str)
                        and re.fullmatch(r'[a-f0-9]{32}', value[key]), 'Invalid incident identity.')
-    if legacy:
-        value = upgrade_legacy_state(value)
+    if value['incident_opened_at'] is not None:
+        timestamp(value['incident_opened_at'])
     announced, count = value['incident_conditions_announced'], value['incident_attempt_count']
     backup.require(type(announced) is list and len(set(announced)) == len(announced)
                    and all(isinstance(item, str) and item in ANNOUNCEABLE for item in announced)
@@ -833,13 +807,106 @@ def read_state():
                        'Invalid incident record.')
     else:
         backup.require(value['incident_id'] is not None and value['incident_opened_at'] is not None
-                       and value['last_attempt_at'] is not None and count >= 1
-                       and value['incident_attempt_condition'] is not None
+                       and count >= 1 and value['incident_attempt_condition'] is not None
                        and (value['incident_attempt_notice'] == 'initial') == (count == 1)
                        and (value['incident_attempt_notice'] != 'initial'
                             or value['incident_attempt'] == value['incident_id']),
                        'Invalid incident record.')
+
+
+def read_notices():
+    """The sidecar ledger, or None where no release that keeps one has written it yet."""
+    path = DIRECTORY / NOTICES_FILE
+    if not path.exists() and not path.is_symlink():
+        return None
+    value = json.loads(backup.read_private(path, 65536))
+    backup.require(type(value) is dict and set(value) == {'format', 'incident', 'announced_at'}
+                   and type(value['format']) is int and value['format'] == 1
+                   and type(value['announced_at']) is dict and set(value['announced_at']) == set(SEVERITY_RANK)
+                   and (value['incident'] is None
+                        or type(value['incident']) is dict and set(value['incident']) == set(RECORD_KEYS)),
+                   'Invalid incident notices.')
+    for when in value['announced_at'].values():
+        if when is not None:
+            timestamp(when)
+    if value['incident'] is not None:
+        validate_incident(value['incident'])
     return value
+
+
+def read_state():
+    path = DIRECTORY / 'status.json'
+    if not path.exists() and not path.is_symlink():
+        # Partial recovery may lose mutable state while retaining a durable
+        # request record. Do not invent a fresh incident and send again.
+        backup.require(not any(DIRECTORY.glob('incident-*')), 'Incident state is missing.')
+        return initial_state()
+    value = json.loads(backup.read_private(path, 65536))
+    backup.require(type(value) is dict and set(value) == set(STATUS_KEYS)
+                   and type(value['format']) is int and value['format'] == 1
+                   and value['condition'] in ERRORS
+                   and (value['incident_id'] is not None or value['incident_attempt'] is None),
+                   'Invalid monitor state.')
+    for key in ('last_check_at', 'last_attempt_at'):
+        if value[key] is not None:
+            timestamp(value[key])
+    for key in ('incident_id', 'incident_attempt'):
+        backup.require(value[key] is None or isinstance(value[key], str)
+                       and re.fullmatch(r'[a-f0-9]{32}', value[key]), 'Invalid incident identity.')
+    notices = read_notices() or {'incident': None, 'announced_at': no_announcements()}
+    state = dict(value, **closed_incident(), announced_at=dict(notices['announced_at']))
+    record = notices['incident']
+    if value['incident_id'] is None:
+        pass    # A closed incident: any older record describes an incident that is over.
+    elif record and (record['incident_id'], record['incident_attempt']) == (value['incident_id'],
+                                                                            value['incident_attempt']):
+        state.update(record)
+    else:
+        # status.json names an incident the ledger does not describe: the previous release opened
+        # it or made its first notice, or a crash fell between the two writes of one check. Either
+        # way it can only be that shape: at most a first notice, named by the incident itself
+        # (anything else fails the invariants below). What that notice announced is read from its
+        # own durable record rather than assumed.
+        same = record is not None and record['incident_id'] == value['incident_id']
+        state.update(incident_id=value['incident_id'],
+                     incident_opened_at=record['incident_opened_at'] if same else value['last_check_at'])
+        if value['incident_attempt']:
+            first = attempt_record('incident-' + value['incident_attempt'])
+            state.update(incident_attempt=value['incident_attempt'], incident_attempt_notice='initial',
+                         incident_attempt_condition=first['condition'], incident_attempt_count=1,
+                         incident_conditions_announced=[first['condition']])
+            if not same:
+                state['incident_opened_at'] = first['attempted_at']
+            level = severity(first['condition'])
+            known = state['announced_at'].get(level)
+            if level in SEVERITY_RANK and (known is None or timestamp(known) < timestamp(first['attempted_at'])):
+                state['announced_at'][level] = first['attempted_at']
+    validate_incident(state)
+    backup.require(state['incident_attempt'] is None or state['last_attempt_at'] is not None,
+                   'Invalid incident record.')
+    return state
+
+
+def write_state(state):
+    """Two files and one rule: the ledger only ever DESCRIBES status.json's incident.
+
+    status.json is the commit point every release reads. While an incident is open the ledger is
+    written FIRST, so a crash between the two leaves status.json at a shape the ledger, or the
+    first-notice reading above, still explains. When the incident is closed status.json goes first,
+    so the ledger's older record is inert from the moment it lands. The ledger is created on first
+    need: a monitor that has never announced anything has no ledger.
+    """
+    status = {key: state[key] for key in STATUS_KEYS}
+    ledger = DIRECTORY / NOTICES_FILE
+    notices = {'format': 1, 'announced_at': dict(state['announced_at']),
+               'incident': {key: state[key] for key in RECORD_KEYS} if state['incident_id'] else None}
+    if state['incident_id']:
+        scheduled.atomic_status(ledger, notices)
+        scheduled.atomic_status(DIRECTORY / 'status.json', status)
+    else:
+        scheduled.atomic_status(DIRECTORY / 'status.json', status)
+        if ledger.exists() or ledger.is_symlink() or any(state['announced_at'].values()):
+            scheduled.atomic_status(ledger, notices)
 
 
 @contextmanager
@@ -865,7 +932,11 @@ def configured_transport(values):
     from django.test.utils import override_settings
     if not settings.configured:
         settings.configure(DEFAULT_CHARSET='utf-8')
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    # Once per process: an unconditional insert grew sys.path by one entry per check in any
+    # long-lived process, and a spawned child inherits the whole list.
+    root = str(Path(__file__).resolve().parents[1])
+    if root not in sys.path:
+        sys.path.insert(0, root)
     from core import email_backend
     with override_settings(**values):
         yield email_backend
@@ -895,10 +966,18 @@ def notice_message(condition, at, prefix, *, test=False, notice='initial', incid
     lines = f'UTC check: {at.isoformat()}\nReference: {prefix}\n' + ERRORS[condition] + footer
     header = 'QuillMD private synthetic environment: operational backup notification.\n'
     if test or notice == 'initial':
-        subject = ('[QuillMD NONCLINICAL TEST] Simulated backup failure' if test
+        subject = ('[QuillMD operations] ESCALATION: a more severe backup incident opened'
+                   if incident and incident.get('lifted_over') else
+                   '[QuillMD NONCLINICAL TEST] Simulated backup failure' if test
                    else '[QuillMD operations] Backup recovery requires attention')
+        lifted = ''
+        if incident and incident.get('lifted_over'):
+            earlier = {rank: level for level, rank in SEVERITY_RANK.items()}[incident['lifted_over']]
+            lifted = (f'ESCALATION: a new incident, sent inside the 24-hour interval between incidents because '
+                      f'it is more severe ({severity(condition)}) than every notice in the last 24 hours '
+                      f'(highest: {earlier}).\n')
         return subject, (header + ('AUTHORIZED SIMULATED FAILURE; NO BACKUP WAS INTERRUPTED.\n' if test else '')
-                         + f'Condition: {condition}\n' + lines)
+                         + lifted + f'Condition: {condition}\n' + lines)
     opened = timestamp(incident['opened_at'])
     open_for = (f'Incident open for at least {duration((at - opened).total_seconds())}, '
                 f'open since no later than {opened.isoformat()}. This is notice {incident["count"]} for this incident.\n')
@@ -1014,6 +1093,20 @@ def incident_summary(state, at, *, latest_confirmed, deferred_until=None):
             'escalation_deferred_until': deferred_until.isoformat() if deferred_until else None}
 
 
+def recent_severity_rank(state, at):
+    """The highest severity announced in the COOLDOWN_SECONDS before `at`, across incidents.
+
+    ⚠️ A notice status.json records that the ledger does not (the previous release made it, or the
+    ledger was new) counts as a FAILURE: an unknown notice can hold the cooldown, never lift it.
+    """
+    def recent(when):
+        return when is not None and (at - timestamp(when)).total_seconds() < COOLDOWN_SECONDS
+    rank = max([SEVERITY_RANK[level] for level, when in state['announced_at'].items() if recent(when)], default=0)
+    if recent(state['last_attempt_at']) and state['last_attempt_at'] not in state['announced_at'].values():
+        rank = SEVERITY_RANK['failure']
+    return rank
+
+
 def plan_notice(state, condition, at):
     """What an open incident whose latest notice was ACCEPTED owes now: (notice, deferred_until).
 
@@ -1102,7 +1195,7 @@ def check(at=None):
                 values = read_configuration()
             except Exception:
                 state.update(last_check_at=at.isoformat(), condition='alert_configuration_unavailable')
-                scheduled.atomic_status(DIRECTORY / 'status.json', state)
+                write_state(state)
                 return report(state['condition'], checked_at=state['last_check_at']), 1
             condition = backup_condition(at)
             recovery = recovery_status(at)
@@ -1114,6 +1207,7 @@ def check(at=None):
                 condition = 'external_monitor_unconfirmed'
             state.update(last_check_at=at.isoformat(), condition=condition)
             alert = deferred_until = None
+            lifted = False
             if condition in QUIET:
                 state.update(closed_incident())
             elif condition not in UNANNOUNCED:
@@ -1133,13 +1227,19 @@ def check(at=None):
                 elif (state['last_attempt_at'] is None or
                       (at - timestamp(state['last_attempt_at'])).total_seconds() >= COOLDOWN_SECONDS):
                     notice = 'initial'
+                elif SEVERITY_RANK[severity(condition)] > recent_severity_rank(state, at):
+                    # A NEW incident more severe than everything announced in the last 24 hours is
+                    # not held by the cooldown between incidents. Only a strict increase lifts it,
+                    # so flapping at the same or a lower severity still sends nothing extra.
+                    notice, lifted = 'initial', True
                 else:
                     alert = {'outcome': 'cooldown_suppressed', 'provider_accepted': False}
                 if notice:
                     announced = state['incident_conditions_announced']
                     context = {'opened_at': state['incident_opened_at'], 'previous': state['incident_attempt_condition'],
-                               'count': state['incident_attempt_count'] + 1}
-                    # The first notice keeps the incident's identity (the format-1 receipt name);
+                               'count': state['incident_attempt_count'] + 1,
+                               'lifted_over': recent_severity_rank(state, at) if lifted else None}
+                    # The first notice keeps the incident's identity (the receipt name every release uses);
                     # every later notice is a new request with its own identity and receipt.
                     identity = state['incident_id'] if notice == 'initial' else secrets.token_hex(16)
                     state.update(incident_attempt=identity, last_attempt_at=at.isoformat(),
@@ -1147,11 +1247,12 @@ def check(at=None):
                                  incident_attempt_count=context['count'],
                                  incident_conditions_announced=(announced if condition in announced
                                                                 else announced + [condition]))
+                    state['announced_at'][severity(condition)] = at.isoformat()
                     # Persist the identity before sending: a crash between state
                     # and pending receipt fails closed, requiring operator review.
-                    scheduled.atomic_status(DIRECTORY / 'status.json', state)
+                    write_state(state)
                     alert = attempt_alert(values, condition, identity, at, notice=notice, incident=context)
-            scheduled.atomic_status(DIRECTORY / 'status.json', state)
+            write_state(state)
             incident = incident_summary(state, at, deferred_until=deferred_until,
                                         latest_confirmed=bool(alert and alert['outcome'] == 'provider_accepted'))
             if alert and alert['outcome'] in {'pending', 'uncertain_no_retry'}:
