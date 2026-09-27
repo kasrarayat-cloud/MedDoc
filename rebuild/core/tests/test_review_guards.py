@@ -17,7 +17,7 @@ from unittest.mock import patch
 
 import threading
 
-from django.db import connection
+from django.db import connection, transaction
 from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
@@ -1184,3 +1184,71 @@ class CodeWritersRefuseAFinalizedRecord(OrdinaryDraft, TestCase):
                           AuditEvent.objects.filter(action='coding.accept').count(),
                           AuditEvent.objects.filter(action='coding.suggest').count()),   # (1: the one before finalization)
                          ([(409, True, True)] * 2, None, 1, 0, 1))
+
+
+ALNUM = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+#: 12,000 distinct three-character codes: joined by one separator they are 47,999 characters of notes.
+MANY_CODES = [letter + second + third for letter in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' for second in ALNUM for third in ALNUM][:12000]
+
+
+@override_settings(**TEST_SETTINGS)
+class SuggestingCodesDoesNotHoldTheDocument(OrdinaryDraft, TransactionTestCase):
+    """Refutation round 4, R4-2: `coding` held the encounter's row lock for its whole suggestion pass, and the pass rescanned
+    the notes once per code. The refuter's input: any department member (an employee) saves 48,000 characters holding
+    12,000 synthetic codes, all in the release in effect, and posts Suggest codes — the lock was held 70.6 s, a page view
+    of that encounter waited 77.2 s, and with 2 workers the site stalls. Measured here, each request committing on its own:
+    how long the request holds the row lock once it has taken it (from the locking query to its answer — an upper bound,
+    since it commits before answering), what another request waits for that lock, and the request's own time."""
+    LOCK_BOUND = 5.0          # seconds the encounter row may stay locked by one Suggest codes request
+    REQUEST_BOUND = 30.0      # seconds the whole request may take on this input
+
+    def suggested(self, separator):
+        today = timezone.localdate()
+        release = CodeSet.objects.create(system='ICD-10-CM', version='synthetic-review-guards-cost', sha256='0' * 64,
+                                         effective_from=today - timedelta(days=1), effective_until=today + timedelta(days=1),
+                                         source_url='https://synthetic.invalid/codes')
+        Code.objects.bulk_create([Code(release=release, code=code, description='Synthetic fixture; no clinical use')
+                                  for code in MANY_CODES])
+        notes = separator.join(MANY_CODES)
+        self.assertEqual(len(notes), 47999)                                          # (the control: the refuter's size)
+        _template, version = self.upload(self.make_docx(), 'docx')
+        encounter = self.create_encounter(version, notes)
+        self.client.force_login(self.member('guards-cost-employee', 'employee'))
+        measured = {}
+
+        def other_request():
+            try:
+                started = time.monotonic()
+                with transaction.atomic():
+                    Encounter.objects.select_for_update().get(pk=encounter.pk)
+                measured['other_waited'] = time.monotonic() - started
+            finally:
+                connection.close()
+        other = threading.Thread(target=other_request)
+
+        def locking(execute, sql, params, many, context):
+            result = execute(sql, params, many, context)
+            if 'locked' not in measured and 'FOR UPDATE' in sql and 'core_encounter' in sql:
+                measured['locked'] = time.monotonic(); other.start()
+            return result
+
+        started = time.monotonic()
+        with connection.execute_wrapper(locking):
+            response = self.client.post(f'/encounters/{encounter.pk}/coding/', {'revision': encounter.revision})
+        answered = time.monotonic()
+        other.join(timeout=600)
+        held = round(answered - measured.get('locked', started), 1)
+        return (response.status_code, CodeSuggestion.objects.filter(encounter=encounter).count(),
+                held, round(measured.get('other_waited', -1), 1), round(answered - started, 1))
+
+    def within_bounds(self, separator):
+        status, count, held, waited, took = self.suggested(separator)
+        self.assertEqual((status, count), (302, 12000))                            # (the control: every code suggested)
+        self.assertTrue(held < self.LOCK_BOUND and waited < self.LOCK_BOUND and took < self.REQUEST_BOUND,
+                        f'lock held {held} s, another request waited {waited} s, the request took {took} s')
+
+    def test_codes_one_per_line(self):
+        self.within_bounds('\n')
+
+    def test_codes_on_one_line(self):
+        self.within_bounds(' ')
