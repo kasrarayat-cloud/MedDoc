@@ -15,6 +15,9 @@ class RecordRetraction(SimpleTestCase):
             ('Allergies',ALLERGY,'delete that entry from the chart.'),
             ('Allergies',ALLERGY,'omit this statement from final chart.'),
             ('Allergies',ALLERGY,'withdrawal of the erroneous declaration.'),
+            ('Allergies',ALLERGY,'omission of erroneous NKA entry.'),
+            ('Allergies',ALLERGY,'clinician deletes erroneous NKA entry.'),
+            ('Allergies',ALLERGY,'clinician removes erroneous NKA entry.'),
             ('Examination',EXAMS[0],'deletion of erroneous normal neurological entry.'),
             ('Examination',EXAMS[1],'deletion of erroneous normal cardiopulmonary entry.'),
             ('Allergies',ALLERGY,'penicillin avoidance for documented anaphylaxis.'),
@@ -37,7 +40,10 @@ class RecordRetraction(SimpleTestCase):
             self.assertEqual((answers[label]['status'],answers[label]['text']),('conflict',''))
 
     def test_physical_removal_is_not_a_record_retraction(self):
-        for tail in ('removal of stitches.','removal of the temporary device.'):
+        for tail in ('removal of stitches.','removal of the temporary device.',
+                     'removal of stitches documented.','removal of the temporary device documented.',
+                     'record removal of stitches.','remove the catheter and note response.',
+                     'document removal of stitches.'):
             notes=ALLERGY+'\nPlan: '+tail
             answer=run(notes,{'Allergies':[ALLERGY]},fields=FIELDS)['Allergies']
             self.assertEqual((answer['status'],answer['text']),('supported',ALLERGY))

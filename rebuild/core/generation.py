@@ -1983,17 +1983,38 @@ SELF_CORRECTION = re.compile(LETTER_BEFORE + r'(?:sorry|i\s+mean|i\s+meant|scrat
 # Record edits can retract an earlier statement without repeating the form's label.
 # Both an action and a record reference are required: physical stitches/device removal
 # is not itself a correction. These cues only hold offers; they do not rewrite a record.
-V3_RETRACTION_ACTION = re.compile(LETTER_BEFORE + r'(?:delet(?:e|ed|ing|ion)|remov(?:e|ed|ing|al)'
-    r'|omit(?:s|ted|ting)?|retract(?:s|ed|ing|ion)?|withdraw(?:s|n|ing|al)?'
+V3_RETRACTION_ACTION = re.compile(LETTER_BEFORE + r'(?:delet(?:e[sd]?|ing|ions?)|remov(?:e[sd]?|ing|als?)'
+    r'|omit(?:s|ted|ting)?|omissions?|retract(?:s|ed|ing|ions?)?|withdraw(?:s|n|ing|als?)?'
     r'|strik(?:e|ing)|amend(?:s|ed|ing|ment)?|correct(?:s|ed|ing|ion)?'
     r'|invalidat(?:e|ed|ing|ion))' + LETTER_AFTER, re.I)
 V3_RECORD_REFERENCE = re.compile(LETTER_BEFORE + r'(?:entr(?:y|ies)|statements?|declarations?'
-    r'|records?|chart|documentation|documented|annotations?|notes?)' + LETTER_AFTER, re.I)
+    r'|records?|chart|documentation|annotations?|notes?)' + LETTER_AFTER, re.I)
+V3_RECORD_EVENT = re.compile(r'(?P<action>' + V3_RETRACTION_ACTION.pattern + r')|(?P<reference>'
+    + V3_RECORD_REFERENCE.pattern + r')|(?P<boundary>[.!?;\n])', re.I)
+
+
+def v3_record_retraction(text):
+    """A record object follows its edit action in the same sentence; linear in source length."""
+    action = None
+    for event in V3_RECORD_EVENT.finditer(text):
+        if event.lastgroup == 'boundary':
+            action = None
+        elif event.lastgroup == 'action':
+            action = event.end()
+        elif action is not None:
+            # In 'remove the catheter and note response', note is a second
+            # instruction, not the object removed. A preceding 'record' in
+            # 'record removal of stitches' never establishes this relation.
+            if event.group().casefold() in ('note', 'record') and re.search(
+                    r'\b(?:and|or|then)\s*$', text[max(action,event.start()-12):event.start()], re.I):
+                action = None
+                continue
+            return True
+    return False
 
 
 def v3_note_correction(text):
-    return any(SELF_CORRECTION.search(reading) or (
-        V3_RETRACTION_ACTION.search(reading) and V3_RECORD_REFERENCE.search(reading))
+    return any(SELF_CORRECTION.search(reading) or v3_record_retraction(reading)
         for reading in safety_readings(text))
 
 
