@@ -483,6 +483,42 @@ def clinician_decided(e):
                 for a in (e.answers or {}).values())
             or bool((e.template_review or {}).get('decisions')))
 
+def same_text(first,second):
+    """Equal as text: a browser posts a textarea's line breaks as CRLF."""
+    return first.replace('\r\n','\n').replace('\r','\n')==second.replace('\r\n','\n').replace('\r','\n')
+
+def review_state_counts(e,codes=True):
+    """What clearing this draft discards, as counts only (never clinical text), for its audit row."""
+    answers=[a for a in (e.answers or {}).values() if isinstance(a,dict)]
+    decisions=[d for d in ((e.template_review or {}).get('decisions') or {}).values() if isinstance(d,dict)]
+    return {'answers_reviewed':sum(1 for a in answers if a.get('reviewed')),
+            'answers_edited':sum(1 for a in answers if a.get('status')=='edited'),
+            'answers_accepted':sum(1 for a in answers if a.get('accepted_suggestion')),
+            'answers_left_blank':sum(1 for a in answers if a.get('status')=='left_blank'),
+            'statement_decisions':len(decisions),'statement_reviews':sum(1 for d in decisions if d.get('reviewed')),
+            'codes_accepted':CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False).count() if codes else 0}
+
+@require_POST
+@transaction.atomic
+def clear_review(request,pk):
+    """"Clear answers and review to generate again": a clinician's explicit, confirmed and audited reset of the answer
+    draft and its review. The notes, and the accepted codes that rest on them, are kept."""
+    e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
+    if e.status=='finalized':return document_refusal(request,e,'Finalized documents are immutable.',409)
+    membership(request.user,e.department,roles=['owner','clinician'])
+    if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():
+        return document_refusal(request,e,'Wait until the pending job is resolved. Nothing was cleared.',409)
+    if request.POST.get('revision')!=str(e.revision):
+        return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Reopen it before clearing. Nothing was cleared.',409)
+    if request.POST.get('confirm_clear')!='on':
+        return document_refusal(request,e,'Tick the confirmation to clear the answers and review. Nothing was cleared.',400)
+    cleared=review_state_counts(e,codes=False)
+    e.answers={};e.revision+=1;e.status='draft';wm_review.invalidate_review(e)
+    e.save(update_fields=['answers','revision','status','template_review'])
+    audit(request.user,'encounter.review_cleared',e.pk,department=e.department,revision=e.revision,cleared=cleared)
+    messages.success(request,'Answers and review cleared. The notes and accepted codes are kept. Generate a new draft when ready.')
+    return redirect('encounter_detail',pk=pk)
+
 @require_POST
 def generate_view(request,pk):
     e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
@@ -495,8 +531,8 @@ def generate_view(request,pk):
         # raced past this check is refused by `enqueue`'s locked revision check. (Ported from feat/wm-narrative.)
         if clinician_decided(e):
             raise ValidationError("These answers include a clinician's review or decisions, and a new draft would replace them. "
-                                  'Nothing was sent or charged. To start again from the notes, save the source notes again '
-                                  '(unchanged is fine): that clears the saved answers and review decisions. Then generate.')
+                                  'Nothing was sent or charged. To generate again, a clinician can use "Clear answers and '
+                                  'review to generate again" under the notes: it asks for confirmation and is recorded.')
         quoted=usage_quote(request,e)
         job=enqueue(e,request.user,config=quoted,expected_revision=e.revision)
         if getattr(job,'reused',False):
@@ -1347,11 +1383,17 @@ def encounter_notes(request,pk):
         notes=(e.notes+'\n\n'+corrected if e.notes else corrected) if request.POST['transcript_mode']=='append' else corrected
     else:notes=request.POST.get('notes','')
     if not notes.strip() or len(notes)>50000:return document_refusal(request,e,'Notes must contain 1–50,000 characters; nothing was truncated.',400)
+    # ⚠️ AN UNCHANGED SAVE CHANGES NOTHING. It used to clear every answer, review decision and accepted code — by any
+    # member, with only the revision audited. The stored notes stay byte-identical (a browser re-posts line breaks as
+    # CRLF, which is the same text), so every evidence offset stays valid. A reviewed transcript is always a change.
+    if transcript_job is None and same_text(notes,e.notes):
+        messages.info(request,'Notes unchanged — nothing was cleared.');return redirect('encounter_detail',pk=pk)
+    cleared=review_state_counts(e)
     e.notes=notes;e.answers={};e.revision+=1;e.status='draft';wm_review.invalidate_review(e);e.save(update_fields=['notes','answers','revision','status','template_review'])
     CodeSuggestion.objects.filter(encounter=e).update(accepted_by=None,accepted_at=None)
     CodeSuggestion.objects.filter(encounter=e).delete()
     audit(request.user,'coding.invalidated_by_source_edit',e.pk,department=e.department)
-    audit(request.user,'encounter.notes_saved',e.pk,department=e.department,revision=e.revision)
+    audit(request.user,'encounter.notes_saved',e.pk,department=e.department,revision=e.revision,cleared=cleared)
     if transcript_job:
         audit(request.user,'transcription.applied',transcript_job.pk,department=e.department,revision=e.revision,
               mode=request.POST['transcript_mode'],raw_sha256=hashlib.sha256(raw_transcript.encode()).hexdigest(),

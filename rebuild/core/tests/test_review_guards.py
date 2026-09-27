@@ -4,10 +4,13 @@ Offline and synthetic. Ordinary forms generate in fixture mode. The qualified Wo
 `synthetic_resolver`, which resolves the way the engine does for this fixture's statements (the chosen wording, and the
 signer: the finalizing clinician once finalized, else the viewer); no Word runtime and no provider is involved.
 """
+from datetime import timedelta
 import hashlib
 import html
+import json
 from html.parser import HTMLParser
 from pathlib import Path
+import re
 import tempfile
 from unittest.mock import patch
 
@@ -16,13 +19,16 @@ from django.utils import timezone
 
 from core import wm_review
 from core.jobs import run_one
-from core.models import AuditEvent, Job, Membership, TemplateVersion, User
+from core.security import private_path
+from core.models import AuditEvent, Code, CodeSet, CodeSuggestion, Encounter, Job, Membership, TemplateVersion, User
 from core.wm_review import BACKEND, ORIGINAL_SHA256
 from .test_security import SyntheticFixture
 from . import test_workflow
 from .test_workflow import TEST_SETTINGS
 
 REFUSED = 'a new draft would replace them. Nothing was sent or charged.'
+CLEAR_ACTION = 'Clear answers and review to generate again'
+UNCHANGED = 'Notes unchanged — nothing was cleared.'
 
 
 class BrowserSaveForm(HTMLParser):
@@ -62,12 +68,9 @@ class BrowserSaveForm(HTMLParser):
 
 
 # ── ordinary forms ────────────────────────────────────────────────────────────────────────────────────────────────
-@override_settings(**TEST_SETTINGS)
-class GenerationRefusedOverReviewOnOrdinaryForms(TestCase):
-    """A generation replaces every answer and review decision (`jobs.py` adoption). The page offers it only before any
-    answer exists, but the server queued it for any POST carrying the current revision."""
-    # DocumentWorkflow's fixture and helpers, without re-running its own tests (imported by module for the same reason:
-    # a TestCase class in this module's namespace would be collected here again).
+class OrdinaryDraft:
+    """DocumentWorkflow's fixture and helpers, without re-running its own tests (imported by module for the same reason:
+    a TestCase class in this module's namespace would be collected here again)."""
     workflow = test_workflow.DocumentWorkflow
     setUp, make_docx, upload = workflow.setUp, workflow.make_docx, workflow.upload
     create_encounter, generate = workflow.create_encounter, workflow.generate
@@ -85,6 +88,36 @@ class GenerationRefusedOverReviewOnOrdinaryForms(TestCase):
         encounter.refresh_from_db()
         return response
 
+    def reviewed_draft(self, **extra):
+        """A generated draft the clinician saved with every answer reviewed (plus `extra` posted fields)."""
+        encounter = self.drafted()
+        keys = sorted(encounter.answers)
+        self.post(f'/encounters/{encounter.pk}/save/', encounter,
+                  {**{'answer_' + key: encounter.answers[key]['text'] for key in keys},
+                   **{'reviewed_' + key: 'on' for key in keys}, **extra})
+        self.assertTrue(all(answer['reviewed'] for answer in encounter.answers.values()))   # (the control)
+        return encounter, keys
+
+    def member(self, name, role):
+        user = User.objects.create_user(username=name, email=name + '@synthetic.invalid', verified_at=timezone.now())
+        Membership.objects.create(user=user, department=self.department, role=role)
+        return user
+
+    def accepted_code(self, encounter):
+        today = timezone.localdate()
+        release = CodeSet.objects.create(system='ICD-10-CM', version='synthetic-review-guards', sha256='0' * 64,
+                                         effective_from=today - timedelta(days=1), effective_until=today + timedelta(days=1),
+                                         source_url='https://synthetic.invalid/codes')
+        code = Code.objects.create(release=release, code='R00.0', description='Synthetic fixture; no clinical use')
+        return CodeSuggestion.objects.create(encounter=encounter, terminology=code, explanation='Synthetic documented code',
+                                             evidence='No chest pain.', accepted_by=self.user, accepted_at=timezone.now())
+
+
+@override_settings(**TEST_SETTINGS)
+class GenerationRefusedOverReviewOnOrdinaryForms(OrdinaryDraft, TestCase):
+    """A generation replaces every answer and review decision (`jobs.py` adoption). The page offers it only before any
+    answer exists, but the server queued it for any POST carrying the current revision."""
+
     def refused_after(self, *saves):
         encounter = self.drafted()
         keys = sorted(encounter.answers)
@@ -98,7 +131,8 @@ class GenerationRefusedOverReviewOnOrdinaryForms(TestCase):
         self.assertEqual(Job.objects.filter(encounter=encounter, kind='generation').count(), 1)
         self.assertEqual(encounter.answers, saved)
         self.assertContains(response, REFUSED)
-        self.assertContains(response, 'save the source notes again')
+        self.assertContains(response, CLEAR_ACTION)
+        self.assertNotContains(response, 'save the source notes again')
         return saved
 
     def test_generation_is_refused_over_reviewed_answers(self):
@@ -118,21 +152,6 @@ class GenerationRefusedOverReviewOnOrdinaryForms(TestCase):
         self.assertEqual(sorted((answer['status'], answer['reviewed']) for answer in saved.values()),
                          [('left_blank', False), ('supported', False)])               # (the control)
 
-    def test_the_way_forward_is_saving_the_notes_which_clears_the_draft(self):
-        encounter = self.drafted()
-        keys = sorted(encounter.answers)
-        self.post(f'/encounters/{encounter.pk}/save/', encounter,
-                  {**{'answer_' + key: encounter.answers[key]['text'] for key in keys},
-                   **{'reviewed_' + key: 'on' for key in keys}})
-        self.assertContains(self.post(f'/encounters/{encounter.pk}/generate/', encounter), REFUSED)   # (the control)
-        self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': encounter.notes})
-        self.assertEqual((encounter.answers, encounter.template_review), ({}, {}))
-        self.post(f'/encounters/{encounter.pk}/generate/', encounter)
-        self.assertTrue(run_one())
-        encounter.refresh_from_db()
-        self.assertEqual(Job.objects.filter(encounter=encounter, kind='generation', state='succeeded').count(), 2)
-        self.assertFalse(any(answer['reviewed'] for answer in encounter.answers.values()))
-
     def test_a_draft_nobody_has_decided_is_not_refused(self):
         """The refusal reads decisions, not the presence of answers: an untouched draft reaches the existing
         same-revision reuse (nothing new is requested either way)."""
@@ -140,6 +159,143 @@ class GenerationRefusedOverReviewOnOrdinaryForms(TestCase):
         response = self.post(f'/encounters/{encounter.pk}/generate/', encounter)
         self.assertNotContains(response, REFUSED)
         self.assertContains(response, 'No new request was made')
+
+
+def last_event(action, encounter):
+    """The details of the latest audit row of `action` for `encounter` ({} when there is none, so a missing row fails an
+    assertion rather than raising)."""
+    event = AuditEvent.objects.filter(action=action, target=str(encounter.pk)).order_by('-created_at').first()
+    return event.details if event else {}
+
+
+def notes_help(page):
+    return re.search(r'<p class="helptext" id="notes-help">(.*?)</p>', page.content.decode(), re.S).group(1)
+
+
+@override_settings(**TEST_SETTINGS)
+class ANotesSaveNeverClearsSilently(OrdinaryDraft, TestCase):
+    """R1 (refutation of this branch): saving the notes UNCHANGED wiped every answer, review decision and accepted code,
+    by any member, with only the revision in its audit row — and the generation refusal told people to do exactly that."""
+
+    def test_an_unchanged_notes_save_clears_nothing(self):
+        encounter, _keys = self.reviewed_draft()
+        code = self.accepted_code(encounter)
+        before = (encounter.answers, encounter.revision, encounter.status)
+        audited = AuditEvent.objects.filter(action='encounter.notes_saved', target=str(encounter.pk)).count()
+        self.client.force_login(self.member('guards-notes-employee', 'employee'))
+        # (as a browser posts the textarea: its line breaks as CRLF)
+        response = self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': encounter.notes.replace('\n', '\r\n')})
+        self.assertEqual((encounter.answers, encounter.revision, encounter.status), before)
+        code.refresh_from_db()
+        self.assertEqual(code.accepted_by_id, self.user.pk)
+        self.assertContains(response, UNCHANGED)
+        self.assertEqual(AuditEvent.objects.filter(action='encounter.notes_saved', target=str(encounter.pk)).count(), audited)
+
+    def test_a_changed_notes_save_clears_as_before_and_records_what_it_cleared(self):
+        # Notes whose unlabelled line holds every answer for a decision, each with a one-click suggestion.
+        _template, version = self.upload(self.make_docx(), 'docx')
+        encounter = self.create_encounter(version, 'Fictional software test only.\nSymptoms: no chest pain\nExamination: normal gait')
+        self.post(f'/encounters/{encounter.pk}/generate/', encounter)
+        self.assertTrue(run_one())
+        encounter.refresh_from_db()
+        first, second = sorted(encounter.answers)
+        self.assertTrue(encounter.answers[first].get('suggestion'))                  # (the control: an offer to accept)
+        self.post(f'/encounters/{encounter.pk}/save/', encounter, {
+            'answer_' + first: '', 'accept_' + first: 'on', 'reviewed_' + first: 'on',
+            'answer_' + second: '', 'blank_' + second: 'on', 'blank_shown_' + second: '1', 'reviewed_' + second: 'on'})
+        self.assertEqual(sorted((a['status'], bool(a.get('accepted_suggestion'))) for a in encounter.answers.values()),
+                         [('edited', True), ('left_blank', False)])                     # (the control)
+        self.accepted_code(encounter)
+        self.assertIn('accepted codes', notes_help(self.client.get(f'/encounters/{encounter.pk}/')))
+        self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': encounter.notes + '\nPlan: synthetic follow-up.'})
+        self.assertEqual((encounter.answers, encounter.template_review, CodeSuggestion.objects.filter(encounter=encounter).count()),
+                         ({}, {}, 0))
+        event = last_event('encounter.notes_saved', encounter)
+        self.assertEqual(event.get('cleared'), {'answers_reviewed': 2, 'answers_edited': 1, 'answers_accepted': 1,
+                                                    'answers_left_blank': 1, 'statement_decisions': 0,
+                                                    'statement_reviews': 0, 'codes_accepted': 1})
+
+    def test_a_reviewed_transcript_is_applied_even_when_it_leaves_the_notes_as_they_were(self):
+        """The unchanged-notes no-op is for a notes save only: a reviewed transcript is always applied (and recorded), or
+        it would stay awaiting review with nothing to show why."""
+        encounter, _keys = self.reviewed_draft()
+        payload = json.dumps({'raw_transcript': 'Synthetic words.', 'transcript': 'Synthetic words.'}).encode()
+        relative = 'receipts/synthetic-review-guards-transcript.json'
+        path = private_path(relative); path.parent.mkdir(parents=True, exist_ok=True, mode=0o700); path.write_bytes(payload)
+        job = Job.objects.create(encounter=encounter, user=self.user, kind='transcription', state='succeeded',
+                                 revision=encounter.revision, request_key='synthetic-transcript-' + str(encounter.pk),
+                                 config={'transcript_review_required': True}, result_path=relative,
+                                 result_sha256=hashlib.sha256(payload).hexdigest())
+        response = self.post(f'/encounters/{encounter.pk}/notes/', encounter, {
+            'transcript_job': str(job.pk), 'corrected_transcript': encounter.notes, 'transcript_mode': 'replace',
+            'transcript_reviewed': 'on'})
+        self.assertTrue(AuditEvent.objects.filter(action='transcription.applied', target=str(job.pk)).exists())
+        self.assertNotContains(response, UNCHANGED)
+
+
+@override_settings(**TEST_SETTINGS)
+class ClearAnswersAndReviewToGenerateAgain(OrdinaryDraft, TestCase):
+    """R1(c): the explicit way to generate again over a decided draft — POST only, owner or clinician, confirmed, refused
+    while a job is pending or once finalized, audited with the same counts, and a new revision."""
+
+    def clear(self, encounter, **payload):
+        encounter.refresh_from_db()
+        response = self.client.post(f'/encounters/{encounter.pk}/clear-review/', {'revision': encounter.revision, **payload})
+        encounter.refresh_from_db()
+        return response
+
+    def test_a_clinician_clears_with_confirmation_and_generates_again(self):
+        encounter, _keys = self.reviewed_draft()
+        code = self.accepted_code(encounter)
+        refused = self.post(f'/encounters/{encounter.pk}/generate/', encounter)
+        self.assertContains(refused, REFUSED)
+        self.assertContains(refused, CLEAR_ACTION)
+        self.assertContains(refused, 'data-clear-review')                         # (offered to this clinician)
+        before = (encounter.answers, encounter.revision)
+        self.assertEqual(self.clear(encounter).status_code, 400)                   # (no confirmation: nothing cleared)
+        self.assertEqual((encounter.answers, encounter.revision), before)
+        self.assertEqual(self.client.get(f'/encounters/{encounter.pk}/clear-review/').status_code, 405)
+        response = self.clear(encounter, confirm_clear='on')
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual((encounter.answers, encounter.template_review, encounter.status, encounter.revision),
+                         ({}, {}, 'draft', before[1] + 1))
+        event = AuditEvent.objects.filter(action='encounter.review_cleared', target=str(encounter.pk)).first()
+        self.assertEqual((getattr(event, 'actor_id', None), last_event('encounter.review_cleared', encounter).get('revision'),
+                          last_event('encounter.review_cleared', encounter).get('cleared')),
+                         (self.user.pk, encounter.revision,
+                          {'answers_reviewed': 2, 'answers_edited': 0, 'answers_accepted': 0, 'answers_left_blank': 0,
+                           'statement_decisions': 0, 'statement_reviews': 0, 'codes_accepted': 0}))
+        code.refresh_from_db()
+        self.assertEqual(code.accepted_by_id, self.user.pk)                        # (the notes did not change)
+        self.post(f'/encounters/{encounter.pk}/generate/', encounter)
+        self.assertTrue(run_one())
+        encounter.refresh_from_db()
+        self.assertEqual(Job.objects.filter(encounter=encounter, kind='generation', state='succeeded').count(), 2)
+        self.assertFalse(any(answer['reviewed'] for answer in encounter.answers.values()))
+
+    def test_an_employee_cannot_clear_and_is_not_offered_it(self):
+        encounter, _keys = self.reviewed_draft()
+        before = (encounter.answers, encounter.revision)
+        self.client.force_login(self.member('guards-clear-employee', 'employee'))
+        self.assertNotContains(self.client.get(f'/encounters/{encounter.pk}/'), 'data-clear-review')
+        self.assertEqual(self.clear(encounter, confirm_clear='on').status_code, 403)
+        self.assertEqual((encounter.answers, encounter.revision), before)
+        self.assertFalse(AuditEvent.objects.filter(action='encounter.review_cleared').exists())
+
+    def test_clearing_is_refused_while_a_job_is_pending_on_a_stale_page_or_once_finalized(self):
+        encounter, _keys = self.reviewed_draft()
+        before = (encounter.answers, encounter.revision)
+        job = Job.objects.create(encounter=encounter, user=self.user, kind='generation', revision=encounter.revision,
+                                 request_key='synthetic-pending-' + str(encounter.pk), state='queued')
+        self.assertEqual(self.clear(encounter, confirm_clear='on').status_code, 409)
+        job.state = 'failed'; job.request_key = 'synthetic-ended-' + str(encounter.pk); job.save()
+        stale = self.client.post(f'/encounters/{encounter.pk}/clear-review/', {'revision': encounter.revision - 1, 'confirm_clear': 'on'})
+        self.assertEqual(stale.status_code, 409)
+        Encounter.objects.filter(pk=encounter.pk).update(status='finalized', finalized_by=self.user, finalized_at=timezone.now())
+        self.client.raise_request_exception = False      # (the database's own guard would answer 500; the page says why)
+        self.assertEqual(self.clear(encounter, confirm_clear='on').status_code, 409)
+        self.assertEqual((encounter.answers, encounter.revision), before)
+        self.assertFalse(AuditEvent.objects.filter(action='encounter.review_cleared').exists())
 
 
 # ── the qualified Word form, offline ─────────────────────────────────────────────────────────────────────────────
@@ -307,6 +463,39 @@ class EmployeeSaveKeepsStatementDecisions(OfflineWordForm):
         self.save({'claim_variant_claim_32': 'negative'})
         decision = self.encounter.template_review['decisions']['claim_32']
         self.assertEqual((decision['variant'], decision['reviewed']), ('negative', False))
+
+
+
+class WordNotesSaveAndClear(OfflineWordForm):
+    """R1 on the Word form: statement decisions are review state too."""
+
+    def test_an_unchanged_notes_save_keeps_the_statement_decisions_and_a_changed_one_counts_them(self):
+        reviewed = self.clinician_reviews()
+        self.client.force_login(self.member('wm-guards-notes-employee', 'employee'))
+        url = f'/encounters/{self.encounter.pk}/notes/'
+        response = self.client.post(url, {'revision': self.encounter.revision, 'notes': self.encounter.notes}, follow=True)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.template_review, reviewed)
+        self.assertContains(response, UNCHANGED)
+        self.client.post(url, {'revision': self.encounter.revision, 'notes': self.encounter.notes + '\nSynthetic addendum.'})
+        self.encounter.refresh_from_db()
+        self.assertEqual((self.encounter.answers, self.encounter.template_review), ({}, {}))
+        event = last_event('encounter.notes_saved', self.encounter)
+        self.assertEqual(event.get('cleared'), {'answers_reviewed': 4, 'answers_edited': 0, 'answers_accepted': 0,
+                                                    'answers_left_blank': 0, 'statement_decisions': 3,
+                                                    'statement_reviews': 3, 'codes_accepted': 0})
+
+    def test_clearing_counts_the_statement_decisions_it_clears(self):
+        self.clinician_reviews()
+        response = self.client.post(f'/encounters/{self.encounter.pk}/clear-review/',
+                                    {'revision': self.encounter.revision, 'confirm_clear': 'on'})
+        self.assertEqual(response.status_code, 302)
+        self.encounter.refresh_from_db()
+        self.assertEqual((self.encounter.answers, self.encounter.template_review), ({}, {}))
+        event = last_event('encounter.review_cleared', self.encounter)
+        self.assertEqual(event.get('cleared'), {'answers_reviewed': 4, 'answers_edited': 0, 'answers_accepted': 0,
+                                                    'answers_left_blank': 0, 'statement_decisions': 3,
+                                                    'statement_reviews': 3, 'codes_accepted': 0})
 
 
 class AFinalizedRecordIsNotReReviewedByItsReader(OfflineWordForm):
