@@ -46,13 +46,14 @@ daily reminder.
 When an incident has ended and a new one opens inside the 24-hour interval, its
 first notice is still sent (subject `ESCALATION`) if it is more severe than every
 notice of the last 24 hours; otherwise the interval holds. A notice the state
-records but the sidecar does not describe counts as a failure for this purpose,
-so it can only hold the interval. The converse is never trusted: a notice the
-sidecar stamps but the state records no request for (a check that stopped
-between writing the two files, before any request began) counts as not sent, so
-it can never hold anything. Flapping at the same or a lower severity
-therefore sends nothing extra, and healthy/failure flapping after a warning sends
-at most one extra notice a day.
+records that no sidecar stamp reaches (none at or after its time) counts as a
+failure for this purpose, so it can only hold the interval. The converse is never
+trusted: a notice the sidecar describes but `status.json` never recorded (a check
+that stopped between writing the two files, before any request began) is
+discarded with the sidecar record that described it, even after an earlier
+release has checked in between, so it can never hold anything. Flapping at the
+same or a lower severity therefore sends nothing extra, and healthy/failure
+flapping after a warning sends at most one extra notice a day.
 
 A healthy check ends the incident. The pending record is
 written before a provider request; a timeout or interruption is uncertain and
@@ -61,15 +62,64 @@ uncertain attempt requires operator review, and it also stops every later
 escalation and reminder for that incident. The JSON status carries an `incident`
 summary (opened, notices, last notice and its condition, next reminder, any
 deferred escalation) without identities; `status` reports the deferred
-escalation the last check decided, recomputed by the same rule. `status` reads
-the state under the check's own lock, held shared and opened read-only, so a
-check running at the same moment cannot make it report the monitor broken, and
-a reader never makes a check refuse. A recorded time later than the monitor's
-clock (a clock that ran fast and was corrected) is read as the moment it is first
-seen, so it never delays a notice and an incident's age is never negative. The
-monitor's own status becomes stale after 15 minutes without a check. A broken monitor or lost email credential
-cannot reliably notify through that same broken channel: inspect its service
-failure and status locally, and keep outside-host detection separately gated.
+escalation the last check decided, recomputed by the same rule over the recorded
+state (none after an uncertain notice, which is never followed).
+
+`status` reads the state under the check's own lock, held shared and opened
+read-only. It waits up to 30 seconds for a running check; a check still running
+after that (the check unit allows 60 seconds) is reported, not treated as a
+fault: `status` then reads the last completed state without the lock, marks it
+`check_running: true`, and never reports the monitor broken merely because a
+check is running. A notice that check is making at that moment is not yet part
+of any completed state and is not shown. A check waits up to two seconds for a
+reader, which holds the lock only while it reads the state files and the named
+notice's record.
+
+A recorded time later than the monitor's clock (a clock that ran fast and was
+corrected) is read as the moment it is first seen, so it never delays a notice,
+including after a check stopped between the two files of a close, and an
+incident's age is never negative. The monitor's own status becomes stale after
+15 minutes without a check.
+
+### Fail closed means alert, not silence
+
+A design rule for this monitor, decided by the lead on 2026-09-27: a state the
+monitor cannot validate or recover must never leave it refusing for ever with no
+email. Those states are `status.json` missing while incident records remain;
+`status.json` or the sidecar unsafe or malformed; a notice the state names that
+has no request record, or one that cannot be read or disagrees with the state;
+and an incident record that breaks its own invariants.
+
+The check that meets one sends, at most once per 24 hours, an operator notice
+with the subject `MONITOR RESTARTED: the backup monitor could not read its own
+state`. It says plainly that the monitor could not read its own state and why,
+as one fixed label (`state_missing`, `state_invalid`, `ledger_invalid`,
+`notice_record_missing`, `notice_record_invalid`, `notice_record_mismatch`,
+`incident_record_invalid`) and never any content; the current backup condition,
+its severity and action; and that the monitor has restarted its incident record
+from this check. It then continues from a fresh, valid state. When the current
+condition is one that is announced, that notice is the new incident's first
+notice; otherwise it is sent on its own and holds nothing. Notices sent before it
+are not carried forward, so it may repeat one already received. A possible
+duplicate is acceptable; permanent silence is not.
+
+Nothing is lost for diagnosis: the unreadable `status.json` and sidecar are kept
+beside the new record as `monitor-restart-<id>-status.json` and
+`monitor-restart-<id>-incident-notices.json` (hard links, so `status.json` is
+never missing), with a `monitor-restart-<id>.json` marker recording the label and
+time. Request records are never rewritten, and no request is ever made for a
+notice the unreadable state named. A restart counts toward the 24 hours once its
+notice's request record exists; inside that window a state that cannot be read
+again is refused without any change, and `check` reports `state_unreadable`,
+`state_restarted: false` and `next_state_notice_at`. `status` stays read-only and
+reports `state_unreadable`; the next check restarts. Without a working email
+configuration nothing is restarted, because nothing could be announced.
+
+The rule does not reach a monitor directory or lock file that is itself unsafe,
+a directory the check cannot write, or a parallel check: those still fail closed
+without email. A broken monitor or lost email credential cannot reliably notify
+through that same broken channel: inspect its service failure and status
+locally, and keep outside-host detection separately gated.
 
 The user-authorized test has a separate fixed identity
 `20260920-operation-recovery` and subject
@@ -133,20 +183,33 @@ escalation change keeps its extension (when the incident opened, the last
 notice's kind and condition, the notice count, the conditions announced, and
 when each severity was last announced) in a sidecar,
 `.runtime/backup-alerts/incident-notices.json` (0600, atomic writes, created on
-first need, refused if malformed). A release without the sidecar never opens it,
-so reverting `backup_alerts.py` is a complete rollback: no state repair. The
+first need, restarted with a notice if malformed). A release without the sidecar
+never opens it, nor the `monitor-restart-*` files, so reverting `backup_alerts.py`
+is a complete rollback with no state repair: the previous release runs on every
+state this release leaves behind as it does on its own, with ONE known
+exception. A brand-new monitor (no `status.json` yet) whose very first notice is
+stopped between writing the sidecar and `status.json` leaves the sidecar alone;
+the previous release reads any incident file without a `status.json` as lost
+state and refuses, sending nothing and inventing no incident. This release
+recovers that directory and sends the owed notice: roll forward, not back. The
 current monitor adopts whatever an earlier release leaves behind, reading what an
-unrecorded first notice announced from that notice's own receipt.
+unrecorded first notice announced from that notice's own receipt, including after
+this release stopped between its two files and the earlier release then checked.
 
 While an incident is open the sidecar is written before `status.json`, and a
 write that makes a notice also keeps, until the next write, the exact
-`status.json` it began from and what the sidecar said about it. A check stopped
-between the two files therefore leaves `status.json` exactly as kept: the
-monitor reads the kept record and discards the newer notice, which provably
-never began (no request record exists, and a request only follows both writes),
-and the next check sends whatever is owed. `status.json` is the commit point: a
-notice it names with no request record still fails closed for operator review.
-An in-flight send stopped during rollback remains uncertain. If source has moved
+`status.json` it began from and what the sidecar said about it. The newer notice
+counts only if `status.json` records it (its incident, identity and time) or its
+own request record (its condition, at its time) shows it began. Otherwise a check
+stopped between the two files is read as though it never ran: the monitor reads
+the kept record and discards the newer notice, which provably never began (a
+request only follows both writes), whether or not an earlier release has since
+rewritten `status.json`, and the next check sends whatever is owed. An earlier
+release's own first notice for the same incident, under the same name, is read
+from its own receipt and never merged with the discarded one. `status.json` is
+the commit point: a notice it names with no request record is never sent, and the
+monitor restarts its record and says so (see "Fail closed means alert, not
+silence"). An in-flight send stopped during rollback remains uncertain. If source has moved
 since installation, the exact-source gate requires a new reviewed scope; do not
 bypass it or apply an old declaration to different source.
 
