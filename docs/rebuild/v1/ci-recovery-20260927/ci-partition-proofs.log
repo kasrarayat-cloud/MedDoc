@@ -1,0 +1,9 @@
+test_each_failing_stage_stops_without_success_or_later_commands (ops.test_ci_gate_partitions.CIGatePartitions.test_each_failing_stage_stops_without_success_or_later_commands) ... ok
+test_partitions_exactly_cover_legacy_python_gate (ops.test_ci_gate_partitions.CIGatePartitions.test_partitions_exactly_cover_legacy_python_gate) ... ok
+test_required_aggregate_runs_always_and_accepts_only_success (ops.test_ci_gate_partitions.CIGatePartitions.test_required_aggregate_runs_always_and_accepts_only_success) ... ok
+test_unknown_mode_refuses_without_any_suite (ops.test_ci_gate_partitions.CIGatePartitions.test_unknown_mode_refuses_without_any_suite) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.647s
+
+OK

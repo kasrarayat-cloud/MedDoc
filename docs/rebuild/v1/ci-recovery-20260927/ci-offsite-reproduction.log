@@ -1,0 +1,17 @@
+test_execute_live_path_fixture_records_completion_and_no_restore (ops.test_automatic_offsite.AutomaticOffsiteTests.test_execute_live_path_fixture_records_completion_and_no_restore) ... FAIL
+
+======================================================================
+FAIL: test_execute_live_path_fixture_records_completion_and_no_restore (ops.test_automatic_offsite.AutomaticOffsiteTests.test_execute_live_path_fixture_records_completion_and_no_restore)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/ops/test_automatic_offsite.py", line 397, in test_execute_live_path_fixture_records_completion_and_no_restore
+    self.assertEqual(result['state'], 'complete')
+AssertionError: 'refused' != 'complete'
+- refused
++ complete
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.023s
+
+FAILED (failures=1)
