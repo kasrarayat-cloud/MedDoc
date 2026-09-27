@@ -4,6 +4,8 @@
 See [REFUTATION-1.md](REFUTATION-1.md) for the preserved finding, bounded
 containment and current result of three automatic gains, 12/12 and 26/77.
 The four-gain result below remains first-pass evidence, not an accepted claim.
+The reviewed union's remaining internal engineering and adjudication work is
+classified in [REMAINING-51.md](REMAINING-51.md); no new campaign was run for it.
 
 Worktree `/opt/meddoc-pro/.worktrees/v1-patient-topics`, branch
 `v1/patient-topics`, base `aa4e8c0d0c0f935bdc35012263e5881bbd703ace`.
