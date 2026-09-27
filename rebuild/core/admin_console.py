@@ -289,6 +289,94 @@ def shape(value, recogniser=None):
     return 'present, recognised shape' if recogniser(value) else 'present, UNRECOGNISED shape'
 
 
+def live_generation_queue_row(live):
+    """How many LIVE-mode generation jobs are waiting or in flight: a count, nothing about any job.
+
+    A model, price or mode switch is only clean once these drain, and a switch out of live mode is the operator's stop —
+    the worker refuses each queued live job before sending it (not processed, hold released). Without the count the drain
+    the migration note asks for could not be seen from either screen.
+    """
+    from django.db import DatabaseError
+    from .models import Job
+    try:
+        live_jobs = Job.objects.filter(kind='generation', config__mode='live')
+        queued, running = live_jobs.filter(state='queued').count(), live_jobs.filter(state='running').count()
+    except DatabaseError:
+        return {'name': 'live generation jobs', 'value': 'UNAVAILABLE — the job table could not be read', 'severity': 'error'}
+    value = f'{queued} queued, {running} running'
+    if live:
+        return {'name': 'live generation jobs', 'value': value + ' (drained when both are 0)', 'severity': ''}
+    return {'name': 'live generation jobs', 'severity': 'warning' if queued or running else '',
+            'value': value + ' — QUILLMD_AI_MODE is not live, so the worker refuses each queued one before sending it '
+                             '(not processed, nothing charged, hold released)'}
+
+
+def language_model_rows():
+    """The language-model section: model, three rates, the Sonnet 5 settings, the request profile and pricing_version.
+
+    ONE implementation, printed line for line by `manage.py configuration_status` and rendered by the services page, so
+    the two screens cannot disagree about which request a generation queued now would send — including the INVALID state
+    that refuses every generation. None of these is a secret: they answer "which model, at which price". Every derived
+    value comes from `core.generation.configuration()`, the function enqueue snapshots.
+
+    Each row is {'name', 'value', 'severity'}; severity is '' for a plain setting, else success / warning / error.
+
+    ⚠️ OUTSIDE LIVE MODE NOTHING HERE IS SENT. `generate()` answers from the synthetic fixture before it reads the profile,
+    so a fixture deployment configured with an unlisted model printed 'INVALID — every generation is refused' while every
+    generation succeeded, and a legacy one printed a request that is never made. Not live, the section opens by saying no
+    provider request is sent, and every value is still shown but marked INACTIVE.
+    """
+    import json
+    from django.conf import settings
+    from django.core.exceptions import ValidationError
+    from . import generation
+    unset = lambda value: value if isinstance(value, str) and value.strip() else '(unset)'
+    live = settings.AI_MODE == 'live'
+    inactive = '' if live else ' (inactive: QUILLMD_AI_MODE is not live)'
+    rows = [] if live else [{'name': 'provider requests', 'severity': 'warning',
+                             'value': f'NONE — QUILLMD_AI_MODE is {unset(settings.AI_MODE)}, not live: generation answers from '
+                                      'the synthetic fixture and sends no provider request. The values below are configured '
+                                      'but INACTIVE.'}]
+    for name, value in (('QUILLMD_AI_MODEL', settings.AI_MODEL),
+                        ('QUILLMD_AI_INPUT_RATE', settings.AI_INPUT_RATE),
+                        ('QUILLMD_AI_OUTPUT_RATE', settings.AI_OUTPUT_RATE),
+                        ('QUILLMD_AI_CACHED_RATE', settings.AI_CACHED_RATE),
+                        ('QUILLMD_AI_THINKING', settings.AI_THINKING),
+                        ('QUILLMD_AI_EFFORT', settings.AI_EFFORT),
+                        ('QUILLMD_AI_INFERENCE_GEO', settings.AI_INFERENCE_GEO)):
+        # Thinking and effort are read only for claude-sonnet-5; saying so stops a 4.6 operator reading them as live.
+        scope = ' (read only for claude-sonnet-5)' if name in ('QUILLMD_AI_THINKING', 'QUILLMD_AI_EFFORT') else ''
+        rows.append({'name': name, 'value': unset(value) + scope + inactive, 'severity': ''})
+    try:
+        config = generation.configuration()
+    except ValidationError as error:
+        # Only the discount can refuse here, and its message is fixed text naming no value.
+        rows.append({'name': 'request profile', 'value': 'UNAVAILABLE — ' + '; '.join(error.messages), 'severity': 'error'})
+        rows.append({'name': 'pricing_version', 'value': 'UNAVAILABLE', 'severity': 'error'})
+        rows.append(live_generation_queue_row(live))
+        return rows
+    profile = config['request_profile']
+    if 'invalid' in profile:
+        value, severity = ('INVALID — every generation is refused before any request: ' + profile['invalid'], 'error')
+    # ⚠️ 'legacy' ONLY FOR THE EXACT PRE-PROFILE REQUEST. The label used to be chosen after dropping `inference_geo` from
+    # the comparison, so claude-sonnet-4-6 with QUILLMD_AI_INFERENCE_GEO=us — which SENDS inference_geo, holds 1.1x and
+    # fingerprints away from fcc80267 — read 'legacy (the pre-profile request, unchanged)', and the rollback check that
+    # looks for that line was met by a request that is not the rollback.
+    elif profile == generation.LEGACY_PROFILE:
+        value, severity = ('legacy (the pre-profile request, unchanged) ' + json.dumps(profile, sort_keys=True), 'success')
+    elif {k: v for k, v in profile.items() if k != 'inference_geo'} == generation.LEGACY_PROFILE:
+        value, severity = (f'NOT the pre-profile request: legacy-v1 plus inference_geo {profile["inference_geo"]} '
+                           + json.dumps(profile, sort_keys=True), 'warning')
+    else:
+        value, severity = ('explicit ' + json.dumps(profile, sort_keys=True), 'success')
+    if not live:
+        value, severity = 'INACTIVE — no provider request is sent while QUILLMD_AI_MODE is not live. In live mode: ' + value, ''
+    rows.append({'name': 'request profile', 'value': value, 'severity': severity})
+    rows.append({'name': 'pricing_version', 'value': config['pricing_version'] + inactive, 'severity': ''})
+    rows.append(live_generation_queue_row(live))
+    return rows
+
+
 def configuration_rows():
     """Everything `manage.py configuration_status` prints, as data. Values are never returned."""
     import os
@@ -321,6 +409,8 @@ def configuration_rows():
                      'severity': 'success' if shape(value, recogniser) == 'present' or shape(value, recogniser).endswith('recognised shape') else
                                  'warning' if shape(value, recogniser) == 'absent' else 'error'}
                     for name, value, recogniser in secret_rows],
+        # The same rows `configuration_status` prints under 'Language model', from the same function.
+        'language_model': language_model_rows(),
         'media_tools': [
             {'name': 'ffprobe', 'status': probe or missing, 'severity': 'success' if probe else 'error'},
             {'name': 'ffmpeg', 'status': remuxer or missing, 'severity': 'success' if remuxer else 'error'},

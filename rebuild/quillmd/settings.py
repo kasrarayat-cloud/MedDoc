@@ -78,6 +78,15 @@ AI_MODEL=os.getenv('QUILLMD_AI_MODEL','gpt-4.1-mini')
 AI_INPUT_RATE=os.getenv('QUILLMD_AI_INPUT_RATE','')
 AI_OUTPUT_RATE=os.getenv('QUILLMD_AI_OUTPUT_RATE','')
 AI_CACHED_RATE=os.getenv('QUILLMD_AI_CACHED_RATE','')
+# Request profile (core.generation.request_profile). Read ONLY when QUILLMD_AI_MODEL is claude-sonnet-5: the listed
+# legacy Claude models (core.generation.LEGACY_CLAUDE_MODELS, claude-sonnet-4-6 included) keep the pre-profile request
+# byte for byte and ignore the first two. With provider anthropic any other model id is refused before any request, and
+# with provider openai any Claude model id is. NOTE: the defaults above (anthropic + gpt-4.1-mini) are such a pair, so a
+# live deployment must set QUILLMD_AI_MODEL; fixture mode sends nothing and is unaffected.
+# Thinking 'disabled' | 'adaptive'; effort 'low' | 'medium' | 'high'. Unset inference geography sends no inference_geo.
+AI_THINKING=os.getenv('QUILLMD_AI_THINKING','disabled')
+AI_EFFORT=os.getenv('QUILLMD_AI_EFFORT','medium')
+AI_INFERENCE_GEO=os.getenv('QUILLMD_AI_INFERENCE_GEO','')
 STRIPE_SECRET_KEY=os.getenv('STRIPE_SECRET_KEY','')
 STRIPE_WEBHOOK_SECRET=os.getenv('STRIPE_WEBHOOK_SECRET','')
 STRIPE_LIVE_ENABLED=False

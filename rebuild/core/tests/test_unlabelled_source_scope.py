@@ -48,9 +48,12 @@ def _legacy_instructions(config):
     client.messages.create.side_effect = create
     # generate() refuses before building a request when rates are unset; supply synthetic ones
     # so the instruction is reached. Nothing is sent: create() raises on entry.
-    config = {**config, 'input_rate': '0.000003', 'output_rate': '0.000015', 'cached_rate': '0.0000003'}
-    fields = [{'key': 'cell_0', 'label': 'Consent', 'kind': 'text', 'locator': {'cell': 0}}]
+    # ⚠️ And a pair QuillMD sends: the settings default is anthropic + gpt-4.1-mini, which is now refused before any
+    # request (F2, round 3), so the capture names the rollback model and its legacy request explicitly.
     from core import generation
+    config = {**config, 'input_rate': '0.000003', 'output_rate': '0.000015', 'cached_rate': '0.0000003',
+              'provider': 'anthropic', 'model': 'claude-sonnet-4-6', 'request_profile': dict(generation.LEGACY_PROFILE)}
+    fields = [{'key': 'cell_0', 'label': 'Consent', 'kind': 'text', 'locator': {'cell': 0}}]
     with patch('anthropic.Anthropic', return_value=client):
         try:
             generation.generate('Consent: documented', fields, config)

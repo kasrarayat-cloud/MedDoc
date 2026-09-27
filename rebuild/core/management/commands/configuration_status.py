@@ -56,6 +56,7 @@ class Command(BaseCommand):
         self.stdout.write('Private credentials (status only):')
         for name, value, recogniser in secrets:
             self.stdout.write(f'  {name}: {shape(value, recogniser)}')
+        self.language_model()
         # ⚠️ THESE TWO SENTENCES SAID THE OPPOSITE OF WHAT THE CODE DOES, in the same change that removed the
         # fallback they described. They promised a degraded-but-working submission path; there is no such path now.
         # During an incident where every recording is failing, this is the one screen built to localise it — and it
@@ -73,3 +74,17 @@ class Command(BaseCommand):
         self.stdout.write(f'  SYNTHETIC_ONLY: {settings.SYNTHETIC_ONLY}')
         self.stdout.write(f'  STRIPE_LIVE_ENABLED: {settings.STRIPE_LIVE_ENABLED}')
         self.stdout.write(f'  database: {settings.DATABASES["default"]["NAME"]}')
+
+    def language_model(self):
+        """The model, its rates, the request profile and the pricing version a generation queued NOW would carry.
+
+        None of these is a secret — they are the answer to "which model, at which price" — and without them an operator
+        switching the model could not confirm the switch from the one screen built for it. Every value is computed by
+        `core.generation.configuration()`, the function enqueue snapshots, so this screen cannot describe a different
+        request from the one a job would make. The rows come from `core.admin_console.language_model_rows()`, which the
+        services page renders too: one implementation, so the terminal and the browser cannot disagree.
+        """
+        from core.admin_console import language_model_rows
+        self.stdout.write('Language model (plain configuration values, shown so a model switch can be confirmed):')
+        for row in language_model_rows():
+            self.stdout.write(f'  {row["name"]}: {row["value"]}')

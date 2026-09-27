@@ -77,7 +77,9 @@ class ProviderDedupRefutation(SyntheticFixture, TestCase):
                     Decimal(".1"), {}, {}, provider, request, False)
                    for provider, request in [("anthropic:synthetic-model-a", "req_first"),
                                              ("anthropic:synthetic-model-b", "req_second")]]
-        with tempfile.TemporaryDirectory() as directory, override_settings(MEDIA_ROOT=Path(directory)), \
+        # Live jobs run in a live deployment: a job queued live is refused unsent when the deployment is not live
+        # (core.generation.refuse_switched_mode), which is the operator's stop and not what this test is about.
+        with tempfile.TemporaryDirectory() as directory, override_settings(MEDIA_ROOT=Path(directory), AI_MODE="live"), \
                 patch("core.jobs.generation.generate", side_effect=replies) as provider:
             self.assertTrue(run_one())
             self.assertTrue(run_one())

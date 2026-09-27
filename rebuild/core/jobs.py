@@ -59,6 +59,12 @@ OVERFLOW_ERROR='The transcript was not added because the notes would exceed the 
 # An over-limit upload is kept for the doctor's decision; the approval is valid 30 minutes, so after 40 an unapproved upload
 # can never be sent and is removed.
 NOTES_FULL='The notes are at the 50,000-character limit, so no transcript could be added. Shorten the notes first. Nothing was sent for transcription.'
+#: A generation quote signed under a price or request that is no longer configured: refused before any hold or job.
+QUOTE_PRICE_CHANGED=('The prices or the language model changed after this page loaded, so this request was not made. Nothing was '
+                     'sent or charged. Review the new maximum charge on this page, then generate again.')
+#: The same refusal when the deployment moved between live and synthetic (fixture) processing after the page was quoted.
+QUOTE_MODE_CHANGED=('QuillMD was switched between live and synthetic processing after this page loaded, so this request was not '
+                    'made. Nothing was sent or charged. Review this page again, then generate again.')
 ABANDONED_UPLOAD_SECONDS=2400
 UPLOAD_NAME=re.compile(r'audio/[a-f0-9]{48}\.(wav|webm|mp3|m4a)')
 # The normalised artifact is TRANSIENT: written under the same protected storage as the upload, at 0600, submitted, and
@@ -223,6 +229,19 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
         old.reused=True
         return old
     if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists(): raise ValidationError('This encounter already has a pending job.')
+    # ⚠️ A SIGNED QUOTE IS A PRICE THE DOCTOR SAW, NOT A LICENCE TO SEND A REQUEST THE OPERATOR HAS SINCE WITHDRAWN. The
+    # quote carries the whole configuration() it was signed under, and for its 600 s it used to be enqueued as it stood:
+    # measured, a page loaded under claude-sonnet-5 and clicked after a rollback, restart and drain queued and SENT a
+    # claude-sonnet-5 request (profile claude-sonnet-5-v1, 8975b158…) while configuration_status said legacy. pricing_version
+    # hashes the model, the rates, the discount and the request profile, so any of them moving refuses the quote here —
+    # before Job.objects.create and before any hold — and the page the doctor is sent back to signs a fresh one.
+    # ⚠️ AND THE MODE, WHICH pricing_version DOES NOT HASH. Measured: a page quoted live and clicked after the deployment was
+    # switched to fixture queued a LIVE job — held, sent, charged — while the console said no request is sent; the reverse
+    # queued a fixture job whose synthetic answers entered a live deployment. Both directions are refused here.
+    if config is not None and kind=='generation':
+        current=generation.configuration()
+        if config.get('mode')!=current['mode']: raise ValidationError(QUOTE_MODE_CHANGED)
+        if config.get('pricing_version')!=current['pricing_version']: raise ValidationError(QUOTE_PRICE_CHANGED)
     config=dict(config or generation.configuration())
     if kind=='transcription':
         if not (config['voice_rate_minute'] or config['voice_rate_second']): raise ValidationError('Transcription usage rates have not been configured.')
@@ -520,6 +539,8 @@ def run_one():
     provider_returned=False
     try:
         e=job.encounter
+        # The operator's mode switch is a stop: a job queued in the other mode is refused here, before anything is sent.
+        if job.kind=='generation': generation.refuse_switched_mode(job.config)
         result,cost,units,rates,provider,request_id,simulated=generation.generate(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements]) if job.kind=='generation' else transcribe(job)
         provider_returned=True
         response=(result.get('anthropic_response') or result.get('response')) if isinstance(result,dict) else None
@@ -608,7 +629,7 @@ def run_one():
                 # The failed job state is already durable; a failed reversal must never stop the worker. audit_billing flags settled-but-unabsorbed failures.
                 audit(job.user,'usage.absorb_failed',job.pk,department=job.encounter.department,error_class=type(absorb_error).__name__)
         audit(job.user,'job.'+job.state,job.pk,department=job.encounter.department,error_class=type(exc).__name__,
-              billing='not_adopted' if declined else 'platform_failure' if known and not fixture else 'fixture' if fixture else 'not_processed' if unsent else 'uncertain')
+              billing='not_adopted' if declined else 'platform_failure' if known and not fixture else 'not_processed' if unsent else 'fixture' if fixture else 'uncertain')
     return True
 
 

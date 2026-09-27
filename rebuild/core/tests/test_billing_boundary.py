@@ -29,7 +29,7 @@ from core.tests.test_billing_policy import AUDITABLE_RATES, STORAGES, PolicyFixt
 from core.tests.test_security import SyntheticFixture
 from core.tests.audio_fixtures import wav_bytes
 
-LIVE={'AI_MODE':'live','AI_PROVIDER':'anthropic','AI_MODEL':'synthetic-model','AI_INPUT_RATE':'3','AI_OUTPUT_RATE':'15','AI_CACHED_RATE':'.3'}
+LIVE={'AI_MODE':'live','AI_PROVIDER':'anthropic','AI_MODEL':'claude-sonnet-4-6','AI_INPUT_RATE':'3','AI_OUTPUT_RATE':'15','AI_CACHED_RATE':'.3'}
 GENERATION_DISCLOSURE='This is an additional generation for this document. Earlier generations remain charged; this request is charged separately at provider usage × 1.5.'
 VOICE_DISCLOSURE='A previous transcription for this document succeeded and remains charged; this new recording is charged separately at provider usage × 1.5.'
 CANCEL_BUTTON='Cancel queued request'

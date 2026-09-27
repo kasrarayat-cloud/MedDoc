@@ -12,7 +12,7 @@ from core.tests.test_natural_tab_generation import NOTES, ORIGINAL
 from documents.engine import docx_inspect
 
 
-@override_settings(AI_MODE='live', AI_PROVIDER='anthropic', AI_MODEL='synthetic-no-network',
+@override_settings(AI_MODE='live', AI_PROVIDER='anthropic', AI_MODEL='claude-sonnet-4-6',
                    AI_INPUT_RATE='1', AI_OUTPUT_RATE='5', AI_CACHED_RATE='0.1')
 class IndependentSectionPromptTests(SimpleTestCase):
     @classmethod
