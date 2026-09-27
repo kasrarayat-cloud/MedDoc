@@ -2133,6 +2133,48 @@ PLAN_FIELDS = frozenset(('plan', 'treatment plan', 'management plan'))
 RETURN_IF_INSTRUCTION = re.compile(r'return\s+if\s+[^.!?\r\n:]+\.', re.I)
 
 
+# Exact destination names, not a clinical synonym map. Source subjects are kept
+# separately from value extraction so "No examination ..." and anatomical or
+# temporal modifiers remain in the adopted text and its original evidence.
+CLINICAL_SUBJECT_FIELDS = frozenset(('examination', 'assessment', 'medications'))
+LOCAL_SUBJECT_QUALIFIERS = {'assessment': frozenset(('probable',)), 'examination': frozenset(('today',))}
+
+
+def v3_field_subjects(units, named, parsed):
+    eligible = {label for label, matches in named.items() if label in CLINICAL_SUBJECT_FIELDS
+                and len(matches) == 1 and matches[0].get('kind') in ('text', 'long_text')}
+    patterns = {label: re.compile(r'^(?P<prefix>(?:[^\W\d_]+\s+){0,3})(?P<head>' + re.escape(label)
+                                  + r')\s+(?P<predicate>\S.*)$', re.I) for label in eligible}
+    subjects, spans = {}, {}
+    for unit in units:
+        own = parsed[unit['id']]
+        subjects[unit['id']] = own[0] if own and len(named.get(own[0], ())) == 1 else None
+        if own: continue
+        matches = []
+        for label, pattern in patterns.items():
+            match = pattern.match(unit['quote'])
+            if not match: continue
+            prefix = match.group('prefix')
+            predicate = re.sub(r'^there\s+', '', match.group('predicate'), count=1, flags=re.I)
+            if (not FINITE_STATEMENT_V3.match(predicate)
+                    or any(p.search(prefix) for p in (UNSETTLED, INHERITED_SCOPE, SELF_CORRECTION))
+                    or any(re.search(r'\b' + re.escape(other) + r'\b', prefix, re.I) for other in named)):
+                continue
+            matches.append((label, unit['start'] + match.start('head'), unit['start'] + match.end('head')))
+        if len(matches) == 1:
+            label, start, end = matches[0]
+            subjects[unit['id']] = label
+            spans[unit['id']] = {'label': label, 'start': start, 'end': end}
+    by_subject = {}
+    for unit in units:
+        if (subject := subjects[unit['id']]):
+            by_subject.setdefault(subject, []).append(unit['id'])
+    # The new source-subject route cannot choose one of several statements about
+    # the same clinical field. Keep all of them visible for a clinician's decision.
+    ambiguous = {label for label, ids in by_subject.items() if len(ids) > 1 and any(unit in spans for unit in ids)}
+    return subjects, spans, eligible, ambiguous
+
+
 def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None):
     """One bounded source-context reading used by generation and stored-answer governance.
 
@@ -2149,6 +2191,7 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
                and matches[0].get('kind') in ('text', 'long_text') and label in GENERAL_NARRATIVE_FIELDS}
     parsed = ({u['id']: value for u, value in zip(units, parsed_units)} if parsed_units is not None else
               {u['id']: tab_source_value(u['quote'], labels) for u in units})
+    subjects, subject_spans, clinical, ambiguous_subjects = v3_field_subjects(units, named, parsed)
     colon = {u['id']: bool(labelled_value(u['quote'], labels)) for u in units}
     plain = {u['id']: bool(colon[u['id']] and parsed[u['id']] and len(named.get(parsed[u['id']][0], ())) == 1
                            and plain_value(parsed[u['id']][1])) for u in units}
@@ -2185,7 +2228,7 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
         previous = unit
     if group: groups.append(group)
     blocks, block_of, barriers = [], {}, {}
-    conditional_spans, conditional_units, conditional_multisentence = [], set(), set()
+    conditional_spans, conditional_units, conditional_multisentence, conditional_unsafe = [], set(), set(), set()
     for group in groups:
         group_blocks, block = [], []
         for unit in group:
@@ -2194,14 +2237,14 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
             # labels and repeated questions cannot establish a write destination.
             patient_after_plain = bool(len(block) == 1 and plain[block[0]['id']]
                                        and own is None and patients[unit['id']])
-            if block and ((own and len(named.get(own[0], ())) == 1) or patient_after_plain):
+            if block and (subjects[unit['id']] or patient_after_plain):
                 group_blocks.append(block); block = []
             block.append(unit)
         if block: group_blocks.append(block)
         for position, block in enumerate(group_blocks):
             index = len(blocks)
             own = parsed[block[0]['id']]
-            owner = own[0] if own and len(named.get(own[0], ())) == 1 else None
+            owner = subjects[block[0]['id']]
             value = '\n'.join([own[1] if own else block[0]['quote'], *(u['quote'] for u in block[1:])])
             local_conditional = []
             if owner in PLAN_FIELDS:
@@ -2226,6 +2269,18 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
                     if (len(pieces) == 2 and found == [pieces[1]] and parsed[unit['id']]
                             and parsed[unit['id']][0] == owner):
                         conditional_multisentence.add(unit['id'])
+            if local_conditional:
+                # A return instruction cannot convert an earlier question/pointer
+                # into a supported treatment. Read each constituent sentence, then
+                # share the same hold with stored-draft review and finalization.
+                for unit in block:
+                    for low, high in sentence_spans(unit['quote']):
+                        text = unit['quote'][low:high]
+                        part = parsed[unit['id']] if low == 0 else None
+                        value_part = text[part[2]:] if part and part[2] <= len(text) else text
+                        if v3_shape_holds(text, value_part):
+                            conditional_unsafe.add(unit['id'])
+                conditional_multisentence.difference_update(conditional_unsafe)
             conditional_spans.extend(local_conditional)
             scoped_words = all(any(low <= match.start() + unit['start'] and match.end() + unit['start'] <= high
                                    for low, high in local_conditional)
@@ -2234,9 +2289,15 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
             # unresolved list or nonplain specific answer retains its earlier hold.
             narrative = (owner in general and (FINITE_STATEMENT_V3.search(
                 value if colon[block[0]['id']] else block[0]['quote']) or local_conditional))
+            factual = owner in clinical and (colon[block[0]['id']] or FINITE_STATEMENT_V3.search(block[0]['quote']))
+            # These qualifications belong to the exact stated topic and stay in
+            # the answer. They do not change another field's subject or polarity.
+            local_words = LOCAL_SUBJECT_QUALIFIERS.get(owner, ()) if factual else ()
+            unsettled = any(match.group().casefold() not in local_words
+                            for text in readings(value) for match in UNSETTLED.finditer(text))
             safe = bool(scoped_words and ((owner and plain_value(value)) or (
-                (narrative or patients[block[0]['id']])
-                and not any(UNSETTLED.search(text) or SELF_CORRECTION.search(text) or SCOPE_POINTER.search(text)
+                (narrative or factual or patients[block[0]['id']]) and not unsettled
+                and not any(SELF_CORRECTION.search(text) or SCOPE_POINTER.search(text)
                             for text in readings(value)))))
             barriers[index] = safe
             blocks.append({'units': block, 'owner': owner, 'position': position,
@@ -2250,9 +2311,11 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
             'colon': colon, 'before': before, 'independent': independent, 'general': general, 'groups': groups,
             'ends_read': ends_read, 'shapes_read': shapes_read, 'blocks': blocks, 'block_of': block_of,
             'barriers': barriers, 'patients': patients, 'named': named,
+            'subjects': subjects, 'subject_spans': subject_spans, 'clinical': clinical,
+            'ambiguous_subjects': ambiguous_subjects,
             'neighbours': paragraph_neighbours(notes, units, plain_values),
             'conditional_spans': conditional_spans, 'conditional_units': conditional_units,
-            'conditional_multisentence': conditional_multisentence,
+            'conditional_multisentence': conditional_multisentence, 'conditional_unsafe': conditional_unsafe,
             'inherited_causes': [cause for cause in getattr(units, 'scope_causes', ())
                 if cause[0] != 'lexical' or not any(low <= cause[1] and cause[2] <= high for low, high in conditional_spans)]}
 
@@ -2265,6 +2328,8 @@ def v3_scope_selection(reading, label, evidence):
     block. Other blocks remain relevant when they carry existing scope warnings.
     """
     label = question_key(label)
+    if label in reading['ambiguous_subjects']:
+        return {'before': set(), 'after': set(), 'complete': set()}
     spans = {(entry.get('start'), entry.get('end')) for entry in evidence}
     chosen = {reading['spans'][span]['id'] for span in spans if span in reading['spans']}
     before, after, complete = set(), set(), set()
@@ -2304,7 +2369,9 @@ def v3_preceding_warnings(reading, label, evidence):
             if len(group) > 1 and not any(reading['parsed'][u['id']] for u in group):
                 if all((u['start'], u['end']) in spans for u in group):
                     complete.update(u['id'] for u in group)
-    warnings = {}
+    warnings = {unit['id']: unit for unit in reading['units']
+                if unit['id'] in reading['conditional_unsafe'] or (label in reading['ambiguous_subjects']
+                    and reading['subjects'][unit['id']] == label)}
     starts = [unit['start'] for unit in reading['units']]
     for kind, start, end in reading['inherited_causes']:
         index = bisect.bisect_right(starts, start) - 1
@@ -2313,6 +2380,9 @@ def v3_preceding_warnings(reading, label, evidence):
     for span in spans:
         unit = reading['spans'].get(span)
         if not unit: continue
+        subject = reading['subjects'][unit['id']]
+        if subject and subject != label:
+            warnings[unit['id']] = unit
         before, changer = reading['neighbours'][unit['id']]
         if (before and not reading['colon'][unit['id']] and unit['id'] not in complete
                 and unit['id'] not in reading['independent'].get(label, ()) and unit['id'] not in scoped['before']):
@@ -2423,6 +2493,8 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             quote=unit['quote']
             # Exact source question labels keep their previous cross-field guard.
             if parsed and parsed[0]!=label: continue
+            if v3 and (subject := governance[11]['preceding']['subjects'][unit['id']]) and subject != label:
+                continue
             value=parsed[1] if parsed else quote
             # `correction_value` is INLINE_CORRECTION's own match, kept on the unit: without it there is nothing to correct.
             corrected=corrected_quantity(unit,field) if unit['correction_value'] is not None else None
@@ -2431,6 +2503,8 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             if parsed and parsed[1]: explicit.setdefault(value,unit)
         evidence=[]; texts=[]; guarded=False; nearby={}
         choices=[by_id[value] for value in item.unit_ids] if isinstance(item,UnitSelection) else item.quotes
+        if v3 and choices and label in governance[11]['preceding']['ambiguous_subjects']:
+            guarded = True
         scoped = v3_scope_selection(governance[11]['preceding'], label,
                     [choice if isinstance(choice,dict) else allowed[choice][0] for choice in choices if isinstance(choice,dict) or choice in allowed]) if v3 else {}
         if v3 and scoped['complete']:

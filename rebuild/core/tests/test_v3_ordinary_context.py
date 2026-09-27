@@ -216,3 +216,147 @@ class CompleteOrdinaryNoteWorkflow(V3EncounterFixture, TestCase):
         self.walk('\n'.join((head, allergy, plan, follow)),
                   {'Chief complaint': [head], 'Allergies': [allergy], 'Plan': [plan, follow]},
                   {'Chief complaint': head, 'Allergies': 'none known.', 'Plan': plan[6:] + '\n' + follow})
+
+
+class ConditionalQuestionRefutation(SimpleTestCase):
+    fields = [field('p', 'Plan', 'long_text')]
+    question = 'Plan: amoxicillin? Return if symptoms worsen.'
+
+    def test_a_question_before_return_is_not_a_supported_plan(self):
+        answer = run(self.question, {'Plan': [self.question]}, fields=self.fields)['Plan']
+        self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+        self.assertNotIn('suggestion', answer)
+        separate = 'Plan: amoxicillin?\nReturn if symptoms worsen.'
+        answer = run(separate, {'Plan': separate.splitlines()}, fields=self.fields)['Plan']
+        self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+        positive = 'Plan: amoxicillin. Return if symptoms worsen.'
+        good = run(positive, {'Plan': [positive]}, fields=self.fields)['Plan']
+        self.assertEqual((good['status'], good['text']), ('supported', positive[6:]))
+
+    def test_a_stored_supported_question_cannot_pass_review_or_finalization(self):
+        evidence = [{'quote': self.question, 'start': 0, 'end': len(self.question)}]
+        answer = {'text': self.question[6:], 'status': 'supported', 'evidence': evidence, 'reviewed': True}
+        governance = g.governance_for(self.question, self.fields)
+        page = g.as_currently_governed(governance, self.question, {**answer, 'label': 'Plan'})
+        self.assertEqual((page['status'], page['text']), ('conflict', ''))
+        self.assertEqual(g.governed_decisions(self.question, self.fields, {'p': answer}), ['Plan'])
+        positive = 'Plan: amoxicillin. Return if symptoms worsen.'
+        good = run(positive, {'Plan': [positive]}, fields=self.fields)['Plan']
+        self.assertEqual(g.governed_decisions(positive, self.fields, {'p': {**good, 'reviewed': True}}), [])
+
+
+class ExactClinicalSubjects(SimpleTestCase):
+    fields = [field('h', 'Chief complaint'), field('m', 'Medications', 'long_text'),
+              field('a', 'Allergies'), field('s', 'Smoker', 'choice', ['Yes', 'No']),
+              field('e', 'Examination', 'long_text'), field('d', 'Assessment', 'long_text'), field('p', 'Plan', 'long_text')]
+
+    def test_retained_independent_examination_and_assessment_keep_source_words(self):
+        for examination, assessment in (
+            ('On examination there is a small effusion and medial joint line tenderness.',
+             'Assessment is a probable medial meniscus tear.'),
+            ('Chest examination revealed crackles at the right base.', 'Assessment: community-acquired pneumonia.'),
+            ('Examination was not performed today.', 'Assessment: stable type 2 diabetes and hyperlipidemia.'),
+        ):
+            head, allergy, plan = 'Patient presents for medication review.', 'Allergies: codeine.', 'Plan: continue current medications.'
+            notes = '\n'.join((head, allergy, examination, assessment, plan))
+            picks = {'Chief complaint': [head], 'Allergies': [allergy], 'Examination': [examination],
+                     'Assessment': [assessment], 'Plan': [plan]}
+            answers = run(notes, picks, fields=self.fields)
+            for label in picks:
+                self.assertEqual(answers[label]['status'], 'supported', (label, notes, answers[label]))
+            self.assertEqual(answers['Examination']['text'], examination.removeprefix('Examination was '))
+            self.assertEqual(answers['Assessment']['text'], assessment.removeprefix('Assessment is ').removeprefix('Assessment: '))
+            stored = {f['key']: {**answers[f['label']], 'reviewed': True} for f in self.fields}
+            self.assertEqual(g.governed_decisions(notes, self.fields, stored), [])
+
+    def test_source_subject_never_strips_negation_or_reassigns_another_subject(self):
+        for quote in ('No examination was performed.', 'On examination of her mother there is a rash.',
+                      'Previous examination revealed a rash.', 'If examination reveals a rash, review tomorrow.'):
+            notes = 'Allergies: codeine.\n' + quote + '\nPlan: rest.'
+            answer = run(notes, {'Examination': [quote]}, fields=self.fields)['Examination']
+            self.assertTrue(answer['status'] == 'conflict' or answer['text'] == quote, (quote, answer))
+            if 'mother' in quote or quote.startswith(('Previous', 'If')):
+                self.assertEqual(answer['status'], 'conflict')
+        quote = 'Chest examination revealed crackles at the right base.'
+        notes = 'Allergies: codeine.\n' + quote + '\nPlan: rest.'
+        governance = g.governance_for(notes, self.fields)
+        source = next(u for u in governance[11]['units'] if u['quote'] == quote)
+        subject = governance[11]['preceding']['subject_spans'][source['id']]
+        self.assertEqual(notes[subject['start']:subject['end']].casefold(), 'examination')
+        for target in ('Medications', 'Plan'):
+            self.assertEqual(run(notes, {target: [quote]}, fields=self.fields)[target]['status'], 'conflict')
+            stored = {'status': 'supported', 'text': quote, 'reviewed': True,
+                      'evidence': [{k: source[k] for k in ('quote', 'start', 'end')}]}
+            key = next(f['key'] for f in self.fields if f['label'] == target)
+            self.assertEqual(g.governed_decisions(notes, self.fields, {key: stored}), [target])
+        duplicate = self.fields + [field('e2', 'Examination', 'long_text')]
+        self.assertEqual(run(notes, {'Examination': [quote]}, fields=duplicate)['Examination']['status'], 'conflict')
+        for prefix in ("For the patient's mother only:\n", 'If symptoms recur:\n'):
+            self.assertEqual(run(prefix + notes, {'Examination': [quote]}, fields=self.fields)['Examination']['status'], 'conflict')
+
+    def test_complete_retained_note9_has_seven_supported_unchanged_answers(self):
+        case = retained_note('r1-note9')
+        answers = run(case['notes'], case['picks'], fields=self.fields)
+        for label in case['picks']:
+            self.assertEqual(answers[label]['status'], 'supported', (label, answers[label]))
+        self.assertEqual(answers['Medications']['text'], 'Current medications are atorvastatin 20 mg and metformin 1000 mg.')
+        self.assertEqual(answers['Examination']['text'], 'not performed today.')
+        stored = {f['key']: {**answers[f['label']], 'reviewed': True} for f in self.fields}
+        self.assertEqual(g.governed_decisions(case['notes'], self.fields, stored), [])
+        corrected = case['notes'] + '\nCorrection: metformin was discontinued.'
+        self.assertEqual(run(corrected, case['picks'], fields=self.fields)['Medications']['status'], 'conflict')
+
+
+def retained_note(name):
+    path = Path(__file__).resolve().parents[3] / 'docs/rebuild/v1/notes-recovery-20260927/evidence/r1-corpus.json'
+    return next(note for note in json.loads(path.read_text())['notes'] if note['name'] == name)
+
+
+def medication_review_form(path):
+    doc = Document()
+    doc.add_paragraph('Synthetic medication review')
+    labels = ('Chief complaint', 'Medications', 'Allergies', 'Examination', 'Assessment', 'Plan')
+    table = doc.add_table(rows=len(labels), cols=2)
+    for i, label in enumerate(labels):table.cell(i, 0).text = label
+    doc.add_paragraph('Smoker  ☐ Yes  ☐ No')
+    out = BytesIO();doc.save(out)
+    Path(path).write_bytes(out.getvalue())
+    return out.getvalue()
+
+
+@override_settings(**LIVE)
+class CompleteRetainedMedicationReview(V3EncounterFixture, TestCase):
+    walk = CompleteOrdinaryNoteWorkflow.walk
+
+    def setUp(self):
+        with patch('core.tests.test_word_v3_workflow.build_intake_form', side_effect=medication_review_form):
+            super().setUp()
+        self.assertEqual(len(self.version.fields), 7)
+        smoker = next(f for f in self.version.fields if f['label'] == 'Smoker')
+        self.assertEqual((smoker['kind'], smoker['options']), ('choice', ['Yes', 'No']))
+
+    def test_unchanged_retained_note9_completes_review_and_the_original_word_form(self):
+        case = retained_note('r1-note9')
+        expected = {'Chief complaint': 'Patient presents for medication review.',
+                    'Medications': 'Current medications are atorvastatin 20 mg and metformin 1000 mg.',
+                    'Allergies': 'codeine.', 'Smoker': 'No', 'Examination': 'not performed today.',
+                    'Assessment': 'stable type 2 diabetes and hyperlipidemia.', 'Plan': 'continue current medications.'}
+        self.walk(case['notes'], case['picks'], expected)
+        body = part_text(private_path(self.encounter.export_path).read_bytes())
+        self.assertIn('Smoker  ☐ Yes  ☒ No', body)
+
+
+class RepeatedSourceSubjectRefutation(SimpleTestCase):
+    def test_repeated_source_subject_cannot_silently_drop_another_medication_statement(self):
+        fields = [field('m', 'Medications', 'long_text')]
+        quotes = ['Current medications are aspirin daily.', 'Current medications are metformin twice daily.']
+        for separator in ('\n', '\n\n'):
+            notes = separator.join(quotes)
+            for selected in ([quotes[0]], quotes):
+                answer = run(notes, {'Medications': selected}, fields=fields)['Medications']
+                self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+                self.assertNotIn('suggestion', answer)
+                self.assertEqual({e['quote'] for e in answer['held_candidate']['context']}, set(quotes))
+            old = {'status': 'supported', 'text': quotes[0], 'reviewed': True,
+                   'evidence': [{'quote': quotes[0], 'start': 0, 'end': len(quotes[0])}]}
+            self.assertEqual(g.governed_decisions(notes, fields, {'m': old}), ['Medications'])
