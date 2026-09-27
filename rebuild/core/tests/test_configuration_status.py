@@ -216,6 +216,27 @@ class ConfigurationStatusNamesTheModel(TestCase):
         self.assertNotIn('inactive', report.lower())
         self.assertIn('request profile: legacy (the pre-profile request, unchanged)', report)
 
+    def test_a_mode_that_is_not_exactly_live_is_shown_as_sending_nothing(self):
+        """F4 / mutant MA (round 3). generate() and the worker treat every mode but exactly 'live' as fixture. A console
+        that tested `!= 'fixture'` instead showed 'Live', 'LIVE' or 'live ' as a green legacy request while nothing was
+        sent — and survived every test. The screen and the behaviour are asserted together, per spelling."""
+        from core import admin_console
+        from core.tests.test_sonnet5_profile import FIELDS, NOTES
+        for mode in ('Live', 'LIVE', 'live ', ' live', 'fixture', ''):
+            with self.subTest(mode=mode), override_settings(**dict(SONNET_46, AI_MODE=mode)), \
+                    patch.dict(os.environ, PRICE_ENV), patch('anthropic.Anthropic') as client:
+                rows = admin_console.language_model_rows()
+                self.assertEqual(rows[0]['name'], 'provider requests')
+                self.assertTrue(rows[0]['value'].startswith('NONE — '), rows[0]['value'])
+                profile = next(row for row in rows if row['name'] == 'request profile')
+                self.assertTrue(profile['value'].startswith('INACTIVE — '), profile['value'])
+                self.assertEqual(profile['severity'], '')
+                # ...and that IS what happens: the fixture answers and no provider client is ever built.
+                self.assertEqual(g.generate(NOTES, FIELDS)[4], 'synthetic-extractive-fixture')
+                client.assert_not_called()
+        with override_settings(**SONNET_46), patch.dict(os.environ, PRICE_ENV):      # positive control: exactly 'live'
+            self.assertNotEqual(admin_console.language_model_rows()[0]['name'], 'provider requests')
+
     def test_each_request_profile_state_carries_its_severity(self):
         """R2-4. The badge is what an operator reads first, and no test asserted it: turning the rollback red, or the
         not-the-rollback case green, survived the whole suite. Each state is pinned to its severity."""

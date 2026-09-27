@@ -766,6 +766,34 @@ class QuoteAcrossAModelSwitch(OutcomeFixture, TestCase):
         with override_settings(**SONNET_46):                       # unchanged: the same quote queues
             self.assertEqual(enqueue(encounter, self.user, config=quoted).config['pricing_version'], ROLLBACK_FINGERPRINT)
 
+    def test_a_quote_signed_before_profiles_existed_is_checked_the_same_way(self):
+        """F4 / mutant MG (round 3): the pages open when this release deploys carry quotes signed by the previous one,
+        with no request_profile key. Skipping the check for that shape survived every test; measured under the mutant, a
+        pre-profile 4.6 quote clicked after the switch to Sonnet 5 queued and SENT claude-sonnet-4-6 at 6000 tokens."""
+        encounter = self.fresh_encounter()
+        with override_settings(**SONNET_46):
+            quoted = {k: v for k, v in g.configuration().items() if k != 'request_profile'}
+        with override_settings(**SONNET_5), patch('anthropic.Anthropic') as client:
+            with self.assertRaisesMessage(ValidationError, 'The prices or the language model changed'):
+                enqueue(encounter, self.user, config=quoted)
+            client.assert_not_called()
+        self.assertFalse(Job.objects.filter(encounter=encounter).exists())
+        self.assertFalse(Reservation.objects.filter(job__encounter=encounter).exists())
+        with override_settings(**SONNET_46):                       # positive control: unchanged, it queues as it was
+            self.assertNotIn('request_profile', enqueue(encounter, self.user, config=quoted).config)
+
+    def test_a_stale_price_is_refused_in_fixture_mode_too(self):
+        """F4 / mutant MC (round 3): the price check is not a live-mode-only check. A fixture job records the
+        pricing_version it was quoted under, so a quote from before a price change is refused there as well."""
+        fixture = dict(SONNET_46, AI_MODE='fixture')
+        encounter = self.fresh_encounter()
+        with override_settings(**fixture):
+            quoted = g.configuration()
+        with override_settings(**dict(fixture, AI_OUTPUT_RATE='16')):
+            with self.assertRaisesMessage(ValidationError, 'The prices or the language model changed'):
+                enqueue(encounter, self.user, config=quoted)
+        self.assertFalse(Job.objects.filter(encounter=encounter).exists())
+
 
 @override_settings(ADMIN_SITE=False, STORAGES=STORAGES)
 class ProviderSpelling(OutcomeFixture, TestCase):
