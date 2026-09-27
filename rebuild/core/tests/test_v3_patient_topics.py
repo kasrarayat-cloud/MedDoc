@@ -25,13 +25,14 @@ def retained(name='r1-note4'):
 VALUES = {'Allergies': 'No known drug allergies.', 'Examination': 'Neurological examination is normal.',
           'Assessment': 'tension-type headache.',
           'Plan': 'to start amitriptyline 10 mg at night.\nShe will follow up in six weeks.'}
+AUTOMATIC = {label: value for label, value in VALUES.items() if label != 'Allergies'}
 
 
 class PatientSourceTopics(SimpleTestCase):
     def test_retained_complete_note_keeps_exact_named_answers_and_unresolved_values(self):
         case = retained()
         answers = run(case['notes'], case['unchanged_picks'], fields=case['fields'])
-        for label, value in VALUES.items():
+        for label, value in AUTOMATIC.items():
             with self.subTest(label=label):
                 self.assertEqual((answers[label]['status'], answers[label]['text']), ('supported', value))
                 quotes = case['unchanged_picks'][label]
@@ -41,7 +42,7 @@ class PatientSourceTopics(SimpleTestCase):
                 key = next(f['key'] for f in case['fields'] if f['label'] == label)
                 self.assertEqual(g.governed_decisions(case['notes'], case['fields'],
                     {key: {**answers[label], 'reviewed': True}}), [])
-        for label in ('Chief complaint', 'History of present illness', 'Medications', 'Smoker'):
+        for label in ('Chief complaint', 'History of present illness', 'Medications', 'Smoker', 'Allergies'):
             self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''), label)
 
     def assert_named_hold(self, notes, labels=('Allergies', 'Examination', 'Assessment')):
@@ -125,7 +126,7 @@ class PatientSourceTopics(SimpleTestCase):
         case = retained()
         for notes in (case['notes'], case['notes'].replace('. ', '.\n')):
             answers = run(notes, case['unchanged_picks'], fields=case['fields'])
-            self.assertEqual({label: answers[label]['text'] for label in VALUES}, VALUES)
+            self.assertEqual({label: answers[label]['text'] for label in AUTOMATIC}, AUTOMATIC)
             reading = g.governance_for(notes, case['fields'])[11]['preceding']
             relations = reading['actor_relations']
             self.assertEqual(set(relations['units']), {u['id'] for u in reading['units']})
@@ -137,6 +138,12 @@ class PatientSourceTopics(SimpleTestCase):
                              ['ago', 'or', 'nonsmoker', 'to'])
         self.assert_named_hold(case['notes'].replace('headaches. The headaches', 'headaches The headaches'))
         self.assert_named_hold(case['notes'].replace('She denies', 'He denies'))
+
+    def test_negative_allergy_cannot_drop_a_clinically_related_assessment(self):
+        case = retained()
+        for assessment in ('penicillin anaphylaxis.', 'penicillin hypersensitivity.'):
+            notes = case['notes'].replace('tension-type headache.', assessment)
+            self.assert_named_hold(notes, ('Allergies',))
 
 
 @override_settings(**LIVE)
@@ -166,17 +173,17 @@ class CompletePatientTopicWorkflow(V3EncounterFixture, TestCase):
         page = self.client.get(f'/encounters/{self.encounter.pk}/')
         rows = {row['label']: row for row in page.context['answer_rows']}
         for label in case['unchanged_picks']:
-            expected = ('supported', VALUES[label]) if label in VALUES else ('conflict', '')
+            expected = ('supported', AUTOMATIC[label]) if label in AUTOMATIC else ('conflict', '')
             self.assertEqual((rows[label]['status'], rows[label]['text']), expected, label)
         self.finalize(); self.encounter.refresh_from_db()
         self.assertNotEqual(self.encounter.status, 'finalized')
         self.assertFalse(self.encounter.export_path)
-        # These four explicit clinician decisions are assisted completion, never
+        # These five explicit clinician decisions are assisted completion, never
         # automatic recognition or source-selection successes.
         manual = {label: '\n'.join(case['unchanged_picks'][label])
-                  for label in ('Chief complaint', 'History of present illness', 'Medications')}
+                  for label in ('Chief complaint', 'History of present illness', 'Medications', 'Allergies')}
         manual['Smoker'] = 'No'
-        payload = self.answers_payload({**VALUES, **manual})
+        payload = self.answers_payload({**AUTOMATIC, **manual})
         for label in manual: payload['held_shown_' + self.key(label)] = '1'
         for field in self.version.fields:
             if field['label'] not in case['unchanged_picks'] and field['kind'] not in ('signature', 'initials'):
@@ -184,13 +191,13 @@ class CompletePatientTopicWorkflow(V3EncounterFixture, TestCase):
         saved = self.client.post(f'/encounters/{self.encounter.pk}/save/', payload)
         self.assertEqual(saved.status_code, 302, saved.content.decode())
         self.encounter.refresh_from_db()
-        for label, value in {**VALUES, **manual}.items():
+        for label, value in {**AUTOMATIC, **manual}.items():
             self.assertEqual(self.encounter.answers[self.key(label)]['text'], value)
         self.finalize(); self.encounter.refresh_from_db()
         self.assertEqual(self.encounter.status, 'finalized')
         exported = private_path(self.encounter.export_path).read_bytes()
         body = part_text(exported)
-        for value in (*VALUES.values(), *manual.values()):
+        for value in (*AUTOMATIC.values(), *manual.values()):
             for line in value.splitlines():
                 if line != 'No': self.assertIn(line, body)
         self.assertIn('Smoker  ☐ Yes  ☒ No', body)
@@ -223,3 +230,32 @@ class CompletePatientTopicWorkflow(V3EncounterFixture, TestCase):
         self.assertEqual(self.save(VALUES).status_code, 302)
         self.finalize(); self.encounter.refresh_from_db()
         self.assertNotEqual(self.encounter.status, 'finalized'); self.assertFalse(self.encounter.export_path)
+
+    def test_negative_allergy_and_related_assessment_refuse_actual_stored_routes(self):
+        case = retained()
+        quote = case['unchanged_picks']['Allergies'][0]
+        for assessment in ('penicillin anaphylaxis.', 'penicillin hypersensitivity.'):
+            notes = case['notes'].replace('tension-type headache.', assessment)
+            self.encounter.refresh_from_db()
+            self.assertEqual(self.client.post(f'/encounters/{self.encounter.pk}/notes/',
+                {'revision': self.encounter.revision, 'notes': notes}).status_code, 302)
+            # Resolve every other answer explicitly so the negative test cannot
+            # pass only because some unrelated field is missing/unreviewed.
+            payload = self.answers_payload({})
+            for field in self.version.fields:
+                if field['kind'] not in ('signature', 'initials'):
+                    payload['blank_' + field['key']] = 'on'
+            self.assertEqual(self.client.post(f'/encounters/{self.encounter.pk}/save/', payload).status_code, 302)
+            self.encounter.refresh_from_db()
+            start = notes.index(quote)
+            self.encounter.answers[self.key('Allergies')] = {'status': 'supported', 'text': quote,
+                'reviewed': True, 'evidence': [{'quote': quote, 'start': start, 'end': start + len(quote)}]}
+            self.encounter.save(update_fields=['answers'])
+            self.assertEqual(g.governed_decisions(notes, self.version.fields, self.encounter.answers), ['Allergies'])
+            rows = {row['label']: row for row in self.client.get(f'/encounters/{self.encounter.pk}/').context['answer_rows']}
+            self.assertEqual((rows['Allergies']['status'], rows['Allergies']['text']), ('conflict', ''))
+            self.finalize(); self.encounter.refresh_from_db()
+            self.assertNotEqual(self.encounter.status, 'finalized'); self.assertFalse(self.encounter.export_path)
+            self.assertEqual(self.save({'Allergies': quote}).status_code, 302)
+            self.finalize(); self.encounter.refresh_from_db()
+            self.assertNotEqual(self.encounter.status, 'finalized'); self.assertFalse(self.encounter.export_path)

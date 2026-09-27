@@ -2410,7 +2410,9 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
     actor = patient_relations(units, patients, subjects, parsed, finite=FINITE_STATEMENT_V3, denial=DENIAL,
                               acceptable=actor_acceptable, shape_holds=actor_shape_holds)
     actor_destinations = {label for label, matches in named.items() if len(matches) == 1
-        and label in (CLINICAL_SUBJECT_FIELDS | PLAN_FIELDS | {'allergies'})
+        # Patient attribution does not prove a negative allergy declaration is
+        # independent of an Assessment. Keep its original context requirements.
+        and label in (CLINICAL_SUBJECT_FIELDS | PLAN_FIELDS)
         and matches[0].get('kind') in ('text', 'long_text')
         and question_key(matches[0].get('context') or '') in ('', label)}
     ancillary_relations = {}
