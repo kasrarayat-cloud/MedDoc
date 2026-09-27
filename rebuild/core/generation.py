@@ -1853,9 +1853,12 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             key = owners[0]
             target = next(field for field in fields if field['key'] == key)
             name = target['label'].strip().rstrip(':?').casefold()
-            # This relaxation is for a narrative paragraph, never a side/row/duplicate destination or an option.
+            # This bounded path is only for named general narrative destinations. A negative side-word list
+            # missed 'Lt knee' and admitted medication paragraphs into Allergies. Other questions retain holds.
+            # The model still chooses relevance among these narrative areas; that needs separate live qualification.
             if (ids <= picked[key] and target.get('kind') in ('text', 'long_text') and labels_count[name] == 1
-                    and not re.search(r'\b(?:left|right|bilateral)\b|[—–:]|\d', name, re.I)):
+                    and name in {'history', 'history of present illness', 'hpi', 'reason for visit',
+                                 'plan', 'treatment plan', 'management plan'}):
                 complete_paragraphs.setdefault(key, set()).update(ids)
     for field in fields:
         item=selected[field['key']]
@@ -1935,7 +1938,9 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
                     guarded=True
                 else:
                     used[quote]=item.key
-            if value and value not in texts: texts.append(value)
+            # Identical wording at two source positions can be two separate instructions (take a tablet,
+            # wait, take a tablet). Whole-paragraph adoption retains each occurrence in source order.
+            if value and (value not in texts or unit['id'] in complete_paragraphs.get(item.key, ())): texts.append(value)
         conflict=item.conflict or len(explicit)>1 or injection or (inherited and bool(texts)) or guarded
         if len(explicit)>1:
             evidence=[{k:unit[k] for k in ('quote','start','end')} for unit in explicit.values()]
