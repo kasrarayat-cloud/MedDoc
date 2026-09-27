@@ -10,9 +10,9 @@ not an installed or combined-candidate result. Reuse unchanged checks; run chang
 | # | area | check | proof | result |
 |---|---|---|---|---|
 | 1 | build | `manage.py check`, `makemigrations --check` | CI script (python gate) | local integration complete; final candidate CI pending |
-| 2 | build | full core suite | `manage.py test core.tests` | local integration complete; final candidate CI pending |
+| 2 | build | full core suite | `manage.py test core.tests` | 1,969 tests at47bdb1a3:7 failure records,2 errors,31 skips; instrument repairs80PASS, source regression under review; final candidate CI pending |
 | 3 | build | document suites incl. `test_word_v3` | explicit unittest list | local integration complete; final candidate CI pending |
-| 4 | build | ops discovery suite | `unittest discover -s ops` | local integration complete; final candidate CI pending |
+| 4 | build | ops discovery suite | `unittest discover -s ops` | 1,143 run:1,139PASS/2FAIL/2known skips; stale cost instrument repaired,6focused and24mutation checks passed; no full-run green claim |
 | 5 | access | invite-only: `/register/` 404 in invite mode; clinic invitation accept and recovery links without clinical content | blockers-stream tests | branch fixture evidence; combined candidate pending |
 | 6 | access | MFA required for every account in real mode; staff Reset MFA | blockers-stream tests | local integration complete; final candidate CI pending |
 | 7 | access | real mode refuses to start with sandbox Stripe; live mode refuses the preview gate | R1/R2 repair tests | pending |
@@ -76,3 +76,25 @@ remain in the denominator; the current refusal caps automatic success at 17/20, 
 The bounded 158-file inventory review cannot provide the ten-lineage development supplement: optimistic source-capped
 ceiling eight. Original 60 files / 44 lineages and all first-pass results are unchanged. See the custody and bounded
 inventory adjudication reports. This is evidence preparation, not Word compatibility acceptance.
+
+
+## Full-core reconciliation at the continued candidate
+
+The source stayed frozen at `47bdb1a30838a0acd86a92691fd3eb682f426409` for the full local run:
+1,969 tests in922.644s, seven failure records (including subtests), two errors and31skips. Six failure
+records used the old generation-only queue-row label; the displayed and tested drain now includes mapping
+jobs. One test mutated an existing job's immutable kind. Another used the current Job ORM after
+MigrationExecutor had reversed0021/0022 before0020 refused, removing a column. Test-only repairs preserve
+the original guard and payment assertions; all80 tests in those three modules then passed in13.130s.
+Independent review found no weakened claim. All failed-run evidence is retained in
+`evidence/core-recovery-20260927/`.
+
+The remaining application regression is unique Indication held alongside repeated Pain/Comments.
+Its source repair and the nominal-Plan context repair are undergoing independent clinical refutation;
+this paragraph does not claim them integrated or passed. The ordinary-input evidence-span repair was
+integrated as `ea6cae5c754ce4e8c8e51d2992cc53c41cd294c4`, with disjoint AST changes preserved.
+
+The31 native Word skips are explicit missing local evidence: the local test caller owns the installed
+processor, so its isolation check correctly refuses that boundary. The installed app uses a distinct
+service user; this does not establish an installed adapter failure. Required CI prepares a root-owned
+processor and requires those tests; native desktop Word acceptance remains a separate gate.

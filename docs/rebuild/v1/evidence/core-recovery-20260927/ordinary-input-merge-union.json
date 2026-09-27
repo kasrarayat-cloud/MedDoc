@@ -1,0 +1,21 @@
+{
+  "head": "ea6cae5c754ce4e8c8e51d2992cc53c41cd294c4",
+  "author_changed": [
+    "LabelledLines",
+    "judged_context",
+    "v3_evidence_span",
+    "v3_evidence_units",
+    "v3_labelled_source",
+    "v3_preceding_reading",
+    "v3_preceding_warnings",
+    "v3_scope_selection",
+    "validate_tab_selections"
+  ],
+  "root_changed": [
+    "v3_adopted",
+    "v3_generation_fields"
+  ],
+  "overlap": [],
+  "all_preserved": true,
+  "generation_sha256": "ae62e77d317dc28a20ef6cafc269c843f45537a8e2c337875e09370843530a9a"
+}

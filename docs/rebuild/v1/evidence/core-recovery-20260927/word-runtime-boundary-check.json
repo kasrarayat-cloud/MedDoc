@@ -1,0 +1,11 @@
+{
+  "runtime": "/opt/meddoc-pro/rebuild/.word-sdk/429283dfb71aa389bccef48976ee0dce2936e0bc/runtime",
+  "manifest": "/opt/meddoc-pro/rebuild/.word-sdk/429283dfb71aa389bccef48976ee0dce2936e0bc/runtime-manifest.json",
+  "expected_manifest_sha256": "2a2ab5e1ba63e041dfd087e7f2c205999ccf8ff6bc41f9409cfd1d99e4537680",
+  "caller_uid": 1000,
+  "runtime_uid": 1000,
+  "qualification": false,
+  "verified": false,
+  "error_type": "RuntimeError",
+  "error": "Application must not own or modify its runtime or manifest."
+}
