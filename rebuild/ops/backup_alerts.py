@@ -1239,6 +1239,29 @@ def recent_severity_rank(state, at):
     return rank
 
 
+def not_after(state, at):
+    """⚠️ A RECORDED TIME LATER THAN NOW IS READ AS NOW, AND KEPT THAT WAY.
+
+    A clock that ran fast and was then corrected leaves notice, stamp and opening times in the
+    future. Measured as they stand, the reminder, the escalation spacing and the interval between
+    incidents would each wait out the whole error (three days fast: a reminder after four), and an
+    incident would report a negative age. Each such time becomes the moment it is first seen in the
+    future, and check() persists that, so every interval restarts from the correction rather than
+    from a time that has not happened. It can only bring a notice forward, never hold one back.
+    """
+    def clamp(value):
+        return at.isoformat() if value is not None and timestamp(value) > at else value
+    state.update(last_attempt_at=clamp(state['last_attempt_at']),
+                 incident_opened_at=clamp(state['incident_opened_at']),
+                 announced_at={level: clamp(when) for level, when in state['announced_at'].items()})
+    return state
+
+
+#: The conditions check() plans a notice for. `alert_configuration_unavailable` is recorded only by
+#: the check that could not read its configuration, and that check returns before planning.
+PLANNED = ANNOUNCEABLE - {'alert_configuration_unavailable'}
+
+
 def plan_notice(state, condition, at):
     """What an open incident whose latest notice was ACCEPTED owes now: (notice, deferred_until).
 
@@ -1332,6 +1355,7 @@ def check(at=None):
         with locked():
             state = read_state()
             began = superseded(state)
+            not_after(state, at)
             try:
                 values = read_configuration()
             except Exception:
@@ -1450,7 +1474,15 @@ def status(at=None):
         external = external_heartbeat(at)
         if (condition == 'healthy' or condition in WARNINGS) and external['outcome'] in {'configuration_or_state_invalid', 'pending', 'uncertain_no_retry'}:
             condition = 'external_monitor_unconfirmed'
-        incident = incident_summary(state, at, latest_confirmed=bool(alert and alert['provider_accepted']))
+        # The escalation the last check deferred, if any: the same rule over the same persisted
+        # inputs at the same moment, so status() and check() cannot disagree about it.
+        deferred_until = None
+        if (state['incident_attempt'] and alert and alert['outcome'] == 'provider_accepted'
+                and state['condition'] in PLANNED and state['last_check_at']):
+            deferred_until = plan_notice(state, state['condition'], timestamp(state['last_check_at']))[1]
+        not_after(state, at)
+        incident = incident_summary(state, at, deferred_until=deferred_until,
+                                    latest_confirmed=bool(alert and alert['provider_accepted']))
         result = report(condition, checked_at=state['last_check_at'], alert=alert,
                         recovery=recovery, local_capture=local_capture_status(at), external=external,
                         incident=incident)

@@ -373,6 +373,7 @@ class IncidentEscalationReproductionTests(unittest.TestCase):
 class IncidentNotificationTests(unittest.TestCase):
     """Escalation, reminder and their storm guards inside ONE open incident. Mocked transport only."""
     setUp = BackupAlertsTests.setUp
+    write_config = BackupAlertsTests.write_config
 
     def state(self):
         """The merged view this release works from, after asserting that status.json is still
@@ -552,6 +553,9 @@ class IncidentNotificationTests(unittest.TestCase):
         self.health.return_value = 'backup_failed'
         a.check(fast)
         corrected = self.at + timedelta(minutes=5)
+        shown, _ = a.status(corrected)                        # corrected before any check has run
+        self.assertEqual((shown['incident']['open_seconds'], shown['incident']['next_reminder_at']),
+                         (0, (corrected + timedelta(hours=24)).isoformat()))
         result, _ = a.check(corrected)
         self.assertEqual(result['incident']['open_seconds'], 0)
         self.assertEqual(result['incident']['next_reminder_at'], (corrected + timedelta(hours=24)).isoformat())
@@ -576,6 +580,19 @@ class IncidentNotificationTests(unittest.TestCase):
         a.check(corrected + timedelta(hours=24))
         self.assertEqual(self.sender.call_count, 2, 'the next incident waited out a fast clock')
 
+    def test_a_warning_stamped_by_a_fast_clock_does_not_later_hold_a_failure(self):
+        """The stamps are read as now with the notice time, or the next read would find a stamp
+        later than every recorded request, drop it as unsent, and count the warning as a failure."""
+        self.recovery.return_value['condition'] = 'offsite_capacity_low'
+        a.check(self.at + timedelta(days=3))                  # a warning notice, on the fast clock
+        corrected = self.at + timedelta(minutes=5)
+        self.recovery.return_value['condition'] = 'healthy'
+        a.check(corrected)                                    # closes
+        self.health.return_value = 'backup_failed'
+        a.check(corrected + timedelta(hours=1))
+        self.assertEqual(self.sender.call_count, 2, 'a warning from a fast clock held a failure')
+        self.assertIn('(highest: warning)', self.sent()[-1][1])
+
     def test_status_reports_the_deferred_escalation_the_check_reported(self):
         """⚠️ R5(b). The summary carries any deferred escalation, from status() as from check()."""
         self.health.return_value = 'backup_failed'
@@ -587,9 +604,30 @@ class IncidentNotificationTests(unittest.TestCase):
         shown, _ = a.status(self.at + timedelta(minutes=6))
         self.assertEqual(shown['incident']['escalation_deferred_until'], deferred,
                          'check() reported a deferred escalation and status() did not')
+        # Past that time with no check since, it is still the last check's decision, owed at its next run.
+        shown, _ = a.status(self.at + timedelta(hours=1, minutes=1))
+        self.assertEqual((shown['condition'], shown['incident']['escalation_deferred_until']),
+                         ('monitoring_stale', deferred))
         result, _ = a.check(self.at + timedelta(hours=1))     # sent: nothing is deferred any more
         self.assertIsNone(result['incident']['escalation_deferred_until'])
         self.assertIsNone(a.status(self.at + timedelta(hours=1, minutes=1))[0]['incident']['escalation_deferred_until'])
+
+    def test_status_reports_no_deferral_where_the_check_planned_nothing(self):
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        self.health.return_value = 'backup_in_progress'        # keeps the incident open, plans nothing
+        self.assertIsNone(a.check(self.at + timedelta(minutes=5))[0]['incident']['escalation_deferred_until'])
+        shown, _ = a.status(self.at + timedelta(minutes=6))
+        self.assertEqual(shown['condition'], 'backup_in_progress')
+        self.assertIsNone(shown['incident']['escalation_deferred_until'])
+        self.health.return_value = 'backup_failed'
+        a.check(self.at + timedelta(minutes=10))
+        self.write_config(enabled=False)                       # the check records this and returns
+        self.assertEqual(a.check(self.at + timedelta(minutes=15))[0]['condition'], 'alert_configuration_unavailable')
+        self.write_config()
+        shown, _ = a.status(self.at + timedelta(minutes=16))
+        self.assertIsNone(shown['incident']['escalation_deferred_until'])
+        self.sender.assert_called_once()
 
     def test_reminder_names_duration_and_current_condition_at_a_fixed_interval(self):
         self.health.return_value = 'backup_failed'

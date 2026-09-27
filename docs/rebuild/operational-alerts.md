@@ -60,8 +60,14 @@ must not be retried automatically, even after provider idempotency expires. An
 uncertain attempt requires operator review, and it also stops every later
 escalation and reminder for that incident. The JSON status carries an `incident`
 summary (opened, notices, last notice and its condition, next reminder, any
-deferred escalation) without identities. The monitor's own status becomes
-stale after 15 minutes without a check. A broken monitor or lost email credential
+deferred escalation) without identities; `status` reports the deferred
+escalation the last check decided, recomputed by the same rule. `status` reads
+the state under the check's own lock, held shared and opened read-only, so a
+check running at the same moment cannot make it report the monitor broken, and
+a reader never makes a check refuse. A recorded time later than the monitor's
+clock (a clock that ran fast and was corrected) is read as the moment it is first
+seen, so it never delays a notice and an incident's age is never negative. The
+monitor's own status becomes stale after 15 minutes without a check. A broken monitor or lost email credential
 cannot reliably notify through that same broken channel: inspect its service
 failure and status locally, and keep outside-host detection separately gated.
 
