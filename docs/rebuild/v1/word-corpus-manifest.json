@@ -1,0 +1,1314 @@
+{
+ "frozen_at": "2026-09-27",
+ "selection_seed": 20260937,
+ "selection_rules": {
+  "eligible": "authorization tier strong (US federal 17 USC 105 / OGL v3.0 / CC BY) and blank",
+  "files_per_lineage_max": 2,
+  "lineage_never_crosses_sets": true,
+  "cap_per_source_group": 8,
+  "cap_nih_total": 24,
+  "sets_source_disjoint": true,
+  "coverage": "each family F1-F10: >=6 lineages in the 60, >=3 in dev, >=2 in holdout, >=2 in qualification",
+  "legacy_doc": "2..6 in the 60, >=1 in qualification (natural share of the eligible pool is 18/277)",
+  "owner_forms": "WM IOV and colonoscopy forced into dev"
+ },
+ "sealed_full_manifest": {
+  "path": "rebuild/.runtime/v1-word-corpus/FULL-MANIFEST-SEALED.json",
+  "sha256": "450c0a6af3364ebe382f4b6a8caad578d33284590585f6109ac60fbc7762014f"
+ },
+ "coverage_declared": {
+  "dev": {
+   "F1": 12,
+   "F2": 22,
+   "F3": 17,
+   "F4": 20,
+   "F5": 29,
+   "F6": 22,
+   "F7": 6,
+   "F8": 3,
+   "F9": 12,
+   "F10": 22
+  },
+  "holdout": {
+   "F1": 7,
+   "F2": 8,
+   "F3": 3,
+   "F4": 6,
+   "F5": 10,
+   "F6": 7,
+   "F7": 5,
+   "F8": 4,
+   "F9": 7,
+   "F10": 7
+  },
+  "qual": {
+   "F1": 4,
+   "F2": 9,
+   "F3": 6,
+   "F4": 9,
+   "F5": 11,
+   "F6": 10,
+   "F7": 4,
+   "F8": 4,
+   "F9": 4,
+   "F10": 5
+  }
+ },
+ "coverage_declared_60": {
+  "F1": 19,
+  "F2": 30,
+  "F3": 20,
+  "F4": 26,
+  "F5": 39,
+  "F6": 29,
+  "F7": 11,
+  "F8": 7,
+  "F9": 19,
+  "F10": 29
+ },
+ "sets": {
+  "dev": [
+   {
+    "corpus_file": "dev/originals/D01-c1852a492221.docx",
+    "sha256": "c1852a492221cfa0d144c9c0a60b700a7363a2cca7630aa988ee8b6329e1868b",
+    "source_group": "Owner practice",
+    "families_declared": [
+     "F2",
+     "F4",
+     "F5",
+     "F8",
+     "F10"
+    ],
+    "format": "docx",
+    "title": null,
+    "source_org": "Owner practice (West Medical)",
+    "lineage": "owner-wm-iov",
+    "url": null,
+    "authorization_basis": "Owner's own blank form; accepted tracked fixture (AGENTS.md 'Tracked fixtures', decided 2026-07-26)"
+   },
+   {
+    "corpus_file": "dev/originals/D02-8ae1e2b0ebee.docx",
+    "sha256": "8ae1e2b0ebeec317c038b8bfeed6a0824055f44d689c039ab450404593f2815a",
+    "source_group": "Owner practice",
+    "families_declared": [
+     "F1",
+     "F5",
+     "F6",
+     "F10"
+    ],
+    "format": "docx",
+    "title": null,
+    "source_org": "Owner practice",
+    "lineage": "owner-colonoscopy",
+    "url": null,
+    "authorization_basis": "Owner's own blank form (docs/rebuild/colonoscopy-template-compatibility-20260921.md); committed fixture"
+   },
+   {
+    "corpus_file": "dev/originals/D03-29dfcdd8a5da.docx",
+    "sha256": "29dfcdd8a5daef213e30e03e5062fa9193a31a53651c880acc498006c1d506ff",
+    "source_group": "Zenodo deposit: Kaniuka-Jakubowska S. (acromegaly headache)",
+    "families_declared": [
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F6",
+     "F8",
+     "F9"
+    ],
+    "format": "docx",
+    "title": "Detailed Patient Headache Questionnaire (current headache) V1 31.01.2018",
+    "source_org": "Zenodo deposit: Kaniuka-Jakubowska S. (acromegaly headache)",
+    "lineage": "zenodo-4756701",
+    "url": "https://zenodo.org/records/4756701",
+    "authorization_basis": "Explicit licence CC BY 4.0 as recorded in Zenodo record metadata (https://zenodo.org/api/records/4756701, VERIFIED 2026-09-27)."
+   },
+   {
+    "corpus_file": "dev/originals/D04-cebb55cd7345.docx",
+    "sha256": "cebb55cd73453bdb6c8caf0fc040861daf9b074bf3cca278b6243e98e02da175",
+    "source_group": "Zenodo deposit: Vishwakarma D. (geriatric depression, Wardha)",
+    "families_declared": [
+     "F5",
+     "F6"
+    ],
+    "format": "docx",
+    "title": "Prevalence of depression data collection tool (geriatric, cross-sectional)",
+    "source_org": "Zenodo deposit: Vishwakarma D. (geriatric depression, Wardha)",
+    "lineage": "zenodo-8004749",
+    "url": "https://zenodo.org/records/8004749",
+    "authorization_basis": "Explicit licence CC BY 4.0 as recorded in Zenodo record metadata (https://zenodo.org/api/records/8004749, VERIFIED 2026-09-27)."
+   },
+   {
+    "corpus_file": "dev/originals/D05-ab006eeb434e.docx",
+    "sha256": "ab006eeb434eb3b479e57313c13f3fb2c1fcb95b6ce3f8580794ab2a170d048a",
+    "source_group": "NIH / NIDCR",
+    "families_declared": [
+     "F10",
+     "F2",
+     "F3",
+     "F4",
+     "F5"
+    ],
+    "format": "docx",
+    "title": "screening enrollment log",
+    "source_org": "NIH / NIDCR",
+    "lineage": "NIDCR Clinical Research Tools & Templates",
+    "url": "https://www.nidcr.nih.gov/research/conducting-nidcr-clinical-research/tools-templates",
+    "authorization_basis": "US federal government work, 17 U.S.C. 105: published by an NIH institute on a .nih.gov site (NIDCR Clinical Research Tools & Templates, https://www.nidcr.nih.gov/research/conducting-nidcr-clinical-research/tools-templates, retrieved 2026-09-27). Page has no explicit license text (VERIFIED via fetch)."
+   },
+   {
+    "corpus_file": "dev/originals/D06-8c13e2d1c71c.docx",
+    "sha256": "8c13e2d1c71c3890f38d0866ddff759e99891ea2a9df6fdfeb79a627ff1fed61",
+    "source_group": "NIH / NIDCR",
+    "families_declared": [
+     "F10",
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F6"
+    ],
+    "format": "docx",
+    "title": "quality management participant data review tool",
+    "source_org": "NIH / NIDCR",
+    "lineage": "NIDCR Clinical Research Tools & Templates",
+    "url": "https://www.nidcr.nih.gov/research/conducting-nidcr-clinical-research/tools-templates",
+    "authorization_basis": "US federal government work, 17 U.S.C. 105: published by an NIH institute on a .nih.gov site (NIDCR Clinical Research Tools & Templates, https://www.nidcr.nih.gov/research/conducting-nidcr-clinical-research/tools-templates, retrieved 2026-09-27). Page has no explicit license text (VERIFIED via fetch)."
+   },
+   {
+    "corpus_file": "dev/originals/D07-f43d08e3b436.docx",
+    "sha256": "f43d08e3b4361ea7161572917a8839beea7f79ba2497a14dca7493ddf6e67cc3",
+    "source_group": "NIH / NINDS (Common Data Elements project)",
+    "families_declared": [
+     "F10",
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F9"
+    ],
+    "format": "docx",
+    "title": "NINDS CDE CRF module: Rehabilitation Treatment",
+    "source_org": "NIH / NINDS (Common Data Elements project)",
+    "lineage": "NINDS CDE CRF module / Rehabilitation Treatment",
+    "url": "https://www.commondataelements.ninds.nih.gov/Traumatic%20Brain%20Injury",
+    "authorization_basis": "US federal government work, 17 U.S.C. 105: published by an NIH institute on a .nih.gov site (NINDS Common Data Elements project). CDE listing API flags this module copyright=false; commondataelements.ninds.nih.gov (retrieved 2026-09-27) states: \"The NINDS CDE Team does not post proprietary instruments/scales recommended by the CDE Working Groups on this website. This includes, but is not limited to, copyrighted or trademarked instruments/scales.\" CAVEAT: modules drafted by NINDS CDE working groups with contractor support (site contact NINDSCDE@emmes.com); 105 strictly covers federal-employee authorship - INFERRED public domain, owner may confirm."
+   },
+   {
+    "corpus_file": "dev/originals/D08-9eeac252e6d2.docx",
+    "sha256": "9eeac252e6d2d6fe5a1f05adc2dc74de63c7e415aeb09d4590f5e06203b462d6",
+    "source_group": "NIH / NINDS (Common Data Elements project)",
+    "families_declared": [
+     "F1",
+     "F10",
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F6",
+     "F9"
+    ],
+    "format": "docx",
+    "title": "NINDS CDE CRF module: Acute Admission/Discharge",
+    "source_org": "NIH / NINDS (Common Data Elements project)",
+    "lineage": "NINDS CDE CRF module / Acute Admission/Discharge",
+    "url": "https://www.commondataelements.ninds.nih.gov/Spinal%20Cord%20Injury",
+    "authorization_basis": "US federal government work, 17 U.S.C. 105: published by an NIH institute on a .nih.gov site (NINDS Common Data Elements project). CDE listing API flags this module copyright=false; commondataelements.ninds.nih.gov (retrieved 2026-09-27) states: \"The NINDS CDE Team does not post proprietary instruments/scales recommended by the CDE Working Groups on this website. This includes, but is not limited to, copyrighted or trademarked instruments/scales.\" CAVEAT: modules drafted by NINDS CDE working groups with contractor support (site contact NINDSCDE@emmes.com); 105 strictly covers federal-employee authorship - INFERRED public domain, owner may confirm."
+   },
+   {
+    "corpus_file": "dev/originals/D09-b04f37b4ff08.docx",
+    "sha256": "b04f37b4ff081529644b1d16c225bf4603c1749e392d8327ed0eb3943019822a",
+    "source_group": "NIH / NINDS (Common Data Elements project)",
+    "families_declared": [
+     "F10",
+     "F2",
+     "F4",
+     "F5",
+     "F9"
+    ],
+    "format": "docx",
+    "title": "NINDS CDE CRF module: Physical Exam",
+    "source_org": "NIH / NINDS (Common Data Elements project)",
+    "lineage": "NINDS CDE CRF module / Physical Exam",
+    "url": "https://www.commondataelements.ninds.nih.gov/General%20%28For%20all%20diseases%29",
+    "authorization_basis": "US federal government work, 17 U.S.C. 105: published by an NIH institute on a .nih.gov site (NINDS Common Data Elements project). CDE listing API flags this module copyright=false; commondataelements.ninds.nih.gov (retrieved 2026-09-27) states: \"The NINDS CDE Team does not post proprietary instruments/scales recommended by the CDE Working Groups on this website. This includes, but is not limited to, copyrighted or trademarked instruments/scales.\" CAVEAT: modules drafted by NINDS CDE working groups with contractor support (site contact NINDSCDE@emmes.com); 105 strictly covers federal-employee authorship - INFERRED public domain, owner may confirm."
+   },
+   {
+    "corpus_file": "dev/originals/D10-b54cc9e77067.docx",
+    "sha256": "b54cc9e770678dda021110abc66d155fc419af6baf5a9a0c8272da727ab91546",
+    "source_group": "NIH / NINDS (Common Data Elements project)",
+    "families_declared": [
+     "F10",
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F9"
+    ],
+    "format": "docx",
+    "title": "NINDS CDE CRF module: Physical Examination",
+    "source_org": "NIH / NINDS (Common Data Elements project)",
+    "lineage": "NINDS CDE CRF module / Physical Exam",
+    "url": "https://www.commondataelements.ninds.nih.gov/Myalgic%20Encephalomyelitis/Chronic%20Fatigue%20Syndrome",
+    "authorization_basis": "US federal government work, 17 U.S.C. 105: published by an NIH institute on a .nih.gov site (NINDS Common Data Elements project). CDE listing API flags this module copyright=false; commondataelements.ninds.nih.gov (retrieved 2026-09-27) states: \"The NINDS CDE Team does not post proprietary instruments/scales recommended by the CDE Working Groups on this website. This includes, but is not limited to, copyrighted or trademarked instruments/scales.\" CAVEAT: modules drafted by NINDS CDE working groups with contractor support (site contact NINDSCDE@emmes.com); 105 strictly covers federal-employee authorship - INFERRED public domain, owner may confirm."
+   },
+   {
+    "corpus_file": "dev/originals/D11-500efd5985a7.docx",
+    "sha256": "500efd5985a715277144cfaa42d8dbe72ee748fa11bb43a6215ed944b0bc352d",
+    "source_group": "NIH / NINDS (Common Data Elements project)",
+    "families_declared": [
+     "F10",
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F6",
+     "F9"
+    ],
+    "format": "docx",
+    "title": "NINDS CDE CRF module: Laboratory Tests ",
+    "source_org": "NIH / NINDS (Common Data Elements project)",
+    "lineage": "NINDS CDE CRF module / Laboratory Tests",
+    "url": "https://www.commondataelements.ninds.nih.gov/amyotrophic%20lateral%20sclerosis",
+    "authorization_basis": "US federal government work, 17 U.S.C. 105: published by an NIH institute on a .nih.gov site (NINDS Common Data Elements project). CDE listing API flags this module copyright=false; commondataelements.ninds.nih.gov (retrieved 2026-09-27) states: \"The NINDS CDE Team does not post proprietary instruments/scales recommended by the CDE Working Groups on this website. This includes, but is not limited to, copyrighted or trademarked instruments/scales.\" CAVEAT: modules drafted by NINDS CDE working groups with contractor support (site contact NINDSCDE@emmes.com); 105 strictly covers federal-employee authorship - INFERRED public domain, owner may confirm."
+   },
+   {
+    "corpus_file": "dev/originals/D12-934bf431af0b.docx",
+    "sha256": "934bf431af0b1486f5f809d83a14a61c6e6721342e1e4c377153e1df640a3604",
+    "source_group": "NIH / NINDS (Common Data Elements project)",
+    "families_declared": [
+     "F1",
+     "F10",
+     "F2",
+     "F5",
+     "F9"
+    ],
+    "format": "docx",
+    "title": "NINDS CDE CRF module: Electrocardiogram (ECG)",
+    "source_org": "NIH / NINDS (Common Data Elements project)",
+    "lineage": "NINDS CDE CRF module / Electrocardiogram",
+    "url": "https://www.commondataelements.ninds.nih.gov/General%20%28For%20all%20diseases%29",
+    "authorization_basis": "US federal government work, 17 U.S.C. 105: published by an NIH institute on a .nih.gov site (NINDS Common Data Elements project). CDE listing API flags this module copyright=false; commondataelements.ninds.nih.gov (retrieved 2026-09-27) states: \"The NINDS CDE Team does not post proprietary instruments/scales recommended by the CDE Working Groups on this website. This includes, but is not limited to, copyrighted or trademarked instruments/scales.\" CAVEAT: modules drafted by NINDS CDE working groups with contractor support (site contact NINDSCDE@emmes.com); 105 strictly covers federal-employee authorship - INFERRED public domain, owner may confirm."
+   },
+   {
+    "corpus_file": "dev/originals/D13-75b75da8559d.docx",
+    "sha256": "75b75da8559db2a5849343d6809e3171c254a538870e0da40b0a15d367160a92",
+    "source_group": "NIH / NINDS (Common Data Elements project)",
+    "families_declared": [
+     "F10",
+     "F5",
+     "F9"
+    ],
+    "format": "docx",
+    "title": "NINDS CDE CRF module: Risk Factor Questionnaire (RFQ) - Physical Activity and Sleep",
+    "source_org": "NIH / NINDS (Common Data Elements project)",
+    "lineage": "NINDS CDE CRF module / Risk Factor Questionnaire - Physical Activity and Sleep",
+    "url": "https://www.commondataelements.ninds.nih.gov/cerebral%20palsy",
+    "authorization_basis": "US federal government work, 17 U.S.C. 105: published by an NIH institute on a .nih.gov site (NINDS Common Data Elements project). CDE listing API flags this module copyright=false; commondataelements.ninds.nih.gov (retrieved 2026-09-27) states: \"The NINDS CDE Team does not post proprietary instruments/scales recommended by the CDE Working Groups on this website. This includes, but is not limited to, copyrighted or trademarked instruments/scales.\" CAVEAT: modules drafted by NINDS CDE working groups with contractor support (site contact NINDSCDE@emmes.com); 105 strictly covers federal-employee authorship - INFERRED public domain, owner may confirm."
+   },
+   {
+    "corpus_file": "dev/originals/D14-5089ad547ee0.docx",
+    "sha256": "5089ad547ee0d0527f687bec1e8f26a35f5204e68e7c50b8bd8ae296983a2a50",
+    "source_group": "NIH / NINDS (Common Data Elements project)",
+    "families_declared": [
+     "F10",
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F6",
+     "F9"
+    ],
+    "format": "docx",
+    "title": "NINDS CDE CRF module: Lower Extremity Orthopedic Surgical Procedures - Hip",
+    "source_org": "NIH / NINDS (Common Data Elements project)",
+    "lineage": "NINDS CDE CRF module / Lower Extremity Orthopedic Surgical Procedures - Hip",
+    "url": "https://www.commondataelements.ninds.nih.gov/cerebral%20palsy",
+    "authorization_basis": "US federal government work, 17 U.S.C. 105: published by an NIH institute on a .nih.gov site (NINDS Common Data Elements project). CDE listing API flags this module copyright=false; commondataelements.ninds.nih.gov (retrieved 2026-09-27) states: \"The NINDS CDE Team does not post proprietary instruments/scales recommended by the CDE Working Groups on this website. This includes, but is not limited to, copyrighted or trademarked instruments/scales.\" CAVEAT: modules drafted by NINDS CDE working groups with contractor support (site contact NINDSCDE@emmes.com); 105 strictly covers federal-employee authorship - INFERRED public domain, owner may confirm."
+   },
+   {
+    "corpus_file": "dev/originals/D15-19efe830ee0d.docx",
+    "sha256": "19efe830ee0d049cae32236fe0db8bdfa1cfe5f17ab80f5a37cd66c7593663c2",
+    "source_group": "ECRAID-Base consortium (Zenodo 20125281)",
+    "families_declared": [
+     "F1",
+     "F10",
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F6",
+     "F9"
+    ],
+    "format": "docx",
+    "title": "ECRAID-Base POS Subject Information Sheet / Informed Consent Form template (additional samples v1)",
+    "source_org": "ECRAID-Base consortium (Zenodo 20125281)",
+    "lineage": "zenodo-20125281-ecraid-icf",
+    "url": "https://zenodo.org/records/20125281",
+    "authorization_basis": "Explicit licence CC BY-SA 4.0 (ShareAlike) as recorded in Zenodo record metadata (https://zenodo.org/api/records/20125281, VERIFIED 2026-09-27)."
+   },
+   {
+    "corpus_file": "dev/originals/D16-51c6e400e89d.docx",
+    "sha256": "51c6e400e89d631bf81959418c9cc5cc9631bfb3ac741a3bdce5d8f9a1e0273f",
+    "source_group": "Zenodo deposit: Zitouni C. (osteoradionecrosis HBO study)",
+    "families_declared": [
+     "F5",
+     "F6"
+    ],
+    "format": "docx",
+    "title": "Case Report Form: retrospective study on hyperbaric oxygen therapy in osteoradionecrosis (translated)",
+    "source_org": "Zenodo deposit: Zitouni C. (osteoradionecrosis HBO study)",
+    "lineage": "zenodo-13901089",
+    "url": "https://zenodo.org/records/13901089",
+    "authorization_basis": "Explicit licence CC BY 4.0 as recorded in Zenodo record metadata (https://zenodo.org/api/records/13901089, VERIFIED 2026-09-27)."
+   },
+   {
+    "corpus_file": "dev/originals/D17-92b3e2ed55db.docx",
+    "sha256": "92b3e2ed55db0bba14bc20bdb5b27ad5253337075c1b042d0362663a7a16154a",
+    "source_group": "Legal Aid Agency (Ministry of Justice)",
+    "families_declared": [
+     "F4",
+     "F5"
+    ],
+    "format": "docx",
+    "title": "Response from health professional to request for evidence of injuries/condition consistent with domestic abuse (example letter)",
+    "source_org": "Legal Aid Agency (Ministry of Justice)",
+    "lineage": "laa-health-professional-evidence-letters",
+    "url": "https://www.gov.uk/government/publications/get-medical-proof-of-domestic-abuse",
+    "authorization_basis": "OGL v3.0 (Crown copyright). VERIFIED 2026-09-27: gov.uk page footer \"All content is available under the Open Government Licence v3.0, except where otherwise stated\" (https://www.gov.uk/government/publications/hospital-forms-for-use-under-the-mental-health-act). Commercial re-use permitted with attribution."
+   },
+   {
+    "corpus_file": "dev/originals/D18-73fe91e5501b.docx",
+    "sha256": "73fe91e5501bad3fe7e5ad413f49934006965b8b2e1d2612f88e1daf78ac9f46",
+    "source_group": "Legal Aid Agency (Ministry of Justice)",
+    "families_declared": [
+     "F4"
+    ],
+    "format": "docx",
+    "title": "Response from health professional to request for evidence of injuries/condition consistent with domestic violence (older example letter)",
+    "source_org": "Legal Aid Agency (Ministry of Justice)",
+    "lineage": "laa-health-professional-evidence-letters",
+    "url": "https://www.gov.uk/government/publications/give-evidence-of-injuries-consistent-with-domestic-violence",
+    "authorization_basis": "OGL v3.0 (Crown copyright). VERIFIED 2026-09-27: gov.uk page footer \"All content is available under the Open Government Licence v3.0, except where otherwise stated\" (https://www.gov.uk/government/publications/hospital-forms-for-use-under-the-mental-health-act). Commercial re-use permitted with attribution."
+   },
+   {
+    "corpus_file": "dev/originals/D19-46f4c7cffa95.doc",
+    "sha256": "46f4c7cffa95fa64e34e51a6ced30857084b4f5b3baf3626c0be9c8a6dd8d84d",
+    "source_group": "REPEAT trial (Norfolk & Norwich Univ Hospitals) (Zenodo 7551598)",
+    "families_declared": [],
+    "format": "doc",
+    "title": "REPEAT consent form (with samples) V2.0 28May2021 NNUH",
+    "source_org": "REPEAT trial (Norfolk & Norwich Univ Hospitals) (Zenodo 7551598)",
+    "lineage": "hra-consent-template-and-derivatives",
+    "url": "https://zenodo.org/records/7551598",
+    "authorization_basis": "Explicit licence CC BY 4.0 as recorded in Zenodo record metadata (https://zenodo.org/api/records/7551598, VERIFIED 2026-09-27)."
+   },
+   {
+    "corpus_file": "dev/originals/D20-d35cb2a6f54e.docx",
+    "sha256": "d35cb2a6f54ea38f2beff2e7a0417741d6d6745230b653ed24599d6300ede711",
+    "source_group": "PREFER consortium (IMI) (Zenodo 6400437)",
+    "families_declared": [
+     "F10",
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F6",
+     "F7"
+    ],
+    "format": "docx",
+    "title": "PREFER informed consent form template",
+    "source_org": "PREFER consortium (IMI) (Zenodo 6400437)",
+    "lineage": "zenodo-6400437-prefer-icf",
+    "url": "https://zenodo.org/records/6400437",
+    "authorization_basis": "Explicit licence CC BY 4.0 as recorded in Zenodo record metadata (https://zenodo.org/api/records/6400437, VERIFIED 2026-09-27)."
+   },
+   {
+    "corpus_file": "dev/originals/D21-d1c0e1234bae.docx",
+    "sha256": "d1c0e1234baeb32039bac32c1ba1f207d044da816df91ddb5e6d81e87125fcba",
+    "source_group": "NIH Office of the Director / OHSRP (NIH IRB)",
+    "families_declared": [
+     "F1",
+     "F10",
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F6"
+    ],
+    "format": "docx",
+    "title": "Consent Template Expanded Access v9",
+    "source_org": "NIH Office of the Director / OHSRP (NIH IRB)",
+    "lineage": "NIH IRB (OHSRP) consent template family",
+    "url": "https://irbo.nih.gov/nih-irb-templates/consent-templates/",
+    "authorization_basis": "US federal government work, 17 U.S.C. 105: published by an NIH institute on a .nih.gov site (NIH Office of Human Subjects Research Protections / NIH IRB consent templates, https://irbo.nih.gov/nih-irb-templates/consent-templates/, retrieved 2026-09-27). No explicit license text checked on page (UNKNOWN)."
+   },
+   {
+    "corpus_file": "dev/originals/D22-e858648b9d5c.docx",
+    "sha256": "e858648b9d5c52c920e64bfd8fe7cb925505ebddaefc320003f88a5d2e7ea020",
+    "source_group": "NIH Office of the Director / OHSRP (NIH IRB)",
+    "families_declared": [
+     "F1",
+     "F10",
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F6"
+    ],
+    "format": "docx",
+    "title": "Consent Addendum Template CC v2",
+    "source_org": "NIH Office of the Director / OHSRP (NIH IRB)",
+    "lineage": "NIH IRB (OHSRP) consent template family",
+    "url": "https://irbo.nih.gov/nih-irb-templates/consent-templates/",
+    "authorization_basis": "US federal government work, 17 U.S.C. 105: published by an NIH institute on a .nih.gov site (NIH Office of Human Subjects Research Protections / NIH IRB consent templates, https://irbo.nih.gov/nih-irb-templates/consent-templates/, retrieved 2026-09-27). No explicit license text checked on page (UNKNOWN)."
+   },
+   {
+    "corpus_file": "dev/originals/D23-9e0857330b9e.docx",
+    "sha256": "9e0857330b9ebf641fd0518ee4e45d6dbeeb45c4d75dd26cb02ecc42b1c656dc",
+    "source_group": "US Department of Veterans Affairs (VA medical center research offices)",
+    "families_declared": [
+     "F1",
+     "F10",
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F6",
+     "F7"
+    ],
+    "format": "docx",
+    "title": "AnnArbor VA INFORMED CONSENT 042915",
+    "source_org": "US Department of Veterans Affairs (VA medical center research offices)",
+    "lineage": "VA Ann Arbor research consent template",
+    "url": "UNKNOWN (file located by web search on annarbor.research.va.gov)",
+    "authorization_basis": "US federal government work, 17 U.S.C. 105: published on a va.gov site by a VA medical center research office. VA web policy pages fetched gave no explicit public-domain sentence (department.va.gov/copyright-policy content not retrievable) - basis INFERRED from federal authorship."
+   },
+   {
+    "corpus_file": "dev/originals/D24-20a7df595e0f.docx",
+    "sha256": "20a7df595e0ffbc15dbf5800d15d558ee5a355fed7abb31acb44eaf0c741435c",
+    "source_group": "US Department of Veterans Affairs (VA medical center research offices)",
+    "families_declared": [
+     "F1",
+     "F10",
+     "F5",
+     "F6"
+    ],
+    "format": "docx",
+    "title": "Portland research information sheet template",
+    "source_org": "US Department of Veterans Affairs (VA medical center research offices)",
+    "lineage": "VA Portland research IRB forms",
+    "url": "https://www.va.gov/PORTLANDRESEARCH/hrpp/index.asp",
+    "authorization_basis": "US federal government work, 17 U.S.C. 105: published on a va.gov site by a VA medical center research office. VA web policy pages fetched gave no explicit public-domain sentence (department.va.gov/copyright-policy content not retrievable) - basis INFERRED from federal authorship."
+   },
+   {
+    "corpus_file": "dev/originals/D25-017d29aeeb69.docx",
+    "sha256": "017d29aeeb6953bf3d22f337844091593dc2b1f535ab61bcdd0e0812feb1430b",
+    "source_group": "US Department of Veterans Affairs (VA medical center research offices)",
+    "families_declared": [
+     "F1",
+     "F10",
+     "F2",
+     "F4",
+     "F5",
+     "F6"
+    ],
+    "format": "docx",
+    "title": "Portland va informed consent",
+    "source_org": "US Department of Veterans Affairs (VA medical center research offices)",
+    "lineage": "VA Portland research IRB forms",
+    "url": "https://www.va.gov/PORTLANDRESEARCH/hrpp/index.asp",
+    "authorization_basis": "US federal government work, 17 U.S.C. 105: published on a va.gov site by a VA medical center research office. VA web policy pages fetched gave no explicit public-domain sentence (department.va.gov/copyright-policy content not retrievable) - basis INFERRED from federal authorship."
+   },
+   {
+    "corpus_file": "dev/originals/D26-0e247607a738.docx",
+    "sha256": "0e247607a7388575f78b7be00bb172362830f7577178364bac2252a85a0454fb",
+    "source_group": "SMA-TB consortium (Zenodo 7457938)",
+    "families_declared": [
+     "F10",
+     "F2",
+     "F3",
+     "F5",
+     "F6",
+     "F7"
+    ],
+    "format": "docx",
+    "title": "SMA-TB template 017 Code break report v1",
+    "source_org": "SMA-TB consortium (Zenodo 7457938)",
+    "lineage": "zenodo-7457938-smatb-templates",
+    "url": "https://zenodo.org/records/7457938",
+    "authorization_basis": "Explicit licence CC BY 4.0 as recorded in Zenodo record metadata (https://zenodo.org/api/records/7457938, VERIFIED 2026-09-27)."
+   },
+   {
+    "corpus_file": "dev/originals/D27-bc002ff4594e.docx",
+    "sha256": "bc002ff4594eb374f1748c8e80a66dfa432bc1432d98cd4e218a06d3515d0c66",
+    "source_group": "SMA-TB consortium (Zenodo 7457938)",
+    "families_declared": [
+     "F10",
+     "F2",
+     "F3",
+     "F5",
+     "F6",
+     "F7",
+     "F9"
+    ],
+    "format": "docx",
+    "title": "SMA-TB template 015 Serious Adverse Event reporting form v1",
+    "source_org": "SMA-TB consortium (Zenodo 7457938)",
+    "lineage": "zenodo-7457938-smatb-templates",
+    "url": "https://zenodo.org/records/7457938",
+    "authorization_basis": "Explicit licence CC BY 4.0 as recorded in Zenodo record metadata (https://zenodo.org/api/records/7457938, VERIFIED 2026-09-27)."
+   },
+   {
+    "corpus_file": "dev/originals/D28-479946b2185f.docx",
+    "sha256": "479946b2185f8d259b3de72375aa6ba941841f67ba2d676f61d714ddb9fc9786",
+    "source_group": "HHS / SAMHSA (SPARS)",
+    "families_declared": [
+     "F1",
+     "F10",
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F6"
+    ],
+    "format": "docx",
+    "title": "SPARS CMHSNOMsChildTool 11.2021",
+    "source_org": "HHS / SAMHSA (SPARS)",
+    "lineage": "SAMHSA CMHS NOMs client-level tool",
+    "url": "UNKNOWN (file located by web search on spars.samhsa.gov)",
+    "authorization_basis": "US federal government (HHS/SAMHSA) OMB-approved data collection instrument (OMB No. 0930-0285, printed in the file) hosted on spars.samhsa.gov. CAVEAT: SPARS is operated by a SAMHSA contractor; no license text checked - INFERRED public domain as federal OMB instrument."
+   },
+   {
+    "corpus_file": "dev/originals/D29-e01fb51a1ce2.docx",
+    "sha256": "e01fb51a1ce2c1194f307916641590e7a8bd25657c69bb0892c8a4e4078ba1d8",
+    "source_group": "Zenodo deposit: Van Hoving DJ (Stellenbosch Univ / Univ Cape Town EM)",
+    "families_declared": [
+     "F10",
+     "F2",
+     "F3",
+     "F5",
+     "F6"
+    ],
+    "format": "docx",
+    "title": "Case report form: Rapid diagnosis of HIV-associated tuberculosis in the emergency centre (TB-POC CRF)",
+    "source_org": "Zenodo deposit: Van Hoving DJ (Stellenbosch Univ / Univ Cape Town EM)",
+    "lineage": "zenodo-3738912-tbpoc",
+    "url": "https://zenodo.org/records/3738912",
+    "authorization_basis": "Explicit licence CC BY (Zenodo licence id \"cc-by\") as recorded in Zenodo record metadata (https://zenodo.org/api/records/3738912, VERIFIED 2026-09-27)."
+   },
+   {
+    "corpus_file": "dev/originals/D30-fdeafbee872f.docx",
+    "sha256": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+    "source_group": "HM Prison and Probation Service - Mental Health Casework Section",
+    "families_declared": [
+     "F10",
+     "F2",
+     "F4",
+     "F5",
+     "F6"
+    ],
+    "format": "docx",
+    "title": "Report on conditionally discharged restricted patient (clinical and social supervisor report, June 2025)",
+    "source_org": "HM Prison and Probation Service - Mental Health Casework Section",
+    "lineage": "hmpps-mhcs-restricted-patient-forms",
+    "url": "https://www.gov.uk/government/publications/conditionally-discharged-restricted-patient-report",
+    "authorization_basis": "OGL v3.0 (Crown copyright). VERIFIED 2026-09-27: gov.uk page footer \"All content is available under the Open Government Licence v3.0, except where otherwise stated\" (https://www.gov.uk/government/publications/hospital-forms-for-use-under-the-mental-health-act). Commercial re-use permitted with attribution."
+   },
+   {
+    "corpus_file": "dev/originals/D31-f730aa53671a.docx",
+    "sha256": "f730aa53671ab367eb5e89376d653ef0d51f096962ae616480711a292eeed36d",
+    "source_group": "HM Prison and Probation Service - Mental Health Casework Section",
+    "families_declared": [
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F6",
+     "F9"
+    ],
+    "format": "docx",
+    "title": "Discharge Application form for Restricted Patients v2.1 (24.02.22)",
+    "source_org": "HM Prison and Probation Service - Mental Health Casework Section",
+    "lineage": "hmpps-mhcs-restricted-patient-forms",
+    "url": "https://www.gov.uk/government/publications/submit-a-conditional-discharge-request-for-restricted-patients",
+    "authorization_basis": "OGL v3.0 (Crown copyright). VERIFIED 2026-09-27: gov.uk page footer \"All content is available under the Open Government Licence v3.0, except where otherwise stated\" (https://www.gov.uk/government/publications/hospital-forms-for-use-under-the-mental-health-act). Commercial re-use permitted with attribution."
+   },
+   {
+    "corpus_file": "dev/originals/D32-46a80892ef0d.docx",
+    "sha256": "46a80892ef0d8fe5a3620c25e1f79ea4bea46250ed7affd8f38ed79520329b87",
+    "source_group": "NIH/NCI",
+    "families_declared": [
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F6",
+     "F8"
+    ],
+    "format": "docx",
+    "title": "patient drug interactions handout",
+    "source_org": "NIH / NCI - CTEP (DCTD)",
+    "lineage": "NCI CTEP patient drug-interaction handout",
+    "url": "https://dctd.cancer.gov/research/ctep-trials/trial-development",
+    "authorization_basis": "US federal government work, 17 U.S.C. 105: published by an NIH institute on a .nih.gov site (NCI DCTD/CTEP trial-development templates, https://dctd.cancer.gov/research/ctep-trials/trial-development, retrieved 2026-09-27). No explicit license text checked (UNKNOWN)."
+   },
+   {
+    "corpus_file": "dev/originals/D33-45e292c57ec8.docx",
+    "sha256": "45e292c57ec851c457297f421d3c0c844b61f7bef07aa0ed9af8f4c7b5cbac0c",
+    "source_group": "NIH/NCI",
+    "families_declared": [
+     "F1",
+     "F10",
+     "F2",
+     "F4",
+     "F5",
+     "F6",
+     "F7"
+    ],
+    "format": "docx",
+    "title": "ICF DCP Template Revision",
+    "source_org": "NIH / NCI - Division of Cancer Prevention",
+    "lineage": "NCI consent (ICD) template family (DCP variants)",
+    "url": "UNKNOWN (file located by web search; landing page not found)",
+    "authorization_basis": "US federal government work, 17 U.S.C. 105: published by an NIH institute on a .nih.gov site (NCI Division of Cancer Prevention, prevention.cancer.gov, found via web search 2026-09-27). Landing page not located (404 on consortia page); no license text seen."
+   },
+   {
+    "corpus_file": "dev/originals/D34-35feb7a7ab69.docx",
+    "sha256": "35feb7a7ab6997b9f786ced2d30dd6460bf75c731c2c86990aaf3830c61879b0",
+    "source_group": "NIH/NCI",
+    "families_declared": [
+     "F1",
+     "F10",
+     "F2",
+     "F4",
+     "F5",
+     "F6",
+     "F7"
+    ],
+    "format": "docx",
+    "title": "CTNet Informed Consent Template",
+    "source_org": "NIH / NCI - Division of Cancer Prevention",
+    "lineage": "NCI consent (ICD) template family (DCP variants)",
+    "url": "UNKNOWN (file located by web search; landing page not found)",
+    "authorization_basis": "US federal government work, 17 U.S.C. 105: published by an NIH institute on a .nih.gov site (NCI Division of Cancer Prevention, prevention.cancer.gov, found via web search 2026-09-27). Landing page not located (404 on consortia page); no license text seen."
+   },
+   {
+    "corpus_file": "dev/originals/D35-cf9b240f3893.docx",
+    "sha256": "cf9b240f3893f97bf168c7cd3ac808bb720b3bf0f65b168c9671c6827ca1a4b7",
+    "source_group": "NIH/NCI",
+    "families_declared": [
+     "F10",
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F6",
+     "F7",
+     "F9"
+    ],
+    "format": "docx",
+    "title": "dcp sae report form 2024 11",
+    "source_org": "NIH / NCI - Division of Cancer Prevention",
+    "lineage": "NCI DCP SAE report form",
+    "url": "UNKNOWN (file located by web search; landing page not found)",
+    "authorization_basis": "US federal government work, 17 U.S.C. 105: published by an NIH institute on a .nih.gov site (NCI Division of Cancer Prevention, prevention.cancer.gov, found via web search 2026-09-27). Landing page not located (404 on consortia page); no license text seen."
+   },
+   {
+    "corpus_file": "dev/originals/D36-01b700ed8dd7.docx",
+    "sha256": "01b700ed8dd72eb46647f209f1608ceecfd7406fa34859a3b122eb497371fdf9",
+    "source_group": "NIH/NCI",
+    "families_declared": [
+     "F1",
+     "F10",
+     "F2",
+     "F4",
+     "F5",
+     "F6",
+     "F7"
+    ],
+    "format": "docx",
+    "title": "consent template",
+    "source_org": "NIH / NCI - CTEP (DCTD)",
+    "lineage": "NCI consent (ICD) template family (CTEP)",
+    "url": "https://dctd.cancer.gov/research/ctep-trials/trial-development",
+    "authorization_basis": "US federal government work, 17 U.S.C. 105: published by an NIH institute on a .nih.gov site (NCI DCTD/CTEP trial-development templates, https://dctd.cancer.gov/research/ctep-trials/trial-development, retrieved 2026-09-27). No explicit license text checked (UNKNOWN)."
+   },
+   {
+    "corpus_file": "dev/originals/D37-01326e0d4d17.docx",
+    "sha256": "01326e0d4d17d211cfda2757c34455b6bd132fb3bfc8b23f989e4a9635eef500",
+    "source_group": "NIH/NCI",
+    "families_declared": [
+     "F1",
+     "F10",
+     "F4",
+     "F5",
+     "F6",
+     "F7"
+    ],
+    "format": "docx",
+    "title": "consent template 2018",
+    "source_org": "NIH / NCI - CTEP (DCTD)",
+    "lineage": "NCI consent (ICD) template family (CTEP)",
+    "url": "https://dctd.cancer.gov/research/ctep-trials/trial-development",
+    "authorization_basis": "US federal government work, 17 U.S.C. 105: published by an NIH institute on a .nih.gov site (NCI DCTD/CTEP trial-development templates, https://dctd.cancer.gov/research/ctep-trials/trial-development, retrieved 2026-09-27). No explicit license text checked (UNKNOWN)."
+   },
+   {
+    "corpus_file": "dev/originals/D38-83769a3b2c6b.docx",
+    "sha256": "83769a3b2c6bc3920f4a37e7881b354e11107cdf079f1090e6865bf8cb6a1301",
+    "source_group": "Zenodo deposit: Kanlerd A. et al. (caustic ingestion EGD vs CT)",
+    "families_declared": [
+     "F1",
+     "F5",
+     "F6"
+    ],
+    "format": "docx",
+    "title": "Case record form: EGD versus thoracic CT in caustic ingestion",
+    "source_org": "Zenodo deposit: Kanlerd A. et al. (caustic ingestion EGD vs CT)",
+    "lineage": "zenodo-10614582",
+    "url": "https://zenodo.org/records/10614582",
+    "authorization_basis": "Explicit licence CC BY 4.0 as recorded in Zenodo record metadata (https://zenodo.org/api/records/10614582, VERIFIED 2026-09-27)."
+   },
+   {
+    "corpus_file": "dev/originals/D39-17e6d154693c.docx",
+    "sha256": "17e6d154693c4c7c41b31f20fd16dfb9560ff6e343cbc03af32b3b231ecc02cb",
+    "source_group": "Zenodo creator 582b52",
+    "families_declared": [
+     "F1",
+     "F5"
+    ],
+    "format": "docx",
+    "title": "Study proforma: serum uric acid marker study",
+    "source_org": "Zenodo deposits sharing one document creator (hash 582b52)",
+    "lineage": "zenodo-proforma-creator-582b52",
+    "url": "https://zenodo.org/records/8426468",
+    "authorization_basis": "Explicit licence CC BY 4.0 as recorded in Zenodo record metadata (https://zenodo.org/api/records/8426468, VERIFIED 2026-09-27)."
+   },
+   {
+    "corpus_file": "dev/originals/D40-e24dc2605ffe.docx",
+    "sha256": "e24dc2605ffece80b31b1d8fb5fb35c6a1a8596fd6105c180b937648f903b6f4",
+    "source_group": "Zenodo creator 582b52",
+    "families_declared": [
+     "F1",
+     "F5"
+    ],
+    "format": "docx",
+    "title": "Clinical data proforma: diabetic lower-limb vascular complications",
+    "source_org": "Zenodo deposits sharing one document creator (hash 582b52)",
+    "lineage": "zenodo-proforma-creator-582b52",
+    "url": "https://zenodo.org/records/8387391",
+    "authorization_basis": "Explicit licence CC BY 4.0 as recorded in Zenodo record metadata (https://zenodo.org/api/records/8387391, VERIFIED 2026-09-27)."
+   }
+  ],
+  "holdout": [
+   {
+    "corpus_file": "holdout/originals/H01-b50388c19e60.docx",
+    "sha256": "b50388c19e609e79d13e0f25fccac2995e7286481fede1c3930d46778ebfd926",
+    "source_group": "NIH / NIMH",
+    "families_declared": [
+     "F1",
+     "F10",
+     "F2",
+     "F4",
+     "F5",
+     "F6",
+     "F8",
+     "F9"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "holdout/originals/H02-687e94896e4d.docx",
+    "sha256": "687e94896e4df9f48bac6622788d79a6f376110521957b9cd38dc2175897526a",
+    "source_group": "NIH / NIMH",
+    "families_declared": [
+     "F1",
+     "F10",
+     "F2",
+     "F4",
+     "F5"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "holdout/originals/H03-5adc1289b543.doc",
+    "sha256": "5adc1289b543681935fb30afd931a02d785f4a07d5c0801f98a861ee3a24808b",
+    "source_group": "Ministry of Defence",
+    "families_declared": [],
+    "format": "doc"
+   },
+   {
+    "corpus_file": "holdout/originals/H04-3715f2f80889.docx",
+    "sha256": "3715f2f80889884afd1f014bcd369fa1c2a3a17059b3cab6a603ec559be1f308",
+    "source_group": "NIH / NCCIH",
+    "families_declared": [
+     "F1",
+     "F10",
+     "F2",
+     "F5",
+     "F6",
+     "F9"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "holdout/originals/H05-6b2cfc3a29f2.docx",
+    "sha256": "6b2cfc3a29f2683b0ed355816d1aeaa55cba8f00846864d429db2ea81312c3f3",
+    "source_group": "NIH / NCCIH",
+    "families_declared": [
+     "F1",
+     "F10",
+     "F2",
+     "F5",
+     "F9"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "holdout/originals/H06-a7bf90d167b5.docx",
+    "sha256": "a7bf90d167b5100df402f2bec34ba1e67281ddcefb75428aba82b85db59c5874",
+    "source_group": "Health New Zealand",
+    "families_declared": [
+     "F10",
+     "F2",
+     "F3",
+     "F8",
+     "F9"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "holdout/originals/H07-3d835f883488.docx",
+    "sha256": "3d835f8834881bd352305542be889ded4d7ac500d13e97acd9714ba1e9361620",
+    "source_group": "Health New Zealand",
+    "families_declared": [
+     "F10",
+     "F2",
+     "F3",
+     "F8",
+     "F9"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "holdout/originals/H08-b87238c11dd6.docx",
+    "sha256": "b87238c11dd67f69cc334a5562d26122b42e591c44a0674f0dfaf4ba0bafe113",
+    "source_group": "Health New Zealand",
+    "families_declared": [
+     "F10",
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F6",
+     "F8",
+     "F9"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "holdout/originals/H09-430af1e02b91.docx",
+    "sha256": "430af1e02b915b2304c663f6c4e25c8af1f25a2ea1a02e4651f51ec7a4d4c366",
+    "source_group": "Health New Zealand",
+    "families_declared": [
+     "F2",
+     "F4",
+     "F5",
+     "F6",
+     "F7",
+     "F8",
+     "F9"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "holdout/originals/H10-2bafe1a4cffe.docx",
+    "sha256": "2bafe1a4cffeb777f8b52eda80fe940de9271bd854fde4badf44898b9324eb16",
+    "source_group": "HHS / CMS (Beneficiary Notices Initiative)",
+    "families_declared": [
+     "F5",
+     "F7"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "holdout/originals/H11-ff923d7b8ed2.docx",
+    "sha256": "ff923d7b8ed2cd549c6b74fc8d30dd3889d16c5dbbb464c844f69ec0e6159ba4",
+    "source_group": "HHS / CMS (Beneficiary Notices Initiative)",
+    "families_declared": [
+     "F1",
+     "F5",
+     "F7"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "holdout/originals/H12-870414ddbfef.docx",
+    "sha256": "870414ddbfefd522c9ed96b21b6f8356dac2b4d6d7ce5951e0ddd944b8544a6b",
+    "source_group": "HHS / CMS (Beneficiary Notices Initiative)",
+    "families_declared": [
+     "F10",
+     "F2",
+     "F4",
+     "F5",
+     "F7"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "holdout/originals/H13-ea693106c8c4.docx",
+    "sha256": "ea693106c8c48eaa167872afb4c34410c3aecc899c0ee5eba8eef458f8a82238",
+    "source_group": "HHS / CMS (Beneficiary Notices Initiative)",
+    "families_declared": [
+     "F1",
+     "F5",
+     "F6"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "holdout/originals/H14-99b8c6731291.docx",
+    "sha256": "99b8c67312910b7ec8b27c78e0807933b332741e775ce90ba0bf0d2d439ee6c8",
+    "source_group": "HHS / CMS (Beneficiary Notices Initiative)",
+    "families_declared": [
+     "F10",
+     "F2",
+     "F4",
+     "F6",
+     "F7"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "holdout/originals/H15-d4ce44196f5a.docx",
+    "sha256": "d4ce44196f5a71d4b375ca3fd3c17b253d48cb4f841ca224c44c72cc4e6b9112",
+    "source_group": "HHS / CMS (Beneficiary Notices Initiative)",
+    "families_declared": [
+     "F1",
+     "F5",
+     "F7",
+     "F9"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "holdout/originals/H16-f62811e31a3a.docx",
+    "sha256": "f62811e31a3a6a8e912ce9d2673f4bf521424806d6afb62fe7ba2d7ac8dec66d",
+    "source_group": "HHS / CMS (Beneficiary Notices Initiative)",
+    "families_declared": [
+     "F1"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "holdout/originals/H17-d2c0100f61b9.docx",
+    "sha256": "d2c0100f61b91dd8ed9572f67224efcf228aab25ff1b56a8e8d3238885967d88",
+    "source_group": "HHS / CMS (Beneficiary Notices Initiative)",
+    "families_declared": [
+     "F5"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "holdout/originals/H18-0a9169f5e9d9.docx",
+    "sha256": "0a9169f5e9d907b722c1ff501ad807448ad2eccad4128a984bcbbb3a8af8f614",
+    "source_group": "GCS-NeuroCOVID consortium (Zenodo 4404855)",
+    "families_declared": [
+     "F1",
+     "F10",
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F6",
+     "F9"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "holdout/originals/H19-64e5706373fa.docx",
+    "sha256": "64e5706373fa14538f589fd1da535ff9fda261b6281f99148b3411cdc244ce1f",
+    "source_group": "GCS-NeuroCOVID consortium (Zenodo 4404855)",
+    "families_declared": [
+     "F1",
+     "F10",
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F6",
+     "F9"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "holdout/originals/H20-97fcbc6e17b6.doc",
+    "sha256": "97fcbc6e17b62a7121fb62a2279ffceb21254c98c3e05e26f12d738d7339ef19",
+    "source_group": "Ministry of Housing, Communities and Local Government (Firefighters' Pension Scheme)",
+    "families_declared": [],
+    "format": "doc"
+   }
+  ],
+  "qual": [
+   {
+    "corpus_file": "qual/originals/Q01-4efee2f2e812.docx",
+    "sha256": "4efee2f2e812ef530848b437b22a42494f06c5ccd4bb7d97a82c2ae0433bb030",
+    "source_group": "Zenodo deposit: Wattanawilaikul R., Benchahong S. (fear of childbirth)",
+    "families_declared": [
+     "F1",
+     "F5"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "qual/originals/Q02-650bc26389a2.docx",
+    "sha256": "650bc26389a22980c45cfbabeffb6b171936bc2b368c6f9401e0d5aa01683af5",
+    "source_group": "Zenodo deposit: Wattanawilaikul R., Benchahong S. (fear of childbirth)",
+    "families_declared": [
+     "F1",
+     "F5",
+     "F6",
+     "F7"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "qual/originals/Q03-c93f59785eae.docx",
+    "sha256": "c93f59785eaeefb921054090bc3cfb7a643f53fd78d6af9fb810630b441ee058",
+    "source_group": "Department of Health and Social Care (England)",
+    "families_declared": [
+     "F10",
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F6"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "qual/originals/Q04-eaaf1373cfb5.docx",
+    "sha256": "eaaf1373cfb5174f96fa3505117c54c9dd7b399e81044d23605e475152436dfc",
+    "source_group": "Department of Health and Social Care (England)",
+    "families_declared": [
+     "F10",
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F6"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "qual/originals/Q05-b753b9af42e8.docx",
+    "sha256": "b753b9af42e83025d91ab5bbcc1075e7f623ec7f9d5c9a0ee28c22c62c559bac",
+    "source_group": "Department of Health and Social Care (England)",
+    "families_declared": [
+     "F10",
+     "F5",
+     "F6"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "qual/originals/Q06-8a675ab3c96d.docx",
+    "sha256": "8a675ab3c96da810b40b690ce62886d0aad0b7a959cb487394c786ca5a690db9",
+    "source_group": "Department of Health and Social Care (England)",
+    "families_declared": [
+     "F10",
+     "F5",
+     "F6"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "qual/originals/Q07-aff1ef980d6d.doc",
+    "sha256": "aff1ef980d6d81778fc295f7b7b609ecb28640558bf443ed3a40433fa1d8c16a",
+    "source_group": "Department of Health and Social Care (England)",
+    "families_declared": [],
+    "format": "doc"
+   },
+   {
+    "corpus_file": "qual/originals/Q08-cc13a005e659.docx",
+    "sha256": "cc13a005e65992c9bbc7e7d7f87be8c21f1ab14c6c0e8f588b19a1a7b80bf1ef",
+    "source_group": "NIH / NIAMS",
+    "families_declared": [
+     "F10",
+     "F2",
+     "F4",
+     "F5",
+     "F9"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "qual/originals/Q09-4f4973ac1d07.docx",
+    "sha256": "4f4973ac1d070b1ce97571c356552cddf9c7665e1f4b8e8e04acfa307964873d",
+    "source_group": "NIH / NIAMS",
+    "families_declared": [
+     "F10",
+     "F4",
+     "F5",
+     "F8",
+     "F9"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "qual/originals/Q10-c9baeeeeac72.docx",
+    "sha256": "c9baeeeeac7215088f9e64463235e3911abd561554352753b1f579a1bcef1e79",
+    "source_group": "Zenodo deposit: Zade R. (DCD leap-motion RCT)",
+    "families_declared": [
+     "F2",
+     "F4",
+     "F5",
+     "F6"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "qual/originals/Q11-86ca46da8329.docx",
+    "sha256": "86ca46da832972d532687d7f0012e2a703ba2a7957a5228f10da95500f01a7c1",
+    "source_group": "Zenodo deposit: Zade R. (DCD leap-motion RCT)",
+    "families_declared": [
+     "F1",
+     "F5",
+     "F6"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "qual/originals/Q12-4117faa57c70.docx",
+    "sha256": "4117faa57c70b3f321a5d3dd4e9520facd7167b1da036688fddb066dc0a9484d",
+    "source_group": "NHS England (Newborn Blood Spot Screening Programme)",
+    "families_declared": [
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F6"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "qual/originals/Q13-fe2a5b533b25.docx",
+    "sha256": "fe2a5b533b2570e854dfeacbea7100c281d3c61220b7f8666a133e5d3924541e",
+    "source_group": "UKHSA/PHE",
+    "families_declared": [
+     "F1",
+     "F10",
+     "F2",
+     "F4",
+     "F5",
+     "F6",
+     "F7",
+     "F9"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "qual/originals/Q14-36427ed16c14.docx",
+    "sha256": "36427ed16c1410504d549e04c856e9dbfcaec98834634394c7c2e3e4d9487436",
+    "source_group": "UKHSA/PHE",
+    "families_declared": [
+     "F10",
+     "F2",
+     "F3",
+     "F5",
+     "F6",
+     "F8",
+     "F9"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "qual/originals/Q15-1bc71920687e.docx",
+    "sha256": "1bc71920687edc59a9cf6642e4745bfe43c863271fc1a808fea3e46ad07ee259",
+    "source_group": "UKHSA/PHE",
+    "families_declared": [
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F6",
+     "F8",
+     "F9"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "qual/originals/Q16-5b89848b430a.docx",
+    "sha256": "5b89848b430ac9cb8dae6c7665fcba1ed8225d1ae013ac0378c6188f15f79b9b",
+    "source_group": "UKHSA/PHE",
+    "families_declared": [
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F6",
+     "F8",
+     "F9"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "qual/originals/Q17-1693090a5dbe.docx",
+    "sha256": "1693090a5dbed70628fc36502ed158abfe7ec3d7d5fd7e7941ee0148e9aebee2",
+    "source_group": "UKHSA/PHE",
+    "families_declared": [
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F6"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "qual/originals/Q18-d261de71aaeb.docx",
+    "sha256": "d261de71aaeb3e9074272524a5846bdd0d9e15ed541311b21e54e8e26541fb8a",
+    "source_group": "UKHSA/PHE",
+    "families_declared": [
+     "F2",
+     "F3",
+     "F4",
+     "F5",
+     "F6",
+     "F7"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "qual/originals/Q19-140ce583ba2c.docx",
+    "sha256": "140ce583ba2cc42da59b77c3baca431fd80c3d4aa759a98c9eedd04d9bbd9d3c",
+    "source_group": "UKHSA/PHE",
+    "families_declared": [
+     "F10",
+     "F2",
+     "F4",
+     "F5",
+     "F6",
+     "F7",
+     "F8",
+     "F9"
+    ],
+    "format": "docx"
+   },
+   {
+    "corpus_file": "qual/originals/Q20-9f09d1af1eec.docx",
+    "sha256": "9f09d1af1eec7d1f9b236e3ca4c3e3fe10c5f1758289dfd1d4d798237a234a59",
+    "source_group": "UKHSA/PHE",
+    "families_declared": [
+     "F1",
+     "F10",
+     "F5",
+     "F6",
+     "F8",
+     "F9"
+    ],
+    "format": "docx"
+   }
+  ]
+ }
+}
