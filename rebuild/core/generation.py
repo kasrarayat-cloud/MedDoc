@@ -1735,7 +1735,7 @@ def v3_option_value(field, text):
     from .v3_mapping import CHECKBOX_YES, CHECKED, option_for
     lines = [line for line in str(text or '').split('\n') if line.strip()]
     if field.get('kind') == 'checkbox':
-        return CHECKED if len(lines) == 1 and lines[0].strip().casefold() in CHECKBOX_YES else None
+        return CHECKED if len(lines) == 1 and lines[0].strip().lower() in CHECKBOX_YES else None
     options = field.get('options') or []
     chosen = [option_for(options, line) for line in lines]
     if not chosen or None in chosen or (field.get('kind') == 'choice' and len(chosen) != 1):

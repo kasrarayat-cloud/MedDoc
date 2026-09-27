@@ -62,11 +62,14 @@ def label_of(field):
 
 def option_for(options, text):
     """The one printed option `text` names: equal after trimming, ignoring case. None when it names no option, or
-    when two printed options would both match (then the text does not identify one)."""
-    wanted = str(text or '').strip().casefold()
+    when two printed options would both match (then the text does not identify one).
+
+    Case only: `lower()`, not Unicode case folding, so 'MASS' does not name 'Maß' and a long s does not name an s.
+    Generation fills an option only through this comparison, so the narrower reading is the conservative one."""
+    wanted = str(text or '').strip().lower()
     if not wanted:
         return None
-    found = [option for option in options or [] if str(option).strip().casefold() == wanted]
+    found = [option for option in options or [] if str(option).strip().lower() == wanted]
     return found[0] if len(found) == 1 else None
 
 

@@ -661,6 +661,16 @@ def live_result(notes, quotes, v3=True):
     return raw
 
 
+class V3OptionMatch(TestCase):
+    def test_an_option_is_named_by_its_printed_words_ignoring_case_only(self):
+        from core.v3_mapping import option_for
+        self.assertEqual(option_for(["Yes", "No"], "  yes "), "Yes")
+        self.assertIsNone(option_for(["Yes", "No"], "Yes."))
+        self.assertIsNone(option_for(["Maß"], "MASS"), "case folding would equate ß with ss")
+        self.assertIsNone(option_for(["Yes"], "Ye\u017f"), "a long s is not an s")
+        self.assertIsNone(option_for(["Left", "LEFT"], "left"), "two printed options that differ by case name neither")
+
+
 class V3LiveAdoption(TestCase):
     """The provider's selections for a v3 form get the same option rule; the request carries no options."""
 
