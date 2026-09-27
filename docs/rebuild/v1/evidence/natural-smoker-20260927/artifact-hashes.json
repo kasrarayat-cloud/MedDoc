@@ -1,0 +1,78 @@
+{
+  "base": "90808d5a3032286bedd9be2961dcabb6480a0358",
+  "source_sha256": {
+    "rebuild/core/generation.py": "bb81dd8117dfe53737b5f37cf5482801260ac7655316dabf424908c68463996f",
+    "rebuild/core/v3_nonsmoker.py": "953f75c941311eb64e4efff7429b107656be148924b8b38f3a634c182546fb48",
+    "rebuild/core/tests/test_natural_smoker.py": "126a13c5e7b443b5456a08999138160369dca8b2677e9de11eba3cf875a4aadb"
+  },
+  "artifacts": [
+    {
+      "path": "01-red.log",
+      "bytes": 3107,
+      "sha256": "5265f22bfcb0bb95fcb943d3218d8223dd9022600da9f2376f9e734b66c9d083"
+    },
+    {
+      "path": "02-focused.log",
+      "bytes": 734,
+      "sha256": "5c214cc0cc700b958034084d87f76cd8a5c248aa7caf0351dd633da83ce941b8"
+    },
+    {
+      "path": "03-stored-opposite-probe.json",
+      "bytes": 196,
+      "sha256": "68cc501011ea6d3efa7e78333cd688d604d9af237ed1804b69c1240fd73db440"
+    },
+    {
+      "path": "04-final-focused.log",
+      "bytes": 735,
+      "sha256": "e7bb4d99abef7297d32bb181f026adcd9f436253556471a3c903951f3430036d"
+    },
+    {
+      "path": "05-text-control-red.log",
+      "bytes": 967,
+      "sha256": "adea4b0620cbf63923d9eb8010c7377d4068c1553defcdf3c765f294ed66b57a"
+    },
+    {
+      "path": "06-final-focused.log",
+      "bytes": 737,
+      "sha256": "b321b6dbce477c6ce4712bf3a2be666cfe21001fb147ac4ce99b5c20e44163a0"
+    },
+    {
+      "path": "07-artifact-workflow.log",
+      "bytes": 489,
+      "sha256": "e2d8ab4dd34807bd538a91da754e219cf39c3a17f40c020bcb6c114805a23721"
+    },
+    {
+      "path": "08-workflow-proof.json",
+      "bytes": 1156,
+      "sha256": "dadb8c482cf2bdb8eb98ece95a8f8030cb08ff5e0e8155aa8f3f697267b3190a"
+    },
+    {
+      "path": "09-stored-opposite-after.log",
+      "bytes": 329,
+      "sha256": "9f6d6a82e8dfbe6bd243906b8681d2fc4b09fcfb013a2489f20f12bf5dceea7f"
+    },
+    {
+      "path": "stored_opposite_probe.py",
+      "bytes": 907,
+      "sha256": "1557fe86e89e24c4da4bd1ec05e12e2480c0bc2d980b0f100312e47a9ac0d195"
+    },
+    {
+      "path": "synthetic-finalized.docx",
+      "bytes": 36700,
+      "sha256": "cdce78af8fc92387ecdfba725f52f8b682d08dcb0315631442e1abb90e21e519"
+    },
+    {
+      "path": "synthetic-original.docx",
+      "bytes": 36621,
+      "sha256": "44c816b30f7cbba701d7aeb9ad8c7a5c6a77fa1147552b186d5cdd88b52e4ff7"
+    },
+    {
+      "path": "workflow_artifact_probe.py",
+      "bytes": 1682,
+      "sha256": "10c41ffd48e4ff1d64f5eb686d1bbe52dd9569a25cfb62a35996456a0f7bbc03"
+    }
+  ],
+  "provider_calls": 0,
+  "actual_spend": 0,
+  "corpus_results_changed": false
+}

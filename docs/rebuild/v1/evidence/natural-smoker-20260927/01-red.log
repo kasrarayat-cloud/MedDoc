@@ -1,0 +1,53 @@
+Creating test database for alias 'default'...
+/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-natural-smoker/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+FFF
+======================================================================
+FAIL: test_worker_review_save_finalize_and_original_word_option (core.tests.test_natural_smoker.NaturalSmokerWorkflow.test_worker_review_save_finalize_and_original_word_option)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-natural-smoker/rebuild/core/tests/test_natural_smoker.py", line 107, in test_worker_review_save_finalize_and_original_word_option
+    self.walk(QUOTE, {'Smoker': [QUOTE]}, {'Smoker': 'No'})
+  File "/opt/meddoc-pro/.worktrees/v1-natural-smoker/rebuild/core/tests/test_v3_ordinary_context.py", line 186, in walk
+    self.assertEqual({label: (answers[self.key(label)]['status'], answers[self.key(label)]['text']) for label in expected},
+AssertionError: {'Smoker': ('conflict', '')} != {'Smoker': ('supported', 'No')}
+- {'Smoker': ('conflict', '')}
++ {'Smoker': ('supported', 'No')}
+
+======================================================================
+FAIL: test_explicit_present_patient_preserves_complete_source_evidence (core.tests.test_natural_smoker.NaturalSmoker.test_explicit_present_patient_preserves_complete_source_evidence) (quote='The patient is a nonsmoker.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-natural-smoker/rebuild/core/tests/test_natural_smoker.py", line 27, in test_explicit_present_patient_preserves_complete_source_evidence
+    self.assertEqual((answer['status'], answer['text']), ('supported', 'No'))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'No')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'No')
+
+======================================================================
+FAIL: test_explicit_present_patient_preserves_complete_source_evidence (core.tests.test_natural_smoker.NaturalSmoker.test_explicit_present_patient_preserves_complete_source_evidence) (quote='Patient is a nonsmoker.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-natural-smoker/rebuild/core/tests/test_natural_smoker.py", line 27, in test_explicit_present_patient_preserves_complete_source_evidence
+    self.assertEqual((answer['status'], answer['text']), ('supported', 'No'))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'No')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'No')
+
+----------------------------------------------------------------------
+Ran 2 tests in 2.183s
+
+FAILED (failures=3)
+Destroying test database for alias 'default'...
+Found 2 test(s).
+System check identified no issues (0 silenced).

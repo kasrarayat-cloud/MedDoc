@@ -1709,6 +1709,10 @@ def judged_context(governance, notes, index, label, evidence):
         scope = governance[11]
         warnings = list(scope['corrections'])
         warnings += v3_preceding_warnings(scope.get('preceding'), label, evidence)
+        if question_key(label) == 'smoker':
+            from .v3_nonsmoker import evidence_needs_review
+            if evidence_needs_review(notes, scope['preceding']['named'].get('smoker', ()), evidence):
+                warnings += scope['units']
         if re.search(SUBJECTS[0], str(label or ''), re.I):
             spans = {span[:2] for entry in evidence if (span := v3_evidence_span(entry))}
             warnings += [unit for unit in scope['units'] if (unit['start'], unit['end']) not in spans]
@@ -3178,8 +3182,8 @@ def v3_option_value(field, text):
 
 
 def v3_option_answer(field, answer, notes, labels, lines=None):
-    """An option question's generated answer: filled ONLY with the printed option its own labelled value names
-    exactly; otherwise held for the clinician with the candidate and its source lines. Absence stays missing."""
+    """An option question's generated answer: its exact labelled option or the narrow whole-note current-patient
+    nonsmoker relation. Every other value stays held with its source; absence stays missing."""
     label = question_key(field['label'])
     reason = V3_CHECKBOX_REASON if field.get('kind') == 'checkbox' else V3_OPTION_REASON
 
@@ -3196,6 +3200,9 @@ def v3_option_answer(field, answer, notes, labels, lines=None):
     if answer.get('status') == 'supported' and answer.get('text'):
         own = answer.get('own_evidence') or answer.get('evidence') or []
         value = named(answer['text'], own)
+        if value is None and not answer.get('held_candidate'):
+            from .v3_nonsmoker import current_nonsmoker
+            value = current_nonsmoker(field, answer['text'], notes, own)
         if value is not None:
             return {**answer, 'text': value}
         return {**answer, 'status': 'conflict', 'text': '', 'evidence': own,
