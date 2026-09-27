@@ -1,3 +1,5 @@
+> Historical source 658 failed final independent refutation. See [ROUND4.md](ROUND4.md) for the all-block reference repair; the preceding report and failures remain preserved below.
+
 # Ordinary source ownership and references — third pass
 
 ## Frozen prepared candidate

@@ -1,0 +1,115 @@
+{
+  "source_commit": "66d588701758c38bb70413940c98f5542fad3ddb",
+  "generation_sha256": "2a173620c44229c7403ba4fb170a2436de00dcfc7637e6357fa4d121f995145b",
+  "scope": "Retained synthetic inputs and mock responses; zero provider calls. All preceding failures retained.",
+  "files": {
+    "before-context-identity-final.log": {
+      "sha256": "be4427ba6605726e3d64453d749906646ad78a94557a46d731a804652b187790",
+      "bytes": 95
+    },
+    "before-context-known-measure.log": {
+      "sha256": "1bb05d5dc70181ed1894e0697efe3f75dca514ae63407569eadee86afce7fe99",
+      "bytes": 2916
+    },
+    "before-context-known-results.json": {
+      "sha256": "00e17706dbe4d41072d91d7d33df1e3d1d2decfb962968e02d6622c9f12fa3ee",
+      "bytes": 199438
+    },
+    "before-context-repaired-independent.json": {
+      "sha256": "286fd6cb337f0f356b6cec229bf5baf0bceebbb97c688ff2733f3b861dfe8b88",
+      "bytes": 101992
+    },
+    "context-omission-red.log": {
+      "sha256": "caea0456b606d9925fe910774f72a9ef532b6cce8ff2f9b8ffa80c283c249de9",
+      "bytes": 5408
+    },
+    "final-targeted-2.log": {
+      "sha256": "e14514a615f8017b2e144b07ea390602b5189684fc0528cbc98a65704377a1ea",
+      "bytes": 920
+    },
+    "final-targeted.log": {
+      "sha256": "caea0456b606d9925fe910774f72a9ef532b6cce8ff2f9b8ffa80c283c249de9",
+      "bytes": 5408
+    },
+    "generation-context-omission.py": {
+      "sha256": "37542d38fc4358dd8546d78a57b54e5e53981cf0f7da9b0f5af50524babcec01",
+      "bytes": 220580
+    },
+    "generation-known-bad-658.py": {
+      "sha256": "166947914409a575269c2bd5e174bdc62b2ae73239ab0754900b85d32c84c24f",
+      "bytes": 219200
+    },
+    "identity-final.log": {
+      "sha256": "16699211fb095cabdda71d28c0cee1eea107ac134ce299641328c11194d64011",
+      "bytes": 100
+    },
+    "identity-round4.json": {
+      "sha256": "d3bf17e6f8361534a652b6a9822ed91b2c7ceeca055ce004f6dad535e8da6a08",
+      "bytes": 189547
+    },
+    "identity-round4final.json": {
+      "sha256": "d3bf17e6f8361534a652b6a9822ed91b2c7ceeca055ce004f6dad535e8da6a08",
+      "bytes": 189547
+    },
+    "independent-base.json": {
+      "sha256": "80d12ad5f8fb318ce91b87076597e5e0e6d3dd66ce72a97195c510608b5ae1c7",
+      "bytes": 63012
+    },
+    "independent-candidate.json": {
+      "sha256": "be1e360f1b3aca393904f4343f84e0d9ad8f81915bf614e83ccef6b5eb98b801",
+      "bytes": 77911
+    },
+    "independent-prior1747.json": {
+      "sha256": "138946ed78f2aa6ab0c7c2a29cde01d34f44bee0d4c5e846d8ff452fb4cb53ae",
+      "bytes": 61323
+    },
+    "independent-probe.py": {
+      "sha256": "09003e970fc9e019fedfda94733bd4f5fe47d5acbf8fcc4c4f85ec9d750c1be8",
+      "bytes": 4696
+    },
+    "independent-report.md": {
+      "sha256": "3854ee7449c9063b6663b1ae4040565df38df0f4947e2d715757a13b25f2e9b8",
+      "bytes": 6188
+    },
+    "known-measure.log": {
+      "sha256": "1bb05d5dc70181ed1894e0697efe3f75dca514ae63407569eadee86afce7fe99",
+      "bytes": 2916
+    },
+    "known-results.json": {
+      "sha256": "0bc532195d473e95d6c412582cfd97ff2c1d4918149cc84821d935a39016b0b3",
+      "bytes": 199438
+    },
+    "measure-known.py": {
+      "sha256": "bc25878f42a3beb9339cc8f7ab0a87b33e1169de3dcc70e43eedbf7a314c4ada",
+      "bytes": 1699
+    },
+    "ordinary-continuation-root-red.json": {
+      "sha256": "ed10211965958568bb6d56457e0b3fcd100d7577de18147ca4485aea17db83f0",
+      "bytes": 3456
+    },
+    "ordinary-continuation-root.py": {
+      "sha256": "fd1c5c6565666336e35fc72af3b0796da4f5892e0a8e7127ea5d48541e2840fe",
+      "bytes": 2557
+    },
+    "ordinary-suffix-root-red.json": {
+      "sha256": "c8928d56de082d0b0080b5d2ac5ab976ecf20c9e2c6c3fc0bfc43133c736db54",
+      "bytes": 227
+    },
+    "ordinary-suffix-root.py": {
+      "sha256": "742a37fae0e92a39af636ef866af2448387a0766b35423ea5b486a7cae5c3006",
+      "bytes": 1192
+    },
+    "repaired-independent.json": {
+      "sha256": "4e146d4f9684832736c2b642063d71855f98e16720e21193aed9c7a846173377",
+      "bytes": 104130
+    },
+    "suffix-red.log": {
+      "sha256": "37b4b61571c88e21dcceb4d7c937a6bbbd438ab6e844a44f15b8656e254d4009",
+      "bytes": 2980
+    },
+    "unowned-red.log": {
+      "sha256": "95b733cbbc852d8b000136eee39595821fca9637d5b5c94fe014c7ee85b70be6",
+      "bytes": 15891
+    }
+  }
+}

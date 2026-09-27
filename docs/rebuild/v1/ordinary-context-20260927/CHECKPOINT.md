@@ -1,3 +1,15 @@
+# Current checkpoint — fourth-pass source 66d58870
+
+- Tree `/opt/meddoc-pro/.worktrees/v1-ordinary-context`, branch `v1/ordinary-context`; source **66d588701758c38bb70413940c98f5542fad3ddb**, generation SHA256 **2a173620c44229c7403ba4fb170a2436de00dcfc7637e6357fa4d121f995145b**. Following commit is docs/evidence only. No other writer; source frozen for mandatory independent refutation. Not merged/deployed/activated.
+- 658 was independently refuted: unowned references disappeared; suffix beneficiary admitted. Original scripts/source/results preserved. All-block scanning, recorded complete visit-purpose relation, unresolved medication suffix and complete review context now pinned in generation/stored governance.
+- Final122 tests PASS23.973s. Original21-case reviewer replay held the demonstrated defects with exact old-supported refusal. Note9 seven-answer actual Word workflow remains;30 identity records unchanged d3bf17...;15 retained cases remain10/12,18/77. B-G1 OPEN; ROUND3/ROUND4 explain concrete offline code gaps versus unavailable model/product evidence.
+- Sessions23615/2380 RED exit1 as intended;41310 first repaired run exit1 with5 context-visibility failures;44010 final run exit0. Final pure sessions95308/5603 exit0. No active test/process. Dedicated notesDB55706 test DB retained by --keepdb. All failure logs and source snapshot retained.
+- Runtime `.runtime/ordinary-context-20260927/round4`; durable evidence/round4 manifest. No provider receipt/reservation/spending, campaign/holdout, real-data or agreement operation in this stream. Root retains release/deployment/financial authority; preserve its separate request-schema fix in union.
+- Next safe action: independent final refutation; reproduce/repair concrete findings; integrate only after clearance. Then continue the authorized bounded inline-option/unrelated-tail ordinary-note repair. Source is not to be broadened during refutation.
+
+---
+## Preserved preceding checkpoints (superseded)
+
 # Current checkpoint — source65805938, third pass
 
 - Tree `/opt/meddoc-pro/.worktrees/v1-ordinary-context`, branch `v1/ordinary-context`; source6580593899eb7931fedea9fccaf38c233e0d3625, generation SHA256166947914409a575269c2bd5e174bdc62b2ae73239ab0754900b85d32c84c24f. Following commit is docs/evidence only. Original baseebcddc2a; root separate anthropic_request schema fix must survive union.
@@ -23,3 +35,7 @@
 ## Resumed third pass
 
 Independent root/Word refutation found foreign-prefix, planned-examination and cross-question allergy contradiction releases on source1747. This source is known bad and remains unmerged. Original scripts/base/failing outputs and exact source copied to runtime round3/. Narrow ownership constructions and cross-question source coupling will be pinned before repair; root approved the design. No other writer or active test found in this tree. Preserve every previous stage and the unchanged r1-note9 positive.
+
+## Fourth pass resumed
+
+Independent final refutation of source 658 found that unowned literal references could disappear from continuation governance. Source is unmerged; original scripts, source snapshot, base/failing results preserved in runtime round4. No other writer/test in tree. All-block source-reference repair is now active; no provider/financial/deployment operation.
