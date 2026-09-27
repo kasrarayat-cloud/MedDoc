@@ -18,6 +18,7 @@ import re
 import tempfile
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import anthropic
@@ -207,6 +208,61 @@ class PricingFingerprint(SimpleTestCase):
         self.assertEqual(g.request_profile('openai', 'claude-sonnet-4-6', 'disabled', 'medium', ''),
                          {'invalid': 'QUILLMD_AI_MODEL names a Claude model but QUILLMD_AI_PROVIDER is openai: Claude models '
                                      'are sent only with QUILLMD_AI_PROVIDER=anthropic.'})
+
+    def test_a_model_id_that_is_not_a_plain_id_is_invalid_for_every_provider(self):
+        """F-A (round 4). Under openai any id without `claude` was rated legacy — '', ' ' and a padded 'gpt-4.1-mini '
+        included. Measured: the console showed QUILLMD_AI_MODEL (unset) beside 'request profile: legacy' marked success,
+        enqueue held $0.0217, the SDK sent model '' and the 400 left the job in reconciliation with its hold kept. For EVERY
+        provider an id that is empty, padded, carries a control or other non-id character is INVALID, and is refused before
+        any hold or request — from configuration, a stored pre-profile config and a forged legacy snapshot alike."""
+        bad = ('', ' ', '   ', 'gpt-4.1-mini ', ' gpt-4.1-mini', '\tgpt-4.1-mini', 'gpt-4.1-mini\n', 'gpt-4.1-mini\r',
+               'gpt-4.1-mini\x00', 'gpt-4.1\x1bmini', 'gpt-4.1-mini\x7f', 'gpt-4.1-mini\x85', 'gpt-4.1-mini ',
+               ' gpt-4.1-mini', 'gpt-4.1-mini​', '﻿gpt-4.1-mini', 'gpt 4.1 mini', 'gpt-4.1-mini/', 'gpt-4.1-mini?',
+               '-gpt-4.1-mini', '.gpt-4.1-mini', ':gpt-4.1-mini', 'gpt-４.1-mini', 'gpt-4.1-mıni', 'g' * 129,
+               'claude-sonnet-4-6 ', '\nclaude-sonnet-5', 'claude-sonnet-4-6\x00')
+        for provider in g.PROVIDERS:
+            for model in bad:
+                with self.subTest(provider=provider, model=model):
+                    self.assertIn('invalid', g.request_profile(provider, model, 'disabled', 'medium', ''))
+                    with override_settings(**dict(SONNET_46, AI_PROVIDER=provider, AI_MODEL=model)), \
+                            patch.dict(os.environ, PRICE_ENV), patch('anthropic.Anthropic') as client, \
+                            patch('openai.OpenAI') as openai_client:
+                        quoted = g.configuration()
+                        old = {k: v for k, v in quoted.items() if k != 'request_profile'}
+                        for config in (None, quoted, old, {**old, 'request_profile': g.LEGACY_PROFILE}):
+                            with self.assertRaises(NoProviderRequest):
+                                g.maximum_cost(NOTES, FIELDS, config)
+                            with self.assertRaises(NoProviderRequest):
+                                g.generate(NOTES, FIELDS, config)
+                        client.assert_not_called()
+                        openai_client.assert_not_called()
+        # A stored config whose model is not a string at all is refused the same way.
+        with override_settings(**dict(SONNET_46, AI_PROVIDER='openai', AI_MODEL='gpt-4.1-mini')), \
+                patch.dict(os.environ, PRICE_ENV), patch('openai.OpenAI') as openai_client:
+            for model in (None, 0, ['gpt-4.1-mini']):
+                with self.subTest(stored_model=model), self.assertRaises(NoProviderRequest):
+                    g.generate(NOTES, FIELDS, {**g.configuration(), 'model': model})
+            openai_client.assert_not_called()
+        for provider in g.PROVIDERS:
+            self.assertEqual(g.request_profile(provider, 'gpt-4.1-mini ', 'disabled', 'medium', ''),
+                             {'invalid': 'QUILLMD_AI_MODEL must be a plain model id: set, with no surrounding spaces or '
+                                         'control characters, a letter or digit first, then only letters, digits and . _ : - '
+                                         '(at most 128 characters).'})
+        # Positive control: the openai ids QuillMD sends keep the pre-profile request, and are sent exactly as configured.
+        for model in ('gpt-4.1-mini', 'ft:gpt-4.1-mini:org:name:id', 'ft:gpt-4.1-mini-2025-04-14:acme_health::AbC123',
+                      'g' * 128):
+            with self.subTest(accepted=model):
+                self.assertEqual(g.request_profile('openai', model, 'x', 'y', ''), g.LEGACY_PROFILE)
+                with override_settings(**dict(SONNET_46, AI_PROVIDER='openai', AI_MODEL=model)), \
+                        patch.dict(os.environ, PRICE_ENV), patch('openai.OpenAI') as openai_client:
+                    openai_client.return_value.responses.parse.return_value = SimpleNamespace(
+                        id='resp_synthetic', _request_id='req_synthetic',
+                        usage=SimpleNamespace(input_tokens=100, output_tokens=10,
+                                              input_tokens_details=SimpleNamespace(cached_tokens=0)))
+                    g.generate(NOTES, FIELDS)
+                    self.assertEqual(openai_client.call_args.kwargs, {'timeout': 60, 'max_retries': 0})
+                    sent = openai_client.return_value.responses.parse.call_args.kwargs
+                    self.assertEqual((sent['model'], sent['max_output_tokens']), (model, 6000))
 
     def test_only_the_listed_claude_models_get_the_legacy_request_deny_by_default(self):
         """S5-R1. The version parser read `claude-<family>-<major>[-<minor>]`, so `claude-mythos-preview` — a real id outside
@@ -953,3 +1009,39 @@ class ProviderModelPairing(OutcomeFixture, TestCase):
                 self.assertTrue(job.error.startswith('Not processed: '), job.error)
                 self.assertFalse(Usage.objects.filter(job=job).exists())
                 self.assertFalse(Reservation.objects.filter(job=job, state='held').exists())
+
+    def test_a_model_id_that_is_not_a_plain_id_is_refused_at_enqueue_by_the_worker_and_on_the_console(self):
+        """F-A (round 4), through the console, enqueue and the worker. Measured before the repair with provider openai and
+        QUILLMD_AI_MODEL set but empty: the console printed 'request profile: legacy' marked success, enqueue held $0.0217,
+        the SDK sent model '' and the 400 left the job in reconciliation with its hold kept. Now the console says INVALID,
+        enqueue refuses with no job and no hold, and a job stored with such a model (queued by the previous release) is not
+        sent: not processed, nothing charged, hold released."""
+        from core import admin_console
+        for provider, model in (('openai', ''), ('openai', ' '), ('openai', 'gpt-4.1-mini '), ('openai', 'gpt-4.1-mini\n'),
+                                ('openai', '\x1bgpt-4.1-mini'), ('anthropic', ''), ('anthropic', 'claude-sonnet-4-6\t')):
+            with self.subTest(provider=provider, model=model), \
+                    override_settings(**dict(SONNET_46, AI_PROVIDER=provider, AI_MODEL=model)), \
+                    patch('anthropic.Anthropic') as client, patch('openai.OpenAI') as openai_client:
+                profile = next(row for row in admin_console.language_model_rows() if row['name'] == 'request profile')
+                self.assertTrue(profile['value'].startswith('INVALID — every generation is refused'), profile['value'])
+                self.assertEqual(profile['severity'], 'error')
+                encounter = self.fresh_encounter()
+                with self.assertRaises(NoProviderRequest):
+                    enqueue(encounter, self.user)
+                self.assertFalse(Job.objects.filter(encounter=encounter).exists())
+                self.assertFalse(Reservation.objects.filter(job__encounter=encounter).exists())
+                quoted = g.configuration()
+                pre_profile = {k: v for k, v in quoted.items() if k != 'request_profile'}
+                for label, stored in (('pre-profile', pre_profile),
+                                      ('forged legacy', {**pre_profile, 'request_profile': dict(g.LEGACY_PROFILE)})):
+                    job = Job.objects.create(encounter=encounter, user=self.user, revision=encounter.revision,
+                                             request_key=f'generation:{encounter.pk}:plain:{label}', config=stored)
+                    reserve(job, Decimal('0.2'))
+                    self.assertTrue(run_one())
+                    job.refresh_from_db()
+                    self.assertEqual(job.state, 'failed', label)
+                    self.assertTrue(job.error.startswith('Not processed: '), job.error)
+                    self.assertFalse(Usage.objects.filter(job=job).exists())
+                    self.assertFalse(Reservation.objects.filter(job=job, state='held').exists())
+                client.assert_not_called()
+                openai_client.assert_not_called()
