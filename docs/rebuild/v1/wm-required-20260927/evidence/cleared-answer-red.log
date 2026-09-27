@@ -1,0 +1,19 @@
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-wm-integration/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-wm-integration/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+F
+======================================================================
+FAIL: test_a_wm_answer_deliberately_cleared_is_a_preserved_and_counted_edit (core.tests.test_review_guards.AnEmptyFieldIsNotAClearedAnswer.test_a_wm_answer_deliberately_cleared_is_a_preserved_and_counted_edit)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-wm-integration/rebuild/core/tests/test_review_guards.py", line 1359, in test_a_wm_answer_deliberately_cleared_is_a_preserved_and_counted_edit
+    self.assertTrue(views.clinician_decided(cleared_answer))
+AssertionError: False is not true
+
+----------------------------------------------------------------------
+Ran 1 test in 0.078s
+
+FAILED (failures=1)
+Destroying test database for alias 'default'...
+Found 1 test(s).
+System check identified no issues (0 silenced).

@@ -1,0 +1,10 @@
+{
+  "result": "PASS",
+  "checks": [
+    "multiple text blocks after thinking preserve complete JSON and exact source value",
+    "refusal, incomplete, wrong actual model reject adoption",
+    "preparation failure classified unsent before client construction",
+    "post-submission timeout stays uncertain and request is not retried"
+  ],
+  "live_provider_calls": 0
+}

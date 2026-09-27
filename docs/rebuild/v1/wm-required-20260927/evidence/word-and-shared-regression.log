@@ -1,0 +1,25 @@
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-wm-integration/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-wm-integration/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+.....................F................................................................................../opt/meddoc-pro/.worktrees/v1-wm-integration/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-wm-integration/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+............................................................................................................................................................................
+======================================================================
+FAIL: test_round_18_generation_is_refused_over_a_cleared_answer (wm_operator_workflow.LocalNarrative.test_round_18_generation_is_refused_over_a_cleared_answer)
+Round 18: an answer a person cleared (`missing`, with its `edited_by`) was re-filled by a second generation.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-wm-integration/rebuild/core/tests/test_wm_workflow.py", line 920, in test_round_18_generation_is_refused_over_a_cleared_answer
+    encounter = self.generation_is_refused_after({}, {'measurement_1_1': ''}, by=self.member('wm-employee-r18g', 'employee'))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-wm-integration/rebuild/core/tests/test_wm_workflow.py", line 905, in generation_is_refused_after
+    self.assertFalse(run_one())
+AssertionError: True is not false
+
+----------------------------------------------------------------------
+Ran 276 tests in 457.874s
+
+FAILED (failures=1)
+Destroying test database for alias 'default'...
+Found 276 test(s).
+System check identified no issues (0 silenced).

@@ -1,0 +1,24 @@
+{
+  "synthetic_paired_evidence": [
+    {
+      "field": "Right GSV at the SFJ: diameter (mm)",
+      "start": 11,
+      "supported": true,
+      "opposite_copy_refused": "side",
+      "resave_stable": true
+    },
+    {
+      "field": "Left GSV at the SFJ: diameter (mm)",
+      "start": 95,
+      "supported": true,
+      "opposite_copy_refused": "side",
+      "resave_stable": true
+    }
+  ],
+  "source": {
+    "core/views.py": "991f32ffb8dff330997d54abf76ab28b4ea20a1019e59e88cd2b2834681fc375",
+    "core/wm_review.py": "a84ef5972c5ae768140561c80d9695ec802e7e1d50dc04648ec4dadb833c3d8c",
+    "core/wm_narrative.py": "c29e0896bb630d487b5ff1ee44c983841d3307c392342cca7bebaac8e6c8de14",
+    "documents/sdk_word/Adapter/WmAdapter.cs": "883273448d427245e2026efa17ce4c7e38deff354834ae014a3659918a192441"
+  }
+}
