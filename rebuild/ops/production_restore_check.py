@@ -6,7 +6,8 @@ restored from production (point in time or snapshot), never to the live one, as 
 role over verify-full TLS with the profile's pinned CA bundle, and checks what the private
 restore-check (backup_restore.py) already requires of a synthetic restore:
 
-- every QuillMD integrity trigger exists and is enabled, and there are exactly the declared number;
+- every release-bound integrity trigger has its expected table, event, function body and enabled
+  state, with no additional custom core trigger, and the count agrees with the selected release;
 - backup_restore.INVARIANTS are all zero (wallet bounds, the 1.5x charge rule, encounter scope,
   held reservations);
 - every file the database references (backup_restore.FILE_QUERIES) exists under the restored
@@ -20,7 +21,7 @@ and the live endpoint and live state root are refused, so the tool cannot be poi
 
     python3 ops/production_restore_check.py --database-host <drill endpoint> \
         --state-root /mnt/quillmd-drill-20261101t0300 --credentials <role credential file> \
-        --expected-triggers 9
+        --expected-triggers 17
 """
 import argparse
 import hashlib
@@ -33,14 +34,14 @@ import sys
 try:
     from . import backup_restore as backup
     from . import deployment_profile
+    from . import integrity_contract
 except ImportError:
     import backup_restore as backup
     import deployment_profile
+    import integrity_contract
 
 DRILL_STAMP = r'[0-9]{8}t[0-9]{4}'
-TRIGGERS = '''SELECT t.tgname, t.tgenabled FROM pg_trigger t
-    JOIN pg_proc p ON p.oid=t.tgfoid JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace
-    WHERE NOT t.tgisinternal AND n.nspname='public' AND p.proname LIKE 'quillmd%' ORDER BY t.tgname'''
+TRIGGERS = integrity_contract.CATALOG
 TABLES = '''SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
     WHERE n.nspname='public' AND c.relkind='r' ORDER BY c.relname'''
 
@@ -78,7 +79,7 @@ def _file_sha256(path):
 def check(query, state_root, expected_triggers):
     """Run every check through `query(sql) -> rows`; return a counts-only report."""
     triggers = query(TRIGGERS)
-    enabled = [row for row in triggers if row[1] in ('O', 'A')]
+    trigger_report = integrity_contract.assess(triggers, query(integrity_contract.CONTEXT), expected_triggers)
     invariants = {name: query(statement)[0][0] for name, statement in backup.INVARIANTS.items()}
     references = {}
     for _, statement in backup.FILE_QUERIES:
@@ -103,8 +104,7 @@ def check(query, state_root, expected_triggers):
     tables = [row[0] for row in query(TABLES)]
     rows = sum(query('SELECT count(*) FROM public."%s"' % name.replace('"', '""'))[0][0] for name in tables)
     report = {
-        'triggers': {'found': len(triggers), 'enabled': len(enabled), 'expected': expected_triggers,
-                     'passed': len(triggers) == expected_triggers and len(enabled) == len(triggers)},
+        'triggers': trigger_report,
         'invariants': {'violations': sum(invariants.values()), 'checked': len(invariants),
                        'passed': not any(invariants.values())},
         'files': {'referenced': len(references), 'missing': missing, 'hash_mismatched': mismatched,

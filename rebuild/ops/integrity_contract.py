@@ -1,0 +1,66 @@
+"""Release-bound PostgreSQL integrity definitions for a production restore drill.
+
+Expected bodies come from reviewed migration SQL, never the inspected database.
+This is a point-in-time catalog check, not protection against a privileged owner.
+Keep the migration parity test and this contract in the same reviewed change.
+"""
+import hashlib
+
+CATALOG = '''SELECT c.relname,t.tgname,p.proname,t.tgtype,t.tgenabled,
+    pg_get_triggerdef(t.oid),pn.nspname,p.prosrc,p.oid::regproc::text,
+    p.pronargs,l.lanname,p.prorettype='pg_catalog.trigger'::regtype,
+    p.prosecdef,p.proconfig,p.proisstrict,p.provolatile,p.proparallel
+    FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid
+    JOIN pg_namespace n ON n.oid=c.relnamespace
+    JOIN pg_proc p ON p.oid=t.tgfoid JOIN pg_namespace pn ON pn.oid=p.pronamespace
+    JOIN pg_language l ON l.oid=p.prolang
+    WHERE NOT t.tgisinternal AND n.nspname='public'
+      AND (left(c.relname,5)='core_' OR left(p.proname,7)='quillmd')
+    ORDER BY c.relname,t.tgname'''
+CONTEXT = "SELECT current_schema(),current_setting('session_replication_role')"
+
+
+def assess(rows, context, declared_count):
+    """Return counts/fixed labels only; a replacement cannot choose its own expected identity."""
+    expected = {(table, name): (function, kind) for table, name, function, kind in GUARDS}
+    present = {}
+    malformed = 0
+    enabled = 0
+    for row in rows:
+        if len(row) != 17 or (row[0], row[1]) in present:
+            malformed += 1
+            continue
+        present[(row[0], row[1])] = row
+        enabled += row[4] in ('O', 'A')
+    mismatched = 0
+    for (table, name), (function, kind) in expected.items():
+        row = present.get((table, name))
+        if row is None:
+            continue
+        (_, _, actual_function, actual_kind, state, definition, namespace, body, sql_function,
+         nargs, language, returns_trigger, security_definer, config, strict, volatility, parallel) = row
+        event = {23: 'INSERT OR UPDATE', 27: 'DELETE OR UPDATE', 19: 'UPDATE', 34: 'TRUNCATE'}[kind]
+        each = 'ROW' if kind & 1 else 'STATEMENT'
+        wanted = (f'CREATE TRIGGER {name} BEFORE {event} ON public.{table} '
+                  f'FOR EACH {each} EXECUTE FUNCTION {sql_function}()')
+        valid = (actual_function == function and actual_kind == kind and state in ('O', 'A')
+                 and definition == wanted and namespace == 'public' and nargs == 0
+                 and language == 'plpgsql' and returns_trigger is True and security_definer is False
+                 and config is None and strict is False and volatility == 'v' and parallel == 'u'
+                 and isinstance(body, str)
+                 and hashlib.sha256(body.encode()).hexdigest() == FUNCTION_SHA256[function])
+        mismatched += not valid
+    missing = len(expected.keys() - present.keys())
+    unexpected = len(present.keys() - expected.keys())
+    context_valid = list(context) == [('public', 'origin')]
+    declaration_valid = type(declared_count) is int and declared_count == len(expected)
+    return {'found': len(rows), 'enabled': enabled, 'expected': len(expected),
+            'missing': missing, 'unexpected': unexpected, 'definition_mismatches': mismatched,
+            'malformed': malformed, 'context_valid': context_valid,
+            'declaration_matches_release': declaration_valid,
+            'passed': not (missing or unexpected or mismatched or malformed)
+                      and context_valid and declaration_valid}
+
+FUNCTION_SHA256 = {'quillmd_append_only': '8d5ec86a531621ac1de53c85109dfb5122f9142b1cb66dcfc377e0945d869764', 'quillmd_encounter_guard': 'a3ecc20a637f6b1dc483eb4810d278b3d0db609f5ecc42f97ac85326eadd206d', 'quillmd_job_financial_guard': 'bbc4d75781636526a07bdbb1d4e705eb642a57c81776161b192dad88c1b8dd26', 'quillmd_livemode_guard': '231e4fd6d5f23b0b38d9b4353add5b26cb31b62c571ccb0987e06705cf6b32cf', 'quillmd_mapping_job_scope_guard': '0ebc170e576db208a2c8fea78fa2c46652aead48ef2a88af27bb21254cfc7954', 'quillmd_mapping_template_guard': '8c7d8e4b6e59981318f27e5688dd8be86e3fefee3a0c33620c77e5d60235eea9', 'quillmd_payment_evidence_guard': '4c4c2a8c49133266a8bf61181f1d6ca764ee8e98d5de262cb59eac99190520bd', 'quillmd_reconciliation_evidence_guard': 'e25b0f7d604223287b30f2955bc167c34ce889460ac612757d88a93b1f828bdd', 'quillmd_refuse_truncate': '1f42decb7308aa5ee0a2f5425bd3ca1e8edf244ef3ff5a3faffe0c1dd6b4f447', 'quillmd_webhook_evidence_guard': '797abc46124f7f810165cd8058731387c10bbad141f840f8fddc5b0b5f732f8c'}
+
+GUARDS = (('core_auditevent', 'audit_append_only', 'quillmd_append_only', 27), ('core_costreconciliation', 'reconciliation_evidence_immutable', 'quillmd_reconciliation_evidence_guard', 27), ('core_encounter', 'encounter_scope', 'quillmd_encounter_guard', 23), ('core_job', 'job_financial_immutable', 'quillmd_job_financial_guard', 19), ('core_job', 'mapping_job_scope', 'quillmd_mapping_job_scope_guard', 23), ('core_ledgerentry', 'ledger_append_only', 'quillmd_append_only', 27), ('core_ledgerentry', 'ledger_no_truncate', 'quillmd_refuse_truncate', 34), ('core_mappingconfirmation', 'mapping_confirmation_append_only', 'quillmd_append_only', 27), ('core_payment', 'payment_evidence_immutable', 'quillmd_payment_evidence_guard', 27), ('core_payment', 'payment_no_truncate', 'quillmd_refuse_truncate', 34), ('core_providerreceipt', 'receipt_append_only', 'quillmd_append_only', 27), ('core_template', 'mapping_template_source', 'quillmd_mapping_template_guard', 19), ('core_templateversion', 'mapping_immutable', 'quillmd_append_only', 27), ('core_usage', 'usage_append_only', 'quillmd_append_only', 27), ('core_webhookevent', 'webhook_evidence_immutable', 'quillmd_webhook_evidence_guard', 27), ('core_webhookevent', 'webhook_livemode_immutable', 'quillmd_livemode_guard', 19), ('core_webhookevent', 'webhook_no_truncate', 'quillmd_refuse_truncate', 34))

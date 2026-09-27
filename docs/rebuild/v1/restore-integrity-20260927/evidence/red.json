@@ -1,0 +1,64 @@
+{
+  "source_sha256": "70da59de3da5ab082239b8a9b3ac85161bca4e5917678cff3f62cc7a42306779",
+  "input_triggers": [
+    [
+      "quillmd_t0",
+      "O"
+    ],
+    [
+      "quillmd_t1",
+      "O"
+    ],
+    [
+      "quillmd_t2",
+      "O"
+    ],
+    [
+      "quillmd_t3",
+      "O"
+    ],
+    [
+      "quillmd_t4",
+      "O"
+    ],
+    [
+      "quillmd_t5",
+      "O"
+    ],
+    [
+      "quillmd_t6",
+      "O"
+    ],
+    [
+      "quillmd_t7",
+      "O"
+    ],
+    [
+      "quillmd_t8",
+      "O"
+    ]
+  ],
+  "result": {
+    "triggers": {
+      "found": 9,
+      "enabled": 9,
+      "expected": 9,
+      "passed": true
+    },
+    "invariants": {
+      "violations": 0,
+      "checked": 4,
+      "passed": true
+    },
+    "files": {
+      "referenced": 0,
+      "missing": 0,
+      "hash_mismatched": 0,
+      "passed": true
+    },
+    "tables": 2,
+    "rows": 6,
+    "passed": true
+  },
+  "finding": "Nine invented trigger names pass; expected identity/body is unmeasured."
+}
