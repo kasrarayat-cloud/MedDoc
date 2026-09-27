@@ -65,6 +65,35 @@ class RepeatedSourceTopics(SimpleTestCase):
 
 
 class NominalPlanTopic(SimpleTestCase):
+    def test_visible_compatibility_denials_cannot_release_the_opposite_assessment(self):
+        fields = [field('a', 'Assessment', 'long_text'), field('p', 'Plan', 'long_text')]
+        for denial in ('no', 'NO', 'ｎｏ', 'n\u200bo'):
+            for finding in ('infection.', 'active bacterial infection.'):
+                with self.subTest(denial=denial, finding=finding):
+                    plan = denial + ' ' + finding
+                    notes = 'Assessment: ' + finding + '\nPlan: ' + plan
+                    self.assertFalse(g.plain_value(plan))
+                    answers = run(notes, {'Assessment': ['Assessment: ' + finding], 'Plan': ['Plan: ' + plan]}, fields=fields)
+                    self.assertEqual((answers['Assessment']['status'], answers['Assessment']['text']), ('conflict', ''))
+                    self.assertEqual(answers['Assessment']['held_candidate']['context'][0]['quote'], 'Plan: ' + plan)
+                    self.assertEqual(answers['Plan']['text'], plan)
+                    quote = 'Assessment: ' + finding
+                    old = {'status': 'supported', 'text': finding, 'reviewed': True,
+                           'evidence': [{'quote': quote, 'start': 0, 'end': len(quote)}]}
+                    self.assertEqual(g.governed_decisions(notes, fields, {'a': old}), ['Assessment'])
+
+    def test_compatibility_reading_only_withholds_and_does_not_create_plain_answers(self):
+        for value in ('ｎｏ infection.', 'consent ｔｏｍｏｒｒｏｗ.', 'ｍｏｔｈｅｒ present.', 'ａｓ ａｂｏｖｅ.'):
+            self.assertFalse(g.plain_value(value), value)
+        fields = [field('a', 'Assessment', 'long_text'), field('p', 'Plan', 'long_text')]
+        for plan in ('amoxicillin ｉｆ symptoms develop.', 'consent ｔｏｍｏｒｒｏｗ.', 'ｓｅｅ above.'):
+            notes = 'Assessment: infection.\nPlan: ' + plan
+            answer = run(notes, {'Assessment': ['Assessment: infection.']}, fields=fields)['Assessment']
+            self.assertEqual(answer['status'], 'conflict', plan)
+        # The literal option grammar is still required: compatibility conversion
+        # is never an authorization to choose a printed answer.
+        self.assertIsNone(g.v3_option_value(field('s', 'Smoker', 'choice', ['Yes', 'No']), 'Ｎｏ.'))
+
     def test_nominal_denial_keeps_the_earlier_assessment_governed(self):
         fields = [field('a', 'Assessment', 'long_text'), field('p', 'Plan', 'long_text')]
         for assessment in ('infection.', 'active bacterial infection.'):
@@ -169,12 +198,12 @@ class CompleteNominalPlanWorkflow(V3EncounterFixture, TestCase):
                     'Allergies': 'sulfa.', 'Smoker': 'Yes'}
         self.walk(case['notes'], {label: case['picks'][label] for label in expected}, expected)
 
-    def test_stale_reviewed_assessment_cannot_finalize_past_a_nominal_denial(self):
-        self.encounter.notes = 'Assessment: infection.\nPlan: no infection.'
+    def assert_stale_denial_cannot_finalize(self, denial):
+        self.encounter.notes = 'Assessment: infection.\nPlan: ' + denial + ' infection.'
         self.encounter.answers = {}
         for f in self.version.fields:
             label = f['label']
-            value = {'Assessment': 'infection.', 'Plan': 'no infection.'}.get(label, '')
+            value = {'Assessment': 'infection.', 'Plan': denial + ' infection.'}.get(label, '')
             quote = label + ': ' + value
             start = self.encounter.notes.index(quote) if value else 0
             self.encounter.answers[f['key']] = {'status': 'supported' if value else 'missing',
@@ -187,9 +216,15 @@ class CompleteNominalPlanWorkflow(V3EncounterFixture, TestCase):
         self.finalize(); self.encounter.refresh_from_db()
         self.assertNotEqual(self.encounter.status, 'finalized')
         self.assertFalse(self.encounter.export_path)
-        self.assertEqual(self.save({'Assessment': 'infection.', 'Plan': 'no infection.'}).status_code, 302)
+        self.assertEqual(self.save({'Assessment': 'infection.', 'Plan': denial + ' infection.'}).status_code, 302)
         self.encounter.refresh_from_db()
         self.assertEqual(self.encounter.answers[self.key('Assessment')]['status'], 'supported')
         self.finalize(); self.encounter.refresh_from_db()
         self.assertNotEqual(self.encounter.status, 'finalized')
         self.assertFalse(self.encounter.export_path)
+
+    def test_stale_reviewed_assessment_cannot_finalize_past_a_nominal_denial(self):
+        self.assert_stale_denial_cannot_finalize('no')
+
+    def test_stale_reviewed_assessment_cannot_finalize_past_a_fullwidth_denial(self):
+        self.assert_stale_denial_cannot_finalize('ｎｏ')

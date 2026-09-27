@@ -2080,10 +2080,14 @@ def plain_value(value):
         return False
     if text.casefold() in PLAIN_ANSWERS:
         return True
+    # Compatibility/visible readings may only veto this literal grammar. They
+    # never create a plain answer, rewrite its words, or grant a source location.
     return (len(text.split()) <= 3 and '.' not in PLAIN_STOPS.sub('', text)
-            and not any(pattern.search(text) for pattern in (FINITE_STATEMENT_V3, INHERITED_SCOPE, DENIAL, SELF_CORRECTION,
-                                                             UNSETTLED))
-            and not points_elsewhere(text))
+            and not any(pattern.search(visible) for source in (text, unicodedata.normalize('NFKC', text))
+                        for visible in readings(source)
+                        for pattern in (FINITE_STATEMENT_V3, INHERITED_SCOPE, DENIAL, SELF_CORRECTION, UNSETTLED))
+            and not any(points_elsewhere(visible) for source in (text, unicodedata.normalize('NFKC', text))
+                        for visible in readings(source)))
 
 
 # Only punctuation at the start of a literal printed side option is normalized for the plain-value
@@ -2456,7 +2460,10 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
                 # A nominal denial can qualify an earlier finding even without
                 # repeating its question label (Assessment: infection / Plan: no
                 # infection). It retains the old context hold; its words stay intact.
-                nominal_plan = not shapes_read[first['id']] and not any(DENIAL.search(text) for text in readings(value))
+                nominal_plan = not shapes_read[first['id']] and not any(
+                    pattern.search(text) for source in (value, unicodedata.normalize('NFKC', value))
+                    for text in readings(source)
+                    for pattern in (DENIAL, INHERITED_SCOPE, UNSETTLED, SELF_CORRECTION, SCOPE_POINTER))
             narrative = (owner in general and (FINITE_STATEMENT_V3.search(
                 value if colon[block[0]['id']] else block[0]['quote']) or local_conditional or nominal_plan))
             factual = owner in clinical and (colon[block[0]['id']] or FINITE_STATEMENT_V3.search(block[0]['quote']))
