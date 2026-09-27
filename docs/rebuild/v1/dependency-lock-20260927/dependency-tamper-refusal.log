@@ -1,0 +1,7 @@
+Looking in links: /opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/dependency-tampered-wheels
+Processing ./rebuild/.runtime/v1-astra-recovery-20260927/dependency-tampered-wheels/annotated_types-0.8.0-py3-none-any.whl (from -r /opt/meddoc-pro/.worktrees/v1-host-readiness/rebuild/requirements-production.lock (line 5))
+ERROR: THESE PACKAGES DO NOT MATCH THE HASHES FROM THE REQUIREMENTS FILE. If you have updated the package versions, please update the hashes. Otherwise, examine the package contents carefully; someone may have tampered with them.
+    annotated-types==0.8.0 from file:///opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/dependency-tampered-wheels/annotated_types-0.8.0-py3-none-any.whl (from -r /opt/meddoc-pro/.worktrees/v1-host-readiness/rebuild/requirements-production.lock (line 5)):
+        Expected sha256 f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0
+             Got        8ba3754db80aa4ed4848f27a7eaad987715a21604f7b5dc3e8202bd04694bff8
+
