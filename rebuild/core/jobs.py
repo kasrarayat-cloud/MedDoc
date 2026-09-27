@@ -247,6 +247,8 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
         #                                 to the provider. A completeness statement may rest on this and on nothing else.
         config.update(recording_seconds=str(bounds.measured),recording_seconds_confirmed=str(bounds.confirmed),
                       charge_limit=str(charge_limit),limit_basis='approved' if approved_limit is not None else 'standard')
+        # New jobs only: the provider request parameters, recorded with the job so the worker sends what was queued.
+        config.update(deepgram_parameters=deepgram_parameters())
         # REFUSED HERE, BEFORE Job.objects.create AND BEFORE reserve(): a recording whose payload does not decide which
         # audio a decoder would process never reaches the provider, is never held against, and is never charged for. The
         # provider picking one silently is exactly what this prevents — measured: ffmpeg given a two-stream Matroska and no
@@ -477,22 +479,60 @@ def prepare_submission(job):
         raise
 
 
+DEEPGRAM_MODEL='nova-3-medical'
+#: The query parameters a transcription request may carry, and the values Deepgram documents for them
+#: (https://developers.deepgram.com/reference/speech-to-text/listen-pre-recorded, read 2026-09-27):
+#: `smart_format` and `mip_opt_out` are booleans, both default false. `mip_opt_out=true` excludes the request
+#: from Deepgram's Model Improvement Program, which otherwise retains the audio and uses it for training
+#: (https://developers.deepgram.com/trust-security/your-data).
+DEEPGRAM_BOOLEAN_PARAMETERS=('smart_format','mip_opt_out')
+
+
+def deepgram_parameters():
+    """The parameters a NEW transcription job is recorded with at enqueue, from the current settings.
+
+    QUILLMD_DEEPGRAM_MIP_OPT_OUT defaults to 'true', so every request opts out; 'false' is refused at startup in
+    real data mode. QUILLMD_DEEPGRAM_SMART_FORMAT defaults to 'false', the request as it always was. Smart
+    Formatting is listed as 'Included' for Pay As You Go and Growth on https://deepgram.com/pricing (read
+    2026-09-27), so it is not part of the priced configuration and changes no quote.
+    """
+    return {'model':DEEPGRAM_MODEL,'smart_format':settings.QUILLMD_DEEPGRAM_SMART_FORMAT,'mip_opt_out':settings.QUILLMD_DEEPGRAM_MIP_OPT_OUT}
+
+
+def request_parameters(job):
+    """What this job's request carries: the parameters recorded when it was queued.
+
+    `Job.config` is write-once, so a job keeps the parameters it was queued (and quoted) with even if the settings
+    change before the worker reaches it. A job queued before parameters were recorded sends the request it was queued
+    for — nova-3-medical without smart formatting — plus the current opt-out, so no request leaves without it.
+    """
+    recorded=(job.config or {}).get('deepgram_parameters')
+    if recorded is None:
+        return {'model':DEEPGRAM_MODEL,'smart_format':'false','mip_opt_out':settings.QUILLMD_DEEPGRAM_MIP_OPT_OUT}
+    if (not isinstance(recorded,dict) or set(recorded)!={'model',*DEEPGRAM_BOOLEAN_PARAMETERS} or recorded['model']!=DEEPGRAM_MODEL
+            or any(recorded[name] not in ('true','false') for name in DEEPGRAM_BOOLEAN_PARAMETERS)):
+        raise NoProviderRequest('The recorded transcription request parameters are not recognised. Nothing was sent.')
+    return dict(recorded)
+
+
 def transcribe(job):
     # Everything before httpx.post raises NoProviderRequest: no provider request was made, so nothing is billable.
     # The key is read FIRST: preparing a payload — and recording that we prepared one — for a request that could never have
     # been made would put a submission row in the audit trail with no provider request behind it.
     key=os.getenv('DEEPGRAM_API_KEY')
     if not key: raise NoProviderRequest('Transcription provider is not connected.')
+    params=request_parameters(job)
     raw,artifact,submitted=prepare_submission(job)
     try:
-        return submit_transcription(job,raw,key,submitted)
+        return submit_transcription(job,raw,key,submitted,params)
     finally:
         # The artifact is transient by design; its sha256 and measured duration on the job are what survive.
         if artifact is not None: artifact.unlink(missing_ok=True)
 
 
-def submit_transcription(job,raw,key,submitted):
-    response=httpx.post('https://api.deepgram.com/v1/listen',params={'model':'nova-3-medical','smart_format':'false'},headers={'Authorization':f'Token {key}','Content-Type':'application/octet-stream'},content=raw,timeout=90)
+def submit_transcription(job,raw,key,submitted,params=None):
+    params=params if params is not None else request_parameters(job)
+    response=httpx.post('https://api.deepgram.com/v1/listen',params=params,headers={'Authorization':f'Token {key}','Content-Type':'application/octet-stream'},content=raw,timeout=90)
     response.raise_for_status()
     data=response.json()
     try:transcript=data['results']['channels'][0]['alternatives'][0]['transcript']
