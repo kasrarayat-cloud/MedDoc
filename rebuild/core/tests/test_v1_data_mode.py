@@ -49,6 +49,13 @@ REFUSALS = [
     ('QUILLMD_APP_BASE_URL', {'QUILLMD_APP_BASE_URL': 'https://app.quillmd.com/billing'}),
     ('QUILLMD_APP_BASE_URL', {'QUILLMD_APP_BASE_URL': 'https://someone:secret@app.quillmd.com'}),
     ('QUILLMD_APP_BASE_URL', {'QUILLMD_APP_BASE_URL': 'https://unlisted.example'}),
+    # R3: an EMPTY query or fragment, or port 0, parsed as nothing to refuse, and put every link after the '?' or '#'.
+    ('QUILLMD_APP_BASE_URL', {'QUILLMD_APP_BASE_URL': 'https://app.quillmd.com?'}),
+    ('QUILLMD_APP_BASE_URL', {'QUILLMD_APP_BASE_URL': 'https://app.quillmd.com#'}),
+    ('QUILLMD_APP_BASE_URL', {'QUILLMD_APP_BASE_URL': 'https://app.quillmd.com?/'}),
+    ('QUILLMD_APP_BASE_URL', {'QUILLMD_APP_BASE_URL': 'https://app.quillmd.com/#'}),
+    ('QUILLMD_APP_BASE_URL', {'QUILLMD_APP_BASE_URL': 'https://app.quillmd.com:0'}),
+    ('QUILLMD_APP_BASE_URL', {'QUILLMD_APP_BASE_URL': 'https://app.quillmd.com:00/'}),
     # R1: a sandbox payment mode with any server key would turn Stripe's public test card into paid balance.
     ('QUILLMD_STRIPE_MODE', {'STRIPE_SECRET_KEY': f'sk_test_{PRIVATE_VALUE}'}),
     ('QUILLMD_STRIPE_MODE', {'STRIPE_SECRET_KEY': f'rk_test_{PRIVATE_VALUE}', 'QUILLMD_STRIPE_MODE': 'test'}),
@@ -182,6 +189,25 @@ class RealModeRefusesToStart(SimpleTestCase):
                 result = start({'QUILLMD_DATA_MODE': value})
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn('QUILLMD_DATA_MODE must be one of: synthetic, real.', result.stderr)
+
+
+class OriginIsAnOriginOnly(SimpleTestCase):
+    """R3: the check refuses '?' and '#' as characters and port 0, and keeps every refusal it had."""
+    def test_refused(self):
+        for value in ('https://app.quillmd.com?', 'https://app.quillmd.com#', 'https://app.quillmd.com?/', 'https://app.quillmd.com/?',
+                      'https://app.quillmd.com/#', 'https://app.quillmd.com?#', 'https://app.quillmd.com:0', 'https://app.quillmd.com:00',
+                      'https://app.quillmd.com:0/', 'https://app.quillmd.com?x=1', 'https://app.quillmd.com#x',
+                      # Refusals it already had.
+                      '', 'http://app.quillmd.com', 'https://app.quillmd.com/billing', 'https://someone:secret@app.quillmd.com',
+                      'https://localhost', 'https://unlisted.example', ' https://app.quillmd.com', 'https://app.quillmd.com:99999'):
+            with self.subTest(value=value):
+                self.assertIsNotNone(profile.public_https_origin_problem(value, ALLOWED))
+
+    def test_accepted(self):
+        for value in ('https://app.quillmd.com', 'https://app.quillmd.com/', 'https://app.quillmd.com:443', 'https://app.quillmd.com:9443',
+                      'https://admin.quillmd.com'):
+            with self.subTest(value=value):
+                self.assertIsNone(profile.public_https_origin_problem(value, ALLOWED))
 
 
 class RealModeTakesOnlyLivePaymentsOrNone(SimpleTestCase):

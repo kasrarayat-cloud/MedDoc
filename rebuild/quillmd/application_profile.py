@@ -89,9 +89,13 @@ def public_https_origin_problem(value, allowed_hosts):
         return 'must be a valid https origin'
     if parsed.scheme != 'https':
         return 'must be an https origin'
-    if (parsed.username or parsed.password or parsed.query or parsed.fragment
+    # '?' and '#' are refused as characters, not by what urlsplit parses: an EMPTY query or fragment
+    # parses as '' and passes a truthiness test, yet every link built on it lands after the '?' or '#'.
+    if (parsed.username or parsed.password or parsed.query or parsed.fragment or '?' in value or '#' in value
             or parsed.path not in ('', '/') or any(character.isspace() for character in origin)):
-        return 'must be an origin only (scheme and host, no path, query or credentials)'
+        return 'must be an origin only (scheme and host, no path, query, fragment or credentials)'
+    if parsed.port == 0:
+        return 'must not name port 0'
     host = (parsed.hostname or '').lower()
     if not host or host in NON_PUBLIC_HOSTS or host.endswith('.localhost'):
         return 'must name a public host, not a loopback or test host'

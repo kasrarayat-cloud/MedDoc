@@ -64,7 +64,9 @@ class LiveModeRefusesToStartHalfConfigured(SimpleTestCase):
         for name, value in (('STRIPE_SECRET_KEY', 'sk_test_synthetic_never_real'), ('STRIPE_SECRET_KEY', ''),
                             ('STRIPE_SECRET_KEY', ' rk_live_synthetic_never_real'),
                             ('STRIPE_WEBHOOK_SECRET', ''), ('QUILLMD_APP_BASE_URL', 'http://localhost:9130'),
-                            ('QUILLMD_APP_BASE_URL', ''), ('QUILLMD_PREVIEW_AUTH_ENABLED', '1')):
+                            ('QUILLMD_APP_BASE_URL', ''), ('QUILLMD_PREVIEW_AUTH_ENABLED', '1'),
+                            ('QUILLMD_APP_BASE_URL', 'https://app.quillmd.com?'), ('QUILLMD_APP_BASE_URL', 'https://app.quillmd.com#'),
+                            ('QUILLMD_APP_BASE_URL', 'https://app.quillmd.com:0')):
             with self.subTest(name=name, value=value):
                 result = start({**self.COMPLETE, name: value})
                 self.assertNotEqual(result.returncode, 0)
@@ -169,6 +171,16 @@ class LiveCheckoutAndSettlement(SyntheticFixture, TestCase):
         response, api = self.checkout('localhost-click')
         api.assert_not_called()
         self.assertFalse(Payment.objects.exists())
+
+    @override_settings(STRIPE_SECRET_KEY='rk_live_synthetic_adapter', QUILLMD_STRIPE_MODE='live')
+    def test_live_mode_never_returns_a_payer_to_an_address_with_an_empty_query_fragment_or_port_0(self):
+        """R3: 'https://app.quillmd.com?' would send the payer to 'https://app.quillmd.com?/billing/...'."""
+        for base in ('https://app.quillmd.com?', 'https://app.quillmd.com#', 'https://app.quillmd.com:0'):
+            with self.subTest(base=base), override_settings(QUILLMD_APP_BASE_URL=base):
+                response, api = self.checkout(f'origin-click-{len(base)}-{base[-1]}')
+                self.assertEqual(response.status_code, 302)
+                api.assert_not_called()
+                self.assertFalse(Payment.objects.exists())
 
     def signed(self, payload):
         body = json.dumps(payload).encode()
