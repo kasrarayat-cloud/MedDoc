@@ -25,16 +25,23 @@ One alert is attempted when an unhealthy incident opens, with a 24-hour interval
 between the first notices of successive incidents, so a condition flapping between
 healthy and unhealthy cannot send more than once a day. Inside an open incident:
 
-- a change to a condition the incident has not yet announced is a new notice
-  (subject `ESCALATION`) with its own identity and receipt, stating the new
-  condition and whether severity rose, held or fell. It is sent at once when it is
-  more severe than anything the incident has announced (at most once per
-  incident: warning to failure), otherwise no sooner than one hour after the
-  incident's previous notice;
-- a condition the incident has already announced is never announced again, so
-  flapping between announced conditions sends nothing more;
-- a still-open incident is re-announced 24 hours after its last notice (subject
-  `REMINDER`), naming how long it has been open and its current condition.
+- a condition more severe than the incident's LAST notice is announced at once,
+  whether or not the incident announced it before, as a new notice (subject
+  `ESCALATION`) with its own identity and receipt, stating the condition and that
+  severity rose. A failure that returns after a notice said the severity
+  decreased is therefore never left standing on "decreased";
+- any other change to a condition the incident has not yet announced is a new
+  `ESCALATION` notice stating whether severity held or fell, sent no sooner than
+  one hour after the incident's previous notice;
+- nothing else is announced before the reminder: a still-open incident is
+  re-announced 24 hours after its last notice (subject `REMINDER`), naming how
+  long it has been open and its current condition.
+
+This cannot loop. Once the last notice is the more severe one, flapping between
+conditions already announced sends nothing until the reminder. A rise needs a
+notice at a lower severity first, and such a notice is either a newly announced
+condition (at most once per condition, an hour after the previous notice) or the
+daily reminder.
 
 When an incident has ended and a new one opens inside the 24-hour interval, its
 first notice is still sent (subject `ESCALATION`) if it is more severe than every

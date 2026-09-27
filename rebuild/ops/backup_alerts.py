@@ -40,9 +40,9 @@ STALE_SECONDS = 15 * 60
 COOLDOWN_SECONDS = 24 * 3600
 #: Inside one open incident, a still-open incident is re-announced this long after its last notice.
 REMINDER_SECONDS = 24 * 3600
-#: Inside one open incident, the least time between a notice and a CHANGE to a condition of the
-#: same or lower severity. A change to a MORE severe condition than any this incident has
-#: announced is not held by it; that can happen at most once per incident (warning -> failure).
+#: Inside one open incident, the least time between a notice and a change to a condition not yet
+#: announced that is no more severe than that notice. A condition MORE severe than the LAST notice
+#: is not held by it (see plan_notice for why that cannot loop).
 ESCALATION_SPACING_SECONDS = 3600
 NOTICES = ('initial', 'escalation', 'reminder')
 BACKUP_TIMEOUT_SECONDS = 600
@@ -990,7 +990,7 @@ def notice_message(condition, at, prefix, *, test=False, notice='initial', incid
         previous = incident['previous']
         movement = SEVERITY_RANK[severity(condition)] - SEVERITY_RANK[severity(previous)]
         return ('[QuillMD operations] ESCALATION: backup recovery condition changed',
-                header + 'ESCALATION: an open incident changed to a new condition since its last notice.\n'
+                header + 'ESCALATION: an open incident changed condition since its last notice.\n'
                 + f'Condition: {condition}\nSeverity: {severity(condition)} '
                 + f'(last notice announced {previous}, {severity(previous)}; severity '
                 + ('increased' if movement > 0 else 'unchanged' if movement == 0 else 'decreased') + ')\n'
@@ -1115,15 +1115,23 @@ def recent_severity_rank(state, at):
 def plan_notice(state, condition, at):
     """What an open incident whose latest notice was ACCEPTED owes now: (notice, deferred_until).
 
-    A condition this incident has already announced is never announced again except as the
-    reminder, so a condition flapping between announced states sends nothing more.
+    1. A condition MORE SEVERE than the incident's LAST notice is announced at once, announced
+       before or not. The operator's newest email is the one they act on: a failure that returns
+       after a notice said the severity decreased must not stand on "decreased" until a reminder.
+    2. Any other condition the incident has not announced waits ESCALATION_SPACING_SECONDS
+       after the last notice.
+    3. Anything else, the reminder, REMINDER_SECONDS after the last notice.
+
+    ⚠️ WHY (1) CANNOT LOOP. It compares with the LAST notice, so once that notice is the failure,
+    flapping between conditions already announced sends nothing until the reminder. A rise needs a
+    notice at a lower severity first, and such a notice is itself bounded: either a newly announced
+    condition, an hour after the previous notice and once per condition, or the daily reminder.
     """
     last = timestamp(state['last_attempt_at'])
     elapsed = (at - last).total_seconds()
-    announced = state['incident_conditions_announced']
-    if condition not in announced:
-        if SEVERITY_RANK[severity(condition)] > max(SEVERITY_RANK[severity(item)] for item in announced):
-            return 'escalation', None
+    if SEVERITY_RANK[severity(condition)] > SEVERITY_RANK[severity(state['incident_attempt_condition'])]:
+        return 'escalation', None
+    if condition not in state['incident_conditions_announced']:
         if elapsed >= ESCALATION_SPACING_SECONDS:
             return 'escalation', None
         return None, last + timedelta(seconds=ESCALATION_SPACING_SECONDS)
