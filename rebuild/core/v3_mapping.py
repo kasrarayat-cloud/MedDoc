@@ -46,8 +46,13 @@ def is_v3_fields(fields):
 
 
 def answerable(fields):
-    """Every field that can hold an answer: all but signature and initials areas."""
-    return [f for f in fields or [] if f.get('kind') not in SIGNING_KINDS]
+    """Fields that can hold an answer, excluding signatures, initials and protected signing details."""
+    return [f for f in fields or [] if f.get('kind') not in SIGNING_KINDS and not f.get('write_protected')]
+
+
+def export_refusal(template):
+    from documents.word_v3 import FLOATING_INITIALS_REFUSAL
+    return FLOATING_INITIALS_REFUSAL if FLOATING_INITIALS_REFUSAL in template.warnings else ''
 
 
 def too_many_fields(count):
@@ -117,6 +122,8 @@ def normalize(field, text):
     text = str(text or '')
     if not text.strip():
         return ''
+    if field.get('write_protected'):
+        raise ValidationError(f'"{label}" is a protected signing area. It remains unchanged; review the original and complete it by hand.')
     if kind in SIGNING_KINDS:
         raise ValidationError(f'"{label}" is signed by hand on the printed form; QuillMD never fills it.')
     options = [str(option) for option in field.get('options') or []]
@@ -220,6 +227,8 @@ def as_printed(field):
 
 def review_note(field):
     """Under the input on the review page."""
+    if field.get('write_protected'):
+        return field.get('review_reason') or 'Protected signing area; left unchanged.'
     kind = field.get('kind')
     if kind == 'checkbox':
         return ('Ticked here, the box is exported ticked; left unticked, it is exported unticked'
@@ -246,6 +255,8 @@ def blank_note(field):
 
 def finalized_note(field, answer):
     """What the finalized page states the export holds, when the answer text alone does not say it."""
+    if field.get('write_protected'):
+        return field.get('review_reason') or 'Protected signing area; left unchanged.'
     kind = field.get('kind')
     if kind == 'checkbox':
         return 'Box exported ticked.' if (answer.get('text') or '').strip() else 'Box exported unticked.'

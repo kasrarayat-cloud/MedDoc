@@ -36,6 +36,9 @@ NS = {"w": W, "w14": W14, "mc": MC}
 CONTRACT = "v3"
 MAX_FIELDS = 1500
 MAX_ANSWER = 100_000
+FLOATING_INITIALS_REFUSAL = ("Filled export is unavailable for this form's floating initials boxes: answer reflow can "
+                           "clip or move a box away from its question. The unchanged original remains available. "
+                           "This layout needs qualification before any nonempty export.")
 
 
 def q(tag: str) -> str:
@@ -728,6 +731,7 @@ class Area:
     order: int = 0
     note: str = ""
     capacity: int | None = None
+    protection: str = ""
 
 
 #: A list marker is 1-3 digits, ONE letter or a roman numeral (i..xxx), as 'M.' 'M)' or '(M)' before a space.
@@ -791,6 +795,8 @@ class Detector:
         self.areas: list[Area] = []
         self.notes: list[str] = []
         self.claimed: set = set()          # element ids already turned into an area (or used as its label)
+        self.protected_regions: set[str] = set()
+        self.floating_initials = False
         self._order = 0
         self._grid = {}
         self._text = {}
@@ -1130,7 +1136,7 @@ class Detector:
             return "initials"
         if TIME_LABEL.search(label) and not DATE_LABEL.search(label):
             return "time"
-        if DATE_LABEL.search(label):
+        if DATE_LABEL.search(label) or re.search(r"\bdated\s*$", label, re.I):
             return "date"
         if LONG_LABEL.search(label):
             return "long_text"
@@ -1148,6 +1154,7 @@ class Detector:
 
     # -- the rules -------------------------------------------------------------------------------------------------
     def detect(self):
+        self.rule_protected_signing_areas()
         self.rule_content_controls()
         self.rule_form_fields()
         self.rule_checkboxes()
@@ -1156,7 +1163,7 @@ class Detector:
         self.rule_checkboxes(leftovers=True)
         self.rule_lines_below_label()
         self.rule_paragraph_fields()
-        self.rule_initial_boxes()
+        self.rule_inline_initial_boxes()
         self.merge_header_copies()
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
         self.qualify_sides()
@@ -1918,6 +1925,9 @@ class Detector:
                     continue                      # (trailing spaces after the colon mean: answer on this line)
                 blanks = []
                 for nxt in paras[i + 1:]:
+                    # A table or other block between paragraphs ends the relationship.
+                    if nxt.el.getprevious() is not (blanks[-1].el if blanks else ps.el):
+                        break
                     t2, pcs = self.ptext(nxt.el)
                     if t2.strip() or id(nxt.el) in self.claimed or nxt.el.find(".//" + TXBX) is not None:
                         break
@@ -2144,18 +2154,96 @@ class Detector:
             return False
         return self.list_info(nxt.el) is not None and self.list_info(slot.el) is None and text.strip().endswith(":")
 
-    # 8. empty drawn boxes for initials (consent statement tables) -------------------------------------------------
+    # Protected signing structures: enumerate them without claiming a visual layout engine.
+    def rule_protected_signing_areas(self):
+        self.rule_signing_captions()
+        self.rule_initial_boxes()
+
+    def rule_signing_captions(self):
+        for slot in [s for s in self.index.slots if s.kind == "p"]:
+            text, pieces = self.ptext(slot.el)
+            spans = self.blank_spans(text, pieces)
+            if len(spans) < 2 or any(kind != "utab" for _, _, kind in spans) or text.strip():
+                continue
+            below = self.index.by_el.get(id(slot.el.getnext()))
+            if below is None or below.kind != "p" or below.parent is not slot.parent:
+                continue
+            caption, _ = self.ptext(below.el)
+            labels = [clean_label(x) for x in re.split(r"\t+", caption) if x.strip()]
+            if not any(SIGNATURE.search(x) or INITIALS.search(x) for x in labels):
+                continue
+            reason = ("Protected signing block: its name, date and signature areas remain unchanged. "
+                      "Complete them by hand after checking the actual signing act; ordinary notes do not authorize them.")
+            paired = len(labels) == len(spans) and all(FIELDISH.search(x) for x in labels)
+            if not paired:
+                reason = ("Protected signing block: the captions do not identify every writing band unambiguously. "
+                          "Review the original; these areas remain unchanged.")
+            for n, (start, end, shape) in enumerate(spans):
+                label = labels[n] if paired else "Signing area %d (caption unresolved)" % (n + 1)
+                self.add(Area(self.kind_for(label) if paired else "text", label, slot,
+                              {"type": "span", "start": start, "end": end, "shape": shape},
+                              context=reason, protection=reason))
+            self.claimed.add(id(below.el))
+            self.protected_regions.add(below.id)
+            self.notes.append(reason + " Location: " + slot.id)
+
     def rule_initial_boxes(self):
         WPS = "http://schemas.microsoft.com/office/word/2010/wordprocessingShape"
+        WP = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+        A = "http://schemas.openxmlformats.org/drawingml/2006/main"
+        affected = set()
         for c in [s for s in self.index.slots if s.kind == "tc"]:
             if self.cell_has_claim(c.el) or self.cell_text(c):
                 continue
-            rects = [x for x in c.el.iter("{%s}wsp" % WPS) if x.find("{%s}txbx" % WPS) is None]
+            rects = [x for x in c.el.iter("{%s}wsp" % WPS)
+                     if x.find("{%s}txbx" % WPS) is None
+                     and not any(a.tag == FALLBACK for a in x.iterancestors())
+                     and any(a.tag == "{%s}anchor" % WP for a in x.iterancestors())
+                     and any(g.get("prst") == "rect" for g in x.iter("{%s}prstGeom" % A))]
             if not rects:
                 continue
             header = clean_label(self.column_header(c.parent, c.info["col"], c.info["row"]))
             label = self.row_label(c.parent, c.info["row"], c.info["col"])
-            if INITIALS.search(header + " " + label) or re.search(r"\binitial", self.context_for(c), re.I):
+            before = c.parent.el.getprevious()
+            instruction = self.text(before) if before is not None and before.tag == q("w:p") else ""
+            if not INITIALS.search(" ".join((header, label, instruction, self.context_for(c)))):
+                self.notes.append("An unlabelled floating rectangle needs visual review at " + c.id)
+                continue
+            affected.add(c.parent)
+            reason = ("Protected floating initials box: its visual question is unresolved because an anchor can sit "
+                      "in another row. Check each box against the original; QuillMD leaves it unchanged.")
+            for n, _ in enumerate(rects, 1):
+                self.add(Area("initials", "Floating initials box %d (placement unresolved)" % n, c,
+                              {"type": "none", "drawing": n}, context=reason, protection=reason))
+            self.notes.append(reason + " Location: " + c.id + " (%d boxes)." % len(rects))
+        for table in affected:
+            # Empty cells in such a table can be spacers or sit under an overlapping
+            # floating shape. They are not inferred as writable text destinations.
+            # Inline blanks in printed statements are still parsed independently.
+            for c in table.children:
+                if c.kind == "tc" and self.is_empty_cell(c):
+                    self.claimed.add(id(c.el))
+                    self.protected_regions.add(c.id)
+            self.notes.append("Blank cells in the floating-initials table are not assigned text answers; "
+                              "check the original for additional areas. Location: " + table.id)
+        if affected:
+            self.floating_initials = True
+            self.notes.append(FLOATING_INITIALS_REFUSAL)
+
+    def rule_inline_initial_boxes(self):
+        """Keep the previous non-floating drawn-box path; floating anchors need explicit review above."""
+        WPS = "http://schemas.microsoft.com/office/word/2010/wordprocessingShape"
+        WP = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+        for c in [s for s in self.index.slots if s.kind == "tc"]:
+            if self.cell_has_claim(c.el) or self.cell_text(c):
+                continue
+            rects = [x for x in c.el.iter("{%s}wsp" % WPS) if x.find("{%s}txbx" % WPS) is None
+                     and not any(a.tag == "{%s}anchor" % WP for a in x.iterancestors())]
+            if not rects:
+                continue
+            header = clean_label(self.column_header(c.parent, c.info["col"], c.info["row"]))
+            label = self.row_label(c.parent, c.info["row"], c.info["col"])
+            if INITIALS.search(header + " " + label) or INITIALS.search(self.context_for(c)):
                 self.add(Area("initials", label or header or "Initials", c, {"type": "none"}, context=self.context_for(c)))
 
     def capacity_for(self, area):
@@ -2289,6 +2377,9 @@ def area_to_field(n: int, area: Area) -> dict:
             target["printed"] = list(area.options)
     if area.capacity:
         field["max_chars"] = int(area.capacity)
+    if area.protection:
+        field["write_protected"] = True
+        field["review_reason"] = area.protection
     return field
 
 
@@ -2925,6 +3016,9 @@ def fill(data: bytes, fields: list, answers: dict) -> bytes:
     anything changes; signature and initials areas never take an automatic answer."""
     package = open_package(data)
     index = SlotIndex(package)
+    protected = Detector(package)
+    protected.rule_protected_signing_areas()
+    protected_slots = {area.slot.id for area in protected.areas if area.protection} | protected.protected_regions
     ops = []                                   # (paragraph_or_element, sort_position, callable)
 
     def resolve(part, path, fp):
@@ -2940,6 +3034,19 @@ def fill(data: bytes, fields: list, answers: dict) -> bytes:
         answer = answers.get(field["key"])
         if answer is None or answer == "" or answer == []:
             continue
+        target = loc.get("target") or {}
+        destinations = [loc] + list(loc.get("extra", [])) + list(target.get("copies", [])) + list(target.get("boxes", []))
+        if target.get("type") == "paragraph_options":
+            destinations.extend({"part": anchor.get("part"), "slot": path}
+                                for anchor in [loc] + list(target.get("copies", []))
+                                for path in target.get("paragraphs", []))
+        if target.get("type") == "table_rows":
+            destinations.append({"part": loc.get("part"), "slot": target.get("table")})
+        locations = ["%s#%s" % (x.get("part"), x.get("slot")) for x in destinations]
+        if field.get("write_protected") or any(location == s or location.startswith(s + "/") or s.startswith(location + "/")
+                                               for location in locations for s in protected_slots):
+            fail("This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+                 "protected_signing_area")
         if isinstance(answer, str) and len(answer) > MAX_ANSWER:
             fail("An answer is longer than the form can take.", "invalid_answer")
         if isinstance(answer, str) and field.get("max_chars") and len(answer) > int(field["max_chars"]):
@@ -3027,6 +3134,8 @@ def fill(data: bytes, fields: list, answers: dict) -> bytes:
                 ops.append((anchor.el, 0, lambda f=field, a=answer: write_table_rows(index, f, a), part))
             else:
                 fail("This answer area cannot be filled automatically.", "unsupported_layout")
+    if protected.floating_initials and ops:
+        fail(FLOATING_INITIALS_REFUSAL, "unqualified_floating_initials")
     # position edits inside one element run from the end backwards; ticks (position -1) last
     ops.sort(key=lambda op: (id(op[0]), -op[1] if op[1] >= 0 else float("inf")))
     changed = set()

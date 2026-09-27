@@ -2569,8 +2569,8 @@ def v3_generation_fields(fields, context_labels=()):
     from .v3_mapping import is_v3_fields
     if not is_v3_fields(fields):
         return fields, context_labels, None
-    asked = [f for f in fields if f.get('kind') not in V3_NEVER_GENERATED]
-    held = [f['label'] for f in fields if f.get('kind') in V3_NEVER_GENERATED]
+    asked = [f for f in fields if f.get('kind') not in V3_NEVER_GENERATED and not f.get('write_protected')]
+    held = [f['label'] for f in fields if f.get('kind') in V3_NEVER_GENERATED or f.get('write_protected')]
     return asked, list(context_labels) + held, fields
 
 
@@ -2734,9 +2734,10 @@ def v3_adopted(fields, answers, notes, generated, context_labels=()):
     out = {}
     for field in fields:
         kind = field.get('kind')
-        if kind in V3_NEVER_GENERATED:
+        if kind in V3_NEVER_GENERATED or field.get('write_protected'):
             out[field['key']] = {'text': '', 'status': 'missing', 'evidence': [], 'reviewed': False,
-                                 'reason': V3_NOT_GENERATED_REASON[kind]}
+                                 'reason': (field.get('review_reason') or 'Protected signing area; left unchanged.')
+                                           if field.get('write_protected') else V3_NOT_GENERATED_REASON[kind]}
             continue
         answer = answers[field['key']]
         count = repeats[question_key(field['label'])]

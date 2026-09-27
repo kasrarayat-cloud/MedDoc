@@ -1,0 +1,26 @@
+{
+  "source_sha256": "394eaa6eb6fc4e33ab21eac78d635cb68c6d687baeb7827fef7d58ded5814219",
+  "areas": 17,
+  "protected_areas": 14,
+  "automatic_success": false,
+  "cases": [
+    {
+      "case": "missing",
+      "status": "finalized",
+      "sha256": "3cdf485f98ab64b7740d5c073de62357fc0ba096af6b50f6b908ff8f82c81dc4",
+      "identical_to_retained_rendered_missing": true
+    },
+    {
+      "case": "ordinary",
+      "status": "refused",
+      "export_created": false,
+      "draft_and_original_preserved": true
+    },
+    {
+      "case": "long",
+      "status": "refused",
+      "export_created": false,
+      "draft_and_original_preserved": true
+    }
+  ]
+}
