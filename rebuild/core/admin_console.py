@@ -21,7 +21,6 @@ from django.utils import timezone
 from .models import (AuditEvent, CostReconciliation, Department, Job, LedgerEntry, Membership,
                      Organization, PlatformCost, Payment, Refund, Reservation, ServiceHealth,
                      Usage, User, Wallet)
-from .billing import welcome_credit_label
 
 ZERO = Decimal('0')
 
@@ -168,7 +167,10 @@ def business_overview(window):
             {'label': 'Refunded out', 'amount': refunded_out,
              'definition': "Sum of 'refund' ledger entries, as a positive number. Only refunds that reached the ledger."},
             {'label': 'Promotional credit granted', 'amount': granted,
-             'definition': f"Sum of 'welcome' ledger entries: {welcome_credit_label() or '$0'} per verified account. A liability, not a cost."},
+             # A historical sum: each entry keeps the amount it was granted at. No per-account figure from
+             # today's QUILLMD_WELCOME_CREDIT, which would contradict the entries it sums once changed.
+             'definition': "Sum of the recorded 'welcome' ledger entries, each at the amount granted when it was recorded "
+                           "(a later change to QUILLMD_WELCOME_CREDIT does not restate them). A liability, not a cost."},
         ],
         'difference': {
             'label': 'Charged (all balances) less provider cost',

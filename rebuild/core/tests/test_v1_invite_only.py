@@ -222,6 +222,21 @@ class WelcomeCreditSetting(TestCase):
         welcome_credit(user)
         self.assertEqual(LedgerEntry.objects.filter(kind='welcome', wallet__user=user).count(), 1)
 
+    def test_the_console_sums_recorded_grants_without_restating_todays_setting(self):
+        """R4: 'Promotional credit granted' is a historical sum. Its entries keep the amount they were granted at, so
+        its definition must not state a per-account amount from today's setting: at 0 or 25 that contradicted the $10."""
+        from core import admin_console
+        self.verify()  # One $10 entry, at the default.
+        definitions = set()
+        for value in (Decimal('10'), Decimal('0'), Decimal('25')):
+            with self.subTest(setting=value), override_settings(QUILLMD_WELCOME_CREDIT=value):
+                row = next(row for row in admin_console.business_overview({'filters': {}})['flow']
+                           if row['label'] == 'Promotional credit granted')
+                definitions.add(row['definition'])
+                self.assertEqual(row['amount'], Decimal('10'))
+                self.assertIsNone(re.search(r'\$\s*\d', row['definition']), row['definition'])
+        self.assertEqual(len(definitions), 1, definitions)
+
     @override_settings(QUILLMD_WELCOME_CREDIT=Decimal('0'))
     def test_zero_grants_nothing_and_promises_nothing(self):
         self.assertNotContains(self.client.get('/register/'), 'welcome credit')
