@@ -1349,6 +1349,19 @@ class AnEmptyFieldIsNotAClearedAnswer(OrdinaryDraft, TestCase):
                           'the answer draft (1 answer, not reviewed).' in said, '2 answers' in said),
                          (cleared(unreviewed_unedited=1), True, False))
 
+    def test_a_wm_answer_deliberately_cleared_is_a_preserved_and_counted_edit(self):
+        # WM saves empty answers as missing while preserving who cleared them. This
+        # differs from a never-answered missing field; generation may not replace it.
+        untouched = Encounter(template_review={}, answers={'a': {'text': '', 'status': 'missing'}})
+        cleared_answer = Encounter(template_review={}, answers={
+            'a': {'text': '', 'status': 'missing', 'edited_by': 'synthetic-employee'}})
+        self.assertFalse(views.clinician_decided(untouched))
+        self.assertTrue(views.clinician_decided(cleared_answer))
+        counts = views.review_state_counts(cleared_answer, codes=False)
+        self.assertEqual(counts['answers_edited_not_accepted'], 1)
+        self.assertEqual(counts['answers_with_clinician_review'], 0)
+        self.assertEqual(sum(counts[state] for state in views.ANSWER_STATES), 1)
+
     def test_each_counted_answer_carries_text_or_a_decision(self):
         """The five states stay disjoint and sum to the answers they count; an empty field is counted only once somebody
         decided something about it."""

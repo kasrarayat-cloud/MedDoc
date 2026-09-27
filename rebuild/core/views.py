@@ -867,7 +867,10 @@ def encounter_detail(request,pk):
 def clinician_decided(e):
     """Whether the saved draft carries a clinician's review state, which a generation would replace wholesale.
     (An acceptance also marks its answer `edited`; it is named for itself so no change to statuses can open this.)"""
-    return (any(isinstance(a,dict) and (a.get('reviewed') or a.get('accepted_suggestion') or a.get('status') in ('edited','left_blank'))
+    # WM records a deliberate clearing as missing with its editor. That remains
+    # a person's decision even though the answer text is now empty.
+    return (any(isinstance(a,dict) and (a.get('reviewed') or a.get('accepted_suggestion') or a.get('status') in ('edited','left_blank')
+                                      or a.get('edited_by'))
                 for a in (e.answers or {}).values())
             or bool((e.template_review or {}).get('decisions')))
 
@@ -911,7 +914,7 @@ def review_state_counts(e,codes=True):
         a=a if isinstance(a,dict) else {'text':str(a) if a else ''}
         if a.get('accepted_suggestion'):state='answers_accepted_suggestion'
         elif a.get('status')=='left_blank':state='answers_left_blank'
-        elif a.get('status')=='edited':state='answers_edited_not_accepted'
+        elif a.get('status')=='edited' or a.get('edited_by'):state='answers_edited_not_accepted'
         elif a.get('reviewed'):state='answers_reviewed_unedited'
         elif not is_empty(a.get('text')):state='answers_unreviewed_unedited'
         else:continue                                     # (an empty field nobody decided: nothing to clear)
