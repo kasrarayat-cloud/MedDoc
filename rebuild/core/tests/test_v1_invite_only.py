@@ -9,6 +9,8 @@ from pathlib import Path
 import re
 import tempfile
 
+from unittest.mock import patch
+
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 from django_otp.plugins.otp_totp.models import TOTPDevice
@@ -244,6 +246,64 @@ class WelcomeCreditSetting(TestCase):
         self.assertFalse(LedgerEntry.objects.filter(kind='welcome').exists())
         self.assertEqual(Wallet.objects.get(user=user, kind='promo').balance, Decimal('0'))
         self.assertTrue(Membership.objects.filter(user=user, role='owner').exists())
+
+
+@override_settings(ADMIN_SITE=False, QUILLMD_PREVIEW_AUTH_ENABLED=False, STORAGES=STORAGES)
+class DoctorPagesFollowTheWelcomeCreditSetting(TestCase):
+    """F3: billing, team and the registration warning state the configured grant; 0 removes the promise."""
+    BILLING_DEFAULT = 'Each newly verified user receives one $10 personal promotional credit, including employees joining by invitation.'
+    TEAM_DEFAULT = 'Invited employees receive their own account and one personal welcome credit after verification.'
+
+    def setUp(self):
+        from core.billing import welcome_credit
+        self.owner = User.objects.create_user(username='owner@synthetic.invalid', email='owner@synthetic.invalid', verified_at=timezone.now())
+        department = Department.objects.create(organization=Organization.objects.create(name='Welcome copy'), name='Welcome copy')
+        Membership.objects.create(user=self.owner, department=department, role='owner')
+        with override_settings(QUILLMD_WELCOME_CREDIT=Decimal('0')):
+            welcome_credit(self.owner)  # Wallets only: no ledger entry whose own description could mention a credit.
+        self.client.force_login(self.owner)
+
+    def pages(self):
+        billing = self.client.get('/billing/').content.decode()
+        team = self.client.get('/team/').content.decode()
+        self.assertEqual(billing.count('<div class="review-footer">'), 1)
+        self.assertEqual(team.count('<h2>Invite an employee</h2>'), 1)
+        return billing, team
+
+    def test_the_default_copy_is_unchanged(self):
+        billing, team = self.pages()
+        self.assertIn(self.BILLING_DEFAULT, billing)
+        self.assertIn(self.TEAM_DEFAULT, team)
+
+    @override_settings(QUILLMD_WELCOME_CREDIT=Decimal('25'))
+    def test_a_configured_amount_is_the_amount_promised(self):
+        billing, team = self.pages()
+        self.assertIn('Each newly verified user receives one $25 personal promotional credit', billing)
+        self.assertFalse('$10 ' in billing, 'the $10 promise is still on the page')
+        self.assertIn(self.TEAM_DEFAULT, team)
+
+    @override_settings(QUILLMD_WELCOME_CREDIT=Decimal('0'))
+    def test_zero_promises_no_welcome_credit_on_either_page(self):
+        billing, team = self.pages()
+        for name, page in (('billing', billing), ('team', team)):
+            self.assertFalse('welcome credit' in page, f'{name} still promises a welcome credit')
+            self.assertFalse('receives one' in page, f'{name} still promises a grant')
+        self.assertIn('Invited employees receive their own account.', team)
+        self.assertIn('Promotional funds cannot be transferred', billing)
+
+    def test_the_registration_warning_promises_credit_only_when_one_is_granted(self):
+        from core.email_delivery import Delivery
+        password = 'Synthetic-Only-4821!private'
+        for value, promised in ((Decimal('10'), True), (Decimal('0'), False)):
+            with self.subTest(setting=value), override_settings(QUILLMD_WELCOME_CREDIT=value), \
+                    patch('core.views.verification_mail', return_value=Delivery(status='failed', recovery_staged=True)):
+                client = Client()
+                response = client.post('/register/', {'email': f'walk-in-{value}@synthetic.invalid', 'first_name': 'Walk',
+                                                       'last_name': 'In', 'password1': password, 'password2': password,
+                                                       'synthetic_only': 'on'}, follow=True)
+                text = ' '.join(str(message) for message in response.context['messages'])
+                self.assertIn('verification email delivery could not be confirmed', text)
+                self.assertEqual('welcome credit' in text, promised, text)
 
 
 @override_settings(ADMIN_SITE=False, QUILLMD_PREVIEW_AUTH_ENABLED=False, STORAGES=STORAGES, QUILLMD_REGISTRATION='invite')

@@ -178,7 +178,7 @@ def register(request):
         delivery=verification_mail(user,raw,verification)
         if delivery.status=='outbox':messages.success(request,'Verification created in the private development outbox. Email delivery is not live yet.')
         elif delivery.status=='accepted':messages.success(request,'Verification submitted to the email provider. Check your inbox; inbox delivery is not yet confirmed.')
-        else:messages.warning(request,'Account created, but verification email delivery could not be confirmed. Ask your administrator to recover the verification link or retry delivery. No welcome credit has been granted yet.')
+        else:messages.warning(request,'Account created, but verification email delivery could not be confirmed. Ask your administrator to recover the verification link or retry delivery.'+(' No welcome credit has been granted yet.' if welcome_credit_label() else ''))
         return redirect('login')
     return render(request,'register.html',{'form':form})
 
