@@ -1011,6 +1011,32 @@ notes, so that needs a compromised parent.
   adversarially, which found one defect of its own — a kill between a record's temporary file and its link left
   `.partial-…-attempt.json`, which `Path.glob` matches, so every restart failed; the ledger now reads only
   `NNN-<case>-attempt.json` records (reproduced, then pinned). An independent pass over round 19 remains due before merge.
+  Round 20 — the independent pass over round 19 (`207a26a8..86a1e52c`): three sealed read-only lenses (reader; page;
+  runner), each finding verified by a separate agent and reproduced here before any repair. 18 findings: 17 confirmed
+  (7 HIGH, 6 MEDIUM, 4 LOW as the verifiers assessed them), 1 refuted (an employee's two wording changes dropping the
+  clinician's basis: the first change legitimately replaced the decision). The reader's: an exclusion's clause of its
+  own exempted the whole sentence (`Except for the right leg, which was examined last week, the great saphenous vein
+  measures 9.6 mm` pre-filled the right, as `f01107aa` did) — the clause now places only a value inside it, the words
+  before `which`/`where` must be the limb's or the vein's own, and a set-apart side in a later clause places nothing of a
+  value; a set-apart side a sentence earlier, which the paragraph's reading took (`Unilateral study excluding the right
+  leg.` / `The great saphenous vein measures 9.6 mm …`), is held where it is the side that reading gives; `maybe` after a
+  bracket, quote or colon, or across a comma before the value (`6.1 mm (perhaps artifact)`, `Right GSV SFJ, maybe, 6.1
+  mm`), is held again as on `f01107aa`; a side bracket below the value is an item only with a measured value on its line
+  (`(left) - repeat 09/25/2026` was an item, older); up to three words of the limb's own between an exclusion or a
+  contrast and its side (`except for the painful right leg`, older); and a set-apart sentence's hold comes after the
+  hedge, the earlier study and the date, whose reasons say more. The page's: under the labelled contract the `&` advice
+  named a spelling the engine refuses (it accepts a labelled answer only as its line writes it) — that contract now has
+  its own blocker, whose advice names the notes' line, and review refuses what finalization refuses; an employee's
+  changed statement source under the clinician's wording is still not kept, and the saver is told. The runner's: a
+  resume against another database read the missing job as proof nothing was sent — a captured request, or a missing
+  encounter, is now an unknown outcome at its maximum that stops the stage, and a campaign is bound to its database by
+  its first encounter; no verdict is written while any attempt lacks its outcome, its manifest entry or its score, or
+  the records are not exported (`OPEN`, exit 6: the next start records them and re-derives every stop first); the
+  replay is published whole and the manifest says whether it matches its answer; a retained response is named by its
+  attempt and kept once; every line reading as an authorization counts, and any revocation word refuses; the declaration
+  path is a literal pathspec. Each repair is pinned by tests that fail on `86a1e52c` (the reader's 29 of 31 held rows, 3
+  statements and 2 reasons; the runner's 4 new tests), and my own probes of the new rules found one over-hold of my first
+  paragraph rule (`RIGHT LEG:` / `All segments were imaged, unlike the left.` / …), narrowed before commit.
 - **Cost.** The reader answers every per-place question by bisection over positions read once per text (sides, clause
   breaks, digits, words, numbers, quantities by unit, relatives, paragraphs, lines), the backtracking patterns are
   atomic, a correction's reach, its struck spans and the governors' blocks are read once per unit or note, what a
@@ -1136,6 +1162,16 @@ notes, so that needs a compromised parent.
 ## Known limits (this candidate does not solve them)
 
 Every one of these fails closed (a hold, or a statement the clinician must source) unless it says otherwise.
+
+- **A set-apart side holds more than it must in two shapes (round 20, accepted).** In a dictated transcript with no
+  punctuation, one set-apart phrase (`… unlike the right side the left small saphenous vein is competent`) holds every
+  sided value before it in the run-on sentence; and a side bracket with no measured value on the line below a value
+  (`(L) GSV SFJ competent, no reflux`) is read as a remark, so the value above is held. Both are over-holds the
+  clinician resolves at review; the release of the opposite readings is what rounds 18–20 closed.
+- **Under the labelled contract, a table-cell value written with `&p`, `&l`, `&m`, `&b` or `&&` completes only by
+  changing the notes' line and generating again (round 20).** The engine accepts a labelled answer only as its line
+  writes it, and its cell replace rewrites those sequences; the advice says so. The narrative contract takes the
+  capitalized spelling at review.
 
 - **Interpretation the text does not signal.** A model that misses a negation, swaps two values within a sentence,
   invents a choice, leaves a real conflict unflagged, misses hedging or reads a plan as the past can still pre-fill a
@@ -1482,6 +1518,12 @@ one attempt fails on that record and is never sent) — and a replay manifest en
 notes hash, request, response and replay files by sha256 with the model, usage, costs and failure; a retried case always counts against the stage's retries. Before each attempt the worst case of
 the whole ledger plus this attempt's maximum must fit the stage's and the campaign's limits. One runner per campaign
 (an exclusive lock); live evidence has one fixed place per campaign id; a stage with a verdict is never re-run.
+A captured request, or an attempt whose encounter the database does not hold, is never `not_run`: it is an unknown
+outcome at its maximum (its wallet at its hold) and the stage stops; a campaign is bound to its database by its first
+encounter's random id and is never resumed against another. No verdict is written while any attempt lacks its outcome,
+its manifest entry or its score, or the records are not exported: the run ends `OPEN` (exit 6) with a dated open report,
+and the next start records what is missing from the product and the durable ledger and re-derives every stop before
+anything could be sent. A key found in the evidence still closes the stage `STOPPED`.
 
 **Stops (nothing further is sent):** a wrong pre-filled answer or wrong pre-selected statement; a settled cost above its
 quoted maximum or a charge above its hold; a job, receipt or usage row no attempt accounts for; another model or pricing
@@ -1504,7 +1546,9 @@ fields (key, provider, model, rates) into a scrubbed environment for its own pro
 the configuration unless a committed, unmodified declaration (`docs/foundation/mutations/`, run through
 `scripts/run-ruled-mutation.sh`) names the campaign, stage, limits, model, pricing version and exactly one line
 `authorization: owner <YYYY-MM-DD> approved stage <n> at the stated limits` with nothing after it (the owner's own words
-go on an `owner_words:` line, recorded and never parsed; any line starting `revok…` refuses), never prints or copies the
+go on an `owner_words:` line, recorded and never parsed; every line that reads as an authorization, in any case or
+markdown, counts toward the one; any revocation word — `revok…`, `rescind`, `withdrew`/`withdraw…`, `cancel…` — anywhere
+refuses; the path is read as a literal pathspec), never prints or copies the
 key, and scans every evidence file for the key and key-shaped text before and after its report.
 
 **Offline validation (no provider request possible):** `rebuild/ops/wm_narrative_campaign_offline.py` drives the real
