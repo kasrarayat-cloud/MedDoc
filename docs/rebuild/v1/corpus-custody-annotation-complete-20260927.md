@@ -65,7 +65,7 @@ the maximum possible automatic count is **17/20**, below the required **18/20**.
 Therefore no paid/live qualification first pass should run on that candidate.
 The three legacy originals stay in the cohort; none is replaced, excluded or
 reclassified. A future eligible candidate may use the frozen unseen cohort.
-The conditional external 40-file request is not approval.
+The conditional $40 verification spending request is not financial approval.
 
 ## Original denominator and next internal task
 
