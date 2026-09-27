@@ -783,19 +783,18 @@ def upgrade_legacy_state(value):
 
     Its one attempt becomes this incident's first notice, and WHAT that attempt announced is
     read from the attempt's own durable record rather than assumed. An unreadable record fails
-    closed here exactly as its replay would have.
+    closed here exactly as its replay would have. The result is then held to every format-2
+    invariant by the caller, so a legacy attempt not named by its incident, or an incident
+    without a check time, fails closed there rather than by a second, drifting copy here.
     """
     state = dict(initial_state(), **{key: value[key] for key in LEGACY_KEYS - {'format'}})
     if value['incident_attempt']:
-        backup.require(value['incident_attempt'] == value['incident_id']
-                       and value['last_attempt_at'] is not None, 'Invalid legacy incident.')
         record = attempt_record('incident-' + value['incident_attempt'])
         state.update(incident_opened_at=record['attempted_at'],
                      incident_attempt_condition=record['condition'], incident_attempt_notice='initial',
                      incident_attempt_count=1, incident_conditions_announced=[record['condition']])
     elif value['incident_id']:
         # Opened no later than the last check that persisted it; durations are stated as "at least".
-        backup.require(value['last_check_at'] is not None, 'Invalid legacy incident.')
         state['incident_opened_at'] = value['last_check_at']
     return state
 

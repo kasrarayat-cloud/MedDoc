@@ -392,7 +392,7 @@ class IncidentNotificationTests(unittest.TestCase):
                        'provider_message_id': 'legacy-provider-id', 'provider_accepted': True,
                        'delivery_confirmed': False, 'inbox_receipt_confirmed': False}
             for suffix in ('pending', 'result'):
-                a.backup.write_private(self.alerts / f'incident-{identity}-{suffix}.json',
+                a.backup.write_private(self.alerts / f"incident-{value['incident_attempt']}-{suffix}.json",
                                        json.dumps(dict(receipt, outcome='pending', provider_accepted=False,
                                                        provider_message_id=None) if suffix == 'pending'
                                                   else receipt).encode())
@@ -673,9 +673,15 @@ class IncidentNotificationTests(unittest.TestCase):
         self.sender.assert_called_once()
 
     def test_inconsistent_previous_release_state_fails_closed_without_email(self):
-        self.legacy(incident_attempt='d' * 32)
-        result, code = a.check(self.at + timedelta(days=2))
-        self.assertEqual((code, result['condition']), (1, 'monitoring_state_unavailable'))
+        # Each has a readable receipt, so only the format-2 invariants can refuse it.
+        for changes in ({'incident_attempt': 'd' * 32},
+                        {'incident_attempt': None, 'last_attempt_at': None, 'last_check_at': None}):
+            with self.subTest(changes=changes):
+                for path in self.alerts.iterdir():
+                    path.unlink()
+                self.legacy(**changes)
+                result, code = a.check(self.at + timedelta(days=2))
+                self.assertEqual((code, result['condition']), (1, 'monitoring_state_unavailable'))
         self.sender.assert_not_called()
 
     def test_invalid_incident_records_fail_closed_without_email_or_disclosure(self):
@@ -691,6 +697,9 @@ class IncidentNotificationTests(unittest.TestCase):
                         {'incident_attempt_notice': 'private-canary'}, {'incident_attempt_condition': 'backup_timeout'},
                         {'incident_opened_at': None}, {'incident_opened_at': 'private-canary'},
                         {'incident_attempt_notice': 'initial', 'incident_attempt_count': 1},
+                        {'incident_attempt_notice': 'initial'},
+                        {'incident_attempt': None, 'incident_attempt_count': 0, 'incident_conditions_announced': [],
+                         'incident_attempt_condition': None},
                         {'format': 1}, {'unexpected': 'private-canary'}):
             with self.subTest(changes=changes):
                 (self.alerts / 'status.json').write_text(json.dumps(dict(original, **changes)))
