@@ -1039,6 +1039,35 @@ class PreviousReleaseCompatibilityTests(unittest.TestCase):
                                  expected['alert'] and expected['alert']['outcome'])
         self.old_sender.assert_not_called()
 
+    def test_the_previous_release_runs_on_the_shapes_the_repairs_write(self):
+        """A notice time read as now after a fast clock (R5), a rise re-announcing an announced
+        condition (R1), and a ledger that ran ahead of status.json with its kept layer (R2/R3)."""
+        steps = [(timedelta(days=3), 'backup_failed', 'healthy'),              # a clock three days fast
+                 (timedelta(0), 'backup_failed', 'healthy'),                   # corrected: read as now
+                 (timedelta(hours=2), 'healthy', 'offsite_capacity_low'),      # a decrease
+                 (timedelta(hours=2, minutes=5), 'backup_failed', 'healthy')]  # the rise, re-announced
+        for offset, local, remote in steps:
+            with self.subTest(offset=offset):
+                self.health.return_value = local
+                self.recovery.return_value['condition'] = remote
+                expected, _ = a.check(self.at + offset)
+                checked, shown, _ = self.previous_release_on_a_copy(self.at + offset + timedelta(minutes=1))
+                self.assertEqual((checked['condition'], checked['alert']['outcome']),
+                                 (expected['condition'], expected['alert']['outcome']))
+                self.assertNotEqual(shown['condition'], 'monitoring_state_unavailable')
+        self.assertEqual(self.sender.call_count, 3)
+        self.health.return_value = 'backup_timeout'
+        crash, _ = IncidentLedgerTests.crash_on_second_write(self)
+        with crash, self.assertRaises(KeyboardInterrupt):
+            a.check(self.at + timedelta(hours=4))
+        self.assertIsNotNone(json.loads((self.alerts / a.NOTICES_FILE).read_text())['committed'])
+        checked, shown, _ = self.previous_release_on_a_copy(self.at + timedelta(hours=4, minutes=1))
+        self.assertEqual((checked['condition'], checked['alert']['outcome']), ('backup_timeout', 'provider_accepted'))
+        self.assertNotEqual(shown['condition'], 'monitoring_state_unavailable')
+        self.old_sender.assert_not_called()
+        result, _ = a.check(self.at + timedelta(hours=4, minutes=5))          # and this release recovers
+        self.assertEqual((result['condition'], self.sender.call_count), ('backup_timeout', 4))
+
     def test_this_release_adopts_what_the_previous_release_leaves_behind(self):
         self.health.return_value = 'backup_failed'
         a.check(self.at)
