@@ -7,8 +7,10 @@ and `manage.py real_mode_payment_check` (read-only) refuses a database holding s
 
 No provider is called: Stripe Checkout is a mock and every webhook is signed locally with a synthetic secret.
 """
+import tempfile
 from decimal import Decimal
 from io import StringIO
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -435,12 +437,20 @@ class RealModeFundsOnlyWhatItCanSpend(SyntheticFixture, TestCase):
 class RealModeWorkerNeverSpendsAHoldOnSandboxMoney(SyntheticFixture, TestCase):
     """Round-3 refutation F2: a hold taken before the switch to real data mode sits on sandbox money. The worker refuses
     the job before any provider request: not processed, nothing charged, the hold released, audited."""
-    setUp = stripe_live.LiveCheckoutAndSettlement.setUp
     checkout = stripe_live.LiveCheckoutAndSettlement.checkout
     signed = stripe_live.LiveCheckoutAndSettlement.signed
     sandbox_top_up = RealModeNeverSpendsSandboxMoney.sandbox_top_up
     job = RealModeNeverSpendsSandboxMoney.job
     ANSWERS = {'symptoms': {'text': 'no chest pain', 'status': 'supported', 'reviewed': False, 'evidence': []}}
+
+    def setUp(self):
+        stripe_live.LiveCheckoutAndSettlement.setUp(self)
+        # A job the worker sends writes its result file under MEDIA_ROOT: a temporary directory, never the tree's .runtime.
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        media = override_settings(MEDIA_ROOT=Path(directory.name))
+        media.enable()
+        self.addCleanup(media.disable)
     REAL_LIVE_AI = dict(REAL_PAYMENTS_OFF, AI_MODE='live')
 
     def run_worker(self, **now):
