@@ -372,6 +372,37 @@ class AnUntouchedNotesSaveRoundTrips(OrdinaryDraft, TestCase):
         self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': notes[4:]})
         self.assertEqual(encounter.answers, {})                    # (both dropped: the doctor removed a line — a change)
 
+    MEASURED = '12 mm at the synthetic junction.\n' + OrdinaryDraft.NOTES
+
+    def changed_save(self, encounter, posted):
+        response = self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': posted})
+        self.assertEqual((encounter.answers, encounter.notes), ({}, posted))
+        self.assertNotContains(response, UNCHANGED)
+
+    def test_deleting_the_first_character_is_a_change(self):
+        """M1 (the leading-break condition removed from same_text): "12 mm" saved as "2 mm" was "Notes unchanged"."""
+        encounter = self.reviewed_with_notes(self.MEASURED)
+        self.changed_save(encounter, self.MEASURED[1:])
+
+    def test_deleting_a_leading_space_is_a_change(self):
+        """M2 (any leading whitespace ignored, not only the line break the parser drops)."""
+        encounter = self.reviewed_with_notes(' ' + self.MEASURED)
+        self.changed_save(encounter, self.MEASURED)
+
+    def test_deleting_one_leading_blank_line_is_the_one_deletion_ignored(self):
+        """F5, accepted as harmless and pinned: one missing leading line break is what a page rendered before R2-1 posts,
+        so deleting one leading blank line reads as "Notes unchanged". The next character is not ignored."""
+        encounter = self.reviewed_with_notes('\n' + self.MEASURED)
+        self.untouched_save(encounter, self.MEASURED)
+        self.changed_save(encounter, self.MEASURED[1:])
+
+    def test_the_same_text_boundary(self):
+        same = [('12 mm', '\n12 mm'), ('12 mm', '\r\n12 mm'), ('12 mm', '\r12 mm'), ('a\r\nb', 'a\nb'), ('a\r\nb', 'a\rb')]
+        changed = [('2 mm', '12 mm'), ('12 mm', ' 12 mm'), ('12 mm', '\t12 mm'), ('12 mm', '\u00a012 mm'),
+                   ('12 mm', '\n\n12 mm'), ('\n12 mm', '12 mm'), ('2 mm', '\n12 mm')]
+        self.assertEqual([views.same_text(posted, stored) for posted, stored in same + changed],
+                         [True] * len(same) + [False] * len(changed))
+
     def test_lone_carriage_returns_are_line_breaks_too(self):
         """R2-3 A6: notes stored with lone CRs come back from a browser as CRLF — the same notes."""
         notes = self.EDITED.replace('\n', '\r')
