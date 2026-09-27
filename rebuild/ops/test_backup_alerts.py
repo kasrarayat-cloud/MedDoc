@@ -10,6 +10,7 @@ import subprocess
 import sys
 from types import ModuleType, SimpleNamespace
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -1091,6 +1092,52 @@ class CrossIncidentSeverityTests(unittest.TestCase):
         a.check(self.at + timedelta(hours=2))
         self.assertEqual(self.sender.call_count, 1)
         self.assertIn('(highest: warning)', self.sender.call_args.args[2])
+
+
+class ConcurrentStatusReadTests(unittest.TestCase):
+    """⚠️ R4. status() read status.json and then the ledger with no lock, while check() writes them
+    under the monitor lock. A check landing between its two reads made status() report the monitor
+    broken. The publisher runs status() every five minutes, beside the check's own five-minute timer."""
+    setUp = BackupAlertsTests.setUp
+
+    def test_a_status_read_across_a_checks_writes_is_consistent_and_the_check_still_runs(self):
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        self.health.return_value = 'backup_stale'
+        a.check(self.at + timedelta(hours=2))                  # status.json names a later notice
+        self.health.return_value = 'backup_timeout'
+        real, paused, release, results = a.read_notices, threading.Event(), threading.Event(), {}
+
+        def pausing():
+            if threading.current_thread().name == 'status-reader' and not paused.is_set():
+                paused.set()                                   # status.json is read; the ledger is not
+                release.wait(30)
+            return real()
+
+        def reader():
+            results['status'] = a.status(self.at + timedelta(hours=2, minutes=1))
+
+        def writer():
+            results['check'] = a.check(self.at + timedelta(hours=4))
+        with patch.object(a, 'read_notices', side_effect=pausing), \
+                patch.object(a, 'LOCK_WAIT_SECONDS', 30, create=True):
+            reading = threading.Thread(target=reader, name='status-reader')
+            reading.start()
+            self.assertTrue(paused.wait(30))
+            writing = threading.Thread(target=writer, name='check-writer')
+            writing.start()
+            writing.join(1.5)                                  # unlocked, the whole check lands in here
+            release.set()
+            reading.join(30)
+            writing.join(30)
+        self.assertFalse(reading.is_alive() or writing.is_alive())
+        shown, _ = results['status']
+        self.assertNotEqual(shown['condition'], 'monitoring_state_unavailable',
+                            'a concurrent check made status() report the monitor broken')
+        self.assertEqual(shown['incident']['last_notice_condition'], 'backup_stale')
+        checked, _ = results['check']
+        self.assertEqual(checked['condition'], 'backup_timeout', 'a status reader made the check refuse')
+        self.assertEqual(self.sender.call_count, 3)
 
 
 class TransportImportPathTests(unittest.TestCase):
