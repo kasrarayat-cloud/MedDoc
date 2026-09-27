@@ -164,6 +164,35 @@ class ShapeTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaisesRegex(profile.ProfileError, '^profile_path$'):
                 profile.validate(activated(**{'host.state_root': value}))
 
+    def test_a_path_not_in_normal_form_is_refused_before_the_mixed_check(self):
+        # PurePosixPath keeps a leading '//', so '//var/lib/quillmd' did not overlap '/var/lib/quillmd' and a
+        # record naming the private state root that way was accepted. Every non-normal spelling is profile_path.
+        cases = [
+            ('host.state_root', '//var/lib/quillmd'),
+            ('host.install_root', '//opt/meddoc-pro'),
+            ('host.state_root', '//var/lib/quillmd-production'),
+            ('host.environment_file', '//run/quillmd-production/application.env'),
+            ('host.state_root', '/var/./lib/quillmd'),
+            ('host.state_root', '/./var/lib/quillmd-production'),
+            ('host.state_root', '/var/lib/quillmd-production/.'),
+            ('host.state_root', '/var/lib/quillmd-production/../quillmd'),
+            ('host.state_root', '/var/lib/quillmd/'),
+            ('host.state_root', '/var//lib/quillmd'),
+            ('host.install_root', '/opt//quillmd-production'),
+        ]
+        for path, value in cases:
+            with self.subTest(path=path, value=value), self.assertRaisesRegex(profile.ProfileError, '^profile_path$'):
+                profile.validate(activated(**{path: value}))
+        for value in ('//etc/quillmd', '//etc/quillmd-production'):
+            with self.subTest(configuration_root=value), \
+                    self.assertRaisesRegex(profile.ProfileError, '^profile_path$'):
+                profile.validate(activated(**{'host.configuration_root': value,
+                                              'database.tls.ca_bundle': value + '/rds-ca-global-bundle.pem'}))
+        # The normal spelling of a private path is still refused as mixed, and the record itself still validates.
+        with self.assertRaisesRegex(profile.ProfileError, '^profile_mixed$'):
+            profile.validate(activated(**{'host.state_root': '/var/lib/quillmd'}))
+        self.assertEqual(str(profile.validate(activated()).state_root), RECORD['host']['state_root'])
+
     def test_environment_file_must_be_on_run_tmpfs(self):
         for value in ('/etc/quillmd-production-env/application.env', '/run/application.env',
                       '/run/quillmd-production/nested/application.env'):

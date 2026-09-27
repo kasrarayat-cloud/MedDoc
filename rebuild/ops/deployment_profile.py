@@ -212,10 +212,17 @@ def _shape(value, shape):
 
 
 def _path(text):
-    """An absolute, normalised POSIX path of at least two components; no '..', no trailing slash."""
+    """An absolute POSIX path of at least two components, already in normal form.
+
+    Anything else is refused as profile_path, before any overlap or mixed check: a leading '//',
+    a '.' or '..' component, a repeated '/' or a trailing '/'. The leading '//' matters most:
+    PurePosixPath keeps it (POSIX leaves its meaning to the implementation), so '//var/lib/quillmd'
+    would not overlap '/var/lib/quillmd' although Linux resolves both to one directory.
+    """
     require(isinstance(text, str) and text.startswith('/') and '\x00' not in text, 'profile_path')
+    require(all(part not in ('', '.', '..') for part in text.split('/')[1:]), 'profile_path')
     pure = PurePosixPath(text)
-    require(str(pure) == text and '..' not in pure.parts and len(pure.parts) >= 3, 'profile_path')
+    require(str(pure) == text and pure.anchor == '/' and len(pure.parts) >= 3, 'profile_path')
     return pure
 
 
