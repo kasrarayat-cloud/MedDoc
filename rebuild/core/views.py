@@ -507,8 +507,10 @@ def review_state_counts(e,codes=True):
     nor edited — so those states are disjoint and sum to the answers cleared (refutation round 2, R2-4). Across them, and
     NOT a further state to add to them, `answers_with_clinician_review` counts the answers that carried a review tick,
     which only an owner or clinician can set: two edited answers a clinician reviewed no longer audit exactly as two
-    edits nobody reviewed (refutation round 3, F3). Each statement decision is counted once, reviewed or chosen and
-    unreviewed; accepted codes only."""
+    edits nobody reviewed (refutation round 3, F3). Each statement decision is counted once: reviewed, or recorded and
+    unreviewed — which includes a wording saved exactly as the form rendered it, since a save records every statement's
+    wording and the record cannot tell a deliberate choice of the default from none, so the key does not say "chosen"
+    (refutation round 3, F4). Accepted codes only."""
     counts=dict.fromkeys(ANSWER_STATES,0);counts['answers_with_clinician_review']=0
     for a in (e.answers or {}).values():
         a=a if isinstance(a,dict) else {}                 # (a malformed entry is still an answer the save clears)
@@ -520,7 +522,7 @@ def review_state_counts(e,codes=True):
         counts[state]+=1;counts['answers_with_clinician_review']+=int(bool(a.get('reviewed')))
     decisions=[d for d in ((e.template_review or {}).get('decisions') or {}).values() if isinstance(d,dict)]
     counts.update(statements_reviewed=sum(1 for d in decisions if d.get('reviewed')),
-                  statements_chosen_unreviewed=sum(1 for d in decisions if not d.get('reviewed')),
+                  statements_recorded_unreviewed=sum(1 for d in decisions if not d.get('reviewed')),
                   codes_accepted=CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False).count() if codes else 0)
     return counts
 

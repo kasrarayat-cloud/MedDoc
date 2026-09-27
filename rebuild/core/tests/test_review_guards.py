@@ -197,13 +197,13 @@ def last_event(action, encounter):
 
 
 def cleared(accepted_suggestion=0, left_blank=0, edited_not_accepted=0, reviewed_unedited=0, unreviewed_unedited=0,
-            with_clinician_review=0, statements_reviewed=0, statements_chosen_unreviewed=0, codes=0):
+            with_clinician_review=0, statements_reviewed=0, statements_recorded_unreviewed=0, codes=0):
     """The audit's counts of what a clearing discarded. Disjoint, as the names say: each answer is counted once in its
     state, and each statement decision once; `with_clinician_review` counts across the answer states (F3)."""
     return {'answers_accepted_suggestion': accepted_suggestion, 'answers_left_blank': left_blank,
             'answers_edited_not_accepted': edited_not_accepted, 'answers_reviewed_unedited': reviewed_unedited,
             'answers_unreviewed_unedited': unreviewed_unedited, 'answers_with_clinician_review': with_clinician_review,
-            'statements_reviewed': statements_reviewed, 'statements_chosen_unreviewed': statements_chosen_unreviewed,
+            'statements_reviewed': statements_reviewed, 'statements_recorded_unreviewed': statements_recorded_unreviewed,
             'codes_accepted': codes}
 
 
@@ -973,7 +973,7 @@ class WordNotesSaveAndClear(OfflineWordForm):
                                                                      'notes': self.encounter.notes + '\nSynthetic addendum.'})
         self.assertEqual(last_event('encounter.notes_saved', self.encounter).get('cleared'),
                          cleared(reviewed_unedited=3, unreviewed_unedited=1, with_clinician_review=3, statements_reviewed=2,
-                                 statements_chosen_unreviewed=1, codes=1))
+                                 statements_recorded_unreviewed=1, codes=1))
 
     def test_clearing_counts_the_statement_decisions_it_clears(self):
         self.clinician_reviews()
