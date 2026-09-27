@@ -640,6 +640,16 @@ def clean_label(text: str) -> str:
     return text.strip(" :–—-_*").strip()[:300]
 
 
+def option_text(text: str) -> str:
+    """An option as printed, trimmed: box glyphs and NULs removed, each whitespace run read as one space, and the
+    ends trimmed of the spaces, colons, dashes, underscores and asterisks around a printed option (the write-in blank
+    after 'Other: ____', the separator in 'Temple -') - exactly clean_label's trimming.
+    ⚠️ NEVER the list-marker strip, which is for question labels only: '(L) knee' and '(R) knee' are two options, and
+    stripping them made both 'knee' - the clinician chose a side the export could not tell apart."""
+    text = (text or "").replace("\x00", " ").replace(BOX, " ").replace(CHECKED, " ")
+    return re.sub(r"\s+", " ", text.replace("\t", " ")).strip().strip(" :–—-_*").strip()[:300]
+
+
 def is_hint_run(r) -> bool:
     """Author guidance ink: a light, grey or blue colour (not black/auto), the convention for text to overwrite."""
     rpr = r.find(q("w:rPr")) if r is not None else None
@@ -871,14 +881,16 @@ class Detector:
                 return clean_label(self.cell_text(c))
         return ""
 
-    def row_label(self, tbl_slot, row, col) -> str:
+    def row_label(self, tbl_slot, row, col, printed=False) -> str:
+        """The row's label; `printed` reads it as an option (option_text: no list-marker strip)."""
+        read = option_text if printed else clean_label
         rows = self.grid(tbl_slot)
         best = ""
         for c in sorted(rows.get(row, []), key=lambda c: c.info["col"]):
             if c.info["col"] >= col:
                 break
             if self.is_label_cell(c):
-                best = clean_label(self.cell_text(c))
+                best = read(self.cell_text(c))
         if not best:
             # a vertically merged label cell continues from the row above
             for c in rows.get(row, []):
@@ -886,7 +898,7 @@ class Detector:
                     for r in sorted((r for r in rows if r < row), reverse=True):
                         head = next((x for x in rows[r] if x.info["col"] == c.info["col"]), None)
                         if head is not None and head.info["vmerge"] != "continue":
-                            best = clean_label(self.cell_text(head))
+                            best = read(self.cell_text(head))
                             break
         return best
 
@@ -1117,7 +1129,7 @@ class Detector:
                     self.column_header(cell.parent, cell.info["col"], cell.info["row"]):
                 continue
             if cell is not None and s.parent is cell and len(units) == 1 and self.pure_option_cell(cell, s, units[0]):
-                opt = clean_label(units[0][2]) or clean_label(units[0][1])
+                opt = option_text(units[0][2]) if clean_label(units[0][2]) else option_text(units[0][1])
                 units = [[units[0][0], opt, ""]]
                 self._pure[id(s)] = cell
             para_units.append((s, units))
@@ -1195,7 +1207,7 @@ class Detector:
     def emit_checkbox_group(self, g):
         pslot = g["paras"][0]
         for units in self.split_inline_groups(g):
-            options = [clean_label(re.split(r"\t{2,}| {4,}", o)[0]) if re.search(r"\S", re.split(r"\t{2,}| {4,}", o)[0]) else clean_label(o)
+            options = [option_text(re.split(r"\t{2,}| {4,}", o)[0]) if re.search(r"\S", re.split(r"\t{2,}| {4,}", o)[0]) else option_text(o)
                        for _, o, _ in units]
             question = clean_label(units[0][2])
             host = pslot
@@ -1329,7 +1341,7 @@ class Detector:
                         opts.append(paras[j])
                         j += 1
                     if len(opts) >= 2:
-                        words = [clean_label(self.text(o.el)) for o in opts]
+                        words = [option_text(self.text(o.el)) for o in opts]
                         self.add(Area(self.choice_kind(qtext, words), clean_label(qtext), opts[0],
                                       {"type": "paragraph_options", "paragraphs": [o.path for o in opts]},
                                       context=self.context_for(opts[0]), options=words, extra_slots=opts[1:]))
@@ -1374,7 +1386,7 @@ class Detector:
                 cells = [c for c in sorted(rows[r], key=lambda c: c.info["col"]) if c.info["vmerge"] != "continue"]
                 opt_cells = []
                 for c in cells:
-                    header = clean_label(self.column_header(tslot, c.info["col"], r).strip("√✓✔*† "))
+                    header = option_text(self.column_header(tslot, c.info["col"], r).strip("√✓✔*† "))
                     if id(c) in filler:
                         continue
                     if self.is_option_cell(c) and header and len(header.split()) <= 3 and len(header) <= 24 and \
@@ -1446,7 +1458,7 @@ class Detector:
                     continue
                 ht = self.header_table(tslot)
                 header = " ".join(dict.fromkeys(self.column_headers_all(tslot, col, items[0][0])))
-                labelled = [(r, c, self.row_label(tslot, r, col)) for r, c in items]
+                labelled = [(r, c, self.row_label(tslot, r, col, printed=True)) for r, c in items]
                 if not header or not all(lbl for _, _, lbl in labelled):
                     continue
                 first = labelled[0][1]
@@ -1479,7 +1491,7 @@ class Detector:
                     right = cells[i + 1] if i + 1 < len(cells) else None
                     opt = self.cell_text(right) if right is not None else ""
                     if opt and len(opt.split()) <= 8 and not is_blank_text(opt) and BOX not in opt:
-                        ticks.setdefault(c.info["col"], []).append((r, c, clean_label(opt)))
+                        ticks.setdefault(c.info["col"], []).append((r, c, option_text(opt)))
                     else:
                         filler.add(id(c))
             for col, items in sorted(ticks.items()):
@@ -1525,7 +1537,7 @@ class Detector:
                             j += 1
                         else:
                             break
-                    headers = [clean_label(self.column_header(tslot, c.info["col"], r)) for c in cells]
+                    headers = [option_text(self.column_header(tslot, c.info["col"], r)) for c in cells]
                     if len(run) >= 2 and sum(1 for h in headers if h) >= max(2, len(cells) // 2):
                         first = sorted(cells, key=lambda c: c.info["col"])[0]
                         title = self.heading_before(first) or "Table"
@@ -1569,7 +1581,7 @@ class Detector:
                         target["all"] = True
                     slash = []
                     for h in [header] + self.column_headers_all(tslot, c.info["col"], r):
-                        parts = [x.strip() for x in re.split(r"\s*/\s*|\s+or\s+", clean_label(h))] if h else []
+                        parts = [x.strip() for x in re.split(r"\s*/\s*|\s+or\s+", option_text(h))] if h else []
                         if len(parts) >= 2 and all(is_option_word(x) for x in parts):
                             slash = parts
                             break
@@ -2010,7 +2022,8 @@ def area_to_field(n: int, area: Area) -> dict:
     field = {"key": "v3_%d" % n, "label": area.label or "Answer", "kind": area.kind, "context": area.context,
              "locator": locator}
     if area.options:
-        field["options"] = unique_options(area.options)
+        # labels: the options as read, each whitespace run one space (a legacy dropdown keeps its entries raw)
+        field["options"] = unique_options([" ".join(str(o).split()) for o in area.options])
         if field["options"] != list(area.options):
             target["printed"] = list(area.options)
     if area.capacity:
@@ -2946,7 +2959,7 @@ def locate(data: bytes, targets: list) -> list:
         slot = detector.index.by_id.get(t.get("slot") or "")
         if slot is None:
             fail("The chosen place is not in this form.", "invalid_mapping")
-        options = [clean_label(str(o))[:200] for o in (t.get("options") or []) if clean_label(str(o))]
+        options = [option_text(str(o))[:200] for o in (t.get("options") or []) if option_text(str(o))]
         target = None
         if slot.kind == "p":
             text = detector.ptext(slot.el)[0]

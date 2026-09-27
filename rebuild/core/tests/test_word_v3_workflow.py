@@ -945,6 +945,61 @@ class V3RepeatedOptions(V3Fixture, TestCase):
         self.assertIn('<option value="Left (2)" >Left (2)</option>', page)
 
 
+def laterality_form_bytes():
+    doc = Document()
+    doc.add_paragraph("Synthetic joint procedure")
+    doc.add_paragraph("Indication: ____________")
+    doc.add_paragraph("Injected joint:  ☐ (L) knee  ☐ (R) knee")
+    doc.add_paragraph("Aspirated joint:  ☐ L knee  ☐ R knee")
+    doc.add_paragraph("Imaged joint: ")._p.append(_sdt("dropdown", options=["Choose an item.", "(L) knee", "(R) knee"]))
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    return buffer.getvalue()
+
+
+@override_settings(**V3)
+class V3LateralityRoundTrip(V3Fixture, TestCase):
+    """Notes -> answer -> export keeps the side: '(L) knee' / '(R) knee' and 'L knee' / 'R knee' are options as printed."""
+
+    def test_the_side_in_the_notes_is_the_box_ticked(self):
+        from core.jobs import enqueue, run_one
+        template, version = self.uploaded(data=laterality_form_bytes(), name="Synthetic joints")
+        by = self.by_label(version)
+        self.assertEqual(by["Injected joint"]["options"], ["(L) knee", "(R) knee"])
+        version = self.confirm(template)
+        notes = ("Indication: synthetic\nInjected joint: (R) knee\nAspirated joint: L knee\nImaged joint: (L) knee")
+        self.assertEqual(self.new_encounter(version, notes=notes).status_code, 302)
+        encounter = Encounter.objects.get()
+        enqueue(encounter, self.user)
+        self.assertTrue(run_one())
+        encounter = Encounter.objects.get()
+        texts = {f["label"]: (encounter.answers[f["key"]]["status"], encounter.answers[f["key"]]["text"]) for f in version.fields}
+        self.assertEqual(texts, {"Indication": ("supported", "synthetic"), "Injected joint": ("supported", "(R) knee"),
+                                 "Aspirated joint": ("supported", "L knee"), "Imaged joint": ("supported", "(L) knee")})
+        payload = {"revision": encounter.revision}
+        for f in version.fields:
+            payload["answer_" + f["key"]] = encounter.answers[f["key"]]["text"]
+            payload["reviewed_" + f["key"]] = "on"
+        self.assertEqual(self.client.post(f"/encounters/{encounter.pk}/save/", payload).status_code, 302)
+        response = self.client.post(f"/encounters/{encounter.pk}/finalize/", {"revision": encounter.revision + 1, "reviewed": "on"}, follow=True)
+        encounter = Encounter.objects.get()
+        self.assertEqual(encounter.status, "finalized", [str(m) for m in response.context["messages"]])
+        body = part_text(private_path(encounter.export_path).read_bytes())
+        self.assertIn("Injected joint:  ☐ (L) knee  ☒ (R) knee", body)
+        self.assertIn("Aspirated joint:  ☒ L knee  ☐ R knee", body)
+        self.assertIn("Imaged joint: (L) knee", body)
+
+    def test_a_side_the_notes_leave_out_is_never_guessed(self):
+        from core.jobs import enqueue, run_one
+        template, version = self.uploaded(data=laterality_form_bytes(), name="Synthetic joints")
+        version = self.confirm(template)
+        self.assertEqual(self.new_encounter(version, notes="Indication: synthetic\nInjected joint: knee").status_code, 302)
+        enqueue(Encounter.objects.get(), self.user)
+        self.assertTrue(run_one())
+        answer = Encounter.objects.get().answers[self.by_label(version)["Injected joint"]["key"]]
+        self.assertEqual((answer["status"], answer["text"], answer["held_candidate"]["text"]), ("conflict", "", "knee"))
+
+
 V3_FIELDS = [
     {"key": "v3_1", "label": "Smoker?", "kind": "choice", "options": ["Yes", "No"], "locator": {"contract": "v3"}},
     {"key": "v3_2", "label": "Allergies", "kind": "text", "locator": {"contract": "v3"}},

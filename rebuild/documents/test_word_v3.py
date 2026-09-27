@@ -568,5 +568,164 @@ class BoxNumbers(unittest.TestCase):
             self.assertIn(count, str(refused.exception), slot)
 
 
+def laterality_form(path):
+    """Options that differ only by a side marker, on every detector path that builds options: a box line with
+    '(L) knee' / '(R) knee', one with 'L knee' / 'R knee', a dropdown, an option grid's column headers, a column
+    checklist's row labels, and narrow tick cells beside printed options."""
+    from docx.shared import Twips
+    doc = Document()
+    doc.add_paragraph("Synthetic joint procedure")
+    doc.add_paragraph("Injected joint:  ☐ (L) knee  ☐ (R) knee")
+    doc.add_paragraph("Aspirated joint:  ☐ L knee  ☐ R knee")
+    doc.add_paragraph("Imaged joint: ")._p.append(_sdt("dropdown", options=["Choose an item.", "(L) knee", "(R) knee"]))
+    grid = doc.add_table(rows=4, cols=3)
+    for c, h in enumerate(["Finding", "(L) knee", "(R) knee"]):
+        grid.cell(0, c).text = h
+    for r, name in enumerate(["Effusion", "Warmth", "Crepitus"], 1):
+        grid.cell(r, 0).text = name
+    doc.add_paragraph("Joints examined")
+    check = doc.add_table(rows=4, cols=2)
+    check.cell(0, 0).text = "Joint"
+    check.cell(0, 1).text = "Examined"
+    for r, name in enumerate(["(L) knee", "(R) knee", "(L) hip"], 1):
+        check.cell(r, 0).text = name
+        check.cell(r, 1).text = "☐"
+    doc.add_paragraph("Dressing site")
+    ticks = doc.add_table(rows=2, cols=2)
+    for r, name in enumerate(["(L) knee", "(R) knee"]):
+        ticks.cell(r, 0).width = Twips(300)
+        ticks.cell(r, 1).text = name
+    Path(path).write_bytes(docx_bytes(doc))
+
+
+class OptionsKeepTheirPrintedText(unittest.TestCase):
+    """An option label is the printed option text, trimmed only; the list-marker strip is for question labels."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        self.form = self.dir / "laterality.docx"
+        laterality_form(self.form)
+        self.fields = inspect_template(self.form, engine="v3")["fields"]
+        self.by = fields_by_label(self.fields)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_every_option_path_keeps_the_side(self):
+        sides = ["(L) knee", "(R) knee"]
+        self.assertEqual(self.by["Injected joint"]["options"], sides)                  # box line
+        self.assertEqual(self.by["Aspirated joint"]["options"], ["L knee", "R knee"])  # box line, bare letters
+        self.assertEqual(self.by["Imaged joint"]["options"], sides)                    # dropdown
+        for finding in ("Effusion", "Warmth", "Crepitus"):                             # option grid headers
+            self.assertIn(finding, self.by, "each grid row is one choice between the two sides")
+            self.assertEqual((self.by[finding]["kind"], self.by[finding]["options"]), ("choice", sides), finding)
+        self.assertEqual(self.by["Examined"]["options"], sides + ["(L) hip"])          # column checklist rows
+        ticks = [f for f in self.fields if f["label"] == "Choose"]                     # narrow tick cells
+        self.assertEqual([f["options"] for f in ticks], [sides])
+        for f in self.fields:
+            self.assertNotIn("knee (2)", f.get("options") or [], f["label"])
+
+    def test_each_side_is_exported_in_its_own_box(self):
+        out = self.dir / "sides.docx"
+        answers = {"Injected joint": "(R) knee", "Aspirated joint": "L knee", "Imaged joint": "(L) knee",
+                   "Effusion": "(R) knee", "Examined": ["(R) knee", "(L) hip"]}
+        fill_template(self.form, self.fields, {self.by[k]["key"]: v for k, v in answers.items()}, out)
+        text = [line for line in paragraphs(out)]
+        self.assertIn("Injected joint:  ☐ (L) knee  ☒ (R) knee", text)
+        self.assertIn("Aspirated joint:  ☒ L knee  ☐ R knee", text)
+        self.assertIn("Imaged joint: (L) knee", text)
+        at = text.index("Effusion")
+        self.assertEqual(text[at:at + 3], ["Effusion", "", "X"])
+        at = text.index("Joint")
+        self.assertEqual(text[at + 2:at + 8], ["(L) knee", "☐", "(R) knee", "☒", "(L) hip", "☒"])
+
+    def test_the_other_option_paths_keep_the_printed_text(self):
+        doc = Document()
+        doc.add_paragraph("Synthetic joint log")
+        site = doc.add_table(rows=2, cols=2)                         # a slash header over an answer cell
+        site.cell(0, 0).text = "Joint"
+        site.cell(0, 1).text = "L. / R."
+        site.cell(1, 0).text = "Knee"
+        doc.add_paragraph("Doses given")
+        log = doc.add_table(rows=3, cols=3)                          # a log table's column headers
+        for c, h in enumerate(["Drug", "(L) dose", "(R) dose"]):
+            log.cell(0, c).text = h
+        ff_field(doc.add_paragraph("Splinted side: "), "dropdown", ["(L) knee ", " (R) knee"])
+        form = self.dir / "paths.docx"
+        form.write_bytes(docx_bytes(doc))
+        fields = inspect_template(form, engine="v3")["fields"]
+        by = fields_by_label(fields)
+        self.assertIn("Knee", by, "'L. / R.' over the answer cell makes it a choice")
+        self.assertEqual((by["Knee"]["kind"], by["Knee"]["options"]), ("choice", ["L.", "R."]))
+        self.assertEqual(next(f for f in fields if f["kind"] == "table_rows")["options"], ["Drug", "(L) dose", "(R) dose"])
+        self.assertEqual(by["Splinted side"]["options"], ["(L) knee", "(R) knee"])
+        out = self.dir / "paths-out.docx"
+        fill_template(form, fields, {by["Knee"]["key"]: "R.", by["Splinted side"]["key"]: "(R) knee"}, out)
+        self.assertEqual(ff_result(out), ["1"])
+        text = paragraphs(out)
+        self.assertEqual(text[text.index("Knee"):text.index("Knee") + 2], ["Knee", "R."])
+        outline = outline_template(form)["slots"]
+        place = next(r for r in outline if r["kind"] == "p" and r["preview"] == "Synthetic joint log")
+        added = locate_fields(form, [{"slot": place["slot"], "kind": "choice", "label": "Side",
+                                      "options": [" (L) knee", "(R)  knee "]}])["fields"]
+        self.assertEqual(added[0]["options"], ["(L) knee", "(R) knee"])
+
+    def test_option_cells_and_lettered_items_keep_the_side(self):
+        doc = Document()
+        doc.add_paragraph("Synthetic procedure")
+        row = doc.add_table(rows=1, cols=3)                          # one box and its option per cell
+        row.cell(0, 0).text = "Injected side"
+        row.cell(0, 1).text = "☐ (L) knee"
+        row.cell(0, 2).text = "☐ (R) knee"
+        doc.add_paragraph("Which knee was examined?")                # lettered list items under a question
+        numbering = doc.part.numbering_part.element
+        abstract = OxmlElement("w:abstractNum")
+        abstract.set(qn("w:abstractNumId"), "90")
+        lvl = OxmlElement("w:lvl")
+        lvl.set(qn("w:ilvl"), "0")
+        for tag, val in (("w:start", "1"), ("w:numFmt", "lowerLetter"), ("w:lvlText", "%1)")):
+            x = OxmlElement(tag)
+            x.set(qn("w:val"), val)
+            lvl.append(x)
+        abstract.append(lvl)
+        numbering.insert(0, abstract)
+        num = OxmlElement("w:num")
+        num.set(qn("w:numId"), "90")
+        ref = OxmlElement("w:abstractNumId")
+        ref.set(qn("w:val"), "90")
+        num.append(ref)
+        numbering.append(num)
+        for side in ("(L) knee", "(R) knee"):
+            ppr = doc.add_paragraph(side)._p.get_or_add_pPr()
+            numpr = OxmlElement("w:numPr")
+            for tag, val in (("w:ilvl", "0"), ("w:numId", "90")):
+                x = OxmlElement(tag)
+                x.set(qn("w:val"), val)
+                numpr.append(x)
+            ppr.append(numpr)
+        form = self.dir / "cells-and-items.docx"
+        form.write_bytes(docx_bytes(doc))
+        fields = inspect_template(form, engine="v3")["fields"]
+        by = fields_by_label(fields)
+        self.assertEqual(by["Injected side"]["options"], ["(L) knee", "(R) knee"])
+        self.assertEqual((by["Which knee was examined?"]["locator"]["target"]["type"], by["Which knee was examined?"]["options"]),
+                         ("paragraph_options", ["(L) knee", "(R) knee"]))
+        out = self.dir / "cells-and-items-out.docx"
+        fill_template(form, fields, {by["Injected side"]["key"]: "(R) knee", by["Which knee was examined?"]["key"]: "(L) knee"}, out)
+        text = paragraphs(out)
+        self.assertIn("☐ (L) knee", text)
+        self.assertIn("☒ (R) knee", text)
+        self.assertIn("☒ (L) knee", text)
+
+    def test_question_labels_keep_the_marker_rule_and_options_do_not(self):
+        from documents.word_v3 import clean_label, option_text
+        self.assertEqual(clean_label("(a) Pain"), "Pain")
+        self.assertEqual(option_text("(a) Pain"), "(a) Pain")
+        self.assertEqual(option_text("  (L)\tknee  "), "(L) knee")
+        self.assertEqual(option_text("Other: ______"), "Other", "the write-in blank is not the option")
+        self.assertEqual(option_text("b) Left knee -"), "b) Left knee")
+
+
 if __name__ == "__main__":
     unittest.main()
