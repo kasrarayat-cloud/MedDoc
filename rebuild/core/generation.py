@@ -2453,7 +2453,10 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
                 if first['id'] not in ends_read: ends_read[first['id']] = inner_sentence_end(first['quote'])
                 if first['id'] not in shapes_read:
                     shapes_read[first['id']] = ends_read[first['id']] or v3_shape_holds(first['quote'], value)
-                nominal_plan = not shapes_read[first['id']]
+                # A nominal denial can qualify an earlier finding even without
+                # repeating its question label (Assessment: infection / Plan: no
+                # infection). It retains the old context hold; its words stay intact.
+                nominal_plan = not shapes_read[first['id']] and not any(DENIAL.search(text) for text in readings(value))
             narrative = (owner in general and (FINITE_STATEMENT_V3.search(
                 value if colon[block[0]['id']] else block[0]['quote']) or local_conditional or nominal_plan))
             factual = owner in clinical and (colon[block[0]['id']] or FINITE_STATEMENT_V3.search(block[0]['quote']))

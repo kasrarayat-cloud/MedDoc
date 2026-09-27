@@ -65,6 +65,25 @@ class RepeatedSourceTopics(SimpleTestCase):
 
 
 class NominalPlanTopic(SimpleTestCase):
+    def test_nominal_denial_keeps_the_earlier_assessment_governed(self):
+        fields = [field('a', 'Assessment', 'long_text'), field('p', 'Plan', 'long_text')]
+        for assessment in ('infection.', 'active bacterial infection.'):
+            plan = 'no ' + assessment
+            notes = 'Assessment: ' + assessment + '\nPlan: ' + plan
+            picks = {'Assessment': ['Assessment: ' + assessment], 'Plan': ['Plan: ' + plan]}
+            answer = run(notes, picks, fields=fields)['Assessment']
+            self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+            self.assertEqual(answer['held_candidate']['text'], assessment)
+            self.assertEqual([e['quote'] for e in answer['held_candidate']['context']], ['Plan: ' + plan])
+            for quote in ('Assessment: ' + assessment, assessment):
+                start = notes.index(quote)
+                old = {'status': 'supported', 'text': assessment, 'reviewed': True,
+                       'evidence': [{'quote': quote, 'start': start, 'end': start + len(quote)}]}
+                governance = g.governance_for(notes, fields)
+                shown = g.as_currently_governed(governance, notes, {**old, 'label': 'Assessment'})
+                self.assertEqual((shown['status'], shown['text']), ('conflict', ''))
+                self.assertEqual(g.governed_decisions(notes, fields, {'a': old}), ['Assessment'])
+
     def test_retained_note5_keeps_its_direct_assessment_beside_complete_nominal_plan(self):
         case = retained_note('r1-note5')
         path = Path(__file__).resolve().parents[3] / 'docs/rebuild/v1/ordinary-input-20260927/evidence/known-results.json'
@@ -149,3 +168,28 @@ class CompleteNominalPlanWorkflow(V3EncounterFixture, TestCase):
                     'Plan': 'naproxen 500 mg twice daily with food and physiotherapy.',
                     'Allergies': 'sulfa.', 'Smoker': 'Yes'}
         self.walk(case['notes'], {label: case['picks'][label] for label in expected}, expected)
+
+    def test_stale_reviewed_assessment_cannot_finalize_past_a_nominal_denial(self):
+        self.encounter.notes = 'Assessment: infection.\nPlan: no infection.'
+        self.encounter.answers = {}
+        for f in self.version.fields:
+            label = f['label']
+            value = {'Assessment': 'infection.', 'Plan': 'no infection.'}.get(label, '')
+            quote = label + ': ' + value
+            start = self.encounter.notes.index(quote) if value else 0
+            self.encounter.answers[f['key']] = {'status': 'supported' if value else 'missing',
+                'text': value, 'reviewed': True, 'evidence':
+                    [{'quote': quote, 'start': start, 'end': start + len(quote)}] if value else []}
+        self.encounter.save(update_fields=['notes', 'answers'])
+        page = self.client.get(f'/encounters/{self.encounter.pk}/')
+        assessment = next(row for row in page.context['answer_rows'] if row['label'] == 'Assessment')
+        self.assertEqual((assessment['status'], assessment['text']), ('conflict', ''))
+        self.finalize(); self.encounter.refresh_from_db()
+        self.assertNotEqual(self.encounter.status, 'finalized')
+        self.assertFalse(self.encounter.export_path)
+        self.assertEqual(self.save({'Assessment': 'infection.', 'Plan': 'no infection.'}).status_code, 302)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.answers[self.key('Assessment')]['status'], 'supported')
+        self.finalize(); self.encounter.refresh_from_db()
+        self.assertNotEqual(self.encounter.status, 'finalized')
+        self.assertFalse(self.encounter.export_path)
