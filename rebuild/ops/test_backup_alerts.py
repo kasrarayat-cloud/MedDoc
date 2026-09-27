@@ -484,6 +484,65 @@ class IncidentNotificationTests(unittest.TestCase):
         self.assertIn('ESCALATION', self.sent()[-1][0])
         self.assertIn('severity decreased', self.sent()[-1][1])
 
+    def test_a_failure_that_returns_after_a_decrease_is_announced_at_once(self):
+        """⚠️ R1. The last email the operator holds says the severity DECREASED; a failure that
+        returns must not wait for the 24-hour reminder merely because it was announced before."""
+        self.recovery.return_value['condition'] = 'offsite_upload_failed'           # failure: first notice
+        a.check(self.at)
+        self.recovery.return_value['condition'] = 'offsite_capacity_low'            # warning: a decrease
+        a.check(self.at + timedelta(hours=2))
+        self.assertIn('severity decreased', self.sent()[-1][1])
+        self.recovery.return_value['condition'] = 'offsite_upload_failed'           # the failure returns
+        result, code = a.check(self.at + timedelta(hours=2, minutes=5))
+        self.assertEqual((code, self.sender.call_count), (1, 3),
+                         "a failure returned and the operator's last email still said the severity decreased")
+        subject, body = self.sent()[-1]
+        self.assertEqual(subject, '[QuillMD operations] ESCALATION: backup recovery condition changed')
+        for text in ('Condition: offsite_upload_failed', 'severity increased',
+                     'last notice announced offsite_capacity_low', 'notice 3'):
+            self.assertIn(text, body)
+        state = self.state()
+        self.assertEqual((state['incident_attempt_notice'], state['incident_attempt_condition'],
+                          state['incident_attempt_count'], state['incident_conditions_announced']),
+                         ('escalation', 'offsite_upload_failed', 3, ['offsite_upload_failed', 'offsite_capacity_low']))
+        self.assertIsNone(result['incident']['escalation_deferred_until'])
+
+    def test_a_different_failure_after_a_decrease_is_not_held_by_the_spacing(self):
+        """R1's variant: the rise is measured against the LAST notice, not the highest ever sent."""
+        self.health.return_value = 'backup_failed'                                  # failure: first notice
+        a.check(self.at)
+        self.health.return_value = 'healthy'
+        self.recovery.return_value['condition'] = 'offsite_capacity_low'            # warning: a decrease
+        a.check(self.at + timedelta(hours=2))
+        self.health.return_value = 'backup_stale'                                   # a NEW failure
+        result, _ = a.check(self.at + timedelta(hours=2, minutes=5))
+        self.assertEqual(self.sender.call_count, 3,
+                         'a failure after a decrease was held an hour, as if the last notice were a failure')
+        self.assertIn('Condition: backup_stale', self.sent()[-1][1])
+        self.assertIn('severity increased', self.sent()[-1][1])
+        self.assertIsNone(result['incident']['escalation_deferred_until'])
+
+    def test_after_the_rise_failure_warning_flapping_sends_nothing_until_the_reminder(self):
+        """The bound that keeps R1 from becoming a loop: once the last notice is the failure, a pair
+        that is already announced flaps without a single extra notice until the reminder is due."""
+        self.recovery.return_value['condition'] = 'offsite_upload_failed'
+        a.check(self.at)
+        self.recovery.return_value['condition'] = 'offsite_capacity_low'
+        a.check(self.at + timedelta(hours=2))
+        rise = self.at + timedelta(hours=2, minutes=5)
+        self.recovery.return_value['condition'] = 'offsite_upload_failed'
+        a.check(rise)
+        for step in range(1, 288):                              # every five minutes, just under 24 h
+            self.recovery.return_value['condition'] = ('offsite_capacity_low' if step % 2
+                                                       else 'offsite_upload_failed')
+            a.check(rise + timedelta(minutes=5 * step))
+        conditions = [body.split('Condition: ')[1].split('\n')[0] for _, body in self.sent()]
+        self.assertEqual(conditions, ['offsite_upload_failed', 'offsite_capacity_low', 'offsite_upload_failed'])
+        self.recovery.return_value['condition'] = 'offsite_upload_failed'
+        a.check(rise + timedelta(hours=24))
+        self.assertEqual(self.sender.call_count, 4)
+        self.assertIn('REMINDER', self.sent()[-1][0])
+
     def test_reminder_names_duration_and_current_condition_at_a_fixed_interval(self):
         self.health.return_value = 'backup_failed'
         a.check(self.at)
