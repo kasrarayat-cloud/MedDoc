@@ -12,7 +12,8 @@ A v3 mapping field:
 
 Slot paths use the grammar of the neutral enumerator used for ground truth:
     b (body) | hf (header/footer root) / tbl[i] / tr[j] / tc[k] / p[n] / sdt[s] / txbx[t] / ff[f] / glyphs
-indices count same-kind children in document order.
+indices count same-kind children in document order - except that a table's rows and a row's cells are counted through
+the content controls and custom XML wrapping them (table_rows_of / row_cells_of), so a wrapped cell keeps its column.
 
 Detection is deterministic. Areas it is unsure about are reported as notes (never silently dropped, never
 guessed); a doctor's manual mapping is recorded separately as an assisted correction.
@@ -433,6 +434,57 @@ class Slot:
         return "%s#%s" % (self.part, self.path)
 
 
+def _through(el, want) -> list:
+    """`want` children of `el` in document order, looking through the content controls and custom XML that wrap them."""
+    out = []
+    for ch in el:
+        if ch.tag == want:
+            out.append(ch)
+        elif ch.tag == SDT:
+            content = ch.find(q("w:sdtContent"))
+            if content is not None:
+                out += _through(content, want)
+        elif ch.tag == q("w:customXml"):
+            out += _through(ch, want)
+    return out
+
+
+def table_rows_of(tbl) -> list:
+    """⚠️ A TABLE'S ROWS, THROUGH ANY CONTROL WRAPPING A ROW (w:tbl/w:sdt/w:tr): direct rows only made a wrapped row
+    invisible (round 3 P1). The one reading of rows for the index and the table_rows writer."""
+    return _through(tbl, q("w:tr"))
+
+
+def row_cells_of(tr) -> list:
+    """⚠️ A ROW'S CELLS, THROUGH ANY CONTROL WRAPPING A CELL (w:tr/w:sdt/w:tc): direct cells only skipped a wrapped cell,
+    so every later cell took the column before its own and a Yes answer was ticked under No (round 3 P1)."""
+    return _through(tr, q("w:tc"))
+
+
+def grid_before(tr) -> int:
+    """The grid columns a row skips before its first cell (w:gridBefore)."""
+    trpr = tr.find(q("w:trPr"))
+    before = trpr.find(q("w:gridBefore")) if trpr is not None else None
+    try:
+        return int(before.get(q("w:val"), "0") or 0) if before is not None else 0
+    except ValueError:
+        return 0
+
+
+def cell_span(tc) -> int:
+    tcpr = tc.find(q("w:tcPr"))
+    gs = tcpr.find(q("w:gridSpan")) if tcpr is not None else None
+    try:
+        return int(gs.get(q("w:val"), "1") or 1) if gs is not None else 1
+    except ValueError:
+        return 1
+
+
+def row_of(tc):
+    """The w:tr holding a cell (through any control wrapping the cell)."""
+    return next(tc.iterancestors(q("w:tr")), None)
+
+
 class SlotIndex:
     """Every slot of the content parts in document order, with element and sibling lookups."""
 
@@ -482,18 +534,12 @@ class SlotIndex:
 
     def _table(self, part, el, path, parent):
         tslot = self._add(Slot(part, path, "tbl", el, parent))
-        for ri, tr in enumerate(el.findall(q("w:tr"))):
-            col = 0
-            trpr = tr.find(q("w:trPr"))
-            before = trpr.find(q("w:gridBefore")) if trpr is not None else None
-            if before is not None:
-                col = int(before.get(q("w:val"), "0") or 0)
-            for ci, tc in enumerate(tr.findall(q("w:tc"))):
+        for ri, tr in enumerate(table_rows_of(el)):
+            col = grid_before(tr)
+            for ci, tc in enumerate(row_cells_of(tr)):
                 tcpr = tc.find(q("w:tcPr"))
-                span, vmerge = 1, None
+                span, vmerge = cell_span(tc), None
                 if tcpr is not None:
-                    gs = tcpr.find(q("w:gridSpan"))
-                    span = int(gs.get(q("w:val"), "1") or 1) if gs is not None else 1
                     vm = tcpr.find(q("w:vMerge"))
                     vmerge = (vm.get(q("w:val")) or "continue") if vm is not None else None
                 cpath = "%s/tr[%d]/tc[%d]" % (path, ri, ci)
@@ -1970,7 +2016,7 @@ class Detector:
         cell = self.host_cell(slot)
         if cell is not None:
             width = self.cell_twips(cell.parent, cell)
-            tr = cell.el.getparent()
+            tr = row_of(cell.el)
             trpr = tr.find(q("w:trPr")) if tr is not None else None
             h = trpr.find(q("w:trHeight")) if trpr is not None else None
             exact = h is not None and h.get(q("w:hRule")) == "exact"
@@ -2181,8 +2227,8 @@ def _flowing(p):
 
 
 def _unclip_row(tc):
-    tr = tc.getparent()
-    if tr is None or tr.tag != q("w:tr"):
+    tr = row_of(tc)
+    if tr is None:
         return
     trpr = tr.find(q("w:trPr"))
     h = trpr.find(q("w:trHeight")) if trpr is not None else None
@@ -2587,7 +2633,7 @@ def write_ff_dropdown(begin_run, answer, occurrence=0):
 
 def wraps_structure(content) -> bool:
     """True when a content control's content holds other controls, fields, tables or drawings."""
-    for tag in ("w:sdt", "w:fldChar", "w:fldSimple", "w:tbl", "w:drawing", "w:pict", "w:object", "w:txbxContent"):
+    for tag in ("w:sdt", "w:fldChar", "w:fldSimple", "w:tbl", "w:tr", "w:tc", "w:drawing", "w:pict", "w:object", "w:txbxContent"):
         if content.find(".//" + q(tag)) is not None:
             return True
     return False
@@ -3070,7 +3116,7 @@ def write_table_rows(index, field, answer):
     tbl = index.by_id.get("%s#%s" % (field["locator"]["part"], target["table"]))
     if tbl is None:
         fail("The stored mapping no longer matches this form.", "mapping_mismatch")
-    trs = tbl.el.findall(q("w:tr"))
+    trs = table_rows_of(tbl.el)
     rows = [trs[r] for r in target["rows"]]
     if len(answer) > 200:
         fail("Too many table rows.", "invalid_answer")
@@ -3081,12 +3127,12 @@ def write_table_rows(index, field, answer):
         rows[-1].addnext(clone)
         rows.append(clone)
     for tr, values in zip(rows, answer):
-        cells = tr.findall(q("w:tc"))
-        col_of, col = {}, 0
-        for tc in cells:
+        # ⚠️ columns counted exactly as the index counts them (grid_before, row_cells_of, cell_span): counting from 0
+        # over direct cells wrote a dose under Route in a row that skips a grid column
+        col_of, col = {}, grid_before(tr)
+        for tc in row_cells_of(tr):
             col_of[col] = tc
-            gs = tc.find(q("w:tcPr") + "/" + q("w:gridSpan")) if tc.find(q("w:tcPr")) is not None else None
-            col += int(gs.get(q("w:val"), "1")) if gs is not None else 1
+            col += cell_span(tc)
         for c, value in zip(target["columns"], values):
             if value and c in col_of:
                 write_cell(col_of[c], str(value))
