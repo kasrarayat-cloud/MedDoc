@@ -1,11 +1,14 @@
 """Isolated alert fault injection: no live Resend, backup, systemd or database calls."""
 from datetime import datetime, timedelta, timezone
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
+import subprocess
 import sys
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -749,6 +752,143 @@ class IncidentNotificationTests(unittest.TestCase):
         self.assertIs(result['clinical_content_included'], False)
         self.assertEqual(result['incident']['conditions_announced'], ['backup_failed', 'backup_stale'])
         self.assertLessEqual(a.LEGACY_KEYS, set(self.state()))
+
+
+#: ⚠️ THE PREVIOUS RELEASE IS PINNED BY COMMIT AND CONTENT, NOT READ FROM `release/v1`. That ref
+#: moves: once this change lands on it, `git show release/v1:...` is THIS code and the test below
+#: compares the new release with itself and passes vacuously. It is also absent from a CI checkout,
+#: which carries full history (fetch-depth 0) but no local branch of that name. dedac162 is the
+#: installed release, an ancestor of this branch, and byte-identical to release/v1's file when this
+#: was written (all three: sha256 11328255...).
+PREVIOUS_RELEASE_COMMIT = 'dedac1625032e32c7a149e6771be22e26c307eb1'
+PREVIOUS_RELEASE_SHA256 = '11328255580d6cfad6e7faf7d4db15685ef48ffbdd900a1070f15faf769ed9c8'
+
+
+def previous_release_source():
+    try:
+        child = subprocess.run(['git', 'show', PREVIOUS_RELEASE_COMMIT + ':rebuild/ops/backup_alerts.py'],
+                               cwd=Path(__file__).resolve().parent, capture_output=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return child.stdout if child.returncode == 0 else None
+
+
+class PreviousReleaseCompatibilityTests(unittest.TestCase):
+    """ROLLBACK = REVERT THE FILE. The installed release must run, unrepaired, on any directory this
+    release has written, and this release must adopt whatever the previous one then leaves behind."""
+    setUp_alerts = BackupAlertsTests.setUp
+
+    def setUp(self):
+        self.setUp_alerts()
+        source = previous_release_source()
+        if source is None:
+            if os.environ.get('CI') == 'true':
+                self.fail('CI must be able to read the previous release; a skip here would be a vacuous pass')
+            self.skipTest('git history holding the previous release is unavailable')
+        self.assertEqual(hashlib.sha256(source).hexdigest(), PREVIOUS_RELEASE_SHA256)
+        old = ModuleType('previous_release_backup_alerts')
+        # `__file__` only locates rebuild/ for the transport import, exactly as when installed.
+        old.__file__, old.__package__ = a.__file__, a.__package__
+        exec(compile(source, PREVIOUS_RELEASE_COMMIT[:8] + ':rebuild/ops/backup_alerts.py', 'exec'), old.__dict__)
+        self.old = old
+        self.old_sender = patch.object(old, 'email_transport', return_value='previous-release-id').start()
+        for name in ('CONFIG', 'ENV_FILE', 'EXTERNAL_CONFIG'):
+            patch.object(old, name, getattr(a, name)).start()
+        patch.object(old, 'backup_condition', self.health).start()
+        patch.object(old, 'recovery_status', self.recovery).start()
+        patch.object(old, 'local_capture_status', return_value=None).start()
+
+    def previous_release_on_a_copy(self, at):
+        """Run the installed release on a COPY of what this release wrote, as a rollback would."""
+        copy = Path(tempfile.mkdtemp(dir=self.root))
+        copy.rmdir()
+        shutil.copytree(self.alerts, copy)
+        copy.chmod(0o700)
+        with patch.object(self.old, 'DIRECTORY', copy):
+            checked, code = self.old.check(at)
+            shown, _ = self.old.status(at + timedelta(minutes=1))
+        return checked, shown, code
+
+    def test_positive_control_the_loaded_previous_release_works_on_its_own_state(self):
+        """Without this, a loader fault would read exactly like an incompatible state file."""
+        with patch.object(self.old, 'DIRECTORY', self.alerts):
+            self.assertEqual(self.old.check(self.at)[0]['condition'], 'healthy')
+            self.health.return_value = 'backup_failed'
+            result, code = self.old.check(self.at + timedelta(minutes=5))
+            self.assertEqual((code, result['condition'], result['alert']['provider_message_id']),
+                             (1, 'backup_failed', 'previous-release-id'))
+            self.assertEqual(self.old.status(self.at + timedelta(minutes=6))[0]['condition'], 'backup_failed')
+        self.old_sender.assert_called_once()
+        self.sender.assert_not_called()
+
+    def test_the_previous_release_runs_on_every_state_this_release_writes(self):
+        steps = [
+            (timedelta(0), 'healthy', 'healthy', None),
+            (timedelta(minutes=5), 'healthy', 'offsite_policy_renewal_due', None),        # first notice
+            (timedelta(minutes=10), 'backup_failed', 'offsite_policy_renewal_due', None), # escalation
+            (timedelta(minutes=15), 'backup_stale', 'offsite_policy_renewal_due', None),  # deferred
+            (timedelta(hours=26), 'backup_failed', 'offsite_policy_renewal_due', None),   # reminder
+            (timedelta(hours=27), 'backup_timeout', 'offsite_policy_renewal_due',
+             RuntimeError('provider-canary')),                                               # uncertain
+            (timedelta(hours=28), 'healthy', 'healthy', None),                                # closed
+            (timedelta(hours=29), 'backup_stale', 'healthy', None),                           # held by cooldown
+        ]
+        for offset, local, remote, failure in steps:
+            with self.subTest(offset=offset):
+                self.health.return_value = local
+                self.recovery.return_value['condition'] = remote
+                self.sender.side_effect = failure
+                expected, _ = a.check(self.at + offset)
+                self.sender.side_effect = None
+                self.assertNotEqual(expected['condition'], 'monitoring_state_unavailable')
+                checked, shown, _ = self.previous_release_on_a_copy(self.at + offset + timedelta(minutes=1))
+                self.assertNotEqual(checked['condition'], 'monitoring_state_unavailable',
+                                    'reverting the file must leave a working monitor')
+                self.assertNotEqual(shown['condition'], 'monitoring_state_unavailable')
+                # Same verdict, and the previous release replays the LATEST notice's own receipt.
+                self.assertEqual(checked['condition'], expected['condition'])
+                self.assertEqual(checked['alert'] and checked['alert']['outcome'],
+                                 expected['alert'] and expected['alert']['outcome'])
+        self.old_sender.assert_not_called()
+
+    def test_this_release_adopts_what_the_previous_release_leaves_behind(self):
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        self.health.return_value = 'backup_stale'
+        a.check(self.at + timedelta(hours=2))                 # escalation: a notice only this release makes
+        with patch.object(self.old, 'DIRECTORY', self.alerts):
+            self.health.return_value = 'healthy'
+            self.assertEqual(self.old.check(self.at + timedelta(hours=3))[0]['condition'], 'healthy')
+            self.health.return_value = 'backup_timeout'
+            result, _ = self.old.check(self.at + timedelta(hours=27))   # the previous release's own first notice
+            self.assertTrue(result['alert']['provider_accepted'])
+        self.old_sender.assert_called_once()
+        result, code = a.check(self.at + timedelta(hours=27, minutes=5))
+        self.assertEqual((code, result['condition']), (1, 'backup_timeout'))
+        self.assertEqual(result['alert']['provider_message_id'], 'previous-release-id')
+        self.assertEqual(result['incident']['conditions_announced'], ['backup_timeout'])
+        self.assertEqual(self.sender.call_count, 2, 'adopting the previous release\'s notice sends nothing')
+
+
+class CrossIncidentSeverityTests(unittest.TestCase):
+    """A MORE SEVERE incident opening inside the between-incidents cooldown is not held by it."""
+    setUp = BackupAlertsTests.setUp
+
+    def test_a_failure_incident_after_a_warning_incident_is_announced_once(self):
+        self.recovery.return_value['condition'] = 'offsite_capacity_low'           # warning
+        a.check(self.at)
+        self.recovery.return_value['condition'] = 'healthy'
+        a.check(self.at + timedelta(hours=1))                                       # incident closes
+        self.health.return_value = 'backup_failed'                                  # failure, 2 h after the warning
+        result, code = a.check(self.at + timedelta(hours=2))
+        self.assertEqual((code, self.sender.call_count), (1, 2),
+                         'a failure opening two hours after a warning notice was held by the cooldown')
+        self.assertTrue(result['alert']['provider_accepted'])
+        # Healthy <-> failure flapping for the rest of the day: nothing more.
+        for step in range(1, 264):
+            self.health.return_value = 'healthy' if step % 2 else 'backup_failed'
+            a.check(self.at + timedelta(hours=2, minutes=5 * step))
+        self.assertEqual(self.sender.call_count, 2)
 
 
 class RecoveryStageTests(unittest.TestCase):
