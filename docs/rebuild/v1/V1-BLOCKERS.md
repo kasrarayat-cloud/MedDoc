@@ -28,7 +28,7 @@ with its evidence and what clears it. **E** = engineering in this programme; **O
 | B-L3 | Deepgram BAA (Enterprise only per its pricing page) and the price effect of `mip_opt_out` | vendor pages; refuter R5 | BAA signed; opt-out enforced account-wide; price confirmed | L + O |
 | B-L4 | Backup storage under a BAA | Backblaze's BAA wording names covered entities; QuillMD is a business associate | use AWS Backup/S3 under the AWS BAA (proposal), or Backblaze confirms a subcontractor BAA | O |
 | B-L5 | Email vendor | Resend offers no BAA | account email stays PHI-free (enforced by test) **or** move to Amazon SES under the AWS BAA | E (enforced) / O (choice) |
-| B-L6 | Retention, deletion, breach-notification and downstream-BAA documents | none exist | counsel provides the schedule and procedures; engineering implements deletion with tombstones | L + E |
+| B-L6 | Retention/deletion controls, breach procedures and downstream agreements | read-only catalog/policy validator/aggregate readiness tool prepared; policy unset; no hold/tombstone/purge workflow | counsel/owner supply schedule, start events, hold authority and procedures; engineering still implements reviewed hold enforcement and tombstone/deletion workflow with backup/downstream reconciliation; readiness counts do not close this gate. See `retention-deletion-readiness.md`. | L + E |
 
 ## Operations on the production target
 
