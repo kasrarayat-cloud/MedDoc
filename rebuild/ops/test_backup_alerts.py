@@ -2289,6 +2289,31 @@ class FailClosedMeansAlertTests(unittest.TestCase):
             self.assertNotIn('state_unreadable', result)
         self.sender.assert_called_once()
 
+    def test_a_restart_during_any_condition_sends_exactly_one_restart_notice(self):
+        """⚠️ R3-3, round 3. `if restart and state['incident_attempt'] != restart` mutated to `if restart
+        and condition in QUIET` survived 161 tests: a restart while a backup or upload was in progress,
+        or offsite recurrence was pending configuration, then sent NO email while the unreadable state
+        was replaced. Every condition a check reaches: exactly one email, the restart notice, naming it
+        (as the new incident's first notice where the condition is announced, otherwise on its own)."""
+        internal = {'authorized_nonclinical_test', 'alert_configuration_unavailable', 'monitoring_state_unavailable',
+                    'monitoring_stale', 'alert_delivery_unconfirmed'}
+        conditions = sorted(set(a.ERRORS) - internal)
+        self.assertTrue(a.QUIET | a.UNANNOUNCED <= set(conditions))
+        for condition in conditions:
+            with self.subTest(condition=condition):
+                for path in self.alerts.iterdir():
+                    path.unlink()
+                self.sender.reset_mock()
+                self.health.return_value = condition
+                a.backup.write_private(self.alerts / 'status.json', b'not json')
+                result, _ = a.check(self.at)
+                self.assertEqual((result['condition'], result.get('state_restarted'), self.sender.call_count),
+                                 (condition, True, 1), 'a restart sent no notice, or more than one')
+                self.assert_restart_notice('state_invalid', condition)
+                announced = condition not in a.QUIET | a.UNANNOUNCED
+                self.assertEqual(json.loads((self.alerts / 'status.json').read_text())['incident_attempt'] is not None,
+                                 announced)
+
     def unreadable_again(self):
         (self.alerts / 'status.json').write_text('not json')
 
