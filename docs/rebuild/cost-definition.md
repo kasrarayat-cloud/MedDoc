@@ -115,8 +115,9 @@ states `thinking` and `output_config.effort`:
 
 It never sends sampling parameters, `budget_tokens` or a prefill. The Claude models listed
 in `LEGACY_CLAUDE_MODELS` (`claude-sonnet-4-6`, `claude-haiku-4-5`, `claude-sonnet-4-5-20250929`,
-`claude-opus-4-1`, each matched exactly as spelled) and every non-Claude model keep the
-pre-profile request byte for byte. The profile is
+each matched exactly as spelled) and every non-Claude model keep the pre-profile request
+byte for byte. `claude-opus-4-1` is deliberately not on the list: Anthropic marks it
+deprecated (retiring 2026-08-05) and this deployment never used it, so it is refused. The profile is
 snapshotted into `Job.config` with the rates and hashed into `pricing_version`, except the
 legacy profile, which hashes as absent. The rollback configuration therefore still
 fingerprints as `configured-v1:fcc80267…`, and no stored fingerprint changes meaning. An

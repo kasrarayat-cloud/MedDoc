@@ -173,7 +173,7 @@ class PricingFingerprint(SimpleTestCase):
                     client.assert_not_called()
         # The LISTED Claude models up to 4.6, and anything that is not an Anthropic Claude id, keep the pre-profile request.
         for provider, model in (('anthropic', 'claude-sonnet-4-6'), ('anthropic', 'claude-haiku-4-5'),
-                                ('anthropic', 'claude-sonnet-4-5-20250929'), ('anthropic', 'claude-opus-4-1'),
+                                ('anthropic', 'claude-sonnet-4-5-20250929'),
                                 ('anthropic', 'synthetic-model'), ('openai', 'gpt-4.1-mini'), ('openai', 'claude-opus-5')):
             with self.subTest(provider=provider, model=model):
                 self.assertEqual(g.request_profile(provider, model, 'x', 'y', ''), g.LEGACY_PROFILE)
@@ -186,7 +186,9 @@ class PricingFingerprint(SimpleTestCase):
         """
         refused = ('claude-mythos-preview', 'claude-mythos', 'claude-sonet-4-6', 'claude-sonnet-4-6 ', 'Claude-Sonnet-4-6',
                    'claude-sonnet-4-6-20260101', 'claude-opus-4-5-20251101', 'claude-3-7-sonnet-20250219',
-                   'us.anthropic.claude-sonnet-4-6', 'claude_sonnet_4_6', 'claude-haiku-4-5-preview', 'claude')
+                   'us.anthropic.claude-sonnet-4-6', 'claude_sonnet_4_6', 'claude-haiku-4-5-preview', 'claude',
+                   # Deprecated by Anthropic (retiring 2026-08-05) and never used here: fails closed like any unlisted id.
+                   'claude-opus-4-1', 'claude-opus-4-1-20250805')
         for model in refused:
             with self.subTest(model=model):
                 self.assertIn('invalid', g.request_profile('anthropic', model, 'disabled', 'medium', ''))
@@ -210,7 +212,7 @@ class PricingFingerprint(SimpleTestCase):
                 self.assertEqual(set(sent), {'model', 'max_tokens', 'system', 'messages', 'output_config'})
         # The list itself is pinned: widening it is a deliberate code change that has to edit this line.
         self.assertEqual(g.LEGACY_CLAUDE_MODELS, frozenset(('claude-sonnet-4-6', 'claude-haiku-4-5',
-                                                            'claude-sonnet-4-5-20250929', 'claude-opus-4-1')))
+                                                            'claude-sonnet-4-5-20250929')))
 
     def test_a_provider_spelled_any_other_way_is_invalid_and_refused_before_any_request(self):
         """R2-3. generate() sends to Anthropic for 'anthropic' and to OpenAI OTHERWISE, and every model check keys on

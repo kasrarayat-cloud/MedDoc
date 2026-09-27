@@ -19,7 +19,7 @@ The installed SDK, `anthropic==0.125.0`, already carries every type used; no upg
 | Request | one call: `max_tokens=6000`, 60 s, no `thinking`/`effort` | model-keyed profile (`core.generation.request_profile`), snapshotted in `Job.config`, hashed into `pricing_version` |
 | claude-sonnet-4-6 | — | the **legacy profile**: the old call byte for byte (tested down to the HTTP body), and the old fingerprint |
 | claude-sonnet-5 | would have run Sonnet 5's defaults (adaptive thinking, effort `high`) | explicit `thinking` and `output_config.effort`; never `temperature`/`top_p`/`top_k`/`budget_tokens`/prefill |
-| claude-haiku-4-5, claude-sonnet-4-5-20250929, claude-opus-4-1 | — | the legacy profile, like claude-sonnet-4-6 (the explicit list `LEGACY_CLAUDE_MODELS`, matched exactly) |
+| claude-haiku-4-5, claude-sonnet-4-5-20250929 | — | the legacy profile, like claude-sonnet-4-6 (the explicit list `LEGACY_CLAUDE_MODELS`, matched exactly). `claude-opus-4-1` is not listed: it is deprecated (retiring 2026-08-05) and unused here, so it is refused |
 | any other Claude model id (e.g. `claude-mythos-preview`, `claude-opus-5`, `claude-sonnet-5-1`, a dated or misspelt id such as `Claude-Sonnet-4-6`) | the old call, which on a newer model means a larger tokenizer and default thinking | **refused before any request** until it has its own profile. Deny by default, not a version comparison |
 | Output bound | `6000` written twice | one `max_output_tokens` per profile, read by the hold and the request: 6000 / 8000 / 16000 |
 | Timeout | 60 s | legacy 60 s; Sonnet 5 120 s, under the worker's `TimeoutStopSec=150` and the 5-minute stale mark |

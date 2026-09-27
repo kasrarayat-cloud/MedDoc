@@ -127,12 +127,14 @@ def claude_generation(model):
 
 
 #: ⚠️ DENY BY DEFAULT. The ONLY Claude model ids the pre-profile (legacy) request may be sent to: each is at or below 4.6,
-#: and each is one the application already accepted — claude-sonnet-4-6 is the live and rollback model; the other three
+#: and each is one the application already accepted — claude-sonnet-4-6 is the live and rollback model; the other two
 #: are the ids the tests already ran through the legacy request. An id is matched EXACTLY as the API would receive it.
+#: claude-opus-4-1 was on this list and is NOT: Anthropic's model table marks it deprecated, retiring 2026-08-05, and this
+#: deployment never used it, so it fails closed like any other unlisted id rather than reaching a retired endpoint.
 #: This replaced a version parser, which read `claude-<family>-<major>[-<minor>]` and so let any id outside that shape —
 #: claude-mythos-preview, measured — fall through to the legacy request (6000 tokens, 60 s, no thinking field) on a model
 #: whose tokenizer and thinking defaults it was never sized for. Adding a model here is a code change with its own test.
-LEGACY_CLAUDE_MODELS=frozenset(('claude-sonnet-4-6','claude-haiku-4-5','claude-sonnet-4-5-20250929','claude-opus-4-1'))
+LEGACY_CLAUDE_MODELS=frozenset(('claude-sonnet-4-6','claude-haiku-4-5','claude-sonnet-4-5-20250929'))
 
 
 def unprofiled(provider,model):
