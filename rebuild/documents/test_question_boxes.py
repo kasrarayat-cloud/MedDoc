@@ -82,6 +82,62 @@ class QuestionBoxes(unittest.TestCase):
                 result = w.inspect(data(doc))
                 self.assertTrue([f for f in result['fields'] if f['locator']['target']['type'] == 'paragraph'])
 
+    def test_paired_spacing_requires_resolved_run_and_table_styles(self):
+        cases = ('character', 'inherited_character', 'unknown_character', 'cyclic_character',
+                 'default_character', 'default_table', 'inherited_default_table',
+                 'unknown_default_table_parent', 'multiple_default_tables', 'explicit_table_override',
+                 'explicit_nil_run_override', 'plain_character')
+        for case in cases:
+            with self.subTest(case=case):
+                doc = Document()
+                table = doc.add_table(rows=1, cols=2)
+                table.cell(0, 0).text = 'Date of Birth'
+                paragraph = table.cell(0, 0).add_paragraph()
+                run = paragraph.add_run('        ')
+                if 'table' in case:
+                    kind = WD_STYLE_TYPE.TABLE
+                    style = doc.styles.add_style('Answer Table', kind)
+                    if case != 'multiple_default_tables':
+                        for candidate in doc.styles.element:
+                            if candidate.get(qn('w:type')) == 'table':
+                                candidate.attrib.pop(qn('w:default'), None)
+                    style.element.set(qn('w:default'), '1')
+                    if case in ('inherited_default_table', 'unknown_default_table_parent'):
+                        parent = doc.styles.add_style('Answer Table Parent', kind)
+                        parent.font.underline = True
+                        style.base_style = parent
+                        if case == 'unknown_default_table_parent':
+                            style.element.find(qn('w:basedOn')).set(qn('w:val'), 'MissingTableParent')
+                    else:
+                        style.font.underline = True
+                    if case == 'explicit_table_override':
+                        table.style = doc.styles.add_style('Plain Explicit Table', kind)
+                else:
+                    style = doc.styles.add_style('Answer Character', WD_STYLE_TYPE.CHARACTER)
+                    if case == 'inherited_character':
+                        parent = doc.styles.add_style('Answer Character Parent', WD_STYLE_TYPE.CHARACTER)
+                        parent.font.underline = True
+                        style.base_style = parent
+                    elif case != 'plain_character':
+                        style.font.underline = True
+                    if case == 'default_character':
+                        for candidate in doc.styles.element:
+                            if candidate.get(qn('w:type')) == 'character':
+                                candidate.attrib.pop(qn('w:default'), None)
+                        style.element.set(qn('w:default'), '1')
+                    else:
+                        run.style = style
+                    if case == 'unknown_character':
+                        run._r.rPr.find(qn('w:rStyle')).set(qn('w:val'), 'MissingAnswerCharacter')
+                    if case == 'cyclic_character':
+                        style.base_style = style
+                    if case == 'explicit_nil_run_override':
+                        run.underline = False  # Conservative retention is permitted; never erase a marked area.
+                result = w.inspect(data(doc))
+                paragraphs = [f for f in result['fields'] if f['locator']['target']['type'] == 'paragraph']
+                self.assertEqual(bool(paragraphs), case not in ('plain_character', 'explicit_table_override'))
+                self.assertEqual(len([f for f in result['fields'] if f['locator']['target']['type'] == 'cell']), 1)
+
     def test_paired_cell_spacing_does_not_claim_controls_or_textboxes(self):
         from .test_word_v3 import _sdt, ff_field
         doc = Document()

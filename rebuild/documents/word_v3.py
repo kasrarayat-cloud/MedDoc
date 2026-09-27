@@ -2140,28 +2140,38 @@ class Detector:
             defaults = self.package.tree("word/styles.xml").find(q("w:docDefaults"))
             if defaults is not None and any(node.tag in markers for node in defaults.iter()):
                 return False
+        def unmarked_style(refs, kind):
+            # An explicit style replaces that type's implicit default, but all
+            # ancestors still participate. Unknown or duplicate references cannot
+            # prove that an empty-looking paragraph has no drawn answer area.
+            if len(refs) > 1:
+                return False
+            if refs:
+                name = refs[0].get(q("w:val"))
+            else:
+                defaults = [s for s in self.package.tree("word/styles.xml").findall(q("w:style"))
+                            if s.get(q("w:type")) == kind and s.get(q("w:default")) in ("1", "true", "on")] \
+                    if "word/styles.xml" in self.package.names else []
+                if len(defaults) > 1:
+                    return False
+                if not defaults:
+                    return True
+                name = defaults[0].get(q("w:styleId"))
+            styles, problem = self.question_box_style_chain(name, kind)
+            return not problem and not any(node.tag in markers for style in styles for node in style.iter())
+
+        if not unmarked_style(slot.el.findall("./" + q("w:pPr") + "/" + q("w:pStyle")), "paragraph"):
+            return False
+        for run in slot.el.iter(R):
+            if not unmarked_style(run.findall("./" + q("w:rPr") + "/" + q("w:rStyle")), "character"):
+                return False
         parent = slot.parent
         while parent is not None:
-            if parent.kind == "tbl":
-                ref = parent.el.find("./" + q("w:tblPr") + "/" + q("w:tblStyle"))
-                if ref is not None:
-                    chain, problem = self.question_box_style_chain(ref.get(q("w:val")), "table")
-                    if problem or any(node.tag in markers for style in chain for node in style.iter()):
-                        return False
-            parent = parent.parent
-        ppr = slot.el.find(q("w:pPr"))
-        ref = ppr.find(q("w:pStyle")) if ppr is not None else None
-        if ref is not None:
-            styles, problem = self.question_box_style_chain(ref.get(q("w:val")), "paragraph")
-        else:
-            defaults = [s for s in self.package.tree("word/styles.xml").findall(q("w:style"))
-                        if s.get(q("w:type")) == "paragraph" and s.get(q("w:default")) in ("1", "true", "on")] \
-                if "word/styles.xml" in self.package.names else []
-            if len(defaults) > 1:
+            if parent.kind == "tbl" and not unmarked_style(
+                    parent.el.findall("./" + q("w:tblPr") + "/" + q("w:tblStyle")), "table"):
                 return False
-            styles, problem = self.question_box_style_chain(defaults[0].get(q("w:styleId")), "paragraph") \
-                if defaults else ([], "")
-        return not problem and not any(node.tag in markers for style in styles for node in style.iter())
+            parent = parent.parent
+        return True
 
     def mapped_beside_label(self, slot):
         """A sole plain cell label already has a directly adjacent mapped answer cell.
