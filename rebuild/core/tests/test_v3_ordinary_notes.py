@@ -1274,3 +1274,72 @@ class RecoveredNoteContext(SimpleTestCase):
         fields = [field('plan', 'Plan', 'long_text')]
         out = run(' '.join(quotes), {'Plan': quotes}, fields=fields)['Plan']
         self.assertEqual((out['status'], out['text']), ('supported', '\n'.join(quotes)))
+
+
+    def test_repeated_label_without_a_selected_competitor_is_still_ambiguous(self):
+        notes = 'The patient has knee pain. He reports stiffness in the morning.'
+        fields = [field('first', 'History', 'long_text'), field('second', 'History', 'long_text')]
+        units, _ = g.source_units(notes, fields)
+        selections = g.UnitSelections(fields=[g.UnitSelection(key='first', unit_ids=[u['id'] for u in units], conflict=False),
+                                              g.UnitSelection(key='second', unit_ids=[], conflict=False)])
+        answers = g.validate_selections(notes, fields, selections, evidence_contract=g.TAB_CONTRACT)
+        self.assertEqual(answers['first']['status'], 'conflict')
+
+    def test_whole_paragraph_must_not_rewrite_a_labelled_value_or_become_an_option(self):
+        notes = 'The patient takes aspirin. Plan is follow-up in six weeks.'
+        quotes = ['The patient takes aspirin.', 'Plan is follow-up in six weeks.']
+        self.assertEqual(run(notes, {'Plan': quotes})['Plan']['status'], 'conflict')
+        fields = [field('option', 'Narrative option', 'choice', ['Yes', 'No'])]
+        notes = 'The patient has knee pain. He reports stiffness in the morning.'
+        units, _ = g.source_units(notes, fields)
+        selections = g.UnitSelections(fields=[g.UnitSelection(key='option', unit_ids=[u['id'] for u in units], conflict=False)])
+        # The intermediate validator also holds this; an unlabelled paragraph never asserts an option.
+        self.assertEqual(g.validate_selections(notes, fields, selections, evidence_contract=g.TAB_CONTRACT)
+                         ['option']['status'], 'conflict')
+
+
+    def test_stored_draft_remains_reviewable_when_source_exceeds_unit_limit(self):
+        notes = 'Patient is well.\n' * 1001
+        quote = 'Patient is well.'
+        fields = [field('history', 'History', 'long_text')]
+        governance = g.governance_for(notes, fields)
+        answer = {'status': 'supported', 'text': quote, 'evidence': [{'quote': quote, 'start': 0, 'end': len(quote)}]}
+        self.assertIsNotNone(g.governed_supported(governance, notes, answer, 'History'))
+
+
+@override_settings(**LIVE)
+class RecoveredNoteContextWorker(V3EncounterFixture, TestCase):
+    generate = RoundThreeThroughTheWorker.generate
+
+    def test_corrected_allergy_is_held_through_the_queued_worker(self):
+        notes = 'Allergies: penicillin.\n\nSorry, I mean amoxicillin.'
+        answers, _ = self.generate(notes, {'Allergies': ['Allergies: penicillin.']})
+        allergy = answers[self.key('Allergies')]
+        self.assertEqual((allergy['status'], allergy['text']), ('conflict', ''))
+        self.assertNotIn('suggestion', allergy)
+        self.assertEqual(allergy['held_candidate']['text'], 'penicillin.')
+        page = self.client.get(f'/encounters/{self.encounter.pk}/')
+        self.assertContains(page, 'Sorry, I mean amoxicillin.')
+
+    def test_intact_ordinary_history_reaches_the_review_page_in_source_order(self):
+        quotes = ['The patient presents with right knee pain for three weeks.', 'He reports stiffness in the morning.']
+        answers, _ = self.generate(' '.join(quotes), {'Reason for visit': quotes[::-1]})
+        history = answers[self.key('Reason for visit')]
+        self.assertEqual((history['status'], history['text']), ('supported', '\n'.join(quotes)))
+        page = self.client.get(f'/encounters/{self.encounter.pk}/')
+        for quote in quotes:
+            self.assertContains(page, quote)
+        blanks = {'blank_' + f['key']: 'on' for f in self.version.fields
+                  if f['label'] != 'Reason for visit' and f['kind'] not in ('signature', 'initials')}
+        self.assertEqual(self.save({'Reason for visit': history['text']}, extra=blanks).status_code, 302)
+        response = self.finalize()
+        encounter = Encounter.objects.get(pk=self.encounter.pk)
+        self.assertEqual(encounter.status, 'finalized', [str(m) for m in response.context['messages']])
+        from core.security import private_path
+        from .test_word_v3_workflow import part_text
+        exported = private_path(encounter.export_path).read_bytes()
+        body = part_text(exported)
+        for quote in quotes:
+            self.assertIn(quote, body)
+        self.assertLess(body.index(quotes[0]), body.index(quotes[1]))
+        self.assertEqual(__import__('hashlib').sha256(exported).hexdigest(), encounter.export_sha256)

@@ -1382,6 +1382,18 @@ def judged_context(governance, notes, index, label, evidence):
     that, for both validators and the page): each other text's occurrences are summarized once per note, and the
     result memoized (eleventh and twelfth passes: a hundred questions over one repeated line held the row lock).
     `index` None: `evidence` alone."""
+    if len(governance) > 11 and evidence:
+        scope = governance[11]
+        warnings = list(scope['corrections'])
+        if re.search(SUBJECTS[0], str(label or ''), re.I):
+            spans = {(entry.get('start'), entry.get('end')) for entry in evidence}
+            warnings += [unit for unit in scope['units'] if (unit['start'], unit['end']) not in spans]
+        if warnings:
+            # Keep every warning's location; never turn this into an adoptable suggestion.
+            unique = {unit['id']: unit for unit in warnings}
+            return [{'quote': unit['quote'], 'start': unit['start'], 'end': unit['end'],
+                     'after': unit['start'] >= evidence[0].get('end', 0), 'same': False}
+                    for unit in unique.values()]
     if not index or not evidence:
         return governed_context(governance, notes, evidence)
     anywhere, by_label, value_of, memo = index
@@ -1429,7 +1441,22 @@ def governance_for(notes, fields, context_labels=()):
     word_form = qualified_word_form(fields)
     governance = heading_governance(notes, labels, lexical=not word_form, per_sentence=per_sentence,
                                     questions=question_labels(fields) if word_form else frozenset())
-    return (*governance, occurrence_index(notes, labels, units))
+    result = (*governance, occurrence_index(notes, labels, units))
+    if natural_v3(fields):
+        # Whole-note warnings are shared by generation, existing drafts, one-click offers and finalization.
+        # Blank paragraphs never erase a spoken correction or prove that consent remains in force.
+        asked, context, _ = v3_generation_fields(fields, context_labels)
+        try:
+            note_units = source_units(notes, asked, context_labels=context)[0]
+            corrections = [unit for unit in note_units
+                           if any(SELF_CORRECTION.search(reading) for reading in readings(unit['quote']))]
+        except ValidationError:
+            # An existing draft must remain reviewable even when its notes exceed generation's unit limit.
+            # No automatic answer is released when this reader cannot establish its context.
+            note_units = [{'id': 0, 'quote': notes, 'start': 0, 'end': len(notes)}]
+            corrections = note_units
+        result += ({'units': note_units, 'corrections': corrections},)
+    return result
 
 
 def page_context(governance, notes, label, evidence):
@@ -1805,6 +1832,31 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
     plain=[bool(parsed and parsed[0] in asked and plain_value(parsed[1])) for parsed in parsed_units] if v3 else []
     paragraph=paragraph_neighbours(notes,units,plain) if v3 else {}
     selected={item.key:item for item in selections.fields}
+    complete_paragraphs = {}
+    if v3:
+        groups, group = [], []
+        for unit in units:
+            if group and BLANK_LINE.search(notes, group[-1]['end'], unit['start']):
+                groups.append(group); group = []
+            group.append(unit)
+        if group: groups.append(group)
+        labels_count = {}
+        for field in fields:
+            name = field['label'].strip().rstrip(':?').casefold()
+            labels_count[name] = labels_count.get(name, 0) + 1
+        picked = {key: set(item.unit_ids) for key, item in selected.items() if isinstance(item, UnitSelection)}
+        for group in groups:
+            ids = {unit['id'] for unit in group}
+            owners = [key for key, chosen in picked.items() if chosen & ids]
+            if len(group) < 2 or len(owners) != 1 or any(parsed_of[unit['id']] for unit in group):
+                continue
+            key = owners[0]
+            target = next(field for field in fields if field['key'] == key)
+            name = target['label'].strip().rstrip(':?').casefold()
+            # This relaxation is for a narrative paragraph, never a side/row/duplicate destination or an option.
+            if (ids <= picked[key] and target.get('kind') in ('text', 'long_text') and labels_count[name] == 1
+                    and not re.search(r'\b(?:left|right|bilateral)\b|[—–:]|\d', name, re.I)):
+                complete_paragraphs.setdefault(key, set()).update(ids)
     for field in fields:
         item=selected[field['key']]
         if clinician_identity(field):
@@ -1825,6 +1877,8 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             if parsed and parsed[1]: explicit.setdefault(value,unit)
         evidence=[]; texts=[]; guarded=False; nearby={}
         choices=[by_id[value] for value in item.unit_ids] if isinstance(item,UnitSelection) else item.quotes
+        if v3 and item.key in complete_paragraphs:
+            choices=sorted(choices, key=lambda unit: unit['start'])
         for choice in choices:
             quote=choice['quote'] if isinstance(choice,dict) else choice
             if quote not in allowed and v3 and isinstance(choice,dict):
@@ -1859,12 +1913,12 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
                 # (a) Anything written after it in its paragraph other than another asked question's PLAIN labelled value
                 #     may change it (the lead's rule held only for the NEXT unit; a correction one labelled line further on
                 #     was adopted past; round 3: a split-off 'Plan: to be obtained tomorrow.' was exempt as labelled).
-                if changer is not None:
+                if changer is not None and unit['id'] not in complete_paragraphs.get(item.key, ()):
                     guarded=True; nearby.setdefault(changer['id'],(unit,changer,True))
                 # (b) An unlabelled or 'Label is ...' sentence depends on the one before it in its paragraph for its subject
                 #     and scope ('He had a myocardial infarction' after a sentence about her father; 'Diagnosis was breast
                 #     cancer.' after one about her sister). A colon-labelled value names its question.
-                if before is not None and not colon_labelled[unit['id']]:
+                if before is not None and not colon_labelled[unit['id']] and unit['id'] not in complete_paragraphs.get(item.key, ()):
                     guarded=True; nearby.setdefault(before['id'],(unit,before,False))
                 # (c) More than one sentence in one unit (a labelled line's remainder, a lowercase continuation), and
                 # (d)-(f) (`v3_shape_holds`): read once per unit (`shape_holds`).
@@ -1907,8 +1961,9 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             # beside it that may change it. A conflict no line governs (a fragment, a question, a value another sentence
             # may change) kept only its evidence, and the page showed an empty conflict.
             own_starts={entry['start'] for entry in own}
+            covered={(entry.get('start'), entry.get('end')) for entry in governed or []}
             context=list(governed or [])+[nearby_entry(notes,held,near,after) for held,near,after in nearby.values()
-                                          if near['start'] not in own_starts]
+                                          if near['start'] not in own_starts and (near['start'], near['end']) not in covered]
             reason=held_reason(context,False,True) if (context or item.conflict or len(explicit)>1) else V3_HELD_REASON
             answer={**answer,'held_candidate':{'text':'\n'.join(texts),'evidence':own,'context':context,'reason':reason}}
         elif status=='conflict':
