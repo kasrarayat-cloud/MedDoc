@@ -4,6 +4,7 @@ import unittest
 from zipfile import ZipFile
 
 from docx import Document
+from docx.enum.style import WD_STYLE_TYPE
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from lxml import etree
@@ -30,6 +31,79 @@ def data(doc):
 
 
 class QuestionBoxes(unittest.TestCase):
+    def test_inherited_heading_scope_and_unknown_or_cyclic_ancestry(self):
+        for ancestor in ('Heading 1', 'Unknown', 'cycle'):
+            with self.subTest(ancestor=ancestor):
+                doc = Document()
+                style = doc.styles.add_style('Donor Section', WD_STYLE_TYPE.PARAGRAPH)
+                style.base_style = doc.styles['Heading 1']
+                if ancestor != 'Heading 1':
+                    style.element.find(qn('w:basedOn')).set(qn('w:val'), 'DonorSection' if ancestor == 'cycle' else ancestor)
+                doc.add_paragraph('Donor', style)
+                doc.add_paragraph('What medications are currently taken?')
+                box(doc)
+                result = w.inspect(data(doc))
+                if ancestor == 'Heading 1':
+                    self.assertEqual(result['fields'][0]['context'], 'Donor')
+                else:
+                    self.assertEqual(result['fields'], [])
+                    self.assertTrue(any('style ancestry' in note for note in result['notes']))
+
+    def test_multi_paragraph_question_keeps_both_sources_in_review(self):
+        for blanks in (0, 1, 2):
+            with self.subTest(blanks=blanks):
+                doc = Document()
+                first = 'Which medications are currently taken?'
+                last = 'Please provide their doses and frequencies.'
+                doc.add_paragraph(first)
+                for _ in range(blanks):
+                    doc.add_paragraph()
+                doc.add_paragraph(last)
+                box(doc)
+                result = w.inspect(data(doc))
+                self.assertEqual(result['fields'], [])
+                self.assertTrue(any(first in note and last in note for note in result['notes']))
+
+    def test_page_break_before_spacer_is_not_plain_empty_space(self):
+        for inherited in (False, True):
+            with self.subTest(inherited=inherited):
+                doc = Document()
+                doc.add_paragraph('What symptoms changed?')
+                p = doc.add_paragraph()
+                if inherited:
+                    style = doc.styles.add_style('New page', WD_STYLE_TYPE.PARAGRAPH)
+                    style.paragraph_format.page_break_before = True
+                    p.style = style
+                else:
+                    p.paragraph_format.page_break_before = True
+                box(doc)
+                result = w.inspect(data(doc))
+                self.assertEqual(result['fields'], [])
+                self.assertTrue(any('page break' in note for note in result['notes']))
+
+    def test_conditional_border_in_ancestor_style_is_not_claimed_as_explicit(self):
+        doc = Document()
+        doc.add_paragraph('What symptoms changed?')
+        table = box(doc, bordered=False)
+        parent = doc.styles.add_style('Base Box', WD_STYLE_TYPE.TABLE)
+        conditional = OxmlElement('w:tblStylePr')
+        conditional.set(qn('w:type'), 'firstRow')
+        parent.element.append(conditional)
+        child = doc.styles.add_style('Child Box', WD_STYLE_TYPE.TABLE)
+        child.base_style = parent
+        props = OxmlElement('w:tblPr')
+        borders = OxmlElement('w:tblBorders')
+        for side in ('top', 'left', 'bottom', 'right'):
+            edge = OxmlElement('w:' + side)
+            edge.set(qn('w:val'), 'single')
+            borders.append(edge)
+        props.append(borders)
+        child.element.append(props)
+        table.style = child
+        result = w.inspect(data(doc))
+        self.assertEqual(result['fields'], [])
+        self.assertTrue(any('border' in note for note in result['notes']))
+
     def test_question_with_its_own_inline_answer_does_not_lose_that_field(self):
         doc = Document()
         doc.add_paragraph('Patient name: __________. What symptoms changed?')

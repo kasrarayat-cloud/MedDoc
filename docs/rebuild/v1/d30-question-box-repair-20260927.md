@@ -5,7 +5,9 @@ provider call, qualification campaign or corpus result replacement occurred.
 
 Worktree: `/opt/meddoc-pro/.worktrees/v1-word-d30`, branch `v1/word-d30`.
 Base: `0b0395a0922f81f5a38526802136197a4bb74b28`.
-Engine SHA256: `326a4baf7d3331add09f36f78e05d66a8fb75acd4e10bd1c2c952447835efbd1`.
+Engine SHA256: `d4d82856ca066c07b537f3c3d28f9a10b1b3bcbf441d516e6ba636699ea8bc77`.
+First frozen candidate: `75e545b2a6469b0d188c779f3c4ee9af02dfc7f5`;
+its refuted evidence remains preserved.
 
 ## Independent expected areas and demonstrated failure
 
@@ -54,6 +56,16 @@ the pre-existing inline name field. The new rule now refuses such a compound
 paragraph, retains the old inline field and flags the separate box for review.
 The before result and repaired control are retained.
 
+The mandatory independent pass then found two introduced scope failures on that
+first frozen candidate: a custom paragraph style based on Heading 1 discarded a
+“Donor” heading, and a two-paragraph medication question kept only the second
+request about doses/frequency. Root and author independently reproduced both.
+The follow-up resolves paragraph style ancestry locally, holds unknown/cyclic
+ancestry visibly, and refuses multi-paragraph question blocks while displaying
+both complete source paragraphs. Page-break-before spacers and conditional table
+borders inherited from ancestor styles also receive explicit review. These are
+new-rule guards; the shared heading/detection rules are unchanged.
+
 ## Measured result and checks
 
 - **26 new destinations**, each matching one independent expected area and its
@@ -87,6 +99,13 @@ The before result and repaired control are retained.
   contract and original digest as the successful workflow/render candidate. Those
   unaffected results are reused. Native Microsoft Word checks were not performed.
 
+The independent eight-artifact probe was replayed unchanged: both direct and
+inherited Donor headings now retain Donor, the compound question refuses with both
+source paragraphs visible, the ordinary positive remains mapped, and direct nil,
+inherited conditional borders, page-break spacers and inline-answer ambiguity
+remain refused. **40 final affected engine checks passed in 11.772 seconds**;
+the complete output is retained separately.
+
 This is **not full D30 success**: six boxes, pre-existing extras/options/type defects
 and whole-document clinical acceptance remain unresolved. Only A25 received the
 complete missing/ordinary/long rendered workflow here; the other new destinations
@@ -119,6 +138,24 @@ reconstructed or cited as retained first-pass artifacts. The failed run log
 survives. Final captures are hash-pinned; the harness now requires a new exclusive
 capture directory. No original corpus first-pass artifact or original file was
 overwritten.
+
+## Finite affected-development scope
+
+At root's request, a passive XML/metadata prefilter examined only the 33 exact
+eligible original DOCX files, verifying each original hash. It did not import or
+execute the candidate engine. Eight originals have a root one-row/one-cell table:
+D17, D21, D26, D27, D30, D31, D33 and D34. Seven contain nonempty prose/title/control
+content in every such table, so they cannot enter this rule's empty-cell path.
+The other 25 originals have no eligible table shape. **Only D30 is affected**.
+
+Root accepted reuse of the existing D30 maps/workflow/render plus the 32 structural
+exclusions. No unchanged-map rerun or new corpus campaign is needed for this rule.
+This proves a narrow changed-code exposure set, not broad compatibility. The
+prefilter, first over-inclusive shape result and classified result are retained
+as `prepare_affected_scope.py`, `23-passive-affected-scope.json` and
+`24-passive-affected-scope-classified.json` in the private runtime. The classified
+proof and script are copied beside this report. All seven held files remain
+unopened for this task, and the original development denominator is still 40.
 
 ## Next safe action
 
