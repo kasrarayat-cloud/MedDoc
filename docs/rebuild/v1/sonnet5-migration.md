@@ -128,7 +128,8 @@ As an example of the hold, take the three-line synthetic note `verify_live` uses
    lives 10 minutes). When it is used after the restart, enqueue compares its `pricing_version` with the current one
    and refuses it: no job, no hold, nothing sent. The doctor sees "The prices or the language model changed after this
    page loaded" and the page re-quotes. Draining is therefore enough; open pages need no action. `configuration_status`
-   and the services page print `live generation jobs: N queued, M running` (a count only); drained means both are 0.
+   and the services page print `live generation jobs: N queued, M running, R in reconciliation` (counts only); drained
+   means all three are 0. A job in reconciliation does not clear by waiting: its hold is kept until you reconcile it.
    Switching `QUILLMD_AI_MODE` between `live` and `fixture` is also a stop: a quote from the other mode is refused at
    enqueue, and a job already queued in the other mode is refused by the worker before anything is sent (not processed,
    nothing charged, hold released).
