@@ -902,8 +902,17 @@ def read_state():
     if not path.exists() and not path.is_symlink():
         # Partial recovery may lose mutable state while retaining a durable
         # request record. Do not invent a fresh incident and send again.
-        backup.require(not any(DIRECTORY.glob('incident-*')), 'Incident state is missing.')
-        return initial_state()
+        pristine = initial_state()
+        evidence = list(DIRECTORY.glob('incident-*'))
+        if evidence == [DIRECTORY / NOTICES_FILE]:
+            # ...with one exception that is provably no loss: a fresh monitor's very first notice
+            # whose ledger landed and whose status.json never did. The ledger kept the pristine
+            # state that check began from, and no request record exists (uncommitted() checks).
+            backup.require(uncommitted(read_notices(), {key: pristine[key] for key in STATUS_KEYS}),
+                           'Incident state is missing.')
+        else:
+            backup.require(not evidence, 'Incident state is missing.')
+        return pristine
     value = json.loads(backup.read_private(path, 65536))
     validate_status(value)
     notices = read_notices() or {'incident': None, 'announced_at': no_announcements(), 'committed': None}
