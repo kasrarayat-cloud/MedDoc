@@ -295,7 +295,7 @@ def configuration_rows():
     import os
     import shutil
     from django.conf import settings
-    from .billing import stripe_test_key_configured
+    from .billing import stripe_key_configured
 
     settings_rows = [
         ('QUILLMD_AI_MODE', settings.AI_MODE),
@@ -310,7 +310,7 @@ def configuration_rows():
         ('DEEPGRAM_API_KEY', os.getenv('DEEPGRAM_API_KEY'), None),
         ('ANTHROPIC_API_KEY', os.getenv('ANTHROPIC_API_KEY'), None),
         ('RESEND_API_KEY', settings.RESEND_API_KEY, None),
-        ('STRIPE_SECRET_KEY', settings.STRIPE_SECRET_KEY, stripe_test_key_configured),
+        ('STRIPE_SECRET_KEY', settings.STRIPE_SECRET_KEY, stripe_key_configured),
         ('STRIPE_WEBHOOK_SECRET', settings.STRIPE_WEBHOOK_SECRET, None),
     ]
     probe, remuxer = shutil.which('ffprobe'), shutil.which('ffmpeg')

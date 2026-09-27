@@ -8,14 +8,24 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 from .models import User, Wallet, LedgerEntry, Reservation, Usage, Membership, Organization, Payment, Refund, WebhookEvent, CostReconciliation, PlatformCost
 from .security import audit, membership
-from .stripe_validation import validate_event_environment
-from quillmd.application_profile import dollars
+from .stripe_validation import live_payments, validate_event_environment
+from quillmd.application_profile import dollars, stripe_key_matches
 ZERO=Decimal('0')
 MULTIPLIER=Decimal('1.5')
 
 def stripe_test_key_configured(key):
     """Recognize sandbox server keys; this does not validate provider access."""
     return isinstance(key,str) and re.fullmatch(r'(?:sk|rk)_test_[A-Za-z0-9_]+',key) is not None
+
+def stripe_key_configured(key):
+    """A server key of the configured QUILLMD_STRIPE_MODE: test keys in test mode, live keys in live mode.
+
+    A key of the other mode is never recognised, so a live key cannot reach Checkout in test mode and a
+    sandbox key cannot in live mode. Test mode is exactly `stripe_test_key_configured`.
+    """
+    from django.conf import settings
+    mode=getattr(settings,'QUILLMD_STRIPE_MODE','test')
+    return stripe_test_key_configured(key) if mode=='test' else stripe_key_matches(key,mode)
 
 def welcome_credit_amount():
     from django.conf import settings
@@ -420,7 +430,9 @@ def record_stripe_event(event,payload_hash):
     if not isinstance(data,dict): raise ValidationError('Malformed payment event data.')
     raw=data.get('object',{})
     if not isinstance(raw,dict): raise ValidationError('Malformed payment event object.')
-    if raw.get('livemode') is True: raise ValidationError('Live payment objects are not accepted.')
+    if live_payments():
+        if raw.get('livemode') is False: raise ValidationError('Test payment objects are not accepted in live mode.')
+    elif raw.get('livemode') is True: raise ValidationError('Live payment objects are not accepted.')
     keys=('id','payment_intent','amount','status','currency','payment_status','amount_total','mode')
     obj={k:raw[k] for k in keys if k in raw}
     if 'metadata' in raw:

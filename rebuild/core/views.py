@@ -25,7 +25,7 @@ from .models import *
 from . import field_location
 from .forms import *
 from .security import audit,departments,scoped,membership,digest,token,store_upload,private_path,rate_limit,client_address
-from .billing import welcome_credit,welcome_credit_label,credit_payment,reconcile_refund,reconciliation,stripe_test_key_configured,reconcile_usage,release
+from .billing import welcome_credit,welcome_credit_label,credit_payment,reconcile_refund,reconciliation,stripe_test_key_configured,stripe_key_configured,reconcile_usage,release
 from .context import integration_status
 from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outcome,may_cancel,ended_key,deliverable,RecordingOverLimit,transcription_quote,seconds_text,standard_voice_limit,UPLOAD_NAME,notes_full
 from .billing import available_balance
@@ -1060,13 +1060,28 @@ def usage_rows(usage):
     absorbed={entry['job_id']:entry['total'] for entry in LedgerEntry.objects.filter(kind='absorbed',job_id__in=[item.job_id for item in usage]).values('job_id').annotate(total=models.Sum('amount'))}
     return [{'usage':item,'reconciliation':item.reconciliation,'absorbed':absorbed.get(item.job_id)} for item in usage]
 
+#: Test mode keeps the sandbox return address it has always used (reached through the SSH tunnel).
+SANDBOX_RETURN_ORIGIN='http://localhost:9130'
+
+def checkout_return_origin():
+    """Where Stripe Checkout returns the payer. Live mode: QUILLMD_APP_BASE_URL, and only a public HTTPS
+    origin — never localhost, never the request's Host header. None refuses the checkout."""
+    if settings.QUILLMD_STRIPE_MODE!='live':return SANDBOX_RETURN_ORIGIN
+    from quillmd.application_profile import public_https_origin_problem
+    origin=(settings.QUILLMD_APP_BASE_URL or '').rstrip('/')
+    return None if public_https_origin_problem(origin,settings.ALLOWED_HOSTS) else origin
+
 @require_POST
 def checkout(request):
     import stripe
     from .billing import checkout_form
     form=checkout_form(request.user,request.POST)
     if not form.is_valid():messages.error(request,'Confirm a one-time amount between $5 and $500.');return redirect('billing')
-    if not stripe_test_key_configured(settings.STRIPE_SECRET_KEY):messages.error(request,'A Stripe test or restricted test key is required. No charge was made.');return redirect('billing')
+    live=settings.QUILLMD_STRIPE_MODE=='live'
+    # A key of the other mode is refused here, before authorization and before any provider call.
+    if not stripe_key_configured(settings.STRIPE_SECRET_KEY):messages.error(request,'A Stripe live or restricted live key is required. No charge was made.' if live else 'A Stripe test or restricted test key is required. No charge was made.');return redirect('billing')
+    return_origin=checkout_return_origin()
+    if return_origin is None:messages.error(request,'Checkout needs the public HTTPS application address configured. No charge was made.');return redirect('billing')
     try:
         authorization=signing.loads(request.POST.get('checkout_token',''),salt='checkout-authorization',max_age=900)
         if authorization.get('user')!=str(request.user.pk) or not isinstance(authorization.get('nonce'),str):raise signing.BadSignature()
@@ -1088,7 +1103,7 @@ def checkout(request):
             if p.checkout_url and p.status in ['pending','processing']:return redirect(p.checkout_url)
             messages.info(request,'This checkout was already submitted. Its payment status remains visible in billing.');return redirect('billing')
     try:
-        session=stripe.checkout.Session.create(api_key=settings.STRIPE_SECRET_KEY,mode='payment',line_items=[{'price_data':{'currency':'usd','unit_amount':p.amount_cents,'product_data':{'name':'QuillMD one-time wallet credit (test)'}},'quantity':1}],metadata={'payment_id':str(p.pk)},success_url='http://localhost:9130/billing/?payment=processing',cancel_url='http://localhost:9130/billing/',idempotency_key=f'checkout:{p.pk}')
+        session=stripe.checkout.Session.create(api_key=settings.STRIPE_SECRET_KEY,mode='payment',line_items=[{'price_data':{'currency':'usd','unit_amount':p.amount_cents,'product_data':{'name':'QuillMD one-time wallet credit' if live else 'QuillMD one-time wallet credit (test)'}},'quantity':1}],metadata={'payment_id':str(p.pk)},success_url=f'{return_origin}/billing/?payment=processing',cancel_url=f'{return_origin}/billing/',idempotency_key=f'checkout:{p.pk}')
         with transaction.atomic():
             p=Payment.objects.select_for_update().get(pk=p.pk)
             if p.stripe_session and p.stripe_session!=session.id:raise ValidationError('Checkout session requires reconciliation.')
