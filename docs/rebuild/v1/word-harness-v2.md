@@ -127,3 +127,34 @@ and an unverifiable question fails the document.
 
 These readings are fixed before the qualification cohort's ground truth is opened by anyone. The first-pass
 results already recorded are not re-scored in place.
+
+## Step 2 done (2026-09-27): v2.1 implemented and pinned — the qualification run uses exactly these files
+
+| file | sha256 |
+|---|---|
+| `word-eval/v2/ticked.py` | `e45a7fc00fd2a2d97173c9093cd1caebe1c7cdd7fe23ffeea6c12fdcdab37b79` |
+| `word-eval/v2/answering.py` (reading 1; the only file that drives the engine) | `75d61b7c29bc129fb03a8a1fcc17fac9cafb2423af28eaca0951e87c7912f6c4` |
+| `word-eval/v2/test_ticked.py` | `221597e6fed15128b6d25d97a4355b7fb6f056bb09a332190205acddf5866104` |
+| `word-eval/v2/info_v21.py` | `0946d5a77f6de2f0accd62c0eef225e14f507001c93acdb8235c05445a7d5033` |
+| `word-eval/v2/codemut_sensitivity.py` | `2fedae90a91bbd38a0700b50eb789b22f98d4c3f571ff36dfc6d258d6013edba` |
+| `word-eval/v2/README.md` | `e00a0a591ca49b45a84fe03182cdc619630c46381324cc57cea179a8a1b0548c` |
+
+Written and self-tested in scratch, copied here byte-identical (hashes re-read after the copy). Outputs go to
+`$TICKED_OUT`, never inside a git work tree or the corpus; set it explicitly for any run.
+
+- 35 self-tests pass; 69 planted mutants (35 from v2.0, 34 for readings 2–6, each first proven applied) are all
+  detected; 36 code mutations of the reader are all detected.
+- **Two further fail-closed readings, declared here with the files:** (i) an option is unreadable when text was
+  inserted right before it, the text just before it was rewritten, or its own text was broken up (a typed label over
+  bracketed options, `[he/she]` → `she`, is never read as a tick or a clean no-tick); (ii) typed bracket boxes
+  (`[ ]`, `( )`) are boxes whose state is unreadable. Both can only move a question from fail to unverifiable, and
+  unverifiable fails the document. The README records every other reading where v2.1 was silent (checkbox_group
+  answered as a single choice; a checkbox answered `True`; a multiple choice given as a list; Wingdings-as-text read
+  only when every font slot names the font and the font table marks it a symbol font).
+- **Information only, the frozen candidate (`79a5b2ec6597`'s engine, extracted by hash
+  `db227329…`, reproducing all 80 frozen v1 exports byte for byte) on the development set:** of 31 documents
+  with option questions, **11 pass, 20 fail, 0 unverifiable**. Of 1,132 option questions: 774 pass, 306 fail
+  (297 mapping failures — the candidate refused the ground-truth label 218 times or had no matching field for 79 —
+  and 9 wrong-destination faults), 52 unverifiable (each reason listed in the README).
+
+The v1 checks still apply alongside `ticked`; `ticked` can only take documents out of the success count.

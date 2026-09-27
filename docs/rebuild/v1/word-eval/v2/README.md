@@ -1,299 +1,410 @@
-# Word harness v2: the `ticked` check
+# Word harness v2.1: the `ticked` check
 
-Implements the `ticked` check of `docs/rebuild/v1/word-harness-v2.md` (committed as `64b1491d`), self-tested on the
-development set only. Written in scratch; nothing under `/opt/meddoc-pro`, no worktree and no corpus file was changed.
+This implements the `ticked` check of `docs/rebuild/v1/word-harness-v2.md`, including the section "v2.1 — seven
+readings" (committed as `3fc6520d`). It was self-tested on the development set only. Everything was written in
+scratch. Nothing under `/opt/meddoc-pro`, no worktree and no corpus file was changed, and no filled document was
+written anywhere: the information pass keeps its exports in memory.
+
+v2.0 (`38f9283f…`, README of `64b1491d`) is the baseline. Every v2.0 fail-closed reading is kept unless a v2.1
+reading replaces it, and each such place is named below.
 
 | file | what |
 |---|---|
 | `ticked.py` | the independent reader: `zipfile` + `lxml` + the standard library; never imports `word_v3` or `core` |
-| `test_ticked.py` | unittest self-tests on dev: information run, resolver cross-check, planted mutants, positive controls |
-| `dev-results.json` | written by the tests: per document and question verdicts, the summary tables, the mutant table |
-| `codemut_sensitivity.py` | supplementary: plants 16 code mutations in copies of `ticked.py` and checks the fast tests catch each |
-| `symcheck/wingdings-sym-render.png` | the LibreOffice render used to check the `w:sym` table entries |
+| `answering.py` | v2.1 reading 1: the ground-truth-derived answers, filled through the candidate's public `fill` API as `final_eval.py` does. It is the only file that touches the engine, which is passed in and never imported by name |
+| `test_ticked.py` | unittest self-tests: the v2.0 set plus the v2.1 readings (35 tests, 69 planted mutants) |
+| `info_v21.py` | the development information pass with the v2.1 answering, for a given engine file |
+| `codemut_sensitivity.py` | plants 36 code mutations in copies of `ticked.py` and checks the fast suite catches each one |
+| `symcheck/` | the LibreOffice renders behind the glyph table: v2.0's `w:sym` render and v2.1's five-form render (see reading 3) |
 
 ```
-sha256  38f9283f3c5db02efee0695873d234a7af1c9af163758886a3653b8190f9dcbc  ticked.py
-sha256  ec6b24531c4f2935e18af9fcbaa125a11672527e201f2e9dbb0d4edbbfe734b2  test_ticked.py
+sha256  e45a7fc00fd2a2d97173c9093cd1caebe1c7cdd7fe23ffeea6c12fdcdab37b79  ticked.py
+sha256  75d61b7c29bc129fb03a8a1fcc17fac9cafb2423af28eaca0951e87c7912f6c4  answering.py
+sha256  221597e6fed15128b6d25d97a4355b7fb6f056bb09a332190205acddf5866104  test_ticked.py
+sha256  0946d5a77f6de2f0accd62c0eef225e14f507001c93acdb8235c05445a7d5033  info_v21.py
+sha256  2fedae90a91bbd38a0700b50eb789b22f98d4c3f571ff36dfc6d258d6013edba  codemut_sensitivity.py
 ```
 
-Run: `/opt/meddoc-pro/rebuild/.venv/bin/python -m unittest -v test_ticked` (14 tests, about 1 minute, all pass). The
-tests read the dev corpus, the frozen results `results/dev-79a5b2ec6597-frozen/` and the v1 `score.py` (for the
-field-level join only). Every corpus path goes through a guard that refuses anything outside `dev/` and that results
-directory. The tests write only `dev-results.json`, next to themselves: if the files move into `word-eval/`, that file
-lands there too.
+The self-tests, the information pass and the sensitivity run below were all run on exactly these bytes.
+
+## Run
+
+All commands run with `/opt/meddoc-pro/rebuild/.venv/bin/python`. None of them needs network access, a provider or a
+`.env` file.
+
+- `-m unittest -v test_ticked`: 35 tests, about 80 s, all pass.
+- `info_v21.py`: about 6 minutes, one process.
+- `codemut_sensitivity.py`: about 50 minutes, one mutant at a time.
+
+Results go to the output directory named by the environment variable `TICKED_OUT`. The default is the session
+scratch directory `…/scratchpad/v1/harness-v21/out`. It is never next to the files: each script refuses an output
+directory inside a git work tree or inside the corpus. `info_v21.py` takes the engine file from `TICKED_ENGINE`. The
+default is the frozen candidate's `word_v3.py`, extracted with
+`git -C /opt/meddoc-pro/.worktrees/v1-word show 79a5b2ec6597:rebuild/documents/word_v3.py`
+(sha256 `db227329…a93a72`). The live `v1-word` worktree is at a later commit, and its engine was not used.
+
+Every corpus path goes through a guard. The guard refuses anything outside `dev/` and
+`results/dev-79a5b2ec6597-frozen/`, and it refuses the `.annotator.json` files as ground truth. `holdout/` and
+`qual/` are never opened.
 
 ## API
 
-`check_document(original_bytes, export_bytes, groundtruth, chosen) -> {"passed", "questions", "counts", "version"}`.
-`chosen[area_id]` is `None` or absent (unanswered), a list of ground-truth option indices (a checkbox: `[0]` ticked,
-`[]` answered unticked), or `{"unknown": reason}` (the question is unverifiable). Every choice, multi_choice,
-checkbox and checkbox_group area gets `verdict` in pass / fail / unverifiable, a `reason`, the box kinds it read and
-the tie mode. `passed` is true only when every such question passes. A document with no such question passes
-vacuously: `ticked` can only take documents out.
+- `check_document(original_bytes, export_bytes, groundtruth, chosen) -> {"passed", "questions", "counts", "version"}`.
+  `chosen[area_id]` is one of:
+  - `None` or absent: unanswered;
+  - a list of ground-truth option indices;
+  - `{"unknown": why}`: the question is unverifiable;
+  - `{"mapping": why}` (v2.1): the question **fails** with a reason starting `mapping:`.
+  Every choice, multi_choice, checkbox and checkbox_group area gets a verdict (pass / fail / unverifiable), a reason,
+  the box kinds it read, and the tie mode (`slot-per-option`, `printed-text`, `dropdown`, `cell-text`).
+- `answering.answer_document(engine, original_bytes, groundtruth, detection, profile, score_doc, answers_for) ->
+  {"export", "chosen", "answers", "refused", "notes"}`.
+- `answering.load_answers_for(final_eval.py)` takes v1's `answers_for` from `final_eval.py`'s own source, via `ast`.
+  It is not retyped, and it is not imported, because importing it would load an engine from a fixed path.
 
-`join_chosen(groundtruth, matched, fields, answers, related)` turns a profile's answers (keyed by detected field)
-into ground-truth option indices, by option text only. `matched` and `related` come from the v1 scorer, which
-`ticked.py` does not import.
+## The seven v2.1 readings, as implemented
 
-## How each rule is read
+1. **The chosen answer in ground-truth terms** (`answering.py`).
+   - Choice: option `min(1, n−1)`. Multiple choice: the first two. Checkbox: ticked.
+   - The option's ground-truth label is given, as text, to the field the v1 scorer's row matches to the question.
+   - If no field matches, the question fails as `mapping: no detected field matches`.
+   - If the engine refuses the fill, the question fails as `mapping: the matched field … did not accept the label …`.
+   - The whole fill is tried first. If the engine refuses it, each answer is tried alone on top of v1's unchanged
+     text answers, and the refused ones are dropped. An answer accepted alone but refused together with the others
+     would be dropped as "refused in combination"; that did not happen on dev.
+   - Text answers are `answers_for` of `final_eval.py`, unchanged.
+   - Before any v2.1 answer was given, the engine file was proven to be the frozen candidate on all 40 dev documents
+     (details under "Development results").
+2. **Printed options with no box, one slot per option.** A slot holding no box reads its option by the inserted mark
+   before the option's printed text, found in *its own slot* (word-bounded, first occurrence).
+   - FAIL-CLOSED: the option is not printed in its slot, or is printed there only inside a longer option's text →
+     unverifiable.
+   - Slots are read one at a time, so one slot may hold a box while another is read by a mark.
+   - The shared-slot (second bullet) mode already read boxless lines by the mark.
+   - This replaces v2.0's fail-closed choice 5.
+3. **Wingdings / Wingdings 2 characters stored as text** are read through the same table as `w:sym`, keyed by the
+   run's font and the character code (`U+F0xx` or the plain byte). FAIL-CLOSED choices:
+   - "The run's font" is the set of slots that can draw the character: ascii **and** hAnsi, plus eastAsia under an
+     eastAsia hint or for an East Asian character, plus cs in a complex-script run. All of them must name one font.
+   - The package's `fontTable.xml` must declare that font with `w:charset 02`. Without that declaration,
+     LibreOffice draws a fallback glyph for the text forms (first render), so the entries were verified only in that
+     configuration.
+   - Every table entry, old and new, was rendered in five storage forms (see "The glyph table").
+   - This replaces v2.0's choice 2 for table entries only; every other symbol-font text character stays unreadable.
+4. **Radio circles.**
+   - Unicode `○` reads unticked; `◉` and `●` read ticked.
+   - Symbol-font circles whose render is `○` / `●` are added to the table (see below).
+   - A `☒` inserted beside a circle that stays `○` reads as the circle unticked, and the question fails. The `☒` is
+     also no option's mark. This is D28 A155 on dev.
+   - FAIL-CLOSED: only these shapes. `◯ ⚪ ⚫ ◎`, the combining enclosing circle U+20DD `⃝`, the heavy rings
+     (Wingdings A2, Wingdings 2 9B), the ring with a dot (Wingdings 2 9C) and Wingdings A4 (`◉`, which renders as
+     a fallback glyph) stay recognised but unreadable.
+5. **Two questions in one paragraph.** A box tied to another question's option, and an inserted mark read for another
+   question's option, are judged by that question only. Rule 3's "every other box" means this question's non-chosen
+   options' boxes plus boxes tied to no question.
+   - This applies to rule 3 (the judgement), not to rule 2 (the ties).
+   - The v2.0 conflict guard stays: one box tied to two questions ties neither, and a conflicted question ties
+     nothing. Its boxes remain "tied to no question" for any third question (`ConflictedTiesAreNoOnes`).
+   - This replaces v2.0's choice 11.
+6. **Cell text.** This applies to a question with ONE slot that is a cell (`…/tc[k]`) empty in the original, and with
+   at least two options. Its exported text must equal an option's label exactly: paragraphs are joined by a line
+   break and only the outer whitespace is stripped; case, punctuation and inner spacing count.
+   - Equal to the chosen label → pass.
+   - Equal to another option's label → that option is shown → fail.
+   - Empty → fail.
+   - Any other text, a box, control or picture in the cell, text that does not print, or two options sharing the
+     label → unreadable.
+   - Several options chosen for one cell → unverifiable.
+   - A question with one slot per option keeps the cell-mark reading of rule 1.
+7. **Legacy dropdowns** are read as v2.0 declared. **No development document has one: the `FORMDROPDOWN` reader is
+   proven on synthetic packages only (`LegacyDropdown`), and a qualification report must say so.**
 
-1. **States.** A content-control checkbox is `w14:checked/@w14:val` in {1, true}. A legacy checkbox is `w:checked`
-   (absent `@w:val` or a true value), else `w:default`. A printed glyph is read from the fixed table below. A cell mark
-   is a cell empty in the original that now holds exactly one of `X x ✓ ✔ ☒`. An inserted mark is a `☒` immediately
-   before the option's printed text (whitespace aside) that the original does not have there. A dropdown's shown text
-   must equal the chosen option's text, with its list entries unchanged.
-2. **Ties** come from the original and the ground truth only. When there is one slot per option, option i is slot i
-   and that slot must hold exactly one box or control. Otherwise each option's printed text is found in document
-   order (first unused occurrence) and takes the box immediately before it; when no option has a box before it, every
-   option takes the box after it; a mixture is unverifiable. Printed options with no box are read by the inserted
-   mark. The original and the export are matched per paragraph, token by token (`difflib`), so an inserted `☒ ` does
-   not shift which box is which.
-3. **Pass** when the ticked set equals the chosen set exactly and every other box in the slots is unticked. For an
-   unanswered question, every box keeps its original state.
-4. **Unverifiable** when no tie is possible or a state cannot be read. It is reported with the question's id, label
-   and reason, and it fails the document.
-
-**The glyph table** is fixed in `ticked.py`:
+## The glyph table (fixed in `ticked.py`)
 
 | Unicode | state |
 |---|---|
-| `☐` | unticked |
-| `☒` `☑` `✓` `✔` | ticked |
+| `☐` `○` | unticked |
+| `☒` `☑` `✓` `✔` `◉` `●` | ticked |
 
-| `w:sym` | unticked | ticked |
+| font | unticked | ticked |
 |---|---|---|
-| Wingdings | `6F` `71` `72` `A8` | `FC` `FD` `FE` |
-| Wingdings 2 | `A3` | `50` `51` `52` `53` `54` |
+| Wingdings | `6F` `71` `72` `A8` `A1`(○) | `FC` `FD` `FE` `6C`(●) |
+| Wingdings 2 | `A3` `81`(○) `99`(○) `9A`(○) | `50` `51` `52` `53` `54` `97`(●) `98`(●) |
 
-Every entry was checked by rendering it as a `w:sym` through LibreOffice's Wingdings recoding (gotenberg:8). The
-render is `symcheck/wingdings-sym-render.png`. Anything else is **unreadable**.
+Every entry was rendered through networkless LibreOffice (gotenberg:8, `docker run --network none`, as the v1
+`render_eval.py` renders) in five forms:
+
+- `w:sym`;
+- `w:t U+F0xx` with rFonts on all four slots;
+- `w:t U+F0xx` with rFonts on ascii/hAnsi only;
+- `w:t` plain byte with rFonts on all four slots;
+- `w:t` plain byte with rFonts on ascii/hAnsi only.
+
+The package's font table declares both fonts with charset 02. Each entry drew the same glyph in all five forms:
+
+- The page is `symcheck/wingdings-wt-render-1.png`; the circle rows are enlarged in `symcheck/zoom-*.png`.
+- In the PDF text layer (`symcheck/text-layer.json`), every form is drawn in OpenSymbol, the font LibreOffice
+  substitutes for Wingdings.
+- The first render had no font table. There, every text form was drawn in NotoSerif as a fallback glyph, which is
+  why the charset condition exists.
+- Left out, because they render as fallback glyphs in every form: Wingdings `78` and Wingdings 2 `2A`. D05's footer
+  box is Wingdings 2 `2A` stored as text, so it stays unreadable.
+
+Anything else recognised as a box is **unreadable**.
 
 ## Fail-closed choices where the declaration is silent
 
-Each choice below is pinned by a test. Mutating any of them in `ticked.py` makes the suite fail (see the sensitivity
-check below).
+v2.0's 20 choices (README of `64b1491d`) stand, except these:
 
-1. **Box recognition is wider than box reading.** A long list of box-like characters (`□ ○ ◉ ● ⃝ ◻ ❏ ✗ √ ⊠ …`),
-   any private-use character, any `w:sym` outside the table, a picture or shape (`w:drawing`, `w:pict`, `w:object`,
-   `mc:AlternateContent`), a run with a character border around nothing but spaces, and a `SYMBOL` / `MACROBUTTON` /
-   `EQ` field are all boxes. Their state is **unreadable**. Otherwise a box outside the table would pass for plain
-   text, and its option would be read by the inserted mark. Radio circles are therefore unreadable (D03, D28, D38).
-2. **Characters in a symbol font carried as `w:t` text are unreadable**, even when their code is in the table. The
-   declaration names `w:sym` codes. Fonts are resolved per character class (ascii / hAnsi / eastAsia under a hint /
-   cs for complex script), through direct `w:rFonts`, the character style chain, the paragraph style chain,
-   document defaults and theme fonts. A private-use character is checked against every font of its run.
-3. **Two `w:sym` codes were left out**: Wingdings `78` (⌧) and Wingdings 2 `2A` (☐). They rendered as fallback
-   glyphs, so they could not be verified.
-4. **List bullets are printed glyphs.** The label from `numbering.xml`, reached through the paragraph or its style
-   chain, `lvlOverride` and `numStyleLink`, is read like any other glyph. A list label that cannot be resolved, or a
-   picture bullet, is an unreadable box. D28's circles come from numbering.
-5. **One slot per option means one box per slot.** An option slot with no box is unverifiable. The sentence "printed
-   options with no box at all are read by the inserted mark" is read as belonging to the second bullet only. The
-   impact is D04 (23 questions) and several eq-shaped slots in D28, D29 and D30. This is the largest ambiguity; see
-   below.
-6. **A cell mark needs a cell slot** (`…/tc[k]`) that is empty in the original: no visible text, box, control or
-   picture. A paragraph slot inside an empty cell is not a cell box. A pre-marked cell is no box at all.
-7. **"Immediately before" allows only whitespace and punctuation** between a box and its option's text. No letter,
-   digit, other box, other option or excluded character may sit between them.
-8. **Printed option text must be word-bounded.** `No` is not found inside `Not sure`. Matching uses NFKC, casefolding
-   and collapsed whitespace. It does not ignore whitespace entirely: `RightLeg` does not match `Right Leg`.
-9. **An option found only inside a longer option's printed text is unverifiable.** The declaration's
-   first-unused-occurrence rule would otherwise tie `Left` to the start of `Left and Right`.
-10. **One box or printed option tied to two ground-truth questions ties neither.** Both questions are unverifiable
-    (D24 A29/A32). Without this, two questions sharing a paragraph with the same option words would both read the
-    first pair.
-11. **Boxes of other questions in the slots count as this question's boxes.** This is literal rule 3 ("every box in
-    the question's slots that belongs to no chosen option is unticked"). So does a `☒` inserted anywhere in a whole
-    paragraph or cell the slots cover that is not the mark read for one of this question's options. That fails
-    closed, but a paragraph shared by two questions can then fail when the other one is answered. See the
-    ambiguities below.
-12. **Content-control checkbox:** a value outside {0, 1, true, false}, a `w14:checked` without `w14:val`, several
-    `w14:checked`, or a shown character that contradicts the state is unreadable. The shown character must be the
-    control's `checkedState` / `uncheckedState` character, by default ☒ / ☐.
-13. **Legacy checkbox:** several `w:checked`, a value outside {0, 1, true, false, on, off}, or neither a `w:checked`
-    nor exactly one `w:default` is unreadable.
-14. **Dropdowns.** Rule 2 does not mention them. A question is a dropdown question only when its slots hold exactly one
-    dropdown and nothing else. Each ground-truth option must equal exactly one list entry (whitespace collapsed,
-    case-sensitive). Showing the placeholder counts as showing nothing. A legacy dropdown reads `w:result`, else
-    `w:default`, else 0, and is unreadable if a visible cached field result disagrees with that. A dropdown cannot
-    show two answers, so a multi-answer chosen set on a dropdown is unverifiable.
-15. **A single checkbox with no options** has one implicit option, and its slot must hold exactly one box.
-16. **Unanswered questions with unreadable boxes are unverifiable** even when the XML did not change (literal rule 4).
-17. **The inserted mark is exactly `☒`**, readable (not in a symbol font, not hidden). An inserted `☑` / `✓` / `○`
-    before an option is unreadable, and an inserted box of any kind that is not an option's mark fails.
-18. **Marks that do not print are unreadable.** Hidden (`w:vanish`, `w:specVanish`, `w:webHidden`, direct or from the
-    character style), white (`FFFFFF` or theme `background1` / `light1`), or under 4 pt. This applies to a glyph, mark,
-    control or cell mark in such a run. Hidden text is not printed option text.
-19. **The structure must be unchanged.** A slot that no longer resolves in the export, or holds a different number
-    or kind of paragraphs, makes the question unverifiable. So does an original box that the token alignment cannot
-    find in the export ("its box is not in the export").
-20. **The chosen set is not in the declaration either.** The declaration says "the set the profile chose", but a
-    profile answers detected fields in the candidate's own option wording. `join_chosen` maps them by text only,
-    never through the engine's option-to-box locator. The field-level match is the v1 scorer's GT-to-field row. The
-    answer's text names a ground-truth option by exact equality, else by an equal sequence of letter/digit words,
-    else by one word sequence starting the other. Each tier needs exactly one hit; ambiguity stops the search. The
-    chosen set is **unknown, and the question unverifiable**, when the matched field is not a choice-like field, the
-    answer names no single option, or an *unmatched* answered tick-writing field touches the slots. A field matched
-    to *another* question is that question's answer; its ticks here are judged by rule 3 as above.
+- **5** is replaced by reading 2.
+- **11** is replaced by reading 5.
+- **2** is narrowed by reading 3.
+- **1**: radio circles are now read by reading 4.
+- **20** (the text join): the information pass uses reading 1 instead. `join_chosen` is kept only to rebuild the
+  chosen sets of the frozen v1-profile exports the self-tests use as bases.
 
-## Development results (frozen candidate `dev-79a5b2ec6597`, information only)
+v2.1 adds these fail-closed readings, each pinned by a test and a code mutation:
 
-The ordinary and long profiles give identical counts, because their choice answers are the same.
+21. **The inserted-mark reading, tightened** (`MarkReadingFailClosed`; mutations C33–C35). Three rules:
+    - The option's printed text must survive as one unbroken run of the original's characters.
+    - When nothing is inserted before the option, the visible token now before it must be the original's.
+    - Text (not whitespace, not `☒`) inserted right before the option makes it **unreadable**. v2.0 read it as
+      unticked.
+
+    Found on dev: the candidate typed a label over bracketed alternatives, as in `[he/she]` → `she`. The letters of
+    `she` lined up with the printed option, so v2.0's rule would have called the question a definite fail. The
+    reader cannot tell a kept option from a retyped one, or a typed `X` mark from other text. v2.0's rule was also
+    fail-open: a typed `X` before a non-chosen option read as unticked, so the question could pass.
+22. **Typed bracket boxes** are boxes of unreadable state (`TypedBoxes`, C36): `[ ]`, `[  ]`, `[]` and `( )` (at least
+    one space inside parentheses). They are the same idea as a bordered blank run. They occur only in D29 on dev,
+    and its ground truth says "mark inside the brackets". Read as text, they would let reading 2 read a correctly
+    marked `[X] no` as "no unticked", a false fail.
+23. Reading 3's font-slot agreement and font-table charset condition (above; C20, C21).
+24. Reading 6's exactness, and "another option's label = that option shown" (C29, C31).
+25. Reading 1's answering choices (listed under "Ambiguities").
+
+A limit that stays: glyph tokens align by kind, not by shape. When a glyph is inserted right after a glyph box, the
+alignment can pair the new glyph with the original box. The displaced box then reads as an inserted box of no
+option, so this can only produce a fail, never a pass (`TypedBoxes` covers the shape).
+
+## Verdicts the v2.1 readings changed in the existing self-tests
+
+Every v2.0 test still passes. Only these expectations changed, each deliberately:
+
+| test | v2.0 expectation | v2.1 | why |
+|---|---|---|---|
+| `FailClosedReadings` D28 A155 | unverifiable, "list bullet" | **pass** (identity) | readings 3+4: its Wingdings 2 radio-circle numbering bullets read `○` |
+| `FailClosedReadings` D04 A2 | unverifiable, "holds 0 boxes" | **pass** (identity) | reading 2: a lettered option with no box is read by the inserted mark |
+| `FailClosedReadings` D06 A58 | unverifiable, "not printed" | **pass** (identity) | reading 6: one empty answer cell is the "cell text" kind |
+| `FailClosedReadings` D05 A6 | unverifiable, "w:t, not w:sym" | unverifiable, "(w:t) outside the glyph table" | reason text only: Wingdings 2 text is read through the table, and `2A` is not in it |
+| `SymTable` Wingdings 2 `F099` | unverifiable | **pass** | reading 4 put `99` (○) in the table; `F09C`, `F09B`, Wingdings `F0A4`, `F0A2` took its place and stay unreadable |
+
+The three pins that now pass are kept as positive pins (`V21IdentityReadings`, together with D28 A7). New unverifiable
+pins were added: D27 A33 (□), D29 A103 (reading 2's no-box branch), D03 A20 (three boxes in one slot), D38 A32
+(mixture), D29 A117 (a label cell that is not empty) and D29 A46 (typed bracket box).
+
+All 35 v2.0 mutants keep their verdicts. The positive controls are unchanged.
+
+On the frozen v1-profile exports with v2.0's join (`DevInformation`, information only), the v2.1 reader changes 189
+of 1,132 question verdicts:
+
+- 187 go from unverifiable to pass:
+  - D06: 105 cell text;
+  - D04 23, D29 30, D03 2, D30 1: slot marks;
+  - D28 19 and D38 6: circles read.
+- 2 go from unverifiable to fail: D28 A158 and A198. Each is unanswered, but a circle was ticked by a v1 extra field.
+
+## Development results: v2.1 answering, frozen candidate `79a5b2ec6597` (information only)
+
+**The engine is the frozen candidate's.** On all 40 dev documents:
+
+- `inspect()` equals the frozen detection;
+- v1's `answers_for` equals the frozen `answers.json`;
+- filling those answers gives exports byte-identical to all 80 frozen v1 exports.
+
+The ordinary and long profiles give identical counts.
 
 **Documents (40 per profile)**
 
 | verdict | count | which |
 |---|---|---|
-| pass | 16 | D01 D05 D07 D08 D09 D11 D12 D13 D14 D15 D25 D31 D33 D34 D37 D39 |
-| fail | 2 | D03, D28 |
-| unverifiable | 13 | D04 D06 D10 D17 D18 D20 D24 D27 D29 D30 D35 D36 D38 |
+| pass | 11 | D01 D05 D06 D08 D09 D11 D13 D25 D33 D34 D37 |
+| fail | 20 | D03 D04 D07 D10 D12 D14 D15 D17 D18 D20 D24 D27 D28 D29 D30 D31 D35 D36 D38 D39 |
+| unverifiable | 0 | |
 | no ticked questions (vacuous pass) | 9 | D02 D16 D19 D21 D22 D23 D26 D32 D40 |
 
 **Questions (1,132 per profile)**
 
 | | pass | fail | unverifiable |
 |---|---|---|---|
-| all | 538 | 2 | 592 |
-| answered (joined) | 518 | 1 | 204 |
-| unanswered | 20 | 1 | 58 |
-| chosen set unknown (the join) | – | – | 330 |
+| all | 774 | 306 | 52 |
+| mapping failures (reading 1) | – | 297 | – |
+| read | 774 | 9 | 50 |
+| chosen set unknown (the ground truth lists no options: D35 A15, A16) | – | – | 2 |
 
-**Per box kind (ordinary profile)**
+The 297 mapping failures are made up of:
 
-| box kind read | pass | fail | unverifiable |
+- 217 labels refused (`invalid_answer`);
+- 1 refused (`answer_too_long`);
+- 79 questions with no matched field.
+
+Most refusals come from candidate option wordings that differ from the printed options. D10's options are `2` and
+`(option 2)` (118). Other wordings: `] kg [`, `Acid ……`, `Yes → if yes, describe…`. Other refusals come from a
+multiple choice mapped to a single-choice field (D03, D07, D14…).
+
+Documents that passed under v2.0 and fail now (D07, D12, D14, D15, D31, D39) fail on mapping only. D06 moved from
+unverifiable to pass (cell text).
+
+The nine read failures:
+
+- D17 A16, D18 A16 and D24 A9: the label list was written into another placeholder, and the options are unmarked.
+- D28 A152 and A184: mapped to text fields; no box ticked.
+- D28 A155: a `☒` was inserted beside a numbering circle that stays `○`.
+- D28 A182 and A183: a 4-option question was mapped to a single checkbox field. The engine takes the label "No" as
+  *unchecked*.
+- D36 A1: "No" was typed after "Circle Yes or No:"; the options are unmarked.
+
+**Per box kind (ordinary; mapping failures keep the box kinds of their informative read)**
+
+| box kind | pass | fail | unverifiable |
 |---|---|---|---|
-| legacy checkbox | 394 | 0 | 118 (all "chosen set unknown": D10's candidate options are `2`, `(option 2)`) |
-| glyph (incl. list bullets) | 48 | 1 | 240 |
-| inserted mark | 27 | 0 | 18 |
-| cell mark | 31 | 0 | 11 |
+| legacy checkbox | 368 | 144 | 0 |
+| glyph (incl. list bullets, circles, text Wingdings) | 188 | 90 | 24 |
+| cell text (reading 6) | 105 | 0 | 0 |
+| inserted mark | 55 | 32 | 13 |
+| cell mark | 30 | 3 | 9 |
 | content-control dropdown | 28 | 0 | 0 |
-| content-control checkbox | 10 | 1 | 0 |
-| content-control checkbox + glyph | 0 | 0 | 2 |
-| picture | 0 | 0 | 16 |
+| content-control checkbox | 0 | 11 | 0 |
+| picture | 0 | 16 | 0 |
 | glyph + picture | 0 | 0 | 1 |
-| untied (no tie possible) | 0 | 0 | 186 |
+| untied | 0 | 10 | 5 |
 
-**Why questions did not pass (ordinary profile)**
+**Every remaining unverifiable question (52 per profile), per box kind**
 
-| count | verdict | reason |
-|---|---|---|
-| 165 | unverifiable | chosen set unknown: unmatched answered detected fields touch the slots (mostly D28) |
-| 122 | unverifiable | chosen set unknown: the answer names no single ground-truth option (118 are D10) |
-| 109 | unverifiable | an option is not printed in the slots (105 are D06 cells where Yes/No/NA/ND is *written*) |
-| 74 | unverifiable | unreadable glyph (radio circles ○ ⃝, Wingdings 2 in `w:t`, □) |
-| 58 | unverifiable | an option slot holds no box (fail-closed choice 5) |
-| 41 | unverifiable | chosen set unknown: matched to a text field |
-| 16 | unverifiable | a picture in the slots (D20's inline-picture boxes, D29) |
-| 2 / 2 / 2 / 1 | unverifiable | several boxes in one option slot / mixture / same option tied to two questions / box not in the export |
-| 1 | **fail** | D03 A21: unanswered, but its `Right` box was ticked. The candidate merged A20 and its Right/Left sub-boxes into one 20-option field and answered "Right" |
-| 1 | **fail** | D28 A155: an inserted `☒` beside options whose printed radio bullets remain |
+- **glyph (24)**
+  - 11: U+20DD `⃝` circles, not a declared radio circle. D03 A33 A76 A79 A80; D38 A5 A31 A39 A41 A47 A52 A56.
+  - 11: a typed bracket box is gone from the export, because the candidate wrote its text answers over `[  ]`.
+    D29 A46 A49 A51 A53 A55 A57 A59 A62 A65 A66 A69.
+  - 2: `□` U+25A1, outside the table. D27 A33 A35.
+- **inserted mark (13)**
+  - 6: the printed options were rewritten: the label was typed over bracketed alternatives. D17 A6 A12, D18 A6 A12,
+    D24 A33 A37.
+  - 5: text inserted right before the options: the label list was written over the placeholder. D17 A11, D18 A11,
+    D24 A16 A27 A34.
+  - 2: the same printed options are tied to two questions. D24 A29 / A32.
+- **cell mark (9)**: the candidate wrote labels or text answers into per-option cells, e.g. "Twice daily" in the
+  "Once daily" cell. D27 A19 A22 A25 A27 A28; D29 A25 A44 A45 A105.
+- **untied (5)**
+  - D35 A15 and A16: the ground truth lists no options.
+  - D03 A34: boxes before some options only (a mixture).
+  - D29 A32: a checkbox slot with no box.
+  - D38 A57: one option slot holds three boxes.
+- **glyph + picture (1)**: D28 A11, picture boxes.
 
-Two further real candidate behaviours are visible as unverifiable, not fail. In D28 A142 the candidate replaced a
-printed radio circle with an `X`, so the original box is gone. D28's grids were split across 3–7 detected fields per
-question.
+Full per-question records are in `out/dev-results-v21.json`.
 
-## Planted mutants (all killed)
+## Planted mutants (69, all detected)
 
-Each mutant starts from a base whose target question passes. It is applied to an in-memory copy. Before its verdict
-is used, it must prove it applied: the bytes differ, the targeted slot's XML differs, and a kind-specific
-post-condition holds. The pre-ticked mutants change both the original and the export.
+Each mutant is applied to an in-memory copy. It must first prove it applied: the bytes differ, the targeted XML
+differs, and a kind-specific post-condition holds.
 
-| kind | mutant | base | verdict |
+- The 35 v2.0 mutants are unchanged: every one gives the same verdict as in v2.0.
+- The v2.1 bases are **synthesized from dev originals**. The export starts as the original and only the question
+  under test is answered.
+
+| reading | base | mutant | verdict |
 |---|---|---|---|
-| content-control checkbox | chosen box unticked | D03 A50* | fail |
-| | tick moved to the neighbour | D03 A50* | fail |
-| | two ticks for one single-choice answer | D03 A50* | fail |
-| | left and right swapped | D03 A22* | fail |
-| | pre-ticked printed default left ticked | D03 A50* | fail |
-| | state ticked but the control still shows ☐ | D03 A50* | unverifiable |
-| legacy checkbox | chosen box unticked | D09 A11 | fail |
-| | tick moved to the neighbour | D09 A11 | fail |
-| | two ticks for one single-choice answer | D09 A11 | fail |
-| | pre-ticked printed default (`w:default`) left ticked | D09 A11 | fail |
-| | multi: one of two chosen boxes unticked | D07 A11 | fail |
-| | `w:checked w:val="maybe"` | D09 A11 | unverifiable |
-| glyph | chosen box unticked | D15 A16 | fail |
-| | tick moved to the neighbour | D35 A11 | fail |
-| | two ticks for one single-choice answer | D35 A11 | fail |
-| | pre-ticked printed default left ticked | D15 A16 | fail |
-| | a box of no option ticked (GT copy without its 3rd option) | D35 A11 | fail |
-| | the ticked glyph does not print (`w:vanish`) | D15 A16 | unverifiable |
-| cell mark | chosen box unticked | D06 A11 | fail |
-| | tick moved to the neighbour | D06 A11 | fail |
-| | two ticks for one single-choice answer | D06 A11 | fail |
-| | pre-ticked printed default (cell pre-marked) | D06 A11 | unverifiable (a pre-marked cell is no box) |
-| | cell holds two marks | D06 A11 | unverifiable |
-| inserted mark | chosen box unticked (mark removed) | D33 A1 | fail |
-| | tick moved to the neighbour | D33 A1 | fail |
-| | two ticks for one single-choice answer | D33 A1 | fail |
-| | pre-ticked printed default (`☒ YES` printed) | D33 A1 | unverifiable (a mixture under rule 2) |
-| | an inserted ☑ instead of ☒ | D33 A1 | fail |
-| | the inserted ☒ does not print (`w:vanish`) | D33 A1 | fail |
-| | a mark beside no option | D33 A1 | fail |
-| dropdown | dropdown shows another entry | D01 A7 | fail |
-| | left and right swapped (right entry shown for left) | D01 A17 | fail |
-| | placeholder shown again | D01 A7 | fail |
-| | pre-selected default left shown | D01 A7 | fail |
-| | a list entry removed | D01 A7 | fail |
+| 2 mark in own slot | D04 A3 (☒ before "Female") | mark removed / moved to "Male" / two marks / ☑ instead / mark after the option / pre-ticked "☒ Male" printed and left / the ☒ hidden | fail ×7 |
+| 3 Wingdings text | D28 A7 (w:t Wingdings 2 `F081` ○; "No" → `F098` ●) | chosen left ○ / tick moved / two ticks / pre-ticked default left / ☒ inserted beside a circle that stays ○ | fail ×5 |
+| | | font table no longer charset 02 / the ticked run's hAnsi another font / `F09C` as the tick | unverifiable ×3 |
+| 4 radio circles | D15 A16 redrawn with ○ ("No" → ●) | ☒ beside a circle that stays ○ (the declared case) / ● back to ○ / ● moved / ◉ on both / pre-ticked default left | fail ×5 |
+| | | `◯` as the tick | unverifiable |
+| 5 two questions | D17 A11+A12 (marks), D03 A60+A61 (⃝ redrawn ☐) | this question's non-chosen option marked (A11; A12) / a mark beside a word of no question / this question's non-chosen box ticked (A61) / a box tied to no question ticked (A61's "After" removed from a GT copy) | fail ×5 |
+| 6 cell text | D06 A58 ("No" written) | cell left empty / another option's label | fail ×2 |
+| | | "no" / "No." / "X" / "No/NA" / hidden label / pre-filled original | unverifiable ×6 |
 
-\* The base is **synthesized**. The candidate's dev exports answer no content-control-checkbox question in
-ground-truth terms, so the base is a copy of its D03 export with the first option's box ticked by hand, `chosen = [0]`.
-It passes before mutation. Left/right questions exist in dev only for content-control checkboxes (D03) and one
-dropdown (D01 A17), so "left and right swapped" is planted on those two kinds only. For the other kinds, "tick moved
-to the neighbour" is the same shape of fault.
+`TwoQuestionsInOneParagraph` also proves two things:
 
-**Positive controls.**
-- Unmutated D01, D07, D09, D15 and D33 ordinary exports pass whole, each with answered questions.
-- Every mutant base passes, including after an lxml re-serialisation.
-- With a pre-ticked original and the default correctly unticked, the question passes (four kinds).
-- Every dev original checked against itself with nothing answered produces no `fail`.
-- Every one of the >20,000 slots the corpus slot tool listed resolves to the element that tool named: kind, text,
-  field type and glyph count.
-- Synthetic `w:sym` packages read the table correctly and treat codes outside it as unreadable.
-- A synthetic legacy dropdown (`FORMDROPDOWN`) passes when it shows the chosen entry. It fails on another entry,
-  changed entries, or a change to an unanswered question. It is unverifiable when its cached result disagrees or its
-  index is out of range.
+- Both bases pass under v2.1 and one question of each fails under v2.0's reading.
+- When one question of a pair fails, the other still passes.
 
-**Sensitivity of the self-test.** `codemut_sensitivity.py` plants 16 code mutations in copies of `ticked.py`. It runs
-the baseline first; the baseline passes. The fast suite catches all 16:
-- the orphan rule
-- the content-control display check
-- the ☒-only inserted mark
-- the inserted-mark scan
-- the cross-question conflict guard
-- unreadable glyphs read as unticked
-- the cell-mark strictness
-- the list-entry check
-- word-bounded option text
-- odd legacy values
-- `w:sym` font handling
-- symbol-font `w:t`
-- hidden runs
-- bordered blanks
-- list bullets
-- the legacy dropdown's cached-result check
+## Positive controls
 
-The word-bound mutation survived at first, because no dev question exercises it. That is why
-`PrintedTextTie.test_tick_on_not_sure_is_not_no` exists.
+- The v2.0 controls all still pass: unmutated D01, D07, D09, D15 and D33 exports; mutant bases, also after a null
+  rewrite; pre-ticked defaults correctly unticked; and every dev original against itself never fails.
+- Each v2.1 base passes, also after a null rewrite: mark-slot, wt-circle, radio, celltext, two-q-marks, two-q-boxes.
+- Readings 2, 3 and 4 have pre-ticked positives (a printed default correctly unticked beside marks).
+- Identity pins pass by the new modes: D04 A2 (inserted mark), D28 A155 (numbering-bullet circle), D28 A7 (w:t
+  circle), D06 A58 (cell text).
+- Synthetic tests pass:
+  - every table entry in text form (PUA and byte; four slots and two);
+  - the `w:sym` radio codes;
+  - the Unicode circles;
+  - cell text;
+  - slot marks read in their own slot;
+  - `answering.py` with a stand-in engine;
+  - `answers_for` equal to v1's.
+- On the real candidate (information pass), every new kind has passing questions:
+  - cell text: D06, 105;
+  - Wingdings 2 text and numbering-bullet circles: D28, 150;
+  - `⃝` boxes the engine redrew as `●`: D38, 6;
+  - slot marks: D04 15, D29 18.
+
+## Code-mutation sensitivity
+
+`codemut_sensitivity.py` first runs the baseline, which passes. It then plants 36 mutations in copies of `ticked.py`,
+each asserted to apply exactly once, and runs the fast suite (every class except `DevInformation` and `Resolver`)
+against each copy. **All 36 are detected** (`out/codemut.log`).
+
+| # | mutation | caught by (first failing test) |
+|---|---|---|
+| C1–C16 | v2.0's 16: orphan rule, content-control display check, ☒-only mark, the inserted-mark scan (re-anchored), conflict guard, unreadable glyph read unticked, cell-mark strictness, list entries, word bounds, odd legacy values, `w:sym` font (re-anchored), symbol-font text, hidden runs, bordered blanks, list bullets, legacy dropdown cached result | as in v2.0 |
+| C17 | reading 2: a slot with no box never read by the mark | `V21IdentityReadings`, mark-slot mutants |
+| C18 | reading 2: the option searched in every slot, not its own | `SlotMarks` |
+| C19 | reading 2: the "inside a longer option" check in a slot removed | `SlotMarks` |
+| C20 | reading 3: the font-table charset condition removed | `WtTable`, the wt-circle font-table mutant |
+| C21 | reading 3: only the ascii slot read | `WtTable`, the wt-circle hAnsi mutant |
+| C22 | reading 3: text forms never read | `V21IdentityReadings`, wt-circle base |
+| C23 | reading 4: `○` read ticked | `RadioCircles`, radio mutants |
+| C24 | reading 4: `●` read unticked | `RadioCircles`, radio base |
+| C25 | reading 5: boxes tied to another question not excluded | `TwoQuestionsInOneParagraph` |
+| C26 | reading 5: marks read for another question not excluded | `TwoQuestionsInOneParagraph` |
+| C27 | reading 5: boxes tied to no question treated as foreign | the orphan mutants |
+| C28 | reading 5: conflicted questions own their boxes | `ConflictedTiesAreNoOnes` |
+| C29 | reading 6: cell text compared case-insensitively | `CellText`, "the label in another case" |
+| C30 | reading 6: cell text removed | `V21IdentityReadings`, celltext base |
+| C31 | reading 6: another option's label read unverifiable | `CellText`, "another option's label written" |
+| C32 | reading 1: a mapping failure read unverifiable | `Mapping` |
+| C33 | inserted text before an option read unticked (v2.0's rule) | `MarkReadingFailClosed` |
+| C34 | the rewritten-neighbour check removed | `MarkReadingFailClosed` |
+| C35 | the unbroken-option-text check removed | `MarkReadingFailClosed` |
+| C36 | typed bracket boxes not recognised | `TypedBoxes`, `FailClosedReadings` D29 A46 |
 
 ## Ambiguities for the declaration's owner
 
-1. **Rule 2's first bullet versus "printed options with no box at all are read by the inserted mark".** Read
-   fail-closed, an option slot must hold a box, so D04's lettered options (23 questions) and similar slots in D28,
-   D29 and D30 are unverifiable. The engine fills these with a `☒ ` prefix, which the other reading would verify.
-2. **Wingdings characters stored as text (`w:t`), not `w:sym`.** Read fail-closed, they are unreadable: D05's
-   footer box, D28's circles. The table would read many of them if extended to `w:t`.
-3. **Overlapping ground-truth questions.** A paragraph shared by two questions makes each question's boxes and marks
-   the other's "boxes of no chosen option". Read literally, answering both fails one. D03 (A20 over A21–A25), D17's
-   four placeholders in `p[7]`, and D38 `p[5]` have this shape. Exempting boxes and marks that another ground-truth
-   question ties would be a deliberate relaxation, and it is not made here.
-4. **How "the set the profile chose" is expressed in ground-truth terms** is undeclared. The text-only join leaves 330
-   of 1,132 dev questions per profile with an unknown chosen set. Candidate labels like `(option 2)` (D10) can only be
-   joined through the candidate's option order, and that order is the locator's; the declaration forbids using it.
-5. **Radio circles** (○ ◉ ⃝, Wingdings 2 `81`/`99`) are outside the table the task fixed. Every radio-button form is
-   unverifiable until the table is widened.
-6. **Written answers in cells** (D06's 105 Yes/No/NA/ND cells, D29's Y/N label cells) are no declared box kind.
-   They are unverifiable.
-7. **Legacy dropdowns** (`FORMDROPDOWN`) occur nowhere in dev. Their reader is tested only on synthetic packages
-   (`LegacyDropdown`). No real form has exercised it.
-8. **The empty profile** is left to v1's package-identity check, as the declaration says. `ticked` does not run on it.
+1. **Reading 1 does not name `checkbox_group`.** It is answered like a choice, with one option `min(1, n−1)`. One
+   ticked option is a valid answer under either reading of a group.
+2. **Ground-truth checkboxes carry no label.** All 123 dev checkboxes have `options: []`, so there is no "label as
+   text" to give. The value given is `True`; a text field writes it as "True" (D27 A25).
+3. **A multiple choice's two labels** are given as a list, which is the engine's shape. A text field matched to a
+   multiple choice then writes the list's repr, `['injuries', 'condition']`.
+4. **Detected choice fields that no ground-truth choice question matches are left unanswered.** There are 198 per
+   profile; v1 answered them. The choice answers are fixed in ground-truth terms, and these fields have none.
+5. **"Does not accept" is observable only as the engine refusing the fill.** A label the engine *accepts with another
+   meaning* is not a refusal: "No" given to a checkbox field is taken as unchecked (D28 A182, A183). The reader then
+   fails the question, so the document outcome is the same, but the class is "read", not "mapping". A text field
+   accepts any label, so questions mapped to text fields are judged by the reader. They are mostly unverifiable when
+   the label is typed over the options.
+6. **Reading 3's "run's font"**: a run has four font slots. Here they must all agree (see above), and the font table
+   must say charset 02. That is the only configuration in which LibreOffice draws the text forms correctly.
+7. **Reading 4 lists three characters.** U+20DD `⃝`, the radio circle of D03 and D38, is not one of them, which leaves
+   11 dev questions unverifiable. `◉` has no Wingdings code that renders, and the Wingdings 2 heavy pair `9B`/`9C` is
+   out.
+8. **Reading 6 speaks of "the chosen option's label" in a cell.** It is read for a question's single answer cell.
+   Per-option empty cells keep the cell-mark reading, so a label written into an option's own cell is unreadable
+   (9 dev questions, all a label written into the wrong option's cell).
+9. **Typed bracket boxes** (`[ ]`) and the tightened mark reading (choices 21, 22) are new fail-closed readings. They
+   hold 22 dev questions at unverifiable where a literal v2.1 reading would say "fail". Every one of them is a
+   candidate that typed text over the options or boxes. Declaring a "typed box" kind (for example `[X]` ticked) would
+   let a correct candidate pass there.
+10. **Legacy dropdowns are proven on synthetic packages only** (reading 7).

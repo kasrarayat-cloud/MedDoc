@@ -11,9 +11,18 @@ ORIGINAL at the same slots.
     absent or None        the profile left the question unanswered
     [i, j, ...]           indices into the area's ground-truth options (a checkbox: [0] ticked, [] answered unticked)
     {"unknown": reason}   the chosen set could not be established -> the question is UNVERIFIABLE (fail closed)
+    {"mapping": reason}   v2.1 reading 1: no candidate field matches the question, or the matched field did not accept
+                          the ground-truth label -> the question FAILS (a mapping failure of the candidate)
 
 Every question gets a verdict pass | fail | unverifiable and a reason. The document passes only when every question
 passes: an unverifiable question fails the document (rule 4). Nothing is skipped.
+
+v2.1 (word-harness-v2.md, "v2.1 - seven readings"): 1 the chosen answer in ground-truth terms (answering.py builds it;
+this file only reads `chosen`, including the "mapping" failure); 2 printed options with no box are read by the inserted
+mark in both association modes; 3 Wingdings / Wingdings 2 characters stored as text read through the w:sym table; 4
+radio circles are boxes; 5 a box tied to another question's option is judged by that question only; 6 an answer
+written as text into a cell empty in the original is the "cell text" box kind; 7 legacy dropdowns unchanged. Each place
+is marked "v2.1 reading N:" below.
 
 Where the declaration is silent the reading is FAIL-CLOSED; every such place is marked "FAIL-CLOSED:" below and is
 listed in README.md.
@@ -26,7 +35,7 @@ import zipfile
 
 from lxml import etree
 
-VERSION = "ticked-v2.0"
+VERSION = "ticked-v2.1"
 
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 W14 = "http://schemas.microsoft.com/office/word/2010/wordml"
@@ -53,11 +62,22 @@ UNICODE_GLYPHS = {"☐": False,      # ☐ BALLOT BOX
                   "☒": True,       # ☒ BALLOT BOX WITH X
                   "☑": True,       # ☑ BALLOT BOX WITH CHECK
                   "✓": True,       # ✓ CHECK MARK
-                  "✔": True}       # ✔ HEAVY CHECK MARK
-# Readable w:sym codes (w:char; F0xx and the plain byte both accepted) in the two fonts the declaration names. Each
-# entry was checked by rendering it as a w:sym through LibreOffice's Wingdings recoding (gotenberg:8, 2026-09-27).
-# FAIL-CLOSED: Wingdings 0x78 (⌧) and Wingdings 2 0x2A (☐) rendered as fallback glyphs there, so they are NOT in the
-# table (unreadable); radio circles (Wingdings 0xA1, Wingdings 2 0x81 / 0x99) are not boxes of this table either.
+                  "✔": True,       # ✔ HEAVY CHECK MARK
+                  # v2.1 reading 4: radio circles are boxes. FAIL-CLOSED: only these three characters; ◯ ⚪ ⚫ ◎ and
+                  # the combining enclosing circle U+20DD stay recognised-but-unreadable (BOX_LIKE below)
+                  "○": False,      # ○ WHITE CIRCLE
+                  "◉": True,       # ◉ FISHEYE
+                  "●": True}       # ● BLACK CIRCLE
+# Readable symbol-font codes (w:char; F0xx and the plain byte both accepted) in the two fonts the declaration names.
+# v2.0: each entry checked by rendering it as a w:sym through LibreOffice's Wingdings recoding (gotenberg:8).
+# v2.1 reading 3: the SAME table reads Wingdings / Wingdings 2 characters stored as TEXT (w:t); every entry, old and
+# new, was re-rendered in five storage forms (w:sym; w:t U+F0xx and w:t plain byte, each with rFonts on all four slots
+# and on ascii/hAnsi only) in a package whose font table declares both fonts with charset 02, and drew the same glyph
+# in all five (symcheck/wingdings-wt-render-1.png, text layer symcheck/text-layer.json: every form drawn in
+# OpenSymbol). v2.1 reading 4 adds the radio circles, each checked the same way.
+# FAIL-CLOSED: Wingdings 0x78 (⌧) and Wingdings 2 0x2A (☐) render as fallback glyphs in every form, so they stay OUT
+# (unreadable). Circles that render as something other than ○ / ● (Wingdings 0xA2 and Wingdings 2 0x9B heavy rings,
+# Wingdings 2 0x9C heavy ring with a dot, Wingdings 0xA4 ◉ which renders as a fallback glyph) are OUT as well.
 SYM_GLYPHS = {
     "wingdings": {0x6F: False,    # □ white square
                   0x71: False,    # ❑ lower-right shadowed white square
@@ -65,23 +85,31 @@ SYM_GLYPHS = {
                   0xA8: False,    # ◻ ballot box
                   0xFC: True,     # ✓ check mark
                   0xFD: True,     # ☒ ballot box with X
-                  0xFE: True},    # ☑ ballot box with check
+                  0xFE: True,     # ☑ ballot box with check
+                  0xA1: False,    # ○ white circle (v2.1 reading 4)
+                  0x6C: True},    # ● black circle (v2.1 reading 4)
     "wingdings 2": {0xA3: False,  # □ white square
                     0x50: True,   # ✓ check mark
                     0x51: True,   # ☒ ballot box with X
                     0x52: True,   # ☑ ballot box with check
                     0x53: True,   # ☒ ballot box with bold X
-                    0x54: True},  # ☒ ballot box with X (variant)
+                    0x54: True,   # ☒ ballot box with X (variant)
+                    0x81: False,  # ○ small white circle (v2.1 reading 4)
+                    0x99: False,  # ○ white circle (v2.1 reading 4)
+                    0x9A: False,  # ○ white circle (v2.1 reading 4)
+                    0x97: True,   # ● black circle (v2.1 reading 4)
+                    0x98: True},  # ● large black circle (v2.1 reading 4)
 }
 # Characters RECOGNISED as boxes but not in the table: a box of UNREADABLE state ("any glyph outside the table is
 # unreadable"). FAIL-CLOSED: recognition is deliberately broader than the table, so a box outside the table is never
 # taken for plain text (which would let its option be read by the inserted mark beside an unread box).
-BOX_LIKE = set("□■▢▣▤▥▦▧▨▩▪▫◻◼◽◾⬜⬛❏❐❑❒○◯●◉◎◌◍❍⚪⚫◇◆◊⊠⊡⊞⊟✅❎✗✘✕✖√☓⍻⮽"
+BOX_LIKE = set("□■▢▣▤▥▦▧▨▩▪▫◻◼◽◾⬜⬛❏❐❑❒◯◎◌◍❍⚪⚫◇◆◊⊠⊡⊞⊟✅❎✗✘✕✖√☓⍻⮽"
                "⃝⃞⃟⃢⃣"          # combining enclosing circle / square / diamond / screen / keycap
                "\U0001F5F3\U0001F5F4\U0001F5F5\U0001F5F6\U0001F5F7\U0001F5F8\U0001F5F9\U0001F5C6\U0001F5C7"
                "\U0001F78E\U0001F78F\U0001F790\U0001F791\U0001F792\U0001F793\U0001F794")
-# Fonts whose characters are pictures. FAIL-CLOSED: a character carried as TEXT (w:t) in one of these fonts is a
-# glyph of UNREADABLE state - the declaration's table names w:sym codes, not w:t characters.
+# Fonts whose characters are pictures. A character carried as TEXT (w:t) in one of these fonts is a glyph (a box);
+# v2.1 reading 3: it is READ through SYM_GLYPHS only when its drawing font is Wingdings / Wingdings 2 without doubt
+# (text_symbol_glyph); FAIL-CLOSED: every other symbol-font text character is a glyph of UNREADABLE state.
 SYMBOL_FONT_NAMES = {"symbol", "webdings", "marlett", "mt extra", "ms outlook", "bookshelf symbol 7", "zapfdingbats",
                      "zapf dingbats", "itc zapf dingbats", "monotype sorts", "dingbats"}
 SYMBOL_FONT_PREFIXES = ("wingdings",)
@@ -115,6 +143,45 @@ def symbol_fonts_for(fonts, c):
 def is_symbol_font(name):
     n = (name or "").strip().lower()
     return bool(n) and (n in SYMBOL_FONT_NAMES or n.startswith(SYMBOL_FONT_PREFIXES))
+
+
+def _east_asian(o):
+    return 0x2E80 <= o <= 0x9FFF or 0xAC00 <= o <= 0xD7AF or 0xF900 <= o <= 0xFAFF or 0xFF00 <= o <= 0xFFEF
+
+
+def drawing_slots(fonts, c):
+    """v2.1 reading 3: the rFonts slots that can draw a text character: ascii AND hAnsi (Word draws ASCII in ascii and
+    other characters, private-use included, in hAnsi; LibreOffice draws both in its Western font, read from ascii),
+    plus eastAsia under an eastAsia hint or for an East Asian character, plus cs in a complex-script run. FAIL-CLOSED:
+    ascii and hAnsi are both required whatever the character, so a run whose two Latin slots name different fonts is
+    never read."""
+    slots = ["ascii", "hAnsi"]
+    if fonts.get("hint") == "eastAsia" or _east_asian(ord(c)):
+        slots.append("eastAsia")
+    if fonts.get("complex"):
+        slots.append("cs")
+    return slots
+
+
+def text_symbol_glyph(pkg, fonts, c, symbol_fonts):
+    """v2.1 reading 3: a Wingdings / Wingdings 2 character stored as text, read through the w:sym table keyed by the
+    run's font and the character code (U+F0xx or the plain byte). FAIL-CLOSED -> a glyph of unreadable state when: the
+    drawing slots do not all name one font; that font is not Wingdings / Wingdings 2; the code is outside the table; or
+    the package's font table does not declare that font a symbol font (w:charset 02) - the configuration every entry
+    was render-checked in (without it LibreOffice draws a fallback glyph)."""
+    o = ord(c)
+    desc = "U+%04X in symbol font %s (w:t)" % (o, "/".join(sorted(symbol_fonts)))
+    names = {(fonts.get(s) or "").strip().lower() for s in drawing_slots(fonts, c)}
+    if len(names) != 1:
+        return Tok("glyph", ch=c, state=None, desc="%s: its drawing font slots name %s" % (desc, " / ".join(sorted(repr(n) for n in names))))
+    font = names.pop()
+    table = SYM_GLYPHS.get(font)
+    low = o - 0xF000 if 0xF000 <= o <= 0xF0FF else (o if o <= 0xFF else None)
+    if table is None or low is None or low not in table:
+        return Tok("glyph", ch=c, state=None, desc="%s outside the glyph table" % desc)
+    if not pkg.symbol_charset(font):
+        return Tok("glyph", ch=c, state=None, desc="%s: the font table does not declare %r a symbol font (charset 02)" % (desc, font))
+    return Tok("glyph", ch=c, state=table[low], desc="w:t %s %02X" % (font, low))
 
 
 def ws(s):
@@ -161,6 +228,23 @@ class Package:
         if getattr(self, "_numbering", None) is None:
             self._numbering = Numbering(self)
         return self._numbering
+
+    def symbol_charset(self, font):
+        """v2.1 reading 3: True when word/fontTable.xml declares `font` (name compared case-insensitively) with
+        w:charset 02 and does not declare it otherwise. FAIL-CLOSED: no font table, no entry, or a second entry of that
+        name with another charset -> False."""
+        if getattr(self, "_charsets", None) is None:
+            self._charsets = {}
+            try:
+                root = self.tree("word/fontTable.xml")
+            except (KeyError, etree.XMLSyntaxError):
+                root = None
+            if root is not None:
+                for f in root.findall(w("font")):
+                    cs = f.find(w("charset"))
+                    val = (cs.get(w("val")) or "").strip().upper() if cs is not None else ""
+                    self._charsets.setdefault((f.get(w("name")) or "").strip().lower(), set()).add(val)
+        return self._charsets.get((font or "").strip().lower()) == {"02"}
 
 
 class Numbering:
@@ -246,7 +330,7 @@ class Numbering:
         fonts = self.pkg.fonts.run_fonts(None, None, rpr=lv.find(w("rPr")))
         out = []
         for c in text:
-            g = glyph_for_char(c, symbol_fonts_for(fonts, c))
+            g = glyph_for_char(c, fonts, self.pkg)
             if g is not None:
                 g.desc = "list bullet: " + g.desc
                 out.append(g)
@@ -491,13 +575,13 @@ def bordered_blank(run):
     return not "".join(t.text or "" for t in run.findall(T)).strip()
 
 
-def glyph_for_char(c, symbol_fonts):
-    """A text character -> a glyph Tok, or None when it is plain text."""
+def glyph_for_char(c, fonts, pkg):
+    """A text character in a run drawn with `fonts` -> a glyph Tok, or None when it is plain text."""
+    symbol_fonts = symbol_fonts_for(fonts, c)
     if symbol_fonts:
         if c.isspace() or c in ("", " "):
             return None
-        return Tok("glyph", ch=c, state=None,
-                   desc="U+%04X in symbol font %s (w:t, not w:sym)" % (ord(c), "/".join(sorted(symbol_fonts))))
+        return text_symbol_glyph(pkg, fonts, c, symbol_fonts)
     if c in UNICODE_GLYPHS:
         return Tok("glyph", ch=c, state=UNICODE_GLYPHS[c], desc=c)
     if c in BOX_LIKE:
@@ -575,7 +659,7 @@ def para_tokens(pkg, p):
                 if symbol is None:
                     symbol = pkg.fonts.run_fonts(r, p)
                 for c in ch.text or "":
-                    g = glyph_for_char(c, symbol_fonts_for(symbol, c))
+                    g = glyph_for_char(c, symbol, pkg)
                     if g is None:
                         toks.append(Tok("t", ch=c, src=r, hidden=bool(hid)))
                     else:
@@ -624,7 +708,34 @@ def para_tokens(pkg, p):
             else:
                 walk(ch)                            # hyperlink, smartTag, customXml, ins, moveTo, dir, bdo, ...
     walk(p)
+    toks = typed_boxes(toks)
     return pkg.numbering.bullet_tokens(p) + toks
+
+
+TYPED_OPEN = {"[": "]", "(": ")"}
+
+
+def typed_boxes(toks):
+    """FAIL-CLOSED (v2.1, found with reading 2): a box TYPED as brackets around nothing but spaces - '[ ]', '[  ]', '[]'
+    or '( )' - is a box of UNREADABLE state, like a bordered blank run. Read as plain text, its option would be read by
+    the inserted mark beside it, and a correctly marked '[X] no' would read as 'no' unticked (D29's ground truth: "mark
+    inside the brackets"). The characters become ONE glyph token."""
+    out, i = [], 0
+    while i < len(toks):
+        t = toks[i]
+        if t.k == "t" and t.ch in TYPED_OPEN and not t.hidden:
+            j = i + 1
+            while j < len(toks) and toks[j].k == "t" and toks[j].ch in (" ", "\t", " ") and not toks[j].hidden:
+                j += 1
+            if j < len(toks) and toks[j].k == "t" and toks[j].ch == TYPED_OPEN[t.ch] and not toks[j].hidden \
+                    and (t.ch == "[" or j > i + 1):
+                shown = "".join(x.ch for x in toks[i:j + 1])
+                out.append(Tok("glyph", ch=shown, src=t.src, state=None, desc="a typed bracket box %r (unreadable)" % shown))
+                i = j + 1
+                continue
+        out.append(t)
+        i += 1
+    return out
 
 
 def element_lines(pkg, el):
@@ -885,7 +996,7 @@ def box_state(pkg, tok):
 
 KIND_NAME = {"glyph": "glyph", "sdtcb": "content-control checkbox", "ffcb": "legacy checkbox", "cell": "cell mark",
              "picture": "picture", "sdtdd": "content-control dropdown", "ffdd": "legacy dropdown",
-             "mark": "inserted mark"}
+             "mark": "inserted mark", "celltext": "cell text"}
 
 
 # ─── the region of a question: its slots read in the original and in the export, aligned ────────────────────────
@@ -902,6 +1013,7 @@ class Region:
     def __init__(self, pkg0, pkg1, slots):
         self.pkg0, self.pkg1 = pkg0, pkg1
         self.lines0, self.lines1, self.own, self.slot_items = [], [], [], {}
+        self.slot_lines, self.cell_slot = {}, {}      # slot -> [(line, own positions or None)]; slot -> a cell box?
         index = {}
         for s in slots:
             try:
@@ -914,7 +1026,7 @@ class Region:
                 raise RegionError("slot %s is not in the export (%s)" % (s, e))
             if len(l0) != len(l1) or any(a[0] != b[0] for a, b in zip(l0, l1)):
                 raise RegionError("slot %s: the export has a different paragraph structure there" % s)
-            items = []
+            items, mine = [], []
             for (tag, e0, t0), (_, e1, t1), o in zip(l0, l1, own0):
                 key = (part, id(e0))
                 if key in index:
@@ -926,8 +1038,11 @@ class Region:
                     self.lines0.append((part, tag, e0, t0))
                     self.lines1.append((part, tag, e1, t1))
                     self.own.append(o)
+                mine.append((i, o))
                 items.extend((i, k) for k, t in enumerate(t0) if (t.is_box or t.is_control) and (o is None or k in o))
             self.slot_items[s] = items
+            self.slot_lines[s] = mine
+            self.cell_slot[s] = cell
         order = sorted(range(len(self.lines0)), key=lambda i: (self.lines0[i][0] != "word/document.xml",
                                                                 self.lines0[i][0], pkg0.pos(self.lines0[i][0], self.lines0[i][2])))
         remap = {old: new for new, old in enumerate(order)}
@@ -935,6 +1050,7 @@ class Region:
         self.lines1 = [self.lines1[i] for i in order]
         self.own = [self.own[i] for i in order]
         self.slot_items = {s: [(remap[i], k) for i, k in v] for s, v in self.slot_items.items()}
+        self.slot_lines = {s: [(remap[i], o) for i, o in v] for s, v in self.slot_lines.items()}
         self.map01, self.inserted1 = [], []
         for (_, _, _, t0), (_, _, _, t1) in zip(self.lines0, self.lines1):
             m = {}
@@ -965,6 +1081,11 @@ class Region:
     def global_key(self, li, k):
         part, _, el, _ = self.lines0[li]
         return (part, self.pkg0.pos(part, el), k)
+
+    def export_key(self, li, j):
+        """An export token position that means the same in every question's region (v2.1 reading 5)."""
+        part, _, el, _ = self.lines1[li]
+        return (part, self.pkg1.pos(part, el), j)
 
 
 # ─── rule 2: options tied to boxes from the original and the ground truth alone ─────────────────────────────────
@@ -1018,6 +1139,25 @@ class Tie:
         self.mode, self.ties, self.orphans = mode, ties, orphans
 
 
+def _mark_tie_in_slot(region, s, option, options):
+    """v2.1 reading 2, one slot per option: an option slot with no box is read by the inserted mark before the option's
+    printed text IN ITS OWN SLOT (first word-bounded occurrence, as in the second bullet). FAIL-CLOSED: the option is
+    not printed in its slot, or is printed there only inside a longer option's printed text -> unverifiable."""
+    needle = norm_search(option)
+    for li, own in region.slot_lines[s]:
+        text, idx = search_line(region.lines0[li][3], own)
+        found = occurrences(text, needle)
+        if not found:
+            continue
+        a, b = found[0]
+        for o in options:
+            n2 = norm_search(o)
+            if len(n2) > len(needle) and any(c <= a and b <= d for c, d in occurrences(text, n2)):
+                raise RegionError("option %r is printed inside option %r" % (option[:30], o[:30]))
+        return ("mark", li, (idx[a], idx[b - 1] + 1))
+    raise RegionError("option %r is not printed in its slot %s, which holds no box" % (option[:40], s.split("#")[-1]))
+
+
 def tie_options(region, area):
     """-> Tie, or raises RegionError (the question is unverifiable). ties[i] per option: ("box", line, pos) |
     ("mark", line, (first, last+1) token positions of its printed text) | ("dropdown", line, pos, entry index)."""
@@ -1047,17 +1187,32 @@ def tie_options(region, area):
                 raise RegionError("option %r is %s the dropdown's list entries" % (o[:40], "not one of" if not hits else "several of"))
             ties.append(("dropdown", li, k, hits[0]))
         return Tie("dropdown", ties, [])
-    # rule 2, first bullet: one slot per option; the slot must hold exactly one box or control
+    # v2.1 reading 6: ONE slot that is a cell empty in the original, for a question of several options: the answer is
+    # written into the cell as text (Yes / No / NA grids) - the "cell text" box kind. FAIL-CLOSED: only a cell slot
+    # (…/tc[k]) with no visible text, box, control or picture in the original; a paragraph slot inside such a cell, or
+    # a cell of one option (one slot per option), keeps the cell-mark reading of rule 1.
+    if len(slots) == 1 and len(options) >= 2 and region.cell_slot.get(slots[0]):
+        (li, _), = region.slot_lines[slots[0]]
+        return Tie("cell-text", [("celltext", li, 0, i) for i in range(len(options))], [])
+    # rule 2, first bullet: one slot per option; the slot must hold exactly one box or control - or, v2.1 reading 2,
+    # no box at all beside the option's printed text, which is then read by the inserted mark
     if len(slots) == len(options):
-        per = []
-        for s in slots:
+        per, ties = [], []
+        for s, o in zip(slots, options):
             got = region.slot_items.get(s, [])
-            if len(got) != 1:
+            if len(got) == 1:
+                per.append(got[0])
+                ties.append(("box",) + got[0])
+            elif not got and not o.startswith("\x00"):
+                ties.append(_mark_tie_in_slot(region, s, o, options))
+            else:
                 raise RegionError("slot %s holds %d boxes (one slot per option needs exactly one)" % (s.split("#")[-1], len(got)))
-            per.append(got[0])
         if len(set(per)) != len(per):
             raise RegionError("two options' slots hold the same box")
-        return Tie("slot-per-option", [("box", li, k) for li, k in per], [x for x in items if x not in set(per)])
+        marks = [(t[1], t[2]) for t in ties if t[0] == "mark"]
+        if len(set(marks)) != len(marks):
+            raise RegionError("two options are read from the same printed text")
+        return Tie("slot-per-option", ties, [x for x in items if x not in set(per)])
     if kind == "checkbox":
         raise RegionError("a checkbox with %d slots and %d options" % (len(slots), len(options)))
     # rule 2, second bullet: each option's printed text, in document order, first unused occurrence
@@ -1125,28 +1280,87 @@ def mark_state(region, li, span):
     does not have there. -> (state, export position of the mark or None, problem)."""
     a, b = span
     m = region.map01[li]
-    if any(k not in m for k in range(a, b)):
+    # FAIL-CLOSED (v2.1): the option's printed text must survive as one unbroken run of the original's characters
+    if any(k not in m for k in range(a, b)) or any(m[k + 1] != m[k] + 1 for k in range(a, b - 1)):
         return None, None, "the option's printed text changed in the export"
-    toks1 = region.lines1[li][3]
+    toks0, toks1 = region.lines0[li][3], region.lines1[li][3]
+    before = a - 1                                   # the original's last visible token before the option
+    while before >= 0 and toks0[before].k == "t" and not toks0[before].ch.strip():
+        before -= 1
     j = m[a] - 1
     while j >= 0 and toks1[j].k == "t" and not toks1[j].ch.strip():
         j -= 1
     if j < 0 or j not in region.inserted1[li]:
+        # FAIL-CLOSED (v2.1): nothing was inserted before the option - but the token now before it must be the one
+        # the original had there; otherwise the text around the option was rewritten (a label typed over bracketed
+        # options lines up with the printed option's letters) and no mark can be read
+        now = next((k for k, v in m.items() if v == j), None) if j >= 0 else None
+        if now != (before if before >= 0 else None):
+            return None, None, "the text right before the option changed in the export"
         return False, None, ""
     t = toks1[j]
     if t.k == "glyph" and t.ch == INSERTED_MARK and t.state is True:
         return True, j, ""
     if t.k == "t":
-        return False, None, ""
+        # FAIL-CLOSED (v2.1): text inserted right before the option is no mark, and not proof of no mark either
+        return None, None, "text inserted right before the option (%r) is not a ☒" % t.ch
     return None, None, "an inserted %s right before the option is not a ☒" % KIND_NAME.get(t.k, t.k)
 
 
-def judge(region, tie, chosen, options):
-    """-> (verdict, reasons, box kinds)."""
+def cell_text_view(pkg, tc, options):
+    """v2.1 reading 6: what a cell (empty in the original) shows -> (option index or None when still empty, problem).
+    The cell's visible text (its paragraphs joined by a line break, ends stripped) must EQUAL one option's label
+    exactly - case, punctuation and inner spacing included. FAIL-CLOSED: any other text, a box, control or picture in
+    the cell, text that does not print, or two options with the same label -> unreadable."""
+    if any(True for _ in tc.iter(*PICTURES)):
+        return None, "the cell holds a picture"
+    lines = element_lines(pkg, tc)
+    toks = [t for _, _, ts in lines for t in ts]
+    if any(t.k != "t" for t in toks):
+        return None, "the cell holds a %s" % KIND_NAME.get(next(t.k for t in toks if t.k != "t"), "box")
+    if any(t.hidden and t.ch.strip() for t in toks):
+        return None, "the cell holds text that does not print"
+    text = "\n".join("".join(t.ch for t in ts) for _, _, ts in lines).strip()
+    if not text:
+        return None, ""
+    hits = [i for i, o in enumerate(options) if o.strip() == text]
+    if len(hits) == 1:
+        return hits[0], ""
+    if hits:
+        return None, "the cell shows %r, the label of %d options" % (text[:40], len(hits))
+    return None, "the cell holds %r, which is no option's label" % text[:40]
+
+
+def judge(region, tie, chosen, options, foreign=frozenset(), foreign_marks=frozenset()):
+    """-> (verdict, reasons, box kinds). v2.1 reading 5: `foreign` holds the (part, position, token) keys of boxes tied
+    to ANOTHER question's option and `foreign_marks` the export keys of inserted marks read for another question's
+    option; each is judged by that question only, never here."""
     pkg0, pkg1 = region.pkg0, region.pkg1
     fails, unread, kinds = [], [], set()
     answered = chosen is not None
     want = set(chosen or [])
+    if tie.mode == "cell-text":
+        _, li, _, _ = tie.ties[0]
+        tc0, tc1 = region.lines0[li][2], region.lines1[li][2]
+        kinds.add("celltext")
+        s0, p0 = cell_text_view(pkg0, tc0, options)
+        s1, p1 = cell_text_view(pkg1, tc1, options)
+        if p0 or s0 is not None:
+            return "unverifiable", ["the original cell is not empty (%s)" % (p0 or "it shows an option")], kinds
+        if p1:
+            return "unverifiable", [p1], kinds
+        if not answered:
+            if s1 is not None:
+                fails.append("unanswered, but the cell now shows %r" % options[s1][:40])
+        elif len(want) != 1:
+            return "unverifiable", ["a cell shows one written answer; the profile chose %d options" % len(want)], kinds
+        else:
+            c = min(want)
+            if s1 is None:
+                fails.append("the cell is still empty; chosen %r" % options[c][:40])
+            elif s1 != c:
+                fails.append("the cell shows %r; chosen %r" % (options[s1][:40], options[c][:40]))
+        return ("fail" if fails else "pass"), fails, kinds
     if tie.mode == "dropdown":
         _, li, k, _ = tie.ties[0]
         t0, t1 = region.tok0(li, k), region.tok1(li, k)
@@ -1203,6 +1417,8 @@ def judge(region, tie, chosen, options):
             elif s0 != s1:
                 fails.append("unanswered, but %r changed from %s to %s" % (label, "ticked" if s0 else "unticked", "ticked" if s1 else "unticked"))
     for li, k in tie.orphans:
+        if region.global_key(li, k) in foreign:
+            continue                                # v2.1 reading 5: another question's option box
         t0, t1 = region.tok0(li, k), region.tok1(li, k)
         kinds.add(t0.k)
         where = "a box of no option (%s)" % KIND_NAME.get(t0.k, t0.k)
@@ -1222,19 +1438,31 @@ def judge(region, tie, chosen, options):
             elif s0 != s1:
                 fails.append("unanswered, but %s changed" % where)
     # FAIL-CLOSED: a box, control or mark INSERTED in the question's slots (a whole paragraph or cell they cover)
-    # that is not the inserted mark read for one of this question's options is a changed meaning
+    # that is not the inserted mark read for one of this question's options is a changed meaning - v2.1 reading 5:
+    # unless it is the inserted mark read for ANOTHER question's option (judged by that question only)
     for li, (_, tag, _, toks1) in enumerate(region.lines1):
         if region.own[li] is not None or tag == "cell":
             continue
         for j in sorted(region.inserted1[li]):
             t = toks1[j]
-            if (t.is_box or t.is_control) and j not in explained.get(li, set()):
+            if (t.is_box or t.is_control) and j not in explained.get(li, set()) and region.export_key(li, j) not in foreign_marks:
                 fails.append("an inserted %s%s that is no option's mark" % (KIND_NAME.get(t.k, t.k), " %s" % t.ch if t.k == "glyph" and len(t.ch) == 1 else ""))
     if fails:
         return "fail", fails + unread, kinds
     if unread:
         return "unverifiable", unread, kinds
     return "pass", [], kinds
+
+
+class _TiedElsewhere:
+    """v2.1 reading 5: `key in x` is true when the key is tied to a question other than `qid`."""
+
+    def __init__(self, owner, qid):
+        self.owner, self.qid = owner, qid
+
+    def __contains__(self, key):
+        ids = self.owner.get(key)
+        return bool(ids) and self.qid not in ids
 
 
 def check_document(original_bytes, export_bytes, groundtruth, chosen):
@@ -1249,7 +1477,11 @@ def check_document(original_bytes, export_bytes, groundtruth, chosen):
                "reason": "", "box_kinds": [], "mode": "", "answered": None}
         results.append(rec)
         c = chosen.get(area["id"])
-        if isinstance(c, dict):
+        if isinstance(c, dict) and "mapping" in c:
+            # v2.1 reading 1: no candidate field matches the question, or the matched field did not accept the
+            # ground-truth label -> the question FAILS as a mapping failure of the candidate, never "unverifiable"
+            rec.update(verdict="fail", reason="mapping: %s" % c["mapping"], answered="mapping")
+        elif isinstance(c, dict):
             rec.update(verdict="unverifiable", reason="chosen set unknown: %s" % c.get("unknown", "?"), answered="unknown")
         rec["answered"] = rec["answered"] or (c is not None)
         n_opts = len(area.get("options") or []) or (1 if area["kind"] == "checkbox" else 0)
@@ -1278,10 +1510,28 @@ def check_document(original_bytes, export_bytes, groundtruth, chosen):
         if len(ids) > 1:
             for i in ids:
                 conflicted.setdefault(i, set()).update(ids - {i})
+    # v2.1 reading 5: every box and every inserted mark a question's ties read, keyed alike in every region, so that a
+    # box tied to another question's option is judged by that question only. FAIL-CLOSED: a question caught by the
+    # conflict guard ties nothing, so its boxes stay "boxes tied to no question" in every other question.
+    box_owner, mark_owner = {}, {}
+    for rec, area, region, t, c in prepared:
+        if area["id"] in conflicted:
+            continue
+        for x in t.ties:
+            if x[0] == "mark":
+                _, pos, _ = mark_state(region, x[1], x[2])
+                if pos is not None:
+                    mark_owner.setdefault(region.export_key(x[1], pos), set()).add(area["id"])
+            else:
+                box_owner.setdefault(region.global_key(x[1], x[2]), set()).add(area["id"])
     for rec, area, region, t, c in prepared:
         options = list(area.get("options") or []) or ["\x00checkbox"]
-        verdict, reasons, kinds = judge(region, t, None if isinstance(c, dict) else c, options)
+        verdict, reasons, kinds = judge(region, t, None if isinstance(c, dict) else c, options,
+                                        _TiedElsewhere(box_owner, area["id"]), _TiedElsewhere(mark_owner, area["id"]))
         rec["box_kinds"] = sorted(KIND_NAME.get(k, k) for k in kinds)
+        if rec["answered"] == "mapping":               # a mapping failure stands whatever the reading
+            rec["reason"] += " | read unanswered: %s%s" % (verdict, (" (" + "; ".join(reasons)[:200] + ")") if reasons else "")
+            continue
         if area["id"] in conflicted:
             rec.update(verdict="unverifiable", reason="a box or printed option is also tied to %s" % ", ".join(sorted(conflicted[area["id"]])))
             continue
@@ -1301,7 +1551,10 @@ FALSE_WORDS = {False, "false", "False", "unchecked", "no", "No"}
 
 
 def join_chosen(groundtruth, matched, fields, answers, related):
-    """The profile's chosen options per ground-truth question, by OPTION TEXT only.
+    """v2.0's dev join, SUPERSEDED for scoring by v2.1 reading 1 (answering.py fixes the chosen answer in ground-truth
+    terms). Kept only so the self-tests can rebuild the chosen sets of the frozen v1-profile exports they use as bases.
+
+    The profile's chosen options per ground-truth question, by OPTION TEXT only.
 
     matched:  {area id: detected field key} from a field-level matcher (the v1 scorer's GT <-> field rows)
     related:  related(area, field) -> bool, the v1 scorer's slot relation (field level)
