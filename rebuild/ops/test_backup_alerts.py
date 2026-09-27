@@ -1824,6 +1824,49 @@ class IncidentLedgerTests(unittest.TestCase):
         self.assertEqual(self.sender.call_count, 3)
         self.assertIn('Condition: backup_stale', self.sender.call_args.args[2])
 
+    def test_a_rise_killed_between_its_writes_after_a_fast_clock_is_sent_at_the_next_check(self):
+        """⚠️ F5, round 2, the refuter's input: the layer a notice keeps must be the state as the check
+        FOUND it, copied before any time is read as now."""
+        self.recovery.return_value['condition'] = 'offsite_capacity_low'
+        a.check(self.at + timedelta(days=3))                          # a warning first notice, fast clock
+        self.recovery.return_value['condition'] = 'offsite_next_run_budget_low'
+        a.check(self.at + timedelta(days=3, hours=2))                 # a same-severity escalation, fast clock
+        self.assertEqual(self.sender.call_count, 2)
+        self.recovery.return_value['condition'] = 'healthy'
+        self.health.return_value = 'backup_failed'
+        crash, calls = self.crash_on_second_write()
+        with crash, self.assertRaises(KeyboardInterrupt):
+            a.check(self.at + timedelta(hours=2))                     # corrected; the rise, killed mid-write
+        self.assertEqual(calls, [a.NOTICES_FILE, 'status.json'])
+        result, code = a.check(self.at + timedelta(hours=3))
+        self.assertEqual((code, result['condition'], self.sender.call_count), (1, 'backup_failed', 3))
+        for text in ('Condition: backup_failed', 'severity increased', 'notice 3'):
+            self.assertIn(text, self.sender.call_args.args[2])
+
+    def test_a_held_rise_killed_between_its_writes_after_a_fast_clock_is_sent_at_the_next_check(self):
+        """⚠️ F5, round 2. Where the kept layer decides whether a notice is sent at all: a held incident
+        rises on the first check after a fast clock is corrected, and that check is killed between the
+        writes. A layer copied AFTER its times were read as now keeps the warning's stamp at the
+        crashed check's time, before the recorded notice's time as the next check reads it, so the
+        warning looks unknown, counts as a failure, and held the failure for a day."""
+        self.recovery.return_value['condition'] = 'offsite_capacity_low'
+        a.check(self.at + timedelta(days=3))                          # a warning notice, fast clock
+        self.recovery.return_value['condition'] = 'healthy'
+        a.check(self.at + timedelta(days=3, hours=1))                 # closes, fast clock
+        self.recovery.return_value['condition'] = 'offsite_next_run_budget_low'
+        result, _ = a.check(self.at + timedelta(days=3, hours=2))     # another warning: held
+        self.assertEqual(result['alert']['outcome'], 'cooldown_suppressed')
+        self.recovery.return_value['condition'] = 'healthy'
+        self.health.return_value = 'backup_failed'
+        crash, calls = self.crash_on_second_write()
+        with crash, self.assertRaises(KeyboardInterrupt):
+            a.check(self.at + timedelta(hours=2))                     # corrected; the held incident rises
+        self.assertEqual(calls, [a.NOTICES_FILE, 'status.json'])
+        result, _ = a.check(self.at + timedelta(hours=3))
+        self.assertEqual((result['alert']['outcome'], self.sender.call_count), ('provider_accepted', 2),
+                         'the rise was held a day by a kept layer copied after its times were read as now')
+        self.assertIn('(highest: warning)', self.sender.call_args.args[2])
+
     def test_crash_between_the_two_writes_of_a_close_leaves_a_working_monitor(self):
         self.health.return_value = 'backup_failed'
         a.check(self.at)
