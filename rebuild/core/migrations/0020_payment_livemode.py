@@ -8,7 +8,9 @@ or live evidence as sandbox.
 
 The reverse refuses while any row is recorded as live: dropping the column erases that evidence, and re-applying
 this migration records every row NULL, which real data mode treats as sandbox money it never spends. A database
-with no live rows still reverses.
+with no live rows still reverses, even with a trigger already missing: an earlier version of this migration installed
+none, and a database that applied it (its plan is empty, so it never receives them) is reversed and re-applied to get
+them. real_mode_payment_check reports the guards missing until then.
 """
 
 from django.db import migrations, models
@@ -24,10 +26,11 @@ CREATE TRIGGER payment_livemode_immutable BEFORE UPDATE ON core_payment FOR EACH
 CREATE TRIGGER webhook_livemode_immutable BEFORE UPDATE ON core_webhookevent FOR EACH ROW EXECUTE FUNCTION quillmd_livemode_guard();
 """
 
+# IF EXISTS: a database that applied the earlier, trigger-less version of this migration must still reverse.
 DROP_LIVEMODE_GUARD = """
-DROP TRIGGER webhook_livemode_immutable ON core_webhookevent;
-DROP TRIGGER payment_livemode_immutable ON core_payment;
-DROP FUNCTION quillmd_livemode_guard();
+DROP TRIGGER IF EXISTS webhook_livemode_immutable ON core_webhookevent;
+DROP TRIGGER IF EXISTS payment_livemode_immutable ON core_payment;
+DROP FUNCTION IF EXISTS quillmd_livemode_guard();
 """
 
 

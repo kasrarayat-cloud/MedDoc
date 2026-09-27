@@ -2,7 +2,7 @@ from decimal import Decimal, ROUND_DOWN
 import hashlib
 import json
 import re
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.models import Sum
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -108,12 +108,42 @@ def sandbox_hold(job):
     return any(real_mode_refuses(r.wallet) for r in Reservation.objects.filter(job=job,state='held').select_related('wallet'))
 
 
+#: The database triggers the sandbox-money rule relies on, as (table, trigger, function, pg_trigger.tgtype): without
+#: them a statement can relabel sandbox evidence as live. tgtype bits: 1 row, 2 before, 8 delete, 16 update, 32 truncate.
+PAYMENT_EVIDENCE_GUARDS=(
+    ('core_ledgerentry','ledger_append_only','quillmd_append_only',27),                    # 0003
+    ('core_webhookevent','webhook_evidence_immutable','quillmd_webhook_evidence_guard',27), # 0008
+    ('core_payment','payment_livemode_immutable','quillmd_livemode_guard',19),              # 0020
+    ('core_webhookevent','webhook_livemode_immutable','quillmd_livemode_guard',19),         # 0020
+)
+
+
+def missing_payment_evidence_guards():
+    """The PAYMENT_EVIDENCE_GUARDS that are missing, disabled, replica-only, conditional or not as installed. Read-only.
+
+    A migration amended after a database applied it never re-runs there (the plan is empty), so the guards are read
+    from pg_trigger rather than inferred from django_migrations.
+    """
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT c.relname,t.tgname,p.proname,t.tgtype,t.tgenabled,t.tgqual IS NULL FROM pg_trigger t "
+                       "JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace "
+                       "JOIN pg_proc p ON p.oid=t.tgfoid WHERE n.nspname=current_schema() AND NOT t.tgisinternal")
+        present={(table,name):row for table,name,*row in cursor.fetchall()}
+
+    def installed(table,name,function,kind):
+        row=present.get((table,name))
+        # tgenabled 'O' fires in ordinary sessions and 'A' always; 'R' (replica only) and 'D' (disabled) never fire here.
+        return row is not None and row[0]==function and row[1]==kind and row[2] in ('O','A') and row[3]
+    return [name for table,name,function,kind in PAYMENT_EVIDENCE_GUARDS if not installed(table,name,function,kind)]
+
+
 def real_mode_payment_problems():
     """Why this database may not run in real data mode, as lines of counts; empty when it may. Read-only.
 
     Real mode runs on a database that has never held sandbox payments: no payment or Stripe event row that is not
     recorded as live, and no paid wallet holding money that live payments do not wholly explain (every 'payment'
-    credit live, and the balance equal to its ledger).
+    credit live, and the balance equal to its ledger). And every guard that keeps that evidence from being relabelled
+    is in place (PAYMENT_EVIDENCE_GUARDS): otherwise the counts above prove nothing.
     """
     problems=[]
     payments=Payment.objects.exclude(livemode=True).count()
@@ -125,6 +155,9 @@ def real_mode_payment_problems():
         ledger=LedgerEntry.objects.filter(wallet=wallet).aggregate(total=Sum('amount'))['total'] or ZERO
         if sandbox_funded(wallet) or ledger!=wallet.balance: unexplained+=1
     if unexplained: problems.append(f'{unexplained} paid wallet(s) holding money that live payments do not wholly explain')
+    missing=missing_payment_evidence_guards()
+    if missing: problems.append(f'{len(missing)} payment evidence guard trigger(s) missing, disabled or altered ({", ".join(missing)}), '
+                                'which migrations 0003, 0008 and 0020 install')
     return problems
 
 
