@@ -2389,6 +2389,30 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
         prefix_safe = prefix_safe and (plain[unit['id']] or patient)
         previous = unit
     if group: groups.append(group)
+    from .v3_patient_topics import patient_relations
+    def actor_shape_holds(unit):
+        text = unit['quote']
+        if unit['id'] not in ends_read: ends_read[unit['id']] = inner_sentence_end(text)
+        if unit['id'] not in shapes_read:
+            own = parsed[unit['id']]
+            printed_side = bool(own and colon[unit['id']] and len(named.get(own[0], ())) == 1
+                                and plain_printed_side_option(named[own[0]][0], own[1]))
+            shapes_read[unit['id']] = (ends_read[unit['id']] and not printed_side) or v3_shape_holds(
+                text, own[1] if own else text)
+        return shapes_read[unit['id']]
+    def actor_acceptable(text, spans):
+        # Only exact literal spans supplied by the complete source grammar can
+        # localize a qualifier. Other visible readings remain withholding-only.
+        return not (any(SELF_CORRECTION.search(reading) or INHERITED_SCOPE.search(reading)
+                        or SCOPE_POINTER.search(reading) for reading in readings(text))
+                    or any(not any(low <= match.start() and match.end() <= high for low, high in spans)
+                           for match in UNSETTLED.finditer(text)))
+    actor = patient_relations(units, patients, subjects, parsed, finite=FINITE_STATEMENT_V3, denial=DENIAL,
+                              acceptable=actor_acceptable, shape_holds=actor_shape_holds)
+    actor_destinations = {label for label, matches in named.items() if len(matches) == 1
+        and label in (CLINICAL_SUBJECT_FIELDS | PLAN_FIELDS | {'allergies'})
+        and matches[0].get('kind') in ('text', 'long_text')
+        and question_key(matches[0].get('context') or '') in ('', label)}
     ancillary_relations = {}
     smoker = named.get('smoker', ())
     if len(smoker) == 1 and smoker[0].get('kind') == 'choice':
@@ -2403,7 +2427,7 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
                     and parsed[ancillary['id']] is None
                     and SMOKER_ANCILLARY_CLAUSE.fullmatch(ancillary['quote'])):
                 ancillary_relations.setdefault('smoker', {})[answer['id']] = {ancillary['id']}
-    blocks, block_of, barriers = [], {}, {}
+    blocks, block_of, barriers, actor_barriers = [], {}, {}, set()
     conditional_spans, conditional_units, conditional_multisentence, conditional_unsafe = [], set(), set(), set()
     for group in groups:
         group_blocks, block = [], []
@@ -2416,7 +2440,8 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
             labelled_topic = bool(colon[unit['id']] and own and own[0] in named)
             patient_after_plain = bool(len(block) == 1 and plain[block[0]['id']]
                                        and own is None and patients[unit['id']])
-            if block and (subjects[unit['id']] or labelled_topic or patient_after_plain):
+            if block and (subjects[unit['id']] or labelled_topic or patient_after_plain
+                          or unit['id'] in actor['boundaries']):
                 group_blocks.append(block); block = []
             block.append(unit)
         if block: group_blocks.append(block)
@@ -2496,10 +2521,23 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
                             for unit in block
                             for text in readings(own[1] if unit is block[0] and own else unit['quote'])
                             for match in UNSETTLED.finditer(text))
+            actor_complete = all(unit['id'] in actor['units'] for unit in block)
+            actor_unsettled = unsettled
+            if actor_complete:
+                actor_unsettled = any(match.group().casefold() not in (set(local_words) | (
+                    PRESENTATION_TIME_WORDS if unit['id'] in age_presentations else set()))
+                    and not any(low <= unit['start'] + match.start() and unit['start'] + match.end() <= high
+                                for low, high in actor['qualifiers'].get(unit['id'], ()))
+                    for unit in block for match in UNSETTLED.finditer(unit['quote']))
             safe = bool(scoped_words and ((owner and plain_value(value)) or (
                 (narrative or factual or patients[block[0]['id']]) and not unsettled
                 and not any(SELF_CORRECTION.search(text) or SCOPE_POINTER.search(text)
                             for text in readings(value)))))
+            if not safe and actor_complete and scoped_words and not actor_unsettled:
+                if (narrative or factual or patients[block[0]['id']]
+                        or (len(block) == 1 and block[0]['id'] in actor['separators'])):
+                    safe = True
+                    actor_barriers.add(index)
             barriers[index] = safe
             blocks.append({'units': block, 'owner': owner, 'position': position,
                            'group_start': index - position, 'group_count': len(group_blocks)})
@@ -2524,6 +2562,7 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
             'inline_options': inline_options,
             'ends_read': ends_read, 'shapes_read': shapes_read, 'blocks': blocks, 'block_of': block_of,
             'barriers': barriers, 'patients': patients, 'named': named,
+            'actor_relations': actor, 'actor_barriers': actor_barriers, 'actor_destinations': actor_destinations,
             'subjects': subjects, 'subject_spans': subject_spans, 'clinical': clinical,
             'declarations': declarations,
             'ambiguous_subjects': ambiguous_subjects, 'unresolved_subjects': unresolved_subjects,
@@ -2564,6 +2603,9 @@ def v3_scope_selection(reading, label, evidence):
     if label in reading['ambiguous_subjects'] or label in reading['coupled']:
         return {'before': set(), 'after': set(), 'complete': set()}
     chosen = set(v3_evidence_units(reading, evidence))
+    def independent_block(index):
+        return reading['barriers'][index] and (index not in reading['actor_barriers']
+                                               or label in reading['actor_destinations'])
     before, after, complete = set(), set(), set()
     after.update(chosen & reading['ancillary_relations'].get(label, {}).keys())
     for index in {reading['block_of'][unit] for unit in chosen}:
@@ -2583,9 +2625,9 @@ def v3_scope_selection(reading, label, evidence):
         # The complete block retains its own preceding source sentences.
         before.update(unit['id'] for unit in block['units'][1:])
         low, high = block['group_start'], block['group_start'] + block['group_count']
-        if all(reading['barriers'][other] for other in range(low, index)):
+        if all(independent_block(other) for other in range(low, index)):
             before.update(ids)
-        if all(reading['barriers'][other] for other in range(index + 1, high)):
+        if all(independent_block(other) for other in range(index + 1, high)):
             after.update(ids)
     return {'before': before, 'after': after, 'complete': complete}
 
