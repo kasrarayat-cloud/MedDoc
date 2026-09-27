@@ -1,3 +1,4 @@
+import bisect
 import hashlib
 import json
 import os
@@ -51,8 +52,11 @@ def wm_resolve(encounter,actor,decisions=None):
     original=private_path(version.template.original_path)
     if hashlib.sha256(original.read_bytes()).hexdigest()!=version.template.sha256:
         raise ValidationError('Original integrity check failed.')
+    from . import wm_narrative
+    proposals=(encounter.template_review.get('proposals',{}) if decisions is None and wm_narrative.enabled(version.fields) else {})
     decisions=decisions if decisions is not None else encounter.template_review.get('decisions',{})
-    variants={row['key']:decisions.get(row['key'],{}).get('variant',row['default_variant'])
+    # A generation's statement proposal pre-selects a wording until the clinician's first save records a decision.
+    variants={row['key']:decisions.get(row['key'],{}).get('variant',(proposals.get(row['key']) or {}).get('variant',row['default_variant']))
               for row in version.review_requirements}
     signer=encounter.finalized_by if encounter.status=='finalized' else actor
     context={'reviewer_id':str(signer.pk),'revision':encounter.revision,'notes':encounter.notes,
@@ -72,18 +76,114 @@ def wm_resolve(encounter,actor,decisions=None):
     return result['review_requirements']
 
 
-def source_quote_evidence(notes,label,raw,labels):
-    """Convert submitted quotations into actual offsets; never accept posted offsets."""
+PREFER_LIMIT=24
+
+
+def source_quote_evidence(notes,label,raw,labels,sentences=None,previous=(),prefer=None,safe=None):
+    """Convert submitted quotations into actual offsets; never accept posted offsets.
+
+    `sentences` (the narrative contract's source units, when it is on): a quotation that is one complete sentence of
+    the notes is that sentence, found first, so an answer read from a sentence keeps it as its evidence. When the same
+    sentence occurs more than once, the occurrence this answer already cited (`previous`) is kept: re-posting the page
+    must not move a left-leg answer onto the right leg's identical sentence. Two quotations of one sentence text are
+    two occurrences, never one twice (round 4); and when a typed sentence occurs more than once, `prefer(unit)` picks
+    the occurrence that carries the answer (the left leg's copy for a left-leg answer): the cited copy is kept while it
+    carries it, and one that does not is left only for a copy that carries it with nothing governing it there (`safe`:
+    never a prior study's or a relative's copy, round 6) — or for one in the paragraph of another line the clinician
+    posted that occurs once (its heading: the clinician's own choice of that copy, round 7) — so re-posting can move an
+    answer off a copy that never did (round 5). The cited copies and at most `PREFER_LIMIT` others are tried, and at
+    most `PREFER_LIMIT` copies are judged by `safe` per call (round 7's cost lens: a copy judged per posted line made a
+    save of 500 repeated lines per field quadratic, 120 s)."""
     if len(raw)>50000:raise ValidationError('Source quotations exceed the supported limit; nothing was truncated.')
+    from . import wm_narrative
+    if sentences is not None and sum(1 for line in raw.splitlines() if line.strip())>wm_narrative.EVIDENCE_LIMIT:
+        # (review's bound, before anything is resolved or stored: round 8 — posted sentences were stored without one, and
+        # each later save matched every posted line against all of them, 190 s)
+        raise ValidationError(f'Cite at most {wm_narrative.EVIDENCE_LIMIT} source sentences for one answer; nothing was truncated.')
     units,_=wm_review.source_units(notes,label,labels)
-    evidence=[]
+    evidence=[];used=set();carried={};clean={};judged=[0]
+    def carries(unit):
+        if unit['start'] not in carried:carried[unit['start']]=bool(prefer(unit))
+        return carried[unit['start']]
+    governed={}
+    def ungoverned_copy(unit):
+        if unit['start'] not in governed:
+            if safe is None:governed[unit['start']]=True
+            elif judged[0]>=PREFER_LIMIT:governed[unit['start']]=False
+            else:
+                judged[0]+=1;governed[unit['start']]=bool(safe(unit))
+        return governed[unit['start']]
+    def safe_copy(unit):
+        if unit['start'] not in clean:
+            if not carries(unit):clean[unit['start']]=0
+            elif safe is None:clean[unit['start']]=2
+            elif judged[0]>=PREFER_LIMIT:clean[unit['start']]=0
+            else:
+                judged[0]+=1;rank=safe(unit)
+                clean[unit['start']]=2 if rank is True else rank if isinstance(rank,int) else 0   # (`safe` may say yes or no)
+        return clean[unit['start']]
+    def cleanest(units):
+        # (a copy nothing governs before one only its side does: round 14 — `RIGHT LEG:` / `No DVT in the left leg.` / S
+        # and `LEFT LEG:` / S kept the right block's S for the left answer)
+        second=None
+        for unit in units:
+            rank=safe_copy(unit)
+            if rank>=2:return unit
+            if rank and second is None:second=unit
+        return second
+    counts={}
+    for unit in sentences or ():counts[unit['quote']]=counts.get(unit['quote'],0)+1
+    posted={line.strip() for line in raw.splitlines() if line.strip()}
+    anchors={wm_narrative.paragraph_start(notes,unit['start']) for unit in sentences or ()
+             if unit['quote'] in posted and counts[unit['quote']]==1} if prefer else set()
+    marks=sorted(unit['start'] for unit in sentences or () if unit['quote'] in posted and counts[unit['quote']]==1) if prefer else []
+    # (a copy the clinician's next or previous line runs straight on from or to — `The great saphenous vein measures 5.0 mm …
+    # without reflux in the` / `left leg.` written under both legs, the side only on the line after: round 17e's review,
+    # the save kept the right leg's copy, and an unchanged re-save moved a correct right answer onto the left's)
+    ordered=sorted(sentences or (),key=lambda unit:unit['start'])
+    position={unit['start']:index for index,unit in enumerate(ordered)}
+    lines=[line.strip() for line in raw.splitlines() if line.strip()]
+    def runs_on(unit,index):
+        at=position.get(unit['start'])
+        if at is None:return False
+        for step,near in ((1,index+1),(-1,index-1)):
+            if 0<=near<len(lines) and 0<=at+step<len(ordered) and ordered[at+step]['quote']==lines[near]:
+                low,high=(unit['end'],ordered[at+step]['start']) if step==1 else (ordered[at+step]['end'],unit['start'])
+                if low<=high and wm_narrative._wrapped_gap(notes[low:high]):return True
+        return False
+    line_index=-1
     for submitted in raw.splitlines():
         quote=submitted.strip()
         if not quote:continue
+        line_index+=1
+        cited={item.get('start') for item in previous or () if isinstance(item,dict) and item.get('quote')==quote}
+        same=[unit for unit in sentences or () if unit['quote']==quote]
+        free=[unit for unit in same if unit['start'] not in used]
+        tried=[unit for unit in free if unit['start'] in cited]+[unit for unit in free[:PREFER_LIMIT] if unit['start'] not in cited]
+        kept=next((unit for unit in tried if unit['start'] in cited and carries(unit)),None) if prefer and len(same)>1 else None
+        moved=cleanest(tried) if prefer and len(same)>1 and kept is None else None
+        if moved is None and kept is None and len(same)>1:
+            paired=[unit for unit in tried if runs_on(unit,line_index)]
+            moved=paired[0] if len(paired)==1 else next((unit for unit in paired if unit['start'] in cited),None)
+        if moved is None and kept is None and anchors and len(same)>1:
+            moved=next((unit for unit in tried if carries(unit) and wm_narrative.paragraph_start(notes,unit['start']) in anchors),None)
+        if moved is None and kept is None and marks and len(same)>1:
+            # (else the copy nearest after a line cited once, across paragraphs: `LEFT LEG:` over a blank line and
+            # `Measurements:` resolved a sentence written under both legs to the right leg's copy — round 11)
+            # (never a copy something governs: a relative's, a prior study's — round 12)
+            placed=[(unit['start']-marks[index-1],unit) for unit in tried
+                    for index in [bisect.bisect_left(marks,unit['start'])] if index and ungoverned_copy(unit)]
+            moved=min(placed,key=lambda item:item[0])[1] if placed else None
+        sentence=(kept or moved
+                  or next((unit for unit in free if unit['start'] in cited),None)
+                  or (free[0] if free else (same[0] if same else None)))
+        if sentence is not None:
+            used.add(sentence['start'])
+            evidence.append({'quote':quote,'start':sentence['start'],'end':sentence['end'],'kind':'unit'});continue
         found=next((item for item in units if item[2]==quote),None)
-        if found is None:raise ValidationError('Use a complete source line or the complete value for this exact question label.')
+        if found is None:raise ValidationError('Use a complete source line or the complete value for this exact question label'+(', or one complete sentence of the notes.' if sentences is not None else '.'))
         evidence.append({'quote':quote,'start':found[0],'end':found[1]})
-    wm_review.validate_evidence(notes,label,evidence,labels)
+    wm_review.validate_evidence(notes,label,[item for item in evidence if 'kind' not in item],labels)
     return evidence
 
 
@@ -104,6 +204,21 @@ WM_BLOCKERS={
     'selected_answer_conflicts_with_fixed_assertion':'The selected reflux finding contradicts this fixed negative statement. Export is blocked.',
     'symptom_conflicts_with_asymptomatic':'This symptom conflicts with the selected asymptomatic finding.',
     'asymptomatic_conflicts_with_documented_symptom':'Asymptomatic conflicts with another selected symptom.',
+    'narrative_evidence_disabled':'This answer cites a sentence of the notes, and reading answers from sentences is switched off. Quote the labelled source line instead.',
+    'narrative_value_not_in_source':'The cited sentence does not contain this value exactly as written. Cite the sentence that states it, or correct the answer.',
+    'labelled_value_differs':'A line labelled with this question gives a different value. Correct the notes or the answer.',
+    'superseded_by_correction':'A correction in the cited sentence replaces this value. Use the corrected value.',
+    'side_not_supported':'The cited sentences place this finding on the other side.',
+    'side_not_stated':'The cited sentences do not say which side this finding is on. Cite the sentence that names the side.',
+    'narrative_qualifiers_hold':'The notes state this finding with uncertainty, for someone other than the patient, or at another time. Decide the answer yourself.',
+    'statement_answers_differ_from_wording':'This wording is not built from the answers it cites. Save to refresh the statement, then review it.',
+    'statement_answers_incomplete':'This wording rests on answers that are still unanswered or need review.',
+    'text_the_form_rewrites':'The form writes "&p", "&l", "&m", "&b" and "&&" in this table cell as breaks, so it would print differently. Write the letter after "&" as a capital (for example "thigh&Mid calf"), which the form prints as written, or leave the answer blank.',
+    'text_the_form_rewrites_labelled':'The form writes "&p", "&l", "&m", "&b" and "&&" in this table cell as breaks, so it would print differently, and on this form an answer must repeat its labelled line exactly. Change that line in the notes: write the letter after "&" as a capital (for example "thigh&Mid calf") or write "and", then generate again.',
+    'statement_absence_not_reviewed':'This wording says its answers are not documented. Leave them unanswered and review each one first.',
+    'governed_source':'A heading, a pointer or a label in the notes denies or reframes what the cited sentences say (a denial, a family history, a hypothetical). Cite a sentence it does not govern.',
+    'statement_source_is_heading':'The cited line is a heading or a title, which states nothing. Cite the sentence that states this.',
+    'narrative_held':'Something in the notes may change this pre-filled answer (it is shown beside it). Choose or type the answer yourself.',
 }
 
 #: ⚠️ `data_mode` WAS A HARDCODED LITERAL AND WAS BEING CITED AS PROOF OF THE GUARD.
@@ -378,6 +493,8 @@ def encounter_detail(request,pk):
     accepters={str(pk):email for pk,email in User.objects.filter(
         pk__in={row['accepted_by'] for row in rows if row.get('accepted_by')}).values_list('pk','email')}
     from .tab_review import clinician_identity
+    editors={str(pk):email for pk,email in User.objects.filter(
+        pk__in={row.get('edited_by') for row in rows} - {None}).values_list('pk','email')}
     deciders={str(pk):email for pk,email in User.objects.filter(
         pk__in={(row.get('blank_decision') or {}).get('by') for row in rows} - {None}).values_list('pk','email')}
     if e.status!='finalized' and e.answers:
@@ -385,8 +502,14 @@ def encounter_detail(request,pk):
         # can hold a governed answer as `supported` or as a one-click offer, accepted or not; each is shown held,
         # with every line that governs it. A FINALIZED record is never re-described: it shows what was offered.
         from .generation import as_currently_governed,governance_for
-        governance=governance_for(e.notes,e.template_version.fields,[row['label'] for row in e.template_version.review_requirements])
-        rows=[as_currently_governed(governance,e.notes,row,is_wm) for row in rows]
+        from . import wm_narrative
+        statement_labels=[row['label'] for row in e.template_version.review_requirements]
+        governance=governance_for(e.notes,e.template_version.fields,statement_labels)
+        # An answer read from a sentence is judged by the narrative reader, exactly as finalization will judge it.
+        narrative_read=(wm_narrative.stored_reading(e.notes,e.template_version.fields,statement_labels,e.answers)
+                        if wm_narrative.active(e.template_version.fields,e.answers) else None)
+        rows=[wm_narrative.as_currently_held(row,row,narrative_read) if narrative_read and wm_narrative.has_unit_evidence(row)
+              else as_currently_governed(governance,e.notes,row,is_wm) for row in rows]
     for row in rows:
         row['accepted_by_email']=accepters.get(str(row.get('accepted_by') or ''),'')
         row['accepted_by_me']=str(row.get('accepted_by') or '')==str(request.user.pk)
@@ -395,6 +518,14 @@ def encounter_detail(request,pk):
         row['blank_eligible']=not e.template_version.document_backend and not clinician_identity(row)
         row['left_blank']=row.get('status')=='left_blank'
         row['blank_by_email']=deciders.get(str((row.get('blank_decision') or {}).get('by') or ''),'')
+        # (who gave the answer, from its stored status — the badge below shows the review's, `conflict` until reviewed)
+        row['entered_by_person']=row.get('status')=='edited'
+        row['read_from_notes']=row.get('status')=='supported'
+        row['edited_by_email']=editors.get(str(row.get('edited_by') or ''),'') if row['entered_by_person'] else ''
+        # (and an answer a person emptied is theirs too, not "nothing in the notes" — round 18: a value generation read and
+        # an employee deleted showed as a plain `missing`, with no author)
+        row['cleared_by_person']=row.get('status')=='missing' and bool(row.get('edited_by'))
+        row['cleared_by_email']=editors.get(str(row.get('edited_by') or ''),'') if row['cleared_by_person'] else ''
         # ⚠️ "I REVIEWED THIS ANSWER" IS THE READER'S OWN STATEMENT, SO IT IS NEVER PRE-TICKED FROM
         # SOMEBODY ELSE'S REVIEW. Rendering the stored flag let a second clinician's plain Save
         # re-post every box and re-stamp reviewed_by to themselves — the signature row included,
@@ -411,8 +542,18 @@ def encounter_detail(request,pk):
         try:
             requirements=wm_resolve(e,request.user)
             resolved_ok=True
-            if can_finalize:
-                assessment=wm_review.evaluate_review(e,request.user,decisions,resolved_requirements=requirements)
+            # (a finalized record is not re-reviewed by whoever views it: its receipt is the review — round 17e's review, a
+            # second clinician was told the finalized record's review was incomplete)
+            if can_finalize and e.status!='finalized':
+                # Before the first save, the page shows the statements generation proposed (as `wm_resolve` resolved
+                # them): its review reads those wordings, unreviewed, not the defaults (round 3).
+                from . import wm_narrative
+                proposed=e.template_review.get('proposals',{}) if not decisions and wm_narrative.enabled(e.template_version.fields) else {}
+                # (a proposal held by `threshold_wording` is `{'held': reason}`: nothing is pre-selected for it — round 17e's
+                # review, the page raised on it for every owner and clinician)
+                page_decisions={**{key:{'variant':row['variant'],'evidence':row.get('evidence',[])} for key,row in proposed.items()
+                                   if 'variant' in row},**decisions}
+                assessment=wm_review.evaluate_review(e,request.user,page_decisions,resolved_requirements=requirements)
         except (ValidationError,DocumentError) as exc:
             review_error=error_message(exc)
             wm_conflicts=getattr(exc,'rows',[])
@@ -431,13 +572,24 @@ def encounter_detail(request,pk):
                 row['status']='conflict'; reasons=[reason for reason in reasons if reason!='conflicting_source']
             row['review_errors']=[WM_BLOCKERS.get(reason,'Clinical review is incomplete.') for reason in reasons]
             row['review_errors']+=[conflict['explanation'] for conflict in wm_conflicts if row['key'] in conflict['answer_keys']]
+        from . import wm_narrative
+        proposals=e.template_review.get('proposals',{}) if not decisions and wm_narrative.enabled(e.template_version.fields) else {}
         for row in requirements:
             row['unresolved']=not resolved_ok
             decision=decisions.get(row['key'],{})
+            proposal=proposals.get(row['key']) or {}
             row['reviewed']=bool(decision.get('reviewed') and e.template_review.get('reviewer_id')==str(request.user.pk)
                                   and e.template_review.get('binding',{}).get('source_revision')==e.revision)
-            row['source_quote']='\n'.join(item['quote'] for item in decision.get('evidence',[]))
-            row['selected_variant']=decision.get('variant') or row.get('selected_variant') or row.get('default_variant')
+            shown=decision.get('evidence') if decision else proposal.get('evidence',[])
+            row['source_quote']='\n'.join(item['quote'] for item in shown or [] if item.get('quote'))
+            # A wording built from answers may rest on those answers; the page posts that basis back explicitly.
+            row['answers_basis']=next((item['answer_keys'] for item in shown or [] if item.get('kind')=='answers'),None)
+            row['answers_basis_labels']=[next((f['label'] for f in e.template_version.fields if f['key']==key),key) for key in row['answers_basis'] or []]
+            row['basis_possible']=row.get('kind')=='assertion' and any(wm_narrative.basis_keys(variant) for variant in row.get('variants',[]))
+            row['proposed']=bool(proposal.get('variant')) and not decision
+            # (a wording the reader would not pre-select, and why: the page's default is not a proposal)
+            row['proposal_held']=proposal.get('held') if not decision else None
+            row['selected_variant']=decision.get('variant') or proposal.get('variant') or row.get('selected_variant') or row.get('default_variant')
             if resolved_ok:
                 row['review_token']=signing.dumps({'encounter':str(e.pk),'revision':e.revision,
                     'actor':str(request.user.pk),'key':row['key'],'text_sha256':row['text_sha256'],
@@ -446,7 +598,7 @@ def encounter_detail(request,pk):
             row['review_errors']=[WM_BLOCKERS.get(reason,'Clinical review is incomplete.') for reason in reasons]
             row['review_errors']+=[conflict['explanation'] for conflict in wm_conflicts if row['key'] in conflict['statement_keys']]
     from .generation import maximum_cost,configuration
-    try:maximum_charge=maximum_cost(e.notes,e.template_version.fields,context_labels=[row['label'] for row in e.template_version.review_requirements])*Decimal('1.5')
+    try:maximum_charge=maximum_cost(e.notes,e.template_version.fields,context_labels=[row['label'] for row in e.template_version.review_requirements],requirements=e.template_version.review_requirements)*Decimal('1.5')
     except ValidationError:maximum_charge=None
     audit(request.user,'encounter.view',e.pk,department=e.department)
     # Billing boundary: earlier charged requests (successes, and successes the user's own state declined) stay charged, so a
@@ -468,9 +620,15 @@ def encounter_detail(request,pk):
                 transcript_reviews.append({'job':job,'raw':raw,'text':transcript,'empty':not (raw or '').strip() and not (transcript or '').strip()})
             except (ValidationError,OSError,ValueError):
                 job.display_error='The retained transcript could not be verified. Contact an administrator; do not resubmit a paid recording.'
-    return render(request,'encounter_detail.html',{'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
+    from . import wm_narrative
+    return render(request,'encounter_detail.html',{'wm_narrative':is_wm and wm_narrative.enabled(e.template_version.fields),'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
         'signer_name':' '.join((request.user.get_full_name() or request.user.email).split())})
+
+def cited_spans(evidence):
+    """The source units an answer cites, as (start, end), in order."""
+    return sorted((item.get('start'),item.get('end')) for item in evidence if isinstance(item,dict) and item.get('kind','unit')=='unit')
+
 
 @require_POST
 def generate_view(request,pk):
@@ -478,6 +636,15 @@ def generate_view(request,pk):
     try:
         if not rate_limit('generate:'+str(request.user.pk),limit=30):raise ValidationError('Generation rate limit reached.')
         if 'revision' in request.POST and request.POST['revision']!=str(e.revision):raise ValidationError('Source notes changed. Reload before generating answers.')
+        # (the page offers generation only before any answer exists; a draft a clinician has reviewed or decided is not
+        # replaced by a request — round 17e's review. A new draft follows a source edit, which clears the answers.)
+        # (round 18: a statement wording chosen and saved without its tick, and an answer a person cleared — `missing`
+        # with its `edited_by` — were replaced by a second generation)
+        if (any(isinstance(a,dict) and (a.get('reviewed') or a.get('status') in ('edited','left_blank') or a.get('accepted_suggestion')
+                                        or a.get('edited_by'))
+                for a in (e.answers or {}).values())
+                or (e.template_review or {}).get('decisions')):
+            raise ValidationError('These answers include a clinician\'s review or decisions. Edit and save the source notes to generate a new draft. Nothing was sent or charged.')
         quoted=usage_quote(request,e)
         job=enqueue(e,request.user,config=quoted,expected_revision=e.revision)
         if getattr(job,'reused',False):
@@ -522,11 +689,32 @@ def save_answers(request,pk):
     previous_answers=dict(e.answers)
     # ⚠️ ONCE PER SAVE, NOT PER FIELD: this runs under the row lock, and a 100-field save recomputed it per offer.
     from .generation import governance_for,governed_supported,held_for_decision,is_empty,looks_the_same,offer_context
-    governance=governance_for(e.notes,e.template_version.fields,[row['label'] for row in e.template_version.review_requirements])
+    from . import wm_narrative
+    statement_labels=[row['label'] for row in e.template_version.review_requirements]
+    governance=governance_for(e.notes,e.template_version.fields,statement_labels)
+    narrative_on=is_wm and wm_narrative.enabled(e.template_version.fields)
+    from .generation import recognized_labels
+    recognized=recognized_labels(e.template_version.fields,statement_labels) if narrative_on else None
+    try:sentences=wm_narrative.units(e.notes,e.template_version.fields,statement_labels) if narrative_on else None
+    except ValidationError:sentences=None   # past the source limit a sentence cannot be cited; labelled lines still can
+    narrative_read=(wm_narrative.stored_reading(e.notes,e.template_version.fields,statement_labels,e.answers)
+                    if wm_narrative.active(e.template_version.fields,e.answers) else None)
+    preferred_read=[narrative_read]
+    def prefer_reading():
+        # The reading a repeated sentence's copies are judged with (built once, only when a copy has to be chosen).
+        if preferred_read[0] is None:
+            preferred_read[0]=wm_narrative.stored_reading(e.notes,e.template_version.fields,statement_labels,e.answers)
+        return preferred_read[0]
     for field in e.template_version.fields:
         key=field['key'];previous=e.answers.get(key,{'text':'','evidence':[],'status':'missing'})
         held_shown=request.POST.get('held_shown_'+key)=='1'
-        supported_context=governed_supported(governance,e.notes,previous,field['label'])
+        narrative_held=None
+        if narrative_read is not None and wm_narrative.has_unit_evidence(previous):
+            narrative_held=wm_narrative.as_currently_held(field,previous,narrative_read)
+            narrative_held=narrative_held if narrative_held is not previous else None
+            supported_context=narrative_held['held_candidate']['context'] if narrative_held else None
+        else:
+            supported_context=governed_supported(governance,e.notes,previous,field['label'])
         governed_offer=offer_context(governance,e.notes,previous,field['label']) is not None
         # A draft from an earlier release holding a governed answer as `supported` is saved as the page showed it —
         # held — so the clinician's answer is their decision even when it repeats the candidate's words. ⚠️ ONLY WHEN
@@ -535,7 +723,8 @@ def save_answers(request,pk):
         # stays `supported` (finalization refuses it); text that visibly differs is the clinician's edit, saved with
         # the candidate and its governing lines kept beside it, so the next page shows what governs it (tenth pass:
         # the edit was saved bare, and the heading was never shown again).
-        held_draft=(held_for_decision(previous,[previous.get('text','')],previous['evidence'],supported_context,is_wm,prefilled=True)
+        held_draft=(narrative_held if narrative_held is not None else
+                    held_for_decision(previous,[previous.get('text','')],previous['evidence'],supported_context,is_wm,prefilled=True)
                     if supported_context is not None else None)
         if held_shown and held_draft is not None:
             previous=held_draft
@@ -623,16 +812,32 @@ def save_answers(request,pk):
                       # The accepter is whoever performed the explicit act, carried forward while
                       # the acceptance stands. A later saver must not inherit somebody's decision.
                       'accepted_by':str(request.user.pk) if key in newly_accepted else (previous.get('accepted_by') if accepted else None),
-                      'status':'edited' if value!=previous.get('text','') else previous.get('status','missing'),'reviewed_by':str(request.user.pk) if reviewed else None}
+                      'status':'edited' if value!=previous.get('text','') else previous.get('status','missing'),'reviewed_by':str(request.user.pk) if reviewed else None,
+                      # Whoever typed or chose an answer that is not generation's: a later saver, or the reviewing
+                      # clinician, must not be read as its author (round 17e's review: an employee's choice of leg read as
+                      # the clinician's).
+                      'edited_by':str(request.user.pk) if value!=previous.get('text','') else previous.get('edited_by')}
         if is_wm:
             quote=request.POST.get('source_'+key,'')
             if len(quote)>50000:return document_refusal(request,e,'Source quotations exceed the supported limit; nothing was saved.',400)
-            try:evidence=source_quote_evidence(e.notes,field['label'],quote,labels)
+            carries=(lambda unit,field=field,value=value:wm_narrative.support(field,value,[wm_narrative.unit_evidence(unit)],e.notes,
+                     recognized,labels) is None) if narrative_on and value else None
+            # (how clean a copy is — round 14: the other leg's copy was as good as the leg's own)
+            ungoverned=(lambda unit,field=field,value=value:wm_narrative.copy_rank(field,value,unit,prefer_reading())
+                        ) if narrative_on and value else None
+            try:evidence=source_quote_evidence(e.notes,field['label'],quote,labels,sentences,previous.get('evidence') or (),carries,
+                                               ungoverned)
             except ValidationError as exc:
                 evidence=[];reviewed=False;review_errors.append(error_message(exc))
             answers[key].update(evidence=evidence,review_quote=quote,reviewed=reviewed,
                                 reviewed_by=str(request.user.pk) if reviewed else None,
                                 review_revision=target_revision if reviewed else None)
+            # ⚠️ GENERATION'S ANSWER RESTS ON GENERATION'S EVIDENCE. Re-cited to other sentences it is the clinician's
+            # decision, and is never kept as source-supported: round 17e's review, `7.4 mm` re-cited to `Her mother's
+            # right great saphenous vein measures 7.4 mm …` stayed `supported` through finalization and export.
+            if (answers[key]['status']=='supported'
+                    and cited_spans(evidence)!=cited_spans(previous.get('evidence') or [])):
+                answers[key].update(status='edited',edited_by=str(request.user.pk))
             if not value:answers[key]['status']='missing'
         else:
             # ⚠️ CARRIED FORWARD LIKE AN ACCEPTANCE, AND WITHDRAWN ONLY BY AN ACT. The box is
@@ -670,15 +875,55 @@ def save_answers(request,pk):
             key=requirement['key'];quote=request.POST.get('claim_source_'+key,'')
             if len(quote)>50000:return document_refusal(request,e,'Source quotations exceed the supported limit; nothing was saved.',400)
             reviewed=request.POST.get('claim_reviewed_'+key)=='on'
-            try:evidence=source_quote_evidence(e.notes,requirement['label'],quote,labels)
+            earlier=(e.template_review.get('decisions',{}).get(key) or e.template_review.get('proposals',{}).get(key) or {}).get('evidence') or ()
+            # A one-leg statement's typed sentence goes to the copy that names its side (round 5: `No saphenous reflux.`
+            # under each leg resolved to the right leg's for the left statement).
+            names=(lambda unit,requirement=requirement:wm_narrative.names_side(requirement,[wm_narrative.unit_evidence(unit)],e.notes,strict=False)) \
+                if narrative_on and wm_narrative.field_side(requirement) else None
+            clear_copy=(lambda unit,requirement=requirement:wm_narrative.statement_governed(requirement,[wm_narrative.unit_evidence(unit)],
+                        prefer_reading(),hidden=False) is None) if names else None
+            try:evidence=source_quote_evidence(e.notes,requirement['label'],quote,labels,sentences,earlier,names,clear_copy)
             except ValidationError as exc:
                 evidence=[];reviewed=False;review_errors.append(error_message(exc))
             variant=request.POST.get('claim_variant_'+key,requirement.get('default_variant'))
             if variant not in {item['id'] for item in requirement['variants']}:
                 return document_refusal(request,e,'Choose an approved statement alternative. No changes were saved.',400)
+            # "Rests on its answers": the answers the selected wording rests on, named from the mapping, never the post.
+            if narrative_on and request.POST.get('claim_basis_'+key)=='answers':
+                chosen=next(item for item in requirement['variants'] if item['id']==variant)
+                # (within review's bound, the answers' entry included: at 100 sentences it made 101, and review refused the
+                # whole page — round 9's integrity lens)
+                if wm_narrative.basis_keys(chosen) and len(evidence)>=wm_narrative.EVIDENCE_LIMIT:
+                    evidence=[];reviewed=False
+                    review_errors.append(f'Cite at most {wm_narrative.EVIDENCE_LIMIT-1} source sentences for a statement resting on its answers; nothing was truncated.')
+                elif wm_narrative.basis_keys(chosen):evidence.append({'kind':'answers','answer_keys':wm_narrative.basis_keys(chosen)})
             decisions[key]={'reviewed':reviewed,'evidence':evidence,'variant':variant}
+    # (generation's statement proposals are only pre-selections the clinician still reviews and ticks: an employee's save
+    # keeps them for the clinician's page — round 17e's review, they were dropped and the defaults shown)
+    kept_proposals=(e.template_review or {}).get('proposals') if is_wm and not (e.template_review or {}).get('decisions') else None
+    previous_decisions=dict((e.template_review or {}).get('decisions') or {}) if is_wm else {}
     e.answers=answers;e.revision=target_revision;e.status='review';wm_review.invalidate_review(e)
-    if is_wm and Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists():
+    if kept_proposals:e.template_review={'proposals':kept_proposals}
+    clinician=is_wm and Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists()
+    if is_wm and not clinician and previous_decisions:
+        # (round 18: an employee's save kept nothing of a clinician's statement decisions and the page fell back to the
+        # defaults. The choices it posts — the page's, the clinician's among them — are kept, each unreviewed: a review is
+        # its reader's own. The incomplete form is never accepted by finalization.)
+        # (a decision the employee left at the clinician's wording is the clinician's, kept whole — the page disables the
+        # "rests on its answers" box for an employee, so a browser posts nothing for it: round 19's focused pass, the
+        # basis was lost and the clinician's page pointed at a source it had never needed)
+        kept={key for key,decision in decisions.items() if isinstance(previous_decisions.get(key),dict)
+              and previous_decisions[key].get('variant')==decision.get('variant')}
+        e.template_review={'schema':0,'decisions':{key:dict(previous_decisions[key] if key in kept else decision,reviewed=False)
+                                                   for key,decision in decisions.items()},
+                           'binding':wm_review.binding(e),'reviewer_id':str(request.user.pk)}
+        # (a source sentence the employee changed under the clinician's wording is not kept, and the saver is told so —
+        # round 20: it was dropped with only "Edits saved")
+        cited=lambda decision:[item for item in decision.get('evidence') or () if item.get('kind')!='answers']
+        if any(cited(decisions[key])!=cited(previous_decisions[key]) for key in kept):
+            review_errors.append('A statement source you changed was not kept: a statement keeps the clinician\'s wording and '
+                                 'sources until a clinician reviews it. Ask a clinician to change the source.')
+    if clinician:
         try:
             resolved=wm_resolve(e,request.user,decisions)
             for requirement in resolved:
@@ -703,10 +948,14 @@ def save_answers(request,pk):
             review_errors.append(error_message(exc))
     # A review is the reader's own, so saving without a tick removes a colleague's; record which.
     withdrawn_reviews=sorted(key for key,answer in answers.items() if (previous_answers.get(key) or {}).get('reviewed') and not answer.get('reviewed'))
+    stored=(e.template_review or {}).get('decisions') or {}
+    withdrawn_statement_reviews=sorted(key for key,decision in previous_decisions.items()
+                                       if isinstance(decision,dict) and decision.get('reviewed') and not (stored.get(key) or {}).get('reviewed'))
     e.save(update_fields=['answers','revision','status','template_review'])
     audit(request.user,'encounter.answers_saved',e.pk,department=e.department,revision=e.revision,
           accepted_suggestions=sorted(newly_accepted),withdrawn_acceptances=sorted(withdrawn),
-          left_blank=sorted(newly_blank),withdrawn_blank_decisions=sorted(withdrawn_blank),withdrawn_reviews=withdrawn_reviews)
+          left_blank=sorted(newly_blank),withdrawn_blank_decisions=sorted(withdrawn_blank),withdrawn_reviews=withdrawn_reviews,
+          withdrawn_statement_reviews=withdrawn_statement_reviews)
     if is_wm:audit(request.user,'encounter.template_review_saved',e.pk,department=e.department,revision=e.revision,complete=e.template_review.get('assessment',{}).get('complete',False))
     messages.success(request,'Edits saved. Review every answer before finalizing.')
     for message in dict.fromkeys(review_errors):messages.warning(request,'Review remains incomplete: '+message)

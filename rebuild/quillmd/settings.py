@@ -78,6 +78,11 @@ AI_MODEL=os.getenv('QUILLMD_AI_MODEL','gpt-4.1-mini')
 AI_INPUT_RATE=os.getenv('QUILLMD_AI_INPUT_RATE','')
 AI_OUTPUT_RATE=os.getenv('QUILLMD_AI_OUTPUT_RATE','')
 AI_CACHED_RATE=os.getenv('QUILLMD_AI_CACHED_RATE','')
+# Narrative notes on the qualified WM IOV form (docs/rebuild/wm-narrative-design.md). OFF by default: a candidate, not
+# enabled for doctors, and not live-verified. With it off, generation, review and export behave exactly as before.
+WM_NARRATIVE=os.getenv('QUILLMD_WM_NARRATIVE','0')=='1'
+# Retained provider-shaped narrative responses, keyed by the sha256 of the notes. Read ONLY in fixture mode, never live.
+AI_REPLAY_DIR=os.getenv('QUILLMD_AI_REPLAY_DIR','')
 STRIPE_SECRET_KEY=os.getenv('STRIPE_SECRET_KEY','')
 STRIPE_WEBHOOK_SECRET=os.getenv('STRIPE_WEBHOOK_SECRET','')
 STRIPE_LIVE_ENABLED=False
