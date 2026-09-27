@@ -11,6 +11,7 @@ import sys
 from types import ModuleType, SimpleNamespace
 import tempfile
 import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -1488,6 +1489,45 @@ class ConcurrentStatusReadTests(unittest.TestCase):
                 self.assertEqual(results['check'][0]['condition'], 'backup_stale')
                 after, _ = a.status(self.at + timedelta(hours=2, minutes=2))
                 self.assertEqual((after['check_running'], after['incident']['last_notice_condition']), (False, 'backup_stale'))
+
+    def test_a_check_waits_out_a_status_reader_holding_the_lock_for_a_second(self):
+        """⚠️ F3, round 2: pins LOCK_WAIT_SECONDS WITHOUT overriding it. At 0 a check that meets a reader
+        refuses as though it met a parallel check (R4's defect), and the suite used to pass."""
+        a.check(self.at)
+        descriptor = os.open(self.alerts / 'monitor.lock', os.O_RDONLY)
+        fcntl.flock(descriptor, fcntl.LOCK_SH | fcntl.LOCK_NB)         # a reader, slow for a second
+        releasing = threading.Timer(1.0, os.close, args=(descriptor,))
+        releasing.start()
+        self.addCleanup(releasing.join)
+        self.health.return_value = 'backup_failed'
+        result, code = a.check(self.at + timedelta(minutes=5))
+        self.assertEqual((code, result['condition']), (1, 'backup_failed'), 'a status reader made the check refuse')
+        self.sender.assert_called_once()
+
+    def test_status_waits_out_a_check_that_runs_for_a_second(self):
+        """⚠️ F3, round 2: pins READ_WAIT_SECONDS WITHOUT overriding it. At 0 status() stops waiting at
+        once: before F4 it reported the monitor broken during any check, and now it would report the
+        state from before a check that finishes a second later. It must wait and read what it wrote."""
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        a.check(self.at + timedelta(hours=1, minutes=55))
+        self.health.return_value = 'backup_stale'
+        entered, results = threading.Event(), {}
+
+        def slow(*args):
+            entered.set()
+            time.sleep(1.0)
+            return 'synthetic-provider-id'
+        self.sender.side_effect = slow
+        worker = threading.Thread(target=lambda: results.update(check=a.check(self.at + timedelta(hours=2))))
+        worker.start()
+        self.addCleanup(worker.join, 30)
+        self.assertTrue(entered.wait(30))
+        shown, _ = a.status(self.at + timedelta(hours=2, minutes=1))
+        worker.join(30)
+        self.assertEqual((shown['condition'], shown.get('check_running'), shown['incident']['last_notice_condition']),
+                         ('backup_stale', False, 'backup_stale'), 'status() did not wait out a one-second check')
+        self.assertEqual(shown['checked_at'], (self.at + timedelta(hours=2)).isoformat())
 
     def test_a_held_lock_with_nothing_being_written_reads_the_state_as_it_is(self):
         self.health.return_value = 'backup_failed'
