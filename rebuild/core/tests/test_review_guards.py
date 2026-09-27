@@ -1320,3 +1320,44 @@ class TheLinearScanReadsAsThePerCodeSearchDid(TestCase):
         notes = 'Seen for S12.\nThen R00.0 and M25.532, then S12 again.\nK21.9'
         scanned = coding_module.evidence_lines(notes, {'K21.9', 'M25.532', 'R00.0', 'S12'})
         self.assertEqual(sorted(scanned, key=lambda code: scanned[code][0]), ['S12', 'R00.0', 'M25.532', 'K21.9'])
+
+
+@override_settings(**TEST_SETTINGS)
+class AnEmptyFieldIsNotAClearedAnswer(OrdinaryDraft, TestCase):
+    """Refutation round 4, R4-3: every entry of the draft was counted as a cleared answer, an empty field nobody decided
+    included. The refuter's input: notes `Symptoms: No chest pain.` generate one supported answer and one `missing` empty
+    field; a changed save then said "the answer draft (2 answers, none reviewed)" and audited answers_unreviewed_unedited: 2.
+    Only an answer that carries text, or a decision (reviewed, accepted, left blank or edited), is cleared."""
+
+    def test_the_refuters_draft_clears_one_answer(self):
+        _template, version = self.upload(self.make_docx(), 'docx')
+        encounter = self.create_encounter(version, 'Symptoms: No chest pain.')
+        self.post(f'/encounters/{encounter.pk}/generate/', encounter)
+        self.assertTrue(run_one())
+        encounter.refresh_from_db()
+        self.assertEqual(sorted((a['status'], a['text']) for a in encounter.answers.values()),
+                         [('missing', ''), ('supported', 'No chest pain.')])                # (the control: one empty field)
+        response = self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': encounter.notes + '\nPlan: synthetic.'})
+        said = shown_messages(response)
+        self.assertEqual((last_event('encounter.notes_saved', encounter).get('cleared'),
+                          'the answer draft (1 answer, not reviewed).' in said, '2 answers' in said),
+                         (cleared(unreviewed_unedited=1), True, False))
+
+    def test_each_counted_answer_carries_text_or_a_decision(self):
+        """The five states stay disjoint and sum to the answers they count; an empty field is counted only once somebody
+        decided something about it."""
+        encounter = Encounter(template_review={}, answers={
+            'empty': {'text': '', 'status': 'missing', 'reviewed': False}, 'spaces': {'text': ' ​ ', 'status': 'supported'},
+            'conflict': {'text': '', 'status': 'conflict', 'suggestion': 'Synthetic'}, 'none': None, 'bare': {},
+            'text': {'text': 'Synthetic.', 'status': 'supported'}, 'legacy': 'legacy',
+            'empty_reviewed': {'text': '', 'status': 'missing', 'reviewed': True},
+            'emptied': {'text': '', 'status': 'edited'}, 'blank': {'text': '', 'status': 'left_blank'},
+            'accepted': {'text': 'Synthetic.', 'status': 'edited', 'accepted_suggestion': True}})
+        counts = views.review_state_counts(encounter, codes=False)
+        self.assertEqual({state: counts[state] for state in views.ANSWER_STATES},
+                         {'answers_accepted_suggestion': 1, 'answers_left_blank': 1, 'answers_edited_not_accepted': 1,
+                          'answers_reviewed_unedited': 1, 'answers_unreviewed_unedited': 2})
+        self.assertEqual(counts['answers_with_clinician_review'], 1)
+        # (and a draft of empty fields alone clears nothing the page warns of or the save names)
+        empty = Encounter(template_review={}, answers={'a': {'text': '', 'status': 'missing'}, 'b': {'text': '', 'status': 'conflict'}})
+        self.assertEqual(views.cleared_sentence(views.review_state_counts(empty, codes=False)), '')
