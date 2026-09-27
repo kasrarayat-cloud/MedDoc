@@ -84,6 +84,39 @@ class Package:
         parts += sorted(n for n in self.names if HEADER_FOOTER.match(n))
         return parts
 
+    def displayed_parts(self):
+        """Header/footer parts some section actually shows: a 'first' header only where the section has a
+        different first page, an 'even' one only when odd/even headers are on. Sections without their own
+        reference inherit the previous section's."""
+        if getattr(self, "_displayed", None) is not None:
+            return self._displayed
+        rel_ns = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+        targets = {}
+        rels_name = "word/_rels/document.xml.rels"
+        if rels_name in self.names:
+            for rel in etree.fromstring(self.zip.read(rels_name), PARSER):
+                target = (rel.get("Target") or "").lstrip("/")
+                targets[rel.get("Id")] = target if target.startswith("word/") else "word/" + target
+        even_on = False
+        if "word/settings.xml" in self.names:
+            settings = self.tree("word/settings.xml")
+            flag = settings.find(q("w:evenAndOddHeaders"))
+            even_on = flag is not None and (flag.get(q("w:val")) or "1") not in ("0", "false")
+        shown = set()
+        doc = self.tree("word/document.xml")
+        current = {}
+        for sect in doc.iter(q("w:sectPr")):
+            for tag in ("w:headerReference", "w:footerReference"):
+                for ref in sect.findall(q(tag)):
+                    current[(tag, ref.get(q("w:type")) or "default")] = targets.get(ref.get("{%s}id" % rel_ns))
+            title = sect.find(q("w:titlePg"))
+            title_on = title is not None and (title.get(q("w:val")) or "1") not in ("0", "false")
+            for (tag, kind), target in current.items():
+                if target and (kind == "default" or (kind == "first" and title_on) or (kind == "even" and even_on)):
+                    shown.add(target)
+        self._displayed = ["word/document.xml"] + [p for p in self.content_parts()[1:] if p in shown]
+        return self._displayed
+
     def write(self, changed: dict) -> bytes:
         """A new package: changed parts re-serialized, every other entry copied byte for byte (same order, same
         compression, same metadata)."""
@@ -373,7 +406,8 @@ class SlotIndex:
         self.slots: list[Slot] = []
         self.by_id: dict[str, Slot] = {}
         self.by_el: dict[int, Slot] = {}
-        for part in package.content_parts():
+        self.hidden_parts = [p for p in package.content_parts() if p not in package.displayed_parts()]
+        for part in package.displayed_parts():
             root = package.tree(part)
             if part == "word/document.xml":
                 self._container(part, root.find(q("w:body")), "b", None)
@@ -598,6 +632,24 @@ def clean_label(text: str) -> str:
     return text.strip(" :–—-_*").strip()[:300]
 
 
+def is_hint_run(r) -> bool:
+    """Author guidance ink: a light, grey or blue colour (not black/auto), the convention for text to overwrite."""
+    rpr = r.find(q("w:rPr")) if r is not None else None
+    col = rpr.find(q("w:color")) if rpr is not None else None
+    if col is None:
+        return False
+    theme = (col.get(q("w:themeColor")) or "").lower()
+    if theme.startswith("accent") or theme in ("text2", "background2", "hyperlink"):
+        return True
+    val = (col.get(q("w:val")) or "").lower()
+    if not re.fullmatch(r"[0-9a-f]{6}", val):
+        return False
+    rr, gg, bb = int(val[0:2], 16), int(val[2:4], 16), int(val[4:6], 16)
+    lum = (0.299 * rr + 0.587 * gg + 0.114 * bb) / 255
+    bluish = bb > rr + 40 and bb > gg + 10
+    return (lum >= 0.35 and not (rr > 150 and gg < 90 and bb < 90)) or bluish
+
+
 def is_blank_text(txt: str) -> bool:
     t = txt.strip()
     return not t or set(t) <= set("_ \t.   ") or bool(PLACEHOLDER_TEXT.match(t))
@@ -622,6 +674,7 @@ class Detector:
         self._is_heading = {}
         self._numbering = None
         self._col_lists = {}
+        self._pure = {}
         self._compute_headings()
 
     # -- cached reads ----------------------------------------------------------------------------------------------
@@ -1048,6 +1101,10 @@ class Detector:
                     not any(clean_label(u[1]) for u in units) and not clean_label(units[0][2]) and \
                     self.column_header(cell.parent, cell.info["col"], cell.info["row"]):
                 continue
+            if cell is not None and s.parent is cell and len(units) == 1 and self.pure_option_cell(cell, s, units[0]):
+                opt = clean_label(units[0][2]) or clean_label(units[0][1])
+                units = [[units[0][0], opt, ""]]
+                self._pure[id(s)] = cell
             para_units.append((s, units))
         groups = []
         current = None
@@ -1056,6 +1113,13 @@ class Detector:
             own_question = bool(before)
             cell = self.host_cell(pslot)
             joined = False
+            if current is not None and id(pslot) in self._pure and id(current["paras"][-1]) in self._pure:
+                lc = self._pure[id(current["paras"][-1])]
+                if lc.parent is cell.parent and lc.info["row"] == cell.info["row"] and \
+                        cell.info["col"] == lc.info["col"] + lc.info["span"]:
+                    current["paras"].append(pslot)
+                    current["units"].extend(units)
+                    continue
             if current is not None and not own_question:
                 last_p = current["paras"][-1]
                 if last_p.parent is pslot.parent:
@@ -1081,6 +1145,16 @@ class Detector:
             groups.append(current)
         for g in groups:
             self.emit_checkbox_group(g)
+
+    def pure_option_cell(self, cell, pslot, unit) -> bool:
+        """A cell that holds one box and a short option word ('Yes ☐' / '☐ No') and nothing else."""
+        if len([c for c in cell.children if c.kind == "p" and self.text(c.el).strip()]) != 1:
+            return False
+        before, after = clean_label(unit[2]), clean_label(unit[1])
+        opt = before or after
+        if before and after:
+            return False
+        return bool(opt) and (is_option_word(opt) or len(opt.split()) <= 3)
 
     def split_inline_groups(self, g):
         """A single paragraph may hold several questions: 'Q1? ☐Yes ☐No   Q2? ☐Yes ☐No'. Split where an option's
@@ -1204,18 +1278,21 @@ class Detector:
                     if not qtext or id(q_slot.el) in self.claimed or len(qtext) > 300:
                         i += 1
                         continue
-                    # (a) circle-one line directly below: 'YES<tab>NO'
-                    if i + 1 < len(paras) and id(paras[i + 1].el) not in self.claimed:
-                        line = self.text(paras[i + 1].el)
+                    # (a) circle-one line below (blank lines between allowed): 'YES<tab>NO'
+                    k = i + 1
+                    while k < len(paras) and k <= i + 3 and not self.text(paras[k].el).strip():
+                        k += 1
+                    if k < len(paras) and id(paras[k].el) not in self.claimed:
+                        line = self.text(paras[k].el)
                         words = [w.strip() for w in re.split(r"\t+| {3,}", line) if w.strip()]
                         if 2 <= len(words) <= 6 and all(is_option_word(w) for w in words) and \
                                 (qtext.endswith(("?", ":", ".")) or re.search(r"\bcircle\b", qtext, re.I)):
-                            opt_slot = paras[i + 1]
+                            opt_slot = paras[k]
                             self.add(Area(self.choice_kind(qtext, words), clean_label(qtext), opt_slot,
                                           {"type": "text_options", "options": words}, context=self.context_for(opt_slot),
                                           options=words))
                             self.claimed.add(id(q_slot.el))
-                            i += 2
+                            i = k + 1
                             continue
                     # (b) lettered list items (or short numbered items) below a question
                     qinfo = self.list_info(q_slot.el)
@@ -1376,6 +1453,46 @@ class Detector:
                 for _, c, _ in labelled:
                     for x in c.el.iter():
                         self.claimed.add(id(x))
+            # (b3) narrow empty cells (no room for text): a tick box beside a printed option ('[ ] Male'), grouped
+            #      down the column into one question; a narrow cell with no option beside it is a spacer
+            ticks = {}
+            for r in ordered:
+                cells = sorted([c for c in rows[r] if c.info["vmerge"] != "continue"], key=lambda c: c.info["col"])
+                for i, c in enumerate(cells):
+                    if not self.is_narrow(tslot, c) or not self.is_empty_cell(c) or self.cell_has_claim(c.el) or id(c) in filler:
+                        continue
+                    right = cells[i + 1] if i + 1 < len(cells) else None
+                    opt = self.cell_text(right) if right is not None else ""
+                    if opt and len(opt.split()) <= 8 and not is_blank_text(opt) and BOX not in opt:
+                        ticks.setdefault(c.info["col"], []).append((r, c, clean_label(opt)))
+                    else:
+                        filler.add(id(c))
+            for col, items in sorted(ticks.items()):
+                groups, cur = [], []
+                for item in items:
+                    if cur and item[0] != cur[-1][0] + 1:
+                        groups.append(cur)
+                        cur = []
+                    cur.append(item)
+                if cur:
+                    groups.append(cur)
+                for g in groups:
+                    r0, c0, _ = g[0]
+                    question = self.row_label(tslot, r0, col) or clean_label(self.column_header(tslot, col, r0)) or \
+                        self.heading_before(c0)
+                    boxes = [{"kind": "cell", "part": c.part, "slot": c.path} for _, c, _ in g]
+                    options = [o for _, _, o in g]
+                    if len(g) == 1:
+                        area = Area("checkbox", options[0], c0, {"type": "checkboxes", "boxes": boxes},
+                                    context=(self.context_for(c0) + " > " + question).strip(" >")[:300], options=options)
+                    else:
+                        area = Area(self.choice_kind(question, options), question or "Choose", c0,
+                                    {"type": "checkboxes", "boxes": boxes}, context=self.context_for(c0), options=options,
+                                    extra_slots=[c for _, c, _ in g[1:]])
+                    self.add(area)
+                    for _, c, _ in g:
+                        for x in c.el.iter():
+                            self.claimed.add(id(x))
             # (c) log tables: >= 2 consecutive fully-empty rows under a header row -> one table_rows area
             i = 0
             while i < len(ordered):
@@ -1419,7 +1536,9 @@ class Detector:
                     txt = self.cell_text(c)
                     placeholder = bool(txt) and (PLACEHOLDER_TEXT.match(txt) or ENTER_HINT.match(txt) or ANGLE.fullmatch(txt)
                                                  or BRACKET.fullmatch(txt))
-                    if not (self.is_empty_cell(c) or placeholder and self.cell_is_plain(c)):
+                    guidance = bool(txt) and not placeholder and self.is_guidance_cell(c) and \
+                        bool(self.row_label(tslot, r, c.info["col"]) or self.column_header(tslot, c.info["col"], r))
+                    if not (self.is_empty_cell(c) or placeholder and self.cell_is_plain(c) or guidance):
                         continue
                     label = self.row_label(tslot, r, c.info["col"])
                     header = clean_label(self.column_header(tslot, c.info["col"], r))
@@ -1431,6 +1550,8 @@ class Detector:
                     name = label if label and (not header or header == label) else \
                         ("%s — %s" % (label, header) if label and header else (header or below))
                     target = {"type": "cell_replace"} if txt else {"type": "cell"}
+                    if guidance:
+                        target["all"] = True
                     slash = []
                     for h in [header] + self.column_headers_all(tslot, c.info["col"], r):
                         parts = [x.strip() for x in re.split(r"\s*/\s*|\s+or\s+", clean_label(h))] if h else []
@@ -1442,6 +1563,36 @@ class Detector:
                                       options=slash))
                         continue
                     self.add(Area(self.kind_for(name), clean_label(name), c, target, context=self.context_for(c)))
+
+    def cell_twips(self, tslot, c) -> float:
+        tcpr = c.el.find(q("w:tcPr"))
+        tcw = tcpr.find(q("w:tcW")) if tcpr is not None else None
+        if tcw is None:
+            return 10000.0
+        try:
+            val = float(tcw.get(q("w:w")) or 0)
+        except ValueError:
+            return 10000.0
+        kind = tcw.get(q("w:type")) or "dxa"
+        if kind == "dxa":
+            return val
+        if kind == "pct":
+            tblpr = tslot.el.find(q("w:tblPr"))
+            tw = tblpr.find(q("w:tblW")) if tblpr is not None else None
+            total = float(tw.get(q("w:w")) or 0) if tw is not None and (tw.get(q("w:type")) or "") == "dxa" else 9360.0
+            return val / 5000.0 * (total or 9360.0)
+        return 10000.0
+
+    def is_narrow(self, tslot, c) -> bool:
+        return self.cell_twips(tslot, c) < 400
+
+    def is_guidance_cell(self, c) -> bool:
+        """Every visible run in the cell is guidance ink (blue/grey prompt text meant to be overwritten)."""
+        runs = [r for r in c.el.iter(R) if (r.findtext(T) or "").strip()]
+        if not runs or c.el.find(".//" + q("w:tbl")) is not None or c.el.find(".//" + SDT) is not None or \
+                c.el.find(".//" + FLDCHAR) is not None or BOX in self.cell_text(c):
+            return False
+        return all(is_hint_run(r) for r in runs)
 
     def cell_is_plain(self, c) -> bool:
         return all(x.kind in ("p", "glyphs") for x in c.children) and len([x for x in c.children if x.kind == "p"]) <= 2
@@ -1527,6 +1678,22 @@ class Detector:
                 run_start = None
         if run_start is not None:
             spans.append((run_start, run_end, "utab"))
+        # inline guidance ink: 'Label: Enter PID No.' written in blue/grey
+        hint_start = None
+        for pc in pieces + [None]:
+            hint = pc is not None and pc.kind == "t" and pc.run is not None and is_hint_run(pc.run)
+            if hint and hint_start is None:
+                hint_start, hint_end = pc.start, pc.end
+            elif hint:
+                hint_end = pc.end
+            elif hint_start is not None:
+                seg = text[hint_start:hint_end]
+                lead = text[:hint_start].rstrip()
+                if seg.strip() and (ENTER_HINT.match(seg.strip()) or PLACEHOLDER_TEXT.match(seg.strip()) or
+                                    (lead.endswith(":") and len(seg.split()) <= 6)):
+                    lstrip = len(seg) - len(seg.lstrip())
+                    spans.append((hint_start + lstrip, hint_end - (len(seg) - len(seg.rstrip())), "hint"))
+                hint_start = None
         return merge_spans(spans)
 
     def rule_paragraph_fields(self):
@@ -1581,6 +1748,7 @@ class Detector:
 
     def segment_paragraph(self, slot, text, pieces, spans) -> int:
         made = 0
+        format_hint = False
         blanks = list(spans)
         # 'Label:' followed by a gap (>=1 tab or >=3 spaces) or the end of the paragraph, with nothing else drawn
         for m in self.LABEL_COLON.finditer(text):
@@ -1600,6 +1768,7 @@ class Detector:
             hint = re.match(r"\(?[^()]{0,40}(?:mm|dd|yy|yyyy|month|day|year|hh|24)[^()]{0,40}\)?\s*$", after, re.I)
             if hint and after.strip().startswith("("):
                 blanks.append((len(text), len(text), "after_label"))
+                format_hint = True
                 continue                          # 'Date: (month/day/year)': the answer goes after the hint
             if after and not ("\t" in gap or len(gap) >= 3):
                 continue                          # a sentence continues after the colon
@@ -1609,7 +1778,8 @@ class Detector:
         blanks = merge_spans(blanks)
         if not blanks:
             return 0
-        if self.is_heading(slot.el) and all(k == "after_label" for _, _, k in blanks) and not text.strip().endswith(":"):
+        if self.is_heading(slot.el) and all(k == "after_label" for _, _, k in blanks) and not text.strip().endswith(":") \
+                and not format_hint:
             return 0
         prose_words = len(re.findall(r"[A-Za-z]{2,}", "".join(ch for i, ch in enumerate(text)
                                                              if not any(s0 <= i < e0 for s0, e0, _ in blanks))))
@@ -1631,7 +1801,9 @@ class Detector:
             seg = re.split(r"[\x00" + BOX + CHECKED + "]", seg)[-1]
             seg = re.split(r"(?<=[.;!?])\s+(?=[A-Z(])", seg.strip())[-1]
             label = clean_label(seg)
-            if kind in ("token", "bracket", "angle"):
+            if kind in ("token", "bracket", "angle", "hint") and not label:
+                label = clean_label(re.sub(r"^(?:enter|insert|type|add|specify)\s+", "", text[s:e].strip("{}[]<> "), flags=re.I))
+            elif kind in ("token", "bracket", "angle"):
                 inner = clean_label(text[s:e].strip("{}[]<> "))
                 label = inner if kind == "token" or not label else ("%s %s" % (label, inner)).strip()
             if not label:
@@ -2173,11 +2345,18 @@ def write_sdt_text(sdt, answer):
     return True
 
 
-def write_cell(tc, answer, replace=False):
+def write_cell(tc, answer, replace=False, whole=False):
     paras = tc.findall(q("w:p"))
     if not paras:
         paras = [etree.SubElement(tc, q("w:p"))]
     p0 = paras[0]
+    if whole:                                  # guidance text the form says to overwrite: every paragraph
+        for extra in paras[1:]:
+            tc.remove(extra)
+        text = paragraph_text(p0)[0]
+        replace_range(p0, 0, len(text), answer)
+        _unclip_row(tc)
+        return True
     text, pieces = paragraph_text(p0)
     if replace or text.strip():
         for p in paras[1:]:
@@ -2273,7 +2452,8 @@ def fill(data: bytes, fields: list, answers: dict) -> bytes:
                 value = str(answer)
                 if field["kind"] == "choice" and target.get("write") == "option_text":
                     value = field["options"][_options_chosen(field, answer)[0]]
-                ops.append((anchor.el, 0, lambda el=anchor.el, v=value, rep=(kind == "cell_replace"): write_cell(el, v, rep), part))
+                ops.append((anchor.el, 0, lambda el=anchor.el, v=value, rep=(kind == "cell_replace"), whole=bool(target.get("all")):
+                            write_cell(el, v, rep, whole), part))
             elif kind == "paragraph":
                 paras = [anchor] + [resolve(x["part"], x["slot"], x["fingerprint"]) for x in loc.get("extra", [])]
                 lines = str(answer).replace("\r\n", "\n").split("\n")
