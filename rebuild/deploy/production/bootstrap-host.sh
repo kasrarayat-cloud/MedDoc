@@ -108,6 +108,9 @@ INGRESS_DIRECTORY="${P[CONFIGURATION_ROOT]}/ingress"
 UNITS=(environment doctor admin worker heartbeat)
 
 # --- artifact: verified before anything else happens ---------------------------------------------
+# The profile sha ties the artifact to this script's profile BYTES, not to this script's commit: an
+# artifact of another commit with a byte-identical profile verifies. Run the script extracted from
+# the same verified artifact (cutover-plan.md G3 step 2); --release-sha binds the commit.
 verification=$("$PYTHON" -B -E -s "$release_app/ops/release_artifact.py" verify --artifact "$artifact" \
   --artifact-sha256 "$artifact_sha" --release-sha "$release_sha" --profile-sha256 "${P[PROFILE_SHA256]}") \
   || refuse "the release artifact failed verification"

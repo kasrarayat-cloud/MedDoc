@@ -10,7 +10,15 @@ name. Verification requires, before anything is extracted:
 - the pax commit id equals the release SHA the operator declared;
 - every member lives under the single prefix `quillmd-<sha>/`;
 - the artifact carries rebuild/ops/production_profile.json and its sha256 equals the profile the
-  running bootstrap script read, so a script from one release cannot install another release.
+  running bootstrap script read, so the installed release carries exactly the profile values
+  (paths, identity, ports, endpoints) that the script validated and planned with.
+
+That last check binds the profile BYTES, not a commit. A bootstrap script from one release WILL
+verify and install any other release whose profile file is byte-identical. The commit is bound
+only by the release SHA the operator declares (checked against the pax commit id) and the artifact
+sha256 recorded when it was built. Running the bootstrap script extracted from that same verified
+artifact (docs/rebuild/v1/cutover-plan.md, G3 step 2) is what makes the script and the release one
+commit; nothing here checks it.
 
 `install` extracts ONLY the `rebuild/` subtree into a destination that must not exist yet, through
 Python's `data` extraction filter: no absolute paths, no `..`, no links leaving the destination, no

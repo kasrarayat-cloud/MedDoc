@@ -305,6 +305,31 @@ class ReleaseArtifactTests(unittest.TestCase):
                 with self.assertRaisesRegex(release_artifact.ArtifactError, '^' + label + '$'):
                     release_artifact.verify(built, built_digest, self.SHA, self.profile_sha)
 
+    def test_the_profile_check_binds_profile_bytes_not_a_commit_and_the_module_says_so(self):
+        # One running script's profile sha verifies two different commits whose profiles are byte-identical.
+        verified = []
+        for sha in (self.SHA, '1' * 40):
+            directory = Path(self.temp.name) / sha[:1]
+            directory.mkdir()
+            prefix = f'quillmd-{sha}/'
+            built, digest = build_artifact(directory, sha, {prefix + 'rebuild/ops/production_profile.json': self.profile_bytes,
+                                                            prefix + 'rebuild/manage.py': sha.encode()})
+            verified.append(release_artifact.verify(built, digest, sha, self.profile_sha)['release_sha'])
+        self.assertEqual(verified, [self.SHA, '1' * 40])
+        # One changed profile byte is refused.
+        directory = Path(self.temp.name) / 'changed'
+        directory.mkdir()
+        prefix = f'quillmd-{self.SHA}/'
+        built, digest = build_artifact(directory, self.SHA, {prefix + 'rebuild/ops/production_profile.json':
+                                                             self.profile_bytes + b' '})
+        with self.assertRaisesRegex(release_artifact.ArtifactError, '^artifact_profile$'):
+            release_artifact.verify(built, digest, self.SHA, self.profile_sha)
+        # So the module claims exactly that, and not that one release's script cannot install another.
+        claim = ' '.join(release_artifact.__doc__.split())
+        self.assertNotIn('cannot install another release', claim)
+        self.assertIn('binds the profile BYTES, not a commit', claim)
+        self.assertIn('WILL verify and install any other release whose profile file is byte-identical', claim)
+
     def test_escaping_members_refuse_and_leave_nothing_outside(self):
         prefix = f'quillmd-{self.SHA}/'
         for name, extra in (('dotdot', {prefix + 'rebuild/../../escaped': b'x'}),
