@@ -2174,7 +2174,7 @@ def v3_field_subjects(units, named, parsed):
     # as unresolved. Only the explicit constructions below can grant ownership.
     patterns = {label: re.compile(r'^(?P<prefix>[^:!?\r\n]{0,80}?)(?P<head>\b' + re.escape(label)
                                   + r')\s+(?P<predicate>\S.*)$', re.I) for label in eligible}
-    prefixes = {'examination': {'', 'on', 'chest', 'no'},
+    prefixes = {'examination': {'', 'on', 'chest', 'no', 'neurological', 'heart and lung'},
                 'medications': {'', 'current', 'no', 'no current'}, 'assessment': {''}}
     factual_predicate = re.compile(r'^(?:there\s+)?(?:is|are|was|were|revealed|reveals|showed|shows|demonstrated|demonstrates)\b', re.I)
     subjects, spans, unresolved = {}, {}, set()
@@ -2188,6 +2188,17 @@ def v3_field_subjects(units, named, parsed):
             if own[0] == 'medications' and v3_medication_complement_holds(own[1]):
                 unresolved.add(unit['id'])
             continue
+        # One complete negative declaration names its own unscoped destination.
+        # Keep every word: this is not "none", a general fragment exemption, or
+        # authority to separate the statement from unresolved surrounding source.
+        allergies = named.get('allergies', ())
+        if (unit['quote'] == 'No known drug allergies.' and len(allergies) == 1
+                and allergies[0].get('kind') in ('text', 'long_text')
+                and question_key(allergies[0].get('context') or '') in ('', 'allergies')):
+            subjects[unit['id']] = 'allergies'
+            spans[unit['id']] = {'label': 'allergies', 'start': unit['start'], 'end': unit['end'],
+                                 'complete_declaration': True}
+            continue
         matches = []
         for label, pattern in patterns.items():
             match = pattern.match(unit['quote'])
@@ -2198,6 +2209,8 @@ def v3_field_subjects(units, named, parsed):
             if not FINITE_STATEMENT_V3.match(bare_predicate): continue
             local_words = LOCAL_SUBJECT_QUALIFIERS.get(label, ())
             if (prefix not in prefixes[label] or not factual_predicate.match(predicate)
+                    or (label == 'examination' and prefix in ('neurological', 'heart and lung')
+                        and question_key(named[label][0].get('context') or '') not in ('', 'examination'))
                     or (label == 'medications' and v3_medication_complement_holds(predicate))
                     or any(m.group().casefold() not in local_words for text in readings(unit['quote'])
                            for m in UNSETTLED.finditer(text))
@@ -2304,6 +2317,7 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
     parsed = ({u['id']: value for u, value in zip(units, parsed_units)} if parsed_units is not None else
               {u['id']: tab_source_value(u['quote'], labels) for u in units})
     subjects, subject_spans, clinical, ambiguous_subjects, unresolved_subjects = v3_field_subjects(units, named, parsed)
+    declarations = {key for key, span in subject_spans.items() if span.get('complete_declaration')}
     colon_values = {u['id']: labelled_value(u['quote'], labels) for u in units}
     colon = {key: bool(value) for key, value in colon_values.items()}
     # Stored option evidence may be the complete labelled VALUE rather than the
@@ -2443,7 +2457,8 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
             # unresolved list or nonplain specific answer retains its earlier hold.
             narrative = (owner in general and (FINITE_STATEMENT_V3.search(
                 value if colon[block[0]['id']] else block[0]['quote']) or local_conditional))
-            factual = owner in clinical and (colon[block[0]['id']] or FINITE_STATEMENT_V3.search(block[0]['quote']))
+            factual = ((owner in clinical and (colon[block[0]['id']] or FINITE_STATEMENT_V3.search(block[0]['quote'])))
+                       or (len(block) == 1 and block[0]['id'] in declarations))
             # These qualifications belong to the exact stated topic and stay in
             # the answer. They do not change another field's subject or polarity.
             local_words = LOCAL_SUBJECT_QUALIFIERS.get(owner, ()) if factual else ()
@@ -2475,6 +2490,7 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
             'ends_read': ends_read, 'shapes_read': shapes_read, 'blocks': blocks, 'block_of': block_of,
             'barriers': barriers, 'patients': patients, 'named': named,
             'subjects': subjects, 'subject_spans': subject_spans, 'clinical': clinical,
+            'declarations': declarations,
             'ambiguous_subjects': ambiguous_subjects, 'unresolved_subjects': unresolved_subjects,
             'coupled': coupled, 'unchanged_references': unchanged_references,
             'neutral_references': neutral_references,
@@ -2728,7 +2744,8 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             # (round 2, F3: 'four or more words and a closing mark' adopted 'Warfarin 5 mg daily.' before 'Stopped last
             # month.' and the question 'Nausea, vomiting or abdominal pain?' as its own answer).
             if (':' not in quote and not finite.search(quote) and not (v3 and unit['id'] in scoped['complete']
-                    and unit['id'] in governance[11]['preceding']['conditional_units'])): guarded=True
+                    and unit['id'] in (governance[11]['preceding']['conditional_units']
+                                       | governance[11]['preceding']['declarations']))): guarded=True
             own_value=parsed_of[unit['id']]
             if v3 and own_value and own_value[1] and POINTER_ONLY_VALUE.fullmatch(own_value[1].strip()):
                 guarded=True

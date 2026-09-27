@@ -1,0 +1,434 @@
+{
+  "source_sha256": "e19cf563ae17326d78e326bea48de7383abf2915fa34b47c4e5fc8feb4dd3b9c",
+  "generation_sha256": "1c0c99abbed920aa25cc13e09bf92a2a82613a957ba65d3ea1a018acecf8ce77",
+  "scope": "diagnostic only; no original result or denominator replaced",
+  "cases": [
+    {
+      "name": "r1-note4",
+      "outcomes": {
+        "Chief complaint": {
+          "status": "conflict",
+          "text": ""
+        },
+        "History of present illness": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Medications": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Allergies": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Smoker": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Examination": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Assessment": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Plan": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "units": [
+        {
+          "id": 1,
+          "quote": "This is a 30-year-old female seen for headaches.",
+          "subject": null,
+          "unresolved": false,
+          "block": 0
+        },
+        {
+          "id": 2,
+          "quote": "The headaches started two months ago and are worse in the morning.",
+          "subject": null,
+          "unresolved": false,
+          "block": 0
+        },
+        {
+          "id": 3,
+          "quote": "She denies visual changes, nausea, or weakness.",
+          "subject": null,
+          "unresolved": false,
+          "block": 0
+        },
+        {
+          "id": 4,
+          "quote": "She takes ibuprofen as needed.",
+          "subject": null,
+          "unresolved": false,
+          "block": 0
+        },
+        {
+          "id": 5,
+          "quote": "No known drug allergies.",
+          "subject": "allergies",
+          "unresolved": false,
+          "block": 1
+        },
+        {
+          "id": 6,
+          "quote": "She is a nonsmoker.",
+          "subject": null,
+          "unresolved": false,
+          "block": 1
+        },
+        {
+          "id": 7,
+          "quote": "Neurological examination is normal.",
+          "subject": "examination",
+          "unresolved": false,
+          "block": 2
+        },
+        {
+          "id": 8,
+          "quote": "Assessment is tension-type headache.",
+          "subject": "assessment",
+          "unresolved": false,
+          "block": 3
+        },
+        {
+          "id": 9,
+          "quote": "Plan is to start amitriptyline 10 mg at night.",
+          "subject": "plan",
+          "unresolved": false,
+          "block": 4
+        },
+        {
+          "id": 10,
+          "quote": "She will follow up in six weeks.",
+          "subject": null,
+          "unresolved": false,
+          "block": 4
+        }
+      ],
+      "blocks": [
+        {
+          "owner": null,
+          "units": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "barrier": false
+        },
+        {
+          "owner": "allergies",
+          "units": [
+            5,
+            6
+          ],
+          "barrier": false
+        },
+        {
+          "owner": "examination",
+          "units": [
+            7
+          ],
+          "barrier": true
+        },
+        {
+          "owner": "assessment",
+          "units": [
+            8
+          ],
+          "barrier": true
+        },
+        {
+          "owner": "plan",
+          "units": [
+            9,
+            10
+          ],
+          "barrier": false
+        }
+      ],
+      "coupled": {},
+      "inherited": []
+    },
+    {
+      "name": "r1-note7",
+      "outcomes": {
+        "Chief complaint": {
+          "status": "conflict",
+          "text": ""
+        },
+        "History of present illness": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Medications": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Allergies": {
+          "status": "supported",
+          "text": "amoxicillin (rash)."
+        },
+        "Examination": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Assessment": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Plan": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "units": [
+        {
+          "id": 1,
+          "quote": "Mother brings in her 4-year-old son with ear pain since yesterday.",
+          "subject": null,
+          "unresolved": false,
+          "block": 0
+        },
+        {
+          "id": 2,
+          "quote": "He has had a runny nose for a week.",
+          "subject": null,
+          "unresolved": false,
+          "block": 0
+        },
+        {
+          "id": 3,
+          "quote": "He takes no regular medications.",
+          "subject": null,
+          "unresolved": false,
+          "block": 0
+        },
+        {
+          "id": 4,
+          "quote": "Allergies: amoxicillin (rash).",
+          "subject": "allergies",
+          "unresolved": false,
+          "block": 1
+        },
+        {
+          "id": 5,
+          "quote": "Examination showed a bulging red left tympanic membrane.",
+          "subject": "examination",
+          "unresolved": false,
+          "block": 2
+        },
+        {
+          "id": 6,
+          "quote": "Assessment is acute otitis media on the left.",
+          "subject": "assessment",
+          "unresolved": false,
+          "block": 3
+        },
+        {
+          "id": 7,
+          "quote": "Plan is azithromycin for five days and ibuprofen for pain.",
+          "subject": "plan",
+          "unresolved": false,
+          "block": 4
+        }
+      ],
+      "blocks": [
+        {
+          "owner": null,
+          "units": [
+            1,
+            2,
+            3
+          ],
+          "barrier": false
+        },
+        {
+          "owner": "allergies",
+          "units": [
+            4
+          ],
+          "barrier": false
+        },
+        {
+          "owner": "examination",
+          "units": [
+            5
+          ],
+          "barrier": true
+        },
+        {
+          "owner": "assessment",
+          "units": [
+            6
+          ],
+          "barrier": true
+        },
+        {
+          "owner": "plan",
+          "units": [
+            7
+          ],
+          "barrier": true
+        }
+      ],
+      "coupled": {
+        "medications": [
+          1,
+          2,
+          3
+        ]
+      },
+      "inherited": []
+    },
+    {
+      "name": "r1-note8",
+      "outcomes": {
+        "Chief complaint": {
+          "status": "conflict",
+          "text": ""
+        },
+        "History of present illness": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Medications": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Allergies": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Smoker": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Examination": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Assessment": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Plan": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "units": [
+        {
+          "id": 1,
+          "quote": "Follow-up for hypertension.",
+          "subject": null,
+          "unresolved": false,
+          "block": 0
+        },
+        {
+          "id": 2,
+          "quote": "Blood pressure today was 142/88.",
+          "subject": null,
+          "unresolved": false,
+          "block": 0
+        },
+        {
+          "id": 3,
+          "quote": "He continues amlodipine 5 mg daily.",
+          "subject": null,
+          "unresolved": false,
+          "block": 0
+        },
+        {
+          "id": 4,
+          "quote": "Allergies: none.",
+          "subject": "allergies",
+          "unresolved": false,
+          "block": 1
+        },
+        {
+          "id": 5,
+          "quote": "Smoker: no.",
+          "subject": "smoker",
+          "unresolved": false,
+          "block": 2
+        },
+        {
+          "id": 6,
+          "quote": "Heart and lung examination was normal.",
+          "subject": "examination",
+          "unresolved": false,
+          "block": 3
+        },
+        {
+          "id": 7,
+          "quote": "Assessment is hypertension not at goal.",
+          "subject": "assessment",
+          "unresolved": false,
+          "block": 4
+        },
+        {
+          "id": 8,
+          "quote": "Plan is to increase amlodipine to 10 mg daily and recheck in four weeks.",
+          "subject": "plan",
+          "unresolved": false,
+          "block": 5
+        }
+      ],
+      "blocks": [
+        {
+          "owner": null,
+          "units": [
+            1,
+            2,
+            3
+          ],
+          "barrier": false
+        },
+        {
+          "owner": "allergies",
+          "units": [
+            4
+          ],
+          "barrier": true
+        },
+        {
+          "owner": "smoker",
+          "units": [
+            5
+          ],
+          "barrier": true
+        },
+        {
+          "owner": "examination",
+          "units": [
+            6
+          ],
+          "barrier": true
+        },
+        {
+          "owner": "assessment",
+          "units": [
+            7
+          ],
+          "barrier": true
+        },
+        {
+          "owner": "plan",
+          "units": [
+            8
+          ],
+          "barrier": false
+        }
+      ],
+      "coupled": {},
+      "inherited": []
+    }
+  ]
+}
