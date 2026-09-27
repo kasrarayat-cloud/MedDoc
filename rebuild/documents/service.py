@@ -148,6 +148,11 @@ def outline_template(path):
     return _run(path, "outline", engine="v3")
 
 
+def assistance_outline(path):
+    """Full source text for blank-only mapping compilation; still processed in the isolated parser."""
+    return _run(path, "assistance_outline", engine="v3")
+
+
 def locate_fields(path, targets: list):
     """Clinician-chosen places -> contract v3 fields with verified anchors (recorded as manual)."""
     if not isinstance(targets, list) or len(targets) > 200:

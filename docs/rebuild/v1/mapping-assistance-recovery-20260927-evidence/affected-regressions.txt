@@ -1,0 +1,21 @@
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+........................................................................................................................./opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+............................................................................................Forbidden (CSRF cookie not set.): /encounters/f4c23c38-fe61-4dd9-aee0-3ab68c43a92c/generate/
+................................Forbidden (CSRF cookie not set.): /console/accounts/e6045384-e1f7-4ad4-8e5e-07653dae5ddf/sessions/
+Forbidden (CSRF cookie not set.): /console/memberships/4fa6f959-d835-4a6c-ac82-b363646be352/
+Forbidden (CSRF cookie not set.): /console/departments/1bb54f5d-3a77-465e-8aea-06bcad2e770c/payer/
+.........................................................../opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+............................................................................
+----------------------------------------------------------------------
+Ran 380 tests in 189.939s
+
+OK
+Destroying test database for alias 'default'...
+Found 380 test(s).
+System check identified no issues (0 silenced).
+Published backup status: healthy (healthy).
+Published backup status: offsite_stale (failure).

@@ -293,7 +293,7 @@ def shape(value, recogniser=None):
 
 
 def live_generation_queue_row(live):
-    """How many LIVE-mode generation jobs are waiting, in flight or awaiting reconciliation: counts, nothing about any job.
+    """LIVE-mode answer generation and blank-mapping jobs waiting, in flight or awaiting reconciliation: counts only.
 
     A model, price or mode switch is only clean once these drain, and a switch out of live mode is the operator's stop —
     the worker refuses each queued live job before sending it (not processed, hold released). Without the count the drain
@@ -306,15 +306,15 @@ def live_generation_queue_row(live):
     from django.db import DatabaseError
     from .models import Job
     try:
-        live_jobs = Job.objects.filter(kind='generation', config__mode='live')
+        live_jobs = Job.objects.filter(kind__in=['generation','mapping'], config__mode='live')
         queued, running, reconciliation = (live_jobs.filter(state='queued').count(), live_jobs.filter(state='running').count(),
                                            live_jobs.filter(state='reconciliation').count())
     except DatabaseError:
-        return {'name': 'live generation jobs', 'value': 'UNAVAILABLE — the job table could not be read', 'severity': 'error'}
+        return {'name': 'live language-model jobs', 'value': 'UNAVAILABLE — the job table could not be read', 'severity': 'error'}
     value = f'{queued} queued, {running} running, {reconciliation} in reconciliation'
     if live:
-        return {'name': 'live generation jobs', 'value': value + ' (drained when all three are 0)', 'severity': ''}
-    return {'name': 'live generation jobs', 'severity': 'warning' if queued or running or reconciliation else '',
+        return {'name': 'live language-model jobs', 'value': value + ' (drained when all three are 0)', 'severity': ''}
+    return {'name': 'live language-model jobs', 'severity': 'warning' if queued or running or reconciliation else '',
             'value': value + ' — QUILLMD_AI_MODE is not live, so the worker refuses each queued one before sending it '
                              '(not processed, nothing charged, hold released)'}
 

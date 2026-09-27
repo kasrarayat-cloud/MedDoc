@@ -1,0 +1,113 @@
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+........EEE...E..
+======================================================================
+ERROR: test_mocked_incomplete_or_wrong_model_is_receipted_absorbed_and_never_adopted (core.tests.test_mapping_assistance.MappingAssistance.test_mocked_incomplete_or_wrong_model_is_receipted_absorbed_and_never_adopted) (stop='max_tokens', model='claude-sonnet-5')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/tests/test_mapping_assistance.py", line 233, in test_mocked_incomplete_or_wrong_model_is_receipted_absorbed_and_never_adopted
+    job=self.enqueue()
+        ^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/tests/test_mapping_assistance.py", line 58, in enqueue
+    return mapping_jobs.enqueue(self.version,self.user,self.config,self.compiled['request_sha256'])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/mapping_jobs.py", line 30, in enqueue
+    permission(config)
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/mapping_jobs.py", line 21, in permission
+    generation.refuse_switched_mode(config)
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 1972, in refuse_switched_mode
+    if now_live and not queued_live: _refuse_profile(MODE_ENTERED_LIVE)
+                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 216, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['QuillMD was switched to live mode after this synthetic request was queued, so its synthetic answers were not used.']
+
+======================================================================
+ERROR: test_mocked_incomplete_or_wrong_model_is_receipted_absorbed_and_never_adopted (core.tests.test_mapping_assistance.MappingAssistance.test_mocked_incomplete_or_wrong_model_is_receipted_absorbed_and_never_adopted) (stop='end_turn', model='claude-sonnet-4-6')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/tests/test_mapping_assistance.py", line 233, in test_mocked_incomplete_or_wrong_model_is_receipted_absorbed_and_never_adopted
+    job=self.enqueue()
+        ^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/tests/test_mapping_assistance.py", line 58, in enqueue
+    return mapping_jobs.enqueue(self.version,self.user,self.config,self.compiled['request_sha256'])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/mapping_jobs.py", line 30, in enqueue
+    permission(config)
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/mapping_jobs.py", line 21, in permission
+    generation.refuse_switched_mode(config)
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 1972, in refuse_switched_mode
+    if now_live and not queued_live: _refuse_profile(MODE_ENTERED_LIVE)
+                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 216, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['QuillMD was switched to live mode after this synthetic request was queued, so its synthetic answers were not used.']
+
+======================================================================
+ERROR: test_mocked_native_receipt_charge_and_financial_views_keep_exact_model (core.tests.test_mapping_assistance.MappingAssistance.test_mocked_native_receipt_charge_and_financial_views_keep_exact_model)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/.venv/lib/python3.12/site-packages/django/test/utils.py", line 456, in inner
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/tests/test_mapping_assistance.py", line 213, in test_mocked_native_receipt_charge_and_financial_views_keep_exact_model
+    job=self.enqueue();response=self.response()
+        ^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/tests/test_mapping_assistance.py", line 58, in enqueue
+    return mapping_jobs.enqueue(self.version,self.user,self.config,self.compiled['request_sha256'])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/mapping_jobs.py", line 30, in enqueue
+    permission(config)
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/mapping_jobs.py", line 21, in permission
+    generation.refuse_switched_mode(config)
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 1972, in refuse_switched_mode
+    if now_live and not queued_live: _refuse_profile(MODE_ENTERED_LIVE)
+                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 216, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['QuillMD was switched to live mode after this synthetic request was queued, so its synthetic answers were not used.']
+
+======================================================================
+ERROR: test_unknown_provider_outcome_keeps_hold_and_same_attempt_without_retry (core.tests.test_mapping_assistance.MappingAssistance.test_unknown_provider_outcome_keeps_hold_and_same_attempt_without_retry)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/.venv/lib/python3.12/site-packages/django/test/utils.py", line 456, in inner
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/tests/test_mapping_assistance.py", line 245, in test_unknown_provider_outcome_keeps_hold_and_same_attempt_without_retry
+    job=self.enqueue()
+        ^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/tests/test_mapping_assistance.py", line 58, in enqueue
+    return mapping_jobs.enqueue(self.version,self.user,self.config,self.compiled['request_sha256'])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/mapping_jobs.py", line 30, in enqueue
+    permission(config)
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/mapping_jobs.py", line 21, in permission
+    generation.refuse_switched_mode(config)
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 1972, in refuse_switched_mode
+    if now_live and not queued_live: _refuse_profile(MODE_ENTERED_LIVE)
+                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 216, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['QuillMD was switched to live mode after this synthetic request was queued, so its synthetic answers were not used.']
+
+----------------------------------------------------------------------
+Ran 16 tests in 25.950s
+
+FAILED (errors=4)
+Destroying test database for alias 'default'...
+Found 16 test(s).
+System check identified no issues (0 silenced).

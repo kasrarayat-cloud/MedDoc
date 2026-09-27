@@ -20,9 +20,11 @@ from reportlab.pdfbase.pdfmetrics import stringWidth
 if __package__:
     from .tab_form import inspect_tabs, fill_tabs, _answer_tab, WARNINGS as TAB_WARNINGS
     from . import word_v3
+    from .assistance import outline as assistance_outline
 else:  # Isolated worker imports this module directly (before the sandbox closes the filesystem).
     from tab_form import inspect_tabs, fill_tabs, _answer_tab, WARNINGS as TAB_WARNINGS
     import word_v3
+    from assistance import outline as assistance_outline
 
 V3_WARNINGS = [
     "QuillMD found these answer areas automatically. Check every field against the form before using it: add any "
@@ -49,6 +51,8 @@ def process_v3(workspace, request):
                     "contract": word_v3.CONTRACT, "adapter": "word-v3", "sandbox": "landlock+seccomp"}
         if operation == "outline":
             return {"format": "docx", **word_v3.outline(data), "adapter": "word-v3", "sandbox": "landlock+seccomp"}
+        if operation == "assistance_outline":
+            return {"format": "docx", **assistance_outline(data), "adapter": "word-v3", "sandbox": "landlock+seccomp"}
         if operation == "locate":
             return {"format": "docx", "fields": word_v3.locate(data, request.get("targets") or []),
                     "contract": word_v3.CONTRACT, "adapter": "word-v3", "sandbox": "landlock+seccomp"}
@@ -655,7 +659,7 @@ def process(workspace, request):
     fmt = request["format"]
     path = workspace / ("input." + fmt)
     warnings = []
-    if fmt == "docx" and (request.get("engine") == "v3" and request.get("operation") in ("inspect", "outline", "locate")
+    if fmt == "docx" and (request.get("engine") == "v3" and request.get("operation") in ("inspect", "outline", "locate", "assistance_outline")
                           or request.get("operation") == "fill" and is_v3_mapping(request.get("mapping"))):
         return process_v3(workspace, request)
     if request.get("operation") in ("outline", "locate"):

@@ -122,7 +122,7 @@ def charge_wallets(job):
     payer's paid wallet (reserve()'s rule; a reconciled charge debits it). A job with no recorded payer yet is judged by
     the payer reserve() would record for it."""
     wallets=[r.wallet for r in Reservation.objects.filter(job=job,state='held').select_related('wallet').order_by('pk')]
-    payer=recorded_paid_wallet(job.payer or department_payer(job.user_id,job.encounter.department))
+    payer=recorded_paid_wallet(job.payer or department_payer(job.user_id,job.department))
     return wallets+([payer] if payer is not None else [])
 
 
@@ -260,13 +260,13 @@ def available_balance(user,department):
 def reserve(job,maximum_cost=None,*,charge_limit=None):
     """Hold the customer's binding charge limit before any provider request. Either the maximum provider cost (held × 1.5)
     or an exact charge limit the customer saw and approved."""
-    membership(job.user,job.encounter.department)
+    membership(job.user,job.department)
     from .models import Job
     job=Job.objects.select_for_update().get(pk=job.pk)
     maximum_charge=exact(charge_limit) if charge_limit is not None else exact(maximum_cost)*MULTIPLIER
     if maximum_charge<0: raise ValidationError('A charge limit cannot be negative.')
     if Reservation.objects.filter(job=job).exists(): return
-    department=job.encounter.department
+    department=job.department
     promo,payer=payer_wallets(job.user,department)
     job.payer=department_payer(job.user_id,department)
     job.save(update_fields=['payer'])
@@ -327,7 +327,7 @@ def settle(job,actual_cost,units,rates,provider,provider_request_id='',simulated
         # The unused part of a paid hold becomes available just as on release().
         # Resume older adjustments only after the settlement and its outer transaction commit.
         if wallet.kind=='paid' and debit<r.amount: reconcile_after_commit(wallet)
-    d=job.encounter.department
+    d=job.department
     result=Usage.objects.create(job=job,user=job.user,department=d,organization=d.organization,payer=job.payer or f'user:{job.user_id}',provider=provider,provider_request_id=provider_request_id,provider_resource_id=provider_resource_id,units=units,rates=rates,actual_cost=actual,charged_cost=charged,simulated=simulated)
     if over_limit>0:
         # Provider cost, customer charge and the absorbed difference stay separate: Usage.actual_cost, the usage ledger debits,
@@ -565,7 +565,7 @@ def absorb_failed_job(job,actor=None,note=''):
     amount=reconciliation.reconciled_cost if reconciliation else usage.actual_cost
     evidence=f'usage:{usage.pk}'+(f' reconciliation:{reconciliation.evidence_reference}' if reconciliation else '')+(f' note:{note.strip()}' if note and note.strip() else '')
     cost,created=PlatformCost.objects.get_or_create(job=job,kind='absorbed_failure',defaults={'amount':amount,'description':'Provider cost absorbed: output not adopted','evidence_reference':evidence[:240],'recorded_by':actor if getattr(actor,'pk',None) else None})
-    if created or reversed_total: audit(job.user,'usage.absorbed',job.pk,department=job.encounter.department,actual_cost=str(usage.actual_cost),platform_cost=str(cost.amount),reversed=str(reversed_total))
+    if created or reversed_total: audit(job.user,'usage.absorbed',job.pk,department=job.department,actual_cost=str(usage.actual_cost),platform_cost=str(cost.amount),reversed=str(reversed_total))
     return cost
 
 def reconciliation():
