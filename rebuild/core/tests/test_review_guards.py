@@ -986,6 +986,23 @@ class WordNotesSaveAndClear(OfflineWordForm):
         self.assertEqual(event.get('cleared'), cleared(reviewed_unedited=4, with_clinician_review=4, statements_reviewed=3))
 
 
+class StatementCountsSayWhatTheyCount(OfflineWordForm):
+    """Refutation round 3, F4: `statements_chosen_unreviewed` counted wordings nobody chose. A plain save posts every
+    statement's wording as the page renders it (its default), and each is recorded as a decision; a changed notes save
+    then audited three "chosen". The record cannot tell a deliberate choice of the default wording from none, so the key
+    says what it counts: statement decisions recorded and unreviewed."""
+
+    def test_wordings_saved_as_rendered_are_not_counted_as_chosen(self):
+        self.save()                                          # (as the page renders it: nobody chose a wording)
+        self.assertEqual({key: (d['variant'], d['reviewed']) for key, d in self.encounter.template_review['decisions'].items()},
+                         {'claim_9': ('original', False), 'claim_32': ('negative', False), 'claim_46': ('trusted', False)})
+        self.client.post(f'/encounters/{self.encounter.pk}/notes/', {'revision': self.encounter.revision,
+                                                                     'notes': self.encounter.notes + '\nSynthetic addendum.'})
+        counts = last_event('encounter.notes_saved', self.encounter).get('cleared', {})
+        self.assertNotIn('statements_chosen_unreviewed', counts)
+        self.assertEqual((counts.get('statements_recorded_unreviewed'), counts.get('statements_reviewed')), (3, 0))
+
+
 class AFinalizedRecordIsNotReReviewedByItsReader(OfflineWordForm):
     """A finalized record was re-evaluated as the reader's own review: for any clinician but the signer, the signer's
     identity no longer resolved to the reader and the page said the Word review was incomplete, showing the template's
