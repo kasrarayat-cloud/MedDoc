@@ -118,7 +118,9 @@ It never sends sampling parameters, `budget_tokens` or a prefill. Every other mo
 snapshotted into `Job.config` with the rates and hashed into `pricing_version`, except the
 legacy profile, which hashes as absent. The rollback configuration therefore still
 fingerprints as `configured-v1:fcc80267…`, and no stored fingerprint changes meaning. An
-invalid choice refuses generation before any request, and the hold is released.
+invalid choice refuses generation before any request, and the hold is released. So does
+any Claude model newer than 4.6 other than `claude-sonnet-5`, until it has its own
+profile: on those models the old call would change meaning.
 
 **Hold.** `maximum_cost` prices the exact `max_tokens` the profile sends:
 

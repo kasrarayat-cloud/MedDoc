@@ -19,6 +19,7 @@ The installed SDK, `anthropic==0.125.0`, already carries every type used; no upg
 | Request | one call: `max_tokens=6000`, 60 s, no `thinking`/`effort` | model-keyed profile (`core.generation.request_profile`), snapshotted in `Job.config`, hashed into `pricing_version` |
 | claude-sonnet-4-6 | — | the **legacy profile**: the old call byte for byte (tested down to the HTTP body), and the old fingerprint |
 | claude-sonnet-5 | would have run Sonnet 5's defaults (adaptive thinking, effort `high`) | explicit `thinking` and `output_config.effort`; never `temperature`/`top_p`/`top_k`/`budget_tokens`/prefill |
+| any other Claude model newer than 4.6 (e.g. `claude-opus-5`, `claude-sonnet-5-1`, a misspelt `Claude-Sonnet-5`) | the old call, which on those models means a larger tokenizer and default thinking | **refused before any request** until it has its own profile |
 | Output bound | `6000` written twice | one `max_output_tokens` per profile, read by the hold and the request: 6000 / 8000 / 16000 |
 | Timeout | 60 s | legacy 60 s; Sonnet 5 120 s, under the worker's `TimeoutStopSec=150` and the 5-minute stale mark |
 | Receipt units | tokens | + `inference_geo`, `thinking_tokens` (if reported), `stop_reason`, `stop_details_category` — new receipts only |

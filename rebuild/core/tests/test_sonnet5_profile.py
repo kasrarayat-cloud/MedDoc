@@ -152,6 +152,30 @@ class PricingFingerprint(SimpleTestCase):
                 client.assert_not_called()
                 openai_client.assert_not_called()
 
+    def test_a_newer_claude_model_without_its_own_profile_is_refused_whatever_it_carries(self):
+        """The class, not the instance: Claude 4.7+ tokenizes larger and Sonnet 5 / Opus 5 think by default, so the legacy
+        request is unsafe on ANY newer model — not only on a misspelt claude-sonnet-5."""
+        for model in ('claude-opus-5', 'claude-opus-5-5', 'claude-sonnet-5-1', 'claude-opus-4-7', 'claude-opus-4-8',
+                      'claude-fable-5-1', 'CLAUDE-OPUS-5', ' claude-sonnet-5', 'Claude-Sonnet-5'):
+            with self.subTest(model=model):
+                self.assertIn('invalid', g.request_profile('anthropic', model, 'disabled', 'medium', ''))
+                with override_settings(**dict(SONNET_46, AI_MODEL=model)), patch.dict(os.environ, PRICE_ENV), \
+                        patch('anthropic.Anthropic') as client:
+                    quoted = g.configuration()
+                    old = {k: v for k, v in quoted.items() if k != 'request_profile'}
+                    for config in (quoted, old, {**old, 'request_profile': g.LEGACY_PROFILE}):
+                        with self.assertRaises(NoProviderRequest):
+                            g.generate(NOTES, FIELDS, config)
+                        with self.assertRaises(NoProviderRequest):
+                            g.maximum_cost(NOTES, FIELDS, config)
+                    client.assert_not_called()
+        # Up to 4.6, and anything that is not an Anthropic Claude model, keeps the pre-profile request.
+        for provider, model in (('anthropic', 'claude-sonnet-4-6'), ('anthropic', 'claude-haiku-4-5'),
+                                ('anthropic', 'claude-sonnet-4-5-20250929'), ('anthropic', 'claude-opus-4-1'),
+                                ('anthropic', 'synthetic-model'), ('openai', 'gpt-4.1-mini'), ('openai', 'claude-opus-5')):
+            with self.subTest(provider=provider, model=model):
+                self.assertEqual(g.request_profile(provider, model, 'x', 'y', ''), g.LEGACY_PROFILE)
+
     def test_a_stored_profile_that_does_not_match_its_shapes_is_refused_before_any_request(self):
         with override_settings(**SONNET_5), patch.dict(os.environ, PRICE_ENV):
             good = g.configuration()

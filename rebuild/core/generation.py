@@ -110,6 +110,29 @@ WORKER_STOP_SECONDS=150
 FORBIDDEN_REQUEST_KEYS=frozenset(('temperature','top_p','top_k','budget_tokens'))
 
 
+_CLAUDE_VERSION=re.compile(r'claude-[a-z]+-(\d{1,2})(?:-(\d{1,2}))?(?:-\d{8})?')
+
+def claude_generation(model):
+    """(major, minor) of a Claude model id — claude-sonnet-4-6 → (4, 6), claude-sonnet-5 → (5, 0),
+    claude-opus-4-5-20251101 → (4, 5) — or None for anything else."""
+    match=_CLAUDE_VERSION.fullmatch(model) if isinstance(model,str) else None
+    return (int(match[1]),int(match[2] or 0)) if match else None
+
+
+def unprofiled(provider,model):
+    """An Anthropic model the pre-profile request is NOT safe for, so it may not run until it has its own profile.
+
+    From Claude 4.7 the tokenizer yields ~30% more tokens (a 6000 max_tokens sized on 4.6 can truncate), and from Sonnet 5 /
+    Opus 5 an omitted `thinking` runs adaptive thinking — the legacy request would silently change meaning on any of them.
+    claude-sonnet-5 itself has a profile; a near-miss spelling of it (capitals, whitespace) is refused too, since the API
+    would never see the string this table keys on. Models up to 4.6, and every non-Claude model, keep the legacy request.
+    """
+    if provider!='anthropic' or not isinstance(model,str) or model==SONNET_5: return False
+    folded=model.strip().casefold()
+    generation=claude_generation(folded)
+    return folded==SONNET_5 or (generation is not None and generation>(4,6))
+
+
 def request_profile(provider,model,thinking,effort,inference_geo):
     """The request profile the named settings select. Never raises: an unusable choice is RECORDED as `{'invalid': why}`,
     because configuration() also prices transcription and renders pages, and a mistyped language-model setting must not
@@ -126,9 +149,9 @@ def request_profile(provider,model,thinking,effort,inference_geo):
                  # can never land in a stored receipt; the returned block carries only an opaque signature.
                  'thinking':{'type':'disabled'} if thinking=='disabled' else {'type':'adaptive','display':'omitted'},
                  'effort':effort}
-    elif provider=='anthropic' and isinstance(model,str) and model.strip().casefold()==SONNET_5:
-        # A near-miss spelling would otherwise take the legacy profile, and Sonnet 5 would run its own defaults.
-        return {'invalid':'QUILLMD_AI_MODEL must be exactly claude-sonnet-5 (no whitespace or capitals).'}
+    elif unprofiled(provider,model):
+        return {'invalid':'QUILLMD_AI_MODEL has no request profile: QuillMD runs claude-sonnet-5 (spelled exactly so) '
+                          'and Claude models up to 4.6; a newer model needs its own profile first.'}
     else:
         profile=dict(LEGACY_PROFILE)
     if geo:
@@ -158,6 +181,8 @@ def job_request_profile(config):
     """
     provider,model=config.get('provider'),config.get('model')
     profile=config.get('request_profile')
+    if unprofiled(provider,model):
+        _refuse_profile('QuillMD has no request profile for this model, so the request cannot be built. Nothing was sent.')
     if profile is None:
         if provider=='anthropic' and model==SONNET_5:
             _refuse_profile('This request was quoted before claude-sonnet-5 had a request profile. Nothing was sent; '
@@ -196,14 +221,12 @@ def anthropic_request(model,profile,system,payload,schema):
     return request
 
 
-_CLAUDE_VERSION=re.compile(r'claude-[a-z]+-(\d{1,2})(?:-(\d{1,2}))?(?:-\d{8})?')
-
 def us_inference_priced(provider):
     """Whether a receipt's provider (`anthropic:<model>`) is a Claude 4.6-or-later model, the generation the US-only
     inference multiplier applies to. Earlier models "always use standard pricing" (pricing page, read 2026-09-27)."""
     family,_,model=str(provider).partition(':')
-    match=_CLAUDE_VERSION.fullmatch(model) if family=='anthropic' else None
-    return bool(match) and (int(match[1]),int(match[2] or 0))>=(4,6)
+    generation=claude_generation(model) if family=='anthropic' else None
+    return generation is not None and generation>=(4,6)
 
 
 def anthropic_usage_facts(response):
