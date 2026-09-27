@@ -1,0 +1,41 @@
+Using existing test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-ordinary-topics/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-ordinary-topics/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+FF
+======================================================================
+FAIL: test_stale_reviewed_assessment_cannot_finalize_past_a_nominal_denial (core.tests.test_v3_ordinary_topics.CompleteNominalPlanWorkflow.test_stale_reviewed_assessment_cannot_finalize_past_a_nominal_denial)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-topics/rebuild/core/tests/test_v3_ordinary_topics.py", line 186, in test_stale_reviewed_assessment_cannot_finalize_past_a_nominal_denial
+    self.assertEqual((assessment['status'], assessment['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'infection.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'infection.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_nominal_denial_keeps_the_earlier_assessment_governed (core.tests.test_v3_ordinary_topics.NominalPlanTopic.test_nominal_denial_keeps_the_earlier_assessment_governed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-topics/rebuild/core/tests/test_v3_ordinary_topics.py", line 75, in test_nominal_denial_keeps_the_earlier_assessment_governed
+    self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'infection.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'infection.')
++ ('conflict', '')
+
+----------------------------------------------------------------------
+Ran 2 tests in 1.424s
+
+FAILED (failures=2)
+Preserving test database for alias 'default'...
+Found 2 test(s).
+System check identified no issues (0 silenced).
