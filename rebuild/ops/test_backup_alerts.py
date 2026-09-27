@@ -1294,6 +1294,48 @@ class PreviousReleaseCompatibilityTests(unittest.TestCase):
         self.assertEqual(result['incident']['conditions_announced'], ['backup_stale'])
         self.assertEqual(self.sender.call_count, 1, 'nothing is owed: the previous release announced it')
 
+    def test_the_previous_releases_first_notice_of_the_same_warning_is_read_at_its_own_time(self):
+        """⚠️ R3-4, round 3, the refuter's exact sequence. layer_in_force reads the discarded notice as
+        begun only if a request record shows ITS condition at ITS time. Compared on the condition alone
+        (a mutant that survived): this release's first notice of a warning incident is killed between
+        the ledger and status.json; after a rollback the previous release sends its own first notice
+        for the same incident, the same warning, later; rolled forward, the ledger's earlier stamp was
+        read as that notice's. The incident closes, and a failure two hours later is then held by the
+        cooldown as though an unknown notice were recent (cooldown_suppressed): silence for a day,
+        where the real code sends the ESCALATION first notice (more severe than the warning)."""
+        self.recovery.return_value['condition'] = 'offsite_capacity_low'
+        a.check(self.at)                                                   # a warning notice at t0
+        self.recovery.return_value['condition'] = 'healthy'
+        a.check(self.at + timedelta(hours=1))                              # closes
+        self.recovery.return_value['condition'] = 'offsite_next_run_budget_low'
+        result, _ = a.check(self.at + timedelta(hours=2))                  # a warning incident, held
+        self.assertEqual(result['alert']['outcome'], 'cooldown_suppressed')
+        held = json.loads((self.alerts / 'status.json').read_text())['incident_id']
+        crash, calls = IncidentLedgerTests.crash_on_second_write(self)
+        with crash, self.assertRaises(KeyboardInterrupt):
+            a.check(self.at + timedelta(hours=24, minutes=5))              # its first notice, killed
+        self.assertEqual(calls, [a.NOTICES_FILE, 'status.json'])
+        self.assertEqual(json.loads((self.alerts / a.NOTICES_FILE).read_text())['incident']['incident_attempt'], held)
+        self.assertEqual(self.sender.call_count, 1)
+        with patch.object(self.old, 'DIRECTORY', self.alerts):             # rolled back: its own first notice
+            result, _ = self.old.check(self.at + timedelta(hours=24, minutes=30))
+        self.assertTrue(result['alert']['provider_accepted'])
+        self.old_sender.assert_called_once()
+        self.assertIn('Condition: offsite_next_run_budget_low', self.old_sender.call_args.args[2])
+        self.assertEqual(json.loads((self.alerts / 'status.json').read_text())['incident_attempt'], held)
+        result, _ = a.check(self.at + timedelta(hours=24, minutes=35))     # rolled forward
+        self.assertEqual((result['condition'], result['alert']['provider_message_id']),
+                         ('offsite_next_run_budget_low', 'previous-release-id'))
+        self.recovery.return_value['condition'] = 'healthy'
+        a.check(self.at + timedelta(hours=25))                             # the incident closes
+        self.health.return_value = 'backup_failed'
+        result, code = a.check(self.at + timedelta(hours=27))
+        self.assertEqual((code, result['condition'], result['alert']['outcome'], self.sender.call_count),
+                         (1, 'backup_failed', 'provider_accepted', 2),
+                         "the previous release's notice was read at the discarded notice's time and held a failure")
+        self.assertIn('ESCALATION: a more severe backup incident opened', self.sender.call_args.args[1])
+        self.assertIn('(highest: warning)', self.sender.call_args.args[2])
+
     def test_the_known_exception_the_previous_release_refuses_rather_than_mis_sends(self):
         """⚠️ F7, round 2. A fresh monitor (no status.json yet) whose first notice is killed between the
         ledger and status.json leaves the ledger alone. The previous release reads any `incident-*`
