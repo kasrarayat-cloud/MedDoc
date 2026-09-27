@@ -1,0 +1,34 @@
+[
+  {
+    "name": "direct-donor-heading",
+    "expected": "Context must retain Donor."
+  },
+  {
+    "name": "inherited-donor-heading",
+    "expected": "Equivalent inherited Heading 1 context must retain Donor or visibly refuse."
+  },
+  {
+    "name": "two-paragraph-question",
+    "expected": "Cannot silently assign only the anaphoric second part; retain complete question context or warn."
+  },
+  {
+    "name": "plain-positive",
+    "expected": "One complete question maps to its adjacent box."
+  },
+  {
+    "name": "cell-nil",
+    "expected": "Explicit cell nil overrides style and must refuse."
+  },
+  {
+    "name": "ancestor-conditional-nil",
+    "expected": "Conditional nil exists in the style ancestry; automatic explicit-border proof must not ignore it."
+  },
+  {
+    "name": "inline-blank",
+    "expected": "Preserve the original name field and warn about the additional box."
+  },
+  {
+    "name": "page-break-spacer",
+    "expected": "A physical page-break paragraph is not a plain empty spacer; assess refusal."
+  }
+]
