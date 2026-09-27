@@ -1210,16 +1210,19 @@ class MixedBoxNumbers(unittest.TestCase):
     def test_a_cell_whose_preview_shows_boxes_nested_inside_it_refuses_a_number(self):
         doc = Document()
         doc.add_paragraph("Synthetic severity")
-        outer = doc.add_table(rows=1, cols=2)
+        outer = doc.add_table(rows=1, cols=3)
         outer.cell(0, 0).paragraphs[0].text = "☐ Mild ☐ Severe"          # its own line, and a nested table's box
         outer.cell(0, 0).add_table(rows=1, cols=1).cell(0, 0).text = "☐ Other"
         control = checkbox_control()                                   # a control showing no box, and a nested box
         control.find(qn("w:sdtContent")).find(qn("w:r")).find(qn("w:t")).text = "x"
         outer.cell(0, 1).paragraphs[0]._p.append(control)
         outer.cell(0, 1).add_table(rows=1, cols=1).cell(0, 0).text = "☐"
+        ff_field(outer.cell(0, 2).paragraphs[0], "checkbox", name="Hidden")   # a legacy checkbox the preview hides,
+        outer.cell(0, 2).add_table(rows=1, cols=1).cell(0, 0).text = "☐"   # and a nested box: 1 shown, 1 of its own
         path, places = self.form(docx_bytes(doc), "nested.docx")
         for tc, preview in (("word/document.xml#b/tbl[0]/tr[0]/tc[0]", "☐ Mild ☐ Severe☐ Other"),
-                            ("word/document.xml#b/tbl[0]/tr[0]/tc[1]", "x☐")):
+                            ("word/document.xml#b/tbl[0]/tr[0]/tc[1]", "x☐"),
+                            ("word/document.xml#b/tbl[0]/tr[0]/tc[2]", "☐")):
             self.assertEqual((places[tc]["preview"], places[tc]["boxes"], places[tc].get("unnumbered_boxes")),
                              (preview, 0, True), tc)
             with self.assertRaises(DocumentError) as refused:
