@@ -775,6 +775,34 @@ class StuckJobRecoverySemantics(ConsoleFixture):
         self.assertNotIn('Retry job', body)
 
 
+class LanguageModelOnTheServicesPage(ConsoleFixture):
+    """S5-R3. The browser is read as the full configuration status, so the model, its rates, the request profile —
+    including INVALID, which refuses every generation — and the pricing_version must be ON the page, not only in the
+    terminal. Rendered through the real view, signed in with MFA."""
+
+    def test_the_page_names_the_model_profile_and_pricing_version_including_invalid(self):
+        import os
+        from core import generation
+        from core.tests.test_sonnet5_profile import PRICE_ENV, SONNET_5
+        self.sign_in()
+        for label, overrides, expected in (
+                ('valid', SONNET_5, 'explicit {'),
+                ('invalid', dict(SONNET_5, AI_EFFORT='max'),
+                 'INVALID — every generation is refused before any request: QUILLMD_AI_EFFORT must be one of: '
+                 'low, medium, high.')):
+            with self.subTest(profile=label), override_settings(**overrides), patch.dict(os.environ, PRICE_ENV):
+                response = self.client.get('/console/services/')
+                self.assertEqual(response.status_code, 200, 'the page must render before its text means anything')
+                body = response.content.decode()
+                version = generation.configuration()['pricing_version']
+                self.assertIn('id="language-model"', body)
+                self.assertIn('>QUILLMD_AI_MODEL<', body)
+                self.assertIn('claude-sonnet-5', body)
+                self.assertIn('>QUILLMD_AI_OUTPUT_RATE<', body)
+                self.assertIn(expected, body)
+                self.assertIn(version, body)
+
+
 class ConsoleAccessControl(ConsoleFixture):
     ROUTES = ['/console/', '/console/audit/', '/console/organizations/', '/console/services/',
               '/console/usage.csv']

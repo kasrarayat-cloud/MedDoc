@@ -150,6 +150,38 @@ class ConfigurationStatusNamesTheModel(SimpleTestCase):
         self.assertIn('request profile: INVALID — every generation is refused before any request: '
                       'QUILLMD_AI_EFFORT must be one of: low, medium, high.', report)
 
+    def test_the_browser_mirror_carries_every_language_model_line(self):
+        """S5-R3. `admin_console.configuration_rows()` — what the services page renders — says it is everything this
+        command prints, and after the language-model section landed it carried none of it: no model, no rates, no
+        request profile, no pricing_version, and no INVALID state that refuses every generation. Each line the terminal
+        prints under 'Language model' must be a row of the browser mirror, in the same order, for every profile state."""
+        from core import admin_console
+        cases = {'sonnet 5': SONNET_5, 'invalid effort': dict(SONNET_5, AI_EFFORT='max'), 'rollback': SONNET_46,
+                 'rollback + us': dict(SONNET_46, AI_INFERENCE_GEO='us'),
+                 'unlisted claude id': dict(SONNET_46, AI_MODEL='claude-mythos-preview')}
+        for label, overrides in cases.items():
+            for discount in ('0', 'x'):
+                with self.subTest(case=label, discount=discount), override_settings(**overrides), \
+                        patch.dict(os.environ, {**PRICE_ENV, 'QUILLMD_PROVIDER_DISCOUNT_RATE': discount,
+                                                'ANTHROPIC_API_KEY': 'sk-ant-canary-never-shown'}):
+                    out = StringIO()
+                    call_command('configuration_status', stdout=out)
+                    rows = admin_console.configuration_rows()
+                    lines = out.getvalue().splitlines()
+                    start = lines.index('Language model (plain configuration values, shown so a model switch can be '
+                                        'confirmed):')
+                    section = [line.strip() for line in lines[start + 1:lines.index('Media tools:')]]
+                    mirror = [f"{row['name']}: {row['value']}" for row in rows.get('language_model', [])]
+                    self.assertEqual(len(section), 9)                  # 7 settings + request profile + pricing_version
+                    self.assertEqual(mirror, section)
+                    self.assertNotIn('canary', repr(rows))
+                    by_name = {row['name']: row for row in rows.get('language_model', [])}
+                    profile = by_name.get('request profile', {})
+                    if label in ('invalid effort', 'unlisted claude id') or discount == 'x':
+                        self.assertEqual(profile.get('severity'), 'error')
+                        self.assertTrue(profile.get('value', '').startswith(('INVALID — every generation is refused',
+                                                                              'UNAVAILABLE')))
+
     def test_a_refused_discount_is_reported_without_stopping_the_screen(self):
         out = StringIO()
         with override_settings(**SONNET_5), patch.dict(os.environ, {**PRICE_ENV, 'QUILLMD_PROVIDER_DISCOUNT_RATE': 'x'}):

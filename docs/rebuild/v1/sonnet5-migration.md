@@ -25,7 +25,7 @@ The installed SDK, `anthropic==0.125.0`, already carries every type used; no upg
 | Timeout | 60 s | legacy 60 s; Sonnet 5 120 s, under the worker's `TimeoutStopSec=150` and the 5-minute stale mark |
 | Receipt units | tokens | + `inference_geo`, `thinking_tokens` (if reported), `stop_reason`, `stop_details_category` — new receipts only |
 | US-only inference | not priced | ×1.1 when **metered** `us` on Claude 4.6+; `audit_billing` recomputes in lockstep; old receipts unchanged |
-| `configuration_status` | mode, provider, key presence | + model, three rates, Sonnet 5 settings, request profile, `pricing_version` |
+| `configuration_status` | mode, provider, key presence | + model, three rates, Sonnet 5 settings, request profile, `pricing_version`; the admin console's services page renders the same rows from the same function (`admin_console.language_model_rows`) |
 
 Response handling needed no change and is now tested with real SDK objects. Anything other than
 `stop_reason: end_turn` is refused, and only `type == "text"` blocks are read. Refusal, `max_tokens` (even with JSON

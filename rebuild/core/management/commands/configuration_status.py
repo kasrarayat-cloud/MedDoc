@@ -81,44 +81,10 @@ class Command(BaseCommand):
         None of these is a secret — they are the answer to "which model, at which price" — and without them an operator
         switching the model could not confirm the switch from the one screen built for it. Every value is computed by
         `core.generation.configuration()`, the function enqueue snapshots, so this screen cannot describe a different
-        request from the one a job would make.
+        request from the one a job would make. The rows come from `core.admin_console.language_model_rows()`, which the
+        services page renders too: one implementation, so the terminal and the browser cannot disagree.
         """
-        import json
-        from django.core.exceptions import ValidationError
-        from core import generation
-        unset = lambda value: value if isinstance(value, str) and value.strip() else '(unset)'
+        from core.admin_console import language_model_rows
         self.stdout.write('Language model (plain configuration values, shown so a model switch can be confirmed):')
-        for name, value in (('QUILLMD_AI_MODEL', settings.AI_MODEL),
-                            ('QUILLMD_AI_INPUT_RATE', settings.AI_INPUT_RATE),
-                            ('QUILLMD_AI_OUTPUT_RATE', settings.AI_OUTPUT_RATE),
-                            ('QUILLMD_AI_CACHED_RATE', settings.AI_CACHED_RATE),
-                            ('QUILLMD_AI_THINKING', settings.AI_THINKING),
-                            ('QUILLMD_AI_EFFORT', settings.AI_EFFORT),
-                            ('QUILLMD_AI_INFERENCE_GEO', settings.AI_INFERENCE_GEO)):
-            # Thinking and effort are read only for claude-sonnet-5; saying so stops a 4.6 operator reading them as live.
-            scope = ' (read only for claude-sonnet-5)' if name in ('QUILLMD_AI_THINKING', 'QUILLMD_AI_EFFORT') else ''
-            self.stdout.write(f'  {name}: {unset(value)}{scope}')
-        try:
-            config = generation.configuration()
-        except ValidationError as error:
-            # Only the discount can refuse here, and its message is fixed text naming no value.
-            self.stdout.write('  request profile: UNAVAILABLE — ' + '; '.join(error.messages))
-            self.stdout.write('  pricing_version: UNAVAILABLE')
-            return
-        profile = config['request_profile']
-        if 'invalid' in profile:
-            self.stdout.write('  request profile: INVALID — every generation is refused before any request: '
-                              + profile['invalid'])
-        else:
-            # ⚠️ 'legacy' ONLY FOR THE EXACT PRE-PROFILE REQUEST. The label used to be chosen after dropping
-            # `inference_geo` from the comparison, so claude-sonnet-4-6 with QUILLMD_AI_INFERENCE_GEO=us — which SENDS
-            # inference_geo, holds 1.1x and fingerprints away from fcc80267 — read 'legacy (the pre-profile request,
-            # unchanged)', and the rollback check that looks for that line was met by a request that is not the rollback.
-            if profile == generation.LEGACY_PROFILE:
-                kind = 'legacy (the pre-profile request, unchanged)'
-            elif {k: v for k, v in profile.items() if k != 'inference_geo'} == generation.LEGACY_PROFILE:
-                kind = f'NOT the pre-profile request: legacy-v1 plus inference_geo {profile["inference_geo"]}'
-            else:
-                kind = 'explicit'
-            self.stdout.write(f'  request profile: {kind} {json.dumps(profile, sort_keys=True)}')
-        self.stdout.write(f'  pricing_version: {config["pricing_version"]}')
+        for row in language_model_rows():
+            self.stdout.write(f'  {row["name"]}: {row["value"]}')
