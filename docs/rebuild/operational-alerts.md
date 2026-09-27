@@ -66,14 +66,27 @@ escalation the last check decided, recomputed by the same rule over the recorded
 state (none after an uncertain notice, which is never followed).
 
 `status` reads the state under the check's own lock, held shared and opened
-read-only. It waits up to 30 seconds for a running check; a check still running
-after that (the check unit allows 60 seconds) is reported, not treated as a
-fault: `status` then reads the last completed state without the lock, marks it
-`check_running: true`, and never reports the monitor broken merely because a
-check is running. A notice that check is making at that moment is not yet part
-of any completed state and is not shown. A check waits up to two seconds for a
-reader, which holds the lock only while it reads the state files and the named
-notice's record.
+read-only and non-blocking; a lock file that is not a private regular file (a
+FIFO included) is refused at once, as `check` refuses it. It waits up to 30
+seconds for a running check; a check still running after that (the check unit
+allows 60 seconds) is reported, not treated as a fault: `status` then reads the
+last completed state without the lock, marks it `check_running: true`, and never
+reports the monitor broken merely because a check is running. Only what that
+running check itself holds as in flight is left out of the completed state:
+while it makes a notice it holds the sidecar it has just written, and while it
+restarts its record it holds the restart's marker, each locked until its state
+is final. A notice in flight is shown as the state before it; a restart in
+flight as the unreadable state it replaces (`monitoring_state_unavailable` with
+its label). A lock dies with its process, so a notice left by a check that was
+killed mid-request is never taken for one in flight: it reads exactly as with
+the lock free (`alert_delivery_unconfirmed`, pending). A check waits up to two
+seconds for a reader, which holds the lock only while it reads the state files
+and the named notice's record.
+
+The administration console publishes what `status` reports
+(`publish_operations_status`), including `check_running`, `state_unreadable`
+and the backup condition reported beside it, and the services page says when a
+row shows the last completed check or a monitor state that could not be read.
 
 A recorded time later than the monitor's clock (a clock that ran fast and was
 corrected) is read as the moment it is first seen, so it never delays a notice,
@@ -90,9 +103,9 @@ email. Those states are `status.json` missing while incident records remain;
 has no request record, or one that cannot be read or disagrees with the state;
 and an incident record that breaks its own invariants.
 
-The check that meets one sends, at most once per 24 hours, an operator notice
-with the subject `MONITOR RESTARTED: the backup monitor could not read its own
-state`. It says plainly that the monitor could not read its own state and why,
+The check that meets one sends, at most once per 24 hours for each severity
+(below), an operator notice with the subject `MONITOR RESTARTED: the backup
+monitor could not read its own state`. It says plainly that the monitor could not read its own state and why,
 as one fixed label (`state_missing`, `state_invalid`, `ledger_invalid`,
 `notice_record_missing`, `notice_record_invalid`, `notice_record_mismatch`,
 `incident_record_invalid`) and never any content; the current backup condition,
@@ -108,12 +121,38 @@ beside the new record as `monitor-restart-<id>-status.json` and
 `monitor-restart-<id>-incident-notices.json` (hard links, so `status.json` is
 never missing), with a `monitor-restart-<id>.json` marker recording the label and
 time. Request records are never rewritten, and no request is ever made for a
-notice the unreadable state named. A restart counts toward the 24 hours once its
-notice's request record exists; inside that window a state that cannot be read
-again is refused without any change, and `check` reports `state_unreadable`,
-`state_restarted: false` and `next_state_notice_at`. `status` stays read-only and
-reports `state_unreadable`; the next check restarts. Without a working email
-configuration nothing is restarted, because nothing could be announced.
+notice the unreadable state named.
+
+A restart counts toward the 24 hours once its notice's request record exists,
+and it holds only what it announced, read from that record. Inside the 24 hours
+a state that cannot be read again is refused without any change while the backup
+condition is no more severe than the one the LAST restart notice announced,
+exactly as a rise inside an incident is never held by its last notice; a more
+severe condition restarts and is announced at once. A restart notice that said
+`healthy` therefore never holds a failure, and at most one restart notice per
+severity is sent in a day. A held check still computes the backup condition and
+reports it (`backup_condition`, `backup_severity`, with the offsite,
+local-capture and heartbeat evidence) beside `state_unreadable`,
+`state_restarted: false`, `next_state_notice_at` and
+`last_state_notice_condition`. It sends nothing and pings no outside heartbeat:
+a heartbeat that stops while the monitor cannot read its own state is itself an
+alert. `status` stays read-only and reports the same; the next check restarts
+unless the last restart notice holds it. Without a working email configuration
+nothing is restarted, because nothing could be announced, and the backup
+condition is still reported.
+
+A restart has one crash window: from the moment it replaces `status.json` until
+its notice is recorded, which is through the two fsyncs of the notice's write
+(sidecar, then `status.json`) when the condition is announced, or through the
+fsync of the notice's request record when it is sent on its own. Milliseconds.
+A restart stopped inside it resumes from the fresh record without announcing
+the restart: the next check announces the backup condition as an ordinary first
+notice when that condition is announced, and sends nothing when it is not
+(healthy, in progress, or pending configuration); the unreadable files stay kept
+as above. Stopped before it, the state is still unreadable and the next check
+restarts. Stopped after it, either the notice's request is recorded (and, like
+every request, never repeated if uncertain), or `status.json` names the notice
+before its request record exists and the next check restarts and announces it.
 
 The rule does not reach a monitor directory or lock file that is itself unsafe,
 a directory the check cannot write, or a parallel check: those still fail closed

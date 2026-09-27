@@ -1,0 +1,18 @@
+{
+  "mutations-original.txt": {
+    "sha256": "dfb20e44a3cc95515cbaaa4d86ee4ded37b56bf66e3228500a215fa27c0cda6c",
+    "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/repair-alerts3/mut-final.txt"
+  },
+  "mutation-r1f-recovered.txt": {
+    "sha256": "5f2b7859679afe30f584716d69dbf31866b9622c640b7c5357310b4184b6cf31",
+    "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/repair-alerts3/astra-recovery/mutation-r1f.txt"
+  },
+  "ops-suite.txt": {
+    "sha256": "13102341b191ef94aedf8af2c10ba22639a7841cf87eeb972384fb0a25452ef5",
+    "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/repair-alerts3/astra-recovery/ops-suite.txt"
+  },
+  "skip-identification.txt": {
+    "sha256": "8eb8dd7e041e9eb142caa89f2f1101c072362fd26318993fa9524311d70a9206",
+    "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/repair-alerts3/astra-recovery/skip-identification.txt"
+  }
+}

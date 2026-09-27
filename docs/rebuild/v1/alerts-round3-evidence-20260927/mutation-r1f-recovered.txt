@@ -1,0 +1,11 @@
+== R1f a condition raised by the heartbeat receipt is still held
+  baseline (unmutated): exit 0 Ran 1 test in 0.328s | OK
+  mutation applied: True
+  restored (sha256 equal): True 138bd702d4b6cc0f
+    FAIL: test_a_held_restart_pings_no_outside_heartbeat (ops.test_backup_alerts.FailClosedMeansAlertTests.test_a_held_restart_pings_no_outside_heartbeat)
+    AssertionError: Tuples differ: ('monitoring_state_unavailable', False, 2, 2) != ('external_monitor_unconfirmed', True, 2, 3)
+    Ran 1 test in 0.311s
+    FAILED (failures=1)
+  verdict: KILLED
+worktree untouched: True
+SUMMARY: [["R1f a condition raised by the heartbeat receipt is still held", "KILLED"]]

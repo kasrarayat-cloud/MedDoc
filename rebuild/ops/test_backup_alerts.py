@@ -1,5 +1,6 @@
 """Isolated alert fault injection: no live Resend, backup, systemd or database calls."""
 from datetime import datetime, timedelta, timezone
+import errno
 import fcntl
 import hashlib
 import json
@@ -1708,8 +1709,9 @@ class ConcurrentStatusReadTests(unittest.TestCase):
         real = getattr(a, blocking)
 
         def stopped(*args, **kwargs):
-            entered.set()
-            release.wait(30)
+            if threading.current_thread().name == 'check-running':     # never the reader, which may call it too
+                entered.set()
+                release.wait(30)
             return real(*args, **kwargs)
 
         def running():
@@ -1784,6 +1786,24 @@ class ConcurrentStatusReadTests(unittest.TestCase):
                 self.assertEqual((after['condition'], after.get('check_running'), after.get('state_unreadable')),
                                  (local, False, None))
 
+    def test_a_restart_is_no_longer_in_flight_once_its_state_is_written(self):
+        """The mark ends with the check's final write, not with the process: a check still finishing
+        its report after that write is reported with the state it wrote, never as the unreadable
+        state it has already replaced."""
+        self.health.return_value = 'backup_failed'
+        a.backup.write_private(self.alerts / 'status.json', b'not json')
+        worker, release, results = self.running_check(self.at, 'incident_summary')   # after its last write
+        try:
+            with patch.object(a, 'READ_WAIT_SECONDS', 0.3):
+                shown, _ = a.status(self.at + timedelta(minutes=1))
+        finally:
+            release.set()
+            worker.join(30)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual((shown['condition'], shown.get('state_unreadable'), shown.get('check_running'),
+                          shown['incident']['last_notice_condition']), ('backup_failed', None, True, 'backup_failed'))
+        self.assertTrue(results['check'][0].get('state_restarted'))
+
     def bounded(self, call, fifo, seconds=10):
         """Run `call` in a thread and give it `seconds`. A call stuck opening `fifo` for reading is
         released afterwards (a writer opened non-blocking) so a failing test never hangs the suite."""
@@ -1821,6 +1841,66 @@ class ConcurrentStatusReadTests(unittest.TestCase):
         descriptor = os.open(self.alerts / 'monitor.lock', os.O_RDWR)
         self.addCleanup(os.close, descriptor)
         fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    def test_status_refuses_a_monitor_lock_that_check_refuses(self):
+        """⚠️ R3-6 (M28), round 3. status() takes the lock only on a private regular file, exactly as
+        check() does. Without lock_file() in reading() (a mutant that survived) it read under a lock
+        check() refuses: one another user may read (0644), or one hard-linked from elsewhere."""
+        a.check(self.at)
+        lock, elsewhere = self.alerts / 'monitor.lock', self.root / 'elsewhere-lock'
+        for name, spoil, repair in (('mode', lambda: lock.chmod(0o644), lambda: lock.chmod(0o600)),
+                                    ('link', lambda: os.link(lock, elsewhere), elsewhere.unlink)):
+            with self.subTest(name=name):
+                spoil()
+                shown, code = a.status(self.at + timedelta(minutes=1))
+                self.assertEqual((code, shown['condition']), (1, 'monitoring_state_unavailable'))
+                result, code = a.check(self.at + timedelta(minutes=2))
+                self.assertEqual((code, result['condition']), (1, 'monitoring_state_unavailable'))
+                repair()
+                self.assertEqual(a.status(self.at + timedelta(minutes=3))[0]['condition'], 'healthy',
+                                 'the positive control: the same lock, repaired, is read')
+        self.sender.assert_not_called()
+
+    def test_a_read_straddling_two_writes_of_the_same_size_is_repeated(self):
+        """⚠️ R3-6 (M39), round 3. A read without the lock is believed only if status.json is the same
+        before and after it, compared by content. Compared by size only (a mutant that survived), a
+        read that straddles a whole escalation (its two writes) was believed whenever the two
+        status.json are the same length, as here: the earlier escalation's status.json with the
+        later one's ledger, a pair no check ever left, reported as the monitor broken."""
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)                                                   # first notice
+        self.health.return_value = 'offsite_policy_expired'
+        a.check(self.at + timedelta(hours=2))                              # an escalation
+        earlier = (self.alerts / 'status.json').read_bytes()
+        self.health.return_value = 'offsite_cleanup_failed'                # the next one, the same length
+        worker, release, results = self.running_check(self.at + timedelta(hours=4), 'backup_condition')
+        real, straddled = a.read_notices, []
+
+        def after_the_whole_check():
+            if threading.current_thread().name == 'status-reader' and not straddled:
+                straddled.append(True)                                     # status.json is read; the ledger is not
+                release.set()
+                worker.join(30)
+            return real()
+        box = {}
+        reader = threading.Thread(target=lambda: box.update(value=a.status(self.at + timedelta(hours=4, minutes=1))),
+                                  name='status-reader')
+        try:
+            with patch.object(a, 'READ_WAIT_SECONDS', 0.3), patch.object(a, 'read_notices', side_effect=after_the_whole_check):
+                reader.start()
+                reader.join(60)
+        finally:
+            release.set()
+            worker.join(30)
+        self.assertFalse(reader.is_alive() or worker.is_alive())
+        self.assertEqual(straddled, [True])
+        later = (self.alerts / 'status.json').read_bytes()
+        self.assertEqual((len(later), later != earlier), (len(earlier), True), 'the two status.json must differ, same size')
+        shown, _ = box['value']
+        self.assertEqual((shown['condition'], shown['incident']['last_notice_condition'], shown.get('check_running')),
+                         ('offsite_cleanup_failed', 'offsite_cleanup_failed', True),
+                         'a read straddling two writes of the same size was believed')
+        self.assertEqual(self.sender.call_count, 3)
 
     def test_a_fifo_in_status_jsons_place_never_hangs_a_read_made_while_a_check_runs(self):
         """⚠️ R3-5, round 3. fingerprint() opens status.json NON-BLOCKING: without it (a mutant that
@@ -2359,6 +2439,7 @@ class FailClosedMeansAlertTests(unittest.TestCase):
         self.assertEqual((self.alerts / 'status.json').read_bytes(), b'not json', 'restarted with nothing to send')
         self.assertEqual((code, result['condition'], result.get('state_unreadable'), result.get('state_restarted'),
                           result.get('next_state_notice_at')), (1, 'monitoring_state_unavailable', 'state_invalid', False, None))
+        self.assertEqual(result.get('backup_condition'), 'healthy', 'R3-1: the backup condition is reported here too')
         self.sender.assert_not_called()
         self.write_config()
         self.assertEqual(a.check(self.at + timedelta(minutes=5))[0].get('state_restarted'), True)
@@ -2410,6 +2491,152 @@ class FailClosedMeansAlertTests(unittest.TestCase):
             self.assertEqual((code, result['condition']), (1, 'alert_delivery_unconfirmed'))
             self.assertNotIn('state_unreadable', result)
         self.sender.assert_called_once()
+
+    legacy = IncidentNotificationTests.legacy
+
+    def markers(self):
+        return [path for path in self.alerts.iterdir() if a.RESTART_MARKER.fullmatch(path.name)]
+
+    def test_a_restart_marker_that_is_not_exactly_one_this_release_writes_holds_nothing(self):
+        """⚠️ R3-6 (M8, M9), round 3. A marker holds the day only if it is exactly what this release
+        writes: format 1, its three keys, a known label. Without the key-set check or the label check
+        (mutants that survived) a marker of any other shape held the next restart notice for a day.
+        The untampered case is the positive control: the same marker, as written, does hold."""
+        for changes, holds in (({}, True), ({'unexpected': 'private-clinical-canary'}, False),
+                               ({'reason': 'private-clinical-canary'}, False), ({'format': 2}, False)):
+            with self.subTest(changes=changes):
+                for path in self.alerts.iterdir():
+                    path.unlink()
+                self.sender.reset_mock()
+                self.health.return_value = 'backup_failed'
+                a.backup.write_private(self.alerts / 'status.json', b'not json')
+                a.check(self.at)                                        # a restart that announces the failure
+                self.assertEqual((len(self.markers()), self.sender.call_count), (1, 1))
+                for marker in self.markers():
+                    marker.write_text(json.dumps(dict(json.loads(marker.read_text()), **changes)))
+                self.unreadable_again()
+                result, _ = a.check(self.at + timedelta(hours=1))       # the same failure, inside the day
+                self.assertEqual((result.get('state_restarted'), self.sender.call_count), (not holds, 1 + (not holds)),
+                                 'a marker of another shape held the next restart notice' if not holds
+                                 else 'the positive control: a marker as written holds the day')
+                self.assertNotIn('canary', json.dumps(result) + ''.join(''.join(sent) for sent in self.sent()))
+
+    def test_a_malformed_record_of_the_named_notice_is_announced_as_invalid_not_missing(self):
+        """⚠️ R3-6 (M22), round 3. A notice whose request record exists but cannot be validated is
+        `notice_record_invalid`; `notice_record_missing` is for one with no record at all. Labelling
+        both missing survived, and the wrong label reaches the restart notice and status()."""
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        named = json.loads((self.alerts / 'status.json').read_text())['incident_attempt']
+        (self.alerts / f'incident-{named}-result.json').write_text('private-clinical-canary')
+        shown, _ = a.status(self.at + timedelta(days=2))
+        self.assertEqual((shown['condition'], shown.get('state_unreadable')), ('monitoring_state_unavailable', 'notice_record_invalid'))
+        result, _ = a.check(self.at + timedelta(days=2))
+        self.assertEqual((result.get('state_unreadable'), result.get('state_restarted'), self.sender.call_count),
+                         ('notice_record_invalid', True, 2))
+        self.assert_restart_notice('notice_record_invalid', 'backup_failed')
+        self.assertNotIn('canary', json.dumps(shown) + json.dumps(result) + ''.join(self.sent()[-1]))
+
+    def test_an_unexpected_failure_while_the_state_is_read_is_labelled_incident_record_invalid(self):
+        """⚠️ R3-6 (M23), round 3. Anything unexpected while the state is read, outside the named
+        checks, is `incident_record_invalid`, the label status() and the restart notice carry; another
+        label there survived. Fault injection: one I/O error (EIO) from the existence check of a
+        request record, which reading the previous release's first notice makes outside those checks."""
+        self.legacy(condition='backup_failed')
+        self.health.return_value = 'backup_failed'
+        real = a.requested
+
+        def once(*failures):
+            calls = []
+
+            def requested(prefix):
+                calls.append(prefix)
+                if len(calls) in failures:
+                    raise OSError(errno.EIO, 'synthetic I/O error')
+                return real(prefix)
+            return patch.object(a, 'requested', side_effect=requested)
+        with once(1):
+            shown, _ = a.status(self.at + timedelta(days=2))
+        self.assertEqual((shown['condition'], shown.get('state_unreadable')),
+                         ('monitoring_state_unavailable', 'incident_record_invalid'))
+        with once(1):
+            result, _ = a.check(self.at + timedelta(days=2))
+        self.assertEqual((result['condition'], result.get('state_unreadable'), result.get('state_restarted'),
+                          self.sender.call_count), ('backup_failed', 'incident_record_invalid', True, 1))
+        self.assert_restart_notice('incident_record_invalid', 'backup_failed')
+
+    def test_a_restart_that_fails_to_replace_status_json_leaves_no_temporary_file(self):
+        """⚠️ R3-6 (M37), round 3. replace_status() writes a temporary file and renames it over
+        status.json; one that fails removes its temporary file. Without that (a mutant that survived)
+        every check that failed there left another `.status-*` file behind. The next check still
+        restarts and announces it."""
+        self.health.return_value = 'backup_failed'
+        a.backup.write_private(self.alerts / 'status.json', b'not json')
+        real, calls = os.replace, []
+
+        def failing(*args, **kwargs):
+            calls.append(args)
+            if len(calls) == 1:
+                raise OSError(errno.EIO, 'synthetic I/O error')
+            return real(*args, **kwargs)
+        with patch.object(a.os, 'replace', side_effect=failing):
+            result, code = a.check(self.at)
+        self.assertEqual((code, result['condition'], self.sender.call_count), (1, 'monitoring_state_unavailable', 0))
+        self.assertEqual(str(calls[0][1]), str(self.alerts / 'status.json'), 'the failure was not in replace_status')
+        self.assertEqual([path.name for path in self.alerts.iterdir() if path.name.startswith('.status-')], [],
+                         'a failed replace_status left its temporary file')
+        self.assertEqual((self.alerts / 'status.json').read_bytes(), b'not json')
+        result, _ = a.check(self.at + timedelta(minutes=5))
+        self.assertEqual((result['condition'], result.get('state_restarted'), self.sender.call_count),
+                         ('backup_failed', True, 1))
+
+    def test_a_held_restart_pings_no_outside_heartbeat(self):
+        """A held restart sends nothing, and pings nothing: an outside heartbeat that stops while the
+        monitor cannot read its own state is itself an alert (as before R3-1, when a held check
+        returned before the heartbeat). A restart that is announced pings as any check does."""
+        a.backup.write_private(a.EXTERNAL_CONFIG, json.dumps({
+            'version': 1, 'provider': 'healthchecks.io', 'synthetic_only': True,
+            'owner_approval_reference': 'synthetic-approved-fixture',
+            'check_url': 'https://hc-ping.com/00000000-0000-4000-8000-000000000000'}).encode())
+        http = patch.object(a.requests, 'Session').start()
+        session = http.return_value.__enter__.return_value
+        response = session.get.return_value.__enter__.return_value
+        response.status_code, response.raw.read.return_value = 200, b'OK'
+        a.backup.write_private(self.alerts / 'status.json', b'not json')
+        result, _ = a.check(self.at)                                        # announced: pings
+        self.assertEqual((result.get('state_restarted'), session.get.call_count, self.sender.call_count), (True, 1, 1))
+        self.unreadable_again()
+        result, _ = a.check(self.at + timedelta(minutes=10))                # held: no ping
+        self.assertEqual((result.get('state_restarted'), result['condition'], result.get('backup_condition')),
+                         (False, 'monitoring_state_unavailable', 'healthy'))
+        self.assertEqual((session.get.call_count, self.sender.call_count), (1, 1), 'a held restart pinged the heartbeat')
+        self.assertEqual(result['external_monitor']['outcome'], 'provider_accepted')
+        result, _ = a.check(self.at + timedelta(hours=24, minutes=5))       # a day later: announced, pings
+        self.assertEqual((result.get('state_restarted'), session.get.call_count, self.sender.call_count), (True, 2, 2))
+        # What the heartbeat's own evidence shows still counts: an unusable heartbeat configuration makes
+        # a healthy backup external_monitor_unconfirmed (a failure), which the healthy restart never holds.
+        a.EXTERNAL_CONFIG.write_text(json.dumps({'version': 1, 'provider': 'private-clinical-canary'}))
+        self.unreadable_again()
+        result, _ = a.check(self.at + timedelta(hours=24, minutes=15))
+        self.assertEqual((result['condition'], result.get('state_restarted'), session.get.call_count, self.sender.call_count),
+                         ('external_monitor_unconfirmed', True, 2, 3),
+                         'a failure the heartbeat evidence showed was held by a restart that announced a healthy backup')
+        self.assert_restart_notice('state_invalid', 'external_monitor_unconfirmed')
+        self.assertNotIn('canary', json.dumps(result) + ''.join(self.sent()[-1]))
+
+    def test_a_restart_whose_request_record_cannot_be_read_holds_nothing(self):
+        """What a restart notice announced is read from its request record; one that cannot be read
+        holds nothing (a duplicate at most, never silence), as a marker that cannot be read."""
+        self.health.return_value = 'backup_failed'
+        a.backup.write_private(self.alerts / 'status.json', b'not json')
+        a.check(self.at)
+        (identity,) = [a.RESTART_MARKER.fullmatch(path.name)[1] for path in self.markers()]
+        (self.alerts / f'incident-{identity}-result.json').write_text('private-clinical-canary')
+        self.unreadable_again()
+        result, _ = a.check(self.at + timedelta(hours=1))
+        self.assertEqual((result.get('state_restarted'), self.sender.call_count), (True, 2),
+                         'a restart whose record cannot be read held the next')
+        self.assertNotIn('canary', json.dumps(result) + ''.join(self.sent()[-1]))
 
     def test_a_restart_during_any_condition_sends_exactly_one_restart_notice(self):
         """⚠️ R3-3, round 3. `if restart and state['incident_attempt'] != restart` mutated to `if restart
