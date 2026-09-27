@@ -214,3 +214,44 @@ class OneReadingPerUnit(SimpleTestCase):
         self.assertEqual(len(calls), len(units), 'one reading per unit, however many questions the form asks')
         self.assertLess(elapsed, 2.0)
         self.assertEqual(answers['v3_0']['text'], 'Pain is 0.')
+
+
+GOVERNED_NOTES = (
+    'Plan: rest. Allergies: none.\nAllergies: correction, penicillin.',
+    'Plan: rest and ice. Allergies: none known.\nAllergies: correction, penicillin.',
+    'Chief complaint: knee pain. Findings: as follows.\nEffusion is present.',
+    'Allergies: none.\nSmoker: yes.\nCorrection: former smoker.',
+    'Review of systems: negative for the following:\nChest pain.\nAllergies: none.',
+    'Patient presents with knee pain. The patient denies the following.\nChest pain.\nPlan: rest.',
+    'Chief complaint: knee pain.\nAllergies: penicillin.\nPlan: ice. Smoker: no.',
+)
+
+
+class OneGovernanceReader(SimpleTestCase):
+    """R9: v3 generation reads governance exactly as the page, save and finalization do."""
+
+    fields = FIELDS + [field('v3_7', 'Findings', 'long_text')]
+
+    def test_nothing_generation_adopts_or_offers_is_refused_at_finalization_for_governance(self):
+        config = {**g.configuration(), 'mode': 'fixture'}
+        for notes in GOVERNED_NOTES:
+            answers = g.generate(notes, self.fields, config)[0]
+            accepted = {key: ({**answer, 'text': answer['suggestion'], 'status': 'edited', 'accepted_suggestion': True}
+                              if answer.get('suggestion') else answer) for key, answer in answers.items()}
+            self.assertEqual(g.governed_decisions(notes, self.fields, accepted), [], notes)
+            governance = g.governance_for(notes, self.fields)
+            for f in self.fields:
+                self.assertIsNone(g.governed_supported(governance, notes, answers[f['key']], f['label']), (notes, f['label']))
+
+    def test_the_correction_line_holds_what_it_may_correct(self):
+        notes = GOVERNED_NOTES[0]
+        answers = g.generate(notes, self.fields, {**g.configuration(), 'mode': 'fixture'})[0]
+        by_label = {f['label']: answers[f['key']] for f in self.fields}
+        self.assertEqual(by_label['Plan']['status'], 'conflict')
+        self.assertEqual(by_label['Plan']['held_candidate']['text'], 'rest. Allergies: none.')
+        self.assertNotEqual(by_label['Allergies']['status'], 'supported')
+
+    def test_generation_reads_the_same_governance_the_page_reads(self):
+        asked, context, _ = g.v3_generation_fields(self.fields)
+        for notes in GOVERNED_NOTES:
+            self.assertEqual(g.governance_for(notes, asked, context), g.governance_for(notes, self.fields), notes)

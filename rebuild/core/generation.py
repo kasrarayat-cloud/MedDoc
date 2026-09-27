@@ -1533,11 +1533,18 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
                             v3=False):
     units,inherited=source_units(notes,fields,context_labels=context_labels)
     labels=recognized_labels(fields,context_labels)
-    governance=heading_governance(notes,labels)
     # ⚠️ EACH UNIT IS READ ONCE PER VALIDATION, NOT ONCE PER QUESTION (R7): `tab_source_value` tries every label on every
     # unit, so a 100-question form over 999 units spent 26 s here under the row lock. Same reading, same order.
     parsed_units=[tab_source_value(unit['quote'],labels) for unit in units]
-    index=occurrence_index(notes,labels,units,parsed_units)
+    if v3:
+        # ⚠️ CONTRACT v3 READS GOVERNANCE WITH THE PAGE'S, SAVE'S AND FINALIZATION'S ONE READER (R9): `governance_for`, per
+        # line, over every occurrence. Read per sentence here, a correction line was exempted as 'its own answer' that
+        # finalization then refused ('Plan: rest. Allergies: none.' / 'Allergies: correction, penicillin.').
+        governance=governance_for(notes,fields,context_labels)
+        index=governance[10]
+    else:
+        governance=heading_governance(notes,labels)
+        index=occurrence_index(notes,labels,units,parsed_units)
     injection=bool(INJECTION.search(notes) or any(INJECTION.search(f['label']) for f in fields))
     from .tab_review import clinician_identity
     output={}; used_numbered={}
