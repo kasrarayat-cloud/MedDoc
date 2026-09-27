@@ -1,0 +1,26 @@
+{
+  "selected_root": "/opt/meddoc-pro/.worktrees/v1-wm-integration",
+  "retained_build": "/opt/meddoc-pro/.worktrees/wm-narrative/rebuild/.runtime/word-narrative-build-10",
+  "all_17_input_hashes_match": true,
+  "build_inputs": {
+    "rebuild/documents/sdk_word/Adapter/IDocumentSandbox.cs": "4a05134acf22968876c7a05187df38223db12b3fc6bdf5d7add6c777098dd53b",
+    "rebuild/documents/sdk_word/Adapter/SdkSeccompGate.cs": "757cf77d71f107760570b273750aeb2fa02940fe0ef29f1a3a95e111cd10ed17",
+    "rebuild/documents/sdk_word/Adapter/WmAdapter.cs": "883273448d427245e2026efa17ce4c7e38deff354834ae014a3659918a192441",
+    "rebuild/documents/sdk_word/Adapter/WmVariants.cs": "75dbfbfd7bb27919eab99aa28743b1abc3626723f35b4a761081233989456f11",
+    "rebuild/documents/sdk_word/Adapter/WordAdapter.csproj": "4206c5bde71b62fdf8dc9d5a6e9b96daba7255b757ff5e10bdaf3b5394ed9a0d",
+    "rebuild/documents/sdk_word/Adapter/packages.lock.json": "f4086442dff748fd3e5a5aa252d94d574d8138f04a9d356c6e5f35f1ad754398",
+    "rebuild/documents/sdk_word/ProbeHost/ProbeHost.csproj": "efae067d4fe5e1105d3a4e3446bdec16e80a5c6d2fc7305bcffa46d4ae638e19",
+    "rebuild/documents/sdk_word/ProbeHost/Program.cs": "de7c09262a18aa56cbcfdca316218d2ac51163e66231b4fd1da60ab57d2b662b",
+    "rebuild/documents/sdk_word/ProbeHost/packages.lock.json": "5a902dd0ff620ddc827c94695f089fffd61dd33dfb8b20b3292f732b991eddb4",
+    "rebuild/documents/sdk_word/Program.cs": "3df0212b1e93239ee6fd77152af5ca98daf289aacb836061eb1ce5cd48ca16d6",
+    "rebuild/documents/sdk_word/Qualification.csproj": "871fce1d6ceedf3a80de4a49f24c41765c8e79d051b9eab851a8392cef3a14f5",
+    "rebuild/documents/sdk_word/WordHost/Program.cs": "ac8694f4d1f939edab673d1cc2dc16a15756fe6530474f50d952fad96c95e09c",
+    "rebuild/documents/sdk_word/WordHost/WordHost.csproj": "5e173b27262c39219c611d0e36dbd26cc2d066092d2dc9e0560c9f21a3c80905",
+    "rebuild/documents/sdk_word/WordHost/packages.lock.json": "5a902dd0ff620ddc827c94695f089fffd61dd33dfb8b20b3292f732b991eddb4",
+    "rebuild/documents/sdk_word/build_word.py": "d5ffbe674a81468feb795545fe202b1f965a18eb1db5aab4fef58af3cc32d4a9",
+    "rebuild/documents/sdk_word/global.json": "8fe9f4e7c811472092c6264a786c677dbe383a521b82a3982b257443defcc805",
+    "rebuild/documents/sdk_word/packages.lock.json": "56c1f2c3daf32ddfe7d709a9b88b65c56f6da68f8a0f8cb4aaa6c57036a6b892"
+  },
+  "build_proof_sha256": "9ded38e9e3f0c6271ce2551ef8adaaa8fbb83ecde7b7bfb0d836365b55c0dbca",
+  "manifest_sha256": "2a1e4477144207bed04d3f3d38cb3b276cdaf7e450ef7d622f1ee63cd4e0d756"
+}

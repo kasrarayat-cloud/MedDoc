@@ -43,6 +43,9 @@ PREVIOUS_PROMPT_VERSION = 'extractive-v5-tab-independent-sections'
 CURRENT_PROMPT_VERSION = 'extractive-v6-source-scope-attestation'
 TAB_PROMPT_VERSIONS = frozenset(('extractive-v4-tab-evidence-units', PREVIOUS_PROMPT_VERSION,
                                  CURRENT_PROMPT_VERSION))
+#: The narrative contract for the qualified WM IOV form (`wm_narrative`). A job carries it in its write-once config
+#: only when the flag was on when it was quoted, so its attribution names the instructions it was actually sent.
+NARRATIVE_CONTRACT = 'wm-narrative-v1'
 
 # The tab contract has carried this since v4; the LEGACY contract — the one a table,
 # multi-column or mixed mapping selects — never did. Defined once because it must reach BOTH
@@ -332,7 +335,24 @@ def configuration():
     # EXCEPT the legacy profile, which is the request every existing fingerprint was computed for and so hashes as absent.
     if config['request_profile']!=LEGACY_PROFILE: price['request_profile']=config['request_profile']
     config['pricing_version']='configured-v1:'+hashlib.sha256(json.dumps(price,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    # Absent unless the flag is on: with it off the configuration, and so every quote and job, is unchanged.
+    if getattr(settings,'WM_NARRATIVE',False): config['narrative_contract']=NARRATIVE_CONTRACT
     return config
+
+
+def narrative_contract(fields,config):
+    """Whether THIS job runs the narrative contract: quoted with it, and the qualified Word form."""
+    return (config or {}).get('narrative_contract')==NARRATIVE_CONTRACT and qualified_word_form(fields)
+
+
+def narrative_refusal(fields,config):
+    """Why a narrative job may not reach the provider, or None. Read before any request is made."""
+    if not narrative_contract(fields,config): return None
+    if not getattr(settings,'WM_NARRATIVE',False):
+        return 'Narrative filling was switched off after this was quoted. Nothing was sent or charged; generate again.'
+    if config.get('mode')=='live' and config.get('provider')!='anthropic':
+        return 'Narrative filling runs only on the approved clinical provider. Nothing was sent or charged.'
+    return None
 
 # Settlement-safe precision: eleven decimals, so the exact 1.5× charge always fits the twelve-decimal ledger.
 COST_QUANTUM=Decimal('0.00000000001')
@@ -380,11 +400,18 @@ def rates(config=None):
         return values
     except Exception: raise ValidationError('Provider rates are not configured. No billable request can run.')
 
-def maximum_cost(notes,fields,config=None,*,context_labels=()):
+def maximum_cost(notes,fields,config=None,*,context_labels=(),requirements=None):
     config=config or configuration()
     if config['mode']!='live': return Decimal('0')
     r=rates(config)
     profile=job_request_profile(config)
+    if narrative_contract(fields,config):
+        from . import wm_narrative
+        if len(notes)>50000 or len(fields)>100: raise ValidationError('Source exceeds supported limits; split explicitly. Nothing was truncated.')
+        sent=json.dumps(wm_narrative.payload(notes,fields,requirements or []))+wm_narrative.INSTRUCTIONS+json.dumps(wm_narrative.NarrativeSelections.model_json_schema())
+        bound=Decimal(len(sent.encode())+12000)*r['input_per_million']/1000000+Decimal(profile['max_output_tokens'])*r['output_per_million']/1000000
+        if profile.get('inference_geo')=='us':bound=(bound*US_INFERENCE_MULTIPLIER).quantize(COST_QUANTUM,rounding=ROUND_CEILING)
+        return bound
     units=source_units(notes,fields,context_labels=context_labels)[0] if tab_evidence_contract(fields) else []
     asked,context,v3_fields=v3_generation_fields(fields,context_labels)
     if v3_fields is not None:
@@ -646,7 +673,7 @@ def source_units(notes, fields, *, context_labels=()):
         for end,next_start in boundaries+[(len(stripped),len(stripped))]:
             quote=stripped[local:end]
             if quote:
-                if UNSCOPED_NEGATIVE_HEADING.search(quote): inherited=True
+                if ':' in quote and UNSCOPED_NEGATIVE_HEADING.search(quote): inherited=True   # (it needs a colon: without one it backtracked per denial word)
                 if len(units)>=1000: raise ValidationError('Source exceeds 1,000 complete statements; split explicitly. Nothing was truncated.')
                 correction=INLINE_CORRECTION.search(quote)
                 units.append({'id':len(units)+1,'quote':quote,'start':start+local,'end':start+end,
@@ -757,7 +784,7 @@ def negative_heading(notes):
 
     A property of the whole note, asked once per FIELD: cached, so a 100-field form pays for it once.
     """
-    return any(UNSCOPED_NEGATIVE_HEADING.search(line) or denial_before_colon(line) or governs_other_lines(line)
+    return any((':' in line and UNSCOPED_NEGATIVE_HEADING.search(line)) or denial_before_colon(line) or governs_other_lines(line)
                for line in notes.splitlines())
 
 
@@ -1233,7 +1260,7 @@ def bare_label(text, parsed):
             and not any(SCOPE_POINTER.search(reading) or POINTER.search(reading) for reading in readings(text)))
 
 
-def heading_governance(notes, labels, *, lexical=True, per_sentence=True, questions=frozenset()):
+def heading_governance(notes, labels, *, lexical=True, per_sentence=True, questions=frozenset(), errata=True):
     """⚠️ ONE READER FOR EVERY CONSUMER: both validators, the page, save and finalization call this, never a copy.
 
     Returns `(starts, spans, headings, forward, backward, meaning)`: the note's non-empty lines' start offsets (sorted)
@@ -1335,7 +1362,8 @@ def heading_governance(notes, labels, *, lexical=True, per_sentence=True, questi
                 unit_starts = [low for low, _ in units]
                 sentence_starts = [low for low, _ in sentences]
                 owners = {}                       # each unit's own label, parsed once however many errata it holds
-                for at in erratum_points(stripped):
+                # The narrative WM contract scopes corrections itself (`wm_narrative.correction_hold`): no reach here.
+                for at in (erratum_points(stripped) if errata else ()):
                     low, high = units[max(0, bisect.bisect_right(unit_starts, at) - 1)]
                     if low not in owners:
                         found = (answered_label if per_sentence else labelled_value)(stripped[low:high], labels)
@@ -1697,12 +1725,13 @@ def judged_context(governance, notes, index, label, evidence):
     return None if found is None else list(found)
 
 
-def governance_for(notes, fields, context_labels=()):
+def governance_for(notes, fields, context_labels=(), narrative=False):
     """The note's governance for this form, computed once: on the qualified Word form labelled lines never govern,
     and the answered-question exception reads answers the way this form's validator does. Its last element is the
     occurrence index, so the page judges a stored answer over every occurrence exactly as generation does."""
     labels = recognized_labels(fields, context_labels)
-    per_sentence = tab_evidence_contract(fields)
+    # The narrative WM contract (`wm_narrative`) reads its answers per sentence, like the tab contract.
+    per_sentence = tab_evidence_contract(fields) or narrative
     units = None
     if per_sentence:
         try:
@@ -1710,8 +1739,8 @@ def governance_for(notes, fields, context_labels=()):
         except ValidationError:
             units = []
     word_form = qualified_word_form(fields)
-    governance = heading_governance(notes, labels, lexical=not word_form, per_sentence=per_sentence,
-                                    questions=question_labels(fields) if word_form else frozenset())
+    governance = heading_governance(notes, labels, lexical=not word_form or narrative, per_sentence=per_sentence,
+                                    questions=question_labels(fields) if word_form else frozenset(), errata=not narrative)
     result = (*governance, occurrence_index(notes, labels, units))
     if natural_v3(fields):
         # Whole-note warnings are shared by generation, existing drafts, one-click offers and finalization.
@@ -1857,6 +1886,12 @@ def governed_decisions(notes, fields, answers, context_labels=()):
     governance = governance_for(notes, fields, context_labels)
     word_form = qualified_word_form(fields)
     found = []
+    from . import wm_narrative
+    if wm_narrative.active(fields, answers):
+        # The narrative contract's own reader for every answer resting on source sentences (headings and pointers per
+        # sentence, corrections scoped); an answer resting on labelled lines is judged below as it always was.
+        found = wm_narrative.held_labels(notes, fields, context_labels, answers)
+        answers = {key: answer for key, answer in answers.items() if not wm_narrative.has_unit_evidence(answer)}
     for field in fields:
         answer = answers.get(field['key']) or {}
         if governed_supported(governance, notes, answer, field['label']) is not None:
@@ -2376,6 +2411,102 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
         output[item.key]=answer
     return output
 
+def anthropic_settlement(response,r,config):
+    """One settlement formula for both Anthropic generation contracts; historical receipts stay unchanged."""
+    u=response.usage
+    cached=getattr(u,'cache_read_input_tokens',0) or 0
+    written=getattr(u,'cache_creation_input_tokens',0) or 0
+    units={'input_tokens':u.input_tokens,'cached_input_tokens':cached,'cache_creation_tokens':written,'output_tokens':u.output_tokens}
+    # New receipts carry the metered geography, the thinking share of the output and why generation stopped.
+    units.update(anthropic_usage_facts(response))
+    provider=f"anthropic:{config['model']}"
+    list_cost=(u.input_tokens*r['input_per_million']+cached*r['cached_per_million']+written*r['input_per_million']*Decimal('1.25')+u.output_tokens*r['output_per_million'])/1000000
+    geo=us_inference_multiplier(provider,units)
+    if geo!=1: list_cost*=geo
+    discount=discount_rate(config);cost=discounted_cost(list_cost,discount)
+    recorded=cost_rates(r,list_cost,discount)
+    # Recorded only when applied, so a receipt priced at standard rates keeps exactly the rate shape it always had.
+    if geo!=1: recorded['inference_geo_multiplier']=str(geo)
+    return cost,units,recorded
+
+
+REPLAY_LIMIT=2*1024*1024
+
+def narrative_fixture(notes,fields,requirements):
+    """The synthetic provider for the narrative contract (fixture mode only, never live): a retained provider-shaped
+    response for exactly these notes (`AI_REPLAY_DIR/<sha256 of the notes>.json`), else the labelled lines read the
+    way the labelled fixture reads them. Either way the same validator judges it as it would a live response."""
+    from pathlib import Path
+    folder=getattr(settings,'AI_REPLAY_DIR','')
+    if folder:
+        path=Path(folder)/(hashlib.sha256(notes.encode()).hexdigest()+'.json')
+        if path.is_file() and not path.is_symlink():
+            if path.stat().st_size>REPLAY_LIMIT: raise ValidationError('Retained response exceeds its limit.')
+            return path.read_text(encoding='utf-8'),'replay'
+    from . import wm_narrative
+    labels_=[row['label'] for row in requirements]
+    labels=recognized_labels(fields,labels_)
+    unit_list=source_units(notes,fields,context_labels=labels_)[0]
+    rows=[]
+    for f in fields:
+        mine=f['label'].strip().rstrip(':?').casefold()
+        found=[(u['id'],p[1]) for u in unit_list if (p:=labelled_value(u['quote'],labels)) and p[0]==mine and p[1]]
+        values=list(dict.fromkeys(value for _,value in found))
+        value=values[0] if values else ''
+        if f.get('kind')=='choice' and value not in (f.get('options') or []): value=''
+        if f.get('kind')=='measurement' and not wm_narrative.MEASUREMENT_VALUE.fullmatch(value): value=''
+        rows.append({'key':f['key'],'value':value,'unit_ids':[i for i,v in found if v==value] if value else [],
+                     'conflict':len(values)>1,'subject':'patient','certainty':'definite',
+                     'timing':'prior' if wm_narrative.previous_treatment(f) else 'current'})
+    return json.dumps({'fields':rows,'statements':[]}),'fixture'
+
+
+def generate_narrative(notes,fields,config,requirements):
+    from . import wm_narrative
+    with before_the_provider(config.get('mode')=='live'):
+        refusal=narrative_refusal(fields,config)
+        if refusal: raise ValidationError(refusal)
+        if len(notes)>50000 or len(fields)>100: raise ValidationError('Source exceeds supported limits; split explicitly. Nothing was truncated.')
+        raw={'notes':notes,'fields':fields,'requirements':requirements,'evidence_contract':NARRATIVE_CONTRACT}
+        if config['mode']!='live':
+            content,source=narrative_fixture(notes,fields,requirements)
+            return {**raw,'narrative_replay':content,'replay_source':source},Decimal('0'),{},{},'synthetic-narrative-'+source,'',True
+        from anthropic import Anthropic
+        profile=job_request_profile(config)
+        r=rates(config)
+        payload=wm_narrative.payload(notes,fields,requirements)
+        request=anthropic_request(config['model'],profile,wm_narrative.INSTRUCTIONS,payload,wm_narrative.NarrativeSelections)
+        client=Anthropic(timeout=profile['timeout_seconds'],max_retries=0)
+    # Only request construction is classified as definitely unsent. A request exception keeps reconciliation semantics.
+    response=client.messages.create(**request)
+    cost,units,recorded=anthropic_settlement(response,r,config)
+    return {**raw,'anthropic_response':response,'requested_model':config['model']},cost,units,recorded,f"anthropic:{config['model']}",getattr(response,'_request_id',None) or '',False
+
+
+def narrative_validated(result):
+    """(answers, statement proposals) of a narrative result, live or synthetic, through the one validator."""
+    from . import wm_narrative
+    if 'anthropic_response' in result:
+        response=result['anthropic_response']
+        if response.stop_reason!='end_turn': raise ValidationError('Provider output incomplete; no answers adopted.')
+        if result.get('requested_model') and getattr(response,'model',None)!=result['requested_model']:
+            raise ValidationError('Provider response model differs from the requested model; no answers adopted.')
+        content=''.join(block.text for block in response.content if block.type=='text')
+    else:
+        content=result['narrative_replay']
+    selections=wm_narrative.NarrativeSelections.model_validate_json(content)
+    return wm_narrative.validate(result['notes'],result['fields'],selections,result['requirements'])
+
+
+def adoption(result):
+    """(answers, the template review to start from) of a generation result: the narrative contract's statement
+    proposals pre-select the page and nothing else; every other contract starts from an empty review."""
+    if isinstance(result,dict) and result.get('evidence_contract')==NARRATIVE_CONTRACT:
+        answers,proposals=narrative_validated(result)
+        return answers,({'proposals':proposals} if proposals else {})
+    return validated(result),{}
+
+
 #: Why a queued generation is refused when the deployment's mode moved after it was queued (`refuse_switched_mode`).
 MODE_LEFT_LIVE=('QuillMD was switched out of live mode after this request was queued, so it was not sent to the provider.')
 MODE_ENTERED_LIVE=('QuillMD was switched to live mode after this synthetic request was queued, so its synthetic answers were not '
@@ -2618,8 +2749,10 @@ def before_the_provider(active):
         raise NoProviderRequest('The provider request could not be prepared.') from error
 
 
-def generate(notes,fields,config=None,*,context_labels=()):
+def generate(notes,fields,config=None,*,context_labels=(),requirements=None):
     config=config or configuration()
+    if narrative_contract(fields,config):
+        return generate_narrative(notes,fields,config,list(requirements or []))
     # Contract v3 only: the provider is asked about the generated kinds, with the others' labels as context labels.
     # Every other form reaches the unchanged request below with its fields and context labels untouched.
     fields,context_labels,v3_fields=v3_generation_fields(fields,context_labels)
@@ -2672,20 +2805,8 @@ def generate(notes,fields,config=None,*,context_labels=()):
             request=anthropic_request(config['model'],profile,instructions,payload,schema)
     if config['provider']=='anthropic':
         response=client.messages.create(**request)
-        u=response.usage
-        cached=getattr(u,'cache_read_input_tokens',0) or 0
-        written=getattr(u,'cache_creation_input_tokens',0) or 0
-        units={'input_tokens':u.input_tokens,'cached_input_tokens':cached,'cache_creation_tokens':written,'output_tokens':u.output_tokens}
-        # New receipts carry the metered geography, the thinking share of the output and why generation stopped.
-        units.update(anthropic_usage_facts(response))
+        cost,units,recorded=anthropic_settlement(response,r,config)
         provider=f"anthropic:{config['model']}"
-        list_cost=(u.input_tokens*r['input_per_million']+cached*r['cached_per_million']+written*r['input_per_million']*Decimal('1.25')+u.output_tokens*r['output_per_million'])/1000000
-        geo=us_inference_multiplier(provider,units)
-        if geo!=1: list_cost*=geo
-        discount=discount_rate(config);cost=discounted_cost(list_cost,discount)
-        recorded=cost_rates(r,list_cost,discount)
-        # Recorded only when applied, so a receipt priced at standard rates keeps exactly the rate shape it always had.
-        if geo!=1: recorded['inference_geo_multiplier']=str(geo)
         raw={'anthropic_response':response,'notes':notes,'fields':fields,'context_labels':list(context_labels),
              'evidence_contract':TAB_CONTRACT if natural else 'legacy'}
         if v3_fields is not None:raw['v3_fields']=v3_fields
@@ -2705,6 +2826,8 @@ def generate(notes,fields,config=None,*,context_labels=()):
     return raw,cost,units,cost_rates(r,list_cost,discount),f"openai:{config['model']}",getattr(response,'_request_id',None) or '',False
 
 def validated(result):
+    if isinstance(result,dict) and result.get('evidence_contract')==NARRATIVE_CONTRACT:
+        return narrative_validated(result)[0]
     if isinstance(result,dict) and 'anthropic_response' in result:
         response=result['anthropic_response']
         if response.stop_reason!='end_turn': raise ValidationError('Provider output incomplete; no answers adopted.')

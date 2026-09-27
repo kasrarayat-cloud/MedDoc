@@ -243,6 +243,8 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
         if config.get('mode')!=current['mode']: raise ValidationError(QUOTE_MODE_CHANGED)
         if config.get('pricing_version')!=current['pricing_version']: raise ValidationError(QUOTE_PRICE_CHANGED)
     config=dict(config or generation.configuration())
+    if kind=='generation' and (refusal:=generation.narrative_refusal(e.template_version.fields,config)):
+        raise ValidationError(refusal)
     if kind=='transcription':
         if not (config['voice_rate_minute'] or config['voice_rate_second']): raise ValidationError('Transcription usage rates have not been configured.')
         # Exact, not an estimate: notes with no room for even one character can take no transcript, so nothing is sent or charged.
@@ -285,7 +287,8 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     if kind=='transcription':
         reserve(job,charge_limit=charge_limit)
     else:
-        max_cost=generation.maximum_cost(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements])
+        max_cost=generation.maximum_cost(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements],
+                                         requirements=e.template_version.review_requirements)
         reserve(job,max_cost)
         charge_limit=max_cost*MULTIPLIER
     audit(user,'job.queued',job.pk,department=e.department,kind=kind,charge_limit=str(charge_limit))
@@ -617,7 +620,10 @@ def run_one():
         e=job.encounter
         # The operator's mode switch is a stop: a job queued in the other mode is refused here, before anything is sent.
         if job.kind=='generation': generation.refuse_switched_mode(job.config)
-        result,cost,units,rates,provider,request_id,simulated=generation.generate(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements]) if job.kind=='generation' else transcribe(job)
+        # A job quoted with the narrative contract after the flag went off stops here: nothing is sent or charged.
+        if job.kind=='generation' and (refusal:=generation.narrative_refusal(e.template_version.fields,job.config)):
+            raise NoProviderRequest(refusal)
+        result,cost,units,rates,provider,request_id,simulated=generation.generate(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements],requirements=e.template_version.review_requirements) if job.kind=='generation' else transcribe(job)
         provider_returned=True
         response=(result.get('anthropic_response') or result.get('response')) if isinstance(result,dict) else None
         resource_id=getattr(response,'id','') or ''
@@ -635,6 +641,9 @@ def run_one():
             saved={'provider_output':result['anthropic_response'].model_dump(mode='json')}
         elif isinstance(result,dict) and 'response' in result:
             saved={'provider_output':result['response'].model_dump(mode='json')}
+        elif isinstance(result,dict) and 'narrative_replay' in result:
+            # A synthetic narrative response (fixture mode): kept as the text the validator read, and named as such.
+            saved={'provider_output_text':result['narrative_replay'],'synthetic_source':result['replay_source']}
         else:saved={'answers':result}
         result_path=f'receipts/{secrets.token_hex(24)}.json'
         path=private_path(result_path);path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
@@ -646,7 +655,7 @@ def run_one():
         with transaction.atomic():
             e=Encounter.objects.select_for_update().get(pk=e.pk)
             # Output QuillMD cannot use is a platform failure whatever the user did meanwhile, so it is checked first and absorbed.
-            if job.kind=='generation': answers=generation.validated(result)
+            if job.kind=='generation': answers,review=generation.adoption(result)
             elif not isinstance(result,str): raise PlatformFailure('Provider supplied no usable transcript.')
             # Usable output that the user's own state (finalized, edited, access revoked) declines is not a platform failure:
             # NotAdoptedByUser keeps the settled charge.
@@ -667,7 +676,8 @@ def run_one():
                 CodeSuggestion.objects.filter(encounter=e).delete()
                 audit(job.user,'coding.invalidated_by_transcription',e.pk,department=e.department,revision=e.revision)
             if not (job.kind=='transcription' and job.config.get('transcript_review_required')):
-                e.template_review={}
+                # A generation's statement proposals only pre-select the page; the first save replaces them with decisions.
+                e.template_review=review if job.kind=='generation' else {}
                 e.save()
             job.state='succeeded';job.provider=provider;job.provider_request_id=request_id;job.finished_at=timezone.now();job.save()
             audit(job.user,'job.succeeded',job.pk,department=e.department,kind=job.kind)
