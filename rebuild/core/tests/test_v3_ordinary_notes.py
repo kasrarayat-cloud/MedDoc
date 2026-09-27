@@ -59,10 +59,13 @@ class OrdinaryNotesOnV3Forms(SimpleTestCase):
         self.assertEqual(out['Plan']['status'], 'supported')
 
     def test_an_option_is_filled_only_from_its_own_labelled_line(self):
-        notes = 'Smoker: No.\nThe patient drinks socially.'
+        notes = 'Smoker: No.\n\nThe patient drinks socially.'
         out = run(notes, {'Smoker': ['Smoker: No.']})
         self.assertEqual(out['Smoker']['text'], 'No')
         self.assertEqual(out['Smoker']['status'], 'supported')
+        # Round 2 (F2): the next line of its paragraph may change it ('I mean yes.'), so there it is held.
+        smoker = run('Smoker: No.\nThe patient drinks socially.', {'Smoker': ['Smoker: No.']})['Smoker']
+        self.assertEqual((smoker['status'], smoker['text'], smoker['held_candidate']['text']), ('conflict', '', 'No.'))
 
     def test_a_line_that_begins_with_a_form_label_is_one_unit_and_its_answer_is_the_rest_of_the_line(self):
         """R2/R3: split into sentences, the labelled sentence alone ticked the box and dropped what followed it."""
@@ -79,7 +82,10 @@ class OrdinaryNotesOnV3Forms(SimpleTestCase):
             self.assertEqual(smoker['held_candidate']['text'], notes.split(': ', 1)[1], notes)
         notes = 'Allergies: penicillin. Sorry, I mean amoxicillin.'
         allergies = run(notes, {'Allergies': [notes]})['Allergies']
-        self.assertEqual(allergies['text'], 'penicillin. Sorry, I mean amoxicillin.', 'the whole remainder, never penicillin alone')
+        # Round 2 (F2): a value of more than one sentence is held, never adopted; the candidate is the whole remainder.
+        self.assertEqual((allergies['status'], allergies['text']), ('conflict', ''))
+        self.assertEqual(allergies['held_candidate']['text'], 'penicillin. Sorry, I mean amoxicillin.',
+                         'the whole remainder, never penicillin alone')
         self.assertEqual(allergies['evidence'], [{'quote': notes, 'start': 0, 'end': len(notes)}])
 
     def test_an_option_is_never_read_from_a_labelled_sentence_inside_another_line(self):
@@ -218,7 +224,8 @@ class OneReadingPerUnit(SimpleTestCase):
             elapsed = time.monotonic() - started
         self.assertEqual(len(calls), len(units), 'one reading per unit, however many questions the form asks')
         self.assertLess(elapsed, 2.0)
-        self.assertEqual(answers['v3_0']['text'], 'Pain is 0.')
+        # Round 2 (F2): the next sentence of its paragraph may change it, so it is held with its candidate.
+        self.assertEqual((answers['v3_0']['status'], answers['v3_0']['held_candidate']['text']), ('conflict', 'Pain is 0.'))
 
 
 GOVERNED_NOTES = (
@@ -344,23 +351,26 @@ class QueuedContractAttribution(SimpleTestCase):
 
     def test_a_v3_job_quoted_before_the_contract_existed_is_sent_the_labelled_line_request(self):
         config = {k: v for k, v in live_config().items() if k != 'v3_evidence_contract'}
-        sent = sent_request('Smoker: yes\nPatient seen today.', FIELDS, config)
+        sent = sent_request('Patient seen today.\nSmoker: yes', FIELDS, config)
         payload = json.loads(sent['messages'][0]['content'])
         self.assertNotIn('source_units', payload)
         self.assertIn('Selection', sent['output_config']['format']['schema']['$defs'])
         self.assertNotIn('UnitSelection', sent['output_config']['format']['schema']['$defs'])
         self.assertTrue(sent['system'].startswith('Map source documentation to questions.'))
-        fixture = g.generate('Smoker: yes\nPatient seen today.', FIELDS, {**config, 'mode': 'fixture'})[0]
+        fixture = g.generate('Patient seen today.\nSmoker: yes', FIELDS, {**config, 'mode': 'fixture'})[0]
         smoker = fixture['v3_4']
         self.assertEqual((smoker['status'], smoker['text'], smoker.get('suggestion')), ('conflict', '', 'Yes'),
                          'the labelled-line contract holds an answer beside an unlabelled line, as it was quoted')
 
     def test_a_v3_job_quoted_under_the_contract_is_sent_the_complete_sentence_request(self):
-        sent = sent_request('Smoker: yes\nPatient seen today.', FIELDS, live_config())
+        sent = sent_request('Patient seen today.\nSmoker: yes', FIELDS, live_config())
         self.assertIn('source_units', json.loads(sent['messages'][0]['content']))
         self.assertIn('UnitSelection', sent['output_config']['format']['schema']['$defs'])
-        fixture = g.generate('Smoker: yes\nPatient seen today.', FIELDS, {**live_config(), 'mode': 'fixture'})[0]
+        fixture = g.generate('Patient seen today.\nSmoker: yes', FIELDS, {**live_config(), 'mode': 'fixture'})[0]
         self.assertEqual((fixture['v3_4']['status'], fixture['v3_4']['text']), ('supported', 'Yes'))
+        # Round 2 (F2): above an unlabelled line of its paragraph the labelled answer is held under this contract too.
+        fixture = g.generate('Smoker: yes\nPatient seen today.', FIELDS, {**live_config(), 'mode': 'fixture'})[0]
+        self.assertEqual((fixture['v3_4']['status'], fixture['v3_4']['text']), ('conflict', ''))
 
 
 @override_settings(**V3)
@@ -379,13 +389,13 @@ class EnqueuedContractAttribution(V3EncounterFixture, TestCase):
         return job, Encounter.objects.get(pk=encounter.pk).answers[self.key('Smoker?')]
 
     def test_a_new_job_records_the_contract_it_runs_under(self):
-        job, smoker = self.run_generation('Smoker: yes\nPatient seen today.')
+        job, smoker = self.run_generation('Patient seen today.\nSmoker: yes')
         self.assertEqual(job.config['v3_evidence_contract'], 'natural-v1')
         self.assertEqual((smoker['status'], smoker['text']), ('supported', 'Yes'))
 
     def test_a_job_queued_before_the_contract_existed_runs_as_it_was_quoted(self):
         quoted = {k: v for k, v in g.configuration().items() if k != 'v3_evidence_contract'}
-        job, smoker = self.run_generation('Smoker: yes\nPatient seen today.', config=quoted)
+        job, smoker = self.run_generation('Patient seen today.\nSmoker: yes', config=quoted)
         self.assertNotIn('v3_evidence_contract', job.config)
         self.assertEqual((smoker['status'], smoker['text'], smoker.get('suggestion')), ('conflict', '', 'Yes'))
 
@@ -523,7 +533,9 @@ class LiveCompleteSentenceWorker(V3EncounterFixture, TestCase):
 
     def test_the_worker_adopts_a_live_unit_selection_for_a_v3_form(self):
         from core.jobs import enqueue, run_one
-        notes = 'Referring physician: Dr Example\nPatient presents with right knee pain.\nSmoker: yes'
+        # Round 2 (F2): each answer's paragraph neighbour after it is another labelled line, and the unlabelled sentence
+        # opens its paragraph (in the earlier order both the physician and the reason were held).
+        notes = 'Patient presents with right knee pain.\nReferring physician: Dr Example\nSmoker: yes'
         encounter = Encounter.objects.get(pk=self.encounter.pk)
         self.assertEqual(self.client.post(f"/encounters/{encounter.pk}/notes/",
                                           {"revision": encounter.revision, "notes": notes}).status_code, 302)
@@ -610,6 +622,24 @@ class RoundTwoRefutation(SimpleTestCase):
                 ('Nausea, vomiting or abdominal pain? None.', 'Review of systems', 'Nausea, vomiting or abdominal pain?')):
             with self.subTest(notes=notes):
                 self.held(notes, label, quote, quote)
+
+    def test_the_paragraph_rule_holds_by_structure_not_by_words(self):
+        """Not the refuter's inputs: the F1-F3 shapes with no scope word, correction word or verbless fragment for a list
+        to find. The paragraph rule holds them by position alone."""
+        for notes, label, quote in (
+                ('Her father has heart disease. He had a myocardial infarction at age 50 and has diabetes.',
+                 'Past medical history', 'He had a myocardial infarction at age 50 and has diabetes.'),
+                ('Warfarin 5 mg daily. Stopped last month.', 'Medications', 'Stopped last month.'),
+                ('Warfarin 5 mg daily. stopped last month.', 'Medications', 'Warfarin 5 mg daily. stopped last month.'),
+                ('Does she have chest pain?', 'Chief complaint', 'Does she have chest pain?')):
+            with self.subTest(notes=notes):
+                self.held(notes, label, quote, quote)
+        # What the rule reads as a boundary: another question's labelled value, a blank line, the end of the note.
+        out = run('Chest pain on exertion is present.\nAllergies: penicillin.\n\nThe patient is well today.',
+                  {'Chief complaint': ['Chest pain on exertion is present.'], 'Allergies': ['Allergies: penicillin.'],
+                   'Plan': ['The patient is well today.']}, fields=REFUTED)
+        self.assertEqual({label: out[label]['status'] for label in ('Chief complaint', 'Allergies', 'Plan')},
+                         {'Chief complaint': 'supported', 'Allergies': 'supported', 'Plan': 'supported'})
 
     def test_f4_an_option_printed_with_a_closing_full_stop_is_named_by_its_value(self):
         form = [field('v3_r', 'Right impression', 'choice', ['reflux positive.', 'is absent.']),

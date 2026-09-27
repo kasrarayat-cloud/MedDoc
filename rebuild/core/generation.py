@@ -1565,6 +1565,46 @@ def governed_decisions(notes, fields, answers, context_labels=()):
 POINTER_ONLY_VALUE = re.compile(r'(?:as\s+follows|see\s+below|as\s+below|listed\s+below|below|the\s+following|as\s+listed)'
                                 r'[\s.:;,!?\u2026]*', re.I)
 
+#: A sentence end INSIDE one unit with more words after it: `.`, `!`, `?` or `…` (any closing quotes or brackets),
+#: then space and text in ANY case ('penicillin. sorry, I mean amoxicillin.'), or a CJK stop and text. A full stop
+#: `source_units` reads as an abbreviation or an initial (`ABBREVIATION`) is not one: the splitter's own reading.
+INNER_SENTENCE_END = re.compile(r'[.!?\u2026]+["\'\u201d\u2019)\]]*\s+(?=\S)|[\u3002\uff0e\uff01\uff1f\uff61]+(?=\S)')
+#: A statement that asks or trails off: its last visible mark is `?`, `…` or `..` (closing quotes, brackets and
+#: emphasis marks after it are read through). It answers nothing.
+ASKS_OR_TRAILS_OFF = re.compile(r'(?:[?\uff1f\u2026]|\.\.)["\'\u201d\u2019)\]*_~`\s]*$')
+
+
+def inner_sentence_end(text):
+    """Whether one unit's text holds more than one sentence (`INNER_SENTENCE_END`)."""
+    for match in INNER_SENTENCE_END.finditer(text):
+        end = match.start() + 1
+        if text[match.start()] == '.' and ABBREVIATION.search(text[max(0, end - 32):end]):
+            continue
+        return True
+    return False
+
+
+def paragraph_neighbours(notes, units):
+    """Each unit's neighbours in its PARAGRAPH, `{id: (before, after)}`: the unit written just before and just after it
+    with no blank line between (a blank line is two line breaks with nothing but whitespace between them), else None.
+    Lines are broken as `source_units` breaks them (`str.splitlines`)."""
+    joined = []
+    for first, second in zip(units, units[1:]):
+        gap = notes[first['end']:second['start']]
+        breaks = sum(part != part.splitlines()[0] for part in gap.splitlines(True))
+        joined.append(breaks < 2)
+    return {unit['id']: (units[index - 1] if index and joined[index - 1] else None,
+                         units[index + 1] if index < len(joined) and joined[index] else None)
+            for index, unit in enumerate(units)}
+
+
+def nearby_entry(notes, unit, near, after):
+    """A neighbouring unit shown beside a held candidate, in the shape of a governing line (`same`: no line break
+    between them)."""
+    gap = notes[unit['end']:near['start']] if after else notes[near['end']:unit['start']]
+    return {'quote': shown_quote(notes, near['start'], near['end'], after), 'start': near['start'], 'end': near['end'],
+            'after': after, 'same': gap.splitlines(True) == gap.splitlines()}
+
 
 def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered_duplicate_holds=False,finite=FINITE_STATEMENT,
                             v3=False):
@@ -1587,6 +1627,7 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
     output={}; used_numbered={}
     by_id={unit['id']:unit for unit in units}
     parsed_of={unit['id']:parsed for unit,parsed in zip(units,parsed_units)}
+    paragraph=paragraph_neighbours(notes,units) if v3 else {}
     selected={item.key:item for item in selections.fields}
     for field in fields:
         item=selected[field['key']]
@@ -1606,7 +1647,7 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             if corrected is not None:value=corrected
             allowed[quote]=(unit,value)
             if parsed and parsed[1]: explicit.setdefault(value,unit)
-        evidence=[]; texts=[]; guarded=False
+        evidence=[]; texts=[]; guarded=False; nearby={}
         choices=[by_id[value] for value in item.unit_ids] if isinstance(item,UnitSelection) else item.quotes
         for choice in choices:
             quote=choice['quote'] if isinstance(choice,dict) else choice
@@ -1633,6 +1674,23 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             own_value=parsed_of[unit['id']]
             if v3 and own_value and own_value[1] and POINTER_ONLY_VALUE.fullmatch(own_value[1].strip()):
                 guarded=True
+            if v3:
+                # ⚠️ CONTRACT v3: A VALUE OR SENTENCE IS ADOPTED ONLY WHEN NOTHING IN ITS PARAGRAPH CAN CHANGE IT (round 2,
+                # F2/F3). STRUCTURE, NOT WORDS: no list of correction or denial words decides it, so nothing a list misses
+                # is adopted. 'Allergies: penicillin.' above 'Sorry, I mean amoxicillin.', 'Consent obtained: yes.' above
+                # 'To be obtained tomorrow.' and 'Warfarin 5 mg daily.' before 'Stopped last month.' were adopted.
+                before,after=paragraph[unit['id']]
+                # (a) The unit written next in its paragraph may change it, unless it is another question's labelled value.
+                if after is not None and not parsed_of[after['id']]:
+                    guarded=True; nearby.setdefault(after['id'],(unit,after,True))
+                # (b) An unlabelled sentence depends on the one before it in its paragraph for its subject and scope ('He
+                #     had a myocardial infarction' after a sentence about her father). A labelled value names its question.
+                if before is not None and not own_value:
+                    guarded=True; nearby.setdefault(before['id'],(unit,before,False))
+                # (c) More than one sentence in one unit (a labelled line's remainder, a lowercase continuation).
+                if inner_sentence_end(quote): guarded=True
+                # (d) A value that asks or trails off answers nothing ('Nausea, vomiting or abdominal pain?').
+                if ASKS_OR_TRAILS_OFF.search(own_value[1] if own_value else quote): guarded=True
             # Dates and consent are not inferred from a procedure date or general
             # narrative. These source subjects must themselves be documented.
             if any(re.search(subject,label,re.I) and not re.search(subject,quote,re.I) for subject in SUBJECTS): guarded=True
@@ -1666,11 +1724,15 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
         elif status=='supported' and (context:=governed) is not None:
             # ONE RULE for the page and for finalization: what finalization would refuse is held here.
             answer=held_for_decision(answer,texts,own,context)
-        elif status=='conflict' and v3 and governed is None and texts:
-            # ⚠️ CONTRACT v3: A HOLD KEEPS ITS CANDIDATE (round 2). A conflict no line governs (a fragment, a question, a
-            # value another sentence may change) kept only its evidence, and the page showed an empty conflict.
-            answer={**answer,'held_candidate':{'text':'\n'.join(texts),'evidence':own,'context':[],
-                    'reason':held_reason([],False,True) if (item.conflict or len(explicit)>1) else V3_HELD_REASON}}
+        elif status=='conflict' and v3 and texts:
+            # ⚠️ CONTRACT v3: A HOLD KEEPS ITS CANDIDATE (round 2), shown with what governs it and with the sentences
+            # beside it that may change it. A conflict no line governs (a fragment, a question, a value another sentence
+            # may change) kept only its evidence, and the page showed an empty conflict.
+            own_starts={entry['start'] for entry in own}
+            context=list(governed or [])+[nearby_entry(notes,held,near,after) for held,near,after in nearby.values()
+                                          if near['start'] not in own_starts]
+            reason=held_reason(context,False,True) if (context or item.conflict or len(explicit)>1) else V3_HELD_REASON
+            answer={**answer,'held_candidate':{'text':'\n'.join(texts),'evidence':own,'context':context,'reason':reason}}
         elif status=='conflict':
             answer=with_governing_lines(answer,texts,own,governed)
         output[item.key]=answer
