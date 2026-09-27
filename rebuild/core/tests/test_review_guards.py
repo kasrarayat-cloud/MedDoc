@@ -510,7 +510,8 @@ class TheSaveSaysExactlyWhatItCleared(OrdinaryDraft, TestCase):
         counts = dict.fromkeys(views.review_state_counts(Encounter(answers={}, template_review={}), codes=False), 0)
         self.assertEqual(views.cleared_sentence(counts), '')
         self.assertEqual(views.cleared_sentence({**counts, 'answers_left_blank': 1, 'answers_with_clinician_review': 1}),
-                         'Cleared, and recorded under your name: the answer draft (1 answer, 1 reviewed by a clinician). ')
+                         'Cleared, and recorded under your name: the answer draft (1 answer: 1 decision to leave blank; 1 '
+                         'reviewed by a clinician). ')                               # (R4-4: the decision is named)
         self.assertEqual(views.cleared_sentence({**counts, 'answers_edited_not_accepted': 1, 'statements_reviewed': 1,
                                                  'statements_recorded_unreviewed': 1, 'codes_accepted': 2}),
                          'Cleared, and recorded under your name: the answer draft (1 answer, not reviewed), 2 saved prewritten '

@@ -533,18 +533,36 @@ def review_state_counts(e,codes=True):
                   codes_accepted=CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False).count() if codes else 0)
     return counts
 
-def cleared_sentence(counts):
-    """What a changed notes save cleared, in words, read from its audited counts: each part is named only when its count
-    is not zero, so the sentence cannot claim what the audit row does not record (refutation round 3, F2)."""
-    def counted(number,noun):return f'{number} {noun}'+('' if number==1 else 's')
+def cleared_parts(counts):
+    """What a changed notes save clears, as phrases read from its audited counts: each part is named only when its count
+    is not zero, so no sentence built from them can claim what the audit row does not record (refutation round 3, F2).
+    Within the answer draft, the decisions a clinician made — accepted suggestions and decisions to leave blank — are named
+    with the answers they are part of, beside the reviewed count that spans them: an acceptance made without the review
+    tick vanished from "(2 answers, 1 reviewed by a clinician)" while the audit recorded it (refutation round 4, R4-4)."""
+    def counted(number,noun,plural=None):return f'{number} '+(noun if number==1 else plural or noun+'s')
     def reviewed(total,number):return (f'{number} reviewed by a clinician' if number else 'none reviewed' if total>1 else 'not reviewed')
     answers=sum(counts[state] for state in ANSWER_STATES)
+    review=reviewed(answers,counts['answers_with_clinician_review'])
+    decisions=[(number,counted(number,noun,plural)) for number,noun,plural in (
+        (counts['answers_accepted_suggestion'],'accepted suggestion',None),
+        (counts['answers_left_blank'],'decision to leave blank','decisions to leave blank')) if number]
+    named=' and '.join(text for _,text in decisions)
+    if not decisions:draft=f'{counted(answers,"answer")}, {review}'
+    elif sum(number for number,_ in decisions)==answers:draft=f'{counted(answers,"answer")}: {named}; {review}'
+    else:draft=f'{counted(answers,"answer")}, including {named}; {review}'
     statements=counts['statements_reviewed']+counts['statements_recorded_unreviewed']
-    parts=([f'the answer draft ({counted(answers,"answer")}, {reviewed(answers,counts["answers_with_clinician_review"])})'] if answers else [])
+    parts=([f'the answer draft ({draft})'] if answers else [])
     parts+=([f'{counted(statements,"saved prewritten statement wording")} ({reviewed(statements,counts["statements_reviewed"])})'] if statements else [])
     parts+=([counted(counts['codes_accepted'],'accepted code')] if counts['codes_accepted'] else [])
-    if not parts:return ''
-    return 'Cleared, and recorded under your name: '+(', '.join(parts[:-1])+' and '+parts[-1] if len(parts)>1 else parts[0])+'. '
+    return parts
+
+def listed(parts):
+    return ', '.join(parts[:-1])+' and '+parts[-1] if len(parts)>1 else ''.join(parts)
+
+def cleared_sentence(counts):
+    """What a changed notes save cleared, in words, from its audited counts (see `cleared_parts`)."""
+    parts=cleared_parts(counts)
+    return 'Cleared, and recorded under your name: '+listed(parts)+'. ' if parts else ''
 
 @require_POST
 @transaction.atomic
