@@ -1784,6 +1784,38 @@ class ConcurrentStatusReadTests(unittest.TestCase):
                 self.assertEqual((after['condition'], after.get('check_running'), after.get('state_unreadable')),
                                  (local, False, None))
 
+    def bounded(self, call, fifo, seconds=10):
+        """Run `call` in a thread and give it `seconds`. A call stuck opening `fifo` for reading is
+        released afterwards (a writer opened non-blocking) so a failing test never hangs the suite."""
+        results = {}
+        worker = threading.Thread(target=lambda: results.update(value=call()), daemon=True)
+        worker.start()
+        worker.join(seconds)
+        stuck = worker.is_alive()
+        if stuck:
+            try:
+                os.close(os.open(fifo, os.O_WRONLY | os.O_NONBLOCK))
+            except OSError:
+                pass
+            worker.join(30)
+        self.assertFalse(stuck, f'it hung for {seconds} s on a FIFO')
+        return results['value']
+
+    def test_a_fifo_monitor_lock_is_refused_at_once_by_status_and_check(self):
+        """⚠️ R3-5, round 3 (pre-existing). reading() opened monitor.lock read-only WITHOUT O_NONBLOCK, and
+        opening a FIFO for reading blocks until a writer appears: a FIFO in the lock's place hung
+        status(), and with it every publisher tick, for ever. It is opened non-blocking and a lock
+        that is not a private regular file is refused, as check() already refuses it."""
+        a.check(self.at)
+        lock = self.alerts / 'monitor.lock'
+        lock.unlink()
+        os.mkfifo(lock, 0o600)
+        shown, code = self.bounded(lambda: a.status(self.at + timedelta(minutes=1)), lock)
+        self.assertEqual((code, shown['condition']), (1, 'monitoring_state_unavailable'))
+        result, code = self.bounded(lambda: a.check(self.at + timedelta(minutes=5)), lock)
+        self.assertEqual((code, result['condition']), (1, 'monitoring_state_unavailable'))
+        self.sender.assert_not_called()
+
     def test_status_takes_the_lock_without_creating_or_writing_anything(self):
         """The publisher runs status() in a sandbox with no write grant to this directory, so the
         reader's lock is opened read-only and never created: a writable open would fail there."""
