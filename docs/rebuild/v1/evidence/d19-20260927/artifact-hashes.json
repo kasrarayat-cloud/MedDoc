@@ -1,0 +1,207 @@
+[
+  {
+    "path": "01-red.log",
+    "bytes": 5064,
+    "sha256": "caa82c55bacebff5ef5b3be449b747dae07e2ec5076ce4d1a6d38cdd33003f78"
+  },
+  {
+    "path": "02-first-green.log",
+    "bytes": 1253,
+    "sha256": "70c3d299f60d1f9100c93cc7f79b606af20842d1543d8f443f41ec65d86df3ff"
+  },
+  {
+    "path": "03-d19-inspection.json",
+    "bytes": 16540,
+    "sha256": "95ebe08e6b1bbb5dda688f5c10d837a47d3eb4d0cb63395b7d071b5ca39e686b"
+  },
+  {
+    "path": "04-workflow-first.log",
+    "bytes": 23025,
+    "sha256": "7b98879c7a98671c40f98b64928b7e5322a2cd2dae32044b4e8d044b66608b9f"
+  },
+  {
+    "path": "05-word-regressions.log",
+    "bytes": 14622,
+    "sha256": "1acc5e90b47396d28e4968e13d6284bff5f58bb3db0df38a5a92b22da4a03aa4"
+  },
+  {
+    "path": "06-workflow-regressions.log",
+    "bytes": 19315,
+    "sha256": "4acbca035b588cccc63fe7bbd1d429de97bc3026e65e097515e1cc70363de9cd"
+  },
+  {
+    "path": "07-d19-workflow.json",
+    "bytes": 28926,
+    "sha256": "1ceadcf36d130941c8d071b70551e9d49f6beb619458848466d50c265a5f3f3e"
+  },
+  {
+    "path": "08-focused-workflow-final.log",
+    "bytes": 490,
+    "sha256": "28139d9562bce629a4f9cc3ba527dd5bf68146ee63e23990672f07970aa5094d"
+  },
+  {
+    "path": "09-engine-final.log",
+    "bytes": 1432,
+    "sha256": "7c57072ec1a83c995f98006e91d969b7635bf7f9379a79277734ed76907bd1f4"
+  },
+  {
+    "path": "10-render.log",
+    "bytes": 1869,
+    "sha256": "34bfeb98e090c696d8c0a707595c6e4b3ab03a99060fa36cf32efd3c204f1d7a"
+  },
+  {
+    "path": "11-engine-final-regions.log",
+    "bytes": 1432,
+    "sha256": "08108fab16ee8d4764d5e3650c0a3aac0f272701c56b3c36fad4a9769ce690a5"
+  },
+  {
+    "path": "12-render-checks.json",
+    "bytes": 2099,
+    "sha256": "767c04ae4eafaa97c3d469a6e87fd988ebbba6a6a43fb546d076213b6e9fe0e4"
+  },
+  {
+    "path": "13-containment-engine.log",
+    "bytes": 1837,
+    "sha256": "a30ed55c906168da129ac72a9d61752f55890f73563e27e7bd06e8c3d1ed30fb"
+  },
+  {
+    "path": "14-containment-workflow.log",
+    "bytes": 1438,
+    "sha256": "8b2c9439059e308ba95a420eceee67fe7f851cd72396f70b2753c0c4bf35b130"
+  },
+  {
+    "path": "15-d19-containment.json",
+    "bytes": 14616,
+    "sha256": "99732135144df1acea87af3629035b5f9a315f17b68c10cc542afbd32a719b9f"
+  },
+  {
+    "path": "16-containment-final.log",
+    "bytes": 491,
+    "sha256": "6b10b881bf91dc22a025adf1215e51fa3627887691b165e07099ad8668a23756"
+  },
+  {
+    "path": "d19_containment_probe.py",
+    "bytes": 2962,
+    "sha256": "053c974b350d034cb24632325276fb4d94577335061de0ad6e92a2870f43d55d"
+  },
+  {
+    "path": "d19_probe.py",
+    "bytes": 4996,
+    "sha256": "233dd2eedc635f658111a02fe820e84594f94579d70efbab7042aecec72c8db4"
+  },
+  {
+    "path": "long.docx",
+    "bytes": 78167,
+    "sha256": "152e9754d89d7181d48702b0fb8fb9a730d23c2600e2a3c364f409aacbe1a68e"
+  },
+  {
+    "path": "missing.docx",
+    "bytes": 78084,
+    "sha256": "3cdf485f98ab64b7740d5c073de62357fc0ba096af6b50f6b908ff8f82c81dc4"
+  },
+  {
+    "path": "ordinary.docx",
+    "bytes": 78127,
+    "sha256": "b01b57f5d42c290a8b30e91fd579e6f07e28f0e228172359e2330db272c6c0f1"
+  },
+  {
+    "path": "original.docx",
+    "bytes": 78324,
+    "sha256": "394eaa6eb6fc4e33ab21eac78d635cb68c6d687baeb7827fef7d58ded5814219"
+  },
+  {
+    "path": "render-checks-first-error.txt",
+    "bytes": 284,
+    "sha256": "8ede9910f87eb159b395d6c678f36a5a95e2ac77435aab6d6af00578faaad330"
+  },
+  {
+    "path": "render-input/long.docx",
+    "bytes": 78167,
+    "sha256": "152e9754d89d7181d48702b0fb8fb9a730d23c2600e2a3c364f409aacbe1a68e"
+  },
+  {
+    "path": "render-input/missing.docx",
+    "bytes": 78084,
+    "sha256": "3cdf485f98ab64b7740d5c073de62357fc0ba096af6b50f6b908ff8f82c81dc4"
+  },
+  {
+    "path": "render-input/ordinary.docx",
+    "bytes": 78127,
+    "sha256": "b01b57f5d42c290a8b30e91fd579e6f07e28f0e228172359e2330db272c6c0f1"
+  },
+  {
+    "path": "render-input/original.docx",
+    "bytes": 78324,
+    "sha256": "394eaa6eb6fc4e33ab21eac78d635cb68c6d687baeb7827fef7d58ded5814219"
+  },
+  {
+    "path": "render-output/long-01.png",
+    "bytes": 222616,
+    "sha256": "381bd2db9710209fa774a27f41913faa076ed71101bc17ce87860963ab851f7c"
+  },
+  {
+    "path": "render-output/long-02.png",
+    "bytes": 120557,
+    "sha256": "64e56d9af402a6b0a5c0b1da3db42c2acb91c051cba03701da77ded45a766a22"
+  },
+  {
+    "path": "render-output/long.pdf",
+    "bytes": 87514,
+    "sha256": "685a357c5ca7ac5c53b5b923aacaf719b5d2f9befaa4d7d912417799095372e3"
+  },
+  {
+    "path": "render-output/missing-01.png",
+    "bytes": 156725,
+    "sha256": "4bb82a4e4c8dc3b5d6501d673639be6b27f7a0a10538654dfecaa0d4223f33bb"
+  },
+  {
+    "path": "render-output/missing-02.png",
+    "bytes": 36202,
+    "sha256": "79e6c33bec5ad44c478c027bbbff2e035d03acb93907c39ff7b821ba1558ba02"
+  },
+  {
+    "path": "render-output/missing.pdf",
+    "bytes": 86361,
+    "sha256": "c7498b103261d382f7a102422b8acff17feccb8882ae98bbfceb190fa71f01d4"
+  },
+  {
+    "path": "render-output/ordinary-01.png",
+    "bytes": 159079,
+    "sha256": "ddf9ab2de4a9f5ecf91b10f68b36ec0d08915418252ca1c0a7f86e162b35f977"
+  },
+  {
+    "path": "render-output/ordinary-02.png",
+    "bytes": 36202,
+    "sha256": "79e6c33bec5ad44c478c027bbbff2e035d03acb93907c39ff7b821ba1558ba02"
+  },
+  {
+    "path": "render-output/ordinary.pdf",
+    "bytes": 86857,
+    "sha256": "b0d70fd08afff73eb8f98db8b69382e521469b360a57af8788cd68484b56eacd"
+  },
+  {
+    "path": "render-output/original-01.png",
+    "bytes": 156725,
+    "sha256": "4bb82a4e4c8dc3b5d6501d673639be6b27f7a0a10538654dfecaa0d4223f33bb"
+  },
+  {
+    "path": "render-output/original-02.png",
+    "bytes": 36202,
+    "sha256": "79e6c33bec5ad44c478c027bbbff2e035d03acb93907c39ff7b821ba1558ba02"
+  },
+  {
+    "path": "render-output/original.pdf",
+    "bytes": 86361,
+    "sha256": "da708910fc5b1d874afa277a4a2997b1b5b63c38e099ff43f919af05d8340c44"
+  },
+  {
+    "path": "render.py",
+    "bytes": 1353,
+    "sha256": "1947b598c9b2acf7d37a1ab9621ff61629fa743f69bfbbdec172e0979895fae5"
+  },
+  {
+    "path": "render_checks.py",
+    "bytes": 1318,
+    "sha256": "2976b5fc5ebe6c3b76bca6c35e80cc45cc984290d8c64551ada6574d7a739c1d"
+  }
+]

@@ -17,7 +17,7 @@ from .media import (AMBIGUOUS,MISSING,RETRYABLE,SUBMISSION_BUDGET_SECONDS,TOO_LA
                     SubmissionUnprobeable,normalise_submission,plan_normalisation,probe_submission,refusal_text,
                     scrubbed)
 from .billing import reserve,settle,release,absorb_failed_job,sandbox_hold,MULTIPLIER
-from . import generation
+from . import generation, v3_mapping
 from . import audio
 
 
@@ -214,6 +214,8 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     if e.status=='finalized': raise ValidationError('Finalized documents are immutable.')
     if expected_revision is not None and e.revision!=expected_revision:
         raise ValidationError('Source notes changed after the quote. Reload and review the current notes before submitting.')
+    if kind=='generation' and (refusal:=v3_mapping.generation_refusal(e.template_version)):
+        raise ValidationError(refusal)
     if kind=='generation' and not e.notes.strip():
         raise ValidationError('Type and save source notes, or review and add a transcript, before generating answers.')
     fingerprint=hashlib.sha256(private_path(input_path).read_bytes()).hexdigest() if kind=='transcription' else str(e.revision)
@@ -621,6 +623,8 @@ def run_one():
         # reconciled cost would debit) may hold it: real mode never spends it, and refuses the job as reserve() would.
         if sandbox_hold(job): raise refuse_sandbox_hold(job)
         e=job.encounter
+        if job.kind=='generation' and (refusal:=v3_mapping.generation_refusal(e.template_version)):
+            raise NoProviderRequest(refusal)
         # The operator's mode switch is a stop: a job queued in the other mode is refused here, before anything is sent.
         if job.kind=='generation': generation.refuse_switched_mode(job.config)
         # A job quoted with the narrative contract after the flag went off stops here: nothing is sent or charged.

@@ -1,0 +1,15 @@
+test_caption_count_mismatch_is_visible_and_not_guessed (documents.test_signing_areas.SigningAreas.test_caption_count_mismatch_is_visible_and_not_guessed) ... ok
+test_captioned_signing_bands_preserve_types_and_actual_spans (documents.test_signing_areas.SigningAreas.test_captioned_signing_bands_preserve_types_and_actual_spans) ... ok
+test_copies_and_descendant_slots_cannot_bypass_protected_source (documents.test_signing_areas.SigningAreas.test_copies_and_descendant_slots_cannot_bypass_protected_source) ... ok
+test_dated_inline_blank_is_a_date (documents.test_signing_areas.SigningAreas.test_dated_inline_blank_is_a_date) ... ok
+test_every_primary_writer_and_paragraph_option_secondary_target_is_protected (documents.test_signing_areas.SigningAreas.test_every_primary_writer_and_paragraph_option_secondary_target_is_protected) ... ok
+test_floating_initials_have_no_guessed_consent_label (documents.test_signing_areas.SigningAreas.test_floating_initials_have_no_guessed_consent_label) ... ok
+test_floating_layout_all_nonempty_exports_refuse_but_missing_is_unchanged (documents.test_signing_areas.SigningAreas.test_floating_layout_all_nonempty_exports_refuse_but_missing_is_unchanged) ... ok
+test_initials_instruction_does_not_cross_a_table_to_an_empty_paragraph (documents.test_signing_areas.SigningAreas.test_initials_instruction_does_not_cross_a_table_to_an_empty_paragraph) ... ok
+test_protected_short_long_and_forged_flags_refuse_without_writing (documents.test_signing_areas.SigningAreas.test_protected_short_long_and_forged_flags_refuse_without_writing) ... ok
+test_supported_answer_and_missing_preserve_all_signing_xml (documents.test_signing_areas.SigningAreas.test_supported_answer_and_missing_preserve_all_signing_xml) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 2.119s
+
+OK

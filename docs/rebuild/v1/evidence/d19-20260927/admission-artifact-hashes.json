@@ -1,0 +1,45 @@
+{
+  "base_draft": "7d3828f13eb772198ed8146f4f2f774f1ceebe0c",
+  "artifacts": [
+    {
+      "path": "17-admission-red.log",
+      "sha256": "2e683c056066efdfb265d88434ba268f23cb17c0a90ca9be07bcf7445161aa80",
+      "bytes": 2686
+    },
+    {
+      "path": "18-admission-billing-red.log",
+      "sha256": "90c50692256a53b7b557c044c4eacd116d06d253dfef962b4413a072d5334e8a",
+      "bytes": 1350
+    },
+    {
+      "path": "19-admission-focused.log",
+      "sha256": "1cbfcd12a8f61f60125ebeb521595917d052b6c1bc5d5ec8817ec819ffbcbf8f",
+      "bytes": 499
+    }
+  ],
+  "sources": [
+    {
+      "path": "rebuild/core/jobs.py",
+      "sha256": "ad1f9e4334b11cdc932605fbeb0f097267de810b51e4f61b099348d83d1095aa"
+    },
+    {
+      "path": "rebuild/core/v3_mapping.py",
+      "sha256": "c64d3eb48df6175b692c4f0af6ebbcb85a2382eafdd645498e0ca0e994242698"
+    },
+    {
+      "path": "rebuild/core/views.py",
+      "sha256": "b33a170ad224ad828fcc8874d4481235567f4ddd3b7c93fcff839a810a995511"
+    },
+    {
+      "path": "rebuild/core/tests/test_signing_areas.py",
+      "sha256": "18decbbd77b5c8860cbc8ee019fa99b361143bcd73be7920d9e5fbab19f38550"
+    }
+  ],
+  "historical_41_artifact_manifest_unchanged": true,
+  "network_calls": 0,
+  "actual_provider_spend": 0,
+  "synthetic_red_cost": ".01",
+  "synthetic_red_charge": ".015",
+  "final_tests": 13,
+  "final_seconds": 21.457
+}

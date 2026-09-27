@@ -1,0 +1,22 @@
+Creating test database for alias 'default'...
+/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-word-d19/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+F
+======================================================================
+FAIL: test_old_queued_job_refuses_before_provider_and_releases_real_hold (core.tests.test_signing_areas.SigningGenerationAdmission.test_old_queued_job_refuses_before_provider_and_releases_real_hold)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-d19/rebuild/core/tests/test_signing_areas.py", line 204, in test_old_queued_job_refuses_before_provider_and_releases_real_hold
+    self.assertEqual(job.state, 'failed', {'state': job.state, 'provider_calls': provider.call_count,
+AssertionError: 'succeeded' != 'failed'
+- succeeded
++ failed
+ : {'state': 'succeeded', 'provider_calls': 1, 'usage_costs': [(Decimal('0.010000000000'), Decimal('0.015000000000'))], 'receipt_count': 1}
+
+----------------------------------------------------------------------
+Ran 1 test in 1.371s
+
+FAILED (failures=1)
+Destroying test database for alias 'default'...
+Found 1 test(s).
+System check identified no issues (0 silenced).

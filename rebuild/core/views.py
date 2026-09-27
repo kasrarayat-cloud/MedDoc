@@ -777,7 +777,8 @@ def encounter_detail(request,pk):
             row['v3_note']=v3_mapping.review_note(row)
             row['blank_note']=v3_mapping.blank_note(row)
             row['v3_final']=v3_mapping.finalized_note(row,row)
-            row['v3_context']=(row.get('context') or '') if label_counts.get(question_key(row.get('label')),0)>1 else ''
+            row['v3_context']=(row.get('review_reason') if row.get('write_protected') else
+                               ((row.get('context') or '') if label_counts.get(question_key(row.get('label')),0)>1 else ''))
     requirements=[];review_error='';assessment=None;resolved_ok=False;wm_conflicts=[]
     if is_wm:
         decisions=e.template_review.get('decisions',{})
@@ -865,7 +866,8 @@ def encounter_detail(request,pk):
     from . import wm_narrative
     return render(request,'encounter_detail.html',{'wm_narrative':is_wm and wm_narrative.enabled(e.template_version.fields),'notes_save_clears':notes_save_clears(e),'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or is_v3 or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'v3_template':is_v3,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
-        'signer_name':' '.join((request.user.get_full_name() or request.user.email).split())})
+        'signer_name':' '.join((request.user.get_full_name() or request.user.email).split()),
+        'export_refusal':v3_mapping.export_refusal(e.template_version.template) if is_v3 else ''})
 
 def clinician_decided(e):
     """Whether the saved draft carries a clinician's review state, which a generation would replace wholesale.
@@ -1000,6 +1002,7 @@ def generate_view(request,pk):
             raise ValidationError("These answers include a clinician's review or decisions, and a new draft would replace them. "
                                   'Nothing was sent or charged. To generate again, a clinician can use "Clear answers and '
                                   'review to generate again" under the notes: it asks for confirmation and is recorded.')
+        if refusal:=v3_mapping.generation_refusal(e.template_version):raise ValidationError(refusal)
         quoted=usage_quote(request,e)
         job=enqueue(e,request.user,config=quoted,expected_revision=e.revision)
         if getattr(job,'reused',False):

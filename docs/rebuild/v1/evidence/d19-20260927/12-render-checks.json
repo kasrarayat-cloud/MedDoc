@@ -1,0 +1,78 @@
+[
+  {
+    "mode": "original",
+    "pages": 2,
+    "overlap_count": 0,
+    "missing_answer_probes": [],
+    "pdf_sha256": "da708910fc5b1d874afa277a4a2997b1b5b63c38e099ff43f919af05d8340c44",
+    "page_images": [
+      {
+        "page": 1,
+        "png": "original-01.png",
+        "sha256": "4bb82a4e4c8dc3b5d6501d673639be6b27f7a0a10538654dfecaa0d4223f33bb"
+      },
+      {
+        "page": 2,
+        "png": "original-02.png",
+        "sha256": "79e6c33bec5ad44c478c027bbbff2e035d03acb93907c39ff7b821ba1558ba02"
+      }
+    ]
+  },
+  {
+    "mode": "missing",
+    "pages": 2,
+    "overlap_count": 0,
+    "missing_answer_probes": [],
+    "pdf_sha256": "c7498b103261d382f7a102422b8acff17feccb8882ae98bbfceb190fa71f01d4",
+    "page_images": [
+      {
+        "page": 1,
+        "png": "missing-01.png",
+        "sha256": "4bb82a4e4c8dc3b5d6501d673639be6b27f7a0a10538654dfecaa0d4223f33bb"
+      },
+      {
+        "page": 2,
+        "png": "missing-02.png",
+        "sha256": "79e6c33bec5ad44c478c027bbbff2e035d03acb93907c39ff7b821ba1558ba02"
+      }
+    ]
+  },
+  {
+    "mode": "ordinary",
+    "pages": 2,
+    "overlap_count": 0,
+    "missing_answer_probes": [],
+    "pdf_sha256": "b0d70fd08afff73eb8f98db8b69382e521469b360a57af8788cd68484b56eacd",
+    "page_images": [
+      {
+        "page": 1,
+        "png": "ordinary-01.png",
+        "sha256": "ddf9ab2de4a9f5ecf91b10f68b36ec0d08915418252ca1c0a7f86e162b35f977"
+      },
+      {
+        "page": 2,
+        "png": "ordinary-02.png",
+        "sha256": "79e6c33bec5ad44c478c027bbbff2e035d03acb93907c39ff7b821ba1558ba02"
+      }
+    ]
+  },
+  {
+    "mode": "long",
+    "pages": 2,
+    "overlap_count": 0,
+    "missing_answer_probes": [],
+    "pdf_sha256": "685a357c5ca7ac5c53b5b923aacaf719b5d2f9befaa4d7d912417799095372e3",
+    "page_images": [
+      {
+        "page": 1,
+        "png": "long-01.png",
+        "sha256": "381bd2db9710209fa774a27f41913faa076ed71101bc17ce87860963ab851f7c"
+      },
+      {
+        "page": 2,
+        "png": "long-02.png",
+        "sha256": "64e56d9af402a6b0a5c0b1da3db42c2acb91c051cba03701da77ded45a766a22"
+      }
+    ]
+  }
+]
