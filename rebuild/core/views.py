@@ -1414,7 +1414,7 @@ def checkout_return_origin():
 @require_POST
 def checkout(request):
     import stripe
-    from .billing import checkout_form
+    from .billing import checkout_form,real_mode_refuses
     from .stripe_validation import sandbox_payments_refused
     # Real data mode checks out only in live mode: no Payment row and no provider call otherwise.
     if sandbox_payments_refused():messages.error(request,'Payments are not available. No charge was made.');return redirect('billing')
@@ -1440,6 +1440,14 @@ def checkout(request):
             organization_id=payer.split(':',1)[1]
             if not Membership.objects.select_for_update().filter(user=request.user,user__is_active=True,user__verified_at__isnull=False,active=True,role='owner',department__organization_id=organization_id).exists():raise PermissionDenied
             wallet,_=Wallet.objects.get_or_create(organization_id=organization_id,kind='paid')
+        # Real data mode never spends a balance sandbox payments funded (reserve() refuses it), so live money is never
+        # taken into one: refused before any Payment row or Stripe call. The payer is told what to do, and nothing that
+        # identifies the balance, its payments or its amount.
+        if real_mode_refuses(wallet):
+            audit(request.user,'payment.checkout_refused_sandbox_balance',wallet.pk,payer='personal' if payer=='personal' else 'organization')
+            messages.error(request,'This paid balance holds sandbox (test) payments, which real data mode never spends, so no live payment '
+                           'can be added to it. Contact support to resolve this balance. No charge was made.')
+            return redirect('billing')
         p,created=Payment.objects.get_or_create(request_key=request_key,defaults={'user':request.user,'wallet':wallet,'amount_cents':amount_cents,'status':'creating','livemode':live})
         if p.user_id!=request.user.pk or p.amount_cents!=amount_cents or p.wallet_id!=wallet.pk:raise ValidationError('A repeated checkout must use the original authorized balance and amount.')
         if not created:

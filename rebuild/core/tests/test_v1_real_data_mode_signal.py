@@ -15,7 +15,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 
 from core.billing import reserve
 from core.jobs import NoProviderRequest, request_parameters
-from core.models import Job, Payment, Reservation, Wallet
+from core.models import Job, LedgerEntry, Payment, Reservation, Wallet
 from core.stripe_validation import real_data_mode, sandbox_payments_refused, validate_event_environment
 from core.tests.test_security import SyntheticFixture
 from core.tests import test_v1_stripe_live as stripe_live  # The module, so its TestCase is not collected twice here.
@@ -90,9 +90,14 @@ class EitherSettingSaysRealAtTheDoor(SyntheticFixture, TestCase):
                 self.assertFalse(Payment.objects.exists())
 
     def test_reserve_refuses_a_sandbox_funded_balance_on_either_signal(self):
+        # A sandbox payment that FUNDED the wallet: paid, with its credit. (A checkout nobody paid holds no money and
+        # no longer counts: round-3 F1; the unfunded case is covered in test_v1_real_mode_payments.)
         wallet = Wallet.objects.get(user=self.user, kind='paid')
-        Payment.objects.create(user=self.user, wallet=wallet, amount_cents=1000, stripe_session='cs_test_partial', livemode=False)
+        Payment.objects.create(user=self.user, wallet=wallet, amount_cents=1000, stripe_session='cs_test_partial',
+                               stripe_intent='pi_test_partial', status='paid', livemode=False)
         Wallet.objects.filter(pk=wallet.pk).update(balance=Decimal('10'))
+        LedgerEntry.objects.create(wallet=wallet, amount=Decimal('10'), kind='payment', key='payment:pi_test_partial',
+                                   description='Explicit Stripe wallet top-up', balance_after=Decimal('10'))
         encounter = self.user.membership_set.first().department.encounter_set.first()
         for label, values in PARTIAL.items():
             with self.subTest(mode=label), override_settings(**values):
