@@ -1,0 +1,21 @@
+..F
+======================================================================
+FAIL: test_selected_model_schema_survives_actual_sdk_without_unsupported_constraints (core.tests.test_anthropic_schema_compatibility.NativeSchemaCompatibility.test_selected_model_schema_survives_actual_sdk_without_unsupported_constraints) (schema='core.mapping_assistance.Proposal')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_anthropic_schema_compatibility.py", line 55, in test_selected_model_schema_survives_actual_sdk_without_unsupported_constraints
+    self.assertEqual(unsupported(self.wire(g.SONNET_5, schema)), [])
+AssertionError: Lists differ: ['$.$defs.SlotVerdict.properties.slot.maxL[565 chars]ems'] != []
+
+First list contains 14 additional elements.
+First extra element 0:
+'$.$defs.SlotVerdict.properties.slot.maxLength'
+
+Diff is 659 characters long. Set self.maxDiff to None to see it.
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.054s
+
+FAILED (failures=1)
+Found 3 test(s).
+System check identified no issues (0 silenced).

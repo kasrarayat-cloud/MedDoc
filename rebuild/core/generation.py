@@ -277,7 +277,16 @@ def job_request_profile(config):
 def anthropic_request(model,profile,system,payload,schema):
     """The keyword arguments of the one Messages API call a profile makes. Under the legacy profile they are exactly the
     pre-profile call — model, max_tokens=6000, system, one user message, output_config={'format': …} — and nothing else."""
-    output_config={'format':{'type':'json_schema','schema':schema.model_json_schema()}}
+    output_schema=schema.model_json_schema()
+    if model==SONNET_5:
+        # messages.create sends the supplied schema verbatim. Native structured output
+        # rejects numerical/string bounds and most array bounds. The official SDK
+        # moves those constraints into descriptions; the original Pydantic models
+        # still enforce every constraint when validating the returned payload.
+        # Preserve earlier-model request bytes and all historical records.
+        from anthropic import transform_schema
+        output_schema=transform_schema(output_schema)
+    output_config={'format':{'type':'json_schema','schema':output_schema}}
     request={'model':model,'max_tokens':profile['max_output_tokens'],'system':system,
              'messages':[{'role':'user','content':json.dumps(payload)}],'output_config':output_config}
     if 'thinking' in profile: request['thinking']=dict(profile['thinking'])

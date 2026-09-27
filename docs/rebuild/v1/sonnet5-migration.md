@@ -237,3 +237,12 @@ No paid generation, served-worker Sonnet5 proof or agreement claim follows from 
 
 The drain row now reads **live language-model jobs** and includes template-scoped mapping operations as well
 as clinical generation. All queued/running/reconciliation counts must be zero before a model/profile switch.
+
+
+## Native output schema compatibility — 2026-09-27 continuation
+
+The actual SDK `messages.create` HTTP body retained14 unsupported constraint nodes in the expanded mapping schema; the compact replacement schema contained26. Current [native structured-output documentation](https://platform.claude.com/docs/en/build-with-claude/structured-outputs) states these bounds are rejected. This was an offline request-body observation, not a paid400 response.
+
+For Sonnet5 only, the shared request compiler now applies the official installed `anthropic.transform_schema` before hashing/quoting/sending. Constraints move into descriptions; original local Pydantic validation remains strict. Earlier-model request schemas/bytes and historical records are unchanged.13 focused request/schema/rollback checks and12 independent controls pass, including actual SDK serialization through an in-process HTTP transport with sockets denied. Mapping wire validation separately passes33 independent bounded controls. These checks do not prove actual served Sonnet5 behavior.
+
+Original failed evidence is retained in `integration-evidence-20260927/schema-compatibility-*.txt`. One first invocation lacked a required environment value; a combined invocation also included DB tests without the isolated DB profile and was refused at authentication before any test/query. The successful focused run uses only SimpleTestCase classes and explicit unused DB port1. No production credential, DB data or provider operation was used.
