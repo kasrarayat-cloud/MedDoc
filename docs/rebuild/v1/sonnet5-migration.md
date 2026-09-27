@@ -124,8 +124,10 @@ As an example of the hold, take the three-line synthetic note `verify_live` uses
 1. Declare the expected delta first (runbook §2.5). For the switch, the declaration covers configuration only:
    `pricing_version` moves from the rollback value to the table value, and nothing else changes.
 2. Drain. There must be no generation `queued`, `running` or in `reconciliation`. A queued job keeps the model and profile
-   it was quoted with. A signed page quote lives 10 minutes, and a pre-change quote for claude-sonnet-5 is refused
-   without charge.
+   it was quoted with. A page loaded before the change still holds a quote signed under the old model and prices (it
+   lives 10 minutes). When it is used after the restart, enqueue compares its `pricing_version` with the current one
+   and refuses it: no job, no hold, nothing sent. The doctor sees "The prices or the language model changed after this
+   page loaded" and the page re-quotes. Draining is therefore enough; open pages need no action.
 3. Set the four values and the profile in the private environment, then restart the doctor, admin and worker services.
    They read the environment only at start.
 4. Run `manage.py configuration_status`. Confirm the model, the rates, `request profile: explicit {…}` and the
@@ -178,7 +180,9 @@ Set the rollback values, restart the three services, and confirm that `configura
 `request profile: legacy (the pre-profile request, unchanged)` and `configured-v1:fcc80267…`. If
 `QUILLMD_AI_INFERENCE_GEO=us` was left set, the line reads `request profile: NOT the pre-profile request: legacy-v1 plus
 inference_geo us` instead: that request sends `inference_geo`, holds 1.1× and has a different `pricing_version`, so it is
-not the rollback. Jobs already queued under Sonnet 5 keep their Sonnet 5 snapshot, so drain first.
+not the rollback. Jobs already queued under Sonnet 5 keep their Sonnet 5 snapshot, so drain first. A page loaded before
+the rollback cannot queue Sonnet 5 afterwards: its quote no longer matches the current `pricing_version`, so it is refused
+before any hold, and the page re-quotes under the rollback values.
 
 ## Open, and not decidable in code
 

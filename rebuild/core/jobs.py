@@ -59,6 +59,9 @@ OVERFLOW_ERROR='The transcript was not added because the notes would exceed the 
 # An over-limit upload is kept for the doctor's decision; the approval is valid 30 minutes, so after 40 an unapproved upload
 # can never be sent and is removed.
 NOTES_FULL='The notes are at the 50,000-character limit, so no transcript could be added. Shorten the notes first. Nothing was sent for transcription.'
+#: A generation quote signed under a price or request that is no longer configured: refused before any hold or job.
+QUOTE_PRICE_CHANGED=('The prices or the language model changed after this page loaded, so this request was not made. Nothing was '
+                     'sent or charged. Review the new maximum charge on this page, then generate again.')
 ABANDONED_UPLOAD_SECONDS=2400
 UPLOAD_NAME=re.compile(r'audio/[a-f0-9]{48}\.(wav|webm|mp3|m4a)')
 # The normalised artifact is TRANSIENT: written under the same protected storage as the upload, at 0600, submitted, and
@@ -223,6 +226,14 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
         old.reused=True
         return old
     if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists(): raise ValidationError('This encounter already has a pending job.')
+    # ⚠️ A SIGNED QUOTE IS A PRICE THE DOCTOR SAW, NOT A LICENCE TO SEND A REQUEST THE OPERATOR HAS SINCE WITHDRAWN. The
+    # quote carries the whole configuration() it was signed under, and for its 600 s it used to be enqueued as it stood:
+    # measured, a page loaded under claude-sonnet-5 and clicked after a rollback, restart and drain queued and SENT a
+    # claude-sonnet-5 request (profile claude-sonnet-5-v1, 8975b158…) while configuration_status said legacy. pricing_version
+    # hashes the model, the rates, the discount and the request profile, so any of them moving refuses the quote here —
+    # before Job.objects.create and before any hold — and the page the doctor is sent back to signs a fresh one.
+    if config is not None and kind=='generation' and config.get('pricing_version')!=generation.configuration()['pricing_version']:
+        raise ValidationError(QUOTE_PRICE_CHANGED)
     config=dict(config or generation.configuration())
     if kind=='transcription':
         if not (config['voice_rate_minute'] or config['voice_rate_second']): raise ValidationError('Transcription usage rates have not been configured.')

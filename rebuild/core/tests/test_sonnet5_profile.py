@@ -22,6 +22,7 @@ from unittest.mock import patch
 import anthropic
 import httpx
 from anthropic.types import Message
+from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from core import generation as g
@@ -570,3 +571,56 @@ class Sonnet5Outcomes(OutcomeFixture, TestCase):
         self.assertTrue(job.error.startswith('Not processed: '), job.error)
         self.assertFalse(Usage.objects.filter(job=job).exists())
         self.assertFalse(Reservation.objects.filter(job=job, state='held').exists())
+
+
+@override_settings(ADMIN_SITE=False, STORAGES=STORAGES)
+class QuoteAcrossAModelSwitch(OutcomeFixture, TestCase):
+    """R2-1. The encounter page signs the whole configuration() into its quote, and the quote used to be enqueued as it
+    stood for its 600 s. Measured: a page loaded under claude-sonnet-5 and clicked after a rollback, restart and drain queued
+    and SENT a claude-sonnet-5 request while configuration_status said legacy. A generation quote whose pricing_version is
+    not the current one is refused at enqueue — no job, no hold, nothing sent — and the page it returns to re-quotes."""
+
+    def page(self, encounter, **kwargs):
+        self.client.force_login(self.user)
+        return self.client.get(f'/encounters/{encounter.pk}/', **kwargs)
+
+    def test_a_page_loaded_under_sonnet_5_cannot_queue_it_after_the_rollback(self):
+        encounter = self.fresh_encounter()
+        with override_settings(**SONNET_5):
+            quote = self.page(encounter).context['usage_quote']
+        with override_settings(**SONNET_46), patch('anthropic.Anthropic') as client:
+            response = self.client.post(f'/encounters/{encounter.pk}/generate/', {'usage_quote': quote}, follow=True)
+            client.assert_not_called()
+        self.assertFalse(Job.objects.filter(encounter=encounter).exists())
+        self.assertFalse(Reservation.objects.filter(job__encounter=encounter).exists())
+        self.assertContains(response, 'The prices or the language model changed after this page loaded')
+        # Positive control: the page it lands on signed a fresh quote under the rolled-back configuration, and that one
+        # queues and sends exactly the legacy request.
+        with override_settings(**SONNET_46), patch('anthropic.Anthropic') as client:
+            self.client.post(f'/encounters/{encounter.pk}/generate/', {'usage_quote': response.context['usage_quote']})
+            job = Job.objects.get(encounter=encounter)
+            self.assertEqual((job.config['pricing_version'], job.config['request_profile']),
+                             (ROLLBACK_FINGERPRINT, g.LEGACY_PROFILE))
+            client.return_value.messages.create.return_value = message(text(SELECTED), model='claude-sonnet-4-6')
+            self.assertTrue(run_one())
+            sent = client.return_value.messages.create.call_args.kwargs
+        self.assertEqual((sent['model'], sent['max_tokens']), ('claude-sonnet-4-6', 6000))
+        self.assertNotIn('thinking', sent)
+
+    def test_any_price_change_refuses_a_directly_enqueued_quote_before_any_hold(self):
+        encounter = self.fresh_encounter()
+        with override_settings(**SONNET_46):
+            quoted = g.configuration()
+        for label, overrides, env in (('rates', dict(SONNET_46, AI_OUTPUT_RATE='16'), {}),
+                                      ('model', SONNET_5, {}),
+                                      ('geography', dict(SONNET_46, AI_INFERENCE_GEO='us'), {}),
+                                      ('discount', SONNET_46, {'QUILLMD_PROVIDER_DISCOUNT_RATE': '0.1'})):
+            with self.subTest(changed=label), override_settings(**overrides), patch.dict(os.environ, env), \
+                    patch('anthropic.Anthropic') as client:
+                with self.assertRaisesMessage(ValidationError, 'The prices or the language model changed'):
+                    enqueue(encounter, self.user, config=quoted)
+                client.assert_not_called()
+                self.assertFalse(Job.objects.filter(encounter=encounter).exists())
+                self.assertFalse(Reservation.objects.filter(job__encounter=encounter).exists())
+        with override_settings(**SONNET_46):                       # unchanged: the same quote queues
+            self.assertEqual(enqueue(encounter, self.user, config=quoted).config['pricing_version'], ROLLBACK_FINGERPRINT)
