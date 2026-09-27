@@ -324,6 +324,19 @@ def tab_evidence_contract(fields):
         and f['locator'].get('tab_form',{}).get('version') == 1 for f in fields)
 
 
+def sentence_boundaries(stripped, labels, parsed=None):
+    """Where `source_units` ends the sentences of one stripped line, as `[(end, next_start)]`. `parsed`: the line's own
+    labelled reading, given only on contract v3 - a line that begins with a form label is then split only where another
+    form label begins (F5), so each label's answer is its own unit and runs to the next label."""
+    boundaries=[]
+    for match in re.finditer(r'[.!?]\s+(?=[A-Z0-9"\'(])',stripped):
+        end=match.start()+1
+        if match.group()[0]=='.' and ABBREVIATION.search(stripped[max(0,end-32):end]): continue
+        if parsed and not labelled_value(stripped[match.end():],labels): continue
+        boundaries.append((end,match.end()))
+    return boundaries
+
+
 def source_units(notes, fields, *, context_labels=()):
     """Offer complete source sentences with exact offsets, never word fragments.
 
@@ -332,9 +345,10 @@ def source_units(notes, fields, *, context_labels=()):
     Semicolons stay inside their sentence, preserving negation and corrections.
     """
     labels=recognized_labels(fields,context_labels)
-    # ⚠️ CONTRACT v3: A LINE THAT BEGINS WITH A FORM LABEL IS ONE UNIT (R2/R3). Its answer is the rest of its line, as
-    # every other reader of that form takes it: split into sentences, 'Consent obtained: yes. To be obtained tomorrow.'
-    # offered 'yes.' alone and ticked the box, and 'Allergies: penicillin. Sorry, I mean amoxicillin.' filled penicillin.
+    # ⚠️ CONTRACT v3: A LINE THAT BEGINS WITH A FORM LABEL IS SPLIT ONLY WHERE ANOTHER FORM LABEL BEGINS (R2/R3, round 2
+    # F5). Each label's answer is the rest of its line up to the next form label: split into sentences, 'Consent
+    # obtained: yes. To be obtained tomorrow.' offered 'yes.' alone and ticked the box; kept whole, 'BP: 124/78. HR: 88.'
+    # gave BP the whole tail and HR nothing. A remainder of more than one sentence is held (`validate_tab_selections`).
     whole_labelled_lines=natural_v3(fields)
     # ⚠️ CONTRACT v3 READS SCOPE EXACTLY AS THE TAB CONTRACT DOES, NOTE-WIDE (round 2, F1). Any line that ends in a colon
     # or carries a pointer or reframer word, any quotation, a denial before a colon, and an unpunctuated unlabelled line
@@ -356,11 +370,7 @@ def source_units(notes, fields, *, context_labels=()):
             # A lone unpunctuated statement is still complete under the old
             # contract; multiple fragments can inherit an omitted heading.
             inherited=inherited or multiline
-        boundaries=[]
-        for match in re.finditer(r'[.!?]\s+(?=[A-Z0-9"\'(])',stripped) if not (whole_labelled_lines and parsed) else ():
-            end=match.start()+1
-            if match.group()[0]=='.' and ABBREVIATION.search(stripped[max(0,end-32):end]): continue
-            boundaries.append((end,match.end()))
+        boundaries=sentence_boundaries(stripped,labels,parsed if whole_labelled_lines else None)
         local=0
         for end,next_start in boundaries+[(len(stripped),len(stripped))]:
             quote=stripped[local:end]
@@ -1885,12 +1895,25 @@ def v3_labelled_source(notes, labels, label, evidence):
                 found = line
                 break
             offset += len(line)
-        parsed = labelled_value(found, labels) if found is not None else None
+        whole = found.strip() if found is not None else ''
+        if not whole:
+            return False
+        # The line's own labelled part: the whole line, or (F5) the segment `source_units` cut from a line that begins
+        # with a form label where another form label begins ('Smoker: No.' in 'Allergies: none. Smoker: No.').
+        base = offset + found.index(whole)
+        low, high = 0, len(whole)
+        opening = labelled_value(whole, labels)
+        for end, next_start in sentence_boundaries(whole, labels, opening) if opening else ():
+            if base + next_start <= start:
+                low = next_start
+            elif high == len(whole):
+                high = end
+        part = whole[low:high]
+        parsed = labelled_value(part, labels)
         if not parsed or parsed[0] != label or not parsed[1]:
             return False
-        whole = found.strip()
-        if not ((quote == parsed[1] and start == offset + parsed[2])
-                or (quote == whole and start == offset + found.index(whole))):
+        if not ((quote == parsed[1] and start == base + low + parsed[2])
+                or (quote == part and start == base + low)):
             return False
     return True
 

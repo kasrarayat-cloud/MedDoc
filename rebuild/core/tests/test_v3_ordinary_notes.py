@@ -260,7 +260,10 @@ class OneGovernanceReader(SimpleTestCase):
         answers = g.generate(notes, self.fields, {**g.configuration(), 'mode': 'fixture'})[0]
         by_label = {f['label']: answers[f['key']] for f in self.fields}
         self.assertEqual(by_label['Plan']['status'], 'conflict')
-        self.assertEqual(by_label['Plan']['held_candidate']['text'], 'rest. Allergies: none.')
+        # Round 2 (F5): 'Plan: rest.' is its own unit (the line's next form label starts another); it is still held,
+        # because the correction line governs the whole line as the page and finalization read it.
+        self.assertEqual(by_label['Plan']['held_candidate']['text'], 'rest.')
+        self.assertTrue(by_label['Plan']['held_candidate']['context'])
         self.assertNotEqual(by_label['Allergies']['status'], 'supported')
 
     def test_generation_reads_the_same_governance_the_page_reads(self):
@@ -664,6 +667,11 @@ class RoundTwoRefutation(SimpleTestCase):
         out = run(notes, {'Allergies': ['Allergies: none.'], 'Smoker': ['Smoker: No.']})
         self.assertEqual((out['Allergies']['status'], out['Allergies']['text']), ('supported', 'none.'))
         self.assertEqual((out['Smoker']['status'], out['Smoker']['text']), ('supported', 'No'))
+        # Without re-opening R2/R3: a label's answer still runs to the next form label, and more than one sentence holds.
+        notes = 'Allergies: none. Smoker: No. Quit in 2015.'
+        smoker = run(notes, {'Smoker': ['Smoker: No. Quit in 2015.']})['Smoker']
+        self.assertEqual((smoker['status'], smoker['text'], smoker['held_candidate']['text']),
+                         ('conflict', '', 'No. Quit in 2015.'))
 
     def test_f7_a_value_or_sentence_that_only_points_elsewhere_is_held(self):
         for line in ('Findings: to follow.', 'Findings: as follows —', 'Findings: **as follows**',
