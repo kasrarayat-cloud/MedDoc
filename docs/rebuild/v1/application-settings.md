@@ -17,7 +17,7 @@ Code: `rebuild/quillmd/application_profile.py` (parsing and startup checks) and
 | `QUILLMD_WELCOME_CREDIT` | `10` | owner's decision | The one-time promotional grant per newly verified account, US dollars in whole cents, 0 to 500. `0` grants nothing, writes no ledger entry and removes the promise from every screen. Ledger entries already written keep the amount they record; the console's **Promotional credit granted** sums those entries and its definition states no per-account amount, so a later change to this setting cannot contradict it. |
 | `QUILLMD_MFA_REQUIRED_ALL` | `0` | `1` (required by real) | `1`: every sign-in needs a confirmed TOTP authenticator, not only administrators'. An account without one signs in with its password only far enough to enrol (every other page redirects to `/mfa/`); enrolment shows the otpauth URI and the same key as grouped manual-entry text. Enables the console **Reset MFA** action. |
 | `QUILLMD_STRIPE_MODE` | `test` | `live` once live payments are approved; until then `STRIPE_SECRET_KEY` unset (payments off) — required by real | `test`: byte-identical to before (sandbox keys only, `livemode=false` events only, `http://localhost:9130` return URLs, "(test)" product label). `live`: `sk_live_`/`rk_live_` keys only, `livemode=true` events only (a sandbox event or object is refused before any write), return URLs built from `QUILLMD_APP_BASE_URL`, product "QuillMD one-time wallet credit". A key of the other mode is refused at checkout in both modes, before authorization and before any provider call. Live mode **refuses to start** without a live key, `STRIPE_WEBHOOK_SECRET`, and a public HTTPS `QUILLMD_APP_BASE_URL`, and **with `QUILLMD_PREVIEW_AUTH_ENABLED=1`**: the preview gate answers 403 to Stripe's webhook, so a live payment would be charged and never credited. **Real data mode refuses to start in `test` mode while `STRIPE_SECRET_KEY` is set** (any value): a payment made with Stripe's public test card would otherwise become paid balance that funds real provider calls. As a second wall, in real data mode checkout is refused before any Payment row or provider call unless the mode is `live`, and the webhook refuses every event that is not `livemode=true` — with `test` mode and no key (payments off) it refuses every event. |
-| `QUILLMD_DEEPGRAM_MIP_OPT_OUT` | `true` | `true` (required by real) | Sends `mip_opt_out=true` on every transcription request. `false` exists only to reproduce the pre-V1 request in synthetic mode. |
+| `QUILLMD_DEEPGRAM_MIP_OPT_OUT` | unset: follows the data mode | `true` (required by real; unset means `true` in real mode) | Unset in synthetic mode: **no `mip_opt_out` parameter is sent**, the request exactly as before V1. Unset in real mode: `mip_opt_out=true` on every request; `false` refuses the start, and a real-mode worker sends nothing for a job recorded without `true`. Set explicitly, the value is recorded and sent as given. **The price effect of opting out is unverified** — see *Deepgram parameters*. |
 | `QUILLMD_DEEPGRAM_SMART_FORMAT` | `false` | `true` | Deepgram smart formatting (punctuation, paragraphs, and for English dates, times, amounts and numerals as digits). `false` is the request as it always was. |
 | `QUILLMD_HTTPS` | `0` | `1` (required by real) | Secure session and CSRF cookies, HTTPS redirect, HSTS. Real mode also checks the computed `SESSION_COOKIE_SECURE` and `CSRF_COOKIE_SECURE`. |
 | `QUILLMD_TRUST_PROXY` | `0` | `1` behind the host proxy | Believe the proxy's `X-Forwarded-Proto` and key per-address rate limits on the right-most `X-Forwarded-For` entry. **On the administrator surface it takes effect only with `QUILLMD_HTTPS=1`** — see below. |
@@ -99,10 +99,12 @@ Audit: `admin.mfa_reset` with `devices_removed`, `sessions_invalidated`, `reason
 ## Deepgram parameters
 
 New transcription jobs record `deepgram_parameters` in `Job.config` at enqueue
-(`{"model": "nova-3-medical", "smart_format": ..., "mip_opt_out": ...}`); the worker sends exactly
-those. A job queued before this change sends the request it was queued for (no smart formatting)
-plus the current opt-out. An unrecognised recorded value sends nothing (`NoProviderRequest`,
-nothing billable).
+(`{"model": "nova-3-medical", "smart_format": ...}`, plus `"mip_opt_out": ...` when the setting has a
+value — in synthetic mode with it unset there is no such key); the worker sends exactly those. A
+job queued before this change sends the request it was queued for (no smart formatting) plus the
+current opt-out setting, if it has a value. An unrecognised recorded value sends nothing
+(`NoProviderRequest`, nothing billable), and so does, in real data mode, any recorded request
+without `mip_opt_out=true` (for example a job queued while the system was synthetic).
 
 Sources, read 2026-09-27:
 
@@ -110,7 +112,18 @@ Sources, read 2026-09-27:
   Model Improvement Program by default and are retained; "Set `mip_opt_out=true` and the request
   is excluded from model improvement"; opting out gives zero data retention. The pre-recorded API
   reference (<https://developers.deepgram.com/reference/speech-to-text/listen-pre-recorded>) lists
-  `mip_opt_out` as a boolean query parameter, default false. Neither page states a price effect.
+  `mip_opt_out` as a boolean query parameter, default false, and describes it as: "Opts out requests
+  from the Deepgram Model Improvement Program. Refer to our Docs for pricing impacts before setting
+  this to true. https://dpgr.am/deepgram-mip" (quoted by the refutation pass from its fetch of
+  2026-09-27; not re-fetched for this correction, which made no network request).
+- ⚠️ **The price effect of opting out is UNVERIFIED.** The API reference points to pricing impacts;
+  the linked Model Improvement Program page and <https://deepgram.com/pricing>, as fetched, state no
+  figure. An earlier version of this document said neither page states a price effect; that was
+  wrong about the API reference. The quote, the charge limit and the recorded provider cost all use
+  the unchanged configured `voice_rate_minute`. **If opted-out requests carry a premium, recorded
+  provider cost — and the 1.5× charge computed from it — understate actual cost on every opted-out
+  job.** Confirming the price (Deepgram account terms or a billing check) is an owner/account check
+  before real mode. This is also why synthetic mode no longer sends the parameter by default.
 - `smart_format` — same API reference: boolean, default false, "Apply formatting to transcript
   output". <https://developers.deepgram.com/docs/smart-format> describes punctuation, paragraphs,
   and for English dates, times, currency amounts, phone numbers, emails and URLs.
@@ -152,3 +165,5 @@ the outbox.
   require `synthetic_only: true` and will refuse to run for real data until requalified.
 - The launcher, units and role tools remain pinned to this host's private target.
 - The production proxy's `X-Forwarded-For` handling (see *Rate limits*).
+- Deepgram opt-out pricing: confirm with Deepgram (account terms or a billing check) whether
+  `mip_opt_out=true` requests are priced differently, before real mode (see *Deepgram parameters*).

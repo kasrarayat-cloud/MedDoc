@@ -24,7 +24,8 @@ try:
     QUILLMD_MFA_REQUIRED_ALL=_profile.flag(os.environ,'QUILLMD_MFA_REQUIRED_ALL','0')
     QUILLMD_WELCOME_CREDIT=_profile.welcome_credit(os.environ)
     QUILLMD_DEEPGRAM_SMART_FORMAT=_profile.choice(os.environ,'QUILLMD_DEEPGRAM_SMART_FORMAT',_profile.BOOLEAN_WORDS,'false')
-    QUILLMD_DEEPGRAM_MIP_OPT_OUT=_profile.choice(os.environ,'QUILLMD_DEEPGRAM_MIP_OPT_OUT',_profile.BOOLEAN_WORDS,'true')
+    # None: synthetic mode with the setting unset sends no mip_opt_out parameter, the request as before V1.
+    QUILLMD_DEEPGRAM_MIP_OPT_OUT=_profile.deepgram_mip_opt_out(os.environ,QUILLMD_DATA_MODE)
 except _profile.ProfileError as exc:
     raise ImproperlyConfigured(str(exc)) from None
 # Deliberate release gate. 'real' is accepted only with the production-required settings below.

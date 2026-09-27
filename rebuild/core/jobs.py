@@ -486,17 +486,28 @@ DEEPGRAM_MODEL='nova-3-medical'
 #: from Deepgram's Model Improvement Program, which otherwise retains the audio and uses it for training
 #: (https://developers.deepgram.com/trust-security/your-data).
 DEEPGRAM_BOOLEAN_PARAMETERS=('smart_format','mip_opt_out')
+#: The recorded shapes a request may have: without `mip_opt_out` (synthetic mode with the setting unset, the request
+#: as it was before V1) or with it.
+DEEPGRAM_RECORDED_SHAPES=(frozenset({'model','smart_format'}),frozenset({'model','smart_format','mip_opt_out'}))
+
+
+def mip_opt_out_parameter():
+    """{'mip_opt_out': value} when QUILLMD_DEEPGRAM_MIP_OPT_OUT has a value; {} in synthetic mode with it unset."""
+    value=settings.QUILLMD_DEEPGRAM_MIP_OPT_OUT
+    return {} if value is None else {'mip_opt_out':value}
 
 
 def deepgram_parameters():
     """The parameters a NEW transcription job is recorded with at enqueue, from the current settings.
 
-    QUILLMD_DEEPGRAM_MIP_OPT_OUT defaults to 'true', so every request opts out; 'false' is refused at startup in
-    real data mode. QUILLMD_DEEPGRAM_SMART_FORMAT defaults to 'false', the request as it always was. Smart
-    Formatting is listed as 'Included' for Pay As You Go and Growth on https://deepgram.com/pricing (read
-    2026-09-27), so it is not part of the priced configuration and changes no quote.
+    QUILLMD_DEEPGRAM_MIP_OPT_OUT follows the data mode when unset: real mode sends 'true' ('false' is refused at
+    startup); synthetic mode sends no `mip_opt_out` parameter, the request as it was before V1. Whether Deepgram
+    prices an opted-out request differently is UNVERIFIED (docs/rebuild/v1/application-settings.md), so the quote is
+    unchanged. QUILLMD_DEEPGRAM_SMART_FORMAT defaults to 'false', the request as it always was. Smart Formatting is
+    listed as 'Included' for Pay As You Go and Growth on https://deepgram.com/pricing (read 2026-09-27), so it is not
+    part of the priced configuration and changes no quote.
     """
-    return {'model':DEEPGRAM_MODEL,'smart_format':settings.QUILLMD_DEEPGRAM_SMART_FORMAT,'mip_opt_out':settings.QUILLMD_DEEPGRAM_MIP_OPT_OUT}
+    return {'model':DEEPGRAM_MODEL,'smart_format':settings.QUILLMD_DEEPGRAM_SMART_FORMAT,**mip_opt_out_parameter()}
 
 
 def request_parameters(job):
@@ -504,15 +515,21 @@ def request_parameters(job):
 
     `Job.config` is write-once, so a job keeps the parameters it was queued (and quoted) with even if the settings
     change before the worker reaches it. A job queued before parameters were recorded sends the request it was queued
-    for — nova-3-medical without smart formatting — plus the current opt-out, so no request leaves without it.
+    for — nova-3-medical without smart formatting — plus the current opt-out setting, if it has a value. In real data
+    mode nothing is sent without mip_opt_out=true, whatever a job recorded in another mode.
     """
     recorded=(job.config or {}).get('deepgram_parameters')
     if recorded is None:
-        return {'model':DEEPGRAM_MODEL,'smart_format':'false','mip_opt_out':settings.QUILLMD_DEEPGRAM_MIP_OPT_OUT}
-    if (not isinstance(recorded,dict) or set(recorded)!={'model',*DEEPGRAM_BOOLEAN_PARAMETERS} or recorded['model']!=DEEPGRAM_MODEL
-            or any(recorded[name] not in ('true','false') for name in DEEPGRAM_BOOLEAN_PARAMETERS)):
+        params={'model':DEEPGRAM_MODEL,'smart_format':'false',**mip_opt_out_parameter()}
+    elif (not isinstance(recorded,dict) or frozenset(recorded) not in DEEPGRAM_RECORDED_SHAPES or recorded['model']!=DEEPGRAM_MODEL
+            or any(recorded[name] not in ('true','false') for name in DEEPGRAM_BOOLEAN_PARAMETERS if name in recorded)):
         raise NoProviderRequest('The recorded transcription request parameters are not recognised. Nothing was sent.')
-    return dict(recorded)
+    else:
+        params=dict(recorded)
+    from .stripe_validation import real_data_mode  # The one definition of 'not synthetic'.
+    if real_data_mode() and params.get('mip_opt_out')!='true':
+        raise NoProviderRequest('Real data mode sends transcription only with the Model Improvement opt-out. Nothing was sent.')
+    return params
 
 
 def transcribe(job):

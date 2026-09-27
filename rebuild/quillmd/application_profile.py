@@ -71,6 +71,15 @@ def welcome_credit(env):
     return amount
 
 
+def deepgram_mip_opt_out(env, data_mode):
+    """QUILLMD_DEEPGRAM_MIP_OPT_OUT: 'true' or 'false' when set. Unset follows the data mode: real mode sends
+    'true' (and `real_mode_problems` refuses 'false'); synthetic mode returns None, meaning the parameter is
+    not sent at all, exactly the request as it was before V1."""
+    if not raw(env, 'QUILLMD_DEEPGRAM_MIP_OPT_OUT'):
+        return 'true' if data_mode == 'real' else None
+    return choice(env, 'QUILLMD_DEEPGRAM_MIP_OPT_OUT', BOOLEAN_WORDS, 'true')
+
+
 def dollars(amount):
     """'$10' for a whole amount, '$12.50' otherwise — the wording the product has always used."""
     amount = Decimal(amount)
