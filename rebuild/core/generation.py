@@ -300,6 +300,13 @@ def tab_evidence_contract(fields):
         and f['locator'].get('tab_form',{}).get('version') == 1 for f in fields)
 
 
+#: Contract v3: an unpunctuated, unlabelled line of at most this many words reads as a heading (`Family history`, `If
+#: symptoms recur`); its scope words govern the note. A longer one is dictation, and holds only itself.
+V3_HEADING_WORDS = 8
+#: A statement that closes like a sentence (the same test `source_units` applies to a line).
+CLOSED_STATEMENT = re.compile(r'[.!?]["\')\]]?$')
+
+
 def source_units(notes, fields, *, context_labels=()):
     """Offer complete source sentences with exact offsets, never word fragments.
 
@@ -308,19 +315,27 @@ def source_units(notes, fields, *, context_labels=()):
     Semicolons stay inside their sentence, preserving negation and corrections.
     """
     labels=recognized_labels(fields,context_labels)
-    units=[]; offset=0; inherited=bool(QUOTED_SOURCE.search(notes))
-    multiline=sum(bool(line.strip()) for line in notes.splitlines())>1
     # ⚠️ CONTRACT v3: A LINE THAT BEGINS WITH A FORM LABEL IS ONE UNIT (R2/R3). Its answer is the rest of its line, as
     # every other reader of that form takes it: split into sentences, 'Consent obtained: yes. To be obtained tomorrow.'
     # offered 'yes.' alone and ticked the box, and 'Allergies: penicillin. Sorry, I mean amoxicillin.' filled penicillin.
-    whole_labelled_lines=natural_v3(fields)
+    whole_labelled_lines=v3=natural_v3(fields)
+    # ⚠️ CONTRACT v3: SCOPE WORDS AND QUOTATIONS MAKE THE WHOLE NOTE INHERITED ONLY IN A HEADING-LIKE LINE (R12a). One
+    # 'Return if symptoms worsen.' or 'below the knee' in an ordinary sentence held every answer in the note; there it
+    # holds only its own sentence, when that sentence is selected (`validate_tab_selections`).
+    units=[]; offset=0; inherited=bool(QUOTED_SOURCE.search(notes)) and not v3
+    multiline=sum(bool(line.strip()) for line in notes.splitlines())>1
     for line in notes.splitlines(keepends=True):
         stripped=line.strip()
         if not stripped:
             offset+=len(line); continue
         start=offset+line.index(stripped)
         parsed=labelled_value(stripped,labels)
-        if ends_in_colon(stripped) or INHERITED_SCOPE.search(stripped): inherited=True
+        if v3:
+            unfinished=not re.search(r'[.!?]["\')\]]?$',stripped) and not (parsed and parsed[1])
+            heading_like=ends_in_colon(stripped) or (unfinished and len(stripped.split())<=V3_HEADING_WORDS)
+            if ends_in_colon(stripped) or (heading_like and (INHERITED_SCOPE.search(stripped) or QUOTED_SOURCE.search(stripped))):
+                inherited=True
+        elif ends_in_colon(stripped) or INHERITED_SCOPE.search(stripped): inherited=True
         if not re.search(r'[.!?]["\')\]]?$',stripped) and not (parsed and parsed[1]):
             # A lone unpunctuated statement is still complete under the old
             # contract; multiple fragments can inherit an omitted heading.
@@ -1589,8 +1604,17 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             if notes[unit['start']:unit['end']]!=quote: raise ValidationError('Evidence offset mismatch.')
             evidence.append({k:unit[k] for k in ('quote','start','end')})
             if unit['correction_value'] and corrected_quantity(unit,field) is None: guarded=True
-            if ':' not in quote and not finite.search(quote): guarded=True
-            if v3 and (own_value:=parsed_of[unit['id']]) and own_value[1] and POINTER_ONLY_VALUE.fullmatch(own_value[1].strip()):
+            if ':' not in quote and not finite.search(quote) and not (
+                    v3 and len(quote.split())>=4 and CLOSED_STATEMENT.search(quote)):
+                # A verbless fragment ('Left knee.', 'NKDA.') is held. Contract v3 (R12b): a statement of four or more
+                # words that closes like a sentence is complete whatever its verb ('No known drug allergies.').
+                guarded=True
+            own_value=parsed_of[unit['id']]
+            if v3 and own_value and own_value[1] and POINTER_ONLY_VALUE.fullmatch(own_value[1].strip()):
+                guarded=True
+            if v3 and (INHERITED_SCOPE.search(said:=own_value[1] if own_value else quote) or QUOTED_SOURCE.search(said)):
+                # Contract v3 (R12a): a scope word or a quotation inside an ordinary sentence holds THAT sentence (its value,
+                # not the form's own label: 'Family history: …' is that question's answer), never the whole note.
                 guarded=True
             # Dates and consent are not inferred from a procedure date or general
             # narrative. These source subjects must themselves be documented.
