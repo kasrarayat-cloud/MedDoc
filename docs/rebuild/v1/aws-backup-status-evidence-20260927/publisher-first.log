@@ -1,0 +1,24 @@
+Creating test database for alias 'default'...
+...E......
+======================================================================
+ERROR: test_existing_console_marks_missing_and_stale_production_status (core.tests.test_production_operations_status.ProductionOperationsStatusTests.test_existing_console_marks_missing_and_stale_production_status)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-host-readiness/rebuild/core/tests/test_production_operations_status.py", line 82, in test_existing_console_marks_missing_and_stale_production_status
+    self.assertTrue(row['stale']); self.assertFalse(row['healthy'])
+                                                    ~~~^^^^^^^^^^^
+KeyError: 'healthy'
+
+----------------------------------------------------------------------
+Ran 10 tests in 13.417s
+
+FAILED (errors=1)
+Destroying test database for alias 'default'...
+Found 10 test(s).
+System check identified no issues (0 silenced).
+Publication deferred: an activation holds exclusion. Nothing written; the existing row keeps its own freshness.
+Publication deferred: an activation holds exclusion. Nothing written; the existing row keeps its own freshness.
+Publication deferred: an activation holds exclusion. Nothing written; the existing row keeps its own freshness.
+Published backup status: synthetic test condition (failure).
+Publication deferred: an activation holds exclusion. Nothing written; the existing row keeps its own freshness.
+Published backup status: synthetic test condition (failure).

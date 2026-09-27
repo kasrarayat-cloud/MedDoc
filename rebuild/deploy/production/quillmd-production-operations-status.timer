@@ -1,0 +1,11 @@
+[Unit]
+Description=Publish QuillMD production backup metadata every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=5min
+AccuracySec=10s
+Unit=quillmd-production-operations-status.service
+
+[Install]
+WantedBy=timers.target
