@@ -1,0 +1,86 @@
+Using existing test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+F.FFFF
+======================================================================
+FAIL: test_old_supported_value_cannot_skip_page_save_or_finalization_context (core.tests.test_v3_ordinary_input.CompleteValueEvidenceWorkflow.test_old_supported_value_cannot_skip_page_save_or_finalization_context)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/tests/test_v3_ordinary_input.py", line 284, in test_old_supported_value_cannot_skip_page_save_or_finalization_context
+    self.assertEqual((row['status'], row['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'No') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'No')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_complete_value_keeps_the_same_context_as_its_labelled_source_unit (core.tests.test_v3_ordinary_input.CompleteValueEvidenceContext.test_complete_value_keeps_the_same_context_as_its_labelled_source_unit) (notes='Father: MI at 50. Smoker: No.', quote='No.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/tests/test_v3_ordinary_input.py", line 258, in test_complete_value_keeps_the_same_context_as_its_labelled_source_unit
+    self.assertEqual((page['status'], page['text']), ('conflict', '') if held else ('supported', 'No'))
+AssertionError: Tuples differ: ('supported', 'No') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'No')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_complete_value_keeps_the_same_context_as_its_labelled_source_unit (core.tests.test_v3_ordinary_input.CompleteValueEvidenceContext.test_complete_value_keeps_the_same_context_as_its_labelled_source_unit) (notes='Family hx: father had an MI. Smoker: No.', quote='No.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/tests/test_v3_ordinary_input.py", line 258, in test_complete_value_keeps_the_same_context_as_its_labelled_source_unit
+    self.assertEqual((page['status'], page['text']), ('conflict', '') if held else ('supported', 'No'))
+AssertionError: Tuples differ: ('supported', 'No') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'No')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_complete_value_keeps_the_same_context_as_its_labelled_source_unit (core.tests.test_v3_ordinary_input.CompleteValueEvidenceContext.test_complete_value_keeps_the_same_context_as_its_labelled_source_unit) (notes='Smoker: No.\nThe patient drinks socially but smokes daily.', quote='No.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/tests/test_v3_ordinary_input.py", line 258, in test_complete_value_keeps_the_same_context_as_its_labelled_source_unit
+    self.assertEqual((page['status'], page['text']), ('conflict', '') if held else ('supported', 'No'))
+AssertionError: Tuples differ: ('supported', 'No') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'No')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_complete_value_keeps_the_same_context_as_its_labelled_source_unit (core.tests.test_v3_ordinary_input.CompleteValueEvidenceContext.test_complete_value_keeps_the_same_context_as_its_labelled_source_unit) (notes='Seen recently: No.\nPatient seen today.', quote='No.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/tests/test_v3_ordinary_input.py", line 258, in test_complete_value_keeps_the_same_context_as_its_labelled_source_unit
+    self.assertEqual((page['status'], page['text']), ('conflict', '') if held else ('supported', 'No'))
+AssertionError: Tuples differ: ('supported', 'No') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'No')
++ ('conflict', '')
+
+----------------------------------------------------------------------
+Ran 3 tests in 2.547s
+
+FAILED (failures=5)
+Preserving test database for alias 'default'...
+Found 3 test(s).
+System check identified no issues (0 silenced).

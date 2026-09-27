@@ -1,0 +1,22 @@
+..F
+======================================================================
+FAIL: test_retained_visit_and_social_tails_keep_exact_smoker_answer (core.tests.test_v3_ordinary_input.AncillarySmokerContext.test_retained_visit_and_social_tails_keep_exact_smoker_answer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/tests/test_v3_ordinary_input.py", line 81, in test_retained_visit_and_social_tails_keep_exact_smoker_answer
+    self.assertEqual((answer['status'], answer['text']), ('supported', expected))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'Yes')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'Yes')
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.341s
+
+FAILED (failures=1)
+Found 3 test(s).
+System check identified no issues (0 silenced).

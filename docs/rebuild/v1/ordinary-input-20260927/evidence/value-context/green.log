@@ -1,0 +1,22 @@
+Using existing test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+F..
+======================================================================
+FAIL: test_old_supported_value_cannot_skip_page_save_or_finalization_context (core.tests.test_v3_ordinary_input.CompleteValueEvidenceWorkflow.test_old_supported_value_cannot_skip_page_save_or_finalization_context)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/tests/test_v3_ordinary_input.py", line 290, in test_old_supported_value_cannot_skip_page_save_or_finalization_context
+    self.assertEqual(self.encounter.answers[self.key('Smoker')]['status'], 'conflict')
+AssertionError: 'supported' != 'conflict'
+- supported
++ conflict
+
+
+----------------------------------------------------------------------
+Ran 3 tests in 2.781s
+
+FAILED (failures=1)
+Preserving test database for alias 'default'...
+Found 3 test(s).
+System check identified no issues (0 silenced).

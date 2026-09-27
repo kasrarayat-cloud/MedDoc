@@ -1,0 +1,55 @@
+{
+  "source_sha256": "05601c5001f1e9e745e083d01c258958eea7a0fe93a3752a7eb2b58009bd1c0d",
+  "cases": [
+    {
+      "notes": "Father: MI at 50. Smoker: No.",
+      "quote": "Smoker: No.",
+      "whole_generation": "conflict",
+      "valid_locator": true,
+      "governed": [
+        "Smoker"
+      ]
+    },
+    {
+      "notes": "Father: MI at 50. Smoker: No.",
+      "quote": "No.",
+      "whole_generation": "conflict",
+      "valid_locator": true,
+      "governed": [
+        "Smoker"
+      ]
+    },
+    {
+      "notes": "Family history is coronary disease. Smoker: No.",
+      "quote": "Smoker: No.",
+      "whole_generation": "conflict",
+      "valid_locator": true,
+      "governed": [
+        "Smoker"
+      ]
+    },
+    {
+      "notes": "Family history is coronary disease. Smoker: No.",
+      "quote": "No.",
+      "whole_generation": "conflict",
+      "valid_locator": true,
+      "governed": [
+        "Smoker"
+      ]
+    },
+    {
+      "notes": "Patient presents with knee pain. Smoker: No.",
+      "quote": "Smoker: No.",
+      "whole_generation": "supported",
+      "valid_locator": true,
+      "governed": []
+    },
+    {
+      "notes": "Patient presents with knee pain. Smoker: No.",
+      "quote": "No.",
+      "whole_generation": "supported",
+      "valid_locator": true,
+      "governed": []
+    }
+  ]
+}

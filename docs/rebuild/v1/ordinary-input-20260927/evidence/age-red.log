@@ -1,0 +1,25 @@
+..F
+======================================================================
+FAIL: test_retained_explicit_presentations_keep_full_age_and_time_wording (core.tests.test_v3_ordinary_input.AgeSexPresentation.test_retained_explicit_presentations_keep_full_age_and_time_wording)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/tests/test_v3_ordinary_input.py", line 135, in test_retained_explicit_presentations_keep_full_age_and_time_wording
+    self.assertEqual((answer['status'], answer['text']), ('supported', quote), notes)
+AssertionError: Tuples differ: ('conflict', '') != ('supported', '45-year-old man presents wit[44 chars]ll.')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported',
++  '45-year-old man presents with right knee pain for three weeks after a fall.') : Referring physician: Dr Example
+45-year-old man presents with right knee pain for three weeks after a fall.
+Smoker: No.
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.215s
+
+FAILED (failures=1)
+Found 3 test(s).
+System check identified no issues (0 silenced).

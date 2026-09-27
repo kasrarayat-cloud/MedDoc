@@ -1710,15 +1710,16 @@ def judged_context(governance, notes, index, label, evidence):
         warnings = list(scope['corrections'])
         warnings += v3_preceding_warnings(scope.get('preceding'), label, evidence)
         if re.search(SUBJECTS[0], str(label or ''), re.I):
-            spans = {(entry.get('start'), entry.get('end')) for entry in evidence}
+            spans = {span[:2] for entry in evidence if (span := v3_evidence_span(entry))}
             warnings += [unit for unit in scope['units'] if (unit['start'], unit['end']) not in spans]
         if warnings:
             # Keep every warning's location; never turn this into an adoptable suggestion.
             unique = {unit['id']: unit for unit in warnings}
+            first = v3_evidence_span(evidence[0])
+            first_start, first_end = first[:2] if first else (0, 0)
             return [{'quote': unit['quote'], 'start': unit['start'], 'end': unit['end'],
-                     'after': unit['start'] >= evidence[0].get('end', 0),
-                     'same': not re.search(r'[\r\n]', notes[min(unit['end'], evidence[0].get('end', 0)):
-                                                           max(unit['start'], evidence[0].get('start', 0))])}
+                     'after': unit['start'] >= first_end,
+                     'same': not re.search(r'[\r\n]', notes[min(unit['end'], first_end):max(unit['start'], first_start)])}
                     for unit in unique.values()]
     if not index or not evidence:
         return governed_context(governance, notes, evidence)
@@ -2138,8 +2139,17 @@ GENERAL_NARRATIVE_FIELDS = frozenset(('history', 'history of present illness', '
                                      'reason for visit', 'plan', 'treatment plan', 'management plan'))
 HISTORY_NARRATIVE_FIELDS = GENERAL_NARRATIVE_FIELDS - {'plan', 'treatment plan', 'management plan'}
 EXPLICIT_PATIENT_SUBJECT = re.compile(r'^(?:the\s+)?patient\s+', re.I)
+AGE_PATIENT_PRESENTATION = re.compile(
+    r'^(?:this is (?:a|an) )?\d{1,3}-year-old (?:man|woman|male|female|boy|girl|child|patient) '
+    r'(?:(?:presents|presented) (?:with|for)|(?:was )?seen for)\b', re.I)
+PRESENTATION_TIME_WORDS = frozenset(('after', 'ago', 'since'))
 PLAN_FIELDS = frozenset(('plan', 'treatment plan', 'management plan'))
 RETURN_IF_INSTRUCTION = re.compile(r'return\s+if\s+[^.!?\r\n:]+\.', re.I)
+# A bounded source-topic relationship, not a general patient-subject reset.
+# These complete ancillary clauses cannot change an explicit Smoker option; they
+# remain relevant to every other question, including attendance and alcohol use.
+SMOKER_ANCILLARY_CLAUSE = re.compile(
+    r'(?:the )?patient (?:(?:was )?seen(?: today)?|drinks socially)\.', re.I)
 
 
 # Exact destination names, not a clinical synonym map. Source subjects are kept
@@ -2294,18 +2304,46 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
     parsed = ({u['id']: value for u, value in zip(units, parsed_units)} if parsed_units is not None else
               {u['id']: tab_source_value(u['quote'], labels) for u in units})
     subjects, subject_spans, clinical, ambiguous_subjects, unresolved_subjects = v3_field_subjects(units, named, parsed)
-    colon = {u['id']: bool(labelled_value(u['quote'], labels)) for u in units}
+    colon_values = {u['id']: labelled_value(u['quote'], labels) for u in units}
+    colon = {key: bool(value) for key, value in colon_values.items()}
+    # Stored option evidence may be the complete labelled VALUE rather than the
+    # whole source unit (the same two forms v3_labelled_source accepts). Bind its
+    # exact quote and offsets to that unit for context; never use containment or
+    # discard the label's neighbouring source. Stored evidence itself is unchanged.
+    evidence_units = {(u['start'], u['end'], u['quote']): u for u in units}
+    for unit in units:
+        value = colon_values[unit['id']]
+        if value and value[1]:
+            start = unit['start'] + value[2]
+            evidence_units[(start, start + len(value[1]), value[1])] = unit
+    # Inline options inside a prose-opening line need an established source
+    # context too. A sentence boundary after "Father: ..." grants no patient
+    # ownership. Keep this identical in generation and stored-answer governance.
+    inline_options, opening, previous_unit = set(), None, None
+    for unit in units:
+        gap = notes[previous_unit['end']:unit['start']] if previous_unit else ''
+        if previous_unit is None or gap.splitlines(True) != gap.splitlines(): opening = unit
+        own = parsed[unit['id']]
+        if (opening is not unit and not colon[opening['id']] and colon[unit['id']] and own
+                and any(f.get('kind') in ('choice', 'multi_choice', 'checkbox') for f in named.get(own[0], ()))):
+            inline_options.add(unit['id'])
+        previous_unit = unit
     plain = {u['id']: bool(colon[u['id']] and parsed[u['id']] and len(named.get(parsed[u['id']][0], ())) == 1
                            and plain_value(parsed[u['id']][1])) for u in units}
     ends_read, shapes_read = {}, {}
+    age_presentations = {unit['id'] for unit in units if AGE_PATIENT_PRESENTATION.match(unit['quote'])}
     def patient_sentence(unit):
         text = unit['quote']
-        if not (EXPLICIT_PATIENT_SUBJECT.match(text) and FINITE_STATEMENT_V3.search(text)):
+        if not ((EXPLICIT_PATIENT_SUBJECT.match(text) or unit['id'] in age_presentations)
+                and FINITE_STATEMENT_V3.search(text)):
             return False
         if unit['id'] not in ends_read: ends_read[unit['id']] = inner_sentence_end(text)
         if unit['id'] not in shapes_read:
             shapes_read[unit['id']] = ends_read[unit['id']] or v3_shape_holds(text, text)
-        return not (UNSETTLED.search(text) or INHERITED_SCOPE.search(text) or shapes_read[unit['id']])
+        local_words = PRESENTATION_TIME_WORDS if unit['id'] in age_presentations else ()
+        return not (any(match.group().casefold() not in local_words for reading in readings(text)
+                        for match in UNSETTLED.finditer(reading))
+                    or INHERITED_SCOPE.search(text) or shapes_read[unit['id']])
     before, independent, groups, group, patients = {}, {}, [], [], {}
     prefix_safe = True
     previous = None
@@ -2329,6 +2367,20 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
         prefix_safe = prefix_safe and (plain[unit['id']] or patient)
         previous = unit
     if group: groups.append(group)
+    ancillary_relations = {}
+    smoker = named.get('smoker', ())
+    if len(smoker) == 1 and smoker[0].get('kind') == 'choice':
+        for group in groups:
+            # Only the complete two-statement paragraph qualifies. A third
+            # statement, tail qualifier or another question keeps its context.
+            if len(group) != 2: continue
+            answer, ancillary = group
+            own = parsed[answer['id']]
+            if (plain[answer['id']] and own and own[0] == 'smoker'
+                    and v3_option_value(smoker[0], own[1]) is not None
+                    and parsed[ancillary['id']] is None
+                    and SMOKER_ANCILLARY_CLAUSE.fullmatch(ancillary['quote'])):
+                ancillary_relations.setdefault('smoker', {})[answer['id']] = {ancillary['id']}
     blocks, block_of, barriers = [], {}, {}
     conditional_spans, conditional_units, conditional_multisentence, conditional_unsafe = [], set(), set(), set()
     for group in groups:
@@ -2395,8 +2447,13 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
             # These qualifications belong to the exact stated topic and stay in
             # the answer. They do not change another field's subject or polarity.
             local_words = LOCAL_SUBJECT_QUALIFIERS.get(owner, ()) if factual else ()
-            unsettled = any(match.group().casefold() not in local_words
-                            for text in readings(value) for match in UNSETTLED.finditer(text))
+            # The age/presentation sentence keeps its own time qualifier. That
+            # does not relax a pronoun continuation or a different source topic.
+            unsettled = any(match.group().casefold() not in (set(local_words) | (
+                                PRESENTATION_TIME_WORDS if unit['id'] in age_presentations else set()))
+                            for unit in block
+                            for text in readings(own[1] if unit is block[0] and own else unit['quote'])
+                            for match in UNSETTLED.finditer(text))
             safe = bool(scoped_words and ((owner and plain_value(value)) or (
                 (narrative or factual or patients[block[0]['id']]) and not unsettled
                 and not any(SELF_CORRECTION.search(text) or SCOPE_POINTER.search(text)
@@ -2411,20 +2468,39 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
                          and (plain_value(parsed[u['id']][1]) or (len(named[parsed[u['id']][0]]) == 1
                               and plain_printed_side_option(named[parsed[u['id']][0]][0], parsed[u['id']][1]))))
                     for u in units]
-    return {'units': units, 'spans': {(u['start'], u['end']): u for u in units}, 'parsed': parsed,
+    return {'units': units, 'evidence_units': evidence_units, 'parsed': parsed,
+            'source': {'id': 0, 'quote': notes, 'start': 0, 'end': len(notes)},
             'colon': colon, 'before': before, 'independent': independent, 'general': general, 'groups': groups,
+            'inline_options': inline_options,
             'ends_read': ends_read, 'shapes_read': shapes_read, 'blocks': blocks, 'block_of': block_of,
             'barriers': barriers, 'patients': patients, 'named': named,
             'subjects': subjects, 'subject_spans': subject_spans, 'clinical': clinical,
             'ambiguous_subjects': ambiguous_subjects, 'unresolved_subjects': unresolved_subjects,
             'coupled': coupled, 'unchanged_references': unchanged_references,
             'neutral_references': neutral_references,
+            'ancillary_relations': ancillary_relations,
             'neighbours': paragraph_neighbours(notes, units, plain_values),
             'conditional_spans': conditional_spans, 'conditional_units': conditional_units,
             'conditional_multisentence': conditional_multisentence, 'conditional_unsafe': conditional_unsafe,
             'inherited_causes': [cause for cause in getattr(units, 'scope_causes', ())
                 if cause[0] != 'lexical' or not any(low <= cause[1] and cause[2] <= high for low, high in conditional_spans)]}
 
+
+
+def v3_evidence_span(entry):
+    """An exact evidence shape; old records may omit end, never contradict it."""
+    if not isinstance(entry, dict): return None
+    start, quote = entry.get('start'), entry.get('quote')
+    if type(start) is not int or start < 0 or not isinstance(quote, str) or not quote: return None
+    end = entry.get('end', start + len(quote))
+    if type(end) is not int or end != start + len(quote): return None
+    return start, end, quote
+
+
+def v3_evidence_units(reading, evidence):
+    """Resolve only an exact whole source unit or its complete labelled value."""
+    return {unit['id']: unit for entry in evidence
+            if (unit := reading['evidence_units'].get(v3_evidence_span(entry)))}
 
 
 def v3_scope_selection(reading, label, evidence):
@@ -2436,9 +2512,9 @@ def v3_scope_selection(reading, label, evidence):
     label = question_key(label)
     if label in reading['ambiguous_subjects'] or label in reading['coupled']:
         return {'before': set(), 'after': set(), 'complete': set()}
-    spans = {(entry.get('start'), entry.get('end')) for entry in evidence}
-    chosen = {reading['spans'][span]['id'] for span in spans if span in reading['spans']}
+    chosen = set(v3_evidence_units(reading, evidence))
     before, after, complete = set(), set(), set()
+    after.update(chosen & reading['ancillary_relations'].get(label, {}).keys())
     for index in {reading['block_of'][unit] for unit in chosen}:
         block = reading['blocks'][index]
         ids = {u['id'] for u in block['units']}
@@ -2467,13 +2543,17 @@ def v3_preceding_warnings(reading, label, evidence):
     """The same paragraph/source-block context on generation, page, save and finalize."""
     if not reading: return []
     label = question_key(label)
-    spans = {(entry.get('start'), entry.get('end')) for entry in evidence}
+    if any(v3_evidence_span(entry) not in reading['evidence_units'] for entry in evidence):
+        # An unmatched span cannot silently disappear from governance. Keep the
+        # actual note visible for a new decision, including malformed old drafts.
+        return reading['units'] or [reading['source']]
+    selected = v3_evidence_units(reading, evidence)
     scoped = v3_scope_selection(reading, label, evidence)
     complete = set()
     if label in reading['general']:
         for group in reading['groups']:
             if len(group) > 1 and not any(reading['parsed'][u['id']] for u in group):
-                if all((u['start'], u['end']) in spans for u in group):
+                if all(u['id'] in selected for u in group):
                     complete.update(u['id'] for u in group)
     warnings = {unit['id']: unit for unit in reading['units']
                 if unit['id'] in reading['conditional_unsafe'] or unit['id'] in reading['coupled'].get(label, ()) or (label in reading['ambiguous_subjects']
@@ -2483,14 +2563,14 @@ def v3_preceding_warnings(reading, label, evidence):
         index = bisect.bisect_right(starts, start) - 1
         if index >= 0:
             unit = reading['units'][index]; warnings[unit['id']] = unit
-    for span in spans:
-        unit = reading['spans'].get(span)
-        if not unit: continue
+    for unit in selected.values():
         subject = reading['subjects'][unit['id']]
-        if unit['id'] in reading['unresolved_subjects'] or (subject and subject != label):
+        own = reading['parsed'][unit['id']]
+        if (unit['id'] in reading['unresolved_subjects'] or (subject and subject != label)
+                or (own and own[0] != label)):
             warnings[unit['id']] = unit
         before, changer = reading['neighbours'][unit['id']]
-        if (before and not reading['colon'][unit['id']] and unit['id'] not in complete
+        if (before and (not reading['colon'][unit['id']] or unit['id'] in reading['inline_options']) and unit['id'] not in complete
                 and unit['id'] not in reading['independent'].get(label, ()) and unit['id'] not in scoped['before']):
             warnings[before['id']] = before
         if changer and unit['id'] not in complete and unit['id'] not in scoped['after']:
@@ -2669,7 +2749,8 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
                 # (b) An unlabelled or 'Label is ...' sentence depends on the one before it in its paragraph for its subject
                 #     and scope ('He had a myocardial infarction' after a sentence about her father; 'Diagnosis was breast
                 #     cancer.' after one about her sister). A colon-labelled value names its question.
-                if (before is not None and not colon_labelled[unit['id']] and unit['id'] not in complete_paragraphs.get(item.key, ())
+                if (before is not None and (not colon_labelled[unit['id']]
+                        or unit['id'] in governance[11]['preceding']['inline_options']) and unit['id'] not in complete_paragraphs.get(item.key, ())
                         and unit['id'] not in governance[11]['preceding']['independent'].get(label, ())
                         and unit['id'] not in scoped['before']):
                     guarded=True; nearby.setdefault(before['id'],(unit,before,False))
@@ -2996,8 +3077,8 @@ def v3_generation_fields(fields, context_labels=()):
 class LabelledLines:
     """The notes' lines as the validator reads them (`splitlines`, offsets included), each line's labelled parts split
     ONCE (R3-5): split again for every evidence entry, one line of 999 'Q1: No.' segments took 7-10 s. The parts are the
-    whole line, or (F5) the segments `source_units` cut from a line that begins with a form label where another form
-    label begins ('Smoker: No.' in 'Allergies: none. Smoker: No.')."""
+    whole line, or the same segments `source_units` offers. A labelled opening
+    splits only at another label; an ordinary prose opening uses sentence boundaries."""
 
     def __init__(self, notes, labels):
         self.labels, self.lines, self.starts, self.split = labels, notes.splitlines(keepends=True), [], {}
@@ -3016,7 +3097,7 @@ class LabelledLines:
             line = self.lines[index]
             whole = line.strip()
             opening = labelled_value(whole, self.labels) if whole else None
-            boundaries = sentence_boundaries(whole, self.labels, opening) if opening else []
+            boundaries = sentence_boundaries(whole, self.labels, opening) if whole else []
             self.split[index] = (whole, self.starts[index] + line.index(whole) if whole else 0,
                                  [next_start for _, next_start in boundaries], [end for end, _ in boundaries])
         whole, base, next_starts, ends = self.split[index]
@@ -3034,7 +3115,9 @@ def v3_labelled_source(notes, labels, label, evidence, lines=None):
         return False
     lines = lines if lines is not None else LabelledLines(notes, labels)
     for entry in evidence:
-        start, quote = entry.get('start'), entry.get('quote')
+        span = v3_evidence_span(entry)
+        if span is None: return False
+        start, _, quote = span
         located = lines.part(start)
         if located is None:
             return False
