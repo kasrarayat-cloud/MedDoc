@@ -428,3 +428,56 @@ class RefutedOwnershipAndCoupling(SimpleTestCase):
         answer = run(plan, {'Plan': [plan]}, fields=self.fields)['Plan']
         self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
         self.assert_stored_held(plan, 'Plan', plan, plan[6:])
+
+
+    def test_unowned_reference_blocks_cannot_disappear_from_continuation_governance(self):
+        medication = 'Current medications are aspirin daily.'
+        plan = 'Plan: continue current medications.'
+        for extra in ('A medication was discontinued.', 'Warfarin is another medication.',
+                      'Patient medications are warfarin.', 'Sibling medications are warfarin.',
+                      'Planned medications will include warfarin.'):
+            notes = '\n\n'.join((medication, extra, plan))
+            answers = run(notes, {'Medications': [medication], 'Plan': [plan]}, fields=self.fields)
+            for label, quote, text in (('Medications', medication, medication), ('Plan', plan, plan[6:])):
+                with self.subTest(extra=extra, label=label):
+                    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+                    self.assertIn(extra, [c['quote'] for c in answers[label]['held_candidate']['context']])
+                    self.assert_stored_held(notes, label, quote, text)
+
+    def test_visit_purpose_reference_cannot_hide_a_qualifier_or_extra_statement(self):
+        medication = 'Current medications are aspirin daily.'
+        plan = 'Plan: continue current medications.'
+        for purpose in ('Patient presents for medication review with warfarin.',
+                        'Patient presents for medication review. A medication was discontinued.',
+                        'Patient presents for medication review for the donor.'):
+            notes = '\n\n'.join((purpose, medication, plan))
+            answers = run(notes, {'Medications': [medication], 'Plan': [plan]}, fields=self.fields)
+            for label, quote, text in (('Medications', medication, medication), ('Plan', plan, plan[6:])):
+                with self.subTest(purpose=purpose, label=label):
+                    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+                    self.assert_stored_held(notes, label, quote, text)
+
+
+    def test_medication_for_complement_does_not_establish_patient_ownership(self):
+        for quote in ('Medications are warfarin for the donor.',
+                      'Current medications are warfarin for an unrelated recipient.',
+                      'Medications: warfarin for the donor.'):
+            notes = 'Allergies: penicillin.\n' + quote + '\nPlan: rest.'
+            answer = run(notes, {'Medications': [quote]}, fields=self.fields)['Medications']
+            with self.subTest(quote=quote):
+                self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+                self.assertIn('for ', answer['held_candidate']['text'])
+                self.assert_stored_held(notes, 'Medications', quote, answer['held_candidate']['text'])
+
+
+    def test_complete_visit_purpose_is_recorded_without_losing_its_source(self):
+        case = retained_note('r1-note9')
+        governance = g.governance_for(case['notes'], self.fields)
+        reading = governance[11]['preceding']
+        self.assertEqual(len(reading['neutral_references']), 1)
+        relation = next(iter(reading['neutral_references'].values()))
+        self.assertEqual(relation['labels'], {'medications'})
+        units = [unit for unit in reading['units'] if unit['id'] in relation['units']]
+        self.assertEqual([unit['quote'] for unit in units], ['Patient presents for medication review.'])
+        for unit in units:
+            self.assertEqual(case['notes'][unit['start']:unit['end']], unit['quote'])

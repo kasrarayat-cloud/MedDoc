@@ -2154,7 +2154,13 @@ def v3_field_subjects(units, named, parsed):
     for unit in units:
         own = parsed[unit['id']]
         subjects[unit['id']] = own[0] if own and len(named.get(own[0], ())) == 1 else None
-        if own: continue
+        if own:
+            # A medication's trailing for-complement can name a beneficiary,
+            # indication or duration. This route cannot establish which one;
+            # keep the complete statement for review, including parsed subjects.
+            if own[0] == 'medications' and re.search(r'\bfor\s+\S', own[1], re.I):
+                unresolved.add(unit['id'])
+            continue
         matches = []
         for label, pattern in patterns.items():
             match = pattern.match(unit['quote'])
@@ -2165,6 +2171,7 @@ def v3_field_subjects(units, named, parsed):
             if not FINITE_STATEMENT_V3.match(bare_predicate): continue
             local_words = LOCAL_SUBJECT_QUALIFIERS.get(label, ())
             if (prefix not in prefixes[label] or not factual_predicate.match(predicate)
+                    or (label == 'medications' and re.search(r'\bfor\s+\S', predicate, re.I))
                     or any(m.group().casefold() not in local_words for text in readings(unit['quote'])
                            for m in UNSETTLED.finditer(text))
                     or any(p.search(unit['quote']) for p in (INHERITED_SCOPE, SELF_CORRECTION))):
@@ -2188,7 +2195,7 @@ def v3_field_subjects(units, named, parsed):
 def v3_related_source_blocks(blocks, named, parsed, barriers, ambiguous, unresolved, ends_read, shapes_read):
     """Link literal references to another documented question. This is structural
     coupling for review, not a semantic contradiction classifier."""
-    patterns = {}
+    patterns, visit_purposes = {}, {}
     for label in named:
         variants = {label}
         if label.endswith('ies'): variants.add(label[:-3] + 'y')
@@ -2196,17 +2203,29 @@ def v3_related_source_blocks(blocks, named, parsed, barriers, ambiguous, unresol
         elif label.endswith('y'): variants.add(label[:-1] + 'ies')
         else: variants.add(label + 's')
         patterns[label] = re.compile(LETTER_BEFORE + '(?:' + '|'.join(re.escape(v) for v in variants) + ')' + LETTER_AFTER, re.I)
-    values, references, sources = {}, {}, {}
+        visit_purposes[label] = re.compile(r'(?:the\s+)?patient presents for (?:'
+            + '|'.join(re.escape(v) for v in variants) + r') review\.', re.I)
+    values, references, sources, neutral_references = {}, {}, {}, {}
     for index, block in enumerate(blocks):
         owner = block['owner']
-        if owner is None: continue
         first, *rest = block['units']
         own = parsed[first['id']]
         value = '\n'.join([own[1] if own else first['quote'], *(u['quote'] for u in rest)])
         values[index] = value
         references[index] = {label for label, pattern in patterns.items() if label != owner
                              and any(pattern.search(text) for text in readings(value))}
-        sources.setdefault(owner, []).append(index)
+        # This complete visit-purpose clause names a topic without asserting its
+        # value. Record the relation explicitly; a suffix or another source unit
+        # cannot use this exception. Unknown ownership stays in the reference scan.
+        if (owner is None and not rest and first['id'] not in unresolved):
+            neutral = {label for label in references[index] if visit_purposes[label].fullmatch(value)}
+            if neutral:
+                neutral_references[index] = {'labels': neutral, 'units': {first['id']}}
+                references[index].difference_update(neutral)
+        if owner is not None: sources.setdefault(owner, []).append(index)
+    referring = {}
+    for index, targets in references.items():
+        for target in targets: referring.setdefault(target, set()).add(index)
     coupled, unchanged_references = {}, {}
     for index, targets in references.items():
         block = blocks[index]
@@ -2219,7 +2238,7 @@ def v3_related_source_blocks(blocks, named, parsed, barriers, ambiguous, unresol
                 and len(named[target]) == 1 and named[target][0].get('kind') in ('text', 'long_text')
                 and re.fullmatch(r'continue current ' + re.escape(target) + r'\.', values[index], re.I)
                 and len(referents) == 1 and target not in ambiguous
-                and all(other == index or target not in refs for other, refs in references.items()))
+                and referring[target] == {index})
             if exact_continue:
                 referent = blocks[referents[0]]
                 units = referent['units']
@@ -2231,12 +2250,14 @@ def v3_related_source_blocks(blocks, named, parsed, barriers, ambiguous, unresol
                     if not shapes_read[unit['id']]:
                         unchanged_references[index] = {'label': target, 'units': {unit['id']}}
                         continue
-            linked = {u['id'] for other in [index, *referents] for u in blocks[other]['units']}
+            # Every related statement is visible at either involved answer. A
+            # hold without the source that caused it is not a usable review path.
+            linked = {u['id'] for other in ({index, *referents} | referring[target]) for u in blocks[other]['units']}
             coupled.setdefault(target, set()).update(linked)
             # A missing referent is unresolved too; the referencing statement
             # cannot become supported merely because there is no value to compare.
-            coupled.setdefault(block['owner'], set()).update(linked)
-    return coupled, unchanged_references
+            if block['owner'] is not None: coupled.setdefault(block['owner'], set()).update(linked)
+    return coupled, unchanged_references, neutral_references
 
 
 def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None):
@@ -2367,7 +2388,7 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
             blocks.append({'units': block, 'owner': owner, 'position': position,
                            'group_start': index - position, 'group_count': len(group_blocks)})
             for unit in block: block_of[unit['id']] = index
-    coupled, unchanged_references = v3_related_source_blocks(blocks, named, parsed, barriers,
+    coupled, unchanged_references, neutral_references = v3_related_source_blocks(blocks, named, parsed, barriers,
         ambiguous_subjects, unresolved_subjects, ends_read, shapes_read)
     plain_values = [bool(parsed[u['id']] and parsed[u['id']][0] in named
                          and (plain_value(parsed[u['id']][1]) or (len(named[parsed[u['id']][0]]) == 1
@@ -2380,6 +2401,7 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
             'subjects': subjects, 'subject_spans': subject_spans, 'clinical': clinical,
             'ambiguous_subjects': ambiguous_subjects, 'unresolved_subjects': unresolved_subjects,
             'coupled': coupled, 'unchanged_references': unchanged_references,
+            'neutral_references': neutral_references,
             'neighbours': paragraph_neighbours(notes, units, plain_values),
             'conditional_spans': conditional_spans, 'conditional_units': conditional_units,
             'conditional_multisentence': conditional_multisentence, 'conditional_unsafe': conditional_unsafe,
