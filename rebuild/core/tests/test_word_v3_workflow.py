@@ -622,13 +622,18 @@ class V3Generation(V3EncounterFixture, TestCase):
                          "their labelled lines are still read as labelled, so the note stays fully labelled")
 
     def test_an_offer_on_an_option_question_names_a_printed_option_or_is_held(self):
-        answers = self.generate("Smoker: yes\nLaterality: left side\nPatient seen today.")
+        answers = self.generate("Smoker: yes\nLaterality: left side\n\nPatient seen today.")
         smoker, laterality = self.answer(answers, "Smoker?"), self.answer(answers, "Laterality")
         # Ordinary notes (B-G1): an unrelated complete sentence ('Patient seen today.') no longer holds every answer.
         # The explicit labelled statement names a printed option, so it is filled; a governed note would still hold it.
+        # Round 2 (F2): the sentence is in its own paragraph here; written in the same paragraph it may correct the
+        # answers above it, and they are held (asserted below).
         self.assertEqual((smoker["status"], smoker["text"]), ("supported", "Yes"))
         self.assertNotIn("suggestion", laterality, "a value that names no printed option is never one click away")
         self.assertEqual(laterality["held_candidate"]["text"], "left side")
+        answers = self.generate("Smoker: yes\nLaterality: left side\nPatient seen today.")
+        smoker = self.answer(answers, "Smoker?")
+        self.assertEqual((smoker["status"], smoker["text"], smoker["held_candidate"]["text"]), ("conflict", "", "yes"))
 
     def test_a_held_option_is_the_clinicians_decision_and_is_exported(self):
         self.generate("Referring physician: Dr Example\nLaterality: left side")

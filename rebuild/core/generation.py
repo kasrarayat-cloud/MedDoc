@@ -1609,18 +1609,27 @@ def inner_sentence_end(text):
     return False
 
 
-def paragraph_neighbours(notes, units):
-    """Each unit's neighbours in its PARAGRAPH, `{id: (before, after)}`: the unit written just before and just after it
-    with no blank line between (a blank line is two line breaks with nothing but whitespace between them), else None.
-    Lines are broken as `source_units` breaks them (`str.splitlines`)."""
-    joined = []
-    for first, second in zip(units, units[1:]):
-        gap = notes[first['end']:second['start']]
-        breaks = sum(part != part.splitlines()[0] for part in gap.splitlines(True))
-        joined.append(breaks < 2)
-    return {unit['id']: (units[index - 1] if index and joined[index - 1] else None,
-                         units[index + 1] if index < len(joined) and joined[index] else None)
-            for index, unit in enumerate(units)}
+#: A blank line: two line feeds with nothing but spaces, tabs or carriage returns between them. Nothing else ends a
+#: paragraph - not U+2028, a form feed or a lone carriage return, which the page may show inline.
+BLANK_LINE = re.compile(r'\n[ \t\r]*\n')
+
+
+def paragraph_neighbours(notes, units, parsed_units):
+    """Each unit's neighbours in its PARAGRAPH (units with no `BLANK_LINE` between them), `{id: (before, changer)}`:
+    `before`, the unit written just before it; `changer`, the FIRST unit after it that is not another question's
+    one-sentence labelled value - an unlabelled sentence, or a labelled value that runs on into more sentences. Such a
+    unit may correct or reframe anything written before it in its paragraph, not only its neighbour ('Smoker: yes.' /
+    'Allergies: none.' / 'Sorry, I meant smoker no.'). None when there is none."""
+    joined = [not BLANK_LINE.search(notes, first['end'], second['start']) for first, second in zip(units, units[1:])]
+    found, changer = {}, None
+    for index in range(len(units) - 1, -1, -1):
+        unit = units[index]
+        if index < len(joined) and not joined[index]:
+            changer = None                                  # its paragraph ends with it
+        found[unit['id']] = (units[index - 1] if index and joined[index - 1] else None, changer)
+        if not parsed_units[index] or inner_sentence_end(unit['quote']):
+            changer = unit
+    return found
 
 
 def nearby_entry(notes, unit, near, after):
@@ -1652,7 +1661,7 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
     output={}; used_numbered={}
     by_id={unit['id']:unit for unit in units}
     parsed_of={unit['id']:parsed for unit,parsed in zip(units,parsed_units)}
-    paragraph=paragraph_neighbours(notes,units) if v3 else {}
+    paragraph=paragraph_neighbours(notes,units,parsed_units) if v3 else {}
     selected={item.key:item for item in selections.fields}
     for field in fields:
         item=selected[field['key']]
@@ -1704,10 +1713,12 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
                 # F2/F3). STRUCTURE, NOT WORDS: no list of correction or denial words decides it, so nothing a list misses
                 # is adopted. 'Allergies: penicillin.' above 'Sorry, I mean amoxicillin.', 'Consent obtained: yes.' above
                 # 'To be obtained tomorrow.' and 'Warfarin 5 mg daily.' before 'Stopped last month.' were adopted.
-                before,after=paragraph[unit['id']]
-                # (a) The unit written next in its paragraph may change it, unless it is another question's labelled value.
-                if after is not None and not parsed_of[after['id']]:
-                    guarded=True; nearby.setdefault(after['id'],(unit,after,True))
+                before,changer=paragraph[unit['id']]
+                # (a) Anything written after it in its paragraph other than another question's one-sentence labelled
+                #     value may change it (the lead's rule held only for the NEXT unit; a correction one labelled line
+                #     further on was adopted past).
+                if changer is not None:
+                    guarded=True; nearby.setdefault(changer['id'],(unit,changer,True))
                 # (b) An unlabelled sentence depends on the one before it in its paragraph for its subject and scope ('He
                 #     had a myocardial infarction' after a sentence about her father). A labelled value names its question.
                 if before is not None and not own_value:

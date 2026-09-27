@@ -644,6 +644,25 @@ class RoundTwoRefutation(SimpleTestCase):
         self.assertEqual({label: out[label]['status'] for label in ('Chief complaint', 'Allergies', 'Plan')},
                          {'Chief complaint': 'supported', 'Allergies': 'supported', 'Plan': 'supported'})
 
+    def test_a_correction_anywhere_later_in_its_paragraph_holds_it(self):
+        """Not the refuter's inputs: the F2 shape one labelled value further on, and a paragraph 'ended' by breaks the page
+        may show inline. Only a blank line of spaces, tabs or carriage returns between two line feeds ends a paragraph."""
+        for notes, label, quote, candidate in (
+                ('Smoker: yes. Allergies: none. Sorry, smoker is no.', 'Smoker', 'Smoker: yes.', 'yes.'),
+                ('Smoker: yes.\nAllergies: none.\nSorry, I meant smoker no.', 'Smoker', 'Smoker: yes.', 'yes.'),
+                ('Allergies: penicillin.\u2028\u2028Sorry, I mean amoxicillin.', 'Allergies', 'Allergies: penicillin.',
+                 'penicillin.'),
+                ('Allergies: penicillin.\n\u2028\nSorry, I mean amoxicillin.', 'Allergies', 'Allergies: penicillin.',
+                 'penicillin.'),
+                ('Allergies: penicillin.\n\x0c\nSorry, I mean amoxicillin.', 'Allergies', 'Allergies: penicillin.',
+                 'penicillin.')):
+            with self.subTest(notes=notes):
+                self.held(notes, label, quote, candidate)
+        # A blank line written with spaces, tabs or CRLF still ends it.
+        for gap in ('\n\n', '\n \t\n', '\r\n\r\n'):
+            notes = 'Allergies: penicillin.' + gap + 'The patient is well today.'
+            self.assertEqual(run(notes, {'Allergies': ['Allergies: penicillin.']})['Allergies']['text'], 'penicillin.', gap)
+
     def test_f4_an_option_printed_with_a_closing_full_stop_is_named_by_its_value(self):
         form = [field('v3_r', 'Right impression', 'choice', ['reflux positive.', 'is absent.']),
                 field('v3_s', 'Smoker', 'choice', ['Yes.', 'No.'])]
