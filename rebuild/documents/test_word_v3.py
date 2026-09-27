@@ -1575,5 +1575,83 @@ class LoneBoxInAnOptionRow(unittest.TestCase):
         self.assertEqual([(f["label"], f["kind"]) for f in fields], [("Fever", "checkbox"), ("Consent obtained", "checkbox")])
 
 
+def sided_grid_bytes(side="Left", *, heading=False, after=False):
+    doc = Document()
+    doc.add_paragraph("Synthetic joint examination")
+    if heading:
+        doc.add_paragraph(side + " knee:")
+        table = yes_no_grid(doc, ("Effusion",))
+    else:
+        table = doc.add_table(rows=2, cols=4)
+        headers = ["Finding", "Yes", "No", "Side"] if after else ["Side", "Finding", "Yes", "No"]
+        values = ["Effusion", "☐", "☐", side] if after else [side, "Effusion", "☐", "☐"]
+        for row, vals in enumerate((headers, values)):
+            for col, value in enumerate(vals):
+                table.cell(row, col).text = value
+    return docx_bytes(doc)
+
+
+class RoundThreeRemainingDefects(unittest.TestCase):
+    def test_a_separate_side_cell_qualifies_the_question_even_after_the_boxes(self):
+        from documents import word_v3
+        for side in ("L", "R", "Left", "Right", "Bilateral"):
+            for after in (False, True):
+                with self.subTest(side=side, after=after):
+                    data = sided_grid_bytes(side, after=after)
+                    field = next(f for f in word_v3.inspect(data)["fields"] if "Effusion" in f["label"])
+                    self.assertIn(side, field["label"])
+                    out = paragraphs_bytes(word_v3.fill(data, [field], {field["key"]: "Yes"}))
+                    at = out.index("Effusion")
+                    self.assertEqual(out[at + 1:at + 3], ["☒", "☐"])
+
+    def test_a_plain_side_heading_qualifies_its_questions(self):
+        from documents import word_v3
+        field = next(f for f in word_v3.inspect(sided_grid_bytes(heading=True))["fields"] if "Effusion" in f["label"])
+        self.assertIn("Left knee", field["label"])
+
+    def test_duplicate_context_uses_readable_line_text(self):
+        from documents import word_v3
+        doc = Document()
+        doc.add_paragraph("Synthetic symptoms")
+        doc.add_paragraph("Pain? ☐ Yes ☐ No")
+        doc.add_paragraph("Pain? ☐ Yes ☐ No")
+        fields = word_v3.inspect(docx_bytes(doc))["fields"]
+        self.assertEqual(len(fields), 2)
+        for field in fields:
+            self.assertIn("Pain?", field["context"])
+            self.assertNotRegex(field["context"], r"(?:b|hf)/|/glyphs|p\[|sdt\[")
+        self.assertNotEqual(fields[0]["context"], fields[1]["context"])
+
+    def test_text_fields_are_not_drawn_as_printed_boxes(self):
+        from documents import word_v3
+        for legacy in (False, True):
+            doc = Document()
+            p = doc.add_paragraph("Side: ")
+            if legacy:
+                ff_text_field(p, "Side")
+            else:
+                p._p.append(_sdt("rich", placeholder=" "))
+            p.add_run(" Left ☐ Right")
+            data = docx_bytes(doc)
+            place = next(r for r in word_v3.outline(data)["slots"] if r["kind"] == "p")
+            self.assertEqual(place["preview"], "Side: [text field] Left ☐ Right")
+            self.assertEqual(place["boxes"], 1)
+            field = word_v3.locate(data, [{"slot": place["slot"], "kind": "checkbox", "label": "Right", "box": 1}])[0]
+            self.assertIn("Left ☒ Right", "".join(paragraphs_bytes(word_v3.fill(data, [field], {field["key"]: True}))))
+
+    def test_an_unaddressable_checkbox_in_a_hyperlink_cannot_be_mapped_by_number(self):
+        from documents import word_v3
+        doc = Document()
+        p = doc.add_paragraph("Synthetic symptom: ")
+        link = OxmlElement("w:hyperlink")
+        link.set(qn("w:anchor"), "local")
+        link.append(checkbox_control())
+        p._p.append(link)
+        p.add_run(" Yes")
+        data = docx_bytes(doc)
+        with self.assertRaises(word_v3.V3Failure):
+            word_v3.locate(data, [{"slot": "word/document.xml#b/p[0]", "kind": "checkbox", "label": "Symptom", "box": 1}])
+
+
 if __name__ == "__main__":
     unittest.main()
