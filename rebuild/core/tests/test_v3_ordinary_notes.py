@@ -915,7 +915,7 @@ class RoundThreeRefutation(SimpleTestCase):
                 ('Consent obtained: yes. Plan: consent tomorrow.', 'Consent obtained', 'Consent obtained: yes.'),  # unsettled
                 ('Smoker: yes. Findings: details overleaf.', 'Smoker', 'Smoker: yes.'),                           # pointer
                 ('Consent obtained: yes. Plan: rest.Consent Friday.', 'Consent obtained', 'Consent obtained: yes.'),  # stop
-                ('Smoker: yes. Plan: rest ice elevation compression.', 'Smoker', 'Smoker: yes.'),         # four words
+                ('Smoker: yes. Findings: rest ice elevation compression.', 'Smoker', 'Smoker: yes.'),     # four words, not a Plan
                 ('Smoker: yes. Allergies: none, penicillin.', 'Smoker', 'Smoker: yes.'),                  # a list
                 ('Smoker: yes. Allergies: penicillin, latex.', 'Smoker', 'Smoker: yes.'),                 # a list
                 ('Smoker: yes. Allergies: penicillin (rash).', 'Smoker', 'Smoker: yes.'),                 # a bracket
@@ -928,6 +928,13 @@ class RoundThreeRefutation(SimpleTestCase):
                   fields=ROUND3)
         self.assertEqual((out['Allergies']['status'], out['Allergies']['text']), ('supported', 'penicillin.'))
         self.assertEqual((out['Plan']['status'], out['Plan']['text']), ('supported', 'rest.'))
+        # A complete nominal Plan now has a source-topic contract; it does not
+        # change the general plain-value grammar or arbitrary other fields.
+        notes = 'Smoker: yes. Plan: rest ice elevation compression.'
+        out = run(notes, {'Smoker': ['Smoker: yes.'], 'Plan': ['Plan: rest ice elevation compression.']}, fields=ROUND3)
+        self.assertEqual((out['Smoker']['status'], out['Smoker']['text']), ('supported', 'Yes'))
+        self.assertEqual((out['Plan']['status'], out['Plan']['text']), ('supported', 'rest ice elevation compression.'))
+        self.assertFalse(g.plain_value('rest ice elevation compression.'))
         for value in ('none.', 'No', 'NKDA', '124/78.', '36.9', '104 bpm', '98%', 'A+', 'Dr Example', 'Dr. Example',
                       'knee pain.', 'left'):
             self.assertTrue(g.plain_value(value), value)
