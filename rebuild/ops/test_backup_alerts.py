@@ -1792,12 +1792,13 @@ class ConcurrentStatusReadTests(unittest.TestCase):
         worker.start()
         worker.join(seconds)
         stuck = worker.is_alive()
-        if stuck:
+        deadline = time.monotonic() + 30
+        while worker.is_alive() and time.monotonic() < deadline:     # it may block again: release each
             try:
                 os.close(os.open(fifo, os.O_WRONLY | os.O_NONBLOCK))
             except OSError:
                 pass
-            worker.join(30)
+            worker.join(0.05)
         self.assertFalse(stuck, f'it hung for {seconds} s on a FIFO')
         return results['value']
 
@@ -1815,6 +1816,53 @@ class ConcurrentStatusReadTests(unittest.TestCase):
         result, code = self.bounded(lambda: a.check(self.at + timedelta(minutes=5)), lock)
         self.assertEqual((code, result['condition']), (1, 'monitoring_state_unavailable'))
         self.sender.assert_not_called()
+
+    def hold_as_a_running_check(self):
+        descriptor = os.open(self.alerts / 'monitor.lock', os.O_RDWR)
+        self.addCleanup(os.close, descriptor)
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    def test_a_fifo_in_status_jsons_place_never_hangs_a_read_made_while_a_check_runs(self):
+        """⚠️ R3-5, round 3. fingerprint() opens status.json NON-BLOCKING: without it (a mutant that
+        survived) a FIFO in status.json's place hangs status() whenever a check runs past its wait."""
+        a.check(self.at)
+        status = self.alerts / 'status.json'
+        status.unlink()
+        os.mkfifo(status, 0o600)
+        self.hold_as_a_running_check()
+        with patch.object(a, 'READ_WAIT_SECONDS', 0.3):
+            shown, code = self.bounded(lambda: a.status(self.at + timedelta(minutes=1)), status)
+        self.assertEqual((code, shown['condition'], shown.get('state_unreadable'), shown.get('check_running')),
+                         (1, 'monitoring_state_unavailable', 'state_invalid', True))
+
+    def test_a_read_made_while_a_check_runs_never_follows_a_link_in_status_jsons_place(self):
+        """⚠️ R3-5, round 3. fingerprint() never follows status.json: without O_NOFOLLOW (a mutant that
+        survived) it opened whatever a link there names. Observed directly: a writer blocked opening
+        a FIFO the link names is released only if something opens that FIFO for reading."""
+        a.check(self.at)
+        target = self.root / 'elsewhere'
+        os.mkfifo(target, 0o600)
+        status = self.alerts / 'status.json'
+        status.unlink()
+        status.symlink_to(target)
+        opened = threading.Event()
+
+        def writer():
+            os.close(os.open(target, os.O_WRONLY))             # blocks until the FIFO is opened for reading
+            opened.set()
+        blocked = threading.Thread(target=writer, daemon=True)
+        blocked.start()
+        self.hold_as_a_running_check()
+        try:
+            with patch.object(a, 'READ_WAIT_SECONDS', 0.3):
+                shown, code = self.bounded(lambda: a.status(self.at + timedelta(minutes=1)), target)
+            self.assertEqual((code, shown['condition'], shown.get('state_unreadable'), shown.get('check_running')),
+                             (1, 'monitoring_state_unavailable', 'state_invalid', True))
+            self.assertFalse(opened.wait(0.5), "status() opened what a link in status.json's place names")
+        finally:
+            reader = os.open(target, os.O_RDONLY | os.O_NONBLOCK)   # release the writer
+            blocked.join(30)
+            os.close(reader)
 
     def test_status_takes_the_lock_without_creating_or_writing_anything(self):
         """The publisher runs status() in a sandbox with no write grant to this directory, so the
