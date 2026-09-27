@@ -65,12 +65,13 @@ def option_for(options, text):
     when two printed options would both match (then the text does not identify one).
 
     Case only: `lower()`, not Unicode case folding, so 'MASS' does not name 'Maß' and a long s does not name an s.
-    Generation fills an option only through this comparison, so the narrower reading is the conservative one."""
-    wanted = str(text or '').strip().lower()
-    if not wanted:
-        return None
-    found = [option for option in options or [] if str(option).strip().lower() == wanted]
-    return found[0] if len(found) == 1 else None
+    Generation fills an option only through this comparison, so the narrower reading is the conservative one.
+
+    ⚠️ ONE READER: this is the engine's own `option_position`, so the option the review accepts is the option the
+    export ticks (they disagreed: the engine compared list-marker-stripped labels and took the first hit)."""
+    from documents.word_v3 import option_position
+    position = option_position(options, text)
+    return None if position is None else list(options)[position]
 
 
 def columns(field):

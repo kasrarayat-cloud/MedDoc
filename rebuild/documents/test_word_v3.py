@@ -181,5 +181,82 @@ class ContractV3(unittest.TestCase):
         self.assertNotEqual(info.get("contract"), "v3")
 
 
+def docx_bytes(doc):
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    return buffer.getvalue()
+
+
+def knee_form(path):
+    """F1: dropdown options that differ only by an abbreviation a list-marker strip would remove."""
+    doc = Document()
+    doc.add_paragraph("Synthetic knee injection note")
+    p = doc.add_paragraph("Injection site: ")
+    p._p.append(_sdt("dropdown", options=["Choose an item.", "Rt. knee", "Lt. knee", "Bil. knees"]))
+    Path(path).write_bytes(docx_bytes(doc))
+
+
+class OptionReader(unittest.TestCase):
+    """F1: the engine chooses an option exactly as the review reads it: the stored label, trimmed, case only."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_the_reviewed_option_is_the_exported_option(self):
+        knee_form(self.dir / "knee.docx")
+        info = inspect_template(self.dir / "knee.docx", engine="v3")
+        field = next(f for f in info["fields"] if f["kind"] == "choice")
+        self.assertEqual(field["options"], ["Rt. knee", "Lt. knee", "Bil. knees"])
+        for answer, shown in (("Lt. knee", "Injection site: Lt. knee"), (" lt. KNEE ", "Injection site: Lt. knee"),
+                              ("Bil. knees", "Injection site: Bil. knees")):
+            out = self.dir / ("out-%d.docx" % len(list(self.dir.iterdir())))
+            fill_template(self.dir / "knee.docx", info["fields"], {field["key"]: answer}, out)
+            self.assertIn(shown, part_text(out), answer)
+        with self.assertRaises(DocumentError) as refused:
+            fill_template(self.dir / "knee.docx", info["fields"], {field["key"]: "knee"}, self.dir / "never.docx")
+        self.assertEqual(refused.exception.code, "invalid_answer")
+
+    def test_options_that_differ_only_in_punctuation_stay_distinct(self):
+        doc = Document()
+        doc.add_paragraph("Synthetic follow-up")
+        p = doc.add_paragraph("Imaging reviewed: ")
+        p._p.append(_sdt("dropdown", options=["Choose an item.", "Yes", "Yes*", "No"]))
+        (self.dir / "star.docx").write_bytes(docx_bytes(doc))
+        info = inspect_template(self.dir / "star.docx", engine="v3")
+        field = next(f for f in info["fields"] if f["kind"] == "choice")
+        self.assertEqual(field["options"], ["Yes", "Yes*", "No"])
+        fill_template(self.dir / "star.docx", info["fields"], {field["key"]: "Yes*"}, self.dir / "star-out.docx")
+        self.assertIn("Imaging reviewed: Yes*", part_text(self.dir / "star-out.docx"))
+
+    def test_list_markers_are_digits_single_letters_and_roman_numerals_only(self):
+        from documents.word_v3 import clean_label
+        kept = ["Rt. knee effusion", "Lt. knee", "Bil. knees", "Dr. Example", "No. of lesions", "Mr. Synthetic",
+                "Hx. reviewed", "Pt. consent"]
+        for text in kept:
+            self.assertEqual(clean_label(text), text)
+        stripped = {"1. Name": "Name", "12) Plan": "Plan", "a) Yes": "Yes", "B. No": "No", "(3) Dose": "Dose",
+                    "(c) Route": "Route", "iv. Findings": "Findings", "(xii) Impression": "Impression",
+                    "XXX. Item": "Item", "vii) Item": "Item"}
+        for text, label in stripped.items():
+            self.assertEqual(clean_label(text), label, text)
+
+    def test_laterality_survives_in_detected_and_typed_labels(self):
+        doc = Document()
+        doc.add_paragraph("Synthetic joint exam")
+        doc.add_paragraph("Rt. knee effusion: ____________")
+        doc.add_paragraph("Lt. knee effusion: ____________")
+        doc.add_paragraph("")
+        (self.dir / "joint.docx").write_bytes(docx_bytes(doc))
+        info = inspect_template(self.dir / "joint.docx", engine="v3")
+        self.assertEqual([f["label"] for f in info["fields"]], ["Rt. knee effusion", "Lt. knee effusion"])
+        added = locate_fields(self.dir / "joint.docx", [{"slot": "word/document.xml#b/p[3]", "kind": "text",
+                                                          "label": "Rt. knee aspirate volume"}])["fields"]
+        self.assertEqual(added[0]["label"], "Rt. knee aspirate volume")
+
+
 if __name__ == "__main__":
     unittest.main()

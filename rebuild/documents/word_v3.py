@@ -626,10 +626,17 @@ class Area:
     capacity: int | None = None
 
 
+#: A list marker is 1-3 digits, ONE letter or a roman numeral (i..xxx), as 'M.' 'M)' or '(M)' before a space.
+#: ⚠️ Never a multi-letter word: 'Rt.', 'Lt.', 'Bil.', 'Dr.', 'No.' are text, and stripping them turned 'Rt. knee' and
+#: 'Lt. knee' into the same label - and, through the option reader, the left knee into the right one.
+LIST_MARK = r"(?:\d{1,3}|[A-Za-z]|(?i:x{0,2}(?:i{1,3}|iv|vi{0,3}|ix)|x{1,3}))"
+LIST_MARKER = re.compile(r"^(?:" + LIST_MARK + r"[.)]|\(" + LIST_MARK + r"\))\s+")
+
+
 def clean_label(text: str) -> str:
     text = (text or "").replace("\x00", " ").replace(BOX, " ").replace(CHECKED, " ")
     text = re.sub(r"\s+", " ", text.replace("\t", " ")).strip()
-    text = re.sub(r"^(?:[\dA-Za-z]{1,3}[.)]|\(\w{1,3}\))\s+", "", text)
+    text = LIST_MARKER.sub("", text)
     return text.strip(" :–—-_*").strip()[:300]
 
 
@@ -2437,8 +2444,20 @@ def mark_option_text(p, option):
     return True
 
 
+def option_position(options, value):
+    """THE option reader (core/v3_mapping.option_for calls this one): the index of the one stored option label equal
+    to `value` after trimming, ignoring case (str.lower) - nothing else. None when no label or more than one matches.
+    ⚠️ Never clean_label: it made 'Lt. knee' name 'Rt. knee' (the first hit), so the left knee reviewed was the right
+    knee exported."""
+    wanted = str(value if value is not None else "").strip().lower()
+    if not wanted:
+        return None
+    hits = [i for i, option in enumerate(options or []) if str(option).strip().lower() == wanted]
+    return hits[0] if len(hits) == 1 else None
+
+
 def _options_chosen(field, answer):
-    """The option labels an answer selects, validated against the field's options."""
+    """The option positions an answer selects, validated against the field's stored option labels."""
     options = field.get("options") or []
     kind = field["kind"]
     if kind == "checkbox":
@@ -2452,11 +2471,11 @@ def _options_chosen(field, answer):
         fail("Only one option can be chosen for this question.", "invalid_answer")
     out = []
     for value in chosen:
-        norm = [clean_label(o).lower() for o in options]
-        key = clean_label(str(value)).lower()
-        if key not in norm:
+        position = option_position(options, value)
+        if position is None:
             fail("The answer is not one of the printed options.", "invalid_answer")
-        out.append(norm.index(key))
+        if position not in out:
+            out.append(position)
     return out
 
 

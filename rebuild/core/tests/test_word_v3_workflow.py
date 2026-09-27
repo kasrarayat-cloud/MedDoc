@@ -670,6 +670,59 @@ class V3OptionMatch(TestCase):
         self.assertIsNone(option_for(["Yes"], "Ye\u017f"), "a long s is not an s")
         self.assertIsNone(option_for(["Left", "LEFT"], "left"), "two printed options that differ by case name neither")
 
+    def test_the_review_and_the_engine_share_one_reader(self):
+        from core.v3_mapping import option_for
+        from documents.word_v3 import option_position
+        options = ["Rt. knee", "Lt. knee", "Yes", "YES", " No "]
+        for value in ("Lt. knee", "lt. knee", "knee", "Yes", "yes", "No", "no ", "", "Rt knee", "Maß"):
+            position = option_position(options, value)
+            self.assertEqual(option_for(options, value), None if position is None else options[position], value)
+        self.assertEqual(option_position(options, " lt. KNEE "), 1)
+        self.assertIsNone(option_position(options, "yes"), "two stored labels that differ by case name neither")
+        from unittest.mock import patch
+        with patch("documents.word_v3.option_position", return_value=1):
+            self.assertEqual(option_for(["first", "second"], "anything"), "second",
+                             "the review reads an option through the engine's reader, not a copy of it")
+
+
+def knee_form_bytes():
+    doc = Document()
+    doc.add_paragraph("Synthetic knee injection note")
+    doc.add_paragraph("Indication: ____________")
+    p = doc.add_paragraph("Injection site: ")
+    p._p.append(_sdt("dropdown", options=["Choose an item.", "Rt. knee", "Lt. knee", "Bil. knees"]))
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    return buffer.getvalue()
+
+
+@override_settings(**V3)
+class V3ReviewedOptionIsExported(V3Fixture, TestCase):
+    """F1 end to end: the left knee reviewed is the left knee exported."""
+
+    def test_left_knee_generated_reviewed_and_exported(self):
+        from core.jobs import enqueue, run_one
+        template, version = self.uploaded(data=knee_form_bytes(), name="Synthetic knee")
+        field = next(f for f in version.fields if f["kind"] == "choice")
+        version = self.confirm(template)
+        self.assertEqual(self.new_encounter(version, notes="Indication: synthetic knee pain\nInjection site: Lt. knee").status_code, 302)
+        encounter = Encounter.objects.get()
+        enqueue(encounter, self.user)
+        self.assertTrue(run_one())
+        encounter = Encounter.objects.get(pk=encounter.pk)
+        self.assertEqual((encounter.answers[field["key"]]["status"], encounter.answers[field["key"]]["text"]), ("supported", "Lt. knee"))
+        payload = {"revision": encounter.revision}
+        for f in version.fields:
+            payload["answer_" + f["key"]] = encounter.answers[f["key"]]["text"]
+            payload["reviewed_" + f["key"]] = "on"
+        self.assertEqual(self.client.post(f"/encounters/{encounter.pk}/save/", payload).status_code, 302)
+        response = self.client.post(f"/encounters/{encounter.pk}/finalize/", {"revision": encounter.revision + 1, "reviewed": "on"}, follow=True)
+        encounter = Encounter.objects.get(pk=encounter.pk)
+        self.assertEqual(encounter.status, "finalized", [str(m) for m in response.context["messages"]])
+        body = part_text(private_path(encounter.export_path).read_bytes())
+        self.assertIn("Injection site: Lt. knee", body)
+        self.assertNotIn("Rt. knee", body)
+
 
 class V3LiveAdoption(TestCase):
     """The provider's selections for a v3 form get the same option rule; the request carries no options."""
