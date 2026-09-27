@@ -561,3 +561,162 @@ class V3Export(V3EncounterFixture, TestCase):
         self.assertNotEqual(Encounter.objects.get(pk=self.encounter.pk).status, "finalized")
         self.assertIn("The stored mapping no longer matches this form. Review the mapping again.",
                       " ".join(str(m) for m in response.context["messages"]))
+
+
+@override_settings(**V3)
+class V3Generation(V3EncounterFixture, TestCase):
+    """Fixture-mode generation through the worker: text kinds as before; options only when named exactly."""
+
+    def generate(self, notes):
+        from core.jobs import enqueue, run_one
+        encounter = Encounter.objects.get(pk=self.encounter.pk)
+        saved = self.client.post(f"/encounters/{encounter.pk}/notes/", {"revision": encounter.revision, "notes": notes})
+        self.assertEqual(saved.status_code, 302)
+        job = enqueue(Encounter.objects.get(pk=encounter.pk), self.user)
+        self.assertTrue(run_one())
+        job.refresh_from_db()
+        self.assertEqual(job.state, "succeeded", job.error)
+        return Encounter.objects.get(pk=encounter.pk).answers
+
+    def answer(self, answers, label):
+        return answers[self.key(label)]
+
+    def test_an_option_is_filled_only_when_its_labelled_value_names_it_exactly(self):
+        answers = self.generate("Referring physician: Dr Example\nSmoker: yes\nLaterality: LEFT\n"
+                                "Symptoms (check all that apply): Pain\nDiabetes: present")
+        expected = {"Referring physician": "Dr Example", "Smoker?": "Yes", "Laterality": "Left",
+                    "Symptoms (check all that apply)": "Pain", "Diabetes": "checked"}
+        for label, text in expected.items():
+            self.assertEqual((self.answer(answers, label)["status"], self.answer(answers, label)["text"]), ("supported", text), label)
+
+    def test_anything_else_is_held_for_the_clinician_with_its_quote(self):
+        candidates = {"Smoker?": "former smoker", "Laterality": "left side",
+                      "Symptoms (check all that apply)": "Pain, Redness", "Diabetes": "no"}
+        answers = self.generate("Smoker: former smoker\nLaterality: left side\n"
+                                "Symptoms (check all that apply): Pain, Redness\nDiabetes: no")
+        for label, candidate in candidates.items():
+            answer = self.answer(answers, label)
+            self.assertEqual((answer["status"], answer["text"]), ("conflict", ""), label)
+            self.assertEqual(answer["held_candidate"]["text"], candidate, label)
+            self.assertEqual([e["quote"] for e in answer["held_candidate"]["evidence"]], [candidate], label)
+            self.assertIn("NOT used as an answer", answer["held_candidate"]["reason"])
+        page = self.client.get(f"/encounters/{self.encounter.pk}/").content.decode()
+        self.assertIn("Read from the notes &mdash; not offered as an answer.", page)
+        self.assertIn("left side", page)
+        self.assertIn("An empty box is never read as No.", page)
+
+    def test_absence_is_never_turned_into_no(self):
+        answers = self.generate("Referring physician: Dr Example")
+        for label in ("Smoker?", "Laterality", "Symptoms (check all that apply)", "Diabetes"):
+            self.assertEqual((self.answer(answers, label)["status"], self.answer(answers, label)["text"]), ("missing", ""), label)
+
+    def test_table_rows_signature_and_initials_are_never_generated(self):
+        answers = self.generate("Referring physician: Dr Example\nTable: Aspirin | 81 mg | daily\n"
+                                "Clinician signature: Synthetic Alpha Clinician\nPhysician initials: SAC")
+        for label in ("Table", "Clinician signature", "Physician initials"):
+            answer = self.answer(answers, label)
+            self.assertEqual((answer["status"], answer["text"], answer["evidence"]), ("missing", "", []), label)
+        self.assertIn("never generated", self.answer(answers, "Table")["reason"])
+        self.assertEqual(self.answer(answers, "Referring physician")["text"], "Dr Example",
+                         "their labelled lines are still read as labelled, so the note stays fully labelled")
+
+    def test_an_offer_on_an_option_question_names_a_printed_option_or_is_held(self):
+        answers = self.generate("Smoker: yes\nLaterality: left side\nPatient seen today.")
+        smoker, laterality = self.answer(answers, "Smoker?"), self.answer(answers, "Laterality")
+        self.assertEqual((smoker["status"], smoker["text"], smoker.get("suggestion")), ("conflict", "", "Yes"))
+        self.assertNotIn("suggestion", laterality, "a value that names no printed option is never one click away")
+        self.assertEqual(laterality["held_candidate"]["text"], "left side")
+
+    def test_a_held_option_is_the_clinicians_decision_and_is_exported(self):
+        self.generate("Referring physician: Dr Example\nLaterality: left side")
+        page = self.client.get(f"/encounters/{self.encounter.pk}/").content.decode()
+        self.assertIn(f'name="held_shown_{self.key("Laterality")}" value="1"', page)
+        values = dict(self.FULL, Laterality="Left")
+        self.assertEqual(self.save(values, extra={"held_shown_" + self.key("Laterality"): "1"}).status_code, 302)
+        self.assertEqual(self.stored("Laterality"), "Left")
+        response = self.finalize()
+        encounter = Encounter.objects.get(pk=self.encounter.pk)
+        self.assertEqual(encounter.status, "finalized", [str(m) for m in response.context["messages"]])
+        self.assertIn("Laterality: Left", part_text(private_path(encounter.export_path).read_bytes()))
+
+
+V3_FIELDS = [
+    {"key": "v3_1", "label": "Smoker?", "kind": "choice", "options": ["Yes", "No"], "locator": {"contract": "v3"}},
+    {"key": "v3_2", "label": "Allergies", "kind": "text", "locator": {"contract": "v3"}},
+    {"key": "v3_3", "label": "Clinician signature", "kind": "signature", "locator": {"contract": "v3"}},
+]
+
+
+def live_result(notes, quotes, v3=True):
+    """A synthetic completed provider response for the legacy evidence contract (nothing is sent anywhere)."""
+    import json
+    from types import SimpleNamespace
+    asked = [f for f in V3_FIELDS if f["kind"] != "signature"]
+    body = {"fields": [{"key": f["key"], "quotes": quotes.get(f["key"], []), "conflict": False} for f in asked]}
+    response = SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text=json.dumps(body))])
+    raw = {"anthropic_response": response, "notes": notes, "fields": asked, "context_labels": ["Clinician signature"],
+           "evidence_contract": "legacy"}
+    if v3:
+        raw["v3_fields"] = V3_FIELDS
+    return raw
+
+
+class V3LiveAdoption(TestCase):
+    """The provider's selections for a v3 form get the same option rule; the request carries no options."""
+
+    def test_an_unlabelled_line_is_never_read_as_an_option(self):
+        from core.generation import validated
+        answers = validated(live_result("Yes", {"v3_1": ["Yes"]}))
+        self.assertEqual((answers["v3_1"]["status"], answers["v3_1"]["text"]), ("conflict", ""))
+        self.assertEqual(answers["v3_1"]["held_candidate"]["text"], "Yes")
+        self.assertEqual(answers["v3_3"]["status"], "missing")
+
+    def test_its_own_labelled_value_or_line_names_the_option(self):
+        from core.generation import validated
+        notes = "Smoker: yes\nAllergies: none documented"
+        for quote in ("yes", "Smoker: yes"):
+            answers = validated(live_result(notes, {"v3_1": [quote], "v3_2": ["none documented"]}))
+            self.assertEqual((answers["v3_1"]["status"], answers["v3_1"]["text"]), ("supported", "Yes"), quote)
+            self.assertEqual(answers["v3_2"]["text"], "none documented")
+
+    def test_other_forms_are_adopted_exactly_as_before(self):
+        from core.generation import validated
+        raw = live_result("Smoker: former\nAllergies: none", {"v3_1": ["former"]}, v3=False)
+        answers = validated(raw)
+        self.assertEqual((answers["v3_1"]["status"], answers["v3_1"]["text"]), ("supported", "former"))
+
+    def captured_payload(self, fields, context_labels=()):
+        import json
+        from unittest.mock import MagicMock, patch
+        from core import generation
+        captured = {}
+
+        def create(**kwargs):
+            captured["payload"] = json.loads(kwargs["messages"][0]["content"])
+            raise RuntimeError("stop before any request")
+
+        client = MagicMock()
+        client.messages.create.side_effect = create
+        config = {**generation.configuration(), "mode": "live", "provider": "anthropic", "model": "synthetic-model",
+                  "input_rate": "0.000003", "output_rate": "0.000015", "cached_rate": "0.0000003"}
+        with patch("anthropic.Anthropic", return_value=client):
+            with self.assertRaises(RuntimeError):
+                generation.generate("Smoker: yes", fields, config, context_labels=context_labels)
+        return captured["payload"]
+
+    def test_the_request_asks_only_the_generated_kinds_and_carries_no_options(self):
+        payload = self.captured_payload(V3_FIELDS)
+        self.assertEqual(payload["questions"], [
+            {"key": "v3_1", "label": "Smoker?", "answer_policy": "documented_source_only"},
+            {"key": "v3_2", "label": "Allergies", "answer_policy": "documented_source_only"}])
+        self.assertEqual(payload["context_labels"], ["Clinician signature"])
+        self.assertNotIn("options", __import__("json").dumps(payload))
+
+    def test_the_request_for_any_other_form_is_unchanged(self):
+        fields = [{"key": "cell_0", "label": "Allergies", "kind": "text", "locator": {"cell": 0}},
+                  {"key": "cell_1", "label": "Electronically signed by", "kind": "text", "locator": {"cell": 1}}]
+        payload = self.captured_payload(fields, context_labels=("Statement",))
+        self.assertEqual(payload, {"questions": [
+            {"key": "cell_0", "label": "Allergies", "answer_policy": "documented_source_only"},
+            {"key": "cell_1", "label": "Electronically signed by", "answer_policy": "documented_source_only"}],
+            "context_labels": ["Statement"], "notes": "Smoker: yes"})
