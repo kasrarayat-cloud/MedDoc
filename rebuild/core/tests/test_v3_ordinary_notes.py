@@ -1343,3 +1343,68 @@ class RecoveredNoteContextWorker(V3EncounterFixture, TestCase):
             self.assertIn(quote, body)
         self.assertLess(body.index(quotes[0]), body.index(quotes[1]))
         self.assertEqual(__import__('hashlib').sha256(exported).hexdigest(), encounter.export_sha256)
+
+class RecoveredParagraphRefutation(SimpleTestCase):
+    def test_a_specific_clinical_question_is_not_a_generic_narrative_destination(self):
+        cases = [
+            ('Lt knee', ['The patient has right knee pain.', 'He reports stiffness in the morning.']),
+            ('Allergies', ['The patient takes aspirin daily.', 'She also takes vitamin D.']),
+        ]
+        for label, quotes in cases:
+            with self.subTest(label=label):
+                out = run(' '.join(quotes), {label: quotes}, fields=[field('one', label, 'long_text')])[label]
+                self.assertEqual((out['status'], out['text']), ('conflict', ''))
+                self.assertNotIn('suggestion', out)
+
+    def test_intact_plan_preserves_repeated_instructions_as_separate_occurrences(self):
+        notes = 'The patient will take one tablet now. She will wait five minutes. The patient will take one tablet now.'
+        fields = [field('plan', 'Plan', 'long_text')]
+        units, _ = g.source_units(notes, fields)
+        self.assertEqual(len(units), 3)
+        picks = g.UnitSelections(fields=[g.UnitSelection(key='plan', unit_ids=[u['id'] for u in units], conflict=False)])
+        answers = g.validate_selections(notes, fields, picks, evidence_contract=g.TAB_CONTRACT)
+        out = g.v3_adopted(fields, answers, notes, fields, ())['plan']
+        self.assertEqual((out['status'], out['text']), ('supported', '\n'.join(u['quote'] for u in units)))
+        self.assertEqual([e['start'] for e in out['evidence']], [u['start'] for u in units])
+
+
+@override_settings(**LIVE)
+class RecoveredParagraphExport(V3EncounterFixture, TestCase):
+    def test_repeated_hpi_occurrences_survive_worker_review_and_word_export(self):
+        from core.jobs import enqueue, run_one
+        from core.security import private_path
+        from .test_word_v3_workflow import part_text
+        quotes = ['The patient reports pain after walking.', 'He is resting for five minutes.',
+                  'The patient reports pain after walking.']
+        notes = ' '.join(quotes)
+        encounter = Encounter.objects.get(pk=self.encounter.pk)
+        self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/notes/',
+                                          {'revision': encounter.revision, 'notes': notes}).status_code, 302)
+        def respond(**kwargs):
+            payload = json.loads(kwargs['messages'][0]['content'])
+            response = unit_response(payload, {})
+            fields = [{'key': q['key'], 'unit_ids': [u['id'] for u in payload['source_units']]
+                       if q['label'] == 'Reason for visit' else [], 'conflict': False} for q in payload['questions']]
+            response.content = [SimpleNamespace(type='text', text=json.dumps({'fields': fields}))]
+            return response
+        with patch('anthropic.Anthropic') as client:
+            client.return_value.messages.create.side_effect = respond
+            job = enqueue(Encounter.objects.get(pk=self.encounter.pk), self.user)
+            self.assertTrue(run_one())
+        job.refresh_from_db()
+        self.assertEqual(job.state, 'succeeded', job.error)
+        encounter.refresh_from_db()
+        answer = encounter.answers[self.key('Reason for visit')]
+        self.assertEqual((answer['status'], answer['text']), ('supported', '\n'.join(quotes)))
+        blanks = {'blank_' + f['key']: 'on' for f in self.version.fields
+                  if f['label'] != 'Reason for visit' and f['kind'] not in ('signature', 'initials')}
+        self.assertEqual(self.save({'Reason for visit': answer['text']}, extra=blanks).status_code, 302)
+        response = self.finalize()
+        encounter.refresh_from_db()
+        self.assertEqual(encounter.status, 'finalized', [str(m) for m in response.context['messages']])
+        data = private_path(encounter.export_path).read_bytes()
+        body = part_text(data)
+        self.assertEqual(body.count(quotes[0]), 2)
+        self.assertLess(body.index(quotes[0]), body.index(quotes[1]))
+        self.assertLess(body.index(quotes[1]), body.rindex(quotes[0]))
+        self.assertEqual(__import__('hashlib').sha256(data).hexdigest(), encounter.export_sha256)
