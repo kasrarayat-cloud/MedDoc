@@ -325,6 +325,13 @@ def missing_boxes(fields, outline_rows):
     return found
 
 
+def checkboxes_off_box(fields):
+    """Labels of checkbox fields whose place is not a box (a checkbox on a text answer area, as manual mapping once
+    stored): every export of them is refused, so the mapping is never confirmed."""
+    return [label_of(field) for field in fields or [] if field.get('kind') == 'checkbox'
+            and ((field.get('locator') or {}).get('target') or {}).get('type') != 'checkboxes']
+
+
 def insert_in_document_order(fields, added, outline_rows):
     """`fields` with `added` placed before the first field that comes later in the document. Existing fields keep
     their order; a field whose place the outline does not list keeps its position."""

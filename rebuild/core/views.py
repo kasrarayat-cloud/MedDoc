@@ -490,6 +490,8 @@ def v3_confirm(request,t):
         # ⚠️ A box that does not exist can never be confirmed (it would only refuse at export, after the review).
         missing=v3_mapping.missing_boxes(latest.fields,v3_outline(t))
         if missing:raise ValidationError('These fields point at a printed box the form does not have: '+field_list(missing)+' Remove each one and add it again with the right box number.')
+        off_box=v3_mapping.checkboxes_off_box(latest.fields)
+        if off_box:raise ValidationError('These checkbox fields point at a place that is not a box: '+field_list(off_box)+' Remove each one and add it again on its printed box or checkbox control, or as text.')
         if latest.confirmed:
             messages.info(request,'This mapping version was already confirmed.')
             return redirect('template_detail',pk=t.pk)

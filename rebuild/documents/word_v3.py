@@ -3051,6 +3051,9 @@ def place_box_refs(index, slot):
     return []
 
 
+#: ⚠️ A checkbox on a text answer area was accepted, confirmed, and then refused at every export (fill_mismatch).
+NOT_A_BOX = ("That place is a %s, which is not a checkbox: choose a printed box or a checkbox control as the place, or "
+             "add this answer as text.")
 UNNUMBERED_CELL = ("This cell's preview does not show exactly its boxes (a legacy checkbox field, or boxes nested inside "
                    "the cell), so a box number cannot name one of them: choose the line inside the cell, or the checkbox "
                    "itself, as the place.")
@@ -3166,6 +3169,8 @@ def locate(data: bytes, targets: list) -> list:
             elif typ in ("dropDownList", "comboBox"):
                 target, kind = {"type": "sdt_choice"}, "choice"
                 options = [o for o in slot.info["options"] if o and not PLACEHOLDER_TEXT.match(o)]
+            elif kind == "checkbox":
+                fail(NOT_A_BOX % "Word text control", "invalid_mapping")
             else:
                 target = {"type": "sdt_text", "date": typ == "date"} if typ == "date" else {"type": "sdt_text"}
         elif slot.kind == "ff":
@@ -3175,6 +3180,8 @@ def locate(data: bytes, targets: list) -> list:
                 target, kind = {"type": "checkboxes", "boxes": [{"kind": "ff", "part": slot.part, "slot": slot.path}]}, "checkbox"
             elif field_kind == "FORMDROPDOWN":
                 target, kind, options = {"type": "ff_dropdown"}, "choice", [o for o in slot.info.get("options", []) if o]
+            elif kind == "checkbox":
+                fail(NOT_A_BOX % "legacy text field", "invalid_mapping")
             else:
                 target = {"type": "ff_text"}
         if target is None:
