@@ -1,8 +1,8 @@
 """Review guards ported from the draft branch feat/wm-narrative (4396c801): its flag-independent fixes only.
 
 Offline and synthetic. Ordinary forms generate in fixture mode. The qualified Word form's resolver is replaced by
-`SyntheticResolver`, which resolves the way the engine does (the chosen wording, its answer tokens, and the signer —
-the finalizing clinician once finalized, else the viewer); no Word runtime and no provider is involved.
+`synthetic_resolver`, which resolves the way the engine does for this fixture's statements (the chosen wording, and the
+signer: the finalizing clinician once finalized, else the viewer); no Word runtime and no provider is involved.
 """
 import hashlib
 import html
@@ -175,8 +175,8 @@ NOTES = '\n'.join([field['label'] + ': ' + VALUES[field['key']] for field in FIE
 
 
 def synthetic_resolver(encounter, actor, decisions=None):
-    """`views.wm_resolve` as the engine answers it: the chosen wordings, filled from the answers, signed by the finalizing
-    clinician once finalized and otherwise by the viewer (`trusted_context.signer_name`)."""
+    """`views.wm_resolve` as the engine answers it for these statements (none has an answer token): the chosen wordings,
+    signed by the finalizing clinician once finalized and otherwise by the viewer (`trusted_context.signer_name`)."""
     decisions = decisions if decisions is not None else encounter.template_review.get('decisions', {})
     signer = encounter.finalized_by if encounter.status == 'finalized' else actor
     name = ' '.join(signer.get_full_name().split()) or signer.email
