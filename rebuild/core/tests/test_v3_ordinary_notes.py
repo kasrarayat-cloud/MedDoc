@@ -701,6 +701,12 @@ class RoundTwoRefutation(SimpleTestCase):
         for notes in ('The findings are as follows.', 'The findings are as follows.\nEffusion is present.'):
             with self.subTest(notes=notes):
                 self.held(notes, 'Findings', 'The findings are as follows.', 'The findings are as follows.')
+        # The shape is read at the end and the start of the value, not anywhere in it.
+        for notes, label, text in (('Plan: follow up in two weeks.', 'Plan', 'follow up in two weeks.'),
+                                   ('Findings: effusion is seen on the lateral view.', 'Findings',
+                                    'effusion is seen on the lateral view.')):
+            answer = run(notes, {label: [notes]}, fields=REFUTED)[label]
+            self.assertEqual((answer['status'], answer['text']), ('supported', text), notes)
 
 
 @override_settings(**LIVE)

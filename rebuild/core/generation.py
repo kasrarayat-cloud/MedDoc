@@ -1584,6 +1584,20 @@ INNER_SENTENCE_END = re.compile(r'[.!?\u2026]+["\'\u201d\u2019)\]]*\s+(?=\S)|[\u
 ASKS_OR_TRAILS_OFF = re.compile(r'(?:[?\uff1f\u2026]|\.\.)["\'\u201d\u2019)\]*_~`\s]*$')
 
 
+#: ⚠️ A VALUE OR SENTENCE SHAPED AS A POINTER ANSWERS NOTHING (round 2, F7): 'to follow.', 'as follows —', '**as follows**',
+#: 'see next line.', 'see beneath.', 'The findings are as follows.' were adopted as the Findings answer. STRUCTURE first -
+#: it ends in a colon (`ends_in_colon`) or a dash; then POSITION - its LAST word points onward or its FIRST word is 'see'.
+#: These words only ever HOLD; a pointer they miss above the lines it introduces is still held by the paragraph rule.
+POINTING_END = re.compile(r'(?:[\-\u2010-\u2015\u2212]|' + LETTER_BEFORE + r'(?:follows?|following|below|beneath|overleaf))'
+                          r'[\s.!?;,*_~`"\'\u201d\u2019)\]]*$', re.I)
+POINTING_START = re.compile(r'^[\s*_~`"\'\u201c\u2018(\[]*see' + LETTER_AFTER, re.I)
+
+
+def points_elsewhere(text):
+    """Whether a value or sentence is shaped as a pointer to other lines (`POINTING_END`, `POINTING_START`)."""
+    return bool(ends_in_colon(text) or POINTING_END.search(text) or POINTING_START.search(text))
+
+
 def inner_sentence_end(text):
     """Whether one unit's text holds more than one sentence (`INNER_SENTENCE_END`)."""
     for match in INNER_SENTENCE_END.finditer(text):
@@ -1701,6 +1715,8 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
                 if inner_sentence_end(quote): guarded=True
                 # (d) A value that asks or trails off answers nothing ('Nausea, vomiting or abdominal pain?').
                 if ASKS_OR_TRAILS_OFF.search(own_value[1] if own_value else quote): guarded=True
+                # (e) Nor does one shaped as a pointer to other lines (F7).
+                if points_elsewhere(own_value[1] if own_value else quote): guarded=True
             # Dates and consent are not inferred from a procedure date or general
             # narrative. These source subjects must themselves be documented.
             if any(re.search(subject,label,re.I) and not re.search(subject,quote,re.I) for subject in SUBJECTS): guarded=True
