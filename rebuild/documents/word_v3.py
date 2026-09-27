@@ -629,8 +629,11 @@ class Area:
 #: A list marker is 1-3 digits, ONE letter or a roman numeral (i..xxx), as 'M.' 'M)' or '(M)' before a space.
 #: ⚠️ Never a multi-letter word: 'Rt.', 'Lt.', 'Bil.', 'Dr.', 'No.' are text, and stripping them turned 'Rt. knee' and
 #: 'Lt. knee' into the same label - and, through the option reader, the left knee into the right one.
+#: ⚠️ AND NEVER A SIDE: 'L.' 'R.' 'L)' 'R)' (either case) and ANY single letter in parentheses - '(L)' '(R)' '(a)' '(i)'
+#: - are kept (fail closed): '(L) Effusion' and '(R) Effusion' both became 'Effusion', and a notes line
+#: 'Effusion: Yes' that names no side filled the left-only question.
 LIST_MARK = r"(?:\d{1,3}|[A-Za-z]|(?i:x{0,2}(?:i{1,3}|iv|vi{0,3}|ix)|x{1,3}))"
-LIST_MARKER = re.compile(r"^(?:" + LIST_MARK + r"[.)]|\(" + LIST_MARK + r"\))\s+")
+LIST_MARKER = re.compile(r"^(?:(?![LRlr][.)])" + LIST_MARK + r"[.)]|\((?![A-Za-z]\))" + LIST_MARK + r"\))\s+")
 
 
 def clean_label(text: str) -> str:
@@ -2039,9 +2042,7 @@ def inspect(data: bytes) -> dict:
         fail("The form has more answer areas than one mapping can hold (%d)." % MAX_FIELDS, "too_many_fields")
     fields = [area_to_field(i + 1, a) for i, a in enumerate(areas)]
     for field in fields:
-        ticked = printed_ticked(detector.index, field)
-        if ticked:
-            field["printed_ticked"] = ticked
+        annotate_printed(detector.index, field)
     return {"contract": CONTRACT, "fields": fields, "notes": notes}
 
 
@@ -2271,6 +2272,29 @@ def glyph_boxes(p):
     return out
 
 
+def box_pieces(p):
+    """[(kind, node, n)] for EVERY box paragraph p shows, in the order its text shows them (paragraph_text: a checkbox
+    control is one box): ('glyph', None, n) for its n-th printed glyph box (glyph_boxes' numbering), ('sdt', the
+    control, None) for a checkbox content control, ('ff', the field's begin run, None) for a legacy checkbox."""
+    _, pieces = paragraph_text(p)
+    out, n = [], 0
+    for pc in pieces:
+        for ch in piece_text(pc):
+            if ch not in (BOX, CHECKED):
+                continue
+            if pc.kind == "obj":
+                out.append(("sdt" if pc.obj == "sdt_checkbox" else "ff", pc.node, None))
+            else:
+                out.append(("glyph", None, n))
+                n += 1
+    return out
+
+
+def cell_boxes(tc):
+    """[(kind, node)] for every box a table cell's paragraphs show, in order (box_pieces' kinds)."""
+    return [(kind, node) for p in tc.iter(q("w:p")) for kind, node, _ in box_pieces(p)]
+
+
 RADIO_CODES = (0x81, 0xF081, 0xA1, 0xF0A1)
 
 
@@ -2318,7 +2342,8 @@ def set_sdt_checkbox(sdt, ticked):
         fail("A stored checkbox is no longer a checkbox control.", "mapping_mismatch")
     ch = cb.find(q("w14:checked"))
     if ch is None:
-        ch = etree.SubElement(cb, q("w14:checked"))
+        ch = etree.Element(q("w14:checked"))
+        cb.insert(0, ch)                         # schema order: checked, checkedState, uncheckedState
     ch.set(q("w14:val"), "1" if ticked else "0")
     state = cb.find(q("w14:checkedState" if ticked else "w14:uncheckedState"))
     code = (state.get(q("w14:val")) if state is not None else None) or ("2612" if ticked else "2610")
@@ -2370,7 +2395,18 @@ CELL_MARKS = ("X", "x", "✓", "✔", "√", "✗", "✘")
 
 
 def set_cell_box(tc, ticked):
-    """A box cell: its first printed glyph box when it has one; otherwise an X written in (or removed from) it."""
+    """A box cell: the checkbox control it holds, set as that control; else its first printed glyph box when it has
+    one; otherwise an X written in (or removed from) it.
+    ⚠️ A CONTROL IS NEVER WRITTEN OVER: an X over a checkbox control refused every answer, and an untick left a
+    printed tick the reader could not see. A cell holding a control beside another box is refused: which box its
+    answer means is not known."""
+    boxes = cell_boxes(tc)
+    if any(kind != "glyph" for kind, _ in boxes):
+        if len(boxes) != 1:
+            fail("A table cell holds a checkbox control beside another box, so which box its answer means is not known.",
+                 "unsupported_layout")
+        kind, node = boxes[0]
+        return set_sdt_checkbox(node, ticked) if kind == "sdt" else set_ff_checkbox(node, ticked)
     for p in tc.iter(q("w:p")):
         if glyph_boxes(p):
             return set_glyph(p, 0, ticked)
@@ -2698,23 +2734,80 @@ def fill(data: bytes, fields: list, answers: dict) -> bytes:
 DISPLAYED = ("sdt_choice", "ff_dropdown")
 
 
+def _symbol_code(code):
+    """A glyph's code point, a symbol font's private-use form (U+F0xx) read as the plain byte it stands for."""
+    return code - 0xF000 if 0xF000 <= code <= 0xF0FF else code
+
+
+def _state_code(cb, checked):
+    """The glyph a checkbox control's own checkedState / uncheckedState names (☒ / ☐ when it names none)."""
+    state = cb.find(q("w14:checkedState" if checked else "w14:uncheckedState"))
+    try:
+        return _symbol_code(int((state.get(q("w14:val")) if state is not None else None) or ("2612" if checked else "2610"), 16))
+    except ValueError:
+        return None
+
+
+def _shown_code(sdt):
+    """The one glyph a control's content displays, or None when it displays none or more than one."""
+    content = sdt.find(q("w:sdtContent"))
+    codes = []
+    for node in content.iter(T, SYM) if content is not None else ():
+        if any(a.tag == FALLBACK for a in node.iterancestors()):
+            continue
+        if node.tag == T:
+            codes += [ord(c) for c in (node.text or "") if not c.isspace()]
+        else:
+            try:
+                codes.append(int(node.get(q("w:char")) or "", 16))
+            except ValueError:
+                return None
+    return _symbol_code(codes[0]) if len(codes) == 1 else None
+
+
+def sdt_checkbox_state(sdt):
+    """⚠️ A CHECKBOX CONTROL IS TICKED OR UNTICKED ONLY WHEN ITS w14:checked FLAG AND THE GLYPH IT DISPLAYS AGREE:
+    True / False, or None (cannot be read) when the glyph is not the one the flag's own checkedState / uncheckedState
+    names. The read-back trusted the flag alone, so a writer that cleared the flag but left ☒ passed as unticked."""
+    pr = sdt.find(q("w:sdtPr"))
+    cb = pr.find(q("w14:checkbox")) if pr is not None else None
+    if cb is None:
+        return None
+    flag = cb.find(q("w14:checked"))
+    checked = (flag.get(q("w14:val")) if flag is not None else "0") in ("1", "true")
+    shown = _shown_code(sdt)
+    return checked if shown is not None and shown == _state_code(cb, checked) else None
+
+
+def ff_checkbox_state(begin_run):
+    """A legacy checkbox's state (its explicit checked state, else its default), or None when it is not one."""
+    fc = begin_run.find(FLDCHAR)
+    data = fc.find(q("w:ffData")) if fc is not None else None
+    info = ff_info(data) if data is not None else {}
+    return info.get("checked") if info.get("field") == "FORMCHECKBOX" else None
+
+
 def box_state(index, box):
     """Whether one box is ticked, read from the package: True, False, or None when it cannot be read."""
     slot = index.by_id.get("%s#%s" % (box["part"], box["slot"]))
     if slot is None:
         return None
     if box["kind"] == "sdt":
-        info = sdt_info(slot.el)
-        return info["checked"] if info["type"] == "checkbox" else None
+        return sdt_checkbox_state(slot.el)
     if box["kind"] == "ff":
-        data = slot.el.find(FLDCHAR).find(q("w:ffData"))
-        info = ff_info(data) if data is not None else {}
-        return info.get("checked") if info.get("field") == "FORMCHECKBOX" else None
+        return ff_checkbox_state(slot.el)
     if box["kind"] == "glyph":
         boxes = glyph_boxes(slot.el)
         n = box.get("glyph", 0)
         return boxes[n][2] == CHECKED if n < len(boxes) else None
     if box["kind"] == "cell":
+        # the control a box cell holds is read as that control (set_cell_box writes it so); beside another box: unread
+        boxes = cell_boxes(slot.el)
+        if any(kind != "glyph" for kind, _ in boxes):
+            if len(boxes) != 1:
+                return None
+            kind, node = boxes[0]
+            return sdt_checkbox_state(node) if kind == "sdt" else ff_checkbox_state(node)
         for p in slot.el.iter(q("w:p")):
             boxes = glyph_boxes(p)
             if boxes:
@@ -2745,7 +2838,9 @@ def displayed_option(index, field):
         if dd is None:
             return None
         entries = [x.get(q("w:val")) for x in dd.findall(q("w:listEntry"))]
+        # the entry Word shows: w:result, else w:default, else the first
         res = dd.find(q("w:result"))
+        res = res if res is not None else dd.find(q("w:default"))
         at = int(res.get(q("w:val")) or 0) if res is not None else 0
         if not 0 <= at < len(entries):
             return None
@@ -2813,6 +2908,25 @@ def printed_ticked(index, field):
         return [i for i, state in enumerate(option_states(index, field)) if state]
     except (AttributeError, IndexError, KeyError, TypeError, ValueError):
         return []                       # an annotation for the review page; never a reason to refuse the upload
+
+
+def printed_unread(index, field):
+    """Positions whose printed state cannot be read (a control whose flag and glyph disagree, a cell holding a control
+    beside another box): the pages never call them unticked. An unreadable field is unread throughout."""
+    if field.get("kind") not in ("choice", "multi_choice", "checkbox"):
+        return []
+    try:
+        return [i for i, state in enumerate(option_states(index, field)) if state is None]
+    except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+        return list(range(len(field.get("options") or [])))
+
+
+def annotate_printed(index, field):
+    """The blank form's printed state on a field: `printed_ticked` and `printed_unread`, each only when not empty."""
+    for name, read in (("printed_ticked", printed_ticked), ("printed_unread", printed_unread)):
+        positions = read(index, field)
+        if positions:
+            field[name] = positions
 
 
 def verify_options(data, fields, answers):
@@ -2883,22 +2997,66 @@ def write_table_rows(index, field, answer):
 MANUAL_KINDS = {"text", "long_text", "date", "time", "checkbox", "choice", "signature", "initials"}
 
 
-def boxes_in_cell(tslot):
-    """[(paragraph slot, glyph number)] for every printed glyph box directly in a table cell, in order."""
-    return [(c, i) for c in tslot.children if c.kind == "p" for i in range(len(glyph_boxes(c.el)))]
+def box_key(box) -> str:
+    """One box ref as text (kind, part, slot, and a glyph box's number): how the outline lists the boxes of a place,
+    and how the pages find a field's box among them."""
+    kind = box.get("kind", "")
+    return "%s:%s#%s:%s" % (kind, box.get("part", ""), box.get("slot", ""), box.get("glyph") if kind == "glyph" else "")
 
 
-def place_boxes(slot) -> int:
-    """How many printed boxes a place holds (the numbering a clinician's box number counts in)."""
+def _paragraph_refs(index, pslot):
+    """Box refs for every box paragraph slot `pslot` shows, in order (box_pieces); None for a control the index
+    cannot address (one nested where no slot reaches it)."""
+    refs = []
+    for kind, node, n in box_pieces(pslot.el):
+        if kind == "glyph":
+            refs.append({"kind": "glyph", "part": pslot.part, "slot": pslot.path + "/glyphs", "glyph": n})
+            continue
+        control = index.by_el.get(id(node))
+        refs.append({"kind": kind, "part": control.part, "slot": control.path}
+                    if control is not None and control.kind == kind else None)
+    return refs
+
+
+def _boxes_shown(el) -> int:
+    return sum(1 for ch in text_of(el) if ch in (BOX, CHECKED))
+
+
+def place_box_refs(index, slot):
+    """⚠️ THE BOXES A PLACE'S PREVIEW SHOWS, IN ITS ORDER - the numbering a clinician's box number counts in - as box
+    refs the writers and the read-back understand: a printed glyph box, a checkbox content control and a legacy
+    checkbox alike (None for a control no slot addresses). Counting glyph boxes only mapped box 2 'Left' of
+    'Side: ☐ Right [control] Left ☐ Bilateral' to Bilateral, and D03's 'Red' to 'Other'.
+
+    A paragraph's preview is its paragraph_text, which shows every checkbox control as one box, so its boxes are
+    numbered as shown. A cell's preview is its text, which does not show a legacy checkbox and does show boxes nested
+    inside the cell: a cell is numbered only when its preview shows exactly its own paragraphs' boxes, each control
+    once; otherwise None, and the cell refuses a box number (its line, or the checkbox itself, is the place)."""
     if slot.kind in ("p", "glyphs"):
-        return len(glyph_boxes(slot.el))
+        return _paragraph_refs(index, slot if slot.kind == "p" else slot.parent)
     if slot.kind == "tc":
-        return len(boxes_in_cell(slot))
+        refs = [ref for c in slot.children if c.kind == "p" for ref in _paragraph_refs(index, c)]
+        for ref in refs:
+            if ref is None or ref["kind"] == "ff":
+                return None
+            if ref["kind"] == "sdt":
+                content = index.by_id["%s#%s" % (ref["part"], ref["slot"])].el.find(q("w:sdtContent"))
+                if content is None or _boxes_shown(content) != 1:
+                    return None
+        return refs if _boxes_shown(slot.el) == len(refs) else None
     if slot.kind == "sdt":
-        return 1 if slot.info.get("type") == "checkbox" else 0
+        return [{"kind": "sdt", "part": slot.part, "slot": slot.path}] if slot.info.get("type") == "checkbox" else []
     if slot.kind == "ff":
-        return 1 if slot.info.get("field") == "FORMCHECKBOX" else 0
-    return 0
+        return [{"kind": "ff", "part": slot.part, "slot": slot.path}] if slot.info.get("field") == "FORMCHECKBOX" else []
+    return []
+
+
+#: ⚠️ A checkbox on a text answer area was accepted, confirmed, and then refused at every export (fill_mismatch).
+NOT_A_BOX = ("That place is a %s, which is not a checkbox: choose a printed box or a checkbox control as the place, or "
+             "add this answer as text.")
+UNNUMBERED_CELL = ("This cell's preview does not show exactly its boxes (a legacy checkbox field, or boxes nested inside "
+                   "the cell), so a box number cannot name one of them: choose the line inside the cell, or the checkbox "
+                   "itself, as the place.")
 
 
 def box_number(t, count):
@@ -2937,11 +3095,17 @@ def outline(data: bytes) -> dict:
             preview = s.info.get("name") or s.info["field"]
         else:
             preview = detector.ptext(s.el)[0]
-        rows.append({"slot": s.id, "kind": s.kind, "part": "body" if s.part == "word/document.xml" else
-                     ("header" if "header" in s.part else "footer"),
-                     "preview": re.sub(r"\s+", " ", preview.replace("\x00", "▢")).strip()[:120],
-                     "context": detector.heading_before(s)[:120],
-                     "control": s.info.get("type") or s.info.get("field") or "", "boxes": place_boxes(s)})
+        refs = place_box_refs(detector.index, s)
+        row = {"slot": s.id, "kind": s.kind, "part": "body" if s.part == "word/document.xml" else
+               ("header" if "header" in s.part else "footer"),
+               "preview": re.sub(r"\s+", " ", preview.replace("\x00", "▢")).strip()[:120],
+               "context": detector.heading_before(s)[:120],
+               "control": s.info.get("type") or s.info.get("field") or "", "boxes": len(refs or [])}
+        if refs and s.kind in ("p", "glyphs", "tc"):
+            row["box_keys"] = [box_key(ref) if ref is not None else None for ref in refs]
+        if refs is None:
+            row["unnumbered_boxes"] = True
+        rows.append(row)
     return {"contract": CONTRACT, "slots": rows}
 
 
@@ -2961,28 +3125,38 @@ def locate(data: bytes, targets: list) -> list:
             fail("The chosen place is not in this form.", "invalid_mapping")
         options = [option_text(str(o))[:200] for o in (t.get("options") or []) if option_text(str(o))]
         target = None
-        if slot.kind == "p":
+        if slot.kind == "glyphs" or slot.kind == "p" and kind == "checkbox":
+            # ⚠️ THE CLINICIAN'S BOX, NOT THE FIRST ONE ('Smoker? ☐ Yes ☐ No' mapped as box 2 ticked Yes), counted among
+            # EVERY box the preview shows - a checkbox control included - and written as whatever kind of box it is.
+            refs = place_box_refs(detector.index, slot)
+            box = box_number(t, len(refs))
+            if refs[box] is None:
+                fail("Box %d of that place is a checkbox control QuillMD cannot address there, so it cannot be filled."
+                     % (box + 1), "invalid_mapping")
+            target, kind = {"type": "checkboxes", "boxes": [refs[box]]}, "checkbox"
+            if slot.kind == "glyphs":
+                slot = slot.parent
+        elif slot.kind == "p":
             text = detector.ptext(slot.el)[0]
-            if kind == "checkbox":
-                # ⚠️ THE CLINICIAN'S BOX, NOT THE FIRST ONE: 'Smoker? ☐ Yes ☐ No' mapped as box 2 ticked Yes.
-                n = box_number(t, place_boxes(slot))
-                target = {"type": "checkboxes", "boxes": [{"kind": "glyph", "part": slot.part, "slot": slot.path + "/glyphs", "glyph": n}]}
-            elif not text.strip(" \t\x00"):
+            if not text.strip(" \t\x00"):
                 target = {"type": "paragraph"}
             else:
                 end = len(text.rstrip())
                 target = {"type": "span", "start": end, "end": end, "shape": "after_label"}
-        elif slot.kind == "tc" and kind == "checkbox" and boxes_in_cell(slot):
-            para, i = boxes_in_cell(slot)[box_number(t, place_boxes(slot))]
-            target = {"type": "checkboxes", "boxes": [{"kind": "glyph", "part": para.part, "slot": para.path + "/glyphs", "glyph": i}]}
         elif slot.kind == "tc":
-            if kind == "checkbox":
-                box_number(t, 1)
-            if not detector.is_empty_cell(slot):
-                fail("The chosen cell holds printed text. Choose the empty answer cell, or a paragraph to write after.",
-                     "invalid_mapping")
-            target = {"type": "checkboxes", "boxes": [{"kind": "cell", "part": slot.part, "slot": slot.path}]} \
-                if kind == "checkbox" else {"type": "cell"}
+            refs = place_box_refs(detector.index, slot) if kind == "checkbox" else []
+            if refs is None:
+                fail(UNNUMBERED_CELL, "invalid_mapping")
+            if refs:
+                target = {"type": "checkboxes", "boxes": [refs[box_number(t, len(refs))]]}
+            else:
+                if kind == "checkbox":
+                    box_number(t, 1)
+                if not detector.is_empty_cell(slot):
+                    fail("The chosen cell holds printed text. Choose the empty answer cell, or a paragraph to write after.",
+                         "invalid_mapping")
+                target = {"type": "checkboxes", "boxes": [{"kind": "cell", "part": slot.part, "slot": slot.path}]} \
+                    if kind == "checkbox" else {"type": "cell"}
         elif slot.kind == "sdt":
             typ = slot.info["type"]
             content = slot.el.find(q("w:sdtContent"))
@@ -2995,6 +3169,8 @@ def locate(data: bytes, targets: list) -> list:
             elif typ in ("dropDownList", "comboBox"):
                 target, kind = {"type": "sdt_choice"}, "choice"
                 options = [o for o in slot.info["options"] if o and not PLACEHOLDER_TEXT.match(o)]
+            elif kind == "checkbox":
+                fail(NOT_A_BOX % "Word text control", "invalid_mapping")
             else:
                 target = {"type": "sdt_text", "date": typ == "date"} if typ == "date" else {"type": "sdt_text"}
         elif slot.kind == "ff":
@@ -3004,12 +3180,10 @@ def locate(data: bytes, targets: list) -> list:
                 target, kind = {"type": "checkboxes", "boxes": [{"kind": "ff", "part": slot.part, "slot": slot.path}]}, "checkbox"
             elif field_kind == "FORMDROPDOWN":
                 target, kind, options = {"type": "ff_dropdown"}, "choice", [o for o in slot.info.get("options", []) if o]
+            elif kind == "checkbox":
+                fail(NOT_A_BOX % "legacy text field", "invalid_mapping")
             else:
                 target = {"type": "ff_text"}
-        elif slot.kind == "glyphs":
-            n_glyph = box_number(t, place_boxes(slot))
-            target, kind = {"type": "checkboxes", "boxes": [{"kind": "glyph", "part": slot.part, "slot": slot.path, "glyph": n_glyph}]}, "checkbox"
-            slot = slot.parent
         if target is None:
             fail("That place cannot take an answer.", "invalid_mapping")
         area = Area(kind, label, slot, target, context=clean_label(str(t.get("context") or detector.context_for(slot)))[:300],
@@ -3018,8 +3192,6 @@ def locate(data: bytes, targets: list) -> list:
         field = area_to_field(n, area)
         field["key"] = "m3_%s" % hashlib.sha256(("%s|%s|%s" % (slot.id, json_dumps(target), label)).encode()).hexdigest()[:12]
         field["origin"] = "manual"
-        ticked = printed_ticked(detector.index, field)
-        if ticked:
-            field["printed_ticked"] = ticked
+        annotate_printed(detector.index, field)
         out.append(field)
     return out

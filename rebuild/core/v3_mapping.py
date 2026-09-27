@@ -192,12 +192,13 @@ def shows_words(field):
     return target.get('type') in ('sdt_choice', 'ff_dropdown') or target.get('write') == 'option_text'
 
 
-def printed_words(field):
-    """The options the blank form itself shows chosen, as printed."""
+def printed_words(field, key='printed_ticked'):
+    """The options the blank form itself shows chosen (or, with key='printed_unread', whose printed state QuillMD
+    cannot read), as printed."""
     from documents.word_v3 import printed_options
     printed = printed_options(field)
     words = []
-    for i in field.get('printed_ticked') or []:
+    for i in field.get(key) or []:
         if isinstance(i, int) and 0 <= i < len(printed) and str(printed[i]) not in words:
             words.append(str(printed[i]))
     return words
@@ -206,6 +207,12 @@ def printed_words(field):
 def as_printed(field):
     verb = 'shown' if shows_words(field) else 'ticked'
     words = printed_words(field)
+    unread = printed_words(field, 'printed_unread')
+    if unread:
+        # ⚠️ Never "with no option ticked" about a box the reader could not read.
+        return ('the form keeps what it prints' + (': ' + ', '.join(words) + ' ' + verb if words else '')
+                + '; QuillMD cannot read whether ' + ', '.join(unread) + (' is ' if len(unread) == 1 else ' are ')
+                + verb + ' on the blank form')
     if words:
         return 'the form keeps what it prints: ' + ', '.join(words) + ' ' + verb
     return 'the form keeps what it prints, with no option ' + verb
@@ -216,7 +223,9 @@ def review_note(field):
     kind = field.get('kind')
     if kind == 'checkbox':
         return ('Ticked here, the box is exported ticked; left unticked, it is exported unticked'
-                + (', although the blank form prints it ticked' if field.get('printed_ticked') else '') + '.')
+                + (', although the blank form prints it ticked' if field.get('printed_ticked') else '')
+                + ('. QuillMD cannot read whether the blank form prints this box ticked' if field.get('printed_unread') else '')
+                + '.')
     if kind in ('choice', 'multi_choice'):
         if shows_words(field):
             first = 'The chosen option is written in its place on the form'
@@ -230,7 +239,7 @@ def review_note(field):
 
 def blank_note(field):
     """What "Leave blank - reviewed" exports, when that is not an empty answer area."""
-    if field.get('kind') in ('choice', 'multi_choice') and field.get('printed_ticked'):
+    if field.get('kind') in ('choice', 'multi_choice') and (field.get('printed_ticked') or field.get('printed_unread')):
         return 'the exported ' + as_printed(field)[len('the '):]
     return ''
 
@@ -302,19 +311,25 @@ def open_places(outline_rows, fields, query=''):
 
 
 def missing_boxes(fields, outline_rows):
-    """Labels of fields with a glyph box numbered beyond the boxes its place holds (or a place the form lacks)."""
-    counts = {row['slot']: row.get('boxes') or 0 for row in outline_rows or []}
+    """Labels of fields with a printed glyph box the form does not have: a box every place's `box_keys` in the
+    outline leaves out (a number beyond the glyph boxes of its line, or a line the form lacks)."""
+    from documents.word_v3 import box_key
+    shown = {key for row in outline_rows or [] for key in row.get('box_keys') or [] if key}
     found = []
     for field in fields or []:
         target = (field.get('locator') or {}).get('target') or {}
         for box in target.get('boxes') or []:
-            if box.get('kind') != 'glyph':
-                continue
-            count = counts.get(_slot(box.get('part', ''), box.get('slot', '')), 0)
-            if not 0 <= int(box.get('glyph') or 0) < count:
+            if box.get('kind') == 'glyph' and box_key(box) not in shown:
                 found.append(label_of(field))
                 break
     return found
+
+
+def checkboxes_off_box(fields):
+    """Labels of checkbox fields whose place is not a box (a checkbox on a text answer area, as manual mapping once
+    stored): every export of them is refused, so the mapping is never confirmed."""
+    return [label_of(field) for field in fields or [] if field.get('kind') == 'checkbox'
+            and ((field.get('locator') or {}).get('target') or {}).get('type') != 'checkboxes']
 
 
 def insert_in_document_order(fields, added, outline_rows):

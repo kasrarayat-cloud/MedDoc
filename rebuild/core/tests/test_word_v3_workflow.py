@@ -729,6 +729,8 @@ class V3PrintedTicks(V3Fixture, TestCase):
         self.assertIn("Ticked here, the box is exported ticked; left unticked, it is exported unticked, although the "
                       "blank form prints it ticked.", page)
         self.assertIn("With no option chosen, the form keeps what it prints: No ticked.", page)
+        # M26: "Leave blank - reviewed" on a choice the blank form prints ticked names what the export keeps
+        self.assertIn("decided no answer belongs here; the exported form keeps what it prints: No ticked. Leave", page)
         self.save({"Indication": "synthetic"})
         exported = self.finalized_export()
         text = part_text(exported)
@@ -749,6 +751,52 @@ class V3PrintedTicks(V3Fixture, TestCase):
         self.assertIn("Smoker?  ☒ Yes  ☐ No", text)
         self.assertIn("Hypertension ☒", text)
         self.assertIn("Consent obtained ☐", text)
+
+
+@override_settings(**V3)
+class V3ControlCells(V3Fixture, TestCase):
+    """R2 end to end: a checklist whose boxes are checkbox controls in cells. The page names the box the blank form
+    prints ticked, and an answer sets every control of the checklist."""
+
+    def setUp(self):
+        super().setUp()
+        from documents.test_word_v3 import control_checklist_bytes
+        self.template, _ = self.uploaded(data=control_checklist_bytes(), name="Synthetic reconciliation")
+        self.version = self.confirm(self.template)
+        self.field = next(f for f in self.version.fields if f["kind"] == "multi_choice")
+        self.assertEqual(self.new_encounter(self.version, notes="Synthetic reconciliation notes").status_code, 302)
+        self.encounter = Encounter.objects.get()
+
+    def test_the_page_names_the_printed_tick_and_the_answer_is_exported(self):
+        from documents.test_word_v3 import controls_shown
+        page = self.client.get(f"/encounters/{self.encounter.pk}/").content.decode()
+        self.assertIn("With no option chosen, the form keeps what it prints: Warfarin ticked.", page)
+        self.assertIn("decided no answer belongs here; the exported form keeps what it prints: Warfarin ticked.", page)
+        payload = {"revision": Encounter.objects.get(pk=self.encounter.pk).revision, "answer_" + self.field["key"]: ["Metformin"]}
+        for f in self.version.fields:
+            payload["reviewed_" + f["key"]] = "on"
+        self.assertEqual(self.client.post(f"/encounters/{self.encounter.pk}/save/", payload).status_code, 302)
+        response = self.client.post(f"/encounters/{self.encounter.pk}/finalize/",
+                                    {"revision": Encounter.objects.get(pk=self.encounter.pk).revision, "reviewed": "on"}, follow=True)
+        encounter = Encounter.objects.get(pk=self.encounter.pk)
+        self.assertEqual(encounter.status, "finalized", [str(m) for m in response.context["messages"]])
+        self.assertEqual(controls_shown(private_path(encounter.export_path).read_bytes()), [("☐", "0"), ("☒", "1"), ("☐", "0")])
+
+    def test_a_printed_state_that_cannot_be_read_is_never_called_unticked(self):
+        from core import v3_mapping
+        choice = {"kind": "choice", "options": ["Yes", "No"], "printed_unread": [0],
+                  "locator": {"contract": "v3", "target": {"type": "checkboxes"}}}
+        self.assertEqual(v3_mapping.review_note(choice), "The chosen option is ticked and every other printed option is "
+                         "left unticked. With no option chosen, the form keeps what it prints; QuillMD cannot read "
+                         "whether Yes is ticked on the blank form.")
+        self.assertEqual(v3_mapping.blank_note(choice), "the exported form keeps what it prints; QuillMD cannot read "
+                         "whether Yes is ticked on the blank form")
+        both = {**choice, "options": ["Yes", "No", "Unsure"], "printed_ticked": [1], "printed_unread": [0, 2]}
+        self.assertEqual(v3_mapping.finalized_note(both, {"text": ""}), "No option chosen; the form keeps what it prints: "
+                         "No ticked; QuillMD cannot read whether Yes, Unsure are ticked on the blank form.")
+        box = {"kind": "checkbox", "options": ["Consent"], "printed_unread": [0], "locator": choice["locator"]}
+        self.assertEqual(v3_mapping.review_note(box), "Ticked here, the box is exported ticked; left unticked, it is "
+                         "exported unticked. QuillMD cannot read whether the blank form prints this box ticked.")
 
 
 def smoker_form_bytes():
@@ -821,6 +869,86 @@ class V3BoxNumbers(V3Fixture, TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("point at a printed box the form does not have: Current smoker.", response.context["v3_error"])
         self.assertFalse(MappingConfirmation.objects.filter(version=stale).exists())
+
+
+@override_settings(**V3)
+class V3MixedBoxNumbers(V3Fixture, TestCase):
+    """R1 end to end: on a line mixing a checkbox control with printed boxes, the page counts every box the preview
+    shows, the location names the clinician's box among them, and the export ticks exactly that box."""
+
+    def setUp(self):
+        super().setUp()
+        from documents.test_word_v3 import mixed_side_bytes
+        self.template, version = self.uploaded(data=mixed_side_bytes(), name="Synthetic side")
+        side = next(f for f in version.fields if f["label"] == "Side")
+        self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_save", "mapping_version": version.pk,
+                                                             "remove_" + side["key"]: "on"})
+        self.version = self.latest(self.template)
+
+    def test_box_two_is_the_control_the_preview_shows_second(self):
+        from documents.test_word_v3 import controls_shown
+        page = self.client.get(f"/templates/{self.template.pk}/").content.decode()
+        row = page[page.index('data-v3-place="word/document.xml#b/p[1]"'):]
+        row = row[:row.index("</tr>")]
+        self.assertIn("Side: ☐ Right ☐ Left ☐ Bilateral", row)
+        self.assertIn("3 printed boxes", row)
+        response = self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_add", "mapping_version": self.version.pk,
+                                    "slot": "word/document.xml#b/p[1]", "kind": "checkbox", "label": "Left", "box": "2"})
+        self.assertEqual(response.status_code, 302, getattr(response, "context", None) and response.context.get("v3_error"))
+        latest = self.latest(self.template)
+        added = next(f for f in latest.fields if f.get("origin") == "manual")
+        rows = self.client.get(f"/templates/{self.template.pk}/").context["v3_rows"]
+        self.assertIn("printed box 2 of 3", next(r for r in rows if r["key"] == added["key"])["location"])
+        latest = self.confirm(self.template, latest)
+        self.assertEqual(self.new_encounter(latest, notes="Synthetic side notes").status_code, 302)
+        encounter = Encounter.objects.get()
+        payload = {"revision": encounter.revision, "answer_" + added["key"]: "checked"}
+        for f in latest.fields:
+            payload["reviewed_" + f["key"]] = "on"
+        self.assertEqual(self.client.post(f"/encounters/{encounter.pk}/save/", payload).status_code, 302)
+        response = self.client.post(f"/encounters/{encounter.pk}/finalize/", {"revision": encounter.revision + 1, "reviewed": "on"}, follow=True)
+        encounter = Encounter.objects.get()
+        self.assertEqual(encounter.status, "finalized", [str(m) for m in response.context["messages"]])
+        exported = private_path(encounter.export_path).read_bytes()
+        self.assertIn("Side: ☐ Right ☒ Left ☐ Bilateral", part_text(exported))
+        self.assertEqual(controls_shown(exported), [("☒", "1")])
+
+    def test_a_glyph_box_the_line_lacks_is_never_confirmed_though_the_line_shows_more_boxes(self):
+        response = self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_add", "mapping_version": self.version.pk,
+                                    "slot": "word/document.xml#b/p[1]", "kind": "checkbox", "label": "Bilateral", "box": "3"})
+        self.assertEqual(response.status_code, 302)
+        latest = self.latest(self.template)
+        added = next(f for f in latest.fields if f.get("origin") == "manual")
+        self.assertEqual(added["locator"]["target"]["boxes"][0]["glyph"], 1, "box 3 of 3 is the line's 2nd printed box")
+        fields = [dict(f) for f in latest.fields]
+        for f in fields:
+            if f.get("origin") == "manual":        # glyph 2: within the 3 boxes the line shows, beyond its 2 glyph boxes
+                f["locator"] = {**f["locator"], "target": {**f["locator"]["target"], "boxes": [
+                    {**f["locator"]["target"]["boxes"][0], "glyph": 2}]}}
+        stale = TemplateVersion.objects.create(template=self.template, number=latest.number + 1, fields=fields,
+                                               contract="v3", corrections={"base_version": latest.number}, created_by=self.user)
+        response = self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_confirm", "mapping_version": stale.pk,
+                                                                        "checked_every_field": "on"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("point at a printed box the form does not have: Bilateral.", response.context["v3_error"])
+
+    def test_a_cell_whose_preview_hides_a_box_refuses_a_number_and_says_so(self):
+        from documents.test_word_v3 import fever_cell_bytes
+        template, version = self.uploaded(data=fever_cell_bytes(), name="Synthetic fever")
+        cell = "word/document.xml#b/tbl[0]/tr[0]/tc[1]"
+        self.client.post(f"/templates/{template.pk}/", {"action": "v3_save", "mapping_version": version.pk,
+                                                        **{"remove_" + f["key"]: "on" for f in version.fields}})
+        version = self.latest(template)
+        self.assertEqual(version.fields, [], "the cell is open for this test")
+        page = self.client.get(f"/templates/{template.pk}/").content.decode()
+        row = page[page.index('data-v3-place="%s"' % cell):]
+        self.assertIn("its preview does not show exactly its boxes: for a checkbox, choose the line inside it or the "
+                      "checkbox itself", row[:row.index("</tr>")])
+        response = self.client.post(f"/templates/{template.pk}/", {"action": "v3_add", "mapping_version": version.pk,
+                                    "slot": cell, "kind": "checkbox", "label": "No fever", "box": "2"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("choose the line inside the cell, or the checkbox itself, as the place.", response.context["v3_error"])
+        self.assertEqual(self.latest(template).pk, version.pk)
 
 
 def two_knees_form_bytes():
@@ -901,6 +1029,114 @@ class V3RepeatedQuestions(V3Fixture, TestCase):
         texts = {f["label"]: answers[f["key"]]["text"] for f in version.fields}
         self.assertEqual(texts, {"Indication": "synthetic", "Right knee pain": "Yes", "Left knee pain": "No",
                                  "Right knee comments": "settled", "Left knee comments": "swollen"})
+
+
+def consent_control_form_bytes():
+    doc = Document()
+    doc.add_paragraph("Synthetic consent")
+    doc.add_paragraph("Consent obtained: ")._p.append(_sdt("rich", placeholder="Click or tap here to enter text."))
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    return buffer.getvalue()
+
+
+@override_settings(**V3)
+class V3CheckboxNeedsABox(V3Fixture, TestCase):
+    """R7 end to end: a checkbox placed on a text control is refused when added, and a stored one is never confirmed
+    (it was accepted, confirmed, and then refused at every export)."""
+
+    def setUp(self):
+        super().setUp()
+        self.template, version = self.uploaded(data=consent_control_form_bytes(), name="Synthetic consent")
+        self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_save", "mapping_version": version.pk,
+                                                             **{"remove_" + f["key"]: "on" for f in version.fields}})
+        self.version = self.latest(self.template)
+        self.assertEqual(self.version.fields, [])
+
+    def test_a_checkbox_on_a_text_control_is_refused_when_added(self):
+        response = self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_add", "mapping_version": self.version.pk,
+                                    "slot": "word/document.xml#b/p[1]/sdt[0]", "kind": "checkbox", "label": "Consent obtained", "box": "1"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("is not a checkbox", response.context["v3_error"])
+        self.assertEqual(self.latest(self.template).pk, self.version.pk)
+
+    def test_a_stored_checkbox_on_a_text_control_is_never_confirmed(self):
+        from documents import locate_fields
+        from core.views import v3_original
+        field = locate_fields(v3_original(self.template), [{"slot": "word/document.xml#b/p[1]/sdt[0]", "kind": "text",
+                                                           "label": "Consent obtained"}])["fields"][0]
+        field = {**field, "kind": "checkbox", "options": ["Consent obtained"]}   # the shape locate stored before R7
+        stale = TemplateVersion.objects.create(template=self.template, number=self.version.number + 1, fields=[field],
+                                               contract="v3", corrections={"base_version": self.version.number}, created_by=self.user)
+        response = self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_confirm", "mapping_version": stale.pk,
+                                                                        "checked_every_field": "on"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("checkbox fields point at a place that is not a box: Consent obtained.", response.context["v3_error"])
+        self.assertFalse(MappingConfirmation.objects.filter(version=stale).exists())
+
+
+def left_effusion_form_bytes():
+    """The refuter's p9 input: a left-only question whose side is written as a list marker."""
+    doc = Document()
+    doc.add_paragraph("Synthetic knee injection note")
+    doc.add_paragraph("(L) Effusion? ☐ Yes ☐ No")
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    return buffer.getvalue()
+
+
+def two_sides_grid_bytes():
+    """One question label printed twice, told apart only by its column: Effusion under Right knee and Left knee."""
+    doc = Document()
+    doc.add_paragraph("Synthetic knee examination")
+    table = doc.add_table(rows=2, cols=3)
+    for c, h in enumerate(["Finding", "Right knee", "Left knee"]):
+        table.cell(0, c).text = h
+    table.cell(1, 0).text = "Effusion"
+    table.cell(1, 1).text = "☐ Yes ☐ No"
+    table.cell(1, 2).text = "☐ Yes ☐ No"
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    return buffer.getvalue()
+
+
+@override_settings(**V3)
+class V3SideInQuestions(V3Fixture, TestCase):
+    """R4 end to end: a question's side is never lost from its label, and a repeated label is shown with its context."""
+
+    def generated(self, version, notes):
+        from core.jobs import enqueue, run_one
+        self.assertEqual(self.new_encounter(version, notes=notes).status_code, 302)
+        encounter = Encounter.objects.get()
+        enqueue(encounter, self.user)
+        self.assertTrue(run_one())
+        return Encounter.objects.get()
+
+    def test_a_line_that_names_no_side_never_fills_a_sided_question(self):
+        template, _ = self.uploaded(data=left_effusion_form_bytes(), name="Synthetic effusion")
+        version = self.confirm(template)
+        field = next(f for f in version.fields if f["kind"] == "choice")
+        answer = self.generated(version, "Effusion: Yes\n").answers[field["key"]]
+        self.assertEqual((answer["status"], answer["text"]), ("missing", ""), "the notes name no side")
+        self.assertEqual(field["label"], "(L) Effusion?")
+
+    def test_the_line_that_names_the_side_fills_it(self):
+        template, _ = self.uploaded(data=left_effusion_form_bytes(), name="Synthetic effusion")
+        version = self.confirm(template)
+        field = next(f for f in version.fields if f["kind"] == "choice")
+        answer = self.generated(version, "(L) Effusion: Yes\n").answers[field["key"]]
+        self.assertEqual((answer["status"], answer["text"]), ("supported", "Yes"))
+
+    def test_a_repeated_label_is_shown_with_its_context_on_the_review_page(self):
+        template, _ = self.uploaded(data=two_sides_grid_bytes(), name="Synthetic sides")
+        version = self.confirm(template)
+        self.assertEqual([(f["label"], f["context"]) for f in version.fields],
+                         [("Effusion", "Effusion > Right knee"), ("Effusion", "Effusion > Left knee")])
+        encounter = self.generated(version, "Synthetic knee notes")
+        page = self.client.get(f"/encounters/{encounter.pk}/").content.decode()
+        self.assertIn("Effusion &gt; Right knee", page)
+        self.assertIn("Effusion &gt; Left knee", page)
+        self.assertLess(page.index("Effusion &gt; Right knee"), page.index("Effusion &gt; Left knee"))
 
 
 def repeated_option_form_bytes():

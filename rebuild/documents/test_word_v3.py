@@ -279,11 +279,11 @@ class OptionReader(unittest.TestCase):
     def test_list_markers_are_digits_single_letters_and_roman_numerals_only(self):
         from documents.word_v3 import clean_label
         kept = ["Rt. knee effusion", "Lt. knee", "Bil. knees", "Dr. Example", "No. of lesions", "Mr. Synthetic",
-                "Hx. reviewed", "Pt. consent"]
+                "Hx. reviewed", "Pt. consent", "(c) Route"]     # R4: a single letter in parentheses is kept (fail closed)
         for text in kept:
             self.assertEqual(clean_label(text), text)
         stripped = {"1. Name": "Name", "12) Plan": "Plan", "a) Yes": "Yes", "B. No": "No", "(3) Dose": "Dose",
-                    "(c) Route": "Route", "iv. Findings": "Findings", "(xii) Impression": "Impression",
+                    "c) Route": "Route", "iv. Findings": "Findings", "(xii) Impression": "Impression",
                     "XXX. Item": "Item", "vii) Item": "Item"}
         for text, label in stripped.items():
             self.assertEqual(clean_label(text), label, text)
@@ -720,11 +720,515 @@ class OptionsKeepTheirPrintedText(unittest.TestCase):
 
     def test_question_labels_keep_the_marker_rule_and_options_do_not(self):
         from documents.word_v3 import clean_label, option_text
-        self.assertEqual(clean_label("(a) Pain"), "Pain")
+        self.assertEqual(clean_label("a) Pain"), "Pain")
+        self.assertEqual(option_text("a) Pain"), "a) Pain")
         self.assertEqual(option_text("(a) Pain"), "(a) Pain")
         self.assertEqual(option_text("  (L)\tknee  "), "(L) knee")
         self.assertEqual(option_text("Other: ______"), "Other", "the write-in blank is not the option")
         self.assertEqual(option_text("b) Left knee -"), "b) Left knee")
+
+
+def checkbox_control(checked=False, *, states=True, flag=True):
+    """A checkbox content control as Word writes it: the w14:checked flag, the checkedState/uncheckedState glyphs
+    (MS Gothic U+2612 / U+2610) and the glyph the state names as its content."""
+    sdt = _sdt("checkbox")
+    cb = sdt.find(qn("w:sdtPr")).find("{%s}checkbox" % W14)
+    cb.find("{%s}checked" % W14).set("{%s}val" % W14, "1" if checked else "0")
+    if not flag:
+        cb.remove(cb.find("{%s}checked" % W14))
+    if states:
+        for tag, code in (("checkedState", "2612"), ("uncheckedState", "2610")):
+            state = etree.SubElement(cb, "{%s}%s" % (W14, tag))
+            state.set("{%s}val" % W14, code)
+            state.set("{%s}font" % W14, "MS Gothic")
+    sdt.find(qn("w:sdtContent")).find(qn("w:r")).find(qn("w:t")).text = "☒" if checked else "☐"
+    return sdt
+
+
+def text_run(text):
+    r = OxmlElement("w:r")
+    t = OxmlElement("w:t")
+    t.text = text
+    t.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+    r.append(t)
+    return r
+
+
+def controls_shown(data):
+    """[(glyph shown, w14:checked flag)] for every checkbox content control of an exported package, in order."""
+    root = etree.fromstring(ZipFile(io.BytesIO(data)).read("word/document.xml"))
+    out = []
+    for sdt in root.iter(qn("w:sdt")):
+        cb = sdt.find(".//{%s}checkbox" % W14)
+        if cb is None:
+            continue
+        flag = cb.find("{%s}checked" % W14)
+        out.append(("".join(t.text or "" for t in sdt.find(qn("w:sdtContent")).iter(qn("w:t"))),
+                    flag.get("{%s}val" % W14) if flag is not None else None))
+    return out
+
+
+class ControlReadBack(unittest.TestCase):
+    """R3: a checkbox control reads as ticked or unticked only when its flag AND the glyph it displays agree."""
+
+    def anticoagulated(self):
+        doc = Document()
+        doc.add_paragraph("Synthetic intake")
+        p = doc.add_paragraph("Anticoagulated? ")
+        p._p.append(checkbox_control(checked=True))
+        p._p.append(text_run(" Yes  "))
+        p._p.append(checkbox_control())
+        p._p.append(text_run(" No"))
+        return docx_bytes(doc)
+
+    def test_a_writer_that_leaves_the_ticked_glyph_is_refused(self):
+        from unittest.mock import patch
+        from documents import word_v3
+        data = self.anticoagulated()
+        fields = word_v3.inspect(data)["fields"]
+        self.assertEqual((fields[0]["label"], fields[0]["options"]), ("Anticoagulated?", ["Yes", "No"]))
+        real = word_v3.set_sdt_checkbox
+
+        def regressed(sdt, ticked):             # the refuter's writer: the flag set, the printed glyph left
+            if ticked:
+                return real(sdt, True)
+            cb = sdt.find(word_v3.q("w:sdtPr")).find(word_v3.q("w14:checkbox"))
+            cb.find(word_v3.q("w14:checked")).set(word_v3.q("w14:val"), "0")
+            return True
+        with patch.object(word_v3, "set_sdt_checkbox", side_effect=regressed):
+            with self.assertRaises(word_v3.V3Failure) as refused:
+                word_v3.fill(data, fields, {fields[0]["key"]: "No"})
+        self.assertEqual(refused.exception.code, "fill_mismatch")
+
+    def test_unticking_a_control_shows_its_unchecked_glyph(self):
+        from documents import word_v3
+        data = self.anticoagulated()
+        fields = word_v3.inspect(data)["fields"]
+        self.assertEqual(fields[0].get("printed_ticked"), [0])
+        out = word_v3.fill(data, fields, {fields[0]["key"]: "No"})
+        self.assertEqual(controls_shown(out), [("☐", "0"), ("☒", "1")])
+
+    def test_an_added_flag_keeps_the_schema_order(self):
+        """R5: w14:checked precedes w14:checkedState and w14:uncheckedState (CT_SdtCheckbox is a sequence)."""
+        from documents import word_v3
+        doc = Document()
+        doc.add_paragraph("Synthetic intake")
+        p = doc.add_paragraph("Smoker? ")
+        p._p.append(checkbox_control(flag=False))      # an unticked control written without its optional flag
+        p._p.append(text_run(" Yes  "))
+        p._p.append(checkbox_control(flag=False))
+        p._p.append(text_run(" No"))
+        data = docx_bytes(doc)
+        fields = word_v3.inspect(data)["fields"]
+        out = word_v3.fill(data, fields, {fields[0]["key"]: "Yes"})
+        root = etree.fromstring(ZipFile(io.BytesIO(out)).read("word/document.xml"))
+        orders = [[etree.QName(c).localname for c in cb] for cb in root.iter("{%s}checkbox" % W14)]
+        self.assertEqual(orders, [["checked", "checkedState", "uncheckedState"]] * 2)
+        self.assertEqual(controls_shown(out), [("☒", "1"), ("☐", "0")])
+
+
+def control_checklist_bytes():
+    """The refuter's p1c input: a check-all-that-apply column whose boxes are checkbox controls, Warfarin printed
+    ticked."""
+    doc = Document()
+    doc.add_paragraph("Synthetic medication reconciliation")
+    table = doc.add_table(rows=4, cols=2)
+    table.cell(0, 0).text = "Medication"
+    table.cell(0, 1).text = "Continue (check all that apply)"
+    for r, name in ((1, "Warfarin"), (2, "Metformin"), (3, "Aspirin")):
+        table.cell(r, 0).text = name
+        table.cell(r, 1).paragraphs[0]._p.append(checkbox_control(checked=(r == 1)))
+    return docx_bytes(doc)
+
+
+def control_grid_bytes():
+    """The refuter's p1 input: a Yes/No grid whose answer cells are checkbox controls, Chest pain printed Yes."""
+    doc = Document()
+    doc.add_paragraph("Synthetic review of systems")
+    table = doc.add_table(rows=3, cols=3)
+    for c, h in enumerate(["Symptom", "Yes", "No"]):
+        table.cell(0, c).text = h
+    table.cell(1, 0).text = "Chest pain"
+    table.cell(2, 0).text = "Dyspnea"
+    for r in (1, 2):
+        for c in (1, 2):
+            table.cell(r, c).paragraphs[0]._p.append(checkbox_control(checked=(r == 1 and c == 1)))
+    return docx_bytes(doc)
+
+
+class ControlsInBoxCells(unittest.TestCase):
+    """R2: a table cell whose box is a checkbox control is read and written as that control."""
+
+    def test_a_control_cell_printed_ticked_is_recorded_and_kept_when_unanswered(self):
+        from documents import word_v3
+        data = control_checklist_bytes()
+        fields = word_v3.inspect(data)["fields"]
+        field = next(f for f in fields if f["kind"] == "multi_choice")
+        self.assertEqual(field["options"], ["Warfarin", "Metformin", "Aspirin"])
+        self.assertEqual(field.get("printed_ticked"), [0], "Warfarin is printed ticked")
+        self.assertEqual(controls_shown(word_v3.fill(data, fields, {})), [("☒", "1"), ("☐", "0"), ("☐", "0")])
+
+    def test_an_answer_sets_every_control_of_the_checklist(self):
+        from documents import word_v3
+        data = control_checklist_bytes()
+        fields = word_v3.inspect(data)["fields"]
+        field = next(f for f in fields if f["kind"] == "multi_choice")
+        out = word_v3.fill(data, fields, {field["key"]: ["Metformin"]})
+        self.assertEqual(controls_shown(out), [("☐", "0"), ("☒", "1"), ("☐", "0")])
+        out = word_v3.fill(data, fields, {field["key"]: ["Aspirin", "Warfarin"]})
+        self.assertEqual(controls_shown(out), [("☒", "1"), ("☐", "0"), ("☒", "1")])
+
+    def test_a_grid_of_controls_takes_the_other_option(self):
+        from documents import word_v3
+        data = control_grid_bytes()
+        fields = word_v3.inspect(data)["fields"]
+        chest = fields_by_label(fields)["Chest pain"]
+        self.assertEqual((chest["kind"], chest["options"], chest.get("printed_ticked")), ("choice", ["Yes", "No"], [0]))
+        out = word_v3.fill(data, fields, {chest["key"]: "No"})
+        self.assertEqual(controls_shown(out), [("☐", "0"), ("☒", "1"), ("☐", "0"), ("☐", "0")])
+
+    def test_a_cell_holding_a_control_beside_another_box_is_unread_and_refused(self):
+        from documents import word_v3
+        doc = Document()
+        doc.add_paragraph("Synthetic review of systems")
+        table = doc.add_table(rows=2, cols=3)
+        for c, h in enumerate(["Symptom", "Yes", "No"]):
+            table.cell(0, c).text = h
+        table.cell(1, 0).text = "Cough"
+        table.cell(1, 1).text = "☐"                   # a printed box, and a legacy checkbox printed ticked beside it
+        ff_field(table.cell(1, 1).paragraphs[0], "checkbox", checked=True, name="CoughYes")
+        table.cell(1, 2).text = "☐"
+        data = docx_bytes(doc)
+        fields = word_v3.inspect(data)["fields"]
+        cough = fields_by_label(fields)["Cough"]
+        self.assertEqual((cough["options"], cough.get("printed_ticked"), cough.get("printed_unread")),
+                         (["Yes", "No"], None, [0]), "never read as unticked")
+        with self.assertRaises(word_v3.V3Failure) as refused:
+            word_v3.fill(data, fields, {cough["key"]: "No"})
+        self.assertEqual(refused.exception.code, "unsupported_layout")
+        self.assertIn("checkbox control beside another box", str(refused.exception))
+
+
+def mixed_side_bytes(control="sdt"):
+    """The refuter's p2 input: one printed line mixing a checkbox control between two printed glyph boxes."""
+    doc = Document()
+    doc.add_paragraph("Synthetic knee note")
+    p = doc.add_paragraph("Side: ☐ Right ")
+    if control == "sdt":
+        p._p.append(checkbox_control())
+    else:
+        ff_field(p, "checkbox", name="Left")
+    p._p.append(text_run(" Left ☐ Bilateral"))
+    return docx_bytes(doc)
+
+
+def mixed_cell_bytes():
+    """D03's shape (DEV corpus, place b/tbl[0]/tr[17]/tc[0]/p[4]): printed boxes and two checkbox controls on one
+    line in a table cell, and a cell mixing a printed box, a control and a printed box."""
+    doc = Document()
+    doc.add_paragraph("Synthetic social history")
+    table = doc.add_table(rows=2, cols=1)
+    p = table.cell(0, 0).paragraphs[0]
+    p.add_run("☐ Alcohol beverages: ☐ Wine [")
+    p._p.append(checkbox_control())
+    p._p.append(text_run(" Red "))
+    p._p.append(checkbox_control())
+    p._p.append(text_run(" White ], ☐ Other:__________"))
+    q = table.cell(1, 0).paragraphs[0]
+    q.add_run("☐ Mild ")
+    q._p.append(checkbox_control())
+    q._p.append(text_run(" Moderate ☐ Severe"))
+    return docx_bytes(doc)
+
+
+def glyphs_shown(data, contains):
+    """The printed text (glyphs, controls as their glyph) of the exported paragraph containing `contains`."""
+    return next(line for line in paragraphs_bytes(data) if contains in line)
+
+
+def side_questions_bytes():
+    """The refuter's p6 input: questions whose only difference is a side marker, in table rows and in paragraphs."""
+    doc = Document()
+    doc.add_paragraph("Synthetic knee examination")
+    table = doc.add_table(rows=3, cols=2)
+    table.cell(0, 0).text = "Finding"
+    table.cell(0, 1).text = "Present?"
+    table.cell(1, 0).text = "(L) Effusion"
+    table.cell(1, 1).text = "☐ Yes ☐ No"
+    table.cell(2, 0).text = "(R) Effusion"
+    table.cell(2, 1).text = "☐ Yes ☐ No"
+    doc.add_paragraph("L. Tenderness? ☐ Yes ☐ No")
+    doc.add_paragraph("R. Tenderness? ☐ Yes ☐ No")
+    return docx_bytes(doc)
+
+
+class SideMarkersInQuestions(unittest.TestCase):
+    """R4: a side written as a list marker - (L) (R) L. R. - stays in the question label; so does any single letter in
+    parentheses (fail closed). '(L) Effusion' and '(R) Effusion' both became 'Effusion'."""
+
+    def test_the_side_stays_in_every_question_label(self):
+        from documents import word_v3
+        fields = word_v3.inspect(side_questions_bytes())["fields"]
+        self.assertEqual([(f["label"], f["kind"], f["options"]) for f in fields],
+                         [("(L) Effusion", "choice", ["Yes", "No"]), ("(R) Effusion", "choice", ["Yes", "No"]),
+                          ("L. Tenderness?", "choice", ["Yes", "No"]), ("R. Tenderness?", "choice", ["Yes", "No"])])
+
+    def test_side_letters_and_single_letters_in_parentheses_are_kept(self):
+        from documents.word_v3 import clean_label
+        for text in ("(L) Effusion", "(R) Effusion", "(l) knee", "(r) knee", "L. Tenderness?", "R. Tenderness?",
+                     "L) knee", "R) knee", "l. knee", "r) knee", "(a) Pain", "(B) Hip", "(i) Item", "(x) Item"):
+            self.assertEqual(clean_label(text), text)
+        for text, label in (("a) Yes", "Yes"), ("B. No", "No"), ("(3) Dose", "Dose"), ("12) Plan", "Plan"),
+                            ("iv. Findings", "Findings"), ("(xii) Impression", "Impression"), ("(ii) Item", "Item")):
+            self.assertEqual(clean_label(text), label, text)
+
+
+class LegacyDropdownDefault(unittest.TestCase):
+    """R6: a legacy dropdown with no w:result shows its w:default entry (ECMA-376 ddList), not the first."""
+
+    def test_the_default_entry_is_the_one_printed(self):
+        from documents import word_v3
+        doc = Document()
+        doc.add_paragraph("Synthetic injection note")
+        p = doc.add_paragraph("Side: ")
+        ff_field(p, "dropdown", options=["Left", "Right", "Bilateral"], name="Side")
+        default = OxmlElement("w:default")
+        default.set(qn("w:val"), "1")
+        p._p.find(".//" + qn("w:ddList")).insert(0, default)
+        data = docx_bytes(doc)
+        fields = word_v3.inspect(data)["fields"]
+        self.assertEqual((fields[0]["options"], fields[0].get("printed_ticked")), (["Left", "Right", "Bilateral"], [1]))
+        for answer, shown in (("Left", "0"), ("Bilateral", "2")):
+            with tempfile.TemporaryDirectory() as tmp:
+                Path(tmp, "out.docx").write_bytes(word_v3.fill(data, fields, {fields[0]["key"]: answer}))
+                self.assertEqual(ff_result(Path(tmp, "out.docx")), [shown], answer)
+
+
+def ff_text_field(p, name="Consent"):
+    """A legacy text form field (FORMTEXT) appended to python-docx paragraph `p`, with an empty result."""
+    for kind, child in (("begin", None), ("instr", None), ("separate", None), ("end", None)):
+        r = OxmlElement("w:r")
+        if kind == "instr":
+            node = OxmlElement("w:instrText")
+            node.text = " FORMTEXT "
+        else:
+            node = OxmlElement("w:fldChar")
+            node.set(qn("w:fldCharType"), kind)
+            if kind == "begin":
+                data = OxmlElement("w:ffData")
+                n = OxmlElement("w:name")
+                n.set(qn("w:val"), name)
+                data.append(n)
+                data.append(OxmlElement("w:enabled"))
+                data.append(OxmlElement("w:textInput"))
+                node.append(data)
+        r.append(node)
+        p._p.append(r)
+
+
+class CheckboxNeedsABox(unittest.TestCase):
+    """R7: a manual checkbox on a text content control or a legacy text field is refused when it is added, instead
+    of being accepted, confirmed, and refused at every export."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        doc = Document()
+        doc.add_paragraph("Synthetic consent")
+        doc.add_paragraph("Consent obtained: ")._p.append(_sdt("rich", placeholder="Click or tap here to enter text."))
+        ff_text_field(doc.add_paragraph("Witness: "), name="Witness")
+        self.form = self.dir / "consent.docx"
+        self.form.write_bytes(docx_bytes(doc))
+        self.places = {row["slot"]: row for row in outline_template(self.form)["slots"]}
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_a_checkbox_on_a_text_control_or_text_field_is_refused(self):
+        for slot in ("word/document.xml#b/p[1]/sdt[0]", "word/document.xml#b/p[2]/ff[0]"):
+            self.assertIn(slot, self.places)
+            with self.assertRaises(DocumentError) as refused:
+                locate_fields(self.form, [{"slot": slot, "kind": "checkbox", "label": "Consent obtained", "glyph": 0}])
+            self.assertEqual(refused.exception.code, "invalid_mapping", slot)
+            self.assertIn("is not a checkbox", str(refused.exception), slot)
+
+    def test_the_same_places_still_take_text(self):
+        for n, slot in enumerate(("word/document.xml#b/p[1]/sdt[0]", "word/document.xml#b/p[2]/ff[0]")):
+            field = locate_fields(self.form, [{"slot": slot, "kind": "text", "label": "Consent note"}])["fields"][0]
+            out = self.dir / ("text-%d.docx" % n)
+            fill_template(self.form, [field], {field["key"]: "Signed by synthetic patient"}, out)
+            self.assertIn("Signed by synthetic patient", part_text(out))
+
+
+class SurvivingMutantPins(unittest.TestCase):
+    """Guards the round-2 mutation batch showed no test would miss: M01, M13 and M16."""
+
+    def test_a_repeat_suffix_never_takes_a_printed_options_words(self):
+        """M01: 'Left' printed again after a printed 'Left (2)' is 'Left (3)', or two options share one label and
+        neither can be chosen."""
+        from documents import word_v3
+        self.assertEqual(word_v3.unique_options(["Left", "Left (2)", "Left"]), ["Left", "Left (2)", "Left (3)"])
+        doc = Document()
+        doc.add_paragraph("Synthetic swelling check")
+        doc.add_paragraph("Swelling:  ☐ Left  ☐ Left (2)  ☐ Left")
+        data = docx_bytes(doc)
+        fields = word_v3.inspect(data)["fields"]
+        self.assertEqual(fields[0]["options"], ["Left", "Left (2)", "Left (3)"])
+        for answer, line in (("Left (3)", "Swelling:  ☐ Left  ☐ Left (2)  ☒ Left"),
+                             ("Left (2)", "Swelling:  ☐ Left  ☒ Left (2)  ☐ Left")):
+            self.assertIn(line, paragraphs_bytes(word_v3.fill(data, fields, {fields[0]["key"]: answer})), answer)
+
+    def test_a_manual_checkbox_records_its_printed_tick(self):
+        """M13: a box added by hand on a box the blank form prints ticked says so on the page."""
+        with tempfile.TemporaryDirectory() as tmp:
+            form = Path(tmp) / "prechecked.docx"
+            prechecked_form(form)
+            place = next(r for r in outline_template(form)["slots"] if r["kind"] == "p" and r["preview"] == "Hypertension ☒")
+            added = locate_fields(form, [{"slot": place["slot"], "kind": "checkbox", "label": "Hypertension", "glyph": 0}])
+            self.assertEqual(added["fields"][0].get("printed_ticked"), [0])
+
+    def test_a_dropdown_or_option_cell_showing_other_words_is_refused(self):
+        """M16: the read-back of a dropdown control and of an option-text cell compares the words shown."""
+        from unittest.mock import patch
+        from documents import word_v3
+        doc = Document()
+        doc.add_paragraph("Synthetic joint log")
+        doc.add_paragraph("Laterality: ")._p.append(_sdt("dropdown", options=["Choose an item.", "Left", "Right"]))
+        site = doc.add_table(rows=2, cols=2)
+        site.cell(0, 0).text = "Joint"
+        site.cell(0, 1).text = "L. / R."
+        site.cell(1, 0).text = "Knee"
+        data = docx_bytes(doc)
+        by = fields_by_label(word_v3.inspect(data)["fields"])
+        fields = [by["Laterality"], by["Knee"]]
+        self.assertEqual((by["Knee"]["locator"]["target"].get("write"), by["Knee"]["options"]), ("option_text", ["L.", "R."]))
+        self.assertIn("Laterality: Left", paragraphs_bytes(word_v3.fill(data, fields, {by["Laterality"]["key"]: "Left",
+                                                                                          by["Knee"]["key"]: "L."})))
+        real_sdt, real_cell = word_v3.write_sdt_text, word_v3.write_cell
+        for name, wrong, answers in (
+                ("write_sdt_text", lambda sdt, answer: real_sdt(sdt, "Right"), {by["Laterality"]["key"]: "Left"}),
+                ("write_cell", lambda tc, answer, *a: real_cell(tc, "R.", *a), {by["Knee"]["key"]: "L."})):
+            with patch.object(word_v3, name, side_effect=wrong):
+                with self.assertRaises(word_v3.V3Failure) as refused:
+                    word_v3.fill(data, fields, answers)
+            self.assertEqual(refused.exception.code, "fill_mismatch", name)
+
+
+def fever_cell_bytes():
+    """A cell 'Yes' printed box and a legacy checkbox 'No': the cell's text shows the printed box only."""
+    doc = Document()
+    doc.add_paragraph("Synthetic review of systems")
+    table = doc.add_table(rows=1, cols=2)
+    table.cell(0, 0).text = "Fever"
+    cell = table.cell(0, 1).paragraphs[0]
+    cell.add_run("☐ Yes ")
+    ff_field(cell, "checkbox", name="FeverNo")
+    cell._p.append(text_run(" No"))
+    return docx_bytes(doc)
+
+
+class MixedBoxNumbers(unittest.TestCase):
+    """R1: the box number a clinician gives counts EXACTLY the boxes the place's preview shows, in its order - printed
+    glyph boxes and checkbox controls alike - and the export ticks exactly that box, whatever its kind."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def form(self, data, name):
+        path = self.dir / name
+        path.write_bytes(data)
+        return path, {row["slot"]: row for row in outline_template(path)["slots"]}
+
+    def add_and_fill(self, path, slot, box, label):
+        field = locate_fields(path, [{"slot": slot, "kind": "checkbox", "label": label, "glyph": box - 1}])["fields"][0]
+        out = self.dir / ("%s-%d.docx" % (label.replace(" ", "-"), box))
+        fill_template(path, [field], {field["key"]: True}, out)
+        return field, out.read_bytes()
+
+    def test_a_line_mixing_a_control_counts_every_box_it_shows(self):
+        path, places = self.form(mixed_side_bytes(), "side.docx")
+        for slot in ("word/document.xml#b/p[1]", "word/document.xml#b/p[1]/glyphs"):
+            self.assertEqual(places[slot]["preview"], "Side: ☐ Right ☐ Left ☐ Bilateral")
+            self.assertEqual(places[slot]["boxes"], 3, slot)
+        _, out = self.add_and_fill(path, "word/document.xml#b/p[1]", 2, "Left")
+        self.assertEqual(controls_shown(out), [("☒", "1")], "box 2 is the control printed before 'Left'")
+        self.assertEqual(glyphs_shown(out, "Right"), "Side: ☐ Right ☒ Left ☐ Bilateral")
+        _, out = self.add_and_fill(path, "word/document.xml#b/p[1]/glyphs", 3, "Bilateral")
+        self.assertEqual((controls_shown(out), glyphs_shown(out, "Right")), ([("☐", "0")], "Side: ☐ Right ☐ Left ☒ Bilateral"))
+        _, out = self.add_and_fill(path, "word/document.xml#b/p[1]", 1, "Right")
+        self.assertEqual((controls_shown(out), glyphs_shown(out, "Right")), ([("☐", "0")], "Side: ☒ Right ☐ Left ☐ Bilateral"))
+        with self.assertRaises(DocumentError) as refused:
+            self.add_and_fill(path, "word/document.xml#b/p[1]", 4, "Beyond")
+        self.assertIn("That place has 3 printed boxes", str(refused.exception))
+
+    def test_a_legacy_checkbox_on_the_line_is_numbered_where_it_shows(self):
+        path, places = self.form(mixed_side_bytes("ff"), "side-ff.docx")
+        self.assertEqual((places["word/document.xml#b/p[1]"]["preview"], places["word/document.xml#b/p[1]"]["boxes"]),
+                         ("Side: ☐ Right ☐ Left ☐ Bilateral", 3))
+        _, out = self.add_and_fill(path, "word/document.xml#b/p[1]", 2, "Left")
+        self.assertEqual(control_states(self.dir / "Left-2.docx"), ([], ["1"]))
+        self.assertEqual(glyphs_shown(out, "Right"), "Side: ☐ Right  Left ☐ Bilateral")
+
+    def test_d03s_red_wine_is_the_third_box_shown(self):
+        path, places = self.form(mixed_cell_bytes(), "social.docx")
+        line = "word/document.xml#b/tbl[0]/tr[0]/tc[0]/p[0]"
+        self.assertEqual(places[line]["preview"], "☐ Alcohol beverages: ☐ Wine [☐ Red ☐ White ], ☐ Other:__________")
+        self.assertEqual(places[line]["boxes"], 5)
+        _, out = self.add_and_fill(path, line, 3, "Red wine")
+        self.assertEqual(controls_shown(out)[:2], [("☒", "1"), ("☐", "0")], "box 3 is the control before 'Red'")
+        self.assertIn("☐ Other", glyphs_shown(out, "Alcohol"))
+        _, out = self.add_and_fill(path, line, 5, "Other drink")
+        self.assertEqual(controls_shown(out)[:2], [("☐", "0"), ("☐", "0")])
+        self.assertIn("☒ Other", glyphs_shown(out, "Alcohol"))
+
+    def test_a_cell_counts_its_controls_as_its_preview_shows_them(self):
+        path, places = self.form(mixed_cell_bytes(), "severity.docx")
+        cell = "word/document.xml#b/tbl[0]/tr[1]/tc[0]"
+        self.assertEqual((places[cell]["preview"], places[cell]["boxes"]), ("☐ Mild ☐ Moderate ☐ Severe", 3))
+        _, out = self.add_and_fill(path, cell, 2, "Moderate")
+        self.assertEqual(controls_shown(out)[2:], [("☒", "1")])
+        self.assertEqual(glyphs_shown(out, "Mild"), "☐ Mild ☒ Moderate ☐ Severe")
+        _, out = self.add_and_fill(path, cell, 3, "Severe")
+        self.assertEqual((controls_shown(out)[2:], glyphs_shown(out, "Mild")), ([("☐", "0")], "☐ Mild ☐ Moderate ☒ Severe"))
+
+    def test_a_cell_whose_preview_does_not_show_its_boxes_refuses_a_number(self):
+        path, places = self.form(fever_cell_bytes(), "fever.docx")
+        tc, line = "word/document.xml#b/tbl[0]/tr[0]/tc[1]", "word/document.xml#b/tbl[0]/tr[0]/tc[1]/p[0]"
+        self.assertEqual((places[tc]["preview"], places[tc]["boxes"], places[tc].get("unnumbered_boxes")), ("☐ Yes No", 0, True))
+        with self.assertRaises(DocumentError) as refused:
+            self.add_and_fill(path, tc, 2, "No fever")
+        self.assertEqual(refused.exception.code, "invalid_mapping")
+        self.assertIn("choose the line inside the cell, or the checkbox itself", str(refused.exception))
+        self.assertEqual((places[line]["preview"], places[line]["boxes"]), ("☐ Yes ☐ No", 2))
+        _, out = self.add_and_fill(path, line, 2, "No fever")
+        self.assertEqual(control_states(self.dir / "No-fever-2.docx"), ([], ["1"]))
+
+    def test_a_cell_whose_preview_shows_boxes_nested_inside_it_refuses_a_number(self):
+        doc = Document()
+        doc.add_paragraph("Synthetic severity")
+        outer = doc.add_table(rows=1, cols=3)
+        outer.cell(0, 0).paragraphs[0].text = "☐ Mild ☐ Severe"          # its own line, and a nested table's box
+        outer.cell(0, 0).add_table(rows=1, cols=1).cell(0, 0).text = "☐ Other"
+        control = checkbox_control()                                   # a control showing no box, and a nested box
+        control.find(qn("w:sdtContent")).find(qn("w:r")).find(qn("w:t")).text = "x"
+        outer.cell(0, 1).paragraphs[0]._p.append(control)
+        outer.cell(0, 1).add_table(rows=1, cols=1).cell(0, 0).text = "☐"
+        ff_field(outer.cell(0, 2).paragraphs[0], "checkbox", name="Hidden")   # a legacy checkbox the preview hides,
+        outer.cell(0, 2).add_table(rows=1, cols=1).cell(0, 0).text = "☐"   # and a nested box: 1 shown, 1 of its own
+        path, places = self.form(docx_bytes(doc), "nested.docx")
+        for tc, preview in (("word/document.xml#b/tbl[0]/tr[0]/tc[0]", "☐ Mild ☐ Severe☐ Other"),
+                            ("word/document.xml#b/tbl[0]/tr[0]/tc[1]", "x☐"),
+                            ("word/document.xml#b/tbl[0]/tr[0]/tc[2]", "☐")):
+            self.assertEqual((places[tc]["preview"], places[tc]["boxes"], places[tc].get("unnumbered_boxes")),
+                             (preview, 0, True), tc)
+            with self.assertRaises(DocumentError) as refused:
+                self.add_and_fill(path, tc, 1, "Box one")
+            self.assertEqual(refused.exception.code, "invalid_mapping", tc)
+        self.assertEqual(places["word/document.xml#b/tbl[0]/tr[0]/tc[0]/p[0]"]["boxes"], 2)
 
 
 if __name__ == "__main__":

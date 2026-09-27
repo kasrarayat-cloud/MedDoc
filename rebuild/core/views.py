@@ -390,7 +390,7 @@ def v3_page(request,t,version,*,status=200,error='',posted=None,outline=None):
         try:outline=v3_outline(t)
         except (ValidationError,DocumentError,OSError) as exc:outline=[];outline_error=error_message(exc) if not isinstance(exc,OSError) else 'The original is unavailable.'
     places=v3_mapping.open_places(outline,version.fields,query)
-    box_counts={row['slot']:row.get('boxes') for row in outline}
+    box_keys={row['slot']:row['box_keys'] for row in outline if row.get('box_keys')}
     posted=posted or {}
     # ⚠️ Repeated questions are counted with generation's own normalizer, over the fields generation reads: two of
     # them sharing a label are never filled from the notes (each is held), so the page names them for renaming.
@@ -402,7 +402,7 @@ def v3_page(request,t,version,*,status=200,error='',posted=None,outline=None):
            'kind':f.get('kind'),'chosen_kind':posted.get('kind_'+f['key'],f.get('kind')),
            'kind_name':v3_mapping.KIND_NAMES.get(f.get('kind'),f.get('kind')),
            'kind_editable':f.get('kind') in v3_mapping.TEXT_KINDS,'options':f.get('options') or [],
-           'location':field_location.describe(f,box_counts=box_counts),'context':f.get('context') or '',
+           'location':field_location.describe(f,box_keys=box_keys),'context':f.get('context') or '',
            'origin':'Manual' if f.get('origin')=='manual' else 'Automatic','max_chars':f.get('max_chars'),
            'remove':posted.get('remove_'+f['key'])=='on',
            'duplicate':f.get('kind') not in v3_mapping.NEVER_GENERATED and counts.get(question_key(f['label']),0)>1}
@@ -527,6 +527,8 @@ def v3_confirm(request,t):
         # ⚠️ A box that does not exist can never be confirmed (it would only refuse at export, after the review).
         missing=v3_mapping.missing_boxes(latest.fields,v3_outline(t))
         if missing:raise ValidationError('These fields point at a printed box the form does not have: '+field_list(missing)+' Remove each one and add it again with the right box number.')
+        off_box=v3_mapping.checkboxes_off_box(latest.fields)
+        if off_box:raise ValidationError('These checkbox fields point at a place that is not a box: '+field_list(off_box)+' Remove each one and add it again on its printed box or checkbox control, or as text.')
         if latest.confirmed:
             messages.info(request,'This mapping version was already confirmed.')
             return redirect('template_detail',pk=t.pk)
@@ -605,6 +607,12 @@ def encounter_detail(request,pk):
         from .generation import as_currently_governed,governance_for
         governance=governance_for(e.notes,e.template_version.fields,[row['label'] for row in e.template_version.review_requirements])
         rows=[as_currently_governed(governance,e.notes,row,is_wm) for row in rows]
+    if is_v3:
+        # ⚠️ A QUESTION LABEL THE FORM REPEATS IS SHOWN WITH ITS CONTEXT (counted with generation's own normalizer):
+        # two questions reading "Effusion" are told apart only by where they sit on the form.
+        from .generation import question_key
+        label_counts={}
+        for f in e.template_version.fields:label_counts[question_key(f.get('label'))]=label_counts.get(question_key(f.get('label')),0)+1
     for row in rows:
         row['accepted_by_email']=accepters.get(str(row.get('accepted_by') or ''),'')
         row['accepted_by_me']=str(row.get('accepted_by') or '')==str(request.user.pk)
@@ -636,6 +644,7 @@ def encounter_detail(request,pk):
             row['v3_note']=v3_mapping.review_note(row)
             row['blank_note']=v3_mapping.blank_note(row)
             row['v3_final']=v3_mapping.finalized_note(row,row)
+            row['v3_context']=(row.get('context') or '') if label_counts.get(question_key(row.get('label')),0)>1 else ''
     requirements=[];review_error='';assessment=None;resolved_ok=False;wm_conflicts=[]
     if is_wm:
         decisions=e.template_review.get('decisions',{})
