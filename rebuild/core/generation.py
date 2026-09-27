@@ -1638,6 +1638,43 @@ def inner_sentence_end(text):
 BLANK_LINE = re.compile(r'\n[ \t\r]*\n')
 
 
+#: ⚠️ ONLY A PLAIN VALUE PASSES RULE (a) (round 3, R3-1/R3-2). Rule (a) let any later one-sentence labelled value pass
+#: without holding what came before it, and F5 splits a line wherever a form OR CONTEXT label begins: 'Consent obtained:
+#: yes. Plan: to be obtained tomorrow.' ticked the box, and so did '... Clinician signature: consent form not yet signed.'
+#: (a label nothing generates). A later labelled value passes only when it answers an ASKED question (never a context
+#: label) with a value this grammar proves plain, and the grammar FAILS CLOSED: one answer word (`PLAIN_ANSWERS`), or at
+#: most three words of letters, digits and `/ - ' % ° + − < > = #` - no comma, semicolon, colon, bracket, quotation mark,
+#: question mark or second sentence, and no full stop but one closing it, one between digits or one after a title -
+#: with no listed verb, scope, denial, self-correction, pointer or `UNSETTLED` word. These word lists only ever HOLD.
+#: ⚠️ IT DOES NOT READ MEANING, AND SAYS SO: a plain value that contradicts an earlier answer by meaning alone ('Consent
+#: obtained: yes. Plan: consent Friday.') still passes. That residual is stated, not solved by another word list.
+PLAIN_ANSWERS = frozenset(('yes', 'no', 'none', 'nil', 'negative', 'positive', 'normal', 'absent', 'nkda'))
+PLAIN_CHARACTERS = re.compile(r"(?:[^\W_]|[ /'\u2019%\u00b0+\u2212<>=#.\-])++")
+PLAIN_STOPS = re.compile(r'(?<=[0-9])\.(?=[0-9])|' + LETTER_BEFORE + r'(?:dr|mr|mrs|ms|prof)\.(?= )', re.I)
+#: Words that may put another answer in doubt: time and deferral, withdrawal, status, doubt, attribution to someone else.
+UNSETTLED = re.compile(LETTER_BEFORE + r'(?:pending|await(?:ed|ing)?|today|tonight|tomorrow|yesterday|now|then|later|next|until|'
+    r'unless|after|before|since|ago|to|or|defer(?:red)?|postponed?|outstanding|withdrawn|withdrew|declined?|refused?|'
+    r'cancell?ed|stopped|quit|former(?:ly)?|ex|non[^\W_]*|previous(?:ly)?|prior|past|history|query|possible|possibly|'
+    r'probable|probably|suspected|excluded|ruled|disproven|reversed|changed|corrected|correct|correction|instead|rather|'
+    r'except|but|however|only|again|repeat|recheck(?:ed)?|retest(?:ed)?|un(?:known|clear|sure|certain|confirmed|verified|'
+    r'able|signed)|mother|father|sister|brother|son|daughter|wife|husband|partner|family|relative)' + LETTER_AFTER, re.I)
+
+
+def plain_value(value):
+    """Whether a labelled value is plain by the fail-closed grammar above (R3-1): it cannot change another answer."""
+    text = str(value or '').strip()
+    if text.endswith('.') and not text.endswith('..'):
+        text = text[:-1].rstrip()
+    if not text or len(text) > 120 or not PLAIN_CHARACTERS.fullmatch(text) or not re.search(r'[^\W_]', text):
+        return False
+    if text.casefold() in PLAIN_ANSWERS:
+        return True
+    return (len(text.split()) <= 3 and '.' not in PLAIN_STOPS.sub('', text)
+            and not any(pattern.search(text) for pattern in (FINITE_STATEMENT_V3, INHERITED_SCOPE, DENIAL, SELF_CORRECTION,
+                                                             UNSETTLED))
+            and not points_elsewhere(text))
+
+
 def v3_shape_holds(quote, value):
     """Rules (d)-(f) of contract v3 for one unit (`quote`, and its labelled `value` or the quote itself); rule (c), more
     than one sentence in the unit, is `inner_sentence_end`. Read once per unit per validation (R3-4)."""
@@ -1650,14 +1687,13 @@ def v3_shape_holds(quote, value):
         or any(SELF_CORRECTION.search(reading) for reading in readings(quote)))
 
 
-def paragraph_neighbours(notes, units, parsed_units, ends_inside=None):
+def paragraph_neighbours(notes, units, plain):
     """Each unit's neighbours in its PARAGRAPH (units with no `BLANK_LINE` between them), `{id: (before, changer)}`:
-    `before`, the unit written just before it; `changer`, the FIRST unit after it that is not another question's
-    one-sentence labelled value - an unlabelled sentence, or a labelled value that runs on into more sentences. Such a
-    unit may correct or reframe anything written before it in its paragraph, not only its neighbour ('Smoker: yes.' /
-    'Allergies: none.' / 'Sorry, I meant smoker no.'). None when there is none. `ends_inside(unit)`: the caller's
-    once-per-unit reading of `inner_sentence_end` (R3-4)."""
-    ends_inside = ends_inside or (lambda unit: inner_sentence_end(unit['quote']))
+    `before`, the unit written just before it; `changer`, the FIRST unit after it that is not another asked question's
+    PLAIN labelled value (`plain[index]`, R3-1) - an unlabelled sentence, a 'Label is ...' sentence or a labelled value
+    that is not plain, a context label's value. Such a unit may correct or reframe anything written before it in its
+    paragraph, not only its neighbour ('Smoker: yes.' / 'Allergies: none.' / 'Sorry, I meant smoker no.'). None when
+    there is none."""
     joined = [not BLANK_LINE.search(notes, first['end'], second['start']) for first, second in zip(units, units[1:])]
     found, changer = {}, None
     for index in range(len(units) - 1, -1, -1):
@@ -1665,7 +1701,7 @@ def paragraph_neighbours(notes, units, parsed_units, ends_inside=None):
         if index < len(joined) and not joined[index]:
             changer = None                                  # its paragraph ends with it
         found[unit['id']] = (units[index - 1] if index and joined[index - 1] else None, changer)
-        if not parsed_units[index] or ends_inside(unit):
+        if not plain[index]:
             changer = unit
     return found
 
@@ -1709,7 +1745,14 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
         if unit['id'] not in shape_read:
             shape_read[unit['id']]=ends_inside(unit) or v3_shape_holds(unit['quote'],own_value[1] if own_value else unit['quote'])
         return shape_read[unit['id']]
-    paragraph=paragraph_neighbours(notes,units,parsed_units,ends_inside) if v3 else {}
+    # ⚠️ CONTRACT v3: A 'Label is ...' SENTENCE IS AN ORDINARY SENTENCE FOR RULES (a) AND (b) (R3-2): read as a labelled
+    # value it neither changed what came before it ('Consent obtained: yes.' / 'Plan is to proceed once consent is signed
+    # tomorrow.') nor was changed ('Her sister was seen in oncology last month. Diagnosis was breast cancer.'). Only a
+    # colon-labelled value names its question for rule (b); either passes rule (a) only as an asked question's plain value.
+    asked={f['label'].strip().rstrip(':?').casefold() for f in fields}
+    colon_labelled={unit['id']:bool(parsed and labelled_value(unit['quote'],labels)) for unit,parsed in zip(units,parsed_units)} if v3 else {}
+    plain=[bool(parsed and parsed[0] in asked and plain_value(parsed[1])) for parsed in parsed_units] if v3 else []
+    paragraph=paragraph_neighbours(notes,units,plain) if v3 else {}
     selected={item.key:item for item in selections.fields}
     for field in fields:
         item=selected[field['key']]
@@ -1762,14 +1805,15 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
                 # is adopted. 'Allergies: penicillin.' above 'Sorry, I mean amoxicillin.', 'Consent obtained: yes.' above
                 # 'To be obtained tomorrow.' and 'Warfarin 5 mg daily.' before 'Stopped last month.' were adopted.
                 before,changer=paragraph[unit['id']]
-                # (a) Anything written after it in its paragraph other than another question's one-sentence labelled
-                #     value may change it (the lead's rule held only for the NEXT unit; a correction one labelled line
-                #     further on was adopted past).
+                # (a) Anything written after it in its paragraph other than another asked question's PLAIN labelled value
+                #     may change it (the lead's rule held only for the NEXT unit; a correction one labelled line further on
+                #     was adopted past; round 3: a split-off 'Plan: to be obtained tomorrow.' was exempt as labelled).
                 if changer is not None:
                     guarded=True; nearby.setdefault(changer['id'],(unit,changer,True))
-                # (b) An unlabelled sentence depends on the one before it in its paragraph for its subject and scope ('He
-                #     had a myocardial infarction' after a sentence about her father). A labelled value names its question.
-                if before is not None and not own_value:
+                # (b) An unlabelled or 'Label is ...' sentence depends on the one before it in its paragraph for its subject
+                #     and scope ('He had a myocardial infarction' after a sentence about her father; 'Diagnosis was breast
+                #     cancer.' after one about her sister). A colon-labelled value names its question.
+                if before is not None and not colon_labelled[unit['id']]:
                     guarded=True; nearby.setdefault(before['id'],(unit,before,False))
                 # (c) More than one sentence in one unit (a labelled line's remainder, a lowercase continuation), and
                 # (d)-(f) (`v3_shape_holds`): read once per unit (`shape_holds`).

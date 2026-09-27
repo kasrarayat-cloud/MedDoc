@@ -592,8 +592,15 @@ class V3Generation(V3EncounterFixture, TestCase):
     def test_anything_else_is_held_for_the_clinician_with_its_quote(self):
         candidates = {"Smoker?": "former smoker", "Laterality": "left side",
                       "Symptoms (check all that apply)": "Pain, Redness", "Diabetes": "no"}
-        answers = self.generate("Smoker: former smoker\nLaterality: left side\n"
-                                "Symptoms (check all that apply): Pain, Redness\nDiabetes: no")
+        # Round 3 (R3-1): each labelled line in its own paragraph, so each is judged by the option rule alone. Written as
+        # one paragraph, 'Pain, Redness' (a list, not a plain value) also holds the lines above it; asserted below.
+        notes = ("Smoker: former smoker\n\nLaterality: left side\n\n"
+                 "Symptoms (check all that apply): Pain, Redness\n\nDiabetes: no")
+        one_paragraph = self.generate(notes.replace("\n\n", "\n"))
+        for label, candidate in candidates.items():
+            answer = self.answer(one_paragraph, label)
+            self.assertEqual((answer["status"], answer["text"], answer["held_candidate"]["text"]), ("conflict", "", candidate))
+        answers = self.generate(notes)
         for label, candidate in candidates.items():
             answer = self.answer(answers, label)
             self.assertEqual((answer["status"], answer["text"]), ("conflict", ""), label)
@@ -612,7 +619,12 @@ class V3Generation(V3EncounterFixture, TestCase):
             self.assertEqual((self.answer(answers, label)["status"], self.answer(answers, label)["text"]), ("missing", ""), label)
 
     def test_table_rows_signature_and_initials_are_never_generated(self):
-        answers = self.generate("Referring physician: Dr Example\nTable: Aspirin | 81 mg | daily\n"
+        # Round 3 (R3-1): a never-generated label's line in the same paragraph is never a plain value of an asked question,
+        # so it holds the answer above it (asserted below); the signature block here is its own paragraph.
+        held = self.answer(self.generate("Referring physician: Dr Example\nClinician signature: Synthetic Alpha Clinician"),
+                           "Referring physician")
+        self.assertEqual((held["status"], held["text"], held["held_candidate"]["text"]), ("conflict", "", "Dr Example"))
+        answers = self.generate("Referring physician: Dr Example\n\nTable: Aspirin | 81 mg | daily\n"
                                 "Clinician signature: Synthetic Alpha Clinician\nPhysician initials: SAC")
         for label in ("Table", "Clinician signature", "Physician initials"):
             answer = self.answer(answers, label)

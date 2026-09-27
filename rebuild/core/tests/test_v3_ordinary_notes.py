@@ -50,15 +50,19 @@ def run(notes, picks, conflicts=(), fields=None):
 
 class OrdinaryNotesOnV3Forms(SimpleTestCase):
     def test_prose_notes_are_adopted_as_complete_sentences_not_returned_as_conflicts(self):
-        notes = ('Patient presents with right knee pain for three weeks. Allergies: penicillin. '
+        # Round 3 (R3-1/R3-2): each statement in its own paragraph. Written as one paragraph, the 'Plan is ...' sentence
+        # is an ordinary sentence that may change the two before it, and the sentence before it may change it: all held.
+        picks = {'Chief complaint': ['Patient presents with right knee pain for three weeks.'],
+                 'Allergies': ['Allergies: penicillin.'], 'Plan': ['Plan is physiotherapy twice weekly and review in six weeks.']}
+        notes = ('Patient presents with right knee pain for three weeks.\n\nAllergies: penicillin.\n\n'
                  'Plan is physiotherapy twice weekly and review in six weeks.')
-        out = run(notes, {'Chief complaint': ['Patient presents with right knee pain for three weeks.'],
-                          'Allergies': ['Allergies: penicillin.'],
-                          'Plan': ['Plan is physiotherapy twice weekly and review in six weeks.']})
+        out = run(notes, picks)
         self.assertEqual(out['Chief complaint']['status'], 'supported')
         self.assertEqual(out['Chief complaint']['text'], 'Patient presents with right knee pain for three weeks.')
         self.assertEqual(out['Allergies']['text'], 'penicillin.')
         self.assertEqual(out['Plan']['status'], 'supported')
+        out = run(notes.replace('\n\n', ' '), picks)
+        self.assertEqual({label: out[label]['status'] for label in picks}, dict.fromkeys(picks, 'conflict'))
 
     def test_an_option_is_filled_only_from_its_own_labelled_line(self):
         notes = 'Smoker: No.\n\nThe patient drinks socially.'
@@ -509,7 +513,9 @@ def unit_response(payload, picks, request_id='synthetic-no-provider'):
 class LiveCompleteSentencePath(SimpleTestCase):
     """R11: the live path for a v3 form, the Anthropic client patched: what is sent, and what is adopted from the reply."""
 
-    notes = ('Patient presents with right knee pain for three weeks.\nAllergies: penicillin.\nSmoker: No.\n'
+    # Round 3 (R3-1/R3-2): the 'Plan is ...' sentence in its own paragraph; in the same paragraph it holds every answer
+    # above it (it is not a plain value) and is held by the line before it.
+    notes = ('Patient presents with right knee pain for three weeks.\nAllergies: penicillin.\nSmoker: No.\n\n'
              'Plan is physiotherapy twice weekly and review in six weeks.')
     picks = {'Chief complaint': ['Patient presents with right knee pain for three weeks.'],
              'Allergies': ['Allergies: penicillin.'], 'Smoker': ['Smoker: No.'],
@@ -885,6 +891,37 @@ class RoundThreeRefutation(SimpleTestCase):
         out = run('Allergies: none. Smoker: No.', {'Allergies': ['Allergies: none.'], 'Smoker': ['Smoker: No.']})
         self.assertEqual((out['Allergies']['status'], out['Allergies']['text']), ('supported', 'none.'))
         self.assertEqual((out['Smoker']['status'], out['Smoker']['text']), ('supported', 'No'))
+
+    def test_r3_1_the_plain_value_grammar_fails_closed(self):
+        """Not the refuter's inputs: each part of the grammar, pinned by a later value only that part makes not plain."""
+        for notes, label, quote in (
+                ('Consent obtained: yes. Plan: not obtained.', 'Consent obtained', 'Consent obtained: yes.'),       # denial
+                ('Consent obtained: yes. Plan: consent was withheld.', 'Consent obtained', 'Consent obtained: yes.'),  # verb
+                ('Consent obtained: yes. Plan: surgery if needed.', 'Consent obtained', 'Consent obtained: yes.'),  # scope
+                # A pointing scope word also makes the note inherited, where the answer would be OFFERED for one click:
+                ('Smoker: yes. Plan: as above.', 'Smoker', 'Smoker: yes.'),                                  # scope
+                ('Smoker: yes. Allergies: actually penicillin.', 'Smoker', 'Smoker: yes.'),               # self-correction
+                ('Consent obtained: yes. Plan: consent tomorrow.', 'Consent obtained', 'Consent obtained: yes.'),  # unsettled
+                ('Smoker: yes. Findings: details overleaf.', 'Smoker', 'Smoker: yes.'),                           # pointer
+                ('Consent obtained: yes. Plan: rest.Consent Friday.', 'Consent obtained', 'Consent obtained: yes.'),  # stop
+                ('Smoker: yes. Plan: rest ice elevation compression.', 'Smoker', 'Smoker: yes.'),         # four words
+                ('Smoker: yes. Allergies: none, penicillin.', 'Smoker', 'Smoker: yes.'),                  # a list
+                ('Smoker: yes. Allergies: penicillin, latex.', 'Smoker', 'Smoker: yes.'),                 # a list
+                ('Smoker: yes. Allergies: penicillin (rash).', 'Smoker', 'Smoker: yes.'),                 # a bracket
+                ('Allergies: none.\nClinician signature: Dr Example.', 'Allergies', 'Allergies: none.')):  # context label
+            with self.subTest(notes=notes):
+                held_with(self, notes, label, quote, quote.split(': ', 1)[1])
+        # A plain 'Label is ...' value passes rule (a) like a colon-labelled one; for rule (b) it is an ordinary sentence.
+        out = run('Allergies: penicillin.\nPlan is rest.', {'Allergies': ['Allergies: penicillin.'], 'Plan': ['Plan is rest.']},
+                  fields=ROUND3)
+        self.assertEqual((out['Allergies']['status'], out['Allergies']['text']), ('supported', 'penicillin.'))
+        self.assertEqual((out['Plan']['status'], out['Plan']['held_candidate']['text']), ('conflict', 'rest.'))
+        for value in ('none.', 'No', 'NKDA', '124/78.', '36.9', '104 bpm', '98%', 'A+', 'Dr Example', 'Dr. Example',
+                      'knee pain.', 'left'):
+            self.assertTrue(g.plain_value(value), value)
+        for value in ('none, he quit ten years ago.', 'to be obtained tomorrow.', 'consent form not yet signed.', 'yes?',
+                      '"yes"', 'so\u00adrry', 'a' * 121, '/', '', 'rest.Consent Friday', 'No..'):
+            self.assertFalse(g.plain_value(value), value)
 
     def test_r3_2_a_label_is_sentence_is_an_ordinary_sentence_for_the_paragraph_rule(self):
         """R3-2: 'Plan is ...' read as a labelled value, so it neither changed what came before it nor was changed."""
