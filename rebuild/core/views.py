@@ -492,9 +492,9 @@ def same_text(posted,stored):
     return posted==stored or (stored.startswith('\n') and posted==stored[1:])
 
 def notes_save_clears(e):
-    """Whether a changed notes save would clear something: the answer draft, statement decisions or accepted codes."""
-    return (bool(e.answers) or bool((e.template_review or {}).get('decisions'))
-            or CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False).exists())
+    """Whether a changed notes save would clear something: the answer draft, statement decisions or accepted codes. Read
+    from the counts the save audits and states, so the page's warning and the saved message cannot disagree."""
+    return any(review_state_counts(e).values())
 
 ANSWER_STATES=('answers_accepted_suggestion','answers_left_blank','answers_edited_not_accepted','answers_reviewed_unedited',
                'answers_unreviewed_unedited')
@@ -520,11 +520,24 @@ def review_state_counts(e,codes=True):
         elif a.get('reviewed'):state='answers_reviewed_unedited'
         else:state='answers_unreviewed_unedited'
         counts[state]+=1;counts['answers_with_clinician_review']+=int(bool(a.get('reviewed')))
-    decisions=[d for d in ((e.template_review or {}).get('decisions') or {}).values() if isinstance(d,dict)]
+    decisions=[d if isinstance(d,dict) else {} for d in ((e.template_review or {}).get('decisions') or {}).values()]
     counts.update(statements_reviewed=sum(1 for d in decisions if d.get('reviewed')),
                   statements_recorded_unreviewed=sum(1 for d in decisions if not d.get('reviewed')),
                   codes_accepted=CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False).count() if codes else 0)
     return counts
+
+def cleared_sentence(counts):
+    """What a changed notes save cleared, in words, read from its audited counts: each part is named only when its count
+    is not zero, so the sentence cannot claim what the audit row does not record (refutation round 3, F2)."""
+    def counted(number,noun):return f'{number} {noun}'+('' if number==1 else 's')
+    def reviewed(total,number):return (f'{number} reviewed by a clinician' if number else 'none reviewed' if total>1 else 'not reviewed')
+    answers=sum(counts[state] for state in ANSWER_STATES)
+    statements=counts['statements_reviewed']+counts['statements_recorded_unreviewed']
+    parts=([f'the answer draft ({counted(answers,"answer")}, {reviewed(answers,counts["answers_with_clinician_review"])})'] if answers else [])
+    parts+=([f'{counted(statements,"saved prewritten statement wording")} ({reviewed(statements,counts["statements_reviewed"])})'] if statements else [])
+    parts+=([counted(counts['codes_accepted'],'accepted code')] if counts['codes_accepted'] else [])
+    if not parts:return ''
+    return 'Cleared, and recorded under your name: '+(', '.join(parts[:-1])+' and '+parts[-1] if len(parts)>1 else parts[0])+'. '
 
 @require_POST
 @transaction.atomic
@@ -1446,7 +1459,7 @@ def encounter_notes(request,pk):
     # CRLF, which is the same text), so every evidence offset stays valid. A reviewed transcript is always a change.
     if transcript_job is None and same_text(notes,e.notes):
         messages.info(request,'Notes unchanged — nothing was cleared.');return redirect('encounter_detail',pk=pk)
-    cleared=review_state_counts(e);clears=notes_save_clears(e)
+    cleared=review_state_counts(e)
     e.notes=notes;e.answers={};e.revision+=1;e.status='draft';wm_review.invalidate_review(e);e.save(update_fields=['notes','answers','revision','status','template_review'])
     CodeSuggestion.objects.filter(encounter=e).update(accepted_by=None,accepted_at=None)
     CodeSuggestion.objects.filter(encounter=e).delete()
@@ -1456,9 +1469,9 @@ def encounter_notes(request,pk):
         audit(request.user,'transcription.applied',transcript_job.pk,department=e.department,revision=e.revision,
               mode=request.POST['transcript_mode'],raw_sha256=hashlib.sha256(raw_transcript.encode()).hexdigest(),
               corrected_sha256=hashlib.sha256(corrected.encode()).hexdigest(),corrected=corrected.replace('\r\n','\n')!=raw_transcript.replace('\r\n','\n'))
-    # (said plainly to whoever saved: any member's changed save clears a clinician's review — refutation round 2)
-    messages.success(request,('Notes saved. The answer draft, its review decisions and accepted codes were cleared, and the '
-                              'clearing is recorded under your name. ' if clears else 'Notes saved. ')+'Generate and review a new answer draft.')
+    # (said plainly to whoever saved: any member's changed save clears a clinician's review — refutation round 2 — and
+    # exactly what it cleared, read from the counts just audited — refutation round 3, F2)
+    messages.success(request,'Notes saved. '+cleared_sentence(cleared)+'Generate and review a new answer draft.')
     return redirect('encounter_detail',pk=pk)
 
 def review_transcript(job):

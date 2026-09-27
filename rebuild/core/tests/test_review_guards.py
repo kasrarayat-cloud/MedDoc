@@ -432,10 +432,11 @@ class TheNotesPageSaysWhatAChangedSaveClears(OrdinaryDraft, TestCase):
             self.assertIn(words, help_text)
         response = self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': encounter.notes + '\nPlan: synthetic.'})
         self.assertEqual(encounter.answers, {})
-        self.assertContains(response, 'The answer draft, its review decisions and accepted codes were cleared')
+        self.assertIn('Notes saved. Cleared, and recorded under your name: the answer draft (2 answers, 2 reviewed by a '
+                      'clinician). Generate and review a new answer draft.', shown_messages(response))
         # (and a save that had nothing to clear does not claim it cleared anything)
         response = self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': encounter.notes + '\nPlan: again.'})
-        self.assertNotContains(response, 'were cleared')
+        self.assertEqual(shown_messages(response).strip(), 'Notes saved. Generate and review a new answer draft.')
 
 
 SAVED = 'Notes saved. '
@@ -463,14 +464,33 @@ class TheSaveSaysExactlyWhatItCleared(OrdinaryDraft, TestCase):
         self.assertEqual(last_event('encounter.notes_saved', encounter)['cleared']['codes_accepted'], 1)
         self.assertIn(SAVED + 'Cleared, and recorded under your name: 1 accepted code. ' + NEXT, said)
         for claim in ('answer draft', 'review decision', 'statement'):
-            self.assertNotIn(claim, said)
+            self.assertNotIn(claim, said.split(NEXT)[0])                           # (what it says it cleared)
 
     def test_a_save_over_a_draft_nobody_reviewed_names_only_the_draft(self):
         encounter = self.drafted()
         said = self.saved(encounter)
         self.assertIn(SAVED + 'Cleared, and recorded under your name: the answer draft (2 answers, none reviewed). ' + NEXT, said)
         for claim in ('review decision', 'accepted code', 'statement'):
-            self.assertNotIn(claim, said)
+            self.assertNotIn(claim, said.split(NEXT)[0])
+
+    def test_the_sentence_names_each_part_only_when_its_count_is_not_zero(self):
+        counts = dict.fromkeys(views.review_state_counts(Encounter(answers={}, template_review={}), codes=False), 0)
+        self.assertEqual(views.cleared_sentence(counts), '')
+        self.assertEqual(views.cleared_sentence({**counts, 'answers_left_blank': 1, 'answers_with_clinician_review': 1}),
+                         'Cleared, and recorded under your name: the answer draft (1 answer, 1 reviewed by a clinician). ')
+        self.assertEqual(views.cleared_sentence({**counts, 'answers_edited_not_accepted': 1, 'statements_reviewed': 1,
+                                                 'statements_recorded_unreviewed': 1, 'codes_accepted': 2}),
+                         'Cleared, and recorded under your name: the answer draft (1 answer, not reviewed), 2 saved prewritten '
+                         'statement wordings (1 reviewed by a clinician) and 2 accepted codes. ')
+
+    def test_the_page_warns_exactly_when_the_save_will_name_something(self):
+        """The page's warning and the saved message read one set of counts, so they agree even on a malformed entry."""
+        encounter, _keys = self.reviewed_draft()
+        Encounter.objects.filter(pk=encounter.pk).update(answers={}, template_review={'decisions': {'claim_1': 'legacy'}})
+        self.assertIn('Saving changed notes clears', notes_help(self.client.get(f'/encounters/{encounter.pk}/')))
+        self.assertIn('Cleared, and recorded under your name: 1 saved prewritten statement wording (not reviewed). ',
+                      self.saved(encounter))
+        self.assertNotIn('Saving changed notes clears', notes_help(self.client.get(f'/encounters/{encounter.pk}/')))
 
     def test_a_save_over_statement_wordings_alone_names_them(self):
         """M9's other half: a message whose clearing is read from the answers alone says nothing here."""
@@ -1017,6 +1037,15 @@ class WordNotesSaveAndClear(OfflineWordForm):
         self.assertEqual(last_event('encounter.notes_saved', self.encounter).get('cleared'),
                          cleared(reviewed_unedited=3, unreviewed_unedited=1, with_clinician_review=3, statements_reviewed=2,
                                  statements_recorded_unreviewed=1, codes=1))
+
+    def test_a_changed_save_names_each_thing_it_cleared(self):
+        self.clinician_reviews()
+        OrdinaryDraft.accepted_code(self, self.encounter)
+        response = self.client.post(f'/encounters/{self.encounter.pk}/notes/', {'revision': self.encounter.revision,
+                                    'notes': self.encounter.notes + '\nSynthetic addendum.'}, follow=True)
+        self.assertIn('Notes saved. Cleared, and recorded under your name: the answer draft (4 answers, 4 reviewed by a '
+                      'clinician), 3 saved prewritten statement wordings (3 reviewed by a clinician) and 1 accepted code. '
+                      'Generate and review a new answer draft.', shown_messages(response))
 
     def test_clearing_counts_the_statement_decisions_it_clears(self):
         self.clinician_reviews()
