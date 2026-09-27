@@ -59,3 +59,7 @@ The complete-source contract is still too restrictive for broad ordinary day-to-
 ## Handoff
 
 Runtime `rebuild/.runtime/ordinary-input-20260927/`; durable `evidence/` contains base and intermediate source snapshots, original and final results, tests, helper scripts and SHA256 manifest. Source frozen atfe938a2a. Next safe action is independent finished-diff refutation, reproduce any finding and repair safely, then parent integrates a reviewed union preserving D19 and model/accounting work. Parent owns release, financial authority and deployment state. No spending allowance, provider receipt, campaign reservation, account agreement, real-data operation or unexplained lock action arose in this stream.
+
+## Later source-context repair
+
+The prior frozen-source status above is historical. See [VALUE-CONTEXT.md](VALUE-CONTEXT.md) for the independently discovered complete-value evidence gap, preserved failures, source 5caaa50dc7c77f6d491b30a22d829ff80b4847c5 and142 passing affected tests. Final refutation remains pending; B-G1 stays open.

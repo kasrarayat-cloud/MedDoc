@@ -1,0 +1,254 @@
+{
+  "disk_source_sha256": "05601c5001f1e9e745e083d01c258958eea7a0fe93a3752a7eb2b58009bd1c0d",
+  "executed_override": null,
+  "override_sha256": null,
+  "cases": [
+    {
+      "case": "father",
+      "notes": "Father: MI at 50. Smoker: No.",
+      "answer": {
+        "status": "supported",
+        "text": "No",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "No.",
+            "start": 26,
+            "end": 29
+          }
+        ]
+      },
+      "source_eligible": true,
+      "page": {
+        "status": "conflict",
+        "text": "",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "No.",
+            "start": 26,
+            "end": 29
+          }
+        ],
+        "label": "Smoker",
+        "held_candidate": {
+          "text": "No",
+          "evidence": [
+            {
+              "quote": "No.",
+              "start": 26,
+              "end": 29
+            }
+          ],
+          "context": [
+            {
+              "quote": "Father: MI at 50.",
+              "start": 0,
+              "end": 17,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+          "prefilled": true
+        }
+      },
+      "refusals": [
+        "Smoker"
+      ]
+    },
+    {
+      "case": "family",
+      "notes": "Family hx: father had an MI. Smoker: No.",
+      "answer": {
+        "status": "supported",
+        "text": "No",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "No.",
+            "start": 37,
+            "end": 40
+          }
+        ]
+      },
+      "source_eligible": true,
+      "page": {
+        "status": "conflict",
+        "text": "",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "No.",
+            "start": 37,
+            "end": 40
+          }
+        ],
+        "label": "Smoker",
+        "held_candidate": {
+          "text": "No",
+          "evidence": [
+            {
+              "quote": "No.",
+              "start": 37,
+              "end": 40
+            }
+          ],
+          "context": [
+            {
+              "quote": "Family hx: father had an MI.",
+              "start": 0,
+              "end": 28,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+          "prefilled": true
+        }
+      },
+      "refusals": [
+        "Smoker"
+      ]
+    },
+    {
+      "case": "positive",
+      "notes": "Patient presents with knee pain. Smoker: No.",
+      "answer": {
+        "status": "supported",
+        "text": "No",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "No.",
+            "start": 41,
+            "end": 44
+          }
+        ]
+      },
+      "source_eligible": true,
+      "page": {
+        "status": "supported",
+        "text": "No",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "No.",
+            "start": 41,
+            "end": 44
+          }
+        ],
+        "label": "Smoker"
+      },
+      "refusals": []
+    },
+    {
+      "case": "ancillary-qualified",
+      "notes": "Smoker: No.\nThe patient drinks socially but smokes daily.",
+      "answer": {
+        "status": "supported",
+        "text": "No",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "No.",
+            "start": 8,
+            "end": 11
+          }
+        ]
+      },
+      "source_eligible": true,
+      "page": {
+        "status": "conflict",
+        "text": "",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "No.",
+            "start": 8,
+            "end": 11
+          }
+        ],
+        "label": "Smoker",
+        "held_candidate": {
+          "text": "No",
+          "evidence": [
+            {
+              "quote": "No.",
+              "start": 8,
+              "end": 11
+            }
+          ],
+          "context": [
+            {
+              "quote": "The patient drinks socially but smokes daily.",
+              "start": 12,
+              "end": 57,
+              "after": true,
+              "same": false
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+          "prefilled": true
+        }
+      },
+      "refusals": [
+        "Smoker"
+      ]
+    },
+    {
+      "case": "other-question",
+      "notes": "Seen recently: No.\nPatient seen today.",
+      "answer": {
+        "status": "supported",
+        "text": "No",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "No.",
+            "start": 15,
+            "end": 18
+          }
+        ]
+      },
+      "source_eligible": true,
+      "page": {
+        "status": "conflict",
+        "text": "",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "No.",
+            "start": 15,
+            "end": 18
+          }
+        ],
+        "label": "Seen recently",
+        "held_candidate": {
+          "text": "No",
+          "evidence": [
+            {
+              "quote": "No.",
+              "start": 15,
+              "end": 18
+            }
+          ],
+          "context": [
+            {
+              "quote": "Patient seen today.",
+              "start": 19,
+              "end": 38,
+              "after": true,
+              "same": false
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+          "prefilled": true
+        }
+      },
+      "refusals": [
+        "Seen recently"
+      ]
+    }
+  ]
+}
