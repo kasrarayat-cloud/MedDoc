@@ -355,15 +355,20 @@ def v3_page(request,t,version,*,status=200,error='',posted=None,outline=None):
     places=v3_mapping.open_places(outline,version.fields,query)
     box_counts={row['slot']:row.get('boxes') for row in outline}
     posted=posted or {}
+    # ⚠️ Repeated questions are counted with generation's own normalizer, over the fields generation reads: two of
+    # them sharing a label are never filled from the notes (each is held), so the page names them for renaming.
+    from .generation import question_key
     counts={}
-    for f in version.fields:counts[f['label'].strip()]=counts.get(f['label'].strip(),0)+1
+    for f in version.fields:
+        if f.get('kind') not in v3_mapping.NEVER_GENERATED:counts[question_key(f['label'])]=counts.get(question_key(f['label']),0)+1
     rows=[{'number':n,'key':f['key'],'field':f,'label':posted.get('label_'+f['key'],f['label']),
            'kind':f.get('kind'),'chosen_kind':posted.get('kind_'+f['key'],f.get('kind')),
            'kind_name':v3_mapping.KIND_NAMES.get(f.get('kind'),f.get('kind')),
            'kind_editable':f.get('kind') in v3_mapping.TEXT_KINDS,'options':f.get('options') or [],
            'location':field_location.describe(f,box_counts=box_counts),'context':f.get('context') or '',
            'origin':'Manual' if f.get('origin')=='manual' else 'Automatic','max_chars':f.get('max_chars'),
-           'remove':posted.get('remove_'+f['key'])=='on','duplicate':counts.get(f['label'].strip(),0)>1}
+           'remove':posted.get('remove_'+f['key'])=='on',
+           'duplicate':f.get('kind') not in v3_mapping.NEVER_GENERATED and counts.get(question_key(f['label']),0)>1}
           for n,f in enumerate(version.fields,1)]
     can_confirm=Membership.objects.filter(user=request.user,department=t.department,active=True,role__in=['owner','clinician']).exists()
     return render(request,'template_detail.html',{'template':t,'version':version,'v3':True,'v3_rows':rows,'v3_error':error,

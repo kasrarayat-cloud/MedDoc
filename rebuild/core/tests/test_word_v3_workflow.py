@@ -782,6 +782,86 @@ class V3BoxNumbers(V3Fixture, TestCase):
         self.assertFalse(MappingConfirmation.objects.filter(version=stale).exists())
 
 
+def two_knees_form_bytes():
+    doc = Document()
+    doc.add_paragraph("Synthetic knee examination")
+    doc.add_paragraph("Indication: ____________")
+    doc.add_paragraph("RIGHT KNEE")
+    doc.add_paragraph("Pain?  ☐ Yes  ☐ No")
+    doc.add_paragraph("Comments: ____________")
+    doc.add_paragraph("LEFT KNEE")
+    doc.add_paragraph("PAIN:  ☐ Yes  ☐ No")
+    doc.add_paragraph("Comments: ____________")
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    return buffer.getvalue()
+
+
+@override_settings(**V3)
+class V3RepeatedQuestions(V3Fixture, TestCase):
+    """F4: a label the form repeats names no one question; the review flags it with generation's normalizer."""
+
+    def setUp(self):
+        super().setUp()
+        self.template, self.version = self.uploaded(data=two_knees_form_bytes(), name="Synthetic knees")
+
+    def generate(self, version, notes):
+        from core.jobs import enqueue, run_one
+        if not Encounter.objects.filter(template_version=version).exists():
+            self.assertEqual(self.new_encounter(version).status_code, 302)
+        encounter = Encounter.objects.get(template_version=version)
+        self.assertEqual(self.client.post(f"/encounters/{encounter.pk}/notes/",
+                                          {"revision": encounter.revision, "notes": notes}).status_code, 302)
+        enqueue(Encounter.objects.get(pk=encounter.pk), self.user)
+        self.assertTrue(run_one())
+        encounter = Encounter.objects.get(pk=encounter.pk)
+        return {f["key"]: encounter.answers[f["key"]] for f in version.fields}, encounter
+
+    def test_the_review_flags_labels_that_generation_reads_as_one(self):
+        rows = self.client.get(f"/templates/{self.template.pk}/").context["v3_rows"]
+        flagged = {(row["label"], row["duplicate"]) for row in rows}
+        self.assertIn(("Pain?", True), flagged)
+        self.assertIn(("PAIN", True), flagged)
+        self.assertIn(("Comments", True), flagged)
+        self.assertIn(("Indication", False), flagged)
+
+    def test_a_labelled_line_fills_none_of_the_repeated_questions(self):
+        version = self.confirm(self.template)
+        answers, encounter = self.generate(version, "Indication: synthetic knee review\nPain: yes\nComments: settled")
+        for f in version.fields:
+            answer = answers[f["key"]]
+            if f["label"] == "Indication":
+                self.assertEqual((answer["status"], answer["text"]), ("supported", "synthetic knee review"))
+                continue
+            self.assertEqual((answer["status"], answer["text"]), ("conflict", ""), f["label"])
+            self.assertIn("appears 2 times on the form", answer["held_candidate"]["reason"])
+            self.assertEqual(answer["held_candidate"]["text"], "yes" if f["kind"] == "choice" else "settled")
+        page = self.client.get(f"/encounters/{encounter.pk}/").content.decode()
+        self.assertIn("This question appears 2 times on the form; the notes do not say which one", page)
+
+    def test_absence_stays_missing(self):
+        version = self.confirm(self.template)
+        answers, _ = self.generate(version, "Indication: synthetic knee review")
+        self.assertEqual({a["status"] for key, a in answers.items() if key != self.by_label(version)["Indication"]["key"]},
+                         {"missing"})
+
+    def test_renamed_questions_are_filled_from_their_own_lines(self):
+        by = {(f["label"], n): f for n, f in enumerate(self.version.fields)}
+        pains = [f for f in self.version.fields if f["label"] in ("Pain?", "PAIN")]
+        comments = [f for f in self.version.fields if f["label"] == "Comments"]
+        response = self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_save", "mapping_version": self.version.pk,
+            "label_" + pains[0]["key"]: "Right knee pain", "label_" + pains[1]["key"]: "Left knee pain",
+            "label_" + comments[0]["key"]: "Right knee comments", "label_" + comments[1]["key"]: "Left knee comments"})
+        self.assertEqual(response.status_code, 302)
+        version = self.confirm(self.template)
+        self.assertFalse(any(row["duplicate"] for row in self.client.get(f"/templates/{self.template.pk}/").context["v3_rows"]))
+        answers, _ = self.generate(version, "Indication: synthetic\nRight knee pain: yes\nLeft knee pain: no\n"
+                                            "Right knee comments: settled\nLeft knee comments: swollen")
+        texts = {f["label"]: answers[f["key"]]["text"] for f in version.fields}
+        self.assertEqual(texts, {"Indication": "synthetic", "Right knee pain": "Yes", "Left knee pain": "No",
+                                 "Right knee comments": "settled", "Left knee comments": "swollen"})
+
+
 def repeated_option_form_bytes():
     doc = Document()
     doc.add_paragraph("Synthetic swelling check")

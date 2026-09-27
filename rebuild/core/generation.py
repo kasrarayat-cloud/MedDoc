@@ -147,11 +147,17 @@ class Labels(dict):
         return self.__dict__['_stated']
 
 
+def question_key(label):
+    """THE label normalizer: how a notes line's label and a form question are compared (trimmed, a trailing ':' or
+    '?' dropped, case folded). The mapping review flags repeated questions with this same function."""
+    return str(label or '').strip().rstrip(':?').casefold()
+
+
 def recognized_labels(fields, context_labels=()):
     """Keep actual label punctuation as well as the existing canonical alias."""
     aliases=Labels()
     for label in [field['label'] for field in fields]+list(context_labels):
-        canonical=label.strip().rstrip(':?').casefold()
+        canonical=question_key(label)
         aliases[canonical]=canonical
         aliases[label.strip().casefold()]=canonical
     return aliases
@@ -196,12 +202,12 @@ def fixture(notes,fields,*,context_labels=(),evidence_contract=None):
     if evidence_contract != 'legacy' and tab_evidence_contract(fields):
         units,_=source_units(notes,fields,context_labels=context_labels)
         for f in fields:
-            label=f['label'].strip().rstrip(':?').casefold()
+            label=question_key(f['label'])
             quotes=[u['quote'] for u in units if (p:=labelled_value(u['quote'],labels)) and p[0]==label and p[1]]
             result.append(Selection(key=f['key'],quotes=quotes,conflict=False))
         return Selections(fields=result)
     for f in fields:
-        label=f['label'].strip().rstrip(':?').casefold()
+        label=question_key(f['label'])
         quotes=[]
         for line in notes.splitlines():
             parsed=labelled_value(line,labels)
@@ -1318,7 +1324,7 @@ def judged_context(governance, notes, index, label, evidence):
     if not index or not evidence:
         return governed_context(governance, notes, evidence)
     anywhere, by_label, value_of, memo = index
-    key = str(label or '').strip().rstrip(':?').casefold()
+    key = question_key(label)
     own = by_label.get(key, {})
     # Every other place its quotes occur where this question may select them: a quote anywhere or under this label;
     # an own-label line's VALUE under this label (`SYMPTOMS:  chest pain` repeats `Symptoms: chest pain`, tenth pass).
@@ -1519,7 +1525,7 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=()):
             output[item.key]={'text':'','status':'missing','evidence':[],'reviewed':False,
                               'reason':'Signature requires explicit review by the finalizing clinician; it is not generated from notes.'}
             continue
-        label=field['label'].strip().rstrip(':?').casefold()
+        label=question_key(field['label'])
         allowed={}; explicit={}
         for unit in units:
             quote=unit['quote']; parsed=tab_source_value(quote,labels)
@@ -1614,7 +1620,7 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
             output[item.key]={'text':'','status':'conflict','evidence':[],'reviewed':False,'reason':'Instruction-like source text requires manual review.'}; continue
         evidence=[]
         field=next(f for f in fields if f['key']==item.key)
-        label=field['label'].strip().rstrip(':?').casefold()
+        label=question_key(field['label'])
         allowed={}
         explicit={}
         offset=0
@@ -1752,7 +1758,7 @@ def v3_option_value(field, text):
 def v3_option_answer(field, answer, notes, labels):
     """An option question's generated answer: filled ONLY with the printed option its own labelled value names
     exactly; otherwise held for the clinician with the candidate and its source lines. Absence stays missing."""
-    label = field['label'].strip().rstrip(':?').casefold()
+    label = question_key(field['label'])
     reason = V3_CHECKBOX_REASON if field.get('kind') == 'checkbox' else V3_OPTION_REASON
 
     def named(text, evidence):
@@ -1775,10 +1781,35 @@ def v3_option_answer(field, answer, notes, labels):
     return answer
 
 
+V3_REPEATED_REASON = ('This question appears {count} times on the form; the notes do not say which one, so none of them '
+                      'was filled. Enter each answer yourself, or rename the questions in the form mapping so each label '
+                      'names one of them.')
+
+
+def v3_repeated(answer, count):
+    """A question whose label the form repeats: a labelled line cannot say which one it answers, so the candidate is
+    kept with its source lines and nothing is filled or offered. Absence stays missing."""
+    held = answer.get('held_candidate') or {}
+    candidate = answer.get('text') or answer.get('suggestion') or held.get('text') or ''
+    if not candidate and answer.get('status') == 'missing':
+        return answer
+    own = (answer.get('own_evidence') or answer.get('suggestion_evidence') or held.get('evidence')
+           or answer.get('evidence') or [])
+    kept = {k: v for k, v in answer.items() if k not in ('suggestion', 'suggestion_evidence', 'reason')}
+    return {**kept, 'status': 'conflict', 'text': '', 'evidence': own,
+            'held_candidate': {'text': candidate, 'evidence': own, 'context': held.get('context') or [],
+                               'reason': V3_REPEATED_REASON.format(count=count)}}
+
+
 def v3_adopted(fields, answers, notes, generated, context_labels=()):
     """Every field of a v3 mapping: text kinds exactly as the extractive validator adopted them, option kinds only
-    when the notes name a printed option exactly, and table rows, signature and initials never generated."""
+    when the notes name a printed option exactly, and table rows, signature and initials never generated.
+
+    ⚠️ A LABEL THE FORM REPEATS NAMES NO ONE QUESTION (refutation F4): 'Pain?' under RIGHT KNEE and 'PAIN' under
+    LEFT KNEE read the same, so 'Pain: yes' filled both knees. When two or more generated fields share a
+    question_key, a labelled line fills NONE of them; each is held for the clinician."""
     labels = recognized_labels(generated, context_labels)
+    repeats = collections.Counter(question_key(f['label']) for f in generated)
     out = {}
     for field in fields:
         kind = field.get('kind')
@@ -1787,7 +1818,10 @@ def v3_adopted(fields, answers, notes, generated, context_labels=()):
                                  'reason': V3_NOT_GENERATED_REASON[kind]}
             continue
         answer = answers[field['key']]
-        if kind in ('choice', 'multi_choice', 'checkbox'):
+        count = repeats[question_key(field['label'])]
+        if count > 1:
+            answer = v3_repeated(answer, count)
+        elif kind in ('choice', 'multi_choice', 'checkbox'):
             answer = v3_option_answer(field, answer, notes, labels)
         out[field['key']] = answer
     return out
