@@ -12,3 +12,7 @@
 - Final144 affected tests PASS33.504s; targeted6 PASS3.004s; unchanged root end probe passes. RED6 failures+3errors retained with exact earlier source. All sessions15186/17389/98274 ended. Evidence `.runtime/ordinary-input-20260927/value-end` and durable `evidence/value-end`. Source frozen pending independent refutation.
 - Read-only remaining55-field classification is in REMAINING-55.md and evidence/remaining-55-classification.json:38 directly relevant stated values,7 author-adjudication items,10 invalid single-field oracle selections. Denominator77 stays unchanged,22 supported. These classifications are engineering triage, not new pass claims.
 - First subsequent bounded design must include the root-reproduced prior-positive Indication regression with duplicate Pain/Comments (root owns before/after and union failure evidence), then nominal labelled Plan / qualified independent-topic guards if same cause. No source change until present repair is independently cleared.
+
+## Lead-reported independent closure
+
+Source2499a4fb / SHA72904344 independently refuted with NOTHING FOUND (original5, aliases8, fallback5; lead end4 and25 controls). Source remains frozen and clean. Lead may integrate while its combined core result is collected. Next author source edits wait for the complete failure names; see VALUE-CONTEXT.md closure and REMAINING-55.md triage.
