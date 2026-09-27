@@ -15,9 +15,14 @@ from .security import private_path, membership, audit
 def enabled():
     return bool(getattr(settings,'QUILLMD_MAPPING_ASSISTANCE',False))
 
-def permission(config):
+def permission(config,*,queued=False):
     from .jobs import NoProviderRequest
     if not enabled():raise NoProviderRequest('Mapping assistance is disabled.')
+    # This must precede the current compiler: old queued contracts are never replayed
+    # through a new schema and reservations must be released as definitely unsent.
+    if queued and config.get('mapping_contract')!=mapping.VERSION:
+        raise NoProviderRequest('Mapping contract changed. Review a fresh quote; nothing was sent.')
+    mapping.request_profile(config)
     generation.refuse_switched_mode(config)
     current=generation.configuration()
     if config.get('pricing_version')!=current['pricing_version']:
@@ -41,6 +46,7 @@ def enqueue(version,user,config,request_sha256):
         raise ValidationError('This template already has a pending mapping operation.')
     config={**config,'source_sha256':template.sha256,'department_id':str(template.department_id),
             'mapping_version_id':str(version.pk),'mapping_contract':mapping.VERSION,
+            'mapping_request_profile':compiled['profile'],'mapping_profile_sha256':compiled['profile_sha256'],
             'request_sha256':compiled['request_sha256'],'input_token_bound':compiled['input_token_bound'],
             'mapping_maximum_cost':compiled['maximum_cost']}
     job=Job.objects.create(mapping_version=version,user=user,kind='mapping',request_key=key,config=config)
@@ -53,15 +59,12 @@ def send(compiled,config):
     if config['mode']!='live':
         payload=json.loads(compiled['request']['messages'][0]['content'])
         # The fixture makes no semantic judgement. Every unmapped place stays visibly unresolved.
-        slots={s for field in payload['fields'] for s in field['slots']}
-        body={'fields':[{'key':f['key'],'verdict':'keep','target':None} for f in payload['fields']],
-              'slots':[{'slot':r['slot'],'verdict':'covered' if r['slot'] in slots else 'uncertain'} for r in payload['slots']],
-              'additions':[]}
+        body=mapping.wire.fixture(payload)
         return body,Decimal(0),{}, {},'synthetic-mapping-fixture','','',True
     from .jobs import NoProviderRequest
     try:
         from anthropic import Anthropic
-        profile=generation.job_request_profile(config)
+        profile=mapping.request_profile(config)
         client=Anthropic(timeout=profile['timeout_seconds'],max_retries=0)
     except Exception as exc:
         # No transport call exists before this boundary. A definite local failure
@@ -98,7 +101,7 @@ def run_one():
         job.state='running';job.started_at=timezone.now();job.save(update_fields=['state','started_at'])
     sent=False;returned=False
     try:
-        permission(job.config)
+        permission(job.config,queued=True)
         try:membership(job.user,job.department,roles=['owner','clinician','manager'])
         except PermissionDenied as exc:raise NoProviderRequest('Access revoked before mapping.') from exc
         if sandbox_hold(job):raise NoProviderRequest('Sandbox funds cannot fund real-mode mapping.')

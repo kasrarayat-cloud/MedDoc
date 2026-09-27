@@ -1,0 +1,10 @@
+{
+  "response_bytes": 17255,
+  "response_sha256": "0dd2b02d5daf2db0cceb6f119938009229b88f96c35f87d4cdbf5153fb04fe85",
+  "count_request_sha256": "52225de3bd14756722430db311884433c5b1179ad33b8f4076c95999a9009ac6",
+  "fields": 200,
+  "slots": 1200,
+  "changes": 100,
+  "option_spans": 400,
+  "note": "No token estimate. Wide integers conservatively exceed realizable catalog/offset widths under the full request byte cap."
+}

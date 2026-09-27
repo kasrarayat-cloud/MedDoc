@@ -1,0 +1,19 @@
+{
+  "compact-ceiling-response.json": "0dd2b02d5daf2db0cceb6f119938009229b88f96c35f87d4cdbf5153fb04fe85",
+  "compact-count-attempt.json": "fb2ddb88549902d0d4b7d8d143c360b9e242d87eda937fdb9b2a43c114e14e1f",
+  "compact-count-outcome.json": "a6b0d4702b06ead79e12a05a18f58e74f9423a8483984bf19194a78057acc217",
+  "compact-count-request.json": "52225de3bd14756722430db311884433c5b1179ad33b8f4076c95999a9009ac6",
+  "compact-sizing.json": "6ddda817cd914cc3f9b79256a43b2b9450f9f1617f4077f9ff05574052bdd2cb",
+  "compact-sizing.py": "e55187cca1be9a5b946eb64094e50b640ccf39be64771e297676aef96c64b889",
+  "mapping-boundaries.log": "56c7d5f87bd37728219ab2aaeef0c8eef3ca9a6b9ca20efb79538dc7623e9b4e",
+  "mapping-first.log": "0da959e21d8439757f68ba3579a01bb9bb64879e047cffe304d2ec99c2ce1b48",
+  "native-compact-count.py": "e1bf23d030de15754a307161c5ea7ab53805c105bc5a51f3d73ddc81a8188437",
+  "native-compact-count.txt": "2fbb128500e09d7e04912c5a85f1d8490d023299714aa998a204b52ef18e3e57",
+  "quote-boundaries.log": "d5ea93ae33cb4b0ae59804f8204a49b0603754017ce29bf71990750ef4834a07",
+  "schema-diff-refutation.py": "e67e60999714201c61638ce8e1169f95e1712db5647326b7354c5785fd134910",
+  "schema-diff-refutation.txt": "306d3b6d4e285bfa5e7442fc9592d52bf14789324f7c50bc276f939da9b48a02",
+  "schema-impact.json": "ac002b6ffc3f4c894b673dfc2433c3339818355e4add1c33c02355b3b548093a",
+  "schema-impact.py": "13ab222df45760d317824863e60fb6d4bd19432ceadbb0e77db2070292c8459b",
+  "source-under-review.sha256": "a9c2ed1c7b6d6e9ff3f195876717d5c73d1f14e2773b4ff176750e5a5aef9bb3",
+  "wire-ceilings.log": "17c36780f7208ac8f7aad5cc29168b150e8c58b4e5066f93cd5c22d164fece41"
+}

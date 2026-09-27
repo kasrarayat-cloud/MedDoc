@@ -78,22 +78,36 @@ class MappingAssistance(TestCase):
 
     def test_missing_duplicated_unknown_or_extra_schema_members_refuse(self):
         body=self.body()
-        mutations=[{**body,'fields':body['fields'][:-1]}, {**body,'slots':body['slots'][:-1]},
-                   {**body,'slots':body['slots']+[body['slots'][0]]}, {**body,'xml':'execute this'}]
+        mutations=[{**body,'f':{**body['f'],'k':body['f']['k'][:-1]}},
+                   {**body,'s':{**body['s'],'u':body['s']['u'][:-1]}},
+                   {**body,'f':{**body['f'],'u':[body['f']['k'][0]]}}, {**body,'xml':'execute this'}]
         for candidate in mutations:
             with self.subTest(candidate=list(candidate)):
                 with self.assertRaises((ValidationError,ValueError)):mapping.validate_proposal(self.version,self.compiled,candidate)
 
-    def test_wrong_slots_overlap_and_invented_options_are_visible_preserved_refusals(self):
+    def target(self,slot,label,kind='text',fid=-1,options=()):
+        payload=json.loads(self.compiled['request']['messages'][0]['content'])
+        sid=next(n for n,row in enumerate(payload['slots']) if row['slot']==slot)
+        def reference(text):
+            for n,(owner,role,index) in enumerate(payload['text_refs']):
+                if owner!=sid or role==4:continue
+                row=payload['slots'][owner]
+                source=row['options'][index] if role==3 else row.get(('text','heading','row_label')[role],'')
+                if text in source:return [n,source.index(text),source.index(text)+len(text)]
+            raise AssertionError('Synthetic target text missing from source')
+        return [fid,sid,mapping.wire.KINDS.index(kind),*reference(label),-1]+[n for option in options for n in reference(option)]
+
+    def test_wrong_slots_and_references_refuse_and_overlap_stays_visible(self):
         body=self.body();prior=self.version.fields[0]
         slot=next(iter(mapping.v3_mapping.mapped_slots([prior])))
-        for target in [dict(slot='invented',kind='text',label='Plan',options=[],glyph=None),
-                       dict(slot=slot,kind='choice',label='Plan',options=['Invented option'],glyph=None),
-                       dict(slot=slot,kind='text',label=prior['label'],options=[],glyph=None)]:
-            body['additions']=[target]
-            result=mapping.validate_proposal(self.version,self.compiled,body)
-            self.assertEqual(result['fields'],self.version.fields)
-            self.assertTrue(result['review']['unresolved'])
+        target=self.target(slot,prior['label'])
+        for index,value in [(1,1199),(3,399999)]:
+            altered=target.copy();altered[index]=value;body['x']=[altered]
+            with self.assertRaises((ValidationError,ValueError)):mapping.validate_proposal(self.version,self.compiled,body)
+        body['x']=[target]
+        result=mapping.validate_proposal(self.version,self.compiled,body)
+        self.assertEqual(result['fields'],self.version.fields)
+        self.assertTrue(result['review']['unresolved'])
 
     def test_source_mutation_refuses_before_enqueue(self):
         private_path(self.template.original_path).write_bytes(b'corrupt synthetic file')
@@ -181,8 +195,8 @@ class MappingAssistance(TestCase):
         self.version=TemplateVersion.objects.create(template=self.template,number=2,fields=fields,contract='v3',created_by=self.user)
         self.compiled=mapping.compile_request(self.version,self.config)
         body=self.body()
-        for row in body['slots']:row['verdict']='not_answer'
-        body['additions']=[dict(slot=next(iter(mapping.v3_mapping.mapped_slots([missing]))),kind=missing['kind'],label='Plan',options=[],glyph=None)]
+        body['s']={'c':[],'n':list(range(len(json.loads(self.compiled['request']['messages'][0]['content'])['slots']))),'u':[]}
+        body['x']=[self.target(next(iter(mapping.v3_mapping.mapped_slots([missing]))),'Plan',missing['kind'])]
         job=self.enqueue()
         with patch('core.mapping_jobs.send',return_value=(body,Decimal(0),{},{},'synthetic-mapping-fixture','','',True)):
             jobs.run_one()
@@ -242,6 +256,9 @@ class MappingAssistance(TestCase):
         client.assert_called_once_with(timeout=120,max_retries=0)
         sent=client.return_value.messages.create.call_args.kwargs
         self.assertEqual(sent['model'],'claude-sonnet-5');self.assertEqual(sent['thinking'],{'type':'disabled'})
+        self.assertEqual(sent['max_tokens'],20000)
+        self.assertEqual(job.config['request_profile']['max_output_tokens'],8000)
+        self.assertEqual(job.config['mapping_request_profile']['max_output_tokens'],20000)
         job.refresh_from_db();self.assertEqual(job.state,'succeeded',job.error)
         usage=Usage.objects.get(job=job)
         self.assertEqual(usage.units['response_model'],'claude-sonnet-5')
@@ -359,3 +376,77 @@ class MappingAssistance(TestCase):
         with patch('anthropic.Anthropic') as provider:jobs.run_one();provider.assert_not_called()
         latest=template.versions.latest('number')
         self.assertTrue(latest.assistance['simulated']);self.assertTrue(latest.needs_confirmation)
+
+    def test_mapping_quote_prices_its_exact_profile_without_rewriting_generation(self):
+        before=copy.deepcopy(self.config)
+        self.assertEqual(self.compiled['request']['max_tokens'],20000)
+        self.assertEqual(self.compiled['profile']['timeout_seconds'],120)
+        self.assertEqual(self.compiled['profile_sha256'],mapping.digest(self.compiled['profile']))
+        payload=json.loads(self.compiled['request']['messages'][0]['content'])
+        self.assertEqual(payload['profile_sha256'],self.compiled['profile_sha256'])
+        expected=(Decimal(self.compiled['input_token_bound'])*2+Decimal(20000)*10)/1000000
+        self.assertEqual(Decimal(self.compiled['maximum_cost']),expected)
+        self.assertEqual(self.config,before)
+        self.assertEqual(self.config['request_profile']['max_output_tokens'],8000)
+        with override_settings(AI_INFERENCE_GEO='us'):
+            config=generation.configuration();compiled=mapping.compile_request(self.version,config)
+            expected=(Decimal(compiled['input_token_bound'])*2+Decimal(20000)*10)/1000000*generation.US_INFERENCE_MULTIPLIER
+            self.assertEqual(Decimal(compiled['maximum_cost']),expected.quantize(generation.COST_QUANTUM,rounding='ROUND_CEILING'))
+
+    def test_old_queued_contract_refuses_before_new_compiler_and_releases(self):
+        from core.billing import reserve
+        config={**self.config,'mapping_contract':'blank-mapping-v1','source_sha256':self.template.sha256,
+                'department_id':str(self.department.pk),'mapping_version_id':str(self.version.pk)}
+        job=Job.objects.create(kind='mapping',mapping_version=self.version,user=self.user,config=config,request_key='synthetic-old-contract')
+        reserve(job,Decimal(0))
+        with patch('core.mapping_assistance.compile_request') as compile_new,patch('core.mapping_jobs.send') as send:
+            jobs.run_one();compile_new.assert_not_called();send.assert_not_called()
+        job.refresh_from_db();self.assertEqual(job.state,'failed')
+        self.assertEqual(job.config,config)
+        self.assertFalse(Reservation.objects.filter(job=job,state='held').exists())
+        self.assertFalse(ProviderReceipt.objects.filter(job=job).exists())
+
+    def test_incomplete_capacity_is_visible_and_prevents_unassisted_confirmation(self):
+        body=self.body();body['e']=True
+        body['s']={'c':[],'n':list(range(len(json.loads(self.compiled['request']['messages'][0]['content'])['slots']))),'u':[]}
+        job=self.enqueue()
+        with patch('core.mapping_jobs.send',return_value=(body,Decimal(0),{},{},'synthetic-mapping-fixture','','',True)):
+            jobs.run_one()
+        latest=self.template.versions.latest('number')
+        self.assertTrue(latest.assistance['incomplete'])
+        self.assertEqual(len(latest.assistance['areas']),len(body['s']['n']))
+        self.assertTrue(any('capacity' in area['reason'] for area in latest.assistance['unresolved']))
+        self.assertEqual(self.client.post(f'/templates/{self.template.pk}/',{'action':'v3_confirm','mapping_version':latest.pk,'checked_every_field':'on'}).status_code,400)
+
+    def test_signature_downgrade_remains_visible_and_preserves_existing_field(self):
+        body=self.body();prior=next(f for f in self.version.fields if f['kind']=='signature')
+        fid=self.version.fields.index(prior);body['f']['k'].remove(fid);body['f']['r']=[fid]
+        body['x']=[self.target(next(iter(mapping.v3_mapping.mapped_slots([prior]))),prior['label'],'text',fid)]
+        result=mapping.validate_proposal(self.version,self.compiled,body)
+        self.assertIn(prior,result['fields'])
+        self.assertTrue(any('Signature' in row['reason'] for row in result['review']['unresolved']))
+
+    def test_tampered_mapping_profile_or_hash_refuses_unsent(self):
+        job=self.enqueue()
+        for update in [{'mapping_profile_sha256':'0'*64},{'mapping_request_profile':{**job.config['mapping_request_profile'],'max_output_tokens':20001}},
+                       {'mapping_request_profile':{**job.config['mapping_request_profile'],'timeout_seconds':150}}]:
+            with self.subTest(update=update),self.assertRaises(jobs.NoProviderRequest):
+                mapping_jobs.permission({**job.config,**update},queued=True)
+
+    def test_minimum_and_maximum_metadata_quote_match_request_and_byte_admission(self):
+        # Pure synthetic source metadata substitutes only the outline for this compiler boundary.
+        for count,field_count in [(0,0),(1200,200)]:
+            rows=[{'slot':f'word/document.xml#body/p[{n}]','text':'Plan','heading':'','row_label':'','options':[]} for n in range(count)]
+            fields=[{**self.version.fields[0],'key':f'synthetic_{n}'} for n in range(field_count)]
+            version=SimpleNamespace(template=self.template,contract='v3',document_backend='',fields=fields)
+            with self.subTest(count=count),patch.object(mapping,'assistance_outline',return_value={'sha256':self.template.sha256,'slots':rows}):
+                compiled=mapping.compile_request(version,self.config)
+                self.assertEqual(compiled['request']['max_tokens'],20000)
+                self.assertEqual(compiled['input_token_bound'],len(mapping.canonical(compiled['request']).encode())+12000)
+                expected=(Decimal(compiled['input_token_bound'])*2+Decimal(20000)*10)/1000000
+                self.assertEqual(Decimal(compiled['maximum_cost']),expected)
+                size=len(mapping.canonical(compiled['request']).encode())
+                with patch.object(mapping,'MAX_PAYLOAD_BYTES',size):mapping.compile_request(version,self.config)
+                with patch.object(mapping,'MAX_PAYLOAD_BYTES',size-1),self.assertRaises(ValidationError):mapping.compile_request(version,self.config)
+        with patch.object(mapping,'MAX_SLOTS',1199),patch.object(mapping,'assistance_outline',return_value={'sha256':self.template.sha256,'slots':rows}),self.assertRaises(ValidationError):
+            mapping.compile_request(version,self.config)

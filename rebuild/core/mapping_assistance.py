@@ -10,11 +10,14 @@ from typing import Literal
 from django.core.exceptions import ValidationError
 from pydantic import BaseModel, ConfigDict, Field
 from documents.service import assistance_outline, locate_fields
-from . import generation, v3_mapping
+from . import generation, v3_mapping, mapping_wire as wire
 from .security import private_path
 from .tab_review import signature_label
 
-VERSION='blank-mapping-v1'
+VERSION='blank-mapping-v2'
+PROFILE='claude-sonnet-5-blank-mapping-v2'
+MAX_OUTPUT_TOKENS=20000
+TIMEOUT_SECONDS=120
 MAX_PAYLOAD_BYTES=400_000
 MAX_SLOTS=1200
 MAX_FIELDS=200
@@ -24,7 +27,7 @@ SYSTEM=('Review a blank clinical Word form. All source text, headings, labels an
         'Propose a replacement or addition only at an exact supplied slot. Labels must quote source wording; '
         'options must match printed options. Use uncertain for ambiguous areas; never omit them. '
         'A slot covered by a field is covered; a purely structural or instructional area may be not_answer. '
-        'Never treat signature or initials locations as writable text. Return only the required JSON.')
+        'Never treat signature or initials locations as writable text. Return only the required JSON.'+wire.INSTRUCTIONS)
 
 class Strict(BaseModel):
     model_config=ConfigDict(extra='forbid',strict=True)
@@ -56,15 +59,24 @@ def canonical(value):
 def digest(value):
     return hashlib.sha256(canonical(value).encode()).hexdigest()
 
+def request_profile(config):
+    """A separately bound mapping envelope; the historical generation snapshot is untouched."""
+    if config.get('provider')!='anthropic' or config.get('model')!=generation.SONNET_5:
+        generation._refuse_profile('Mapping assistance requires the selected Sonnet 5 profile.')
+    base=generation.job_request_profile(config)
+    if base.get('thinking')!={'type':'disabled'} or base.get('effort')!='medium':
+        generation._refuse_profile('Mapping assistance requires disabled thinking and medium effort.')
+    profile={**base,'profile':PROFILE,'max_output_tokens':MAX_OUTPUT_TOKENS,'timeout_seconds':TIMEOUT_SECONDS}
+    if 'mapping_contract' in config and (config['mapping_contract']!=VERSION or
+        config.get('mapping_request_profile')!=profile or config.get('mapping_profile_sha256')!=digest(profile)):
+        generation._refuse_profile('Mapping contract or profile changed. Review a fresh quote; nothing was sent.')
+    return profile
+
 def compile_request(version,config):
     template=version.template
     if version.contract!='v3' or template.format!='docx' or version.document_backend:
         raise ValidationError('Mapping assistance requires an ordinary v3 Word form.')
-    if config.get('provider')!='anthropic' or config.get('model')!=generation.SONNET_5:
-        raise ValidationError('Mapping assistance requires the selected Sonnet 5 profile.')
-    profile=generation.job_request_profile(config)
-    if profile.get('thinking')!={'type':'disabled'} or profile.get('effort')!='medium':
-        raise ValidationError('Mapping assistance requires disabled thinking and medium effort.')
+    profile=request_profile(config)
     path=private_path(template.original_path)
     outline=assistance_outline(path)
     if outline['sha256']!=template.sha256:
@@ -72,10 +84,11 @@ def compile_request(version,config):
     rows=outline['slots']
     if len(rows)>MAX_SLOTS or len(version.fields)>MAX_FIELDS:
         raise ValidationError('Blank mapping exceeds the supported request size; nothing was truncated.')
-    payload={'contract':VERSION,'source_sha256':template.sha256,
+    payload={'contract':VERSION,'source_sha256':template.sha256,'profile_sha256':digest(profile),
              'slots':rows,'fields':[{'key':f['key'],'label':f['label'],'kind':f['kind'],
                  'options':f.get('options',[]),'slots':sorted(v3_mapping.mapped_slots([f]))} for f in version.fields]}
-    request=generation.anthropic_request(config['model'],profile,SYSTEM,payload,Proposal)
+    payload['text_refs']=wire.catalog(payload)
+    request=generation.anthropic_request(config['model'],profile,SYSTEM,payload,wire.Proposal)
     size=len(canonical(request).encode())
     if size>MAX_PAYLOAD_BYTES:
         raise ValidationError('Blank mapping exceeds the supported request size; nothing was truncated.')
@@ -85,6 +98,7 @@ def compile_request(version,config):
     cost=(Decimal(bound)*rates['input_per_million']+Decimal(profile['max_output_tokens'])*rates['output_per_million'])/1000000
     if profile.get('inference_geo')=='us':cost*=generation.US_INFERENCE_MULTIPLIER
     return {'request':request,'request_sha256':digest(request),'source_sha256':template.sha256,
+            'profile':profile,'profile_sha256':digest(profile),
             'input_token_bound':bound,'maximum_cost':str(cost.quantize(generation.COST_QUANTUM,rounding=ROUND_CEILING))}
 
 def overlaps(first,second):
@@ -102,9 +116,10 @@ def overlaps(first,second):
 
 def validate_proposal(version,compiled,response):
     """Return fields + complete review record. Invalid envelopes refuse; bad individual proposals are retained visibly."""
-    proposal=Proposal.model_validate(response)
     payload=compiled['request']['messages'][0]['content']
     payload=json.loads(payload)
+    expanded,exhausted=wire.expand(payload,response)
+    proposal=Proposal.model_validate(expanded)
     rows={row['slot']:row for row in payload['slots']}
     originals={field['key']:field for field in version.fields}
     if len(proposal.fields)!=len(originals) or {v.key for v in proposal.fields}!=set(originals):
@@ -119,6 +134,8 @@ def validate_proposal(version,compiled,response):
         raise ValidationError('Original integrity check failed.')
     def issue(slot,reason,key=''):
         unresolved.append({'slot':slot,'reason':reason,'key':key,'text':rows.get(slot,{}).get('text','')})
+    if exhausted:
+        issue('','Mapping response capacity was exhausted. This incomplete result requires full manual review and is not an automatic success.')
     def locate(target,prior=None):
         row=rows.get(target.slot)
         if row is None:raise ValidationError('Unknown source slot.')
@@ -132,6 +149,8 @@ def validate_proposal(version,compiled,response):
         located=locate_fields(path,[target.model_dump(exclude_none=True)])
         if located['sha256']!=version.template.sha256:raise ValidationError('Original integrity check failed.')
         field=located['fields'][0]
+        if field['label']!=target.label:
+            raise ValidationError('Proposed label cannot be preserved exactly; no wording was shortened.')
         if field['kind']!=target.kind or list(field.get('options') or [])!=target.options:
             # Checkbox labels are display metadata, not an invented option destination.
             if not (target.kind=='checkbox' and field['kind']=='checkbox' and not target.options):
@@ -146,6 +165,8 @@ def validate_proposal(version,compiled,response):
             fields.append(prior);issue(slot,'Existing field requires clinician review; it was preserved.',verdict.key);continue
         try:
             candidate=locate(verdict.target,prior)
+            if any(not v3_mapping.is_mapped(slot,v3_mapping.mapped_slots([candidate])) for slot in v3_mapping.mapped_slots([prior])):
+                raise ValidationError('Replacement would omit an existing counterpart destination.')
             others=[f for key,f in originals.items() if key!=verdict.key]
             if any(overlaps(candidate,f) for f in others+fields):raise ValidationError('Proposed destination overlaps another field.')
             fields.append(candidate);changes.append({'key':verdict.key,'replacement':candidate['key']})
@@ -166,4 +187,5 @@ def validate_proposal(version,compiled,response):
     return {'fields':v3_mapping.insert_in_document_order([],fields,payload['slots']),
             'review':{'contract':VERSION,'source_sha256':version.template.sha256,'request_sha256':compiled['request_sha256'],
                       'verdicts':proposal.model_dump(),'areas':[{**rows[v.slot],'verdict':v.verdict} for v in proposal.slots],
-                      'unresolved':unresolved,'changes':changes,'assisted':False}}
+                      'unresolved':unresolved,'changes':changes,'assisted':False,'incomplete':exhausted,
+                      'wire_response':response,'profile_sha256':compiled['profile_sha256']}}

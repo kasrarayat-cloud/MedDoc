@@ -1,0 +1,9 @@
+{
+  "request_sha256": "52225de3bd14756722430db311884433c5b1179ad33b8f4076c95999a9009ac6",
+  "timestamp": "2026-09-27T17:57:15.924261+00:00",
+  "endpoint": "https://api.anthropic.com/v1/messages/count_tokens",
+  "model": "claude-sonnet-5",
+  "max_retries": 0,
+  "timeout_seconds": 30,
+  "measurement": "Native INPUT tokens of prospective output text, not generation proof."
+}
