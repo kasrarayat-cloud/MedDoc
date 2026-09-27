@@ -895,7 +895,12 @@ def write_state(state):
     first-notice reading above, still explains. When the incident is closed status.json goes first,
     so the ledger's older record is inert from the moment it lands. The ledger is created on first
     need: a monitor that has never announced anything has no ledger.
+
+    The state is held to the same invariants on the way OUT as on the way in: an inconsistent
+    incident is refused here (and the check fails closed) rather than persisted for the next
+    check to trip over, or for a stale key to be silently dropped.
     """
+    validate_incident(state)
     status = {key: state[key] for key in STATUS_KEYS}
     ledger = DIRECTORY / NOTICES_FILE
     notices = {'format': 1, 'announced_at': dict(state['announced_at']),

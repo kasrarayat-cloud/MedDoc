@@ -1079,6 +1079,16 @@ class IncidentLedgerTests(unittest.TestCase):
         self.assertEqual(a.check(self.at + timedelta(days=2))[0]['condition'], 'monitoring_state_unavailable')
         self.sender.assert_called_once()
 
+    def test_an_inconsistent_state_is_refused_on_the_way_out_and_nothing_is_written(self):
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        before = {path.name: path.read_bytes() for path in self.alerts.glob('*.json')}
+        state = a.read_state()
+        state.update(incident_id=None, incident_attempt=None)      # a partial close: stale extension keys
+        with self.assertRaises(RuntimeError):
+            a.write_state(state)
+        self.assertEqual({path.name: path.read_bytes() for path in self.alerts.glob('*.json')}, before)
+
     def test_crash_between_the_two_writes_of_a_notice_after_a_first_notice_recovers(self):
         self.health.return_value = 'backup_failed'
         a.check(self.at)
