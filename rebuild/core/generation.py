@@ -1578,7 +1578,11 @@ POINTER_ONLY_VALUE = re.compile(r'(?:as\s+follows|see\s+below|as\s+below|listed\
 #: A sentence end INSIDE one unit with more words after it: `.`, `!`, `?` or `…` (any closing quotes or brackets),
 #: then space and text in ANY case ('penicillin. sorry, I mean amoxicillin.'), or a CJK stop and text. A full stop
 #: `source_units` reads as an abbreviation or an initial (`ABBREVIATION`) is not one: the splitter's own reading.
-INNER_SENTENCE_END = re.compile(r'[.!?\u2026]+["\'\u201d\u2019)\]]*\s+(?=\S)|[\u3002\uff0e\uff01\uff1f\uff61]+(?=\S)')
+#: ⚠️ LINEAR (round 3, R3-4): a run of stops is read only from its FIRST stop, possessively, and a CJK stop one at a time.
+#: `[.!?…]+` retried from every stop of a run and backtracked through it: 8,000 stops took 1.2 s, and 49,900 after a
+#: label took 89 s of `run_one` under the encounter lock. Same matches on every text (the fuzz test compares them).
+INNER_SENTENCE_END = re.compile(r'(?<![.!?\u2026])[.!?\u2026]++["\'\u201d\u2019)\]]*+\s++(?=\S)'
+                                r'|[\u3002\uff0e\uff01\uff1f\uff61](?=\S)')
 #: A statement that asks or trails off: its last visible mark is `?`, `…` or `..` (closing quotes, brackets and
 #: emphasis marks after it are read through). It answers nothing.
 ASKS_OR_TRAILS_OFF = re.compile(r'(?:[?\uff1f\u2026]|\.\.)["\'\u201d\u2019)\]*_~`\s]*$')
@@ -1622,12 +1626,26 @@ def inner_sentence_end(text):
 BLANK_LINE = re.compile(r'\n[ \t\r]*\n')
 
 
-def paragraph_neighbours(notes, units, parsed_units):
+def v3_shape_holds(quote, value):
+    """Rules (d)-(f) of contract v3 for one unit (`quote`, and its labelled `value` or the quote itself); rule (c), more
+    than one sentence in the unit, is `inner_sentence_end`. Read once per unit per validation (R3-4)."""
+    return bool(
+        # (d) A value that asks or trails off answers nothing ('Nausea, vomiting or abdominal pain?').
+        ASKS_OR_TRAILS_OFF.search(value)
+        # (e) Nor does one shaped as a pointer to other lines (F7).
+        or points_elsewhere(value)
+        # (f) A self-correction inside the sentence (read with invisible characters removed too).
+        or any(SELF_CORRECTION.search(reading) for reading in readings(quote)))
+
+
+def paragraph_neighbours(notes, units, parsed_units, ends_inside=None):
     """Each unit's neighbours in its PARAGRAPH (units with no `BLANK_LINE` between them), `{id: (before, changer)}`:
     `before`, the unit written just before it; `changer`, the FIRST unit after it that is not another question's
     one-sentence labelled value - an unlabelled sentence, or a labelled value that runs on into more sentences. Such a
     unit may correct or reframe anything written before it in its paragraph, not only its neighbour ('Smoker: yes.' /
-    'Allergies: none.' / 'Sorry, I meant smoker no.'). None when there is none."""
+    'Allergies: none.' / 'Sorry, I meant smoker no.'). None when there is none. `ends_inside(unit)`: the caller's
+    once-per-unit reading of `inner_sentence_end` (R3-4)."""
+    ends_inside = ends_inside or (lambda unit: inner_sentence_end(unit['quote']))
     joined = [not BLANK_LINE.search(notes, first['end'], second['start']) for first, second in zip(units, units[1:])]
     found, changer = {}, None
     for index in range(len(units) - 1, -1, -1):
@@ -1635,7 +1653,7 @@ def paragraph_neighbours(notes, units, parsed_units):
         if index < len(joined) and not joined[index]:
             changer = None                                  # its paragraph ends with it
         found[unit['id']] = (units[index - 1] if index and joined[index - 1] else None, changer)
-        if not parsed_units[index] or inner_sentence_end(unit['quote']):
+        if not parsed_units[index] or ends_inside(unit):
             changer = unit
     return found
 
@@ -1669,7 +1687,17 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
     output={}; used_numbered={}
     by_id={unit['id']:unit for unit in units}
     parsed_of={unit['id']:parsed for unit,parsed in zip(units,parsed_units)}
-    paragraph=paragraph_neighbours(notes,units,parsed_units) if v3 else {}
+    # ⚠️ EACH UNIT'S SHAPE IS READ ONCE PER VALIDATION, NOT ONCE PER QUESTION THAT SELECTS IT (R3-4): an unlabelled unit of
+    # 20,000 stops selected by three questions was read three times over. Same readings, cached by unit id.
+    ends_read,shape_read={},{}
+    def ends_inside(unit):
+        if unit['id'] not in ends_read: ends_read[unit['id']]=inner_sentence_end(unit['quote'])
+        return ends_read[unit['id']]
+    def shape_holds(unit,own_value):
+        if unit['id'] not in shape_read:
+            shape_read[unit['id']]=ends_inside(unit) or v3_shape_holds(unit['quote'],own_value[1] if own_value else unit['quote'])
+        return shape_read[unit['id']]
+    paragraph=paragraph_neighbours(notes,units,parsed_units,ends_inside) if v3 else {}
     selected={item.key:item for item in selections.fields}
     for field in fields:
         item=selected[field['key']]
@@ -1731,14 +1759,9 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
                 #     had a myocardial infarction' after a sentence about her father). A labelled value names its question.
                 if before is not None and not own_value:
                     guarded=True; nearby.setdefault(before['id'],(unit,before,False))
-                # (c) More than one sentence in one unit (a labelled line's remainder, a lowercase continuation).
-                if inner_sentence_end(quote): guarded=True
-                # (d) A value that asks or trails off answers nothing ('Nausea, vomiting or abdominal pain?').
-                if ASKS_OR_TRAILS_OFF.search(own_value[1] if own_value else quote): guarded=True
-                # (e) Nor does one shaped as a pointer to other lines (F7).
-                if points_elsewhere(own_value[1] if own_value else quote): guarded=True
-                # (f) A self-correction inside the sentence (read with invisible characters removed too).
-                if any(SELF_CORRECTION.search(reading) for reading in readings(quote)): guarded=True
+                # (c) More than one sentence in one unit (a labelled line's remainder, a lowercase continuation), and
+                # (d)-(f) (`v3_shape_holds`): read once per unit (`shape_holds`).
+                if shape_holds(unit,own_value): guarded=True
             # Dates and consent are not inferred from a procedure date or general
             # narrative. These source subjects must themselves be documented.
             if any(re.search(subject,label,re.I) and not re.search(subject,quote,re.I) for subject in SUBJECTS): guarded=True
@@ -1920,32 +1943,52 @@ def v3_generation_fields(fields, context_labels=()):
     return asked, list(context_labels) + held, fields
 
 
-def v3_labelled_source(notes, labels, label, evidence):
+class LabelledLines:
+    """The notes' lines as the validator reads them (`splitlines`, offsets included), each line's labelled parts split
+    ONCE (R3-5): split again for every evidence entry, one line of 999 'Q1: No.' segments took 7-10 s. The parts are the
+    whole line, or (F5) the segments `source_units` cut from a line that begins with a form label where another form
+    label begins ('Smoker: No.' in 'Allergies: none. Smoker: No.')."""
+
+    def __init__(self, notes, labels):
+        self.labels, self.lines, self.starts, self.split = labels, notes.splitlines(keepends=True), [], {}
+        offset = 0
+        for line in self.lines:
+            self.starts.append(offset)
+            offset += len(line)
+
+    def part(self, start):
+        """`(whole, base, low, high)` of the line holding `start` (its part is `whole[low:high]`, `base` the line's first
+        visible character in the notes), or None when no line holds it or the line is blank."""
+        index = bisect.bisect_right(self.starts, start) - 1 if isinstance(start, int) else -1
+        if index < 0 or start >= self.starts[index] + len(self.lines[index]):
+            return None
+        if index not in self.split:
+            line = self.lines[index]
+            whole = line.strip()
+            opening = labelled_value(whole, self.labels) if whole else None
+            boundaries = sentence_boundaries(whole, self.labels, opening) if opening else []
+            self.split[index] = (whole, self.starts[index] + line.index(whole) if whole else 0,
+                                 [next_start for _, next_start in boundaries], [end for end, _ in boundaries])
+        whole, base, next_starts, ends = self.split[index]
+        if not whole:
+            return None
+        found = bisect.bisect_right(next_starts, start - base)
+        return whole, base, next_starts[found - 1] if found else 0, ends[found] if found < len(ends) else len(whole)
+
+
+def v3_labelled_source(notes, labels, label, evidence, lines=None):
     """True when every evidence entry is THIS question's own labelled line, or the complete value after its label.
-    An option is never read from free text: an unlabelled line does not say which question it answers."""
+    An option is never read from free text: an unlabelled line does not say which question it answers. `lines`: the
+    notes' `LabelledLines`, shared by every option question of one adoption."""
     if not evidence:
         return False
+    lines = lines if lines is not None else LabelledLines(notes, labels)
     for entry in evidence:
         start, quote = entry.get('start'), entry.get('quote')
-        offset, found = 0, None
-        for line in notes.splitlines(keepends=True):       # the validator's own line reading, offsets included
-            if offset <= start < offset + len(line):
-                found = line
-                break
-            offset += len(line)
-        whole = found.strip() if found is not None else ''
-        if not whole:
+        located = lines.part(start)
+        if located is None:
             return False
-        # The line's own labelled part: the whole line, or (F5) the segment `source_units` cut from a line that begins
-        # with a form label where another form label begins ('Smoker: No.' in 'Allergies: none. Smoker: No.').
-        base = offset + found.index(whole)
-        low, high = 0, len(whole)
-        opening = labelled_value(whole, labels)
-        for end, next_start in sentence_boundaries(whole, labels, opening) if opening else ():
-            if base + next_start <= start:
-                low = next_start
-            elif high == len(whole):
-                high = end
+        whole, base, low, high = located
         part = whole[low:high]
         parsed = labelled_value(part, labels)
         if not parsed or parsed[0] != label or not parsed[1]:
@@ -1995,14 +2038,14 @@ def v3_option_value(field, text):
     return '\n'.join(option for option in options if option in chosen)
 
 
-def v3_option_answer(field, answer, notes, labels):
+def v3_option_answer(field, answer, notes, labels, lines=None):
     """An option question's generated answer: filled ONLY with the printed option its own labelled value names
     exactly; otherwise held for the clinician with the candidate and its source lines. Absence stays missing."""
     label = field['label'].strip().rstrip(':?').casefold()
     reason = V3_CHECKBOX_REASON if field.get('kind') == 'checkbox' else V3_OPTION_REASON
 
     def named(text, evidence):
-        return v3_option_value(field, text) if v3_labelled_source(notes, labels, label, evidence) else None
+        return v3_option_value(field, text) if v3_labelled_source(notes, labels, label, evidence, lines) else None
 
     if answer.get('suggestion'):
         evidence = answer.get('suggestion_evidence') or []
@@ -2025,6 +2068,7 @@ def v3_adopted(fields, answers, notes, generated, context_labels=()):
     """Every field of a v3 mapping: text kinds exactly as the extractive validator adopted them, option kinds only
     when the notes name a printed option exactly, and table rows, signature and initials never generated."""
     labels = recognized_labels(generated, context_labels)
+    lines = LabelledLines(notes, labels)            # each line split once, for every option question (R3-5)
     out = {}
     for field in fields:
         kind = field.get('kind')
@@ -2034,7 +2078,7 @@ def v3_adopted(fields, answers, notes, generated, context_labels=()):
             continue
         answer = answers[field['key']]
         if kind in ('choice', 'multi_choice', 'checkbox'):
-            answer = v3_option_answer(field, answer, notes, labels)
+            answer = v3_option_answer(field, answer, notes, labels, lines)
         out[field['key']] = answer
     return out
 

@@ -4,6 +4,8 @@ The provider's choice is simulated by unit selections, exactly the shape the liv
 What is asserted is what the application does with it: complete source sentences are adopted, options are filled
 only from their own labelled statement, and governance, fragments and corrections are held, never discarded.
 """
+import random
+import re
 import time
 from unittest.mock import patch
 
@@ -940,6 +942,22 @@ class RoundThreeCost(SimpleTestCase):
             g.inner_sentence_end('.' * count)
             self.assertLess(time.monotonic() - started, 0.05, count)
 
+    def test_r3_4_the_linear_pattern_reads_what_the_original_read(self):
+        """The rewrite changes cost, not readings: the same `.!?…` matches (spans) and the same answer on every text,
+        realistic notes and 20,000 random strings over the characters the pattern reads."""
+        original = re.compile(r'[.!?\u2026]+["\'\u201d\u2019)\]]*\s+(?=\S)|[\u3002\uff0e\uff01\uff1f\uff61]+(?=\S)')
+        rng = random.Random(20260927)
+        alphabet = 'aB1 .!?\u2026"\')]\u3002\uff0e\uff01\uff1f\uff61\n\t'
+        texts = [notes for notes, *_ in GOVERNED_NOTES] + [notes for _, notes in LARGE_NOTES] + [
+            'Warfarin 5 mg daily (since May.) Stopped last month.', 'penicillin. sorry, I mean amoxicillin.',
+            'She takes aspirin 81 mg p.o. daily.', 'none\u3002Sorry, smoker is no.', 'Really?! Yes... "Fine." (Ok.) Done']
+        texts += [''.join(rng.choice(alphabet) for _ in range(rng.randint(0, 40))) for _ in range(20000)]
+        for text in texts:
+            ascii_spans = [[m.span() for m in pattern.finditer(text) if text[m.start()] in '.!?\u2026']
+                           for pattern in (original, g.INNER_SENTENCE_END)]
+            self.assertEqual(ascii_spans[0], ascii_spans[1], repr(text))
+            self.assertEqual(bool(original.search(text)), bool(g.INNER_SENTENCE_END.search(text)), repr(text))
+
     def test_r3_4_an_unlabelled_unit_of_20k_stops_selected_by_three_questions(self):
         unit = 'Patient seen today' + '.' * 20000
         fields = [field('a', 'Chief complaint'), field('b', 'History'), field('c', 'Plan')]
@@ -949,8 +967,9 @@ class RoundThreeCost(SimpleTestCase):
         self.assertEqual({a['status'] for a in out.values()}, {'conflict'})
 
     def test_r3_4_each_unit_is_read_for_sentence_ends_once_however_many_questions_select_it(self):
-        notes = 'Patient presents with knee pain. She reports it is worse at night.'
-        fields = [field('a', 'Chief complaint'), field('b', 'History'), field('c', 'Plan')]
+        """Once per unit, shared by the paragraph rule and every question that selects the unit."""
+        notes = 'Patient presents with knee pain. She reports it is worse at night.\nAllergies: penicillin.'
+        fields = [field('a', 'Chief complaint'), field('b', 'History'), field('c', 'Plan'), field('d', 'Allergies')]
         real, calls = g.inner_sentence_end, []
 
         def counted(text):
@@ -958,10 +977,19 @@ class RoundThreeCost(SimpleTestCase):
             return real(text)
 
         units, _ = g.source_units(notes, fields)
-        with patch.object(g, 'inner_sentence_end', side_effect=counted):
-            run(notes, {'Chief complaint': [units[0]['quote']], 'History': [u['quote'] for u in units],
-                        'Plan': [units[1]['quote']]}, fields=fields)
+        self.assertEqual(len(units), 3)
+        real_shape, shapes = g.v3_shape_holds, []
+
+        def counted_shape(quote, value):
+            shapes.append(quote)
+            return real_shape(quote, value)
+
+        with patch.object(g, 'inner_sentence_end', side_effect=counted), \
+                patch.object(g, 'v3_shape_holds', side_effect=counted_shape):
+            run(notes, {'Chief complaint': [units[0]['quote']], 'History': [u['quote'] for u in units[:2]],
+                        'Plan': [units[1]['quote']], 'Allergies': [units[2]['quote']]}, fields=fields)
         self.assertLessEqual(len(calls), len(units), calls)
+        self.assertLessEqual(len(shapes), len(units), shapes)
 
     def test_r3_5_a_line_of_999_labelled_segments_is_split_once(self):
         notes = ' '.join(['Q1: No.'] * 999)
@@ -983,6 +1011,20 @@ class RoundThreeCost(SimpleTestCase):
         self.assertLess(time.monotonic() - started, 2.0)
         self.assertLessEqual(len(calls), 1, 'one line, split once')
         self.assertEqual((adopted['q']['status'], adopted['q']['text']), ('supported', 'No'))
+        # Split once for every option question of the adoption, not once per question.
+        notes = ' '.join(['Q1: No. Q2: Yes.'] * 400)
+        fields = [field('q', 'Q1', 'choice', ['Yes', 'No']), field('r', 'Q2', 'choice', ['Yes', 'No'])]
+        asked, context, v3_fields = g.v3_generation_fields(fields)
+        units, _ = g.source_units(notes, fields)
+        selections = g.UnitSelections(fields=[
+            g.UnitSelection(key=key, unit_ids=[u['id'] for u in units if u['quote'] == quote], conflict=False)
+            for key, quote in (('q', 'Q1: No.'), ('r', 'Q2: Yes.'))])
+        answers = g.validate_selections(notes, asked, selections, context_labels=context, evidence_contract=g.TAB_CONTRACT)
+        calls.clear()
+        with patch.object(g, 'sentence_boundaries', side_effect=counted):
+            adopted = g.v3_adopted(v3_fields, answers, notes, asked, context)
+        self.assertLessEqual(len(calls), 1, 'one line, split once for both questions')
+        self.assertEqual((adopted['q']['text'], adopted['r']['text']), ('No', 'Yes'))
 
 
 @override_settings(**LIVE)
