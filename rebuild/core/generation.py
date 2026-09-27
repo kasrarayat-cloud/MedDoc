@@ -1762,12 +1762,23 @@ def v3_labelled_source(notes, labels, label, evidence):
     return True
 
 
+def without_closing_stop(line):
+    """A labelled value with AT MOST ONE closing full stop removed ('Smoker: No.' names 'No'), trimmed.
+
+    ⚠️ ONLY A SINGLE FULL STOP (R1). A question mark asks and an ellipsis trails off: 'Smoker: yes?' and 'Smoker: No...'
+    are uncertain, not answers, and stripping every closing '.!?' filled them as 'Yes' and 'No'. They keep their marks,
+    name no printed option, and are held for the clinician."""
+    line = line.strip()
+    if line.endswith('.') and not line.endswith('..'):
+        line = line[:-1].strip()
+    return line
+
+
 def v3_option_value(field, text):
     """The text form of an option answer read from the notes, or None unless the value names the printed options
     exactly (trimmed, ignoring case). A checkbox takes only an explicit yes, checked or present."""
     from .v3_mapping import CHECKBOX_YES, CHECKED, option_for
-    # A complete sentence's closing full stop is not part of the option it names ('Smoker: No.' names 'No').
-    lines = [line.strip().rstrip('.!?').strip() for line in str(text or '').split('\n') if line.strip().rstrip('.!?').strip()]
+    lines = [line for line in map(without_closing_stop, str(text or '').split('\n')) if line]
     if field.get('kind') == 'checkbox':
         return CHECKED if len(lines) == 1 and lines[0].strip().lower() in CHECKBOX_YES else None
     options = field.get('options') or []

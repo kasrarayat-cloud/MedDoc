@@ -76,6 +76,20 @@ class OrdinaryNotesOnV3Forms(SimpleTestCase):
             self.assertNotEqual(out['Smoker']['status'], 'supported', notes)
             self.assertEqual(out['Smoker']['text'], '', notes)
 
+    def test_only_one_closing_full_stop_is_removed_from_an_option_value(self):
+        """R1: a question mark, an exclamation mark or an ellipsis is part of the value; it names no option."""
+        for notes in ('Smoker: yes?', 'Smoker: no?', 'Smoker: Yes?!', 'Smoker: Yes!', 'Smoker: No...', 'Smoker: No..'):
+            smoker = run(notes, {'Smoker': [notes]})['Smoker']
+            self.assertEqual((smoker['status'], smoker['text']), ('conflict', ''), notes)
+            self.assertEqual(smoker['held_candidate']['text'], notes.split(': ', 1)[1], notes)
+        for notes in ('Consent obtained: yes?', 'Consent obtained: present?', 'Consent obtained: yes...'):
+            consent = run(notes, {'Consent obtained': [notes]})['Consent obtained']
+            self.assertEqual((consent['status'], consent['text']), ('conflict', ''), notes)
+        for notes, text in (('Smoker: No.', 'No'), ('Smoker: yes', 'Yes'), ('Smoker: Yes .', 'Yes')):
+            self.assertEqual(run(notes, {'Smoker': [notes]})['Smoker']['text'], text, notes)
+        self.assertEqual(run('Consent obtained: yes.', {'Consent obtained': ['Consent obtained: yes.']})
+                         ['Consent obtained']['text'], 'checked')
+
     def test_a_checkbox_is_ticked_only_by_an_explicit_yes(self):
         self.assertEqual(run('Consent obtained: yes.', {'Consent obtained': ['Consent obtained: yes.']})
                          ['Consent obtained']['text'], 'checked')
