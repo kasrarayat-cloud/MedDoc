@@ -1,0 +1,600 @@
+{
+  "finished_commit": "f170f5a7e10d557679d3fb6000948f7bd5df5e16",
+  "finished_source_sha256": "d4d82856ca066c07b537f3c3d28f9a10b1b3bcbf441d516e6ba636699ea8bc77",
+  "cases": [
+    {
+      "name": "direct-donor-heading",
+      "kind": "retained-original",
+      "sha256": "01b43a253175dd69ccdda834dd38de0ab1931e3cb98ecdaa820b96a9aa22983a",
+      "outputs": {
+        "previous": {
+          "fields": [
+            {
+              "label": "What medications are currently taken?",
+              "context": "Donor",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        },
+        "finished": {
+          "fields": [
+            {
+              "label": "What medications are currently taken?",
+              "context": "Donor",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        }
+      }
+    },
+    {
+      "name": "inherited-donor-heading",
+      "kind": "retained-original",
+      "sha256": "7723cbbe8825e71547994e09e33df7f55d283ee610d0812d1892a514cb5e61eb",
+      "outputs": {
+        "previous": {
+          "fields": [
+            {
+              "label": "What medications are currently taken?",
+              "context": "",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        },
+        "finished": {
+          "fields": [
+            {
+              "label": "What medications are currently taken?",
+              "context": "Donor",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        }
+      }
+    },
+    {
+      "name": "two-paragraph-question",
+      "kind": "retained-original",
+      "sha256": "be45cc73d4f5f66b96ddb498abee5f07f2c7b6882c1247e095d8c5dfada7c564",
+      "outputs": {
+        "previous": {
+          "fields": [
+            {
+              "label": "Please provide their doses and frequencies.",
+              "context": "",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        },
+        "finished": {
+          "fields": [],
+          "notes": [
+            "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. The question spans multiple paragraphs; review the complete source block. Earlier text: Which medications are currently taken? Printed text: Please provide their doses and frequencies."
+          ]
+        }
+      }
+    },
+    {
+      "name": "plain-positive",
+      "kind": "retained-original",
+      "sha256": "beb5918a21a5c0ed277703d45ae8be449564d9e86828bf4cf563c014fe385783",
+      "outputs": {
+        "previous": {
+          "fields": [
+            {
+              "label": "What symptoms changed?",
+              "context": "",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        },
+        "finished": {
+          "fields": [
+            {
+              "label": "What symptoms changed?",
+              "context": "",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        }
+      }
+    },
+    {
+      "name": "cell-nil",
+      "kind": "retained-original",
+      "sha256": "53fc05e7309e84b7e10a2d749522e6850b36b222fa1f2b32126a52ff928219e1",
+      "outputs": {
+        "previous": {
+          "fields": [],
+          "notes": [
+            "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. The border or unmerged one-cell structure is not explicit. Printed text: What symptoms changed?"
+          ]
+        },
+        "finished": {
+          "fields": [],
+          "notes": [
+            "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. The border or unmerged one-cell structure is not explicit. Printed text: What symptoms changed?"
+          ]
+        }
+      }
+    },
+    {
+      "name": "ancestor-conditional-nil",
+      "kind": "retained-original",
+      "sha256": "5e0ac6d2264ee30c7c56c6e26a007e0009cbd8222291e88cb8158c96850a4dee",
+      "outputs": {
+        "previous": {
+          "fields": [
+            {
+              "label": "What symptoms changed?",
+              "context": "",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        },
+        "finished": {
+          "fields": [],
+          "notes": [
+            "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. The border or unmerged one-cell structure is not explicit. Printed text: What symptoms changed?"
+          ]
+        }
+      }
+    },
+    {
+      "name": "inline-blank",
+      "kind": "retained-original",
+      "sha256": "21256cfbdc4738d6f3aac7a01dea8d1a0f7cf46b011236e8ff4c655cda682f6a",
+      "outputs": {
+        "previous": {
+          "fields": [
+            {
+              "label": "Patient name",
+              "context": "",
+              "slot": "b/p[0]",
+              "target": {
+                "type": "span",
+                "start": 14,
+                "end": 24,
+                "shape": "blank"
+              }
+            }
+          ],
+          "notes": [
+            "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. The printed question contains another answer area; review their separate destinations. Printed text: Patient name: __________. What symptoms changed?"
+          ]
+        },
+        "finished": {
+          "fields": [
+            {
+              "label": "Patient name",
+              "context": "",
+              "slot": "b/p[0]",
+              "target": {
+                "type": "span",
+                "start": 14,
+                "end": 24,
+                "shape": "blank"
+              }
+            }
+          ],
+          "notes": [
+            "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. The printed question contains another answer area; review their separate destinations. Printed text: Patient name: __________. What symptoms changed?"
+          ]
+        }
+      }
+    },
+    {
+      "name": "page-break-spacer",
+      "kind": "retained-original",
+      "sha256": "f370f99cdf1a405c1dac80b9fe552abc5425cfa57dce19d554046a4042450913",
+      "outputs": {
+        "previous": {
+          "fields": [
+            {
+              "label": "What symptoms changed?",
+              "context": "",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        },
+        "finished": {
+          "fields": [],
+          "notes": [
+            "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. A page break separates the printed question or spacer from the preceding source."
+          ]
+        }
+      }
+    },
+    {
+      "name": "paragraph-unknown",
+      "kind": "new-local-control",
+      "sha256": "001a7384faa56bfb10b40ca7daddca8614d94198479d9be46689c1136d17768c",
+      "expected": "hold",
+      "expected_context": "",
+      "pass": true,
+      "outputs": {
+        "previous": {
+          "fields": [
+            {
+              "label": "What symptoms changed?",
+              "context": "",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        },
+        "finished": {
+          "fields": [],
+          "notes": [
+            "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. The style ancestry is not uniquely defined."
+          ]
+        }
+      }
+    },
+    {
+      "name": "paragraph-cycle",
+      "kind": "new-local-control",
+      "sha256": "ef1fdc70315c790a7527dab7d8b9b834350ae275e82289bae15433cc9f86d397",
+      "expected": "hold",
+      "expected_context": "",
+      "pass": true,
+      "outputs": {
+        "previous": {
+          "fields": [
+            {
+              "label": "What symptoms changed?",
+              "context": "",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        },
+        "finished": {
+          "fields": [],
+          "notes": [
+            "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. The style ancestry is cyclic or unavailable."
+          ]
+        }
+      }
+    },
+    {
+      "name": "paragraph-missing-parent",
+      "kind": "new-local-control",
+      "sha256": "174a472543d79f0777521c525528bc61a8ed4347f2778118c422009ff1f91939",
+      "expected": "hold",
+      "expected_context": "",
+      "pass": true,
+      "outputs": {
+        "previous": {
+          "fields": [
+            {
+              "label": "What symptoms changed?",
+              "context": "",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        },
+        "finished": {
+          "fields": [],
+          "notes": [
+            "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. The style ancestry is not uniquely defined."
+          ]
+        }
+      }
+    },
+    {
+      "name": "table-unknown",
+      "kind": "new-local-control",
+      "sha256": "acdef1e30a12f0ab6ede36a67a47362cf0b27092ca0390ec2939f1196529c7fa",
+      "expected": "hold",
+      "expected_context": "",
+      "pass": true,
+      "outputs": {
+        "previous": {
+          "fields": [
+            {
+              "label": "What symptoms changed?",
+              "context": "",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        },
+        "finished": {
+          "fields": [],
+          "notes": [
+            "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. The border or unmerged one-cell structure is not explicit. Printed text: What symptoms changed?"
+          ]
+        }
+      }
+    },
+    {
+      "name": "table-cycle",
+      "kind": "new-local-control",
+      "sha256": "637e4b121767b0070243d911a9f4b95d2b45108b78ef8471721fb4a865ed666b",
+      "expected": "hold",
+      "expected_context": "",
+      "pass": true,
+      "outputs": {
+        "previous": {
+          "fields": [
+            {
+              "label": "What symptoms changed?",
+              "context": "",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        },
+        "finished": {
+          "fields": [],
+          "notes": [
+            "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. The border or unmerged one-cell structure is not explicit. Printed text: What symptoms changed?"
+          ]
+        }
+      }
+    },
+    {
+      "name": "table-missing-parent",
+      "kind": "new-local-control",
+      "sha256": "c63174fd26066e56196bb2fdd2ba134f8de5096eb239c5c7d386e6763c47cee4",
+      "expected": "hold",
+      "expected_context": "",
+      "pass": true,
+      "outputs": {
+        "previous": {
+          "fields": [
+            {
+              "label": "What symptoms changed?",
+              "context": "",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        },
+        "finished": {
+          "fields": [],
+          "notes": [
+            "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. The border or unmerged one-cell structure is not explicit. Printed text: What symptoms changed?"
+          ]
+        }
+      }
+    },
+    {
+      "name": "inherited-break",
+      "kind": "new-local-control",
+      "sha256": "15c46059c310f538a12db5641d9cfdefe1720c7df57d31f4eed4d72d82951e74",
+      "expected": "hold",
+      "expected_context": "",
+      "pass": true,
+      "outputs": {
+        "previous": {
+          "fields": [
+            {
+              "label": "What symptoms changed?",
+              "context": "",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        },
+        "finished": {
+          "fields": [],
+          "notes": [
+            "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. A page break separates the printed question or spacer from the preceding source."
+          ]
+        }
+      }
+    },
+    {
+      "name": "inherited-break-overridden-false",
+      "kind": "new-local-control",
+      "sha256": "a541f2e2b7bf0d346ec975376ed5e1fc54a531c7fb9bb95b7f8d04d2f1882065",
+      "expected": "map",
+      "expected_context": "",
+      "pass": true,
+      "outputs": {
+        "previous": {
+          "fields": [
+            {
+              "label": "What symptoms changed?",
+              "context": "",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        },
+        "finished": {
+          "fields": [
+            {
+              "label": "What symptoms changed?",
+              "context": "",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        }
+      }
+    },
+    {
+      "name": "full-inherited-scope",
+      "kind": "new-local-control",
+      "sha256": "dd166e86a133a9792c61d8bd62a51ec78eeb85652ef375417b79ec61ba17514e",
+      "expected": "map",
+      "expected_context": "Part B > Donor > Medication history",
+      "pass": true,
+      "outputs": {
+        "previous": {
+          "fields": [
+            {
+              "label": "What medications are currently taken?",
+              "context": "",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        },
+        "finished": {
+          "fields": [
+            {
+              "label": "What medications are currently taken?",
+              "context": "Part B > Donor > Medication history",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        }
+      }
+    },
+    {
+      "name": "simple-ancestor-borders",
+      "kind": "new-local-control",
+      "sha256": "a37b740d33e532ba0a079c4a68ace5f0d597e328209d9bc38565db63910d88f8",
+      "expected": "map",
+      "expected_context": "",
+      "pass": true,
+      "outputs": {
+        "previous": {
+          "fields": [],
+          "notes": [
+            "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. The border or unmerged one-cell structure is not explicit. Printed text: What symptoms changed?"
+          ]
+        },
+        "finished": {
+          "fields": [
+            {
+              "label": "What symptoms changed?",
+              "context": "",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        }
+      }
+    },
+    {
+      "name": "simple-ancestor-borders-child-nil",
+      "kind": "new-local-control",
+      "sha256": "45f9c20aa09fcc4bb3aa36c15943b41be9b13dd3a3fe40f96b83de0a44d0da33",
+      "expected": "hold",
+      "expected_context": "",
+      "pass": true,
+      "outputs": {
+        "previous": {
+          "fields": [],
+          "notes": [
+            "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. The border or unmerged one-cell structure is not explicit. Printed text: What symptoms changed?"
+          ]
+        },
+        "finished": {
+          "fields": [],
+          "notes": [
+            "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. The border or unmerged one-cell structure is not explicit. Printed text: What symptoms changed?"
+          ]
+        }
+      }
+    },
+    {
+      "name": "split-question-one-spacer",
+      "kind": "new-local-control",
+      "sha256": "db31063c353f3e28025f28d471f28871fc18df21d673c9e8f202e0264e14b2ec",
+      "expected": "hold",
+      "expected_context": "",
+      "pass": true,
+      "outputs": {
+        "previous": {
+          "fields": [
+            {
+              "label": "Please provide their doses and frequencies.",
+              "context": "",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        },
+        "finished": {
+          "fields": [],
+          "notes": [
+            "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. The question spans multiple paragraphs; review the complete source block. Earlier text: Which medications are currently taken? Printed text: Please provide their doses and frequencies."
+          ]
+        }
+      }
+    }
+  ]
+}
