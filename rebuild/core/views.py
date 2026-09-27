@@ -353,7 +353,7 @@ def v3_page(request,t,version,*,status=200,error='',posted=None,outline=None):
         try:outline=v3_outline(t)
         except (ValidationError,DocumentError,OSError) as exc:outline=[];outline_error=error_message(exc) if not isinstance(exc,OSError) else 'The original is unavailable.'
     places=v3_mapping.open_places(outline,version.fields,query)
-    box_counts={row['slot']:row.get('boxes') for row in outline}
+    box_keys={row['slot']:row['box_keys'] for row in outline if row.get('box_keys')}
     posted=posted or {}
     # ⚠️ Repeated questions are counted with generation's own normalizer, over the fields generation reads: two of
     # them sharing a label are never filled from the notes (each is held), so the page names them for renaming.
@@ -365,7 +365,7 @@ def v3_page(request,t,version,*,status=200,error='',posted=None,outline=None):
            'kind':f.get('kind'),'chosen_kind':posted.get('kind_'+f['key'],f.get('kind')),
            'kind_name':v3_mapping.KIND_NAMES.get(f.get('kind'),f.get('kind')),
            'kind_editable':f.get('kind') in v3_mapping.TEXT_KINDS,'options':f.get('options') or [],
-           'location':field_location.describe(f,box_counts=box_counts),'context':f.get('context') or '',
+           'location':field_location.describe(f,box_keys=box_keys),'context':f.get('context') or '',
            'origin':'Manual' if f.get('origin')=='manual' else 'Automatic','max_chars':f.get('max_chars'),
            'remove':posted.get('remove_'+f['key'])=='on',
            'duplicate':f.get('kind') not in v3_mapping.NEVER_GENERATED and counts.get(question_key(f['label']),0)>1}

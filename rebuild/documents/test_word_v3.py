@@ -945,6 +945,19 @@ def glyphs_shown(data, contains):
     return next(line for line in paragraphs_bytes(data) if contains in line)
 
 
+def fever_cell_bytes():
+    """A cell 'Yes' printed box and a legacy checkbox 'No': the cell's text shows the printed box only."""
+    doc = Document()
+    doc.add_paragraph("Synthetic review of systems")
+    table = doc.add_table(rows=1, cols=2)
+    table.cell(0, 0).text = "Fever"
+    cell = table.cell(0, 1).paragraphs[0]
+    cell.add_run("☐ Yes ")
+    ff_field(cell, "checkbox", name="FeverNo")
+    cell._p.append(text_run(" No"))
+    return docx_bytes(doc)
+
+
 class MixedBoxNumbers(unittest.TestCase):
     """R1: the box number a clinician gives counts EXACTLY the boxes the place's preview shows, in its order - printed
     glyph boxes and checkbox controls alike - and the export ticks exactly that box, whatever its kind."""
@@ -1014,15 +1027,7 @@ class MixedBoxNumbers(unittest.TestCase):
         self.assertEqual((controls_shown(out)[2:], glyphs_shown(out, "Mild")), ([("☐", "0")], "☐ Mild ☐ Moderate ☒ Severe"))
 
     def test_a_cell_whose_preview_does_not_show_its_boxes_refuses_a_number(self):
-        doc = Document()
-        doc.add_paragraph("Synthetic review of systems")
-        table = doc.add_table(rows=1, cols=2)
-        table.cell(0, 0).text = "Fever"
-        cell = table.cell(0, 1).paragraphs[0]
-        cell.add_run("☐ Yes ")
-        ff_field(cell, "checkbox", name="FeverNo")             # a legacy checkbox: the cell's text does not show it
-        cell._p.append(text_run(" No"))
-        path, places = self.form(docx_bytes(doc), "fever.docx")
+        path, places = self.form(fever_cell_bytes(), "fever.docx")
         tc, line = "word/document.xml#b/tbl[0]/tr[0]/tc[1]", "word/document.xml#b/tbl[0]/tr[0]/tc[1]/p[0]"
         self.assertEqual((places[tc]["preview"], places[tc]["boxes"], places[tc].get("unnumbered_boxes")), ("☐ Yes No", 0, True))
         with self.assertRaises(DocumentError) as refused:

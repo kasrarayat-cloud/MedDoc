@@ -911,6 +911,43 @@ class V3MixedBoxNumbers(V3Fixture, TestCase):
         self.assertIn("Side: ☐ Right ☒ Left ☐ Bilateral", part_text(exported))
         self.assertEqual(controls_shown(exported), [("☒", "1")])
 
+    def test_a_glyph_box_the_line_lacks_is_never_confirmed_though_the_line_shows_more_boxes(self):
+        response = self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_add", "mapping_version": self.version.pk,
+                                    "slot": "word/document.xml#b/p[1]", "kind": "checkbox", "label": "Bilateral", "box": "3"})
+        self.assertEqual(response.status_code, 302)
+        latest = self.latest(self.template)
+        added = next(f for f in latest.fields if f.get("origin") == "manual")
+        self.assertEqual(added["locator"]["target"]["boxes"][0]["glyph"], 1, "box 3 of 3 is the line's 2nd printed box")
+        fields = [dict(f) for f in latest.fields]
+        for f in fields:
+            if f.get("origin") == "manual":        # glyph 2: within the 3 boxes the line shows, beyond its 2 glyph boxes
+                f["locator"] = {**f["locator"], "target": {**f["locator"]["target"], "boxes": [
+                    {**f["locator"]["target"]["boxes"][0], "glyph": 2}]}}
+        stale = TemplateVersion.objects.create(template=self.template, number=latest.number + 1, fields=fields,
+                                               contract="v3", corrections={"base_version": latest.number}, created_by=self.user)
+        response = self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_confirm", "mapping_version": stale.pk,
+                                                                        "checked_every_field": "on"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("point at a printed box the form does not have: Bilateral.", response.context["v3_error"])
+
+    def test_a_cell_whose_preview_hides_a_box_refuses_a_number_and_says_so(self):
+        from documents.test_word_v3 import fever_cell_bytes
+        template, version = self.uploaded(data=fever_cell_bytes(), name="Synthetic fever")
+        cell = "word/document.xml#b/tbl[0]/tr[0]/tc[1]"
+        self.client.post(f"/templates/{template.pk}/", {"action": "v3_save", "mapping_version": version.pk,
+                                                        **{"remove_" + f["key"]: "on" for f in version.fields}})
+        version = self.latest(template)
+        self.assertEqual(version.fields, [], "the cell is open for this test")
+        page = self.client.get(f"/templates/{template.pk}/").content.decode()
+        row = page[page.index('data-v3-place="%s"' % cell):]
+        self.assertIn("its preview does not show exactly its boxes: for a checkbox, choose the line inside it or the "
+                      "checkbox itself", row[:row.index("</tr>")])
+        response = self.client.post(f"/templates/{template.pk}/", {"action": "v3_add", "mapping_version": version.pk,
+                                    "slot": cell, "kind": "checkbox", "label": "No fever", "box": "2"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("choose the line inside the cell, or the checkbox itself, as the place.", response.context["v3_error"])
+        self.assertEqual(self.latest(template).pk, version.pk)
+
 
 def two_knees_form_bytes():
     doc = Document()
