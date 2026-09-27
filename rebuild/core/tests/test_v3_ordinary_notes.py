@@ -730,3 +730,75 @@ class RoundTwoThroughTheWorker(V3EncounterFixture, TestCase):
         answer = Encounter.objects.get(pk=self.encounter.pk).answers[self.key('Reason for visit')]
         self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
         self.assertEqual(answer['held_candidate']['text'], 'Chest pain on exertion.')
+
+
+class RoundTwoMutantPins(SimpleTestCase):
+    """Round 2, F8: each of these mutants survived the suite. Every test here fails on its mutant (the proofs are in the
+    commit that adds them); the rules they pin are the ones this release relies on."""
+
+    def by_id(self, notes, picks, fields=REFUTED):
+        """The provider selecting units BY ID (a quote that repeats is one exact occurrence)."""
+        asked, context, v3_fields = g.v3_generation_fields(fields)
+        selections = g.UnitSelections(fields=[g.UnitSelection(key=f['key'], unit_ids=picks.get(f['label'], []),
+                                                              conflict=False) for f in asked])
+        answers = g.validate_selections(notes, asked, g.unit_selections(notes, asked, selections, context_labels=context),
+                                        context_labels=context, evidence_contract=g.TAB_CONTRACT)
+        return {f['label']: g.v3_adopted(v3_fields, answers, notes, asked, context)[f['key']] for f in fields}
+
+    def test_r9_generation_holds_exactly_what_the_page_judges_over_every_occurrence(self):
+        # Governed where the page reads it: the forward pointer governs the second line group; the repeated sentence
+        # there is not a whole line, so the page's reading (line by line, R9) does not count it, and nor may generation.
+        notes = 'Allergies: none.\n\nFindings are as follows.\nSeen today. Allergies: none.'
+        units, inherited = g.source_units(notes, g.v3_generation_fields(REFUTED)[0], context_labels=['Clinician signature'])
+        self.assertFalse(inherited)
+        allergies = self.by_id(notes, {'Allergies': [units[0]['id']]})['Allergies']
+        self.assertEqual((allergies['status'], allergies['text']), ('supported', 'none.'))
+        governance = g.governance_for(notes, REFUTED)
+        self.assertIsNone(g.governed_supported(governance, notes, allergies, 'Allergies'))
+        # The refuter's probe: the occurrence after 'Denies the following.' is held, with the other place named.
+        notes = 'Chest pain on exertion is present.\nSeen today. Denies the following. Chest pain on exertion is present.'
+        units, _ = g.source_units(notes, g.v3_generation_fields(REFUTED)[0], context_labels=['Clinician signature'])
+        for unit in (units[0], units[-1]):
+            answer = self.by_id(notes, {'Chief complaint': [unit['id']]})['Chief complaint']
+            self.assertEqual((answer['status'], answer['text']), ('conflict', ''), unit)
+
+    def test_r10_only_the_named_contract_value_selects_the_complete_sentence_request(self):
+        for value in ('natural-v0', 'natural-v1 ', 'NATURAL-V1', '', None):
+            with self.subTest(value=value):
+                sent = sent_request('Patient seen today.\nSmoker: yes', FIELDS, live_config(v3_evidence_contract=value))
+                self.assertNotIn('source_units', json.loads(sent['messages'][0]['content']))
+                self.assertTrue(sent['system'].startswith('Map source documentation to questions.'))
+
+    def test_r6_a_tab_form_selection_of_another_questions_labelled_unit_still_fails_the_job(self):
+        from pathlib import Path
+        from documents.engine import docx_inspect
+        tab = docx_inspect(Path(__file__).resolve().parents[2] / 'documents/__fixtures__/Colonoscopy_Operative_Template.docx')[3]
+        notes = 'Anesthesia: monitored anesthesia care.'
+        unit = g.source_units(notes, tab)[0][0]
+        selections = g.UnitSelections(fields=[g.UnitSelection(key=f['key'], unit_ids=[unit['id']] if f['label'] == 'PROCEDURE'
+                                                              else [], conflict=False) for f in tab])
+        with self.assertRaisesMessage(g.ValidationError, 'Evidence must be a complete offered source sentence'):
+            g.validate_selections(notes, tab, selections)
+
+    def test_a_stop_inside_a_unit_is_not_a_closing_mark_and_an_abbreviation_is_not_a_stop(self):
+        for notes in ('Pain in the knee. after a fall', 'Pain in the knee. after a fall.'):
+            answer = run(notes, {'Chief complaint': [notes]}, fields=REFUTED)['Chief complaint']
+            self.assertEqual((answer['status'], answer['text']), ('conflict', ''), notes)
+        for label, notes in (('Past medical history', 'Dr. Smith has reviewed the scan.'),
+                             ('Medications', 'She takes aspirin 81 mg p.o. daily.')):
+            answer = run(notes, {label: [notes]}, fields=REFUTED)[label]
+            self.assertEqual((answer['status'], answer['text']), ('supported', notes), notes)
+
+    def test_a_held_candidate_shows_the_sentence_that_may_change_it(self):
+        notes = 'Allergies: penicillin.\nSorry, I mean amoxicillin.'
+        kept = run(notes, {'Allergies': ['Allergies: penicillin.']})['Allergies']['held_candidate']
+        self.assertEqual(kept['context'], [{'quote': 'Sorry, I mean amoxicillin.', 'start': 23, 'end': 49, 'after': True,
+                                            'same': False}])
+        self.assertEqual(kept['reason'], g.HELD_REASON)
+        notes = 'Her father has heart disease. He had a myocardial infarction at age 50.'
+        kept = run(notes, {'Past medical history': ['He had a myocardial infarction at age 50.']},
+                   fields=REFUTED)['Past medical history']['held_candidate']
+        self.assertEqual(kept['context'], [{'quote': 'Her father has heart disease.', 'start': 0, 'end': 29, 'after': False,
+                                            'same': True}])
+        kept = run('Right knee.', {'Chief complaint': ['Right knee.']})['Chief complaint']['held_candidate']
+        self.assertEqual((kept['context'], kept['reason']), ([], g.V3_HELD_REASON))

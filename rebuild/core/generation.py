@@ -1586,8 +1586,9 @@ ASKS_OR_TRAILS_OFF = re.compile(r'(?:[?\uff1f\u2026]|\.\.)["\'\u201d\u2019)\]*_~
 
 #: ⚠️ A VALUE OR SENTENCE SHAPED AS A POINTER ANSWERS NOTHING (round 2, F7): 'to follow.', 'as follows —', '**as follows**',
 #: 'see next line.', 'see beneath.', 'The findings are as follows.' were adopted as the Findings answer. STRUCTURE first -
-#: it ends in a colon (`ends_in_colon`) or a dash; then POSITION - its LAST word points onward or its FIRST word is 'see'.
-#: These words only ever HOLD; a pointer they miss above the lines it introduces is still held by the paragraph rule.
+#: it ends in a dash; then POSITION - its LAST word points onward or its FIRST word is 'see'. (One that ends in a colon
+#: always ends its line, and that line already holds every answer in the note.) These words only ever HOLD; a pointer
+#: they miss above the lines it introduces is still held by the paragraph rule.
 POINTING_END = re.compile(r'(?:[\-\u2010-\u2015\u2212]|' + LETTER_BEFORE + r'(?:follows?|following|below|beneath|overleaf))'
                           r'[\s.!?;,*_~`"\'\u201d\u2019)\]]*$', re.I)
 POINTING_START = re.compile(r'^[\s*_~`"\'\u201c\u2018(\[]*see' + LETTER_AFTER, re.I)
@@ -1595,7 +1596,7 @@ POINTING_START = re.compile(r'^[\s*_~`"\'\u201c\u2018(\[]*see' + LETTER_AFTER, r
 
 def points_elsewhere(text):
     """Whether a value or sentence is shaped as a pointer to other lines (`POINTING_END`, `POINTING_START`)."""
-    return bool(ends_in_colon(text) or POINTING_END.search(text) or POINTING_START.search(text))
+    return bool(POINTING_END.search(text) or POINTING_START.search(text))
 
 
 def inner_sentence_end(text):
