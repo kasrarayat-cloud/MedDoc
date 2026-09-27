@@ -1005,15 +1005,13 @@ def merged_state():
     with unreadable('ledger_invalid'):
         notices = read_notices() or {'incident': None, 'announced_at': no_announcements(), 'committed': None}
     notices = layer_in_force(notices, value)
-    # ⚠️ A STAMP COUNTS ONLY IF status.json RECORDS A REQUEST NO EARLIER THAN IT. Every notice
-    # stamps its severity with the very instant status.json then records as last_attempt_at. A
-    # stamp later than that (or any stamp before status.json records a request at all) was written
-    # by a check that died between the ledger and status.json: no request ever began for it, and a
-    # notice nobody received must never hold the one that is owed. It is read as not sent.
-    backed = timestamp(value['last_attempt_at']) if value['last_attempt_at'] else None
-    announced_at = {level: when if when is not None and backed is not None and timestamp(when) <= backed
-                    else None for level, when in notices['announced_at'].items()}
-    state = dict(value, **closed_incident(), announced_at=announced_at)
+    # ⚠️ EVERY STAMP IN THE LAYER IN FORCE IS A NOTICE THAT WAS MADE. A stamp for a notice that never
+    # began can only come from a notice write whose status.json never landed, and layer_in_force has
+    # already discarded that layer. A stamp LATER than status.json's last_attempt_at is therefore not
+    # evidence of an unsent notice (F2, round 2): a close writes status.json first with its times read
+    # as now after a fast clock, and one stopped before the ledger leaves the ledger's stamps unread-
+    # as-now. Dropping them turned a real warning into an unknown notice that held a failure a day.
+    state = dict(value, **closed_incident(), announced_at=dict(notices['announced_at']))
     record = notices['incident']
     if value['incident_id'] is None:
         pass    # A closed incident: any older record describes an incident that is over.
@@ -1408,15 +1406,19 @@ def incident_summary(state, at, *, latest_confirmed, deferred_until=None):
 def recent_severity_rank(state, at):
     """The highest severity announced in the COOLDOWN_SECONDS before `at`, across incidents.
 
-    ⚠️ A notice status.json records that the ledger does not (the previous release made it, or the
+    ⚠️ A notice status.json records that no stamp reaches (the previous release made it, or the
     ledger was new) counts as a FAILURE: an unknown notice can hold the cooldown, never lift it.
-    The converse never reaches here: a stamp the ledger holds that status.json records no request
-    for was dropped by read_state, because a notice nobody received must hold nothing.
+    A stamp reaches it when it is no earlier than it: every notice stamps its severity with its own
+    time, and a close stopped between its writes can leave that stamp later than status.json's time
+    for it (read as now after a fast clock), never earlier. The converse never reaches here: a
+    notice that never began was discarded with its layer by read_state, so it holds nothing.
     """
     def recent(when):
         return when is not None and (at - timestamp(when)).total_seconds() < COOLDOWN_SECONDS
     rank = max([SEVERITY_RANK[level] for level, when in state['announced_at'].items() if recent(when)], default=0)
-    if recent(state['last_attempt_at']) and state['last_attempt_at'] not in state['announced_at'].values():
+    last = state['last_attempt_at']
+    if recent(last) and not any(when is not None and timestamp(when) >= timestamp(last)
+                                for when in state['announced_at'].values()):
         rank = SEVERITY_RANK['failure']
     return rank
 
