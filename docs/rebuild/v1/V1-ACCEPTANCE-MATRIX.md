@@ -10,7 +10,7 @@ not an installed or combined-candidate result. Reuse unchanged checks; run chang
 | # | area | check | proof | result |
 |---|---|---|---|---|
 | 1 | build | `manage.py check`, `makemigrations --check` | CI script (python gate) | local integration complete; final candidate CI pending |
-| 2 | build | full core suite | `manage.py test core.tests` | 1,969 tests at47bdb1a3:7 failure records,2 errors,31 skips; instrument repairs80PASS, source regression under review; final candidate CI pending |
+| 2 | build | full core suite | `manage.py test core.tests` | 1,969 tests at47bdb1a3:7 failure records,2 errors,31 skips; instrument repairs80PASS, clinical/Word union255PASS; final candidate CI pending |
 | 3 | build | document suites incl. `test_word_v3` | explicit unittest list | local integration complete; final candidate CI pending |
 | 4 | build | ops discovery suite | `unittest discover -s ops` | 1,143 run:1,139PASS/2FAIL/2known skips; stale cost instrument repaired,6focused and24mutation checks passed; no full-run green claim |
 | 5 | access | invite-only: `/register/` 404 in invite mode; clinic invitation accept and recovery links without clinical content | blockers-stream tests | branch fixture evidence; combined candidate pending |
@@ -98,3 +98,16 @@ The31 native Word skips are explicit missing local evidence: the local test call
 processor, so its isolation check correctly refuses that boundary. The installed app uses a distinct
 service user; this does not establish an installed adapter failure. Required CI prepares a root-owned
 processor and requires those tests; native desktop Word acceptance remains a separate gate.
+
+
+### Reviewed source integration and changed-path rerun
+
+The unique-Indication repair and nominal-Plan/Unicode denial corrections are now locally integrated as
+`4f3f7e50d01d4915dcc500728470b636bcf51b25`; its evidence commit is
+`c4e3a370` (application source unchanged). The merged generation SHA256 is
+`d40e1c913408f5926a870913fb23d59b1a5f64099776d2aa3bd596c737f2e02e`.
+All255 checks across ordinary context/input/notes/topics, exact nonsmoker, Word v3 workflow and protected
+signing areas passed in176.521s. This closes the remaining original full-core application regression;
+it does not turn the earlier failed1,969 run into a passing run or qualify unseen forms/live Sonnet5.
+Both sides of the AST merge were preserved (two author definitions/four existing release definitions,
+no overlap). The later literal-Allergies/examination dependency remains separate and unintegrated here.
