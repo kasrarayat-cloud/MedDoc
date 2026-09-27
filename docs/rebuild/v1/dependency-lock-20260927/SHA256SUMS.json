@@ -1,0 +1,9 @@
+{
+  "dependency-resolution.log": "5557a08ff8ea88c981ced0c547b7d1f73b5b88a8f332ef7aac29b44608db00ad",
+  "dependency-resolution-with-pip.log": "c1d3926898e970fc5cca2eb69d47886f242ee7d8df80ce311be144ddd8f24ca2",
+  "dependency-bootstrap-tests.log": "0afc3d0f4b8f16a1429beb0fa4d90349adff34e9efd1a3c9ec603440a0ee4de0",
+  "dependency-download.log": "41c85bbbfa9463437d1dc133a1667bd3599c14857a62fa75b22e213b3a5572f6",
+  "dependency-pip-download.log": "db0b30df2f9a8a3041df902986fc178f95536e61b79770693ae5d56a94405a2a",
+  "dependency-bootstrap-final-tests.log": "fffdcec1f8fe206c6ce82462cf1501b72080aa0c0b0089fad240dada954f7fde",
+  "dependency-tamper-refusal.log": "ff0f934a3159f04a8a580d3f1aafa6c8556441d841ff3aa73339cfef0d9676d2"
+}

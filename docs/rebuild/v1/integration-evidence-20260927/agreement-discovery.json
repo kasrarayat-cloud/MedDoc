@@ -1,0 +1,17 @@
+{
+  "checked_at": "2026-09-27T17:58:28.201614+00:00",
+  "source": "connected Google Drive metadata-only search",
+  "queries": {
+    "QuillMD agreement": 0,
+    "QuillMD BAA": 0,
+    "MedDoc BAA": 0,
+    "Anthropic BAA": 0,
+    "Deepgram agreement": 0,
+    "QuillMD": 0,
+    "HIPAA": 0,
+    "business associate": 5
+  },
+  "relevant_agreements_found": 0,
+  "unrelated_file_contents_fetched": 0,
+  "conclusion": "No matching executed QuillMD provider agreement located in these bounded searches. This is not proof that agreements do not exist."
+}

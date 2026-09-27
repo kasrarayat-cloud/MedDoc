@@ -1,0 +1,44 @@
+{
+  "at": "2026-09-27T21:58:52.495049+00:00",
+  "reviewer": "root Astra",
+  "files": [
+    {
+      "path": "/opt/meddoc-pro/.worktrees/v1-word-long-questions/rebuild/.runtime/d30-long-questions-20260927/render-output/A23-original-05.png",
+      "sha256": "cc77f93e823ae0e0200b0d98b58ac8b121a24e88a871c5d6ff8b5e46f4e0d10a"
+    },
+    {
+      "path": "/opt/meddoc-pro/.worktrees/v1-word-long-questions/rebuild/.runtime/d30-long-questions-20260927/render-output/A23-long-05.png",
+      "sha256": "17385b4edc03c14e0e592a737eb1daff27c7e930279239ba3228442e8d9a75eb"
+    },
+    {
+      "path": "/opt/meddoc-pro/.worktrees/v1-word-long-questions/rebuild/.runtime/d30-long-questions-20260927/render-output/A23-long-06.png",
+      "sha256": "9acc5775dec743b19bd69f806fd09a63ef94f9a8feb43fd3526e05486c16ff5e"
+    },
+    {
+      "path": "/opt/meddoc-pro/.worktrees/v1-word-long-questions/rebuild/.runtime/d30-long-questions-20260927/render-output/A35-long-07.png",
+      "sha256": "0b75a2fc21ab604ea1943fb01c8cb2e583a47ca4d8d8fb86c7bec3f5af00be9a"
+    },
+    {
+      "path": "/opt/meddoc-pro/.worktrees/v1-word-long-questions/rebuild/.runtime/d30-long-questions-20260927/render-output/A35-long-08.png",
+      "sha256": "a349028513b399e11402446796f9f25302bd11a8cebd39cd89d65bdd84bb0625"
+    },
+    {
+      "path": "/opt/meddoc-pro/.worktrees/v1-word-long-questions/rebuild/.runtime/d30-long-questions-20260927/render-output/A44-long-08.png",
+      "sha256": "ae6bcddd3dcdc95161be976c2675470d10eb92b6b077d4c877e6527d02d574ba"
+    },
+    {
+      "path": "/opt/meddoc-pro/.worktrees/v1-word-long-questions/rebuild/.runtime/d30-long-questions-20260927/render-output/A44-long-09.png",
+      "sha256": "4e9360ea6431bcd6dd4b7c83f1b458226272fc6017d9fa66bc511800471f2a8b"
+    }
+  ],
+  "observations": [
+    "A23 full printed long question and link remain before the filled box; answer flows from page5 into page6 with complete visible last statement before Relationships.",
+    "A35 long box flows from page7 into page8; Further Comments and subsequent signature/contact/date table remain visible and unfilled.",
+    "A44 PartC heading, red instructions and full long source question remain; long answer flows from page8 to page9 without visible overlap into header/footer."
+  ],
+  "limits": [
+    "Selected changed pages only; supplements author full-export pair render measurements, not native Word acceptance.",
+    "SYNTHETIC repeated text checks geometry and continuation, not clinical answer quality.",
+    "D30 remains document-level FAIL."
+  ]
+}

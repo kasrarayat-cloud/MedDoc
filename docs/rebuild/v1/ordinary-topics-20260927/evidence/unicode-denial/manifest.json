@@ -1,0 +1,30 @@
+{
+  "ast-delta.json": {
+    "bytes": 168,
+    "sha256": "1703b22e25c08c0673dc14e518dbbaa5e79143ed5971d4016f7debb7fe06c91c"
+  },
+  "generation-before.py": {
+    "bytes": 229311,
+    "sha256": "a228fc6517b5dab765803f02e9c37a5d2fe25b83b8801a195a98ddee60413c40"
+  },
+  "green.log": {
+    "bytes": 816,
+    "sha256": "68749f6d221c305c51aa6d571a2e025ccd0932a5566631bfe6dc4cd3f83a8367"
+  },
+  "prior-independent-closure.md": {
+    "bytes": 3149,
+    "sha256": "0ee7cad77de19f5aea797b592de7761abfe46bdb6e24a9f999a549e00761cab3"
+  },
+  "red.log": {
+    "bytes": 3917,
+    "sha256": "1b7d916f7e039aedefe33117a2cc8a47dd29a704c87cbbdc03429cbefb160e2b"
+  },
+  "root-red.json": {
+    "bytes": 3109,
+    "sha256": "b18c0a67eb73b69ccc2b8fc8de7534b40fa8029d8b9e18535e845eb5c54ba64a"
+  },
+  "safety-reads.log": {
+    "bytes": 163,
+    "sha256": "cd1ff9d2174e58670469e20d032a9a7674da49aede37af70541e7b4b302465e2"
+  }
+}

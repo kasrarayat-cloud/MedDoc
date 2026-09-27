@@ -1,0 +1,54 @@
+[
+  {
+    "file": "literal-topic-correction-root.py",
+    "sha256": "6c428468f0c16bf5231f4cbd43c3ba4ab4901789d38ec043161d2287f032dd5e"
+  },
+  {
+    "file": "literal-topic-correction-root-red.json",
+    "sha256": "c96e3905f64d40e58e56ce44c98ca4597a8713d3f31b0d3ec5f336093307d83f"
+  },
+  {
+    "file": "record-retraction-red.txt",
+    "sha256": "64179f8f4e5512817f484c93f965bb8e2c94c3857b9436c5fce9b1a4b8c87af0"
+  },
+  {
+    "file": "record-retraction-focused.txt",
+    "sha256": "cc2bacfdd424c9cfa54369195920765b06ff25178defe64720ab4a87d7e464c7"
+  },
+  {
+    "file": "record-for-red.txt",
+    "sha256": "e0ee7787305f261c8efef3e63615bbe97ad79e420c07b757977da9d7421456a9"
+  },
+  {
+    "file": "record-retraction-final.txt",
+    "sha256": "5209f498700d8442f8e0180c27bd963c132ca1884a3433901f7f337cdbf1d3db"
+  },
+  {
+    "file": "record-adjacent-root.py",
+    "sha256": "bf16063cd949672afb3ef51f745ae754148eff4ebfd7e12df2a99d633b952054"
+  },
+  {
+    "file": "record-adjacent-root-red.json",
+    "sha256": "cb585cd984cf9cc2faf3f6a74e6e887e0821fcef61fedd9fde008d12a2caf5b9"
+  },
+  {
+    "file": "record-adjacent-root-after.json",
+    "sha256": "ea1cc27fcd99238a799c1641fd0f517bcd8af9d161323c953269b70a6d07bf54"
+  },
+  {
+    "file": "record-retraction-directional-final.txt",
+    "sha256": "8bda6f8f2e5fda53fe7ce90696dc14e78ecd03c3ae49b789ac7f4c6eaf7ae84d"
+  },
+  {
+    "file": "record-directional-root-red.json",
+    "sha256": "af3699207f23979549606c1c12d7c1dfc90f02cb66a4d00c34ba1594646ed506"
+  },
+  {
+    "file": "record-directional-root-after.json",
+    "sha256": "bfd4357e72f325bfbaaf66a1fdc535bb2c56bad569769754280b6b86ca782fed"
+  },
+  {
+    "file": "record-retraction-morphology-final.txt",
+    "sha256": "812f5cf01a704aec94639ac1c2bd69919e98113c4dafc1eeaf4ff6bb5eac59c9"
+  }
+]

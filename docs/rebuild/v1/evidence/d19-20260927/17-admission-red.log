@@ -1,0 +1,42 @@
+Creating test database for alias 'default'...
+/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-word-d19/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+FFF
+======================================================================
+FAIL: test_direct_enqueue_refuses_before_job_and_reservation (core.tests.test_signing_areas.SigningGenerationAdmission.test_direct_enqueue_refuses_before_job_and_reservation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-d19/rebuild/core/tests/test_signing_areas.py", line 181, in test_direct_enqueue_refuses_before_job_and_reservation
+    with self.assertRaisesMessage(ValidationError, 'Generation is unavailable'):
+  File "/usr/lib/python3.12/contextlib.py", line 144, in __exit__
+    next(self.gen)
+AssertionError: ValidationError not raised
+
+======================================================================
+FAIL: test_http_refuses_before_quote_and_leaves_original_and_mapping_available (core.tests.test_signing_areas.SigningGenerationAdmission.test_http_refuses_before_quote_and_leaves_original_and_mapping_available)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-d19/rebuild/core/tests/test_signing_areas.py", line 169, in test_http_refuses_before_quote_and_leaves_original_and_mapping_available
+    self.assert_no_financial_request()
+  File "/opt/meddoc-pro/.worktrees/v1-word-d19/rebuild/core/tests/test_signing_areas.py", line 155, in assert_no_financial_request
+    self.assertFalse(Job.objects.exists())
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_old_queued_job_refuses_before_provider_and_releases_real_hold (core.tests.test_signing_areas.SigningGenerationAdmission.test_old_queued_job_refuses_before_provider_and_releases_real_hold)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-d19/rebuild/core/tests/test_signing_areas.py", line 203, in test_old_queued_job_refuses_before_provider_and_releases_real_hold
+    self.assertEqual(job.state, 'failed')
+AssertionError: 'succeeded' != 'failed'
+- succeeded
++ failed
+
+
+----------------------------------------------------------------------
+Ran 3 tests in 3.726s
+
+FAILED (failures=3)
+Destroying test database for alias 'default'...
+Found 3 test(s).
+System check identified no issues (0 silenced).

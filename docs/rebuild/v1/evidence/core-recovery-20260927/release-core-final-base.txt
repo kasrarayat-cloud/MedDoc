@@ -1,0 +1,340 @@
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-release/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+.............................Forbidden (CSRF cookie not set.): /console/accounts/72d3694b-013e-41ac-b178-a87ba09bb640/sessions/
+Forbidden (CSRF cookie not set.): /console/memberships/c4aeed7e-3de7-4bf9-9da0-733b3ea4c697/
+Forbidden (CSRF cookie not set.): /console/departments/4ec0e3a9-59f1-4e6b-b284-2bbff3eaf493/payer/
+.........................................................../opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-release/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+.................../opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-release/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+..../opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-release/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+......./opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-release/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+....................../opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-release/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+....................................................../opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-release/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+.........................................................................................................................................................................................FFF.FFF...........................................................................................................................................................................................................................................................................................................................................................................................Forbidden (private preview CSRF validation failed).
+Forbidden (private preview CSRF validation failed).
+.Forbidden (private preview CSRF validation failed).
+Forbidden (private preview CSRF validation failed).
+..............................................................................Forbidden (CSRF cookie not set.): /recovery/
+Forbidden (CSRF cookie not set.): /verification/resend/
+...............E.......................................................................................Forbidden (CSRF cookie not set.): /encounters/cd9fc7a0-27e9-4e6c-b056-92ab0a81ca45/generate/
+...................................................................................................................................................................................................................................sssssssssssssssssssssssssssssss............................................................F................................................./opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-release/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+............................................................................................................................................................../opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-release/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+.............................................................................................................................E......................................................................................................................................................................................................................................................................................................................................................................................
+======================================================================
+ERROR: test_transcription_source_change_invalidates_prior_coding_acceptance (core.tests.test_refutation.AuthorizationAndPayerRefutation.test_transcription_source_change_invalidates_prior_coding_acceptance)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.RaiseException: Job scope is immutable
+CONTEXT:  PL/pgSQL function quillmd_mapping_job_scope_guard() line 6 at RAISE
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/test/utils.py", line 456, in inner
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_refutation.py", line 256, in test_transcription_source_change_invalidates_prior_coding_acceptance
+    self.job.save(update_fields=["kind"])
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 902, in save
+    self.save_base(
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1008, in save_base
+    updated = self._save_table(
+              ^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1138, in _save_table
+    updated = self._do_update(
+              ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1203, in _do_update
+    return filtered._update(values) > 0
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 1288, in _update
+    return query.get_compiler(self.db).execute_sql(ROW_COUNT)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 2060, in execute_sql
+    row_count = super().execute_sql(result_type)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1623, in execute_sql
+    cursor.execute(sql, params)
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.ProgrammingError: Job scope is immutable
+CONTEXT:  PL/pgSQL function quillmd_mapping_job_scope_guard() line 6 at RAISE
+
+======================================================================
+ERROR: test_P4_reversing_0020_refuses_while_live_evidence_exists (core.tests.test_v1_real_mode_payments.ReversingThePaymentModeMigration.test_P4_reversing_0020_refuses_while_live_evidence_exists)
+The refuter's P4: a live payment, 0020 reversed and re-applied: the payment read NULL and reserve() refused a
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedColumn: column "mapping_version_id" of relation "core_job" does not exist
+LINE 1: ...O "core_job" ("id", "created_at", "encounter_id", "mapping_v...
+                                                             ^
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v1_real_mode_payments.py", line 697, in test_P4_reversing_0020_refuses_while_live_evidence_exists
+    reserve(self.job('after-refused-rollback'), Decimal('2'))
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v1_real_mode_payments.py", line 52, in job
+    return Job.objects.create(encounter=self.user.membership_set.first().department.encounter_set.first(),
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 665, in create
+    obj.save(force_insert=True, using=self.db)
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 902, in save
+    self.save_base(
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1008, in save_base
+    updated = self._save_table(
+              ^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1169, in _save_table
+    results = self._do_insert(
+              ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1210, in _do_insert
+    return manager._insert(
+           ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 1873, in _insert
+    return query.get_compiler(using=using).execute_sql(returning_fields)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1882, in execute_sql
+    cursor.execute(sql, params)
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.ProgrammingError: column "mapping_version_id" of relation "core_job" does not exist
+LINE 1: ...O "core_job" ("id", "created_at", "encounter_id", "mapping_v...
+                                                             ^
+
+======================================================================
+FAIL: test_an_unreadable_job_table_is_reported_without_stopping_the_screen (core.tests.test_configuration_status.ConfigurationStatusNamesTheModel.test_an_unreadable_job_table_is_reported_without_stopping_the_screen) (mode='live')
+F-C (round 4). The live-jobs row reads the job table; when that read raises DatabaseError the row says UNAVAILABLE
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_configuration_status.py", line 276, in test_an_unreadable_job_table_is_reported_without_stopping_the_screen
+    self.assertIn('live generation jobs: UNAVAILABLE — the job table could not be read', report)
+AssertionError: 'live generation jobs: UNAVAILABLE — the job table could not be read' not found in 'Configuration (no value is read back):\n  QUILLMD_AI_MODE: live\n  QUILLMD_AI_PROVIDER: anthropic\n  QUILLMD_EMAIL_MODE: file\n  QUILLMD_EMAIL_FROM: (unset)\n  QUILLMD_EMAIL_VERIFIED_DOMAIN: (unset)\n  CPT_LICENSE_ID: (unset)\n  CPT_LICENSE_EXPIRY: (unset)\nPrivate credentials (status only):\n  DEEPGRAM_API_KEY: absent\n  ANTHROPIC_API_KEY: present\n  RESEND_API_KEY: absent\n  STRIPE_SECRET_KEY: absent\n  STRIPE_WEBHOOK_SECRET: absent\nLanguage model (plain configuration values, shown so a model switch can be confirmed):\n  QUILLMD_AI_MODEL: claude-sonnet-4-6\n  QUILLMD_AI_INPUT_RATE: 3\n  QUILLMD_AI_OUTPUT_RATE: 15\n  QUILLMD_AI_CACHED_RATE: 0.30\n  QUILLMD_AI_THINKING: disabled (read only for claude-sonnet-5)\n  QUILLMD_AI_EFFORT: medium (read only for claude-sonnet-5)\n  QUILLMD_AI_INFERENCE_GEO: (unset)\n  request profile: legacy (the pre-profile request, unchanged) {"max_output_tokens": 6000, "profile": "legacy-v1", "timeout_seconds": 60}\n  pricing_version: configured-v1:fcc802676fc66faa1dca2e574588ab96d9ee90cba679f047d6a80bb7924583ae\n  live language-model jobs: UNAVAILABLE — the job table could not be read\nMedia tools:\n  ffprobe: /usr/bin/ffprobe\n  ffmpeg: /usr/bin/ffmpeg\nRelease gates:\n  SYNTHETIC_ONLY: True\n  STRIPE_LIVE_ENABLED: False\n  QUILLMD_DATA_MODE: synthetic\n  QUILLMD_REGISTRATION: open\n  QUILLMD_STRIPE_MODE: test\n  QUILLMD_MFA_REQUIRED_ALL: False\n  database: test_quillmd_ci\n'
+
+======================================================================
+FAIL: test_an_unreadable_job_table_is_reported_without_stopping_the_screen (core.tests.test_configuration_status.ConfigurationStatusNamesTheModel.test_an_unreadable_job_table_is_reported_without_stopping_the_screen) (mode='fixture')
+F-C (round 4). The live-jobs row reads the job table; when that read raises DatabaseError the row says UNAVAILABLE
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_configuration_status.py", line 276, in test_an_unreadable_job_table_is_reported_without_stopping_the_screen
+    self.assertIn('live generation jobs: UNAVAILABLE — the job table could not be read', report)
+AssertionError: 'live generation jobs: UNAVAILABLE — the job table could not be read' not found in 'Configuration (no value is read back):\n  QUILLMD_AI_MODE: fixture\n  QUILLMD_AI_PROVIDER: anthropic\n  QUILLMD_EMAIL_MODE: file\n  QUILLMD_EMAIL_FROM: (unset)\n  QUILLMD_EMAIL_VERIFIED_DOMAIN: (unset)\n  CPT_LICENSE_ID: (unset)\n  CPT_LICENSE_EXPIRY: (unset)\nPrivate credentials (status only):\n  DEEPGRAM_API_KEY: absent\n  ANTHROPIC_API_KEY: present\n  RESEND_API_KEY: absent\n  STRIPE_SECRET_KEY: absent\n  STRIPE_WEBHOOK_SECRET: absent\nLanguage model (plain configuration values, shown so a model switch can be confirmed):\n  provider requests: NONE — QUILLMD_AI_MODE is fixture, not live: generation answers from the synthetic fixture and sends no provider request. The values below are configured but INACTIVE.\n  QUILLMD_AI_MODEL: claude-sonnet-4-6 (inactive: QUILLMD_AI_MODE is not live)\n  QUILLMD_AI_INPUT_RATE: 3 (inactive: QUILLMD_AI_MODE is not live)\n  QUILLMD_AI_OUTPUT_RATE: 15 (inactive: QUILLMD_AI_MODE is not live)\n  QUILLMD_AI_CACHED_RATE: 0.30 (inactive: QUILLMD_AI_MODE is not live)\n  QUILLMD_AI_THINKING: disabled (read only for claude-sonnet-5) (inactive: QUILLMD_AI_MODE is not live)\n  QUILLMD_AI_EFFORT: medium (read only for claude-sonnet-5) (inactive: QUILLMD_AI_MODE is not live)\n  QUILLMD_AI_INFERENCE_GEO: (unset) (inactive: QUILLMD_AI_MODE is not live)\n  request profile: INACTIVE — no provider request is sent while QUILLMD_AI_MODE is not live. In live mode: legacy (the pre-profile request, unchanged) {"max_output_tokens": 6000, "profile": "legacy-v1", "timeout_seconds": 60}\n  pricing_version: configured-v1:fcc802676fc66faa1dca2e574588ab96d9ee90cba679f047d6a80bb7924583ae (inactive: QUILLMD_AI_MODE is not live)\n  live language-model jobs: UNAVAILABLE — the job table could not be read\nMedia tools:\n  ffprobe: /usr/bin/ffprobe\n  ffmpeg: /usr/bin/ffmpeg\nRelease gates:\n  SYNTHETIC_ONLY: True\n  STRIPE_LIVE_ENABLED: False\n  QUILLMD_DATA_MODE: synthetic\n  QUILLMD_REGISTRATION: open\n  QUILLMD_STRIPE_MODE: test\n  QUILLMD_MFA_REQUIRED_ALL: False\n  database: test_quillmd_ci\n'
+
+======================================================================
+FAIL: test_an_unreadable_job_table_is_reported_without_stopping_the_screen (core.tests.test_configuration_status.ConfigurationStatusNamesTheModel.test_an_unreadable_job_table_is_reported_without_stopping_the_screen)
+F-C (round 4). The live-jobs row reads the job table; when that read raises DatabaseError the row says UNAVAILABLE
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_configuration_status.py", line 282, in test_an_unreadable_job_table_is_reported_without_stopping_the_screen
+    self.assertIn('live generation jobs: 0 queued, 0 running, 0 in reconciliation (drained when all three are 0)', report)
+AssertionError: 'live generation jobs: 0 queued, 0 running, 0 in reconciliation (drained when all three are 0)' not found in 'Configuration (no value is read back):\n  QUILLMD_AI_MODE: live\n  QUILLMD_AI_PROVIDER: anthropic\n  QUILLMD_EMAIL_MODE: file\n  QUILLMD_EMAIL_FROM: (unset)\n  QUILLMD_EMAIL_VERIFIED_DOMAIN: (unset)\n  CPT_LICENSE_ID: (unset)\n  CPT_LICENSE_EXPIRY: (unset)\nPrivate credentials (status only):\n  DEEPGRAM_API_KEY: absent\n  ANTHROPIC_API_KEY: present\n  RESEND_API_KEY: absent\n  STRIPE_SECRET_KEY: absent\n  STRIPE_WEBHOOK_SECRET: absent\nLanguage model (plain configuration values, shown so a model switch can be confirmed):\n  QUILLMD_AI_MODEL: claude-sonnet-4-6\n  QUILLMD_AI_INPUT_RATE: 3\n  QUILLMD_AI_OUTPUT_RATE: 15\n  QUILLMD_AI_CACHED_RATE: 0.30\n  QUILLMD_AI_THINKING: disabled (read only for claude-sonnet-5)\n  QUILLMD_AI_EFFORT: medium (read only for claude-sonnet-5)\n  QUILLMD_AI_INFERENCE_GEO: (unset)\n  request profile: legacy (the pre-profile request, unchanged) {"max_output_tokens": 6000, "profile": "legacy-v1", "timeout_seconds": 60}\n  pricing_version: configured-v1:fcc802676fc66faa1dca2e574588ab96d9ee90cba679f047d6a80bb7924583ae\n  live language-model jobs: 0 queued, 0 running, 0 in reconciliation (drained when all three are 0)\nMedia tools:\n  ffprobe: /usr/bin/ffprobe\n  ffmpeg: /usr/bin/ffmpeg\nRelease gates:\n  SYNTHETIC_ONLY: True\n  STRIPE_LIVE_ENABLED: False\n  QUILLMD_DATA_MODE: synthetic\n  QUILLMD_REGISTRATION: open\n  QUILLMD_STRIPE_MODE: test\n  QUILLMD_MFA_REQUIRED_ALL: False\n  database: test_quillmd_ci\n'
+
+======================================================================
+FAIL: test_outside_live_mode_the_section_says_nothing_is_sent_and_marks_every_value_inactive (core.tests.test_configuration_status.ConfigurationStatusNamesTheModel.test_outside_live_mode_the_section_says_nothing_is_sent_and_marks_every_value_inactive) (case='unlisted model')
+R2-2. generate() answers from the synthetic fixture before it reads the profile, so in fixture mode an unlisted
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_configuration_status.py", line 209, in test_outside_live_mode_the_section_says_nothing_is_sent_and_marks_every_value_inactive
+    self.assertEqual(rows[-1]['name'], 'live generation jobs')
+AssertionError: 'live language-model jobs' != 'live generation jobs'
+- live language-model jobs
++ live generation jobs
+
+
+======================================================================
+FAIL: test_outside_live_mode_the_section_says_nothing_is_sent_and_marks_every_value_inactive (core.tests.test_configuration_status.ConfigurationStatusNamesTheModel.test_outside_live_mode_the_section_says_nothing_is_sent_and_marks_every_value_inactive) (case='rollback')
+R2-2. generate() answers from the synthetic fixture before it reads the profile, so in fixture mode an unlisted
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_configuration_status.py", line 209, in test_outside_live_mode_the_section_says_nothing_is_sent_and_marks_every_value_inactive
+    self.assertEqual(rows[-1]['name'], 'live generation jobs')
+AssertionError: 'live language-model jobs' != 'live generation jobs'
+- live language-model jobs
++ live generation jobs
+
+
+======================================================================
+FAIL: test_outside_live_mode_the_section_says_nothing_is_sent_and_marks_every_value_inactive (core.tests.test_configuration_status.ConfigurationStatusNamesTheModel.test_outside_live_mode_the_section_says_nothing_is_sent_and_marks_every_value_inactive) (case='sonnet 5')
+R2-2. generate() answers from the synthetic fixture before it reads the profile, so in fixture mode an unlisted
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_configuration_status.py", line 209, in test_outside_live_mode_the_section_says_nothing_is_sent_and_marks_every_value_inactive
+    self.assertEqual(rows[-1]['name'], 'live generation jobs')
+AssertionError: 'live language-model jobs' != 'live generation jobs'
+- live language-model jobs
++ live generation jobs
+
+
+======================================================================
+FAIL: test_a_labelled_line_fills_none_of_the_repeated_questions (core.tests.test_word_v3_workflow.V3RepeatedQuestions.test_a_labelled_line_fills_none_of_the_repeated_questions)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_word_v3_workflow.py", line 1052, in test_a_labelled_line_fills_none_of_the_repeated_questions
+    self.assertEqual((answer["status"], answer["text"]), ("supported", "synthetic knee review"))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'synthetic knee review')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'synthetic knee review')
+
+----------------------------------------------------------------------
+Ran 1969 tests in 922.644s
+
+FAILED (failures=7, errors=2, skipped=31)
+Destroying test database for alias 'default'...
+Found 1969 test(s).
+System check identified no issues (0 silenced).
+Published backup status: healthy (healthy).
+Published backup status: offsite_stale (failure).
+{
+  "checked_at": "2026-09-27T19:40:09.796117+00:00",
+  "scope": "Read-only fresh application records; no external requests; no clinical text or credentials exported.",
+  "charge_policy": "User charge is exactly 1.5 \u00d7 the attributable metered provider cost after applicable discounts and allocated provider credits; configured-rate rows are estimates until reconciled to authentic provider evidence.",
+  "platform_costs": {
+    "totals_by_kind": {
+      "fixed_overhead": "0",
+      "absorbed_failure": "0",
+      "absorbed_over_limit": "0"
+    },
+    "rows": 0,
+    "policy": "Fixed overhead and absorbed platform-failure cost are tracked separately and never charged to users."
+  },
+  "reconciliation_summary": {
+    "evidence_kinds": {
+      "unclassified": 0,
+      "provider_report": 0,
+      "invoice": 0
+    },
+    "reconciled_rows": 0,
+    "unreconciled_rows": 0,
+    "pending_funds": 0,
+    "absorbed_rows": 0
+  },
+  "cost_basis": "Original usage is provider-metered units priced at configured USD rates; reservations are estimates. Classified reconciliation evidence and adjustments are reported separately.",
+  "fingerprint_limit": "A configured pricing fingerprint identifies the application configuration, not a provider contract, tariff version, invoice, or verified account discount.",
+  "rate_reference_reviewed_on": "2026-09-17",
+  "rate_references": [
+    "https://platform.claude.com/docs/en/about-claude/pricing",
+    "https://deepgram.com/pricing"
+  ],
+  "rows": [],
+  "wallets": [
+    {
+      "wallet_id": "8606d4d0-d984-4085-9988-a5d8c0979160",
+      "kind": "promo",
+      "balance_usd": "10.000000000000",
+      "ledger_sum_usd": "10.000000000000",
+      "reserved_usd": "0.010000000000",
+      "held_reservations_usd": "0.010000000000",
+      "checks": {
+        "balance_equals_ledger": true,
+        "reserved_equals_holds": true
+      }
+    },
+    {
+      "wallet_id": "8a1d3023-2e42-46c4-bb00-1b407402b3aa",
+      "kind": "paid",
+      "balance_usd": "0E-12",
+      "ledger_sum_usd": "0",
+      "reserved_usd": "0E-12",
+      "held_reservations_usd": "0",
+      "checks": {
+        "balance_equals_ledger": true,
+        "reserved_equals_holds": true
+      }
+    }
+  ],
+  "unsettled_provider_receipts": [],
+  "unresolved_jobs": [],
+  "ledger_policy": {
+    "orphan_policy_entries": 0,
+    "checks": {
+      "policy_ledger_entries_bound_to_jobs": true,
+      "over_limit_absorptions_bound_to_settled_usage": true
+    }
+  },
+  "cancellation_policy": {
+    "cancelled_jobs": 0,
+    "checks": {
+      "cancelled_jobs_have_no_usage": true,
+      "cancelled_jobs_have_no_provider_receipt": true,
+      "cancelled_jobs_have_no_ledger_entries": true,
+      "cancelled_jobs_hold_no_funds": true
+    }
+  },
+  "hold_policy": {
+    "ended_jobs_holding_funds": [
+      "b1a8c60d-0777-413d-9862-b837e193c95a"
+    ],
+    "checks": {
+      "ended_jobs_hold_no_funds": false
+    }
+  },
+  "all_checks_pass": false,
+  "durable_receipt_gaps": 0,
+  "invoice_reconciliation": {
+    "invoice_rows": 0,
+    "provider_report_rows": 0,
+    "unclassified_rows": 0,
+    "scope": "Administrator-recorded per-usage classification; no account-wide or whole-invoice reconciliation is implied.",
+    "provenance": "Source authenticity and attribution require administrator review; this audit verifies ledger arithmetic, not provider authenticity."
+  }
+}
+Publication deferred: an activation holds exclusion. Nothing written; the existing row keeps its own freshness.
+Publication deferred: an activation holds exclusion. Nothing written; the existing row keeps its own freshness.
+Publication deferred: an activation holds exclusion. Nothing written; the existing row keeps its own freshness.
+Published backup status: synthetic test condition (failure).
+Publication deferred: an activation holds exclusion. Nothing written; the existing row keeps its own freshness.
+Published backup status: synthetic test condition (failure).

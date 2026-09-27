@@ -1,0 +1,22 @@
+F
+======================================================================
+FAIL: test_text_field_keeps_its_existing_extractive_answer (core.tests.test_natural_smoker.NaturalSmoker.test_text_field_keeps_its_existing_extractive_answer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-natural-smoker/rebuild/core/tests/test_natural_smoker.py", line 104, in test_text_field_keeps_its_existing_extractive_answer
+    self.assertEqual((out['status'], out['text']), ('supported', QUOTE))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'The patient is a nonsmoker.')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'The patient is a nonsmoker.')
+
+----------------------------------------------------------------------
+Ran 1 test in 0.203s
+
+FAILED (failures=1)
+Found 1 test(s).
+System check identified no issues (0 silenced).

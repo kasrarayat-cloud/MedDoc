@@ -1,0 +1,226 @@
+{
+  "disk_sha256": "6f1a5354a29a3b50cc112be4bdd0436d5cc77896a6d6c6e6b75d81bd2350737a",
+  "override": null,
+  "cases": [
+    {
+      "notes": "Assessment: infection.\nPlan: no infection.",
+      "forced": {
+        "a": {
+          "status": "supported",
+          "text": "infection.",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "Assessment: infection.",
+              "start": 0,
+              "end": 22
+            }
+          ]
+        },
+        "p": {
+          "status": "supported",
+          "text": "no infection.",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "Plan: no infection.",
+              "start": 23,
+              "end": 42
+            }
+          ]
+        }
+      },
+      "pages": {
+        "Assessment": {
+          "status": "conflict",
+          "text": "",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "Assessment: infection.",
+              "start": 0,
+              "end": 22
+            }
+          ],
+          "label": "Assessment",
+          "held_candidate": {
+            "text": "infection.",
+            "evidence": [
+              {
+                "quote": "Assessment: infection.",
+                "start": 0,
+                "end": 22
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: no infection.",
+                "start": 23,
+                "end": 42,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+            "prefilled": true
+          }
+        },
+        "Plan": {
+          "status": "supported",
+          "text": "no infection.",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "Plan: no infection.",
+              "start": 23,
+              "end": 42
+            }
+          ],
+          "label": "Plan"
+        }
+      },
+      "refusals": [
+        "Assessment"
+      ]
+    },
+    {
+      "notes": "Assessment: active bacterial infection.\nPlan: no active bacterial infection.",
+      "forced": {
+        "a": {
+          "status": "supported",
+          "text": "active bacterial infection.",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "Assessment: active bacterial infection.",
+              "start": 0,
+              "end": 39
+            }
+          ]
+        },
+        "p": {
+          "status": "supported",
+          "text": "no active bacterial infection.",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "Plan: no active bacterial infection.",
+              "start": 40,
+              "end": 76
+            }
+          ]
+        }
+      },
+      "pages": {
+        "Assessment": {
+          "status": "conflict",
+          "text": "",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "Assessment: active bacterial infection.",
+              "start": 0,
+              "end": 39
+            }
+          ],
+          "label": "Assessment",
+          "held_candidate": {
+            "text": "active bacterial infection.",
+            "evidence": [
+              {
+                "quote": "Assessment: active bacterial infection.",
+                "start": 0,
+                "end": 39
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: no active bacterial infection.",
+                "start": 40,
+                "end": 76,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+            "prefilled": true
+          }
+        },
+        "Plan": {
+          "status": "supported",
+          "text": "no active bacterial infection.",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "Plan: no active bacterial infection.",
+              "start": 40,
+              "end": 76
+            }
+          ],
+          "label": "Plan"
+        }
+      },
+      "refusals": [
+        "Assessment"
+      ]
+    },
+    {
+      "notes": "Assessment: mechanical low back pain.\nPlan: naproxen 500 mg twice daily with food and physiotherapy.",
+      "forced": {
+        "a": {
+          "status": "supported",
+          "text": "mechanical low back pain.",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "Assessment: mechanical low back pain.",
+              "start": 0,
+              "end": 37
+            }
+          ]
+        },
+        "p": {
+          "status": "supported",
+          "text": "naproxen 500 mg twice daily with food and physiotherapy.",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "Plan: naproxen 500 mg twice daily with food and physiotherapy.",
+              "start": 38,
+              "end": 100
+            }
+          ]
+        }
+      },
+      "pages": {
+        "Assessment": {
+          "status": "supported",
+          "text": "mechanical low back pain.",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "Assessment: mechanical low back pain.",
+              "start": 0,
+              "end": 37
+            }
+          ],
+          "label": "Assessment"
+        },
+        "Plan": {
+          "status": "supported",
+          "text": "naproxen 500 mg twice daily with food and physiotherapy.",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "Plan: naproxen 500 mg twice daily with food and physiotherapy.",
+              "start": 38,
+              "end": 100
+            }
+          ],
+          "label": "Plan"
+        }
+      },
+      "refusals": []
+    }
+  ]
+}

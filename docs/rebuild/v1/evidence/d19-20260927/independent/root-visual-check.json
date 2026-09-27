@@ -1,0 +1,21 @@
+{
+  "finding": "Root visually inspected retained original and long PNG pages: original has eight initials boxes on page1; long output has two on page1 and five on page2. Item3 at top of long page2 lacks its visible initials box. This confirms containment need, not successful compatibility. No new rendering/native Word check.",
+  "images": [
+    {
+      "path": "/opt/meddoc-pro/.worktrees/v1-word-d19/rebuild/.runtime/d19-repair-20260927/render-output/original-01.png",
+      "sha256": "4bb82a4e4c8dc3b5d6501d673639be6b27f7a0a10538654dfecaa0d4223f33bb"
+    },
+    {
+      "path": "/opt/meddoc-pro/.worktrees/v1-word-d19/rebuild/.runtime/d19-repair-20260927/render-output/original-02.png",
+      "sha256": "79e6c33bec5ad44c478c027bbbff2e035d03acb93907c39ff7b821ba1558ba02"
+    },
+    {
+      "path": "/opt/meddoc-pro/.worktrees/v1-word-d19/rebuild/.runtime/d19-repair-20260927/render-output/long-01.png",
+      "sha256": "381bd2db9710209fa774a27f41913faa076ed71101bc17ce87860963ab851f7c"
+    },
+    {
+      "path": "/opt/meddoc-pro/.worktrees/v1-word-d19/rebuild/.runtime/d19-repair-20260927/render-output/long-02.png",
+      "sha256": "64e56d9af402a6b0a5c0b1da3db42c2acb91c051cba03701da77ded45a766a22"
+    }
+  ]
+}

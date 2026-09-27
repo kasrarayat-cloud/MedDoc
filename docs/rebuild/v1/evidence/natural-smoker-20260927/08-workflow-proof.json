@@ -1,0 +1,37 @@
+{
+  "input": "The patient is a nonsmoker.",
+  "source_contract": "whole-note exact current-patient statement",
+  "worker": "SDK response mocked, network denied; no actual model behavior demonstrated",
+  "job_state": "succeeded",
+  "encounter_state": "finalized",
+  "answer": {
+    "text": "No",
+    "status": "supported",
+    "evidence": [
+      {
+        "end": 27,
+        "quote": "The patient is a nonsmoker.",
+        "start": 0
+      }
+    ],
+    "reviewed": true,
+    "edited_by": null,
+    "accepted_by": null,
+    "reviewed_by": "c85fa672-dcf2-491b-8579-f3cf06a407b7",
+    "own_evidence": [
+      {
+        "end": 27,
+        "quote": "The patient is a nonsmoker.",
+        "start": 0
+      }
+    ],
+    "accepted_suggestion": false
+  },
+  "original_sha256": "44c816b30f7cbba701d7aeb9ad8c7a5c6a77fa1147552b186d5cdd88b52e4ff7",
+  "export_sha256": "cdce78af8fc92387ecdfba725f52f8b682d08dcb0315631442e1abb90e21e519",
+  "word_option_text": "Synthetic ordinary input formSmoker  \u2610 Yes  \u2612 No",
+  "mock_request_model": "claude-sonnet-5",
+  "synthetic_receipts": 1,
+  "synthetic_cost": "0.000300000000",
+  "synthetic_charge": "0.000450000000"
+}

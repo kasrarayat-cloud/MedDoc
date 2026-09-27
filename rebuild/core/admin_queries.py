@@ -45,7 +45,7 @@ def financial_context(job, visible_wallets=None):
         balances.append({'wallet': wallet, 'ledger_total': total, 'held': held,
                          'matches': total == wallet.balance and held == wallet.reserved})
     from .models import Department
-    scope = Department.objects.select_related('organization').get(pk=job.encounter.department_id)
+    scope = Department.objects.select_related('organization').get(pk=job.department_id)
     evidence_ids = [str(job.pk)] + ([str(usage.pk)] if usage else [])
     return {'financial_job': {'id': job.pk, 'kind': job.kind, 'state': job.state,
                              'user': job.user.email, 'department': scope.name, 'organization': scope.organization.name,

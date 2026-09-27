@@ -16,7 +16,7 @@ Integration detail: the queued provider rate snapshot and user-approved maximum 
 
 Each usage row stores `actual_cost`, the **configured estimate**: provider-returned units × the recorded rates, less the recorded discount fraction, and `charged_cost` = 1.5 × that estimate, capped at the binding limit held for the request. The database check constraint `usage_charge_at_most_multiplier` forbids a charge above 1.5 × cost; `audit_billing` and the backup/restore invariant `usage_multiplier` require exactly min(1.5 × estimate, the settled holds), with anything above the cap recorded as one `absorbed_over_limit` platform cost. (The earlier constraint `exact_usage_multiplier` was replaced by migration 0013.) The estimate is labelled as an estimate on the billing page and in the audit report until it is reconciled to authentic provider evidence.
 
-Discount basis: `core.generation.configuration()` carries `discount_rate`, read from `QUILLMD_PROVIDER_DISCOUNT_RATE` (default `0`; a decimal fraction in [0, 1), otherwise no billable request can run). It is part of the `price` dictionary hashed into `pricing_version`, so changing it changes the configured pricing fingerprint of every job queued afterwards. Adding the key itself changed the fingerprint of all jobs queued after this policy landed, even at the default `0`; rows queued earlier keep their recorded fingerprint and are recomputed with a discount of zero. Every live usage row records `discount_rate` and `list_cost_usd` in `rates`, so `audit_billing` recomputes the list cost and the discounted estimate independently. The attributable cost is always held to USD 0.00000000001 (eleven decimals, half-even, and never above the list cost) at any discount including zero, so that the exact 1.5× charge always fits the twelve-decimal ledger and settlement can never refuse a provider-paid job. A value of `-0` is stored as `0`. Provider credits are not a configured input: they are allocated at reconciliation time from provider evidence.
+Discount basis: `core.generation.configuration()` carries `discount_rate`, read from `QUILLMD_PROVIDER_DISCOUNT_RATE` (default `0`; a decimal fraction in [0, 1), otherwise no billable request can run). The bound is checked on the canonical value that is stored and used, after Decimal normalization to 28 digits: a value such as `0.99999999999999999999999999999` normalizes to `1` and is refused by `configuration()`, so nothing is held or sent. It used to be stored as `1` and refused only at settlement, after the provider call. It is part of the `price` dictionary hashed into `pricing_version`, so changing it changes the configured pricing fingerprint of every job queued afterwards. Adding the key itself changed the fingerprint of all jobs queued after this policy landed, even at the default `0`; rows queued earlier keep their recorded fingerprint and are recomputed with a discount of zero. Every live usage row records `discount_rate` and `list_cost_usd` in `rates`, so `audit_billing` recomputes the list cost and the discounted estimate independently. The attributable cost is always held to USD 0.00000000001 (eleven decimals, half-even, and never above the list cost) at any discount including zero, so that the exact 1.5× charge always fits the twelve-decimal ledger and settlement can never refuse a provider-paid job. A value of `-0` is stored as `0`. Provider credits are not a configured input: they are allocated at reconciliation time from provider evidence.
 
 Reconciliation (`CostReconciliation`, one row per usage, append-only apart from its ledger status) records the reconciled actual cost, the allocated provider credit and discount applied (informational), a required evidence reference (invoice number, export file sha256 or report id), an optional evidence sha256, the administrator and a note. It never modifies the usage row or its original ledger entries. It computes `charge_delta` = 1.5 × (reconciled cost − configured estimate) and settles it by appended ledger entries of kind `reconciliation` (unique key `reconciliation:<usage>:<wallet>`):
 
@@ -87,3 +87,86 @@ correction workflow. Preserve later originals and preview differences; do not
 rewrite history or represent a provider-report record as an invoice upgrade.
 Any future correction workflow must be reviewed and append-only. Keep the new
 classification column and history during rollback.
+
+
+## September 27, 2026 — Claude Sonnet 5: request profile and settlement fidelity
+
+Everything above still holds: the exactly-1.5× charge, the binding hold,
+promotional-before-paid, absorption, reconciliation and append-only records. No
+historical row changes. `live-provider-verification.json` stays the
+2026-09-17 claude-sonnet-4-6 record. What follows describes the code. The deployed
+configuration is still whatever the owner has set. Switching it is described in
+[the Sonnet 5 migration note](v1/sonnet5-migration.md).
+
+**Rates.** From the pricing page, read 2026-09-27: Claude Sonnet 5 costs $2 input,
+$2.50 5-minute cache write, $4 1-hour cache write, $0.20 cache read and $10
+output per million tokens. The $2/$10 launch price "is now the standard price",
+and the scheduled rise to $3/$15 "will not occur". Sonnet 4.6 stays at
+$3/$15/$0.30. There is no long-context premium on Claude 4.6 and later.
+Sonnet 5's tokenizer produces about 30% more tokens for the same text, so an
+equivalent request costs less, but not in proportion to the rates.
+
+**Request profile, part of the price.** `core.generation.request_profile` keys what one
+generation request sends to (provider, model). For `claude-sonnet-5` it always
+states `thinking` and `output_config.effort`:
+
+- `thinking` is `{type: disabled}`, or `{type: adaptive, display: omitted}`, set by `QUILLMD_AI_THINKING` (default `disabled`).
+- `effort` is `low`, `medium` or `high`, set by `QUILLMD_AI_EFFORT` (default `medium`).
+
+It never sends sampling parameters, `budget_tokens` or a prefill. The Claude models listed
+in `LEGACY_CLAUDE_MODELS` (`claude-sonnet-4-6`, `claude-haiku-4-5`, `claude-sonnet-4-5-20250929`,
+each matched exactly as spelled) with `QUILLMD_AI_PROVIDER=anthropic`, and non-Claude models
+with `QUILLMD_AI_PROVIDER=openai`, keep the pre-profile request byte for byte. Any other pairing
+is refused before any hold or request: `anthropic` with any other id (a non-Claude id such as
+the settings default `gpt-4.1-mini` included), and `openai` with any id containing `claude`,
+which would otherwise be sent to the wrong API and 404 into reconciliation. `claude-opus-4-1` is deliberately not on the list: Anthropic marks it
+deprecated (retiring 2026-08-05) and this deployment never used it, so it is refused. The profile is
+snapshotted into `Job.config` with the rates and hashed into `pricing_version`, except the
+legacy profile, which hashes as absent. The rollback configuration therefore still
+fingerprints as `configured-v1:fcc80267…`, and no stored fingerprint changes meaning. An
+invalid choice refuses generation before any request, and the hold is released. So does a
+`QUILLMD_AI_PROVIDER` that is not exactly `anthropic` or `openai` (generate() sends every other
+value to OpenAI, so `Anthropic` would have sent a Claude id there), and so does
+every other Claude model id, until it has its own profile. This is deny by default, not a
+version comparison: a parser of `claude-<family>-<n>` let `claude-mythos-preview` through to
+the old call, which on a newer model would change meaning.
+
+**Hold.** `maximum_cost` prices the exact `max_tokens` the profile sends:
+
+| Profile | `max_tokens` |
+|---|---|
+| legacy | 6000 |
+| Sonnet 5, thinking disabled | 8000 (the 4.6-sized 6000 × 1.3) |
+| Sonnet 5, thinking adaptive | 16000 |
+
+`max_tokens` caps thinking and text together, and thinking is billed as output, so the output term is a true
+bound. The input term is still one token per UTF-8 byte of the serialized payload plus 12000.
+A byte-level token spans at least one byte, so no tokenizer yields more tokens than bytes.
+That is why a tokenizer 30% larger does not move the bound. Anthropic does not document its
+tokenizer, so the live check records `input_tokens` against this bound. With
+`QUILLMD_AI_INFERENCE_GEO=us`, the request carries `inference_geo: us` and the bound is ×1.1,
+rounded up to the settlement quantum.
+
+**Settlement, new receipts only.** Anthropic receipts now also record the following units:
+
+- `inference_geo`
+- `thinking_tokens`, when the provider reports it. It is already inside `output_tokens` and is not priced again.
+- `stop_reason`
+- `stop_details_category`
+
+When the provider meters `inference_geo: us` on a Claude 4.6+ model, the list cost is
+multiplied by 1.1 across every token category, and `inference_geo_multiplier: 1.1` is written
+into the recorded rates. This applies whether the request asked for it or the workspace
+default is US-only. Standard-geography receipts keep exactly the rate shape they always had.
+`audit_billing.recompute_list_cost` derives the same multiplier from the recorded units. A
+recorded multiplier that disagrees with the metered geography fails the row. Historical
+receipts carry none of the new units, so they recompute to the identical Decimal.
+
+**Refusals.** A Sonnet 5 refusal is HTTP 200 with `stop_reason: refusal`, empty content and
+token counts in `usage`. Like any stop other than `end_turn`, it is settled at the metered
+tokens, never adopted, and absorbed as a platform failure. The customer is not charged.
+Anthropic does not bill some refusals that arrive before any output: the documented
+categories are other than `bio`, `frontier_llm` and `reasoning_extraction`. Whether that rule
+covers Sonnet 5's cyber refusals is inferred, not documented. So an absorbed refusal's
+recorded platform cost may overstate the invoice, and `stop_details_category` is on the
+receipt for reconciliation.

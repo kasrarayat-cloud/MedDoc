@@ -1,0 +1,22 @@
+baseline: 0 11 tests pass
+r5-1-refuse-live-money applied: True killed: True exit: 1
+restored: True 130b4a666d1effe0f15d6e4de2a7898234a7a7eb097b3a0607778a2b4f461f85
+r5-3-ignore-organization applied: True killed: True exit: 1
+restored: True 130b4a666d1effe0f15d6e4de2a7898234a7a7eb097b3a0607778a2b4f461f85
+r5-4-check-balance-before-audit applied: True killed: True exit: 1
+restored: True 130b4a666d1effe0f15d6e4de2a7898234a7a7eb097b3a0607778a2b4f461f85
+r5-2-ignore-definition applied: True killed: True exit: 1
+restored: True 130b4a666d1effe0f15d6e4de2a7898234a7a7eb097b3a0607778a2b4f461f85
+r5-2-ignore-function-schema applied: True killed: True exit: 1
+restored: True 130b4a666d1effe0f15d6e4de2a7898234a7a7eb097b3a0607778a2b4f461f85
+r5-2-ignore-function-body applied: True killed: True exit: 1
+restored: True 130b4a666d1effe0f15d6e4de2a7898234a7a7eb097b3a0607778a2b4f461f85
+r5-2-ignore-extra-triggers applied: True killed: True exit: 1
+restored: True 130b4a666d1effe0f15d6e4de2a7898234a7a7eb097b3a0607778a2b4f461f85
+r5-2-ignore-current-replication applied: True killed: True exit: 1
+restored: True 130b4a666d1effe0f15d6e4de2a7898234a7a7eb097b3a0607778a2b4f461f85
+r5-2-ignore-persistent-replication applied: True killed: True exit: 1
+restored: True 130b4a666d1effe0f15d6e4de2a7898234a7a7eb097b3a0607778a2b4f461f85
+r5-2-inspect-login-instead-of-runtime-role applied: True killed: True exit: 1
+restored: True 130b4a666d1effe0f15d6e4de2a7898234a7a7eb097b3a0607778a2b4f461f85
+worktree untouched: True

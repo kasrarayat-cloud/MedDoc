@@ -1,0 +1,19 @@
+......F.......
+======================================================================
+FAIL: test_full_source_limits_keep_boundary_and_refuse_after_scope_expansion (documents.test_question_boxes.QuestionBoxes.test_full_source_limits_keep_boundary_and_refuse_after_scope_expansion)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-long-questions/rebuild/documents/test_question_boxes.py", line 71, in test_full_source_limits_keep_boundary_and_refuse_after_scope_expansion
+    self.assertEqual(result['fields'], [])
+AssertionError: Lists differ: [{'key': 'v3_1', 'label': 'What changed?',[2497 chars]3'}}] != []
+
+First list contains 2 additional elements.
+First extra element 0:
+{'key': 'v3_1', 'label': 'What changed?', 'kind': 'long_text', 'context': 'Clinical xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx · occurrence 1 of 2 (table row 1: )', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]', 'target': {'type': 'cell'}, 'fingerprint': '9443f4990394d76a48d2de173ba2a6333ee509bdff255bf6e4a481051ca2c343'}}
+
+Diff is 2787 characters long. Set self.maxDiff to None to see it.
+
+----------------------------------------------------------------------
+Ran 14 tests in 2.776s
+
+FAILED (failures=1)

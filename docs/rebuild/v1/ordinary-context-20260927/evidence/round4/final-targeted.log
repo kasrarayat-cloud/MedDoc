@@ -1,0 +1,53 @@
+Using existing test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+./opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+......................................FFFFF.................................................................................
+======================================================================
+FAIL: test_unowned_reference_blocks_cannot_disappear_from_continuation_governance (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unowned_reference_blocks_cannot_disappear_from_continuation_governance) (extra='A medication was discontinued.', label='Plan')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 444, in test_unowned_reference_blocks_cannot_disappear_from_continuation_governance
+    self.assertIn(extra, [c['quote'] for c in answers[label]['held_candidate']['context']])
+AssertionError: 'A medication was discontinued.' not found in ['Current medications are aspirin daily.', 'Plan: continue current medications.']
+
+======================================================================
+FAIL: test_unowned_reference_blocks_cannot_disappear_from_continuation_governance (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unowned_reference_blocks_cannot_disappear_from_continuation_governance) (extra='Warfarin is another medication.', label='Plan')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 444, in test_unowned_reference_blocks_cannot_disappear_from_continuation_governance
+    self.assertIn(extra, [c['quote'] for c in answers[label]['held_candidate']['context']])
+AssertionError: 'Warfarin is another medication.' not found in ['Current medications are aspirin daily.', 'Plan: continue current medications.']
+
+======================================================================
+FAIL: test_unowned_reference_blocks_cannot_disappear_from_continuation_governance (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unowned_reference_blocks_cannot_disappear_from_continuation_governance) (extra='Patient medications are warfarin.', label='Plan')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 444, in test_unowned_reference_blocks_cannot_disappear_from_continuation_governance
+    self.assertIn(extra, [c['quote'] for c in answers[label]['held_candidate']['context']])
+AssertionError: 'Patient medications are warfarin.' not found in ['Current medications are aspirin daily.', 'Plan: continue current medications.']
+
+======================================================================
+FAIL: test_unowned_reference_blocks_cannot_disappear_from_continuation_governance (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unowned_reference_blocks_cannot_disappear_from_continuation_governance) (extra='Sibling medications are warfarin.', label='Plan')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 444, in test_unowned_reference_blocks_cannot_disappear_from_continuation_governance
+    self.assertIn(extra, [c['quote'] for c in answers[label]['held_candidate']['context']])
+AssertionError: 'Sibling medications are warfarin.' not found in ['Current medications are aspirin daily.', 'Plan: continue current medications.']
+
+======================================================================
+FAIL: test_unowned_reference_blocks_cannot_disappear_from_continuation_governance (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unowned_reference_blocks_cannot_disappear_from_continuation_governance) (extra='Planned medications will include warfarin.', label='Plan')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 444, in test_unowned_reference_blocks_cannot_disappear_from_continuation_governance
+    self.assertIn(extra, [c['quote'] for c in answers[label]['held_candidate']['context']])
+AssertionError: 'Planned medications will include warfarin.' not found in ['Current medications are aspirin daily.', 'Plan: continue current medications.']
+
+----------------------------------------------------------------------
+Ran 121 tests in 22.278s
+
+FAILED (failures=5)
+Preserving test database for alias 'default'...
+Found 121 test(s).
+System check identified no issues (0 silenced).

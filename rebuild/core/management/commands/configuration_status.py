@@ -13,7 +13,7 @@ import os
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
-from core.billing import stripe_test_key_configured
+from core.billing import stripe_key_configured
 
 
 def shape(value, recogniser=None):
@@ -46,7 +46,7 @@ class Command(BaseCommand):
             ('DEEPGRAM_API_KEY', os.getenv('DEEPGRAM_API_KEY'), None),
             ('ANTHROPIC_API_KEY', os.getenv('ANTHROPIC_API_KEY'), None),
             ('RESEND_API_KEY', settings.RESEND_API_KEY, None),
-            ('STRIPE_SECRET_KEY', settings.STRIPE_SECRET_KEY, stripe_test_key_configured),
+            ('STRIPE_SECRET_KEY', settings.STRIPE_SECRET_KEY, stripe_key_configured),
             ('STRIPE_WEBHOOK_SECRET', settings.STRIPE_WEBHOOK_SECRET, None),
         ]
         self.stdout.write('Configuration (no value is read back):')
@@ -56,6 +56,7 @@ class Command(BaseCommand):
         self.stdout.write('Private credentials (status only):')
         for name, value, recogniser in secrets:
             self.stdout.write(f'  {name}: {shape(value, recogniser)}')
+        self.language_model()
         # ⚠️ THESE TWO SENTENCES SAID THE OPPOSITE OF WHAT THE CODE DOES, in the same change that removed the
         # fallback they described. They promised a degraded-but-working submission path; there is no such path now.
         # During an incident where every recording is failing, this is the one screen built to localise it — and it
@@ -72,4 +73,22 @@ class Command(BaseCommand):
         self.stdout.write('Release gates:')
         self.stdout.write(f'  SYNTHETIC_ONLY: {settings.SYNTHETIC_ONLY}')
         self.stdout.write(f'  STRIPE_LIVE_ENABLED: {settings.STRIPE_LIVE_ENABLED}')
+        self.stdout.write(f'  QUILLMD_DATA_MODE: {settings.QUILLMD_DATA_MODE}')
+        self.stdout.write(f'  QUILLMD_REGISTRATION: {settings.QUILLMD_REGISTRATION}')
+        self.stdout.write(f'  QUILLMD_STRIPE_MODE: {settings.QUILLMD_STRIPE_MODE}')
+        self.stdout.write(f'  QUILLMD_MFA_REQUIRED_ALL: {settings.QUILLMD_MFA_REQUIRED_ALL}')
         self.stdout.write(f'  database: {settings.DATABASES["default"]["NAME"]}')
+
+    def language_model(self):
+        """The model, its rates, the request profile and the pricing version a generation queued NOW would carry.
+
+        None of these is a secret — they are the answer to "which model, at which price" — and without them an operator
+        switching the model could not confirm the switch from the one screen built for it. Every value is computed by
+        `core.generation.configuration()`, the function enqueue snapshots, so this screen cannot describe a different
+        request from the one a job would make. The rows come from `core.admin_console.language_model_rows()`, which the
+        services page renders too: one implementation, so the terminal and the browser cannot disagree.
+        """
+        from core.admin_console import language_model_rows
+        self.stdout.write('Language model (plain configuration values, shown so a model switch can be confirmed):')
+        for row in language_model_rows():
+            self.stdout.write(f'  {row["name"]}: {row["value"]}')

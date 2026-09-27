@@ -1,0 +1,34 @@
+[
+  [
+    "exact",
+    null,
+    null,
+    0
+  ],
+  [
+    "fingerprint",
+    "fingerprint",
+    "0000000000000000000000000000000000000000000000000000000000000000",
+    0
+  ],
+  [
+    "write-target",
+    "target",
+    {
+      "type": "cell_replace"
+    },
+    0
+  ],
+  [
+    "descendant",
+    null,
+    null,
+    1
+  ],
+  [
+    "foreign",
+    null,
+    null,
+    2
+  ]
+]

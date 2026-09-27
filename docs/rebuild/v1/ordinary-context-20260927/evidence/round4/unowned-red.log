@@ -1,0 +1,247 @@
+FFFFFFFFFFFFFFFF
+======================================================================
+FAIL: test_unowned_reference_blocks_cannot_disappear_from_continuation_governance (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unowned_reference_blocks_cannot_disappear_from_continuation_governance) (extra='A medication was discontinued.', label='Medications')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 443, in test_unowned_reference_blocks_cannot_disappear_from_continuation_governance
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'Current medications are aspirin daily.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Current medications are aspirin daily.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_unowned_reference_blocks_cannot_disappear_from_continuation_governance (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unowned_reference_blocks_cannot_disappear_from_continuation_governance) (extra='A medication was discontinued.', label='Plan')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 443, in test_unowned_reference_blocks_cannot_disappear_from_continuation_governance
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'continue current medications.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'continue current medications.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_unowned_reference_blocks_cannot_disappear_from_continuation_governance (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unowned_reference_blocks_cannot_disappear_from_continuation_governance) (extra='Warfarin is another medication.', label='Medications')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 443, in test_unowned_reference_blocks_cannot_disappear_from_continuation_governance
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'Current medications are aspirin daily.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Current medications are aspirin daily.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_unowned_reference_blocks_cannot_disappear_from_continuation_governance (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unowned_reference_blocks_cannot_disappear_from_continuation_governance) (extra='Warfarin is another medication.', label='Plan')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 443, in test_unowned_reference_blocks_cannot_disappear_from_continuation_governance
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'continue current medications.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'continue current medications.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_unowned_reference_blocks_cannot_disappear_from_continuation_governance (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unowned_reference_blocks_cannot_disappear_from_continuation_governance) (extra='Patient medications are warfarin.', label='Medications')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 443, in test_unowned_reference_blocks_cannot_disappear_from_continuation_governance
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'Current medications are aspirin daily.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Current medications are aspirin daily.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_unowned_reference_blocks_cannot_disappear_from_continuation_governance (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unowned_reference_blocks_cannot_disappear_from_continuation_governance) (extra='Patient medications are warfarin.', label='Plan')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 443, in test_unowned_reference_blocks_cannot_disappear_from_continuation_governance
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'continue current medications.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'continue current medications.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_unowned_reference_blocks_cannot_disappear_from_continuation_governance (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unowned_reference_blocks_cannot_disappear_from_continuation_governance) (extra='Sibling medications are warfarin.', label='Medications')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 443, in test_unowned_reference_blocks_cannot_disappear_from_continuation_governance
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'Current medications are aspirin daily.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Current medications are aspirin daily.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_unowned_reference_blocks_cannot_disappear_from_continuation_governance (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unowned_reference_blocks_cannot_disappear_from_continuation_governance) (extra='Sibling medications are warfarin.', label='Plan')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 443, in test_unowned_reference_blocks_cannot_disappear_from_continuation_governance
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'continue current medications.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'continue current medications.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_unowned_reference_blocks_cannot_disappear_from_continuation_governance (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unowned_reference_blocks_cannot_disappear_from_continuation_governance) (extra='Planned medications will include warfarin.', label='Medications')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 443, in test_unowned_reference_blocks_cannot_disappear_from_continuation_governance
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'Current medications are aspirin daily.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Current medications are aspirin daily.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_unowned_reference_blocks_cannot_disappear_from_continuation_governance (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unowned_reference_blocks_cannot_disappear_from_continuation_governance) (extra='Planned medications will include warfarin.', label='Plan')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 443, in test_unowned_reference_blocks_cannot_disappear_from_continuation_governance
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'continue current medications.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'continue current medications.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_visit_purpose_reference_cannot_hide_a_qualifier_or_extra_statement (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_visit_purpose_reference_cannot_hide_a_qualifier_or_extra_statement) (purpose='Patient presents for medication review with warfarin.', label='Medications')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 457, in test_visit_purpose_reference_cannot_hide_a_qualifier_or_extra_statement
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'Current medications are aspirin daily.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Current medications are aspirin daily.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_visit_purpose_reference_cannot_hide_a_qualifier_or_extra_statement (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_visit_purpose_reference_cannot_hide_a_qualifier_or_extra_statement) (purpose='Patient presents for medication review with warfarin.', label='Plan')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 457, in test_visit_purpose_reference_cannot_hide_a_qualifier_or_extra_statement
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'continue current medications.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'continue current medications.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_visit_purpose_reference_cannot_hide_a_qualifier_or_extra_statement (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_visit_purpose_reference_cannot_hide_a_qualifier_or_extra_statement) (purpose='Patient presents for medication review. A medication was discontinued.', label='Medications')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 457, in test_visit_purpose_reference_cannot_hide_a_qualifier_or_extra_statement
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'Current medications are aspirin daily.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Current medications are aspirin daily.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_visit_purpose_reference_cannot_hide_a_qualifier_or_extra_statement (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_visit_purpose_reference_cannot_hide_a_qualifier_or_extra_statement) (purpose='Patient presents for medication review. A medication was discontinued.', label='Plan')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 457, in test_visit_purpose_reference_cannot_hide_a_qualifier_or_extra_statement
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'continue current medications.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'continue current medications.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_visit_purpose_reference_cannot_hide_a_qualifier_or_extra_statement (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_visit_purpose_reference_cannot_hide_a_qualifier_or_extra_statement) (purpose='Patient presents for medication review for the donor.', label='Medications')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 457, in test_visit_purpose_reference_cannot_hide_a_qualifier_or_extra_statement
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'Current medications are aspirin daily.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Current medications are aspirin daily.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_visit_purpose_reference_cannot_hide_a_qualifier_or_extra_statement (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_visit_purpose_reference_cannot_hide_a_qualifier_or_extra_statement) (purpose='Patient presents for medication review for the donor.', label='Plan')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 457, in test_visit_purpose_reference_cannot_hide_a_qualifier_or_extra_statement
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'continue current medications.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'continue current medications.')
++ ('conflict', '')
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.214s
+
+FAILED (failures=16)
+Found 2 test(s).
+System check identified no issues (0 silenced).

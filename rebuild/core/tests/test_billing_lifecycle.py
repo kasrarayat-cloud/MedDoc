@@ -167,7 +167,7 @@ class StripeLifecycle(StripeFixture,TestCase):
         self.assertEqual(usage.cost_evidence,'Provider-metered usage × configured rates')
         self.assertEqual(usage.invoice_status,'Not reconciled to a provider invoice')
 
-    @override_settings(AI_MODE='live',AI_PROVIDER='anthropic',AI_MODEL='synthetic-model',AI_INPUT_RATE='3',AI_OUTPUT_RATE='15',AI_CACHED_RATE='.3')
+    @override_settings(AI_MODE='live',AI_PROVIDER='anthropic',AI_MODEL='claude-sonnet-4-6',AI_INPUT_RATE='3',AI_OUTPUT_RATE='15',AI_CACHED_RATE='.3')
     def test_new_provider_call_records_http_request_and_message_ids_separately(self):
         from core.jobs import enqueue,run_one
         response=SimpleNamespace(id='msg_synthetic_resource',_request_id='req_synthetic_http',

@@ -1,0 +1,2931 @@
+{
+  "disk_sha256": "1c0c99abbed920aa25cc13e09bf92a2a82613a957ba65d3ea1a018acecf8ce77",
+  "override": null,
+  "cases": [
+    {
+      "case": "nka-positive",
+      "notes": "No known drug allergies.",
+      "fields": [
+        {
+          "key": "a",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "e",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "p",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "No known drug allergies.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ]
+        },
+        "Examination": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "forced_pages": {
+        "a": {
+          "status": "supported",
+          "text": "No known drug allergies.",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "label": "Allergies"
+        }
+      },
+      "forced_refusals": []
+    },
+    {
+      "case": "paired-positive",
+      "notes": "No known drug allergies. Neurological examination is normal.",
+      "fields": [
+        {
+          "key": "a",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "e",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "p",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "No known drug allergies.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "Neurological examination is normal.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Neurological examination is normal.",
+              "start": 25,
+              "end": 60
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "forced_pages": {
+        "a": {
+          "status": "supported",
+          "text": "No known drug allergies.",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "label": "Allergies"
+        },
+        "e": {
+          "status": "supported",
+          "text": "Neurological examination is normal.",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "Neurological examination is normal.",
+              "start": 25,
+              "end": 60
+            }
+          ],
+          "label": "Examination"
+        }
+      },
+      "forced_refusals": []
+    },
+    {
+      "case": "heart-positive",
+      "notes": "No known drug allergies. Heart and lung examination was normal.",
+      "fields": [
+        {
+          "key": "a",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "e",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "p",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "No known drug allergies.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "Heart and lung examination was normal.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Heart and lung examination was normal.",
+              "start": 25,
+              "end": 63
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "forced_pages": {
+        "a": {
+          "status": "supported",
+          "text": "No known drug allergies.",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "label": "Allergies"
+        },
+        "e": {
+          "status": "supported",
+          "text": "Heart and lung examination was normal.",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "Heart and lung examination was normal.",
+              "start": 25,
+              "end": 63
+            }
+          ],
+          "label": "Examination"
+        }
+      },
+      "forced_refusals": []
+    },
+    {
+      "case": "nka-field-Family history",
+      "notes": "No known drug allergies.",
+      "fields": [
+        {
+          "key": "a",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "Family history",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "e",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "p",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "held_candidate": {
+            "text": "No known drug allergies.",
+            "evidence": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24
+              }
+            ],
+            "context": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Examination": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "forced_pages": {
+        "a": {
+          "status": "conflict",
+          "text": "",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "label": "Allergies",
+          "held_candidate": {
+            "text": "No known drug allergies.",
+            "evidence": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24
+              }
+            ],
+            "context": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+            "prefilled": true
+          }
+        }
+      },
+      "forced_refusals": [
+        "Allergies"
+      ]
+    },
+    {
+      "case": "nka-field-Mother",
+      "notes": "No known drug allergies.",
+      "fields": [
+        {
+          "key": "a",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "Mother",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "e",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "p",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "held_candidate": {
+            "text": "No known drug allergies.",
+            "evidence": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24
+              }
+            ],
+            "context": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Examination": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "forced_pages": {
+        "a": {
+          "status": "conflict",
+          "text": "",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "label": "Allergies",
+          "held_candidate": {
+            "text": "No known drug allergies.",
+            "evidence": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24
+              }
+            ],
+            "context": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+            "prefilled": true
+          }
+        }
+      },
+      "forced_refusals": [
+        "Allergies"
+      ]
+    },
+    {
+      "case": "nka-source-foreign",
+      "notes": "For the donor:\nNo known drug allergies.",
+      "fields": [
+        {
+          "key": "a",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "e",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "p",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "For the donor:\nNo known drug allergies.",
+              "start": 0,
+              "end": 39
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 15,
+              "end": 39
+            }
+          ],
+          "held_candidate": {
+            "text": "No known drug allergies.",
+            "evidence": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 15,
+                "end": 39
+              }
+            ],
+            "context": [
+              {
+                "quote": "For the donor:",
+                "start": 0,
+                "end": 14,
+                "after": false,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Examination": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "forced_pages": {
+        "a": {
+          "status": "conflict",
+          "text": "",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 15,
+              "end": 39
+            }
+          ],
+          "label": "Allergies",
+          "held_candidate": {
+            "text": "No known drug allergies.",
+            "evidence": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 15,
+                "end": 39
+              }
+            ],
+            "context": [
+              {
+                "quote": "For the donor:",
+                "start": 0,
+                "end": 14,
+                "after": false,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+            "prefilled": true
+          }
+        }
+      },
+      "forced_refusals": [
+        "Allergies"
+      ]
+    },
+    {
+      "case": "nka-wrong-destination",
+      "notes": "No known drug allergies.",
+      "fields": [
+        {
+          "key": "a",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "e",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "p",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "held_candidate": {
+            "text": "No known drug allergies.",
+            "evidence": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24
+              }
+            ],
+            "context": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "forced_pages": {
+        "p": {
+          "status": "conflict",
+          "text": "",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "label": "Plan",
+          "held_candidate": {
+            "text": "No known drug allergies.",
+            "evidence": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24
+              }
+            ],
+            "context": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+            "prefilled": true
+          }
+        }
+      },
+      "forced_refusals": [
+        "Plan"
+      ]
+    },
+    {
+      "case": "neuro-field-Family history",
+      "notes": "Neurological examination is normal.",
+      "fields": [
+        {
+          "key": "a",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "e",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "Family history",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "p",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "Neurological examination is normal.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Neurological examination is normal.",
+              "start": 0,
+              "end": 35
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Neurological examination is normal.",
+              "start": 0,
+              "end": 35
+            }
+          ]
+        },
+        "Plan": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "forced_pages": {
+        "e": {
+          "status": "supported",
+          "text": "Neurological examination is normal.",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "Neurological examination is normal.",
+              "start": 0,
+              "end": 35
+            }
+          ],
+          "label": "Examination"
+        }
+      },
+      "forced_refusals": []
+    },
+    {
+      "case": "neuro-field-Mother",
+      "notes": "Neurological examination is normal.",
+      "fields": [
+        {
+          "key": "a",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "e",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "Mother",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "p",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "Neurological examination is normal.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Neurological examination is normal.",
+              "start": 0,
+              "end": 35
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Neurological examination is normal.",
+              "start": 0,
+              "end": 35
+            }
+          ]
+        },
+        "Plan": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "forced_pages": {
+        "e": {
+          "status": "supported",
+          "text": "Neurological examination is normal.",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "Neurological examination is normal.",
+              "start": 0,
+              "end": 35
+            }
+          ],
+          "label": "Examination"
+        }
+      },
+      "forced_refusals": []
+    },
+    {
+      "case": "neuro-source-foreign",
+      "notes": "For the donor:\nNeurological examination is normal.",
+      "fields": [
+        {
+          "key": "a",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "e",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "p",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "For the donor:\nNeurological examination is normal.",
+              "start": 0,
+              "end": 50
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Neurological examination is normal.",
+              "start": 15,
+              "end": 50
+            }
+          ],
+          "held_candidate": {
+            "text": "Neurological examination is normal.",
+            "evidence": [
+              {
+                "quote": "Neurological examination is normal.",
+                "start": 15,
+                "end": 50
+              }
+            ],
+            "context": [
+              {
+                "quote": "For the donor:",
+                "start": 0,
+                "end": 14,
+                "after": false,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Plan": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "forced_pages": {
+        "e": {
+          "status": "conflict",
+          "text": "",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "Neurological examination is normal.",
+              "start": 15,
+              "end": 50
+            }
+          ],
+          "label": "Examination",
+          "held_candidate": {
+            "text": "Neurological examination is normal.",
+            "evidence": [
+              {
+                "quote": "Neurological examination is normal.",
+                "start": 15,
+                "end": 50
+              }
+            ],
+            "context": [
+              {
+                "quote": "For the donor:",
+                "start": 0,
+                "end": 14,
+                "after": false,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+            "prefilled": true
+          }
+        }
+      },
+      "forced_refusals": [
+        "Examination"
+      ]
+    },
+    {
+      "case": "neuro-wrong-destination",
+      "notes": "Neurological examination is normal.",
+      "fields": [
+        {
+          "key": "a",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "e",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "p",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Neurological examination is normal.",
+              "start": 0,
+              "end": 35
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Neurological examination is normal.",
+              "start": 0,
+              "end": 35
+            }
+          ],
+          "held_candidate": {
+            "text": "Neurological examination is normal.",
+            "evidence": [
+              {
+                "quote": "Neurological examination is normal.",
+                "start": 0,
+                "end": 35
+              }
+            ],
+            "context": [
+              {
+                "quote": "Neurological examination is normal.",
+                "start": 0,
+                "end": 35,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "forced_pages": {
+        "p": {
+          "status": "conflict",
+          "text": "",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "Neurological examination is normal.",
+              "start": 0,
+              "end": 35
+            }
+          ],
+          "label": "Plan",
+          "held_candidate": {
+            "text": "Neurological examination is normal.",
+            "evidence": [
+              {
+                "quote": "Neurological examination is normal.",
+                "start": 0,
+                "end": 35
+              }
+            ],
+            "context": [
+              {
+                "quote": "Neurological examination is normal.",
+                "start": 0,
+                "end": 35,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+            "prefilled": true
+          }
+        }
+      },
+      "forced_refusals": [
+        "Plan"
+      ]
+    },
+    {
+      "case": "heart-field-Family history",
+      "notes": "Heart and lung examination was normal.",
+      "fields": [
+        {
+          "key": "a",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "e",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "Family history",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "p",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "Heart and lung examination was normal.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Heart and lung examination was normal.",
+              "start": 0,
+              "end": 38
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Heart and lung examination was normal.",
+              "start": 0,
+              "end": 38
+            }
+          ]
+        },
+        "Plan": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "forced_pages": {
+        "e": {
+          "status": "supported",
+          "text": "Heart and lung examination was normal.",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "Heart and lung examination was normal.",
+              "start": 0,
+              "end": 38
+            }
+          ],
+          "label": "Examination"
+        }
+      },
+      "forced_refusals": []
+    },
+    {
+      "case": "heart-field-Mother",
+      "notes": "Heart and lung examination was normal.",
+      "fields": [
+        {
+          "key": "a",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "e",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "Mother",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "p",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "Heart and lung examination was normal.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Heart and lung examination was normal.",
+              "start": 0,
+              "end": 38
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Heart and lung examination was normal.",
+              "start": 0,
+              "end": 38
+            }
+          ]
+        },
+        "Plan": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "forced_pages": {
+        "e": {
+          "status": "supported",
+          "text": "Heart and lung examination was normal.",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "Heart and lung examination was normal.",
+              "start": 0,
+              "end": 38
+            }
+          ],
+          "label": "Examination"
+        }
+      },
+      "forced_refusals": []
+    },
+    {
+      "case": "heart-source-foreign",
+      "notes": "For the donor:\nHeart and lung examination was normal.",
+      "fields": [
+        {
+          "key": "a",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "e",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "p",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "For the donor:\nHeart and lung examination was normal.",
+              "start": 0,
+              "end": 53
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Heart and lung examination was normal.",
+              "start": 15,
+              "end": 53
+            }
+          ],
+          "held_candidate": {
+            "text": "Heart and lung examination was normal.",
+            "evidence": [
+              {
+                "quote": "Heart and lung examination was normal.",
+                "start": 15,
+                "end": 53
+              }
+            ],
+            "context": [
+              {
+                "quote": "For the donor:",
+                "start": 0,
+                "end": 14,
+                "after": false,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Plan": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "forced_pages": {
+        "e": {
+          "status": "conflict",
+          "text": "",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "Heart and lung examination was normal.",
+              "start": 15,
+              "end": 53
+            }
+          ],
+          "label": "Examination",
+          "held_candidate": {
+            "text": "Heart and lung examination was normal.",
+            "evidence": [
+              {
+                "quote": "Heart and lung examination was normal.",
+                "start": 15,
+                "end": 53
+              }
+            ],
+            "context": [
+              {
+                "quote": "For the donor:",
+                "start": 0,
+                "end": 14,
+                "after": false,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+            "prefilled": true
+          }
+        }
+      },
+      "forced_refusals": [
+        "Examination"
+      ]
+    },
+    {
+      "case": "heart-wrong-destination",
+      "notes": "Heart and lung examination was normal.",
+      "fields": [
+        {
+          "key": "a",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "e",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "p",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Heart and lung examination was normal.",
+              "start": 0,
+              "end": 38
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Heart and lung examination was normal.",
+              "start": 0,
+              "end": 38
+            }
+          ],
+          "held_candidate": {
+            "text": "Heart and lung examination was normal.",
+            "evidence": [
+              {
+                "quote": "Heart and lung examination was normal.",
+                "start": 0,
+                "end": 38
+              }
+            ],
+            "context": [
+              {
+                "quote": "Heart and lung examination was normal.",
+                "start": 0,
+                "end": 38,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "forced_pages": {
+        "p": {
+          "status": "conflict",
+          "text": "",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "Heart and lung examination was normal.",
+              "start": 0,
+              "end": 38
+            }
+          ],
+          "label": "Plan",
+          "held_candidate": {
+            "text": "Heart and lung examination was normal.",
+            "evidence": [
+              {
+                "quote": "Heart and lung examination was normal.",
+                "start": 0,
+                "end": 38
+              }
+            ],
+            "context": [
+              {
+                "quote": "Heart and lung examination was normal.",
+                "start": 0,
+                "end": 38,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+            "prefilled": true
+          }
+        }
+      },
+      "forced_refusals": [
+        "Plan"
+      ]
+    },
+    {
+      "case": "nka-unknown-continuation",
+      "notes": "No known drug allergies. Except penicillin.",
+      "fields": [
+        {
+          "key": "a",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "e",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "p",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "No known drug allergies.",
+            "evidence": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24
+              }
+            ],
+            "context": [
+              {
+                "quote": "Except penicillin.",
+                "start": 25,
+                "end": 43,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Examination": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "forced_pages": {
+        "a": {
+          "status": "conflict",
+          "text": "",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "label": "Allergies",
+          "held_candidate": {
+            "text": "No known drug allergies.",
+            "evidence": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24
+              }
+            ],
+            "context": [
+              {
+                "quote": "Except penicillin.",
+                "start": 25,
+                "end": 43,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+            "prefilled": true
+          }
+        }
+      },
+      "forced_refusals": [
+        "Allergies"
+      ]
+    },
+    {
+      "case": "nka-competing",
+      "notes": "No known drug allergies.\nAllergies: penicillin.",
+      "fields": [
+        {
+          "key": "a",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "e",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "p",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "No known drug allergies.",
+            "evidence": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24
+              }
+            ],
+            "context": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Allergies: penicillin.",
+                "start": 25,
+                "end": 47,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Examination": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "forced_pages": {
+        "a": {
+          "status": "conflict",
+          "text": "",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "label": "Allergies",
+          "held_candidate": {
+            "text": "No known drug allergies.",
+            "evidence": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24
+              }
+            ],
+            "context": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Allergies: penicillin.",
+                "start": 25,
+                "end": 47,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+            "prefilled": true
+          }
+        }
+      },
+      "forced_refusals": [
+        "Allergies"
+      ]
+    },
+    {
+      "case": "nka-duplicate",
+      "notes": "No known drug allergies.",
+      "fields": [
+        {
+          "key": "a",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "e",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "p",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "a2",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "held_candidate": {
+            "text": "No known drug allergies.",
+            "evidence": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24
+              }
+            ],
+            "context": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "Examination": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "forced_pages": {
+        "a": {
+          "status": "conflict",
+          "text": "",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "label": "Allergies",
+          "held_candidate": {
+            "text": "No known drug allergies.",
+            "evidence": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24
+              }
+            ],
+            "context": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+            "prefilled": true
+          }
+        },
+        "a2": {
+          "status": "conflict",
+          "text": "",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "label": "Allergies",
+          "held_candidate": {
+            "text": "No known drug allergies.",
+            "evidence": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24
+              }
+            ],
+            "context": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+            "prefilled": true
+          }
+        }
+      },
+      "forced_refusals": [
+        "Allergies",
+        "Allergies"
+      ]
+    },
+    {
+      "case": "nka-fragment",
+      "notes": "No known drug allergies",
+      "fields": [
+        {
+          "key": "a",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "e",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "p",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "No known drug allergies",
+              "start": 0,
+              "end": 23
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "No known drug allergies",
+              "start": 0,
+              "end": 23
+            }
+          ],
+          "held_candidate": {
+            "text": "No known drug allergies",
+            "evidence": [
+              {
+                "quote": "No known drug allergies",
+                "start": 0,
+                "end": 23
+              }
+            ],
+            "context": [
+              {
+                "quote": "No known drug allergies",
+                "start": 0,
+                "end": 23,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Examination": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "forced_pages": {
+        "a": {
+          "status": "conflict",
+          "text": "",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "No known drug allergies",
+              "start": 0,
+              "end": 23
+            }
+          ],
+          "label": "Allergies",
+          "held_candidate": {
+            "text": "No known drug allergies",
+            "evidence": [
+              {
+                "quote": "No known drug allergies",
+                "start": 0,
+                "end": 23
+              }
+            ],
+            "context": [
+              {
+                "quote": "No known drug allergies",
+                "start": 0,
+                "end": 23,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+            "prefilled": true
+          }
+        }
+      },
+      "forced_refusals": [
+        "Allergies"
+      ]
+    },
+    {
+      "case": "neuro-negation",
+      "notes": "Neurological examination is not normal.",
+      "fields": [
+        {
+          "key": "a",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "e",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "p",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "Neurological examination is not normal.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Neurological examination is not normal.",
+              "start": 0,
+              "end": 39
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Neurological examination is not normal.",
+              "start": 0,
+              "end": 39
+            }
+          ]
+        },
+        "Plan": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "forced_pages": {
+        "e": {
+          "status": "supported",
+          "text": "Neurological examination is not normal.",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "Neurological examination is not normal.",
+              "start": 0,
+              "end": 39
+            }
+          ],
+          "label": "Examination"
+        }
+      },
+      "forced_refusals": []
+    },
+    {
+      "case": "neuro-predicate-foreign",
+      "notes": "Neurological examination is normal for her mother.",
+      "fields": [
+        {
+          "key": "a",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "e",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "p",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Neurological examination is normal for her mother.",
+              "start": 0,
+              "end": 50
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Neurological examination is normal for her mother.",
+              "start": 0,
+              "end": 50
+            }
+          ],
+          "held_candidate": {
+            "text": "Neurological examination is normal for her mother.",
+            "evidence": [
+              {
+                "quote": "Neurological examination is normal for her mother.",
+                "start": 0,
+                "end": 50
+              }
+            ],
+            "context": [
+              {
+                "quote": "Neurological examination is normal for her mother.",
+                "start": 0,
+                "end": 50,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Plan": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "forced_pages": {
+        "e": {
+          "status": "conflict",
+          "text": "",
+          "reviewed": true,
+          "evidence": [
+            {
+              "quote": "Neurological examination is normal for her mother.",
+              "start": 0,
+              "end": 50
+            }
+          ],
+          "label": "Examination",
+          "held_candidate": {
+            "text": "Neurological examination is normal for her mother.",
+            "evidence": [
+              {
+                "quote": "Neurological examination is normal for her mother.",
+                "start": 0,
+                "end": 50
+              }
+            ],
+            "context": [
+              {
+                "quote": "Neurological examination is normal for her mother.",
+                "start": 0,
+                "end": 50,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+            "prefilled": true
+          }
+        }
+      },
+      "forced_refusals": [
+        "Examination"
+      ]
+    }
+  ]
+}

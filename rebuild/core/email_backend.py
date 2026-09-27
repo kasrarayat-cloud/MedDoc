@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import re
 import stat
+import unicodedata
 from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -44,15 +45,24 @@ class PrivateFileEmailBackend(FileEmailBackend):
 
 def application_origin():
     """Fixed configured origin: never use an untrusted request Host header."""
-    origin = settings.QUILLMD_APP_BASE_URL.rstrip("/")
+    configured = settings.QUILLMD_APP_BASE_URL
+    # Control characters and whitespace are refused as characters, wherever they sit and in every mode: urlsplit strips
+    # leading C0 controls and spaces, so '\x01https://app.quillmd.com' parses as the doctor host yet begins every link.
+    # Which hosts each mode accepts is decided below and is not changed by this.
+    if any(character.isspace() or unicodedata.category(character) == "Cc" for character in configured):
+        raise ImproperlyConfigured("Configure a valid QuillMD application origin for email links.")
+    origin = configured.rstrip("/")
     try:
         parsed = urlsplit(origin)
         parsed.port  # Reject malformed or out-of-range ports before generating a link.
     except ValueError:
         raise ImproperlyConfigured("Configure a valid QuillMD application origin for email links.") from None
+    # '?' and '#' are refused as characters: an EMPTY query or fragment parses as '' yet puts every link's path
+    # after the '?' or '#'. Port 0 is unreachable. The same refusals the real/live startup check makes.
     if (parsed.scheme not in {"http", "https"} or not parsed.hostname
             or parsed.username or parsed.password or parsed.query or parsed.fragment
-            or parsed.path not in {"", "/"} or any(character.isspace() for character in origin)):
+            or "?" in origin or "#" in origin or parsed.port == 0
+            or parsed.path not in {"", "/"}):
         raise ImproperlyConfigured("Configure a valid QuillMD application origin for email links.")
     if settings.QUILLMD_EMAIL_MODE == "resend":
         if parsed.scheme != "https" or parsed.hostname in {"localhost", "127.0.0.1", "::1"}:
@@ -93,7 +103,7 @@ def private_access_instructions(recipient, purpose):
     validate_resend_recipient(recipient)
     username = settings.QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME
     password = settings.QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD
-    if purpose not in {"invitation", "recovery"} or not username:
+    if purpose not in {"invitation", "recovery", "owner_invitation"} or not username:
         return ""
     origin = application_origin()
     return (f"\n\nPrivate synthetic preview: first sign in on the private preview access page at {origin}."

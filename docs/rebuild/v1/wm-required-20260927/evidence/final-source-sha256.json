@@ -1,0 +1,12 @@
+{
+  "candidate": "edd02753c0816e3eb1d0955cfd6a3494f401bb93",
+  "files": {
+    "core/generation.py": "34558bca7356fabb04ceb16f2eeb74d94cf043b0fc36d0aab49b934e05e77721",
+    "core/jobs.py": "dde1bef03d21cc9bd69950b20d7bcafebeaa3971191d834128a7621ea4fc119f",
+    "core/views.py": "0f50d70f76ae4132062d95c1d4f892fe44019e1f5b13171427f058e1a074bbed",
+    "core/wm_narrative.py": "c29e0896bb630d487b5ff1ee44c983841d3307c392342cca7bebaac8e6c8de14",
+    "core/wm_review.py": "a84ef5972c5ae768140561c80d9695ec802e7e1d50dc04648ec4dadb833c3d8c",
+    "core/tests/test_review_guards.py": "15ee60c3876c9f52c3cdd5c532a400aca0cfdf36b1f206f049b289ac609f4a9b",
+    "documents/sdk_word/Adapter/WmAdapter.cs": "883273448d427245e2026efa17ce4c7e38deff354834ae014a3659918a192441"
+  }
+}

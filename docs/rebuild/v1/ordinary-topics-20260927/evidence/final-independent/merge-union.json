@@ -1,0 +1,16 @@
+{
+  "head": "4f3f7e50d01d4915dcc500728470b636bcf51b25",
+  "generation_sha256": "d40e1c913408f5926a870913fb23d59b1a5f64099776d2aa3bd596c737f2e02e",
+  "author_changed": [
+    "plain_value",
+    "v3_preceding_reading"
+  ],
+  "root_changed": [
+    "judged_context",
+    "v3_adopted",
+    "v3_generation_fields",
+    "v3_option_answer"
+  ],
+  "overlap": [],
+  "all_preserved": true
+}

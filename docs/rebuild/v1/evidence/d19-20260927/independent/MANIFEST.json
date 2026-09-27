@@ -1,0 +1,81 @@
+{
+  "scope": "Every retained file under this independent evidence directory except this manifest. Render images remain at the separately hashed runtime locations.",
+  "files": [
+    {
+      "path": "d19-admission-independent-20260927/REPORT.md",
+      "sha256": "fd36ba274e33e8669e2f3608b08ea81801d9f0cbd2e1ffeb4386b49c12270552"
+    },
+    {
+      "path": "d19-admission-independent-20260927/SHA256.json",
+      "sha256": "686e1b4fbba514f25c60f12bb87f354d5f8f058f580522111188adf86d95df23"
+    },
+    {
+      "path": "d19-admission-independent-20260927/probe.json",
+      "sha256": "3f7f7053bc99be343708973b7664bb648726bcc1999e4124be7e0fd959077229"
+    },
+    {
+      "path": "d19-admission-independent-20260927/probe.py",
+      "sha256": "5c9ebd9059f7c50c38536c67c9476c8bc47f4a5a96cab49bf340c2d28d5ebe37"
+    },
+    {
+      "path": "d19-admission-root.json",
+      "sha256": "965e16ec94db3c0780ad67d7a6b5c41b1ecb54b6c8e5184c8f4214b1b9caa039"
+    },
+    {
+      "path": "d19-admission-root.py",
+      "sha256": "1a6d7e8fc8b79d093e6cacb02ba32225c8e15dd8eba7816fa585edbea1ca7371"
+    },
+    {
+      "path": "d19-independent-refutation-20260927/REPORT.md",
+      "sha256": "5f7c93df1ebb747041a27666f37b4c70cdd2aff1757ff7757aa7f21908aa89e0"
+    },
+    {
+      "path": "d19-independent-refutation-20260927/SHA256.json",
+      "sha256": "85a65d258ef332b80091a2ddf8f34ea22b8b48c1c012ac1ec1fbeb8550e44f1e"
+    },
+    {
+      "path": "d19-independent-refutation-20260927/probe.json",
+      "sha256": "22bdebed22aef32f6760645aad30e29fcd40e09bd991375b5b9ce93840cdcb3e"
+    },
+    {
+      "path": "d19-independent-refutation-20260927/probe.py",
+      "sha256": "e52ee365f2984aecb87e7fdf804a3ae139ba0dd462777b850542b5e2fc6a33c0"
+    },
+    {
+      "path": "d19-merge-union.json",
+      "sha256": "3ce770fea5007152ec0ed3387c92a27fe501103f8ae072878cb83104e316678b"
+    },
+    {
+      "path": "d19-paragraph-options-root-red.json",
+      "sha256": "3430b90d3b522869531fe1d44ea9b38b5428dfe17a09d6218fbf340a1bdaea13"
+    },
+    {
+      "path": "d19-protection-root-final-resolved.json",
+      "sha256": "d261b40a700836246e6f1a0c54e0754603199c6160ba9988e3afa5dc59464215"
+    },
+    {
+      "path": "d19-protection-root.py",
+      "sha256": "7f72f20625fe116e827c7e7bea244c4166636d403f889d48afc624399f4793f0"
+    },
+    {
+      "path": "d19-union-workflow.txt",
+      "sha256": "50f6ced67a9e2c0baeffdf51a67956cbc22943e02b7693b0598a8d0b0838d536"
+    },
+    {
+      "path": "repeated-indication-root-base.json",
+      "sha256": "7e59a9935356752988f5dc89a4ccea9f3137bcc123e04b726142541020809ecf"
+    },
+    {
+      "path": "repeated-indication-root-current.json",
+      "sha256": "bedf5690e9eeaeeaac4fb7286c70a5b47676ec2b4655f5012f9171c9b48bb36f"
+    },
+    {
+      "path": "repeated-indication-root.py",
+      "sha256": "1c42ded40c974346dbaeb7f4d3220eba0d05a81e88623080d04d1c4c661eb667"
+    },
+    {
+      "path": "root-visual-check.json",
+      "sha256": "44e35176886ed10de2654c68c81366aa7e454c68e70db6c40a089e15c1fd292f"
+    }
+  ]
+}

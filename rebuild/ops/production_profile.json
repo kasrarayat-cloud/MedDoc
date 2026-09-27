@@ -1,0 +1,55 @@
+{
+  "format": 1,
+  "name": "production",
+  "reviewed_on": "2026-09-27",
+  "host": {
+    "provider": "aws",
+    "region": "us-east-1",
+    "operating_system": "ubuntu-24.04-lts",
+    "install_root": "/opt/quillmd-production",
+    "state_root": "/var/lib/quillmd-production",
+    "configuration_root": "/etc/quillmd-production",
+    "environment_file": "/run/quillmd-production/application.env",
+    "docker": "absent"
+  },
+  "service": {
+    "account": "quillmd-production-app",
+    "uid": 931,
+    "unit_prefix": "quillmd-production-",
+    "doctor": {"bind": "127.0.0.1", "port": 9140, "workers": 2},
+    "admin": {"bind": "127.0.0.1", "port": 9141, "workers": 1}
+  },
+  "database": {
+    "engine": "aws-rds-postgresql",
+    "instance_identifier": "quillmd-production",
+    "host": null,
+    "port": 5432,
+    "name": "quillmd_production",
+    "roles": {
+      "owner": "quillmd_production_owner",
+      "runtime": "quillmd_production_runtime",
+      "migrator": "quillmd_production_migrator",
+      "backup": "quillmd_production_backup"
+    },
+    "tls": {
+      "sslmode": "verify-full",
+      "ca_bundle": "/etc/quillmd-production/rds-ca-global-bundle.pem",
+      "ca_bundle_sha256": null
+    }
+  },
+  "secrets": {
+    "application_environment": "quillmd-production/application-environment"
+  },
+  "public": {
+    "doctor_origin": "https://app.quillmd.com",
+    "admin_origin": "https://admin.quillmd.com"
+  },
+  "modes": {
+    "data": "real-patient",
+    "payment": "stripe-live",
+    "email": "resend",
+    "email_content": "no-phi-fixed-templates",
+    "ai_provider": "anthropic",
+    "ai_mode": "live"
+  }
+}

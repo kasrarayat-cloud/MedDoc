@@ -1,0 +1,66 @@
+test_assessment_and_allergy_answers_cannot_ignore_each_other (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_assessment_and_allergy_answers_cannot_ignore_each_other) ... ok
+test_changed_continuation_and_another_modifying_reference_require_review (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_changed_continuation_and_another_modifying_reference_require_review) ... ok
+test_complete_visit_purpose_is_recorded_without_losing_its_source (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_complete_visit_purpose_is_recorded_without_losing_its_source) ... ok
+test_exact_continuation_does_not_choose_between_multiple_sources (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_exact_continuation_does_not_choose_between_multiple_sources) ... ok
+test_exact_continuation_with_no_referenced_source_requires_review (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_exact_continuation_with_no_referenced_source_requires_review) ... ok
+test_medication_complement_guard_reads_invisible_and_compatibility_characters (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_medication_complement_guard_reads_invisible_and_compatibility_characters) ... 
+  test_medication_complement_guard_reads_invisible_and_compatibility_characters (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_medication_complement_guard_reads_invisible_and_compatibility_characters) (head='Medications are', complement='ｆｏｒ') ... FAIL
+  test_medication_complement_guard_reads_invisible_and_compatibility_characters (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_medication_complement_guard_reads_invisible_and_compatibility_characters) (head='Current medications are', complement='ｆｏｒ') ... FAIL
+  test_medication_complement_guard_reads_invisible_and_compatibility_characters (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_medication_complement_guard_reads_invisible_and_compatibility_characters) (head='Medications:', complement='ｆｏｒ') ... FAIL
+test_medication_for_complement_does_not_establish_patient_ownership (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_medication_for_complement_does_not_establish_patient_ownership) ... ok
+test_unknown_ownership_and_planned_predicates_never_become_patient_answers (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unknown_ownership_and_planned_predicates_never_become_patient_answers) ... ok
+test_unowned_reference_blocks_cannot_disappear_from_continuation_governance (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unowned_reference_blocks_cannot_disappear_from_continuation_governance) ... ok
+test_visit_purpose_reference_cannot_hide_a_qualifier_or_extra_statement (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_visit_purpose_reference_cannot_hide_a_qualifier_or_extra_statement) ... ok
+
+======================================================================
+FAIL: test_medication_complement_guard_reads_invisible_and_compatibility_characters (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_medication_complement_guard_reads_invisible_and_compatibility_characters) (head='Medications are', complement='ｆｏｒ')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 492, in test_medication_complement_guard_reads_invisible_and_compatibility_characters
+    self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'warfarin ｆｏｒ the donor.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'warfarin ｆｏｒ the donor.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_medication_complement_guard_reads_invisible_and_compatibility_characters (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_medication_complement_guard_reads_invisible_and_compatibility_characters) (head='Current medications are', complement='ｆｏｒ')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 492, in test_medication_complement_guard_reads_invisible_and_compatibility_characters
+    self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'Current medications are warfarin ｆｏｒ the donor.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Current medications are warfarin ｆｏｒ the donor.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_medication_complement_guard_reads_invisible_and_compatibility_characters (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_medication_complement_guard_reads_invisible_and_compatibility_characters) (head='Medications:', complement='ｆｏｒ')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 492, in test_medication_complement_guard_reads_invisible_and_compatibility_characters
+    self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'warfarin ｆｏｒ the donor.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'warfarin ｆｏｒ the donor.')
++ ('conflict', '')
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.375s
+
+FAILED (failures=3)
+Found 10 test(s).
+Skipping setup of unused database(s): default.
+System check identified no issues (0 silenced).

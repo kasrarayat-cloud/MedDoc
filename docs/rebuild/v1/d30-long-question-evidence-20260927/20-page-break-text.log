@@ -1,0 +1,44 @@
+[
+  {
+    "area": "A23",
+    "pdf_sha256": "21b4359899548a6196e3e69b5b3a75939474d6d3c0c3b48269ce3f0ff6bcf3c9",
+    "body_bounds_points": {
+      "bottom": 70,
+      "top": "page height minus 100",
+      "left": 0,
+      "right": "page width"
+    },
+    "raw_fullpage_count_retained": 89,
+    "body_contiguous_answer": true,
+    "body_full_statement_count": 90,
+    "expected": 90
+  },
+  {
+    "area": "A35",
+    "pdf_sha256": "7a3405919b69e4a4e198efb2f2602df1b189f14f6a435b3053e1c35e3dd925ee",
+    "body_bounds_points": {
+      "bottom": 70,
+      "top": "page height minus 100",
+      "left": 0,
+      "right": "page width"
+    },
+    "raw_fullpage_count_retained": 89,
+    "body_contiguous_answer": true,
+    "body_full_statement_count": 90,
+    "expected": 90
+  },
+  {
+    "area": "A44",
+    "pdf_sha256": "c1d60050500bf5336873351bc5e698f41a47d46cd080a8b71cbde60579e7c77c",
+    "body_bounds_points": {
+      "bottom": 70,
+      "top": "page height minus 100",
+      "left": 0,
+      "right": "page width"
+    },
+    "raw_fullpage_count_retained": 89,
+    "body_contiguous_answer": true,
+    "body_full_statement_count": 90,
+    "expected": 90
+  }
+]

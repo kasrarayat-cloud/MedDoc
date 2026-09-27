@@ -1,0 +1,3 @@
+real_shape aws_capture_current
+future_db aws_capture_current
+future_backup aws_capture_current

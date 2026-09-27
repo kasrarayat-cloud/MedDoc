@@ -1,0 +1,91 @@
+{
+  "source_hashes": {
+    "documents/word_v3.py": "190c470192e49005166e3d2b6b792772dd7284d616bdf2977854a19306de4e80",
+    "core/v3_mapping.py": "e956fd8c735a63c1e13f532eb53ebb10965a80bb74c3dba65d52b6e4fee19341",
+    "core/generation.py": "a79b59e6703eb78745b67a527f86abc786bc9c862612e86fd14890c539ab4923",
+    "core/views.py": "5fa0f2cbc364f9136a65c09b5f4e71fb556b352d22723c404151410ba1d08642"
+  },
+  "cases": [
+    {
+      "case": "flags-stripped",
+      "outcome": "REFUSED",
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand."
+    },
+    {
+      "case": "extra",
+      "outcome": "REFUSED",
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand."
+    },
+    {
+      "case": "copies",
+      "outcome": "REFUSED",
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand."
+    },
+    {
+      "case": "paragraph-options",
+      "outcome": "REFUSED",
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand."
+    },
+    {
+      "case": "checkbox-destination",
+      "outcome": "REFUSED",
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand."
+    },
+    {
+      "case": "manual-caption-alias",
+      "outcome": "REFUSED",
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand."
+    },
+    {
+      "case": "ordinary-short",
+      "outcome": "EXPORTED",
+      "signing_regions_unchanged": true
+    },
+    {
+      "case": "ordinary-long",
+      "outcome": "EXPORTED",
+      "signing_regions_unchanged": true
+    },
+    {
+      "case": "header-copy",
+      "outcome": "REFUSED",
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand."
+    },
+    {
+      "case": "nested-table-copy",
+      "outcome": "REFUSED",
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand."
+    },
+    {
+      "case": "table-ancestor-alias",
+      "outcome": "REFUSED",
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand."
+    },
+    {
+      "case": "floating-short",
+      "outcome": "REFUSED",
+      "code": "unqualified_floating_initials",
+      "message": "Filled export is unavailable for this form's floating initials boxes: answer reflow can clip or move a box away from its question. The unchanged original remains available. This layout needs qualification before any nonempty export."
+    },
+    {
+      "case": "floating-long",
+      "outcome": "REFUSED",
+      "code": "unqualified_floating_initials",
+      "message": "Filled export is unavailable for this form's floating initials boxes: answer reflow can clip or move a box away from its question. The unchanged original remains available. This layout needs qualification before any nonempty export."
+    },
+    {
+      "case": "floating-blank",
+      "outcome": "EXPORTED",
+      "all_package_parts_unchanged": true
+    }
+  ]
+}

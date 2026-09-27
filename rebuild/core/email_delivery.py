@@ -13,19 +13,47 @@ class Delivery:
     recovery_staged: bool = False
 
 
+#: The link route each purpose points at.
+ROUTES = {
+    'verification': 'verify',
+    'invitation': 'invite',
+    'recovery': 'recovery/confirm',
+    'owner_invitation': 'invite/clinic',
+}
+
+#: Every account email QuillMD sends: (subject, body) per data mode and purpose. The ONLY substitution
+#: field any of them may carry is {link}, which holds the configured origin, the route and the token.
+#: Nothing from a patient, an encounter, a department, an organization or the recipient's own record can
+#: be interpolated, and `core.tests.test_v1_email_copy` fails if a field other than {link} is
+#: ever added. Real mode drops the "test account" and "synthetic" wording and changes nothing else.
+COPY = {
+    'synthetic': {
+        'verification': ('Verify your QuillMD test account', 'Open {link} to verify your synthetic test account.'),
+        'invitation': ('QuillMD department invitation', 'Accept your QuillMD department invitation at {link}'),
+        'recovery': ('Recover your QuillMD test account', 'Recover your QuillMD test account at {link}. This link expires in 30 minutes. Administrators also need their enrolled authenticator.'),
+        'owner_invitation': ('QuillMD clinic invitation', 'Set up your clinic on QuillMD at {link}. This invitation link works once and expires in 7 days.'),
+    },
+    'real': {
+        'verification': ('Verify your QuillMD account', 'Open {link} to verify your QuillMD account.'),
+        'invitation': ('QuillMD department invitation', 'Accept your QuillMD department invitation at {link}'),
+        'recovery': ('Recover your QuillMD account', 'Recover your QuillMD account at {link}. This link expires in 30 minutes. If you use an authenticator, you will still need it to sign in.'),
+        'owner_invitation': ('QuillMD clinic invitation', 'Set up your clinic on QuillMD at {link}. This invitation link works once and expires in 7 days.'),
+    },
+}
+
+
+def account_copy(purpose):
+    return COPY['synthetic' if settings.SYNTHETIC_ONLY else 'real'][purpose]
+
+
 def deliver_account_email(actor, target, recipient, purpose, raw_token, department=None):
     """Return an honest outcome. Account creation survives transport failures."""
-    route, subject = {
-        'verification': ('verify', 'Verify your QuillMD test account'),
-        'invitation': ('invite', 'QuillMD department invitation'),
-        'recovery': ('recovery/confirm', 'Recover your QuillMD test account'),
-    }[purpose]
+    route = ROUTES[purpose]
+    subject, template = account_copy(purpose)
     recovery_body = f"Delivery configuration requires repair. Private recovery route: /{route}/{raw_token}/"
     try:
         link = f"{application_origin()}/{route}/{raw_token}/"
-        body = {'verification': f'Open {link} to verify your synthetic test account.',
-                'invitation': f'Accept your QuillMD department invitation at {link}',
-                'recovery': f'Recover your QuillMD test account at {link}. This link expires in 30 minutes. Administrators also need their enrolled authenticator.'}[purpose]
+        body = template.format(link=link)
         recovery_body = body
         body += private_access_instructions(recipient, purpose)
         message = EmailMessage(subject, body, settings.DEFAULT_FROM_EMAIL, [recipient])

@@ -1,0 +1,56 @@
+Using existing test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-patient-topics/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-patient-topics/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+FFF
+======================================================================
+FAIL: test_negative_allergy_and_related_assessment_refuse_actual_stored_routes (core.tests.test_v3_patient_topics.CompletePatientTopicWorkflow.test_negative_allergy_and_related_assessment_refuse_actual_stored_routes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-patient-topics/rebuild/core/tests/test_v3_patient_topics.py", line 250, in test_negative_allergy_and_related_assessment_refuse_actual_stored_routes
+    self.assertEqual(g.governed_decisions(notes, self.version.fields, self.encounter.answers), ['Allergies'])
+AssertionError: Lists differ: [] != ['Allergies']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'Allergies'
+
+- []
++ ['Allergies']
+
+======================================================================
+FAIL: test_negative_allergy_cannot_drop_a_clinically_related_assessment (core.tests.test_v3_patient_topics.PatientSourceTopics.test_negative_allergy_cannot_drop_a_clinically_related_assessment) (label='Allergies', notes='This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is penicillin anaphylaxis. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-patient-topics/rebuild/core/tests/test_v3_patient_topics.py", line 52, in assert_named_hold
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'No known drug allergies.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'No known drug allergies.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_negative_allergy_cannot_drop_a_clinically_related_assessment (core.tests.test_v3_patient_topics.PatientSourceTopics.test_negative_allergy_cannot_drop_a_clinically_related_assessment) (label='Allergies', notes='This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is penicillin hypersensitivity. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-patient-topics/rebuild/core/tests/test_v3_patient_topics.py", line 52, in assert_named_hold
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'No known drug allergies.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'No known drug allergies.')
++ ('conflict', '')
+
+----------------------------------------------------------------------
+Ran 2 tests in 1.378s
+
+FAILED (failures=3)
+Preserving test database for alias 'default'...
+Found 2 test(s).
+System check identified no issues (0 silenced).

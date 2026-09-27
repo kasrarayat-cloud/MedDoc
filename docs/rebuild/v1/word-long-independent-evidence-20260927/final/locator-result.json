@@ -1,0 +1,189 @@
+{
+  "engine_sha256": "3f2ca5136a876d153b045e5c8dd37b8b8b24b303833263966664c63290a3b856",
+  "mapping_sha256": "03fa6840a559e50f0f14a79356cfaa7dfc47848bda419fc5269067522995093b",
+  "cases": [
+    {
+      "case": "exact",
+      "prior": {
+        "key": "m3_7d5f205fc264",
+        "label": "Complete original question",
+        "kind": "text",
+        "context": "Retained complete prior DONOR ONLY context ",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[0]/tc[0]",
+          "target": {
+            "type": "cell"
+          },
+          "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+        },
+        "origin": "manual"
+      },
+      "output": {
+        "fields": [
+          {
+            "key": "m3_7d5f205fc264",
+            "label": "Complete original question",
+            "kind": "text",
+            "context": "Retained complete prior DONOR ONLY context ",
+            "locator": {
+              "contract": "v3",
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              },
+              "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+            },
+            "origin": "model_assisted"
+          }
+        ],
+        "unresolved": []
+      }
+    },
+    {
+      "case": "fingerprint",
+      "prior": {
+        "key": "m3_7d5f205fc264",
+        "label": "Complete original question",
+        "kind": "text",
+        "context": "Retained complete prior DONOR ONLY context ",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[0]/tc[0]",
+          "target": {
+            "type": "cell"
+          },
+          "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "origin": "manual"
+      },
+      "output": {
+        "fields": [
+          {
+            "key": "m3_7d5f205fc264",
+            "label": "Complete original question",
+            "kind": "text",
+            "context": "Actual source section",
+            "locator": {
+              "contract": "v3",
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              },
+              "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+            },
+            "origin": "model_assisted"
+          }
+        ],
+        "unresolved": []
+      }
+    },
+    {
+      "case": "write-target",
+      "prior": {
+        "key": "m3_7d5f205fc264",
+        "label": "Complete original question",
+        "kind": "text",
+        "context": "Retained complete prior DONOR ONLY context ",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[0]/tc[0]",
+          "target": {
+            "type": "cell_replace"
+          },
+          "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+        },
+        "origin": "manual"
+      },
+      "output": {
+        "fields": [
+          {
+            "key": "m3_7d5f205fc264",
+            "label": "Complete original question",
+            "kind": "text",
+            "context": "Actual source section",
+            "locator": {
+              "contract": "v3",
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              },
+              "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+            },
+            "origin": "model_assisted"
+          }
+        ],
+        "unresolved": []
+      }
+    },
+    {
+      "case": "descendant",
+      "prior": {
+        "key": "m3_7d5f205fc264",
+        "label": "Complete original question",
+        "kind": "text",
+        "context": "Retained complete prior DONOR ONLY context ",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[0]/tc[0]",
+          "target": {
+            "type": "cell"
+          },
+          "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+        },
+        "origin": "manual"
+      },
+      "output": {
+        "fields": [
+          {
+            "key": "m3_ed02b2defdd5",
+            "label": "Complete original question",
+            "kind": "text",
+            "context": "Actual source section",
+            "locator": {
+              "contract": "v3",
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[0]/tc[0]/p[0]",
+              "target": {
+                "type": "paragraph"
+              },
+              "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8"
+            },
+            "origin": "model_assisted"
+          }
+        ],
+        "unresolved": []
+      }
+    },
+    {
+      "case": "foreign",
+      "prior": {
+        "key": "m3_7d5f205fc264",
+        "label": "Complete original question",
+        "kind": "text",
+        "context": "Retained complete prior DONOR ONLY context ",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[0]/tc[0]",
+          "target": {
+            "type": "cell"
+          },
+          "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+        },
+        "origin": "manual"
+      },
+      "output": {
+        "error_type": "ValidationError",
+        "error": "['Replacement target belongs to another field destination.']"
+      }
+    }
+  ]
+}

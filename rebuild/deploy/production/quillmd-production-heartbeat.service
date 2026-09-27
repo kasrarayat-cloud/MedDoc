@@ -1,0 +1,27 @@
+# QuillMD PRODUCTION outside-host heartbeat. Pings the owner-controlled check URL ONLY after the
+# doctor and admin surfaces answer /health/ with 200 on this host, so a missing ping means the host,
+# the services or the network is down. The check service alerts from outside AWS.
+[Unit]
+Description=QuillMD production outside-host heartbeat
+After=network-online.target quillmd-production-doctor.service quillmd-production-admin.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+DynamicUser=yes
+LoadCredential=heartbeat-url:/etc/quillmd-production/operator/heartbeat-url
+ExecStart=/opt/quillmd-production/rebuild/deploy/production/quillmd-production-heartbeat.sh
+TimeoutStartSec=90
+NoNewPrivileges=true
+LimitCORE=0
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=169.254.169.254/32 fd00:ec2::254/128
+InaccessiblePaths=/run/quillmd-production /var/lib/quillmd-production
+SyslogIdentifier=quillmd-production-heartbeat

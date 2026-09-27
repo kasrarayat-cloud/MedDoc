@@ -1,0 +1,22 @@
+.FF.
+======================================================================
+FAIL: test_ambiguous_boxes_have_a_visible_source_location (documents.test_question_boxes.QuestionBoxes.test_ambiguous_boxes_have_a_visible_source_location) (case='long')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-d30/rebuild/documents/test_question_boxes.py", line 78, in test_ambiguous_boxes_have_a_visible_source_location
+    self.assertTrue(any(question in x for x in result['notes']))
+AssertionError: False is not true
+
+======================================================================
+FAIL: test_empty_ordinary_long_preserve_other_document_parts_and_neighbours (documents.test_question_boxes.QuestionBoxes.test_empty_ordinary_long_preserve_other_document_parts_and_neighbours) (length=3450)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-d30/rebuild/documents/test_question_boxes.py", line 101, in test_empty_ordinary_long_preserve_other_document_parts_and_neighbours
+    self.assertEqual(w.text_of(new[1]).strip(), answer)
+AssertionError: 'SYNT[3384 chars]IC long answer. SYNTHETIC long answer. SYNTHETIC long answer.' != 'SYNT[3384 chars]IC long answer. SYNTHETIC long answer. SYNTHETIC long answer. '
+Diff is 10359 characters long. Set self.maxDiff to None to see it.
+
+----------------------------------------------------------------------
+Ran 4 tests in 1.221s
+
+FAILED (failures=2)

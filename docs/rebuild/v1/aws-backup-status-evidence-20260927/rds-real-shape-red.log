@@ -1,0 +1,25 @@
+test_documented_automated_backup_shape_and_wrong_identity_pages (ops.test_aws_backup_status.AWSBackupStatusTests.test_documented_automated_backup_shape_and_wrong_identity_pages) ... ERROR
+
+======================================================================
+ERROR: test_documented_automated_backup_shape_and_wrong_identity_pages (ops.test_aws_backup_status.AWSBackupStatusTests.test_documented_automated_backup_shape_and_wrong_identity_pages)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-host-readiness/rebuild/ops/test_aws_backup_status.py", line 93, in test_documented_automated_backup_shape_and_wrong_identity_pages
+    self.assertEqual(self.project(aws)['condition'],'aws_capture_current')
+                     ^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-host-readiness/rebuild/ops/test_aws_backup_status.py", line 58, in project
+    def project(self,aws=None):return s.collect(profile(),config(),aws or Transport(),NOW)[0]
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-host-readiness/rebuild/ops/aws_backup_status.py", line 118, in collect
+    earliest, latest = stamp(db.get('EarliestRestorableTime')), stamp(db.get('LatestRestorableTime'))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-host-readiness/rebuild/ops/aws_backup_status.py", line 27, in stamp
+    require(isinstance(value, str), 'timestamp')
+  File "/opt/meddoc-pro/.worktrees/v1-host-readiness/rebuild/ops/production_operator.py", line 20, in require
+    raise OperatorError(label)
+ops.production_operator.OperatorError: timestamp
+
+----------------------------------------------------------------------
+Ran 1 test in 0.007s
+
+FAILED (errors=1)

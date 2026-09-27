@@ -1,0 +1,16 @@
+repaired/test: supported 1/12; held 11 = 92%
+  holds lifted by disabling ONE rule alone: {'paragraph (a)+(b)': 11, 'paragraph (a) only': 8, 'paragraph (b) only': 3, '(c) inner sentence': 0, '(d) asks/trails off': 0, '(e) pointer shape': 0, 'R3-1 plain grammar (every value plain)': 5, '(g) run-on': 0}
+      5  paragraph (a)+(b) + paragraph (a) only + R3-1 plain grammar (every value plain)
+      3  paragraph (a)+(b) + paragraph (b) only
+      3  paragraph (a)+(b) + paragraph (a) only
+  t-prose    Chief complaint              HELD  [paragraph (a)+(b) + paragraph (a) only + R3-1 plain grammar (every value plain)]  'Patient presents with right knee pain for three weeks.'
+  t-prose    Allergies                    HELD  [paragraph (a)+(b) + paragraph (a) only + R3-1 plain grammar (every value plain)]  'Allergies: penicillin.'
+  t-prose    Plan                         HELD  [paragraph (a)+(b) + paragraph (b) only]  'Plan is physiotherapy twice weekly and review in six weeks.'
+  t-lines    Chief complaint              HELD  [paragraph (a)+(b) + paragraph (a) only + R3-1 plain grammar (every value plain)]  'Patient presents with right knee pain for three weeks.'
+  t-lines    Allergies                    HELD  [paragraph (a)+(b) + paragraph (a) only + R3-1 plain grammar (every value plain)]  'Allergies: penicillin.'
+  t-lines    Smoker                       HELD  [paragraph (a)+(b) + paragraph (a) only + R3-1 plain grammar (every value plain)]  'Smoker: No.'
+  t-lines    Plan                         HELD  [paragraph (a)+(b) + paragraph (b) only]  'Plan is physiotherapy twice weekly and review in six weeks.'
+  t-worker   Referring physician          HELD  [paragraph (a)+(b) + paragraph (a) only]  'Referring physician: Dr Example'
+  t-worker   Reason for visit             HELD  [paragraph (a)+(b) + paragraph (b) only]  'Patient presents with right knee pain.'
+  t-r10      Smoker                       HELD  [paragraph (a)+(b) + paragraph (a) only]  'Smoker: yes'
+  t-social   Smoker                       HELD  [paragraph (a)+(b) + paragraph (a) only]  'Smoker: No.'

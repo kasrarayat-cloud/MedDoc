@@ -1,0 +1,55 @@
+{
+  "engine_sha256": "92098300e175ba7cd8c5d7718e2bc6a6089dcc95ffe828580430157f98dc36b9",
+  "cases": [
+    {
+      "heading": "Report",
+      "label": "Please provide the initial",
+      "result": {
+        "contract": "v3",
+        "fields": [
+          {
+            "key": "v3_1",
+            "label": "Please provide the initial",
+            "kind": "long_text",
+            "context": "Report",
+            "locator": {
+              "contract": "v3",
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              },
+              "fingerprint": "9443f4990394d76a48d2de173ba2a6333ee509bdff255bf6e4a481051ca2c343"
+            }
+          }
+        ],
+        "notes": []
+      }
+    },
+    {
+      "heading": "",
+      "label": "Please countersign the initial report?",
+      "result": {
+        "contract": "v3",
+        "fields": [
+          {
+            "key": "v3_1",
+            "label": "Please countersign the initial report?",
+            "kind": "long_text",
+            "context": "",
+            "locator": {
+              "contract": "v3",
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              },
+              "fingerprint": "9443f4990394d76a48d2de173ba2a6333ee509bdff255bf6e4a481051ca2c343"
+            }
+          }
+        ],
+        "notes": []
+      }
+    }
+  ]
+}

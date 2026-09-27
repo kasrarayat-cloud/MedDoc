@@ -33,9 +33,44 @@ def part_name(part):
     return name or 'Body'
 
 
-def describe(field):
+V3_TARGETS = {
+    'cell': 'empty answer cell in a table', 'cell_replace': 'answer cell in a table', 'paragraph': 'empty line',
+    'sdt_text': 'Word content control', 'sdt_choice': 'Word dropdown', 'ff_text': 'legacy Word form field',
+    'ff_dropdown': 'legacy Word dropdown field', 'checkboxes': 'printed boxes', 'paragraph_options': 'printed options',
+    'text_options': 'printed options', 'table_rows': 'rows of a table',
+}
+
+
+def describe_v3(locator, box_keys=None):
+    """Contract v3: the part (body, header, footer) and the kind of place the answer is written to. A single box on a
+    place of boxes says which one: 'printed box 2 of 3', counted among EVERY box the place's preview shows (its
+    `box_keys` in the form's outline: printed glyph boxes and checkbox controls alike), exactly as the clinician's box
+    number counts. Without the place's boxes it names no number."""
+    target = locator.get('target') or {}
+    kind = target.get('type', '')
+    if kind == 'span':
+        what = 'after the printed label' if target.get('shape') == 'after_label' else 'on the printed blank'
+    else:
+        what = V3_TARGETS.get(kind, 'answer area')
+    boxes = target.get('boxes') or []
+    if kind == 'checkboxes' and len(boxes) == 1:
+        from documents.word_v3 import box_key
+        what = 'printed box'
+        keys = (box_keys or {}).get('%s#%s' % (locator.get('part', ''), locator.get('slot', '')))
+        keys = keys if isinstance(keys, list) else []
+        if box_key(boxes[0]) in keys:
+            what = 'printed box %d of %d' % (keys.index(box_key(boxes[0])) + 1, len(keys))
+    where = part_name(locator.get('part', 'word/document.xml'))
+    copies = len(target.get('copies') or [])
+    return f'{where} · {what}' + (f' (and {copies} repeated copy/copies)' if copies else '')
+
+
+def describe(field, box_keys=None):
     """One short phrase locating this field's answer area in the original form."""
     locator = field.get('locator') or {}
+
+    if locator.get('contract') == 'v3':
+        return describe_v3(locator, box_keys)
 
     if 'cell' in locator:
         return 'Answer cell in a question/answer table'

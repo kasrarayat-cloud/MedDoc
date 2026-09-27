@@ -44,9 +44,17 @@ from ops import activation_exclusion as exclusion
 #: Keys of the aggregator's report that are safe and useful to retain. Anything the aggregator
 #: might add later is dropped rather than published blind: a redaction allowlist only works if
 #: it is an allowlist.
+#:
+#: ⚠️ AND WHAT SAYS THE REPORT IS STALE IS PART OF THE REPORT (R3-2, round 3). `check_running`
+#: marks a report made while a monitor check was running (it shows the last completed check), and
+#: `state_unreadable` one made from a monitor state that could not be read, with the backup
+#: condition computed anyway and when the next restart notice may be sent. Dropping them published
+#: a stale or unreadable state as though it were current. Fixed labels, booleans and timestamps only.
 PAYLOAD_KEYS = ('local_capture', 'offsite', 'external_monitor', 'alert',
                 'offsite_recovery_verified', 'outside_host_failure_detection',
-                'clinical_content_included', 'monitor_age_seconds', 'stale_after_seconds')
+                'clinical_content_included', 'monitor_age_seconds', 'stale_after_seconds',
+                'check_running', 'state_unreadable', 'backup_condition', 'backup_severity',
+                'next_state_notice_at', 'last_state_notice_condition')
 
 
 def collect():
@@ -59,16 +67,62 @@ def collect():
     return backup_alerts.status()
 
 
+def production_context():
+    """Pin the writer to the activated production DB before any collection or write."""
+    import os
+    from django.conf import settings
+    from django.db import connection
+    from ops import deployment_profile
+    from ops.production_operator import private_json, require
+    from ops.service_launcher import verified_ca_bundle
+    profile = deployment_profile.load_production()
+    require(os.geteuid() == 0 and Path(_ROOT) == profile.app_root, 'operator_identity')
+    receipt = private_json('/var/lib/quillmd-bootstrap/receipt.json')
+    require(receipt.get('profile_sha256') == profile.sha256
+            and receipt.get('release_sha') == settings.RELEASE_SHA, 'installed_release')
+    require(os.environ.get('QUILLMD_DEPLOYMENT_PROFILE') == 'production'
+            and settings.STATE_DIR == profile.state_root, 'application_profile')
+    verified_ca_bundle(profile.ca_bundle, profile.ca_bundle_sha256)
+    db = connection.settings_dict
+    require(db['HOST'] == profile.database_host and str(db['PORT']) == str(profile.database_port)
+            and db['NAME'] == profile.database_name and db['USER'] == profile.roles['runtime'], 'application_database')
+    connection.ensure_connection()
+    actual = connection.connection.info.get_parameters()
+    require(actual.get('host') == profile.database_host and actual.get('sslmode') == 'verify-full'
+            and actual.get('sslrootcert') == str(profile.ca_bundle), 'application_tls')
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT current_database(),current_user,current_setting('session_replication_role'),"
+                       "(SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid())")
+        require(cursor.fetchone() == (profile.database_name, profile.roles['runtime'], 'origin', True), 'application_connection')
+    return profile
+
+
 class Command(BaseCommand):
     help = 'Publish the backup/offsite status report into ServiceHealth for the admin console.'
 
     def add_arguments(self, parser):
+        parser.add_argument('--profile', choices=['private', 'production'], default='private')
         parser.add_argument('--dry-run', action='store_true',
                             help='Print the document that would be published and write nothing.')
         parser.add_argument('--interval-seconds', type=int, default=300,
                             help='Cadence this publisher runs at. The console calls the row STALE past twice this.')
 
     def handle(self, *args, **options):
+        import os
+        self.production = None
+        if os.environ.get('QUILLMD_DEPLOYMENT_PROFILE') == 'production' and options.get('profile', 'private') != 'production':
+            raise CommandError('Production publication requires the explicit production profile.')
+        if options.get('profile', 'private') == 'production':
+            from ops import deployment_profile
+            from ops.production_operator import OperatorError
+            from ops.service_launcher import BoundaryFailure
+            try:
+                self.production = production_context()
+            except (OperatorError, deployment_profile.ProfileError, BoundaryFailure, OSError, ValueError):
+                raise CommandError('Production publication refused: target or operator identity could not be verified.') from None
+            # Separate root-only production lock. Cutover/recovery must stop the
+            # timer and acquire this same lock; no private lock is touched.
+            exclusion.bind_runtime(self.production.operator_directory / 'operations-publication')
         interval = options['interval_seconds']
         if interval < 60:
             raise CommandError('An interval under 60 seconds cannot be distinguished from a stuck publisher.')
@@ -93,7 +147,11 @@ class Command(BaseCommand):
             return self.publish(interval, dry_run=False)
 
     def publish(self, interval, *, dry_run):
-        report, code = collect()
+        if getattr(self, 'production', None) is None:
+            report, code = collect()
+        else:
+            from ops import aws_backup_status
+            report, code = aws_backup_status.status(self.production)
         if not isinstance(report, dict) or 'condition' not in report or 'severity' not in report:
             raise CommandError('The operations aggregator returned a shape this publisher does not recognise.')
         if report.get('clinical_content_included') is not False:

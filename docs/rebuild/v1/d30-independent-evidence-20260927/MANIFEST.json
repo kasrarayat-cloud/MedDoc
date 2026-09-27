@@ -1,0 +1,24 @@
+{
+  "candidate_commit": "75e545b2a6469b0d188c779f3c4ee9af02dfc7f5",
+  "base_commit": "0b0395a0922f81f5a38526802136197a4bb74b28",
+  "files": {
+    "predeclared.json": "f9e355d8680918ca8765da21c0c052ec0c9bc0c27e83ea3bccb5a47b8552bf8d",
+    "probe.log": "4ca778b61156f19cd41f1d1d115a87c07af22a3187defb45d264e7116541ac8d",
+    "result.json": "4ca778b61156f19cd41f1d1d115a87c07af22a3187defb45d264e7116541ac8d",
+    "probe.py": "48fe6242f58a8bef679b423938a776c11bd291558f8e05a605a5bbfdc288a919"
+  },
+  "runtime_artifacts": {
+    "rebuild/.runtime/d30-refutation-20260927/direct-donor-heading.docx": "01b43a253175dd69ccdda834dd38de0ab1931e3cb98ecdaa820b96a9aa22983a",
+    "rebuild/.runtime/d30-refutation-20260927/inline-blank.docx": "21256cfbdc4738d6f3aac7a01dea8d1a0f7cf46b011236e8ff4c655cda682f6a",
+    "rebuild/.runtime/d30-refutation-20260927/page-break-spacer.docx": "f370f99cdf1a405c1dac80b9fe552abc5425cfa57dce19d554046a4042450913",
+    "rebuild/.runtime/d30-refutation-20260927/probe.py": "48fe6242f58a8bef679b423938a776c11bd291558f8e05a605a5bbfdc288a919",
+    "rebuild/.runtime/d30-refutation-20260927/inherited-donor-heading.docx": "7723cbbe8825e71547994e09e33df7f55d283ee610d0812d1892a514cb5e61eb",
+    "rebuild/.runtime/d30-refutation-20260927/ancestor-conditional-nil.docx": "5e0ac6d2264ee30c7c56c6e26a007e0009cbd8222291e88cb8158c96850a4dee",
+    "rebuild/.runtime/d30-refutation-20260927/positive-export.docx": "8bd15b46a41a49fb9f842176c7699d1756192bc0966f5c1172c75919a7b65855",
+    "rebuild/.runtime/d30-refutation-20260927/cell-nil.docx": "53fc05e7309e84b7e10a2d749522e6850b36b222fa1f2b32126a52ff928219e1",
+    "rebuild/.runtime/d30-refutation-20260927/candidate-word-v3.py": "326a4baf7d3331add09f36f78e05d66a8fb75acd4e10bd1c2c952447835efbd1",
+    "rebuild/.runtime/d30-refutation-20260927/two-paragraph-question.docx": "be45cc73d4f5f66b96ddb498abee5f07f2c7b6882c1247e095d8c5dfada7c564",
+    "rebuild/.runtime/d30-refutation-20260927/base-word-v3.py": "190c470192e49005166e3d2b6b792772dd7284d616bdf2977854a19306de4e80",
+    "rebuild/.runtime/d30-refutation-20260927/plain-positive.docx": "beb5918a21a5c0ed277703d45ae8be449564d9e86828bf4cf563c014fe385783"
+  }
+}

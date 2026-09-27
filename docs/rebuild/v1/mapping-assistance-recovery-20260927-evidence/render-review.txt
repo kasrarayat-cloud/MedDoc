@@ -1,0 +1,4 @@
+Error: ENOENT: no such file or directory, open '/opt/meddoc-pro/.worktrees/v1-mapping-assistance/static/app.css'
+    at async open (node:internal/fs/promises:636:25)
+    at async Object.readFile (node:internal/fs/promises:1235:14)
+    at async /opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/.runtime/mapping-assistance-20260927/render-review.cjs:7:12

@@ -1,0 +1,23 @@
+FF
+======================================================================
+FAIL: test_manual_derived_context_is_complete_or_visibly_refused (documents.test_question_boxes.QuestionBoxes.test_manual_derived_context_is_complete_or_visibly_refused) (length=600)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-long-questions/rebuild/documents/test_question_boxes.py", line 83, in test_manual_derived_context_is_complete_or_visibly_refused
+    self.assertEqual(w.locate(data(doc), [target])[0]['context'], context)
+AssertionError: '' != 'Clinical cccccccccccccccccccccccccccccccc[555 chars]cccc'
++ Clinical ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+
+======================================================================
+FAIL: test_manual_derived_context_is_complete_or_visibly_refused (documents.test_question_boxes.QuestionBoxes.test_manual_derived_context_is_complete_or_visibly_refused) (length=1001)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-long-questions/rebuild/documents/test_question_boxes.py", line 85, in test_manual_derived_context_is_complete_or_visibly_refused
+    with self.assertRaises(w.V3Failure): w.locate(data(doc), [target])
+AssertionError: V3Failure not raised
+
+----------------------------------------------------------------------
+Ran 1 test in 0.130s
+
+FAILED (failures=2)

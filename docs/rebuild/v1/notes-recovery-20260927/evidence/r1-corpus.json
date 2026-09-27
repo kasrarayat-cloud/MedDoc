@@ -1,0 +1,508 @@
+{
+ "fields": [
+  {
+   "key": "v3_1",
+   "label": "Chief complaint",
+   "kind": "text",
+   "context": "",
+   "locator": {
+    "contract": "v3",
+    "part": "word/document.xml",
+    "slot": "b/p[4]",
+    "target": {
+     "type": "span",
+     "start": 0,
+     "end": 0,
+     "shape": "after_label"
+    },
+    "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+   }
+  },
+  {
+   "key": "v3_2",
+   "label": "History of present illness",
+   "kind": "long_text",
+   "context": "",
+   "locator": {
+    "contract": "v3",
+    "part": "word/document.xml",
+    "slot": "b/p[4]",
+    "target": {
+     "type": "span",
+     "start": 0,
+     "end": 0,
+     "shape": "after_label"
+    },
+    "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+   }
+  },
+  {
+   "key": "v3_3",
+   "label": "Past medical history",
+   "kind": "long_text",
+   "context": "",
+   "locator": {
+    "contract": "v3",
+    "part": "word/document.xml",
+    "slot": "b/p[4]",
+    "target": {
+     "type": "span",
+     "start": 0,
+     "end": 0,
+     "shape": "after_label"
+    },
+    "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+   }
+  },
+  {
+   "key": "v3_4",
+   "label": "Medications",
+   "kind": "long_text",
+   "context": "",
+   "locator": {
+    "contract": "v3",
+    "part": "word/document.xml",
+    "slot": "b/p[4]",
+    "target": {
+     "type": "span",
+     "start": 0,
+     "end": 0,
+     "shape": "after_label"
+    },
+    "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+   }
+  },
+  {
+   "key": "v3_5",
+   "label": "Allergies",
+   "kind": "text",
+   "context": "",
+   "locator": {
+    "contract": "v3",
+    "part": "word/document.xml",
+    "slot": "b/p[4]",
+    "target": {
+     "type": "span",
+     "start": 0,
+     "end": 0,
+     "shape": "after_label"
+    },
+    "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+   }
+  },
+  {
+   "key": "v3_6",
+   "label": "Smoker",
+   "kind": "choice",
+   "context": "",
+   "locator": {
+    "contract": "v3",
+    "part": "word/document.xml",
+    "slot": "b/p[4]",
+    "target": {
+     "type": "span",
+     "start": 0,
+     "end": 0,
+     "shape": "after_label"
+    },
+    "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+   },
+   "options": [
+    "Yes",
+    "No"
+   ]
+  },
+  {
+   "key": "v3_7",
+   "label": "Examination",
+   "kind": "long_text",
+   "context": "",
+   "locator": {
+    "contract": "v3",
+    "part": "word/document.xml",
+    "slot": "b/p[4]",
+    "target": {
+     "type": "span",
+     "start": 0,
+     "end": 0,
+     "shape": "after_label"
+    },
+    "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+   }
+  },
+  {
+   "key": "v3_8",
+   "label": "Assessment",
+   "kind": "long_text",
+   "context": "",
+   "locator": {
+    "contract": "v3",
+    "part": "word/document.xml",
+    "slot": "b/p[4]",
+    "target": {
+     "type": "span",
+     "start": 0,
+     "end": 0,
+     "shape": "after_label"
+    },
+    "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+   }
+  },
+  {
+   "key": "v3_9",
+   "label": "Plan",
+   "kind": "long_text",
+   "context": "",
+   "locator": {
+    "contract": "v3",
+    "part": "word/document.xml",
+    "slot": "b/p[4]",
+    "target": {
+     "type": "span",
+     "start": 0,
+     "end": 0,
+     "shape": "after_label"
+    },
+    "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+   }
+  },
+  {
+   "key": "v3_10",
+   "label": "Consent obtained",
+   "kind": "checkbox",
+   "context": "",
+   "locator": {
+    "contract": "v3",
+    "part": "word/document.xml",
+    "slot": "b/p[5]",
+    "target": {
+     "type": "span",
+     "start": 0,
+     "end": 0,
+     "shape": "after_label"
+    },
+    "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+   },
+   "options": [
+    "Consent obtained"
+   ]
+  },
+  {
+   "key": "v3_11",
+   "label": "Clinician signature",
+   "kind": "signature",
+   "context": "",
+   "locator": {
+    "contract": "v3",
+    "part": "word/document.xml",
+    "slot": "b/p[5]",
+    "target": {
+     "type": "span",
+     "start": 0,
+     "end": 0,
+     "shape": "after_label"
+    },
+    "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+   }
+  }
+ ],
+ "notes": [
+  {
+   "name": "r1-note1",
+   "notes": "45-year-old man presents with right knee pain for three weeks after a fall. He has hypertension and takes lisinopril 10 mg daily. Allergies: penicillin. Smoker: No. On examination there is a small effusion and medial joint line tenderness. Assessment is a probable medial meniscus tear. Plan is an MRI of the right knee and physiotherapy referral.",
+   "picks": {
+    "Chief complaint": [
+     "45-year-old man presents with right knee pain for three weeks after a fall."
+    ],
+    "History of present illness": [
+     "45-year-old man presents with right knee pain for three weeks after a fall."
+    ],
+    "Past medical history": [
+     "He has hypertension and takes lisinopril 10 mg daily."
+    ],
+    "Medications": [
+     "He has hypertension and takes lisinopril 10 mg daily."
+    ],
+    "Allergies": [
+     "Allergies: penicillin."
+    ],
+    "Smoker": [
+     "Smoker: No."
+    ],
+    "Examination": [
+     "On examination there is a small effusion and medial joint line tenderness."
+    ],
+    "Assessment": [
+     "Assessment is a probable medial meniscus tear."
+    ],
+    "Plan": [
+     "Plan is an MRI of the right knee and physiotherapy referral."
+    ]
+   }
+  },
+  {
+   "name": "r1-note2",
+   "notes": "Patient presents with a cough for five days.\nShe reports low-grade fevers and green sputum.\nShe has asthma.\nMedications: salbutamol inhaler as needed.\nAllergies: none known.\nSmoker: no.\nChest examination revealed crackles at the right base.\nAssessment: community-acquired pneumonia.\nPlan: amoxicillin 500 mg three times daily for five days.\nReturn if symptoms worsen.",
+   "picks": {
+    "Chief complaint": [
+     "Patient presents with a cough for five days."
+    ],
+    "History of present illness": [
+     "Patient presents with a cough for five days.",
+     "She reports low-grade fevers and green sputum."
+    ],
+    "Past medical history": [
+     "She has asthma."
+    ],
+    "Medications": [
+     "Medications: salbutamol inhaler as needed."
+    ],
+    "Allergies": [
+     "Allergies: none known."
+    ],
+    "Smoker": [
+     "Smoker: no."
+    ],
+    "Examination": [
+     "Chest examination revealed crackles at the right base."
+    ],
+    "Assessment": [
+     "Assessment: community-acquired pneumonia."
+    ],
+    "Plan": [
+     "Plan: amoxicillin 500 mg three times daily for five days.",
+     "Return if symptoms worsen."
+    ]
+   }
+  },
+  {
+   "name": "r1-note3",
+   "notes": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+   "picks": {
+    "Chief complaint": [
+     "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    ],
+    "History of present illness": [
+     "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    ],
+    "Past medical history": [
+     "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    ],
+    "Medications": [
+     "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    ],
+    "Allergies": [
+     "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    ],
+    "Smoker": [
+     "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    ],
+    "Examination": [
+     "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    ],
+    "Assessment": [
+     "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    ],
+    "Plan": [
+     "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    ]
+   }
+  },
+  {
+   "name": "r1-note4",
+   "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks.",
+   "picks": {
+    "Chief complaint": [
+     "This is a 30-year-old female seen for headaches."
+    ],
+    "History of present illness": [
+     "The headaches started two months ago and are worse in the morning.",
+     "She denies visual changes, nausea, or weakness."
+    ],
+    "Medications": [
+     "She takes ibuprofen as needed."
+    ],
+    "Allergies": [
+     "No known drug allergies."
+    ],
+    "Smoker": [
+     "She is a nonsmoker."
+    ],
+    "Examination": [
+     "Neurological examination is normal."
+    ],
+    "Assessment": [
+     "Assessment is tension-type headache."
+    ],
+    "Plan": [
+     "Plan is to start amitriptyline 10 mg at night.",
+     "She will follow up in six weeks."
+    ]
+   }
+  },
+  {
+   "name": "r1-note5",
+   "notes": "Subjective: Patient reports lower back pain for two weeks after lifting boxes.\nObjective: Lumbar paraspinal tenderness, straight leg raise negative.\nAssessment: mechanical low back pain.\nPlan: naproxen 500 mg twice daily with food and physiotherapy.\nAllergies: sulfa.\nSmoker: Yes.",
+   "picks": {
+    "Chief complaint": [
+     "Subjective: Patient reports lower back pain for two weeks after lifting boxes."
+    ],
+    "History of present illness": [
+     "Subjective: Patient reports lower back pain for two weeks after lifting boxes."
+    ],
+    "Examination": [
+     "Objective: Lumbar paraspinal tenderness, straight leg raise negative."
+    ],
+    "Assessment": [
+     "Assessment: mechanical low back pain."
+    ],
+    "Plan": [
+     "Plan: naproxen 500 mg twice daily with food and physiotherapy."
+    ],
+    "Allergies": [
+     "Allergies: sulfa."
+    ],
+    "Smoker": [
+     "Smoker: Yes."
+    ]
+   }
+  },
+  {
+   "name": "r1-note6",
+   "notes": "The patient was seen for removal of a skin lesion on the left forearm. The risks and benefits were discussed. Consent obtained: yes. The lesion was excised under local anesthesia and closed with sutures. She tolerated the procedure well. Plan is suture removal in ten days.",
+   "picks": {
+    "Chief complaint": [
+     "The patient was seen for removal of a skin lesion on the left forearm."
+    ],
+    "Consent obtained": [
+     "Consent obtained: yes."
+    ],
+    "Examination": [
+     "The lesion was excised under local anesthesia and closed with sutures."
+    ],
+    "Plan": [
+     "She tolerated the procedure well.",
+     "Plan is suture removal in ten days."
+    ]
+   }
+  },
+  {
+   "name": "r1-note7",
+   "notes": "Mother brings in her 4-year-old son with ear pain since yesterday. He has had a runny nose for a week. He takes no regular medications. Allergies: amoxicillin (rash). Examination showed a bulging red left tympanic membrane. Assessment is acute otitis media on the left. Plan is azithromycin for five days and ibuprofen for pain.",
+   "picks": {
+    "Chief complaint": [
+     "Mother brings in her 4-year-old son with ear pain since yesterday."
+    ],
+    "History of present illness": [
+     "Mother brings in her 4-year-old son with ear pain since yesterday.",
+     "He has had a runny nose for a week."
+    ],
+    "Medications": [
+     "He takes no regular medications."
+    ],
+    "Allergies": [
+     "Allergies: amoxicillin (rash)."
+    ],
+    "Examination": [
+     "Examination showed a bulging red left tympanic membrane."
+    ],
+    "Assessment": [
+     "Assessment is acute otitis media on the left."
+    ],
+    "Plan": [
+     "Plan is azithromycin for five days and ibuprofen for pain."
+    ]
+   }
+  },
+  {
+   "name": "r1-note8",
+   "notes": "Follow-up for hypertension. Blood pressure today was 142/88. He continues amlodipine 5 mg daily. Allergies: none. Smoker: no. Heart and lung examination was normal. Assessment is hypertension not at goal. Plan is to increase amlodipine to 10 mg daily and recheck in four weeks.",
+   "picks": {
+    "Chief complaint": [
+     "Follow-up for hypertension."
+    ],
+    "History of present illness": [
+     "Blood pressure today was 142/88."
+    ],
+    "Medications": [
+     "He continues amlodipine 5 mg daily."
+    ],
+    "Allergies": [
+     "Allergies: none."
+    ],
+    "Smoker": [
+     "Smoker: no."
+    ],
+    "Examination": [
+     "Heart and lung examination was normal."
+    ],
+    "Assessment": [
+     "Assessment is hypertension not at goal."
+    ],
+    "Plan": [
+     "Plan is to increase amlodipine to 10 mg daily and recheck in four weeks."
+    ]
+   }
+  },
+  {
+   "name": "r1-note9",
+   "notes": "Patient presents for medication review.\nCurrent medications are atorvastatin 20 mg and metformin 1000 mg.\nAllergies: codeine.\nSmoker: No.\nExamination was not performed today.\nAssessment: stable type 2 diabetes and hyperlipidemia.\nPlan: continue current medications.",
+   "picks": {
+    "Chief complaint": [
+     "Patient presents for medication review."
+    ],
+    "Medications": [
+     "Current medications are atorvastatin 20 mg and metformin 1000 mg."
+    ],
+    "Allergies": [
+     "Allergies: codeine."
+    ],
+    "Smoker": [
+     "Smoker: No."
+    ],
+    "Examination": [
+     "Examination was not performed today."
+    ],
+    "Assessment": [
+     "Assessment: stable type 2 diabetes and hyperlipidemia."
+    ],
+    "Plan": [
+     "Plan: continue current medications."
+    ]
+   }
+  },
+  {
+   "name": "r1-note10",
+   "notes": "Patient presents with chest tightness on exertion for one month. His father had a heart attack at 55. He has high cholesterol. He takes rosuvastatin. Allergies: none known. Smoker: Yes. Examination is normal. Assessment is possible stable angina. Plan is an exercise stress test and aspirin 81 mg daily.",
+   "picks": {
+    "Chief complaint": [
+     "Patient presents with chest tightness on exertion for one month."
+    ],
+    "History of present illness": [
+     "Patient presents with chest tightness on exertion for one month."
+    ],
+    "Past medical history": [
+     "He has high cholesterol."
+    ],
+    "Medications": [
+     "He takes rosuvastatin."
+    ],
+    "Allergies": [
+     "Allergies: none known."
+    ],
+    "Smoker": [
+     "Smoker: Yes."
+    ],
+    "Examination": [
+     "Examination is normal."
+    ],
+    "Assessment": [
+     "Assessment is possible stable angina."
+    ],
+    "Plan": [
+     "Plan is an exercise stress test and aspirin 81 mg daily."
+    ]
+   }
+  }
+ ]
+}

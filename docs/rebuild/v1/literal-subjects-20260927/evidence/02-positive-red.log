@@ -1,0 +1,24 @@
+test_exact_declaration_and_retained_heads_keep_every_source_word (core.tests.test_v3_literal_subjects.LiteralSubjects.test_exact_declaration_and_retained_heads_keep_every_source_word) ... FAIL
+
+======================================================================
+FAIL: test_exact_declaration_and_retained_heads_keep_every_source_word (core.tests.test_v3_literal_subjects.LiteralSubjects.test_exact_declaration_and_retained_heads_keep_every_source_word)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-literal-subjects/rebuild/core/tests/test_v3_literal_subjects.py", line 26, in test_exact_declaration_and_retained_heads_keep_every_source_word
+    self.assertEqual((answer['status'], answer['text']), ('supported', quote))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'No known drug allergies.')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'No known drug allergies.')
+
+----------------------------------------------------------------------
+Ran 1 test in 0.202s
+
+FAILED (failures=1)
+Found 1 test(s).
+Skipping setup of unused database(s): default.
+System check identified no issues (0 silenced).

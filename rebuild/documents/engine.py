@@ -19,8 +19,57 @@ from reportlab.pdfbase.pdfmetrics import stringWidth
 
 if __package__:
     from .tab_form import inspect_tabs, fill_tabs, _answer_tab, WARNINGS as TAB_WARNINGS
-else:  # Isolated worker imports this module directly.
+    from . import word_v3
+    from .assistance import outline as assistance_outline
+else:  # Isolated worker imports this module directly (before the sandbox closes the filesystem).
     from tab_form import inspect_tabs, fill_tabs, _answer_tab, WARNINGS as TAB_WARNINGS
+    import word_v3
+    from assistance import outline as assistance_outline
+
+V3_WARNINGS = [
+    "QuillMD found these answer areas automatically. Check every field against the form before using it: add any "
+    "area it missed, remove anything that is not an answer, and correct kinds and options. Your corrections are "
+    "recorded as manual mapping.",
+    "Answers expand and can change pagination. Review the exported document's layout.",
+]
+
+
+def is_v3_mapping(mapping):
+    return bool(mapping) and all(isinstance(f, dict) and (f.get("locator") or {}).get("contract") == word_v3.CONTRACT
+                                 for f in mapping)
+
+
+def process_v3(workspace, request):
+    """Contract v3: inspect / fill / outline / locate, on the original's bytes only."""
+    path = workspace / "input.docx"
+    data = path.read_bytes()
+    operation = request["operation"]
+    try:
+        if operation == "inspect":
+            found = word_v3.inspect(data)
+            return {"format": "docx", "fields": found["fields"], "warnings": found["notes"] + V3_WARNINGS,
+                    "contract": word_v3.CONTRACT, "adapter": "word-v3", "sandbox": "landlock+seccomp"}
+        if operation == "outline":
+            return {"format": "docx", **word_v3.outline(data), "adapter": "word-v3", "sandbox": "landlock+seccomp"}
+        if operation == "assistance_outline":
+            return {"format": "docx", **assistance_outline(data), "adapter": "word-v3", "sandbox": "landlock+seccomp"}
+        if operation == "locate":
+            return {"format": "docx", "fields": word_v3.locate(data, request.get("targets") or []),
+                    "contract": word_v3.CONTRACT, "adapter": "word-v3", "sandbox": "landlock+seccomp"}
+        if operation == "fill":
+            mapping, answers = request["mapping"], request["answers"]
+            if not is_v3_mapping(mapping):
+                fail("The stored mapping is not a contract v3 mapping.", "stale_mapping")
+            output = word_v3.fill(data, mapping, answers)
+            (workspace / "output.docx").write_bytes(output)
+            filled = [f["key"] for f in mapping if answers.get(f["key"]) not in (None, "", [])]
+            return {"format": "docx", "fields": mapping, "warnings": V3_WARNINGS[1:], "contract": word_v3.CONTRACT,
+                    "adapter": "word-v3", "sandbox": "landlock+seccomp", "filled": len(filled),
+                    "missing": [f["key"] for f in mapping if f["key"] not in filled]}
+    except word_v3.V3Failure as exc:
+        code = "stale_mapping" if exc.code == "mapping_mismatch" else exc.code
+        raise DocumentFailure(str(exc), code) from None
+    fail("Unsupported operation.")
 
 MAX_FIELDS = 200
 MAX_ANSWER = 100_000
@@ -610,6 +659,11 @@ def process(workspace, request):
     fmt = request["format"]
     path = workspace / ("input." + fmt)
     warnings = []
+    if fmt == "docx" and (request.get("engine") == "v3" and request.get("operation") in ("inspect", "outline", "locate", "assistance_outline")
+                          or request.get("operation") == "fill" and is_v3_mapping(request.get("mapping"))):
+        return process_v3(workspace, request)
+    if request.get("operation") in ("outline", "locate"):
+        fail("Manual mapping needs a contract v3 Word form.", "unsupported_format")
     if fmt == "docx":
         stored = request.get("mapping") if request.get("operation") == "fill" else None
         try:

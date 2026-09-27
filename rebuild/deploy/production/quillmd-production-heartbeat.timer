@@ -1,0 +1,11 @@
+[Unit]
+Description=QuillMD production outside-host heartbeat every five minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Unit=quillmd-production-heartbeat.service
+
+[Install]
+WantedBy=timers.target

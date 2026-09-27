@@ -1,0 +1,2141 @@
+{
+  "disk_source_sha256": "b20785d78b780451d49cfacc5cdfa4e8bbdfea4612fae4d1118e4b52d9b84d45",
+  "override": null,
+  "cases": [
+    {
+      "case": "repeated:settled",
+      "notes": "Indication: right knee assessment\nPain: yes\nComments: settled",
+      "answers": {
+        "v3_1": {
+          "label": "Indication",
+          "text": "right knee assessment",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Indication: right knee assessment",
+              "start": 0,
+              "end": 33
+            }
+          ],
+          "reviewed": false
+        },
+        "v3_2": {
+          "label": "Pain?",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Pain: yes",
+              "start": 34,
+              "end": 43
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "yes",
+            "evidence": [
+              {
+                "quote": "Pain: yes",
+                "start": 34,
+                "end": 43
+              }
+            ],
+            "context": [],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_3": {
+          "label": "Comments",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Comments: settled",
+              "start": 44,
+              "end": 61
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "settled",
+            "evidence": [
+              {
+                "quote": "Comments: settled",
+                "start": 44,
+                "end": 61
+              }
+            ],
+            "context": [],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_4": {
+          "label": "PAIN",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Pain: yes",
+              "start": 34,
+              "end": 43
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "yes",
+            "evidence": [
+              {
+                "quote": "Pain: yes",
+                "start": 34,
+                "end": 43
+              }
+            ],
+            "context": [],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_5": {
+          "label": "Comments",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Comments: settled",
+              "start": 44,
+              "end": 61
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "settled",
+            "evidence": [
+              {
+                "quote": "Comments: settled",
+                "start": 44,
+                "end": 61
+              }
+            ],
+            "context": [],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "repeated:left knee",
+      "notes": "Indication: right knee assessment\nPain: yes\nComments: left knee",
+      "answers": {
+        "v3_1": {
+          "label": "Indication",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Indication: right knee assessment",
+              "start": 0,
+              "end": 33
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "right knee assessment",
+            "evidence": [
+              {
+                "quote": "Indication: right knee assessment",
+                "start": 0,
+                "end": 33
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: left knee",
+                "start": 44,
+                "end": 63,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "v3_2": {
+          "label": "Pain?",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Pain: yes",
+              "start": 34,
+              "end": 43
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "yes",
+            "evidence": [
+              {
+                "quote": "Pain: yes",
+                "start": 34,
+                "end": 43
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: left knee",
+                "start": 44,
+                "end": 63,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_3": {
+          "label": "Comments",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Comments: left knee",
+              "start": 44,
+              "end": 63
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "left knee",
+            "evidence": [
+              {
+                "quote": "Comments: left knee",
+                "start": 44,
+                "end": 63
+              }
+            ],
+            "context": [],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_4": {
+          "label": "PAIN",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Pain: yes",
+              "start": 34,
+              "end": 43
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "yes",
+            "evidence": [
+              {
+                "quote": "Pain: yes",
+                "start": 34,
+                "end": 43
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: left knee",
+                "start": 44,
+                "end": 63,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_5": {
+          "label": "Comments",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Comments: left knee",
+              "start": 44,
+              "end": 63
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "left knee",
+            "evidence": [
+              {
+                "quote": "Comments: left knee",
+                "start": 44,
+                "end": 63
+              }
+            ],
+            "context": [],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "repeated:Lt. knee",
+      "notes": "Indication: right knee assessment\nPain: yes\nComments: Lt. knee",
+      "answers": {
+        "v3_1": {
+          "label": "Indication",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Indication: right knee assessment",
+              "start": 0,
+              "end": 33
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "right knee assessment",
+            "evidence": [
+              {
+                "quote": "Indication: right knee assessment",
+                "start": 0,
+                "end": 33
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: Lt. knee",
+                "start": 44,
+                "end": 62,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "v3_2": {
+          "label": "Pain?",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Pain: yes",
+              "start": 34,
+              "end": 43
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "yes",
+            "evidence": [
+              {
+                "quote": "Pain: yes",
+                "start": 34,
+                "end": 43
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: Lt. knee",
+                "start": 44,
+                "end": 62,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_3": {
+          "label": "Comments",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Comments: Lt. knee",
+              "start": 44,
+              "end": 62
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Lt. knee",
+            "evidence": [
+              {
+                "quote": "Comments: Lt. knee",
+                "start": 44,
+                "end": 62
+              }
+            ],
+            "context": [],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_4": {
+          "label": "PAIN",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Pain: yes",
+              "start": 34,
+              "end": 43
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "yes",
+            "evidence": [
+              {
+                "quote": "Pain: yes",
+                "start": 34,
+                "end": 43
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: Lt. knee",
+                "start": 44,
+                "end": 62,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_5": {
+          "label": "Comments",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Comments: Lt. knee",
+              "start": 44,
+              "end": 62
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Lt. knee",
+            "evidence": [
+              {
+                "quote": "Comments: Lt. knee",
+                "start": 44,
+                "end": 62
+              }
+            ],
+            "context": [],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "repeated:(L)",
+      "notes": "Indication: right knee assessment\nPain: yes\nComments: (L)",
+      "answers": {
+        "v3_1": {
+          "label": "Indication",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Indication: right knee assessment",
+              "start": 0,
+              "end": 33
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "right knee assessment",
+            "evidence": [
+              {
+                "quote": "Indication: right knee assessment",
+                "start": 0,
+                "end": 33
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: (L)",
+                "start": 44,
+                "end": 57,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "v3_2": {
+          "label": "Pain?",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Pain: yes",
+              "start": 34,
+              "end": 43
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "yes",
+            "evidence": [
+              {
+                "quote": "Pain: yes",
+                "start": 34,
+                "end": 43
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: (L)",
+                "start": 44,
+                "end": 57,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_3": {
+          "label": "Comments",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Comments: (L)",
+              "start": 44,
+              "end": 57
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "(L)",
+            "evidence": [
+              {
+                "quote": "Comments: (L)",
+                "start": 44,
+                "end": 57
+              }
+            ],
+            "context": [],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_4": {
+          "label": "PAIN",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Pain: yes",
+              "start": 34,
+              "end": 43
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "yes",
+            "evidence": [
+              {
+                "quote": "Pain: yes",
+                "start": 34,
+                "end": 43
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: (L)",
+                "start": 44,
+                "end": 57,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_5": {
+          "label": "Comments",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Comments: (L)",
+              "start": 44,
+              "end": 57
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "(L)",
+            "evidence": [
+              {
+                "quote": "Comments: (L)",
+                "start": 44,
+                "end": 57
+              }
+            ],
+            "context": [],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "repeated:\uff2c\uff45\uff46\uff54 knee",
+      "notes": "Indication: right knee assessment\nPain: yes\nComments: \uff2c\uff45\uff46\uff54 knee",
+      "answers": {
+        "v3_1": {
+          "label": "Indication",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Indication: right knee assessment",
+              "start": 0,
+              "end": 33
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "right knee assessment",
+            "evidence": [
+              {
+                "quote": "Indication: right knee assessment",
+                "start": 0,
+                "end": 33
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: \uff2c\uff45\uff46\uff54 knee",
+                "start": 44,
+                "end": 63,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "v3_2": {
+          "label": "Pain?",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Pain: yes",
+              "start": 34,
+              "end": 43
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "yes",
+            "evidence": [
+              {
+                "quote": "Pain: yes",
+                "start": 34,
+                "end": 43
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: \uff2c\uff45\uff46\uff54 knee",
+                "start": 44,
+                "end": 63,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_3": {
+          "label": "Comments",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Comments: \uff2c\uff45\uff46\uff54 knee",
+              "start": 44,
+              "end": 63
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "\uff2c\uff45\uff46\uff54 knee",
+            "evidence": [
+              {
+                "quote": "Comments: \uff2c\uff45\uff46\uff54 knee",
+                "start": 44,
+                "end": 63
+              }
+            ],
+            "context": [],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_4": {
+          "label": "PAIN",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Pain: yes",
+              "start": 34,
+              "end": 43
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "yes",
+            "evidence": [
+              {
+                "quote": "Pain: yes",
+                "start": 34,
+                "end": 43
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: \uff2c\uff45\uff46\uff54 knee",
+                "start": 44,
+                "end": 63,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_5": {
+          "label": "Comments",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Comments: \uff2c\uff45\uff46\uff54 knee",
+              "start": 44,
+              "end": 63
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "\uff2c\uff45\uff46\uff54 knee",
+            "evidence": [
+              {
+                "quote": "Comments: \uff2c\uff45\uff46\uff54 knee",
+                "start": 44,
+                "end": 63
+              }
+            ],
+            "context": [],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "repeated:le\u200bft knee",
+      "notes": "Indication: right knee assessment\nPain: yes\nComments: le\u200bft knee",
+      "answers": {
+        "v3_1": {
+          "label": "Indication",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Indication: right knee assessment",
+              "start": 0,
+              "end": 33
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "right knee assessment",
+            "evidence": [
+              {
+                "quote": "Indication: right knee assessment",
+                "start": 0,
+                "end": 33
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: le\u200bft knee",
+                "start": 44,
+                "end": 64,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "v3_2": {
+          "label": "Pain?",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Pain: yes",
+              "start": 34,
+              "end": 43
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "yes",
+            "evidence": [
+              {
+                "quote": "Pain: yes",
+                "start": 34,
+                "end": 43
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: le\u200bft knee",
+                "start": 44,
+                "end": 64,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_3": {
+          "label": "Comments",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Comments: le\u200bft knee",
+              "start": 44,
+              "end": 64
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "le\u200bft knee",
+            "evidence": [
+              {
+                "quote": "Comments: le\u200bft knee",
+                "start": 44,
+                "end": 64
+              }
+            ],
+            "context": [],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_4": {
+          "label": "PAIN",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Pain: yes",
+              "start": 34,
+              "end": 43
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "yes",
+            "evidence": [
+              {
+                "quote": "Pain: yes",
+                "start": 34,
+                "end": 43
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: le\u200bft knee",
+                "start": 44,
+                "end": 64,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_5": {
+          "label": "Comments",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Comments: le\u200bft knee",
+              "start": 44,
+              "end": 64
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "le\u200bft knee",
+            "evidence": [
+              {
+                "quote": "Comments: le\u200bft knee",
+                "start": 44,
+                "end": 64
+              }
+            ],
+            "context": [],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "repeated:Indication is wrong.",
+      "notes": "Indication: right knee assessment\nPain: yes\nComments: Indication is wrong.",
+      "answers": {
+        "v3_1": {
+          "label": "Indication",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Indication: right knee assessment",
+              "start": 0,
+              "end": 33
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "right knee assessment",
+            "evidence": [
+              {
+                "quote": "Indication: right knee assessment",
+                "start": 0,
+                "end": 33
+              }
+            ],
+            "context": [
+              {
+                "quote": "Indication: right knee assessment",
+                "start": 0,
+                "end": 33,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Comments: Indication is wrong.",
+                "start": 44,
+                "end": 74,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "v3_2": {
+          "label": "Pain?",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Pain: yes",
+              "start": 34,
+              "end": 43
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "yes",
+            "evidence": [
+              {
+                "quote": "Pain: yes",
+                "start": 34,
+                "end": 43
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: Indication is wrong.",
+                "start": 44,
+                "end": 74,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_3": {
+          "label": "Comments",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Comments: Indication is wrong.",
+              "start": 44,
+              "end": 74
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Indication is wrong.",
+            "evidence": [
+              {
+                "quote": "Comments: Indication is wrong.",
+                "start": 44,
+                "end": 74
+              }
+            ],
+            "context": [],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_4": {
+          "label": "PAIN",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Pain: yes",
+              "start": 34,
+              "end": 43
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "yes",
+            "evidence": [
+              {
+                "quote": "Pain: yes",
+                "start": 34,
+                "end": 43
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: Indication is wrong.",
+                "start": 44,
+                "end": 74,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_5": {
+          "label": "Comments",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Comments: Indication is wrong.",
+              "start": 44,
+              "end": 74
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Indication is wrong.",
+            "evidence": [
+              {
+                "quote": "Comments: Indication is wrong.",
+                "start": 44,
+                "end": 74
+              }
+            ],
+            "context": [],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "repeated:Actually, the indication is left knee pain.",
+      "notes": "Indication: right knee assessment\nPain: yes\nComments: Actually, the indication is left knee pain.",
+      "answers": {
+        "v3_1": {
+          "label": "Indication",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Indication: right knee assessment",
+              "start": 0,
+              "end": 33
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "right knee assessment",
+            "evidence": [
+              {
+                "quote": "Indication: right knee assessment",
+                "start": 0,
+                "end": 33
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: Actually, the indication is left knee pain.",
+                "start": 44,
+                "end": 97,
+                "after": true,
+                "same": false
+              },
+              {
+                "quote": "Indication: right knee assessment",
+                "start": 0,
+                "end": 33,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "v3_2": {
+          "label": "Pain?",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Pain: yes",
+              "start": 34,
+              "end": 43
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "yes",
+            "evidence": [
+              {
+                "quote": "Pain: yes",
+                "start": 34,
+                "end": 43
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: Actually, the indication is left knee pain.",
+                "start": 44,
+                "end": 97,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_3": {
+          "label": "Comments",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Comments: Actually, the indication is left knee pain.",
+              "start": 44,
+              "end": 97
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Actually, the indication is left knee pain.",
+            "evidence": [
+              {
+                "quote": "Comments: Actually, the indication is left knee pain.",
+                "start": 44,
+                "end": 97
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: Actually, the indication is left knee pain.",
+                "start": 44,
+                "end": 97,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_4": {
+          "label": "PAIN",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Pain: yes",
+              "start": 34,
+              "end": 43
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "yes",
+            "evidence": [
+              {
+                "quote": "Pain: yes",
+                "start": 34,
+                "end": 43
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: Actually, the indication is left knee pain.",
+                "start": 44,
+                "end": 97,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_5": {
+          "label": "Comments",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Comments: Actually, the indication is left knee pain.",
+              "start": 44,
+              "end": 97
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Actually, the indication is left knee pain.",
+            "evidence": [
+              {
+                "quote": "Comments: Actually, the indication is left knee pain.",
+                "start": 44,
+                "end": 97
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: Actually, the indication is left knee pain.",
+                "start": 44,
+                "end": 97,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "repeated:The pain is in the other knee.",
+      "notes": "Indication: right knee assessment\nPain: yes\nComments: The pain is in the other knee.",
+      "answers": {
+        "v3_1": {
+          "label": "Indication",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Indication: right knee assessment",
+              "start": 0,
+              "end": 33
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "right knee assessment",
+            "evidence": [
+              {
+                "quote": "Indication: right knee assessment",
+                "start": 0,
+                "end": 33
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: The pain is in the other knee.",
+                "start": 44,
+                "end": 84,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "v3_2": {
+          "label": "Pain?",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Pain: yes",
+              "start": 34,
+              "end": 43
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "yes",
+            "evidence": [
+              {
+                "quote": "Pain: yes",
+                "start": 34,
+                "end": 43
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: The pain is in the other knee.",
+                "start": 44,
+                "end": 84,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_3": {
+          "label": "Comments",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Comments: The pain is in the other knee.",
+              "start": 44,
+              "end": 84
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "The pain is in the other knee.",
+            "evidence": [
+              {
+                "quote": "Comments: The pain is in the other knee.",
+                "start": 44,
+                "end": 84
+              }
+            ],
+            "context": [],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_4": {
+          "label": "PAIN",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Pain: yes",
+              "start": 34,
+              "end": 43
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "yes",
+            "evidence": [
+              {
+                "quote": "Pain: yes",
+                "start": 34,
+                "end": 43
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: The pain is in the other knee.",
+                "start": 44,
+                "end": 84,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_5": {
+          "label": "Comments",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Comments: The pain is in the other knee.",
+              "start": 44,
+              "end": 84
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "The pain is in the other knee.",
+            "evidence": [
+              {
+                "quote": "Comments: The pain is in the other knee.",
+                "start": 44,
+                "end": 84
+              }
+            ],
+            "context": [],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "repeated:see above.",
+      "notes": "Indication: right knee assessment\nPain: yes\nComments: see above.",
+      "answers": {
+        "v3_1": {
+          "label": "Indication",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Indication: right knee assessment\nPain: yes\nComments: see above.",
+              "start": 0,
+              "end": 64
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Indication: right knee assessment",
+              "start": 0,
+              "end": 33
+            }
+          ],
+          "held_candidate": {
+            "text": "right knee assessment",
+            "evidence": [
+              {
+                "quote": "Indication: right knee assessment",
+                "start": 0,
+                "end": 33
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: see above.",
+                "start": 44,
+                "end": 64,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "v3_2": {
+          "label": "Pain?",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Pain: yes",
+              "start": 34,
+              "end": 43
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Pain: yes",
+              "start": 34,
+              "end": 43
+            }
+          ],
+          "held_candidate": {
+            "text": "yes",
+            "evidence": [
+              {
+                "quote": "Pain: yes",
+                "start": 34,
+                "end": 43
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: see above.",
+                "start": 44,
+                "end": 64,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_3": {
+          "label": "Comments",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Comments: see above.",
+              "start": 44,
+              "end": 64
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Comments: see above.",
+              "start": 44,
+              "end": 64
+            }
+          ],
+          "held_candidate": {
+            "text": "see above.",
+            "evidence": [
+              {
+                "quote": "Comments: see above.",
+                "start": 44,
+                "end": 64
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: see above.",
+                "start": 44,
+                "end": 64,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_4": {
+          "label": "PAIN",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Pain: yes",
+              "start": 34,
+              "end": 43
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Pain: yes",
+              "start": 34,
+              "end": 43
+            }
+          ],
+          "held_candidate": {
+            "text": "yes",
+            "evidence": [
+              {
+                "quote": "Pain: yes",
+                "start": 34,
+                "end": 43
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: see above.",
+                "start": 44,
+                "end": 64,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        },
+        "v3_5": {
+          "label": "Comments",
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Comments: see above.",
+              "start": 44,
+              "end": 64
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Comments: see above.",
+              "start": 44,
+              "end": 64
+            }
+          ],
+          "held_candidate": {
+            "text": "see above.",
+            "evidence": [
+              {
+                "quote": "Comments: see above.",
+                "start": 44,
+                "end": 64
+              }
+            ],
+            "context": [
+              {
+                "quote": "Comments: see above.",
+                "start": 44,
+                "end": 64,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+          }
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "plan:positive",
+      "notes": "Assessment: mechanical low back pain.\nPlan: naproxen 500 mg twice daily with food and physiotherapy.",
+      "answers": {
+        "Assessment": {
+          "text": "mechanical low back pain.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Assessment: mechanical low back pain.",
+              "start": 0,
+              "end": 37
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "naproxen 500 mg twice daily with food and physiotherapy.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: naproxen 500 mg twice daily with food and physiotherapy.",
+              "start": 38,
+              "end": 100
+            }
+          ],
+          "reviewed": false
+        },
+        "Allergies": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "plan:question",
+      "notes": "Assessment: mechanical low back pain.\nPlan: naproxen?",
+      "answers": {
+        "Assessment": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Assessment: mechanical low back pain.",
+              "start": 0,
+              "end": 37
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "mechanical low back pain.",
+            "evidence": [
+              {
+                "quote": "Assessment: mechanical low back pain.",
+                "start": 0,
+                "end": 37
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: naproxen?",
+                "start": 38,
+                "end": 53,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Plan: naproxen?",
+              "start": 38,
+              "end": 53
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "naproxen?",
+            "evidence": [
+              {
+                "quote": "Plan: naproxen?",
+                "start": 38,
+                "end": 53
+              }
+            ],
+            "context": [],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Allergies": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "plan:pointer",
+      "notes": "Assessment: mechanical low back pain.\nPlan: see above.",
+      "answers": {
+        "Assessment": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Assessment: mechanical low back pain.\nPlan: see above.",
+              "start": 0,
+              "end": 54
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Assessment: mechanical low back pain.",
+              "start": 0,
+              "end": 37
+            }
+          ],
+          "held_candidate": {
+            "text": "mechanical low back pain.",
+            "evidence": [
+              {
+                "quote": "Assessment: mechanical low back pain.",
+                "start": 0,
+                "end": 37
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: see above.",
+                "start": 38,
+                "end": 54,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Assessment: mechanical low back pain.\nPlan: see above.",
+              "start": 0,
+              "end": 54
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Plan: see above.",
+              "start": 38,
+              "end": 54
+            }
+          ],
+          "held_candidate": {
+            "text": "see above.",
+            "evidence": [
+              {
+                "quote": "Plan: see above.",
+                "start": 38,
+                "end": 54
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: see above.",
+                "start": 38,
+                "end": 54,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Allergies": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "plan:correction",
+      "notes": "Assessment: mechanical low back pain.\nPlan: naproxen. Actually, do not give it.",
+      "answers": {
+        "Assessment": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Assessment: mechanical low back pain.",
+              "start": 0,
+              "end": 37
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "mechanical low back pain.",
+            "evidence": [
+              {
+                "quote": "Assessment: mechanical low back pain.",
+                "start": 0,
+                "end": 37
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: naproxen. Actually, do not give it.",
+                "start": 38,
+                "end": 79,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Plan: naproxen. Actually, do not give it.",
+              "start": 38,
+              "end": 79
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "naproxen. Actually, do not give it.",
+            "evidence": [
+              {
+                "quote": "Plan: naproxen. Actually, do not give it.",
+                "start": 38,
+                "end": 79
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: naproxen. Actually, do not give it.",
+                "start": 38,
+                "end": 79,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Allergies": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "plan:reference",
+      "notes": "Assessment: infection.\nPlan: the assessment is wrong.",
+      "answers": {
+        "Assessment": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Assessment: infection.",
+              "start": 0,
+              "end": 22
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "infection.",
+            "evidence": [
+              {
+                "quote": "Assessment: infection.",
+                "start": 0,
+                "end": 22
+              }
+            ],
+            "context": [
+              {
+                "quote": "Assessment: infection.",
+                "start": 0,
+                "end": 22,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Plan: the assessment is wrong.",
+                "start": 23,
+                "end": 53,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Plan: the assessment is wrong.",
+              "start": 23,
+              "end": 53
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "the assessment is wrong.",
+            "evidence": [
+              {
+                "quote": "Plan: the assessment is wrong.",
+                "start": 23,
+                "end": 53
+              }
+            ],
+            "context": [
+              {
+                "quote": "Assessment: infection.",
+                "start": 0,
+                "end": 22,
+                "after": false,
+                "same": false
+              },
+              {
+                "quote": "Plan: the assessment is wrong.",
+                "start": 23,
+                "end": 53,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Allergies": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "plan:negation",
+      "notes": "Assessment: infection.\nPlan: no infection.",
+      "answers": {
+        "Assessment": {
+          "text": "infection.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Assessment: infection.",
+              "start": 0,
+              "end": 22
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "no infection.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: no infection.",
+              "start": 23,
+              "end": 42
+            }
+          ],
+          "reviewed": false
+        },
+        "Allergies": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "plan:long-negation",
+      "notes": "Assessment: active bacterial infection.\nPlan: no active bacterial infection.",
+      "answers": {
+        "Assessment": {
+          "text": "active bacterial infection.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Assessment: active bacterial infection.",
+              "start": 0,
+              "end": 39
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "no active bacterial infection.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: no active bacterial infection.",
+              "start": 40,
+              "end": 76
+            }
+          ],
+          "reviewed": false
+        },
+        "Allergies": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "plan:conditional",
+      "notes": "Assessment: infection.\nPlan: amoxicillin if symptoms develop.",
+      "answers": {
+        "Assessment": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Assessment: infection.\nPlan: amoxicillin if symptoms develop.",
+              "start": 0,
+              "end": 61
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Assessment: infection.",
+              "start": 0,
+              "end": 22
+            }
+          ],
+          "held_candidate": {
+            "text": "infection.",
+            "evidence": [
+              {
+                "quote": "Assessment: infection.",
+                "start": 0,
+                "end": 22
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: amoxicillin if symptoms develop.",
+                "start": 23,
+                "end": 61,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Assessment: infection.\nPlan: amoxicillin if symptoms develop.",
+              "start": 0,
+              "end": 61
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Plan: amoxicillin if symptoms develop.",
+              "start": 23,
+              "end": 61
+            }
+          ],
+          "held_candidate": {
+            "text": "amoxicillin if symptoms develop.",
+            "evidence": [
+              {
+                "quote": "Plan: amoxicillin if symptoms develop.",
+                "start": 23,
+                "end": 61
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: amoxicillin if symptoms develop.",
+                "start": 23,
+                "end": 61,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Allergies": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "refusals": []
+    }
+  ]
+}

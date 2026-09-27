@@ -1,0 +1,83 @@
+{
+  "schema": 1,
+  "source_candidate": "edd02753c0816e3eb1d0955cfd6a3494f401bb93",
+  "evidence_scope": "Synthetic offline finite regressions and bounded independent refutation; not live-model, corpus, production identity or native Word proof.",
+  "files": {
+    "candidate.sha256": {
+      "sha256": "0a8ce14ef3ac79cefe236f355c5ee98720404b07dada3d84ca66e7a2955ad1c1",
+      "bytes": 482
+    },
+    "cleared-answer-and-review-final.log": {
+      "sha256": "618180f3077e358fa0b6e552c52f0ce2a56e0912c2a59de382c1f898ae123085",
+      "bytes": 601
+    },
+    "cleared-answer-red.log": {
+      "sha256": "d33fd2dbf15ec77be96f8ed6288b699daa093cea34365765dcd383bc9590113e",
+      "bytes": 1198
+    },
+    "final-source-sha256.json": {
+      "sha256": "8702668a32dea9637cfbc3c2dd3bf4c27fa895d4eae3482486f2f4976d900fb5",
+      "bytes": 762
+    },
+    "independent-repair-refutation.md": {
+      "sha256": "81fc4313de9ea6d990618b3377a4f418ee13a107f4b13200348bda163d358775",
+      "bytes": 1071
+    },
+    "known-benchmark-module-initial.log": {
+      "sha256": "3eb61285f4ba80ce1701b249ec22893d541cb65cc8d60c729eb395301b50440b",
+      "bytes": 2125
+    },
+    "known-benchmark-report.txt": {
+      "sha256": "b4f6707f4d4e6ee13546f1f2afc62c83a24f69922ae037145a2c9c861edf5ce5",
+      "bytes": 15106
+    },
+    "preserved-draft-benchmark-report.txt": {
+      "sha256": "b4f6707f4d4e6ee13546f1f2afc62c83a24f69922ae037145a2c9c861edf5ce5",
+      "bytes": 15106
+    },
+    "reused-word-build-proof.json": {
+      "sha256": "110f34b1fc199a75b5069d6fdea78f25129818088cfdb6904fc0815a1aa7c676",
+      "bytes": 2528
+    },
+    "runtime-verification.txt": {
+      "sha256": "40a6740aaa1a2382b4e525915787503128fba94cc7c420ef49d6e71a376a9947",
+      "bytes": 98
+    },
+    "sonnet-focused.log": {
+      "sha256": "7ba2ee0867d11f69764a5381676670f822f81b2bc09db915a595da6f5a94f128",
+      "bytes": 169
+    },
+    "views-cleared-answer-failing.py": {
+      "sha256": "991f32ffb8dff330997d54abf76ab28b4ea20a1019e59e88cd2b2834681fc375",
+      "bytes": 173620
+    },
+    "wm-and-profile-regression.log": {
+      "sha256": "7d88b01380a3edc820997bfc0b0e22fa2d54cebaf222152545f852e67b33ec34",
+      "bytes": 1058
+    },
+    "wm-refutation.log": {
+      "sha256": "307b621126dceb0e30f9579eff58d8c7ff144407965fa22802acc4c294463427",
+      "bytes": 806
+    },
+    "wm-sonnet-independent.json": {
+      "sha256": "ec42fe2dd232fd95bde271a8c3d32bacfaf8cb12e9808d3e54b88cb3fd244564",
+      "bytes": 367
+    },
+    "wm-sonnet-independent.py": {
+      "sha256": "bb7ea480d07751bc73555d86fdca4bc3c95cef805a88bbaf3f3c1b9afc58c802",
+      "bytes": 2622
+    },
+    "wm_operator_workflow.py": {
+      "sha256": "9ecdc2c5461bff528984cfc94b3d78e9a4e6f4604cd342fa8c19e0c57bc6a4e5",
+      "bytes": 434
+    },
+    "wm_refutation.py": {
+      "sha256": "479122188c62edfd25009903f29482aef4002e226645f7d4afbcd74efc9e0411",
+      "bytes": 2699
+    },
+    "word-and-shared-regression.log": {
+      "sha256": "c4c4b17cf191efa157111f2847f6567367cebc2d99ba515b8ed95a4b8448bff0",
+      "bytes": 2143
+    }
+  }
+}

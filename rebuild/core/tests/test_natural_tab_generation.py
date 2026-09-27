@@ -142,7 +142,7 @@ class NaturalTabGenerationTests(SimpleTestCase):
         self.assertEqual(result[self.fields[0]['key']]['text'],'Synthetic Example')
         self.assertEqual(sum(a['status']=='supported' for a in result.values()),2)
 
-    @override_settings(AI_MODE='live',AI_PROVIDER='anthropic',AI_MODEL='synthetic-no-network',
+    @override_settings(AI_MODE='live',AI_PROVIDER='anthropic',AI_MODEL='claude-sonnet-4-6',
         AI_INPUT_RATE='1',AI_OUTPUT_RATE='5',AI_CACHED_RATE='0.1')
     def test_provider_adapter_sends_bounded_units_and_retains_raw_id_selection_for_validation(self):
         units,_=g.source_units(NOTES,self.fields)
@@ -181,7 +181,7 @@ class NaturalTabGenerationTests(SimpleTestCase):
         key=next(f['key'] for f in fields if f['label']=='CONSENT DOCUMENTATION')
         self.assertEqual((result[key]['status'],result[key]['text']),('conflict',''))
 
-    @override_settings(AI_MODE='live',AI_PROVIDER='anthropic',AI_MODEL='synthetic-no-network',
+    @override_settings(AI_MODE='live',AI_PROVIDER='anthropic',AI_MODEL='claude-sonnet-4-6',
         AI_INPUT_RATE='1',AI_OUTPUT_RATE='5',AI_CACHED_RATE='0.1')
     def test_queued_legacy_prompt_and_receipt_keep_original_quotation_contract(self):
         config=g.configuration(); config['prompt_version']='extractive-v3-reviewed-context-labels'

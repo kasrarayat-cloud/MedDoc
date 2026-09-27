@@ -1,0 +1,81 @@
+Creating test database for alias 'default' ('test_quillmd_ci')...
+Found 23 test(s).
+Operations to perform:
+  Synchronize unmigrated apps: django_otp, messages, staticfiles
+  Apply all migrations: auth, contenttypes, core, otp_totp, sessions
+Synchronizing apps without migrations:
+  Creating tables...
+    Running deferred SQL...
+Running migrations:
+  Applying contenttypes.0001_initial... OK
+  Applying contenttypes.0002_remove_content_type_name... OK
+  Applying auth.0001_initial... OK
+  Applying auth.0002_alter_permission_name_max_length... OK
+  Applying auth.0003_alter_user_email_max_length... OK
+  Applying auth.0004_alter_user_username_opts... OK
+  Applying auth.0005_alter_user_last_login_null... OK
+  Applying auth.0006_require_contenttypes_0002... OK
+  Applying auth.0007_alter_validators_add_error_messages... OK
+  Applying auth.0008_alter_user_username_max_length... OK
+  Applying auth.0009_alter_user_last_name_max_length... OK
+  Applying auth.0010_alter_group_name_max_length... OK
+  Applying auth.0011_update_proxy_permissions... OK
+  Applying auth.0012_alter_user_first_name_max_length... OK
+  Applying core.0001_initial... OK
+  Applying core.0002_job_payer... OK
+  Applying core.0003_immutable_records... OK
+  Applying core.0004_job_config... OK
+  Applying core.0005_providerreceipt... OK
+  Applying core.0006_receipt_immutable... OK
+  Applying core.0007_job_result_path_job_result_sha256... OK
+  Applying core.0008_payment_event_evidence... OK
+  Applying core.0009_provider_identifiers... OK
+  Applying core.0010_canonical_provider_settlement... OK
+  Applying core.0011_template_clinical_review... OK
+  Applying core.0012_billing_policy... OK
+  Applying core.0013_recording_charge_limit... OK
+  Applying core.0014_encounter_service_date... OK
+  Applying core.0015_reconciliation_evidence_guard... OK
+  Applying core.0016_user_session_version... OK
+  Applying core.0017_reconciliation_evidence_kind... OK
+  Applying core.0018_servicehealth... OK
+  Applying core.0019_clinicinvitation... OK
+  Applying core.0020_payment_livemode... OK
+  Applying core.0021_word_v3_mapping_review... OK
+  Applying core.0022_mapping_job_scope... OK
+  Applying otp_totp.0001_initial... OK
+  Applying otp_totp.0002_auto_20190420_0723... OK
+  Applying otp_totp.0003_add_timestamps... OK
+  Applying sessions.0001_initial...test_changed_scope_is_held_on_page_save_and_finalize (core.tests.test_v3_literal_subjects.LiteralSubjectsWorkflow.test_changed_scope_is_held_on_page_save_and_finalize) ... /opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-literal-subjects/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+ok
+test_worker_review_save_finalize_exports_complete_negative_declaration_and_head (core.tests.test_v3_literal_subjects.LiteralSubjectsWorkflow.test_worker_review_save_finalize_exports_complete_negative_declaration_and_head) ... ok
+test_declaration_does_not_relax_fragments_or_other_allergy_wording (core.tests.test_v3_literal_subjects.LiteralSubjects.test_declaration_does_not_relax_fragments_or_other_allergy_wording) ... ok
+test_duplicate_declarations_and_cross_topic_allergy_references_stay_held (core.tests.test_v3_literal_subjects.LiteralSubjects.test_duplicate_declarations_and_cross_topic_allergy_references_stay_held) ... ok
+test_exact_declaration_and_retained_heads_keep_every_source_word (core.tests.test_v3_literal_subjects.LiteralSubjects.test_exact_declaration_and_retained_heads_keep_every_source_word) ... ok
+test_family_scope_corrections_and_unknown_neighbours_remain_held (core.tests.test_v3_literal_subjects.LiteralSubjects.test_family_scope_corrections_and_unknown_neighbours_remain_held) ... ok
+test_new_subjects_cannot_fill_foreign_fields (core.tests.test_v3_literal_subjects.LiteralSubjects.test_new_subjects_cannot_fill_foreign_fields) ... ok
+test_only_unique_unscoped_text_destination_qualifies (core.tests.test_v3_literal_subjects.LiteralSubjects.test_only_unique_unscoped_text_destination_qualifies) ... ok
+test_retained_anatomical_heads_do_not_strip_negation_or_qualifiers (core.tests.test_v3_literal_subjects.LiteralSubjects.test_retained_anatomical_heads_do_not_strip_negation_or_qualifiers) ... ok
+test_complete_retained_note9_has_seven_supported_unchanged_answers (core.tests.test_v3_ordinary_context.ExactClinicalSubjects.test_complete_retained_note9_has_seven_supported_unchanged_answers) ... ok
+test_retained_independent_examination_and_assessment_keep_source_words (core.tests.test_v3_ordinary_context.ExactClinicalSubjects.test_retained_independent_examination_and_assessment_keep_source_words) ... ok
+test_source_subject_never_strips_negation_or_reassigns_another_subject (core.tests.test_v3_ordinary_context.ExactClinicalSubjects.test_source_subject_never_strips_negation_or_reassigns_another_subject) ... ok
+test_repeated_source_subject_cannot_silently_drop_another_medication_statement (core.tests.test_v3_ordinary_context.RepeatedSourceSubjectRefutation.test_repeated_source_subject_cannot_silently_drop_another_medication_statement) ... ok
+test_assessment_and_allergy_answers_cannot_ignore_each_other (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_assessment_and_allergy_answers_cannot_ignore_each_other) ... ok
+test_changed_continuation_and_another_modifying_reference_require_review (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_changed_continuation_and_another_modifying_reference_require_review) ... ok
+test_complete_visit_purpose_is_recorded_without_losing_its_source (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_complete_visit_purpose_is_recorded_without_losing_its_source) ... ok
+test_exact_continuation_does_not_choose_between_multiple_sources (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_exact_continuation_does_not_choose_between_multiple_sources) ... ok
+test_exact_continuation_with_no_referenced_source_requires_review (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_exact_continuation_with_no_referenced_source_requires_review) ... ok
+test_medication_complement_guard_reads_invisible_and_compatibility_characters (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_medication_complement_guard_reads_invisible_and_compatibility_characters) ... ok
+test_medication_for_complement_does_not_establish_patient_ownership (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_medication_for_complement_does_not_establish_patient_ownership) ... ok
+test_unknown_ownership_and_planned_predicates_never_become_patient_answers (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unknown_ownership_and_planned_predicates_never_become_patient_answers) ... ok
+test_unowned_reference_blocks_cannot_disappear_from_continuation_governance (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unowned_reference_blocks_cannot_disappear_from_continuation_governance) ... ok
+test_visit_purpose_reference_cannot_hide_a_qualifier_or_extra_statement (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_visit_purpose_reference_cannot_hide_a_qualifier_or_extra_statement) ... ok
+
+----------------------------------------------------------------------
+Ran 23 tests in 5.246s
+
+OK
+Destroying test database for alias 'default' ('test_quillmd_ci')...
+ OK
+System check identified no issues (0 silenced).

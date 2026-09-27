@@ -1,0 +1,44 @@
+Using existing test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+./opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+.........................................................................F.........F...................................................
+======================================================================
+FAIL: test_an_option_is_never_read_from_a_labelled_sentence_inside_another_line (core.tests.test_v3_ordinary_notes.OrdinaryNotesOnV3Forms.test_an_option_is_never_read_from_a_labelled_sentence_inside_another_line)
+R2: the complete-sentence clause read 'Smoker: yes.' out of a line about the patient's father.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/tests/test_v3_ordinary_notes.py", line 106, in test_an_option_is_never_read_from_a_labelled_sentence_inside_another_line
+    self.assertEqual((answer['status'], answer['text']), ('conflict', ''), notes)
+AssertionError: Tuples differ: ('supported', 'Yes') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Yes')
++ ('conflict', '') : Father: MI at 50. Smoker: yes.
+
+======================================================================
+FAIL: test_a_v3_job_quoted_under_the_contract_is_sent_the_complete_sentence_request (core.tests.test_v3_ordinary_notes.QueuedContractAttribution.test_a_v3_job_quoted_under_the_contract_is_sent_the_complete_sentence_request)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/tests/test_v3_ordinary_notes.py", line 397, in test_a_v3_job_quoted_under_the_contract_is_sent_the_complete_sentence_request
+    self.assertEqual((fixture['v3_4']['status'], fixture['v3_4']['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'Yes') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Yes')
++ ('conflict', '')
+
+----------------------------------------------------------------------
+Ran 136 tests in 30.735s
+
+FAILED (failures=2)
+Preserving test database for alias 'default'...
+Found 136 test(s).
+System check identified no issues (0 silenced).

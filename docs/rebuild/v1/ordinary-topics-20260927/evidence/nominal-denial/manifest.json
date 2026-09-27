@@ -1,0 +1,70 @@
+{
+  "generation-before.py": {
+    "bytes": 229004,
+    "sha256": "b20785d78b780451d49cfacc5cdfa4e8bbdfea4612fae4d1118e4b52d9b84d45"
+  },
+  "green.log": {
+    "bytes": 812,
+    "sha256": "089a03165d4e4189ddaf1528fe4d68b14c715b901ee3ee2ca01b62b44966ceb1"
+  },
+  "known-results.json": {
+    "bytes": 194582,
+    "sha256": "42c76b9a10f3b9de3c5ac81c84de6ffcd142886e7f2cfa65cff9a708a79524d9"
+  },
+  "known.log": {
+    "bytes": 2923,
+    "sha256": "ad4a9c68b8df3e04c5515588b258513e93690377fdd1084b0f802c5aaa9602b1"
+  },
+  "measure-known.py": {
+    "bytes": 1704,
+    "sha256": "381112f3949b14d6947b2180a7343b59133e218793b0db7ab5c9aefe12b33a85"
+  },
+  "red.log": {
+    "bytes": 2160,
+    "sha256": "23ba67ae813714f1fb94a1302d8218c507e3319399e92956f67e69ba759aea8b"
+  },
+  "reviewer-REPORT.md": {
+    "bytes": 5152,
+    "sha256": "29476727ab2f983723674213d58df94ecd28404627cd47bf6b07ad1ee301a8bd"
+  },
+  "reviewer-SHA256.json": {
+    "bytes": 908,
+    "sha256": "d3ab16a215a55abc77e0eac7ed645cd1b7a2b30009fe9e1eaaea90d277b2db8c"
+  },
+  "reviewer-after.json": {
+    "bytes": 68773,
+    "sha256": "3a4f4d5d708e32f58cb216ee3dc9969932650dccae2d2e4d14cc3a9dc0267cb0"
+  },
+  "reviewer-base.json": {
+    "bytes": 93900,
+    "sha256": "1da37da4f6f549b6e5477e79e3a80aa6bf2fa0750202899b0812d811f8060cb0"
+  },
+  "reviewer-candidate.json": {
+    "bytes": 67257,
+    "sha256": "0dd017b160a9a7075fedbcfa566a65902c35e8fdfd42157b4031d1d48abf1e9e"
+  },
+  "reviewer-forced-after.json": {
+    "bytes": 6268,
+    "sha256": "63978e66c0620d3937d8409d86f9aaf7122969208167cd644fc7969bc32658a3"
+  },
+  "reviewer-nominal-forced-base.json": {
+    "bytes": 7242,
+    "sha256": "9b286531864985b150394e7644f9096e38e1920d30093f6c279e45868fb1dc0a"
+  },
+  "reviewer-nominal-forced-candidate.json": {
+    "bytes": 4634,
+    "sha256": "2fdef5f0cc561ee8fdbba0f7a5c2bae890b90fa605efa6894faf023d32466740"
+  },
+  "reviewer-nominal-forced.py": {
+    "bytes": 1740,
+    "sha256": "f268f12b6b4b706dbebc3962b3f94ddc426c857dbfee60aa9db399a218eb4235"
+  },
+  "reviewer-probe.py": {
+    "bytes": 2619,
+    "sha256": "bd836b6289e49789c00b95bcfa5d9c6ec6d16858e66915294a29f4d201762499"
+  },
+  "root-red.json": {
+    "bytes": 2490,
+    "sha256": "c514e5fd2c21e7fc8e301e642bf56627e435c69bfdcce9643ec9b3c1ed45d22f"
+  }
+}

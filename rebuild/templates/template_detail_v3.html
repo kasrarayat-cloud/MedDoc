@@ -1,0 +1,62 @@
+{% if mapping_assistance_enabled %}<p><a href="{% url 'mapping_assistance' template.pk %}">Mapping assistance and unresolved areas</a></p>{% endif %}
+{% if v3_error %}<div class="notice warning" role="alert" data-v3-error><strong>Not saved.</strong> {{ v3_error }}</div>{% endif %}
+{% if version.confirmed %}<div class="notice success" data-v3-confirmed>Mapping version {{ version.number }} was confirmed by {{ version.confirmed.confirmed_by.email }} on {{ version.confirmed.created_at|date:'M j, Y, H:i' }} UTC: every field checked against the form.</div>
+{% else %}<div class="notice warning" data-v3-unconfirmed><strong>Not yet confirmed.</strong> QuillMD found these answer areas automatically. Check every field against your form: correct labels and kinds, remove anything that is not an answer, and add any area it missed. Documents cannot be created with this form until a clinician confirms the mapping below.</div>{% endif %}
+<div class="split">
+  <section>
+    <div class="section-heading"><h2>Answer fields</h2><span class="badge">Mapping v{{ version.number }}</span></div>
+    <p class="small muted">{{ v3_rows|length }} field{{ v3_rows|length|pluralize }} in document order; {{ answerable }} of them take answers (signature and initials areas are signed by hand and never filled). Generation supports at most {{ field_limit }} answer areas per form today.</p>
+    {% if v3_rows %}
+    <form method="post" data-submit-once data-v3-mapping>{% csrf_token %}<input type="hidden" name="action" value="v3_save"><input type="hidden" name="mapping_version" value="{{ version.pk }}">
+    <div class="table-wrap"><table><thead><tr><th scope="col">#</th><th scope="col">Question</th><th scope="col">Kind</th><th scope="col">Printed options</th><th scope="col">Where on the form</th><th scope="col">Found</th><th scope="col">Fits</th><th scope="col">Not an answer</th></tr></thead><tbody>
+    {% for row in v3_rows %}<tr data-v3-field="{{ row.key }}">
+      <td>{{ row.number }}</td>
+      <td><label class="small muted" for="label-{{ row.key }}">Label for question {{ row.number }} (up to {{ mapping_label_limit }} characters)</label><input id="label-{{ row.key }}" name="label_{{ row.key }}" value="{{ row.label }}" maxlength="{{ mapping_input_limit }}" required>{% if row.duplicate %}<span class="subline" data-v3-repeated>This question label repeats on the form (ignoring case and a final colon or question mark). The notes cannot say which one a labelled line answers, so none of them is filled from the notes: rename each so its label names one of them.</span>{% endif %}<span class="subline mono">{{ row.key }}</span></td>
+      <td>{% if row.kind_editable %}<label class="small muted" for="kind-{{ row.key }}">Kind of question {{ row.number }}</label><select id="kind-{{ row.key }}" name="kind_{{ row.key }}">{% for value, name in text_kinds %}<option value="{{ value }}" {% if value == row.chosen_kind %}selected{% endif %}>{{ name }}</option>{% endfor %}</select>{% else %}{{ row.kind_name }}{% endif %}</td>
+      <td>{% if row.options %}<ul class="small">{% for option in row.options %}<li>{{ option }}</li>{% endfor %}</ul>{% else %}<span class="muted">None</span>{% endif %}</td>
+      <td>{{ row.location }}{% if row.context %}<span class="subline">{{ row.context }}</span>{% endif %}</td>
+      <td>{{ row.origin }}</td>
+      <td>{% if row.max_chars %}{{ row.max_chars }} characters{% else %}<span class="muted">Grows</span>{% endif %}</td>
+      <td><label class="check-label" for="remove-{{ row.key }}"><input id="remove-{{ row.key }}" name="remove_{{ row.key }}" type="checkbox" {% if row.remove %}checked{% endif %}><span>Not an answer &mdash; remove</span></label></td>
+    </tr>{% endfor %}
+    </tbody></table></div>
+    <div class="form-footer"><button type="submit">Save corrections as a new mapping version</button></div>
+    <p class="helptext">Only text, long text, date and time can be changed into one another; other kinds come from the form itself. A signature question keeps a signature label. Your corrections are recorded with the new version, and it needs its own confirmation.</p>
+    </form>
+    {% else %}<div class="notice warning">No answer areas were found automatically. Add each answer area of your form below.</div>{% endif %}
+
+    <details {% if find or posted_slot %}open{% endif %} data-v3-add><summary>Add a missed field</summary><div class="details-body">
+      <p class="small">Choose the place on the form where the missed answer goes. Places that already belong to a field are not listed. A paragraph with printed text takes the answer after its text; an empty paragraph or cell takes it as its content. Printed text is never replaced.</p>
+      <form method="get" class="inline-form" data-v3-find><label for="v3-find">Search the form's text</label> <input id="v3-find" name="find" value="{{ find }}" maxlength="120"> <button type="submit" class="secondary">Search</button>{% if find %} <a href="?">Show all places</a>{% endif %}</form>
+      {% if outline_error %}<p class="small error-text">The form's places could not be listed: {{ outline_error }}</p>{% endif %}
+      {% if places %}
+      <form method="post" data-submit-once data-v3-add-form>{% csrf_token %}<input type="hidden" name="action" value="v3_add"><input type="hidden" name="mapping_version" value="{{ version.pk }}">
+        <fieldset><legend>Place ({{ places_total }} open{% if find %} matching &ldquo;{{ find }}&rdquo;{% endif %})</legend>
+        <div class="table-wrap"><table><thead><tr><th scope="col">Choose</th><th scope="col">On the form</th><th scope="col">Section</th><th scope="col">Place</th></tr></thead><tbody>
+        {% for place in places %}<tr data-v3-place="{{ place.slot }}"><td><input type="radio" id="place-{{ forloop.counter }}" name="slot" value="{{ place.slot }}" {% if place.slot == posted_slot %}checked{% endif %} required></td><td><label for="place-{{ forloop.counter }}">{{ place.preview|default:'(empty)' }}</label></td><td class="small">{{ place.context }}</td><td class="small">{{ place.kind_name }} · {{ place.part|capfirst }}{% if place.control %} · {{ place.control }}{% endif %}{% if place.boxes %} · {{ place.boxes }} printed box{{ place.boxes|pluralize:"es" }}{% elif place.unnumbered_boxes %} · its preview does not show exactly its boxes: for a checkbox, choose the line inside it or the checkbox itself{% endif %}</td></tr>{% endfor %}
+        </tbody></table></div>
+        {% if places_hidden %}<p class="small muted">{{ places_hidden }} more place{{ places_hidden|pluralize }} not shown. Search the form's text to narrow the list.</p>{% endif %}
+        </fieldset>
+        <p><label for="v3-add-label">Question label (up to {{ mapping_label_limit }} characters)</label><input id="v3-add-label" name="label" value="{{ posted_add_label }}" maxlength="{{ mapping_input_limit }}" required></p>
+        <p><label for="v3-add-kind">Kind</label><select id="v3-add-kind" name="kind" required>{% for value, name in manual_kinds %}<option value="{{ value }}" {% if value == posted_add_kind %}selected{% endif %}>{{ name }}</option>{% endfor %}</select><span class="helptext">A Word dropdown or legacy dropdown takes its own printed options; a printed box is a checkbox.</span></p>
+        <p><label for="v3-add-box">Printed box number, for a checkbox: which box of the place, counting from 1</label><input id="v3-add-box" name="box" type="number" min="1" max="50" value="1"></p>
+        <div class="form-footer"><button type="submit" class="secondary">Add field as a new mapping version</button></div>
+      </form>
+      {% elif not outline_error %}<p class="small muted">No open places{% if find %} match &ldquo;{{ find }}&rdquo;{% endif %}.</p>{% endif %}
+    </div></details>
+
+    {% if corrections %}<details data-v3-corrections><summary>Corrections recorded for version {{ version.number }}</summary><div class="details-body"><ul class="small">
+      <li>Made from version {{ corrections.base_version }}.</li>
+      {% for row in corrections.removed %}<li>Removed (not an answer): {{ row.label }} <span class="mono">{{ row.key }}</span></li>{% endfor %}
+      {% for key in corrections.added %}<li>Added by hand: <span class="mono">{{ key }}</span></li>{% endfor %}
+      {% for row in corrections.renamed %}<li>Renamed: &ldquo;{{ row.from }}&rdquo; to &ldquo;{{ row.to }}&rdquo; <span class="mono">{{ row.key }}</span></li>{% endfor %}
+      {% for key, change in corrections.kind_changed.items %}<li>Kind changed: <span class="mono">{{ key }}</span> {{ change.0 }} to {{ change.1 }}</li>{% endfor %}
+    </ul></div></details>{% endif %}
+
+    {% if not version.confirmed %}<section class="review-footer" data-v3-confirm><h2>Confirm this mapping</h2>
+      {% if can_confirm %}<form method="post" data-submit-once>{% csrf_token %}<input type="hidden" name="action" value="v3_confirm"><input type="hidden" name="mapping_version" value="{{ version.pk }}"><label class="check-label" for="v3-checked"><input id="v3-checked" name="checked_every_field" type="checkbox" required><span>I checked every field against the form: each answer area is listed once, with the right label, kind and printed options, and nothing listed is anything but an answer.</span></label><div class="form-footer"><button type="submit">Confirm mapping version {{ version.number }}</button></div></form>
+      {% else %}<p class="small muted">A clinician or organization owner confirms the mapping.</p>{% endif %}
+    </section>{% endif %}
+  </section>
+  <aside class="aside"><h2>Original file record</h2><dl class="metadata"><dt>Format</dt><dd>{{ template.format|upper }}</dd><dt>Uploaded</dt><dd>{{ template.created_at|date:'M j, Y, H:i' }} UTC</dd><dt>Mapping</dt><dd>Version {{ version.number }} · found automatically, reviewed by clinicians</dd><dt>Fingerprint</dt><dd class="mono">{{ template.sha256 }}</dd></dl><p>Exports use the preserved original and the selected mapping version. Correcting a mapping does not change documents already created with an earlier version.</p><h2>How answers are written</h2><ul class="small"><li>Printed options: one option, exactly as printed.</li><li>Several printed options: tick each one that applies.</li><li>Checkbox: ticked, or left empty.</li><li>Table rows: one row per line, cells separated by &ldquo; | &rdquo;.</li><li>Signature and initials: signed by hand on the printed form; never filled.</li></ul></aside>
+</div>

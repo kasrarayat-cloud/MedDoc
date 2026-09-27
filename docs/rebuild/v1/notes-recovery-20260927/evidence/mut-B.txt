@@ -1,0 +1,16 @@
+batch /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/batchB.py labels ['core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_3_a_single_letter_before_a_stop_ends_a_sentence_for_a_hold', 'core.tests.test_v3_ordinary_notes.RoundTwoMutantPins', 'core.tests.test_v3_ordinary_notes.RoundTwoRefutation', 'core.tests.test_v3_ordinary_notes.OrdinaryNotesOnV3Forms', 'core.tests.test_v3_ordinary_notes.OneGovernanceReader', 'core.tests.test_v3_ordinary_notes.ScopeInOrdinarySentences', 'core.tests.test_v3_ordinary_notes.RoundThreeCost'] sha c0f7f22ccfd67bc7
+BASELINE OK 3s 42  | 
+  B1 mutation applied: True
+B1 the splitter reading again (a single letter is an initial)          KILLED   restored=True 3s 42 failures=1 | FAIL: test_r3_3_a_single_letter_before_a_stop_ends_a_sentence_for_a_hold 
+  B2 mutation applied: True
+B2 read through before any word (no lower-case condition)              KILLED   restored=True 3s 42 failures=1 | FAIL: test_r3_3_a_single_letter_before_a_stop_ends_a_sentence_for_a_hold  (notes='Medications: aspirin 81 mg p.o. Stopped last month.')
+  B3 mutation applied: True
+B3 titles and e.g./i.e. are not read through                           KILLED   restored=True 3s 42 failures=3 | FAIL: test_r3_3_a_single_letter_before_a_stop_ends_a_sentence_for_a_hold  (notes='Dr. Smith has reviewed the scan.') ; FAIL: test_r3_3_a_single_letter_before_a_stop_ends_a_sentence_for_a_hold  (notes='She takes analgesics, e.g. Paracetamol, as 
+  B4 mutation applied: True
+B4 any run that opens with a full stop is judged (the old condition)   KILLED   restored=True 3s 42 failures=1 | FAIL: test_r3_3_a_single_letter_before_a_stop_ends_a_sentence_for_a_hold  (notes='Medications: aspirin 81 mg p.o.) stopped last month.')
+  B5 mutation applied: True
+B5 a single letter before a lower-case word is read through            KILLED   restored=True 3s 42 failures=1 | FAIL: test_r3_3_a_single_letter_before_a_stop_ends_a_sentence_for_a_hold  (notes='Plan: screen for hepatitis C. she is not a smoker.')
+  B6 mutation applied: True
+B6 etc. read through as a title                                        KILLED   restored=True 3s 42 failures=1 | FAIL: test_r3_3_a_single_letter_before_a_stop_ends_a_sentence_for_a_hold  (notes='Medications: aspirin etc. Stopped last month.')
+final sha c0f7f22ccfd67bc7 equal True
+exit 0

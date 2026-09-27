@@ -1,0 +1,1823 @@
+{
+  "generation_sha256": "bb81dd8117dfe53737b5f37cf5482801260ac7655316dabf424908c68463996f",
+  "helper_sha256": "953f75c941311eb64e4efff7429b107656be148924b8b38f3a634c182546fb48",
+  "override": null,
+  "cases": [
+    {
+      "case": "exact",
+      "notes": "The patient is a nonsmoker.",
+      "fields": [
+        {
+          "key": "smoker",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[6]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        }
+      ],
+      "answer": {
+        "status": "supported",
+        "text": "No",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ]
+      },
+      "page": {
+        "status": "supported",
+        "text": "No",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ]
+      },
+      "refusals": []
+    },
+    {
+      "case": "no-the",
+      "notes": "Patient is a nonsmoker.",
+      "fields": [
+        {
+          "key": "smoker",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[6]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        }
+      ],
+      "answer": {
+        "status": "supported",
+        "text": "No",
+        "evidence": [
+          {
+            "quote": "Patient is a nonsmoker.",
+            "start": 0,
+            "end": 23
+          }
+        ]
+      },
+      "page": {
+        "status": "supported",
+        "text": "No",
+        "evidence": [
+          {
+            "quote": "Patient is a nonsmoker.",
+            "start": 0,
+            "end": 23
+          }
+        ]
+      },
+      "refusals": []
+    },
+    {
+      "case": "whitespace",
+      "notes": " \n\tThe patient is a nonsmoker.\n ",
+      "fields": [
+        {
+          "key": "smoker",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[6]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        }
+      ],
+      "answer": {
+        "status": "supported",
+        "text": "No",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 3,
+            "end": 30
+          }
+        ]
+      },
+      "page": {
+        "status": "supported",
+        "text": "No",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 3,
+            "end": 30
+          }
+        ]
+      },
+      "refusals": []
+    },
+    {
+      "case": "foreign",
+      "notes": "For the donor:\nThe patient is a nonsmoker.",
+      "fields": [
+        {
+          "key": "smoker",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[6]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        }
+      ],
+      "answer": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "For the donor:\nThe patient is a nonsmoker.",
+            "start": 0,
+            "end": 42
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 15,
+              "end": 42
+            }
+          ],
+          "context": [
+            {
+              "quote": "For the donor:",
+              "start": 0,
+              "end": 14,
+              "after": false,
+              "same": false
+            },
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 15,
+              "end": 42,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "page": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "For the donor:\nThe patient is a nonsmoker.",
+            "start": 0,
+            "end": 42
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 15,
+              "end": 42
+            }
+          ],
+          "context": [
+            {
+              "quote": "For the donor:",
+              "start": 0,
+              "end": 14,
+              "after": false,
+              "same": false
+            },
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 15,
+              "end": 42,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "opposite",
+      "notes": "The patient is a nonsmoker.\n\nThe patient smokes daily.",
+      "fields": [
+        {
+          "key": "smoker",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[6]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        }
+      ],
+      "answer": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27
+            }
+          ],
+          "context": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27,
+              "after": false,
+              "same": true
+            },
+            {
+              "quote": "The patient smokes daily.",
+              "start": 29,
+              "end": 54,
+              "after": true,
+              "same": false
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "page": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27
+            }
+          ],
+          "context": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27,
+              "after": false,
+              "same": true
+            },
+            {
+              "quote": "The patient smokes daily.",
+              "start": 29,
+              "end": 54,
+              "after": true,
+              "same": false
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "conditional",
+      "notes": "If true:\nThe patient is a nonsmoker.",
+      "fields": [
+        {
+          "key": "smoker",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[6]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        }
+      ],
+      "answer": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "If true:\nThe patient is a nonsmoker.",
+            "start": 0,
+            "end": 36
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 9,
+              "end": 36
+            }
+          ],
+          "context": [
+            {
+              "quote": "If true:",
+              "start": 0,
+              "end": 8,
+              "after": false,
+              "same": false
+            },
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 9,
+              "end": 36,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "page": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "If true:\nThe patient is a nonsmoker.",
+            "start": 0,
+            "end": 36
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 9,
+              "end": 36
+            }
+          ],
+          "context": [
+            {
+              "quote": "If true:",
+              "start": 0,
+              "end": 8,
+              "after": false,
+              "same": false
+            },
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 9,
+              "end": 36,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "invisible",
+      "notes": "\u200bThe patient is a nonsmoker.",
+      "unit_selection_refusal": "'The patient is a nonsmoker.'",
+      "units": [
+        {
+          "id": 1,
+          "quote": "\u200bThe patient is a nonsmoker.",
+          "start": 0,
+          "end": 28,
+          "correction_value": null
+        }
+      ]
+    },
+    {
+      "case": "labelled-positive",
+      "notes": "Smoker: No.",
+      "fields": [
+        {
+          "key": "smoker",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[6]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        }
+      ],
+      "answer": {
+        "status": "supported",
+        "text": "No",
+        "evidence": [
+          {
+            "quote": "Smoker: No.",
+            "start": 0,
+            "end": 11
+          }
+        ]
+      },
+      "page": {
+        "status": "supported",
+        "text": "No",
+        "evidence": [
+          {
+            "quote": "Smoker: No.",
+            "start": 0,
+            "end": 11
+          }
+        ]
+      },
+      "refusals": []
+    },
+    {
+      "case": "reverse-options",
+      "notes": "The patient is a nonsmoker.",
+      "fields": [
+        {
+          "key": "smoker",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[6]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "No",
+            "Yes"
+          ]
+        }
+      ],
+      "answer": {
+        "status": "supported",
+        "text": "No",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ]
+      },
+      "page": {
+        "status": "supported",
+        "text": "No",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ]
+      },
+      "refusals": []
+    },
+    {
+      "case": "extra-option",
+      "notes": "The patient is a nonsmoker.",
+      "fields": [
+        {
+          "key": "smoker",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[6]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No",
+            "Former"
+          ]
+        }
+      ],
+      "answer": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27
+            }
+          ],
+          "context": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "page": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27
+            }
+          ],
+          "context": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "scoped",
+      "notes": "The patient is a nonsmoker.",
+      "fields": [
+        {
+          "key": "smoker",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "Mother",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[6]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        }
+      ],
+      "answer": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27
+            }
+          ],
+          "context": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "page": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27
+            }
+          ],
+          "context": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "case-label",
+      "notes": "The patient is a nonsmoker.",
+      "fields": [
+        {
+          "key": "smoker",
+          "label": "smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[6]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        }
+      ],
+      "answer": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27
+            }
+          ],
+          "context": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "page": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27
+            }
+          ],
+          "context": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "punct-label",
+      "notes": "The patient is a nonsmoker.",
+      "fields": [
+        {
+          "key": "smoker",
+          "label": "Smoker?",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[6]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        }
+      ],
+      "answer": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27
+            }
+          ],
+          "context": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "page": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27
+            }
+          ],
+          "context": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "text",
+      "notes": "The patient is a nonsmoker.",
+      "fields": [
+        {
+          "key": "smoker",
+          "label": "Smoker",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[6]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        }
+      ],
+      "answer": {
+        "status": "supported",
+        "text": "The patient is a nonsmoker.",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ]
+      },
+      "page": {
+        "status": "supported",
+        "text": "The patient is a nonsmoker.",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ]
+      },
+      "refusals": []
+    },
+    {
+      "case": "long-text",
+      "notes": "The patient is a nonsmoker.",
+      "fields": [
+        {
+          "key": "smoker",
+          "label": "Smoker",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[6]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        }
+      ],
+      "answer": {
+        "status": "supported",
+        "text": "The patient is a nonsmoker.",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ]
+      },
+      "page": {
+        "status": "supported",
+        "text": "The patient is a nonsmoker.",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ]
+      },
+      "refusals": []
+    },
+    {
+      "case": "multi-choice",
+      "notes": "The patient is a nonsmoker.",
+      "fields": [
+        {
+          "key": "smoker",
+          "label": "Smoker",
+          "kind": "multi_choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[6]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        }
+      ],
+      "answer": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27
+            }
+          ],
+          "context": [],
+          "reason": "Read from the notes but NOT used as an answer: this question takes an option printed on the form, and its own labelled line in the notes does not name exactly one of them. Choose the option yourself if the notes support it, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "page": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27
+            }
+          ],
+          "context": [],
+          "reason": "Read from the notes but NOT used as an answer: this question takes an option printed on the form, and its own labelled line in the notes does not name exactly one of them. Choose the option yourself if the notes support it, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "duplicate-printed",
+      "notes": "The patient is a nonsmoker.",
+      "fields": [
+        {
+          "key": "smoker",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[6]",
+            "target": {
+              "printed": [
+                "Yes",
+                "No",
+                "No"
+              ]
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        }
+      ],
+      "answer": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27
+            }
+          ],
+          "context": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "page": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27
+            }
+          ],
+          "context": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "duplicate",
+      "notes": "The patient is a nonsmoker.",
+      "fields": [
+        {
+          "key": "smoker",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[6]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "key": "other",
+          "label": "Smoker?",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        }
+      ],
+      "answer": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27
+            }
+          ],
+          "context": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+        }
+      },
+      "page": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27
+            }
+          ],
+          "context": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+        }
+      },
+      "refusals": []
+    },
+    {
+      "case": "stored-positive",
+      "notes": "The patient is a nonsmoker.",
+      "stored": {
+        "text": "No",
+        "status": "supported",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ]
+      },
+      "page": {
+        "status": "supported",
+        "text": "No",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ]
+      },
+      "refusals": []
+    },
+    {
+      "case": "stored-opposite",
+      "notes": "The patient is a nonsmoker.\n\nThe patient smokes daily.",
+      "stored": {
+        "text": "No",
+        "status": "supported",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ]
+      },
+      "page": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ],
+        "held_candidate": {
+          "text": "No",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27
+            }
+          ],
+          "context": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27,
+              "after": false,
+              "same": true
+            },
+            {
+              "quote": "The patient smokes daily.",
+              "start": 29,
+              "end": 54,
+              "after": true,
+              "same": false
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+          "prefilled": true
+        }
+      },
+      "refusals": [
+        "Smoker"
+      ]
+    },
+    {
+      "case": "stored-foreign",
+      "notes": "For the donor:\nThe patient is a nonsmoker.",
+      "stored": {
+        "text": "No",
+        "status": "supported",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 15,
+            "end": 42
+          }
+        ]
+      },
+      "page": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 15,
+            "end": 42
+          }
+        ],
+        "held_candidate": {
+          "text": "No",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 15,
+              "end": 42
+            }
+          ],
+          "context": [
+            {
+              "quote": "For the donor:",
+              "start": 0,
+              "end": 14,
+              "after": false,
+              "same": false
+            },
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 15,
+              "end": 42,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+          "prefilled": true
+        }
+      },
+      "refusals": [
+        "Smoker"
+      ]
+    },
+    {
+      "case": "stored-wrong-end",
+      "notes": "The patient is a nonsmoker.",
+      "stored": {
+        "text": "No",
+        "status": "supported",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 26
+          }
+        ]
+      },
+      "page": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 26
+          }
+        ],
+        "held_candidate": {
+          "text": "No",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 26
+            }
+          ],
+          "context": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27,
+              "after": true,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+          "prefilled": true
+        }
+      },
+      "refusals": [
+        "Smoker"
+      ]
+    },
+    {
+      "case": "stored-off-start",
+      "notes": "The patient is a nonsmoker.",
+      "stored": {
+        "text": "No",
+        "status": "supported",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 1,
+            "end": 27
+          }
+        ]
+      },
+      "page": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 1,
+            "end": 27
+          }
+        ],
+        "held_candidate": {
+          "text": "No",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 1,
+              "end": 27
+            }
+          ],
+          "context": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27,
+              "after": true,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+          "prefilled": true
+        }
+      },
+      "refusals": [
+        "Smoker"
+      ]
+    },
+    {
+      "case": "stored-missing-end",
+      "notes": "The patient is a nonsmoker.",
+      "stored": {
+        "text": "No",
+        "status": "supported",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0
+          }
+        ]
+      },
+      "page": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0
+          }
+        ],
+        "held_candidate": {
+          "text": "No",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0
+            }
+          ],
+          "context": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+          "prefilled": true
+        }
+      },
+      "refusals": [
+        "Smoker"
+      ]
+    },
+    {
+      "case": "stored-partial",
+      "notes": "The patient is a nonsmoker.",
+      "stored": {
+        "text": "No",
+        "status": "supported",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "nonsmoker.",
+            "start": 17,
+            "end": 27
+          }
+        ]
+      },
+      "page": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "nonsmoker.",
+            "start": 17,
+            "end": 27
+          }
+        ],
+        "held_candidate": {
+          "text": "No",
+          "evidence": [
+            {
+              "quote": "nonsmoker.",
+              "start": 17,
+              "end": 27
+            }
+          ],
+          "context": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+          "prefilled": true
+        }
+      },
+      "refusals": [
+        "Smoker"
+      ]
+    },
+    {
+      "case": "stored-wrong-answer",
+      "notes": "The patient is a nonsmoker.",
+      "stored": {
+        "text": "Yes",
+        "status": "supported",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ]
+      },
+      "page": {
+        "status": "supported",
+        "text": "Yes",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ]
+      },
+      "refusals": []
+    },
+    {
+      "case": "direct-wrong-quote",
+      "answer": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "Patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "Patient is a nonsmoker.",
+              "start": 0,
+              "end": 27
+            }
+          ],
+          "context": [],
+          "reason": "Read from the notes but NOT used as an answer: this question takes an option printed on the form, and its own labelled line in the notes does not name exactly one of them. Choose the option yourself if the notes support it, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      }
+    },
+    {
+      "case": "direct-bool-start",
+      "answer": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": true,
+            "end": 27
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": true,
+              "end": 27
+            }
+          ],
+          "context": [],
+          "reason": "Read from the notes but NOT used as an answer: this question takes an option printed on the form, and its own labelled line in the notes does not name exactly one of them. Choose the option yourself if the notes support it, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      }
+    },
+    {
+      "case": "direct-extra-evidence",
+      "answer": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          },
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0,
+            "end": 27
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27
+            },
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0,
+              "end": 27
+            }
+          ],
+          "context": [],
+          "reason": "Read from the notes but NOT used as an answer: this question takes an option printed on the form, and its own labelled line in the notes does not name exactly one of them. Choose the option yourself if the notes support it, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      }
+    },
+    {
+      "case": "direct-missing-end",
+      "answer": {
+        "status": "conflict",
+        "text": "",
+        "evidence": [
+          {
+            "quote": "The patient is a nonsmoker.",
+            "start": 0
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "The patient is a nonsmoker.",
+              "start": 0
+            }
+          ],
+          "context": [],
+          "reason": "Read from the notes but NOT used as an answer: this question takes an option printed on the form, and its own labelled line in the notes does not name exactly one of them. Choose the option yourself if the notes support it, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      }
+    }
+  ]
+}

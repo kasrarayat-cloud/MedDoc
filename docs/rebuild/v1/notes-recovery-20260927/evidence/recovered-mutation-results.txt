@@ -1,0 +1,26 @@
+batch recovered-mutants.py labels ['core.tests.test_v3_ordinary_notes.RecoveredNoteContext'] sha 5def3209299dba19
+BASELINE OK 1s 9  | 
+  N1 mutation applied: True
+N1 no note-wide spoken-correction hold                                 KILLED   restored=True 1s 9 failures=2 | FAIL: test_a_blank_line_cannot_hide_a_spoken_allergy_correction  ; FAIL: test_existing_supported_drafts_are_held_by_page_and_finalization 
+  N2 mutation applied: True
+N2 no consent context hold                                             KILLED   restored=True 1s 9 failures=2 | FAIL: test_consent_does_not_infer_that_a_separate_statement_is_unrelated  ; FAIL: test_existing_supported_drafts_are_held_by_page_and_finalization 
+  N3 mutation applied: True
+N3 no shared note context                                              KILLED   restored=True 1s 9 failures=3 | FAIL: test_a_blank_line_cannot_hide_a_spoken_allergy_correction  ; FAIL: test_consent_does_not_infer_that_a_separate_statement_is_unrelated  ; FAIL: test_existing_supported_drafts_are_held_by_page_and_finalization 
+  N4 mutation applied: True
+N4 incomplete paragraph allowed                                        KILLED   restored=True 1s 9 failures=1 | FAIL: test_an_intact_ordinary_paragraph_can_fill_a_narrative_answer 
+  N5 mutation applied: True
+N5 competing destinations allowed                                      KILLED   restored=True 1s 9 failures=1 | FAIL: test_intact_paragraph_relaxation_cannot_release_sides_rows_or_duplicate_destinations 
+  N6 mutation applied: True
+N6 duplicate destination allowed                                       KILLED   restored=True 2s 9 failures=1 | FAIL: test_repeated_label_without_a_selected_competitor_is_still_ambiguous 
+  N7 mutation applied: True
+N7 option paragraph allowed                                            KILLED   restored=True 1s 9 failures=1 | FAIL: test_whole_paragraph_must_not_rewrite_a_labelled_value_or_become_an_option 
+  N8 mutation applied: True
+N8 labelled paragraph allowed                                          KILLED   restored=True 1s 9 failures=1 | FAIL: test_whole_paragraph_must_not_rewrite_a_labelled_value_or_become_an_option 
+  N9 mutation applied: True
+N9 side row label allowed                                              KILLED   restored=True 1s 9 failures=1 | FAIL: test_intact_paragraph_relaxation_cannot_release_sides_rows_or_duplicate_destinations 
+  N10 mutation applied: True
+N10 model order retained                                               KILLED   restored=True 1s 9 failures=1 | FAIL: test_an_intact_ordinary_paragraph_can_fill_a_narrative_answer 
+  N11 mutation applied: True
+N11 full paragraph disabled                                            KILLED   restored=True 1s 9 failures=2 | FAIL: test_an_intact_ordinary_paragraph_can_fill_a_narrative_answer  ; FAIL: test_intact_ordinary_plan_preserves_each_instruction_and_its_sequence 
+final sha 5def3209299dba19 equal True
+exit 0

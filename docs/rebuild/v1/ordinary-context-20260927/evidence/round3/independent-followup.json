@@ -1,0 +1,581 @@
+{
+  "disk_generation_sha256": "f6e8789f73cf006b05f2bd51bca78b6051610588746cef32cdf9af53f863d1c4",
+  "executed_override": null,
+  "cases": [
+    {
+      "case": "allergy-negated-in-assessment",
+      "notes": "Allergies: penicillin.\nAssessment: no penicillin allergy.",
+      "picks": {
+        "Allergies": [
+          1
+        ],
+        "Assessment": [
+          2
+        ]
+      },
+      "units": [
+        {
+          "id": 1,
+          "quote": "Allergies: penicillin.",
+          "start": 0,
+          "end": 22,
+          "correction_value": null
+        },
+        {
+          "id": 2,
+          "quote": "Assessment: no penicillin allergy.",
+          "start": 23,
+          "end": 57,
+          "correction_value": null
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "penicillin.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Allergies: penicillin.",
+              "start": 0,
+              "end": 22
+            }
+          ],
+          "reviewed": false
+        },
+        "Assessment": {
+          "text": "no penicillin allergy.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Assessment: no penicillin allergy.",
+              "start": 23,
+              "end": 57
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "finalize_refusals": []
+    },
+    {
+      "case": "allergy-possible-in-assessment",
+      "notes": "Allergies: none.\nAssessment is a probable penicillin allergy.",
+      "picks": {
+        "Allergies": [
+          1
+        ],
+        "Assessment": [
+          2
+        ]
+      },
+      "units": [
+        {
+          "id": 1,
+          "quote": "Allergies: none.",
+          "start": 0,
+          "end": 16,
+          "correction_value": null
+        },
+        {
+          "id": 2,
+          "quote": "Assessment is a probable penicillin allergy.",
+          "start": 17,
+          "end": 61,
+          "correction_value": null
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "none.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Allergies: none.",
+              "start": 0,
+              "end": 16
+            }
+          ],
+          "reviewed": false
+        },
+        "Assessment": {
+          "text": "a probable penicillin allergy.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Assessment is a probable penicillin allergy.",
+              "start": 17,
+              "end": 61
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "finalize_refusals": []
+    },
+    {
+      "case": "no-examination",
+      "notes": "Allergies: codeine.\nNo examination was performed.\nPlan: rest.",
+      "picks": {
+        "Allergies": [
+          1
+        ],
+        "Examination": [
+          2
+        ],
+        "Plan": [
+          3
+        ]
+      },
+      "units": [
+        {
+          "id": 1,
+          "quote": "Allergies: codeine.",
+          "start": 0,
+          "end": 19,
+          "correction_value": null
+        },
+        {
+          "id": 2,
+          "quote": "No examination was performed.",
+          "start": 20,
+          "end": 49,
+          "correction_value": null
+        },
+        {
+          "id": 3,
+          "quote": "Plan: rest.",
+          "start": 50,
+          "end": 61,
+          "correction_value": null
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "codeine.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Allergies: codeine.",
+              "start": 0,
+              "end": 19
+            }
+          ],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "No examination was performed.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "No examination was performed.",
+              "start": 20,
+              "end": 49
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "rest.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: rest.",
+              "start": 50,
+              "end": 61
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "finalize_refusals": []
+    },
+    {
+      "case": "no-medication",
+      "notes": "Allergies: codeine.\nNo current medications are recorded.\nPlan: rest.",
+      "picks": {
+        "Allergies": [
+          1
+        ],
+        "Medications": [
+          2
+        ],
+        "Plan": [
+          3
+        ]
+      },
+      "units": [
+        {
+          "id": 1,
+          "quote": "Allergies: codeine.",
+          "start": 0,
+          "end": 19,
+          "correction_value": null
+        },
+        {
+          "id": 2,
+          "quote": "No current medications are recorded.",
+          "start": 20,
+          "end": 56,
+          "correction_value": null
+        },
+        {
+          "id": 3,
+          "quote": "Plan: rest.",
+          "start": 57,
+          "end": 68,
+          "correction_value": null
+        }
+      ],
+      "answers": {
+        "Medications": {
+          "text": "No current medications are recorded.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "No current medications are recorded.",
+              "start": 20,
+              "end": 56
+            }
+          ],
+          "reviewed": false
+        },
+        "Allergies": {
+          "text": "codeine.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Allergies: codeine.",
+              "start": 0,
+              "end": 19
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "rest.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: rest.",
+              "start": 57,
+              "end": 68
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "finalize_refusals": []
+    },
+    {
+      "case": "family-examination",
+      "notes": "Allergies: codeine.\nOn examination of her mother there is a rash.\nPlan: rest.",
+      "picks": {
+        "Examination": [
+          2
+        ]
+      },
+      "units": [
+        {
+          "id": 1,
+          "quote": "Allergies: codeine.",
+          "start": 0,
+          "end": 19,
+          "correction_value": null
+        },
+        {
+          "id": 2,
+          "quote": "On examination of her mother there is a rash.",
+          "start": 20,
+          "end": 65,
+          "correction_value": null
+        },
+        {
+          "id": 3,
+          "quote": "Plan: rest.",
+          "start": 66,
+          "end": 77,
+          "correction_value": null
+        }
+      ],
+      "answers": {
+        "Examination": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "On examination of her mother there is a rash.",
+              "start": 20,
+              "end": 65
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "On examination of her mother there is a rash.",
+            "evidence": [
+              {
+                "quote": "On examination of her mother there is a rash.",
+                "start": 20,
+                "end": 65
+              }
+            ],
+            "context": [
+              {
+                "quote": "Allergies: codeine.",
+                "start": 0,
+                "end": 19,
+                "after": false,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "finalize_refusals": []
+    },
+    {
+      "case": "wrong-destination",
+      "notes": "Allergies: codeine.\nChest examination revealed crackles at the right base.\nPlan: rest.",
+      "picks": {
+        "Medications": [
+          2
+        ]
+      },
+      "units": [
+        {
+          "id": 1,
+          "quote": "Allergies: codeine.",
+          "start": 0,
+          "end": 19,
+          "correction_value": null
+        },
+        {
+          "id": 2,
+          "quote": "Chest examination revealed crackles at the right base.",
+          "start": 20,
+          "end": 74,
+          "correction_value": null
+        },
+        {
+          "id": 3,
+          "quote": "Plan: rest.",
+          "start": 75,
+          "end": 86,
+          "correction_value": null
+        }
+      ],
+      "answers": {
+        "Medications": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Chest examination revealed crackles at the right base.",
+              "start": 20,
+              "end": 74
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Chest examination revealed crackles at the right base.",
+            "evidence": [
+              {
+                "quote": "Chest examination revealed crackles at the right base.",
+                "start": 20,
+                "end": 74
+              }
+            ],
+            "context": [
+              {
+                "quote": "Chest examination revealed crackles at the right base.",
+                "start": 20,
+                "end": 74,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Allergies: codeine.",
+                "start": 0,
+                "end": 19,
+                "after": false,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "finalize_refusals": []
+    },
+    {
+      "case": "two-medication-heads",
+      "notes": "Current medications are aspirin daily.\n\nCurrent medications are metformin twice daily.",
+      "picks": {
+        "Medications": [
+          1
+        ]
+      },
+      "units": [
+        {
+          "id": 1,
+          "quote": "Current medications are aspirin daily.",
+          "start": 0,
+          "end": 38,
+          "correction_value": null
+        },
+        {
+          "id": 2,
+          "quote": "Current medications are metformin twice daily.",
+          "start": 40,
+          "end": 86,
+          "correction_value": null
+        }
+      ],
+      "answers": {
+        "Medications": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Current medications are aspirin daily.",
+              "start": 0,
+              "end": 38
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Current medications are aspirin daily.",
+            "evidence": [
+              {
+                "quote": "Current medications are aspirin daily.",
+                "start": 0,
+                "end": 38
+              }
+            ],
+            "context": [
+              {
+                "quote": "Current medications are aspirin daily.",
+                "start": 0,
+                "end": 38,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Current medications are metformin twice daily.",
+                "start": 40,
+                "end": 86,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "finalize_refusals": []
+    },
+    {
+      "case": "question-fixed",
+      "notes": "Plan: amoxicillin? Return if symptoms worsen.",
+      "picks": {
+        "Plan": [
+          1
+        ]
+      },
+      "units": [
+        {
+          "id": 1,
+          "quote": "Plan: amoxicillin? Return if symptoms worsen.",
+          "start": 0,
+          "end": 45,
+          "correction_value": null
+        }
+      ],
+      "answers": {
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Plan: amoxicillin? Return if symptoms worsen.",
+              "start": 0,
+              "end": 45
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Plan: amoxicillin? Return if symptoms worsen.",
+              "start": 0,
+              "end": 45
+            }
+          ],
+          "held_candidate": {
+            "text": "amoxicillin? Return if symptoms worsen.",
+            "evidence": [
+              {
+                "quote": "Plan: amoxicillin? Return if symptoms worsen.",
+                "start": 0,
+                "end": 45
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: amoxicillin? Return if symptoms worsen.",
+                "start": 0,
+                "end": 45,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "finalize_refusals": [],
+      "forced_supported_refusals": [
+        "Plan"
+      ]
+    },
+    {
+      "case": "conditional-positive",
+      "notes": "Plan: amoxicillin. Return if symptoms worsen.",
+      "picks": {
+        "Plan": [
+          1
+        ]
+      },
+      "units": [
+        {
+          "id": 1,
+          "quote": "Plan: amoxicillin. Return if symptoms worsen.",
+          "start": 0,
+          "end": 45,
+          "correction_value": null
+        }
+      ],
+      "answers": {
+        "Plan": {
+          "text": "amoxicillin. Return if symptoms worsen.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: amoxicillin. Return if symptoms worsen.",
+              "start": 0,
+              "end": 45
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Plan: amoxicillin. Return if symptoms worsen.",
+              "start": 0,
+              "end": 45
+            }
+          ]
+        }
+      },
+      "finalize_refusals": []
+    }
+  ]
+}

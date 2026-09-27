@@ -1,0 +1,579 @@
+{
+  "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks.",
+  "automatic_answers": {
+    "v3_1": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "end": 48,
+          "quote": "This is a 30-year-old female seen for headaches.",
+          "start": 0
+        }
+      ],
+      "reviewed": false,
+      "held_candidate": {
+        "text": "This is a 30-year-old female seen for headaches.",
+        "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+        "context": [
+          {
+            "end": 115,
+            "same": true,
+            "after": true,
+            "quote": "The headaches started two months ago and are worse in the morning.",
+            "start": 49
+          }
+        ],
+        "evidence": [
+          {
+            "end": 48,
+            "quote": "This is a 30-year-old female seen for headaches.",
+            "start": 0
+          }
+        ]
+      }
+    },
+    "v3_2": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "end": 115,
+          "quote": "The headaches started two months ago and are worse in the morning.",
+          "start": 49
+        },
+        {
+          "end": 163,
+          "quote": "She denies visual changes, nausea, or weakness.",
+          "start": 116
+        }
+      ],
+      "reviewed": false,
+      "held_candidate": {
+        "text": "The headaches started two months ago and are worse in the morning.\nShe denies visual changes, nausea, or weakness.",
+        "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+        "context": [
+          {
+            "end": 48,
+            "same": true,
+            "after": false,
+            "quote": "This is a 30-year-old female seen for headaches.",
+            "start": 0
+          },
+          {
+            "end": 163,
+            "same": true,
+            "after": true,
+            "quote": "She denies visual changes, nausea, or weakness.",
+            "start": 116
+          },
+          {
+            "end": 115,
+            "same": true,
+            "after": false,
+            "quote": "The headaches started two months ago and are worse in the morning.",
+            "start": 49
+          },
+          {
+            "end": 194,
+            "same": true,
+            "after": true,
+            "quote": "She takes ibuprofen as needed.",
+            "start": 164
+          }
+        ],
+        "evidence": [
+          {
+            "end": 115,
+            "quote": "The headaches started two months ago and are worse in the morning.",
+            "start": 49
+          },
+          {
+            "end": 163,
+            "quote": "She denies visual changes, nausea, or weakness.",
+            "start": 116
+          }
+        ]
+      }
+    },
+    "v3_3": {
+      "text": "",
+      "status": "missing",
+      "evidence": [],
+      "reviewed": false
+    },
+    "v3_4": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "end": 194,
+          "quote": "She takes ibuprofen as needed.",
+          "start": 164
+        }
+      ],
+      "reviewed": false,
+      "held_candidate": {
+        "text": "She takes ibuprofen as needed.",
+        "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+        "context": [
+          {
+            "end": 163,
+            "same": true,
+            "after": false,
+            "quote": "She denies visual changes, nausea, or weakness.",
+            "start": 116
+          },
+          {
+            "end": 219,
+            "same": true,
+            "after": true,
+            "quote": "No known drug allergies.",
+            "start": 195
+          }
+        ],
+        "evidence": [
+          {
+            "end": 194,
+            "quote": "She takes ibuprofen as needed.",
+            "start": 164
+          }
+        ]
+      }
+    },
+    "v3_5": {
+      "text": "No known drug allergies.",
+      "status": "supported",
+      "evidence": [
+        {
+          "end": 219,
+          "quote": "No known drug allergies.",
+          "start": 195
+        }
+      ],
+      "reviewed": false
+    },
+    "v3_6": {
+      "text": "Neurological examination is normal.",
+      "status": "supported",
+      "evidence": [
+        {
+          "end": 275,
+          "quote": "Neurological examination is normal.",
+          "start": 240
+        }
+      ],
+      "reviewed": false
+    },
+    "v3_7": {
+      "text": "tension-type headache.",
+      "status": "supported",
+      "evidence": [
+        {
+          "end": 312,
+          "quote": "Assessment is tension-type headache.",
+          "start": 276
+        }
+      ],
+      "reviewed": false
+    },
+    "v3_8": {
+      "text": "to start amitriptyline 10 mg at night.\nShe will follow up in six weeks.",
+      "status": "supported",
+      "evidence": [
+        {
+          "end": 359,
+          "quote": "Plan is to start amitriptyline 10 mg at night.",
+          "start": 313
+        },
+        {
+          "end": 392,
+          "quote": "She will follow up in six weeks.",
+          "start": 360
+        }
+      ],
+      "reviewed": false
+    },
+    "v3_9": {
+      "text": "",
+      "status": "missing",
+      "evidence": [],
+      "reviewed": false
+    },
+    "v3_10": {
+      "text": "",
+      "reason": "Signed by hand on the printed form; never filled.",
+      "status": "missing",
+      "evidence": [],
+      "reviewed": false
+    },
+    "v3_11": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "end": 239,
+          "quote": "She is a nonsmoker.",
+          "start": 220
+        }
+      ],
+      "reviewed": false,
+      "held_candidate": {
+        "text": "She is a nonsmoker.",
+        "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+        "context": [
+          {
+            "end": 219,
+            "same": true,
+            "after": false,
+            "quote": "No known drug allergies.",
+            "start": 195
+          },
+          {
+            "end": 275,
+            "same": true,
+            "after": true,
+            "quote": "Neurological examination is normal.",
+            "start": 240
+          }
+        ],
+        "evidence": [
+          {
+            "end": 239,
+            "quote": "She is a nonsmoker.",
+            "start": 220
+          }
+        ]
+      }
+    }
+  },
+  "manual_decisions": {
+    "Chief complaint": "This is a 30-year-old female seen for headaches.",
+    "History of present illness": "The headaches started two months ago and are worse in the morning.\nShe denies visual changes, nausea, or weakness.",
+    "Medications": "She takes ibuprofen as needed.",
+    "Smoker": "No"
+  },
+  "final_answers": {
+    "v3_1": {
+      "text": "This is a 30-year-old female seen for headaches.",
+      "status": "edited",
+      "evidence": [
+        {
+          "end": 48,
+          "quote": "This is a 30-year-old female seen for headaches.",
+          "start": 0
+        }
+      ],
+      "reviewed": true,
+      "edited_by": "34ede30b-0003-4a4f-96d8-3641120771c8",
+      "accepted_by": null,
+      "reviewed_by": "34ede30b-0003-4a4f-96d8-3641120771c8",
+      "held_candidate": {
+        "text": "This is a 30-year-old female seen for headaches.",
+        "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+        "context": [
+          {
+            "end": 115,
+            "same": true,
+            "after": true,
+            "quote": "The headaches started two months ago and are worse in the morning.",
+            "start": 49
+          }
+        ],
+        "evidence": [
+          {
+            "end": 48,
+            "quote": "This is a 30-year-old female seen for headaches.",
+            "start": 0
+          }
+        ]
+      },
+      "accepted_suggestion": false
+    },
+    "v3_2": {
+      "text": "The headaches started two months ago and are worse in the morning.\nShe denies visual changes, nausea, or weakness.",
+      "status": "edited",
+      "evidence": [
+        {
+          "end": 115,
+          "quote": "The headaches started two months ago and are worse in the morning.",
+          "start": 49
+        },
+        {
+          "end": 163,
+          "quote": "She denies visual changes, nausea, or weakness.",
+          "start": 116
+        }
+      ],
+      "reviewed": true,
+      "edited_by": "34ede30b-0003-4a4f-96d8-3641120771c8",
+      "accepted_by": null,
+      "reviewed_by": "34ede30b-0003-4a4f-96d8-3641120771c8",
+      "held_candidate": {
+        "text": "The headaches started two months ago and are worse in the morning.\nShe denies visual changes, nausea, or weakness.",
+        "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+        "context": [
+          {
+            "end": 48,
+            "same": true,
+            "after": false,
+            "quote": "This is a 30-year-old female seen for headaches.",
+            "start": 0
+          },
+          {
+            "end": 163,
+            "same": true,
+            "after": true,
+            "quote": "She denies visual changes, nausea, or weakness.",
+            "start": 116
+          },
+          {
+            "end": 115,
+            "same": true,
+            "after": false,
+            "quote": "The headaches started two months ago and are worse in the morning.",
+            "start": 49
+          },
+          {
+            "end": 194,
+            "same": true,
+            "after": true,
+            "quote": "She takes ibuprofen as needed.",
+            "start": 164
+          }
+        ],
+        "evidence": [
+          {
+            "end": 115,
+            "quote": "The headaches started two months ago and are worse in the morning.",
+            "start": 49
+          },
+          {
+            "end": 163,
+            "quote": "She denies visual changes, nausea, or weakness.",
+            "start": 116
+          }
+        ]
+      },
+      "accepted_suggestion": false
+    },
+    "v3_3": {
+      "text": "",
+      "status": "left_blank",
+      "evidence": [],
+      "reviewed": true,
+      "edited_by": null,
+      "accepted_by": null,
+      "reviewed_by": "34ede30b-0003-4a4f-96d8-3641120771c8",
+      "blank_history": [
+        {
+          "at": "2026-09-27T20:49:15.285780+00:00",
+          "by": "34ede30b-0003-4a4f-96d8-3641120771c8",
+          "decision": "left_blank",
+          "revision": 2,
+          "from_status": "missing"
+        }
+      ],
+      "blank_decision": {
+        "at": "2026-09-27T20:49:15.285780+00:00",
+        "by": "34ede30b-0003-4a4f-96d8-3641120771c8",
+        "revision": 2,
+        "from_status": "missing"
+      },
+      "accepted_suggestion": false
+    },
+    "v3_4": {
+      "text": "She takes ibuprofen as needed.",
+      "status": "edited",
+      "evidence": [
+        {
+          "end": 194,
+          "quote": "She takes ibuprofen as needed.",
+          "start": 164
+        }
+      ],
+      "reviewed": true,
+      "edited_by": "34ede30b-0003-4a4f-96d8-3641120771c8",
+      "accepted_by": null,
+      "reviewed_by": "34ede30b-0003-4a4f-96d8-3641120771c8",
+      "held_candidate": {
+        "text": "She takes ibuprofen as needed.",
+        "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+        "context": [
+          {
+            "end": 163,
+            "same": true,
+            "after": false,
+            "quote": "She denies visual changes, nausea, or weakness.",
+            "start": 116
+          },
+          {
+            "end": 219,
+            "same": true,
+            "after": true,
+            "quote": "No known drug allergies.",
+            "start": 195
+          }
+        ],
+        "evidence": [
+          {
+            "end": 194,
+            "quote": "She takes ibuprofen as needed.",
+            "start": 164
+          }
+        ]
+      },
+      "accepted_suggestion": false
+    },
+    "v3_5": {
+      "text": "No known drug allergies.",
+      "status": "supported",
+      "evidence": [
+        {
+          "end": 219,
+          "quote": "No known drug allergies.",
+          "start": 195
+        }
+      ],
+      "reviewed": true,
+      "edited_by": null,
+      "accepted_by": null,
+      "reviewed_by": "34ede30b-0003-4a4f-96d8-3641120771c8",
+      "accepted_suggestion": false
+    },
+    "v3_6": {
+      "text": "Neurological examination is normal.",
+      "status": "supported",
+      "evidence": [
+        {
+          "end": 275,
+          "quote": "Neurological examination is normal.",
+          "start": 240
+        }
+      ],
+      "reviewed": true,
+      "edited_by": null,
+      "accepted_by": null,
+      "reviewed_by": "34ede30b-0003-4a4f-96d8-3641120771c8",
+      "accepted_suggestion": false
+    },
+    "v3_7": {
+      "text": "tension-type headache.",
+      "status": "supported",
+      "evidence": [
+        {
+          "end": 312,
+          "quote": "Assessment is tension-type headache.",
+          "start": 276
+        }
+      ],
+      "reviewed": true,
+      "edited_by": null,
+      "accepted_by": null,
+      "reviewed_by": "34ede30b-0003-4a4f-96d8-3641120771c8",
+      "accepted_suggestion": false
+    },
+    "v3_8": {
+      "text": "to start amitriptyline 10 mg at night.\nShe will follow up in six weeks.",
+      "status": "supported",
+      "evidence": [
+        {
+          "end": 359,
+          "quote": "Plan is to start amitriptyline 10 mg at night.",
+          "start": 313
+        },
+        {
+          "end": 392,
+          "quote": "She will follow up in six weeks.",
+          "start": 360
+        }
+      ],
+      "reviewed": true,
+      "edited_by": null,
+      "accepted_by": null,
+      "reviewed_by": "34ede30b-0003-4a4f-96d8-3641120771c8",
+      "accepted_suggestion": false
+    },
+    "v3_9": {
+      "text": "",
+      "status": "left_blank",
+      "evidence": [],
+      "reviewed": true,
+      "edited_by": null,
+      "accepted_by": null,
+      "reviewed_by": "34ede30b-0003-4a4f-96d8-3641120771c8",
+      "blank_history": [
+        {
+          "at": "2026-09-27T20:49:15.299351+00:00",
+          "by": "34ede30b-0003-4a4f-96d8-3641120771c8",
+          "decision": "left_blank",
+          "revision": 2,
+          "from_status": "missing"
+        }
+      ],
+      "blank_decision": {
+        "at": "2026-09-27T20:49:15.299351+00:00",
+        "by": "34ede30b-0003-4a4f-96d8-3641120771c8",
+        "revision": 2,
+        "from_status": "missing"
+      },
+      "accepted_suggestion": false
+    },
+    "v3_10": {
+      "text": "",
+      "reason": "Signed by hand on the printed form; never filled.",
+      "status": "missing",
+      "evidence": [],
+      "reviewed": false,
+      "edited_by": null,
+      "accepted_by": null,
+      "reviewed_by": null,
+      "accepted_suggestion": false
+    },
+    "v3_11": {
+      "text": "No",
+      "status": "edited",
+      "evidence": [
+        {
+          "end": 239,
+          "quote": "She is a nonsmoker.",
+          "start": 220
+        }
+      ],
+      "reviewed": true,
+      "edited_by": "34ede30b-0003-4a4f-96d8-3641120771c8",
+      "accepted_by": null,
+      "reviewed_by": "34ede30b-0003-4a4f-96d8-3641120771c8",
+      "held_candidate": {
+        "text": "She is a nonsmoker.",
+        "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+        "context": [
+          {
+            "end": 219,
+            "same": true,
+            "after": false,
+            "quote": "No known drug allergies.",
+            "start": 195
+          },
+          {
+            "end": 275,
+            "same": true,
+            "after": true,
+            "quote": "Neurological examination is normal.",
+            "start": 240
+          }
+        ],
+        "evidence": [
+          {
+            "end": 239,
+            "quote": "She is a nonsmoker.",
+            "start": 220
+          }
+        ]
+      },
+      "accepted_suggestion": false
+    }
+  },
+  "original_sha256": "2e3c2e022f10eb68a4721d5dad7c7e82957eee46b25be2e470ebf56494cd582b",
+  "final_sha256": "5da84989362344812deb31bba81e013f2f0ba21ed07e9d19d54519f8044e12b0"
+}

@@ -1,0 +1,20 @@
+test_local_strict_mapping_validation_still_rejects_constraints (core.tests.test_anthropic_schema_compatibility.NativeSchemaCompatibility.test_local_strict_mapping_validation_still_rejects_constraints) ... 
+  test_local_strict_mapping_validation_still_rejects_constraints (core.tests.test_anthropic_schema_compatibility.NativeSchemaCompatibility.test_local_strict_mapping_validation_still_rejects_constraints) (key='label', value='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx') ... FAIL
+test_prior_model_request_schema_remains_exact (core.tests.test_anthropic_schema_compatibility.NativeSchemaCompatibility.test_prior_model_request_schema_remains_exact) ... ok
+test_selected_model_schema_survives_actual_sdk_without_unsupported_constraints (core.tests.test_anthropic_schema_compatibility.NativeSchemaCompatibility.test_selected_model_schema_survives_actual_sdk_without_unsupported_constraints) ... ok
+
+======================================================================
+FAIL: test_local_strict_mapping_validation_still_rejects_constraints (core.tests.test_anthropic_schema_compatibility.NativeSchemaCompatibility.test_local_strict_mapping_validation_still_rejects_constraints) (key='label', value='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_anthropic_schema_compatibility.py", line 63, in test_local_strict_mapping_validation_still_rejects_constraints
+    with self.subTest(key=key, value=value), self.assertRaises(ValidationError):
+AssertionError: ValidationError not raised
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.058s
+
+FAILED (failures=1)
+Found 3 test(s).
+Skipping setup of unused database(s): default.
+System check identified no issues (0 silenced).

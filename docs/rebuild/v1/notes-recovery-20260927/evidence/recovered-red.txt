@@ -1,0 +1,87 @@
+FF.FFF.
+======================================================================
+FAIL: test_a_blank_line_cannot_hide_a_spoken_allergy_correction (core.tests.test_v3_ordinary_notes.RecoveredNoteContext.test_a_blank_line_cannot_hide_a_spoken_allergy_correction)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 1205, in test_a_blank_line_cannot_hide_a_spoken_allergy_correction
+    self.assertEqual((out['status'], out['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'penicillin.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'penicillin.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_an_intact_ordinary_paragraph_can_fill_a_narrative_answer (core.tests.test_v3_ordinary_notes.RecoveredNoteContext.test_an_intact_ordinary_paragraph_can_fill_a_narrative_answer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 1242, in test_an_intact_ordinary_paragraph_can_fill_a_narrative_answer
+    self.assertEqual((out['status'], out['text']), ('supported', '\n'.join(quotes)))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'The patient presents with ri[65 chars]ng.')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported',
++  'The patient presents with right knee pain for three weeks.\n'
++  'He reports stiffness in the morning.')
+
+======================================================================
+FAIL: test_consent_does_not_infer_that_a_separate_statement_is_unrelated (core.tests.test_v3_ordinary_notes.RecoveredNoteContext.test_consent_does_not_infer_that_a_separate_statement_is_unrelated)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 1214, in test_consent_does_not_infer_that_a_separate_statement_is_unrelated
+    self.assertEqual((out['status'], out['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'checked') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'checked')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_existing_supported_drafts_are_held_by_page_and_finalization (core.tests.test_v3_ordinary_notes.RecoveredNoteContext.test_existing_supported_drafts_are_held_by_page_and_finalization)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 1229, in test_existing_supported_drafts_are_held_by_page_and_finalization
+    self.assertEqual((page['status'], page['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'penicillin.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'penicillin.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_intact_ordinary_plan_preserves_each_instruction_and_its_sequence (core.tests.test_v3_ordinary_notes.RecoveredNoteContext.test_intact_ordinary_plan_preserves_each_instruction_and_its_sequence)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 1276, in test_intact_ordinary_plan_preserves_each_instruction_and_its_sequence
+    self.assertEqual((out['status'], out['text']), ('supported', '\n'.join(quotes)))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'The patient will start physi[60 chars]ks.')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported',
++  'The patient will start physiotherapy twice weekly.\n'
++  'She will return to clinic in six weeks.')
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.194s
+
+FAILED (failures=5)
+Found 7 test(s).
+System check identified no issues (0 silenced).
+exit 1

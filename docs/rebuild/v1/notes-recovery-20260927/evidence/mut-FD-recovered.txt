@@ -1,0 +1,5 @@
+batch batchF-recovered.py labels ['core.tests.test_v3_ordinary_notes.RoundThreeMutantPins.test_d_a_cjk_full_stop_ends_a_sentence'] sha 40be29702245bbba
+BASELINE OK 1s 1  | 
+  FD mutation applied: True
+FD a CJK stop is not a sentence end (valid replacement)                KILLED   restored=True 2s 1 failures=1 | FAIL: test_d_a_cjk_full_stop_ends_a_sentence 
+final sha 40be29702245bbba equal True

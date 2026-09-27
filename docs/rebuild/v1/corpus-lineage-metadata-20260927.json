@@ -1,0 +1,86 @@
+{
+  "manifest_sha256": "450c0a6af3364ebe382f4b6a8caad578d33284590585f6109ac60fbc7762014f",
+  "read_scope": "manifest metadata only; no qualification template or ground-truth content opened",
+  "sets": {
+    "dev": {
+      "files": 40,
+      "declared_lineages": 30,
+      "source_groups": 19,
+      "lineage_multiplicities": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "unique_hashes": 40
+    },
+    "holdout": {
+      "files": 20,
+      "declared_lineages": 14,
+      "source_groups": 7,
+      "lineage_multiplicities": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "unique_hashes": 20
+    },
+    "qual": {
+      "files": 20,
+      "declared_lineages": 12,
+      "source_groups": 6,
+      "lineage_multiplicities": [
+        1,
+        1,
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "unique_hashes": 20
+    }
+  }
+}

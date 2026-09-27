@@ -75,6 +75,30 @@ class Invitation(Entity):
     expires_at=models.DateTimeField()
     accepted_at=models.DateTimeField(null=True)
     invited_by=models.ForeignKey(User,on_delete=models.PROTECT)
+class ClinicInvitation(Entity):
+    """A platform administrator's invitation for the owner of a NEW clinic (QUILLMD_REGISTRATION=invite).
+
+    Department invitations need an existing department and an owner or manager to issue them; with
+    self-service registration closed, nothing could create the first one. Accepting this invitation creates
+    the organization, its first department and the owner membership, exactly as email verification does
+    for a self-registered account. Same token discipline as `Invitation`: 7 days, stored as a sha256,
+    single use. Revoking sets `revoked_at` and ends `expires_at` now.
+    """
+    email=models.EmailField()
+    organization_name=models.CharField(max_length=140)
+    department_name=models.CharField(max_length=120)
+    token_hash=models.CharField(max_length=64,unique=True)
+    expires_at=models.DateTimeField()
+    accepted_at=models.DateTimeField(null=True)
+    revoked_at=models.DateTimeField(null=True)
+    invited_by=models.ForeignKey(User,on_delete=models.PROTECT,related_name='clinic_invitations_issued')
+    accepted_by=models.ForeignKey(User,null=True,on_delete=models.PROTECT,related_name='+')
+    organization=models.ForeignKey(Organization,null=True,on_delete=models.PROTECT,related_name='+')
+    def status(self,now=None):
+        now=now or timezone.now()
+        if self.accepted_at: return 'accepted'
+        if self.revoked_at: return 'revoked'
+        return 'expired' if self.expires_at<=now else 'pending'
 class Verification(Entity):
     user=models.ForeignKey(User,on_delete=models.CASCADE)
     token_hash=models.CharField(max_length=64,unique=True)
@@ -104,8 +128,34 @@ class TemplateVersion(Entity):
     review_requirements=models.JSONField(default=list,blank=True)
     document_backend=models.JSONField(default=dict,blank=True)
     created_by=models.ForeignKey(User,on_delete=models.PROTECT)
+    # Contract v3 Word mappings only ('' for every legacy, tab, PDF and qualified WM mapping). Kept OUT of
+    # `document_backend`, whose non-emptiness is how every page recognises the qualified WM form.
+    contract=models.CharField(max_length=12,blank=True,default='')
+    # The clinician's corrections that made THIS version from the previous one (v3 only):
+    # {'base_version', 'removed', 'added', 'kind_changed', 'renamed'}. Automatic fields stay as the engine found them.
+    corrections=models.JSONField(default=dict,blank=True)
+    assistance=models.JSONField(default=dict,blank=True)
     class Meta: constraints=[models.UniqueConstraint(fields=['template','number'],name='mapping_version_unique')]
+    @property
+    def confirmed(self):
+        """The clinician's confirmation of this mapping version, or None. Mapping versions are immutable rows (a
+        database trigger refuses UPDATE), so the confirmation is its own append-only record."""
+        try:return self.confirmation
+        except ObjectDoesNotExist:return None
+    @property
+    def needs_confirmation(self):
+        """A contract v3 mapping starts no document until a clinician states they checked every field against the form."""
+        return self.contract=='v3' and self.confirmed is None
     def __str__(self): return f'{self.template.name} · mapping {self.number}'
+class MappingConfirmation(Entity):
+    """A clinician's statement that every field of one contract v3 mapping version was checked against the form.
+    `created_at` is when; append-only like the version it confirms."""
+    version=models.OneToOneField(TemplateVersion,on_delete=models.PROTECT,related_name='confirmation')
+    confirmed_by=models.ForeignKey(User,on_delete=models.PROTECT,related_name='mapping_confirmations')
+    def save(self,*args,**kwargs):
+        if not self._state.adding: raise ValidationError('Mapping confirmations are append-only.')
+        super().save(*args,**kwargs)
+    def delete(self,*args,**kwargs): raise ValidationError('Mapping confirmations cannot be deleted.')
 def latest_service_date():
     """The furthest ahead a real date of service can legitimately be.
 
@@ -138,7 +188,8 @@ class Encounter(Entity):
         if self.patient.department_id!=self.department_id or self.template_version.template.department_id!=self.department_id: raise ValidationError('Patient, template and encounter must share a department.')
         if self.service_date and self.service_date>latest_service_date(): raise ValidationError('The date of service or discharge cannot be in the future.')
 class Job(ProviderIdentifiers,Entity):
-    encounter=models.ForeignKey(Encounter,on_delete=models.PROTECT)
+    encounter=models.ForeignKey(Encounter,on_delete=models.PROTECT,null=True)
+    mapping_version=models.ForeignKey(TemplateVersion,on_delete=models.PROTECT,null=True,related_name='mapping_jobs')
     user=models.ForeignKey(User,on_delete=models.PROTECT)
     kind=models.CharField(max_length=20,default='generation')
     state=models.CharField(max_length=20,default='queued')
@@ -155,6 +206,16 @@ class Job(ProviderIdentifiers,Entity):
     input_path=models.CharField(max_length=100,blank=True)
     started_at=models.DateTimeField(null=True)
     finished_at=models.DateTimeField(null=True)
+    class Meta:
+        constraints=[models.CheckConstraint(name='job_exactly_one_scope',condition=(
+            models.Q(kind='mapping',encounter__isnull=True,mapping_version__isnull=False)
+            | (~models.Q(kind='mapping') & models.Q(encounter__isnull=False,mapping_version__isnull=True))))]
+    @property
+    def department(self):
+        return self.mapping_version.template.department if self.mapping_version_id else self.encounter.department
+    @property
+    def department_id(self):
+        return self.department.pk
     @property
     def pricing_snapshot(self):
         return self.config.get('pricing_version','Not captured for this historical job')
@@ -232,6 +293,9 @@ class Payment(Entity):
     status=models.CharField(max_length=20,default='pending')
     request_key=models.CharField(max_length=64,unique=True,null=True)
     checkout_url=models.URLField(max_length=1000,blank=True)
+    # The Stripe mode the checkout was created in. NULL: recorded before the mode was stored, when only sandbox
+    # payments existed. Real data mode never spends money from a wallet any non-live payment funded.
+    livemode=models.BooleanField(null=True)
 class WebhookEvent(Entity):
     event_id=models.CharField(max_length=180,unique=True)
     kind=models.CharField(max_length=80)
@@ -243,6 +307,8 @@ class WebhookEvent(Entity):
     attempts=models.PositiveIntegerField(default=0)
     error=models.CharField(max_length=160,blank=True)
     processed_at=models.DateTimeField(null=True)
+    # The event's livemode as validated when recorded. NULL: recorded before it was stored (sandbox only then).
+    livemode=models.BooleanField(null=True)
 class Refund(Entity):
     payment=models.ForeignKey(Payment,on_delete=models.PROTECT)
     stripe_refund=models.CharField(max_length=200,unique=True)

@@ -1,0 +1,32 @@
+SOURCE /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/blockers-repair5/astra-recovery/notes-refutation/finished-generation.py
+{
+  "notes": "The patient will take one tablet now. She will wait five minutes. The patient will take one tablet now.",
+  "unit_ids": [
+    1,
+    2,
+    3
+  ],
+  "answer": {
+    "text": "The patient will take one tablet now.\nShe will wait five minutes.",
+    "status": "supported",
+    "evidence": [
+      {
+        "quote": "The patient will take one tablet now.",
+        "start": 0,
+        "end": 37
+      },
+      {
+        "quote": "She will wait five minutes.",
+        "start": 38,
+        "end": 65
+      },
+      {
+        "quote": "The patient will take one tablet now.",
+        "start": 66,
+        "end": 103
+      }
+    ],
+    "reviewed": false
+  },
+  "finalization_governed": []
+}

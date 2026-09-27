@@ -1,0 +1,285 @@
+{
+  "sha256": "03e584bed9ab5e6bb7d6e17c4b46233136aac0132f6d48772970fa739204986a",
+  "cases": [
+    {
+      "notes": "Neurological examination is normal.",
+      "field_context": "",
+      "answer": {
+        "text": "Neurological examination is normal.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Neurological examination is normal.",
+            "start": 0,
+            "end": 35
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "Neurological examination is normal.",
+            "start": 0,
+            "end": 35
+          }
+        ]
+      },
+      "forced_refusals": []
+    },
+    {
+      "notes": "Heart and lung examination was normal.",
+      "field_context": "",
+      "answer": {
+        "text": "Heart and lung examination was normal.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Heart and lung examination was normal.",
+            "start": 0,
+            "end": 38
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "Heart and lung examination was normal.",
+            "start": 0,
+            "end": 38
+          }
+        ]
+      },
+      "forced_refusals": []
+    },
+    {
+      "notes": "Neurological examination is normal.",
+      "field_context": "Examination",
+      "answer": {
+        "text": "Neurological examination is normal.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Neurological examination is normal.",
+            "start": 0,
+            "end": 35
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "Neurological examination is normal.",
+            "start": 0,
+            "end": 35
+          }
+        ]
+      },
+      "forced_refusals": []
+    },
+    {
+      "notes": "Heart and lung examination was normal.",
+      "field_context": "Examination",
+      "answer": {
+        "text": "Heart and lung examination was normal.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Heart and lung examination was normal.",
+            "start": 0,
+            "end": 38
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "Heart and lung examination was normal.",
+            "start": 0,
+            "end": 38
+          }
+        ]
+      },
+      "forced_refusals": []
+    },
+    {
+      "notes": "Neurological examination is normal.",
+      "field_context": "Mother",
+      "answer": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "Neurological examination is normal.",
+            "start": 0,
+            "end": 35
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "Neurological examination is normal.",
+            "start": 0,
+            "end": 35
+          }
+        ],
+        "held_candidate": {
+          "text": "Neurological examination is normal.",
+          "evidence": [
+            {
+              "quote": "Neurological examination is normal.",
+              "start": 0,
+              "end": 35
+            }
+          ],
+          "context": [
+            {
+              "quote": "Neurological examination is normal.",
+              "start": 0,
+              "end": 35,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "forced_refusals": [
+        "Examination"
+      ]
+    },
+    {
+      "notes": "Heart and lung examination was normal.",
+      "field_context": "Mother",
+      "answer": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "Heart and lung examination was normal.",
+            "start": 0,
+            "end": 38
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "Heart and lung examination was normal.",
+            "start": 0,
+            "end": 38
+          }
+        ],
+        "held_candidate": {
+          "text": "Heart and lung examination was normal.",
+          "evidence": [
+            {
+              "quote": "Heart and lung examination was normal.",
+              "start": 0,
+              "end": 38
+            }
+          ],
+          "context": [
+            {
+              "quote": "Heart and lung examination was normal.",
+              "start": 0,
+              "end": 38,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "forced_refusals": [
+        "Examination"
+      ]
+    },
+    {
+      "notes": "Neurological examination is normal.",
+      "field_context": "Family history",
+      "answer": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "Neurological examination is normal.",
+            "start": 0,
+            "end": 35
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "Neurological examination is normal.",
+            "start": 0,
+            "end": 35
+          }
+        ],
+        "held_candidate": {
+          "text": "Neurological examination is normal.",
+          "evidence": [
+            {
+              "quote": "Neurological examination is normal.",
+              "start": 0,
+              "end": 35
+            }
+          ],
+          "context": [
+            {
+              "quote": "Neurological examination is normal.",
+              "start": 0,
+              "end": 35,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "forced_refusals": [
+        "Examination"
+      ]
+    },
+    {
+      "notes": "Heart and lung examination was normal.",
+      "field_context": "Family history",
+      "answer": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "Heart and lung examination was normal.",
+            "start": 0,
+            "end": 38
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "Heart and lung examination was normal.",
+            "start": 0,
+            "end": 38
+          }
+        ],
+        "held_candidate": {
+          "text": "Heart and lung examination was normal.",
+          "evidence": [
+            {
+              "quote": "Heart and lung examination was normal.",
+              "start": 0,
+              "end": 38
+            }
+          ],
+          "context": [
+            {
+              "quote": "Heart and lung examination was normal.",
+              "start": 0,
+              "end": 38,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "forced_refusals": [
+        "Examination"
+      ]
+    }
+  ]
+}

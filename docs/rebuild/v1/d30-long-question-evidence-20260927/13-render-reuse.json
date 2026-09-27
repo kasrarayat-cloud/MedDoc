@@ -1,0 +1,35 @@
+[
+  {
+    "area": "A23",
+    "original_equal_prior": true,
+    "missing_equal_prior": true,
+    "hashes": {
+      "original": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+      "missing": "a85392744688bbf1f58c73a86351216f9e1f2eef6cd7a650db9658d97a774df7",
+      "ordinary": "4e9be290c616982c7075fbcc3978e98faaa50582061e38a183929fad8c3df03c",
+      "long": "172b3c04bb3c2d9cec7e6d14d717e1abe1a834fdcbebbd05b69c9d8617a3cd20"
+    }
+  },
+  {
+    "area": "A35",
+    "original_equal_prior": true,
+    "missing_equal_prior": true,
+    "hashes": {
+      "original": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+      "missing": "a85392744688bbf1f58c73a86351216f9e1f2eef6cd7a650db9658d97a774df7",
+      "ordinary": "eda2e26cd16aa9facbc00d0ae2c5d7351a25d36b4aa13fdaefd3f19453bf54c6",
+      "long": "f02a9b509fdc322be4cd76700eac145ba59b11cad1f6a4a305aa551886c313bb"
+    }
+  },
+  {
+    "area": "A44",
+    "original_equal_prior": true,
+    "missing_equal_prior": true,
+    "hashes": {
+      "original": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+      "missing": "a85392744688bbf1f58c73a86351216f9e1f2eef6cd7a650db9658d97a774df7",
+      "ordinary": "c89b549ae9b5218255952994653aa66bae7f4e6d06032d9a5216253a089a458f",
+      "long": "60fe1e0404995707174836110872655e20950d972908992544dae216a8831dcb"
+    }
+  }
+]

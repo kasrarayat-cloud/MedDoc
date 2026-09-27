@@ -1,0 +1,19 @@
+{
+  "run": 36351792380,
+  "head": "b806ed85b4895304e6ef0c0b5aab8a8affbf9288",
+  "scope": "Completed browser job only; full workflow pending at capture. Fixture providers; no human microphone/native Word proof.",
+  "files": [
+    {
+      "file": "browser-artifacts/report.json",
+      "sha256": "251dcd61c789414993f474ab1df1b98b24a84b16d8ba831ef245aecfe3bf0099"
+    },
+    {
+      "file": "input-workflow-browser/result.json",
+      "sha256": "82cfac6ad7aa5f8a50d3765f4c521ee83cd9b55ddfaacf3c73cffd1500fc3c0e"
+    },
+    {
+      "file": "wm-browser-artifacts/report.json",
+      "sha256": "7d45af1b5e27fd5cee2e3114191640dbb95ba329376e376a2c781ef8a8cdcae6"
+    }
+  ]
+}

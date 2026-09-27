@@ -1,0 +1,6 @@
+A23 409 b/tbl[6]/tr[0]/tc[0]
+A35 334 b/tbl[18]/tr[0]/tc[0]
+A44 232 b/tbl[23]/tr[0]/tc[0]
+prior_fields_unchanged 68 current_fields 71 new_fields 3
+unassigned ['Unassigned answer box at word/document.xml#b/tbl[4]/tr[0]/tc[0]. No unambiguous adjacent printed question.', 'Unassigned answer box at word/document.xml#b/tbl[9]/tr[0]/tc[0]. The question refers to another area; review both source questions. Printed text: In relation to the above question have you asked the patient directly about relationships and what was the response? How do you vary your supervision to monitor compliance with this condition outside of self-reporting?', 'Unassigned answer box at word/document.xml#b/tbl[21]/tr[0]/tc[0]. No unambiguous adjacent printed question. Printed text: This section is for the line manager of the social supervisor to add any comments or highlight any concerns that have arisen out of this report.']
+original_sha256 fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f

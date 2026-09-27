@@ -1,0 +1,22 @@
+F
+======================================================================
+FAIL: test_paired_side_cells_govern_only_their_own_answer (documents.test_word_v3.RoundThreeRemainingDefects.test_paired_side_cells_govern_only_their_own_answer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word/rebuild/documents/test_word_v3.py", line 1604, in test_paired_side_cells_govern_only_their_own_answer
+    self.assertEqual([f["label"] for f in fields], [right + " — Effusion", left + " — Effusion"])
+AssertionError: Lists differ: ['Right — Left — Effusion', 'Right — Left — Effusion'] != ['Right — Effusion', 'Left — Effusion']
+
+First differing element 0:
+'Right — Left — Effusion'
+'Right — Effusion'
+
+- ['Right — Left — Effusion', 'Right — Left — Effusion']
+?          -------             --------
+
++ ['Right — Effusion', 'Left — Effusion']
+
+----------------------------------------------------------------------
+Ran 1 test in 0.078s
+
+FAILED (failures=1)

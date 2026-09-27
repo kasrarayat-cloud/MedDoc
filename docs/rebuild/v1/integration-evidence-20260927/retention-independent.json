@@ -1,0 +1,31 @@
+{
+  "result": "PASS",
+  "checks": [
+    "missing classes",
+    "missing coverage",
+    "missing contract",
+    "days True",
+    "days False",
+    "days 30",
+    "days 0",
+    "days -1",
+    "days 365001",
+    "days 1.5",
+    "protected ledger",
+    "protected audit",
+    "protected provider_receipts",
+    "protected usage",
+    "protected mapping_versions",
+    "protected finalized_clinical_records",
+    "protected final_export_references",
+    "anchor notes",
+    "anchor created_at__year",
+    "anchor created_at;DROP TABLE",
+    "anchor export_path",
+    "valid declaration remains no window False",
+    "valid declaration remains no window True",
+    "all current models represented"
+  ],
+  "count": 24,
+  "scope": "independent policy/domain controls only; PostgreSQL read-only proof remains separate synthetic evidence"
+}

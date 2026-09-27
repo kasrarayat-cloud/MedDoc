@@ -1,0 +1,68 @@
+....FFFF.
+======================================================================
+FAIL: test_retained_complete_note_keeps_exact_named_answers_and_unresolved_values (core.tests.test_v3_patient_topics.PatientSourceTopics.test_retained_complete_note_keeps_exact_named_answers_and_unresolved_values) (label='Allergies')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-patient-topics/rebuild/core/tests/test_v3_patient_topics.py", line 28, in test_retained_complete_note_keeps_exact_named_answers_and_unresolved_values
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('supported', value))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'No known drug allergies.')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'No known drug allergies.')
+
+======================================================================
+FAIL: test_retained_complete_note_keeps_exact_named_answers_and_unresolved_values (core.tests.test_v3_patient_topics.PatientSourceTopics.test_retained_complete_note_keeps_exact_named_answers_and_unresolved_values) (label='Examination')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-patient-topics/rebuild/core/tests/test_v3_patient_topics.py", line 28, in test_retained_complete_note_keeps_exact_named_answers_and_unresolved_values
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('supported', value))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'Neurological examination is normal.')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'Neurological examination is normal.')
+
+======================================================================
+FAIL: test_retained_complete_note_keeps_exact_named_answers_and_unresolved_values (core.tests.test_v3_patient_topics.PatientSourceTopics.test_retained_complete_note_keeps_exact_named_answers_and_unresolved_values) (label='Assessment')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-patient-topics/rebuild/core/tests/test_v3_patient_topics.py", line 28, in test_retained_complete_note_keeps_exact_named_answers_and_unresolved_values
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('supported', value))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'tension-type headache.')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'tension-type headache.')
+
+======================================================================
+FAIL: test_retained_complete_note_keeps_exact_named_answers_and_unresolved_values (core.tests.test_v3_patient_topics.PatientSourceTopics.test_retained_complete_note_keeps_exact_named_answers_and_unresolved_values) (label='Plan')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-patient-topics/rebuild/core/tests/test_v3_patient_topics.py", line 28, in test_retained_complete_note_keeps_exact_named_answers_and_unresolved_values
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('supported', value))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'to start amitriptyline 10 mg[41 chars]ks.')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported',
++  'to start amitriptyline 10 mg at night.\nShe will follow up in six weeks.')
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.789s
+
+FAILED (failures=4)
+Found 6 test(s).
+System check identified no issues (0 silenced).

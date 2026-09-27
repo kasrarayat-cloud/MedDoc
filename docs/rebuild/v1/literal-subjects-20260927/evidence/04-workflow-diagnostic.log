@@ -1,0 +1,107 @@
+34 objects imported automatically (use -v 2 for details).
+
+[
+  {
+    "key": "v3_1",
+    "label": "Allergies",
+    "kind": "text",
+    "context": "Allergies",
+    "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[0]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+    }
+  },
+  {
+    "key": "v3_2",
+    "label": "Examination",
+    "kind": "text",
+    "context": "Examination",
+    "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[1]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+    }
+  }
+]
+{
+  "Allergies": {
+    "text": "",
+    "status": "conflict",
+    "evidence": [
+      {
+        "quote": "No known drug allergies.",
+        "start": 0,
+        "end": 24
+      }
+    ],
+    "reviewed": false,
+    "held_candidate": {
+      "text": "No known drug allergies.",
+      "evidence": [
+        {
+          "quote": "No known drug allergies.",
+          "start": 0,
+          "end": 24
+        }
+      ],
+      "context": [
+        {
+          "quote": "No known drug allergies.",
+          "start": 0,
+          "end": 24,
+          "after": false,
+          "same": true
+        },
+        {
+          "quote": "Neurological examination is normal.",
+          "start": 25,
+          "end": 60,
+          "after": true,
+          "same": true
+        }
+      ],
+      "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+    }
+  },
+  "Examination": {
+    "text": "",
+    "status": "conflict",
+    "evidence": [
+      {
+        "quote": "Neurological examination is normal.",
+        "start": 25,
+        "end": 60
+      }
+    ],
+    "reviewed": false,
+    "held_candidate": {
+      "text": "Neurological examination is normal.",
+      "evidence": [
+        {
+          "quote": "Neurological examination is normal.",
+          "start": 25,
+          "end": 60
+        }
+      ],
+      "context": [
+        {
+          "quote": "No known drug allergies.",
+          "start": 0,
+          "end": 24,
+          "after": false,
+          "same": true
+        }
+      ],
+      "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+    }
+  }
+}

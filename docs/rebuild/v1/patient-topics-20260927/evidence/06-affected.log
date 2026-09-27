@@ -1,0 +1,37 @@
+Using existing test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-patient-topics/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-patient-topics/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+../opt/meddoc-pro/.worktrees/v1-patient-topics/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-patient-topics/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+...........................................................................................................................................F................................F............
+======================================================================
+FAIL: test_r3_4_each_unit_is_read_for_sentence_ends_once_however_many_questions_select_it (core.tests.test_v3_ordinary_notes.RoundThreeCost.test_r3_4_each_unit_is_read_for_sentence_ends_once_however_many_questions_select_it)
+Once per unit, shared by the paragraph rule and every question that selects the unit.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-patient-topics/rebuild/core/tests/test_v3_ordinary_notes.py", line 1134, in test_r3_4_each_unit_is_read_for_sentence_ends_once_however_many_questions_select_it
+    self.assertLessEqual(len(shapes), len(units), shapes)
+AssertionError: 5 not less than or equal to 3 : ['Patient presents with knee pain.', 'Patient presents with knee pain.', 'She reports it is worse at night.', 'She reports it is worse at night.', 'Allergies: penicillin.']
+
+======================================================================
+FAIL: test_a_complete_statement_needs_a_listed_verb (core.tests.test_v3_ordinary_notes.ScopeInOrdinarySentences.test_a_complete_statement_needs_a_listed_verb)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-patient-topics/rebuild/core/tests/test_v3_ordinary_notes.py", line 342, in test_a_complete_statement_needs_a_listed_verb
+    self.assertEqual((answer['status'], answer['text']), ('conflict', ''), fragment)
+AssertionError: Tuples differ: ('supported', 'No known drug allergies.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'No known drug allergies.')
++ ('conflict', '') : No known drug allergies.
+
+----------------------------------------------------------------------
+Ran 187 tests in 69.543s
+
+FAILED (failures=2)
+Preserving test database for alias 'default'...
+Found 187 test(s).
+System check identified no issues (0 silenced).

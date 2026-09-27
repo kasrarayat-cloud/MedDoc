@@ -1,0 +1,135 @@
+{
+  "generation_sha256": "7d31a1acf99e61d892911f761c16371357ab370322da8337102872ffe33500d3",
+  "cases": [
+    {
+      "id": "B01-stitches-documented",
+      "expected": "supported",
+      "status": "conflict",
+      "text": "",
+      "forced_refusals": [
+        "Allergies"
+      ]
+    },
+    {
+      "id": "B02-device-documented",
+      "expected": "supported",
+      "status": "conflict",
+      "text": "",
+      "forced_refusals": [
+        "Allergies"
+      ]
+    },
+    {
+      "id": "B03-record-physical-removal",
+      "expected": "supported",
+      "status": "conflict",
+      "text": "",
+      "forced_refusals": [
+        "Allergies"
+      ]
+    },
+    {
+      "id": "B04-catheter-note-response",
+      "expected": "supported",
+      "status": "conflict",
+      "text": "",
+      "forced_refusals": [
+        "Allergies"
+      ]
+    },
+    {
+      "id": "B05-omission-of-entry",
+      "expected": "conflict",
+      "status": "supported",
+      "text": "No known drug allergies.",
+      "forced_refusals": []
+    },
+    {
+      "id": "B06-deletes-entry",
+      "expected": "conflict",
+      "status": "supported",
+      "text": "No known drug allergies.",
+      "forced_refusals": []
+    },
+    {
+      "id": "B07-removes-entry",
+      "expected": "conflict",
+      "status": "supported",
+      "text": "No known drug allergies.",
+      "forced_refusals": []
+    },
+    {
+      "id": "B08-document-physical-removal-control",
+      "expected": "supported",
+      "status": "supported",
+      "text": "No known drug allergies.",
+      "forced_refusals": []
+    },
+    {
+      "id": "B09-fullwidth-retraction",
+      "expected": "conflict",
+      "status": "conflict",
+      "text": "",
+      "forced_refusals": [
+        "Allergies"
+      ]
+    },
+    {
+      "id": "B10-fullwidth-for",
+      "expected": "conflict",
+      "status": "conflict",
+      "text": "",
+      "forced_refusals": [
+        "Allergies"
+      ]
+    },
+    {
+      "id": "B11-invisible-for",
+      "expected": "conflict",
+      "status": "conflict",
+      "text": "",
+      "forced_refusals": [
+        "Allergies"
+      ]
+    },
+    {
+      "id": "B12-naproxen-positive",
+      "expected": "supported",
+      "status": "supported",
+      "text": "No known drug allergies.",
+      "forced_refusals": []
+    },
+    {
+      "id": "B13-formal-positive",
+      "expected": "supported",
+      "status": "supported",
+      "text": "No known drug allergies.",
+      "forced_refusals": []
+    },
+    {
+      "id": "B14-foreign-body-positive",
+      "expected": "supported",
+      "status": "supported",
+      "text": "No known drug allergies.",
+      "forced_refusals": []
+    },
+    {
+      "id": "B15-unicode-if",
+      "expected": "conflict",
+      "status": "conflict",
+      "text": "",
+      "forced_refusals": [
+        "Examination"
+      ]
+    },
+    {
+      "id": "B16-fullwidth-mother",
+      "expected": "conflict",
+      "status": "conflict",
+      "text": "",
+      "forced_refusals": [
+        "Examination"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+Using existing test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-ordinary-topics/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-ordinary-topics/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+./opt/meddoc-pro/.worktrees/v1-ordinary-topics/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-ordinary-topics/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+....................................................................................................................................F.....................
+======================================================================
+FAIL: test_r3_1_the_plain_value_grammar_fails_closed (core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_1_the_plain_value_grammar_fails_closed) (notes='Smoker: yes. Plan: rest ice elevation compression.')
+Not the refuter's inputs: each part of the grammar, pinned by a later value only that part makes not plain.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-topics/rebuild/core/tests/test_v3_ordinary_notes.py", line 924, in test_r3_1_the_plain_value_grammar_fails_closed
+    held_with(self, notes, label, quote, quote.split(': ', 1)[1])
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-topics/rebuild/core/tests/test_v3_ordinary_notes.py", line 873, in held_with
+    test.assertEqual((answer['status'], answer['text'], answer.get('suggestion')), ('conflict', '', None), notes)
+AssertionError: Tuples differ: ('supported', 'Yes', None) != ('conflict', '', None)
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Yes', None)
++ ('conflict', '', None) : Smoker: yes. Plan: rest ice elevation compression.
+
+----------------------------------------------------------------------
+Ran 155 tests in 42.934s
+
+FAILED (failures=1)
+Preserving test database for alias 'default'...
+Found 155 test(s).
+System check identified no issues (0 silenced).

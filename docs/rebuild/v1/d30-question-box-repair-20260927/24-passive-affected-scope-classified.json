@@ -1,0 +1,959 @@
+{
+  "scope": "Passive XML shape upper bound only; no detector/export/provider execution.",
+  "rights_ledger_sha256": "5abaabb031c6e1552944dab1bc3e7fbd3ae5876436c840ffe1ee6312281851d7",
+  "eligible_originals_examined": 33,
+  "held_files_not_opened": [
+    "D06",
+    "D19",
+    "D20",
+    "D23",
+    "D24",
+    "D25",
+    "D32"
+  ],
+  "candidate_commit": "75e545b2a6469b0d188c779f3c4ee9af02dfc7f5",
+  "candidate_engine_sha256": "326a4baf7d3331add09f36f78e05d66a8fb75acd4e10bd1c2c952447835efbd1",
+  "base_commit": "0b0395a0922f81f5a38526802136197a4bb74b28",
+  "records": [
+    {
+      "development_id": "D01",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D01-c1852a492221.docx",
+      "original_sha256": "c1852a492221cfa0d144c9c0a60b700a7363a2cca7630aa988ee8b6329e1868b",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [],
+      "possible_rule_entry": false,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D01-c1852a492221.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D01-c1852a492221.json"
+    },
+    {
+      "development_id": "D02",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D02-8ae1e2b0ebee.docx",
+      "original_sha256": "8ae1e2b0ebeec317c038b8bfeed6a0824055f44d689c039ab450404593f2815a",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [],
+      "possible_rule_entry": false,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D02-8ae1e2b0ebee.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D02-8ae1e2b0ebee.json"
+    },
+    {
+      "development_id": "D03",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D03-29dfcdd8a5da.docx",
+      "original_sha256": "29dfcdd8a5daef213e30e03e5062fa9193a31a53651c880acc498006c1d506ff",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [],
+      "possible_rule_entry": false,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D03-29dfcdd8a5da.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D03-29dfcdd8a5da.json"
+    },
+    {
+      "development_id": "D04",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D04-cebb55cd7345.docx",
+      "original_sha256": "cebb55cd73453bdb6c8caf0fc040861daf9b074bf3cca278b6243e98e02da175",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [],
+      "possible_rule_entry": false,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D04-cebb55cd7345.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D04-cebb55cd7345.json"
+    },
+    {
+      "development_id": "D05",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D05-ab006eeb434e.docx",
+      "original_sha256": "ab006eeb434eb3b479e57313c13f3fb2c1fcb95b6ce3f8580794ab2a170d048a",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [],
+      "possible_rule_entry": false,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D05-ab006eeb434e.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D05-ab006eeb434e.json"
+    },
+    {
+      "development_id": "D07",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D07-f43d08e3b436.docx",
+      "original_sha256": "f43d08e3b4361ea7161572917a8839beea7f79ba2497a14dca7493ddf6e67cc3",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [],
+      "possible_rule_entry": false,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D07-f43d08e3b436.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D07-f43d08e3b436.json"
+    },
+    {
+      "development_id": "D08",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D08-9eeac252e6d2.docx",
+      "original_sha256": "9eeac252e6d2d6fe5a1f05adc2dc74de63c7e415aeb09d4590f5e06203b462d6",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [],
+      "possible_rule_entry": false,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D08-9eeac252e6d2.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D08-9eeac252e6d2.json"
+    },
+    {
+      "development_id": "D09",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D09-b04f37b4ff08.docx",
+      "original_sha256": "b04f37b4ff081529644b1d16c225bf4603c1749e392d8327ed0eb3943019822a",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [],
+      "possible_rule_entry": false,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D09-b04f37b4ff08.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D09-b04f37b4ff08.json"
+    },
+    {
+      "development_id": "D10",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D10-b54cc9e77067.docx",
+      "original_sha256": "b54cc9e770678dda021110abc66d155fc419af6baf5a9a0c8272da727ab91546",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [],
+      "possible_rule_entry": false,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D10-b54cc9e77067.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D10-b54cc9e77067.json"
+    },
+    {
+      "development_id": "D11",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D11-500efd5985a7.docx",
+      "original_sha256": "500efd5985a715277144cfaa42d8dbe72ee748fa11bb43a6215ed944b0bc352d",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [],
+      "possible_rule_entry": false,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D11-500efd5985a7.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D11-500efd5985a7.json"
+    },
+    {
+      "development_id": "D12",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D12-934bf431af0b.docx",
+      "original_sha256": "934bf431af0b1486f5f809d83a14a61c6e6721342e1e4c377153e1df640a3604",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [],
+      "possible_rule_entry": false,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D12-934bf431af0b.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D12-934bf431af0b.json"
+    },
+    {
+      "development_id": "D13",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D13-75b75da8559d.docx",
+      "original_sha256": "75b75da8559db2a5849343d6809e3171c254a538870e0da40b0a15d367160a92",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [],
+      "possible_rule_entry": false,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D13-75b75da8559d.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D13-75b75da8559d.json"
+    },
+    {
+      "development_id": "D14",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D14-5089ad547ee0.docx",
+      "original_sha256": "5089ad547ee0d0527f687bec1e8f26a35f5204e68e7c50b8bd8ae296983a2a50",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [],
+      "possible_rule_entry": false,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D14-5089ad547ee0.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D14-5089ad547ee0.json"
+    },
+    {
+      "development_id": "D15",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D15-19efe830ee0d.docx",
+      "original_sha256": "19efe830ee0d049cae32236fe0db8bdfa1cfe5f17ab80f5a37cd66c7593663c2",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [],
+      "possible_rule_entry": false,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D15-19efe830ee0d.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D15-19efe830ee0d.json"
+    },
+    {
+      "development_id": "D16",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D16-51c6e400e89d.docx",
+      "original_sha256": "51c6e400e89d631bf81959418c9cc5cc9631bfb3ac741a3bdce5d8f9a1e0273f",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [],
+      "possible_rule_entry": false,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D16-51c6e400e89d.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D16-51c6e400e89d.json"
+    },
+    {
+      "development_id": "D17",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D17-92b3e2ed55db.docx",
+      "original_sha256": "92b3e2ed55db0bba14bc20bdb5b27ad5253337075c1b042d0362663a7a16154a",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [
+        {
+          "table": 0,
+          "slot": "word/document.xml#b/tbl[0]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "c72fbb81520ef70fa9e88948bd34687e71ada7c7a90d5df9fe8fa3ede983e2b8",
+          "xml_sha256": "6d5308818e2e878fa3001ede44e050fc8304205a5c0000afda1afd36924d459e"
+        }
+      ],
+      "possible_rule_entry": true,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D17-92b3e2ed55db.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D17-92b3e2ed55db.json"
+    },
+    {
+      "development_id": "D18",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D18-73fe91e5501b.docx",
+      "original_sha256": "73fe91e5501bad3fe7e5ad413f49934006965b8b2e1d2612f88e1daf78ac9f46",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [],
+      "possible_rule_entry": false,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D18-73fe91e5501b.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D18-73fe91e5501b.json"
+    },
+    {
+      "development_id": "D21",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D21-d1c0e1234bae.docx",
+      "original_sha256": "d1c0e1234baeb32039bac32c1ba1f207d044da816df91ddb5e6d81e87125fcba",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [
+        {
+          "table": 0,
+          "slot": "word/document.xml#b/tbl[0]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "b4fed0c11f9cb7dea1fcf7ca1a96ae0a7325a496e3e3451f9b54a20e47e4e487",
+          "xml_sha256": "dbf308ce92d858ff93a005b5a843a5939a0ac45ae739dd4ba6a6484c043977af"
+        }
+      ],
+      "possible_rule_entry": true,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D21-d1c0e1234bae.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D21-d1c0e1234bae.json"
+    },
+    {
+      "development_id": "D22",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D22-e858648b9d5c.docx",
+      "original_sha256": "e858648b9d5c52c920e64bfd8fe7cb925505ebddaefc320003f88a5d2e7ea020",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [],
+      "possible_rule_entry": false,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D22-e858648b9d5c.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D22-e858648b9d5c.json"
+    },
+    {
+      "development_id": "D26",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D26-0e247607a738.docx",
+      "original_sha256": "0e247607a7388575f78b7be00bb172362830f7577178364bac2252a85a0454fb",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [
+        {
+          "table": 0,
+          "slot": "word/document.xml#b/tbl[0]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "c5c845b04b8307711204dc51fee1d08fa9f4fc6d81a9b07b5860c539f8f2b631",
+          "xml_sha256": "7192602f942c3ee17f516db8b2594fb27530b7fca1d44b677a2f4e5a608daa2a"
+        }
+      ],
+      "possible_rule_entry": true,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D26-0e247607a738.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D26-0e247607a738.json"
+    },
+    {
+      "development_id": "D27",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D27-bc002ff4594e.docx",
+      "original_sha256": "bc002ff4594eb374f1748c8e80a66dfa432bc1432d98cd4e218a06d3515d0c66",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [
+        {
+          "table": 0,
+          "slot": "word/document.xml#b/tbl[0]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "e1956e5ce2e5346d81217a4069f7cbd0645d234dd88370038e37bcd96408fd72",
+          "xml_sha256": "64adfd78dc647b080d2c9325d5510854970b1bf8e0d6b8d1699eee7ee046be4c"
+        }
+      ],
+      "possible_rule_entry": true,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D27-bc002ff4594e.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D27-bc002ff4594e.json"
+    },
+    {
+      "development_id": "D28",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D28-479946b2185f.docx",
+      "original_sha256": "479946b2185f8d259b3de72375aa6ba941841f67ba2d676f61d714ddb9fc9786",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [],
+      "possible_rule_entry": false,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D28-479946b2185f.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D28-479946b2185f.json"
+    },
+    {
+      "development_id": "D29",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D29-e01fb51a1ce2.docx",
+      "original_sha256": "e01fb51a1ce2c1194f307916641590e7a8bd25657c69bb0892c8a4e4078ba1d8",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [],
+      "possible_rule_entry": false,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D29-e01fb51a1ce2.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D29-e01fb51a1ce2.json"
+    },
+    {
+      "development_id": "D30",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D30-fdeafbee872f.docx",
+      "original_sha256": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [
+        {
+          "table": 1,
+          "slot": "word/document.xml#b/tbl[1]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "c60172283faf557af254225aa52072ccc8a6e7542c08efcd0314ed757e1c9466"
+        },
+        {
+          "table": 2,
+          "slot": "word/document.xml#b/tbl[2]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "d5fbb9573d9472c8bd9410727ae122856cdacf929d3e56e58fbcb3d0cdbd4f8d"
+        },
+        {
+          "table": 3,
+          "slot": "word/document.xml#b/tbl[3]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "5c9ded2ce9d57d880c587ea77e9c00191bdfc23add046cbe1dbf0bf312682846"
+        },
+        {
+          "table": 4,
+          "slot": "word/document.xml#b/tbl[4]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "cea69e8fc4609ca2c0176668aae564647f5d7893ed589ee52bcb79a2d146bfb5"
+        },
+        {
+          "table": 5,
+          "slot": "word/document.xml#b/tbl[5]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "a5ea3d3fae073b525fe2ecf3f2c0b2d5a9d30b9c41d6f7ec65c5890b9a880bb1"
+        },
+        {
+          "table": 6,
+          "slot": "word/document.xml#b/tbl[6]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "61760ecfae9bab7c1677c2cab66d49e0e0a895e91dca2c8414cbde3bb35c750a"
+        },
+        {
+          "table": 7,
+          "slot": "word/document.xml#b/tbl[7]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "23b7173b92403975b5e7f3bb8ed46dbad043a9fc020d3742d4fa7525c8109a0c"
+        },
+        {
+          "table": 8,
+          "slot": "word/document.xml#b/tbl[8]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "8a6d3aa88b6ca6489716dede1754d317d6f56ee67e464cf34e381ef74f68d5d0"
+        },
+        {
+          "table": 9,
+          "slot": "word/document.xml#b/tbl[9]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "82c4a1a92e1ffc26f4e80682e27efcae96a675031a6b640362e21994570b66c5"
+        },
+        {
+          "table": 10,
+          "slot": "word/document.xml#b/tbl[10]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "8b2624277995152513d1d4baf66434187f2b1e056069cfefc9fb8e4d53932572"
+        },
+        {
+          "table": 11,
+          "slot": "word/document.xml#b/tbl[11]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "bbda52b006e76e49ac49ca31e7f32e4034f7b6b5ad64909f9a6f607827af3e02"
+        },
+        {
+          "table": 12,
+          "slot": "word/document.xml#b/tbl[12]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "d2baffad4db5d087583e621844fd50d9dd4cddb6fee13f6f3c9d2ad97aac74c7"
+        },
+        {
+          "table": 13,
+          "slot": "word/document.xml#b/tbl[13]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "be49d5abb769f673fae3818be0401094ad9edae1ea9068227d72798c708ce99c"
+        },
+        {
+          "table": 14,
+          "slot": "word/document.xml#b/tbl[14]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "9b2eaba3cfa7c5acad66f13f0304f11a09d979ed090a51ea8e18cf9df4aa1c31"
+        },
+        {
+          "table": 15,
+          "slot": "word/document.xml#b/tbl[15]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "c180078de585c565caefed3aa722f66e85a0c3419cfde2e6c5d4ab3749cbf3be"
+        },
+        {
+          "table": 16,
+          "slot": "word/document.xml#b/tbl[16]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "04addfc105e1712d540541ff7ba8cb8b8e297a5fda1311988c108aa8a1746654"
+        },
+        {
+          "table": 17,
+          "slot": "word/document.xml#b/tbl[17]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "a605599f34c05735573eae7bf0b31d7b119d3dc0a3c6f8ce2bd1633e7eea1d61"
+        },
+        {
+          "table": 18,
+          "slot": "word/document.xml#b/tbl[18]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "558428e40a5e25452be4331b502ffa34b6ac659133b50d9b249d91c1d2383409"
+        },
+        {
+          "table": 19,
+          "slot": "word/document.xml#b/tbl[19]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "571ad46abcda25d06a932a90018d81d9fc78517931fc4de662a9497393fbecf4"
+        },
+        {
+          "table": 21,
+          "slot": "word/document.xml#b/tbl[21]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "ff33b08fa9b198c72df5125d628dc0d8f153f968a24494021df9152f6c1d6872"
+        },
+        {
+          "table": 23,
+          "slot": "word/document.xml#b/tbl[23]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "919a877a1b9b0722fbd244908fbb99515a90a607fdf55e3acef51185eb810cc4"
+        },
+        {
+          "table": 24,
+          "slot": "word/document.xml#b/tbl[24]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "f097834bc05b9a4640d7da265c88bbb1a48a5fa10cc0a0c7bc7d46aa139cd825"
+        },
+        {
+          "table": 25,
+          "slot": "word/document.xml#b/tbl[25]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "23db9751ca206a75fb75ffec841fd12f89c36d99dcb9fc60210eaa5a59721b08"
+        },
+        {
+          "table": 26,
+          "slot": "word/document.xml#b/tbl[26]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "b2074f9bfd43cf40dd55419a1f873103a78f647555ef9c1441f484406a7286df"
+        },
+        {
+          "table": 27,
+          "slot": "word/document.xml#b/tbl[27]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "ce9954a56a076d735e3045092b8082e5cc040d497873a6ee07e1ef6e7f1b451e"
+        },
+        {
+          "table": 28,
+          "slot": "word/document.xml#b/tbl[28]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "26d42e577ffcfae6ed122160f3a944ca160b361928ce496967749b737f1652a3"
+        },
+        {
+          "table": 29,
+          "slot": "word/document.xml#b/tbl[29]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "84674a791e9ee9e5490f8afb7daf243d4df6063eadcdc133b6eaacebf01e8aec"
+        },
+        {
+          "table": 30,
+          "slot": "word/document.xml#b/tbl[30]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "9932b151a5f37b3856527d6a6d9f875a47e65b19fee30bb0addceb0437665e2a"
+        },
+        {
+          "table": 31,
+          "slot": "word/document.xml#b/tbl[31]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "1f518aeaa352dcb59afcb8b32586fa698c7df979b8017128010c58121cafe10e"
+        },
+        {
+          "table": 32,
+          "slot": "word/document.xml#b/tbl[32]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "dbd2dd107670e43f60660a048b23abce6af6fcb7788b3672d83e8fc6721ca622"
+        },
+        {
+          "table": 33,
+          "slot": "word/document.xml#b/tbl[33]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "ff3ae13b622840990183a15a440edc3262a7ba72b3228493cc49c14c9dd81668"
+        },
+        {
+          "table": 34,
+          "slot": "word/document.xml#b/tbl[34]/tr[0]/tc[0]",
+          "plain_text_empty": true,
+          "object_tags": [],
+          "blank_like_without_objects": true,
+          "plain_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "xml_sha256": "aa59e82c1091cc1950a1d00d2edfeea0a3c5d6351457b22bee07bae8af60b266"
+        }
+      ],
+      "possible_rule_entry": true,
+      "eligible_blank_box_present": true,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D30-fdeafbee872f.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D30-fdeafbee872f.json"
+    },
+    {
+      "development_id": "D31",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D31-f730aa53671a.docx",
+      "original_sha256": "f730aa53671ab367eb5e89376d653ef0d51f096962ae616480711a292eeed36d",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [
+        {
+          "table": 1,
+          "slot": "word/document.xml#b/tbl[1]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "82404adb8cc315abd0a6f6ad96b3e18803522bf2fcefc7abbc47f39da8ba7d8a",
+          "xml_sha256": "d0be4be19c4129cc8650b2f5f2dc5dbdc3b238342926925c79757ac78b9a7018"
+        },
+        {
+          "table": 2,
+          "slot": "word/document.xml#b/tbl[2]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [
+            "fldChar"
+          ],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "0891a426c51548cb1bb13e61d784c6e18a9f20e5d6a66191c257077c07982d40",
+          "xml_sha256": "28f8ff7d199b746c5d0f676a0b9f938cdb78841b2f0cb7afe7938a93183988cc"
+        },
+        {
+          "table": 3,
+          "slot": "word/document.xml#b/tbl[3]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "9b2dac4dec671ab76391411c1c252885da75e022942995afd594a0de067521be",
+          "xml_sha256": "c00cf47480ab9941b01f1e1f64bf9e967499890df08f704e929ca764d9a1f4c6"
+        },
+        {
+          "table": 13,
+          "slot": "word/document.xml#b/tbl[13]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "1d588fc115f30cd9e57154f15c04a8145687e53fc825412a1741574e70b72727",
+          "xml_sha256": "610a00c58de42dbba4a810814ed631c048410aec755437acd69eafe0bc9b6642"
+        },
+        {
+          "table": 23,
+          "slot": "word/document.xml#b/tbl[23]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "fbdfc51e8c7f18ead0279c347212d51969bb8eb7bda8955c703207a38320c50c",
+          "xml_sha256": "e8ff2b6a0ccfb6fe2c1be3dda11a5552c3e1b8542a14224d7d16d3d1fa0d13fc"
+        },
+        {
+          "table": 28,
+          "slot": "word/document.xml#b/tbl[28]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "8e3f29ab24801a8f8fcd816a1b6fd042c655e15e97f663fc80f96f3512da7195",
+          "xml_sha256": "412e5b85244ae01c676737926aebac2d847d2633b099a7f19a9f0512640ab70c"
+        },
+        {
+          "table": 31,
+          "slot": "word/document.xml#b/tbl[31]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "7a6be96096775cfed77a939f4db7ee0775fa1423884f8fd9a24e21e2aa2746d2",
+          "xml_sha256": "16e7b1bfbed597f386972712e8ba4fad87c7af6f5264276bff787619c6a1d37e"
+        },
+        {
+          "table": 39,
+          "slot": "word/document.xml#b/tbl[39]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "f1a6b384469a1d6d04df3e5c91250a048c1b0729f1bd05bce27091d6062c9c9a",
+          "xml_sha256": "791985a75461bc4ade997a300b23bef9a288249d3f1f7bfedaf77df279540439"
+        },
+        {
+          "table": 47,
+          "slot": "word/document.xml#b/tbl[47]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "68cfba2d2fa1a41a23033916765d14791381c6a305ca9bef26ffa1ed3834a546",
+          "xml_sha256": "954eda77c2a9addf4b8ddb1f01e319ceef4413191cb1aac1d2544f90ed3b34a0"
+        },
+        {
+          "table": 51,
+          "slot": "word/document.xml#b/tbl[51]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "273bcb98a757d3d08caf95817e5871b4a342b31eea267d4f7e082d13b3a428cb",
+          "xml_sha256": "d2c7cb05508c8ed7f7cc2b5a5abd12cdf7bc33036081fc40c06897e3a1b0479a"
+        },
+        {
+          "table": 55,
+          "slot": "word/document.xml#b/tbl[55]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "84dec001f3bb228e2297afc6d61aa3052e2e77c5ddb5f4229cb7afd609702af9",
+          "xml_sha256": "5a13c0e1c816257435ef2b55a72bf0478d6d018deb10db9f483917ce5bd04387"
+        }
+      ],
+      "possible_rule_entry": true,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D31-f730aa53671a.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D31-f730aa53671a.json"
+    },
+    {
+      "development_id": "D33",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D33-45e292c57ec8.docx",
+      "original_sha256": "45e292c57ec851c457297f421d3c0c844b61f7bef07aa0ed9af8f4c7b5cbac0c",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [
+        {
+          "table": 1,
+          "slot": "word/document.xml#b/tbl[1]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "dadcda02a853c33adea2192c16692e627f1e187acbb3ef8d7ed52874bf28c442",
+          "xml_sha256": "0d6e07aa8dcb8beea9d1c30ba1a7f131af3d55e5469d2d72e82fe985c8f6774f"
+        },
+        {
+          "table": 3,
+          "slot": "word/document.xml#b/tbl[3]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "68c8d45a2edc37fa14571dbb8930c0661f15fc2fb0ec55c4414adce98ef96e4e",
+          "xml_sha256": "edff5f34805dc6bc13d43857a4e91f61272638ab1da1764dd502f782df157563"
+        },
+        {
+          "table": 7,
+          "slot": "word/document.xml#b/tbl[7]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "b4718e1e9edb2d6fd658fffe07cdaa9c2355fd5aaa2b5a1f6e2b64eded7fdee1",
+          "xml_sha256": "d5c1080984e3955ce529d32e778ba99e569ea0f0fd1c864f9f061e3c5cfca685"
+        },
+        {
+          "table": 8,
+          "slot": "word/document.xml#b/tbl[8]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "a9950e907e1f239c2c30af86b31465a95de500f58adf0d169a5282dcc19bbfb5",
+          "xml_sha256": "109858310bf5a1e237603e696b6ceedb1bbac612d779bf4ea61d8b7ea916196a"
+        },
+        {
+          "table": 9,
+          "slot": "word/document.xml#b/tbl[9]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "99c06562a40f6bd5661bc624c744311098bbba0d8ef1935e3da4d20d5e0a4d22",
+          "xml_sha256": "d2a7428fe3d88765cf41843f4ff1474430a3eb7141eb684362d9b23eca68cc66"
+        },
+        {
+          "table": 10,
+          "slot": "word/document.xml#b/tbl[10]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "bd2a4a6cee216c6d4f4e869665cde247a63081291dcecd2e5123a68df02c2e91",
+          "xml_sha256": "d5c9f891eb0a87d8dac410ffc3ea7e2f6be1eebe30ec4c30433851f00c858471"
+        },
+        {
+          "table": 11,
+          "slot": "word/document.xml#b/tbl[11]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "a1e69cac344f610d390206fdbbf6f52fe03360f9b9ea31b26646ace489ee7343",
+          "xml_sha256": "d6c5a0d655598df456e523ed2b2d018ff9bf2f21688f4f31d423e9ee5532eeb2"
+        },
+        {
+          "table": 12,
+          "slot": "word/document.xml#b/tbl[12]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "d140744157498466c5e805f908ef56955c9995e9882a6c78f7d7173985f1a3ae",
+          "xml_sha256": "4343d0f3daf298454bf4fd97b4f246b0b1cec32209c5bced459a440188f735f0"
+        }
+      ],
+      "possible_rule_entry": true,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D33-45e292c57ec8.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D33-45e292c57ec8.json"
+    },
+    {
+      "development_id": "D34",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D34-35feb7a7ab69.docx",
+      "original_sha256": "35feb7a7ab6997b9f786ced2d30dd6460bf75c731c2c86990aaf3830c61879b0",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [
+        {
+          "table": 1,
+          "slot": "word/document.xml#b/tbl[1]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "0c40a46f663cab5af77ca9041ab6a5753c4afb300cbd959c11f182e3c70da390",
+          "xml_sha256": "277b3f6c7999ff7c91ac0e6e4f77237be5d69154448c77b75fcf1a449124a2ea"
+        },
+        {
+          "table": 3,
+          "slot": "word/document.xml#b/tbl[3]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "4c53f8906c19d14b8172247d8381af867f034d3c10977561633910e461ed171f",
+          "xml_sha256": "a8fba6bf1307873860ba7679445851bf6e063c960e9219906c8982d45bb17b9b"
+        },
+        {
+          "table": 7,
+          "slot": "word/document.xml#b/tbl[7]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "b4718e1e9edb2d6fd658fffe07cdaa9c2355fd5aaa2b5a1f6e2b64eded7fdee1",
+          "xml_sha256": "d45444bfb6113650d40986599f40a37b600bbf668749f0bcc97890a5717de4b1"
+        },
+        {
+          "table": 8,
+          "slot": "word/document.xml#b/tbl[8]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "a9950e907e1f239c2c30af86b31465a95de500f58adf0d169a5282dcc19bbfb5",
+          "xml_sha256": "e8c26a2490a819016aba908b3aebb0e772b9aa55e70f55641936af6e65ab0cd1"
+        },
+        {
+          "table": 9,
+          "slot": "word/document.xml#b/tbl[9]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "c82914b1008e3e9a87e7fb08cf276604336612bbf4064ac58fd35ec6c8356540",
+          "xml_sha256": "e37c293fefa68c7625eacac4756141adbbecead1ad71209e66c3ad8570b77fcd"
+        },
+        {
+          "table": 10,
+          "slot": "word/document.xml#b/tbl[10]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "bd2a4a6cee216c6d4f4e869665cde247a63081291dcecd2e5123a68df02c2e91",
+          "xml_sha256": "9d3efd0bc1ef8413ceabcef9dda3c3023190880e2e47291a785d38eb9aa9f2f4"
+        },
+        {
+          "table": 11,
+          "slot": "word/document.xml#b/tbl[11]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "a1e69cac344f610d390206fdbbf6f52fe03360f9b9ea31b26646ace489ee7343",
+          "xml_sha256": "98d986af091e8072fa9e1f031c00aac73e660e05ab979c1cc12e04f679f86e85"
+        },
+        {
+          "table": 12,
+          "slot": "word/document.xml#b/tbl[12]/tr[0]/tc[0]",
+          "plain_text_empty": false,
+          "object_tags": [],
+          "blank_like_without_objects": false,
+          "plain_text_sha256": "d140744157498466c5e805f908ef56955c9995e9882a6c78f7d7173985f1a3ae",
+          "xml_sha256": "11cb782d8966073b4d01e39eea075f87419989a40298a15d72fb0534364031ed"
+        }
+      ],
+      "possible_rule_entry": true,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D34-35feb7a7ab69.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D34-35feb7a7ab69.json"
+    },
+    {
+      "development_id": "D35",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D35-cf9b240f3893.docx",
+      "original_sha256": "cf9b240f3893f97bf168c7cd3ac808bb720b3bf0f65b168c9671c6827ca1a4b7",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [],
+      "possible_rule_entry": false,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D35-cf9b240f3893.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D35-cf9b240f3893.json"
+    },
+    {
+      "development_id": "D36",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D36-01b700ed8dd7.docx",
+      "original_sha256": "01b700ed8dd72eb46647f209f1608ceecfd7406fa34859a3b122eb497371fdf9",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [],
+      "possible_rule_entry": false,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D36-01b700ed8dd7.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D36-01b700ed8dd7.json"
+    },
+    {
+      "development_id": "D37",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D37-01326e0d4d17.docx",
+      "original_sha256": "01326e0d4d17d211cfda2757c34455b6bd132fb3bfc8b23f989e4a9635eef500",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [],
+      "possible_rule_entry": false,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D37-01326e0d4d17.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D37-01326e0d4d17.json"
+    },
+    {
+      "development_id": "D38",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D38-83769a3b2c6b.docx",
+      "original_sha256": "83769a3b2c6bc3920f4a37e7881b354e11107cdf079f1090e6865bf8cb6a1301",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [],
+      "possible_rule_entry": false,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D38-83769a3b2c6b.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D38-83769a3b2c6b.json"
+    },
+    {
+      "development_id": "D39",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D39-17e6d154693c.docx",
+      "original_sha256": "17e6d154693c4c7c41b31f20fd16dfb9560ff6e343cbc03af32b3b231ecc02cb",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [],
+      "possible_rule_entry": false,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D39-17e6d154693c.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D39-17e6d154693c.json"
+    },
+    {
+      "development_id": "D40",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D40-e24dc2605ffe.docx",
+      "original_sha256": "e24dc2605ffece80b31b1d8fb5fb35c6a1a8596fd6105c180b937648f903b6f4",
+      "hash_unchanged": true,
+      "one_row_one_cell_shapes": [],
+      "possible_rule_entry": false,
+      "eligible_blank_box_present": false,
+      "expected_map": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D40-e24dc2605ffe.json",
+      "prior_detection": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/results/dev-79a5b2ec6597-frozen/detect/D40-e24dc2605ffe.json"
+    }
+  ]
+}

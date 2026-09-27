@@ -69,5 +69,59 @@ class SdkParentTests(unittest.TestCase):
             self.assertEqual(result.strip(), 'acquired')
 
 
+
+class ManagedRootPairingTests(unittest.TestCase):
+    """The launcher-fixed state root selects the reviewed Word installation; private is unchanged."""
+    PRODUCTION_STATE = '/var/lib/quillmd-production'
+
+    def activated(self):
+        from ops import deployment_profile
+        raw = json.loads(deployment_profile.PROFILE_PATH.read_text())
+        raw['database']['host'] = 'quillmd-production.c1a2b3c4d5e6.us-east-1.rds.amazonaws.com'
+        raw['database']['tls']['ca_bundle_sha256'] = 'ab' * 32
+        return deployment_profile.validate(raw)
+
+    def test_private_state_keeps_the_private_installation_and_never_reads_the_production_record(self):
+        with patch('ops.deployment_profile.load_production', side_effect=AssertionError('read')), \
+                patch.dict(os.environ, {'QUILLMD_ENV_MANAGED': '1', 'QUILLMD_STATE_DIR': '/var/lib/quillmd'}, clear=True):
+            self.assertEqual(sdk_service._managed_word_root(), Path('/opt/meddoc-pro/rebuild/.word-sdk'))
+            self.assertTrue(sdk_service._managed_state(Path('/var/lib/quillmd')))
+
+    def test_unknown_or_unactivated_states_fall_back_to_the_private_installation(self):
+        for state in ('', '/tmp/other', self.PRODUCTION_STATE):
+            with self.subTest(state=state), patch.dict(os.environ, {'QUILLMD_STATE_DIR': state}, clear=True):
+                # The checked-in production record is not activated, so it selects nothing.
+                self.assertEqual(sdk_service._managed_word_root(), Path('/opt/meddoc-pro/rebuild/.word-sdk'))
+        self.assertFalse(sdk_service._managed_state(Path(self.PRODUCTION_STATE)))
+        self.assertFalse(sdk_service._managed_state(Path('/tmp/other')))
+
+    def test_activated_production_state_selects_only_the_production_installation(self):
+        with patch('ops.deployment_profile.load_production', return_value=self.activated()):
+            with patch.dict(os.environ, {'QUILLMD_STATE_DIR': self.PRODUCTION_STATE}, clear=True):
+                self.assertEqual(sdk_service._managed_word_root(), Path('/opt/quillmd-production/rebuild/.word-sdk'))
+            self.assertTrue(sdk_service._managed_state(Path(self.PRODUCTION_STATE)))
+            self.assertTrue(sdk_service._managed_state(Path('/var/lib/quillmd')))
+            self.assertFalse(sdk_service._managed_state(Path('/var/lib/quillmd-production/files')))
+            with patch.dict(os.environ, {'QUILLMD_STATE_DIR': '/var/lib/quillmd'}, clear=True):
+                self.assertEqual(sdk_service._managed_word_root(), Path('/opt/meddoc-pro/rebuild/.word-sdk'))
+
+    def test_managed_configuration_refuses_a_runtime_outside_the_paired_installation(self):
+        values = {'QUILLMD_ENV_MANAGED': '1', 'QUILLMD_STATE_DIR': '/var/lib/quillmd',
+                  'QUILLMD_WORD_RUNTIME': '/opt/quillmd-production/rebuild/.word-sdk/runtime',
+                  'QUILLMD_WORD_MANIFEST': '/opt/quillmd-production/rebuild/.word-sdk/manifest.json',
+                  'QUILLMD_WORD_MANIFEST_SHA256': 'a' * 64}
+        with patch('ops.deployment_profile.load_production', return_value=self.activated()), \
+                patch.dict(os.environ, values, clear=True), \
+                self.assertRaisesRegex(sdk_service.SdkUnavailable, 'reviewed application installation'):
+            sdk_service.configuration()
+
+    def test_managed_slot_refuses_an_unpaired_state_root(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.dict(os.environ, {'QUILLMD_ENV_MANAGED': '1', 'QUILLMD_STATE_DIR': directory}, clear=True), \
+                self.assertRaisesRegex(sdk_service.SdkUnavailable, 'managed Word processing state is unavailable'):
+            with sdk_service._processing_slot():
+                pass
+
+
 if __name__ == '__main__':
     unittest.main()

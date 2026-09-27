@@ -1,0 +1,95 @@
+{
+  "source_sha256": "b20785d78b780451d49cfacc5cdfa4e8bbdfea4612fae4d1118e4b52d9b84d45",
+  "cases": [
+    {
+      "notes": "Assessment: infection.\nPlan: no infection.",
+      "answers": {
+        "Assessment": {
+          "text": "infection.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Assessment: infection.",
+              "start": 0,
+              "end": 22
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "no infection.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: no infection.",
+              "start": 23,
+              "end": 42
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "refusals": []
+    },
+    {
+      "notes": "Assessment: active bacterial infection.\nPlan: no active bacterial infection.",
+      "answers": {
+        "Assessment": {
+          "text": "active bacterial infection.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Assessment: active bacterial infection.",
+              "start": 0,
+              "end": 39
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "no active bacterial infection.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: no active bacterial infection.",
+              "start": 40,
+              "end": 76
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "refusals": []
+    },
+    {
+      "notes": "Assessment: mechanical low back pain.\nPlan: naproxen 500 mg twice daily with food and physiotherapy.",
+      "answers": {
+        "Assessment": {
+          "text": "mechanical low back pain.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Assessment: mechanical low back pain.",
+              "start": 0,
+              "end": 37
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "naproxen 500 mg twice daily with food and physiotherapy.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: naproxen 500 mg twice daily with food and physiotherapy.",
+              "start": 38,
+              "end": 100
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "refusals": []
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+Using existing test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-patient-topics/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-patient-topics/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+.F.......
+======================================================================
+FAIL: test_whole_original_note_worker_review_correction_finalize_and_export (core.tests.test_v3_patient_topics.CompletePatientTopicWorkflow.test_whole_original_note_worker_review_correction_finalize_and_export)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-patient-topics/rebuild/core/tests/test_v3_patient_topics.py", line 181, in test_whole_original_note_worker_review_correction_finalize_and_export
+    self.assertEqual(self.client.post(f'/encounters/{self.encounter.pk}/save/', payload).status_code, 302)
+AssertionError: 400 != 302
+
+----------------------------------------------------------------------
+Ran 9 tests in 4.509s
+
+FAILED (failures=1)
+Preserving test database for alias 'default'...
+Found 9 test(s).
+System check identified no issues (0 silenced).

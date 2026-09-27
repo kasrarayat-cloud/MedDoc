@@ -1,0 +1,34 @@
+# QuillMD PRODUCTION: render the application environment from AWS Secrets Manager onto tmpfs.
+# The secret name and destination come from rebuild/ops/production_profile.json. systemd removes the
+# runtime directory, and with it every rendered secret, when this unit stops; the application units
+# Require it, so they stop first.
+[Unit]
+Description=QuillMD production environment from AWS Secrets Manager (tmpfs, root only)
+After=network-online.target
+Wants=network-online.target
+Before=quillmd-production-doctor.service quillmd-production-admin.service quillmd-production-worker.service
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=root
+Group=root
+UMask=0077
+RuntimeDirectory=quillmd-production
+RuntimeDirectoryMode=0700
+ExecStart=/usr/bin/python3 -B -E -s /opt/quillmd-production/rebuild/ops/render_production_environment.py --execute
+Restart=on-failure
+RestartSec=15
+TimeoutStartSec=120
+NoNewPrivileges=true
+LimitCORE=0
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/run/quillmd-production
+SyslogIdentifier=quillmd-production-environment
+
+[Install]
+WantedBy=multi-user.target

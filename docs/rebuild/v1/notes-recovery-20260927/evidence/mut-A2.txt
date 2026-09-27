@@ -1,0 +1,24 @@
+'INNER_SENTENCE_END = re.compile(r\'(?<![.!?\\u2026])[.!?\\u2026]++["\\\'\\u201d\\u2019)\\]]*+\\s++(?=\\S)\'\n                                r\'|[\\u3002\\uff0e\\uff01\\uff1f\\uff61](?=\\S)\')\n'
+'INNER_SENTENCE_END = re.compile(r\'[.!?\\u2026]+["\\\'\\u201d\\u2019)\\]]*\\s+(?=\\S)|[\\u3002\\uff0e\\uff01\\uff1f\\uff61]+(?=\\S)\')\n'
+"INNER_SENTENCE_END = re.compile(r'(?<![.!?\\u2026])[.!?\\u2026]++"
+'["\\\'\\u201d\\u2019)\\]]*+'
+batch /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/batchA.py labels ['core.tests.test_v3_ordinary_notes.RoundThreeCost', 'core.tests.test_v3_ordinary_notes.RoundThreeThroughTheWorker.test_r3_4_a_value_of_49900_stops_is_validated_in_linear_time_under_the_lock', 'core.tests.test_v3_ordinary_notes.RoundTwoRefutation', 'core.tests.test_v3_ordinary_notes.RoundTwoMutantPins', 'core.tests.test_v3_ordinary_notes.OrdinaryNotesOnV3Forms'] sha ca0bec34f2f61818
+BASELINE OK 7s 36  | 
+  A1 mutation applied: True
+A1 original sentence-end pattern (backtracking)                        KILLED   restored=True 54s 36 failures=3 | FAIL: test_r3_4_a_value_of_49900_stops_is_validated_in_linear_time_under_the_lock  ; FAIL: test_r3_4_a_run_of_stops_is_read_in_linear_time  ; FAIL: test_r3_4_an_unlabelled_unit_of_20k_stops_selected_by_three_questions 
+  A2 mutation applied: True
+A2 run read from every stop (lookbehind removed, still possessive)     KILLED   restored=True 10s 36 failures=1 | FAIL: test_r3_4_a_run_of_stops_is_read_in_linear_time 
+  A3 mutation applied: True
+A3 shape read per selecting question (cache off)                       KILLED   restored=True 7s 36 failures=1 | FAIL: test_r3_4_each_unit_is_read_for_sentence_ends_once_however_many_questions_select_it 
+  A4 mutation applied: True
+A4 sentence ends read per call (cache off)                             KILLED   restored=True 7s 36 failures=1 | FAIL: test_r3_4_each_unit_is_read_for_sentence_ends_once_however_many_questions_select_it 
+  A5 mutation applied: True
+A5 paragraph rule reads its own sentence ends                          KILLED   restored=True 6s 36 failures=1 | FAIL: test_r3_4_each_unit_is_read_for_sentence_ends_once_however_many_questions_select_it 
+  A6 mutation applied: True
+A6 each line split per evidence entry (cache off)                      KILLED   restored=True 13s 36 failures=1 | FAIL: test_r3_5_a_line_of_999_labelled_segments_is_split_once 
+  A7 mutation applied: True
+A7 each option question splits the lines again                         KILLED   restored=True 7s 36 failures=1 | FAIL: test_r3_5_a_line_of_999_labelled_segments_is_split_once 
+  A8 mutation applied: True
+A8 fuzz power: at most one closing mark after a stop                   KILLED   restored=True 6s 36 failures=1 | FAIL: test_r3_4_the_linear_pattern_reads_what_the_original_read 
+final sha ca0bec34f2f61818 equal True
+exit 0

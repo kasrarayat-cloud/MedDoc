@@ -1,0 +1,357 @@
+{
+  "source_sha256": "addcfe2739ae0f5acb743fc94ecd484a063e5d71b62591fe48099356bf5ababf",
+  "fields": [
+    {
+      "key": "v3_1",
+      "label": "Indication",
+      "kind": "text",
+      "context": "",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/p[1]",
+        "target": {
+          "type": "span",
+          "start": 12,
+          "end": 24,
+          "shape": "blank"
+        },
+        "fingerprint": "1dae9b7b055a4cd9faf02bb9916ce7f99d0da00cb8c948132b9fb7fdbd08aba5"
+      }
+    },
+    {
+      "key": "v3_2",
+      "label": "Pain?",
+      "kind": "choice",
+      "context": "",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/p[3]/glyphs",
+        "target": {
+          "type": "checkboxes",
+          "boxes": [
+            {
+              "kind": "glyph",
+              "part": "word/document.xml",
+              "slot": "b/p[3]/glyphs",
+              "glyph": 0
+            },
+            {
+              "kind": "glyph",
+              "part": "word/document.xml",
+              "slot": "b/p[3]/glyphs",
+              "glyph": 1
+            }
+          ]
+        },
+        "fingerprint": "937fed9ce991544119156ff46f1c8115a506338ae0e9915f0a3fb637a8af8beb"
+      },
+      "options": [
+        "Yes",
+        "No"
+      ]
+    },
+    {
+      "key": "v3_3",
+      "label": "Comments",
+      "kind": "long_text",
+      "context": "occurrence 1 of 2 (line 5: Comments: ____________)",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/p[4]",
+        "target": {
+          "type": "span",
+          "start": 10,
+          "end": 22,
+          "shape": "blank"
+        },
+        "fingerprint": "f1894c0444a4c80594e27e7efc65c156355fa03ea1945049dd5c2f98612df51b"
+      }
+    },
+    {
+      "key": "v3_4",
+      "label": "PAIN",
+      "kind": "choice",
+      "context": "",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/p[6]/glyphs",
+        "target": {
+          "type": "checkboxes",
+          "boxes": [
+            {
+              "kind": "glyph",
+              "part": "word/document.xml",
+              "slot": "b/p[6]/glyphs",
+              "glyph": 0
+            },
+            {
+              "kind": "glyph",
+              "part": "word/document.xml",
+              "slot": "b/p[6]/glyphs",
+              "glyph": 1
+            }
+          ]
+        },
+        "fingerprint": "eb3ab2b6886cacaaecfde174cc810b36100aa3106e1e5f1139e5edc4d1950bdc"
+      },
+      "options": [
+        "Yes",
+        "No"
+      ]
+    },
+    {
+      "key": "v3_5",
+      "label": "Comments",
+      "kind": "long_text",
+      "context": "occurrence 2 of 2 (line 8: Comments: ____________)",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/p[7]",
+        "target": {
+          "type": "span",
+          "start": 10,
+          "end": 22,
+          "shape": "blank"
+        },
+        "fingerprint": "f1894c0444a4c80594e27e7efc65c156355fa03ea1945049dd5c2f98612df51b"
+      }
+    }
+  ],
+  "answers": {
+    "v3_1": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "quote": "Indication: synthetic knee review",
+          "start": 0,
+          "end": 33
+        }
+      ],
+      "reviewed": false,
+      "held_candidate": {
+        "text": "synthetic knee review",
+        "evidence": [
+          {
+            "quote": "Indication: synthetic knee review",
+            "start": 0,
+            "end": 33
+          }
+        ],
+        "context": [
+          {
+            "quote": "Indication: synthetic knee review",
+            "start": 0,
+            "end": 33,
+            "after": false,
+            "same": true
+          },
+          {
+            "quote": "Pain: yes",
+            "start": 34,
+            "end": 43,
+            "after": true,
+            "same": false
+          },
+          {
+            "quote": "Comments: settled",
+            "start": 44,
+            "end": 61,
+            "after": true,
+            "same": false
+          }
+        ],
+        "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+      }
+    },
+    "v3_2": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "quote": "Pain: yes",
+          "start": 34,
+          "end": 43
+        }
+      ],
+      "reviewed": false,
+      "held_candidate": {
+        "text": "yes",
+        "evidence": [
+          {
+            "quote": "Pain: yes",
+            "start": 34,
+            "end": 43
+          }
+        ],
+        "context": [
+          {
+            "quote": "Indication: synthetic knee review",
+            "start": 0,
+            "end": 33,
+            "after": false,
+            "same": false
+          },
+          {
+            "quote": "Pain: yes",
+            "start": 34,
+            "end": 43,
+            "after": false,
+            "same": true
+          },
+          {
+            "quote": "Comments: settled",
+            "start": 44,
+            "end": 61,
+            "after": true,
+            "same": false
+          }
+        ],
+        "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+      }
+    },
+    "v3_3": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "quote": "Comments: settled",
+          "start": 44,
+          "end": 61
+        }
+      ],
+      "reviewed": false,
+      "held_candidate": {
+        "text": "settled",
+        "evidence": [
+          {
+            "quote": "Comments: settled",
+            "start": 44,
+            "end": 61
+          }
+        ],
+        "context": [
+          {
+            "quote": "Indication: synthetic knee review",
+            "start": 0,
+            "end": 33,
+            "after": false,
+            "same": false
+          },
+          {
+            "quote": "Pain: yes",
+            "start": 34,
+            "end": 43,
+            "after": false,
+            "same": false
+          },
+          {
+            "quote": "Comments: settled",
+            "start": 44,
+            "end": 61,
+            "after": false,
+            "same": true
+          }
+        ],
+        "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+      }
+    },
+    "v3_4": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "quote": "Pain: yes",
+          "start": 34,
+          "end": 43
+        }
+      ],
+      "reviewed": false,
+      "held_candidate": {
+        "text": "yes",
+        "evidence": [
+          {
+            "quote": "Pain: yes",
+            "start": 34,
+            "end": 43
+          }
+        ],
+        "context": [
+          {
+            "quote": "Indication: synthetic knee review",
+            "start": 0,
+            "end": 33,
+            "after": false,
+            "same": false
+          },
+          {
+            "quote": "Pain: yes",
+            "start": 34,
+            "end": 43,
+            "after": false,
+            "same": true
+          },
+          {
+            "quote": "Comments: settled",
+            "start": 44,
+            "end": 61,
+            "after": true,
+            "same": false
+          }
+        ],
+        "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+      }
+    },
+    "v3_5": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "quote": "Comments: settled",
+          "start": 44,
+          "end": 61
+        }
+      ],
+      "reviewed": false,
+      "held_candidate": {
+        "text": "settled",
+        "evidence": [
+          {
+            "quote": "Comments: settled",
+            "start": 44,
+            "end": 61
+          }
+        ],
+        "context": [
+          {
+            "quote": "Indication: synthetic knee review",
+            "start": 0,
+            "end": 33,
+            "after": false,
+            "same": false
+          },
+          {
+            "quote": "Pain: yes",
+            "start": 34,
+            "end": 43,
+            "after": false,
+            "same": false
+          },
+          {
+            "quote": "Comments: settled",
+            "start": 44,
+            "end": 61,
+            "after": false,
+            "same": true
+          }
+        ],
+        "reason": "This question appears 2 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+      }
+    }
+  }
+}

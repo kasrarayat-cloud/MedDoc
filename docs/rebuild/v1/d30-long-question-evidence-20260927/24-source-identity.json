@@ -1,0 +1,12 @@
+{
+  "source_commit": "90c5aa7bfbab8e24722beb1189eee6043bd73ac3",
+  "base": "e37e17f041cb9e080f2a8f176b2ad8b6930aa880",
+  "files": {
+    "rebuild/documents/word_v3.py": "92098300e175ba7cd8c5d7718e2bc6a6089dcc95ffe828580430157f98dc36b9",
+    "rebuild/documents/mapping_limits.py": "bdebe9b5f9ec8268164177600176404917af22537e60ef7b971f065b8d396802",
+    "rebuild/core/mapping_assistance.py": "03fa6840a559e50f0f14a79356cfaa7dfc47848bda419fc5269067522995093b",
+    "rebuild/core/mapping_wire.py": "d3e6552137460fc866fecbae3ab0ebdd52bcefce35c4199effa60eb89e1bc824",
+    "rebuild/core/views.py": "79b36d5b81c12a134ec70f8ab665152f3b8a3c616d20c9a089846d9537c61dbc",
+    "rebuild/templates/template_detail_v3.html": "91e2f2f14ee35663d0e30e82920a35b80bc264ff9eca0c820330d0c3daa0da66"
+  }
+}

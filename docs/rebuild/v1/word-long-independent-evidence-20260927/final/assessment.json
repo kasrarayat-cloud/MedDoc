@@ -1,0 +1,26 @@
+{
+  "checks": {
+    "adjective-positive": true,
+    "plain-sign": true,
+    "countersign": true,
+    "initial-imperative": true,
+    "signature-noun": true,
+    "astral-1000": true,
+    "astral-1001": true,
+    "root-manual-donor": true,
+    "manual-1000": true,
+    "manual-1001": true,
+    "manual-unknown-scope": true,
+    "manual-local-sibling-scope": null,
+    "author-source-boundary": true,
+    "locator-exact": true,
+    "locator-fingerprint": true,
+    "locator-write-target": true,
+    "locator-descendant": true,
+    "locator-foreign": true
+  },
+  "ungraded": [
+    "manual-local-sibling-scope"
+  ],
+  "scope": "Twelve retained artifacts (eleven scored, one unchanged ambiguous observation), one author boundary, five locator controls. No corpus compatibility inference."
+}

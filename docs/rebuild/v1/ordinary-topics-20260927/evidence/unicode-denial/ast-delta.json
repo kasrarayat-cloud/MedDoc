@@ -1,0 +1,7 @@
+{
+  "source_sha256": "6f1a5354a29a3b50cc112be4bdd0436d5cc77896a6d6c6e6b75d81bd2350737a",
+  "changed_definitions": [
+    "v3_preceding_reading",
+    "plain_value"
+  ]
+}

@@ -1,0 +1,459 @@
+{
+  "contract": "retention-readiness-v1",
+  "status": "blocked",
+  "purpose": "aggregate_review_only",
+  "as_of": "2026-09-27T18:19:45.120986+00:00",
+  "policy_sha256": "613a5aaa02719f4ef77912cb15d8b98f6c839994887bdb76a7f19d35a3998b73",
+  "policy_authority_verified": false,
+  "purge_available": false,
+  "deletion_eligibility_assessed": false,
+  "database_transaction": "repeatable_read_read_only",
+  "file_contents_read": false,
+  "file_existence_or_integrity_checked": false,
+  "external_accounts_checked": false,
+  "blockers": [
+    "tombstone_and_deletion_workflow_not_implemented",
+    "legal_hold_enforcement_not_implemented",
+    "external_policy_authority_not_verified",
+    "purge_unavailable"
+  ],
+  "rows": [
+    {
+      "class": "accounts",
+      "count_unit": "database_rows",
+      "records": 1,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": false,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "organizations",
+      "count_unit": "database_rows",
+      "records": 1,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": false,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "departments",
+      "count_unit": "database_rows",
+      "records": 1,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": false,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "memberships",
+      "count_unit": "database_rows",
+      "records": 0,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": false,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "department_invitations",
+      "count_unit": "database_rows",
+      "records": 0,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": false,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "clinic_invitations",
+      "count_unit": "database_rows",
+      "records": 0,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": false,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "verification_tokens",
+      "count_unit": "database_rows",
+      "records": 0,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": false,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "sessions",
+      "count_unit": "database_rows",
+      "records": 0,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": false,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "mfa_devices",
+      "count_unit": "database_rows",
+      "records": 0,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": false,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "login_throttles",
+      "count_unit": "database_rows",
+      "records": 0,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": false,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "patient_identity",
+      "count_unit": "database_rows",
+      "records": 2,
+      "at_or_before_review_cutoff": 1,
+      "missing_review_anchor": 0,
+      "policy_mode": "review_window",
+      "protected_by_this_tool": false,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "template_original_references",
+      "count_unit": "database_reference_rows",
+      "records": 1,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": true,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "mapping_versions",
+      "count_unit": "database_rows",
+      "records": 1,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": true,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "mapping_confirmations",
+      "count_unit": "database_rows",
+      "records": 0,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": true,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "draft_clinical_records",
+      "count_unit": "database_rows",
+      "records": 1,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": false,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "finalized_clinical_records",
+      "count_unit": "database_rows",
+      "records": 1,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": true,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "clinical_records_other_status",
+      "count_unit": "database_rows",
+      "records": 0,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": false,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "final_export_references",
+      "count_unit": "database_reference_rows",
+      "records": 1,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": true,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "jobs",
+      "count_unit": "database_rows",
+      "records": 2,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": true,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "recording_references",
+      "count_unit": "database_reference_rows",
+      "records": 2,
+      "at_or_before_review_cutoff": 1,
+      "missing_review_anchor": 1,
+      "policy_mode": "review_window",
+      "protected_by_this_tool": false,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "job_result_references",
+      "count_unit": "database_reference_rows",
+      "records": 1,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": true,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "receipt_result_references",
+      "count_unit": "database_reference_rows",
+      "records": 1,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": true,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "code_suggestions",
+      "count_unit": "database_rows",
+      "records": 0,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": false,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "wallets",
+      "count_unit": "database_rows",
+      "records": 1,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": true,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "ledger",
+      "count_unit": "database_rows",
+      "records": 1,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": true,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "reservations",
+      "count_unit": "database_rows",
+      "records": 0,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": true,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "usage",
+      "count_unit": "database_rows",
+      "records": 0,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": true,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "payments",
+      "count_unit": "database_rows",
+      "records": 0,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": true,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "payment_events",
+      "count_unit": "database_rows",
+      "records": 0,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": true,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "refunds",
+      "count_unit": "database_rows",
+      "records": 0,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": true,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "provider_receipts",
+      "count_unit": "database_rows",
+      "records": 1,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": true,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "reconciliations",
+      "count_unit": "database_rows",
+      "records": 0,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": true,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "platform_costs",
+      "count_unit": "database_rows",
+      "records": 0,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": true,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "audit",
+      "count_unit": "database_rows",
+      "records": 1,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": true,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "service_status",
+      "count_unit": "database_rows",
+      "records": 0,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": false,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "terminology_releases",
+      "count_unit": "database_rows",
+      "records": 0,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": true,
+      "deletion_eligible_count": null
+    },
+    {
+      "class": "terminology_codes",
+      "count_unit": "database_rows",
+      "records": 0,
+      "at_or_before_review_cutoff": null,
+      "missing_review_anchor": null,
+      "policy_mode": "preserve",
+      "protected_by_this_tool": true,
+      "deletion_eligible_count": null
+    }
+  ],
+  "external_inventory": [
+    {
+      "class": "legal_hold_registry",
+      "declaration": "declared_for_review",
+      "verified": false
+    },
+    {
+      "class": "state_file_inventory",
+      "declaration": "declared_for_review",
+      "verified": false
+    },
+    {
+      "class": "rds_pitr",
+      "declaration": "declared_for_review",
+      "verified": false
+    },
+    {
+      "class": "aws_backup_rds",
+      "declaration": "declared_for_review",
+      "verified": false
+    },
+    {
+      "class": "aws_backup_ebs",
+      "declaration": "declared_for_review",
+      "verified": false
+    },
+    {
+      "class": "cross_account_locked_copies",
+      "declaration": "declared_for_review",
+      "verified": false
+    },
+    {
+      "class": "legacy_encrypted_offsite",
+      "declaration": "declared_for_review",
+      "verified": false
+    },
+    {
+      "class": "anthropic_account",
+      "declaration": "declared_for_review",
+      "verified": false
+    },
+    {
+      "class": "deepgram_account",
+      "declaration": "declared_for_review",
+      "verified": false
+    },
+    {
+      "class": "invitation_recovery_email",
+      "declaration": "declared_for_review",
+      "verified": false
+    },
+    {
+      "class": "stripe_records",
+      "declaration": "declared_for_review",
+      "verified": false
+    },
+    {
+      "class": "host_ssm_security_logs",
+      "declaration": "declared_for_review",
+      "verified": false
+    },
+    {
+      "class": "downloaded_exports",
+      "declaration": "declared_for_review",
+      "verified": false
+    }
+  ]
+}

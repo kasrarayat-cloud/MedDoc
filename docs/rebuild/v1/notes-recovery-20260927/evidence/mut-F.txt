@@ -1,0 +1,38 @@
+batch /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/batchF.py labels ['core.tests.test_v3_ordinary_notes.OrdinaryNotesOnV3Forms', 'core.tests.test_v3_ordinary_notes.OneReadingPerUnit', 'core.tests.test_v3_ordinary_notes.OneGovernanceReader', 'core.tests.test_v3_ordinary_notes.ScopeInOrdinarySentences', 'core.tests.test_v3_ordinary_notes.QueuedContractAttribution', 'core.tests.test_v3_ordinary_notes.EnqueuedContractAttribution', 'core.tests.test_v3_ordinary_notes.CostBoundCoversTheRequest', 'core.tests.test_v3_ordinary_notes.NothingStrandsAHold', 'core.tests.test_v3_ordinary_notes.LiveCompleteSentencePath', 'core.tests.test_v3_ordinary_notes.LiveCompleteSentenceWorker', 'core.tests.test_v3_ordinary_notes.RoundTwoRefutation', 'core.tests.test_v3_ordinary_notes.RoundTwoThroughTheWorker', 'core.tests.test_v3_ordinary_notes.RoundTwoMutantPins', 'core.tests.test_v3_ordinary_notes.RoundThreeRefutation', 'core.tests.test_v3_ordinary_notes.RoundThreeMutantPins', 'core.tests.test_v3_ordinary_notes.RoundThreeCost', 'core.tests.test_v3_ordinary_notes.RoundThreeThroughTheWorker', 'core.tests.test_word_v3_workflow'] sha 40be29702245bbba
+BASELINE OK 51s 119  | 
+  FA mutation applied: True
+FA disregard is not a self-correction                                  KILLED   restored=True 50s 119 failures=1 | FAIL: test_a_b_disregard_and_strike_that_are_self_corrections  (notes='Allergies: penicillin, disregard that, amoxicillin.')
+  FB mutation applied: True
+FB strike that is not a self-correction                                KILLED   restored=True 51s 119 failures=1 | FAIL: test_a_b_disregard_and_strike_that_are_self_corrections  (notes='Allergies: penicillin (strike that) amoxicillin.')
+  FC mutation applied: True
+FC self-corrections read on the raw text only                          KILLED   restored=True 49s 119 failures=1 | FAIL: test_c_a_self_correction_is_read_with_invisible_characters_removed 
+  FD mutation applied: True
+FD a CJK stop is not a sentence end                                    KILLED   restored=True 1s ?  | 
+  FE mutation applied: True
+FE no closing bracket after a stop                                     KILLED   restored=True 50s 119 failures=3 | FAIL: test_r3_3_a_single_letter_before_a_stop_ends_a_sentence_for_a_hold  (notes='Medications: aspirin 81 mg p.o.) stopped last month.') ; FAIL: test_e_a_stop_inside_a_bracket_ends_a_sentence  ; FAIL: test_r3_4_the_linear_pattern_reads_what_th
+  FF mutation applied: True
+FF an ellipsis does not trail off                                      KILLED   restored=True 52s 119 failures=1 | FAIL: test_f_g_h_l_a_value_that_trails_off_or_asks_answers_nothing  (notes='Allergies: penicillin…')
+  FG mutation applied: True
+FG two stops do not trail off                                          KILLED   restored=True 52s 119 failures=3 | FAIL: test_r3_4_a_value_of_49900_stops_is_validated_in_linear_time_under_the_lock  ; FAIL: test_f_g_h_l_a_value_that_trails_off_or_asks_answers_nothing  (notes='Allergies: penicillin..') ; FAIL: test_r3_4_an_unlabelled_unit_of_20k_stops_select
+  FH mutation applied: True
+FH a fullwidth question mark does not ask                              KILLED   restored=True 49s 119 failures=1 | FAIL: test_f_g_h_l_a_value_that_trails_off_or_asks_answers_nothing  (notes='Allergies: penicillin？')
+  FL mutation applied: True
+FL no closing marks read through                                       KILLED   restored=True 49s 119 failures=2 | FAIL: test_f_g_h_l_a_value_that_trails_off_or_asks_answers_nothing  (notes='Allergies: penicillin?)') ; FAIL: test_f_g_h_l_a_value_that_trails_off_or_asks_answers_nothing  (notes='Allergies: penicillin?*')
+  FI mutation applied: True
+FI overleaf does not point                                             KILLED   restored=True 50s 119 failures=2 | FAIL: test_r3_1_the_plain_value_grammar_fails_closed  (notes='Smoker: yes. Findings: details overleaf.') ; FAIL: test_i_j_overleaf_and_beneath_point_elsewhere  (notes='Findings: details overleaf.')
+  FJ mutation applied: True
+FJ beneath does not point                                              KILLED   restored=True 50s 119 failures=1 | FAIL: test_i_j_overleaf_and_beneath_point_elsewhere  (notes='Findings: described beneath.')
+  FK mutation applied: True
+FK a no-break-space line is a blank line                               KILLED   restored=True 49s 119 failures=1 | FAIL: test_k_a_line_of_no_break_spaces_is_not_a_blank_line 
+  FN mutation applied: True
+FN no markup before see                                                KILLED   restored=True 49s 119 failures=1 | FAIL: test_n_see_after_opening_markup_points_elsewhere 
+  P1 mutation applied: True
+P1 rule (a) removed                                                    KILLED   restored=True 49s 119 failures=41, errors=5 | ERROR: test_an_offer_on_an_option_question_names_a_printed_option_or_is_held  ; ERROR: test_table_rows_signature_and_initials_are_never_generated  ; ERROR: test_an_option_is_filled_only_from_its_own_labelled_line 
+  P2 mutation applied: True
+P2 rule (b) removed                                                    KILLED   restored=True 48s 119 failures=4, errors=2 | ERROR: test_a_held_candidate_shows_the_sentence_that_may_change_it  ; ERROR: test_r3_1_the_plain_value_grammar_fails_closed  ; FAIL: test_prose_notes_are_adopted_as_complete_sentences_not_returned_as_conflicts 
+  P3 mutation applied: True
+P3 changer not reset where a paragraph ends                            KILLED   restored=True 49s 119 failures=9 | FAIL: test_an_offer_on_an_option_question_names_a_printed_option_or_is_held  ; FAIL: test_anything_else_is_held_for_the_clinician_with_its_quote  ; FAIL: test_table_rows_signature_and_initials_are_never_generated 
+  P4 mutation applied: True
+P4 rule (c) removed (sentence ends not read)                           KILLED   restored=True 49s 119 failures=9 | FAIL: test_the_paragraph_rule_holds_by_structure_not_by_words  (notes='Warfarin 5 mg daily. stopped last month.') ; FAIL: test_r3_3_a_single_letter_before_a_stop_ends_a_sentence_for_a_hold  (notes='Plan: screen for hepatitis C. She is not a sm
+final sha 40be29702245bbba equal True
+exit 0

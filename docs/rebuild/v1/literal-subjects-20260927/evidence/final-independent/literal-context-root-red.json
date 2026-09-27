@@ -1,0 +1,197 @@
+{
+  "sha256": "1c0c99abbed920aa25cc13e09bf92a2a82613a957ba65d3ea1a018acecf8ce77",
+  "cases": [
+    {
+      "notes": "Neurological examination is normal.",
+      "field_context": "",
+      "answer": {
+        "text": "Neurological examination is normal.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Neurological examination is normal.",
+            "start": 0,
+            "end": 35
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "Neurological examination is normal.",
+            "start": 0,
+            "end": 35
+          }
+        ]
+      },
+      "refusals": []
+    },
+    {
+      "notes": "Heart and lung examination was normal.",
+      "field_context": "",
+      "answer": {
+        "text": "Heart and lung examination was normal.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Heart and lung examination was normal.",
+            "start": 0,
+            "end": 38
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "Heart and lung examination was normal.",
+            "start": 0,
+            "end": 38
+          }
+        ]
+      },
+      "refusals": []
+    },
+    {
+      "notes": "Neurological examination is normal.",
+      "field_context": "Examination",
+      "answer": {
+        "text": "Neurological examination is normal.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Neurological examination is normal.",
+            "start": 0,
+            "end": 35
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "Neurological examination is normal.",
+            "start": 0,
+            "end": 35
+          }
+        ]
+      },
+      "refusals": []
+    },
+    {
+      "notes": "Heart and lung examination was normal.",
+      "field_context": "Examination",
+      "answer": {
+        "text": "Heart and lung examination was normal.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Heart and lung examination was normal.",
+            "start": 0,
+            "end": 38
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "Heart and lung examination was normal.",
+            "start": 0,
+            "end": 38
+          }
+        ]
+      },
+      "refusals": []
+    },
+    {
+      "notes": "Neurological examination is normal.",
+      "field_context": "Mother",
+      "answer": {
+        "text": "Neurological examination is normal.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Neurological examination is normal.",
+            "start": 0,
+            "end": 35
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "Neurological examination is normal.",
+            "start": 0,
+            "end": 35
+          }
+        ]
+      },
+      "refusals": []
+    },
+    {
+      "notes": "Heart and lung examination was normal.",
+      "field_context": "Mother",
+      "answer": {
+        "text": "Heart and lung examination was normal.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Heart and lung examination was normal.",
+            "start": 0,
+            "end": 38
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "Heart and lung examination was normal.",
+            "start": 0,
+            "end": 38
+          }
+        ]
+      },
+      "refusals": []
+    },
+    {
+      "notes": "Neurological examination is normal.",
+      "field_context": "Family history",
+      "answer": {
+        "text": "Neurological examination is normal.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Neurological examination is normal.",
+            "start": 0,
+            "end": 35
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "Neurological examination is normal.",
+            "start": 0,
+            "end": 35
+          }
+        ]
+      },
+      "refusals": []
+    },
+    {
+      "notes": "Heart and lung examination was normal.",
+      "field_context": "Family history",
+      "answer": {
+        "text": "Heart and lung examination was normal.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Heart and lung examination was normal.",
+            "start": 0,
+            "end": 38
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "Heart and lung examination was normal.",
+            "start": 0,
+            "end": 38
+          }
+        ]
+      },
+      "refusals": []
+    }
+  ]
+}

@@ -12,6 +12,21 @@ from core.models import CostReconciliation, Job, LedgerEntry, PlatformCost, Prov
 from core.security import private_path
 
 
+def us_inference_multiplier(provider, units, rates):
+    """1.1 when the receipt's METERED geography is US-only on a Claude 4.6+ model, else 1 — independently of settlement.
+
+    Historical receipts carry no `inference_geo` unit and no recorded multiplier, so they recompute exactly as before
+    this rule existed. A recorded multiplier that disagrees with the metered geography is evidence tampering or a
+    settlement defect, and fails the row rather than being believed."""
+    from core.generation import US_INFERENCE_MULTIPLIER, us_inference_priced
+    metered=provider.startswith('anthropic:') and units.get('inference_geo')=='us' and us_inference_priced(provider)
+    expected=US_INFERENCE_MULTIPLIER if metered else Decimal(1)
+    recorded=rates.get('inference_geo_multiplier')
+    if (Decimal(str(recorded)) if recorded is not None else Decimal(1))!=expected:
+        raise ValueError('Recorded inference geography multiplier disagrees with the metered geography')
+    return expected
+
+
 def recompute_list_cost(provider, units, rates):
     if provider.startswith(('anthropic:', 'openai:')):
         inputs=Decimal(units['input_tokens'])
@@ -19,7 +34,16 @@ def recompute_list_cost(provider, units, rates):
         outputs=Decimal(units['output_tokens'])
         written=Decimal(units.get('cache_creation_tokens',0))
         if provider.startswith('openai:'):inputs-=cached
-        return (inputs*Decimal(rates['input_per_million'])+cached*Decimal(rates['cached_per_million'])+outputs*Decimal(rates['output_per_million'])+written*Decimal(rates['input_per_million'])*Decimal('1.25'))/1000000
+        cache_cost=written*Decimal(rates['input_per_million'])*Decimal('1.25')
+        if provider.startswith('anthropic:') and any(key in units for key in ('cache_creation_5m_tokens','cache_creation_1h_tokens')):
+            short=units.get('cache_creation_5m_tokens');long=units.get('cache_creation_1h_tokens')
+            if any(type(value) is not int or value<0 for value in (short,long)) or short+long!=written:
+                raise ValueError('Recorded cache-write metering does not reconcile')
+            cache_cost=(Decimal(short)*Decimal('1.25')+Decimal(long)*2)*Decimal(rates['input_per_million'])
+        # `thinking_tokens` is deliberately absent: thinking is already inside output_tokens, which is what is billed.
+        cost=(inputs*Decimal(rates['input_per_million'])+cached*Decimal(rates['cached_per_million'])+outputs*Decimal(rates['output_per_million'])+cache_cost)/1000000
+        geo=us_inference_multiplier(provider,units,rates)
+        return cost*geo if geo!=1 else cost
     if provider.startswith('deepgram:'):
         return (Decimal(units['duration_seconds'])*Decimal(rates['usd_per_minute'])/60).quantize(Decimal(rates['cost_quantum_usd']),rounding=ROUND_HALF_EVEN)
     raise ValueError('No audited cost formula for provider')
@@ -53,7 +77,7 @@ def audit_report(file_reader=None):
                 'over_limit_absorbed_exactly':sum(over_rows,Decimal(0))==uncapped-usage.charged_cost and len(over_rows)==(1 if uncapped>usage.charged_cost else 0),
                 'ledger_debit_matches':-sum((entry['amount'] for entry in entries),Decimal(0))==usage.charged_cost,
                 'no_held_reservation':not Reservation.objects.filter(job_id=usage.job_id,state='held').exists(),
-                'usage_scope_matches_job':usage.user_id==usage.job.user_id and usage.department_id==usage.job.encounter.department_id and usage.organization_id==usage.job.encounter.department.organization_id,
+                'usage_scope_matches_job':usage.user_id==usage.job.user_id and usage.department_id==usage.job.department_id and usage.organization_id==usage.job.department.organization_id,
                 'payer_matches_authorized_snapshot':not usage.job.payer or usage.payer==usage.job.payer}
         if receipt:checks['durable_receipt_matches']=all(getattr(receipt,k)==getattr(usage,k) for k in ['provider','provider_request_id','provider_resource_id','units','rates','actual_cost','simulated'])
         if 'list_cost_usd' in usage.rates:

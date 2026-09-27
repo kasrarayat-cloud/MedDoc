@@ -1,0 +1,22 @@
+F
+======================================================================
+FAIL: test_exact_continuation_with_no_referenced_source_requires_review (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_exact_continuation_with_no_referenced_source_requires_review)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 429, in test_exact_continuation_with_no_referenced_source_requires_review
+    self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'continue current medications.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'continue current medications.')
++ ('conflict', '')
+
+----------------------------------------------------------------------
+Ran 1 test in 0.194s
+
+FAILED (failures=1)
+Found 1 test(s).
+System check identified no issues (0 silenced).

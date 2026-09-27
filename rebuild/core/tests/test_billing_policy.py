@@ -89,7 +89,7 @@ class PolicyFixture(SyntheticFixture):
 
 @override_settings(ADMIN_SITE=False,STORAGES=STORAGES)
 class ConfiguredEstimateDiscount(PolicyFixture,TestCase):
-    @override_settings(AI_MODE='live',AI_PROVIDER='anthropic',AI_MODEL='synthetic-model',AI_INPUT_RATE='3',AI_OUTPUT_RATE='15',AI_CACHED_RATE='.3')
+    @override_settings(AI_MODE='live',AI_PROVIDER='anthropic',AI_MODEL='claude-sonnet-4-6',AI_INPUT_RATE='3',AI_OUTPUT_RATE='15',AI_CACHED_RATE='.3')
     def test_discount_rate_reduces_the_configured_estimate_and_is_recorded_for_audit(self):
         response=SimpleNamespace(id='msg_discount',_request_id='req_discount',
             usage=SimpleNamespace(input_tokens=100,output_tokens=10,cache_read_input_tokens=0,cache_creation_input_tokens=0),

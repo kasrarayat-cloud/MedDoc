@@ -1,0 +1,46 @@
+{
+  "notes": "Current medications are aspirin daily.\nCurrent medications are metformin twice daily.",
+  "picks": [
+    "Current medications are aspirin daily."
+  ],
+  "answer": {
+    "text": "",
+    "status": "conflict",
+    "evidence": [
+      {
+        "quote": "Current medications are aspirin daily.",
+        "start": 0,
+        "end": 38
+      }
+    ],
+    "reviewed": false,
+    "held_candidate": {
+      "text": "Current medications are aspirin daily.",
+      "evidence": [
+        {
+          "quote": "Current medications are aspirin daily.",
+          "start": 0,
+          "end": 38
+        }
+      ],
+      "context": [
+        {
+          "quote": "Current medications are aspirin daily.",
+          "start": 0,
+          "end": 38,
+          "after": false,
+          "same": true
+        },
+        {
+          "quote": "Current medications are metformin twice daily.",
+          "start": 39,
+          "end": 85,
+          "after": true,
+          "same": false
+        }
+      ],
+      "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+    }
+  },
+  "finalize": []
+}

@@ -1,0 +1,24 @@
+F.
+======================================================================
+FAIL: test_complete_plan_keeps_its_conditional_return_instruction (core.tests.test_v3_ordinary_context.ConditionalPlanScopes.test_complete_plan_keeps_its_conditional_return_instruction)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 118, in test_complete_plan_keeps_its_conditional_return_instruction
+    self.assertEqual((answers['Plan']['status'], answers['Plan']['text']), ('supported', expected))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'amoxicillin 500 mg three tim[48 chars]en.')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported',
++  'amoxicillin 500 mg three times daily for five days.\n'
++  'Return if symptoms worsen.')
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.228s
+
+FAILED (failures=1)
+Found 2 test(s).
+System check identified no issues (0 silenced).

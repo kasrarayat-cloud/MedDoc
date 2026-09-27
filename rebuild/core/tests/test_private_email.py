@@ -188,6 +188,49 @@ class ControlledPrivateEmailTests(SimpleTestCase):
     def test_origin_never_embeds_gate_credentials(self):
         self.assertEqual(application_origin(), "https://app.quillmd.com:9443")
 
+    def test_an_empty_query_or_fragment_or_port_0_never_becomes_an_email_link(self):
+        """Round-2 note: 'https://app.quillmd.com:9443?' made links like '...:9443?/verify/TOKEN/'. Both email modes."""
+        for mode in ("file", "resend"):
+            for origin in ("https://app.quillmd.com:9443?", "https://app.quillmd.com#", "https://app.quillmd.com:0",
+                           "https://app.quillmd.com?/", "http://localhost:9130?", "http://localhost:0"):
+                with self.subTest(mode=mode, origin=origin), override_settings(QUILLMD_EMAIL_MODE=mode, QUILLMD_APP_BASE_URL=origin):
+                    with self.assertRaises(ImproperlyConfigured):
+                        application_origin()
+        with override_settings(QUILLMD_EMAIL_MODE="file", QUILLMD_APP_BASE_URL="http://localhost:9130/"):
+            self.assertEqual(application_origin(), "http://localhost:9130")
+
+    def test_a_control_character_never_becomes_an_email_link(self):
+        """Round-3 F6 (the refuter's P5): '\x01https://app.quillmd.com' parsed as the doctor host (urlsplit strips
+        leading C0 controls) and every email link started with the control character. Refused in every mode, wherever
+        the character sits."""
+        for mode in ("file", "resend"):
+            for origin in ("\x01https://app.quillmd.com", "\x1bhttps://app.quillmd.com", "\x00https://app.quillmd.com",
+                           "https://app.quillmd.com\x01", "https://app.quillmd.com\x7f", "https://app.quill\x01md.com",
+                           "https://app.quillmd.com\x9b", "https://app.quillmd.com:9443\x08"):
+                with self.subTest(mode=mode, origin=repr(origin)), \
+                        override_settings(QUILLMD_EMAIL_MODE=mode, QUILLMD_APP_BASE_URL=origin, ALLOWED_HOSTS=["app.quillmd.com"]):
+                    with self.assertRaises(ImproperlyConfigured):
+                        application_origin()
+
+    def test_whitespace_never_becomes_an_email_link(self):
+        for mode in ("file", "resend"):
+            for origin in (" https://app.quillmd.com", "https://app.quillmd.com ", "\thttps://app.quillmd.com",
+                           "https://app.quillmd.com\n", "https://app.quillmd.com\u00a0", "https://app.quillmd.com\u2028"):
+                with self.subTest(mode=mode, origin=repr(origin)), \
+                        override_settings(QUILLMD_EMAIL_MODE=mode, QUILLMD_APP_BASE_URL=origin, ALLOWED_HOSTS=["app.quillmd.com"]):
+                    with self.assertRaises(ImproperlyConfigured):
+                        application_origin()
+
+    def test_the_hosts_synthetic_mode_accepts_are_unchanged(self):
+        """F6 changes no host decision: the private beta's file-mode origins, and the administrator host it has always
+        accepted there, still become links."""
+        for origin, expected in (("https://app.quillmd.com:9443", "https://app.quillmd.com:9443"),
+                                 ("https://admin.quillmd.com", "https://admin.quillmd.com"),
+                                 ("http://localhost:9130/", "http://localhost:9130"),
+                                 ("https://app.quillmd.com", "https://app.quillmd.com")):
+            with self.subTest(origin=origin), override_settings(QUILLMD_EMAIL_MODE="file", QUILLMD_APP_BASE_URL=origin):
+                self.assertEqual(application_origin(), expected)
+
 
 class PrivateProxySettingTests(SimpleTestCase):
     def test_proxy_trust_is_explicit_and_cannot_change_admin_loopback_behavior(self):

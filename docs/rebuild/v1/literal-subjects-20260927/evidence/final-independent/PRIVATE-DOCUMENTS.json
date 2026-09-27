@@ -1,0 +1,20 @@
+{
+  "scope": "Synthetic original/export bytes preserved privately; pre-commit correctly rejected adding clinical-document extensions. No override. Public evidence uses exact hashes and package-text observations.",
+  "files": [
+    {
+      "name": "heart-export.docx",
+      "preserved_path": "/opt/meddoc-pro/.worktrees/v1-host-readiness/rebuild/.runtime/literal-subjects-independent-20260927/scoped-final/heart-export.docx",
+      "sha256": "2c0307b6a63ee308e9df06bf2e438ed0740dd471aa7e9419939cfd80aae81c47"
+    },
+    {
+      "name": "neuro-export.docx",
+      "preserved_path": "/opt/meddoc-pro/.worktrees/v1-host-readiness/rebuild/.runtime/literal-subjects-independent-20260927/scoped-final/neuro-export.docx",
+      "sha256": "7ebd6b27175ccb2d6914365ca09e78c070c971518529285ba6f972f10a4437e7"
+    },
+    {
+      "name": "synthetic-table.docx",
+      "preserved_path": "/opt/meddoc-pro/.worktrees/v1-host-readiness/rebuild/.runtime/literal-subjects-independent-20260927/scoped-final/synthetic-table.docx",
+      "sha256": "3ab0287f89ea477d391225c52591e9a26b6069ffe224ff35e1cce75c98ebaf7c"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "agent": {
+    "metrics_collection_interval": 60,
+    "run_as_user": "cwagent"
+  },
+  "metrics": {
+    "namespace": "QuillMD/Production",
+    "append_dimensions": {
+      "InstanceId": "${aws:InstanceId}"
+    },
+    "metrics_collected": {
+      "mem": {
+        "measurement": ["mem_used_percent", "mem_available"]
+      },
+      "swap": {
+        "measurement": ["swap_used_percent"]
+      },
+      "disk": {
+        "measurement": ["used_percent", "inodes_free"],
+        "resources": ["/", "/var/lib/quillmd-production"],
+        "drop_device": true
+      },
+      "cpu": {
+        "measurement": ["cpu_usage_iowait"],
+        "totalcpu": true
+      }
+    }
+  }
+}

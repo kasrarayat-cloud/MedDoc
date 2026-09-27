@@ -1,0 +1,161 @@
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-release/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+FF.FFFFFFFF
+======================================================================
+FAIL: test_stale_supported_record_cannot_be_reapproved_or_exported (core.tests.test_v3_record_retraction.RetractionWorkflow.test_stale_supported_record_cannot_be_reapproved_or_exported)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_record_retraction.py", line 63, in test_stale_supported_record_cannot_be_reapproved_or_exported
+    self.assertEqual((row['status'],row['text']),('conflict',''))
+AssertionError: Tuples differ: ('supported', 'No known drug allergies.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'No known drug allergies.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_fullwidth_beneficiary_does_not_acquire_patient_ownership (core.tests.test_v3_record_retraction.RecordRetraction.test_fullwidth_beneficiary_does_not_acquire_patient_ownership)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_record_retraction.py", line 36, in test_fullwidth_beneficiary_does_not_acquire_patient_ownership
+    self.assertEqual((answers[label]['status'],answers[label]['text']),('conflict',''))
+AssertionError: Tuples differ: ('supported', 'Neurological examination is normal for her ｍｏｔｈｅｒ.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Neurological examination is normal for her ｍｏｔｈｅｒ.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_record_retractions_govern_generation_and_old_supported_values (core.tests.test_v3_record_retraction.RecordRetraction.test_record_retractions_govern_generation_and_old_supported_values) (label='Allergies', tail='removal of erroneous NKA entry.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_record_retraction.py", line 25, in test_record_retractions_govern_generation_and_old_supported_values
+    self.assertEqual((answer['status'],answer['text']),('conflict',''))
+AssertionError: Tuples differ: ('supported', 'No known drug allergies.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'No known drug allergies.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_record_retractions_govern_generation_and_old_supported_values (core.tests.test_v3_record_retraction.RecordRetraction.test_record_retractions_govern_generation_and_old_supported_values) (label='Allergies', tail='delete that entry from the chart.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_record_retraction.py", line 25, in test_record_retractions_govern_generation_and_old_supported_values
+    self.assertEqual((answer['status'],answer['text']),('conflict',''))
+AssertionError: Tuples differ: ('supported', 'No known drug allergies.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'No known drug allergies.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_record_retractions_govern_generation_and_old_supported_values (core.tests.test_v3_record_retraction.RecordRetraction.test_record_retractions_govern_generation_and_old_supported_values) (label='Allergies', tail='omit this statement from final chart.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_record_retraction.py", line 25, in test_record_retractions_govern_generation_and_old_supported_values
+    self.assertEqual((answer['status'],answer['text']),('conflict',''))
+AssertionError: Tuples differ: ('supported', 'No known drug allergies.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'No known drug allergies.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_record_retractions_govern_generation_and_old_supported_values (core.tests.test_v3_record_retraction.RecordRetraction.test_record_retractions_govern_generation_and_old_supported_values) (label='Allergies', tail='withdrawal of the erroneous declaration.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_record_retraction.py", line 25, in test_record_retractions_govern_generation_and_old_supported_values
+    self.assertEqual((answer['status'],answer['text']),('conflict',''))
+AssertionError: Tuples differ: ('supported', 'No known drug allergies.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'No known drug allergies.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_record_retractions_govern_generation_and_old_supported_values (core.tests.test_v3_record_retraction.RecordRetraction.test_record_retractions_govern_generation_and_old_supported_values) (label='Examination', tail='deletion of erroneous normal neurological entry.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_record_retraction.py", line 25, in test_record_retractions_govern_generation_and_old_supported_values
+    self.assertEqual((answer['status'],answer['text']),('conflict',''))
+AssertionError: Tuples differ: ('supported', 'Neurological examination is normal.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Neurological examination is normal.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_record_retractions_govern_generation_and_old_supported_values (core.tests.test_v3_record_retraction.RecordRetraction.test_record_retractions_govern_generation_and_old_supported_values) (label='Examination', tail='deletion of erroneous normal cardiopulmonary entry.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_record_retraction.py", line 25, in test_record_retractions_govern_generation_and_old_supported_values
+    self.assertEqual((answer['status'],answer['text']),('conflict',''))
+AssertionError: Tuples differ: ('supported', 'Heart and lung examination was normal.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Heart and lung examination was normal.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_record_retractions_govern_generation_and_old_supported_values (core.tests.test_v3_record_retraction.RecordRetraction.test_record_retractions_govern_generation_and_old_supported_values) (label='Allergies', tail='ａｃｔｕａｌｌｙ there is a penicillin reaction.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_record_retraction.py", line 25, in test_record_retractions_govern_generation_and_old_supported_values
+    self.assertEqual((answer['status'],answer['text']),('conflict',''))
+AssertionError: Tuples differ: ('supported', 'No known drug allergies.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'No known drug allergies.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_record_retractions_govern_generation_and_old_supported_values (core.tests.test_v3_record_retraction.RecordRetraction.test_record_retractions_govern_generation_and_old_supported_values) (label='Examination', tail='ａｃｔｕａｌｌｙ focal weakness is present.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_record_retraction.py", line 25, in test_record_retractions_govern_generation_and_old_supported_values
+    self.assertEqual((answer['status'],answer['text']),('conflict',''))
+AssertionError: Tuples differ: ('supported', 'Neurological examination is normal.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Neurological examination is normal.')
++ ('conflict', '')
+
+----------------------------------------------------------------------
+Ran 4 tests in 1.561s
+
+FAILED (failures=10)
+Destroying test database for alias 'default'...
+Found 4 test(s).
+System check identified no issues (0 silenced).

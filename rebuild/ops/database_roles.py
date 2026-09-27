@@ -8,8 +8,9 @@ from pathlib import Path
 import re
 import secrets
 import subprocess
+import sys
 
-from psycopg import sql
+from psycopg import sql, Error as DatabaseError
 try:
     from .backup_restore import inspect_container, private_dir, read_private, require, run, write_private, LABEL
 except ImportError:
@@ -239,12 +240,21 @@ def verify(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['inspect', 'apply', 'verify'])
-    parser.add_argument('--container', required=True)
-    parser.add_argument('--database', required=True)
-    parser.add_argument('--admin-user', required=True)
+    parser.add_argument('--profile', choices=['private', 'production'], default='private')
+    parser.add_argument('--container')
+    parser.add_argument('--database')
+    parser.add_argument('--admin-user')
     parser.add_argument('--expected-container-id', default='')
     parser.add_argument('--credentials')
     args = parser.parse_args()
+    if args.profile == 'production':
+        require(not any((args.container, args.database, args.admin_user, args.expected_container_id, args.credentials)),
+                'Production target and private credential paths come only from the reviewed profile.')
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        from ops.production_database_roles import run as production_run
+        production_run(args)
+        return
+    require(args.container and args.database and args.admin_user, 'Private target arguments required.')
     if args.action == 'inspect':
         print(json.dumps(inspect_policy(args)))
     else:
@@ -255,5 +265,5 @@ def main():
 if __name__ == '__main__':
     try:
         main()
-    except (RuntimeError, ValueError, KeyError, OSError):
+    except (RuntimeError, ValueError, KeyError, OSError, subprocess.SubprocessError, DatabaseError):
         raise SystemExit('Role operation refused or failed; no secrets/SQL contents emitted.')

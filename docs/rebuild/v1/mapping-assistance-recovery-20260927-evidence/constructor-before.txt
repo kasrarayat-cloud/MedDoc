@@ -1,0 +1,24 @@
+Creating test database for alias 'default'...
+F
+======================================================================
+FAIL: test_definite_constructor_failure_releases_without_unknown_outcome (mapping_constructor_probe.ConstructorProbe.test_definite_constructor_failure_releases_without_unknown_outcome)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/.venv/lib/python3.12/site-packages/django/test/utils.py", line 456, in inner
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/.runtime/mapping-assistance-20260927/mapping_constructor_probe.py", line 15, in test_definite_constructor_failure_releases_without_unknown_outcome
+    self.assertEqual(job.state,'failed')
+AssertionError: 'reconciliation' != 'failed'
+- reconciliation
++ failed
+
+
+----------------------------------------------------------------------
+Ran 1 test in 3.116s
+
+FAILED (failures=1)
+Destroying test database for alias 'default'...
+Found 1 test(s).
+System check identified no issues (0 silenced).
+constructor calls 1 state reconciliation held True receipt False

@@ -1,0 +1,154 @@
+{
+  "source_sha256": "d4d82856ca066c07b537f3c3d28f9a10b1b3bcbf441d516e6ba636699ea8bc77",
+  "rows": [
+    {
+      "name": "direct-donor-heading",
+      "input_sha256": "01b43a253175dd69ccdda834dd38de0ab1931e3cb98ecdaa820b96a9aa22983a",
+      "result": {
+        "contract": "v3",
+        "fields": [
+          {
+            "key": "v3_1",
+            "label": "What medications are currently taken?",
+            "kind": "long_text",
+            "context": "Donor",
+            "locator": {
+              "contract": "v3",
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              },
+              "fingerprint": "9443f4990394d76a48d2de173ba2a6333ee509bdff255bf6e4a481051ca2c343"
+            }
+          }
+        ],
+        "notes": []
+      }
+    },
+    {
+      "name": "inherited-donor-heading",
+      "input_sha256": "7723cbbe8825e71547994e09e33df7f55d283ee610d0812d1892a514cb5e61eb",
+      "result": {
+        "contract": "v3",
+        "fields": [
+          {
+            "key": "v3_1",
+            "label": "What medications are currently taken?",
+            "kind": "long_text",
+            "context": "Donor",
+            "locator": {
+              "contract": "v3",
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              },
+              "fingerprint": "9443f4990394d76a48d2de173ba2a6333ee509bdff255bf6e4a481051ca2c343"
+            }
+          }
+        ],
+        "notes": []
+      }
+    },
+    {
+      "name": "two-paragraph-question",
+      "input_sha256": "be45cc73d4f5f66b96ddb498abee5f07f2c7b6882c1247e095d8c5dfada7c564",
+      "result": {
+        "contract": "v3",
+        "fields": [],
+        "notes": [
+          "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. The question spans multiple paragraphs; review the complete source block. Earlier text: Which medications are currently taken? Printed text: Please provide their doses and frequencies."
+        ]
+      }
+    },
+    {
+      "name": "plain-positive",
+      "input_sha256": "beb5918a21a5c0ed277703d45ae8be449564d9e86828bf4cf563c014fe385783",
+      "result": {
+        "contract": "v3",
+        "fields": [
+          {
+            "key": "v3_1",
+            "label": "What symptoms changed?",
+            "kind": "long_text",
+            "context": "",
+            "locator": {
+              "contract": "v3",
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              },
+              "fingerprint": "9443f4990394d76a48d2de173ba2a6333ee509bdff255bf6e4a481051ca2c343"
+            }
+          }
+        ],
+        "notes": []
+      }
+    },
+    {
+      "name": "cell-nil",
+      "input_sha256": "53fc05e7309e84b7e10a2d749522e6850b36b222fa1f2b32126a52ff928219e1",
+      "result": {
+        "contract": "v3",
+        "fields": [],
+        "notes": [
+          "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. The border or unmerged one-cell structure is not explicit. Printed text: What symptoms changed?"
+        ]
+      }
+    },
+    {
+      "name": "ancestor-conditional-nil",
+      "input_sha256": "5e0ac6d2264ee30c7c56c6e26a007e0009cbd8222291e88cb8158c96850a4dee",
+      "result": {
+        "contract": "v3",
+        "fields": [],
+        "notes": [
+          "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. The border or unmerged one-cell structure is not explicit. Printed text: What symptoms changed?"
+        ]
+      }
+    },
+    {
+      "name": "inline-blank",
+      "input_sha256": "21256cfbdc4738d6f3aac7a01dea8d1a0f7cf46b011236e8ff4c655cda682f6a",
+      "result": {
+        "contract": "v3",
+        "fields": [
+          {
+            "key": "v3_1",
+            "label": "Patient name",
+            "kind": "text",
+            "context": "",
+            "locator": {
+              "contract": "v3",
+              "part": "word/document.xml",
+              "slot": "b/p[0]",
+              "target": {
+                "type": "span",
+                "start": 14,
+                "end": 24,
+                "shape": "blank"
+              },
+              "fingerprint": "684e21630ed34c9469007a62452aa6e8fe4ce1a583e113c4f59f288cf9bfad89"
+            }
+          }
+        ],
+        "notes": [
+          "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. The printed question contains another answer area; review their separate destinations. Printed text: Patient name: __________. What symptoms changed?"
+        ]
+      }
+    },
+    {
+      "name": "page-break-spacer",
+      "input_sha256": "f370f99cdf1a405c1dac80b9fe552abc5425cfa57dce19d554046a4042450913",
+      "result": {
+        "contract": "v3",
+        "fields": [],
+        "notes": [
+          "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. A page break separates the printed question or spacer from the preceding source."
+        ]
+      }
+    }
+  ]
+}

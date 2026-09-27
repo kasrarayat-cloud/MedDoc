@@ -336,3 +336,31 @@ class WMReviewTests(SimpleTestCase):
         self.assertEqual(data['measurement_1_1']['text'], '3.2 mm')
         self.assertFalse(self.encounter.template_review)
         with self.assertRaises(ValidationError): self.finalize()
+
+    def test_text_the_word_engine_rewrites_in_a_table_cell_cannot_complete_review(self):
+        """Ported from feat/wm-narrative (rounds 18 and 20). The engine writes a location answer into its table cell with
+        Aspose's `Range.Replace`, whose replacement reads `&p`, `&l`, `&m`, `&b` and `&&` as a paragraph, line, page or
+        section break and a single `&` — measured on the runtime built from these adapter sources: `thigh&mid calf`, reviewed complete,
+        exported as `thigh`, a page break, `id calf`. The labelled contract accepts only the labelled line's exact text,
+        so the line in the notes is what must change."""
+        from core.views import WM_BLOCKERS
+        self.fields[2]['locator'] = {'body_paragraph': 3}
+        self.fields[3]['locator'] = {'table': 0, 'row': 11, 'column': 0, 'marker': '<<insert location>>'}
+        for text in ('thigh&mid calf', 'knee&lower calf', 'knee&pupper calf', 'knee&below', 'thigh&&calf'):
+            with self.subTest(text=text):
+                self.values['location_11'] = text; self.populate()
+                self.assertEqual(self.assessment()['answers']['location_11']['blockers'], ['text_the_form_rewrites_labelled'])
+                self.seal()
+                with self.assertRaises(ValidationError): self.finalize()
+        self.assertIn('Change that line in the notes', WM_BLOCKERS.get('text_the_form_rewrites_labelled', ''))
+        # Controls: a capital after `&` is written as is, and a body paragraph's answer is appended as a run, never
+        # through the replace — both complete and finalize.
+        self.values['location_11'] = 'thigh&Mid calf'
+        self.values['patient_name'] = 'Synthetic&mPatient'
+        self.populate()
+        assessed = self.assessment()['answers']
+        self.assertEqual((assessed['location_11']['blockers'], assessed['patient_name']['blockers']), ([], []))
+        self.seal()
+        result = self.finalize()
+        self.assertEqual((result['answers']['location_11']['text'], result['answers']['patient_name']['text']),
+                         ('thigh&Mid calf', 'Synthetic&mPatient'))

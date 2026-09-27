@@ -16,8 +16,8 @@ from .security import membership,audit,private_path
 from .media import (AMBIGUOUS,MISSING,RETRYABLE,SUBMISSION_BUDGET_SECONDS,TOO_LARGE,TOO_SLOW,UNAVAILABLE,UNREADABLE,NotNormalised,
                     SubmissionUnprobeable,normalise_submission,plan_normalisation,probe_submission,refusal_text,
                     scrubbed)
-from .billing import reserve,settle,release,absorb_failed_job,MULTIPLIER
-from . import generation
+from .billing import reserve,settle,release,absorb_failed_job,sandbox_hold,MULTIPLIER
+from . import generation, v3_mapping
 from . import audio
 
 
@@ -59,6 +59,12 @@ OVERFLOW_ERROR='The transcript was not added because the notes would exceed the 
 # An over-limit upload is kept for the doctor's decision; the approval is valid 30 minutes, so after 40 an unapproved upload
 # can never be sent and is removed.
 NOTES_FULL='The notes are at the 50,000-character limit, so no transcript could be added. Shorten the notes first. Nothing was sent for transcription.'
+#: A generation quote signed under a price or request that is no longer configured: refused before any hold or job.
+QUOTE_PRICE_CHANGED=('The prices or the language model changed after this page loaded, so this request was not made. Nothing was '
+                     'sent or charged. Review the new maximum charge on this page, then generate again.')
+#: The same refusal when the deployment moved between live and synthetic (fixture) processing after the page was quoted.
+QUOTE_MODE_CHANGED=('QuillMD was switched between live and synthetic processing after this page loaded, so this request was not '
+                    'made. Nothing was sent or charged. Review this page again, then generate again.')
 ABANDONED_UPLOAD_SECONDS=2400
 UPLOAD_NAME=re.compile(r'audio/[a-f0-9]{48}\.(wav|webm|mp3|m4a)')
 # The normalised artifact is TRANSIENT: written under the same protected storage as the upload, at 0600, submitted, and
@@ -165,7 +171,7 @@ def deliverable(job):
 def may_cancel(job,user):
     """Same rule jobs.cancel enforces: the requester, or an owner or clinician of the department."""
     if job.state!='queued': return False
-    try: membership(user,job.encounter.department,roles=None if job.user_id==user.pk else ['owner','clinician'])
+    try: membership(user,job.department,roles=None if job.user_id==user.pk else ['owner','clinician'])
     except PermissionDenied: return False
     return True
 
@@ -208,6 +214,8 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     if e.status=='finalized': raise ValidationError('Finalized documents are immutable.')
     if expected_revision is not None and e.revision!=expected_revision:
         raise ValidationError('Source notes changed after the quote. Reload and review the current notes before submitting.')
+    if kind=='generation' and (refusal:=v3_mapping.generation_refusal(e.template_version)):
+        raise ValidationError(refusal)
     if kind=='generation' and not e.notes.strip():
         raise ValidationError('Type and save source notes, or review and add a transcript, before generating answers.')
     fingerprint=hashlib.sha256(private_path(input_path).read_bytes()).hexdigest() if kind=='transcription' else str(e.revision)
@@ -223,7 +231,22 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
         old.reused=True
         return old
     if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists(): raise ValidationError('This encounter already has a pending job.')
+    # ⚠️ A SIGNED QUOTE IS A PRICE THE DOCTOR SAW, NOT A LICENCE TO SEND A REQUEST THE OPERATOR HAS SINCE WITHDRAWN. The
+    # quote carries the whole configuration() it was signed under, and for its 600 s it used to be enqueued as it stood:
+    # measured, a page loaded under claude-sonnet-5 and clicked after a rollback, restart and drain queued and SENT a
+    # claude-sonnet-5 request (profile claude-sonnet-5-v1, 8975b158…) while configuration_status said legacy. pricing_version
+    # hashes the model, the rates, the discount and the request profile, so any of them moving refuses the quote here —
+    # before Job.objects.create and before any hold — and the page the doctor is sent back to signs a fresh one.
+    # ⚠️ AND THE MODE, WHICH pricing_version DOES NOT HASH. Measured: a page quoted live and clicked after the deployment was
+    # switched to fixture queued a LIVE job — held, sent, charged — while the console said no request is sent; the reverse
+    # queued a fixture job whose synthetic answers entered a live deployment. Both directions are refused here.
+    if config is not None and kind=='generation':
+        current=generation.configuration()
+        if config.get('mode')!=current['mode']: raise ValidationError(QUOTE_MODE_CHANGED)
+        if config.get('pricing_version')!=current['pricing_version']: raise ValidationError(QUOTE_PRICE_CHANGED)
     config=dict(config or generation.configuration())
+    if kind=='generation' and (refusal:=generation.narrative_refusal(e.template_version.fields,config)):
+        raise ValidationError(refusal)
     if kind=='transcription':
         if not (config['voice_rate_minute'] or config['voice_rate_second']): raise ValidationError('Transcription usage rates have not been configured.')
         # Exact, not an estimate: notes with no room for even one character can take no transcript, so nothing is sent or charged.
@@ -247,6 +270,8 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
         #                                 to the provider. A completeness statement may rest on this and on nothing else.
         config.update(recording_seconds=str(bounds.measured),recording_seconds_confirmed=str(bounds.confirmed),
                       charge_limit=str(charge_limit),limit_basis='approved' if approved_limit is not None else 'standard')
+        # New jobs only: the provider request parameters, recorded with the job so the worker sends what was queued.
+        config.update(deepgram_parameters=deepgram_parameters())
         # REFUSED HERE, BEFORE Job.objects.create AND BEFORE reserve(): a recording whose payload does not decide which
         # audio a decoder would process never reaches the provider, is never held against, and is never charged for. The
         # provider picking one silently is exactly what this prevents — measured: ffmpeg given a two-stream Matroska and no
@@ -264,7 +289,8 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     if kind=='transcription':
         reserve(job,charge_limit=charge_limit)
     else:
-        max_cost=generation.maximum_cost(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements])
+        max_cost=generation.maximum_cost(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements],
+                                         requirements=e.template_version.review_requirements)
         reserve(job,max_cost)
         charge_limit=max_cost*MULTIPLIER
     audit(user,'job.queued',job.pk,department=e.department,kind=kind,charge_limit=str(charge_limit))
@@ -373,11 +399,27 @@ def refuse(kind,detail,job=None):
     # Losing this row costs one line of operator evidence. Losing the release costs a doctor their balance.
     try:
         audit(job.user if job else None,'voice.submission_refused',job.pk if job else '',
-              department=job.encounter.department if job else None,
+              department=job.department if job else None,
               kind=kind,retryable=kind in RETRYABLE,detail=scrubbed(detail))
     except Exception:
         pass
     return NoProviderRequest(refusal_text(kind))
+
+
+#: A job whose held funds or payer's paid balance hold sandbox money in real data mode (billing.sandbox_hold): refused
+#: before any provider request.
+SANDBOX_HOLD_REFUSED='The paid balance for this request holds sandbox (test) payments, which real data mode never spends. Contact support.'
+
+
+def refuse_sandbox_hold(job):
+    """The worker's stop for a hold real data mode refuses to spend (billing.sandbox_hold): a NoProviderRequest, so run_one
+    marks the job not processed, charges nothing and releases the hold. The audit write cannot stop the refusal (see
+    refuse())."""
+    try:
+        audit(job.user,'usage.sandbox_hold_refused',job.pk,department=job.department,kind=job.kind)
+    except Exception:
+        pass
+    return NoProviderRequest(SANDBOX_HOLD_REFUSED)
 
 
 def prepare_submission(job):
@@ -467,7 +509,7 @@ def prepare_submission(job):
                    'submission_status':'determined','submission_detail':'; '.join(produced.reasons)[:400],
                    'submission_streams':str(produced.audio_streams),'submission_container':produced.container[:60]}
         # Written BEFORE the request, so a provider call that never returns still leaves a record of what was sent.
-        audit(job.user,'voice.submission_prepared',job.pk,department=job.encounter.department,
+        audit(job.user,'voice.submission_prepared',job.pk,department=job.department,
               source=submitted['submission_source'],container=submitted['submission_container'],
               seconds=submitted['submitted_seconds'],decoded_seconds=submitted['decoded_seconds'],
               submitted_bytes=submitted['submission_bytes'],sha256=submitted['submission_sha256'])
@@ -477,22 +519,77 @@ def prepare_submission(job):
         raise
 
 
+DEEPGRAM_MODEL='nova-3-medical'
+#: The query parameters a transcription request may carry, and the values Deepgram documents for them
+#: (https://developers.deepgram.com/reference/speech-to-text/listen-pre-recorded, read 2026-09-27):
+#: `smart_format` and `mip_opt_out` are booleans, both default false. `mip_opt_out=true` excludes the request
+#: from Deepgram's Model Improvement Program, which otherwise retains the audio and uses it for training
+#: (https://developers.deepgram.com/trust-security/your-data).
+DEEPGRAM_BOOLEAN_PARAMETERS=('smart_format','mip_opt_out')
+#: The recorded shapes a request may have: without `mip_opt_out` (synthetic mode with the setting unset, the request
+#: as it was before V1) or with it.
+DEEPGRAM_RECORDED_SHAPES=(frozenset({'model','smart_format'}),frozenset({'model','smart_format','mip_opt_out'}))
+
+
+def mip_opt_out_parameter():
+    """{'mip_opt_out': value} when QUILLMD_DEEPGRAM_MIP_OPT_OUT has a value; {} in synthetic mode with it unset."""
+    value=settings.QUILLMD_DEEPGRAM_MIP_OPT_OUT
+    return {} if value is None else {'mip_opt_out':value}
+
+
+def deepgram_parameters():
+    """The parameters a NEW transcription job is recorded with at enqueue, from the current settings.
+
+    QUILLMD_DEEPGRAM_MIP_OPT_OUT follows the data mode when unset: real mode sends 'true' ('false' is refused at
+    startup); synthetic mode sends no `mip_opt_out` parameter, the request as it was before V1. Whether Deepgram
+    prices an opted-out request differently is UNVERIFIED (docs/rebuild/v1/application-settings.md), so the quote is
+    unchanged. QUILLMD_DEEPGRAM_SMART_FORMAT defaults to 'false', the request as it always was. Smart Formatting is
+    listed as 'Included' for Pay As You Go and Growth on https://deepgram.com/pricing (read 2026-09-27), so it is not
+    part of the priced configuration and changes no quote.
+    """
+    return {'model':DEEPGRAM_MODEL,'smart_format':settings.QUILLMD_DEEPGRAM_SMART_FORMAT,**mip_opt_out_parameter()}
+
+
+def request_parameters(job):
+    """What this job's request carries: the parameters recorded when it was queued.
+
+    `Job.config` is write-once, so a job keeps the parameters it was queued (and quoted) with even if the settings
+    change before the worker reaches it. A job queued before parameters were recorded sends the request it was queued
+    for — nova-3-medical without smart formatting — plus the current opt-out setting, if it has a value. In real data
+    mode nothing is sent without mip_opt_out=true, whatever a job recorded in another mode.
+    """
+    recorded=(job.config or {}).get('deepgram_parameters')
+    if recorded is None:
+        params={'model':DEEPGRAM_MODEL,'smart_format':'false',**mip_opt_out_parameter()}
+    elif (not isinstance(recorded,dict) or frozenset(recorded) not in DEEPGRAM_RECORDED_SHAPES or recorded['model']!=DEEPGRAM_MODEL
+            or any(recorded[name] not in ('true','false') for name in DEEPGRAM_BOOLEAN_PARAMETERS if name in recorded)):
+        raise NoProviderRequest('The recorded transcription request parameters are not recognised. Nothing was sent.')
+    else:
+        params=dict(recorded)
+    from .stripe_validation import real_data_mode  # The one definition of 'not synthetic'.
+    if real_data_mode() and params.get('mip_opt_out')!='true':
+        raise NoProviderRequest('Real data mode sends transcription only with the Model Improvement opt-out. Nothing was sent.')
+    return params
+
+
 def transcribe(job):
     # Everything before httpx.post raises NoProviderRequest: no provider request was made, so nothing is billable.
     # The key is read FIRST: preparing a payload — and recording that we prepared one — for a request that could never have
     # been made would put a submission row in the audit trail with no provider request behind it.
     key=os.getenv('DEEPGRAM_API_KEY')
     if not key: raise NoProviderRequest('Transcription provider is not connected.')
+    params=request_parameters(job)
     raw,artifact,submitted=prepare_submission(job)
     try:
-        return submit_transcription(job,raw,key,submitted)
+        return submit_transcription(job,raw,key,submitted,params)
     finally:
         # The artifact is transient by design; its sha256 and measured duration on the job are what survive.
         if artifact is not None: artifact.unlink(missing_ok=True)
 
 
-def submit_transcription(job,raw,key,submitted):
-    response=httpx.post('https://api.deepgram.com/v1/listen',params={'model':'nova-3-medical','smart_format':'false'},headers={'Authorization':f'Token {key}','Content-Type':'application/octet-stream'},content=raw,timeout=90)
+def submit_transcription(job,raw,key,submitted,params=None):
+    params=params if params is not None else request_parameters(job)
+    response=httpx.post('https://api.deepgram.com/v1/listen',params=params,headers={'Authorization':f'Token {key}','Content-Type':'application/octet-stream'},content=raw,timeout=90)
     response.raise_for_status()
     data=response.json()
     try:transcript=data['results']['channels'][0]['alternatives'][0]['transcript']
@@ -510,17 +607,30 @@ def submit_transcription(job,raw,key,submitted):
     return transcript,cost,dict(submitted,duration_seconds=str(duration)),rates,'deepgram:nova-3-medical',data['metadata']['request_id'],False
 
 def run_one():
+    from .mapping_jobs import run_one as run_mapping
+    next_kind=Job.objects.filter(state='queued').order_by('created_at').values_list('kind',flat=True).first()
+    if next_kind=='mapping' and run_mapping(): return True
     with transaction.atomic():
-        job=Job.objects.select_for_update(skip_locked=True).filter(state='queued').order_by('created_at').first()
+        job=Job.objects.select_for_update(skip_locked=True).filter(state='queued').exclude(kind='mapping').order_by('created_at').first()
         if not job: return False
-        try: membership(job.user,job.encounter.department)
+        try: membership(job.user,job.department)
         except Exception:
             job.state='failed'; job.error='Access was revoked before processing.'; job.finished_at=timezone.now(); job.request_key=ended_key(job,'failed'); job.save();release(job); return True
         job.state='running';job.started_at=timezone.now();job.save(update_fields=['state','started_at'])
     provider_returned=False
     try:
+        # A hold taken before the switch to real data mode may sit on sandbox money, or its payer's paid balance (which a
+        # reconciled cost would debit) may hold it: real mode never spends it, and refuses the job as reserve() would.
+        if sandbox_hold(job): raise refuse_sandbox_hold(job)
         e=job.encounter
-        result,cost,units,rates,provider,request_id,simulated=generation.generate(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements]) if job.kind=='generation' else transcribe(job)
+        if job.kind=='generation' and (refusal:=v3_mapping.generation_refusal(e.template_version)):
+            raise NoProviderRequest(refusal)
+        # The operator's mode switch is a stop: a job queued in the other mode is refused here, before anything is sent.
+        if job.kind=='generation': generation.refuse_switched_mode(job.config)
+        # A job quoted with the narrative contract after the flag went off stops here: nothing is sent or charged.
+        if job.kind=='generation' and (refusal:=generation.narrative_refusal(e.template_version.fields,job.config)):
+            raise NoProviderRequest(refusal)
+        result,cost,units,rates,provider,request_id,simulated=generation.generate(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements],requirements=e.template_version.review_requirements) if job.kind=='generation' else transcribe(job)
         provider_returned=True
         response=(result.get('anthropic_response') or result.get('response')) if isinstance(result,dict) else None
         resource_id=getattr(response,'id','') or ''
@@ -538,6 +648,9 @@ def run_one():
             saved={'provider_output':result['anthropic_response'].model_dump(mode='json')}
         elif isinstance(result,dict) and 'response' in result:
             saved={'provider_output':result['response'].model_dump(mode='json')}
+        elif isinstance(result,dict) and 'narrative_replay' in result:
+            # A synthetic narrative response (fixture mode): kept as the text the validator read, and named as such.
+            saved={'provider_output_text':result['narrative_replay'],'synthetic_source':result['replay_source']}
         else:saved={'answers':result}
         result_path=f'receipts/{secrets.token_hex(24)}.json'
         path=private_path(result_path);path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
@@ -549,7 +662,7 @@ def run_one():
         with transaction.atomic():
             e=Encounter.objects.select_for_update().get(pk=e.pk)
             # Output QuillMD cannot use is a platform failure whatever the user did meanwhile, so it is checked first and absorbed.
-            if job.kind=='generation': answers=generation.validated(result)
+            if job.kind=='generation': answers,review=generation.adoption(result)
             elif not isinstance(result,str): raise PlatformFailure('Provider supplied no usable transcript.')
             # Usable output that the user's own state (finalized, edited, access revoked) declines is not a platform failure:
             # NotAdoptedByUser keeps the settled charge.
@@ -568,9 +681,10 @@ def run_one():
                 if len(e.notes)+len(text)+2>NOTE_LIMIT: raise NotAdoptedByUser(OVERFLOW_ERROR)
                 e.notes+='\n\n'+text; e.answers={}; e.status='draft'; e.revision+=1
                 CodeSuggestion.objects.filter(encounter=e).delete()
-                audit(job.user,'coding.invalidated_by_transcription',e.pk,department=e.department)
+                audit(job.user,'coding.invalidated_by_transcription',e.pk,department=e.department,revision=e.revision)
             if not (job.kind=='transcription' and job.config.get('transcript_review_required')):
-                e.template_review={}
+                # A generation's statement proposals only pre-select the page; the first save replaces them with decisions.
+                e.template_review=review if job.kind=='generation' else {}
                 e.save()
             job.state='succeeded';job.provider=provider;job.provider_request_id=request_id;job.finished_at=timezone.now();job.save()
             audit(job.user,'job.succeeded',job.pk,department=e.department,kind=job.kind)
@@ -606,9 +720,9 @@ def run_one():
             try: absorb_failed_job(job)
             except Exception as absorb_error:
                 # The failed job state is already durable; a failed reversal must never stop the worker. audit_billing flags settled-but-unabsorbed failures.
-                audit(job.user,'usage.absorb_failed',job.pk,department=job.encounter.department,error_class=type(absorb_error).__name__)
-        audit(job.user,'job.'+job.state,job.pk,department=job.encounter.department,error_class=type(exc).__name__,
-              billing='not_adopted' if declined else 'platform_failure' if known and not fixture else 'fixture' if fixture else 'not_processed' if unsent else 'uncertain')
+                audit(job.user,'usage.absorb_failed',job.pk,department=job.department,error_class=type(absorb_error).__name__)
+        audit(job.user,'job.'+job.state,job.pk,department=job.department,error_class=type(exc).__name__,
+              billing='not_adopted' if declined else 'platform_failure' if known and not fixture else 'not_processed' if unsent else 'fixture' if fixture else 'uncertain')
     return True
 
 
@@ -619,13 +733,13 @@ def cancel(job,user):
     # Lock the job row only: locking the encounter or department too would invert run_one's encounter-then-job order and deadlock.
     job=Job.objects.select_for_update(of=('self',)).select_related('encounter__department').get(pk=job.pk)
     # The requester may cancel their own queued request; anyone else needs a clinician or owner role in the department.
-    membership(user,job.encounter.department,roles=None if job.user_id==user.pk else ['owner','clinician'])
+    membership(user,job.department,roles=None if job.user_id==user.pk else ['owner','clinician'])
     if job.state!='queued': raise CancellationRefused(CANCEL_REFUSALS.get(job.state,'This request can no longer be cancelled.'))
     job.state='cancelled';job.error=CANCELLED_ERROR;job.finished_at=timezone.now()
     job.request_key=ended_key(job,'cancelled')
     job.save(update_fields=['state','error','finished_at','request_key'])
     release(job)
-    audit(user,'job.cancelled',job.pk,department=job.encounter.department,kind=job.kind)
+    audit(user,'job.cancelled',job.pk,department=job.department,kind=job.kind)
     return job
 
 def reap_abandoned_voice_uploads():

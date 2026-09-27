@@ -1,4 +1,5 @@
 import hashlib
+import ipaddress
 import secrets
 from datetime import timedelta
 from pathlib import Path
@@ -61,3 +62,23 @@ def rate_limit(key,limit=8,seconds=600):
     row.count+=1
     row.save(update_fields=['count','window_start'])
     return row.count<=limit
+
+
+def client_address(request):
+    """The client address login, registration, recovery and resend limits are keyed on.
+
+    Behind the loopback proxy every request arrives from 127.0.0.1, so keying on REMOTE_ADDR made each
+    per-address limit a single platform-wide bucket: one client could lock everybody out of signing in or
+    signing up. With QUILLMD_TRUST_PROXY (as effective on this surface; see settings) the key is the
+    RIGHT-MOST X-Forwarded-For entry — the one our proxy wrote. Everything to its left arrived from the
+    client and is never read, so a forged left-most entry cannot buy a fresh bucket. Without trusted-proxy
+    mode, or when that entry is not an IP address, REMOTE_ADDR as before.
+    """
+    remote = request.META.get('REMOTE_ADDR', '')
+    if not getattr(settings, 'QUILLMD_TRUST_PROXY', False):
+        return remote
+    entries = request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')
+    try:
+        return str(ipaddress.ip_address(entries[-1].strip()))
+    except ValueError:
+        return remote

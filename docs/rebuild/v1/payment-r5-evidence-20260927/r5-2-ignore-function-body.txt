@@ -1,0 +1,50 @@
+Found 1 test(s).
+System check identified no issues (0 silenced).
+
+Creating test database for alias 'default'...
+FFFFF
+======================================================================
+FAIL: test_replacing_each_guard_function_body_with_a_noop_is_reported (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_replacing_each_guard_function_body_with_a_noop_is_reported) (function='quillmd_append_only')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 109, in test_replacing_each_guard_function_body_with_a_noop_is_reported
+    self.assertTrue(names.issubset(guards.reported(problems)), problems)
+AssertionError: False is not true : []
+
+======================================================================
+FAIL: test_replacing_each_guard_function_body_with_a_noop_is_reported (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_replacing_each_guard_function_body_with_a_noop_is_reported) (function='quillmd_webhook_evidence_guard')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 109, in test_replacing_each_guard_function_body_with_a_noop_is_reported
+    self.assertTrue(names.issubset(guards.reported(problems)), problems)
+AssertionError: False is not true : []
+
+======================================================================
+FAIL: test_replacing_each_guard_function_body_with_a_noop_is_reported (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_replacing_each_guard_function_body_with_a_noop_is_reported) (function='quillmd_payment_evidence_guard')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 109, in test_replacing_each_guard_function_body_with_a_noop_is_reported
+    self.assertTrue(names.issubset(guards.reported(problems)), problems)
+AssertionError: False is not true : []
+
+======================================================================
+FAIL: test_replacing_each_guard_function_body_with_a_noop_is_reported (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_replacing_each_guard_function_body_with_a_noop_is_reported) (function='quillmd_livemode_guard')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 109, in test_replacing_each_guard_function_body_with_a_noop_is_reported
+    self.assertTrue(names.issubset(guards.reported(problems)), problems)
+AssertionError: False is not true : []
+
+======================================================================
+FAIL: test_replacing_each_guard_function_body_with_a_noop_is_reported (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_replacing_each_guard_function_body_with_a_noop_is_reported) (function='quillmd_refuse_truncate')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 109, in test_replacing_each_guard_function_body_with_a_noop_is_reported
+    self.assertTrue(names.issubset(guards.reported(problems)), problems)
+AssertionError: False is not true : []
+
+----------------------------------------------------------------------
+Ran 1 test in 0.091s
+
+FAILED (failures=5)
+Destroying test database for alias 'default'...

@@ -1,3 +1,4 @@
+import bisect
 import hashlib
 import json
 import os
@@ -24,12 +25,14 @@ from django_otp.plugins.otp_totp.models import TOTPDevice
 from .models import *
 from . import field_location
 from .forms import *
-from .security import audit,departments,scoped,membership,digest,token,store_upload,private_path,rate_limit
-from .billing import welcome_credit,credit_payment,reconcile_refund,reconciliation,stripe_test_key_configured,reconcile_usage,release
+from .security import audit,departments,scoped,membership,digest,token,store_upload,private_path,rate_limit,client_address
+from .billing import welcome_credit,welcome_credit_label,credit_payment,reconcile_refund,reconciliation,stripe_test_key_configured,stripe_key_configured,reconcile_usage,release
 from .context import integration_status
 from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outcome,may_cancel,ended_key,deliverable,RecordingOverLimit,transcription_quote,seconds_text,standard_voice_limit,UPLOAD_NAME,notes_full
 from .billing import available_balance
 from . import wm_review
+from . import v3_mapping
+from documents.mapping_limits import MAX_MAPPING_LABEL, MAX_MAPPING_INPUT_UNITS
 
 
 def error_message(exc):
@@ -51,8 +54,11 @@ def wm_resolve(encounter,actor,decisions=None):
     original=private_path(version.template.original_path)
     if hashlib.sha256(original.read_bytes()).hexdigest()!=version.template.sha256:
         raise ValidationError('Original integrity check failed.')
+    from . import wm_narrative
+    proposals=(encounter.template_review.get('proposals',{}) if decisions is None and wm_narrative.enabled(version.fields) else {})
     decisions=decisions if decisions is not None else encounter.template_review.get('decisions',{})
-    variants={row['key']:decisions.get(row['key'],{}).get('variant',row['default_variant'])
+    # A generation's statement proposal pre-selects a wording until the clinician's first save records a decision.
+    variants={row['key']:decisions.get(row['key'],{}).get('variant',(proposals.get(row['key']) or {}).get('variant',row['default_variant']))
               for row in version.review_requirements}
     signer=encounter.finalized_by if encounter.status=='finalized' else actor
     context={'reviewer_id':str(signer.pk),'revision':encounter.revision,'notes':encounter.notes,
@@ -72,18 +78,114 @@ def wm_resolve(encounter,actor,decisions=None):
     return result['review_requirements']
 
 
-def source_quote_evidence(notes,label,raw,labels):
-    """Convert submitted quotations into actual offsets; never accept posted offsets."""
+PREFER_LIMIT=24
+
+
+def source_quote_evidence(notes,label,raw,labels,sentences=None,previous=(),prefer=None,safe=None):
+    """Convert submitted quotations into actual offsets; never accept posted offsets.
+
+    `sentences` (the narrative contract's source units, when it is on): a quotation that is one complete sentence of
+    the notes is that sentence, found first, so an answer read from a sentence keeps it as its evidence. When the same
+    sentence occurs more than once, the occurrence this answer already cited (`previous`) is kept: re-posting the page
+    must not move a left-leg answer onto the right leg's identical sentence. Two quotations of one sentence text are
+    two occurrences, never one twice (round 4); and when a typed sentence occurs more than once, `prefer(unit)` picks
+    the occurrence that carries the answer (the left leg's copy for a left-leg answer): the cited copy is kept while it
+    carries it, and one that does not is left only for a copy that carries it with nothing governing it there (`safe`:
+    never a prior study's or a relative's copy, round 6) — or for one in the paragraph of another line the clinician
+    posted that occurs once (its heading: the clinician's own choice of that copy, round 7) — so re-posting can move an
+    answer off a copy that never did (round 5). The cited copies and at most `PREFER_LIMIT` others are tried, and at
+    most `PREFER_LIMIT` copies are judged by `safe` per call (round 7's cost lens: a copy judged per posted line made a
+    save of 500 repeated lines per field quadratic, 120 s)."""
     if len(raw)>50000:raise ValidationError('Source quotations exceed the supported limit; nothing was truncated.')
+    from . import wm_narrative
+    if sentences is not None and sum(1 for line in raw.splitlines() if line.strip())>wm_narrative.EVIDENCE_LIMIT:
+        # (review's bound, before anything is resolved or stored: round 8 — posted sentences were stored without one, and
+        # each later save matched every posted line against all of them, 190 s)
+        raise ValidationError(f'Cite at most {wm_narrative.EVIDENCE_LIMIT} source sentences for one answer; nothing was truncated.')
     units,_=wm_review.source_units(notes,label,labels)
-    evidence=[]
+    evidence=[];used=set();carried={};clean={};judged=[0]
+    def carries(unit):
+        if unit['start'] not in carried:carried[unit['start']]=bool(prefer(unit))
+        return carried[unit['start']]
+    governed={}
+    def ungoverned_copy(unit):
+        if unit['start'] not in governed:
+            if safe is None:governed[unit['start']]=True
+            elif judged[0]>=PREFER_LIMIT:governed[unit['start']]=False
+            else:
+                judged[0]+=1;governed[unit['start']]=bool(safe(unit))
+        return governed[unit['start']]
+    def safe_copy(unit):
+        if unit['start'] not in clean:
+            if not carries(unit):clean[unit['start']]=0
+            elif safe is None:clean[unit['start']]=2
+            elif judged[0]>=PREFER_LIMIT:clean[unit['start']]=0
+            else:
+                judged[0]+=1;rank=safe(unit)
+                clean[unit['start']]=2 if rank is True else rank if isinstance(rank,int) else 0   # (`safe` may say yes or no)
+        return clean[unit['start']]
+    def cleanest(units):
+        # (a copy nothing governs before one only its side does: round 14 — `RIGHT LEG:` / `No DVT in the left leg.` / S
+        # and `LEFT LEG:` / S kept the right block's S for the left answer)
+        second=None
+        for unit in units:
+            rank=safe_copy(unit)
+            if rank>=2:return unit
+            if rank and second is None:second=unit
+        return second
+    counts={}
+    for unit in sentences or ():counts[unit['quote']]=counts.get(unit['quote'],0)+1
+    posted={line.strip() for line in raw.splitlines() if line.strip()}
+    anchors={wm_narrative.paragraph_start(notes,unit['start']) for unit in sentences or ()
+             if unit['quote'] in posted and counts[unit['quote']]==1} if prefer else set()
+    marks=sorted(unit['start'] for unit in sentences or () if unit['quote'] in posted and counts[unit['quote']]==1) if prefer else []
+    # (a copy the clinician's next or previous line runs straight on from or to — `The great saphenous vein measures 5.0 mm …
+    # without reflux in the` / `left leg.` written under both legs, the side only on the line after: round 17e's review,
+    # the save kept the right leg's copy, and an unchanged re-save moved a correct right answer onto the left's)
+    ordered=sorted(sentences or (),key=lambda unit:unit['start'])
+    position={unit['start']:index for index,unit in enumerate(ordered)}
+    lines=[line.strip() for line in raw.splitlines() if line.strip()]
+    def runs_on(unit,index):
+        at=position.get(unit['start'])
+        if at is None:return False
+        for step,near in ((1,index+1),(-1,index-1)):
+            if 0<=near<len(lines) and 0<=at+step<len(ordered) and ordered[at+step]['quote']==lines[near]:
+                low,high=(unit['end'],ordered[at+step]['start']) if step==1 else (ordered[at+step]['end'],unit['start'])
+                if low<=high and wm_narrative._wrapped_gap(notes[low:high]):return True
+        return False
+    line_index=-1
     for submitted in raw.splitlines():
         quote=submitted.strip()
         if not quote:continue
+        line_index+=1
+        cited={item.get('start') for item in previous or () if isinstance(item,dict) and item.get('quote')==quote}
+        same=[unit for unit in sentences or () if unit['quote']==quote]
+        free=[unit for unit in same if unit['start'] not in used]
+        tried=[unit for unit in free if unit['start'] in cited]+[unit for unit in free[:PREFER_LIMIT] if unit['start'] not in cited]
+        kept=next((unit for unit in tried if unit['start'] in cited and carries(unit)),None) if prefer and len(same)>1 else None
+        moved=cleanest(tried) if prefer and len(same)>1 and kept is None else None
+        if moved is None and kept is None and len(same)>1:
+            paired=[unit for unit in tried if runs_on(unit,line_index)]
+            moved=paired[0] if len(paired)==1 else next((unit for unit in paired if unit['start'] in cited),None)
+        if moved is None and kept is None and anchors and len(same)>1:
+            moved=next((unit for unit in tried if carries(unit) and wm_narrative.paragraph_start(notes,unit['start']) in anchors),None)
+        if moved is None and kept is None and marks and len(same)>1:
+            # (else the copy nearest after a line cited once, across paragraphs: `LEFT LEG:` over a blank line and
+            # `Measurements:` resolved a sentence written under both legs to the right leg's copy — round 11)
+            # (never a copy something governs: a relative's, a prior study's — round 12)
+            placed=[(unit['start']-marks[index-1],unit) for unit in tried
+                    for index in [bisect.bisect_left(marks,unit['start'])] if index and ungoverned_copy(unit)]
+            moved=min(placed,key=lambda item:item[0])[1] if placed else None
+        sentence=(kept or moved
+                  or next((unit for unit in free if unit['start'] in cited),None)
+                  or (free[0] if free else (same[0] if same else None)))
+        if sentence is not None:
+            used.add(sentence['start'])
+            evidence.append({'quote':quote,'start':sentence['start'],'end':sentence['end'],'kind':'unit'});continue
         found=next((item for item in units if item[2]==quote),None)
-        if found is None:raise ValidationError('Use a complete source line or the complete value for this exact question label.')
+        if found is None:raise ValidationError('Use a complete source line or the complete value for this exact question label'+(', or one complete sentence of the notes.' if sentences is not None else '.'))
         evidence.append({'quote':quote,'start':found[0],'end':found[1]})
-    wm_review.validate_evidence(notes,label,evidence,labels)
+    wm_review.validate_evidence(notes,label,[item for item in evidence if 'kind' not in item],labels)
     return evidence
 
 
@@ -104,6 +206,21 @@ WM_BLOCKERS={
     'selected_answer_conflicts_with_fixed_assertion':'The selected reflux finding contradicts this fixed negative statement. Export is blocked.',
     'symptom_conflicts_with_asymptomatic':'This symptom conflicts with the selected asymptomatic finding.',
     'asymptomatic_conflicts_with_documented_symptom':'Asymptomatic conflicts with another selected symptom.',
+    'text_the_form_rewrites_labelled':'The form reads "&p", "&l", "&m", "&b" and "&&" in this table cell as formatting codes (a break, or a single "&"), so it would print differently from this answer, and on this form an answer must repeat its labelled line exactly. Change that line in the notes: write the letter after "&" as a capital (for example "thigh&Mid calf") or write "and". Then save the notes and generate again.',
+    'narrative_evidence_disabled':'This answer cites a sentence of the notes, and reading answers from sentences is switched off. Quote the labelled source line instead.',
+    'narrative_value_not_in_source':'The cited sentence does not contain this value exactly as written. Cite the sentence that states it, or correct the answer.',
+    'labelled_value_differs':'A line labelled with this question gives a different value. Correct the notes or the answer.',
+    'superseded_by_correction':'A correction in the cited sentence replaces this value. Use the corrected value.',
+    'side_not_supported':'The cited sentences place this finding on the other side.',
+    'side_not_stated':'The cited sentences do not say which side this finding is on. Cite the sentence that names the side.',
+    'narrative_qualifiers_hold':'The notes state this finding with uncertainty, for someone other than the patient, or at another time. Decide the answer yourself.',
+    'statement_answers_differ_from_wording':'This wording is not built from the answers it cites. Save to refresh the statement, then review it.',
+    'statement_answers_incomplete':'This wording rests on answers that are still unanswered or need review.',
+    'text_the_form_rewrites':'The form writes "&p", "&l", "&m", "&b" and "&&" in this table cell as breaks, so it would print differently. Write the letter after "&" as a capital (for example "thigh&Mid calf"), which the form prints as written, or leave the answer blank.',
+    'statement_absence_not_reviewed':'This wording says its answers are not documented. Leave them unanswered and review each one first.',
+    'governed_source':'A heading, a pointer or a label in the notes denies or reframes what the cited sentences say (a denial, a family history, a hypothetical). Cite a sentence it does not govern.',
+    'statement_source_is_heading':'The cited line is a heading or a title, which states nothing. Cite the sentence that states this.',
+    'narrative_held':'Something in the notes may change this pre-filled answer (it is shown beside it). Choose or type the answer yourself.',
 }
 
 #: ⚠️ `data_mode` WAS A HARDCODED LITERAL AND WAS BEING CITED AS PROOF OF THE GUARD.
@@ -111,7 +228,13 @@ WM_BLOCKERS={
 #: SYNTHETIC_ONLY flipped to False — every check that read /health/ as evidence of
 #: synthetic-only operation was reading a label that could not disagree with itself.
 #: It is now derived from the setting the seed and verification commands actually enforce.
-def health(request): return JsonResponse({'status':'ok','data_mode':'synthetic-only' if settings.SYNTHETIC_ONLY else 'live','surface':'admin' if settings.ADMIN_SITE else 'doctor','release':settings.RELEASE_SHA})
+#: 'real' only when the declared data mode is real (settings refused to start otherwise). The guard
+#: switched off WITHOUT the declared real profile — reachable only by overriding settings — still
+#: reports 'live', so the positive control above keeps a value that cannot pass for either mode.
+def health_data_mode():
+    if settings.SYNTHETIC_ONLY:return 'synthetic-only'
+    return 'real' if getattr(settings,'QUILLMD_DATA_MODE','synthetic')=='real' else 'live'
+def health(request): return JsonResponse({'status':'ok','data_mode':health_data_mode(),'surface':'admin' if settings.ADMIN_SITE else 'doctor','release':settings.RELEASE_SHA})
 
 @require_http_methods(['GET','POST'])
 def login_view(request):
@@ -120,19 +243,29 @@ def login_view(request):
     if not next_url.startswith('/') or not url_has_allowed_host_and_scheme(next_url,allowed_hosts=set()):next_url=''
     if request.method=='POST' and form.is_valid():
         email=form.cleaned_data['email'].lower()
-        if not rate_limit('login-ip:'+request.META.get('REMOTE_ADDR',''),limit=40) or not rate_limit('login-email:'+email):
+        if not rate_limit('login-ip:'+client_address(request),limit=40) or not rate_limit('login-email:'+email):
             form.add_error(None,'Too many sign-in attempts. Try again later.')
         else:
             found=User.objects.filter(email__iexact=email).first()
             user=authenticate(request,username=found.username if found else email,password=form.cleaned_data['password'])
             device=None
-            if user and user.is_staff:
+            enrol=False
+            # Administrators always need a confirmed authenticator. With QUILLMD_MFA_REQUIRED_ALL every account
+            # that HAS one must present its code; an account without one signs in with its password only far
+            # enough to enrol: AccessMiddleware confines that session to /mfa/ until a code is verified.
+            if user and (user.is_staff or settings.QUILLMD_MFA_REQUIRED_ALL):
                 with transaction.atomic():
                     device=TOTPDevice.objects.select_for_update().filter(user=user,confirmed=True).first()
-                    if not device or not device.verify_token(form.cleaned_data['otp']): user=None
+                    if device:
+                        if not device.verify_token(form.cleaned_data['otp']): user=None
+                    elif user.is_staff: user=None
+                    else: enrol=True
             if user and user.verified_at and (not settings.ADMIN_SITE or user.is_staff):
                 auth_login(request,user)
                 if device: otp_login(request,device)
+                if enrol:
+                    audit(user,'auth.login',mfa_enrolment_required=True)
+                    return redirect('mfa_setup')
                 audit(user,'auth.login')
                 return redirect(next_url or ('admin_dashboard' if settings.ADMIN_SITE else 'dashboard'))
             audit(None,'auth.login_failed',details='No credentials recorded')
@@ -149,10 +282,12 @@ def verification_mail(user,raw,verification):
 
 @require_http_methods(['GET','POST'])
 def register(request):
-    if settings.ADMIN_SITE: raise Http404
+    # QUILLMD_REGISTRATION=invite closes self-service sign-up entirely: accounts arrive only through a
+    # department invitation or an administrator's clinic-owner invitation.
+    if settings.ADMIN_SITE or settings.QUILLMD_REGISTRATION!='open': raise Http404
     form=RegisterForm(request.POST or None)
     if request.method=='POST' and form.is_valid():
-        if not rate_limit('register:'+request.META.get('REMOTE_ADDR',''),limit=5):return HttpResponse('Try again later.',status=429)
+        if not rate_limit('register:'+client_address(request),limit=5):return HttpResponse('Try again later.',status=429)
         with transaction.atomic():
             user=form.save(commit=False);user.username=form.cleaned_data['email'];user.save()
             raw=token();verification=Verification.objects.create(user=user,token_hash=digest(raw),expires_at=timezone.now()+timedelta(hours=24))
@@ -160,25 +295,34 @@ def register(request):
         delivery=verification_mail(user,raw,verification)
         if delivery.status=='outbox':messages.success(request,'Verification created in the private development outbox. Email delivery is not live yet.')
         elif delivery.status=='accepted':messages.success(request,'Verification submitted to the email provider. Check your inbox; inbox delivery is not yet confirmed.')
-        else:messages.warning(request,'Account created, but verification email delivery could not be confirmed. Ask your administrator to recover the verification link or retry delivery. No welcome credit has been granted yet.')
+        else:messages.warning(request,'Account created, but verification email delivery could not be confirmed. Ask your administrator to recover the verification link or retry delivery.'+(' No welcome credit has been granted yet.' if welcome_credit_label() else ''))
         return redirect('login')
     return render(request,'register.html',{'form':form})
 
 @require_http_methods(['GET','POST'])
 def verify(request,raw):
     v=get_object_or_404(Verification,token_hash=digest(raw),expires_at__gt=timezone.now(),used_at__isnull=True)
-    if request.method=='GET':return render(request,'confirm.html',{'title':'Verify your test account','description':'Confirm ownership of this email to activate your personal $10 welcome credit.'})
+    if request.method=='GET':
+        label=welcome_credit_label() if settings.QUILLMD_REGISTRATION=='open' else ''
+        return render(request,'confirm.html',{'title':'Verify your test account' if settings.SYNTHETIC_ONLY else 'Verify your account','description':f'Confirm ownership of this email to activate your personal {label} welcome credit.' if label else 'Confirm ownership of this email to activate your account.'})
     with transaction.atomic():
         user=User.objects.select_for_update().get(pk=v.user_id)
         v=Verification.objects.select_for_update().get(pk=v.pk)
         if v.used_at or v.expires_at<=timezone.now() or user.verified_at or not user.is_active: raise Http404
         user.verified_at=timezone.now();user.save(update_fields=['verified_at'])
         v.used_at=timezone.now();v.save(update_fields=['used_at'])
+        if settings.QUILLMD_REGISTRATION!='open':
+            # Invite-only: a verification link can only belong to an account registered before sign-up closed.
+            # It proves the mailbox and nothing more. A personal organization is self-service onboarding, which
+            # this mode closed; the account joins a clinic by invitation, and receives the credit when it does.
+            audit(user,'account.verified',user.pk,workspace_created=False)
+            messages.success(request,'Email verified. Sign in to accept the invitation your clinic sends you.');return redirect('login')
         org=Organization.objects.create(name=f'{user.first_name or "Personal"} workspace')
         dept=Department.objects.create(organization=org,name='Personal practice')
         Membership.objects.create(user=user,department=dept,role='owner')
         welcome_credit(user);audit(user,'account.verified',user.pk)
-    messages.success(request,'Email verified. Your $10 personal welcome credit is available.');return redirect('login')
+    label=welcome_credit_label()
+    messages.success(request,f'Email verified. Your {label} personal welcome credit is available.' if label else 'Email verified.');return redirect('login')
 
 @require_http_methods(['GET','POST'])
 def mfa_setup(request):
@@ -192,7 +336,16 @@ def mfa_setup(request):
             if device.verify_token(form.cleaned_data['code']):
                 device.confirmed=True;device.save(update_fields=['confirmed']);otp_login(request,device);audit(request.user,'auth.mfa_verified');return redirect('admin_dashboard' if settings.ADMIN_SITE else 'dashboard')
         form.add_error('code','Invalid or already used code.')
-    return render(request,'mfa_setup.html',{'form':form,'provisioning_uri':device.config_url if not device.confirmed else '', 'device':device})
+    # QUILLMD_MFA_REQUIRED_ALL puts every clinician through this page, many on a phone that cannot scan its own
+    # screen: the same key is also shown as grouped text for manual entry. Default mode renders the page as before.
+    secret=manual_entry_key(device) if settings.QUILLMD_MFA_REQUIRED_ALL and not device.confirmed else ''
+    return render(request,'mfa_setup.html',{'form':form,'provisioning_uri':device.config_url if not device.confirmed else '', 'device':device,'secret':secret})
+
+def manual_entry_key(device):
+    """The device's base32 key — exactly the `secret` in its otpauth URI — in groups of four for typing."""
+    from base64 import b32encode
+    key=b32encode(device.bin_key).decode().rstrip('=')
+    return ' '.join(key[i:i+4] for i in range(0,len(key),4))
 
 def dashboard(request):
     return render(request,'dashboard.html',{'encounters':scoped(Encounter,request.user).select_related('patient','template_version__template').order_by('-created_at')[:30],'templates':scoped(Template,request.user).order_by('-created_at')[:30]})
@@ -200,6 +353,7 @@ def dashboard(request):
 @require_http_methods(['GET','POST'])
 def template_upload(request):
     from documents import inspect_template,DocumentError
+    from documents.service import word_engine
     form=UploadForm(request.POST or None,request.FILES or None,user=request.user)
     if request.method=='POST' and form.is_valid():
         relative=None
@@ -209,12 +363,21 @@ def template_upload(request):
             relative=store_upload(form.cleaned_data['file'])
             if private_path(relative).read_bytes()[:8]==OLE_CONTAINER:
                 raise ValidationError('This file is password-protected, encrypted, or an old Word .doc file. Save it as an unprotected Word .docx (or a fillable PDF) and upload that.')
-            info=inspect_template(private_path(relative))
-            if len(info['fields'])>100:raise ValidationError('Templates support at most 100 answer fields. Split this template explicitly.')
+            # The contract for NEW inspections comes from settings (QUILLMD_WORD_ENGINE). A PDF and the qualified WM
+            # file keep their own paths whatever it says; stored mappings always fill under the contract that made them.
+            info=inspect_template(private_path(relative),engine=word_engine())
+            contract=v3_mapping.CONTRACT if info.get('contract')==v3_mapping.CONTRACT else ''
+            if contract:
+                # ⚠️ The engine maps far more than 100 areas, but generation still refuses more than 100 fields, so a
+                # larger v3 form is refused here, whole and with the count, rather than trimmed or left unusable.
+                answerable=len(v3_mapping.answerable(info['fields']))
+                if answerable>v3_mapping.GENERATION_FIELD_LIMIT:raise ValidationError(v3_mapping.too_many_fields(answerable))
+            elif len(info['fields'])>100:raise ValidationError('Templates support at most 100 answer fields. Split this template explicitly.')
             with transaction.atomic():
                 t=Template.objects.create(department=department,name=form.cleaned_data['name'],format=info['format'],original_name=Path(form.cleaned_data['file'].name).name[:200],original_path=relative,sha256=info['sha256'],warnings=info.get('warnings',[]),created_by=request.user)
-                TemplateVersion.objects.create(template=t,number=1,fields=info['fields'],review_requirements=info.get('review_requirements',[]),document_backend=document_backend(info),created_by=request.user)
-                audit(request.user,'template.upload',t.pk,department=department,sha256=t.sha256,field_count=len(info['fields']))
+                TemplateVersion.objects.create(template=t,number=1,fields=info['fields'],review_requirements=info.get('review_requirements',[]),document_backend=document_backend(info),contract=contract,created_by=request.user)
+                audit(request.user,'template.upload',t.pk,department=department,sha256=t.sha256,field_count=len(info['fields']),**({'contract':contract} if contract else {}))
+            if contract:messages.info(request,f'QuillMD found {len(info["fields"])} answer areas automatically. Check every one against your form, correct the mapping, and confirm it before creating a document.')
             return redirect('template_detail',pk=t.pk)
         except (ValidationError,DocumentError) as exc:
             if relative:private_path(relative).unlink(missing_ok=True)
@@ -288,6 +451,7 @@ def statement_guide(version):
 def template_detail(request,pk):
     t=get_object_or_404(scoped(Template,request.user),pk=pk)
     version=t.versions.order_by('-number').first()
+    if v3_mapping.is_v3_version(version):return template_detail_v3(request,t,version)
     form=MappingForm(request.POST or None,initial={'labels':{f['key']:f['label'] for f in version.fields}})
     if request.method=='POST' and form.is_valid():
         try:
@@ -317,6 +481,180 @@ def template_detail(request,pk):
             messages.success(request,'New mapping version saved. Existing documents keep their original version.');return redirect('template_detail',pk=t.pk)
         except ValidationError as exc:form.add_error(None,error_message(exc))
     return render(request,'template_detail.html',{'template':t,'version':version,'form':form,'field_rows':field_location.rows(version.fields),'field_locations':[field_location.describe(f) for f in version.fields],'statements':statement_guide(version)})
+
+#: At most this many unmapped places are listed at once; the search narrows the rest.
+V3_PLACES_SHOWN=300
+V3_MAPPING_CHANGED='This mapping changed after you opened it. Nothing was saved; the current mapping is shown below. Compare it with your corrections before saving again.'
+
+def v3_original(t):
+    path=private_path(t.original_path)
+    if hashlib.sha256(path.read_bytes()).hexdigest()!=t.sha256:raise ValidationError('Original integrity check failed.')
+    return path
+
+def v3_outline(t):
+    from documents import outline_template
+    return outline_template(v3_original(t))['slots']
+
+def v3_page(request,t,version,*,status=200,error='',posted=None,outline=None):
+    """The contract v3 mapping review: every field in document order, the places a field could still be added to,
+    the corrections that made this version, and the clinician's confirmation."""
+    from documents import DocumentError
+    query=' '.join(request.GET.get('find','').split())[:120]
+    outline_error=''
+    if outline is None:
+        try:outline=v3_outline(t)
+        except (ValidationError,DocumentError,OSError) as exc:outline=[];outline_error=error_message(exc) if not isinstance(exc,OSError) else 'The original is unavailable.'
+    places=v3_mapping.open_places(outline,version.fields,query)
+    box_keys={row['slot']:row['box_keys'] for row in outline if row.get('box_keys')}
+    posted=posted or {}
+    # ⚠️ Repeated questions are counted with generation's own normalizer, over the fields generation reads: two of
+    # them sharing a label are never filled from the notes (each is held), so the page names them for renaming.
+    from .generation import question_key
+    counts={}
+    for f in version.fields:
+        if f.get('kind') not in v3_mapping.NEVER_GENERATED:counts[question_key(f['label'])]=counts.get(question_key(f['label']),0)+1
+    rows=[{'number':n,'key':f['key'],'field':f,'label':posted.get('label_'+f['key'],f['label']),
+           'kind':f.get('kind'),'chosen_kind':posted.get('kind_'+f['key'],f.get('kind')),
+           'kind_name':v3_mapping.KIND_NAMES.get(f.get('kind'),f.get('kind')),
+           'kind_editable':f.get('kind') in v3_mapping.TEXT_KINDS,'options':f.get('options') or [],
+           'location':field_location.describe(f,box_keys=box_keys),'context':f.get('context') or '',
+           'origin':{'manual':'Manual','model_assisted':'Model proposal'}.get(f.get('origin'),'Automatic'),'max_chars':f.get('max_chars'),
+           'remove':posted.get('remove_'+f['key'])=='on',
+           'duplicate':f.get('kind') not in v3_mapping.NEVER_GENERATED and counts.get(question_key(f['label']),0)>1}
+          for n,f in enumerate(version.fields,1)]
+    can_confirm=Membership.objects.filter(user=request.user,department=t.department,active=True,role__in=['owner','clinician']).exists()
+    return render(request,'template_detail.html',{'template':t,'version':version,'v3':True,'v3_rows':rows,'v3_error':error,
+        'places':places[:V3_PLACES_SHOWN],'places_hidden':max(0,len(places)-V3_PLACES_SHOWN),'places_total':len(places),
+        'find':query,'outline_error':outline_error,'posted_slot':posted.get('slot',''),'posted_add_label':posted.get('label',''),
+        'posted_add_kind':posted.get('kind',''),'text_kinds':[(k,v3_mapping.KIND_NAMES[k]) for k in v3_mapping.TEXT_KINDS],
+        'manual_kinds':[(k,v3_mapping.KIND_NAMES[k]) for k in v3_mapping.MANUAL_KINDS],'can_confirm':can_confirm,
+        'answerable':len(v3_mapping.answerable(version.fields)),'field_limit':v3_mapping.GENERATION_FIELD_LIMIT,
+        'corrections':version.corrections,'statements':[],'mapping_label_limit':MAX_MAPPING_LABEL,'mapping_input_limit':MAX_MAPPING_INPUT_UNITS,
+        'mapping_assistance_enabled':getattr(settings,'QUILLMD_MAPPING_ASSISTANCE',False)},status=status)
+
+def template_detail_v3(request,t,version):
+    from documents import DocumentError
+    if request.method!='POST':return v3_page(request,t,version)
+    action=request.POST.get('action','')
+    handler={'v3_save':v3_save_corrections,'v3_add':v3_add_field,'v3_confirm':v3_confirm}.get(action)
+    if handler is None:
+        return v3_page(request,t,version,status=400,error='This mapping is reviewed field by field on this page. Nothing was saved.')
+    try:
+        return handler(request,t)
+    except (ValidationError,DocumentError) as exc:
+        latest=t.versions.order_by('-number').first()
+        return v3_page(request,t,latest,status=400,error=error_message(exc),posted=request.POST)
+
+def v3_new_version(request,t,latest,fields,*,removed=(),added=(),kind_changed=None,renamed=()):
+    """A new immutable mapping version, with the corrections that made it recorded beside the fields. Added fields
+    keep origin 'manual'; the new version needs its own confirmation."""
+    kind_changed=kind_changed or {}
+    corrections={'base_version':latest.number,'removed':list(removed),'added':list(added),'kind_changed':kind_changed,'renamed':list(renamed)}
+    version=TemplateVersion.objects.create(template=t,number=latest.number+1,fields=fields,review_requirements=latest.review_requirements,
+                                           document_backend=latest.document_backend,contract=latest.contract,corrections=corrections,created_by=request.user,
+                                           assistance={**latest.assistance,'assisted':True} if latest.assistance else {})
+    audit(request.user,'template.mapping_version',version.pk,department=t.department,number=version.number,contract=version.contract,
+          removed=[row['key'] for row in removed],added=list(added),kind_changed=kind_changed,renamed=[row['key'] for row in renamed])
+    return version
+
+def v3_save_corrections(request,t):
+    """Rename, change a text-like kind, or remove fields that are not answers; one new version, corrections recorded."""
+    from .tab_review import signature_label
+    membership(request.user,t.department,roles=['owner','clinician','manager'])
+    with transaction.atomic():
+        Template.objects.select_for_update().get(pk=t.pk)
+        latest=t.versions.order_by('-number').first()
+        if request.POST.get('mapping_version')!=str(latest.pk):
+            return v3_page(request,t,latest,status=409,error=V3_MAPPING_CHANGED,posted=request.POST)
+        fields=[];removed=[];renamed=[];kind_changed={}
+        for number,f in enumerate(latest.fields,1):
+            key=f['key']
+            if request.POST.get('remove_'+key)=='on':
+                removed.append({'key':key,'label':f['label'],'kind':f.get('kind'),'origin':f.get('origin','automatic')});continue
+            supplied_label=str(request.POST.get('label_'+key,f['label']))
+            label=supplied_label.strip()
+            if not label or len(supplied_label)>MAX_MAPPING_LABEL or '\n' in label:raise ValidationError(f'Give question {number} a one-line label of 1 to {MAX_MAPPING_LABEL} characters.')
+            kind=request.POST.get('kind_'+key,f.get('kind'))
+            if kind!=f.get('kind'):
+                if f.get('kind') not in v3_mapping.TEXT_KINDS or kind not in v3_mapping.TEXT_KINDS:
+                    raise ValidationError(f'"{f["label"]}" keeps its kind ({v3_mapping.KIND_NAMES.get(f.get("kind"),f.get("kind"))}): only text, long text, date and time can be changed into one another. Nothing was saved.')
+                kind_changed[key]=[f.get('kind'),kind]
+            if label!=f['label']:
+                # ⚠️ The same protection as every other mapping: the identity check reads this label.
+                if signature_label(f['label']) and not signature_label(label):
+                    raise ValidationError('A signature question keeps a signature label, because the identity check reads it: '+f['label']+'. Rename the other questions and leave this one as the form words it.')
+                renamed.append({'key':key,'from':f['label'],'to':label})
+            fields.append({**f,'label':label,'kind':kind})
+        if not (removed or renamed or kind_changed):
+            messages.info(request,'Nothing changed, so no new mapping version was saved.')
+            return redirect('template_detail',pk=t.pk)
+        version=v3_new_version(request,t,latest,fields,removed=removed,kind_changed=kind_changed,renamed=renamed)
+    messages.success(request,f'Mapping version {version.number} saved with your corrections. Confirm it before creating documents; existing documents keep their original version.')
+    return redirect('template_detail',pk=t.pk)
+
+def v3_add_field(request,t):
+    """A place the engine missed, chosen from the form's outline, located by the engine and recorded as manual."""
+    from documents import locate_fields
+    membership(request.user,t.department,roles=['owner','clinician','manager'])
+    slot=request.POST.get('slot','');kind=request.POST.get('kind','');supplied_label=request.POST.get('label','');label=supplied_label.strip()
+    if kind not in v3_mapping.MANUAL_KINDS:raise ValidationError('Choose what kind of answer the added field takes.')
+    if not label or len(supplied_label)>MAX_MAPPING_LABEL or '\n' in label:raise ValidationError(f'Give the added field a one-line label of 1 to {MAX_MAPPING_LABEL} characters.')
+    if not slot:raise ValidationError('Choose the place on the form where the missed answer goes.')
+    latest=t.versions.order_by('-number').first()
+    if request.POST.get('mapping_version')!=str(latest.pk):
+        return v3_page(request,t,latest,status=409,error=V3_MAPPING_CHANGED,posted=request.POST)
+    outline=v3_outline(t)
+    place=next((row for row in outline if row['slot']==slot),None)
+    if place is None:raise ValidationError('That place is not in this form. Choose one from the list.')
+    if v3_mapping.is_mapped(slot,v3_mapping.mapped_slots(latest.fields)):
+        raise ValidationError('That place already belongs to a field. Correct that field instead of adding another.')
+    target={'slot':slot,'kind':kind,'label':label}
+    if kind=='checkbox' or place.get('kind')=='glyphs':
+        # ⚠️ The box the clinician named, for ANY place that holds printed boxes; the engine refuses a number beyond
+        # the boxes the place actually holds (a paragraph place used to take box 1 whatever was asked).
+        try:box=int(request.POST.get('box') or 1)
+        except ValueError:box=0
+        if box<1:raise ValidationError('Give the number of the printed box, counting from 1.')
+        target['glyph']=box-1
+    field=locate_fields(v3_original(t),[target])['fields'][0]
+    if field.get('kind')=='choice' and not field.get('options'):
+        raise ValidationError('A field with printed options needs a Word dropdown or a legacy dropdown field as its place. Choose the dropdown, or add this answer as text.')
+    if any(f['key']==field['key'] for f in latest.fields):raise ValidationError('That place already belongs to a field with this label.')
+    with transaction.atomic():
+        Template.objects.select_for_update().get(pk=t.pk)
+        if t.versions.order_by('-number').first().pk!=latest.pk:
+            return v3_page(request,t,t.versions.order_by('-number').first(),status=409,error=V3_MAPPING_CHANGED,posted=request.POST)
+        fields=v3_mapping.insert_in_document_order(latest.fields,[field],outline)
+        answerable=len(v3_mapping.answerable(fields))
+        if answerable>v3_mapping.GENERATION_FIELD_LIMIT:
+            raise ValidationError(f'Adding this field would give the form {answerable} answer areas; QuillMD can generate answers for at most {v3_mapping.GENERATION_FIELD_LIMIT} per form today. Nothing was saved.')
+        version=v3_new_version(request,t,latest,fields,added=[field['key']])
+    messages.success(request,f'Added "{field["label"]}" ({v3_mapping.KIND_NAMES.get(field["kind"],field["kind"])}) as a manual field in mapping version {version.number}. Confirm the mapping before creating documents.')
+    return redirect('template_detail',pk=t.pk)
+
+def v3_confirm(request,t):
+    """The clinician's statement that every field was checked against the form, recorded with who and when."""
+    membership(request.user,t.department,roles=['owner','clinician'])
+    if request.POST.get('checked_every_field')!='on':raise ValidationError('Tick "I checked every field against the form" to confirm this mapping.')
+    with transaction.atomic():
+        Template.objects.select_for_update().get(pk=t.pk)
+        latest=t.versions.order_by('-number').first()
+        if request.POST.get('mapping_version')!=str(latest.pk):
+            return v3_page(request,t,latest,status=409,error=V3_MAPPING_CHANGED)
+        if latest.assistance.get('unresolved'):raise ValidationError('Resolve every mapping-assistance area before confirming this version.')
+        if not latest.fields:raise ValidationError('This mapping has no fields. Add the form\'s answer areas before confirming it.')
+        # ⚠️ A box that does not exist can never be confirmed (it would only refuse at export, after the review).
+        missing=v3_mapping.missing_boxes(latest.fields,v3_outline(t))
+        if missing:raise ValidationError('These fields point at a printed box the form does not have: '+field_list(missing)+' Remove each one and add it again with the right box number.')
+        off_box=v3_mapping.checkboxes_off_box(latest.fields)
+        if off_box:raise ValidationError('These checkbox fields point at a place that is not a box: '+field_list(off_box)+' Remove each one and add it again on its printed box or checkbox control, or as text.')
+        if latest.confirmed:
+            messages.info(request,'This mapping version was already confirmed.')
+            return redirect('template_detail',pk=t.pk)
+        MappingConfirmation.objects.create(version=latest,confirmed_by=request.user)
+        audit(request.user,'template.mapping_confirmed',latest.pk,department=t.department,number=latest.number,field_count=len(latest.fields))
+    messages.success(request,f'Mapping version {latest.number} confirmed. You can now create documents with this form.')
+    return redirect('template_detail',pk=t.pk)
 
 def template_original(request,pk):
     t=get_object_or_404(scoped(Template,request.user),pk=pk)
@@ -369,6 +707,7 @@ def encounter_detail(request,pk):
         codes=list(visible_codes)
         can_finalize=Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists()
     is_wm=bool(e.template_version.document_backend)
+    is_v3=v3_mapping.is_v3_version(e.template_version)
     rows=[{**f,**e.answers.get(f['key'],{'text':'','status':'missing','evidence':[],'reviewed':False})} for f in e.template_version.fields]
     # ⚠️ A CLINICAL DECISION IS ATTRIBUTED TO THE PERSON WHO MADE IT, NOT TO WHOEVER IS READING.
     # The page told every reader "You accepted this as your answer" — so a second clinician opening
@@ -378,6 +717,8 @@ def encounter_detail(request,pk):
     accepters={str(pk):email for pk,email in User.objects.filter(
         pk__in={row['accepted_by'] for row in rows if row.get('accepted_by')}).values_list('pk','email')}
     from .tab_review import clinician_identity
+    editors={str(pk):email for pk,email in User.objects.filter(
+        pk__in={row.get('edited_by') for row in rows} - {None}).values_list('pk','email')}
     deciders={str(pk):email for pk,email in User.objects.filter(
         pk__in={(row.get('blank_decision') or {}).get('by') for row in rows} - {None}).values_list('pk','email')}
     if e.status!='finalized' and e.answers:
@@ -385,8 +726,20 @@ def encounter_detail(request,pk):
         # can hold a governed answer as `supported` or as a one-click offer, accepted or not; each is shown held,
         # with every line that governs it. A FINALIZED record is never re-described: it shows what was offered.
         from .generation import as_currently_governed,governance_for
-        governance=governance_for(e.notes,e.template_version.fields,[row['label'] for row in e.template_version.review_requirements])
-        rows=[as_currently_governed(governance,e.notes,row,is_wm) for row in rows]
+        from . import wm_narrative
+        statement_labels=[row['label'] for row in e.template_version.review_requirements]
+        governance=governance_for(e.notes,e.template_version.fields,statement_labels)
+        # An answer read from a sentence is judged by the narrative reader, exactly as finalization will judge it.
+        narrative_read=(wm_narrative.stored_reading(e.notes,e.template_version.fields,statement_labels,e.answers)
+                        if wm_narrative.active(e.template_version.fields,e.answers) else None)
+        rows=[wm_narrative.as_currently_held(row,row,narrative_read) if narrative_read and wm_narrative.has_unit_evidence(row)
+              else as_currently_governed(governance,e.notes,row,is_wm) for row in rows]
+    if is_v3:
+        # ⚠️ A QUESTION LABEL THE FORM REPEATS IS SHOWN WITH ITS CONTEXT (counted with generation's own normalizer):
+        # two questions reading "Effusion" are told apart only by where they sit on the form.
+        from .generation import question_key
+        label_counts={}
+        for f in e.template_version.fields:label_counts[question_key(f.get('label'))]=label_counts.get(question_key(f.get('label')),0)+1
     for row in rows:
         row['accepted_by_email']=accepters.get(str(row.get('accepted_by') or ''),'')
         row['accepted_by_me']=str(row.get('accepted_by') or '')==str(request.user.pk)
@@ -395,6 +748,14 @@ def encounter_detail(request,pk):
         row['blank_eligible']=not e.template_version.document_backend and not clinician_identity(row)
         row['left_blank']=row.get('status')=='left_blank'
         row['blank_by_email']=deciders.get(str((row.get('blank_decision') or {}).get('by') or ''),'')
+        # (who gave the answer, from its stored status — the badge below shows the review's, `conflict` until reviewed)
+        row['entered_by_person']=row.get('status')=='edited'
+        row['read_from_notes']=row.get('status')=='supported'
+        row['edited_by_email']=editors.get(str(row.get('edited_by') or ''),'') if row['entered_by_person'] else ''
+        # (and an answer a person emptied is theirs too, not "nothing in the notes" — round 18: a value generation read and
+        # an employee deleted showed as a plain `missing`, with no author)
+        row['cleared_by_person']=row.get('status')=='missing' and bool(row.get('edited_by'))
+        row['cleared_by_email']=editors.get(str(row.get('edited_by') or ''),'') if row['cleared_by_person'] else ''
         # ⚠️ "I REVIEWED THIS ANSWER" IS THE READER'S OWN STATEMENT, SO IT IS NEVER PRE-TICKED FROM
         # SOMEBODY ELSE'S REVIEW. Rendering the stored flag let a second clinician's plain Save
         # re-post every box and re-stamp reviewed_by to themselves — the signature row included,
@@ -405,14 +766,39 @@ def encounter_detail(request,pk):
         row['reviewed']=row['stored_reviewed'] and answer.get('reviewed_by')==str(request.user.pk)
         row['reviewed_by_other']=row['stored_reviewed'] and not row['reviewed']
         row['identity']=clinician_identity(row)
+        if is_v3:
+            # How the page asks for each kind; the stored answer stays its text form (core/v3_mapping.py).
+            kind=row.get('kind')
+            row['v3_input']=v3_mapping.input_for(row)
+            row['chosen']=[line for line in (row.get('text') or '').split('\n') if line] if kind=='multi_choice' else []
+            row['columns_hint']=' | '.join(v3_mapping.columns(row)) if kind=='table_rows' else ''
+            row['unsupported_choice']=bool(kind=='choice' and row.get('text') and row['text'] not in (row.get('options') or []))
+            if kind in v3_mapping.SIGNING_KINDS:row['blank_eligible']=False
+            # What the export does with this answer, in the page's words (the export sets every box of an answered
+            # option field, unticks a reviewed checkbox left unticked, and keeps an unanswered choice as printed).
+            row['v3_note']=v3_mapping.review_note(row)
+            row['blank_note']=v3_mapping.blank_note(row)
+            row['v3_final']=v3_mapping.finalized_note(row,row)
+            row['v3_context']=(row.get('review_reason') if row.get('write_protected') else
+                               ((row.get('context') or '') if label_counts.get(question_key(row.get('label')),0)>1 else ''))
     requirements=[];review_error='';assessment=None;resolved_ok=False;wm_conflicts=[]
     if is_wm:
         decisions=e.template_review.get('decisions',{})
         try:
             requirements=wm_resolve(e,request.user)
             resolved_ok=True
-            if can_finalize:
-                assessment=wm_review.evaluate_review(e,request.user,decisions,resolved_requirements=requirements)
+            # (a finalized record is not re-reviewed by whoever views it: its receipt is the review — round 17e's review, a
+            # second clinician was told the finalized record's review was incomplete)
+            if can_finalize and e.status!='finalized':
+                # Before the first save, the page shows the statements generation proposed (as `wm_resolve` resolved
+                # them): its review reads those wordings, unreviewed, not the defaults (round 3).
+                from . import wm_narrative
+                proposed=e.template_review.get('proposals',{}) if not decisions and wm_narrative.enabled(e.template_version.fields) else {}
+                # (a proposal held by `threshold_wording` is `{'held': reason}`: nothing is pre-selected for it — round 17e's
+                # review, the page raised on it for every owner and clinician)
+                page_decisions={**{key:{'variant':row['variant'],'evidence':row.get('evidence',[])} for key,row in proposed.items()
+                                   if 'variant' in row},**decisions}
+                assessment=wm_review.evaluate_review(e,request.user,page_decisions,resolved_requirements=requirements)
         except (ValidationError,DocumentError) as exc:
             review_error=error_message(exc)
             wm_conflicts=getattr(exc,'rows',[])
@@ -431,13 +817,24 @@ def encounter_detail(request,pk):
                 row['status']='conflict'; reasons=[reason for reason in reasons if reason!='conflicting_source']
             row['review_errors']=[WM_BLOCKERS.get(reason,'Clinical review is incomplete.') for reason in reasons]
             row['review_errors']+=[conflict['explanation'] for conflict in wm_conflicts if row['key'] in conflict['answer_keys']]
+        from . import wm_narrative
+        proposals=e.template_review.get('proposals',{}) if not decisions and wm_narrative.enabled(e.template_version.fields) else {}
         for row in requirements:
             row['unresolved']=not resolved_ok
             decision=decisions.get(row['key'],{})
+            proposal=proposals.get(row['key']) or {}
             row['reviewed']=bool(decision.get('reviewed') and e.template_review.get('reviewer_id')==str(request.user.pk)
                                   and e.template_review.get('binding',{}).get('source_revision')==e.revision)
-            row['source_quote']='\n'.join(item['quote'] for item in decision.get('evidence',[]))
-            row['selected_variant']=decision.get('variant') or row.get('selected_variant') or row.get('default_variant')
+            shown=decision.get('evidence') if decision else proposal.get('evidence',[])
+            row['source_quote']='\n'.join(item['quote'] for item in shown or [] if item.get('quote'))
+            # A wording built from answers may rest on those answers; the page posts that basis back explicitly.
+            row['answers_basis']=next((item['answer_keys'] for item in shown or [] if item.get('kind')=='answers'),None)
+            row['answers_basis_labels']=[next((f['label'] for f in e.template_version.fields if f['key']==key),key) for key in row['answers_basis'] or []]
+            row['basis_possible']=row.get('kind')=='assertion' and any(wm_narrative.basis_keys(variant) for variant in row.get('variants',[]))
+            row['proposed']=bool(proposal.get('variant')) and not decision
+            # (a wording the reader would not pre-select, and why: the page's default is not a proposal)
+            row['proposal_held']=proposal.get('held') if not decision else None
+            row['selected_variant']=decision.get('variant') or proposal.get('variant') or row.get('selected_variant') or row.get('default_variant')
             if resolved_ok:
                 row['review_token']=signing.dumps({'encounter':str(e.pk),'revision':e.revision,
                     'actor':str(request.user.pk),'key':row['key'],'text_sha256':row['text_sha256'],
@@ -446,7 +843,7 @@ def encounter_detail(request,pk):
             row['review_errors']=[WM_BLOCKERS.get(reason,'Clinical review is incomplete.') for reason in reasons]
             row['review_errors']+=[conflict['explanation'] for conflict in wm_conflicts if row['key'] in conflict['statement_keys']]
     from .generation import maximum_cost,configuration
-    try:maximum_charge=maximum_cost(e.notes,e.template_version.fields,context_labels=[row['label'] for row in e.template_version.review_requirements])*Decimal('1.5')
+    try:maximum_charge=maximum_cost(e.notes,e.template_version.fields,context_labels=[row['label'] for row in e.template_version.review_requirements],requirements=e.template_version.review_requirements)*Decimal('1.5')
     except ValidationError:maximum_charge=None
     audit(request.user,'encounter.view',e.pk,department=e.department)
     # Billing boundary: earlier charged requests (successes, and successes the user's own state declined) stay charged, so a
@@ -468,16 +865,146 @@ def encounter_detail(request,pk):
                 transcript_reviews.append({'job':job,'raw':raw,'text':transcript,'empty':not (raw or '').strip() and not (transcript or '').strip()})
             except (ValidationError,OSError,ValueError):
                 job.display_error='The retained transcript could not be verified. Contact an administrator; do not resubmit a paid recording.'
-    return render(request,'encounter_detail.html',{'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
+    from . import wm_narrative
+    return render(request,'encounter_detail.html',{'wm_narrative':is_wm and wm_narrative.enabled(e.template_version.fields),'notes_save_clears':notes_save_clears(e),'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or is_v3 or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'v3_template':is_v3,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
-        'signer_name':' '.join((request.user.get_full_name() or request.user.email).split())})
+        'signer_name':' '.join((request.user.get_full_name() or request.user.email).split()),
+        'export_refusal':v3_mapping.export_refusal(e.template_version.template) if is_v3 else ''})
+
+def clinician_decided(e):
+    """Whether the saved draft carries a clinician's review state, which a generation would replace wholesale.
+    (An acceptance also marks its answer `edited`; it is named for itself so no change to statuses can open this.)"""
+    # WM records a deliberate clearing as missing with its editor. That remains
+    # a person's decision even though the answer text is now empty.
+    return (any(isinstance(a,dict) and (a.get('reviewed') or a.get('accepted_suggestion') or a.get('status') in ('edited','left_blank')
+                                      or a.get('edited_by'))
+                for a in (e.answers or {}).values())
+            or bool((e.template_review or {}).get('decisions')))
+
+def same_text(posted,stored):
+    """Whether posted notes are the stored notes as a browser returns them untouched: it posts a textarea's line breaks as
+    CRLF, and the HTML parser drops the one line break that directly follows <textarea>. The page now emits one there (as
+    Django's Textarea widget does), so a stored leading break survives; a page rendered before that lost it, so exactly
+    one leading line break (LF, CRLF or CR) missing from the post is ignored."""
+    posted,stored=(text.replace('\r\n','\n').replace('\r','\n') for text in (posted,stored))
+    return posted==stored or (stored.startswith('\n') and posted==stored[1:])
+
+def notes_save_clears(e):
+    """What a changed notes save would clear, as the page's warning names it ('' when nothing): the same parts, from the
+    same counts, that the save audits and then states — so the warning names only what would be cleared (refutation round
+    4, R4-7), and it and the saved message cannot disagree."""
+    return listed(cleared_parts(review_state_counts(e)))
+
+ANSWER_STATES=('answers_accepted_suggestion','answers_left_blank','answers_edited_not_accepted','answers_reviewed_unedited',
+               'answers_unreviewed_unedited')
+
+def review_state_counts(e,codes=True):
+    """What clearing this draft discards, as counts only (never clinical text), for its audit row.
+
+    An answer is counted only when it carries text or a decision — a review tick, an acceptance, "Leave blank — reviewed"
+    or an edit (to nothing, too). An empty field nobody decided (a `missing` field, or a conflict nobody resolved) holds
+    no answer to clear: counting it made notes with one supported answer and one empty field say "2 answers" (refutation
+    round 4, R4-3). Each counted answer is counted once, in the first of ANSWER_STATES that fits — an accepted suggestion
+    (which is also `edited` and may be reviewed), left blank, edited and not an accepted suggestion, reviewed and
+    unedited, or neither reviewed nor edited (so, since R4-3, carrying text) — so those states are disjoint and sum to
+    the answers counted (refutation round 2, R2-4). Across them, and NOT a further state to add to them,
+    `answers_with_clinician_review` counts the answers that carried a review tick, which only an owner or clinician can
+    set: two edited answers a clinician reviewed no longer audit exactly as two edits nobody reviewed (refutation round 3,
+    F3). Each statement decision is counted once: reviewed, or recorded and unreviewed — which includes a wording saved
+    exactly as the form rendered it, since a save records every statement's wording and the record cannot tell a
+    deliberate choice of the default from none, so the key does not say "chosen" (refutation round 3, F4). Accepted codes
+    only."""
+    from .generation import is_empty
+    counts=dict.fromkeys(ANSWER_STATES,0);counts['answers_with_clinician_review']=0
+    for a in (e.answers or {}).values():
+        # (a malformed entry from an earlier release is text if it is anything, so the save's count never hides it)
+        a=a if isinstance(a,dict) else {'text':str(a) if a else ''}
+        if a.get('accepted_suggestion'):state='answers_accepted_suggestion'
+        elif a.get('status')=='left_blank':state='answers_left_blank'
+        elif a.get('status')=='edited' or a.get('edited_by'):state='answers_edited_not_accepted'
+        elif a.get('reviewed'):state='answers_reviewed_unedited'
+        elif not is_empty(a.get('text')):state='answers_unreviewed_unedited'
+        else:continue                                     # (an empty field nobody decided: nothing to clear)
+        counts[state]+=1;counts['answers_with_clinician_review']+=int(bool(a.get('reviewed')))
+    decisions=[d if isinstance(d,dict) else {} for d in ((e.template_review or {}).get('decisions') or {}).values()]
+    counts.update(statements_reviewed=sum(1 for d in decisions if d.get('reviewed')),
+                  statements_recorded_unreviewed=sum(1 for d in decisions if not d.get('reviewed')),
+                  codes_accepted=CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False).count() if codes else 0)
+    return counts
+
+def cleared_parts(counts):
+    """What a changed notes save clears, as phrases read from its audited counts: each part is named only when its count
+    is not zero, so no sentence built from them can claim what the audit row does not record (refutation round 3, F2).
+    Within the answer draft, the decisions a clinician made — accepted suggestions and decisions to leave blank — are named
+    with the answers they are part of, beside the reviewed count that spans them: an acceptance made without the review
+    tick vanished from "(2 answers, 1 reviewed by a clinician)" while the audit recorded it (refutation round 4, R4-4)."""
+    def counted(number,noun,plural=None):return f'{number} '+(noun if number==1 else plural or noun+'s')
+    def reviewed(total,number):return (f'{number} reviewed by a clinician' if number else 'none reviewed' if total>1 else 'not reviewed')
+    answers=sum(counts[state] for state in ANSWER_STATES)
+    review=reviewed(answers,counts['answers_with_clinician_review'])
+    decisions=[(number,counted(number,noun,plural)) for number,noun,plural in (
+        (counts['answers_accepted_suggestion'],'accepted suggestion',None),
+        (counts['answers_left_blank'],'decision to leave blank','decisions to leave blank')) if number]
+    named=' and '.join(text for _,text in decisions)
+    if not decisions:draft=f'{counted(answers,"answer")}, {review}'
+    elif sum(number for number,_ in decisions)==answers:draft=f'{counted(answers,"answer")}: {named}; {review}'
+    else:draft=f'{counted(answers,"answer")}, including {named}; {review}'
+    statements=counts['statements_reviewed']+counts['statements_recorded_unreviewed']
+    parts=([f'the answer draft ({draft})'] if answers else [])
+    parts+=([f'{counted(statements,"saved prewritten statement wording")} ({reviewed(statements,counts["statements_reviewed"])})'] if statements else [])
+    parts+=([counted(counts['codes_accepted'],'accepted code')] if counts['codes_accepted'] else [])
+    return parts
+
+def listed(parts):
+    return ', '.join(parts[:-1])+' and '+parts[-1] if len(parts)>1 else ''.join(parts)
+
+def cleared_sentence(counts):
+    """What a changed notes save cleared, in words, from its audited counts (see `cleared_parts`)."""
+    parts=cleared_parts(counts)
+    return 'Cleared, and recorded under your name: '+listed(parts)+'. ' if parts else ''
+
+@require_POST
+@transaction.atomic
+def clear_review(request,pk):
+    """"Clear answers and review to generate again": a clinician's explicit, confirmed and audited reset of the answer
+    draft and its review. The notes, and the accepted codes that rest on them, are kept."""
+    e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
+    if e.status=='finalized':return document_refusal(request,e,'Finalized documents are immutable.',409)
+    membership(request.user,e.department,roles=['owner','clinician'])
+    if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():
+        return document_refusal(request,e,'Wait until the pending job is resolved. Nothing was cleared.',409)
+    if request.POST.get('revision')!=str(e.revision):
+        return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Reopen it before clearing. Nothing was cleared.',409)
+    if request.POST.get('confirm_clear')!='on':
+        return document_refusal(request,e,'Tick the confirmation to clear the answers and review. Nothing was cleared.',400)
+    cleared=review_state_counts(e,codes=False)
+    e.answers={};e.revision+=1;e.status='draft';wm_review.invalidate_review(e)
+    e.save(update_fields=['answers','revision','status','template_review'])
+    audit(request.user,'encounter.review_cleared',e.pk,department=e.department,revision=e.revision,cleared=cleared)
+    messages.success(request,'Answers and review cleared. The notes and accepted codes are kept. Generate a new draft when ready.')
+    return redirect('encounter_detail',pk=pk)
+def cited_spans(evidence):
+    """The source units an answer cites, as (start, end), in order."""
+    return sorted((item.get('start'),item.get('end')) for item in evidence if isinstance(item,dict) and item.get('kind','unit')=='unit')
+
 
 @require_POST
 def generate_view(request,pk):
     e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
     try:
         if not rate_limit('generate:'+str(request.user.pk),limit=30):raise ValidationError('Generation rate limit reached.')
+        # (a finalized record says so first: the advice below names an action it refuses — refutation R2)
+        if e.status=='finalized':raise ValidationError('Finalized documents are immutable.')
         if 'revision' in request.POST and request.POST['revision']!=str(e.revision):raise ValidationError('Source notes changed. Reload before generating answers.')
+        # ⚠️ ADOPTING A GENERATION REPLACES EVERY ANSWER AND THE WHOLE REVIEW (`jobs.py`). The page offers it only
+        # before any answer exists; a crafted POST at the current revision queued a billed job that erased reviewed,
+        # accepted, edited and left-blank answers and statement decisions. A save renumbers the revision, so a request
+        # raced past this check is refused by `enqueue`'s locked revision check. (Ported from feat/wm-narrative.)
+        if clinician_decided(e):
+            raise ValidationError("These answers include a clinician's review or decisions, and a new draft would replace them. "
+                                  'Nothing was sent or charged. To generate again, a clinician can use "Clear answers and '
+                                  'review to generate again" under the notes: it asks for confirmation and is recorded.')
+        if refusal:=v3_mapping.generation_refusal(e.template_version):raise ValidationError(refusal)
         quoted=usage_quote(request,e)
         job=enqueue(e,request.user,config=quoted,expected_revision=e.revision)
         if getattr(job,'reused',False):
@@ -515,6 +1042,7 @@ def save_answers(request,pk):
     if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():return document_refusal(request,e,'Wait until the pending job is resolved.',409)
     if request.POST.get('revision')!=str(e.revision):return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Reopen it to see the current version before editing.',409)
     is_wm=bool(e.template_version.document_backend)
+    is_v3=v3_mapping.is_v3_version(e.template_version)
     labels=[row['label'] for row in e.template_version.fields+e.template_version.review_requirements]
     if is_wm and any(request.POST.get('claim_reviewed_'+row['key'])=='on' for row in e.template_version.review_requirements):
         membership(request.user,e.department,roles=['owner','clinician'])
@@ -522,11 +1050,32 @@ def save_answers(request,pk):
     previous_answers=dict(e.answers)
     # ⚠️ ONCE PER SAVE, NOT PER FIELD: this runs under the row lock, and a 100-field save recomputed it per offer.
     from .generation import governance_for,governed_supported,held_for_decision,is_empty,looks_the_same,offer_context
-    governance=governance_for(e.notes,e.template_version.fields,[row['label'] for row in e.template_version.review_requirements])
+    from . import wm_narrative
+    statement_labels=[row['label'] for row in e.template_version.review_requirements]
+    governance=governance_for(e.notes,e.template_version.fields,statement_labels)
+    narrative_on=is_wm and wm_narrative.enabled(e.template_version.fields)
+    from .generation import recognized_labels
+    recognized=recognized_labels(e.template_version.fields,statement_labels) if narrative_on else None
+    try:sentences=wm_narrative.units(e.notes,e.template_version.fields,statement_labels) if narrative_on else None
+    except ValidationError:sentences=None   # past the source limit a sentence cannot be cited; labelled lines still can
+    narrative_read=(wm_narrative.stored_reading(e.notes,e.template_version.fields,statement_labels,e.answers)
+                    if wm_narrative.active(e.template_version.fields,e.answers) else None)
+    preferred_read=[narrative_read]
+    def prefer_reading():
+        # The reading a repeated sentence's copies are judged with (built once, only when a copy has to be chosen).
+        if preferred_read[0] is None:
+            preferred_read[0]=wm_narrative.stored_reading(e.notes,e.template_version.fields,statement_labels,e.answers)
+        return preferred_read[0]
     for field in e.template_version.fields:
         key=field['key'];previous=e.answers.get(key,{'text':'','evidence':[],'status':'missing'})
         held_shown=request.POST.get('held_shown_'+key)=='1'
-        supported_context=governed_supported(governance,e.notes,previous,field['label'])
+        narrative_held=None
+        if narrative_read is not None and wm_narrative.has_unit_evidence(previous):
+            narrative_held=wm_narrative.as_currently_held(field,previous,narrative_read)
+            narrative_held=narrative_held if narrative_held is not previous else None
+            supported_context=narrative_held['held_candidate']['context'] if narrative_held else None
+        else:
+            supported_context=governed_supported(governance,e.notes,previous,field['label'])
         governed_offer=offer_context(governance,e.notes,previous,field['label']) is not None
         # A draft from an earlier release holding a governed answer as `supported` is saved as the page showed it —
         # held — so the clinician's answer is their decision even when it repeats the candidate's words. ⚠️ ONLY WHEN
@@ -535,7 +1084,8 @@ def save_answers(request,pk):
         # stays `supported` (finalization refuses it); text that visibly differs is the clinician's edit, saved with
         # the candidate and its governing lines kept beside it, so the next page shows what governs it (tenth pass:
         # the edit was saved bare, and the heading was never shown again).
-        held_draft=(held_for_decision(previous,[previous.get('text','')],previous['evidence'],supported_context,is_wm,prefilled=True)
+        held_draft=(narrative_held if narrative_held is not None else
+                    held_for_decision(previous,[previous.get('text','')],previous['evidence'],supported_context,is_wm,prefilled=True)
                     if supported_context is not None else None)
         if held_shown and held_draft is not None:
             previous=held_draft
@@ -543,6 +1093,9 @@ def save_answers(request,pk):
         # refused by every fillable PDF at finalize (a carriage return is not printable), exported
         # to a Word table cell as two breaks per line, and compared unequal to its own unchanged text.
         value=request.POST.get('answer_'+key,'').replace('\r\n','\n').replace('\r','\n')
+        if is_v3 and field.get('kind')=='multi_choice':
+            # Several printed options arrive as several ticked boxes; the text form is one option per line.
+            value='\n'.join(request.POST.getlist('answer_'+key)).replace('\r\n','\n').replace('\r','\n')
         # Refused before it is read character by character (seventh pass: a 20 MB value held the row lock ~10 s).
         if len(value)>20000:return document_refusal(request,e,'Answer too long; nothing was truncated or saved.',400)
         # ⚠️ WHITESPACE IS NOT AN ANSWER. A space counted as an edit, so one keystroke could clear a
@@ -617,22 +1170,44 @@ def save_answers(request,pk):
             membership(request.user,e.department,roles=['owner','clinician'])
             withdrawn.append(key)
         if len(value)>20000:return document_refusal(request,e,'Answer too long; nothing was truncated or saved.',400)
+        if is_v3:
+            # ⚠️ ONE READER FOR THE TEXT FORM: an option not printed on the form, an answer longer than its space, a
+            # malformed table row or anything in a hand-signed area is refused here, naming the question, exactly as
+            # finalization and export would refuse it later.
+            try:value=v3_mapping.normalize(field,value)
+            except ValidationError as exc:return document_refusal(request,e,error_message(exc)+' Nothing was saved.',400)
         reviewed=request.POST.get('reviewed_'+key)=='on'
         if reviewed:membership(request.user,e.department,roles=['owner','clinician'])
         answers[key]={**previous,'text':value,'reviewed':reviewed,'accepted_suggestion':accepted,
                       # The accepter is whoever performed the explicit act, carried forward while
                       # the acceptance stands. A later saver must not inherit somebody's decision.
                       'accepted_by':str(request.user.pk) if key in newly_accepted else (previous.get('accepted_by') if accepted else None),
-                      'status':'edited' if value!=previous.get('text','') else previous.get('status','missing'),'reviewed_by':str(request.user.pk) if reviewed else None}
+                      'status':'edited' if value!=previous.get('text','') else previous.get('status','missing'),'reviewed_by':str(request.user.pk) if reviewed else None,
+                      # Whoever typed or chose an answer that is not generation's: a later saver, or the reviewing
+                      # clinician, must not be read as its author (round 17e's review: an employee's choice of leg read as
+                      # the clinician's).
+                      'edited_by':str(request.user.pk) if value!=previous.get('text','') else previous.get('edited_by')}
         if is_wm:
             quote=request.POST.get('source_'+key,'')
             if len(quote)>50000:return document_refusal(request,e,'Source quotations exceed the supported limit; nothing was saved.',400)
-            try:evidence=source_quote_evidence(e.notes,field['label'],quote,labels)
+            carries=(lambda unit,field=field,value=value:wm_narrative.support(field,value,[wm_narrative.unit_evidence(unit)],e.notes,
+                     recognized,labels) is None) if narrative_on and value else None
+            # (how clean a copy is — round 14: the other leg's copy was as good as the leg's own)
+            ungoverned=(lambda unit,field=field,value=value:wm_narrative.copy_rank(field,value,unit,prefer_reading())
+                        ) if narrative_on and value else None
+            try:evidence=source_quote_evidence(e.notes,field['label'],quote,labels,sentences,previous.get('evidence') or (),carries,
+                                               ungoverned)
             except ValidationError as exc:
                 evidence=[];reviewed=False;review_errors.append(error_message(exc))
             answers[key].update(evidence=evidence,review_quote=quote,reviewed=reviewed,
                                 reviewed_by=str(request.user.pk) if reviewed else None,
                                 review_revision=target_revision if reviewed else None)
+            # ⚠️ GENERATION'S ANSWER RESTS ON GENERATION'S EVIDENCE. Re-cited to other sentences it is the clinician's
+            # decision, and is never kept as source-supported: round 17e's review, `7.4 mm` re-cited to `Her mother's
+            # right great saphenous vein measures 7.4 mm …` stayed `supported` through finalization and export.
+            if (answers[key]['status']=='supported'
+                    and cited_spans(evidence)!=cited_spans(previous.get('evidence') or [])):
+                answers[key].update(status='edited',edited_by=str(request.user.pk))
             if not value:answers[key]['status']='missing'
         else:
             # ⚠️ CARRIED FORWARD LIKE AN ACCEPTANCE, AND WITHDRAWN ONLY BY AN ACT. The box is
@@ -670,15 +1245,60 @@ def save_answers(request,pk):
             key=requirement['key'];quote=request.POST.get('claim_source_'+key,'')
             if len(quote)>50000:return document_refusal(request,e,'Source quotations exceed the supported limit; nothing was saved.',400)
             reviewed=request.POST.get('claim_reviewed_'+key)=='on'
-            try:evidence=source_quote_evidence(e.notes,requirement['label'],quote,labels)
+            earlier=(e.template_review.get('decisions',{}).get(key) or e.template_review.get('proposals',{}).get(key) or {}).get('evidence') or ()
+            # A one-leg statement's typed sentence goes to the copy that names its side (round 5: `No saphenous reflux.`
+            # under each leg resolved to the right leg's for the left statement).
+            names=(lambda unit,requirement=requirement:wm_narrative.names_side(requirement,[wm_narrative.unit_evidence(unit)],e.notes,strict=False)) \
+                if narrative_on and wm_narrative.field_side(requirement) else None
+            clear_copy=(lambda unit,requirement=requirement:wm_narrative.statement_governed(requirement,[wm_narrative.unit_evidence(unit)],
+                        prefer_reading(),hidden=False) is None) if names else None
+            try:evidence=source_quote_evidence(e.notes,requirement['label'],quote,labels,sentences,earlier,names,clear_copy)
             except ValidationError as exc:
                 evidence=[];reviewed=False;review_errors.append(error_message(exc))
             variant=request.POST.get('claim_variant_'+key,requirement.get('default_variant'))
             if variant not in {item['id'] for item in requirement['variants']}:
                 return document_refusal(request,e,'Choose an approved statement alternative. No changes were saved.',400)
+            # "Rests on its answers": the answers the selected wording rests on, named from the mapping, never the post.
+            if narrative_on and request.POST.get('claim_basis_'+key)=='answers':
+                chosen=next(item for item in requirement['variants'] if item['id']==variant)
+                # (within review's bound, the answers' entry included: at 100 sentences it made 101, and review refused the
+                # whole page — round 9's integrity lens)
+                if wm_narrative.basis_keys(chosen) and len(evidence)>=wm_narrative.EVIDENCE_LIMIT:
+                    evidence=[];reviewed=False
+                    review_errors.append(f'Cite at most {wm_narrative.EVIDENCE_LIMIT-1} source sentences for a statement resting on its answers; nothing was truncated.')
+                elif wm_narrative.basis_keys(chosen):evidence.append({'kind':'answers','answer_keys':wm_narrative.basis_keys(chosen)})
             decisions[key]={'reviewed':reviewed,'evidence':evidence,'variant':variant}
+    kept_proposals=(e.template_review or {}).get('proposals') if is_wm and not (e.template_review or {}).get('decisions') else None
+    previous_decisions=dict((e.template_review or {}).get('decisions') or {}) if is_wm else {}
     e.answers=answers;e.revision=target_revision;e.status='review';wm_review.invalidate_review(e)
-    if is_wm and Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists():
+    if kept_proposals:e.template_review={'proposals':kept_proposals}
+    clinician=is_wm and Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists()
+    if is_wm and not clinician and previous_decisions:
+        # ⚠️ A NON-CLINICIAN'S SAVE DISCARDED THE CLINICIAN'S STATEMENT DECISIONS WITHOUT A WORD: the review is emptied
+        # above and only a clinician's save rebuilds one, so the chosen wordings and their sources vanished and the next
+        # page fell back to the mapping's defaults. They are kept — each unreviewed (a review is its reader's own), bound
+        # to this revision, as schema 0, which finalization never accepts. A wording the saver left as it was keeps the
+        # clinician's sources; one the saver changed is the saver's unreviewed choice. (Ported from feat/wm-narrative.)
+        kept={key for key,decision in decisions.items() if isinstance(previous_decisions.get(key),dict)
+              and previous_decisions[key].get('variant')==decision['variant']}
+        e.template_review={'schema':0,'decisions':{key:dict(previous_decisions[key] if key in kept else decision,reviewed=False)
+                                                   for key,decision in decisions.items()},
+                           'binding':wm_review.binding(e),'reviewer_id':str(request.user.pk)}
+        cited=lambda decision:[item for item in decision.get('evidence') or () if item.get('kind')!='answers']
+        if any(cited(decisions[key])!=cited(previous_decisions[key]) for key in kept):
+            review_errors.append('A statement source you changed was not kept: a statement keeps the clinician\'s wording and '
+                                 'sources until a clinician reviews it. Ask a clinician to change the source.')
+        # (each named for what happened to it: a wording the saver replaced is never reported as kept — refutation R3)
+        named=lambda keys:'; '.join(row['label'] for row in e.template_version.review_requirements if row['key'] in keys)
+        replaced={key for key in decisions if isinstance(previous_decisions.get(key),dict) and key not in kept}
+        if replaced:
+            review_errors.append('Your save replaced the chosen statement wording for: '+named(replaced)+'. '
+                                 'A clinician must review the new wording.')
+        kept_reviewed={key for key in kept if previous_decisions[key].get('reviewed')}
+        if kept_reviewed:
+            review_errors.append('The statement choices a clinician reviewed were kept but are no longer reviewed: '
+                                 +named(kept_reviewed)+'. A clinician must review them again.')
+    if clinician:
         try:
             resolved=wm_resolve(e,request.user,decisions)
             for requirement in resolved:
@@ -703,10 +1323,19 @@ def save_answers(request,pk):
             review_errors.append(error_message(exc))
     # A review is the reader's own, so saving without a tick removes a colleague's; record which.
     withdrawn_reviews=sorted(key for key,answer in answers.items() if (previous_answers.get(key) or {}).get('reviewed') and not answer.get('reviewed'))
+    stored=(e.template_review or {}).get('decisions') or {}
+    withdrawn_statement_reviews=sorted(key for key,decision in previous_decisions.items()
+                                       if isinstance(decision,dict) and decision.get('reviewed') and not (stored.get(key) or {}).get('reviewed'))
+    # Which statement's wording this save changed, as identifiers only (statement key, wording ids), never the text.
+    statement_wording_changes=[{'statement':key,'from':decision.get('variant'),'to':stored[key].get('variant')}
+                               for key,decision in sorted(previous_decisions.items())
+                               if isinstance(decision,dict) and isinstance(stored.get(key),dict)
+                               and decision.get('variant')!=stored[key].get('variant')]
     e.save(update_fields=['answers','revision','status','template_review'])
     audit(request.user,'encounter.answers_saved',e.pk,department=e.department,revision=e.revision,
           accepted_suggestions=sorted(newly_accepted),withdrawn_acceptances=sorted(withdrawn),
-          left_blank=sorted(newly_blank),withdrawn_blank_decisions=sorted(withdrawn_blank),withdrawn_reviews=withdrawn_reviews)
+          left_blank=sorted(newly_blank),withdrawn_blank_decisions=sorted(withdrawn_blank),withdrawn_reviews=withdrawn_reviews,
+          withdrawn_statement_reviews=withdrawn_statement_reviews,statement_wording_changes=statement_wording_changes)
     if is_wm:audit(request.user,'encounter.template_review_saved',e.pk,department=e.department,revision=e.revision,complete=e.template_review.get('assessment',{}).get('complete',False))
     messages.success(request,'Edits saved. Review every answer before finalizing.')
     for message in dict.fromkeys(review_errors):messages.warning(request,'Review remains incomplete: '+message)
@@ -728,7 +1357,11 @@ def finalize(request,pk):
             if request.POST.get('reviewed')!='on':raise ValidationError('Explicit clinical review confirmation is required.')
             if request.POST.get('revision')!=str(e.revision):raise ValidationError('Document changed; reload before finalizing.')
             if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():raise ValidationError('Resolve pending jobs before finalizing.')
-            unreviewed=[f['label'] for f in e.template_version.fields if not e.answers.get(f['key'],{}).get('reviewed')]
+            is_v3=v3_mapping.is_v3_version(e.template_version)
+            # A v3 signature or initials area holds no answer (it is signed by hand on the printed form), so there is
+            # nothing in it to review; every other field still needs the clinician's review.
+            unreviewed=[f['label'] for f in e.template_version.fields if not e.answers.get(f['key'],{}).get('reviewed')
+                        and not (is_v3 and f.get('kind') in v3_mapping.SIGNING_KINDS)]
             if unreviewed:raise ValidationError('A clinician must review every field, including missing information. Not yet reviewed: '+field_list(unreviewed))
             order=[f['key'] for f in e.template_version.fields]
             names={f['key']:f['label'] for f in e.template_version.fields}
@@ -779,8 +1412,21 @@ def finalize(request,pk):
                 # passed the fresh fields as the mapping and the two were equal by construction.
                 version=e.template_version
                 validate_identity(version.fields,e.answers,request.user)
-                fill_template(original,version.fields,{k:v['text'] for k,v in e.answers.items()},out)
+                # A v3 answer is re-read from its text form (the same reader as saving) and converted per kind: an
+                # option label, a list of labels, a ticked box, table rows. The engine checks every anchor's
+                # fingerprint and refuses a stale one; its message is shown as it is.
+                answers=(v3_mapping.fill_answers(version.fields,e.answers) if is_v3
+                         else {k:v['text'] for k,v in e.answers.items()})
+                fill_template(original,version.fields,answers,out)
             out.chmod(0o600)
+            # ⚠️ THE REVISION IS NOT RENUMBERED HERE, DELIBERATELY: the record keeps the revision its review is bound to.
+            # The Word receipt's binding (`source_revision`) and each reviewed answer's `review_revision` name THIS
+            # revision, as did the trusted context the export was just filled under (the adapter refuses any other);
+            # renumbering would leave the finalized record contradicting its own receipt, and the release evidence
+            # (build-word-evidence.mjs) checks exactly that equality. Nothing may post to a finalized record anyway: every
+            # writer refuses the status, and the database refuses any update to the row — so the status, not the revision,
+            # is what stops a page opened before finalization (refutation round 4, R4-1: the code writers were the two that
+            # did not check it). No legitimate action after finalization posts a revision: export is a GET.
             e.export_path=relative;e.export_sha256=hashlib.sha256(out.read_bytes()).hexdigest();e.finalized_at=finalized_at;e.finalized_by=request.user;e.status='finalized';e.save()
             audit(request.user,'encounter.finalize',e.pk,department=e.department,export_sha256=e.export_sha256,mapping_version=e.template_version.number)
         messages.success(request,'Finalized. The original structure is preserved in your export.')
@@ -992,22 +1638,64 @@ def invite_accept(request,raw):
                     Membership.objects.get_or_create(user=user,department=invite.department,defaults={'role':invite.role})
                     welcome_credit(user);invite.accepted_at=timezone.now();invite.save(update_fields=['accepted_at'])
                     audit(user,'department.invitation_accepted',invite.pk,department=invite.department)
-                messages.success(request,'Invitation accepted; your personal welcome credit is available.');return redirect('login')
+                messages.success(request,'Invitation accepted; your personal welcome credit is available.' if welcome_credit_label() else 'Invitation accepted.');return redirect('login')
     return render(request,'register.html',{'form':form,'invitation':invite,'existing_invited_account':existing_account})
+
+#: ⚠️ A FINALIZED RECORD'S CODES ARE PART OF IT. Finalization does not renumber the revision (see `finalize`), so a Coding tab
+#: opened before it posts the current revision afterwards: its Accept set accepted_by and audited coding.accept after
+#: encounter.finalize, and its Suggest added a suggestion — while every other writer refused (refutation round 4, R4-1).
+#: The database guard covers the encounter row only, not its code suggestions, so both code writers check the status.
+FINALIZED_CODES='This document is finalized. Finalized documents are immutable.'
+#: ⚠️ A PAGE THAT POSTS NO REVISION IS NOT EVIDENCE THAT ANYTHING CHANGED. A page rendered before the code forms carried one
+#: was told "This document changed after you opened it" even when nothing had (refutation round 4, R4-7).
+PAGE_OUT_OF_DATE='This page is out of date and must be reloaded: it was opened before this version of QuillMD and does not say which version of the document it showed.'
+
+def notes_changed_since(e,revision):
+    """Whether this encounter's notes changed after the revision a page posted, read from the audit rows each notes change
+    leaves with the revision it made: a notes save, or a transcript an earlier release appended unreviewed."""
+    try:revision=int(revision)
+    except (TypeError,ValueError):return False
+    return AuditEvent.objects.filter(target=str(e.pk),action__in=['encounter.notes_saved','coding.invalidated_by_transcription'],
+                                     details__revision__gt=revision).exists()
+
+def coding_refusal(request,e,planned_notes=None):
+    """Why Suggest codes may not write to this encounter as the page posted it, as a refusal page; None when it may."""
+    if e.status=='finalized':return document_refusal(request,e,FINALIZED_CODES+' Nothing was suggested.',409)
+    if not request.POST.get('revision'):
+        return document_refusal(request,e,PAGE_OUT_OF_DATE+' Nothing was suggested. Reload the document, then suggest codes again.',409)
+    if request.POST.get('revision')!=str(e.revision) or (planned_notes is not None and e.notes!=planned_notes):
+        return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Nothing was suggested. Reopen it to see the current notes before suggesting codes.',409)
+    return None
 
 @require_POST
 def coding(request,pk):
-    from .coding import suggest
+    from .coding import plan,suggest
+    # ⚠️ THE SUGGESTIONS ARE WORKED OUT BEFORE THE LOCK, AND ONLY WRITTEN UNDER IT. Holding the encounter's row lock for the
+    # whole pass let any member stall the document — 12,000 codes in 48,000 characters held it 70.6 s, and a page view
+    # waited 77.2 s (refutation round 4, R4-2). The plan is read from the notes at the page's revision; the write then takes
+    # the lock, as `accept_code` below, and re-checks that revision and those notes, so a suggestion is still never drawn
+    # from notes a concurrent save replaced (refutation round 3, F1) — that save now waits for the write alone.
     e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
     membership(request.user,e.department)
-    result=suggest(e,request.user)
+    refused=coding_refusal(request,e)
+    if refused:return refused
+    planned=plan(e)
+    with transaction.atomic():
+        e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
+        membership(request.user,e.department)
+        refused=coding_refusal(request,e,planned_notes=planned.notes)
+        if refused:return refused
+        result=suggest(e,request.user,planned)
     served=e.service_date.strftime('%d %B %Y')
+    from .coding import MAX_SUGGESTIONS
+    over=(f' {result.omitted} further documented code{" was" if result.omitted==1 else "s were"} not suggested: a document holds '
+          f'at most {MAX_SUGGESTIONS} code suggestions.' if result.omitted else '')
     if result.covered:
-        messages.info(request,f'{result.count} new suggestions from explicitly documented codes, validated against {", ".join(result.versions)} for the {served} date of service. Diagnosis inference is not enabled. CPT requires a licensed current feed.')
+        messages.info(request,f'{result.count} new suggestions from explicitly documented codes, validated against {", ".join(result.versions)} for the {served} date of service.{over} Diagnosis inference is not enabled. CPT requires a licensed current feed.')
     elif result.versions:
         # A licensed CPT release can answer for a date no diagnosis release covers. Saying "nothing
         # was recorded" here would deny suggestions sitting on the page underneath the message.
-        messages.warning(request,f'No ICD-10-CM release covers the {served} date of service, so no diagnosis code was validated. {result.count} new suggestions came from {", ".join(result.versions)}. Import the diagnosis release in effect for that date.')
+        messages.warning(request,f'No ICD-10-CM release covers the {served} date of service, so no diagnosis code was validated. {result.count} new suggestions came from {", ".join(result.versions)}.{over} Import the diagnosis release in effect for that date.')
     else:
         messages.warning(request,f'No terminology release covers the {served} date of service, so nothing was validated and no suggestion was recorded. Import the release in effect for that date.')
     return redirect('/encounters/'+str(pk)+'/?tab=coding')
@@ -1015,10 +1703,37 @@ def coding(request,pk):
 @require_POST
 @transaction.atomic
 def accept_code(request,pk,code_pk):
-    e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
+    # ⚠️ UNDER THE ENCOUNTER'S ROW LOCK, AT THE REVISION THE PAGE SHOWED, like every other writer of its codes or review.
+    # Unlocked, an acceptance could commit after a notes save had counted what it would clear and before it cleared the
+    # codes: answered and audited as accepted, then deleted by the save, which said nothing of it (refutation round 3, F1).
+    # Now the two serialize: the save counts and names the accepted code, or this finds its code gone and says so.
+    e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
     membership(request.user,e.department,roles=['owner','clinician'])
+    if e.status=='finalized':return document_refusal(request,e,FINALIZED_CODES+' Nothing was accepted.',409)
     from .coding import applicable_releases,cpt_licensed
-    item=get_object_or_404(CodeSuggestion.objects.select_for_update(),pk=code_pk,encounter=e)
+    item=CodeSuggestion.objects.select_for_update().filter(pk=code_pk,encounter=e).first()
+    posted=request.POST.get('revision')
+    if item is None:
+        # A stale revision proves the notes changed, not that an arbitrary missing code ID
+        # ever belonged to this encounter. State only availability and the observed change.
+        if CodeSuggestion.objects.filter(pk=code_pk).exists():raise Http404
+        if not posted:return document_refusal(request,e,PAGE_OUT_OF_DATE+' Nothing was accepted. Reload the document to see its current codes.',409)
+        if not notes_changed_since(e,posted):raise Http404
+        return document_refusal(request,e,'This code suggestion is unavailable. The notes changed after you opened the page, '
+                                          'which clears their code suggestions. Nothing was accepted. Reopen '
+                                          'it to see the current notes and codes.',409)
+    if not posted:return document_refusal(request,e,PAGE_OUT_OF_DATE+' Nothing was accepted. Reload the document to see its current codes.',409)
+    if posted!=str(e.revision):
+        return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Nothing '
+                                          'was accepted. Reopen it to see the current notes and codes.',409)
+    if item.accepted_by_id:
+        # ⚠️ AN ACCEPTANCE BELONGS TO WHOEVER MADE IT. Accepting does not renumber the revision, so a page opened before
+        # clinician A accepted still posts the current revision, and B's Accept from it re-stamped the code as B's, with a
+        # second coding.accept (refutation round 4, R4-6). Refused, not answered as a no-op: B is told the acceptance is
+        # A's, by the email the page shows beside it, and when — nothing is written or audited.
+        when=timezone.localtime(item.accepted_at).strftime('%Y-%m-%d %H:%M %Z') if item.accepted_at else 'an unrecorded time'
+        return document_refusal(request,e,f'This code was already accepted by {item.accepted_by.email}, at {when}. '
+                                          'Nothing was accepted. Reopen the document to see its current codes.',409)
     if not applicable_releases(e).filter(pk=item.terminology.release_id).exists():raise ValidationError('This release is not the one in effect for the encounter date of service; generate new coding suggestions.')
     if item.evidence not in e.notes:raise ValidationError('Source documentation changed; generate new coding suggestions.')
     if item.system=='CPT' and (not cpt_licensed() or item.terminology.release.license_reference!=settings.CPT_LICENSE_ID):raise PermissionDenied
@@ -1043,13 +1758,31 @@ def usage_rows(usage):
     absorbed={entry['job_id']:entry['total'] for entry in LedgerEntry.objects.filter(kind='absorbed',job_id__in=[item.job_id for item in usage]).values('job_id').annotate(total=models.Sum('amount'))}
     return [{'usage':item,'reconciliation':item.reconciliation,'absorbed':absorbed.get(item.job_id)} for item in usage]
 
+#: Test mode keeps the sandbox return address it has always used (reached through the SSH tunnel).
+SANDBOX_RETURN_ORIGIN='http://localhost:9130'
+
+def checkout_return_origin():
+    """Where Stripe Checkout returns the payer. Live mode: QUILLMD_APP_BASE_URL, and only a public HTTPS
+    origin — never localhost, never the request's Host header. None refuses the checkout."""
+    if settings.QUILLMD_STRIPE_MODE!='live':return SANDBOX_RETURN_ORIGIN
+    from quillmd.application_profile import public_https_origin_problem
+    origin=(settings.QUILLMD_APP_BASE_URL or '').rstrip('/')
+    return None if public_https_origin_problem(origin,settings.ALLOWED_HOSTS) else origin
+
 @require_POST
 def checkout(request):
     import stripe
-    from .billing import checkout_form
+    from .billing import checkout_form,real_mode_refuses
+    from .stripe_validation import sandbox_payments_refused
+    # Real data mode checks out only in live mode: no Payment row and no provider call otherwise.
+    if sandbox_payments_refused():messages.error(request,'Payments are not available. No charge was made.');return redirect('billing')
     form=checkout_form(request.user,request.POST)
     if not form.is_valid():messages.error(request,'Confirm a one-time amount between $5 and $500.');return redirect('billing')
-    if not stripe_test_key_configured(settings.STRIPE_SECRET_KEY):messages.error(request,'A Stripe test or restricted test key is required. No charge was made.');return redirect('billing')
+    live=settings.QUILLMD_STRIPE_MODE=='live'
+    # A key of the other mode is refused here, before authorization and before any provider call.
+    if not stripe_key_configured(settings.STRIPE_SECRET_KEY):messages.error(request,'A Stripe live or restricted live key is required. No charge was made.' if live else 'A Stripe test or restricted test key is required. No charge was made.');return redirect('billing')
+    return_origin=checkout_return_origin()
+    if return_origin is None:messages.error(request,'Checkout needs the public HTTPS application address configured. No charge was made.');return redirect('billing')
     try:
         authorization=signing.loads(request.POST.get('checkout_token',''),salt='checkout-authorization',max_age=900)
         if authorization.get('user')!=str(request.user.pk) or not isinstance(authorization.get('nonce'),str):raise signing.BadSignature()
@@ -1065,13 +1798,21 @@ def checkout(request):
             organization_id=payer.split(':',1)[1]
             if not Membership.objects.select_for_update().filter(user=request.user,user__is_active=True,user__verified_at__isnull=False,active=True,role='owner',department__organization_id=organization_id).exists():raise PermissionDenied
             wallet,_=Wallet.objects.get_or_create(organization_id=organization_id,kind='paid')
-        p,created=Payment.objects.get_or_create(request_key=request_key,defaults={'user':request.user,'wallet':wallet,'amount_cents':amount_cents,'status':'creating'})
+        # Real data mode never spends a balance sandbox payments funded (reserve() refuses it), so live money is never
+        # taken into one: refused before any Payment row or Stripe call. The payer is told what to do, and nothing that
+        # identifies the balance, its payments or its amount.
+        if real_mode_refuses(wallet):
+            audit(request.user,'payment.checkout_refused_sandbox_balance',wallet.pk,payer='personal' if payer=='personal' else 'organization')
+            messages.error(request,'This paid balance holds sandbox (test) payments, which real data mode never spends, so no live payment '
+                           'can be added to it. Contact support to resolve this balance. No charge was made.')
+            return redirect('billing')
+        p,created=Payment.objects.get_or_create(request_key=request_key,defaults={'user':request.user,'wallet':wallet,'amount_cents':amount_cents,'status':'creating','livemode':live})
         if p.user_id!=request.user.pk or p.amount_cents!=amount_cents or p.wallet_id!=wallet.pk:raise ValidationError('A repeated checkout must use the original authorized balance and amount.')
         if not created:
             if p.checkout_url and p.status in ['pending','processing']:return redirect(p.checkout_url)
             messages.info(request,'This checkout was already submitted. Its payment status remains visible in billing.');return redirect('billing')
     try:
-        session=stripe.checkout.Session.create(api_key=settings.STRIPE_SECRET_KEY,mode='payment',line_items=[{'price_data':{'currency':'usd','unit_amount':p.amount_cents,'product_data':{'name':'QuillMD one-time wallet credit (test)'}},'quantity':1}],metadata={'payment_id':str(p.pk)},success_url='http://localhost:9130/billing/?payment=processing',cancel_url='http://localhost:9130/billing/',idempotency_key=f'checkout:{p.pk}')
+        session=stripe.checkout.Session.create(api_key=settings.STRIPE_SECRET_KEY,mode='payment',line_items=[{'price_data':{'currency':'usd','unit_amount':p.amount_cents,'product_data':{'name':'QuillMD one-time wallet credit' if live else 'QuillMD one-time wallet credit (test)'}},'quantity':1}],metadata={'payment_id':str(p.pk)},success_url=f'{return_origin}/billing/?payment=processing',cancel_url=f'{return_origin}/billing/',idempotency_key=f'checkout:{p.pk}')
         with transaction.atomic():
             p=Payment.objects.select_for_update().get(pk=p.pk)
             if p.stripe_session and p.stripe_session!=session.id:raise ValidationError('Checkout session requires reconciliation.')
@@ -1209,7 +1950,7 @@ def admin_resolve_job(request,pk):
     data=form.cleaned_data;note=data['evidence_note'].strip()
     from .billing import absorb_failed_job
     settled=Usage.objects.filter(job=job,simulated=False).first()
-    simulated=Usage.objects.filter(job=job,simulated=True).exists() or (job.kind=='generation' and job.config.get('mode',settings.AI_MODE)!='live')
+    simulated=Usage.objects.filter(job=job,simulated=True).exists() or (job.kind in ('generation','mapping') and job.config.get('mode',settings.AI_MODE)!='live')
     release(job)
     job.state='failed';job.finished_at=timezone.now()
     job.error='Resolved by administrator: settled provider cost absorbed by QuillMD.' if settled else 'Resolved by administrator: synthetic fixture job carries no provider cost.' if simulated else 'Resolved by administrator: no provider cost evidenced.' if data['outcome']=='release_no_cost' else 'Resolved by administrator: provider cost absorbed by QuillMD.'
@@ -1223,7 +1964,7 @@ def admin_resolve_job(request,pk):
     elif data['outcome']=='absorb_platform_failure':
         absorbed,_=PlatformCost.objects.get_or_create(job=job,kind='absorbed_failure',defaults={'amount':data['actual_cost'],'description':'Provider cost absorbed: uncertain outcome resolved by administrator','evidence_reference':note,'recorded_by':request.user})
     else: absorbed=None
-    audit(request.user,'job.resolved',job.pk,department=job.encounter.department,outcome=data['outcome'],evidence_note=note,settled_usage=bool(settled),simulated=simulated,actual_cost=str(absorbed.amount) if absorbed else None)
+    audit(request.user,'job.resolved',job.pk,department=job.department,outcome=data['outcome'],evidence_note=note,settled_usage=bool(settled),simulated=simulated,actual_cost=str(absorbed.amount) if absorbed else None)
     messages.success(request,'Job resolved. Held funds were released and the settled charge was reversed.' if settled else 'Job resolved. Held funds were released and the user was not charged.')
     return redirect('/console/#jobs')
 
@@ -1305,16 +2046,25 @@ def encounter_notes(request,pk):
         notes=(e.notes+'\n\n'+corrected if e.notes else corrected) if request.POST['transcript_mode']=='append' else corrected
     else:notes=request.POST.get('notes','')
     if not notes.strip() or len(notes)>50000:return document_refusal(request,e,'Notes must contain 1–50,000 characters; nothing was truncated.',400)
+    # ⚠️ AN UNCHANGED SAVE CHANGES NOTHING. It used to clear every answer, review decision and accepted code — by any
+    # member, with only the revision audited. The stored notes stay byte-identical (a browser re-posts line breaks as
+    # CRLF, which is the same text), so every evidence offset stays valid. A reviewed transcript is always a change.
+    if transcript_job is None and same_text(notes,e.notes):
+        messages.info(request,'Notes unchanged — nothing was cleared.');return redirect('encounter_detail',pk=pk)
+    cleared=review_state_counts(e)
     e.notes=notes;e.answers={};e.revision+=1;e.status='draft';wm_review.invalidate_review(e);e.save(update_fields=['notes','answers','revision','status','template_review'])
     CodeSuggestion.objects.filter(encounter=e).update(accepted_by=None,accepted_at=None)
     CodeSuggestion.objects.filter(encounter=e).delete()
     audit(request.user,'coding.invalidated_by_source_edit',e.pk,department=e.department)
-    audit(request.user,'encounter.notes_saved',e.pk,department=e.department,revision=e.revision)
+    audit(request.user,'encounter.notes_saved',e.pk,department=e.department,revision=e.revision,cleared=cleared)
     if transcript_job:
         audit(request.user,'transcription.applied',transcript_job.pk,department=e.department,revision=e.revision,
               mode=request.POST['transcript_mode'],raw_sha256=hashlib.sha256(raw_transcript.encode()).hexdigest(),
               corrected_sha256=hashlib.sha256(corrected.encode()).hexdigest(),corrected=corrected.replace('\r\n','\n')!=raw_transcript.replace('\r\n','\n'))
-    messages.success(request,'Notes saved. Generate and review a new answer draft.');return redirect('encounter_detail',pk=pk)
+    # (said plainly to whoever saved: any member's changed save clears a clinician's review — refutation round 2 — and
+    # exactly what it cleared, read from the counts just audited — refutation round 3, F2)
+    messages.success(request,'Notes saved. '+cleared_sentence(cleared)+'Generate and review a new answer draft.')
+    return redirect('encounter_detail',pk=pk)
 
 def review_transcript(job):
     """Read only the bounded, hash-bound retained result for a reviewed transcript."""

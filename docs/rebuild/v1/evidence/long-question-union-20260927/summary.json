@@ -1,0 +1,22 @@
+{
+  "at": "2026-09-27T22:06:32.991059+00:00",
+  "source_commit": "58b6142fda82287ab83f918fcccbc67c03d4519e",
+  "source_sha256": {
+    "rebuild/core/generation.py": "a7bbe3d9efd0db5247dccebeba0cb97137786312b03f22994c394cdfb744a81b",
+    "rebuild/documents/word_v3.py": "3f2ca5136a876d153b045e5c8dd37b8b8b24b303833263966664c63290a3b856",
+    "rebuild/core/mapping_assistance.py": "03fa6840a559e50f0f14a79356cfaa7dfc47848bda419fc5269067522995093b",
+    "rebuild/core/mapping_wire.py": "d3e6552137460fc866fecbae3ab0ebdd52bcefce35c4199effa60eb89e1bc824"
+  },
+  "files": {
+    "word-long-union-app.log": "3ead5b61679b1fd28e564b98cf1ec0e1d733d0bbf58403147c0aff0e59e1c522",
+    "word-long-union-review-corrected.log": "a905be16f75ce27d1fd42c8d0aa2e00aa42d6e43ad5eb989bc5bdcfac45c92bf",
+    "word-long-union-engine-cost.log": "ef8681330f639be8b599916b617c20a9947dfa3c3cd816f2e57fdf13cced155a",
+    "word-signing-root-red.json": "b7ab1bd733d057560e0a1c55814876f730dda99ac33ca0bf28a9d7fd6e86bcef",
+    "word-signing-root-invalid-empty.json": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "word-signing-root-after.json": "60de5e9152936b605bdba29c3c6ec6fdefe150eba0d142f3810993ea5f1656f8",
+    "manual-context-root-red.json": "a9db60b2b1e68cc77e6699fc66e707c3cb069bc1bda8fb6ee844d179a6dcee3d",
+    "manual-context-root-after.json": "325deae794a741b5d48d41ecc285f1bfff64b1df8dd2e82215b30947e915f0a4",
+    "d30-long-root-visual.json": "20dc57d19497d0d29247e97c11dc41ab7fdf0773baf614ca4f18fb5b7409acba"
+  },
+  "outcome": "40 actual tests passed in a41-test invocation with1 discovery error for nonexistent core.tests.test_v3_mapping; intended9 V3MappingReview tests then passed12.505s. Combined49 actual tests pass.21 engine/cost tests pass11.185s. Original import/path errors retained; no production defect inferred from them."
+}

@@ -82,7 +82,7 @@ class InputWorkflow(BoundaryFixture, TestCase):
             self.assertEqual(self.client.post(self.url + 'generate/').status_code, 302)
         self.assertFalse(Job.objects.exists())
 
-    @override_settings(AI_MODE='live', AI_PROVIDER='anthropic', AI_MODEL='synthetic-model', AI_INPUT_RATE='3', AI_OUTPUT_RATE='15', AI_CACHED_RATE='.3')
+    @override_settings(AI_MODE='live', AI_PROVIDER='anthropic', AI_MODEL='claude-sonnet-4-6', AI_INPUT_RATE='3', AI_OUTPUT_RATE='15', AI_CACHED_RATE='.3')
     def test_duplicate_generation_reuses_one_job_and_reservation(self):
         first = enqueue(self.encounter, self.user, expected_revision=self.encounter.revision)
         second = enqueue(self.encounter, self.user, expected_revision=self.encounter.revision)

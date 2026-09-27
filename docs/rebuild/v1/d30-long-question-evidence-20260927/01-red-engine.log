@@ -1,0 +1,30 @@
+FFF
+======================================================================
+FAIL: test_complete_long_question_and_section_are_retained (documents.test_question_boxes.QuestionBoxes.test_complete_long_question_and_section_are_retained)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-long-questions/rebuild/documents/test_question_boxes.py", line 42, in test_complete_long_question_and_section_are_retained
+    self.assertEqual(len(result['fields']), 1)
+AssertionError: 0 != 1
+
+======================================================================
+FAIL: test_manual_long_metadata_never_slices_and_oversize_refuses (documents.test_question_boxes.QuestionBoxes.test_manual_long_metadata_never_slices_and_oversize_refuses)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-long-questions/rebuild/documents/test_question_boxes.py", line 54, in test_manual_long_metadata_never_slices_and_oversize_refuses
+    self.assertEqual(field['label'], target['label'])
+AssertionError: 'Ques[291 chars]qqqqq' != 'Ques[291 chars]qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq[155 chars]qqqq'
+Diff is 1019 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_initial_report_adjective_is_not_a_signing_instruction (documents.test_question_boxes.QuestionBoxes.test_initial_report_adjective_is_not_a_signing_instruction) (phrase='Please describe the changes since the initial report?')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-long-questions/rebuild/documents/test_question_boxes.py", line 72, in test_initial_report_adjective_is_not_a_signing_instruction
+    self.assertEqual(len(fields), int(accepted))
+AssertionError: 0 != 1
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.499s
+
+FAILED (failures=3)

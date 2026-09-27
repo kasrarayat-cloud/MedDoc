@@ -1,0 +1,18 @@
+F
+======================================================================
+FAIL: test_plain_duplicate_side_context_cannot_become_a_harmless_boundary (core.tests.test_v3_ordinary_topics.RepeatedSourceTopics.test_plain_duplicate_side_context_cannot_become_a_harmless_boundary)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-topics/rebuild/core/tests/test_v3_ordinary_topics.py", line 54, in test_plain_duplicate_side_context_cannot_become_a_harmless_boundary
+    self.assertEqual(self.answers(notes)[indication['key']]['status'], 'conflict', tail)
+AssertionError: 'supported' != 'conflict'
+- supported
++ conflict
+ : left knee
+
+----------------------------------------------------------------------
+Ran 1 test in 0.279s
+
+FAILED (failures=1)
+Found 1 test(s).
+System check identified no issues (0 silenced).

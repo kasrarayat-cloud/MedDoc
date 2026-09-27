@@ -1,0 +1,34 @@
+[Unit]
+Description=QuillMD production AWS backup metadata projection
+After=network-online.target quillmd-production-environment.service
+Wants=network-online.target
+Requires=quillmd-production-environment.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/quillmd-production/rebuild
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/run/quillmd-production/application.env
+ExecStart=/opt/quillmd-production/rebuild/.venv/bin/python -B /opt/quillmd-production/rebuild/ops/publish_production_status.py
+TimeoutStartSec=290
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+LimitCORE=0
+MemorySwapMax=0
+MemoryMax=384M
+TasksMax=32
+# Root operator needs IMDS only to assume the two read-only roles; the app units
+# continue to deny IMDS and mask this operator directory.
+ReadWritePaths=/etc/quillmd-production/operator
+SyslogIdentifier=quillmd-production-operations-status

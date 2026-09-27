@@ -1,0 +1,16 @@
+NOSUPERUSER CREATEROLE policy apply passed
+idempotent apply and owner-created default-grant fixture passed
+8 runtime/backup/migrator privilege checks passed; all DML/DDL rolled back
+negative refused: backup table SELECT
+negative refused: runtime table INSERT
+negative refused: runtime sequence USAGE
+negative refused: backup sequence SELECT
+negative refused: runtime schema USAGE
+negative refused: future backup SELECT
+negative refused: future runtime USAGE
+negative refused: future PUBLIC EXECUTE
+negative refused: runtime schema CREATE
+negative refused: runtime TRIGGER
+negative refused: future runtime grant option
+all11 negative controls refused; restored baseline passed
+isolated database and only its generated roles removed

@@ -1,0 +1,45 @@
+{
+  "captured_at": "2026-09-27T22:00:20.522279+00:00",
+  "files": [
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/ci-b806-python.log",
+      "bytes": 1177519,
+      "sha256": "f9152acf612f707aa370785a2229aed7483aa3d6393af8d3b8b031e32e8c5e79"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/ci-b806-python-job.json",
+      "bytes": 4160,
+      "sha256": "def508e07937637484bf6d842a5270ab5368572d91f302200f46ab1e3cad8996"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/ci-b806-annotations.json",
+      "bytes": 1585,
+      "sha256": "e43d17b6c589a14c2a31038c6688fcfec0ef603a9c03d779da76e4d516c67baf"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/ci-offsite-reproduction.log",
+      "bytes": 945,
+      "sha256": "2b924a2b0104992ff4d259e571182708db4349ed2d56fff9e748c64400772858"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/ci-offsite-after.log",
+      "bytes": 6823,
+      "sha256": "f6ef66b3d7a01b4b1d199190277970530b50019de1aa4278b7f308a9f79579e1"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/ci-partition-proofs.log",
+      "bytes": 750,
+      "sha256": "02586d0e332195f95173e07f8327b199e4cb26e637aa9fad3a6730e5e27e7b42"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/ci-ops-local-52f48.log",
+      "bytes": 224895,
+      "sha256": "41cf7dfbb24fc436fafcd610a007138e14add04f89dcd9f5f8e7fe3f2adc7caa"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/ci-offsite-all-after.log",
+      "bytes": 10953,
+      "sha256": "3a13dd2b439a7e918dbb66d2949b2503eeef258a8db83d2115ceb9e14fba471e"
+    }
+  ]
+}

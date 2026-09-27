@@ -1,0 +1,26 @@
+{
+  "release-ops-final.txt": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/release-ops-final.txt",
+    "sha256": "2e68b49023027a415b1a976b530b8ba018d6d31cd78146b33d4e046a51318ba0"
+  },
+  "release-documents-final.txt": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/release-documents-final.txt",
+    "sha256": "b2e44e340a874856933997427c26f940eb003f6016746a663277b23c1b172a40"
+  },
+  "cost-scanner-final-six.txt": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/cost-scanner-final-six.txt",
+    "sha256": "9144794ef5359d1eff2129cf6cd7a816a615aa246ee041f170b394298d47892c"
+  },
+  "cost-scanner-root-red.json": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/cost-scanner-root-red.json",
+    "sha256": "3c32c3e4887d9288bd9f8612da460901833993b362eaf47e1db232fa350655c5"
+  },
+  "cost-scanner-root-fixed.json": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/cost-scanner-root-fixed.json",
+    "sha256": "b1648266846ba0094b8e0fbe0145485e4c4ecde02cc6046952b0772d7853d031"
+  },
+  "cost-scanner-uncached-final.json": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/cost-scanner-uncached-final.json",
+    "sha256": "6266933f9b02c5d7e14947e4ef0027c955da08019cfefc55adbd8db027afdd87"
+  }
+}

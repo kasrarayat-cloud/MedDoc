@@ -1,0 +1,115 @@
+{
+  "sha256": "a228fc6517b5dab765803f02e9c37a5d2fe25b83b8801a195a98ddee60413c40",
+  "cases": [
+    {
+      "notes": "Assessment: infection.\nPlan: no infection.",
+      "answers": {
+        "Assessment": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Assessment: infection.",
+              "start": 0,
+              "end": 22
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "infection.",
+            "evidence": [
+              {
+                "quote": "Assessment: infection.",
+                "start": 0,
+                "end": 22
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: no infection.",
+                "start": 23,
+                "end": 42,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Plan": {
+          "text": "no infection.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: no infection.",
+              "start": 23,
+              "end": 42
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "refusals": []
+    },
+    {
+      "notes": "Assessment: infection.\nPlan: \uff4e\uff4f infection.",
+      "answers": {
+        "Assessment": {
+          "text": "infection.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Assessment: infection.",
+              "start": 0,
+              "end": 22
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "\uff4e\uff4f infection.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: \uff4e\uff4f infection.",
+              "start": 23,
+              "end": 42
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "refusals": []
+    },
+    {
+      "notes": "Assessment: active bacterial infection.\nPlan: \uff4e\uff4f active bacterial infection.",
+      "answers": {
+        "Assessment": {
+          "text": "active bacterial infection.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Assessment: active bacterial infection.",
+              "start": 0,
+              "end": 39
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "\uff4e\uff4f active bacterial infection.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: \uff4e\uff4f active bacterial infection.",
+              "start": 40,
+              "end": 76
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "refusals": []
+    }
+  ]
+}

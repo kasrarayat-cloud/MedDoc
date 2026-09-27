@@ -1,0 +1,54 @@
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+.../opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+......................F..............F.....................F.............E.....................
+======================================================================
+ERROR: test_r3_1_the_plain_value_grammar_fails_closed (core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_1_the_plain_value_grammar_fails_closed)
+Not the refuter's inputs: each part of the grammar, pinned by a later value only that part makes not plain.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_notes.py", line 921, in test_r3_1_the_plain_value_grammar_fails_closed
+    self.assertEqual((out['Plan']['status'], out['Plan']['held_candidate']['text']), ('conflict', 'rest.'))
+                                             ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+KeyError: 'held_candidate'
+
+======================================================================
+FAIL: test_a_hundred_questions_over_999_units_read_each_unit_once (core.tests.test_v3_ordinary_notes.OneReadingPerUnit.test_a_hundred_questions_over_999_units_read_each_unit_once)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_notes.py", line 237, in test_a_hundred_questions_over_999_units_read_each_unit_once
+    self.assertEqual(len(calls), len(units), 'one reading per unit, however many questions the form asks')
+AssertionError: 1998 != 999 : one reading per unit, however many questions the form asks
+
+======================================================================
+FAIL: test_prose_notes_are_adopted_as_complete_sentences_not_returned_as_conflicts (core.tests.test_v3_ordinary_notes.OrdinaryNotesOnV3Forms.test_prose_notes_are_adopted_as_complete_sentences_not_returned_as_conflicts)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_notes.py", line 65, in test_prose_notes_are_adopted_as_complete_sentences_not_returned_as_conflicts
+    self.assertEqual({label: out[label]['status'] for label in picks}, dict.fromkeys(picks, 'conflict'))
+AssertionError: {'Chief complaint': 'conflict', 'Allergies': 'conflict', 'Plan': 'supported'} != {'Chief complaint': 'conflict', 'Allergies': 'conflict', 'Plan': 'conflict'}
+- {'Allergies': 'conflict', 'Chief complaint': 'conflict', 'Plan': 'supported'}
+?                                                                   ^^^^ ^ --
+
++ {'Allergies': 'conflict', 'Chief complaint': 'conflict', 'Plan': 'conflict'}
+?                                                                   ^ ^^^^^
+
+
+======================================================================
+FAIL: test_r3_4_each_unit_is_read_for_sentence_ends_once_however_many_questions_select_it (core.tests.test_v3_ordinary_notes.RoundThreeCost.test_r3_4_each_unit_is_read_for_sentence_ends_once_however_many_questions_select_it)
+Once per unit, shared by the paragraph rule and every question that selects the unit.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_notes.py", line 1117, in test_r3_4_each_unit_is_read_for_sentence_ends_once_however_many_questions_select_it
+    self.assertLessEqual(len(calls), len(units), calls)
+AssertionError: 4 not less than or equal to 3 : ['Patient presents with knee pain.', 'Patient presents with knee pain.', 'She reports it is worse at night.', 'Allergies: penicillin.']
+
+----------------------------------------------------------------------
+Ran 98 tests in 18.265s
+
+FAILED (failures=3, errors=1)
+Destroying test database for alias 'default'...
+Found 98 test(s).
+System check identified no issues (0 silenced).

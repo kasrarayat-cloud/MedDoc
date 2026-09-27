@@ -1,0 +1,36 @@
+test_each_rds_latest_timestamp_must_independently_be_current (ops.test_aws_backup_status.AWSBackupStatusTests.test_each_rds_latest_timestamp_must_independently_be_current) ... 
+  test_each_rds_latest_timestamp_must_independently_be_current (ops.test_aws_backup_status.AWSBackupStatusTests.test_each_rds_latest_timestamp_must_independently_be_current) (scope='instance') ... FAIL
+  test_each_rds_latest_timestamp_must_independently_be_current (ops.test_aws_backup_status.AWSBackupStatusTests.test_each_rds_latest_timestamp_must_independently_be_current) (scope='backup') ... FAIL
+
+======================================================================
+FAIL: test_each_rds_latest_timestamp_must_independently_be_current (ops.test_aws_backup_status.AWSBackupStatusTests.test_each_rds_latest_timestamp_must_independently_be_current) (scope='instance')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-host-readiness/rebuild/ops/test_aws_backup_status.py", line 107, in test_each_rds_latest_timestamp_must_independently_be_current
+    with self.subTest(scope=scope):self.assertEqual(self.project(aws)['condition'],'aws_capture_attention')
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'aws_capture_current' != 'aws_capture_attention'
+- aws_capture_current
+?             ^^^^
++ aws_capture_attention
+?             ^^^   +++
+
+
+======================================================================
+FAIL: test_each_rds_latest_timestamp_must_independently_be_current (ops.test_aws_backup_status.AWSBackupStatusTests.test_each_rds_latest_timestamp_must_independently_be_current) (scope='backup')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-host-readiness/rebuild/ops/test_aws_backup_status.py", line 107, in test_each_rds_latest_timestamp_must_independently_be_current
+    with self.subTest(scope=scope):self.assertEqual(self.project(aws)['condition'],'aws_capture_attention')
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'aws_capture_current' != 'aws_capture_attention'
+- aws_capture_current
+?             ^^^^
++ aws_capture_attention
+?             ^^^   +++
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.019s
+
+FAILED (failures=2)

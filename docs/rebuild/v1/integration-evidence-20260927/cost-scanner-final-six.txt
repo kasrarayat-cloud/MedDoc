@@ -1,0 +1,11 @@
+test_both_cost_branches_must_price_the_same_bound (ops.test_cost_scanner_contract.AdditionalCostContracts.test_both_cost_branches_must_price_the_same_bound) ... ok
+test_compiled_mapping_changes_fail_closed (ops.test_cost_scanner_contract.AdditionalCostContracts.test_compiled_mapping_changes_fail_closed) ... ok
+test_current_general_and_mapping_contracts_resolve (ops.test_cost_scanner_contract.AdditionalCostContracts.test_current_general_and_mapping_contracts_resolve) ... ok
+test_local_request_alias_cannot_hide_changes (ops.test_cost_scanner_contract.AdditionalCostContracts.test_local_request_alias_cannot_hide_changes) ... ok
+test_every_provider_output_cap_is_the_one_the_hold_prices_and_the_document_states (ops.test_production_deploy.ProductionCostDocumentTests.test_every_provider_output_cap_is_the_one_the_hold_prices_and_the_document_states) ... ok
+test_the_stated_bound_and_every_row_of_the_generation_table_agree_with_the_code (ops.test_production_deploy.ProductionCostDocumentTests.test_the_stated_bound_and_every_row_of_the_generation_table_agree_with_the_code) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 16.351s
+
+OK

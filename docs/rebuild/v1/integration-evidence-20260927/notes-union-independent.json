@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/notes-union-independent.py", line 12, in <module>
+    assert answers['Consent obtained']['status']==expected,(value,answers)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ('(R) knee', {'Consent obtained': {'text': '', 'status': 'conflict', 'evidence': [{'quote': 'Consent obtained: yes', 'start': 0, 'end': 21}], 'reviewed': False, 'held_candidate': {'text': 'yes', 'evidence': [{'quote': 'Consent obtained: yes', 'start': 0, 'end': 21}], 'context': [{'quote': 'Injection site: (R) knee', 'start': 22, 'end': 46, 'after': True, 'same': False}], 'reason': 'Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose "Leave blank — reviewed".'}}, 'Injection site': {'text': '(R) knee', 'status': 'supported', 'evidence': [{'quote': 'Injection site: (R) knee', 'start': 22, 'end': 46}], 'reviewed': False}})

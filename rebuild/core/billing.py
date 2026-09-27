@@ -2,19 +2,39 @@ from decimal import Decimal, ROUND_DOWN
 import hashlib
 import json
 import re
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.models import Sum
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from .models import User, Wallet, LedgerEntry, Reservation, Usage, Membership, Organization, Payment, Refund, WebhookEvent, CostReconciliation, PlatformCost
 from .security import audit, membership
-from .stripe_validation import validate_event_environment
+from .stripe_validation import live_payments, real_data_mode, validate_event_environment
+from quillmd.application_profile import dollars, stripe_key_matches
 ZERO=Decimal('0')
 MULTIPLIER=Decimal('1.5')
 
 def stripe_test_key_configured(key):
     """Recognize sandbox server keys; this does not validate provider access."""
     return isinstance(key,str) and re.fullmatch(r'(?:sk|rk)_test_[A-Za-z0-9_]+',key) is not None
+
+def stripe_key_configured(key):
+    """A server key of the configured QUILLMD_STRIPE_MODE: test keys in test mode, live keys in live mode.
+
+    A key of the other mode is never recognised, so a live key cannot reach Checkout in test mode and a
+    sandbox key cannot in live mode. Test mode is exactly `stripe_test_key_configured`.
+    """
+    from django.conf import settings
+    mode=getattr(settings,'QUILLMD_STRIPE_MODE','test')
+    return stripe_test_key_configured(key) if mode=='test' else stripe_key_matches(key,mode)
+
+def welcome_credit_amount():
+    from django.conf import settings
+    return Decimal(getattr(settings,'QUILLMD_WELCOME_CREDIT',Decimal('10')))
+
+def welcome_credit_label():
+    """'$10' at the default; '' when QUILLMD_WELCOME_CREDIT=0, so no screen promises a grant that is not made."""
+    amount=welcome_credit_amount()
+    return dollars(amount) if amount>0 else ''
 
 def checkout_form(user,data=None):
     from .forms import CheckoutForm
@@ -45,10 +65,184 @@ def welcome_credit(user):
     wallet=Wallet.objects.select_for_update().get(pk=wallet.pk)
     key=f'welcome:{user.pk}'
     if LedgerEntry.objects.filter(key=key).exists(): return wallet
-    wallet.balance+=Decimal('10'); wallet.save(update_fields=['balance'])
-    LedgerEntry.objects.create(wallet=wallet,amount=10,kind='welcome',key=key,description='One $10 personal welcome credit after verification',balance_after=wallet.balance)
+    # QUILLMD_WELCOME_CREDIT (default 10). Zero grants nothing and writes no entry. Entries already
+    # written keep the amount they record; changing the setting never revisits them.
+    amount=welcome_credit_amount()
+    if amount<=0: return wallet
+    wallet.balance+=amount; wallet.save(update_fields=['balance'])
+    LedgerEntry.objects.create(wallet=wallet,amount=amount,kind='welcome',key=key,description=f'One {dollars(amount)} personal welcome credit after verification',balance_after=wallet.balance)
     audit(user,'credit.welcome',wallet.pk)
     return wallet
+
+def sandbox_funded(wallet):
+    """Whether any money this wallet ever received came from a payment not recorded as live.
+
+    A payment is live only when its checkout was created in live mode (Payment.livemode is True). Rows recorded before
+    the mode was stored are sandbox: live mode did not exist then. Only payments that FUNDED the wallet count: a
+    checkout nobody paid (creating, pending, processing, uncertain, failed, expired) put no money in it, so an
+    abandoned sandbox checkout never freezes a balance live money funded. Two readers, so no route is missed: the
+    wallet's paid Payment rows, and its 'payment' ledger credits, where a credit whose Payment row is not live, or is
+    missing, counts whatever that row's status says.
+    """
+    if Payment.objects.filter(wallet=wallet,status='paid').exclude(livemode=True).exists(): return True
+    live=[f'payment:{intent}' for intent in Payment.objects.filter(wallet=wallet,livemode=True,stripe_intent__isnull=False).values_list('stripe_intent',flat=True)]
+    return LedgerEntry.objects.filter(wallet=wallet,kind='payment').exclude(key__in=live).exists()
+
+
+def real_mode_refuses(wallet):
+    """Whether real data mode refuses this paid balance: it holds money a payment not recorded as live funded.
+
+    One rule, and nothing in real mode moves money out of such a balance: reserve() never holds it, checkout never takes
+    live money into it (that money could never be spent), the worker never sends a job it could pay for (sandbox_hold),
+    settlement never debits it (settle) and a reconciled charge never comes from it (apply_additional_debit). Always
+    False in synthetic mode, which spends sandbox money as before.
+    """
+    return real_data_mode() and sandbox_funded(wallet)
+
+
+class SandboxFundsRefused(ValidationError):
+    """Real data mode refused to debit a balance sandbox payments funded; nothing was charged."""
+
+
+def department_payer(user_id,department):
+    """The payer reserve() records for a request: the organization when the department pays, otherwise the user."""
+    return f'organization:{department.organization_id}' if department.organization_pays else f'user:{user_id}'
+
+
+def recorded_paid_wallet(payer):
+    """The paid wallet of a payer ('user:<id>' or 'organization:<id>'), or None when it has none. Read-only, unlike
+    payer_wallet()."""
+    scope,_,identifier=(payer or '').partition(':')
+    field={'user':'user_id','organization':'organization_id'}.get(scope)
+    return Wallet.objects.filter(**{field:identifier},kind='paid').first() if field and identifier else None
+
+
+def charge_wallets(job):
+    """Every wallet this job's charges can come from: the wallets holding its funds (settlement debits them) and its
+    payer's paid wallet (reserve()'s rule; a reconciled charge debits it). A job with no recorded payer yet is judged by
+    the payer reserve() would record for it."""
+    wallets=[r.wallet for r in Reservation.objects.filter(job=job,state='held').select_related('wallet').order_by('pk')]
+    payer=recorded_paid_wallet(job.payer or department_payer(job.user_id,job.department))
+    return wallets+([payer] if payer is not None else [])
+
+
+def sandbox_hold(job):
+    """Whether real data mode refuses any wallet this job could be charged from (charge_wallets).
+
+    The worker reads this immediately before the provider request (core.jobs.run_one), so a job reserve() would refuse
+    in real mode is never sent: one whose hold, taken before the switch from synthetic mode, sits on sandbox money, and
+    one whose hold is wholly promotional while its payer's paid balance holds sandbox money (its reconciled cost would
+    be charged there).
+    """
+    return any(real_mode_refuses(w) for w in charge_wallets(job))
+
+
+#: The database triggers the sandbox-money rule relies on, as (table, trigger, function, pg_trigger.tgtype): without
+#: them a statement can relabel sandbox evidence as live. tgtype bits: 1 row, 2 before, 8 delete, 16 update, 32 truncate.
+PAYMENT_EVIDENCE_GUARDS=(
+    ('core_ledgerentry','ledger_append_only','quillmd_append_only',27),                    # 0003: no UPDATE or DELETE
+    ('core_webhookevent','webhook_evidence_immutable','quillmd_webhook_evidence_guard',27), # 0008: no DELETE
+    ('core_payment','payment_evidence_immutable','quillmd_payment_evidence_guard',27),      # 0020: no DELETE, no relabel
+    ('core_webhookevent','webhook_livemode_immutable','quillmd_livemode_guard',19),         # 0020: mode fixed
+    ('core_payment','payment_no_truncate','quillmd_refuse_truncate',34),                    # 0020: no TRUNCATE
+    ('core_webhookevent','webhook_no_truncate','quillmd_refuse_truncate',34),               # 0020
+    ('core_ledgerentry','ledger_no_truncate','quillmd_refuse_truncate',34),                 # 0020
+)
+
+# SHA256 of the exact prosrc installed by migrations 0003, 0008 and 0020. Do not learn these from
+# the inspected database: that would certify a replacement function as its own expected value.
+PAYMENT_GUARD_FUNCTION_SHA256={
+    'quillmd_append_only':'8d5ec86a531621ac1de53c85109dfb5122f9142b1cb66dcfc377e0945d869764',
+    'quillmd_webhook_evidence_guard':'797abc46124f7f810165cd8058731387c10bbad141f840f8fddc5b0b5f732f8c',
+    'quillmd_payment_evidence_guard':'4c4c2a8c49133266a8bf61181f1d6ca764ee8e98d5de262cb59eac99190520bd',
+    'quillmd_livemode_guard':'231e4fd6d5f23b0b38d9b4353add5b26cb31b62c571ccb0987e06705cf6b32cf',
+    'quillmd_refuse_truncate':'1f42decb7308aa5ee0a2f5425bd3ca1e8edf244ef3ff5a3faffe0c1dd6b4f447',
+}
+
+
+def missing_payment_evidence_guards():
+    """Fixed labels for failed payment-evidence checks; read-only, with no row or unexpected object names returned.
+
+    Compare every full trigger definition, enabled state, schema-qualified function identity and installed prosrc
+    hash. Refuse other row or statement triggers, except PostgreSQL's internal foreign-key constraint triggers.
+    Require origin both now and in the effective role/database login default. Run on the target database as the
+    runtime role: SET ROLE alone does not apply login settings, so pg_db_role_setting is inspected as well.
+
+    An amended migration never re-runs where already applied. These catalog reads provide point-in-time evidence;
+    an owner able to change the guards and this checker can defeat it. This is not a lock against that owner.
+    """
+    tables=sorted({table for table,_,_,_ in PAYMENT_EVIDENCE_GUARDS})
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT current_schema(),quote_ident(current_schema()),current_setting('session_replication_role')")
+        schema,quoted_schema,replication=cursor.fetchone()
+        cursor.execute("SELECT c.relname,t.tgname,p.proname,t.tgtype,t.tgenabled,pg_get_triggerdef(t.oid),"
+                       "pn.nspname,p.prosrc,p.oid::regproc::text,p.pronargs,t.tgisinternal,con.contype "
+                       "FROM pg_trigger t "
+                       "JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace "
+                       "JOIN pg_proc p ON p.oid=t.tgfoid JOIN pg_namespace pn ON pn.oid=p.pronamespace "
+                       "LEFT JOIN pg_constraint con ON con.oid=t.tgconstraint "
+                       "WHERE n.nspname=current_schema() AND c.relname=ANY(%s)",[tables])
+        present={(table,name):row for table,name,*row in cursor.fetchall()}
+        # PostgreSQL precedence: role+database > role > database > all roles/databases. These
+        # persistent settings need not be reflected in an already-open connection's current_setting.
+        cursor.execute("SELECT split_part(setting,'=',2) FROM pg_db_role_setting s "
+                       "CROSS JOIN LATERAL unnest(s.setconfig) AS setting "
+                       "WHERE s.setdatabase IN (0,(SELECT oid FROM pg_database WHERE datname=current_database())) "
+                       "AND s.setrole IN (0,(SELECT oid FROM pg_roles WHERE rolname=current_user)) "
+                       "AND split_part(setting,'=',1)='session_replication_role' "
+                       "ORDER BY (s.setrole<>0) DESC,(s.setdatabase<>0) DESC LIMIT 1")
+        default=cursor.fetchone()
+
+    def installed(table,name,function,kind):
+        row=present.get((table,name))
+        if row is None: return False
+        actual_function,actual_kind,enabled,definition,namespace,body,sql_function,nargs,internal,_=row
+        event={27:'DELETE OR UPDATE',19:'UPDATE',34:'TRUNCATE'}[kind]
+        each='ROW' if kind & 1 else 'STATEMENT'
+        expected=(f'CREATE TRIGGER {name} BEFORE {event} ON {quoted_schema}.{table} '
+                  f'FOR EACH {each} EXECUTE FUNCTION {sql_function}()')
+        # 'A' always fires, including origin; 'R' and 'D' do not. Full definition also checks
+        # UPDATE OF columns, WHEN, arguments, constraint/deferred forms and transition relations.
+        return (actual_function==function and namespace==schema and nargs==0 and not internal
+                and actual_kind==kind and enabled in ('O','A') and definition==expected
+                and hashlib.sha256(body.encode()).hexdigest()==PAYMENT_GUARD_FUNCTION_SHA256[function])
+    failed=[name for table,name,function,kind in PAYMENT_EVIDENCE_GUARDS if not installed(table,name,function,kind)]
+    expected_keys={(table,name) for table,name,_,_ in PAYMENT_EVIDENCE_GUARDS}
+    for table in tables:
+        extra=[row for key,row in present.items() if key[0]==table and key not in expected_keys and row[1] & 1
+               and not (row[8] and row[9]=='f' and row[4]=='pg_catalog' and row[0].startswith('RI_FKey_'))]
+        if extra: failed.append(f'unexpected_row_triggers:{table}')
+        statements=[row for key,row in present.items() if key[0]==table and key not in expected_keys and not row[1] & 1]
+        if statements: failed.append(f'unexpected_statement_triggers:{table}')
+    if replication!='origin' or default is not None and default[0]!='origin':
+        failed.append('session_replication_role')
+    return failed
+
+
+def real_mode_payment_problems():
+    """Why this database may not run in real data mode, as lines of counts; empty when it may. Read-only.
+
+    Real mode runs on a database that has never held sandbox payments: no payment or Stripe event row that is not
+    recorded as live, and no paid wallet holding money that live payments do not wholly explain (every 'payment'
+    credit live, and the balance equal to its ledger). And every guard that keeps that evidence from being relabelled
+    is in place (PAYMENT_EVIDENCE_GUARDS): otherwise the counts above prove nothing.
+    """
+    problems=[]
+    payments=Payment.objects.exclude(livemode=True).count()
+    if payments: problems.append(f'{payments} payment row(s) not recorded as live (sandbox, or recorded before the mode was stored)')
+    events=WebhookEvent.objects.exclude(livemode=True).count()
+    if events: problems.append(f'{events} Stripe event row(s) not recorded as live')
+    unexplained=0
+    for wallet in Wallet.objects.filter(kind='paid').exclude(balance=0,reserved=0).order_by('pk'):
+        ledger=LedgerEntry.objects.filter(wallet=wallet).aggregate(total=Sum('amount'))['total'] or ZERO
+        if sandbox_funded(wallet) or ledger!=wallet.balance: unexplained+=1
+    if unexplained: problems.append(f'{unexplained} paid wallet(s) holding money that live payments do not wholly explain')
+    missing=missing_payment_evidence_guards()
+    if missing: problems.append(f'{len(missing)} payment evidence guard check(s) failed ({", ".join(missing)}); '
+                                'require the guards installed by migrations 0003, 0008 and 0020, no extra row/statement triggers, '
+                                'and session_replication_role origin')
+    return problems
+
 
 def payer_wallets(user,department):
     """The personal promotional wallet and the paid wallet that pays for this user's requests in this department."""
@@ -66,17 +260,22 @@ def available_balance(user,department):
 def reserve(job,maximum_cost=None,*,charge_limit=None):
     """Hold the customer's binding charge limit before any provider request. Either the maximum provider cost (held × 1.5)
     or an exact charge limit the customer saw and approved."""
-    membership(job.user,job.encounter.department)
+    membership(job.user,job.department)
     from .models import Job
     job=Job.objects.select_for_update().get(pk=job.pk)
     maximum_charge=exact(charge_limit) if charge_limit is not None else exact(maximum_cost)*MULTIPLIER
     if maximum_charge<0: raise ValidationError('A charge limit cannot be negative.')
     if Reservation.objects.filter(job=job).exists(): return
-    department=job.encounter.department
+    department=job.department
     promo,payer=payer_wallets(job.user,department)
-    job.payer=f'organization:{department.organization_id}' if department.organization_pays else f'user:{job.user_id}'
+    job.payer=department_payer(job.user_id,department)
     job.save(update_fields=['payer'])
     locked={w.pk:w for w in Wallet.objects.select_for_update().filter(pk__in=[promo.pk,payer.pk]).order_by('pk')}
+    # Real data mode never spends sandbox-funded money: the whole request is refused, before any hold, rather than
+    # quietly skipping a balance the payer can see.
+    if real_mode_refuses(locked[payer.pk]):
+        raise ValidationError('This paid balance holds sandbox (test) payments, which never fund requests in real data mode. '
+                              'No provider request was made.')
     available=sum((w.balance-w.reserved for w in locked.values()),ZERO)
     if available<maximum_charge:
         # The requester sees what the request needs, never the payer's balance: an organization's paid funds are shown to owners only.
@@ -110,17 +309,25 @@ def settle(job,actual_cost,units,rates,provider,provider_request_id='',simulated
     over_limit=uncapped-charged
     wallets={w.pk:w for w in Wallet.objects.select_for_update().filter(pk__in=[r.wallet_id for r in reservations]).order_by('pk')}
     remaining=charged
+    debits=[]
     # Personal promotional credit is always used before paid funds.
     for r in sorted(reservations,key=lambda r:0 if r.wallet.kind=='promo' else 1):
+        debits.append((r,min(r.amount,remaining))); remaining-=debits[-1][1]
+    # Real data mode never debits a balance sandbox payments funded. The worker refuses such a job before sending
+    # (sandbox_hold); this is the last wall, before any write: nothing is charged and the job's settlement is held for
+    # reconciliation. A hold on such a balance that this charge does not reach is released unspent, as always.
+    if any(debit and real_mode_refuses(wallets[r.wallet_id]) for r,debit in debits):
+        raise SandboxFundsRefused('This charge would be debited from a paid balance holding sandbox (test) payments, which real '
+                                  'data mode never spends. Nothing was charged; settlement held for reconciliation.')
+    for r,debit in debits:
         wallet=wallets[r.wallet_id]
-        debit=min(r.amount,remaining)
         wallet.reserved-=r.amount; wallet.balance-=debit; wallet.save(update_fields=['reserved','balance'])
         if debit: LedgerEntry.objects.create(wallet=wallet,amount=-debit,kind='usage',key=f'usage:{job.pk}:{wallet.pk}',description='Provider cost × 1.5',job=job,balance_after=wallet.balance)
-        r.state='settled'; r.save(update_fields=['state']); remaining-=debit
+        r.state='settled'; r.save(update_fields=['state'])
         # The unused part of a paid hold becomes available just as on release().
         # Resume older adjustments only after the settlement and its outer transaction commit.
         if wallet.kind=='paid' and debit<r.amount: reconcile_after_commit(wallet)
-    d=job.encounter.department
+    d=job.department
     result=Usage.objects.create(job=job,user=job.user,department=d,organization=d.organization,payer=job.payer or f'user:{job.user_id}',provider=provider,provider_request_id=provider_request_id,provider_resource_id=provider_resource_id,units=units,rates=rates,actual_cost=actual,charged_cost=charged,simulated=simulated)
     if over_limit>0:
         # Provider cost, customer charge and the absorbed difference stay separate: Usage.actual_cost, the usage ledger debits,
@@ -220,10 +427,18 @@ def proportional_split(entries,total):
         shares.append((wallet_id,share));allocated+=share
     return shares
 
-def apply_additional_debit(row,wallet):
-    """Debit a positive charge delta from an already locked paid wallet when its available balance allows it."""
+def apply_additional_debit(row,wallet,actor=None):
+    """Debit a positive charge delta from an already locked paid wallet when its available balance allows it.
+
+    Never from a balance real data mode refuses (sandbox-funded): the charge stays pending_funds, and the refusal is
+    audited each time it is attempted. Both callers (reconcile_usage, apply_pending_reconciliations) come through here.
+    """
     key=f'reconciliation:{row.usage_id}:{wallet.pk}'
     if LedgerEntry.objects.filter(key=key).exists(): return True
+    if real_mode_refuses(wallet):
+        audit(actor,'usage.reconciliation_sandbox_refused',row.usage.job_id,department=row.usage.department,wallet=str(wallet.pk),
+              charge_delta=str(row.charge_delta))
+        return False
     if wallet.balance-wallet.reserved<row.charge_delta: return False
     wallet.balance-=row.charge_delta; wallet.save(update_fields=['balance'])
     LedgerEntry.objects.create(wallet=wallet,amount=-row.charge_delta,kind='reconciliation',key=key,description='Reconciled provider cost above the configured estimate × 1.5 (additional charge)',job_id=row.usage.job_id,balance_after=wallet.balance)
@@ -278,7 +493,7 @@ def reconcile_usage(usage,reconciled_cost,evidence_reference,actor,provider_cred
         payer=payer_wallet(usage.payer)
         wallet=Wallet.objects.select_for_update().get(pk=payer.pk)
         row.save()
-        if not apply_additional_debit(row,wallet):
+        if not apply_additional_debit(row,wallet,actor=actor):
             row.ledger_status='pending_funds'; row.save(update_fields=['ledger_status'])
     else: row.save()
     audit(actor,'usage.reconcile',usage.job_id,department=usage.department,reconciled_cost=str(reconciled),charge_delta=str(delta),ledger_status=row.ledger_status,evidence_reference=evidence_reference,evidence_kind=evidence_kind)
@@ -309,7 +524,7 @@ def apply_pending_reconciliations(actor=None,wallet=None):
                     audit(actor,'usage.reconciliation_absorbed',row.usage.job_id,department=row.usage.department,charge_delta=str(row.charge_delta)); continue
                 payer=payer_wallet(row.usage.payer)
                 wallet=Wallet.objects.select_for_update().get(pk=payer.pk)
-                if not apply_additional_debit(row,wallet): continue
+                if not apply_additional_debit(row,wallet,actor=actor): continue
                 row.ledger_status='applied'; row.save(update_fields=['ledger_status'])
                 audit(actor,'usage.reconciliation_applied',row.usage.job_id,department=row.usage.department,charge_delta=str(row.charge_delta))
                 applied.append(row)
@@ -350,7 +565,7 @@ def absorb_failed_job(job,actor=None,note=''):
     amount=reconciliation.reconciled_cost if reconciliation else usage.actual_cost
     evidence=f'usage:{usage.pk}'+(f' reconciliation:{reconciliation.evidence_reference}' if reconciliation else '')+(f' note:{note.strip()}' if note and note.strip() else '')
     cost,created=PlatformCost.objects.get_or_create(job=job,kind='absorbed_failure',defaults={'amount':amount,'description':'Provider cost absorbed: output not adopted','evidence_reference':evidence[:240],'recorded_by':actor if getattr(actor,'pk',None) else None})
-    if created or reversed_total: audit(job.user,'usage.absorbed',job.pk,department=job.encounter.department,actual_cost=str(usage.actual_cost),platform_cost=str(cost.amount),reversed=str(reversed_total))
+    if created or reversed_total: audit(job.user,'usage.absorbed',job.pk,department=job.department,actual_cost=str(usage.actual_cost),platform_cost=str(cost.amount),reversed=str(reversed_total))
     return cost
 
 def reconciliation():
@@ -406,14 +621,16 @@ def record_stripe_event(event,payload_hash):
     if not isinstance(data,dict): raise ValidationError('Malformed payment event data.')
     raw=data.get('object',{})
     if not isinstance(raw,dict): raise ValidationError('Malformed payment event object.')
-    if raw.get('livemode') is True: raise ValidationError('Live payment objects are not accepted.')
+    if live_payments():
+        if raw.get('livemode') is False: raise ValidationError('Test payment objects are not accepted in live mode.')
+    elif raw.get('livemode') is True: raise ValidationError('Live payment objects are not accepted.')
     keys=('id','payment_intent','amount','status','currency','payment_status','amount_total','mode')
     obj={k:raw[k] for k in keys if k in raw}
     if 'metadata' in raw:
         if not isinstance(raw['metadata'],dict): raise ValidationError('Malformed payment metadata.')
         obj['metadata']={'payment_id':raw['metadata'].get('payment_id')}
     semantic=hashlib.sha256(json.dumps({'kind':kind,'object':obj},sort_keys=True,separators=(',',':')).encode()).hexdigest()
-    row,_=WebhookEvent.objects.get_or_create(event_id=event_id,defaults={'kind':kind,'payload_hash':payload_hash,'semantic_hash':semantic,'object_data':obj,'status':'received'})
+    row,_=WebhookEvent.objects.get_or_create(event_id=event_id,defaults={'kind':kind,'payload_hash':payload_hash,'semantic_hash':semantic,'object_data':obj,'status':'received','livemode':event['livemode']})
     if row.semantic_hash and row.semantic_hash!=semantic: raise ValidationError('Repeated Stripe event has different billing contents.')
     if row.kind!=kind: raise ValidationError('Repeated Stripe event changed type.')
     return row

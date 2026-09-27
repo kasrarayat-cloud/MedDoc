@@ -1,0 +1,33 @@
+convert /in/original.docx as a Writer document -> /out/original.pdf using filter : writer_pdf_Export
+convert /in/missing.docx as a Writer document -> /out/missing.pdf using filter : writer_pdf_Export
+convert /in/ordinary.docx as a Writer document -> /out/ordinary.pdf using filter : writer_pdf_Export
+convert /in/long.docx as a Writer document -> /out/long.pdf using filter : writer_pdf_Export
+
+
+(process:21): dconf-CRITICAL **: 20:55:09.417: unable to create directory '/home/gotenberg/.cache/dconf': Read-only file system.  dconf will not work properly.
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+
+(process:26): dconf-CRITICAL **: 20:55:09.802: unable to create directory '/home/gotenberg/.cache/dconf': Read-only file system.  dconf will not work properly.
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories

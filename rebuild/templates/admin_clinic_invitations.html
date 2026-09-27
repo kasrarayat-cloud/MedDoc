@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}Clinic invitations{% endblock %}
+{% block breadcrumb %}Clinic invitations{% endblock %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow">Invite-only registration</div><h1>Invite a clinic owner.</h1><p>Accepting creates the clinic&rsquo;s organization, its first department and the owner&rsquo;s account. The owner then invites their own colleagues.</p></div><div class="actions"><a class="button secondary" href="{% url 'admin_organizations' %}">Organizations</a></div></div>
+
+{% if invite_mode %}
+<section class="section" id="invite-clinic-owner"><div class="section-heading"><h2>Invite clinic owner</h2></div>
+<p class="small muted">The link is valid for 7 days and works once. It is emailed to the address below; the email carries only the link. Revoke an invitation sent to the wrong address.</p>
+<form method="post" data-submit-once>{% csrf_token %}{{ form.as_p }}<button type="submit">Invite clinic owner</button></form>
+</section>
+{% else %}
+<div class="notice"><p>Self-service registration is open (<code>QUILLMD_REGISTRATION=open</code>). Clinic owner invitations are created only in invite mode. Invitations issued earlier are listed below and can still be revoked.</p></div>
+{% endif %}
+
+<section class="section" id="clinic-invitations"><div class="section-heading"><h2>Clinic owner invitations</h2></div>
+{% if rows %}<div class="table-wrap"><table><thead><tr><th scope="col">Email</th><th scope="col">Clinic</th><th scope="col">First department</th><th scope="col">Status</th><th scope="col">Invited by</th><th scope="col">Expires (UTC)</th></tr></thead><tbody>{% for row in rows %}<tr><td>{{ row.invitation.email }}</td><td>{{ row.invitation.organization_name }}{% if row.invitation.organization %}<span class="subline mono">{{ row.invitation.organization.pk }}</span>{% endif %}</td><td>{{ row.invitation.department_name }}</td><td><span class="badge {% if row.status == 'accepted' %}success{% elif row.status == 'pending' %}warning{% endif %}">{{ row.status|capfirst }}</span>{% if row.status == 'pending' %}<form method="post" action="{% url 'admin_clinic_invitation_revoke' row.invitation.pk %}" data-submit-once>{% csrf_token %}<input type="hidden" name="back" value="{% url 'admin_clinic_invitations' %}"><button type="submit" class="secondary">Revoke invitation</button></form>{% endif %}</td><td>{{ row.invitation.invited_by.email }}</td><td>{{ row.invitation.expires_at|date:'Y-m-d H:i' }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="small muted">No clinic owner invitations.</p>{% endif %}
+{% include 'pagination.html' with navigation=navigation %}
+</section>
+{% endblock %}

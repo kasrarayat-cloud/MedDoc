@@ -1,0 +1,118 @@
+{
+  "result": "PASS",
+  "cases": [
+    {
+      "value": "(R) knee",
+      "expected": "supported",
+      "actual": {
+        "Indication": {
+          "status": "supported",
+          "text": "pain"
+        },
+        "Injection site": {
+          "status": "supported",
+          "text": "(R) knee"
+        }
+      }
+    },
+    {
+      "value": "Lt. knee",
+      "expected": "supported",
+      "actual": {
+        "Indication": {
+          "status": "supported",
+          "text": "pain"
+        },
+        "Injection site": {
+          "status": "supported",
+          "text": "Lt. knee"
+        }
+      }
+    },
+    {
+      "value": "(R) knee, sorry, Lt. knee",
+      "expected": "conflict",
+      "actual": {
+        "Indication": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Injection site": {
+          "status": "conflict",
+          "text": ""
+        }
+      }
+    },
+    {
+      "value": "Lt. knee. Patient declined.",
+      "expected": "conflict",
+      "actual": {
+        "Indication": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Injection site": {
+          "status": "conflict",
+          "text": ""
+        }
+      }
+    },
+    {
+      "value": "(R) knee (prior study)",
+      "expected": "conflict",
+      "actual": {
+        "Indication": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Injection site": {
+          "status": "conflict",
+          "text": ""
+        }
+      }
+    },
+    {
+      "value": "Lt. knee?",
+      "expected": "conflict",
+      "actual": {
+        "Indication": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Injection site": {
+          "status": "conflict",
+          "text": ""
+        }
+      }
+    },
+    {
+      "value": "Lt. knee...",
+      "expected": "conflict",
+      "actual": {
+        "Indication": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Injection site": {
+          "status": "conflict",
+          "text": ""
+        }
+      }
+    },
+    {
+      "value": "(R) knee rather left",
+      "expected": "conflict",
+      "actual": {
+        "Indication": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Injection site": {
+          "status": "conflict",
+          "text": ""
+        }
+      }
+    }
+  ],
+  "duplicate_option_controls": 2
+}

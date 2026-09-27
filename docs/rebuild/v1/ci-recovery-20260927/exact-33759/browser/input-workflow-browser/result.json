@@ -1,0 +1,22 @@
+{
+  "complete": true,
+  "evidence": "isolated Chromium with genuine MediaRecorder and synthetic browser audio",
+  "provider_requests": 0,
+  "physical_microphone_verified": false,
+  "checks": [
+    "Page opening neither records nor submits audio.",
+    "Unsaved notes block older-source generation and navigation prompts before discard.",
+    "Simultaneously edited notes/answers or notes/transcript have explicit reversible undo; no edit is silently discarded.",
+    "Genuine recorder start/stop produces synthetic audio, releases tracks and requires consent before submission.",
+    "Selected recording blocks unrelated submission and explicit discard clears it without sending.",
+    "Browser microphone permission refusal offers site-permission and file-upload recovery.",
+    "Missing recording capability keeps file upload usable.",
+    "Repeated submit produces one local request; HTTP/worker tests separately prove reservation idempotency."
+  ],
+  "started_at": "2026-09-27T22:13:50.098Z",
+  "recording": {
+    "bytes": 11881,
+    "type": "audio/webm;codecs=opus"
+  },
+  "finished_at": "2026-09-27T22:13:53.474Z"
+}

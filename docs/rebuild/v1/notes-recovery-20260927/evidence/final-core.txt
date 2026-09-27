@@ -1,0 +1,140 @@
+/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_tab_form_policy.py:69: SyntaxWarning: invalid escape sequence '\('
+  """⚠️ THE DECLARED BOUND WAS REACHABLE BY ANOTHER SPELLING.
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-notes/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+.............................Forbidden (CSRF cookie not set.): /console/accounts/e7b883f2-380e-4927-99ae-b771abc88388/sessions/
+Forbidden (CSRF cookie not set.): /console/memberships/d24f3957-ebd7-4a28-9db2-78838d023964/
+Forbidden (CSRF cookie not set.): /console/departments/57327b10-8f3f-42e0-9c60-b1cf529078d6/payer/
+........................................................./opt/meddoc-pro/.worktrees/v1-notes/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+.................../opt/meddoc-pro/.worktrees/v1-notes/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+..../opt/meddoc-pro/.worktrees/v1-notes/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+......./opt/meddoc-pro/.worktrees/v1-notes/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+....................../opt/meddoc-pro/.worktrees/v1-notes/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+....................................................../opt/meddoc-pro/.worktrees/v1-notes/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+.........................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................Forbidden (private preview CSRF validation failed).
+Forbidden (private preview CSRF validation failed).
+.Forbidden (private preview CSRF validation failed).
+Forbidden (private preview CSRF validation failed).
+................................................................Forbidden (CSRF cookie not set.): /recovery/
+Forbidden (CSRF cookie not set.): /verification/resend/
+................................Forbidden (CSRF cookie not set.): /encounters/9d48282b-4fb5-4ff8-ac67-e19931c31c59/generate/
+.......................................................sssssssss.........................................................................../opt/meddoc-pro/.worktrees/v1-notes/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+..........................................................................................................................................................................................................................................................................................................................
+----------------------------------------------------------------------
+Ran 1263 tests in 463.772s
+
+OK (skipped=9)
+Destroying test database for alias 'default'...
+Found 1263 test(s).
+System check identified no issues (0 silenced).
+Published backup status: healthy (healthy).
+Published backup status: offsite_stale (failure).
+{
+  "checked_at": "2026-09-27T16:22:56.192677+00:00",
+  "scope": "Read-only fresh application records; no external requests; no clinical text or credentials exported.",
+  "charge_policy": "User charge is exactly 1.5 \u00d7 the attributable metered provider cost after applicable discounts and allocated provider credits; configured-rate rows are estimates until reconciled to authentic provider evidence.",
+  "platform_costs": {
+    "totals_by_kind": {
+      "fixed_overhead": "0",
+      "absorbed_failure": "0",
+      "absorbed_over_limit": "0"
+    },
+    "rows": 0,
+    "policy": "Fixed overhead and absorbed platform-failure cost are tracked separately and never charged to users."
+  },
+  "reconciliation_summary": {
+    "evidence_kinds": {
+      "unclassified": 0,
+      "provider_report": 0,
+      "invoice": 0
+    },
+    "reconciled_rows": 0,
+    "unreconciled_rows": 0,
+    "pending_funds": 0,
+    "absorbed_rows": 0
+  },
+  "cost_basis": "Original usage is provider-metered units priced at configured USD rates; reservations are estimates. Classified reconciliation evidence and adjustments are reported separately.",
+  "fingerprint_limit": "A configured pricing fingerprint identifies the application configuration, not a provider contract, tariff version, invoice, or verified account discount.",
+  "rate_reference_reviewed_on": "2026-09-17",
+  "rate_references": [
+    "https://platform.claude.com/docs/en/about-claude/pricing",
+    "https://deepgram.com/pricing"
+  ],
+  "rows": [],
+  "wallets": [
+    {
+      "wallet_id": "26f239af-821a-45d2-aa42-fbfa5c610fe4",
+      "kind": "paid",
+      "balance_usd": "0E-12",
+      "ledger_sum_usd": "0",
+      "reserved_usd": "0E-12",
+      "held_reservations_usd": "0",
+      "checks": {
+        "balance_equals_ledger": true,
+        "reserved_equals_holds": true
+      }
+    },
+    {
+      "wallet_id": "8fb6046b-afa0-4fe0-95f7-d7e6bcd7eef3",
+      "kind": "promo",
+      "balance_usd": "10.000000000000",
+      "ledger_sum_usd": "10.000000000000",
+      "reserved_usd": "0.010000000000",
+      "held_reservations_usd": "0.010000000000",
+      "checks": {
+        "balance_equals_ledger": true,
+        "reserved_equals_holds": true
+      }
+    }
+  ],
+  "unsettled_provider_receipts": [],
+  "unresolved_jobs": [],
+  "ledger_policy": {
+    "orphan_policy_entries": 0,
+    "checks": {
+      "policy_ledger_entries_bound_to_jobs": true,
+      "over_limit_absorptions_bound_to_settled_usage": true
+    }
+  },
+  "cancellation_policy": {
+    "cancelled_jobs": 0,
+    "checks": {
+      "cancelled_jobs_have_no_usage": true,
+      "cancelled_jobs_have_no_provider_receipt": true,
+      "cancelled_jobs_have_no_ledger_entries": true,
+      "cancelled_jobs_hold_no_funds": true
+    }
+  },
+  "hold_policy": {
+    "ended_jobs_holding_funds": [
+      "f42f64c7-e55b-4c14-85a9-d20becfe05d6"
+    ],
+    "checks": {
+      "ended_jobs_hold_no_funds": false
+    }
+  },
+  "all_checks_pass": false,
+  "durable_receipt_gaps": 0,
+  "invoice_reconciliation": {
+    "invoice_rows": 0,
+    "provider_report_rows": 0,
+    "unclassified_rows": 0,
+    "scope": "Administrator-recorded per-usage classification; no account-wide or whole-invoice reconciliation is implied.",
+    "provenance": "Source authenticity and attribution require administrator review; this audit verifies ledger arithmetic, not provider authenticity."
+  }
+}
+Publication deferred: an activation holds exclusion. Nothing written; the existing row keeps its own freshness.
+Publication deferred: an activation holds exclusion. Nothing written; the existing row keeps its own freshness.
+Publication deferred: an activation holds exclusion. Nothing written; the existing row keeps its own freshness.
+Published backup status: synthetic test condition (failure).
+Publication deferred: an activation holds exclusion. Nothing written; the existing row keeps its own freshness.
+Published backup status: synthetic test condition (failure).
+exit 0

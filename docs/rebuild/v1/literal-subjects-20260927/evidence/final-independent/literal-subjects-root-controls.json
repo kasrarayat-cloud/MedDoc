@@ -1,0 +1,237 @@
+{
+  "sha256": "1c0c99abbed920aa25cc13e09bf92a2a82613a957ba65d3ea1a018acecf8ce77",
+  "cases": [
+    {
+      "notes": "No known drug allergies. Assessment: penicillin allergy.",
+      "answers": {
+        "Allergies": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "No known drug allergies.",
+            "evidence": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24
+              }
+            ],
+            "context": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Assessment: penicillin allergy.",
+                "start": 25,
+                "end": 56,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Assessment": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Assessment: penicillin allergy.",
+              "start": 25,
+              "end": 56
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "penicillin allergy.",
+            "evidence": [
+              {
+                "quote": "Assessment: penicillin allergy.",
+                "start": 25,
+                "end": 56
+              }
+            ],
+            "context": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Assessment: penicillin allergy.",
+                "start": 25,
+                "end": 56,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Examination": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "refusals": []
+    },
+    {
+      "notes": "No known drug allergies. Assessment: allergic to penicillin.",
+      "answers": {
+        "Allergies": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "No known drug allergies.",
+            "evidence": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24
+              }
+            ],
+            "context": [
+              {
+                "quote": "Assessment: allergic to penicillin.",
+                "start": 25,
+                "end": 60,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Assessment": {
+          "text": "allergic to penicillin.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Assessment: allergic to penicillin.",
+              "start": 25,
+              "end": 60
+            }
+          ],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "refusals": []
+    },
+    {
+      "notes": "No known drug allergies. Patient is allergic to penicillin.",
+      "answers": {
+        "Allergies": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "No known drug allergies.",
+            "evidence": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 0,
+                "end": 24
+              }
+            ],
+            "context": [
+              {
+                "quote": "Patient is allergic to penicillin.",
+                "start": 25,
+                "end": 59,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Assessment": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        }
+      },
+      "refusals": []
+    },
+    {
+      "notes": "No known drug allergies. Neurological examination is normal.",
+      "answers": {
+        "Allergies": {
+          "text": "No known drug allergies.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "reviewed": false
+        },
+        "Assessment": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "Neurological examination is normal.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Neurological examination is normal.",
+              "start": 25,
+              "end": 60
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "refusals": []
+    }
+  ]
+}
