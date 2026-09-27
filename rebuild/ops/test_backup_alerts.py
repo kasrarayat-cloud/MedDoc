@@ -96,7 +96,14 @@ class BackupAlertsTests(unittest.TestCase):
         self.recovery.return_value['condition'] = 'offsite_policy_expired'
         result, code = a.check(self.at + timedelta(minutes=15))
         self.assertEqual((code, result['severity']), (1, 'failure'))
-        self.sender.assert_called_once()
+        # ⚠️ THIS LINE USED TO BE `assert_called_once()`, AND IT ENCODED THE DEFECT: the warning
+        # became a failure inside the open incident and the test required that nobody be told.
+        # The failure is now announced once, as an escalation; the warning still sent only once.
+        self.assertEqual(self.sender.call_count, 2)
+        self.assertIn('ESCALATION', self.sender.call_args.args[1])
+        self.assertIn('Condition: offsite_policy_expired', self.sender.call_args.args[2])
+        a.check(self.at + timedelta(minutes=20))
+        self.assertEqual(self.sender.call_count, 2)
 
     def test_uncertain_provider_outcome_no_retry_even_after_retention_window(self):
         self.health.return_value = 'backup_failed'
@@ -357,6 +364,382 @@ class IncidentEscalationReproductionTests(unittest.TestCase):
         subject, body = self.sender.call_args.args[1:]
         self.assertIn('ESCALATION', subject)
         self.assertIn('Condition: offsite_policy_expired', body)
+
+
+class IncidentNotificationTests(unittest.TestCase):
+    """Escalation, reminder and their storm guards inside ONE open incident. Mocked transport only."""
+    setUp = BackupAlertsTests.setUp
+
+    def state(self):
+        return json.loads((self.alerts / 'status.json').read_text())
+
+    def sent(self):
+        return [call.args[1:] for call in self.sender.call_args_list]
+
+    def record(self, identity):
+        return json.loads((self.alerts / f'incident-{identity}-result.json').read_text())
+
+    def legacy(self, **changes):
+        """Exactly what the previous release wrote: six keys, one attempt named by the incident."""
+        identity = 'c' * 32
+        value = dict({'format': 1, 'last_check_at': self.at.isoformat(), 'condition': 'offsite_policy_renewal_due',
+                      'incident_id': identity, 'incident_attempt': identity,
+                      'last_attempt_at': self.at.isoformat()}, **changes)
+        a.backup.write_private(self.alerts / 'status.json', json.dumps(value).encode())
+        if value['incident_attempt']:
+            receipt = {'format': 1, 'kind': 'operational', 'condition': 'offsite_policy_renewal_due',
+                       'attempted_at': self.at.isoformat(), 'outcome': 'provider_accepted',
+                       'provider_message_id': 'legacy-provider-id', 'provider_accepted': True,
+                       'delivery_confirmed': False, 'inbox_receipt_confirmed': False}
+            for suffix in ('pending', 'result'):
+                a.backup.write_private(self.alerts / f'incident-{identity}-{suffix}.json',
+                                       json.dumps(dict(receipt, outcome='pending', provider_accepted=False,
+                                                       provider_message_id=None) if suffix == 'pending'
+                                                  else receipt).encode())
+        return identity
+
+    def test_escalation_is_its_own_attempt_with_identity_receipt_and_recorded_condition(self):
+        self.recovery.return_value['condition'] = 'offsite_policy_renewal_due'
+        a.check(self.at)
+        first = self.state()
+        self.assertEqual((first['incident_attempt'], first['incident_attempt_notice']),
+                         (first['incident_id'], 'initial'))
+        self.recovery.return_value['condition'] = 'offsite_policy_expired'
+        result, code = a.check(self.at + timedelta(hours=17))
+        state = self.state()
+        self.assertEqual(code, 1)
+        self.assertEqual(state['incident_id'], first['incident_id'])
+        self.assertNotEqual(state['incident_attempt'], first['incident_attempt'])
+        self.assertEqual((state['incident_attempt_condition'], state['incident_attempt_notice'],
+                          state['incident_attempt_count']), ('offsite_policy_expired', 'escalation', 2))
+        self.assertEqual(state['incident_conditions_announced'],
+                         ['offsite_policy_renewal_due', 'offsite_policy_expired'])
+        self.assertEqual(state['last_attempt_at'], (self.at + timedelta(hours=17)).isoformat())
+        self.assertEqual(self.record(state['incident_attempt'])['condition'], 'offsite_policy_expired')
+        self.assertEqual(self.record(first['incident_attempt'])['condition'], 'offsite_policy_renewal_due')
+        self.assertEqual(len(list(self.alerts.glob('incident-*-result.json'))), 2)
+        self.assertTrue(result['alert']['provider_accepted'])
+        self.assertEqual(result['incident']['last_notice'], 'escalation')
+        self.assertEqual(result['incident']['open_seconds'], 17 * 3600)
+        subject, body = self.sent()[-1]
+        self.assertEqual(subject, '[QuillMD operations] ESCALATION: backup recovery condition changed')
+        for text in ('Condition: offsite_policy_expired', 'severity increased', 'offsite_policy_renewal_due',
+                     'open for at least 17 hours 0 minutes', 'notice 2', 'Reference: incident-' + state['incident_attempt'],
+                     a.ERRORS['offsite_policy_expired']):
+            self.assertIn(text, body)
+        # The status reader sees the LATEST notice, not the first.
+        status, _ = a.status(self.at + timedelta(hours=17, minutes=1))
+        self.assertEqual(status['alert']['provider_accepted'], True)
+        self.assertEqual(status['incident']['last_notice_condition'], 'offsite_policy_expired')
+
+    def test_severity_escalation_is_immediate_but_only_once_per_incident(self):
+        self.recovery.return_value['condition'] = 'offsite_capacity_low'           # warning
+        a.check(self.at)
+        self.health.return_value = 'backup_failed'                                 # failure
+        a.check(self.at + timedelta(minutes=5))
+        self.assertEqual(self.sender.call_count, 2)
+        self.assertIn('severity increased', self.sent()[-1][1])
+        self.health.return_value = 'healthy'                                       # back to the warning
+        a.check(self.at + timedelta(minutes=10))
+        self.health.return_value = 'backup_stale'                                  # a NEW failure
+        result, _ = a.check(self.at + timedelta(minutes=15))
+        self.assertEqual(self.sender.call_count, 2, 'a second failure is not more severe than the first')
+        self.assertEqual(result['incident']['escalation_deferred_until'],
+                         (self.at + timedelta(minutes=65)).isoformat())
+
+    def test_same_severity_change_waits_for_spacing_then_is_announced(self):
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        self.health.return_value = 'backup_stale'
+        for minutes in (5, 30, 59):
+            result, code = a.check(self.at + timedelta(minutes=minutes))
+            self.assertEqual((code, result['condition']), (1, 'backup_stale'))
+            self.assertTrue(result['alert']['provider_accepted'], 'the latest receipt stays visible')
+            self.assertEqual(result['incident']['escalation_deferred_until'],
+                             (self.at + timedelta(hours=1)).isoformat())
+        self.assertEqual(self.sender.call_count, 1)
+        result, _ = a.check(self.at + timedelta(minutes=60))
+        self.assertEqual(self.sender.call_count, 2)
+        self.assertIn('Condition: backup_stale', self.sent()[-1][1])
+        self.assertIn('severity unchanged', self.sent()[-1][1])
+        self.assertIsNone(result['incident']['escalation_deferred_until'])
+
+    def test_change_to_a_less_severe_new_condition_is_announced_as_a_decrease(self):
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        self.health.return_value = 'healthy'
+        self.recovery.return_value['condition'] = 'offsite_capacity_low'
+        a.check(self.at + timedelta(hours=2))
+        self.assertEqual(self.sender.call_count, 2)
+        self.assertIn('ESCALATION', self.sent()[-1][0])
+        self.assertIn('severity decreased', self.sent()[-1][1])
+
+    def test_reminder_names_duration_and_current_condition_at_a_fixed_interval(self):
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        for hour in range(1, 24):
+            a.check(self.at + timedelta(hours=hour))
+        self.assertEqual(self.sender.call_count, 1)
+        result, code = a.check(self.at + timedelta(hours=24))
+        self.assertEqual((code, self.sender.call_count), (1, 2))
+        subject, body = self.sent()[-1]
+        self.assertEqual(subject, '[QuillMD operations] REMINDER: backup recovery incident still open')
+        for text in ('Condition: backup_failed', 'Severity: failure', 'open for at least 24 hours 0 minutes',
+                     'since ' + self.at.isoformat(), 'notice 2', 'still open'):
+            self.assertIn(text, body)
+        state = self.state()
+        self.assertEqual((state['incident_attempt_notice'], state['incident_attempt_count'],
+                          state['incident_conditions_announced']), ('reminder', 2, ['backup_failed']))
+        self.assertNotEqual(state['incident_attempt'], state['incident_id'])
+        self.assertEqual(result['incident']['next_reminder_at'], (self.at + timedelta(hours=48)).isoformat())
+        a.check(self.at + timedelta(hours=47, minutes=55))
+        self.assertEqual(self.sender.call_count, 2)
+        a.check(self.at + timedelta(hours=48))
+        self.assertEqual(self.sender.call_count, 3)
+        self.assertIn('open for at least 48 hours 0 minutes', self.sent()[-1][1])
+        self.assertIn('notice 3', self.sent()[-1][1])
+
+    def test_reminder_is_measured_from_the_last_notice_and_names_the_current_condition(self):
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        self.health.return_value = 'backup_stale'
+        a.check(self.at + timedelta(hours=10))                 # escalation
+        self.health.return_value = 'backup_failed'             # back to an announced condition
+        a.check(self.at + timedelta(hours=33, minutes=55))
+        self.assertEqual(self.sender.call_count, 2)
+        a.check(self.at + timedelta(hours=34))
+        self.assertEqual(self.sender.call_count, 3)
+        subject, body = self.sent()[-1]
+        self.assertIn('REMINDER', subject)
+        self.assertIn('Condition: backup_failed', body)
+        self.assertIn('open for at least 34 hours 0 minutes', body)
+
+    def test_flapping_between_announced_conditions_sends_no_more_than_the_cooldown_allows(self):
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        for step in range(1, 288):                             # every five minutes, just under 24 h
+            self.health.return_value = 'backup_stale' if step % 2 else 'backup_failed'
+            a.check(self.at + timedelta(minutes=5 * step))
+        conditions = [body.split('Condition: ')[1].split('\n')[0] for _, body in self.sent()]
+        self.assertEqual(conditions, ['backup_failed', 'backup_stale'])
+        self.assertEqual(self.state()['last_attempt_at'], (self.at + timedelta(minutes=65)).isoformat())
+
+    def test_flapping_between_healthy_and_failed_sends_once_per_cooldown(self):
+        for step in range(288):
+            self.health.return_value = 'backup_failed' if step % 2 == 0 else 'healthy'
+            a.check(self.at + timedelta(minutes=5 * step))
+        self.assertEqual(self.sender.call_count, 1)
+        self.health.return_value = 'backup_failed'
+        a.check(self.at + timedelta(hours=24))
+        self.assertEqual(self.sender.call_count, 2)
+        self.assertIn('Backup recovery requires attention', self.sent()[-1][0])
+
+    def test_rotating_new_conditions_are_spaced_not_stormed(self):
+        rotation = ['backup_stale', 'backup_timeout', 'backup_status_unavailable', 'backup_artifacts_unavailable',
+                    'backup_schedule_unavailable', 'offsite_upload_failed', 'offsite_integrity_failed']
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        for step in range(1, 37):                              # three hours, a new condition every check
+            condition = rotation[step % len(rotation)]
+            if condition.startswith('offsite'):
+                self.health.return_value = 'healthy'
+                self.recovery.return_value['condition'] = condition
+            else:
+                self.health.return_value = condition
+            a.check(self.at + timedelta(minutes=5 * step))
+        times = [datetime.fromisoformat(json.loads(p.read_text())['attempted_at'])
+                 for p in self.alerts.glob('incident-*-result.json')]
+        times.sort()
+        self.assertEqual(len(times), 4)                        # t0, then one per spacing window
+        self.assertTrue(all((later - earlier).total_seconds() >= a.ESCALATION_SPACING_SECONDS
+                            for earlier, later in zip(times, times[1:])))
+
+    def test_crash_between_persisting_an_escalation_and_its_request_fails_closed_without_email(self):
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        before = self.state()
+        self.health.return_value = 'backup_stale'
+        with patch.object(a, 'attempt_alert', side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                a.check(self.at + timedelta(hours=2))
+        persisted = self.state()
+        self.assertNotEqual(persisted['incident_attempt'], before['incident_attempt'])
+        self.assertEqual(persisted['incident_attempt_condition'], 'backup_stale')
+        self.assertFalse(list(self.alerts.glob(f"incident-{persisted['incident_attempt']}-*")))
+        for hours in (3, 30, 100):
+            result, code = a.check(self.at + timedelta(hours=hours))
+            self.assertEqual((code, result['condition']), (1, 'monitoring_state_unavailable'))
+        self.assertEqual(a.status(self.at + timedelta(hours=100))[0]['condition'], 'monitoring_state_unavailable')
+        self.sender.assert_called_once()
+
+    def test_interrupted_escalation_request_is_pending_and_never_followed(self):
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        self.health.return_value = 'backup_stale'
+        self.sender.side_effect = KeyboardInterrupt
+        with self.assertRaises(KeyboardInterrupt):
+            a.check(self.at + timedelta(hours=2))
+        self.sender.side_effect = None
+        for hours in (3, 30, 100):
+            result, code = a.check(self.at + timedelta(hours=hours))
+            self.assertEqual((code, result['condition'], result['alert']['outcome']),
+                             (1, 'alert_delivery_unconfirmed', 'pending'))
+        self.assertEqual(self.sender.call_count, 2)
+
+    def test_an_uncertain_notice_is_never_followed_by_escalation_or_reminder(self):
+        self.recovery.return_value['condition'] = 'offsite_capacity_low'
+        self.sender.side_effect = RuntimeError('provider-canary')
+        result, code = a.check(self.at)
+        self.assertEqual((code, result['condition']), (1, 'alert_delivery_unconfirmed'))
+        self.sender.side_effect = None
+        self.health.return_value = 'backup_failed'
+        for hours in (1, 25, 49):
+            result, code = a.check(self.at + timedelta(hours=hours))
+            self.assertEqual((code, result['condition']), (1, 'alert_delivery_unconfirmed'))
+            self.assertIsNone(result['incident']['next_reminder_at'])
+        self.sender.assert_called_once()
+        self.assertEqual(a.status(self.at + timedelta(hours=49))[0]['condition'], 'alert_delivery_unconfirmed')
+        self.assertNotIn('canary', ''.join(p.read_text() for p in self.alerts.glob('*.json')))
+
+    def test_healthy_clears_every_incident_key_and_the_next_incident_starts_fresh(self):
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        self.health.return_value = 'backup_stale'
+        a.check(self.at + timedelta(hours=2))
+        self.assertEqual(self.sender.call_count, 2)
+        for quiet in ('healthy', 'offsite_policy_expiring'):
+            with self.subTest(quiet=quiet):
+                self.health.return_value = 'healthy'
+                self.recovery.return_value['condition'] = quiet
+                result, _ = a.check(self.at + timedelta(hours=3))
+                self.assertIsNone(result['incident'])
+                self.assertEqual({key: value for key, value in self.state().items() if key.startswith('incident')},
+                                 a.closed_incident())
+                self.assertEqual(self.state()['last_attempt_at'], (self.at + timedelta(hours=2)).isoformat())
+        for hours in (4, 26, 50):                              # nothing is reminded about a closed incident
+            a.check(self.at + timedelta(hours=hours))
+        self.assertEqual(self.sender.call_count, 2)
+        self.health.return_value = 'backup_stale'
+        result, _ = a.check(self.at + timedelta(hours=51))
+        state = self.state()
+        self.assertEqual(self.sender.call_count, 3)
+        self.assertIn('Backup recovery requires attention', self.sent()[-1][0])
+        self.assertEqual((state['incident_attempt_notice'], state['incident_attempt_count'],
+                          state['incident_conditions_announced'], state['incident_attempt']),
+                         ('initial', 1, ['backup_stale'], state['incident_id']))
+        self.assertEqual(result['incident']['open_seconds'], 0)
+
+    def test_new_incident_inside_the_cooldown_announces_its_current_condition_when_it_ends(self):
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        self.health.return_value = 'healthy'
+        a.check(self.at + timedelta(hours=1))
+        self.health.return_value = 'backup_stale'
+        result, _ = a.check(self.at + timedelta(hours=2))
+        self.assertEqual(result['alert']['outcome'], 'cooldown_suppressed')
+        self.assertEqual(result['incident']['opened_at'], (self.at + timedelta(hours=2)).isoformat())
+        self.health.return_value = 'backup_timeout'
+        a.check(self.at + timedelta(hours=24))
+        self.assertEqual(self.sender.call_count, 2)
+        self.assertIn('Condition: backup_timeout', self.sent()[-1][1])
+        self.assertEqual(self.state()['incident_attempt_notice'], 'initial')
+
+    def test_previous_release_state_upgrades_and_its_open_incident_escalates(self):
+        identity = self.legacy()
+        self.recovery.return_value['condition'] = 'offsite_policy_expired'
+        later = self.at + timedelta(days=3, hours=17)
+        status_before = (self.alerts / 'status.json').read_bytes()
+        self.assertEqual(a.status(later - timedelta(minutes=1))[0]['condition'], 'monitoring_stale')
+        self.assertEqual((self.alerts / 'status.json').read_bytes(), status_before, 'status stays read-only')
+        result, code = a.check(later)
+        state = self.state()
+        self.assertEqual((code, self.sender.call_count), (1, 1))
+        self.assertEqual(state['format'], 2)
+        self.assertEqual(set(state) - a.LEGACY_KEYS, set(a.closed_incident()) - a.LEGACY_KEYS)
+        self.assertEqual((state['incident_id'], state['incident_opened_at'], state['incident_attempt_count'],
+                          state['incident_conditions_announced']),
+                         (identity, self.at.isoformat(), 2, ['offsite_policy_renewal_due', 'offsite_policy_expired']))
+        self.assertIn('ESCALATION', self.sent()[-1][0])
+        self.assertIn('open for at least 89 hours 0 minutes', self.sent()[-1][1])
+        self.assertEqual(self.record(identity)['provider_message_id'], 'legacy-provider-id')
+
+    def test_previous_release_state_without_an_attempt_upgrades_to_an_open_incident(self):
+        self.legacy(incident_attempt=None, last_attempt_at=None)
+        self.health.return_value = 'backup_failed'
+        a.check(self.at + timedelta(minutes=5))
+        state = self.state()
+        self.assertEqual((state['incident_id'], state['incident_opened_at'], state['incident_attempt_notice']),
+                         ('c' * 32, self.at.isoformat(), 'initial'))
+        self.sender.assert_called_once()
+
+    def test_inconsistent_previous_release_state_fails_closed_without_email(self):
+        self.legacy(incident_attempt='d' * 32)
+        result, code = a.check(self.at + timedelta(days=2))
+        self.assertEqual((code, result['condition']), (1, 'monitoring_state_unavailable'))
+        self.sender.assert_not_called()
+
+    def test_invalid_incident_records_fail_closed_without_email_or_disclosure(self):
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        self.health.return_value = 'backup_stale'
+        a.check(self.at + timedelta(hours=2))
+        original = self.state()
+        for changes in ({'incident_conditions_announced': ['private-clinical-canary', 'backup_stale']},
+                        {'incident_conditions_announced': ['backup_stale', 'backup_stale']},
+                        {'incident_conditions_announced': ['healthy', 'backup_stale']},
+                        {'incident_attempt_count': True}, {'incident_attempt_count': 1},
+                        {'incident_attempt_notice': 'private-canary'}, {'incident_attempt_condition': 'backup_timeout'},
+                        {'incident_opened_at': None}, {'incident_opened_at': 'private-canary'},
+                        {'incident_attempt_notice': 'initial', 'incident_attempt_count': 1},
+                        {'format': 1}, {'unexpected': 'private-canary'}):
+            with self.subTest(changes=changes):
+                (self.alerts / 'status.json').write_text(json.dumps(dict(original, **changes)))
+                result, code = a.check(self.at + timedelta(days=2))
+                self.assertEqual((code, result['condition']), (1, 'monitoring_state_unavailable'))
+                self.assertNotIn('canary', json.dumps(result))
+        self.assertEqual(self.sender.call_count, 2)
+
+    def test_a_receipt_that_disagrees_with_state_fails_closed(self):
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        path = next(self.alerts.glob('incident-*-result.json'))
+        path.write_text(json.dumps(dict(json.loads(path.read_text()), condition='backup_stale')))
+        result, code = a.check(self.at + timedelta(days=2))
+        self.assertEqual((code, result['condition']), (1, 'monitoring_state_unavailable'))
+        self.sender.assert_called_once()
+
+    def test_notices_carry_no_secret_and_the_summary_carries_no_identity(self):
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        self.health.return_value = 'backup_stale'
+        a.check(self.at + timedelta(hours=2))
+        result, _ = a.check(self.at + timedelta(hours=26))
+        self.assertEqual(self.sender.call_count, 3)
+        for subject, body in self.sent():
+            for secret in ('re_synthetic_not_a_real_key', 'DO_NOT_COPY', 'noreply@', 'https://'):
+                self.assertNotIn(secret, subject + body)
+            self.assertIn('No patient information or credentials are included.', body)
+        state = self.state()
+        for identity in (state['incident_id'], state['incident_attempt']):
+            self.assertNotIn(identity, json.dumps(result['incident']))
+
+    def test_status_readers_keep_their_shape(self):
+        """The publisher copies these report keys into the console; extended, never renamed."""
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        self.health.return_value = 'backup_stale'
+        a.check(self.at + timedelta(hours=2))
+        result, code = a.status(self.at + timedelta(hours=2, minutes=1))
+        self.assertEqual(code, 1)
+        self.assertLessEqual({'format', 'condition', 'action', 'checked_at', 'healthy', 'severity', 'alert',
+                              'offsite_recovery_verified', 'local_capture', 'offsite', 'external_monitor',
+                              'outside_host_failure_detection', 'clinical_content_included',
+                              'monitor_age_seconds', 'stale_after_seconds'}, set(result))
+        self.assertEqual(set(result['alert']), {'outcome', 'provider_message_id', 'provider_accepted',
+                                                'delivery_confirmed', 'inbox_receipt_confirmed'})
+        self.assertIs(result['clinical_content_included'], False)
+        self.assertEqual(result['incident']['conditions_announced'], ['backup_failed', 'backup_stale'])
+        self.assertLessEqual(a.LEGACY_KEYS, set(self.state()))
 
 
 class RecoveryStageTests(unittest.TestCase):

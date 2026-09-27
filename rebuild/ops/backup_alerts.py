@@ -35,7 +35,16 @@ HEARTBEAT_INTERVAL_SECONDS = 300
 RECIPIENT = 'kasra.rayat@gmail.com'
 TEST_AUTHORIZATION = '20260920-operation-recovery'
 STALE_SECONDS = 15 * 60
+#: Between the FIRST notices of successive incidents: a condition flapping between healthy and
+#: unhealthy opens a new incident every flap, and this is what stops that becoming a storm.
 COOLDOWN_SECONDS = 24 * 3600
+#: Inside one open incident, a still-open incident is re-announced this long after its last notice.
+REMINDER_SECONDS = 24 * 3600
+#: Inside one open incident, the least time between a notice and a CHANGE to a condition of the
+#: same or lower severity. A change to a MORE severe condition than any this incident has
+#: announced is not held by it; that can happen at most once per incident (warning -> failure).
+ESCALATION_SPACING_SECONDS = 3600
+NOTICES = ('initial', 'escalation', 'reminder')
 BACKUP_TIMEOUT_SECONDS = 600
 OFFSITE_STALE_SECONDS = 30 * 3600
 OFFSITE_TIMEOUT_SECONDS = 1200
@@ -84,6 +93,20 @@ SAFE_ENV_FIELDS = (
     'QUILLMD_EMAIL_MODE', 'QUILLMD_EMAIL_FROM', 'QUILLMD_EMAIL_VERIFIED_DOMAIN',
     'QUILLMD_EMAIL_ALLOWED_RECIPIENTS', 'QUILLMD_APP_BASE_URL', 'RESEND_API_KEY',
 )
+IN_PROGRESS = {'backup_in_progress', 'offsite_in_progress', 'offsite_renewal_in_progress'}
+#: A check in one of these closes the open incident.
+QUIET = {'healthy', 'offsite_policy_expiring'}
+#: A check in one of these keeps the incident open and announces nothing.
+UNANNOUNCED = {'backup_in_progress', 'offsite_in_progress', 'offsite_pending_configuration',
+               'offsite_renewal_in_progress'}
+ANNOUNCEABLE = set(ERRORS) - QUIET - UNANNOUNCED - {'authorized_nonclinical_test'}
+SEVERITY_RANK = {'warning': 1, 'failure': 2}
+
+
+def severity(condition):
+    """The one severity rule: report() and the escalation decision both read this."""
+    return ('warning' if condition in WARNINGS else 'healthy' if condition == 'healthy'
+            else 'in_progress' if condition in IN_PROGRESS else 'failure')
 
 
 def now():
@@ -735,9 +758,46 @@ def local_capture_status(at):
         return None
 
 
+def closed_incident():
+    """Every per-incident key, closed. `last_attempt_at` is deliberately NOT here: it outlives
+    the incident because the cooldown between incidents is measured from it."""
+    return {'incident_id': None, 'incident_attempt': None, 'incident_opened_at': None,
+            'incident_attempt_condition': None, 'incident_attempt_notice': None,
+            'incident_attempt_count': 0, 'incident_conditions_announced': []}
+
+
 def initial_state():
-    return {'format': 1, 'last_check_at': None, 'condition': 'monitoring_stale',
-            'incident_id': None, 'incident_attempt': None, 'last_attempt_at': None}
+    # Format 2 EXTENDS format 1: every format-1 key keeps its name and meaning, with
+    # `incident_attempt` now naming the incident's LATEST notice (its first notice keeps the
+    # incident's own identity, exactly as format 1 wrote it).
+    return {'format': 2, 'last_check_at': None, 'condition': 'monitoring_stale',
+            'incident_id': None, 'last_attempt_at': None, **closed_incident()}
+
+
+LEGACY_KEYS = frozenset({'format', 'last_check_at', 'condition', 'incident_id',
+                         'incident_attempt', 'last_attempt_at'})
+
+
+def upgrade_legacy_state(value):
+    """Read the six-key state the previous release wrote, without inventing anything.
+
+    Its one attempt becomes this incident's first notice, and WHAT that attempt announced is
+    read from the attempt's own durable record rather than assumed. An unreadable record fails
+    closed here exactly as its replay would have.
+    """
+    state = dict(initial_state(), **{key: value[key] for key in LEGACY_KEYS - {'format'}})
+    if value['incident_attempt']:
+        backup.require(value['incident_attempt'] == value['incident_id']
+                       and value['last_attempt_at'] is not None, 'Invalid legacy incident.')
+        record = attempt_record('incident-' + value['incident_attempt'])
+        state.update(incident_opened_at=record['attempted_at'],
+                     incident_attempt_condition=record['condition'], incident_attempt_notice='initial',
+                     incident_attempt_count=1, incident_conditions_announced=[record['condition']])
+    elif value['incident_id']:
+        # Opened no later than the last check that persisted it; durations are stated as "at least".
+        backup.require(value['last_check_at'] is not None, 'Invalid legacy incident.')
+        state['incident_opened_at'] = value['last_check_at']
+    return state
 
 
 def read_state():
@@ -748,14 +808,38 @@ def read_state():
         backup.require(not any(DIRECTORY.glob('incident-*')), 'Incident state is missing.')
         return initial_state()
     value = json.loads(backup.read_private(path, 65536))
-    backup.require(set(value) == set(initial_state()) and value['format'] == 1
+    backup.require(type(value) is dict and type(value.get('format')) is int, 'Invalid monitor state.')
+    legacy = set(value) == LEGACY_KEYS and value['format'] == 1
+    backup.require((legacy or (set(value) == set(initial_state()) and value['format'] == 2))
                    and value['condition'] in ERRORS, 'Invalid monitor state.')
-    for key in ('last_check_at', 'last_attempt_at'):
-        if value[key] is not None:
+    for key in ('last_check_at', 'last_attempt_at', 'incident_opened_at'):
+        if value.get(key) is not None:
             timestamp(value[key])
     for key in ('incident_id', 'incident_attempt'):
         backup.require(value[key] is None or isinstance(value[key], str)
                        and re.fullmatch(r'[a-f0-9]{32}', value[key]), 'Invalid incident identity.')
+    if legacy:
+        value = upgrade_legacy_state(value)
+    announced, count = value['incident_conditions_announced'], value['incident_attempt_count']
+    backup.require(type(announced) is list and len(set(announced)) == len(announced)
+                   and all(isinstance(item, str) and item in ANNOUNCEABLE for item in announced)
+                   and type(count) is int and 0 <= count <= 100000 and len(announced) <= count
+                   and value['incident_attempt_notice'] in (None, *NOTICES)
+                   and value['incident_attempt_condition'] in (None, *announced), 'Invalid incident record.')
+    if value['incident_attempt'] is None:
+        # No notice yet: nothing announced, and an open incident still knows when it opened.
+        backup.require(count == 0 and value['incident_attempt_notice'] is None
+                       and value['incident_attempt_condition'] is None
+                       and (value['incident_opened_at'] is None) == (value['incident_id'] is None),
+                       'Invalid incident record.')
+    else:
+        backup.require(value['incident_id'] is not None and value['incident_opened_at'] is not None
+                       and value['last_attempt_at'] is not None and count >= 1
+                       and value['incident_attempt_condition'] is not None
+                       and (value['incident_attempt_notice'] == 'initial') == (count == 1)
+                       and (value['incident_attempt_notice'] != 'initial'
+                            or value['incident_attempt'] == value['incident_id']),
+                       'Invalid incident record.')
     return value
 
 
@@ -799,7 +883,42 @@ def email_transport(values, subject, body):
     return identifier
 
 
-def attempt_alert(values, condition, identity, at, *, test=False):
+def duration(seconds):
+    seconds = max(0, int(seconds))
+    return f'{seconds // 3600} hours {seconds % 3600 // 60} minutes'
+
+
+def notice_message(condition, at, prefix, *, test=False, notice='initial', incident=None):
+    """Subject and body. Fixed vocabulary, timestamps and a random reference only: no secret,
+    provider response or patient information can reach either."""
+    footer = ('\n\nNo patient information or credentials are included. '
+              'This message confirms neither offsite recovery nor outside-host monitoring.\n')
+    lines = f'UTC check: {at.isoformat()}\nReference: {prefix}\n' + ERRORS[condition] + footer
+    header = 'QuillMD private synthetic environment: operational backup notification.\n'
+    if test or notice == 'initial':
+        subject = ('[QuillMD NONCLINICAL TEST] Simulated backup failure' if test
+                   else '[QuillMD operations] Backup recovery requires attention')
+        return subject, (header + ('AUTHORIZED SIMULATED FAILURE; NO BACKUP WAS INTERRUPTED.\n' if test else '')
+                         + f'Condition: {condition}\n' + lines)
+    opened = timestamp(incident['opened_at'])
+    open_for = (f'Incident open for at least {duration((at - opened).total_seconds())}, '
+                f'since {opened.isoformat()}. This is notice {incident["count"]} for this incident.\n')
+    if notice == 'escalation':
+        previous = incident['previous']
+        movement = SEVERITY_RANK[severity(condition)] - SEVERITY_RANK[severity(previous)]
+        return ('[QuillMD operations] ESCALATION: backup recovery condition changed',
+                header + 'ESCALATION: an open incident changed to a new condition since its last notice.\n'
+                + f'Condition: {condition}\nSeverity: {severity(condition)} '
+                + f'(last notice announced {previous}, {severity(previous)}; severity '
+                + ('increased' if movement > 0 else 'unchanged' if movement == 0 else 'decreased') + ')\n'
+                + open_for + lines)
+    backup.require(notice == 'reminder', 'Unknown notice.')
+    return ('[QuillMD operations] REMINDER: backup recovery incident still open',
+            header + 'REMINDER: this incident is still open; no healthy check has closed it.\n'
+            + f'Condition: {condition}\nSeverity: {severity(condition)}\n' + open_for + lines)
+
+
+def attempt_alert(values, condition, identity, at, *, test=False, notice='initial', incident=None):
     prefix = 'test-' + TEST_AUTHORIZATION if test else 'incident-' + identity
     pending = DIRECTORY / (prefix + '-pending.json')
     result_path = DIRECTORY / (prefix + '-result.json')
@@ -815,14 +934,10 @@ def attempt_alert(values, condition, identity, at, *, test=False):
               'condition': condition, 'attempted_at': at.isoformat(), 'outcome': 'pending',
               'provider_message_id': None, 'provider_accepted': False,
               'delivery_confirmed': False, 'inbox_receipt_confirmed': False}
+    # Composed before the reservation and without I/O: a message that cannot be composed raises
+    # here, leaves no request record, and the already-persisted identity then fails closed.
+    subject, body = notice_message(condition, at, prefix, test=test, notice=notice, incident=incident)
     backup.write_private(pending, json.dumps(record, sort_keys=True).encode() + b'\n')
-    subject = ('[QuillMD NONCLINICAL TEST] Simulated backup failure' if test
-               else '[QuillMD operations] Backup recovery requires attention')
-    body = ('QuillMD private synthetic environment: operational backup notification.\n'
-            + ('AUTHORIZED SIMULATED FAILURE; NO BACKUP WAS INTERRUPTED.\n' if test else '')
-            + f'Condition: {condition}\nUTC check: {at.isoformat()}\nReference: {prefix}\n'
-            + ERRORS[condition] + '\n\nNo patient information or credentials are included. '
-            'This message confirms neither offsite recovery nor outside-host monitoring.\n')
     try:
         provider_id = email_transport(values, subject, body)
         record.update(outcome='provider_accepted', provider_accepted=True,
@@ -836,6 +951,17 @@ def attempt_alert(values, condition, identity, at, *, test=False):
 
 
 def receipt(prefix):
+    return public_receipt(attempt_record(prefix))
+
+
+def public_receipt(value):
+    # Return a fixed set, never unexpected fields supplied by a malformed file.
+    return {key: value[key] for key in ('outcome', 'provider_message_id', 'provider_accepted',
+                                      'delivery_confirmed', 'inbox_receipt_confirmed')}
+
+
+def attempt_record(prefix):
+    """The validated durable record of one attempt, including what it announced and when."""
     path = DIRECTORY / (prefix + '-result.json')
     if not path.exists() and not path.is_symlink():
         path = DIRECTORY / (prefix + '-pending.json')
@@ -858,21 +984,55 @@ def receipt(prefix):
     identifier = value['provider_message_id']
     backup.require((isinstance(identifier, str) and re.fullmatch(r'[A-Za-z0-9_-]{1,200}', identifier))
                    if value['provider_accepted'] else identifier is None, 'Invalid provider identifier.')
-    # Return a fixed set, never unexpected fields supplied by a malformed file.
-    return {key: value[key] for key in ('outcome', 'provider_message_id', 'provider_accepted',
-                                      'delivery_confirmed', 'inbox_receipt_confirmed')}
+    return value
 
 
-def report(condition, *, checked_at=None, alert=None, recovery=None, local_capture=None, external=None):
-    warning = condition in WARNINGS
-    in_progress = condition in {'backup_in_progress', 'offsite_in_progress', 'offsite_renewal_in_progress'}
+def report(condition, *, checked_at=None, alert=None, recovery=None, local_capture=None, external=None,
+           incident=None):
     return {'format': 1, 'condition': condition, 'action': ERRORS[condition],
             'checked_at': checked_at, 'healthy': condition in {'healthy', 'backup_in_progress', 'offsite_in_progress'},
-            'severity': 'warning' if warning else 'healthy' if condition == 'healthy' else 'in_progress' if in_progress else 'failure',
+            'severity': severity(condition),
             'alert': alert, 'offsite_recovery_verified': bool(recovery and recovery.get('last_isolated_restore')),
             'local_capture': local_capture, 'offsite': recovery,
-            'external_monitor': external,
+            'external_monitor': external, 'incident': incident,
             'outside_host_failure_detection': False, 'clinical_content_included': False}
+
+
+def incident_summary(state, at, *, latest_confirmed, deferred_until=None):
+    """Nonsecret incident facts for the operator: no identity, provider data or content."""
+    if not state['incident_id']:
+        return None
+    reminder = None
+    if state['incident_attempt'] and latest_confirmed:
+        reminder = (timestamp(state['last_attempt_at']) + timedelta(seconds=REMINDER_SECONDS)).isoformat()
+    return {'opened_at': state['incident_opened_at'],
+            'open_seconds': int((at - timestamp(state['incident_opened_at'])).total_seconds()),
+            'notices_attempted': state['incident_attempt_count'],
+            'last_notice': state['incident_attempt_notice'],
+            'last_notice_condition': state['incident_attempt_condition'],
+            'conditions_announced': list(state['incident_conditions_announced']),
+            'next_reminder_at': reminder,
+            'escalation_deferred_until': deferred_until.isoformat() if deferred_until else None}
+
+
+def plan_notice(state, condition, at):
+    """What an open incident whose latest notice was ACCEPTED owes now: (notice, deferred_until).
+
+    A condition this incident has already announced is never announced again except as the
+    reminder, so a condition flapping between announced states sends nothing more.
+    """
+    last = timestamp(state['last_attempt_at'])
+    elapsed = (at - last).total_seconds()
+    announced = state['incident_conditions_announced']
+    if condition not in announced:
+        if SEVERITY_RANK[severity(condition)] > max(SEVERITY_RANK[severity(item)] for item in announced):
+            return 'escalation', None
+        if elapsed >= ESCALATION_SPACING_SECONDS:
+            return 'escalation', None
+        return None, last + timedelta(seconds=ESCALATION_SPACING_SECONDS)
+    if elapsed >= REMINDER_SECONDS:
+        return 'reminder', None
+    return None, None
 
 
 def _record_recovery_failure(error):
@@ -954,29 +1114,54 @@ def check(at=None):
             if (condition == 'healthy' or condition in WARNINGS) and external['outcome'] in {'configuration_or_state_invalid', 'pending', 'uncertain_no_retry'}:
                 condition = 'external_monitor_unconfirmed'
             state.update(last_check_at=at.isoformat(), condition=condition)
-            alert = None
-            if condition in {'healthy', 'offsite_policy_expiring'}:
-                state.update(incident_id=None, incident_attempt=None)
-            elif condition not in {'backup_in_progress', 'offsite_in_progress', 'offsite_pending_configuration', 'offsite_renewal_in_progress'}:
+            alert = deferred_until = None
+            if condition in QUIET:
+                state.update(closed_incident())
+            elif condition not in UNANNOUNCED:
                 if not state['incident_id']:
-                    state['incident_id'] = secrets.token_hex(16)
+                    state.update(incident_id=secrets.token_hex(16), incident_opened_at=at.isoformat())
+                notice = None
                 if state['incident_attempt']:
-                    alert = receipt('incident-' + state['incident_attempt'])
+                    latest = attempt_record('incident-' + state['incident_attempt'])
+                    backup.require(latest['condition'] == state['incident_attempt_condition'],
+                                   'Alert receipt and monitor state disagree.')
+                    alert = public_receipt(latest)
+                    # ⚠️ NEVER FOLLOW AN UNCONFIRMED NOTICE. A pending or uncertain request keeps
+                    # the incident at alert_delivery_unconfirmed for operator review; a later
+                    # accepted reminder must not replace that receipt and read as confirmation.
+                    if alert['outcome'] == 'provider_accepted':
+                        notice, deferred_until = plan_notice(state, condition, at)
                 elif (state['last_attempt_at'] is None or
                       (at - timestamp(state['last_attempt_at'])).total_seconds() >= COOLDOWN_SECONDS):
-                    state.update(incident_attempt=state['incident_id'], last_attempt_at=at.isoformat())
+                    notice = 'initial'
+                else:
+                    alert = {'outcome': 'cooldown_suppressed', 'provider_accepted': False}
+                if notice:
+                    announced = state['incident_conditions_announced']
+                    context = {'opened_at': state['incident_opened_at'], 'previous': state['incident_attempt_condition'],
+                               'count': state['incident_attempt_count'] + 1}
+                    # The first notice keeps the incident's identity (the format-1 receipt name);
+                    # every later notice is a new request with its own identity and receipt.
+                    identity = state['incident_id'] if notice == 'initial' else secrets.token_hex(16)
+                    state.update(incident_attempt=identity, last_attempt_at=at.isoformat(),
+                                 incident_attempt_condition=condition, incident_attempt_notice=notice,
+                                 incident_attempt_count=context['count'],
+                                 incident_conditions_announced=(announced if condition in announced
+                                                                else announced + [condition]))
                     # Persist the identity before sending: a crash between state
                     # and pending receipt fails closed, requiring operator review.
                     scheduled.atomic_status(DIRECTORY / 'status.json', state)
-                    alert = attempt_alert(values, condition, state['incident_id'], at)
-                else:
-                    alert = {'outcome': 'cooldown_suppressed', 'provider_accepted': False}
+                    alert = attempt_alert(values, condition, identity, at, notice=notice, incident=context)
             scheduled.atomic_status(DIRECTORY / 'status.json', state)
+            incident = incident_summary(state, at, deferred_until=deferred_until,
+                                        latest_confirmed=bool(alert and alert['outcome'] == 'provider_accepted'))
             if alert and alert['outcome'] in {'pending', 'uncertain_no_retry'}:
                 return report('alert_delivery_unconfirmed', checked_at=state['last_check_at'], alert=alert,
-                              recovery=recovery, local_capture=local_capture, external=external), 1
+                              recovery=recovery, local_capture=local_capture, external=external,
+                              incident=incident), 1
             result = report(condition, checked_at=state['last_check_at'], alert=alert,
-                            recovery=recovery, local_capture=local_capture, external=external)
+                            recovery=recovery, local_capture=local_capture, external=external,
+                            incident=incident)
             return result, 0 if result['healthy'] or condition in WARNINGS | {'offsite_renewal_in_progress'} else 1
     except Exception:
         return report('monitoring_state_unavailable'), 1
@@ -1022,8 +1207,10 @@ def status(at=None):
         external = external_heartbeat(at)
         if (condition == 'healthy' or condition in WARNINGS) and external['outcome'] in {'configuration_or_state_invalid', 'pending', 'uncertain_no_retry'}:
             condition = 'external_monitor_unconfirmed'
+        incident = incident_summary(state, at, latest_confirmed=bool(alert and alert['provider_accepted']))
         result = report(condition, checked_at=state['last_check_at'], alert=alert,
-                        recovery=recovery, local_capture=local_capture_status(at), external=external)
+                        recovery=recovery, local_capture=local_capture_status(at), external=external,
+                        incident=incident)
         result.update(monitor_age_seconds=int(age) if age is not None else None,
                       stale_after_seconds=STALE_SECONDS)
         return result, 0 if result['healthy'] or condition in WARNINGS | {'offsite_renewal_in_progress'} else 1

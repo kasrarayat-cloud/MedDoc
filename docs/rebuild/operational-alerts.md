@@ -21,11 +21,28 @@ The fixed approved recipient is `kasra.rayat@gmail.com`. Configuration is
 `rebuild/.runtime/backup-secrets/backup-alerts.json`, claude0600. Its exact schema
 is installed by the reviewed scoped installer. No new provider key is required.
 
-One alert is attempted for an unhealthy incident, with a 24-hour interval between
-operational attempts. A healthy check ends the incident. The pending record is
+One alert is attempted when an unhealthy incident opens, with a 24-hour interval
+between the first notices of successive incidents, so a condition flapping between
+healthy and unhealthy cannot send more than once a day. Inside an open incident:
+
+- a change to a condition the incident has not yet announced is a new notice
+  (subject `ESCALATION`) with its own identity and receipt, stating the new
+  condition and whether severity rose, held or fell. It is sent at once when it is
+  more severe than anything the incident has announced (at most once per
+  incident: warning to failure), otherwise no sooner than one hour after the
+  incident's previous notice;
+- a condition the incident has already announced is never announced again, so
+  flapping between announced conditions sends nothing more;
+- a still-open incident is re-announced 24 hours after its last notice (subject
+  `REMINDER`), naming how long it has been open and its current condition.
+
+A healthy check ends the incident. The pending record is
 written before a provider request; a timeout or interruption is uncertain and
 must not be retried automatically, even after provider idempotency expires. An
-uncertain attempt requires operator review. The monitor's own status becomes
+uncertain attempt requires operator review, and it also stops every later
+escalation and reminder for that incident. The JSON status carries an `incident`
+summary (opened, notices, last notice and its condition, next reminder, any
+deferred escalation) without identities. The monitor's own status becomes
 stale after 15 minutes without a check. A broken monitor or lost email credential
 cannot reliably notify through that same broken channel: inspect its service
 failure and status locally, and keep outside-host detection separately gated.
@@ -86,6 +103,13 @@ bash scripts/run-ruled-mutation.sh \
 
 Rollback disables only the alert timer and stops only its service; both are
 checked inactive. All units, configuration and receipts remain for diagnosis.
+The monitor state `.runtime/backup-alerts/status.json` is format 2 since the
+escalation change: format 2 keeps every format-1 key and adds the incident's
+opening time, notice count, last notice kind and condition, and the conditions it
+has announced. The current monitor upgrades a format-1 file in place on its first
+check. A release older than that change refuses format 2 as invalid
+(`monitoring_state_unavailable`, no email) until the file holds format 1's six
+keys again; reverting the source alone is therefore not a working rollback.
 An in-flight send stopped during rollback remains uncertain. If source has moved
 since installation, the exact-source gate requires a new reviewed scope; do not
 bypass it or apply an old declaration to different source.
