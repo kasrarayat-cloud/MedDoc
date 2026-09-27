@@ -79,6 +79,11 @@ ATTESTATION_GUIDANCE = (' Leave consent, attestation, signature and dictated/tra
 # `LEGACY_PROFILE` IS that request, and it hashes as ABSENT so every existing fingerprint — claude-sonnet-4-6 at
 # 3/15/0.30 is configured-v1:fcc80267… — stays exactly what it was. Rollback is a model string, not a code change.
 SONNET_5='claude-sonnet-5'
+#: The provider names generate() has a branch for, spelled exactly. ⚠️ generate() sends to Anthropic when the provider is
+#: 'anthropic' and to OpenAI OTHERWISE, so a near-miss such as 'Anthropic' used to pass every model check (they key on
+#: 'anthropic'), show a green legacy row, hold the charge and then send a Claude model id to OpenAI — measured: the job
+#: stranded in reconciliation with its hold. Any other spelling is now an INVALID profile, refused before any hold.
+PROVIDERS=('anthropic','openai')
 THINKING_MODES=('disabled','adaptive')
 EFFORT_LEVELS=('low','medium','high')
 INFERENCE_GEOS=('us',)
@@ -149,6 +154,8 @@ def request_profile(provider,model,thinking,effort,inference_geo):
     because configuration() also prices transcription and renders pages, and a mistyped language-model setting must not
     stop either. Generation refuses it before any request (`job_request_profile`)."""
     geo=(inference_geo or '').strip()
+    if provider not in PROVIDERS:
+        return {'invalid':'QUILLMD_AI_PROVIDER must be exactly one of: '+', '.join(PROVIDERS)+'.'}
     if provider=='anthropic' and model==SONNET_5:
         if thinking not in THINKING_MODES:
             return {'invalid':'QUILLMD_AI_THINKING must be one of: '+', '.join(THINKING_MODES)+'.'}
@@ -193,6 +200,8 @@ def job_request_profile(config):
     """
     provider,model=config.get('provider'),config.get('model')
     profile=config.get('request_profile')
+    if provider not in PROVIDERS:
+        _refuse_profile('QuillMD has no provider named in this request, so it cannot be sent. Nothing was sent.')
     if unprofiled(provider,model):
         _refuse_profile('QuillMD has no request profile for this model, so the request cannot be built. Nothing was sent.')
     if profile is None:

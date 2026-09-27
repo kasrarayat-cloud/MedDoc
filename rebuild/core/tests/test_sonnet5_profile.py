@@ -211,6 +211,30 @@ class PricingFingerprint(SimpleTestCase):
         self.assertEqual(g.LEGACY_CLAUDE_MODELS, frozenset(('claude-sonnet-4-6', 'claude-haiku-4-5',
                                                             'claude-sonnet-4-5-20250929', 'claude-opus-4-1')))
 
+    def test_a_provider_spelled_any_other_way_is_invalid_and_refused_before_any_request(self):
+        """R2-3. generate() sends to Anthropic for 'anthropic' and to OpenAI OTHERWISE, and every model check keys on
+        'anthropic' — so 'Anthropic' passed them all, showed a green legacy row, and sent a Claude id to OpenAI. The provider
+        must be exactly one of the supported names; any other spelling is INVALID and nothing is priced or sent."""
+        for provider in ('Anthropic', 'ANTHROPIC', ' anthropic', 'anthropic ', 'OpenAI', 'claude', 'bedrock', ''):
+            with self.subTest(provider=provider):
+                self.assertEqual(g.request_profile(provider, 'claude-sonnet-4-6', 'disabled', 'medium', ''),
+                                 {'invalid': 'QUILLMD_AI_PROVIDER must be exactly one of: anthropic, openai.'})
+                with override_settings(**dict(SONNET_46, AI_PROVIDER=provider)), patch.dict(os.environ, PRICE_ENV), \
+                        patch('anthropic.Anthropic') as client, patch('openai.OpenAI') as openai_client:
+                    quoted = g.configuration()
+                    old = {k: v for k, v in quoted.items() if k != 'request_profile'}
+                    for config in (None, quoted, old, {**old, 'request_profile': g.LEGACY_PROFILE}):
+                        with self.assertRaises(NoProviderRequest):
+                            g.maximum_cost(NOTES, FIELDS, config)
+                        with self.assertRaises(NoProviderRequest):
+                            g.generate(NOTES, FIELDS, config)
+                    client.assert_not_called()
+                    openai_client.assert_not_called()
+        # Positive control: the two exact names keep the legacy request.
+        for provider, model in (('anthropic', 'claude-sonnet-4-6'), ('openai', 'gpt-4.1-mini')):
+            with self.subTest(provider=provider):
+                self.assertEqual(g.request_profile(provider, model, 'disabled', 'medium', ''), g.LEGACY_PROFILE)
+
     def test_a_stored_profile_that_does_not_match_its_shapes_is_refused_before_any_request(self):
         with override_settings(**SONNET_5), patch.dict(os.environ, PRICE_ENV):
             good = g.configuration()
@@ -624,3 +648,20 @@ class QuoteAcrossAModelSwitch(OutcomeFixture, TestCase):
                 self.assertFalse(Reservation.objects.filter(job__encounter=encounter).exists())
         with override_settings(**SONNET_46):                       # unchanged: the same quote queues
             self.assertEqual(enqueue(encounter, self.user, config=quoted).config['pricing_version'], ROLLBACK_FINGERPRINT)
+
+
+@override_settings(ADMIN_SITE=False, STORAGES=STORAGES)
+class ProviderSpelling(OutcomeFixture, TestCase):
+    def test_a_misspelt_provider_is_refused_at_enqueue_with_no_job_and_no_hold(self):
+        """R2-3, through enqueue: measured before the repair, provider 'Anthropic' held $0.19, fell to the OpenAI branch and
+        stranded the job in reconciliation with its hold. Now it is refused before Job.objects.create commits and before
+        any hold."""
+        encounter = self.fresh_encounter()
+        with override_settings(**dict(SONNET_46, AI_PROVIDER='Anthropic')), patch('anthropic.Anthropic') as client, \
+                patch('openai.OpenAI') as openai_client:
+            with self.assertRaises(NoProviderRequest):
+                enqueue(encounter, self.user)
+            client.assert_not_called()
+            openai_client.assert_not_called()
+        self.assertFalse(Job.objects.filter(encounter=encounter).exists())
+        self.assertFalse(Reservation.objects.filter(job__encounter=encounter).exists())

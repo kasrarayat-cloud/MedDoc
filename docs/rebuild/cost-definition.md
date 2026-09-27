@@ -120,7 +120,9 @@ pre-profile request byte for byte. The profile is
 snapshotted into `Job.config` with the rates and hashed into `pricing_version`, except the
 legacy profile, which hashes as absent. The rollback configuration therefore still
 fingerprints as `configured-v1:fcc80267…`, and no stored fingerprint changes meaning. An
-invalid choice refuses generation before any request, and the hold is released. So does
+invalid choice refuses generation before any request, and the hold is released. So does a
+`QUILLMD_AI_PROVIDER` that is not exactly `anthropic` or `openai` (generate() sends every other
+value to OpenAI, so `Anthropic` would have sent a Claude id there), and so does
 every other Claude model id, until it has its own profile. This is deny by default, not a
 version comparison: a parser of `claude-<family>-<n>` let `claude-mythos-preview` through to
 the old call, which on a newer model would change meaning.
