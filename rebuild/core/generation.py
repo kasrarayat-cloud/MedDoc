@@ -310,6 +310,10 @@ def source_units(notes, fields, *, context_labels=()):
     labels=recognized_labels(fields,context_labels)
     units=[]; offset=0; inherited=bool(QUOTED_SOURCE.search(notes))
     multiline=sum(bool(line.strip()) for line in notes.splitlines())>1
+    # ⚠️ CONTRACT v3: A LINE THAT BEGINS WITH A FORM LABEL IS ONE UNIT (R2/R3). Its answer is the rest of its line, as
+    # every other reader of that form takes it: split into sentences, 'Consent obtained: yes. To be obtained tomorrow.'
+    # offered 'yes.' alone and ticked the box, and 'Allergies: penicillin. Sorry, I mean amoxicillin.' filled penicillin.
+    whole_labelled_lines=natural_v3(fields)
     for line in notes.splitlines(keepends=True):
         stripped=line.strip()
         if not stripped:
@@ -322,7 +326,7 @@ def source_units(notes, fields, *, context_labels=()):
             # contract; multiple fragments can inherit an omitted heading.
             inherited=inherited or multiline
         boundaries=[]
-        for match in re.finditer(r'[.!?]\s+(?=[A-Z0-9"\'(])',stripped):
+        for match in re.finditer(r'[.!?]\s+(?=[A-Z0-9"\'(])',stripped) if not (whole_labelled_lines and parsed) else ():
             end=match.start()+1
             if match.group()[0]=='.' and ABBREVIATION.search(stripped[max(0,end-32):end]): continue
             boundaries.append((end,match.end()))
@@ -1747,11 +1751,6 @@ def v3_labelled_source(notes, labels, label, evidence):
                 found = line
                 break
             offset += len(line)
-        # A complete source sentence (the complete-sentence contract's evidence unit) that is itself this question's
-        # labelled statement: 'Smoker: No.' inside 'Smoker: No. Alcohol: yes.'. Offsets bind it to the notes.
-        own = labelled_value(quote, labels) if isinstance(quote, str) else None
-        if own and own[0] == label and own[1] and isinstance(start, int) and notes[start:start + len(quote)] == quote:
-            continue
         parsed = labelled_value(found, labels) if found is not None else None
         if not parsed or parsed[0] != label or not parsed[1]:
             return False

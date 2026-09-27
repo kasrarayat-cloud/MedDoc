@@ -52,11 +52,41 @@ class OrdinaryNotesOnV3Forms(SimpleTestCase):
         self.assertEqual(out['Allergies']['text'], 'penicillin.')
         self.assertEqual(out['Plan']['status'], 'supported')
 
-    def test_an_option_is_filled_only_from_its_own_labelled_sentence(self):
-        notes = 'Smoker: No. The patient drinks socially.'
+    def test_an_option_is_filled_only_from_its_own_labelled_line(self):
+        notes = 'Smoker: No.\nThe patient drinks socially.'
         out = run(notes, {'Smoker': ['Smoker: No.']})
         self.assertEqual(out['Smoker']['text'], 'No')
         self.assertEqual(out['Smoker']['status'], 'supported')
+
+    def test_a_line_that_begins_with_a_form_label_is_one_unit_and_its_answer_is_the_rest_of_the_line(self):
+        """R2/R3: split into sentences, the labelled sentence alone ticked the box and dropped what followed it."""
+        for notes in ('Consent obtained: yes. To be obtained tomorrow.',
+                      'Consent obtained: yes. Patient withdrew consent before the procedure.'):
+            units, _ = g.source_units(notes, g.v3_generation_fields(FIELDS)[0], context_labels=['Clinician signature'])
+            self.assertEqual([u['quote'] for u in units], [notes])
+            consent = run(notes, {'Consent obtained': [notes]})['Consent obtained']
+            self.assertEqual((consent['status'], consent['text']), ('conflict', ''), notes)
+            self.assertEqual(consent['held_candidate']['text'], notes.split(': ', 1)[1], notes)
+        for notes in ('Smoker: Yes. Quit in 2015.', 'Smoker: No. The patient drinks socially.', 'Smoker: Yes. Corrected to no.'):
+            smoker = run(notes, {'Smoker': [notes]})['Smoker']
+            self.assertEqual((smoker['status'], smoker['text']), ('conflict', ''), notes)
+            self.assertEqual(smoker['held_candidate']['text'], notes.split(': ', 1)[1], notes)
+        notes = 'Allergies: penicillin. Sorry, I mean amoxicillin.'
+        allergies = run(notes, {'Allergies': [notes]})['Allergies']
+        self.assertEqual(allergies['text'], 'penicillin. Sorry, I mean amoxicillin.', 'the whole remainder, never penicillin alone')
+        self.assertEqual(allergies['evidence'], [{'quote': notes, 'start': 0, 'end': len(notes)}])
+
+    def test_an_option_is_never_read_from_a_labelled_sentence_inside_another_line(self):
+        """R2: the complete-sentence clause read 'Smoker: yes.' out of a line about the patient's father."""
+        for notes in ('Father: MI at 50. Smoker: yes.', 'Family hx: father had an MI. Smoker: yes.',
+                      'Seen today. Consent obtained: yes.'):
+            label = 'Smoker' if 'Smoker' in notes else 'Consent obtained'
+            quote = notes[notes.index(label):]
+            answer = run(notes, {label: [quote]})[label]
+            self.assertEqual((answer['status'], answer['text']), ('conflict', ''), notes)
+            self.assertEqual(answer['held_candidate']['evidence'][0]['quote'], quote, notes)
+        # A line of its own still names its option.
+        self.assertEqual(run('Father: MI at 50.\nSmoker: yes.', {'Smoker': ['Smoker: yes.']})['Smoker']['text'], 'Yes')
 
     def test_an_unlabelled_sentence_never_becomes_an_option(self):
         notes = 'The patient does not smoke. Allergies: none known.'
