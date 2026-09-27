@@ -5,6 +5,7 @@ Offline and synthetic. Ordinary forms generate in fixture mode. The qualified Wo
 signer: the finalizing clinician once finalized, else the viewer); no Word runtime and no provider is involved.
 """
 from datetime import timedelta
+from decimal import Decimal
 import hashlib
 import html
 import json
@@ -1512,3 +1513,117 @@ class CodeRefusalsSayWhatHappened(OrdinaryDraft, TestCase):
                       ' '.join(transcript_help(page, job).split()))
         for claim in ('answer draft', 'review decision'):
             self.assertNotIn(claim, notes_help(page) + transcript_help(page, job))
+
+
+@override_settings(**TEST_SETTINGS)
+class RoundFourMutantPins(OrdinaryDraft, TestCase):
+    """Refutation round 4, R4-5: two mutants of round 3 survived. M2 — the page's warning read without
+    answers_unreviewed_unedited — showed no warning on a fresh draft while the save named the draft; M1 — Suggest codes
+    accepting a request that posts no revision — wrote from a page that cannot say which notes it showed."""
+    CODED = OrdinaryDraft.NOTES + '\nAssessment: documented as R00.0.'
+
+    def test_m2_a_fresh_draft_is_warned_about_as_the_save_then_names_it(self):
+        encounter = self.drafted()
+        self.assertFalse(any(a['reviewed'] or a['status'] == 'edited' for a in encounter.answers.values()))   # (the control)
+        warned = ' '.join(notes_help(self.client.get(f'/encounters/{encounter.pk}/')).split())
+        said = shown_messages(self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': encounter.notes + '\nPlan: synthetic.'}))
+        part = 'the answer draft (2 answers, none reviewed)'
+        self.assertEqual((f'Saving changed notes clears {part}, whoever saves them;' in warned,
+                          f'Cleared, and recorded under your name: {part}.' in said), (True, True))
+
+    def test_m1_suggest_codes_writes_nothing_for_a_page_that_posts_no_revision(self):
+        _template, version = self.upload(self.make_docx(), 'docx')
+        encounter = self.create_encounter(version, self.CODED)
+        synthetic_code()
+        refused = self.client.post(f'/encounters/{encounter.pk}/coding/')
+        self.assertEqual((refused.status_code, CodeSuggestion.objects.filter(encounter=encounter).count(),
+                          AuditEvent.objects.filter(action='coding.suggest').count()), (409, 0, 0))
+        # (the control: the same page with its revision suggests the documented code)
+        self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/coding/', {'revision': encounter.revision}).status_code, 302)
+        self.assertEqual(CodeSuggestion.objects.filter(encounter=encounter).count(), 1)
+
+    def test_a_code_from_another_document_is_not_found_after_this_documents_notes_changed(self):
+        """R4-7's discriminator, pinned: a code that exists elsewhere was never on this document, even when this document's
+        notes did change after the page — not "no longer on this document"."""
+        _template, version = self.upload(self.make_docx(), 'docx')
+        encounter = self.create_encounter(version, self.CODED)
+        code = synthetic_code()
+        elsewhere = Encounter.objects.create(department=self.department, patient=self.patient, created_by=self.user,
+                                             template_version=version, notes=self.CODED, service_date=encounter.service_date)
+        foreign = CodeSuggestion.objects.create(encounter=elsewhere, terminology=code, evidence='No chest pain.',
+                                                explanation='Synthetic documented code')
+        stale = encounter.revision
+        self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': self.CODED + '\nPlan: synthetic.'})
+        self.assertGreater(encounter.revision, stale)                                   # (the control: the notes changed)
+        self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/coding/{foreign.pk}/accept/', {'revision': stale}).status_code, 404)
+
+    def test_a_notes_change_before_the_page_is_not_a_change_since_it(self):
+        """notes_changed_since compares with the page's revision: a notes save the page already showed does not make an
+        unknown code "no longer on this document"."""
+        _template, version = self.upload(self.make_docx(), 'docx')
+        encounter = self.create_encounter(version, self.CODED)
+        self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': self.CODED + '\nPlan: synthetic.'})
+        shown = encounter.revision                                                      # (the page opens after that save)
+        Encounter.objects.filter(pk=encounter.pk).update(revision=shown + 1)            # (an answers save renumbers it)
+        self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/coding/00000000-0000-4000-8000-000000000000/accept/',
+                                          {'revision': shown}).status_code, 404)
+
+    def test_suggestions_are_written_only_from_the_notes_they_were_read_from(self):
+        """The write re-checks the notes as well as the revision: notes changed under an unchanged revision (no writer does
+        this today; every notes change renumbers) are not written from."""
+        _template, version = self.upload(self.make_docx(), 'docx')
+        encounter = self.create_encounter(version, self.CODED)
+        synthetic_code()
+        real = coding_module.applicable_releases
+
+        def notes_change_meanwhile(e):
+            Encounter.objects.filter(pk=e.pk).update(notes=self.NOTES)                 # (the revision is left as it was)
+            return real(e)
+        with patch.object(coding_module, 'applicable_releases', notes_change_meanwhile):
+            refused = self.client.post(f'/encounters/{encounter.pk}/coding/', {'revision': encounter.revision})
+        self.assertEqual((refused.status_code, CodeSuggestion.objects.filter(encounter=encounter).count(),
+                          AuditEvent.objects.filter(action='coding.suggest').count()), (409, 0, 0))
+
+    def test_suggestions_are_written_only_while_the_writer_is_still_a_member(self):
+        """The write re-checks membership under the lock: an account suspended while the plan is read (its department
+        membership still active, so the encounter is still in scope) writes nothing."""
+        _template, version = self.upload(self.make_docx(), 'docx')
+        encounter = self.create_encounter(version, self.CODED)
+        synthetic_code()
+        employee = self.member('guards-withdrawn-employee', 'employee')
+        self.client.force_login(employee)
+        real = coding_module.applicable_releases
+
+        def access_withdrawn_meanwhile(e):
+            User.objects.filter(pk=employee.pk).update(is_active=False)
+            return real(e)
+        self.client.raise_request_exception = False
+        with patch.object(coding_module, 'applicable_releases', access_withdrawn_meanwhile):
+            refused = self.client.post(f'/encounters/{encounter.pk}/coding/', {'revision': encounter.revision})
+        self.assertEqual((refused.status_code, CodeSuggestion.objects.filter(encounter=encounter).count(),
+                          AuditEvent.objects.filter(action='coding.suggest').count()), (403, 0, 0))
+
+    def test_a_code_an_unreviewed_transcript_cleared_is_said_to_be_gone(self):
+        """A transcript of an earlier release, appended to the notes unreviewed by the worker, records the revision it made
+        (core/jobs.py), so a code it cleared, accepted from a page opened before it, is "no longer on this document"."""
+        from core.generation import configuration
+        from core.jobs import enqueue
+        from core.tests.audio_fixtures import wav_bytes
+        _template, version = self.upload(self.make_docx(), 'docx')
+        encounter = self.create_encounter(version, self.CODED)
+        synthetic_code()
+        self.client.post(f'/encounters/{encounter.pk}/coding/', {'revision': encounter.revision})
+        offer = CodeSuggestion.objects.get(encounter=encounter)
+        stale = encounter.revision
+        audio = private_path('audio/synthetic-guards.wav'); audio.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        audio.write_bytes(wav_bytes(tag='guards')); audio.chmod(0o600)
+        enqueue(encounter, self.user, kind='transcription', input_path='audio/synthetic-guards.wav',
+                config={**configuration(), 'voice_rate_second': '0', 'voice_max_cost': '0'})   # (no transcript review asked)
+        transcript = ('SYNTHETIC appended words', Decimal('0'), {'duration_seconds': '1'}, {'usd_per_minute': '0'},
+                      'synthetic-transcription', '', True)
+        with patch('core.jobs.transcribe', return_value=transcript):
+            self.assertTrue(run_one())
+        encounter.refresh_from_db()
+        self.assertEqual((encounter.revision, CodeSuggestion.objects.filter(encounter=encounter).count()), (stale + 1, 0))
+        refused = self.client.post(f'/encounters/{encounter.pk}/coding/{offer.pk}/accept/', {'revision': stale})
+        self.assertContains(refused, 'This code suggestion is no longer on this document', status_code=409)
