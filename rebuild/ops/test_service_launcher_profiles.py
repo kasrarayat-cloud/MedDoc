@@ -665,6 +665,33 @@ class ProductionHelperTests(unittest.TestCase):
         self.assertEqual(launcher.metadata_tcp_connects(((socket.AF_INET, listener.getsockname()),), 0.5), ['timeout'])
         self.assertLess(time.monotonic() - start, 1.0)
 
+    def test_the_tcp_window_is_two_and_a_half_seconds_and_the_whole_check_stays_within_three(self):
+        # A slower IMDS handshake behind a UDP-only rule is the case the window exists for; it may not grow the start.
+        self.assertEqual(launcher.METADATA_TCP_SECONDS, 2.5)
+        self.assertLessEqual(launcher.METADATA_TCP_SECONDS + 2 * launcher.METADATA_UDP_SECONDS, 3)
+
+    def test_a_connect_the_wait_did_not_report_is_still_judged_at_the_deadline(self):
+        # Real sockets; only the wait is blinded, as if the handshake finished in the last instant before the deadline.
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.addCleanup(listener.close)
+        listener.bind(('127.0.0.1', 0))
+        listener.listen(4)
+        closed = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        closed.bind(('127.0.0.1', 0))
+        refused = closed.getsockname()
+        closed.close()
+        waits = []
+
+        def blind_wait(readable, writable, errors, timeout):
+            waits.append(len(writable))
+            time.sleep(timeout)
+            return [], [], []
+        with patch.object(launcher.select, 'select', side_effect=blind_wait):
+            outcomes = launcher.metadata_tcp_connects(((socket.AF_INET, listener.getsockname()),
+                                                       (socket.AF_INET, refused)), 0.2)
+        self.assertEqual(waits[0], 2)  # both connects were still in progress when the wait began
+        self.assertEqual(outcomes, ['connected', 'connect:ECONNREFUSED'])
+
     def test_private_installation_must_be_absent(self):
         with tempfile.TemporaryDirectory() as temp:
             self.assertEqual(launcher.absent_path(Path(temp) / 'absent', 'private_installation'), {'absent': True})

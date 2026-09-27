@@ -203,10 +203,12 @@ PROFILES = ('private', 'production')
 DOCKER_SOCKETS = (('docker_socket', '/run/docker.sock'), ('docker_socket_legacy_path', '/var/run/docker.sock'))
 INSTANCE_METADATA = ('169.254.169.254', 80)
 INSTANCE_METADATA_IPV6 = ('fd00:ec2::254', 80)
-# Both TCP connects run at once and share this bound, so a denied host adds about this much to a start
-# (and the whole metadata check stays under 3 s). A reachable IMDS completes a handshake in well under 1 ms.
-METADATA_TCP_SECONDS = 1.5
-METADATA_UDP_SECONDS = 0.5
+# Both TCP connects run at once and share this bound, so a denied host adds about this much to a start.
+# With the two UDP sends the whole metadata check stays within 3 s. A reachable IMDS completes a
+# handshake in well under 1 ms; the bound is for a slow one. A handshake that completes only after the
+# bound is not seen (the limit production-hosting.md states: the units' deny is the primary control).
+METADATA_TCP_SECONDS = 2.5
+METADATA_UDP_SECONDS = 0.25
 # An instance without an IPv6 path to the metadata service cannot reach it over IPv6. Measured in a
 # container on kernel 6.8: no route gives ENETUNREACH at connect; IPv6 disabled by sysctl gives
 # EADDRNOTAVAIL at connect; a kernel without IPv6 gives EAFNOSUPPORT at socket().
@@ -322,11 +324,26 @@ def metadata_udp_send(family, address):
     return 'sent'
 
 
+def _connect_state_now(client):
+    """The final, non-blocking look at the deadline: a connect the kernel has completed (or refused) but the
+    wait had not reported yet still counts; only a connect still in progress is a timeout."""
+    code = client.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+    if code:
+        return 'connect:' + _errno_name(code)
+    try:
+        client.getpeername()
+    except OSError:
+        return 'timeout'
+    return 'connected'
+
+
 def metadata_tcp_connects(targets, seconds):
     """Start a non-blocking TCP connect to every (family, address) at once; nothing is ever sent.
 
     Returns one outcome per target, in order, within `seconds` in total: 'connected', 'timeout', or
-    '<step>:<errno name>'. Every socket is closed before returning.
+    '<step>:<errno name>'. At the deadline every connect not yet reported is looked at once more without
+    waiting (_connect_state_now), so one completed just before the deadline counts. Every socket is
+    closed before returning.
     """
     outcomes = [None] * len(targets)
     waiting = {}
@@ -359,8 +376,8 @@ def metadata_tcp_connects(targets, seconds):
                     code = client.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
                     outcomes[index] = 'connected' if code == 0 else 'connect:' + _errno_name(code)
                     del pending[index]
-        for index in pending:
-            outcomes[index] = 'timeout'
+        for index, client in pending.items():
+            outcomes[index] = _connect_state_now(client)
     finally:
         for client in waiting.values():
             client.close()
@@ -402,6 +419,10 @@ def denied_instance_metadata():
     IPv4 must be denied: UDP send EPERM and no completed TCP connect. IPv6 must be denied the same way
     or be unreachable from this host (IPV6_UNREACHABLE). A completed connect or a sent datagram on
     either address refuses as accessible; anything else refuses as inconclusive.
+
+    The limit: a TCP handshake that completes only after METADATA_TCP_SECONDS is not seen, so a
+    UDP-only rule in front of an IMDS that slow would be accepted. This proves what this process could
+    reach at start; the units' IPAddressDeny= on both protocols is the control that keeps it true.
     """
     targets = ((socket.AF_INET, INSTANCE_METADATA), (socket.AF_INET6, INSTANCE_METADATA_IPV6))
     udp = [metadata_udp_send(family, address) for family, address in targets]
