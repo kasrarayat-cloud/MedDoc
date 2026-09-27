@@ -1039,7 +1039,10 @@ def previous_release_source():
 
 class PreviousReleaseCompatibilityTests(unittest.TestCase):
     """ROLLBACK = REVERT THE FILE. The installed release must run, unrepaired, on any directory this
-    release has written, and this release must adopt whatever the previous one then leaves behind."""
+    release has written, as it does on its own, and this release must adopt whatever the previous one
+    then leaves behind. ⚠️ ONE KNOWN EXCEPTION (F7, round 2), pinned below: a fresh monitor's very
+    first notice killed between the ledger and status.json leaves no status.json at all, and the
+    previous release refuses that directory (it sends nothing and invents nothing)."""
     setUp_alerts = BackupAlertsTests.setUp
 
     def setUp(self):
@@ -1262,6 +1265,28 @@ class PreviousReleaseCompatibilityTests(unittest.TestCase):
         self.assertEqual(result['alert']['provider_message_id'], 'previous-release-id')
         self.assertEqual(result['incident']['conditions_announced'], ['backup_stale'])
         self.assertEqual(self.sender.call_count, 1, 'nothing is owed: the previous release announced it')
+
+    def test_the_known_exception_the_previous_release_refuses_rather_than_mis_sends(self):
+        """⚠️ F7, round 2. A fresh monitor (no status.json yet) whose first notice is killed between the
+        ledger and status.json leaves the ledger alone. The previous release reads any `incident-*`
+        file without a status.json as lost state and refuses, at every check and in status(): it
+        neither sends nor invents an incident. This release recovers it and sends the owed notice,
+        so rolling FORWARD is the repair; reverting the file alone leaves that monitor refusing."""
+        self.health.return_value = 'backup_failed'
+        crash, calls = IncidentLedgerTests.crash_on_second_write(self)
+        with crash, self.assertRaises(KeyboardInterrupt):
+            a.check(self.at)
+        self.assertEqual(calls, [a.NOTICES_FILE, 'status.json'])
+        self.assertEqual(sorted(path.name for path in self.alerts.iterdir()), [a.NOTICES_FILE, 'monitor.lock'])
+        for minutes in (5, 60 * 25):
+            checked, shown, code = self.previous_release_on_a_copy(self.at + timedelta(minutes=minutes))
+            self.assertEqual((code, checked['condition'], shown['condition']),
+                             (1, 'monitoring_state_unavailable', 'monitoring_state_unavailable'))
+        self.old_sender.assert_not_called()
+        result, _ = a.check(self.at + timedelta(minutes=5))
+        self.assertEqual((result['condition'], result['alert']['outcome'], self.sender.call_count),
+                         ('backup_failed', 'provider_accepted', 1))
+        self.assertNotIn('state_unreadable', result)
 
     def test_the_previous_release_runs_on_every_state_a_restart_leaves(self):
         """FAIL CLOSED MEANS ALERT writes new shapes: a restart marker, the unreadable files kept under
