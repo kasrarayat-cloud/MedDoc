@@ -449,8 +449,8 @@ class EmployeeSaveKeepsStatementDecisions(OfflineWordForm):
             self.assertEqual(review['decisions'][key], {**decision, 'reviewed': False}, key)
         self.assertEqual(review['schema'], 0)                              # (never accepted by finalization)
         self.assertEqual(review['binding'], wm_review.binding(self.encounter))
-        event = AuditEvent.objects.filter(action='encounter.answers_saved', target=str(self.encounter.pk)).latest('created_at')
-        self.assertEqual(event.details['withdrawn_statement_reviews'], ['claim_32', 'claim_46', 'claim_9'])
+        self.assertEqual(last_event('encounter.answers_saved', self.encounter).get('withdrawn_statement_reviews'),
+                         ['claim_32', 'claim_46', 'claim_9'])
         self.assertContains(response, 'were kept but are no longer reviewed')
         self.assertNotContains(response, 'was not kept')                   # (nothing was changed under a wording)
         # The clinician's page shows the kept wording, not the default, and asks for the review again.
@@ -484,6 +484,34 @@ class EmployeeSaveKeepsStatementDecisions(OfflineWordForm):
         event = last_event('encounter.answers_saved', self.encounter)
         self.assertEqual(event.get('statement_wording_changes'), [{'statement': 'claim_32', 'from': 'not_assessed', 'to': 'negative'}])
         self.assertNotIn('reflux', json.dumps(event))                      # (identifiers only, never clinical text)
+
+
+    def test_a_clinicians_unreviewed_statement_choices_survive_an_employees_save(self):
+        """R4 (the refutation's P5): choices a clinician saved without ticking them are decisions too; and R5: nothing
+        reviewed was withdrawn, so the saver is not told so and the audit lists nothing."""
+        self.save({'claim_variant_claim_32': 'not_assessed', **self.STATEMENT_SOURCES})     # (the clinician, no ticks)
+        chosen = self.encounter.template_review['decisions']
+        self.assertEqual((chosen['claim_32']['variant'], any(d['reviewed'] for d in chosen.values())), ('not_assessed', False))
+        self.client.force_login(self.member('wm-guards-employee-4', 'employee'))
+        response = self.save()
+        self.assertEqual((self.encounter.template_review or {}).get('decisions'), chosen)
+        self.assertNotContains(response, 'no longer reviewed')
+        self.assertNotContains(response, 'replaced the chosen statement wording')
+        event = last_event('encounter.answers_saved', self.encounter)
+        self.assertEqual((event.get('withdrawn_statement_reviews'), event.get('statement_wording_changes')), ([], []))
+
+
+class WithdrawnStatementReviewsAreThoseTheSaveDidNotKeep(OfflineWordForm):
+    def test_a_clinicians_re_save_withdraws_only_the_review_it_unticks(self):
+        """R5: `withdrawn_statement_reviews` compares what was reviewed with what the save stored reviewed."""
+        self.clinician_reviews()
+        self.save()                                          # (the same clinician: the page re-posts the ticks as rendered)
+        self.assertTrue(all(d['reviewed'] for d in self.encounter.template_review['decisions'].values()))   # (the control)
+        self.assertEqual(last_event('encounter.answers_saved', self.encounter).get('withdrawn_statement_reviews'), [])
+        payload = BrowserSaveForm.of(self.page())
+        self.assertEqual(payload.pop('claim_reviewed_claim_32'), 'on')
+        self.client.post(f'/encounters/{self.encounter.pk}/save/', payload)
+        self.assertEqual(last_event('encounter.answers_saved', self.encounter).get('withdrawn_statement_reviews'), ['claim_32'])
 
 
 class WordNotesSaveAndClear(OfflineWordForm):
