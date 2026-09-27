@@ -2698,14 +2698,58 @@ def fill(data: bytes, fields: list, answers: dict) -> bytes:
 DISPLAYED = ("sdt_choice", "ff_dropdown")
 
 
+def _symbol_code(code):
+    """A glyph's code point, a symbol font's private-use form (U+F0xx) read as the plain byte it stands for."""
+    return code - 0xF000 if 0xF000 <= code <= 0xF0FF else code
+
+
+def _state_code(cb, checked):
+    """The glyph a checkbox control's own checkedState / uncheckedState names (☒ / ☐ when it names none)."""
+    state = cb.find(q("w14:checkedState" if checked else "w14:uncheckedState"))
+    try:
+        return _symbol_code(int((state.get(q("w14:val")) if state is not None else None) or ("2612" if checked else "2610"), 16))
+    except ValueError:
+        return None
+
+
+def _shown_code(sdt):
+    """The one glyph a control's content displays, or None when it displays none or more than one."""
+    content = sdt.find(q("w:sdtContent"))
+    codes = []
+    for node in content.iter(T, SYM) if content is not None else ():
+        if any(a.tag == FALLBACK for a in node.iterancestors()):
+            continue
+        if node.tag == T:
+            codes += [ord(c) for c in (node.text or "") if not c.isspace()]
+        else:
+            try:
+                codes.append(int(node.get(q("w:char")) or "", 16))
+            except ValueError:
+                return None
+    return _symbol_code(codes[0]) if len(codes) == 1 else None
+
+
+def sdt_checkbox_state(sdt):
+    """⚠️ A CHECKBOX CONTROL IS TICKED OR UNTICKED ONLY WHEN ITS w14:checked FLAG AND THE GLYPH IT DISPLAYS AGREE:
+    True / False, or None (cannot be read) when the glyph is not the one the flag's own checkedState / uncheckedState
+    names. The read-back trusted the flag alone, so a writer that cleared the flag but left ☒ passed as unticked."""
+    pr = sdt.find(q("w:sdtPr"))
+    cb = pr.find(q("w14:checkbox")) if pr is not None else None
+    if cb is None:
+        return None
+    flag = cb.find(q("w14:checked"))
+    checked = (flag.get(q("w14:val")) if flag is not None else "0") in ("1", "true")
+    shown = _shown_code(sdt)
+    return checked if shown is not None and shown == _state_code(cb, checked) else None
+
+
 def box_state(index, box):
     """Whether one box is ticked, read from the package: True, False, or None when it cannot be read."""
     slot = index.by_id.get("%s#%s" % (box["part"], box["slot"]))
     if slot is None:
         return None
     if box["kind"] == "sdt":
-        info = sdt_info(slot.el)
-        return info["checked"] if info["type"] == "checkbox" else None
+        return sdt_checkbox_state(slot.el)
     if box["kind"] == "ff":
         data = slot.el.find(FLDCHAR).find(q("w:ffData"))
         info = ff_info(data) if data is not None else {}
