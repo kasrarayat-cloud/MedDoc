@@ -1,0 +1,571 @@
+{
+  "method": "Read-only classification of retained outputs, not a new model or parser run. Original denominator remains77; supported22 and held55. V is a directly relevant source assertion, not promised automatic success or clinical completeness approval.",
+  "source_generation_sha256": "8835d98c6943a323a07207a627151c19a34e98bcb15d2c6f373575ac586396e0",
+  "definitions": {
+    "V": "Directly relevant stated content; bounded source-context/role/option engineering still required.",
+    "J": "Expected per-field wording, source ownership, or clinical-form meaning needs author adjudication.",
+    "I": "Original selected span is not a valid single-field positive oracle."
+  },
+  "counts": {
+    "V": 38,
+    "J": 7,
+    "I": 10
+  },
+  "rows": [
+    {
+      "case": "r1-note1",
+      "field": "Chief complaint",
+      "classification": "V",
+      "gate": "block",
+      "original_selection": [
+        "45-year-old man presents with right knee pain for three weeks after a fall."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note1",
+      "field": "History of present illness",
+      "classification": "V",
+      "gate": "block",
+      "original_selection": [
+        "45-year-old man presents with right knee pain for three weeks after a fall."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note1",
+      "field": "Past medical history",
+      "classification": "J",
+      "gate": "mixed",
+      "original_selection": [
+        "He has hypertension and takes lisinopril 10 mg daily."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note1",
+      "field": "Medications",
+      "classification": "J",
+      "gate": "mixed",
+      "original_selection": [
+        "He has hypertension and takes lisinopril 10 mg daily."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note2",
+      "field": "Chief complaint",
+      "classification": "V",
+      "gate": "block",
+      "original_selection": [
+        "Patient presents with a cough for five days."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note2",
+      "field": "History of present illness",
+      "classification": "V",
+      "gate": "block",
+      "original_selection": [
+        "Patient presents with a cough for five days.",
+        "She reports low-grade fevers and green sputum."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note2",
+      "field": "Past medical history",
+      "classification": "V",
+      "gate": "roles",
+      "original_selection": [
+        "She has asthma."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note3",
+      "field": "Chief complaint",
+      "classification": "I",
+      "gate": "runon",
+      "original_selection": [
+        "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note3",
+      "field": "History of present illness",
+      "classification": "I",
+      "gate": "runon",
+      "original_selection": [
+        "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note3",
+      "field": "Past medical history",
+      "classification": "I",
+      "gate": "runon",
+      "original_selection": [
+        "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note3",
+      "field": "Medications",
+      "classification": "I",
+      "gate": "runon",
+      "original_selection": [
+        "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note3",
+      "field": "Allergies",
+      "classification": "I",
+      "gate": "runon",
+      "original_selection": [
+        "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note3",
+      "field": "Smoker",
+      "classification": "I",
+      "gate": "runon",
+      "original_selection": [
+        "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note3",
+      "field": "Examination",
+      "classification": "I",
+      "gate": "runon",
+      "original_selection": [
+        "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note3",
+      "field": "Assessment",
+      "classification": "I",
+      "gate": "runon",
+      "original_selection": [
+        "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note3",
+      "field": "Plan",
+      "classification": "I",
+      "gate": "runon",
+      "original_selection": [
+        "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note4",
+      "field": "Chief complaint",
+      "classification": "V",
+      "gate": "block",
+      "original_selection": [
+        "This is a 30-year-old female seen for headaches."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note4",
+      "field": "History of present illness",
+      "classification": "V",
+      "gate": "block",
+      "original_selection": [
+        "The headaches started two months ago and are worse in the morning.",
+        "She denies visual changes, nausea, or weakness."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note4",
+      "field": "Medications",
+      "classification": "V",
+      "gate": "roles",
+      "original_selection": [
+        "She takes ibuprofen as needed."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note4",
+      "field": "Allergies",
+      "classification": "V",
+      "gate": "negative",
+      "original_selection": [
+        "No known drug allergies."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note4",
+      "field": "Smoker",
+      "classification": "V",
+      "gate": "option",
+      "original_selection": [
+        "She is a nonsmoker."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note4",
+      "field": "Examination",
+      "classification": "V",
+      "gate": "subject",
+      "original_selection": [
+        "Neurological examination is normal."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note4",
+      "field": "Assessment",
+      "classification": "V",
+      "gate": "barrier",
+      "original_selection": [
+        "Assessment is tension-type headache."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note4",
+      "field": "Plan",
+      "classification": "V",
+      "gate": "barrier",
+      "original_selection": [
+        "Plan is to start amitriptyline 10 mg at night.",
+        "She will follow up in six weeks."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note5",
+      "field": "Chief complaint",
+      "classification": "V",
+      "gate": "soap",
+      "original_selection": [
+        "Subjective: Patient reports lower back pain for two weeks after lifting boxes."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note5",
+      "field": "History of present illness",
+      "classification": "V",
+      "gate": "soap",
+      "original_selection": [
+        "Subjective: Patient reports lower back pain for two weeks after lifting boxes."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note5",
+      "field": "Examination",
+      "classification": "V",
+      "gate": "soap",
+      "original_selection": [
+        "Objective: Lumbar paraspinal tenderness, straight leg raise negative."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note5",
+      "field": "Assessment",
+      "classification": "V",
+      "gate": "barrier",
+      "original_selection": [
+        "Assessment: mechanical low back pain."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note6",
+      "field": "Chief complaint",
+      "classification": "V",
+      "gate": "block",
+      "original_selection": [
+        "The patient was seen for removal of a skin lesion on the left forearm."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note6",
+      "field": "Consent obtained",
+      "classification": "J",
+      "gate": "consent",
+      "original_selection": [
+        "Consent obtained: yes."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note6",
+      "field": "Examination",
+      "classification": "I",
+      "gate": "procedure",
+      "original_selection": [
+        "The lesion was excised under local anesthesia and closed with sutures."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note6",
+      "field": "Plan",
+      "classification": "J",
+      "gate": "mixedplan",
+      "original_selection": [
+        "She tolerated the procedure well.",
+        "Plan is suture removal in ten days."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note7",
+      "field": "Chief complaint",
+      "classification": "V",
+      "gate": "roles",
+      "original_selection": [
+        "Mother brings in her 4-year-old son with ear pain since yesterday."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note7",
+      "field": "History of present illness",
+      "classification": "V",
+      "gate": "roles",
+      "original_selection": [
+        "Mother brings in her 4-year-old son with ear pain since yesterday.",
+        "He has had a runny nose for a week."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note7",
+      "field": "Medications",
+      "classification": "V",
+      "gate": "negative",
+      "original_selection": [
+        "He takes no regular medications."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note7",
+      "field": "Examination",
+      "classification": "V",
+      "gate": "barrier",
+      "original_selection": [
+        "Examination showed a bulging red left tympanic membrane."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note7",
+      "field": "Assessment",
+      "classification": "V",
+      "gate": "barrier",
+      "original_selection": [
+        "Assessment is acute otitis media on the left."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note7",
+      "field": "Plan",
+      "classification": "V",
+      "gate": "barrier",
+      "original_selection": [
+        "Plan is azithromycin for five days and ibuprofen for pain."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note8",
+      "field": "Chief complaint",
+      "classification": "V",
+      "gate": "fragment",
+      "original_selection": [
+        "Follow-up for hypertension."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note8",
+      "field": "History of present illness",
+      "classification": "J",
+      "gate": "vital",
+      "original_selection": [
+        "Blood pressure today was 142/88."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note8",
+      "field": "Medications",
+      "classification": "V",
+      "gate": "roles",
+      "original_selection": [
+        "He continues amlodipine 5 mg daily."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note8",
+      "field": "Allergies",
+      "classification": "V",
+      "gate": "barrier",
+      "original_selection": [
+        "Allergies: none."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note8",
+      "field": "Smoker",
+      "classification": "V",
+      "gate": "barrier",
+      "original_selection": [
+        "Smoker: no."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note8",
+      "field": "Examination",
+      "classification": "V",
+      "gate": "subject",
+      "original_selection": [
+        "Heart and lung examination was normal."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note8",
+      "field": "Assessment",
+      "classification": "V",
+      "gate": "barrier",
+      "original_selection": [
+        "Assessment is hypertension not at goal."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note8",
+      "field": "Plan",
+      "classification": "V",
+      "gate": "barrier",
+      "original_selection": [
+        "Plan is to increase amlodipine to 10 mg daily and recheck in four weeks."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note10",
+      "field": "Chief complaint",
+      "classification": "V",
+      "gate": "block",
+      "original_selection": [
+        "Patient presents with chest tightness on exertion for one month."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note10",
+      "field": "History of present illness",
+      "classification": "V",
+      "gate": "block",
+      "original_selection": [
+        "Patient presents with chest tightness on exertion for one month."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note10",
+      "field": "Past medical history",
+      "classification": "J",
+      "gate": "pronoun",
+      "original_selection": [
+        "He has high cholesterol."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note10",
+      "field": "Medications",
+      "classification": "J",
+      "gate": "pronoun",
+      "original_selection": [
+        "He takes rosuvastatin."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note10",
+      "field": "Allergies",
+      "classification": "V",
+      "gate": "barrier",
+      "original_selection": [
+        "Allergies: none known."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note10",
+      "field": "Smoker",
+      "classification": "V",
+      "gate": "barrier",
+      "original_selection": [
+        "Smoker: Yes."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note10",
+      "field": "Examination",
+      "classification": "V",
+      "gate": "barrier",
+      "original_selection": [
+        "Examination is normal."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note10",
+      "field": "Assessment",
+      "classification": "V",
+      "gate": "barrier",
+      "original_selection": [
+        "Assessment is possible stable angina."
+      ],
+      "recorded_status": "conflict"
+    },
+    {
+      "case": "r1-note10",
+      "field": "Plan",
+      "classification": "V",
+      "gate": "barrier",
+      "original_selection": [
+        "Plan is an exercise stress test and aspirin 81 mg daily."
+      ],
+      "recorded_status": "conflict"
+    }
+  ]
+}

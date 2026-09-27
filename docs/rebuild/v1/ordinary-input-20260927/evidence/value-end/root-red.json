@@ -1,0 +1,27 @@
+{
+  "source_sha256": "05601c5001f1e9e745e083d01c258958eea7a0fe93a3752a7eb2b58009bd1c0d",
+  "cases": [
+    {
+      "end": null,
+      "valid_locator": true,
+      "governed": []
+    },
+    {
+      "end": 28,
+      "valid_locator": true,
+      "governed": []
+    },
+    {
+      "end": 29,
+      "valid_locator": true,
+      "governed": [
+        "Smoker"
+      ]
+    },
+    {
+      "end": 30,
+      "valid_locator": true,
+      "governed": []
+    }
+  ]
+}

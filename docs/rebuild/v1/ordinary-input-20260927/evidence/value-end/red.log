@@ -1,0 +1,142 @@
+F..FFFFFEEE
+======================================================================
+ERROR: test_malformed_partial_or_wrong_label_evidence_stays_held (core.tests.test_v3_ordinary_input.CompleteValueEvidenceContext.test_malformed_partial_or_wrong_label_evidence_stays_held) (evidence={'quote': ['No.'], 'start': 41, 'end': 44})
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/tests/test_v3_ordinary_input.py", line 302, in test_malformed_partial_or_wrong_label_evidence_stays_held
+    shown = g.as_currently_governed(governance, notes, {**answer, 'label': 'Smoker'})
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/generation.py", line 1881, in as_currently_governed
+    context = governed_supported(governance, notes, answer, label)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/generation.py", line 1816, in governed_supported
+    return page_context(governance, notes, label, answer['evidence'])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/generation.py", line 1792, in page_context
+    return judged_context(governance, notes, governance[10] if len(governance) > 10 else None, label, evidence)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/generation.py", line 1711, in judged_context
+    warnings += v3_preceding_warnings(scope.get('preceding'), label, evidence)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/generation.py", line 2534, in v3_preceding_warnings
+    selected = v3_evidence_units(reading, evidence)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/generation.py", line 2491, in v3_evidence_units
+    if (unit := reading['evidence_units'].get((entry.get('start'), entry.get('end'), entry.get('quote'))))}
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'list'
+
+======================================================================
+ERROR: test_malformed_partial_or_wrong_label_evidence_stays_held (core.tests.test_v3_ordinary_input.CompleteValueEvidenceContext.test_malformed_partial_or_wrong_label_evidence_stays_held) (evidence={'quote': 'No.', 'start': [41], 'end': 44})
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/tests/test_v3_ordinary_input.py", line 302, in test_malformed_partial_or_wrong_label_evidence_stays_held
+    shown = g.as_currently_governed(governance, notes, {**answer, 'label': 'Smoker'})
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/generation.py", line 1881, in as_currently_governed
+    context = governed_supported(governance, notes, answer, label)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/generation.py", line 1816, in governed_supported
+    return page_context(governance, notes, label, answer['evidence'])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/generation.py", line 1792, in page_context
+    return judged_context(governance, notes, governance[10] if len(governance) > 10 else None, label, evidence)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/generation.py", line 1711, in judged_context
+    warnings += v3_preceding_warnings(scope.get('preceding'), label, evidence)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/generation.py", line 2534, in v3_preceding_warnings
+    selected = v3_evidence_units(reading, evidence)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/generation.py", line 2491, in v3_evidence_units
+    if (unit := reading['evidence_units'].get((entry.get('start'), entry.get('end'), entry.get('quote'))))}
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'list'
+
+======================================================================
+ERROR: test_malformed_partial_or_wrong_label_evidence_stays_held (core.tests.test_v3_ordinary_input.CompleteValueEvidenceContext.test_malformed_partial_or_wrong_label_evidence_stays_held) (evidence=None)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/tests/test_v3_ordinary_input.py", line 300, in test_malformed_partial_or_wrong_label_evidence_stays_held
+    self.assertFalse(g.v3_labelled_source(notes, g.recognized_labels(self.fields), 'smoker', [bad]))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/generation.py", line 3100, in v3_labelled_source
+    start, quote = entry.get('start'), entry.get('quote')
+                   ^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+======================================================================
+FAIL: test_absent_historical_end_is_derived_for_context_without_rewriting_evidence (core.tests.test_v3_ordinary_input.CompleteValueEvidenceContext.test_absent_historical_end_is_derived_for_context_without_rewriting_evidence)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/tests/test_v3_ordinary_input.py", line 285, in test_absent_historical_end_is_derived_for_context_without_rewriting_evidence
+    self.assertEqual(g.governed_decisions(notes, self.fields, {'v3_4': answer}), ['Smoker'] if held else [])
+AssertionError: Lists differ: [] != ['Smoker']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'Smoker'
+
+- []
++ ['Smoker']
+
+======================================================================
+FAIL: test_malformed_partial_or_wrong_label_evidence_stays_held (core.tests.test_v3_ordinary_input.CompleteValueEvidenceContext.test_malformed_partial_or_wrong_label_evidence_stays_held) (evidence={'quote': 'No.', 'start': 41, 'end': 43})
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/tests/test_v3_ordinary_input.py", line 300, in test_malformed_partial_or_wrong_label_evidence_stays_held
+    self.assertFalse(g.v3_labelled_source(notes, g.recognized_labels(self.fields), 'smoker', [bad]))
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_malformed_partial_or_wrong_label_evidence_stays_held (core.tests.test_v3_ordinary_input.CompleteValueEvidenceContext.test_malformed_partial_or_wrong_label_evidence_stays_held) (evidence={'quote': 'No.', 'start': 41, 'end': 45})
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/tests/test_v3_ordinary_input.py", line 300, in test_malformed_partial_or_wrong_label_evidence_stays_held
+    self.assertFalse(g.v3_labelled_source(notes, g.recognized_labels(self.fields), 'smoker', [bad]))
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_malformed_partial_or_wrong_label_evidence_stays_held (core.tests.test_v3_ordinary_input.CompleteValueEvidenceContext.test_malformed_partial_or_wrong_label_evidence_stays_held) (evidence={'quote': 'No.', 'start': 41, 'end': None})
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/tests/test_v3_ordinary_input.py", line 300, in test_malformed_partial_or_wrong_label_evidence_stays_held
+    self.assertFalse(g.v3_labelled_source(notes, g.recognized_labels(self.fields), 'smoker', [bad]))
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_malformed_partial_or_wrong_label_evidence_stays_held (core.tests.test_v3_ordinary_input.CompleteValueEvidenceContext.test_malformed_partial_or_wrong_label_evidence_stays_held) (evidence={'quote': 'No.', 'start': 40, 'end': 44})
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/tests/test_v3_ordinary_input.py", line 303, in test_malformed_partial_or_wrong_label_evidence_stays_held
+    self.assertEqual((shown['status'], shown['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'No') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'No')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_malformed_partial_or_wrong_label_evidence_stays_held (core.tests.test_v3_ordinary_input.CompleteValueEvidenceContext.test_malformed_partial_or_wrong_label_evidence_stays_held) (evidence={'quote': 'No', 'start': 41, 'end': 43})
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/tests/test_v3_ordinary_input.py", line 303, in test_malformed_partial_or_wrong_label_evidence_stays_held
+    self.assertEqual((shown['status'], shown['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'No') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'No')
++ ('conflict', '')
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.361s
+
+FAILED (failures=6, errors=3)
+Found 4 test(s).
+System check identified no issues (0 silenced).

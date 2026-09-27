@@ -1,0 +1,30 @@
+{
+  "affected.log": {
+    "bytes": 934,
+    "sha256": "be0dbedc4dc614adbc890cdbfb1e42e6667b5ba27451800e99167e298d7e5535"
+  },
+  "generation-before.py": {
+    "bytes": 226404,
+    "sha256": "05601c5001f1e9e745e083d01c258958eea7a0fe93a3752a7eb2b58009bd1c0d"
+  },
+  "green.log": {
+    "bytes": 530,
+    "sha256": "4f634b0e3fd713915fb8d68050a47b0293287b3e2904f6c810e88b427bdec3e3"
+  },
+  "red.log": {
+    "bytes": 10793,
+    "sha256": "593e94fb84d75f838c6de86129a45de496ec225aa44cf43bc04f57bd629eedf7"
+  },
+  "root-after.json": {
+    "bytes": 527,
+    "sha256": "bc4b475486ceddc6c214dc6f324e0e863074ef978539625aa141889e22b249e9"
+  },
+  "root-probe.py": {
+    "bytes": 802,
+    "sha256": "f87b310e36333d0cca5b04a3a4734c0b29b3694a7143feff825b1683fdb99fdb"
+  },
+  "root-red.json": {
+    "bytes": 453,
+    "sha256": "7382de539d25bfee87e1407118276a43e9c4b6d50616d18d9442981047ae38d5"
+  }
+}
