@@ -1,0 +1,19 @@
+test_declared_v1_feature_flags_are_explicit_booleans_and_replay_stays_private (ops.test_production_deploy.EnvironmentRendererTests.test_declared_v1_feature_flags_are_explicit_booleans_and_replay_stays_private) ... ok
+test_fetch_uses_the_profile_secret_and_region_only (ops.test_production_deploy.EnvironmentRendererTests.test_fetch_uses_the_profile_secret_and_region_only) ... ok
+test_main_refuses_unactivated_profile_and_non_root_and_never_prints_values (ops.test_production_deploy.EnvironmentRendererTests.test_main_refuses_unactivated_profile_and_non_root_and_never_prints_values) ... ok
+test_production_voice_settings_are_renderable_and_privacy_cannot_be_disabled (ops.test_production_deploy.EnvironmentRendererTests.test_production_voice_settings_are_renderable_and_privacy_cannot_be_disabled) ... ok
+test_unsafe_or_unknown_secrets_refuse (ops.test_production_deploy.EnvironmentRendererTests.test_unsafe_or_unknown_secrets_refuse) ... ok
+test_valid_secret_renders_sorted_single_quoted_lines (ops.test_production_deploy.EnvironmentRendererTests.test_valid_secret_renders_sorted_single_quoted_lines) ... ok
+test_write_is_private_atomic_and_refuses_a_foreign_directory (ops.test_production_deploy.EnvironmentRendererTests.test_write_is_private_atomic_and_refuses_a_foreign_directory) ... ok
+test_application_units_are_bound_to_the_profile (ops.test_production_deploy.UnitProfileAgreementTests.test_application_units_are_bound_to_the_profile) ... ok
+test_environment_unit_renders_onto_the_profile_tmpfs_path (ops.test_production_deploy.UnitProfileAgreementTests.test_environment_unit_renders_onto_the_profile_tmpfs_path) ... ok
+test_heartbeat_reads_its_url_as_a_credential_and_checks_the_profile_ports (ops.test_production_deploy.UnitProfileAgreementTests.test_heartbeat_reads_its_url_as_a_credential_and_checks_the_profile_ports) ... ok
+test_nginx_routes_each_host_to_its_profile_port_without_request_logs (ops.test_production_deploy.UnitProfileAgreementTests.test_nginx_routes_each_host_to_its_profile_port_without_request_logs) ... ok
+test_no_production_file_names_a_private_path_identity_or_docker (ops.test_production_deploy.UnitProfileAgreementTests.test_no_production_file_names_a_private_path_identity_or_docker) ... ok
+test_only_declared_root_operators_can_reach_either_metadata_address (ops.test_production_deploy.UnitProfileAgreementTests.test_only_declared_root_operators_can_reach_either_metadata_address) ... ok
+test_the_access_list_evaluator_reads_units_the_way_systemd_does (ops.test_production_deploy.UnitProfileAgreementTests.test_the_access_list_evaluator_reads_units_the_way_systemd_does) ... ok
+
+----------------------------------------------------------------------
+Ran 14 tests in 0.035s
+
+OK

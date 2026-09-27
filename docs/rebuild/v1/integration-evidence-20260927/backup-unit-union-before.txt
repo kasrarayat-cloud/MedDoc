@@ -1,0 +1,13 @@
+F
+======================================================================
+FAIL: test_every_unit_but_the_secret_renderer_cannot_reach_either_metadata_address (ops.test_production_deploy.UnitProfileAgreementTests.test_every_unit_but_the_secret_renderer_cannot_reach_either_metadata_address)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/ops/test_production_deploy.py", line 201, in test_every_unit_but_the_secret_renderer_cannot_reach_either_metadata_address
+    self.assertEqual(len(units), 5)
+AssertionError: 6 != 5
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+FAILED (failures=1)

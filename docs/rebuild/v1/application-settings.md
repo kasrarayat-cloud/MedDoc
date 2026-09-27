@@ -278,3 +278,17 @@ enabled on the prepared production target. Six focused renderer checks now pass.
 `QUILLMD_AI_REPLAY_DIR` remains a private fixture-only setting and is refused by the production renderer.
 `ANTHROPIC_BASE_URL` is also refused: the production environment cannot silently redirect native Anthropic
 requests to another endpoint. Actual served-worker model/endpoint/usage evidence is still required.
+
+
+### Production voice configuration correction — 2026-09-27
+
+The environment renderer previously refused the two documented voice keys as unknown. It now accepts
+`QUILLMD_DEEPGRAM_SMART_FORMAT` as literal `true` or `false`, and accepts an explicit
+`QUILLMD_DEEPGRAM_MIP_OPT_OUT` only as `true`. Real mode already defaults the opt-out to true and refuses
+a false value; this repairs explicit configuration without changing historical voice jobs or making a call.
+The V1 smart-format value remains true, subject to actual reviewed dictation acceptance.
+
+The backup status root operator is now explicitly represented beside the secret renderer in the unit
+metadata-access check. Both must run as root; every doctor/admin/worker/heartbeat unit must still deny
+both metadata addresses. The full expected six-unit set is asserted. Original five-unit failure is retained.
+All fourteen renderer/unit agreement checks pass. Evidence: `integration-evidence-20260927`.

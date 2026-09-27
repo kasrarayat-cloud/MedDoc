@@ -194,16 +194,18 @@ class UnitProfileAgreementTests(unittest.TestCase):
                 self.assertEqual(environment['QUILLMD_ADMIN_SITE'], '1' if surface == 'admin' else '0')
                 self.assertEqual(environment['TMPDIR'], str(state / 'tmp'))
 
-    def test_every_unit_but_the_secret_renderer_cannot_reach_either_metadata_address(self):
+    def test_only_declared_root_operators_can_reach_either_metadata_address(self):
         # Judged the way systemd applies IPAddressAllow=/IPAddressDeny= (systemd.resource-control(5)), over the unit
         # and every drop-in this package ships. The heartbeat unit has no launcher behind it: this is its only guard.
         units = sorted(PRODUCTION.glob('*.service'))
-        self.assertEqual(len(units), 5)
+        expected = {'environment', 'doctor', 'admin', 'worker', 'heartbeat', 'operations-status'}
+        self.assertEqual({path.name for path in units}, {PROFILE.unit_prefix + name + '.service' for name in expected})
         for path in units:
             allow, deny = ip_access_lists(path)
             with self.subTest(unit=path.name):
-                if path.name == PROFILE.unit_prefix + 'environment.service':
-                    # Root, and it must reach IMDS: it reads the secret with the instance role.
+                if path.name in {PROFILE.unit_prefix + name + '.service' for name in ('environment', 'operations-status')}:
+                    # Root operators read the configured secret or assume backup metadata read roles.
+                    self.assertEqual(one(unit(path)['Service'], 'User'), 'root')
                     self.assertTrue(ip_reachable(METADATA_ADDRESSES[0], allow, deny))
                 else:
                     for address in METADATA_ADDRESSES:
@@ -332,6 +334,17 @@ class EnvironmentRendererTests(unittest.TestCase):
         for name in ('QUILLMD_AI_REPLAY_DIR', 'ANTHROPIC_BASE_URL'):
             with self.subTest(name=name), self.assertRaisesRegex(renderer.RenderError, 'secret_name'):
                 renderer.parse(json.dumps({**self.VALID, name: '/synthetic-untrusted'}))
+
+    def test_production_voice_settings_are_renderable_and_privacy_cannot_be_disabled(self):
+        for name,values in (('QUILLMD_DEEPGRAM_MIP_OPT_OUT',('true',)),
+                            ('QUILLMD_DEEPGRAM_SMART_FORMAT',('true','false'))):
+            for value in values:
+                self.assertEqual(renderer.parse(json.dumps({**self.VALID,name:value}))[name],value)
+        for name,value,error in (('QUILLMD_DEEPGRAM_MIP_OPT_OUT','false','voice_privacy_value'),
+                                 ('QUILLMD_DEEPGRAM_MIP_OPT_OUT','1','voice_privacy_value'),
+                                 ('QUILLMD_DEEPGRAM_SMART_FORMAT','1','voice_format_value')):
+            with self.subTest(name=name,value=value),self.assertRaisesRegex(renderer.RenderError,error):
+                renderer.parse(json.dumps({**self.VALID,name:value}))
 
     def test_unsafe_or_unknown_secrets_refuse(self):
         cases = [

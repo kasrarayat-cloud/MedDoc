@@ -23,8 +23,7 @@ that our account has one.** No account console was opened, and no agreement was 
   classes (`key`, `quotes` or `unit_ids`, `conflict`); notes and labels travel only in the message payload.
 - **Account email is PHI-free.** Templates substitute only `{link}` (blockers stream, `d97bd05e`, tested).
 - **Payment metadata is PHI-free** (inventory, verified).
-- **Deepgram opt-out.** Real mode requires `QUILLMD_DEEPGRAM_MIP_OPT_OUT=true`. The synthetic system keeps
-  today's request (repair in progress).
+- **Deepgram opt-out.** Real mode defaults to and requires `mip_opt_out=true` in the actual request; an explicit false refuses. The production renderer now accepts the explicit true setting. The synthetic historical request remains unchanged.
 - **Logs.** Clinical text is not logged. One residue: a CSRF failure warning can log a request path that contains
   a capability token (not PHI).
 
@@ -34,3 +33,11 @@ Native Anthropic model metadata returned `claude-sonnet-5`; this is account endp
 agreement, HIPAA-ready organization setting, retention policy, US geography default or rate tier was verified.
 The exact model and structured-output feature must be covered by the actual executed agreement before PHI.
 The AWS, Deepgram and backup account agreement statuses above remain unknown, not implicitly accepted.
+
+## Connected-document discovery, 2026-09-27
+
+Eight bounded metadata-only Drive searches found no matching executed QuillMD/MedDoc provider agreement.
+A broader term returned unrelated documents; their contents were not opened. This is an additional
+search result, not proof of absence or account coverage. Account-console/authorized legal evidence remains
+required. No messages, signatures, agreement acceptance or file writes occurred in Drive. Aggregate search
+evidence is retained in `integration-evidence-20260927/agreement-discovery.json`.

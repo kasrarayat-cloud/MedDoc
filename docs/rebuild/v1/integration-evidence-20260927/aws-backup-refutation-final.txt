@@ -1,0 +1,3 @@
+db aws_capture_attention
+backup aws_capture_attention
+3 root controls PASS; no network

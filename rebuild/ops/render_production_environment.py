@@ -67,6 +67,10 @@ def parse(text, names=deployment_profile.ENVIRONMENT_NAMES):
                 and not set(value) & FORBIDDEN_CHARACTERS and value == value.strip(), 'secret_value')
         if name in deployment_profile.APPLICATION_FEATURE_FLAGS:
             require(value in ('0', '1'), 'feature_flag_value')
+        if name == 'QUILLMD_DEEPGRAM_MIP_OPT_OUT':
+            require(value == 'true', 'voice_privacy_value')
+        if name == 'QUILLMD_DEEPGRAM_SMART_FORMAT':
+            require(value in ('true', 'false'), 'voice_format_value')
     require(data.get('QUILLMD_DEPLOYMENT_PROFILE') == 'production', 'secret_profile')
     return data
 
