@@ -492,9 +492,10 @@ def same_text(posted,stored):
     return posted==stored or (stored.startswith('\n') and posted==stored[1:])
 
 def notes_save_clears(e):
-    """Whether a changed notes save would clear something: the answer draft, statement decisions or accepted codes. Read
-    from the counts the save audits and states, so the page's warning and the saved message cannot disagree."""
-    return any(review_state_counts(e).values())
+    """What a changed notes save would clear, as the page's warning names it ('' when nothing): the same parts, from the
+    same counts, that the save audits and then states — so the warning names only what would be cleared (refutation round
+    4, R4-7), and it and the saved message cannot disagree."""
+    return listed(cleared_parts(review_state_counts(e)))
 
 ANSWER_STATES=('answers_accepted_suggestion','answers_left_blank','answers_edited_not_accepted','answers_reviewed_unedited',
                'answers_unreviewed_unedited')
@@ -1166,10 +1167,23 @@ def invite_accept(request,raw):
 #: encounter.finalize, and its Suggest added a suggestion — while every other writer refused (refutation round 4, R4-1).
 #: The database guard covers the encounter row only, not its code suggestions, so both code writers check the status.
 FINALIZED_CODES='This document is finalized. Finalized documents are immutable.'
+#: ⚠️ A PAGE THAT POSTS NO REVISION IS NOT EVIDENCE THAT ANYTHING CHANGED. A page rendered before the code forms carried one
+#: was told "This document changed after you opened it" even when nothing had (refutation round 4, R4-7).
+PAGE_OUT_OF_DATE='This page is out of date and must be reloaded: it was opened before this version of QuillMD and does not say which version of the document it showed.'
+
+def notes_changed_since(e,revision):
+    """Whether this encounter's notes changed after the revision a page posted, read from the audit rows each notes change
+    leaves with the revision it made: a notes save, or a transcript an earlier release appended unreviewed."""
+    try:revision=int(revision)
+    except (TypeError,ValueError):return False
+    return AuditEvent.objects.filter(target=str(e.pk),action__in=['encounter.notes_saved','coding.invalidated_by_transcription'],
+                                     details__revision__gt=revision).exists()
 
 def coding_refusal(request,e,planned_notes=None):
     """Why Suggest codes may not write to this encounter as the page posted it, as a refusal page; None when it may."""
     if e.status=='finalized':return document_refusal(request,e,FINALIZED_CODES+' Nothing was suggested.',409)
+    if not request.POST.get('revision'):
+        return document_refusal(request,e,PAGE_OUT_OF_DATE+' Nothing was suggested. Reload the document, then suggest codes again.',409)
     if request.POST.get('revision')!=str(e.revision) or (planned_notes is not None and e.notes!=planned_notes):
         return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Nothing was suggested. Reopen it to see the current notes before suggesting codes.',409)
     return None
@@ -1219,13 +1233,22 @@ def accept_code(request,pk,code_pk):
     if e.status=='finalized':return document_refusal(request,e,FINALIZED_CODES+' Nothing was accepted.',409)
     from .coding import applicable_releases,cpt_licensed
     item=CodeSuggestion.objects.select_for_update().filter(pk=code_pk,encounter=e).first()
-    if request.POST.get('revision')!=str(e.revision):
-        # (a changed save, and only a revision-changing write, deletes an encounter's code suggestions)
-        return document_refusal(request,e,('This code suggestion is no longer on this document: its source notes were changed after '
-                                           'you opened the page, which clears their code suggestions.' if item is None else
-                                           'This document changed after you opened it, in another window or by a colleague.')
-                                +' Nothing was accepted. Reopen it to see the current notes and codes.',409)
-    if item is None:raise Http404
+    posted=request.POST.get('revision')
+    if item is None:
+        # ⚠️ "NO LONGER ON THIS DOCUMENT" IS SAID ONLY WHEN IT IS TRUE. Only a change to the notes deletes an encounter's code
+        # suggestions, so a code that exists (on another encounter), or one missing while the notes did not change after
+        # the page's revision, was never on this document: not found, at any revision. Told "its source notes were
+        # changed" at a stale revision, it was told something false (refutation round 4, R4-7).
+        if CodeSuggestion.objects.filter(pk=code_pk).exists():raise Http404
+        if not posted:return document_refusal(request,e,PAGE_OUT_OF_DATE+' Nothing was accepted. Reload the document to see its current codes.',409)
+        if not notes_changed_since(e,posted):raise Http404
+        return document_refusal(request,e,'This code suggestion is no longer on this document: its source notes were changed after '
+                                          'you opened the page, which clears their code suggestions. Nothing was accepted. Reopen '
+                                          'it to see the current notes and codes.',409)
+    if not posted:return document_refusal(request,e,PAGE_OUT_OF_DATE+' Nothing was accepted. Reload the document to see its current codes.',409)
+    if posted!=str(e.revision):
+        return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Nothing '
+                                          'was accepted. Reopen it to see the current notes and codes.',409)
     if item.accepted_by_id:
         # ⚠️ AN ACCEPTANCE BELONGS TO WHOEVER MADE IT. Accepting does not renumber the revision, so a page opened before
         # clinician A accepted still posts the current revision, and B's Accept from it re-stamped the code as B's, with a

@@ -245,7 +245,9 @@ class ANotesSaveNeverClearsSilently(OrdinaryDraft, TestCase):
         self.assertEqual(sorted((a['status'], bool(a.get('accepted_suggestion'))) for a in encounter.answers.values()),
                          [('edited', True), ('left_blank', False)])                     # (the control)
         self.accepted_code(encounter)
-        self.assertIn('accepted codes', notes_help(self.client.get(f'/encounters/{encounter.pk}/')))
+        self.assertIn('Saving changed notes clears the answer draft (2 answers: 1 accepted suggestion and 1 decision to leave '
+                      'blank; 2 reviewed by a clinician) and 1 accepted code, whoever saves them;',     # (R4-7: from the counts)
+                      ' '.join(notes_help(self.client.get(f'/encounters/{encounter.pk}/')).split()))
         self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': encounter.notes + '\nPlan: synthetic follow-up.'})
         self.assertEqual((encounter.answers, encounter.template_review, CodeSuggestion.objects.filter(encounter=encounter).count()),
                          ({}, {}, 0))
@@ -425,7 +427,6 @@ def transcript_help(page, job):
     return re.search(r'<p class="helptext" id="transcript-help-%s">(.*?)</p>' % job.pk, page.content.decode(), re.S).group(1)
 
 
-CLEARS = "including a clinician's"
 
 
 @override_settings(**TEST_SETTINGS)
@@ -440,13 +441,14 @@ class TheNotesPageSaysWhatAChangedSaveClears(OrdinaryDraft, TestCase):
         self.assertEqual(encounter.answers, {})                                     # (the control: only the code is left)
         job = self.transcript_awaiting_review(encounter)
         page = self.client.get(f'/encounters/{encounter.pk}/')
-        self.assertIn('accepted codes', notes_help(page))
-        self.assertIn('accepted codes', transcript_help(page, job))
+        self.assertIn('Saving changed notes clears 1 accepted code,', notes_help(page))        # (R4-7: named from the counts)
+        self.assertIn('Saving clears 1 accepted code;', transcript_help(page, job))
 
     def test_statement_decisions_alone_are_warned_about(self):
         encounter, _keys = self.reviewed_draft()
         Encounter.objects.filter(pk=encounter.pk).update(answers={}, template_review={'decisions': {'claim_1': {'variant': 'a'}}})
-        self.assertIn('review decision', notes_help(self.client.get(f'/encounters/{encounter.pk}/')))
+        self.assertIn('Saving changed notes clears 1 saved prewritten statement wording (not reviewed),',
+                      notes_help(self.client.get(f'/encounters/{encounter.pk}/')))
 
     def test_nothing_to_clear_says_nothing_about_clearing(self):
         _template, version = self.upload(self.make_docx(), 'docx')
@@ -460,9 +462,9 @@ class TheNotesPageSaysWhatAChangedSaveClears(OrdinaryDraft, TestCase):
         encounter, _keys = self.reviewed_draft()
         self.client.force_login(self.member('guards-notes-employee-2', 'employee'))
         help_text = notes_help(self.client.get(f'/encounters/{encounter.pk}/'))
-        for words in ('Saving changed notes clears', CLEARS, 'accepted codes', 'recorded under your name',
-                      'Saving them unchanged clears nothing'):
-            self.assertIn(words, help_text)
+        for words in ('Saving changed notes clears the answer draft (2 answers, 2 reviewed by a clinician), whoever saves them',
+                      'recorded under your name', 'Saving them unchanged clears nothing'):   # (R4-7: what is there, by count)
+            self.assertIn(words, ' '.join(help_text.split()))
         response = self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': encounter.notes + '\nPlan: synthetic.'})
         self.assertEqual(encounter.answers, {})
         self.assertIn('Notes saved. Cleared, and recorded under your name: the answer draft (2 answers, 2 reviewed by a '
