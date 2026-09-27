@@ -502,23 +502,30 @@ ANSWER_STATES=('answers_accepted_suggestion','answers_left_blank','answers_edite
 def review_state_counts(e,codes=True):
     """What clearing this draft discards, as counts only (never clinical text), for its audit row.
 
-    Each answer is counted once, in the first of ANSWER_STATES that fits — an accepted suggestion (which is also `edited`
-    and may be reviewed), left blank, edited and not an accepted suggestion, reviewed and unedited, or neither reviewed
-    nor edited — so those states are disjoint and sum to the answers cleared (refutation round 2, R2-4). Across them, and
-    NOT a further state to add to them, `answers_with_clinician_review` counts the answers that carried a review tick,
-    which only an owner or clinician can set: two edited answers a clinician reviewed no longer audit exactly as two
-    edits nobody reviewed (refutation round 3, F3). Each statement decision is counted once: reviewed, or recorded and
-    unreviewed — which includes a wording saved exactly as the form rendered it, since a save records every statement's
-    wording and the record cannot tell a deliberate choice of the default from none, so the key does not say "chosen"
-    (refutation round 3, F4). Accepted codes only."""
+    An answer is counted only when it carries text or a decision — a review tick, an acceptance, "Leave blank — reviewed"
+    or an edit (to nothing, too). An empty field nobody decided (a `missing` field, or a conflict nobody resolved) holds
+    no answer to clear: counting it made notes with one supported answer and one empty field say "2 answers" (refutation
+    round 4, R4-3). Each counted answer is counted once, in the first of ANSWER_STATES that fits — an accepted suggestion
+    (which is also `edited` and may be reviewed), left blank, edited and not an accepted suggestion, reviewed and
+    unedited, or neither reviewed nor edited (so, since R4-3, carrying text) — so those states are disjoint and sum to
+    the answers counted (refutation round 2, R2-4). Across them, and NOT a further state to add to them,
+    `answers_with_clinician_review` counts the answers that carried a review tick, which only an owner or clinician can
+    set: two edited answers a clinician reviewed no longer audit exactly as two edits nobody reviewed (refutation round 3,
+    F3). Each statement decision is counted once: reviewed, or recorded and unreviewed — which includes a wording saved
+    exactly as the form rendered it, since a save records every statement's wording and the record cannot tell a
+    deliberate choice of the default from none, so the key does not say "chosen" (refutation round 3, F4). Accepted codes
+    only."""
+    from .generation import is_empty
     counts=dict.fromkeys(ANSWER_STATES,0);counts['answers_with_clinician_review']=0
     for a in (e.answers or {}).values():
-        a=a if isinstance(a,dict) else {}                 # (a malformed entry is still an answer the save clears)
+        # (a malformed entry from an earlier release is text if it is anything, so the save's count never hides it)
+        a=a if isinstance(a,dict) else {'text':str(a) if a else ''}
         if a.get('accepted_suggestion'):state='answers_accepted_suggestion'
         elif a.get('status')=='left_blank':state='answers_left_blank'
         elif a.get('status')=='edited':state='answers_edited_not_accepted'
         elif a.get('reviewed'):state='answers_reviewed_unedited'
-        else:state='answers_unreviewed_unedited'
+        elif not is_empty(a.get('text')):state='answers_unreviewed_unedited'
+        else:continue                                     # (an empty field nobody decided: nothing to clear)
         counts[state]+=1;counts['answers_with_clinician_review']+=int(bool(a.get('reviewed')))
     decisions=[d if isinstance(d,dict) else {} for d in ((e.template_review or {}).get('decisions') or {}).values()]
     counts.update(statements_reviewed=sum(1 for d in decisions if d.get('reviewed')),

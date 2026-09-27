@@ -292,18 +292,20 @@ class TheClearedCountsTellAReviewFromNone(OrdinaryDraft, TestCase):
         self.assertEqual((counts.get('answers_edited_not_accepted'), counts.get('answers_with_clinician_review')), (2, 0))
 
     def test_every_answer_is_counted_once_in_its_state_and_its_review_across_them(self):
-        """The states partition the answers (a malformed entry included: the save clears it too); the review count
-        spans them. Unsaved, so no code is counted."""
+        """The states partition the answers that carry text or a decision (a malformed entry included: the save clears it
+        too; an empty field nobody decided is not an answer — R4-3); the review count spans them. Unsaved, so no code is
+        counted."""
         encounter = Encounter(template_review={}, answers={
             'accepted': {'accepted_suggestion': True, 'status': 'edited', 'reviewed': True},
             'blank': {'status': 'left_blank', 'reviewed': True}, 'edited': {'status': 'edited'},
             'edited_reviewed': {'status': 'edited', 'reviewed': True}, 'reviewed': {'status': 'supported', 'reviewed': True},
-            'untouched': {'status': 'supported', 'reviewed': False}, 'missing': {'status': 'missing'}, 'malformed': 'legacy'})
+            'untouched': {'text': 'Synthetic.', 'status': 'supported', 'reviewed': False}, 'missing': {'status': 'missing'},
+            'malformed': 'legacy'})
         counts = views.review_state_counts(encounter, codes=False)
         self.assertEqual({state: counts[state] for state in views.ANSWER_STATES},
                          {'answers_accepted_suggestion': 1, 'answers_left_blank': 1, 'answers_edited_not_accepted': 2,
-                          'answers_reviewed_unedited': 1, 'answers_unreviewed_unedited': 3})
-        self.assertEqual(sum(counts[state] for state in views.ANSWER_STATES), len(encounter.answers))
+                          'answers_reviewed_unedited': 1, 'answers_unreviewed_unedited': 2})
+        self.assertEqual(sum(counts[state] for state in views.ANSWER_STATES), len(encounter.answers) - 1)   # (not 'missing')
         self.assertEqual(counts['answers_with_clinician_review'], 4)
 
     def test_a_draft_nobody_reviewed_or_edited_is_counted_when_it_is_cleared(self):
