@@ -76,3 +76,19 @@ No launch date is promised while account/contracts and these sessions are unsche
 engineering qualification → account/contract/budget admission → isolated target installation and restore/
 alert/payment/security/native-Word acceptance → reviewed cutover → invited real-patient admission. Independent
 preparation continues while external inputs are pending; no launch switch relaxes the Word or clinical gates.
+
+## 5. Corpus rights dependency established after the bounded local audit
+
+The existing inventory was exhausted as a feasibility review, without buying or acquiring more files.
+Its 158 originals divide into four qualification-source aliases, 51 records without the required
+applicable exact-file rights proof (including explicit restrictions), and 103 from one source capped
+at eight. Even granting every unresolved intrinsic requirement optimistically, eight cannot supply
+the ten additional independent development lineages. This is not eight already qualified forms.
+
+Applicable commercial adaptation rights for at least two source-disjoint existing lineages would
+remove that particular ceiling; a complete development supplement still needs ten exact authorized
+blank originals with independent lineage, blankness and source separation established. Authorized
+clinic-supplied originals and their reuse authority can also supply the missing evidence. See
+`corpus-development-inventory-adjudication-20260927.md`. This adds the proven dependency to the same
+consolidated request; it authorizes no acquisition campaign or denominator replacement. The original
+60-file manifest and every first-pass result remain unchanged.
