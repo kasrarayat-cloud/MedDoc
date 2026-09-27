@@ -1035,6 +1035,11 @@ class Detector:
             if typ in ("docPartObj", "docPartList", "citation", "bibliography", "equation", "picture", "group", "checkbox"):
                 continue
             content = slot.el.find(q("w:sdtContent"))
+            if content is not None and wraps_structure(content):
+                # A control that wraps other controls, fields, tables or drawings is a container, not an
+                # answer: writing into it would replace what it holds. Its contents are read by the other rules.
+                self.notes.append("A content control that contains other form parts was read by its parts.")
+                continue
             shown = self.text(content, own=False).strip() if content is not None else ""
             empty_like = info["placeholder"] or is_blank_text(shown) or bool(ENTER_HINT.match(shown))
             label = info["alias"] or info["tag"] or self.label_before_object(slot, slot.el)
@@ -2348,7 +2353,18 @@ def write_ff_dropdown(begin_run, options, answer):
     return True
 
 
+def wraps_structure(content) -> bool:
+    """True when a content control's content holds other controls, fields, tables or drawings."""
+    for tag in ("w:sdt", "w:fldChar", "w:fldSimple", "w:tbl", "w:drawing", "w:pict", "w:object", "w:txbxContent"):
+        if content.find(".//" + q(tag)) is not None:
+            return True
+    return False
+
+
 def write_sdt_text(sdt, answer):
+    content_now = sdt.find(q("w:sdtContent"))
+    if content_now is not None and wraps_structure(content_now):
+        fail("This content control contains other form parts and cannot take a text answer.", "unsupported_layout")
     pr = sdt.find(q("w:sdtPr"))
     if pr is not None:
         for x in pr.findall(q("w:showingPlcHdr")):
@@ -2582,3 +2598,108 @@ def write_table_rows(index, field, answer):
             if value and c in col_of:
                 write_cell(col_of[c], str(value))
     return True
+
+
+# ─── manual mapping: outline and locate ────────────────────────────────────────────────────────────────────────────
+
+MANUAL_KINDS = {"text", "long_text", "date", "time", "checkbox", "choice", "signature", "initials"}
+
+
+def outline(data: bytes) -> dict:
+    """Every place a clinician can map by hand: paragraphs, cells, content controls, legacy fields and glyph
+    boxes, with a short preview and where they sit. Nothing is written."""
+    package = open_package(data)
+    detector = Detector(package)
+    rows = []
+    for s in detector.index.slots:
+        if s.kind not in ("p", "tc", "sdt", "ff", "glyphs"):
+            continue
+        if s.kind == "p":
+            preview = detector.ptext(s.el)[0]
+        elif s.kind == "tc":
+            preview = detector.cell_text(s)
+        elif s.kind == "sdt":
+            if s.info["type"] in ("docPartObj", "docPartList", "group", "picture"):
+                continue
+            content = s.el.find(q("w:sdtContent"))
+            preview = detector.text(content, own=False) if content is not None else ""
+        elif s.kind == "ff":
+            preview = s.info.get("name") or s.info["field"]
+        else:
+            preview = detector.ptext(s.el)[0]
+        rows.append({"slot": s.id, "kind": s.kind, "part": "body" if s.part == "word/document.xml" else
+                     ("header" if "header" in s.part else "footer"),
+                     "preview": re.sub(r"\s+", " ", preview.replace("\x00", "▢")).strip()[:120],
+                     "context": detector.heading_before(s)[:120],
+                     "control": s.info.get("type") or s.info.get("field") or ""})
+    return {"contract": CONTRACT, "slots": rows}
+
+
+def locate(data: bytes, targets: list) -> list:
+    """Clinician-chosen places -> v3 fields (origin 'manual'). A paragraph with printed text takes the answer
+    after its text; an empty paragraph or cell takes it as its content; printed text is never replaced."""
+    package = open_package(data)
+    detector = Detector(package)
+    out = []
+    for n, t in enumerate(targets, 1):
+        kind = t.get("kind")
+        label = clean_label(str(t.get("label") or ""))[:300]
+        if kind not in MANUAL_KINDS or not label:
+            fail("Each added field needs a label and a supported kind.", "invalid_mapping")
+        slot = detector.index.by_id.get(t.get("slot") or "")
+        if slot is None:
+            fail("The chosen place is not in this form.", "invalid_mapping")
+        options = [clean_label(str(o))[:200] for o in (t.get("options") or []) if clean_label(str(o))]
+        target = None
+        if slot.kind == "p":
+            text = detector.ptext(slot.el)[0]
+            if kind == "checkbox":
+                if BOX not in text:
+                    fail("A checkbox must be mapped to a printed box.", "invalid_mapping")
+                target = {"type": "checkboxes", "boxes": [{"kind": "glyph", "part": slot.part, "slot": slot.path + "/glyphs", "glyph": 0}]}
+            elif not text.strip(" \t\x00"):
+                target = {"type": "paragraph"}
+            else:
+                end = len(text.rstrip())
+                target = {"type": "span", "start": end, "end": end, "shape": "after_label"}
+        elif slot.kind == "tc":
+            if not detector.is_empty_cell(slot):
+                fail("The chosen cell holds printed text. Choose the empty answer cell, or a paragraph to write after.",
+                     "invalid_mapping")
+            target = {"type": "checkboxes", "boxes": [{"kind": "cell", "part": slot.part, "slot": slot.path}]} \
+                if kind == "checkbox" else {"type": "cell"}
+        elif slot.kind == "sdt":
+            typ = slot.info["type"]
+            content = slot.el.find(q("w:sdtContent"))
+            if typ == "checkbox":
+                target = {"type": "checkboxes", "boxes": [{"kind": "sdt", "part": slot.part, "slot": slot.path}]}
+                kind = "checkbox"
+            elif content is not None and wraps_structure(content):
+                fail("That content control contains other form parts; choose one of them instead.", "invalid_mapping")
+            elif typ in ("dropDownList", "comboBox"):
+                target, kind = {"type": "sdt_choice"}, "choice"
+                options = [o for o in slot.info["options"] if o and not PLACEHOLDER_TEXT.match(o)]
+            else:
+                target = {"type": "sdt_text", "date": typ == "date"} if typ == "date" else {"type": "sdt_text"}
+        elif slot.kind == "ff":
+            field_kind = slot.info["field"]
+            if field_kind == "FORMCHECKBOX":
+                target, kind = {"type": "checkboxes", "boxes": [{"kind": "ff", "part": slot.part, "slot": slot.path}]}, "checkbox"
+            elif field_kind == "FORMDROPDOWN":
+                target, kind, options = {"type": "ff_dropdown"}, "choice", [o for o in slot.info.get("options", []) if o]
+            else:
+                target = {"type": "ff_text"}
+        elif slot.kind == "glyphs":
+            n_glyph = int(t.get("glyph") or 0)
+            target, kind = {"type": "checkboxes", "boxes": [{"kind": "glyph", "part": slot.part, "slot": slot.path, "glyph": n_glyph}]}, "checkbox"
+            slot = slot.parent
+        if target is None:
+            fail("That place cannot take an answer.", "invalid_mapping")
+        area = Area(kind, label, slot, target, context=clean_label(str(t.get("context") or detector.context_for(slot)))[:300],
+                    options=options if kind in ("choice", "multi_choice") else ([label] if kind == "checkbox" else []))
+        area.capacity = detector.capacity_for(area)
+        field = area_to_field(n, area)
+        field["key"] = "m3_%s" % hashlib.sha256(("%s|%s|%s" % (slot.id, json_dumps(target), label)).encode()).hexdigest()[:12]
+        field["origin"] = "manual"
+        out.append(field)
+    return out
