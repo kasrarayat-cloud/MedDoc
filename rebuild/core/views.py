@@ -914,6 +914,14 @@ def finalize(request,pk):
                 validate_identity(version.fields,e.answers,request.user)
                 fill_template(original,version.fields,{k:v['text'] for k,v in e.answers.items()},out)
             out.chmod(0o600)
+            # ⚠️ THE REVISION IS NOT RENUMBERED HERE, DELIBERATELY: the record keeps the revision its review is bound to.
+            # The Word receipt's binding (`source_revision`) and each reviewed answer's `review_revision` name THIS
+            # revision, as did the trusted context the export was just filled under (the adapter refuses any other);
+            # renumbering would leave the finalized record contradicting its own receipt, and the release evidence
+            # (build-word-evidence.mjs) checks exactly that equality. Nothing may post to a finalized record anyway: every
+            # writer refuses the status, and the database refuses any update to the row — so the status, not the revision,
+            # is what stops a page opened before finalization (refutation round 4, R4-1: the code writers were the two that
+            # did not check it). No legitimate action after finalization posts a revision: export is a GET.
             e.export_path=relative;e.export_sha256=hashlib.sha256(out.read_bytes()).hexdigest();e.finalized_at=finalized_at;e.finalized_by=request.user;e.status='finalized';e.save()
             audit(request.user,'encounter.finalize',e.pk,department=e.department,export_sha256=e.export_sha256,mapping_version=e.template_version.number)
         messages.success(request,'Finalized. The original structure is preserved in your export.')
@@ -1128,6 +1136,12 @@ def invite_accept(request,raw):
                 messages.success(request,'Invitation accepted; your personal welcome credit is available.');return redirect('login')
     return render(request,'register.html',{'form':form,'invitation':invite,'existing_invited_account':existing_account})
 
+#: ⚠️ A FINALIZED RECORD'S CODES ARE PART OF IT. Finalization does not renumber the revision (see `finalize`), so a Coding tab
+#: opened before it posts the current revision afterwards: its Accept set accepted_by and audited coding.accept after
+#: encounter.finalize, and its Suggest added a suggestion — while every other writer refused (refutation round 4, R4-1).
+#: The database guard covers the encounter row only, not its code suggestions, so both code writers check the status.
+FINALIZED_CODES='This document is finalized. Finalized documents are immutable.'
+
 @require_POST
 @transaction.atomic
 def coding(request,pk):
@@ -1136,6 +1150,7 @@ def coding(request,pk):
     # from notes a concurrent save had already replaced — refutation round 3, F1)
     e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
     membership(request.user,e.department)
+    if e.status=='finalized':return document_refusal(request,e,FINALIZED_CODES+' Nothing was suggested.',409)
     if request.POST.get('revision')!=str(e.revision):
         return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Nothing was suggested. Reopen it to see the current notes before suggesting codes.',409)
     result=suggest(e,request.user)
@@ -1159,6 +1174,7 @@ def accept_code(request,pk,code_pk):
     # Now the two serialize: the save counts and names the accepted code, or this finds its code gone and says so.
     e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
     membership(request.user,e.department,roles=['owner','clinician'])
+    if e.status=='finalized':return document_refusal(request,e,FINALIZED_CODES+' Nothing was accepted.',409)
     from .coding import applicable_releases,cpt_licensed
     item=CodeSuggestion.objects.select_for_update().filter(pk=code_pk,encounter=e).first()
     if request.POST.get('revision')!=str(e.revision):
