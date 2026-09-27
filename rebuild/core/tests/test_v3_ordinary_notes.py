@@ -838,3 +838,194 @@ class RoundTwoMutantPins(SimpleTestCase):
                                             'same': True}])
         kept = run('Right knee.', {'Chief complaint': ['Right knee.']})['Chief complaint']['held_candidate']
         self.assertEqual((kept['context'], kept['reason']), ([], g.V3_HELD_REASON))
+
+
+# Round-3 refutation of 1d66c798: the refuter's own inputs, the provider simulated by unit selection exactly as `run`
+# does. Each input below was adopted as `supported` (R3-1, R3-2, R3-3), cost seconds under the row lock (R3-4, R3-5), or
+# was held although it is a plain value or an instruction (R3-6). Where the finding elided text with '…', the sentence is
+# completed and the completion is stated beside it.
+ROUND3 = REFUTED + [field('v3_11', 'Diagnosis'), field('v3_12', 'Follow-up'), field('v3_13', 'Blood group'),
+                    field('v3_14', 'Urine dipstick'), field('v3_15', 'Temperature'), field('v3_16', 'Heart rate')]
+
+
+def held_with(test, notes, label, quote, candidate, fields=ROUND3):
+    """A hold: nothing adopted or offered for one click, the candidate and its own source kept for the clinician."""
+    answer = run(notes, {label: [quote]}, fields=fields)[label]
+    test.assertEqual((answer['status'], answer['text'], answer.get('suggestion')), ('conflict', '', None), notes)
+    kept = answer.get('held_candidate') or {}
+    test.assertEqual(kept.get('text'), candidate, notes)
+    test.assertEqual([entry['quote'] for entry in kept.get('evidence', [])], [quote], notes)
+    return answer
+
+
+class RoundThreeRefutation(SimpleTestCase):
+    def test_r3_1_a_later_labelled_value_that_is_not_plain_holds_what_comes_before_it(self):
+        """R3-1: F5 split a line wherever a form or context label begins, and the split-off tail was exempted as
+        'another question's one-sentence labelled value' however much it said."""
+        for notes, label, quote, candidate in (
+                ('Consent obtained: yes. Plan: to be obtained tomorrow.', 'Consent obtained', 'Consent obtained: yes.', 'yes.'),
+                ('Consent obtained: yes. Clinician signature: consent form not yet signed.', 'Consent obtained',
+                 'Consent obtained: yes.', 'yes.'),
+                ('Smoker: yes. Plan: none, he quit ten years ago.', 'Smoker', 'Smoker: yes.', 'yes.'),
+                ("Allergies: none. Plan: avoid penicillin after last week's anaphylaxis.", 'Allergies', 'Allergies: none.',
+                 'none.'),
+                ('Temperature: 37.2. Heart rate: 104, temperature rechecked at 38.9.', 'Temperature', 'Temperature: 37.2.',
+                 '37.2.')):
+            with self.subTest(notes=notes):
+                held_with(self, notes, label, quote, candidate)
+
+    def test_r3_1_plain_values_after_it_still_leave_an_answer_adopted(self):
+        vitals = [field('v3_b', 'BP'), field('v3_h', 'HR'), field('v3_t', 'Temp')]
+        out = run('BP: 124/78. HR: 88. Temp: 36.9.', {'BP': ['BP: 124/78.'], 'HR': ['HR: 88.'], 'Temp': ['Temp: 36.9.']},
+                  fields=vitals)
+        self.assertEqual({label: (a['status'], a['text']) for label, a in out.items()},
+                         {'BP': ('supported', '124/78.'), 'HR': ('supported', '88.'), 'Temp': ('supported', '36.9.')})
+        out = run('Allergies: none. Smoker: No.', {'Allergies': ['Allergies: none.'], 'Smoker': ['Smoker: No.']})
+        self.assertEqual((out['Allergies']['status'], out['Allergies']['text']), ('supported', 'none.'))
+        self.assertEqual((out['Smoker']['status'], out['Smoker']['text']), ('supported', 'No'))
+
+    def test_r3_2_a_label_is_sentence_is_an_ordinary_sentence_for_the_paragraph_rule(self):
+        """R3-2: 'Plan is ...' read as a labelled value, so it neither changed what came before it nor was changed."""
+        for notes, label, quote, candidate in (
+                ('Consent obtained: yes.\nPlan is to proceed once consent is signed tomorrow.', 'Consent obtained',
+                 'Consent obtained: yes.', 'yes.'),
+                # The finding elided the dose ('Plan is amoxicillin …, as ...'); completed as '500 mg three times daily'.
+                ('Allergies: penicillin.\nPlan is amoxicillin 500 mg three times daily, as the penicillin allergy was '
+                 'disproven on testing last year.', 'Allergies', 'Allergies: penicillin.', 'penicillin.'),
+                ('Smoker: yes.\nAllergies were reviewed today and she quit smoking in 2010.', 'Smoker', 'Smoker: yes.',
+                 'yes.'),
+                ('Her sister was seen in oncology last month. Diagnosis was breast cancer.', 'Diagnosis',
+                 'Diagnosis was breast cancer.', 'breast cancer.')):
+            with self.subTest(notes=notes):
+                held_with(self, notes, label, quote, candidate)
+
+    def test_r3_3_a_single_letter_before_a_stop_ends_a_sentence_for_a_hold(self):
+        """R3-3: 'hepatitis C.' was read as an initial, so the sentence after it hid inside the unit before."""
+        held_with(self, 'Smoker: yes.\nPlan: screen for hepatitis C. She is not a smoker; that was her husband.', 'Smoker',
+                  'Smoker: yes.', 'yes.')
+        for notes, label in (('Plan: screen for hepatitis C. She is not a smoker; that was her husband.', 'Plan'),
+                             ('Medications: vitamin K. Warfarin was stopped last month.', 'Medications')):
+            with self.subTest(notes=notes):
+                held_with(self, notes, label, notes, notes.split(': ', 1)[1])
+
+    def test_r3_6_a_plain_value_or_an_instruction_is_not_a_pointer(self):
+        """R3-6: held although nothing in them points at other lines."""
+        for notes, label, text in (('Follow-up: see in clinic in twelve months.', 'Follow-up', 'see in clinic in twelve months.'),
+                                   ('Plan: see physiotherapist twice weekly for six weeks.', 'Plan',
+                                    'see physiotherapist twice weekly for six weeks.'),
+                                   ('Blood group: O-', 'Blood group', 'O-'), ('Blood group: O−.', 'Blood group', 'O−.'),
+                                   ('Blood group: A+', 'Blood group', 'A+'),
+                                   ('Urine dipstick: nitrites -', 'Urine dipstick', 'nitrites -')):
+            with self.subTest(notes=notes):
+                answer = run(notes, {label: [notes]}, fields=ROUND3)[label]
+                self.assertEqual((answer['status'], answer['text']), ('supported', text), notes)
+
+    def test_an_unpunctuated_run_on_unit_is_held_for_every_question(self):
+        """Pre-existing, listed by the previous repair: a single-line unpunctuated dictation was adopted whole as the answer
+        to every free-text question asked. More than 25 words with no sentence end is a run-on, held."""
+        notes = ('patient is a fifty year old man who comes in with right knee pain for three weeks he has no allergies he '
+                 'smokes ten a day and the plan is physiotherapy twice weekly and review in six weeks')
+        out = run(notes, {'Chief complaint': [notes], 'Allergies': [notes], 'Plan': [notes]}, fields=ROUND3)
+        for label in ('Chief complaint', 'Allergies', 'Plan'):
+            with self.subTest(label=label):
+                held_with(self, notes, label, notes, notes)
+
+
+class RoundThreeCost(SimpleTestCase):
+    """R3-4/R3-5: the refuter's inputs, bounded in time (each was seconds to minutes on 1d66c798)."""
+
+    def test_r3_4_a_run_of_stops_is_read_in_linear_time(self):
+        for count in (2000, 4000, 8000):
+            started = time.monotonic()
+            g.inner_sentence_end('.' * count)
+            self.assertLess(time.monotonic() - started, 0.05, count)
+
+    def test_r3_4_an_unlabelled_unit_of_20k_stops_selected_by_three_questions(self):
+        unit = 'Patient seen today' + '.' * 20000
+        fields = [field('a', 'Chief complaint'), field('b', 'History'), field('c', 'Plan')]
+        started = time.monotonic()
+        out = run(unit, {'Chief complaint': [unit], 'History': [unit], 'Plan': [unit]}, fields=fields)
+        self.assertLess(time.monotonic() - started, 2.0)
+        self.assertEqual({a['status'] for a in out.values()}, {'conflict'})
+
+    def test_r3_4_each_unit_is_read_for_sentence_ends_once_however_many_questions_select_it(self):
+        notes = 'Patient presents with knee pain. She reports it is worse at night.'
+        fields = [field('a', 'Chief complaint'), field('b', 'History'), field('c', 'Plan')]
+        real, calls = g.inner_sentence_end, []
+
+        def counted(text):
+            calls.append(text)
+            return real(text)
+
+        units, _ = g.source_units(notes, fields)
+        with patch.object(g, 'inner_sentence_end', side_effect=counted):
+            run(notes, {'Chief complaint': [units[0]['quote']], 'History': [u['quote'] for u in units],
+                        'Plan': [units[1]['quote']]}, fields=fields)
+        self.assertLessEqual(len(calls), len(units), calls)
+
+    def test_r3_5_a_line_of_999_labelled_segments_is_split_once(self):
+        notes = ' '.join(['Q1: No.'] * 999)
+        fields = [field('q', 'Q1', 'choice', ['Yes', 'No'])]
+        units, _ = g.source_units(notes, fields)
+        self.assertEqual(len(units), 999)
+        asked, context, v3_fields = g.v3_generation_fields(fields)
+        selections = g.UnitSelections(fields=[g.UnitSelection(key='q', unit_ids=[u['id'] for u in units], conflict=False)])
+        answers = g.validate_selections(notes, asked, selections, context_labels=context, evidence_contract=g.TAB_CONTRACT)
+        real, calls = g.sentence_boundaries, []
+
+        def counted(*args):
+            calls.append(1)
+            return real(*args)
+
+        started = time.monotonic()
+        with patch.object(g, 'sentence_boundaries', side_effect=counted):
+            adopted = g.v3_adopted(v3_fields, answers, notes, asked, context)
+        self.assertLess(time.monotonic() - started, 2.0)
+        self.assertLessEqual(len(calls), 1, 'one line, split once')
+        self.assertEqual((adopted['q']['status'], adopted['q']['text']), ('supported', 'No'))
+
+
+@override_settings(**LIVE)
+class RoundThreeThroughTheWorker(V3EncounterFixture, TestCase):
+    """R3-1/R3-2/R3-4 through enqueue and the worker, live mode, the Anthropic client patched and selecting by quote."""
+
+    def generate(self, notes, picks):
+        from core.jobs import enqueue, run_one
+        encounter = Encounter.objects.get(pk=self.encounter.pk)
+        self.assertEqual(self.client.post(f"/encounters/{encounter.pk}/notes/",
+                                          {"revision": encounter.revision, "notes": notes}).status_code, 302)
+        with patch('anthropic.Anthropic') as client:
+            client.return_value.messages.create.side_effect = (
+                lambda **kwargs: unit_response(json.loads(kwargs['messages'][0]['content']), picks))
+            job = enqueue(Encounter.objects.get(pk=self.encounter.pk), self.user)
+            started = time.monotonic()
+            self.assertTrue(run_one())
+            elapsed = time.monotonic() - started
+        job.refresh_from_db()
+        self.assertEqual(job.state, 'succeeded', job.error)
+        return Encounter.objects.get(pk=self.encounter.pk).answers, elapsed
+
+    def held_option(self, notes, label, quote, other):
+        answers, _ = self.generate(notes, {label: [quote], 'Reason for visit': [other]})
+        answer = answers[self.key(label)]
+        self.assertEqual((answer['status'], answer['text']), ('conflict', ''), notes)
+        self.assertEqual(answer['held_candidate']['text'], 'yes.', notes)
+
+    def test_r3_1_a_split_off_reason_that_is_not_a_plain_value_holds_the_checkbox(self):
+        self.held_option('Diabetes: yes. Reason for visit: review; diabetes was excluded on repeat HbA1c.', 'Diabetes',
+                         'Diabetes: yes.', 'Reason for visit: review; diabetes was excluded on repeat HbA1c.')
+
+    def test_r3_1_a_split_off_reason_that_is_not_a_plain_value_holds_the_choice(self):
+        self.held_option('Smoker: yes. Reason for visit: cough; he quit smoking ten years ago.', 'Smoker?', 'Smoker: yes.',
+                         'Reason for visit: cough; he quit smoking ten years ago.')
+
+    def test_r3_2_a_reason_is_sentence_holds_the_checkbox_before_it(self):
+        self.held_option('Diabetes: yes.\nReason for visit is review, as diabetes was excluded on repeat testing.', 'Diabetes',
+                         'Diabetes: yes.', 'Reason for visit is review, as diabetes was excluded on repeat testing.')
+
+    def test_r3_4_a_value_of_49900_stops_is_validated_in_linear_time_under_the_lock(self):
+        notes = 'Reason for visit: knee pain.\nAllergies: ' + '.' * 49900
+        answers, elapsed = self.generate(notes, {'Allergies': ['Allergies: ' + '.' * 49900],
+                                                 'Reason for visit': ['Reason for visit: knee pain.']})
+        self.assertLess(elapsed, 5.0)
+        self.assertEqual(answers[self.key('Allergies')]['status'], 'conflict')
