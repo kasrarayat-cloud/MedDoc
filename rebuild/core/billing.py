@@ -92,10 +92,20 @@ def sandbox_funded(wallet):
 def real_mode_refuses(wallet):
     """Whether real data mode refuses this paid balance: it holds money a payment not recorded as live funded.
 
-    One rule, two readers: reserve() never holds it, and checkout never takes live money into it (that money could
-    never be spent). Always False in synthetic mode, which spends sandbox money as before.
+    One rule, three readers: reserve() never holds it, checkout never takes live money into it (that money could never
+    be spent), and the worker never sends a job whose hold sits on it (sandbox_hold). Always False in synthetic mode,
+    which spends sandbox money as before.
     """
     return real_data_mode() and sandbox_funded(wallet)
+
+
+def sandbox_hold(job):
+    """Whether any funds this job holds sit on a balance real data mode refuses.
+
+    reserve() refuses such a hold in real mode, so one exists only when it was taken before the switch from synthetic
+    mode. The worker reads this immediately before the provider request (core.jobs.run_one).
+    """
+    return any(real_mode_refuses(r.wallet) for r in Reservation.objects.filter(job=job,state='held').select_related('wallet'))
 
 
 def real_mode_payment_problems():

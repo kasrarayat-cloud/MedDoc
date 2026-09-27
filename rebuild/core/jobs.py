@@ -16,7 +16,7 @@ from .security import membership,audit,private_path
 from .media import (AMBIGUOUS,MISSING,RETRYABLE,SUBMISSION_BUDGET_SECONDS,TOO_LARGE,TOO_SLOW,UNAVAILABLE,UNREADABLE,NotNormalised,
                     SubmissionUnprobeable,normalise_submission,plan_normalisation,probe_submission,refusal_text,
                     scrubbed)
-from .billing import reserve,settle,release,absorb_failed_job,MULTIPLIER
+from .billing import reserve,settle,release,absorb_failed_job,sandbox_hold,MULTIPLIER
 from . import generation
 from . import audio
 
@@ -382,6 +382,21 @@ def refuse(kind,detail,job=None):
     return NoProviderRequest(refusal_text(kind))
 
 
+#: A hold taken before the switch to real data mode that sits on sandbox money: refused before any provider request.
+SANDBOX_HOLD_REFUSED='The funds held for this request include sandbox (test) payments, which real data mode never spends. Contact support.'
+
+
+def refuse_sandbox_hold(job):
+    """The worker's stop for a hold real data mode refuses to spend (billing.sandbox_hold): a NoProviderRequest, so run_one
+    marks the job not processed, charges nothing and releases the hold. The audit write cannot stop the refusal (see
+    refuse())."""
+    try:
+        audit(job.user,'usage.sandbox_hold_refused',job.pk,department=job.encounter.department,kind=job.kind)
+    except Exception:
+        pass
+    return NoProviderRequest(SANDBOX_HOLD_REFUSED)
+
+
 def prepare_submission(job):
     """Produce the exact bytes that will be POSTed, describe them durably, and return them with the artifact to reap.
 
@@ -576,6 +591,8 @@ def run_one():
         job.state='running';job.started_at=timezone.now();job.save(update_fields=['state','started_at'])
     provider_returned=False
     try:
+        # A hold taken before the switch to real data mode may sit on sandbox money, which real mode never spends.
+        if sandbox_hold(job): raise refuse_sandbox_hold(job)
         e=job.encounter
         result,cost,units,rates,provider,request_id,simulated=generation.generate(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements]) if job.kind=='generation' else transcribe(job)
         provider_returned=True

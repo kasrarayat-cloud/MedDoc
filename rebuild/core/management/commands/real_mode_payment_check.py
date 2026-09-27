@@ -7,8 +7,11 @@ it runs inside a READ ONLY transaction, so it cannot write even by mistake. It n
 
 A startup check inside every process is not used instead: settings and AppConfig.ready() also run for
 migrate, makemigrations, the test runner and collectstatic, often before the database exists or is migrated,
-and Django advises against queries there. The launcher runs this command; reserve() enforces the same rule
-on every request in real mode (core.billing.sandbox_funded).
+and Django advises against queries there. The launcher runs this command. In real mode the running application
+then enforces the narrower per-balance rule, core.billing.real_mode_refuses (a paid balance any non-live payment
+funded): reserve() refuses to hold it, checkout refuses to add live money to it, and the worker refuses to send a
+job whose hold, taken before the switch to real mode, sits on it. This command is stricter: it refuses a database
+holding ANY sandbox payment or event row, funded or not.
 """
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, transaction
