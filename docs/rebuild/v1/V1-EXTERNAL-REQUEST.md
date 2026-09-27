@@ -33,7 +33,7 @@ engineering decisions an assistant can accept for the company.
 ## 2. Bounded synthetic verification spending, only after a frozen eligible candidate
 
 The old Stage 1 grant names a different revision/model and cannot fund this work. Metadata retrieval and
-four native token-count requests were free; no generation validation has run. The earlier proposed caps are
+eight native token-count requests were free (four tokenizer comparisons, three expanded mapping-output sizing probes and one compact-output sizing probe); no generation validation has run. The earlier proposed caps are
 retained as a single **unapproved** request:
 
 | purpose | proposed provider-cost ceiling | admission conditions |

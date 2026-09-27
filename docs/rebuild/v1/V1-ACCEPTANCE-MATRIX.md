@@ -45,7 +45,7 @@ not an installed or combined-candidate result. Reuse unchanged checks; run chang
 | # | area | check | proof / current result |
 |---|---|---|---|
 | 31 | native Word | final qualified original/export pairs and actual controls | NOT RUN: no connected Word session; both remote devices offline at Sep27 continuation |
-| 32 | model access / sizing | native exact model metadata and new tokenizer count | PASS for metadata and four free counts only; generation/served worker remains row25 |
+| 32 | model access / sizing | native exact model metadata and new tokenizer count | PASS for metadata and eight free counts only; output-text counts are input-token proxies; generation/served worker remains row25 |
 | 33 | corpus independence | 60 independently authored authorized templates, ≥10 sources | INSUFFICIENT:60 hashes/26 sources but44 declared lineages; preserve frozen set/results, validate provenance separately |
 | 34 | WM ordinary narrative | necessary draft path on selected V1 code/adapter, source/row/side/correction → review/export | Locally integrated:273 focused checks; cleared-answer repair80targeted checks; historical benchmark byte-identical; exactSonnet5 quality still pending. No labelled-only substitution |
 | 35 | actual incident delivery | receipt, delivery and recipient acknowledgement; escalation/reminder/outside-host failure | BLOCKED: actual production target/access; no uncertain email or single-use test replay |

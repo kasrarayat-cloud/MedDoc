@@ -131,3 +131,6 @@ and require a fresh quote. Both mapping flags remain off by default. One specifi
 count call measured 8,659 native **input** tokens for the conservative compact output-text envelope; it is
 not native generation or clinical qualification evidence. See the capacity report for exact hashes,
 focused checks, preserved earlier counts and narrow limits.
+
+
+After local integration567ada8a,42 mapping/wire/actual-SDK-schema/WM-profile checks passed49.145s using isolated synthetic DB55707. This includes the shared native-schema repaird798ea7e. Independent root wire validation passed34 cases; source-bound proposal quality and live Sonnet5 behavior remain unverified. Evidence `integration-evidence-20260927/mapping-schema-union.txt`.
