@@ -1,8 +1,15 @@
 """The configuration report must be incapable of printing a secret."""
+import json
+import os
 from io import StringIO
+from unittest.mock import patch
 
 from django.core.management import call_command
 from django.test import SimpleTestCase, override_settings
+
+from core import generation as g
+from core.tests.test_sonnet5_profile import (PRICE_ENV, ROLLBACK_FINGERPRINT, SONNET_5, SONNET_5_DISABLED_MEDIUM,
+                                             SONNET_46)
 
 SECRET = 'sk_test_thisvaluemustneverbeprinted'
 
@@ -91,3 +98,47 @@ class HealthReportsTheGuardRatherThanAsserting(SimpleTestCase):
         out = StringIO()
         call_command('configuration_status', stdout=out)
         return out.getvalue()
+
+
+class ConfigurationStatusNamesTheModel(SimpleTestCase):
+    """The language-model section: which model, at which rates, sending which request, under which pricing version.
+
+    Plain configuration values, printed so the owner can confirm a model switch or a rollback from the one screen built for
+    it (docs/rebuild/v1/sonnet5-migration.md). The credential beside them stays status-only.
+    """
+
+    def report(self, **overrides):
+        out = StringIO()
+        with override_settings(**overrides), patch.dict(os.environ, {**PRICE_ENV,
+                                                                     'ANTHROPIC_API_KEY': 'sk-ant-canary-never-shown'}):
+            call_command('configuration_status', stdout=out)
+            config = g.configuration()
+        return out.getvalue(), config
+
+    def test_the_model_rates_profile_and_pricing_version_are_printed(self):
+        report, config = self.report(**SONNET_5)
+        for line in ('QUILLMD_AI_MODEL: claude-sonnet-5', 'QUILLMD_AI_INPUT_RATE: 2', 'QUILLMD_AI_OUTPUT_RATE: 10',
+                     'QUILLMD_AI_CACHED_RATE: 0.20', 'QUILLMD_AI_THINKING: disabled', 'QUILLMD_AI_EFFORT: medium',
+                     'QUILLMD_AI_INFERENCE_GEO: (unset)',
+                     'request profile: explicit ' + json.dumps(config['request_profile'], sort_keys=True),
+                     f'pricing_version: {SONNET_5_DISABLED_MEDIUM}'):
+            self.assertIn(line, report)
+        self.assertNotIn('canary', report)
+        self.assertIn('ANTHROPIC_API_KEY: present', report)
+
+    def test_the_rollback_profile_is_named_as_the_unchanged_legacy_request(self):
+        report, _ = self.report(**SONNET_46)
+        self.assertIn('request profile: legacy', report)
+        self.assertIn(f'pricing_version: {ROLLBACK_FINGERPRINT}', report)
+
+    def test_an_invalid_profile_is_named_as_refusing_every_generation(self):
+        report, _ = self.report(**dict(SONNET_5, AI_EFFORT='max'))
+        self.assertIn('request profile: INVALID — every generation is refused before any request: '
+                      'QUILLMD_AI_EFFORT must be one of: low, medium, high.', report)
+
+    def test_a_refused_discount_is_reported_without_stopping_the_screen(self):
+        out = StringIO()
+        with override_settings(**SONNET_5), patch.dict(os.environ, {**PRICE_ENV, 'QUILLMD_PROVIDER_DISCOUNT_RATE': 'x'}):
+            call_command('configuration_status', stdout=out)
+        self.assertIn('pricing_version: UNAVAILABLE', out.getvalue())
+        self.assertIn('Release gates:', out.getvalue())

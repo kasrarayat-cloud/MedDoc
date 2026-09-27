@@ -56,6 +56,7 @@ class Command(BaseCommand):
         self.stdout.write('Private credentials (status only):')
         for name, value, recogniser in secrets:
             self.stdout.write(f'  {name}: {shape(value, recogniser)}')
+        self.language_model()
         # ⚠️ THESE TWO SENTENCES SAID THE OPPOSITE OF WHAT THE CODE DOES, in the same change that removed the
         # fallback they described. They promised a degraded-but-working submission path; there is no such path now.
         # During an incident where every recording is failing, this is the one screen built to localise it — and it
@@ -73,3 +74,43 @@ class Command(BaseCommand):
         self.stdout.write(f'  SYNTHETIC_ONLY: {settings.SYNTHETIC_ONLY}')
         self.stdout.write(f'  STRIPE_LIVE_ENABLED: {settings.STRIPE_LIVE_ENABLED}')
         self.stdout.write(f'  database: {settings.DATABASES["default"]["NAME"]}')
+
+    def language_model(self):
+        """The model, its rates, the request profile and the pricing version a generation queued NOW would carry.
+
+        None of these is a secret — they are the answer to "which model, at which price" — and without them an operator
+        switching the model could not confirm the switch from the one screen built for it. Every value is computed by
+        `core.generation.configuration()`, the function enqueue snapshots, so this screen cannot describe a different
+        request from the one a job would make.
+        """
+        import json
+        from django.core.exceptions import ValidationError
+        from core import generation
+        unset = lambda value: value if isinstance(value, str) and value.strip() else '(unset)'
+        self.stdout.write('Language model (plain configuration values, shown so a model switch can be confirmed):')
+        for name, value in (('QUILLMD_AI_MODEL', settings.AI_MODEL),
+                            ('QUILLMD_AI_INPUT_RATE', settings.AI_INPUT_RATE),
+                            ('QUILLMD_AI_OUTPUT_RATE', settings.AI_OUTPUT_RATE),
+                            ('QUILLMD_AI_CACHED_RATE', settings.AI_CACHED_RATE),
+                            ('QUILLMD_AI_THINKING', settings.AI_THINKING),
+                            ('QUILLMD_AI_EFFORT', settings.AI_EFFORT),
+                            ('QUILLMD_AI_INFERENCE_GEO', settings.AI_INFERENCE_GEO)):
+            # Thinking and effort are read only for claude-sonnet-5; saying so stops a 4.6 operator reading them as live.
+            scope = ' (read only for claude-sonnet-5)' if name in ('QUILLMD_AI_THINKING', 'QUILLMD_AI_EFFORT') else ''
+            self.stdout.write(f'  {name}: {unset(value)}{scope}')
+        try:
+            config = generation.configuration()
+        except ValidationError as error:
+            # Only the discount can refuse here, and its message is fixed text naming no value.
+            self.stdout.write('  request profile: UNAVAILABLE — ' + '; '.join(error.messages))
+            self.stdout.write('  pricing_version: UNAVAILABLE')
+            return
+        profile = config['request_profile']
+        if 'invalid' in profile:
+            self.stdout.write('  request profile: INVALID — every generation is refused before any request: '
+                              + profile['invalid'])
+        else:
+            kind = ('legacy (the pre-profile request, unchanged)' if {k: v for k, v in profile.items() if k != 'inference_geo'}
+                    == generation.LEGACY_PROFILE else 'explicit')
+            self.stdout.write(f'  request profile: {kind} {json.dumps(profile, sort_keys=True)}')
+        self.stdout.write(f'  pricing_version: {config["pricing_version"]}')
