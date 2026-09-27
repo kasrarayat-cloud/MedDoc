@@ -65,10 +65,15 @@ Refusals, all with fixed labels and all tested:
   `PG*` variable. A production environment file cannot start the private units (wrong runtime user).
 - **Mixed host.** The production launcher refuses when Docker exists (a denied socket counts as
   present), when `/opt/meddoc-pro` exists, when the state root is not a mounted volume, or when the
-  CA bundle is not root-owned and byte-identical to the pinned hash. It also refuses unless the
-  instance metadata service is provably denied to the application identity: an empty UDP datagram
-  to it must fail with EPERM, which is what the unit's `IPAddressDeny=` egress drop returns. Under
-  that drop a TCP connect only times out, so TCP is not used.
+  CA bundle is not root-owned and byte-identical to the pinned hash. It also refuses unless, at
+  start, the application identity cannot reach the instance metadata service over UDP or TCP on
+  either address: for 169.254.169.254 an empty UDP datagram must fail with EPERM AND a TCP connect
+  must not complete within 1.5 s; fd00:ec2::254 must pass the same test or have no route from this
+  host (no IPv6 path, IPv6 disabled, or no IPv6 stack). That is what the units' `IPAddressDeny=`
+  egress drop produces (UDP fails with EPERM, TCP only times out), and it adds 1.5 s to each start.
+  A UDP-only or TCP-only block, or an open IPv6 path, refuses. It is a check of this process at
+  start, not of every future path: the units' deny line is what keeps it true, and a test fails if
+  any unit but the root secret renderer loses either address.
 
 The private launcher path is proven unchanged by a differential test against a byte-identical copy
 of the launcher as it was before profiles existed (`rebuild/ops/fixtures/`), and the same for the

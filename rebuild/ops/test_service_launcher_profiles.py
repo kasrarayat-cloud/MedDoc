@@ -16,6 +16,7 @@ from pathlib import Path
 import socket
 import stat
 import tempfile
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -547,53 +548,122 @@ class ProductionHelperTests(unittest.TestCase):
                     with self.subTest(label=label), self.assertRaisesRegex(launcher.BoundaryFailure, '^' + label + '$'):
                         launcher.absent_socket(path, 'docker_socket')
 
-    def test_instance_metadata_is_judged_by_one_connected_udp_send_never_tcp(self):
-        # IPAddressDeny= is a cgroup egress drop: a UDP send fails with EPERM, a TCP connect only times out
-        # (measured in a throwaway container on kernel 6.8; the launcher's docstring records it). So the
-        # send's EPERM is the one accepted denial, and TCP is never opened.
-        denied = {'denied': True, 'errno': errno.EPERM, 'method': 'connected_udp_send'}
-        cases = (  # (connect failure, send failure, expected)
-            (None, PermissionError(errno.EPERM, 'x'), denied),
-            (None, None, 'instance_metadata_accessible'),
-            (None, PermissionError(errno.EACCES, 'x'), 'instance_metadata_inconclusive'),
-            (None, socket.timeout('timed out'), 'instance_metadata_inconclusive'),
-            (None, OSError(errno.ENETUNREACH, 'x'), 'instance_metadata_inconclusive'),
-            (None, ConnectionRefusedError(errno.ECONNREFUSED, 'x'), 'instance_metadata_inconclusive'),
-            (OSError(errno.ENETUNREACH, 'x'), None, 'instance_metadata_inconclusive'),
-            (PermissionError(errno.EPERM, 'x'), None, 'instance_metadata_inconclusive'),
-        )
-        for connect_failure, send_failure, expected in cases:
-            with self.subTest(connect=connect_failure, send=send_failure), \
-                    patch.object(launcher.socket, 'socket') as factory:
-                client = factory.return_value.__enter__.return_value
-                client.connect.side_effect = connect_failure
-                client.send.side_effect = send_failure
-                client.send.return_value = 0
-                if isinstance(expected, dict):
-                    self.assertEqual(launcher.denied_instance_metadata(), expected)
-                else:
+    # IPAddressDeny= is a cgroup egress drop: under it a UDP send fails with EPERM and a TCP connect only times out
+    # (measured in a throwaway container on kernel 6.8; the launcher's docstring records it). A UDP-only rule would
+    # also give EPERM while TCP, the protocol IMDS serves, stays open. So both protocols decide, on both addresses.
+    def test_metadata_verdict_needs_udp_eperm_and_no_completed_tcp_connect(self):
+        refuse = 'instance_metadata_accessible'
+        unclear = 'instance_metadata_inconclusive'
+        cases = [  # (udp, tcp, unreachable errnos, expected)
+            ('send:EPERM', 'timeout', (), 'denied'),                     # the unit's drop
+            ('send:EPERM', 'connect:ECONNREFUSED', (), 'denied'),
+            ('send:EPERM', 'connect:EPERM', (), 'denied'),
+            ('send:EPERM', 'connect:EHOSTUNREACH', (), 'denied'),
+            ('send:EPERM', 'connect:ENETUNREACH', (), 'denied'),
+            ('send:EPERM', 'connected', (), refuse),                     # a UDP-only drop: TCP gets through
+            ('sent', 'timeout', (), refuse),                             # a TCP-only drop: UDP gets through
+            ('sent', 'connected', (), refuse),                           # no filter
+            ('send:EACCES', 'timeout', (), unclear),
+            ('send:timeout', 'timeout', (), unclear),
+            ('connect:EPERM', 'timeout', (), unclear),
+            ('connect:ENETUNREACH', 'connect:ENETUNREACH', (), unclear),  # IPv4 must be denied, not unroutable
+            ('connect:ENETUNREACH', 'connect:ENETUNREACH', launcher.IPV6_UNREACHABLE, 'unreachable'),
+            ('connect:EADDRNOTAVAIL', 'connect:EADDRNOTAVAIL', launcher.IPV6_UNREACHABLE, 'unreachable'),
+            ('socket:EAFNOSUPPORT', 'socket:EAFNOSUPPORT', launcher.IPV6_UNREACHABLE, 'unreachable'),
+            ('connect:EHOSTUNREACH', 'timeout', launcher.IPV6_UNREACHABLE, 'unreachable'),
+            ('connect:ENETUNREACH', 'connected', launcher.IPV6_UNREACHABLE, refuse),
+            ('connect:EACCES', 'timeout', launcher.IPV6_UNREACHABLE, unclear),
+        ]
+        for udp, tcp, unreachable, expected in cases:
+            with self.subTest(udp=udp, tcp=tcp, unreachable=bool(unreachable)):
+                if expected.startswith('instance_metadata'):
                     with self.assertRaisesRegex(launcher.BoundaryFailure, '^' + expected + '$'):
-                        launcher.denied_instance_metadata()
-                factory.assert_called_once_with(socket.AF_INET, socket.SOCK_DGRAM)
-                client.connect.assert_called_once_with(('169.254.169.254', 80))
-                if connect_failure is None:
-                    client.send.assert_called_once_with(b'')
+                        launcher.metadata_verdict('instance_metadata', udp, tcp, frozenset(unreachable))
                 else:
-                    client.send.assert_not_called()
-                client.sendall.assert_not_called()
-                client.sendto.assert_not_called()
-                client.recv.assert_not_called()
+                    self.assertEqual(launcher.metadata_verdict('instance_metadata', udp, tcp, frozenset(unreachable)),
+                                     expected)
+        self.assertEqual(launcher.IPV6_UNREACHABLE,
+                         frozenset({'ENETUNREACH', 'EHOSTUNREACH', 'EADDRNOTAVAIL', 'EAFNOSUPPORT'}))
 
-    def test_a_real_udp_send_that_leaves_the_process_is_refused_as_accessible(self):
-        # Real sockets, no mock: an address that answers to UDP stands in for a reachable IMDS.
+    def test_instance_metadata_probes_both_addresses_over_both_protocols_within_three_seconds(self):
+        targets = ((socket.AF_INET, ('169.254.169.254', 80)), (socket.AF_INET6, ('fd00:ec2::254', 80)))
+        self.assertLessEqual(launcher.METADATA_TCP_SECONDS + 2 * launcher.METADATA_UDP_SECONDS, 3)
+        scenarios = [  # (udp v4, udp v6, tcp v4, tcp v6, expected)
+            ('send:EPERM', 'send:EPERM', 'timeout', 'timeout', ('denied', 'denied')),
+            ('send:EPERM', 'connect:ENETUNREACH', 'timeout', 'connect:ENETUNREACH', ('denied', 'unreachable')),
+            ('send:EPERM', 'send:EPERM', 'connected', 'timeout', 'instance_metadata_accessible'),
+            ('sent', 'send:EPERM', 'timeout', 'timeout', 'instance_metadata_accessible'),
+            ('send:EPERM', 'sent', 'timeout', 'connected', 'instance_metadata_ipv6_accessible'),
+            ('send:EPERM', 'send:EPERM', 'timeout', 'connected', 'instance_metadata_ipv6_accessible'),
+            ('send:EPERM', 'sent', 'timeout', 'timeout', 'instance_metadata_ipv6_accessible'),
+            ('send:EPERM', 'send:EACCES', 'timeout', 'timeout', 'instance_metadata_ipv6_inconclusive'),
+            ('connect:ENETUNREACH', 'connect:ENETUNREACH', 'connect:ENETUNREACH', 'connect:ENETUNREACH',
+             'instance_metadata_inconclusive'),
+        ]
+        for udp4, udp6, tcp4, tcp6, expected in scenarios:
+            with self.subTest(udp=(udp4, udp6), tcp=(tcp4, tcp6)):
+                udp_calls, tcp_calls = [], []
+                udp = {socket.AF_INET: udp4, socket.AF_INET6: udp6}
+                with patch.object(launcher, 'metadata_udp_send',
+                                  side_effect=lambda family, address: udp_calls.append((family, address)) or udp[family]), \
+                        patch.object(launcher, 'metadata_tcp_connects',
+                                     side_effect=lambda found, seconds: tcp_calls.append((tuple(found), seconds))
+                                     or [tcp4, tcp6]):
+                    if isinstance(expected, tuple):
+                        report = launcher.denied_instance_metadata()
+                        self.assertEqual((report['denied'], report['ipv4']['verdict'], report['ipv6']['verdict']),
+                                         (True,) + expected)
+                        self.assertEqual((report['ipv4']['udp'], report['ipv4']['tcp'], report['ipv6']['udp'],
+                                          report['ipv6']['tcp']), (udp4, tcp4, udp6, tcp6))
+                    else:
+                        with self.assertRaisesRegex(launcher.BoundaryFailure, '^' + expected + '$'):
+                            launcher.denied_instance_metadata()
+                self.assertEqual(udp_calls, list(targets))
+                self.assertEqual(tcp_calls, [(targets, launcher.METADATA_TCP_SECONDS)])
+
+    def test_real_sockets_a_sent_datagram_and_a_completed_connect_are_both_seen(self):
         receiver = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.addCleanup(receiver.close)
         receiver.bind(('127.0.0.1', 0))
         receiver.settimeout(2)
-        with patch.object(launcher, 'INSTANCE_METADATA', receiver.getsockname()), \
+        self.assertEqual(launcher.metadata_udp_send(socket.AF_INET, receiver.getsockname()), 'sent')
+        self.assertEqual(receiver.recv(65536), b'')  # exactly the empty datagram, nothing else
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.addCleanup(listener.close)
+        listener.bind(('127.0.0.1', 0))
+        listener.listen(4)
+        listener.settimeout(2)
+        closed = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        closed.bind(('127.0.0.1', 0))
+        refused = closed.getsockname()
+        closed.close()
+        self.assertEqual(launcher.metadata_tcp_connects(((socket.AF_INET, listener.getsockname()),
+                                                         (socket.AF_INET, refused)), 1),
+                         ['connected', 'connect:ECONNREFUSED'])
+        accepted, _ = listener.accept()
+        with accepted:
+            accepted.settimeout(2)
+            self.assertEqual(accepted.recv(1), b'')  # the connect sent no byte and was closed
+        # The whole check, pointed at loopback only (no packet may leave this host), refuses as accessible.
+        port_pair = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.addCleanup(port_pair.close)
+        port_pair.bind(listener.getsockname())
+        with patch.object(launcher, 'INSTANCE_METADATA', listener.getsockname()), \
+                patch.object(launcher, 'INSTANCE_METADATA_IPV6', ('::1', refused[1])), \
                 self.assertRaisesRegex(launcher.BoundaryFailure, '^instance_metadata_accessible$'):
             launcher.denied_instance_metadata()
-        self.assertEqual(receiver.recv(65536), b'')  # exactly the empty datagram, nothing else
+
+    def test_real_sockets_a_tcp_connect_that_never_completes_is_bounded(self):
+        # A listener whose accept queue is full drops further SYNs, so the connect neither completes nor fails.
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.addCleanup(listener.close)
+        listener.bind(('127.0.0.1', 0))
+        listener.listen(0)
+        first = socket.create_connection(listener.getsockname(), timeout=2)
+        self.addCleanup(first.close)
+        start = time.monotonic()
+        self.assertEqual(launcher.metadata_tcp_connects(((socket.AF_INET, listener.getsockname()),), 0.5), ['timeout'])
+        self.assertLess(time.monotonic() - start, 1.0)
 
     def test_private_installation_must_be_absent(self):
         with tempfile.TemporaryDirectory() as temp:

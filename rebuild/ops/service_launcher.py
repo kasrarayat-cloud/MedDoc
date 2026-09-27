@@ -24,10 +24,12 @@ import os
 from pathlib import Path
 import pwd
 import re
+import select
 import socket
 import stat
 import sys
 import tempfile
+import time
 
 
 ROOT = Path('/opt/meddoc-pro')
@@ -200,6 +202,15 @@ def probe(surface):
 PROFILES = ('private', 'production')
 DOCKER_SOCKETS = (('docker_socket', '/run/docker.sock'), ('docker_socket_legacy_path', '/var/run/docker.sock'))
 INSTANCE_METADATA = ('169.254.169.254', 80)
+INSTANCE_METADATA_IPV6 = ('fd00:ec2::254', 80)
+# Both TCP connects run at once and share this bound, so a denied host adds about this much to a start
+# (and the whole metadata check stays under 3 s). A reachable IMDS completes a handshake in well under 1 ms.
+METADATA_TCP_SECONDS = 1.5
+METADATA_UDP_SECONDS = 0.5
+# An instance without an IPv6 path to the metadata service cannot reach it over IPv6. Measured in a
+# container on kernel 6.8: no route gives ENETUNREACH at connect; IPv6 disabled by sysctl gives
+# EADDRNOTAVAIL at connect; a kernel without IPv6 gives EAFNOSUPPORT at socket().
+IPV6_UNREACHABLE = frozenset({'ENETUNREACH', 'EHOSTUNREACH', 'EADDRNOTAVAIL', 'EAFNOSUPPORT'})
 PRIVATE_INSTALLATION = Path('/opt/meddoc-pro')
 MAX_CA_BUNDLE_BYTES = 1024 * 1024
 
@@ -285,32 +296,121 @@ def absent_socket(path, label):
         raise BoundaryFailure(label + '_accessible')
 
 
+def _errno_name(code):
+    return errno.errorcode.get(code, 'errno_%s' % code) if code else 'timeout'
+
+
+def metadata_udp_send(family, address):
+    """Send ONE empty datagram on a connected UDP socket; return 'sent' or '<step>:<errno name>'.
+
+    No payload byte is sent and no reply is read.
+    """
+    try:
+        client = socket.socket(family, socket.SOCK_DGRAM)
+    except OSError as exc:
+        return 'socket:' + _errno_name(exc.errno)
+    with client:
+        client.settimeout(METADATA_UDP_SECONDS)
+        try:
+            client.connect(address)  # UDP: a route lookup only; nothing is sent.
+        except OSError as exc:
+            return 'connect:' + _errno_name(exc.errno)
+        try:
+            client.send(b'')
+        except OSError as exc:
+            return 'send:' + _errno_name(exc.errno)
+    return 'sent'
+
+
+def metadata_tcp_connects(targets, seconds):
+    """Start a non-blocking TCP connect to every (family, address) at once; nothing is ever sent.
+
+    Returns one outcome per target, in order, within `seconds` in total: 'connected', 'timeout', or
+    '<step>:<errno name>'. Every socket is closed before returning.
+    """
+    outcomes = [None] * len(targets)
+    waiting = {}
+    try:
+        for index, (family, address) in enumerate(targets):
+            try:
+                client = socket.socket(family, socket.SOCK_STREAM)
+            except OSError as exc:
+                outcomes[index] = 'socket:' + _errno_name(exc.errno)
+                continue
+            waiting[index] = client
+            client.setblocking(False)
+            try:
+                code = client.connect_ex(address)
+            except OSError as exc:
+                code = exc.errno
+            if code == 0:
+                outcomes[index] = 'connected'
+            elif code != errno.EINPROGRESS:
+                outcomes[index] = 'connect:' + _errno_name(code)
+        pending = {index: client for index, client in waiting.items() if outcomes[index] is None}
+        deadline = time.monotonic() + seconds
+        while pending:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            _, writable, _ = select.select([], list(pending.values()), [], remaining)
+            for index, client in list(pending.items()):
+                if client in writable:
+                    code = client.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+                    outcomes[index] = 'connected' if code == 0 else 'connect:' + _errno_name(code)
+                    del pending[index]
+        for index in pending:
+            outcomes[index] = 'timeout'
+    finally:
+        for client in waiting.values():
+            client.close()
+    return outcomes
+
+
+def metadata_verdict(label, udp, tcp, unreachable=frozenset()):
+    """'denied' or 'unreachable'; otherwise refuse with `label`_accessible or `label`_inconclusive.
+
+    Accessible if EITHER protocol got through: the UDP datagram was sent, or the TCP connect completed.
+    Denied only if the UDP send failed with EPERM AND the TCP connect did not complete (a timeout,
+    EPERM, ECONNREFUSED or no route all count as not completed). Where `unreachable` names an errno,
+    that errno at any UDP step, with no completed TCP connect, counts as unreachable. Anything else
+    (EACCES, EPERM at connect, a UDP timeout) proves nothing and is inconclusive.
+    """
+    if tcp == 'connected' or udp == 'sent':
+        raise BoundaryFailure(label + '_accessible')
+    if udp == 'send:EPERM':
+        return 'denied'
+    if udp.partition(':')[2] in unreachable:
+        return 'unreachable'
+    raise BoundaryFailure(label + '_inconclusive')
+
+
 def denied_instance_metadata():
     """The service identity must not reach IMDS, which would hand it the instance role's credentials.
 
-    The verdict comes from ONE empty datagram sent on a connected UDP socket, never from TCP. The
-    unit's IPAddressDeny= is a cgroup egress BPF drop. A dropped UDP send fails at once with EPERM.
-    A dropped TCP SYN does not: the kernel ignores the egress error, retries the SYN, and connect()
-    only times out, which cannot be told apart from an unreachable network. Measured on kernel 6.8
-    with that egress program attached to the process's cgroup: TCP connect timed out after 2 s,
-    the UDP send failed with EPERM.
+    Both metadata addresses are probed, 169.254.169.254 and fd00:ec2::254, each over BOTH protocols:
+    one empty datagram on a connected UDP socket, and one TCP connect bounded by METADATA_TCP_SECONDS
+    (both TCP connects share that bound). Nothing is ever sent over TCP.
 
-    EPERM from the send is the only accepted denial. A send that succeeds means the datagram left
-    this process, so the service is refused as accessible. Anything else (connect failing, no route,
-    a timeout, EACCES) proves nothing and is refused as inconclusive.
+    Why both protocols. The unit's IPAddressDeny= is a cgroup egress BPF drop of every packet to those
+    addresses. Under it a UDP send fails at once with EPERM, but a TCP connect does not: the kernel
+    ignores the egress error and retries the SYN until the connect times out. So TCP alone cannot tell
+    a denial from an unreachable network, and UDP alone cannot tell the unit's drop from a UDP-only
+    rule that leaves TCP (the protocol IMDS actually serves) open. Measured on kernel 6.8 in a
+    container with that egress program attached to the process's cgroup.
+
+    IPv4 must be denied: UDP send EPERM and no completed TCP connect. IPv6 must be denied the same way
+    or be unreachable from this host (IPV6_UNREACHABLE). A completed connect or a sent datagram on
+    either address refuses as accessible; anything else refuses as inconclusive.
     """
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client:
-        client.settimeout(2)
-        try:
-            client.connect(INSTANCE_METADATA)  # UDP: a route lookup only; nothing is sent.
-        except OSError:
-            raise BoundaryFailure('instance_metadata_inconclusive') from None
-        try:
-            client.send(b'')  # Zero payload bytes; no reply is read.
-        except OSError as exc:
-            require(exc.errno == errno.EPERM, 'instance_metadata_inconclusive')
-            return {'denied': True, 'errno': exc.errno, 'method': 'connected_udp_send'}
-        raise BoundaryFailure('instance_metadata_accessible')
+    targets = ((socket.AF_INET, INSTANCE_METADATA), (socket.AF_INET6, INSTANCE_METADATA_IPV6))
+    udp = [metadata_udp_send(family, address) for family, address in targets]
+    tcp = metadata_tcp_connects(targets, METADATA_TCP_SECONDS)
+    ipv4 = metadata_verdict('instance_metadata', udp[0], tcp[0])
+    ipv6 = metadata_verdict('instance_metadata_ipv6', udp[1], tcp[1], IPV6_UNREACHABLE)
+    return {'denied': True, 'method': 'udp_send_eperm_and_no_tcp_connect', 'tcp_seconds': METADATA_TCP_SECONDS,
+            'ipv4': {'udp': udp[0], 'tcp': tcp[0], 'verdict': ipv4},
+            'ipv6': {'udp': udp[1], 'tcp': tcp[1], 'verdict': ipv6}}
 
 
 def absent_path(path, label):

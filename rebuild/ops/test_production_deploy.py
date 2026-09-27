@@ -98,6 +98,20 @@ class UnitProfileAgreementTests(unittest.TestCase):
                 self.assertEqual(environment['QUILLMD_ADMIN_SITE'], '1' if surface == 'admin' else '0')
                 self.assertEqual(environment['TMPDIR'], str(state / 'tmp'))
 
+    def test_every_unit_but_the_secret_renderer_denies_both_metadata_addresses(self):
+        # The launcher refuses unless both addresses are denied; the units are what deny them. Only the root
+        # environment unit may reach IMDS: it reads the secret with the instance role.
+        units = sorted(PRODUCTION.glob('*.service'))
+        self.assertEqual(len(units), 5)
+        for path in units:
+            values = unit(path.name)['Service'].get('IPAddressDeny', [])
+            denied = {address for value in values for address in value.split()}
+            with self.subTest(unit=path.name):
+                if path.name == PROFILE.unit_prefix + 'environment.service':
+                    self.assertEqual(denied, set())
+                else:
+                    self.assertLessEqual({'169.254.169.254/32', 'fd00:ec2::254/128'}, denied)
+
     def test_environment_unit_renders_onto_the_profile_tmpfs_path(self):
         parsed = unit((PROFILE.unit_prefix + 'environment.service'))
         service = parsed['Service']
