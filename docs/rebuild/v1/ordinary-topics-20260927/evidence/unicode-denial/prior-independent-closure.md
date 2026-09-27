@@ -1,0 +1,15 @@
+# Nominal-Plan denial repair independent re-refutation — 2026-09-27
+
+**NOTHING FOUND in the narrow repaired delta. Both original findings are closed.**
+
+Finished source commit `22b07c45e9a98166ec313845d19febf5acde1fc2` in `/opt/meddoc-pro/.worktrees/v1-ordinary-topics`; generation SHA-256 `a228fc6517b5dab765803f02e9c37a5d2fe25b83b8801a195a98ddee60413c40`. Compared the exact follow-up to refuted `af8d45ab2f42c25d188a432c1ad3ea0281565e4f`, and relevant outcomes against original base `90808d5a3032286bedd9be2961dcabb6480a0358`.
+
+The source change at `core/generation.py:2456` adds the existing DENIAL predicate, read through existing invisible-character readings, before a nominal Plan may establish an independent source boundary. It does not change the retained answer wording.
+
+Independently reran the original unchanged 18-case generation probe and 3-case forced-stored probe. Both exact cases — `Assessment: infection. / Plan: no infection.` and `Assessment: active bacterial infection. / Plan: no active bacterial infection.` — again hold Assessment, display its context, and refuse forced supported Assessment at finalization. Plan text remains complete and unchanged. The full naproxen 500 mg twice daily with food and physiotherapy positive stays intact. Duplicate Pain/Comments remain unresolved while the unique plain Indication positive remains supported; side, correction, pointer and reference controls still hold.
+
+Seven adjacent controls were also run on repaired candidate and exact base: uppercase NO, without, negative, absent and zero-width-split no all hold Assessment and refuse its forced stored state. A positive complete-dose Plan remains supported only on candidate as intended. The exact fullwidth case is notes `Assessment: infection.\nPlan: ｎｏ infection.` (U+FF4E U+FF4F). Selecting both complete units makes Assessment supported `infection.` on BOTH original base and repaired candidate; a deliberately forced supported Assessment with its exact whole-unit evidence remains supported through `as_currently_governed`, and `governed_decisions` returns `[]`. These are actual generation and shared page/save/finalization helper observations; no HTTP save, database persistence or native export was exercised. This fullwidth case remains supported in BOTH original base and repaired candidate; this is a retained existing normalization limitation, not an introduced failure or a passing denial guarantee. No global normalization change was requested or made.
+
+Evidence: `replay18.json`, `forced3.json`, `adjacent.py`, `adjacent-candidate.json`, `adjacent-base.json`, exact `generation.py`; original pre-repair failures remain in the parent evidence directory. Base replay uses the explicit preserved original generation override; candidate disk hash is disclosed separately in JSON. No provider, database, unseen corpus, broad suite, source mutation, merge or deployment occurred. No process remains.
+
+Next safe action: root may integrate this exact repaired candidate after its own confirmation. This bounded result does not close broader ordinary-note usefulness or any unrelated clinical-classification gap.

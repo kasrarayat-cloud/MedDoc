@@ -2084,10 +2084,14 @@ def plain_value(value):
         return False
     if text.casefold() in PLAIN_ANSWERS:
         return True
+    # Compatibility/visible readings may only veto this literal grammar. They
+    # never create a plain answer, rewrite its words, or grant a source location.
     return (len(text.split()) <= 3 and '.' not in PLAIN_STOPS.sub('', text)
-            and not any(pattern.search(text) for pattern in (FINITE_STATEMENT_V3, INHERITED_SCOPE, DENIAL, SELF_CORRECTION,
-                                                             UNSETTLED))
-            and not points_elsewhere(text))
+            and not any(pattern.search(visible) for source in (text, unicodedata.normalize('NFKC', text))
+                        for visible in readings(source)
+                        for pattern in (FINITE_STATEMENT_V3, INHERITED_SCOPE, DENIAL, SELF_CORRECTION, UNSETTLED))
+            and not any(points_elsewhere(visible) for source in (text, unicodedata.normalize('NFKC', text))
+                        for visible in readings(source)))
 
 
 # Only punctuation at the start of a literal printed side option is normalized for the plain-value
@@ -2391,11 +2395,14 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
         group_blocks, block = [], []
         for unit in group:
             own = parsed[unit['id']]
-            # Only an exact, unique form subject starts another topic. Context-only
-            # labels and repeated questions cannot establish a write destination.
+            # A complete form-labelled statement starts a source topic even when
+            # that question repeats. Its owner remains unresolved below: a source
+            # boundary cannot choose a write destination. Otherwise its printed
+            # label is misread as a reference inside the preceding unique answer.
+            labelled_topic = bool(colon[unit['id']] and own and own[0] in named)
             patient_after_plain = bool(len(block) == 1 and plain[block[0]['id']]
                                        and own is None and patients[unit['id']])
-            if block and (subjects[unit['id']] or patient_after_plain):
+            if block and (subjects[unit['id']] or labelled_topic or patient_after_plain):
                 group_blocks.append(block); block = []
             block.append(unit)
         if block: group_blocks.append(block)
@@ -2445,8 +2452,24 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
                                for unit in block for match in INHERITED_SCOPE.finditer(unit['quote']))
             # A named topic is not automatically a harmless boundary: a pointer,
             # unresolved list or nonplain specific answer retains its earlier hold.
+            # A nominal labelled Plan is already a valid full source answer. Its
+            # complete single statement can be an independent topic too; questions,
+            # pointers, multiple sentences and all existing scope guards still hold.
+            nominal_plan = owner in general & PLAN_FIELDS and colon[block[0]['id']] and len(block) == 1
+            if nominal_plan:
+                first = block[0]
+                if first['id'] not in ends_read: ends_read[first['id']] = inner_sentence_end(first['quote'])
+                if first['id'] not in shapes_read:
+                    shapes_read[first['id']] = ends_read[first['id']] or v3_shape_holds(first['quote'], value)
+                # A nominal denial can qualify an earlier finding even without
+                # repeating its question label (Assessment: infection / Plan: no
+                # infection). It retains the old context hold; its words stay intact.
+                nominal_plan = not shapes_read[first['id']] and not any(
+                    pattern.search(text) for source in (value, unicodedata.normalize('NFKC', value))
+                    for text in readings(source)
+                    for pattern in (DENIAL, INHERITED_SCOPE, UNSETTLED, SELF_CORRECTION, SCOPE_POINTER))
             narrative = (owner in general and (FINITE_STATEMENT_V3.search(
-                value if colon[block[0]['id']] else block[0]['quote']) or local_conditional))
+                value if colon[block[0]['id']] else block[0]['quote']) or local_conditional or nominal_plan))
             factual = owner in clinical and (colon[block[0]['id']] or FINITE_STATEMENT_V3.search(block[0]['quote']))
             # These qualifications belong to the exact stated topic and stay in
             # the answer. They do not change another field's subject or polarity.
@@ -2468,7 +2491,15 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
             for unit in block: block_of[unit['id']] = index
     coupled, unchanged_references, neutral_references = v3_related_source_blocks(blocks, named, parsed, barriers,
         ambiguous_subjects, unresolved_subjects, ends_read, shapes_read)
+    from documents.word_v3 import side_phrase
+    # A repeated label cannot establish which side its value describes. Reuse
+    # the document reader's side syntax only to withhold that ambiguous context,
+    # never to choose a side or grant an answer a destination.
+    ambiguous_sides = {u['id'] for u in units if parsed[u['id']] and len(named.get(parsed[u['id']][0], ())) > 1
+        and any(side_phrase(text) for source in (parsed[u['id']][1], unicodedata.normalize('NFKC', parsed[u['id']][1]))
+                for text in readings(source))}
     plain_values = [bool(parsed[u['id']] and parsed[u['id']][0] in named
+                         and u['id'] not in ambiguous_sides
                          and (plain_value(parsed[u['id']][1]) or (len(named[parsed[u['id']][0]]) == 1
                               and plain_printed_side_option(named[parsed[u['id']][0]][0], parsed[u['id']][1]))))
                     for u in units]

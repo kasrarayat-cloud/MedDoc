@@ -1,0 +1,70 @@
+{
+  "affected.log": {
+    "bytes": 2178,
+    "sha256": "6d0520ac0af1dbe78141f41ef956a621bc2a9b964bb6c46771c45b0fcc51970e"
+  },
+  "ast-delta.json": {
+    "bytes": 153,
+    "sha256": "a445ef8cb6301cb243d35b190c8308e46ea86b534175b029a8123ccb1236b94c"
+  },
+  "final-targeted.log": {
+    "bytes": 806,
+    "sha256": "a8fab375b342c3217db136617345cb175b83265d22a451e26b050f4191c2680a"
+  },
+  "generation-base.py": {
+    "bytes": 227376,
+    "sha256": "72904344de7344345d9a9cedfc526fcec79a5d0ff522ba22d6bc78e1b178fb30"
+  },
+  "generation-side-red.py": {
+    "bytes": 228387,
+    "sha256": "56433f7f34043fa7d2783f3199f9993529f01adeeef64fb7623a53ba34a7fbe2"
+  },
+  "green.log": {
+    "bytes": 167,
+    "sha256": "063e29cfcdd92ca2475afa81aa90384c3550752aff26980776273f75e0f9d536"
+  },
+  "known-results.json": {
+    "bytes": 194582,
+    "sha256": "ce332ce542f2336600c02f52f2adf3a0a4522d7db54a9cb20534e52a3120859a"
+  },
+  "known.log": {
+    "bytes": 2923,
+    "sha256": "ad4a9c68b8df3e04c5515588b258513e93690377fdd1084b0f802c5aaa9602b1"
+  },
+  "measure-known.py": {
+    "bytes": 1689,
+    "sha256": "ffd377352975f276696436c6eff921ce76ee16a3de450fbafb701bc66eca6b7b"
+  },
+  "red-corrected-fixture.log": {
+    "bytes": 1962,
+    "sha256": "b4e917abf186fa127582cdae9bfbb5daecdd1f0da6a7650f5f02f8fe6a3a742d"
+  },
+  "red.log": {
+    "bytes": 1828,
+    "sha256": "a789d7f79995e7aea989abb3db42c56c7895500bbbcb650f09a5c238e223908b"
+  },
+  "repeated-indication-root-base.json": {
+    "bytes": 6102,
+    "sha256": "7e59a9935356752988f5dc89a4ccea9f3137bcc123e04b726142541020809ecf"
+  },
+  "repeated-indication-root-current.json": {
+    "bytes": 9197,
+    "sha256": "bedf5690e9eeaeeaac4fb7286c70a5b47676ec2b4655f5012f9171c9b48bb36f"
+  },
+  "repeated-indication-root.py": {
+    "bytes": 798,
+    "sha256": "1c42ded40c974346dbaeb7f4d3220eba0d05a81e88623080d04d1c4c661eb667"
+  },
+  "side-red.log": {
+    "bytes": 907,
+    "sha256": "54001ec44c236ff8a13c4ba15e8b6033d1c51602e538942389ccff433b4d2261"
+  },
+  "topic-green.log": {
+    "bytes": 168,
+    "sha256": "5b000ca8f3000c1ac175f09f9155e7fbc9b94096b67902aa5d6c3f848ad80c63"
+  },
+  "workflows.log": {
+    "bytes": 802,
+    "sha256": "686a0e5164e6998d036d271b2e61539be73b1b01a841243715a037bc3faf64b0"
+  }
+}

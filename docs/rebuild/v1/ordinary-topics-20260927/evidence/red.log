@@ -1,0 +1,31 @@
+.E.F
+======================================================================
+ERROR: test_retained_note5_keeps_its_direct_assessment_beside_complete_nominal_plan (core.tests.test_v3_ordinary_topics.NominalPlanTopic.test_retained_note5_keeps_its_direct_assessment_beside_complete_nominal_plan)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-topics/rebuild/core/tests/test_v3_ordinary_topics.py", line 48, in test_retained_note5_keeps_its_direct_assessment_beside_complete_nominal_plan
+    answers = run(case['notes'], case['picks'], fields=case['fields'])
+                                                       ~~~~^^^^^^^^^^
+KeyError: 'fields'
+
+======================================================================
+FAIL: test_unique_indication_keeps_its_destination_while_repeated_questions_stay_held (core.tests.test_v3_ordinary_topics.RepeatedSourceTopics.test_unique_indication_keeps_its_destination_while_repeated_questions_stay_held)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-topics/rebuild/core/tests/test_v3_ordinary_topics.py", line 26, in test_unique_indication_keeps_its_destination_while_repeated_questions_stay_held
+    self.assertEqual((answer['status'], answer['text']), expected, f['label'])
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'synthetic knee review')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'synthetic knee review') : Indication
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.454s
+
+FAILED (failures=1, errors=1)
+Found 4 test(s).
+System check identified no issues (0 silenced).
