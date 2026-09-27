@@ -43,10 +43,23 @@ class RecordRetraction(SimpleTestCase):
         for tail in ('removal of stitches.','removal of the temporary device.',
                      'removal of stitches documented.','removal of the temporary device documented.',
                      'record removal of stitches.','remove the catheter and note response.',
-                     'document removal of stitches.'):
+                     'document removal of stitches.','removal of stitches documented in chart.',
+                     'record removal of stitches in the chart.'):
             notes=ALLERGY+'\nPlan: '+tail
             answer=run(notes,{'Allergies':[ALLERGY]},fields=FIELDS)['Allergies']
             self.assertEqual((answer['status'],answer['text']),('supported',ALLERGY))
+
+    def test_all_declared_action_inflections_govern_the_same_record_object(self):
+        for action in g.V3_RETRACTION_WORDS:
+            tail='Plan: clinician '+action+' erroneous NKA entry.'
+            self.assertTrue(g.v3_note_correction(tail),action)
+        for action in ('strikes','invalidates','amendments','struck','withdrew','corrections','invalidations'):
+            notes=ALLERGY+'\n\nPlan: clinician '+action+' erroneous NKA entry.'
+            answer=run(notes,{'Allergies':[ALLERGY]},fields=FIELDS)['Allergies']
+            self.assertEqual((answer['status'],answer['text']),('conflict',''),action)
+            old={'status':'supported','text':ALLERGY,'reviewed':True,
+                 'evidence':[{'quote':ALLERGY,'start':0,'end':len(ALLERGY)}]}
+            self.assertEqual(g.governed_decisions(notes,FIELDS,{'a':old}),['Allergies'],action)
 
 
 @override_settings(**LIVE)

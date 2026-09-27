@@ -1983,10 +1983,15 @@ SELF_CORRECTION = re.compile(LETTER_BEFORE + r'(?:sorry|i\s+mean|i\s+meant|scrat
 # Record edits can retract an earlier statement without repeating the form's label.
 # Both an action and a record reference are required: physical stitches/device removal
 # is not itself a correction. These cues only hold offers; they do not rewrite a record.
-V3_RETRACTION_ACTION = re.compile(LETTER_BEFORE + r'(?:delet(?:e[sd]?|ing|ions?)|remov(?:e[sd]?|ing|als?)'
-    r'|omit(?:s|ted|ting)?|omissions?|retract(?:s|ed|ing|ions?)?|withdraw(?:s|n|ing|als?)?'
-    r'|strik(?:e|ing)|amend(?:s|ed|ing|ment)?|correct(?:s|ed|ing|ion)?'
-    r'|invalidat(?:e|ed|ing|ion))' + LETTER_AFTER, re.I)
+V3_RETRACTION_WORDS = frozenset(('delete deletes deleted deleting deletion deletions '
+    'remove removes removed removing removal removals omit omits omitted omitting omission omissions '
+    'retract retracts retracted retracting retraction retractions '
+    'withdraw withdraws withdrew withdrawn withdrawing withdrawal withdrawals '
+    'strike strikes struck stricken striking amend amends amended amending amendment amendments '
+    'correct corrects corrected correcting correction corrections '
+    'invalidate invalidates invalidated invalidating invalidation invalidations').split())
+V3_RETRACTION_ACTION = re.compile(LETTER_BEFORE + '(?:' + '|'.join(sorted(V3_RETRACTION_WORDS))
+                                 + ')' + LETTER_AFTER, re.I)
 V3_RECORD_REFERENCE = re.compile(LETTER_BEFORE + r'(?:entr(?:y|ies)|statements?|declarations?'
     r'|records?|chart|documentation|annotations?|notes?)' + LETTER_AFTER, re.I)
 V3_RECORD_EVENT = re.compile(r'(?P<action>' + V3_RETRACTION_ACTION.pattern + r')|(?P<reference>'
@@ -2002,11 +2007,18 @@ def v3_record_retraction(text):
         elif event.lastgroup == 'action':
             action = event.end()
         elif action is not None:
+            prefix = text[max(action,event.start()-24):event.start()]
+            # A chart can be the place a physical act is documented. It is not
+            # the removed object in 'removal of stitches documented in chart'.
+            # An earlier entry/statement object has already returned True.
+            if event.group().casefold() in ('chart', 'record', 'records', 'note', 'notes') and re.search(
+                    r'\b(?:in|on|within)\s+(?:(?:the|a|this|that)\s+)?$', prefix, re.I):
+                continue
             # In 'remove the catheter and note response', note is a second
             # instruction, not the object removed. A preceding 'record' in
             # 'record removal of stitches' never establishes this relation.
             if event.group().casefold() in ('note', 'record') and re.search(
-                    r'\b(?:and|or|then)\s*$', text[max(action,event.start()-12):event.start()], re.I):
+                    r'\b(?:and|or|then)\s*$', prefix, re.I):
                 action = None
                 continue
             return True
