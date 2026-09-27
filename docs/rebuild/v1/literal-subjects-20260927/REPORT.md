@@ -2,7 +2,7 @@
 
 Candidate worktree: `/opt/meddoc-pro/.worktrees/v1-literal-subjects`, branch
 `v1/literal-subjects`, base `ea6cae5c754ce4e8c8e51d2992cc53c41cd294c4`.
-This is a narrow dependency under independent finished-diff review, not a claim
+This is a narrow dependency with completed independent finished-diff review, not a claim
 that retained notes4/7/8 or V1 ordinary input now pass.
 
 ## Change and boundary
@@ -52,7 +52,13 @@ demonstrated scoped-destination defect was repaired only for the two new
 examination prefixes. Both heads now refuse Mother, Family history, left/right
 knee, previous-visit and section context on generation and stored review.
 Original failing evidence and earlier passing runs remain separate. Independent
-review of the final source is pending; no merge/ready claim is made here.
+final refutation returned **NOTHING FOUND** on the exact final hashes below;
+its unchanged 21-case probe closes the four demonstrated scoped failures while
+the other 17 results stay identical. Independent actual-table positive checks
+for both heads retain full text and original-package export. See
+`INDEPENDENT-REFUTATION.md`; its original report refers to the uncommitted source
+it inspected, which is byte-identical to source commit
+`1bba17d550161cd72be7b08c1c8d3aa15031d63e`. No merge/ready claim is made here.
 
 The positive workflow exercises real upload and mapping confirmation, queued
 mocked worker generation, doctor review, answer save, finalization and export
@@ -104,8 +110,7 @@ this branch does not alter the other agent's topic/Unicode safety changes.
 - Independent review of root's unrelated test-fixture correction759e0dcd is
   separately recorded in `docs/rebuild/v1/test-fixture-review-759e0dcd.md`.
 
-Source is frozen for independent refutation. Next safe action: review these
-exact bytes, resolve only demonstrated findings, then let the release owner
+Source is frozen with independent refutation complete. Next safe action: let the release owner
 integrate the union and measure unchanged retained cases. Do not call this
 standalone preparation a retained-case fix, compatibility qualification, native
 Word acceptance or a deployed change.
