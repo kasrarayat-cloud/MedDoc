@@ -465,3 +465,76 @@ class NothingStrandsAHold(V3EncounterFixture, TestCase):
         with patch('anthropic.Anthropic', side_effect=RuntimeError('client could not be built')) as client:
             self.assertTrue(run_one())
         self.assert_not_processed_and_released(job, client)
+
+
+def unit_response(payload, picks, request_id='synthetic-no-provider'):
+    """A synthetic completed provider response selecting source units BY THEIR QUOTE from the request it was sent."""
+    by_quote = {unit['quote']: unit['id'] for unit in payload['source_units']}
+    body = {'fields': [{'key': q['key'], 'unit_ids': [by_quote[quote] for quote in picks.get(q['label'], [])],
+                        'conflict': False} for q in payload['questions']]}
+    return SimpleNamespace(id='msg_' + request_id, _request_id=request_id, stop_reason='end_turn',
+                           usage=SimpleNamespace(input_tokens=100, output_tokens=10, cache_read_input_tokens=0,
+                                                 cache_creation_input_tokens=0),
+                           content=[SimpleNamespace(type='text', text=json.dumps(body))],
+                           model_dump=lambda **kwargs: {'id': 'msg_' + request_id})
+
+
+class LiveCompleteSentencePath(SimpleTestCase):
+    """R11: the live path for a v3 form, the Anthropic client patched: what is sent, and what is adopted from the reply."""
+
+    notes = ('Patient presents with right knee pain for three weeks.\nAllergies: penicillin.\nSmoker: No.\n'
+             'Plan is physiotherapy twice weekly and review in six weeks.')
+    picks = {'Chief complaint': ['Patient presents with right knee pain for three weeks.'],
+             'Allergies': ['Allergies: penicillin.'], 'Smoker': ['Smoker: No.'],
+             'Plan': ['Plan is physiotherapy twice weekly and review in six weeks.']}
+
+    def test_a_v3_form_is_sent_source_units_and_the_unit_schema_and_its_selections_are_adopted(self):
+        with patch('anthropic.Anthropic') as client:
+            client.return_value.messages.create.side_effect = (
+                lambda **kwargs: unit_response(json.loads(kwargs['messages'][0]['content']), self.picks))
+            raw, *_ = g.generate(self.notes, FIELDS, live_config())
+            sent = client.return_value.messages.create.call_args.kwargs
+        asked, context, _ = g.v3_generation_fields(FIELDS)
+        payload = json.loads(sent['messages'][0]['content'])
+        self.assertEqual(payload['source_units'], g.source_units(self.notes, asked, context_labels=context)[0])
+        self.assertEqual(sent['output_config']['format']['schema'], g.UnitSelections.model_json_schema())
+        self.assertTrue(sent['system'].startswith('Map the complete source documentation to the approved form questions.'))
+        self.assertNotIn('options', json.dumps(payload))
+        self.assertEqual(raw['evidence_contract'], g.TAB_CONTRACT)
+        answers = {f['label']: g.validated(raw)[f['key']] for f in FIELDS}
+        self.assertEqual((answers['Chief complaint']['status'], answers['Chief complaint']['text']),
+                         ('supported', 'Patient presents with right knee pain for three weeks.'))
+        self.assertEqual(answers['Allergies']['text'], 'penicillin.')
+        self.assertEqual((answers['Smoker']['status'], answers['Smoker']['text']), ('supported', 'No'))
+        self.assertEqual(answers['Plan']['text'], 'physiotherapy twice weekly and review in six weeks.',
+                         "'Plan is ...' names its question as the tab form reads it: the label is removed")
+        self.assertEqual(answers['Clinician signature']['status'], 'missing')
+
+
+@override_settings(**LIVE)
+class LiveCompleteSentenceWorker(V3EncounterFixture, TestCase):
+    """R11 through enqueue and the worker, live mode: the patched client is sent units and its selections are adopted."""
+
+    def test_the_worker_adopts_a_live_unit_selection_for_a_v3_form(self):
+        from core.jobs import enqueue, run_one
+        notes = 'Referring physician: Dr Example\nPatient presents with right knee pain.\nSmoker: yes'
+        encounter = Encounter.objects.get(pk=self.encounter.pk)
+        self.assertEqual(self.client.post(f"/encounters/{encounter.pk}/notes/",
+                                          {"revision": encounter.revision, "notes": notes}).status_code, 302)
+        picks = {'Referring physician': ['Referring physician: Dr Example'], 'Smoker?': ['Smoker: yes'],
+                 'Reason for visit': ['Patient presents with right knee pain.']}
+        with patch('anthropic.Anthropic') as client:
+            client.return_value.messages.create.side_effect = (
+                lambda **kwargs: unit_response(json.loads(kwargs['messages'][0]['content']), picks))
+            job = enqueue(Encounter.objects.get(pk=self.encounter.pk), self.user)
+            self.assertTrue(run_one())
+            sent = client.return_value.messages.create.call_args.kwargs
+        job.refresh_from_db()
+        self.assertEqual(job.state, 'succeeded', job.error)
+        self.assertEqual(job.config['v3_evidence_contract'], 'natural-v1')
+        self.assertIn('source_units', json.loads(sent['messages'][0]['content']))
+        answers = Encounter.objects.get(pk=self.encounter.pk).answers
+        self.assertEqual(answers[self.key('Referring physician')]['text'], 'Dr Example')
+        self.assertEqual(answers[self.key('Reason for visit')]['text'], 'Patient presents with right knee pain.')
+        self.assertEqual((answers[self.key('Smoker?')]['status'], answers[self.key('Smoker?')]['text']), ('supported', 'Yes'))
+        self.assertEqual(list(Reservation.objects.filter(job=job).values_list('state', flat=True)), ['settled'])
