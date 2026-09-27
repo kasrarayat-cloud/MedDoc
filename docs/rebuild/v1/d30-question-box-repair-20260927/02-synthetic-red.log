@@ -1,0 +1,118 @@
+FFFFFFFFFFFFEF
+======================================================================
+ERROR: test_empty_ordinary_long_preserve_other_document_parts_and_neighbours (documents.test_question_boxes.QuestionBoxes.test_empty_ordinary_long_preserve_other_document_parts_and_neighbours)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-d30/rebuild/documents/test_question_boxes.py", line 88, in test_empty_ordinary_long_preserve_other_document_parts_and_neighbours
+    field = next(f for f in fields if f['label'] == 'What symptoms changed?')
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+StopIteration
+
+======================================================================
+FAIL: test_adjacent_and_spaced_questions_use_the_box_with_complete_scope (documents.test_question_boxes.QuestionBoxes.test_adjacent_and_spaced_questions_use_the_box_with_complete_scope) (spaces=0)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-d30/rebuild/documents/test_question_boxes.py", line 45, in test_adjacent_and_spaced_questions_use_the_box_with_complete_scope
+    self.assertEqual(len(fields), 1)
+AssertionError: 0 != 1
+
+======================================================================
+FAIL: test_adjacent_and_spaced_questions_use_the_box_with_complete_scope (documents.test_question_boxes.QuestionBoxes.test_adjacent_and_spaced_questions_use_the_box_with_complete_scope) (spaces=1)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-d30/rebuild/documents/test_question_boxes.py", line 45, in test_adjacent_and_spaced_questions_use_the_box_with_complete_scope
+    self.assertEqual(len(fields), 1)
+AssertionError: 0 != 1
+
+======================================================================
+FAIL: test_adjacent_and_spaced_questions_use_the_box_with_complete_scope (documents.test_question_boxes.QuestionBoxes.test_adjacent_and_spaced_questions_use_the_box_with_complete_scope) (spaces=2)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-d30/rebuild/documents/test_question_boxes.py", line 45, in test_adjacent_and_spaced_questions_use_the_box_with_complete_scope
+    self.assertEqual(len(fields), 1)
+AssertionError: 0 != 1
+
+======================================================================
+FAIL: test_ambiguous_boxes_have_a_visible_source_location (documents.test_question_boxes.QuestionBoxes.test_ambiguous_boxes_have_a_visible_source_location) (case='heading')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-d30/rebuild/documents/test_question_boxes.py", line 75, in test_ambiguous_boxes_have_a_visible_source_location
+    self.assertTrue(any('Unassigned answer box' in x and 'word/document.xml#b/tbl[' in x
+AssertionError: False is not true : {'contract': 'v3', 'fields': [], 'notes': []}
+
+======================================================================
+FAIL: test_ambiguous_boxes_have_a_visible_source_location (documents.test_question_boxes.QuestionBoxes.test_ambiguous_boxes_have_a_visible_source_location) (case='option')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-d30/rebuild/documents/test_question_boxes.py", line 75, in test_ambiguous_boxes_have_a_visible_source_location
+    self.assertTrue(any('Unassigned answer box' in x and 'word/document.xml#b/tbl[' in x
+AssertionError: False is not true : {'contract': 'v3', 'fields': [], 'notes': []}
+
+======================================================================
+FAIL: test_ambiguous_boxes_have_a_visible_source_location (documents.test_question_boxes.QuestionBoxes.test_ambiguous_boxes_have_a_visible_source_location) (case='signature')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-d30/rebuild/documents/test_question_boxes.py", line 75, in test_ambiguous_boxes_have_a_visible_source_location
+    self.assertTrue(any('Unassigned answer box' in x and 'word/document.xml#b/tbl[' in x
+AssertionError: False is not true : {'contract': 'v3', 'fields': [], 'notes': []}
+
+======================================================================
+FAIL: test_ambiguous_boxes_have_a_visible_source_location (documents.test_question_boxes.QuestionBoxes.test_ambiguous_boxes_have_a_visible_source_location) (case='reference')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-d30/rebuild/documents/test_question_boxes.py", line 75, in test_ambiguous_boxes_have_a_visible_source_location
+    self.assertTrue(any('Unassigned answer box' in x and 'word/document.xml#b/tbl[' in x
+AssertionError: False is not true : {'contract': 'v3', 'fields': [], 'notes': []}
+
+======================================================================
+FAIL: test_ambiguous_boxes_have_a_visible_source_location (documents.test_question_boxes.QuestionBoxes.test_ambiguous_boxes_have_a_visible_source_location) (case='long')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-d30/rebuild/documents/test_question_boxes.py", line 75, in test_ambiguous_boxes_have_a_visible_source_location
+    self.assertTrue(any('Unassigned answer box' in x and 'word/document.xml#b/tbl[' in x
+AssertionError: False is not true : {'contract': 'v3', 'fields': [], 'notes': []}
+
+======================================================================
+FAIL: test_ambiguous_boxes_have_a_visible_source_location (documents.test_question_boxes.QuestionBoxes.test_ambiguous_boxes_have_a_visible_source_location) (case='intervening')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-d30/rebuild/documents/test_question_boxes.py", line 75, in test_ambiguous_boxes_have_a_visible_source_location
+    self.assertTrue(any('Unassigned answer box' in x and 'word/document.xml#b/tbl[' in x
+AssertionError: False is not true : {'contract': 'v3', 'fields': [], 'notes': []}
+
+======================================================================
+FAIL: test_ambiguous_boxes_have_a_visible_source_location (documents.test_question_boxes.QuestionBoxes.test_ambiguous_boxes_have_a_visible_source_location) (case='three-spaces')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-d30/rebuild/documents/test_question_boxes.py", line 75, in test_ambiguous_boxes_have_a_visible_source_location
+    self.assertTrue(any('Unassigned answer box' in x and 'word/document.xml#b/tbl[' in x
+AssertionError: False is not true : {'contract': 'v3', 'fields': [], 'notes': []}
+
+======================================================================
+FAIL: test_ambiguous_boxes_have_a_visible_source_location (documents.test_question_boxes.QuestionBoxes.test_ambiguous_boxes_have_a_visible_source_location) (case='section-break')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-d30/rebuild/documents/test_question_boxes.py", line 75, in test_ambiguous_boxes_have_a_visible_source_location
+    self.assertTrue(any('Unassigned answer box' in x and 'word/document.xml#b/tbl[' in x
+AssertionError: False is not true : {'contract': 'v3', 'fields': [], 'notes': []}
+
+======================================================================
+FAIL: test_ambiguous_boxes_have_a_visible_source_location (documents.test_question_boxes.QuestionBoxes.test_ambiguous_boxes_have_a_visible_source_location) (case='unbordered')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-d30/rebuild/documents/test_question_boxes.py", line 75, in test_ambiguous_boxes_have_a_visible_source_location
+    self.assertTrue(any('Unassigned answer box' in x and 'word/document.xml#b/tbl[' in x
+AssertionError: False is not true : {'contract': 'v3', 'fields': [], 'notes': []}
+
+======================================================================
+FAIL: test_part_change_keeps_distinct_supervisors_and_does_not_reuse_a_question (documents.test_question_boxes.QuestionBoxes.test_part_change_keeps_distinct_supervisors_and_does_not_reuse_a_question)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-d30/rebuild/documents/test_question_boxes.py", line 113, in test_part_change_keeps_distinct_supervisors_and_does_not_reuse_a_question
+    self.assertEqual(len(fields), 2)
+AssertionError: 0 != 2
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.795s
+
+FAILED (failures=13, errors=1)

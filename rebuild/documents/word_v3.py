@@ -1160,6 +1160,7 @@ class Detector:
         self.rule_checkboxes()
         self.rule_text_option_choices()
         self.rule_tables()
+        self.rule_question_boxes()
         self.rule_checkboxes(leftovers=True)
         self.rule_lines_below_label()
         self.rule_paragraph_fields()
@@ -1850,6 +1851,107 @@ class Detector:
                                       options=slash))
                         continue
                     self.add(Area(self.kind_for(name), clean_label(name), c, target, context=self.context_for(c)))
+
+    def question_box_context(self, question):
+        """Keep explicit outer section and local heading for this body-only relation."""
+        outer, role, heading, awaiting_role = "", "", "", False
+        for slot in self.index.roots:
+            if slot is question:
+                break
+            if slot.part != question.part:
+                continue
+            if slot.kind != "p":
+                awaiting_role = False
+                continue
+            text = re.sub(r"\s+", " ", self.text(slot.el)).strip()
+            if not text:
+                continue
+            if not self.is_heading(slot.el):
+                awaiting_role = False
+                continue
+            style = slot.el.find("./" + q("w:pPr") + "/" + q("w:pStyle"))
+            major = (style is not None and (style.get(q("w:val")) or "").lower() == "heading1") or \
+                re.fullmatch(r"(?:part|section)\s+(?:[A-Z]|\d+|[IVX]+)\s*[:.]?", text, re.I)
+            if major:
+                outer, role, heading, awaiting_role = text, "", "", True
+            elif awaiting_role:
+                role, awaiting_role = text, False
+            else:
+                heading = text
+        return " > ".join(dict.fromkeys(x for x in (outer, role, heading) if x))
+
+    def question_box_bordered(self, table, cell):
+        borders = [cell.el.find("./" + q("w:tcPr") + "/" + q("w:tcBorders")),
+                   table.el.find("./" + q("w:tblPr") + "/" + q("w:tblBorders"))]
+        style_ref = table.el.find("./" + q("w:tblPr") + "/" + q("w:tblStyle"))
+        if style_ref is not None and "word/styles.xml" in self.package.names:
+            styles = [s for s in self.package.tree("word/styles.xml").findall(q("w:style"))
+                      if s.get(q("w:styleId")) == style_ref.get(q("w:val")) and s.get(q("w:type")) == "table"]
+            if len(styles) == 1 and styles[0].find(q("w:tblStylePr")) is None:
+                borders.append(styles[0].find("./" + q("w:tblPr") + "/" + q("w:tblBorders")))
+        for side in ("top", "left", "bottom", "right"):
+            edge = next((b.find(q("w:" + side)) for b in borders
+                         if b is not None and b.find(q("w:" + side)) is not None), None)
+            if edge is None or edge.get(q("w:val"), "none") in ("none", "nil", ""):
+                return False
+        return True
+
+    def rule_question_boxes(self):
+        """A printed body question followed by its own empty one-cell bordered table.
+
+        Never borrow across another block, assign a list option, shorten a question,
+        or treat a signing box as ordinary narrative. Unresolved boxes stay visible.
+        """
+        unsafe = {q("w:sdt"), FLDCHAR, q("w:instrText"), q("w:drawing"), q("w:pict"),
+                  q("w:object"), q("w:sectPr"), q("w:br"), q("w:vanish")}
+        for table in self.index.roots:
+            if table.kind != "tbl" or table.part != "word/document.xml":
+                continue
+            cells = [c for c in table.children if c.kind == "tc"]
+            if len(table_rows_of(table.el)) != 1 or len(cells) != 1:
+                continue
+            cell = cells[0]
+            if self.cell_has_claim(cell.el) or not self.is_empty_cell(cell):
+                continue
+            raw, question, reason = "", None, "No unambiguous adjacent printed question."
+            node, skipped = table.el.getprevious(), 0
+            while node is not None and node.tag == q("w:p"):
+                if any(x.tag in unsafe for x in node.iter()):
+                    break
+                raw = re.sub(r"\s+", " ", self.text(node)).strip()
+                if raw:
+                    question = self.index.by_el.get(id(node))
+                    break
+                skipped += 1
+                if skipped > 2:
+                    break
+                node = node.getprevious()
+            bordered = self.question_box_bordered(table, cell)
+            context = self.question_box_context(question) if question is not None else ""
+            request = bool(re.search(r"\?", raw) or re.match(
+                r"^(?:please\s+)?(?:set out|provide|describe|explain|detail|list)\b", raw, re.I))
+            reference = re.search(r"\b(?:above|previous|following)\s+(?:question|answer|section)\b|\bas above\b|\bsame as\b", raw, re.I)
+            signing = SIGNATURE.search(raw + " " + context) or INITIALS.search(raw + " " + context) or \
+                re.search(r"\bconsent\b", raw + " " + context, re.I)
+            inline_answer = question is not None and (BOX in raw or CHECKED in raw or
+                bool(self.blank_spans(*self.ptext(question.el))))
+            if not bordered or cell.info["span"] != 1 or cell.info["vmerge"] is not None:
+                reason = "The border or unmerged one-cell structure is not explicit."
+            elif inline_answer:
+                reason = "The printed question contains another answer area; review their separate destinations."
+            elif len(raw) > 300 or len(context) > 300:
+                reason = "The complete question or section exceeds the mapping label limit; it was not shortened."
+            elif reference:
+                reason = "The question refers to another area; review both source questions."
+            elif signing:
+                reason = "Signing or consent context needs explicit review; it is not an ordinary narrative answer."
+            elif question is not None and question.parent is None and request and \
+                    id(question.el) not in self.claimed and self.list_info(question.el) is None:
+                self.add(Area("long_text", raw, cell, {"type": "cell"}, context=context))
+                self.claimed.add(id(question.el))
+                continue
+            self.notes.append("Unassigned answer box at " + cell.id + ". " + reason +
+                              (" Printed text: " + raw if raw else ""))
 
     def cell_twips(self, tslot, c) -> float:
         tcpr = c.el.find(q("w:tcPr"))

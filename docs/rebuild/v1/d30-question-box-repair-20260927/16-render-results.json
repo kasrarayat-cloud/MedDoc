@@ -1,0 +1,84 @@
+[
+  {
+    "mode": "original",
+    "pdf_sha256": "76db3a7ff8f2ae4ab18ebd5ec99406da9a3d89514e82134c98ee68b391dc014e",
+    "pages": 12,
+    "overlap_pairs": 0,
+    "complete_answer_contiguous_in_text": true,
+    "long_statement_visible_count": null,
+    "long_statement_expected_count": null,
+    "target_pages": [
+      5
+    ],
+    "images": [
+      {
+        "page": 5,
+        "path": "/opt/meddoc-pro/.worktrees/v1-word-d30/rebuild/.runtime/d30-repair-20260927/render-output/original-05.png",
+        "sha256": "cc77f93e823ae0e0200b0d98b58ac8b121a24e88a871c5d6ff8b5e46f4e0d10a"
+      }
+    ]
+  },
+  {
+    "mode": "missing",
+    "pdf_sha256": "b71b5ada93a17393db88a323d29f6c8a21c9e4ddb947508b4b3def859d4bf3db",
+    "pages": 12,
+    "overlap_pairs": 0,
+    "complete_answer_contiguous_in_text": true,
+    "long_statement_visible_count": null,
+    "long_statement_expected_count": null,
+    "target_pages": [
+      5
+    ],
+    "images": [
+      {
+        "page": 5,
+        "path": "/opt/meddoc-pro/.worktrees/v1-word-d30/rebuild/.runtime/d30-repair-20260927/render-output/missing-05.png",
+        "sha256": "cc77f93e823ae0e0200b0d98b58ac8b121a24e88a871c5d6ff8b5e46f4e0d10a"
+      }
+    ]
+  },
+  {
+    "mode": "ordinary",
+    "pdf_sha256": "4f6ece87b3376c69980aad9866611c9138ed397d8bab1feb3ce314c706f12a0c",
+    "pages": 12,
+    "overlap_pairs": 0,
+    "complete_answer_contiguous_in_text": true,
+    "long_statement_visible_count": null,
+    "long_statement_expected_count": null,
+    "target_pages": [
+      5
+    ],
+    "images": [
+      {
+        "page": 5,
+        "path": "/opt/meddoc-pro/.worktrees/v1-word-d30/rebuild/.runtime/d30-repair-20260927/render-output/ordinary-05.png",
+        "sha256": "093a32fbcec21e7737e4f52e5096b7c12edbf1a4d51e4b010d6bf2dab785050d"
+      }
+    ]
+  },
+  {
+    "mode": "long",
+    "pdf_sha256": "ed98c7a403767d90e06518fa5a824c011985d63478869aee20f7f6f67c4c2818",
+    "pages": 13,
+    "overlap_pairs": 0,
+    "complete_answer_contiguous_in_text": false,
+    "long_statement_visible_count": 90,
+    "long_statement_expected_count": 90,
+    "target_pages": [
+      5,
+      6
+    ],
+    "images": [
+      {
+        "page": 5,
+        "path": "/opt/meddoc-pro/.worktrees/v1-word-d30/rebuild/.runtime/d30-repair-20260927/render-output/long-05.png",
+        "sha256": "d6a3eeac2065e9f17d38669eabdac36e036ff9167e651c6b13085358a2c9b528"
+      },
+      {
+        "page": 6,
+        "path": "/opt/meddoc-pro/.worktrees/v1-word-d30/rebuild/.runtime/d30-repair-20260927/render-output/long-06.png",
+        "sha256": "73244ba8e7fb60cc3fa8d6ac9f4c6333b53c6e6291c79e6b388a19ee8ed6775a"
+      }
+    ]
+  }
+]
