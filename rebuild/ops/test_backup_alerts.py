@@ -1110,6 +1110,81 @@ class PreviousReleaseCompatibilityTests(unittest.TestCase):
                          "an unsent failure stamped only in the ledger held the real one")
         self.assertIn('(highest: warning)', self.sender.call_args.args[2])
 
+    def test_a_crash_the_previous_release_then_checks_over_is_adopted_and_the_owed_notice_sent(self):
+        """⚠️ F1(A), round 2, the refuter's exact sequence. R3's recovery kept the layer a notice
+        superseded only while status.json stayed byte-for-byte what the check began from. The
+        rollback's `systemctl stop` can kill a check between the ledger and status.json; the previous
+        release then checks once, rewriting status.json's check time and condition, and the kept layer
+        was dropped: status.json named the escalation at +2h, the ledger described only the unsent one
+        at +4h, and every later check and status() refused, forever, with no email."""
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)                                                   # initial notice at t0
+        self.health.return_value = 'backup_stale'
+        a.check(self.at + timedelta(hours=2))                              # escalation at +2h
+        self.health.return_value = 'backup_timeout'
+        crash, calls = IncidentLedgerTests.crash_on_second_write(self)
+        with crash, self.assertRaises(KeyboardInterrupt):
+            a.check(self.at + timedelta(hours=4))                          # escalation, killed between the writes
+        self.assertEqual(calls, [a.NOTICES_FILE, 'status.json'])
+        with patch.object(self.old, 'DIRECTORY', self.alerts):
+            result, _ = self.old.check(self.at + timedelta(hours=4, minutes=5))   # the previous release, once
+        self.assertEqual((result['condition'], result['alert']['outcome']), ('backup_timeout', 'provider_accepted'))
+        self.old_sender.assert_not_called()
+        shown, _ = a.status(self.at + timedelta(hours=4, minutes=6))
+        self.assertNotEqual(shown['condition'], 'monitoring_state_unavailable',
+                            'a check the previous release made over a crashed notice wedged status()')
+        self.assertEqual((shown['incident']['last_notice'], shown['incident']['last_notice_condition'],
+                          shown['incident']['notices_attempted']), ('escalation', 'backup_stale', 2))
+        result, code = a.check(self.at + timedelta(hours=4, minutes=10))
+        self.assertEqual((code, result['condition'], self.sender.call_count), (1, 'backup_timeout', 3),
+                         'the owed escalation was never sent')
+        self.assertTrue(result['alert']['provider_accepted'])
+        for text in ('Condition: backup_timeout', 'last notice announced backup_stale', 'notice 3'):
+            self.assertIn(text, self.sender.call_args.args[2])
+        for minutes in (15, 20):
+            self.assertEqual(a.check(self.at + timedelta(hours=4, minutes=minutes))[0]['condition'], 'backup_timeout')
+        self.assertEqual(self.sender.call_count, 3, 'and it is sent once')
+
+    def test_the_previous_releases_first_notice_is_never_merged_with_an_unsent_one_of_the_same_incident(self):
+        """⚠️ F1(B), round 2. A held incident rises and this release's lifted first notice (backup_failed)
+        is killed between the ledger and status.json. The previous release later makes ITS first
+        notice for the same incident, backup_stale, under the same identity. The ledger's record
+        named that identity too, so it was merged over the previous release's receipt: check()
+        refused forever ("Alert receipt and monitor state disagree") and status() reported a
+        backup_failed notice nobody sent, with a deferral no check decided."""
+        self.recovery.return_value['condition'] = 'offsite_capacity_low'
+        a.check(self.at)                                                   # warning notice at t0
+        self.recovery.return_value['condition'] = 'healthy'
+        a.check(self.at + timedelta(hours=1))                              # closes
+        self.recovery.return_value['condition'] = 'offsite_next_run_budget_low'
+        result, _ = a.check(self.at + timedelta(hours=2))                  # another warning: held
+        self.assertEqual(result['alert']['outcome'], 'cooldown_suppressed')
+        held = json.loads((self.alerts / 'status.json').read_text())['incident_id']
+        self.health.return_value = 'backup_failed'                         # the held incident rises
+        crash, _ = IncidentLedgerTests.crash_on_second_write(self)
+        with crash, self.assertRaises(KeyboardInterrupt):
+            a.check(self.at + timedelta(hours=3))
+        self.assertEqual(json.loads((self.alerts / a.NOTICES_FILE).read_text())['incident']['incident_attempt'], held)
+        self.recovery.return_value['condition'] = 'healthy'
+        self.health.return_value = 'backup_stale'
+        with patch.object(self.old, 'DIRECTORY', self.alerts):
+            result, _ = self.old.check(self.at + timedelta(hours=24, minutes=5))  # its own first notice
+        self.assertTrue(result['alert']['provider_accepted'])
+        self.old_sender.assert_called_once()
+        self.assertIn('Condition: backup_stale', self.old_sender.call_args.args[2])
+        self.assertEqual(json.loads((self.alerts / 'status.json').read_text())['incident_attempt'], held)
+        shown, _ = a.status(self.at + timedelta(hours=24, minutes=6))
+        self.assertNotEqual(shown['condition'], 'monitoring_state_unavailable')
+        self.assertEqual((shown['incident']['last_notice_condition'], shown['incident']['notices_attempted'],
+                          shown['incident']['escalation_deferred_until']), ('backup_stale', 1, None),
+                         'status() reported a notice nobody sent')
+        result, code = a.check(self.at + timedelta(hours=24, minutes=10))
+        self.assertEqual((code, result['condition']), (1, 'backup_stale'),
+                         "an unsent notice merged over the previous release's receipt wedged the monitor")
+        self.assertEqual(result['alert']['provider_message_id'], 'previous-release-id')
+        self.assertEqual(result['incident']['conditions_announced'], ['backup_stale'])
+        self.assertEqual(self.sender.call_count, 1, 'nothing is owed: the previous release announced it')
+
 
 class CrossIncidentSeverityTests(unittest.TestCase):
     """A MORE SEVERE incident opening inside the between-incidents cooldown is not held by it."""
