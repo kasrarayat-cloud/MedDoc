@@ -1,0 +1,52 @@
+FFF
+======================================================================
+FAIL: test_negation_correction_question_and_scoped_source_do_not_become_independent (core.tests.test_v3_patient_topics.PatientSourceTopics.test_negation_correction_question_and_scoped_source_do_not_become_independent) (label='Allergies', notes='This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or not weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-patient-topics/rebuild/core/tests/test_v3_patient_topics.py", line 52, in assert_named_hold
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'No known drug allergies.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'No known drug allergies.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_negation_correction_question_and_scoped_source_do_not_become_independent (core.tests.test_v3_patient_topics.PatientSourceTopics.test_negation_correction_question_and_scoped_source_do_not_become_independent) (label='Examination', notes='This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or not weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-patient-topics/rebuild/core/tests/test_v3_patient_topics.py", line 52, in assert_named_hold
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'Neurological examination is normal.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Neurological examination is normal.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_negation_correction_question_and_scoped_source_do_not_become_independent (core.tests.test_v3_patient_topics.PatientSourceTopics.test_negation_correction_question_and_scoped_source_do_not_become_independent) (label='Assessment', notes='This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or not weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-patient-topics/rebuild/core/tests/test_v3_patient_topics.py", line 52, in assert_named_hold
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'tension-type headache.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'tension-type headache.')
++ ('conflict', '')
+
+----------------------------------------------------------------------
+Ran 1 test in 0.457s
+
+FAILED (failures=3)
+Found 1 test(s).
+System check identified no issues (0 silenced).

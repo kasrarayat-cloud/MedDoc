@@ -1,0 +1,21 @@
+test_a_complete_statement_needs_a_listed_verb (core.tests.test_v3_ordinary_notes.ScopeInOrdinarySentences.test_a_complete_statement_needs_a_listed_verb) ... FAIL
+
+======================================================================
+FAIL: test_a_complete_statement_needs_a_listed_verb (core.tests.test_v3_ordinary_notes.ScopeInOrdinarySentences.test_a_complete_statement_needs_a_listed_verb)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-patient-topics/rebuild/core/tests/test_v3_ordinary_notes.py", line 342, in test_a_complete_statement_needs_a_listed_verb
+    self.assertEqual((answer['status'], answer['text']), ('conflict', ''), fragment)
+AssertionError: Tuples differ: ('supported', 'No known drug allergies.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'No known drug allergies.')
++ ('conflict', '') : No known drug allergies.
+
+----------------------------------------------------------------------
+Ran 1 test in 0.229s
+
+FAILED (failures=1)
