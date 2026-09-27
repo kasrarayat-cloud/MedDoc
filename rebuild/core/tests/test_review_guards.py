@@ -12,6 +12,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 import re
 import tempfile
+import time
 from unittest.mock import patch
 
 import threading
@@ -20,7 +21,7 @@ from django.db import connection
 from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
-from core import views, wm_review
+from core import coding as coding_module, views, wm_review
 from core.jobs import run_one
 from core.security import private_path
 from core.models import AuditEvent, Code, CodeSet, CodeSuggestion, Encounter, Job, Membership, TemplateVersion, User
@@ -117,13 +118,17 @@ class OrdinaryDraft:
                                   result_sha256=hashlib.sha256(payload).hexdigest())
 
     def accepted_code(self, encounter):
-        today = timezone.localdate()
-        release = CodeSet.objects.create(system='ICD-10-CM', version='synthetic-review-guards', sha256='0' * 64,
-                                         effective_from=today - timedelta(days=1), effective_until=today + timedelta(days=1),
-                                         source_url='https://synthetic.invalid/codes')
-        code = Code.objects.create(release=release, code='R00.0', description='Synthetic fixture; no clinical use')
-        return CodeSuggestion.objects.create(encounter=encounter, terminology=code, explanation='Synthetic documented code',
+        return CodeSuggestion.objects.create(encounter=encounter, terminology=synthetic_code(), explanation='Synthetic documented code',
                                              evidence='No chest pain.', accepted_by=self.user, accepted_at=timezone.now())
+
+
+def synthetic_code():
+    """R00.0 in a synthetic ICD-10-CM release in effect today (the encounters' date of service)."""
+    today = timezone.localdate()
+    release = CodeSet.objects.create(system='ICD-10-CM', version='synthetic-review-guards', sha256='0' * 64,
+                                     effective_from=today - timedelta(days=1), effective_until=today + timedelta(days=1),
+                                     source_url='https://synthetic.invalid/codes')
+    return Code.objects.create(release=release, code='R00.0', description='Synthetic fixture; no clinical use')
 
 
 @override_settings(**TEST_SETTINGS)
@@ -496,6 +501,122 @@ class ClearingOutsideTheTestTransaction(OrdinaryDraft, TransactionTestCase):
         self.assertEqual((response.status_code, outcome.get('colleague_finished_first'), outcome.get('status')), (302, False, 409))
         self.assertEqual((encounter.answers, encounter.revision), ({}, revision + 1))
         self.assertFalse(AuditEvent.objects.filter(action='encounter.answers_saved', actor=colleague).exists())
+
+
+def shown_messages(response):
+    """The page's flash messages, as text."""
+    found = re.search(r'<ul class="message-list"[^>]*>(.*?)</ul>', response.content.decode(), re.S)
+    return html.unescape(re.sub(r'<[^>]+>', ' ', found.group(1))) if found else ''
+
+
+def answered_or_blocked(outcome, deadline=60):
+    """Waits until the other thread's request has been answered (it sets outcome['status']) or is waiting on a lock (any
+    lock not granted in this private test cluster): a positive observation either way, not a guessed timeout; 'timeout'
+    if neither happens within `deadline` seconds. The request is the only thing that thread does before it answers."""
+    end = time.monotonic() + deadline
+    while time.monotonic() < end:
+        if 'status' in outcome:
+            return 'answered'
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT count(*) FROM pg_locks WHERE NOT granted')
+            if cursor.fetchone()[0] and 'status' not in outcome:
+                return 'waiting'
+        time.sleep(0.02)
+    return 'timeout'
+
+
+@override_settings(**TEST_SETTINGS)
+class CodeWritersSerializeWithANotesSave(OrdinaryDraft, TransactionTestCase):
+    """Refutation round 3, F1: `accept_code` read the encounter without its row lock, so an acceptance could commit after
+    a notes save had counted what it would clear and before it cleared the codes: answered 302 and audited, then deleted
+    by the save, which told the employee only "Notes saved…" and audited codes_accepted: 0. The refuter's input: an
+    encounter with no answers and one offered code; a clinician accepts it while an employee saves changed notes. Each
+    request commits on its own, the second in its own thread, as in production."""
+    CODED = OrdinaryDraft.NOTES + '\nAssessment: documented as R00.0.'
+    CHANGED = OrdinaryDraft.NOTES + '\nPlan: synthetic follow-up.'
+
+    def offered(self, notes=OrdinaryDraft.NOTES, suggestion=True):
+        _template, version = self.upload(self.make_docx(), 'docx')
+        encounter = self.create_encounter(version, notes)
+        self.employee = self.member('guards-code-race-employee', 'employee')
+        code = synthetic_code()
+        offer = CodeSuggestion.objects.create(encounter=encounter, terminology=code, explanation='Synthetic documented code',
+                                              evidence='No chest pain.') if suggestion else None
+        self.assertEqual((encounter.answers, CodeSuggestion.objects.filter(accepted_by__isnull=False).count()), ({}, 0))
+        return encounter, offer
+
+    def in_thread(self, user, url, payload, outcome):
+        client = Client(); client.force_login(user); client.raise_request_exception = False
+
+        def request():
+            try:
+                response = client.post(url, payload)
+                outcome['text'] = html.unescape(response.content.decode()); outcome['status'] = response.status_code
+                if response.status_code == 302:                      # (the page it lands on, once answered)
+                    outcome['messages'] = shown_messages(client.get(response['Location']))
+            finally:
+                connection.close()
+        return threading.Thread(target=request)
+
+    def run_while(self, thread, target, name, outcome):
+        """Patches `target` so that, the first time it is reached, `thread` runs and this request waits until that thread
+        has finished or is blocked on a lock."""
+        module, attribute = target
+        real = getattr(module, attribute)
+
+        def reached(*args, **kwargs):
+            result = real(*args, **kwargs)
+            if thread.ident is None:
+                thread.start(); outcome[name] = answered_or_blocked(outcome)
+            return result
+        return patch.object(module, attribute, reached)
+
+    def test_an_acceptance_arriving_while_a_save_clears_waits_and_then_finds_its_code_gone(self):
+        encounter, offer = self.offered()
+        revision, accept = encounter.revision, {}
+        thread = self.in_thread(self.user, f'/encounters/{encounter.pk}/coding/{offer.pk}/accept/', {'revision': revision}, accept)
+        self.client.force_login(self.employee); self.client.raise_request_exception = False
+        # (the save has counted what it will clear, and its write is next)
+        with self.run_while(thread, (views, 'review_state_counts'), 'accept_ran', accept):
+            saved = self.client.post(f'/encounters/{encounter.pk}/notes/', {'revision': revision, 'notes': self.CHANGED}, follow=True)
+        thread.join(timeout=60)
+        encounter.refresh_from_db()
+        self.assertEqual((accept.get('accept_ran'), accept.get('status')), ('waiting', 409))
+        self.assertIn('This code suggestion is no longer on this document', accept.get('text', ''))
+        self.assertIn('Nothing was accepted.', accept.get('text', ''))
+        self.assertFalse(AuditEvent.objects.filter(action='coding.accept').exists())
+        self.assertEqual((encounter.notes, CodeSuggestion.objects.filter(encounter=encounter).count()), (self.CHANGED, 0))
+        self.assertEqual(last_event('encounter.notes_saved', encounter).get('cleared', {}).get('codes_accepted'), 0)
+        self.assertNotIn('accepted code', shown_messages(saved))
+
+    def test_a_save_arriving_while_an_acceptance_commits_waits_and_then_states_the_accepted_code(self):
+        encounter, offer = self.offered()
+        revision, save = encounter.revision, {}
+        thread = self.in_thread(self.employee, f'/encounters/{encounter.pk}/notes/', {'revision': revision, 'notes': self.CHANGED}, save)
+        # (the acceptance's checks are under way, and its write is next)
+        with self.run_while(thread, (coding_module, 'applicable_releases'), 'save_ran', save):
+            accepted = self.client.post(f'/encounters/{encounter.pk}/coding/{offer.pk}/accept/', {'revision': revision})
+        thread.join(timeout=60)
+        encounter.refresh_from_db()
+        self.assertEqual((accepted.status_code, save.get('save_ran'), save.get('status')), (302, 'waiting', 302))
+        self.assertTrue(AuditEvent.objects.filter(action='coding.accept', target=str(offer.pk)).exists())
+        self.assertEqual((encounter.notes, CodeSuggestion.objects.filter(encounter=encounter).count()), (self.CHANGED, 0))
+        self.assertEqual(last_event('encounter.notes_saved', encounter).get('cleared', {}).get('codes_accepted'), 1)
+        self.assertIn('accepted code', save.get('messages', ''))
+
+    def test_suggestions_are_never_drawn_from_notes_a_concurrent_save_replaced(self):
+        """`coding` wrote suggestions from the notes it had read, unlocked, before a save replaced them."""
+        encounter, _offer = self.offered(self.CODED, suggestion=False)
+        revision, save = encounter.revision, {}
+        thread = self.in_thread(self.employee, f'/encounters/{encounter.pk}/notes/', {'revision': revision, 'notes': self.CHANGED}, save)
+        # (the suggestion has read the notes, and its write is next)
+        with self.run_while(thread, (coding_module, 'applicable_releases'), 'save_ran', save):
+            suggested = self.client.post(f'/encounters/{encounter.pk}/coding/', {'revision': revision})
+        thread.join(timeout=60)
+        encounter.refresh_from_db()
+        self.assertEqual((suggested.status_code, save.get('save_ran'), save.get('status')), (302, 'waiting', 302))
+        self.assertEqual(encounter.notes, self.CHANGED)
+        self.assertEqual([s.evidence for s in CodeSuggestion.objects.filter(encounter=encounter) if s.evidence not in encounter.notes], [])
 
 
 # ── the qualified Word form, offline ─────────────────────────────────────────────────────────────────────────────
