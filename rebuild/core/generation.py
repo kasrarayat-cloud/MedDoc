@@ -75,7 +75,7 @@ ATTESTATION_GUIDANCE = (' Leave consent, attestation, signature and dictated/tra
 # fields therefore changes meaning with the model string. So the profile states them EXPLICITLY for Sonnet 5, is
 # SNAPSHOTTED into Job.config at enqueue (a queued job never changes its request shape), and is hashed into
 # pricing_version (a different request is a different price). The listed Claude models up to 4.6 (`LEGACY_CLAUDE_MODELS`)
-# under anthropic, and non-Claude models under openai, keep the pre-profile request byte for byte; every other
+# under anthropic, and plain non-Claude ids under openai, keep the pre-profile request byte for byte; every other
 # (provider, model) pair is refused (`unprofiled`).
 # `LEGACY_PROFILE` IS that request, and it hashes as ABSENT so every existing fingerprint — claude-sonnet-4-6 at
 # 3/15/0.30 is configured-v1:fcc80267… — stays exactly what it was. Rollback is a model string, not a code change.
@@ -138,9 +138,24 @@ def claude_generation(model):
 LEGACY_CLAUDE_MODELS=frozenset(('claude-sonnet-4-6','claude-haiku-4-5','claude-sonnet-4-5-20250929'))
 
 
+#: ⚠️ A MODEL ID IS A PLAIN ID, FOR EVERY PROVIDER. openai used to be refused only for ids naming Claude, so '', ' ' and a
+#: padded 'gpt-4.1-mini ' were rated legacy — measured: the console printed 'request profile: legacy' marked success beside
+#: QUILLMD_AI_MODEL (unset), enqueue held the charge, the SDK sent model '' and a 400 left the job in reconciliation with
+#: its hold kept. ASCII only and matched whole (fullmatch), so no surrounding whitespace, control or look-alike character
+#: can pass; 128 characters is far above any id either provider issues (a fine-tune id is `ft:<base>:<org>:<name>:<id>`).
+PLAIN_MODEL_ID=re.compile(r'[A-Za-z0-9][A-Za-z0-9._:-]{0,127}')
+
+
+def plain_model_id(model):
+    """Whether `model` is a model id as a provider would receive it: a string, non-empty, nothing around it, nothing odd."""
+    return isinstance(model,str) and PLAIN_MODEL_ID.fullmatch(model) is not None
+
+
 def unprofiled(provider,model):
     """A (provider, model) pair QuillMD has no request for, so nothing may be sent until it has one.
 
+    Every provider: a model id that is not a plain id (`plain_model_id`) — empty, padded, carrying a control or any other
+    character outside [A-Za-z0-9._:-] — is refused, whatever else is true of it.
     anthropic: DENY BY DEFAULT — only claude-sonnet-5, which has its own profile, and `LEGACY_CLAUDE_MODELS`, each exactly as
     spelled. A newer model the legacy request is unsafe for (a larger tokenizer from 4.7, adaptive thinking by default from
     Sonnet 5 / Opus 5) can never receive it by being named in a shape nobody anticipated, and a non-Claude id — the
@@ -149,8 +164,9 @@ def unprofiled(provider,model):
     legacy, held, sent to api.openai.com and 404'd into reconciliation with the hold kept.
     Any other provider is refused separately (`PROVIDERS`).
     """
+    if not plain_model_id(model): return True
     if provider=='anthropic': return model!=SONNET_5 and model not in LEGACY_CLAUDE_MODELS
-    if provider=='openai': return not isinstance(model,str) or 'claude' in model.casefold()
+    if provider=='openai': return 'claude' in model.casefold()
     return False
 
 
@@ -161,6 +177,9 @@ def request_profile(provider,model,thinking,effort,inference_geo):
     geo=(inference_geo or '').strip()
     if provider not in PROVIDERS:
         return {'invalid':'QUILLMD_AI_PROVIDER must be exactly one of: '+', '.join(PROVIDERS)+'.'}
+    if not plain_model_id(model):
+        return {'invalid':'QUILLMD_AI_MODEL must be a plain model id: set, with no surrounding spaces or control characters, '
+                          'a letter or digit first, then only letters, digits and . _ : - (at most 128 characters).'}
     if provider=='anthropic' and model==SONNET_5:
         if thinking not in THINKING_MODES:
             return {'invalid':'QUILLMD_AI_THINKING must be one of: '+', '.join(THINKING_MODES)+'.'}
