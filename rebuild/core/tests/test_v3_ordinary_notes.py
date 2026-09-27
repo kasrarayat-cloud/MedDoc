@@ -7,9 +7,14 @@ only from their own labelled statement, and governance, fragments and correction
 import time
 from unittest.mock import patch
 
-from django.test import SimpleTestCase, override_settings
+import json
+from types import SimpleNamespace
+
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from core import generation as g
+from core.models import Encounter
+from .test_word_v3_workflow import V3, V3EncounterFixture
 
 
 def field(key, label, kind='text', options=None):
@@ -301,3 +306,79 @@ class ScopeInOrdinarySentences(SimpleTestCase):
                                 ('Chief complaint', 'Knee pain after a fall')):
             answer = run(fragment, {label: [fragment]}, fields=self.fields)[label]
             self.assertEqual((answer['status'], answer['text']), ('conflict', ''), fragment)
+
+
+def live_config(**extra):
+    return {**g.configuration(), 'mode': 'live', 'provider': 'anthropic', 'model': 'synthetic-no-network',
+            'input_rate': '3', 'output_rate': '15', 'cached_rate': '0.3', **extra}
+
+
+def sent_request(notes, fields, config):
+    """generate() against a patched Anthropic client that records the request and stops before any response."""
+    sent = {}
+
+    def create(**kwargs):
+        sent.update(kwargs)
+        raise RuntimeError('stop before any request')
+
+    with patch('anthropic.Anthropic') as client:
+        client.return_value.messages.create.side_effect = create
+        try:
+            g.generate(notes, fields, config)
+        except RuntimeError:
+            pass
+    return sent
+
+
+class QueuedContractAttribution(SimpleTestCase):
+    """R10: a v3 job runs under the evidence contract its quoted configuration names."""
+
+    def test_the_current_configuration_names_the_complete_sentence_contract(self):
+        self.assertEqual(g.configuration()['v3_evidence_contract'], 'natural-v1')
+
+    def test_a_v3_job_quoted_before_the_contract_existed_is_sent_the_labelled_line_request(self):
+        config = {k: v for k, v in live_config().items() if k != 'v3_evidence_contract'}
+        sent = sent_request('Smoker: yes\nPatient seen today.', FIELDS, config)
+        payload = json.loads(sent['messages'][0]['content'])
+        self.assertNotIn('source_units', payload)
+        self.assertIn('Selection', sent['output_config']['format']['schema']['$defs'])
+        self.assertNotIn('UnitSelection', sent['output_config']['format']['schema']['$defs'])
+        self.assertTrue(sent['system'].startswith('Map source documentation to questions.'))
+        fixture = g.generate('Smoker: yes\nPatient seen today.', FIELDS, {**config, 'mode': 'fixture'})[0]
+        smoker = fixture['v3_4']
+        self.assertEqual((smoker['status'], smoker['text'], smoker.get('suggestion')), ('conflict', '', 'Yes'),
+                         'the labelled-line contract holds an answer beside an unlabelled line, as it was quoted')
+
+    def test_a_v3_job_quoted_under_the_contract_is_sent_the_complete_sentence_request(self):
+        sent = sent_request('Smoker: yes\nPatient seen today.', FIELDS, live_config())
+        self.assertIn('source_units', json.loads(sent['messages'][0]['content']))
+        self.assertIn('UnitSelection', sent['output_config']['format']['schema']['$defs'])
+        fixture = g.generate('Smoker: yes\nPatient seen today.', FIELDS, {**live_config(), 'mode': 'fixture'})[0]
+        self.assertEqual((fixture['v3_4']['status'], fixture['v3_4']['text']), ('supported', 'Yes'))
+
+
+@override_settings(**V3)
+class EnqueuedContractAttribution(V3EncounterFixture, TestCase):
+    """R10 through the worker: enqueue snapshots the quoted contract; the job runs as it was quoted."""
+
+    def run_generation(self, notes, config=None):
+        from core.jobs import enqueue, run_one
+        encounter = Encounter.objects.get(pk=self.encounter.pk)
+        saved = self.client.post(f"/encounters/{encounter.pk}/notes/", {"revision": encounter.revision, "notes": notes})
+        self.assertEqual(saved.status_code, 302)
+        job = enqueue(Encounter.objects.get(pk=encounter.pk), self.user, config=config)
+        self.assertTrue(run_one())
+        job.refresh_from_db()
+        self.assertEqual(job.state, 'succeeded', job.error)
+        return job, Encounter.objects.get(pk=encounter.pk).answers[self.key('Smoker?')]
+
+    def test_a_new_job_records_the_contract_it_runs_under(self):
+        job, smoker = self.run_generation('Smoker: yes\nPatient seen today.')
+        self.assertEqual(job.config['v3_evidence_contract'], 'natural-v1')
+        self.assertEqual((smoker['status'], smoker['text']), ('supported', 'Yes'))
+
+    def test_a_job_queued_before_the_contract_existed_runs_as_it_was_quoted(self):
+        quoted = {k: v for k, v in g.configuration().items() if k != 'v3_evidence_contract'}
+        job, smoker = self.run_generation('Smoker: yes\nPatient seen today.', config=quoted)
+        self.assertNotIn('v3_evidence_contract', job.config)
+        self.assertEqual((smoker['status'], smoker['text'], smoker.get('suggestion')), ('conflict', '', 'Yes'))
