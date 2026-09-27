@@ -945,6 +945,43 @@ def glyphs_shown(data, contains):
     return next(line for line in paragraphs_bytes(data) if contains in line)
 
 
+def side_questions_bytes():
+    """The refuter's p6 input: questions whose only difference is a side marker, in table rows and in paragraphs."""
+    doc = Document()
+    doc.add_paragraph("Synthetic knee examination")
+    table = doc.add_table(rows=3, cols=2)
+    table.cell(0, 0).text = "Finding"
+    table.cell(0, 1).text = "Present?"
+    table.cell(1, 0).text = "(L) Effusion"
+    table.cell(1, 1).text = "☐ Yes ☐ No"
+    table.cell(2, 0).text = "(R) Effusion"
+    table.cell(2, 1).text = "☐ Yes ☐ No"
+    doc.add_paragraph("L. Tenderness? ☐ Yes ☐ No")
+    doc.add_paragraph("R. Tenderness? ☐ Yes ☐ No")
+    return docx_bytes(doc)
+
+
+class SideMarkersInQuestions(unittest.TestCase):
+    """R4: a side written as a list marker - (L) (R) L. R. - stays in the question label; so does any single letter in
+    parentheses (fail closed). '(L) Effusion' and '(R) Effusion' both became 'Effusion'."""
+
+    def test_the_side_stays_in_every_question_label(self):
+        from documents import word_v3
+        fields = word_v3.inspect(side_questions_bytes())["fields"]
+        self.assertEqual([(f["label"], f["kind"], f["options"]) for f in fields],
+                         [("(L) Effusion", "choice", ["Yes", "No"]), ("(R) Effusion", "choice", ["Yes", "No"]),
+                          ("L. Tenderness?", "choice", ["Yes", "No"]), ("R. Tenderness?", "choice", ["Yes", "No"])])
+
+    def test_side_letters_and_single_letters_in_parentheses_are_kept(self):
+        from documents.word_v3 import clean_label
+        for text in ("(L) Effusion", "(R) Effusion", "(l) knee", "(r) knee", "L. Tenderness?", "R. Tenderness?",
+                     "L) knee", "R) knee", "l. knee", "r) knee", "(a) Pain", "(B) Hip", "(i) Item", "(x) Item"):
+            self.assertEqual(clean_label(text), text)
+        for text, label in (("a) Yes", "Yes"), ("B. No", "No"), ("(3) Dose", "Dose"), ("12) Plan", "Plan"),
+                            ("iv. Findings", "Findings"), ("(xii) Impression", "Impression"), ("(ii) Item", "Item")):
+            self.assertEqual(clean_label(text), label, text)
+
+
 def fever_cell_bytes():
     """A cell 'Yes' printed box and a legacy checkbox 'No': the cell's text shows the printed box only."""
     doc = Document()

@@ -1029,6 +1029,63 @@ class V3RepeatedQuestions(V3Fixture, TestCase):
                                  "Right knee comments": "settled", "Left knee comments": "swollen"})
 
 
+def left_effusion_form_bytes():
+    """The refuter's p9 input: a left-only question whose side is written as a list marker."""
+    doc = Document()
+    doc.add_paragraph("Synthetic knee injection note")
+    doc.add_paragraph("(L) Effusion? ☐ Yes ☐ No")
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    return buffer.getvalue()
+
+
+def two_sides_grid_bytes():
+    """One question label printed twice, told apart only by its column: Effusion under Right knee and Left knee."""
+    doc = Document()
+    doc.add_paragraph("Synthetic knee examination")
+    table = doc.add_table(rows=2, cols=3)
+    for c, h in enumerate(["Finding", "Right knee", "Left knee"]):
+        table.cell(0, c).text = h
+    table.cell(1, 0).text = "Effusion"
+    table.cell(1, 1).text = "☐ Yes ☐ No"
+    table.cell(1, 2).text = "☐ Yes ☐ No"
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    return buffer.getvalue()
+
+
+@override_settings(**V3)
+class V3SideInQuestions(V3Fixture, TestCase):
+    """R4 end to end: a question's side is never lost from its label, and a repeated label is shown with its context."""
+
+    def generated(self, version, notes):
+        from core.jobs import enqueue, run_one
+        self.assertEqual(self.new_encounter(version, notes=notes).status_code, 302)
+        encounter = Encounter.objects.get()
+        enqueue(encounter, self.user)
+        self.assertTrue(run_one())
+        return Encounter.objects.get()
+
+    def test_a_line_that_names_no_side_never_fills_a_sided_question(self):
+        template, _ = self.uploaded(data=left_effusion_form_bytes(), name="Synthetic effusion")
+        version = self.confirm(template)
+        field = next(f for f in version.fields if f["kind"] == "choice")
+        answer = self.generated(version, "Effusion: Yes\n").answers[field["key"]]
+        self.assertEqual((answer["status"], answer["text"]), ("missing", ""), "the notes name no side")
+        self.assertEqual(field["label"], "(L) Effusion?")
+
+    def test_a_repeated_label_is_shown_with_its_context_on_the_review_page(self):
+        template, _ = self.uploaded(data=two_sides_grid_bytes(), name="Synthetic sides")
+        version = self.confirm(template)
+        self.assertEqual([(f["label"], f["context"]) for f in version.fields],
+                         [("Effusion", "Effusion > Right knee"), ("Effusion", "Effusion > Left knee")])
+        encounter = self.generated(version, "Synthetic knee notes")
+        page = self.client.get(f"/encounters/{encounter.pk}/").content.decode()
+        self.assertIn("Effusion &gt; Right knee", page)
+        self.assertIn("Effusion &gt; Left knee", page)
+        self.assertLess(page.index("Effusion &gt; Right knee"), page.index("Effusion &gt; Left knee"))
+
+
 def repeated_option_form_bytes():
     doc = Document()
     doc.add_paragraph("Synthetic swelling check")
