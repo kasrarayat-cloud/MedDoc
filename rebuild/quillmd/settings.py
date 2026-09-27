@@ -62,7 +62,14 @@ SESSION_COOKIE_SECURE=os.getenv('QUILLMD_HTTPS','0')=='1'
 CSRF_COOKIE_SECURE=SESSION_COOKIE_SECURE
 SECURE_SSL_REDIRECT=SESSION_COOKIE_SECURE
 # Only enable behind the approved loopback proxy, which overwrites this header.
-SECURE_PROXY_SSL_HEADER=('HTTP_X_FORWARDED_PROTO', 'https') if os.getenv('QUILLMD_TRUST_PROXY','0')=='1' and not ADMIN_SITE else None
+# The administrator surface honours it only when it is also served over HTTPS: today that surface
+# is reached by an SSH tunnel straight to its loopback port, where nothing overwrites the header,
+# while the shared environment file sets QUILLMD_TRUST_PROXY=1 for the doctor's proxy. With
+# QUILLMD_HTTPS=1 a tunnel cannot serve it at all (every request redirects to https), so the only
+# working admin deployment is behind a TLS-terminating proxy, and ignoring that proxy's header is
+# what made admin.quillmd.com redirect to itself and refuse HTTPS form posts.
+QUILLMD_TRUST_PROXY=os.getenv('QUILLMD_TRUST_PROXY','0')=='1' and (not ADMIN_SITE or SESSION_COOKIE_SECURE)
+SECURE_PROXY_SSL_HEADER=('HTTP_X_FORWARDED_PROTO', 'https') if QUILLMD_TRUST_PROXY else None
 SESSION_COOKIE_AGE=1800
 PASSWORD_RESET_TIMEOUT=1800
 SESSION_SAVE_EVERY_REQUEST=True

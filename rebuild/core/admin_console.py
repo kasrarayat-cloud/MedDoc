@@ -332,6 +332,7 @@ def configuration_rows():
             {'name': 'QUILLMD_REGISTRATION', 'value': settings.QUILLMD_REGISTRATION},
             {'name': 'QUILLMD_STRIPE_MODE', 'value': settings.QUILLMD_STRIPE_MODE},
             {'name': 'QUILLMD_MFA_REQUIRED_ALL', 'value': str(settings.QUILLMD_MFA_REQUIRED_ALL)},
+            {'name': 'QUILLMD_TRUST_PROXY (effective on this surface)', 'value': str(settings.QUILLMD_TRUST_PROXY)},
             {'name': 'ADMIN_SITE', 'value': str(settings.ADMIN_SITE)},
             {'name': 'Database', 'value': settings.DATABASES['default']['NAME']},
             {'name': 'Release', 'value': settings.RELEASE_SHA},
