@@ -64,12 +64,29 @@ class LiveModeRefusesToStartHalfConfigured(SimpleTestCase):
         for name, value in (('STRIPE_SECRET_KEY', 'sk_test_synthetic_never_real'), ('STRIPE_SECRET_KEY', ''),
                             ('STRIPE_SECRET_KEY', ' rk_live_synthetic_never_real'),
                             ('STRIPE_WEBHOOK_SECRET', ''), ('QUILLMD_APP_BASE_URL', 'http://localhost:9130'),
-                            ('QUILLMD_APP_BASE_URL', '')):
+                            ('QUILLMD_APP_BASE_URL', ''), ('QUILLMD_PREVIEW_AUTH_ENABLED', '1')):
             with self.subTest(name=name, value=value):
                 result = start({**self.COMPLETE, name: value})
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(name, result.stderr.strip().splitlines()[-1])
                 self.assertNotIn('synthetic_never_real', result.stderr)
+
+    def test_live_mode_refuses_the_preview_gate_which_would_403_every_webhook(self):
+        """R2: today's private deployment (gate on, the gate's :9443 origin) with live Stripe must not start: the gate
+        answers 403 to Stripe's webhook, so a live payment would be charged and never credited."""
+        for extra in ({'QUILLMD_APP_BASE_URL': 'https://app.quillmd.com:9443'}, {'QUILLMD_ADMIN_SITE': '1'}, {}):
+            with self.subTest(extra=extra):
+                result = start({**self.COMPLETE, 'QUILLMD_PREVIEW_AUTH_ENABLED': '1', **extra})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, '')
+                self.assertIn('QUILLMD_PREVIEW_AUTH_ENABLED must be off', result.stderr.strip().splitlines()[-1])
+                self.assertNotIn('synthetic_never_real', result.stderr)
+
+    def test_test_mode_keeps_the_preview_gate(self):
+        """The private synthetic deployment runs test Stripe behind the gate; that start is unchanged."""
+        result = start({'QUILLMD_PREVIEW_AUTH_ENABLED': '1', 'STRIPE_SECRET_KEY': 'rk_test_synthetic_never_real',
+                        'STRIPE_WEBHOOK_SECRET': 'whsec_synthetic_never_real', 'QUILLMD_APP_BASE_URL': 'https://app.quillmd.com:9443'})
+        self.assertEqual((result.returncode, result.stdout.strip()), (0, 'False'), result.stderr)
 
     def test_test_mode_starts_whatever_key_is_present_as_before(self):
         """Test mode's startup is today's: a live key there is refused at checkout, not at start."""

@@ -166,6 +166,11 @@ def stripe_live_problems(env, *, allowed_hosts, secret_key, webhook_secret, app_
         problems.append('STRIPE_SECRET_KEY must be a live secret or restricted key (sk_live_ or rk_live_)')
     if not (webhook_secret or '').strip():
         problems.append('STRIPE_WEBHOOK_SECRET must be set, or paid checkouts are never credited')
+    # The preview gate answers 403 to Stripe's webhook, which carries no preview grant: a paid live
+    # checkout would be charged and never credited. Read raw, like real mode: the stricter reading.
+    if raw(env, 'QUILLMD_PREVIEW_AUTH_ENABLED', '0') == '1':
+        problems.append('QUILLMD_PREVIEW_AUTH_ENABLED must be off (the preview gate refuses the Stripe webhook, '
+                        'so paid checkouts are never credited)')
     origin = explicit_origin_problem(env, app_base_url, allowed_hosts)
     if origin:
         problems.append(f'QUILLMD_APP_BASE_URL {origin} (Checkout returns the payer there)')
