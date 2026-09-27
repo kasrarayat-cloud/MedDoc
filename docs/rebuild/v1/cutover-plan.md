@@ -61,6 +61,14 @@ No launch date is inferred from the implementation-time estimates below. Contrac
 independent review and native Word sessions need actual dates before the critical path can be scheduled.
 Necessary Word and ordinary-narrative engineering remains ahead of qualification and real-data admission.
 
+The final V1 configuration must explicitly name `claude-sonnet-5` with its reviewed rates/profile and enable
+the qualified `QUILLMD_WORD_ENGINE=v3`, `QUILLMD_WM_NARRATIVE=1`, `QUILLMD_MAPPING_ASSISTANCE=1` and
+`QUILLMD_MAPPING_ASSISTANCE_LIVE=1` paths after their acceptance gates clear. These flags are currently off;
+their presence in the renderer is preparation, not activation authority. Record actual worker request and
+response identity, limits, stop reason, usage and billing for both ordinary generation and blank mapping.
+Neither an environment-file edit nor an admin configuration row proves the served worker used that model.
+Do not enable an unqualified path merely to satisfy this configuration list; V1 stays blocked instead.
+
 ### G1 AWS foundation (1 to 2 days)
 
 1. Organization, accounts, SCPs, Identity Center with hardware MFA, root lockdown (checklist A7-A10).

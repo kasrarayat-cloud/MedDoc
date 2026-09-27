@@ -120,7 +120,8 @@ AI_THINKING=os.getenv('QUILLMD_AI_THINKING','disabled')
 AI_EFFORT=os.getenv('QUILLMD_AI_EFFORT','medium')
 AI_INFERENCE_GEO=os.getenv('QUILLMD_AI_INFERENCE_GEO','')
 # Narrative notes on the qualified WM IOV form (docs/rebuild/wm-narrative-design.md). OFF by default: a candidate, not
-# enabled for doctors, and not live-verified. With it off, generation, review and export behave exactly as before.
+# enabled for doctors, and not live-verified. Shared generation/review changes have separate acceptance evidence;
+# a disabled WM flag does not establish their behavior or discharge the required ordinary-note workflow.
 WM_NARRATIVE=os.getenv('QUILLMD_WM_NARRATIVE','0')=='1'
 # Retained provider-shaped narrative responses, keyed by the sha256 of the notes. Read ONLY in fixture mode, never live.
 AI_REPLAY_DIR=os.getenv('QUILLMD_AI_REPLAY_DIR','')
