@@ -1441,3 +1441,72 @@ class AnAcceptedCodeIsNotTakenOver(OrdinaryDraft, TestCase):
                           'Nothing was accepted.' in text, (offer.accepted_by_id, offer.accepted_at),
                           AuditEvent.objects.filter(action='coding.accept').count()),
                          (409, True, True, first, 1))
+
+
+@override_settings(**TEST_SETTINGS)
+class CodeRefusalsSayWhatHappened(OrdinaryDraft, TestCase):
+    """Refutation round 4, R4-7: two 409 texts were false. A code id from another encounter, posted at a stale revision of
+    this one, was told "its source notes were changed" — they were not, and the code was never on this document: it is a
+    404, as it already was at the current revision. A page rendered before this release posts no revision and was told
+    "This document changed after you opened it" even when nothing had changed: it is told the page is out of date."""
+    CODED = OrdinaryDraft.NOTES + '\nAssessment: documented as R00.0.'
+
+    def offered(self):
+        _template, version = self.upload(self.make_docx(), 'docx')
+        encounter = self.create_encounter(version, self.CODED)
+        synthetic_code()
+        self.client.post(f'/encounters/{encounter.pk}/coding/', {'revision': encounter.revision})
+        return encounter, CodeSuggestion.objects.get(encounter=encounter)
+
+    def test_a_code_never_on_this_document_is_not_found_at_a_stale_revision(self):
+        encounter, offer = self.offered()
+        elsewhere = Encounter.objects.create(department=self.department, patient=self.patient, created_by=self.user,
+                                             template_version=encounter.template_version, notes=self.CODED,
+                                             service_date=encounter.service_date)
+        foreign = CodeSuggestion.objects.create(encounter=elsewhere, terminology=offer.terminology, evidence=offer.evidence,
+                                                explanation='Synthetic documented code')
+        stale = encounter.revision
+        Encounter.objects.filter(pk=encounter.pk).update(revision=stale + 1)    # (as an answers save renumbers it: notes kept)
+        answered = [self.client.post(f'/encounters/{encounter.pk}/coding/{code}/accept/', {'revision': stale}).status_code
+                    for code in (foreign.pk, '00000000-0000-4000-8000-000000000000')]
+        foreign.refresh_from_db()
+        self.assertEqual((answered, foreign.accepted_by_id), ([404, 404], None))
+
+    def test_a_code_a_notes_save_cleared_is_still_said_to_be_gone(self):
+        """The control for the text kept: after a changed notes save the code is gone, and says so."""
+        encounter, offer = self.offered()
+        stale = encounter.revision
+        self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': self.CODED + '\nPlan: synthetic.'})
+        refused = self.client.post(f'/encounters/{encounter.pk}/coding/{offer.pk}/accept/', {'revision': stale})
+        self.assertContains(refused, 'This code suggestion is no longer on this document', status_code=409)
+
+    def test_a_page_from_before_this_release_is_told_it_is_out_of_date(self):
+        encounter, offer = self.offered()
+        suggested = AuditEvent.objects.filter(action='coding.suggest').count()
+        said = []
+        for url, nothing in ((f'/encounters/{encounter.pk}/coding/{offer.pk}/accept/', 'Nothing was accepted.'),
+                             (f'/encounters/{encounter.pk}/coding/', 'Nothing was suggested.')):
+            refused = self.client.post(url)                                        # (no revision, as an old page posts)
+            text = html.unescape(refused.content.decode())
+            said.append((refused.status_code, 'This page is out of date' in text, 'This document changed' in text, nothing in text))
+        offer.refresh_from_db()
+        self.assertEqual((said, offer.accepted_by_id, AuditEvent.objects.filter(action='coding.suggest').count()),
+                         ([(409, True, False, True)] * 2, None, suggested))
+
+    def test_the_notes_warning_names_only_what_a_changed_save_would_clear(self):
+        """R4-7's last part: the page's warning named the answer draft, every review decision and accepted codes whatever
+        was there. It now names the parts, from the counts the save audits and states."""
+        encounter, _keys = self.reviewed_draft()
+        self.assertEqual(' '.join(notes_help(self.client.get(f'/encounters/{encounter.pk}/')).split()),
+                         'Include only documented facts. Saving changed notes clears the answer draft (2 answers, 2 reviewed '
+                         'by a clinician), whoever saves them; the clearing is recorded under your name. Saving them '
+                         'unchanged clears nothing.')
+        self.accepted_code(encounter)
+        self.post(f'/encounters/{encounter.pk}/clear-review/', encounter, {'confirm_clear': 'on'})
+        job = self.transcript_awaiting_review(encounter)
+        page = self.client.get(f'/encounters/{encounter.pk}/')
+        self.assertIn('Saving changed notes clears 1 accepted code, whoever saves them;', ' '.join(notes_help(page).split()))
+        self.assertIn('Saving clears 1 accepted code; the clearing is recorded under your name.',
+                      ' '.join(transcript_help(page, job).split()))
+        for claim in ('answer draft', 'review decision'):
+            self.assertNotIn(claim, notes_help(page) + transcript_help(page, job))
