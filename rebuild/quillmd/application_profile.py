@@ -29,6 +29,14 @@ STRIPE_KEY_PATTERNS = {
 #: settings holds it (unstripped), so the startup check tests that same value.
 WEBHOOK_SECRET_PATTERN = re.compile(r'whsec_[A-Za-z0-9]+')
 
+#: The doctor surface's host: the only host an emailed link or a Checkout return may name. The administrator host is
+#: in ALLOWED_HOSTS too, but a clinician or payer sent there lands on a surface that answers 404 to doctor pages.
+DOCTOR_HOST = 'app.quillmd.com'
+#: The only spelling accepted for the application origin: lower-case https, the host, an optional port without
+#: leading zeros, an optional trailing '/'. urlsplit forgives what a link built from the raw value does not: leading
+#: control characters, an empty user ('@'), an empty port (':'), upper case, repeated slashes.
+ORIGIN_FORM = re.compile(r'https://[a-z0-9.-]+(?::[1-9][0-9]{0,4})?/?')
+
 #: Hosts a recipient's browser cannot reach, or that exist only inside the test client.
 NON_PUBLIC_HOSTS = frozenset({'localhost', '127.0.0.1', '::1', 'testserver', '0.0.0.0'})
 
@@ -114,6 +122,11 @@ def public_https_origin_problem(value, allowed_hosts):
         return 'must name a public host, not a loopback or test host'
     if host not in allowed_hosts:
         return 'must name one of the allowed application hosts'
+    if host != DOCTOR_HOST:
+        return f'must name the doctor host {DOCTOR_HOST}, not the administrator surface or another allowed host'
+    if not ORIGIN_FORM.fullmatch(value):
+        return (f'must be written exactly as https://{DOCTOR_HOST}, optionally with :port '
+                '(lower case; no empty user or port, leading zeros, control characters or extra slashes)')
     return None
 
 

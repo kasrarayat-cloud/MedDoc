@@ -66,7 +66,7 @@ class LiveModeRefusesToStartHalfConfigured(SimpleTestCase):
                             ('STRIPE_WEBHOOK_SECRET', ''), ('QUILLMD_APP_BASE_URL', 'http://localhost:9130'),
                             ('QUILLMD_APP_BASE_URL', ''), ('QUILLMD_PREVIEW_AUTH_ENABLED', '1'),
                             ('QUILLMD_APP_BASE_URL', 'https://app.quillmd.com?'), ('QUILLMD_APP_BASE_URL', 'https://app.quillmd.com#'),
-                            ('QUILLMD_APP_BASE_URL', 'https://app.quillmd.com:0')):
+                            ('QUILLMD_APP_BASE_URL', 'https://app.quillmd.com:0'), ('QUILLMD_APP_BASE_URL', 'https://admin.quillmd.com')):
             with self.subTest(name=name, value=value):
                 result = start({**self.COMPLETE, name: value})
                 self.assertNotEqual(result.returncode, 0)
@@ -197,6 +197,14 @@ class LiveCheckoutAndSettlement(SyntheticFixture, TestCase):
                 self.assertEqual(response.status_code, 302)
                 api.assert_not_called()
                 self.assertFalse(Payment.objects.exists())
+
+    @override_settings(STRIPE_SECRET_KEY='rk_live_synthetic_adapter', QUILLMD_STRIPE_MODE='live', QUILLMD_APP_BASE_URL='https://admin.quillmd.com')
+    def test_live_mode_never_returns_a_payer_to_the_administrator_surface(self):
+        """F5: the administrator host is allowed, but a payer returned there lands on a surface that 404s billing."""
+        response, api = self.checkout('admin-origin-click')
+        self.assertEqual(response.status_code, 302)
+        api.assert_not_called()
+        self.assertFalse(Payment.objects.exists())
 
     def signed(self, payload):
         body = json.dumps(payload).encode()

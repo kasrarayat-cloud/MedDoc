@@ -60,6 +60,9 @@ REFUSALS = [
     ('QUILLMD_APP_BASE_URL', {'QUILLMD_APP_BASE_URL': 'https://app.quillmd.com/#'}),
     ('QUILLMD_APP_BASE_URL', {'QUILLMD_APP_BASE_URL': 'https://app.quillmd.com:0'}),
     ('QUILLMD_APP_BASE_URL', {'QUILLMD_APP_BASE_URL': 'https://app.quillmd.com:00/'}),
+    # F5: the administrator host is an allowed host but never the application origin.
+    ('QUILLMD_APP_BASE_URL', {'QUILLMD_APP_BASE_URL': 'https://admin.quillmd.com'}),
+    ('QUILLMD_APP_BASE_URL', {'QUILLMD_APP_BASE_URL': '\x01https://app.quillmd.com'}),
     # R1: a sandbox payment mode with any server key would turn Stripe's public test card into paid balance.
     ('QUILLMD_STRIPE_MODE', {'STRIPE_SECRET_KEY': f'sk_test_{PRIVATE_VALUE}'}),
     ('QUILLMD_STRIPE_MODE', {'STRIPE_SECRET_KEY': f'rk_test_{PRIVATE_VALUE}', 'QUILLMD_STRIPE_MODE': 'test'}),
@@ -220,13 +223,19 @@ class OriginIsAnOriginOnly(SimpleTestCase):
                       'https://app.quillmd.com:0/', 'https://app.quillmd.com?x=1', 'https://app.quillmd.com#x',
                       # Refusals it already had.
                       '', 'http://app.quillmd.com', 'https://app.quillmd.com/billing', 'https://someone:secret@app.quillmd.com',
-                      'https://localhost', 'https://unlisted.example', ' https://app.quillmd.com', 'https://app.quillmd.com:99999'):
+                      'https://localhost', 'https://unlisted.example', ' https://app.quillmd.com', 'https://app.quillmd.com:99999',
+                      # F5: the doctor host only, spelled exactly (the refuter's origin probe found each of these passing).
+                      'https://admin.quillmd.com', 'https://admin.quillmd.com/', 'https://admin.quillmd.com:443',
+                      'https://@app.quillmd.com', 'https://:@app.quillmd.com', 'https://app.quillmd.com:', 'https://app.quillmd.com:/',
+                      'https://app.quillmd.com:0443', 'https://app.quillmd.com:00443', '\x01https://app.quillmd.com',
+                      '\x1bhttps://app.quillmd.com', 'https://APP.QUILLMD.COM', 'HTTPS://app.quillmd.com', 'https://app.quillmd.com//',
+                      'https://app.quillmd.com///', 'https://app.quillmd.com.'):
             with self.subTest(value=value):
                 self.assertIsNotNone(profile.public_https_origin_problem(value, ALLOWED))
 
     def test_accepted(self):
         for value in ('https://app.quillmd.com', 'https://app.quillmd.com/', 'https://app.quillmd.com:443', 'https://app.quillmd.com:9443',
-                      'https://admin.quillmd.com'):
+                      'https://app.quillmd.com:65535'):
             with self.subTest(value=value):
                 self.assertIsNone(profile.public_https_origin_problem(value, ALLOWED))
 
