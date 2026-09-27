@@ -64,7 +64,8 @@ class BrowserSaveForm(HTMLParser):
     @classmethod
     def of(cls, page):
         form = cls(); form.feed(page.content.decode())
-        return {name: html.unescape(value).lstrip('\n') for name, value in form.values.items()}
+        # (the HTML parser drops exactly one line feed right after a <textarea> start tag)
+        return {name: html.unescape(value[1:] if value.startswith('\n') else value) for name, value in form.values.items()}
 
 
 # ── ordinary forms ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -102,6 +103,15 @@ class OrdinaryDraft:
         user = User.objects.create_user(username=name, email=name + '@synthetic.invalid', verified_at=timezone.now())
         Membership.objects.create(user=user, department=self.department, role=role)
         return user
+
+    def transcript_awaiting_review(self, encounter, text='Synthetic words.'):
+        payload = json.dumps({'raw_transcript': text, 'transcript': text}).encode()
+        relative = 'receipts/synthetic-review-guards-transcript.json'
+        path = private_path(relative); path.parent.mkdir(parents=True, exist_ok=True, mode=0o700); path.write_bytes(payload)
+        return Job.objects.create(encounter=encounter, user=self.user, kind='transcription', state='succeeded',
+                                  revision=encounter.revision, request_key='synthetic-transcript-' + str(encounter.pk),
+                                  config={'transcript_review_required': True}, result_path=relative,
+                                  result_sha256=hashlib.sha256(payload).hexdigest())
 
     def accepted_code(self, encounter):
         today = timezone.localdate()
@@ -229,18 +239,78 @@ class ANotesSaveNeverClearsSilently(OrdinaryDraft, TestCase):
         """The unchanged-notes no-op is for a notes save only: a reviewed transcript is always applied (and recorded), or
         it would stay awaiting review with nothing to show why."""
         encounter, _keys = self.reviewed_draft()
-        payload = json.dumps({'raw_transcript': 'Synthetic words.', 'transcript': 'Synthetic words.'}).encode()
-        relative = 'receipts/synthetic-review-guards-transcript.json'
-        path = private_path(relative); path.parent.mkdir(parents=True, exist_ok=True, mode=0o700); path.write_bytes(payload)
-        job = Job.objects.create(encounter=encounter, user=self.user, kind='transcription', state='succeeded',
-                                 revision=encounter.revision, request_key='synthetic-transcript-' + str(encounter.pk),
-                                 config={'transcript_review_required': True}, result_path=relative,
-                                 result_sha256=hashlib.sha256(payload).hexdigest())
+        job = self.transcript_awaiting_review(encounter)
         response = self.post(f'/encounters/{encounter.pk}/notes/', encounter, {
             'transcript_job': str(job.pk), 'corrected_transcript': encounter.notes, 'transcript_mode': 'replace',
             'transcript_reviewed': 'on'})
         self.assertTrue(AuditEvent.objects.filter(action='transcription.applied', target=str(job.pk)).exists())
         self.assertNotContains(response, UNCHANGED)
+
+
+def textarea(page, element_id):
+    """The raw content of a rendered <textarea> (before the HTML parser drops its first line feed)."""
+    return html.unescape(re.search(r'<textarea id="%s"[^>]*>(.*?)</textarea>' % re.escape(element_id),
+                                   page.content.decode(), re.S).group(1))
+
+
+def as_browser_posts(content):
+    """What a browser submits for that textarea untouched: the parser drops exactly one line feed right after the start
+    tag, and form submission normalizes every line break to CRLF."""
+    value = content[1:] if content.startswith('\n') else content
+    return value.replace('\r\n', '\n').replace('\r', '\n').replace('\n', '\r\n')
+
+
+@override_settings(**TEST_SETTINGS)
+class AnUntouchedNotesSaveRoundTrips(OrdinaryDraft, TestCase):
+    """Refutation round 2, R2-1: notes stored with a leading line break were shown without it (the HTML parser drops the
+    first line feed after <textarea>), posted without it, and an untouched "Save source notes" cleared the whole review."""
+    EDITED = OrdinaryDraft.NOTES + '\nPlan: synthetic follow-up.'          # (the doctor's edit: a change, so it is stored)
+
+    def reviewed_with_notes(self, notes):
+        encounter, _keys = self.reviewed_draft()
+        self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': notes})   # (the doctor's own edit)
+        self.assertEqual(encounter.notes, notes)
+        self.post(f'/encounters/{encounter.pk}/generate/', encounter)
+        self.assertTrue(run_one())
+        encounter.refresh_from_db()
+        keys = sorted(encounter.answers)
+        self.post(f'/encounters/{encounter.pk}/save/', encounter, {**{'answer_' + k: encounter.answers[k]['text'] for k in keys},
+                                                                   **{'reviewed_' + k: 'on' for k in keys}})
+        self.assertTrue(encounter.answers and all(a['reviewed'] for a in encounter.answers.values()))   # (the control)
+        return encounter
+
+    def untouched_save(self, encounter, posted):
+        before = (encounter.answers, encounter.revision)
+        response = self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': posted})
+        self.assertEqual((encounter.answers, encounter.revision), before)
+        self.assertContains(response, UNCHANGED)
+
+    def test_notes_stored_with_a_leading_line_break_survive_an_untouched_save(self):
+        notes = '\r\n' + self.EDITED.replace('\n', '\r\n')
+        encounter = self.reviewed_with_notes(notes)
+        content = textarea(self.client.get(f'/encounters/{encounter.pk}/'), 'source-notes-edit')
+        self.assertEqual(content, '\n' + notes)                    # a line feed right after the start tag, as Django's widget
+        self.untouched_save(encounter, as_browser_posts(content))  # (the page as it now renders)
+
+    def test_a_page_rendered_before_the_fix_is_still_an_untouched_save(self):
+        """A tab opened before this release shows the notes without their leading break: exactly one is ignored."""
+        notes = '\n' + self.EDITED
+        encounter = self.reviewed_with_notes(notes)
+        self.untouched_save(encounter, as_browser_posts(notes))    # (the old page: no line feed was emitted, one dropped)
+
+    def test_only_one_leading_line_break_is_ignored(self):
+        notes = '\r\n\r\n' + self.EDITED.replace('\n', '\r\n')
+        encounter = self.reviewed_with_notes(notes)
+        self.untouched_save(encounter, notes[2:])                  # (one break dropped: the same notes)
+        self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': notes[4:]})
+        self.assertEqual(encounter.answers, {})                    # (both dropped: the doctor removed a line — a change)
+
+    def test_the_transcript_textarea_keeps_a_leading_line_break_too(self):
+        encounter, _keys = self.reviewed_draft()
+        self.transcript_awaiting_review(encounter, '\nSynthetic words.')
+        job = Job.objects.get(encounter=encounter, kind='transcription')
+        content = textarea(self.client.get(f'/encounters/{encounter.pk}/'), f'transcript-{job.pk}')
+        self.assertEqual(content, '\n\nSynthetic words.')
 
 
 @override_settings(**TEST_SETTINGS)

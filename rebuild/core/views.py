@@ -483,9 +483,13 @@ def clinician_decided(e):
                 for a in (e.answers or {}).values())
             or bool((e.template_review or {}).get('decisions')))
 
-def same_text(first,second):
-    """Equal as text: a browser posts a textarea's line breaks as CRLF."""
-    return first.replace('\r\n','\n').replace('\r','\n')==second.replace('\r\n','\n').replace('\r','\n')
+def same_text(posted,stored):
+    """Whether posted notes are the stored notes as a browser returns them untouched: it posts a textarea's line breaks as
+    CRLF, and the HTML parser drops the one line break that directly follows <textarea>. The page now emits one there (as
+    Django's Textarea widget does), so a stored leading break survives; a page rendered before that lost it, so exactly
+    one leading line break (LF, CRLF or CR) missing from the post is ignored."""
+    posted,stored=(text.replace('\r\n','\n').replace('\r','\n') for text in (posted,stored))
+    return posted==stored or (stored.startswith('\n') and posted==stored[1:])
 
 def review_state_counts(e,codes=True):
     """What clearing this draft discards, as counts only (never clinical text), for its audit row."""
