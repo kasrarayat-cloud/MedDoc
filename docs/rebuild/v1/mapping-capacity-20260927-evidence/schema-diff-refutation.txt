@@ -1,0 +1,2 @@
+NOTHING FOUND: 12 pure/SDK-mock controls. Sonnet5 transformed; historical4.6 complete request exact; source/profile unchanged; local bounds remain strict.
+generation.py SHA256 ce7af2f35124c24edcc0f74daa103fd0bd9b72b6db610225195315830171827d

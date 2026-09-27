@@ -1,7 +1,7 @@
 # Model-assisted Word mapping — design and bounded measurement request
 
 Status, 2026-09-27: **implemented locally for offline verification; disabled by default; no live model
-measurement or deployment.** See `mapping-assistance-recovery-20260927.md` for exact checks and retained failures.
+generation measurement or deployment.** See `mapping-assistance-recovery-20260927.md` for exact checks and retained failures.
 Provider calls still require eligible spending authority and launch/account admission. This implementation does
 not change any corpus result or establish Word compatibility.
 
@@ -19,8 +19,8 @@ They are judgement calls a reader of the blank form makes easily and a rule set 
    deterministic proposals (slot, kind, label, options). No patient data exists at this stage, and none is ever
    sent here.
 2. One structured-output request to `claude-sonnet-5`, with thinking disabled and effort medium. Template text is
-   labelled untrusted data. The response schema is generic: field keys, verdict enums and slot-id strings. No
-   template text goes into the schema.
+   labelled untrusted data. The v2 response schema uses grouped request-bound numeric IDs and source-span integer arrays. No
+   template text goes into the schema. The server expands those IDs back into stable original locations and wording.
 3. The model returns verdicts on each proposal (keep / not an answer / kind / options / label) and additions
    (slot id + kind + label + options).
 4. **Deterministic validation**:
@@ -38,7 +38,13 @@ They are judgement calls a reader of the blank form makes easily and a rule set 
    Freeze candidate, source/schema/model/profile and first-pass harness before opening an unseen cohort.
    The original corpus's 44-lineage provenance gap remains separately visible.
 
-## Cost (measured sizes, estimated tokens)
+## Historical cost estimate — superseded for new mapping requests
+
+The following original estimate is retained as history, **not a current quote**. Native token counts showed
+that even a minimal old envelope could exceed the 8,000-token output limit. The mapping-only v2 envelope,
+20,000-token reservation and measured compact sizing are recorded in
+[`mapping-capacity-20260927.md`](mapping-capacity-20260927.md). Input-byte counts are not token counts.
+
 
 Measured on the 40 development forms: payload median 26.5 KB, p90 126 KB, max 344 KB. That is roughly
 8.8k / 42k / 115k input tokens with Sonnet 5's denser tokenizer. Output is about 40 tokens per proposed field
@@ -107,3 +113,21 @@ The retained synthetic workflow checks cover upload, request/review, an added mi
 correction/confirmation/finalization and original-based export, including missing and long answers. Browser
 renders verify the local review surface only. Native Microsoft Word and original/export rendered acceptance,
 current model access and genuine broad-template qualification remain release gates.
+
+## Compact capacity contract, 2026-09-27
+
+`blank-mapping-v2` retains all source strings and stable locations in the request and review. Wire IDs are
+array positions bound to that exact request. Every field and slot appears once in disjoint verdict groups.
+Up to 100 combined replacements/additions and 400 printed-option spans are admitted (at most 100 options
+per change); source spans use Unicode code points. A reference belongs to its target context; original
+field labels cannot migrate to foreign destinations. All expanded proposals still pass the deterministic
+writer, overlap, signature and counterpart checks. Exhaustion stays visibly incomplete and blocks
+unassisted confirmation; the full source-area review remains available.
+
+The mapping-only profile is 20,000 output tokens, 120 seconds, disabled thinking and medium effort. Its
+hash is bound into the request/quote and immutable job config. Global generation profiles and historical
+receipts are unchanged. Old queued mapping contracts refuse before the new compiler, release as unsent
+and require a fresh quote. Both mapping flags remain off by default. One specifically authorized free
+count call measured 8,659 native **input** tokens for the conservative compact output-text envelope; it is
+not native generation or clinical qualification evidence. See the capacity report for exact hashes,
+focused checks, preserved earlier counts and narrow limits.
