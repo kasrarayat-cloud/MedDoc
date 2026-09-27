@@ -32,6 +32,7 @@ from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outco
 from .billing import available_balance
 from . import wm_review
 from . import v3_mapping
+from documents.mapping_limits import MAX_MAPPING_LABEL, MAX_MAPPING_INPUT_UNITS
 
 
 def error_message(exc):
@@ -528,7 +529,7 @@ def v3_page(request,t,version,*,status=200,error='',posted=None,outline=None):
         'posted_add_kind':posted.get('kind',''),'text_kinds':[(k,v3_mapping.KIND_NAMES[k]) for k in v3_mapping.TEXT_KINDS],
         'manual_kinds':[(k,v3_mapping.KIND_NAMES[k]) for k in v3_mapping.MANUAL_KINDS],'can_confirm':can_confirm,
         'answerable':len(v3_mapping.answerable(version.fields)),'field_limit':v3_mapping.GENERATION_FIELD_LIMIT,
-        'corrections':version.corrections,'statements':[],
+        'corrections':version.corrections,'statements':[],'mapping_label_limit':MAX_MAPPING_LABEL,'mapping_input_limit':MAX_MAPPING_INPUT_UNITS,
         'mapping_assistance_enabled':getattr(settings,'QUILLMD_MAPPING_ASSISTANCE',False)},status=status)
 
 def template_detail_v3(request,t,version):
@@ -570,8 +571,9 @@ def v3_save_corrections(request,t):
             key=f['key']
             if request.POST.get('remove_'+key)=='on':
                 removed.append({'key':key,'label':f['label'],'kind':f.get('kind'),'origin':f.get('origin','automatic')});continue
-            label=str(request.POST.get('label_'+key,f['label'])).strip()
-            if not label or len(label)>300 or '\n' in label:raise ValidationError(f'Give question {number} a one-line label of 1 to 300 characters.')
+            supplied_label=str(request.POST.get('label_'+key,f['label']))
+            label=supplied_label.strip()
+            if not label or len(supplied_label)>MAX_MAPPING_LABEL or '\n' in label:raise ValidationError(f'Give question {number} a one-line label of 1 to {MAX_MAPPING_LABEL} characters.')
             kind=request.POST.get('kind_'+key,f.get('kind'))
             if kind!=f.get('kind'):
                 if f.get('kind') not in v3_mapping.TEXT_KINDS or kind not in v3_mapping.TEXT_KINDS:
@@ -594,9 +596,9 @@ def v3_add_field(request,t):
     """A place the engine missed, chosen from the form's outline, located by the engine and recorded as manual."""
     from documents import locate_fields
     membership(request.user,t.department,roles=['owner','clinician','manager'])
-    slot=request.POST.get('slot','');kind=request.POST.get('kind','');label=request.POST.get('label','').strip()
+    slot=request.POST.get('slot','');kind=request.POST.get('kind','');supplied_label=request.POST.get('label','');label=supplied_label.strip()
     if kind not in v3_mapping.MANUAL_KINDS:raise ValidationError('Choose what kind of answer the added field takes.')
-    if not label or len(label)>300 or '\n' in label:raise ValidationError('Give the added field a one-line label of 1 to 300 characters.')
+    if not label or len(supplied_label)>MAX_MAPPING_LABEL or '\n' in label:raise ValidationError(f'Give the added field a one-line label of 1 to {MAX_MAPPING_LABEL} characters.')
     if not slot:raise ValidationError('Choose the place on the form where the missed answer goes.')
     latest=t.versions.order_by('-number').first()
     if request.POST.get('mapping_version')!=str(latest.pk):

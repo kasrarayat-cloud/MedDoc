@@ -28,6 +28,11 @@ from dataclasses import dataclass, field as dfield
 
 from lxml import etree
 
+if __package__:
+    from .mapping_limits import MAX_MAPPING_LABEL, MAX_MAPPING_CONTEXT
+else:  # isolated worker imports directly before closing its filesystem
+    from mapping_limits import MAX_MAPPING_LABEL, MAX_MAPPING_CONTEXT
+
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 W14 = "http://schemas.microsoft.com/office/word/2010/wordml"
 MC = "http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -732,6 +737,7 @@ class Area:
     note: str = ""
     capacity: int | None = None
     protection: str = ""
+    complete_source: bool = False   # question-box source cannot be shortened by later metadata passes
 
 
 #: A list marker is 1-3 digits, ONE letter or a roman numeral (i..xxx), as 'M.' 'M)' or '(M)' before a space.
@@ -744,11 +750,11 @@ LIST_MARK = r"(?:\d{1,3}|[A-Za-z]|(?i:x{0,2}(?:i{1,3}|iv|vi{0,3}|ix)|x{1,3}))"
 LIST_MARKER = re.compile(r"^(?:(?![LRlr][.)])" + LIST_MARK + r"[.)]|\((?![A-Za-z]\))" + LIST_MARK + r"\))\s+")
 
 
-def clean_label(text: str) -> str:
+def clean_label(text: str, *, limit=300) -> str:
     text = (text or "").replace("\x00", " ").replace(BOX, " ").replace(CHECKED, " ")
     text = re.sub(r"\s+", " ", text.replace("\t", " ")).strip()
     text = LIST_MARKER.sub("", text)
-    return text.strip(" :–—-_*").strip()[:300]
+    return text.strip(" :–—-_*").strip()[:limit]
 
 
 def option_text(text: str) -> str:
@@ -919,14 +925,14 @@ class Detector:
             self._grid[key] = out
         return self._grid[key]
 
-    def text_at(self, tbl_slot, r, col):
+    def text_at(self, tbl_slot, r, col, *, complete=False):
         for c in self.grid(tbl_slot).get(r, []):
             if c.info["col"] <= col < c.info["col"] + c.info["span"]:
                 if c.info["vmerge"] == "continue":
                     return ""
                 txt = self.cell_text(c)
                 if txt and not is_blank_text(txt) and BOX not in txt and "\x00" not in self.cell_objects(c):
-                    if len(txt) > 80:
+                    if len(txt) > 80 and not complete:
                         first = next((self.text(x.el).strip() for x in c.children if x.kind == "p" and self.text(x.el).strip()), "")
                         txt = first[:80]
                     return txt
@@ -957,19 +963,19 @@ class Detector:
         self._grid[key] = result
         return result
 
-    def column_header(self, tbl_slot, col, row) -> str:
+    def column_header(self, tbl_slot, col, row, *, complete=False) -> str:
         """The label printed directly above (a label row over a blank row), else the table's header rows (a
         continued table's come from the table it continues)."""
         above = [r for r in self.grid(tbl_slot) if r < row]
         if above:
             r = max(above)
             if self.row_kind(tbl_slot, r) == "label":
-                txt = self.text_at(tbl_slot, r, col)
+                txt = self.text_at(tbl_slot, r, col, complete=complete)
                 if txt:
                     return txt
         ht = self.header_table(tbl_slot)
         for r in reversed([h for h in self.header_rows(ht) if ht is not tbl_slot or h < row]):
-            txt = self.text_at(ht, r, col)
+            txt = self.text_at(ht, r, col, complete=complete)
             if txt:
                 return txt
         return ""
@@ -982,31 +988,31 @@ class Detector:
     def cell_objects(self, c) -> str:
         return "".join(self.ptext(x.el)[0] for x in c.children if x.kind == "p")
 
-    def is_label_cell(self, c) -> bool:
+    def is_label_cell(self, c, *, complete=False) -> bool:
         txt = self.cell_text(c)
-        if not txt or is_blank_text(txt) or is_option_word(txt) or len(txt) > 300:
+        if not txt or is_blank_text(txt) or is_option_word(txt) or (len(txt) > 300 and not complete):
             return False
         objs = self.cell_objects(c)
         return BOX not in txt and CHECKED not in txt and "\x00" not in objs
 
-    def row_identity(self, tbl_slot, row, col) -> str:
+    def row_identity(self, tbl_slot, row, col, *, complete=False) -> str:
         """The leftmost label of the row (the item the row is about)."""
         for c in sorted(self.grid(tbl_slot).get(row, []), key=lambda c: c.info["col"]):
             if c.info["col"] >= col:
                 break
-            if self.is_label_cell(c):
-                return clean_label(self.cell_text(c))
+            if self.is_label_cell(c, complete=complete):
+                return clean_label(self.cell_text(c), limit=None if complete else 300)
         return ""
 
-    def row_label(self, tbl_slot, row, col, printed=False) -> str:
+    def row_label(self, tbl_slot, row, col, printed=False, *, complete=False) -> str:
         """The row's label; `printed` reads it as an option (option_text: no list-marker strip)."""
-        read = option_text if printed else clean_label
+        read = option_text if printed else lambda text: clean_label(text, limit=None if complete else 300)
         rows = self.grid(tbl_slot)
         best = ""
         for c in sorted(rows.get(row, []), key=lambda c: c.info["col"]):
             if c.info["col"] >= col:
                 break
-            if self.is_label_cell(c):
+            if self.is_label_cell(c, complete=complete):
                 best = read(self.cell_text(c))
         if not best:
             # a vertically merged label cell continues from the row above
@@ -1019,24 +1025,53 @@ class Detector:
                             break
         return best
 
-    def context_for(self, slot: Slot) -> str:
+    def context_for(self, slot: Slot, *, complete=False) -> str:
         parts = []
         cell = self.host_cell(slot)
+        read = lambda text: clean_label(text, limit=None if complete else 300)
         if cell is not None:
             tbl = cell.parent
-            header = clean_label(self.column_header(tbl, cell.info["col"], cell.info["row"]))
-            ident = self.row_identity(tbl, cell.info["row"], cell.info["col"])
-            rowlab = self.row_label(tbl, cell.info["row"], cell.info["col"])
+            header = read(self.column_header(tbl, cell.info["col"], cell.info["row"], complete=complete))
+            ident = self.row_identity(tbl, cell.info["row"], cell.info["col"], complete=complete)
+            rowlab = self.row_label(tbl, cell.info["row"], cell.info["col"], complete=complete)
             if ident and ident != rowlab:
-                parts.append(ident[:120])
+                parts.append(ident if complete else ident[:120])
             if rowlab:
-                parts.append(rowlab[:120])
+                parts.append(rowlab if complete else rowlab[:120])
             if header:
-                parts.append(header[:80])
-        head = self.heading_before(slot)
+                parts.append(header if complete else header[:80])
+        if complete:
+            root = slot
+            while root.parent is not None:
+                root = root.parent
+            head, problem = self.question_box_context(root)
+            if problem:
+                fail("The complete source section is unresolved: " + problem, "invalid_mapping")
+            # Preserve headings inside real ancestor containers too. A sibling
+            # from another cell is never the local heading of this destination.
+            local, place = [], slot
+            while place.parent is not None:
+                headings = []
+                for sibling in place.parent.children:
+                    if sibling is place:
+                        break
+                    if sibling.kind != "p" or not self.text(sibling.el).strip():
+                        continue
+                    heading, _, issue = self.question_box_paragraph(sibling.el)
+                    if issue and not issue.startswith("A page break "):
+                        fail("The complete source section is unresolved: " + issue, "invalid_mapping")
+                    if heading:
+                        headings.append(re.sub(r"\s+", " ", self.text(sibling.el)).strip())
+                if headings:
+                    local.insert(0, headings[-1])
+                place = place.parent
+            head = " > ".join(dict.fromkeys(x for x in [head] + local if x))
+        else:
+            head = self.heading_before(slot)
         if head:
-            parts.insert(0, head[:120])
-        return " > ".join(dict.fromkeys(p for p in parts if p))[:300]
+            parts.insert(0, head if complete else head[:120])
+        context = " > ".join(dict.fromkeys(p for p in parts if p))
+        return context if complete else context[:300]
 
     def host_paragraph(self, slot):
         s = slot
@@ -1169,7 +1204,13 @@ class Detector:
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
         self.qualify_sides()
         self.surface_duplicates()
-        for a in self.areas:
+        for a in list(self.areas):
+            if a.complete_source and (len(a.label) > MAX_MAPPING_LABEL or len(a.context) > MAX_MAPPING_CONTEXT):
+                self.notes.append("Unassigned answer box at " + a.slot.id +
+                                  ". The complete question or section exceeds the mapping limit; nothing was shortened. "
+                                  "Printed text: " + a.label + " Section: " + a.context)
+                self.areas.remove(a)
+                continue
             a.capacity = self.capacity_for(a)
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
         return self.areas, self.notes
@@ -1252,7 +1293,8 @@ class Detector:
                                       not re.search(r"(?<!\w)" + re.escape(s) + r"(?!\w)", area.label, re.I)))
             if scope:
                 area.label = " — ".join(scope + [area.label])
-                area.context = " > ".join(dict.fromkeys(s for s in scope + [area.context] if s))[:300]
+                context = " > ".join(dict.fromkeys(s for s in scope + [area.context] if s))
+                area.context = context if area.complete_source else context[:300]
 
     def label_before_object(self, slot, obj_el) -> str:
         """Text before an inline object in its paragraph (after any previous object); else row label / column header /
@@ -1942,6 +1984,17 @@ class Detector:
         return bool(re.search(r"\?", text) or re.match(
             r"^(?:please\s+)?(?:set out|provide|describe|explain|detail|list)\b", text, re.I))
 
+    @staticmethod
+    def question_box_signing(text):
+        # The article makes "the initial report" an adjective phrase. Do not
+        # exempt bare "Initial", "Initials", initial-here, or any other marker.
+        reading = re.sub(r"\bthe\s+initial\s+report\b", "the report", text, flags=re.I)
+        # A signing verb still governs an adjective-bearing report (for example,
+        # "Please sign the initial report here?"). The shared regex is unchanged.
+        if reading != text and re.search(r"\bsign\b", reading, re.I):
+            return True
+        return SIGNATURE.search(reading) or INITIALS.search(reading) or re.search(r"\bconsent\b", reading, re.I)
+
     def rule_question_boxes(self):
         """A printed body question followed by its own empty one-cell bordered table.
 
@@ -1995,8 +2048,7 @@ class Detector:
                     break
                 previous = previous.getprevious()
             reference = re.search(r"\b(?:above|previous|following)\s+(?:question|answer|section)\b|\bas above\b|\bsame as\b", raw, re.I)
-            signing = SIGNATURE.search(raw + " " + context) or INITIALS.search(raw + " " + context) or \
-                re.search(r"\bconsent\b", raw + " " + context, re.I)
+            signing = self.question_box_signing(raw + " " + context)
             inline_answer = question is not None and (BOX in raw or CHECKED in raw or
                 bool(self.blank_spans(*self.ptext(question.el))))
             if not bordered or cell.info["span"] != 1 or cell.info["vmerge"] is not None:
@@ -2007,15 +2059,17 @@ class Detector:
                 reason = "The question spans multiple paragraphs; review the complete source block. Earlier text: " + prior_question
             elif inline_answer:
                 reason = "The printed question contains another answer area; review their separate destinations."
-            elif len(raw) > 300 or len(context) > 300:
+            elif len(raw) > MAX_MAPPING_LABEL or len(context) > MAX_MAPPING_CONTEXT:
                 reason = "The complete question or section exceeds the mapping label limit; it was not shortened."
+                if len(context) > MAX_MAPPING_CONTEXT:
+                    reason += " Section: " + context
             elif reference:
                 reason = "The question refers to another area; review both source questions."
             elif signing:
                 reason = "Signing or consent context needs explicit review; it is not an ordinary narrative answer."
             elif question is not None and question.parent is None and request and \
                     id(question.el) not in self.claimed and self.list_info(question.el) is None:
-                self.add(Area("long_text", raw, cell, {"type": "cell"}, context=context))
+                self.add(Area("long_text", raw, cell, {"type": "cell"}, context=context, complete_source=True))
                 self.claimed.add(id(question.el))
                 continue
             self.notes.append("Unassigned answer box at " + cell.id + ". " + reason +
@@ -2464,7 +2518,8 @@ class Detector:
                     where = "line %d: %s" % (len(preceding) + 1, self.text(para.el)[:100])
                 else:
                     where = "printed question %d: %s" % (n, a.label[:100])
-                a.context = ("%s · occurrence %d of %d (%s)" % (context, n, len(group), where)).strip(" ·")[:300]
+                qualified = ("%s · occurrence %d of %d (%s)" % (context, n, len(group), where)).strip(" ·")
+                a.context = qualified if a.complete_source else qualified[:300]
                 a.note = "duplicate label: position shown"
 
     # 9. the same field in several header/footer parts (first page, even, default) is one answer ------------------
@@ -3710,7 +3765,12 @@ def locate(data: bytes, targets: list) -> list:
     out = []
     for n, t in enumerate(targets, 1):
         kind = t.get("kind")
-        label = clean_label(str(t.get("label") or ""))[:300]
+        supplied_label, supplied_context = t.get("label") or "", t.get("context") or ""
+        if not isinstance(supplied_label, str) or len(supplied_label) > MAX_MAPPING_LABEL:
+            fail("An added question label must be at most %d characters; nothing was shortened." % MAX_MAPPING_LABEL, "invalid_mapping")
+        if not isinstance(supplied_context, str) or len(supplied_context) > MAX_MAPPING_CONTEXT:
+            fail("An added question section must be at most %d characters; nothing was shortened." % MAX_MAPPING_CONTEXT, "invalid_mapping")
+        label = clean_label(supplied_label, limit=MAX_MAPPING_LABEL)
         if kind not in MANUAL_KINDS or not label:
             fail("Each added field needs a label and a supported kind.", "invalid_mapping")
         slot = detector.index.by_id.get(t.get("slot") or "")
@@ -3785,7 +3845,10 @@ def locate(data: bytes, targets: list) -> list:
                 target = {"type": "ff_text"}
         if target is None:
             fail("That place cannot take an answer.", "invalid_mapping")
-        area = Area(kind, label, slot, target, context=clean_label(str(t.get("context") or detector.context_for(slot)))[:300],
+        context = supplied_context or detector.context_for(slot, complete=True)
+        if len(context) > MAX_MAPPING_CONTEXT:
+            fail("The complete source section exceeds %d characters; nothing was shortened." % MAX_MAPPING_CONTEXT, "invalid_mapping")
+        area = Area(kind, label, slot, target, context=clean_label(context, limit=MAX_MAPPING_CONTEXT),
                     options=options if kind in ("choice", "multi_choice") else ([label] if kind == "checkbox" else []))
         area.capacity = detector.capacity_for(area)
         field = area_to_field(n, area)

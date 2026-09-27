@@ -64,6 +64,56 @@ class MappingAssistance(TestCase):
             path=Path(location);path.mkdir(parents=True,exist_ok=True)
             (path/name).write_bytes(payload)
 
+    def test_existing_context_inherits_only_with_exact_resolved_locator(self):
+        prior = self.version.fields[0]
+        long_context = 'Known reviewed source context ' + 'complete words ' * 30
+        prior['context'] = long_context
+        self.compiled = mapping.compile_request(self.version, self.config)
+        payload = json.loads(self.compiled['request']['messages'][0]['content'])
+        slot = next(iter(mapping.v3_mapping.mapped_slots([prior])))
+        sid = next(n for n, row in enumerate(payload['slots']) if row['slot'] == slot)
+        body = self.body(); body['f']['k'].remove(0); body['f']['r'] = [0]
+        body['x'] = [[0, sid, 0, payload['text_refs'].index([0, 4, 0]), 0, len(prior['label']), -1]]
+        result = mapping.validate_proposal(self.version, self.compiled, body)
+        replacement = next(f for f in result['fields'] if f['label'] == prior['label'])
+        self.assertEqual(replacement['context'], long_context)
+        self.assertEqual(replacement['locator'], prior['locator'])
+        for key, value in (('fingerprint', '0' * 64), ('target', {'type': 'cell_replace'})):
+            with self.subTest(key=key):
+                saved = copy.deepcopy(prior['locator'])
+                prior['locator'][key] = value
+                result = mapping.validate_proposal(self.version, self.compiled, body)
+                replacement = next(f for f in result['fields'] if f['label'] == prior['label'])
+                self.assertNotEqual(replacement['context'], long_context)
+                prior['locator'] = saved
+        descendant = copy.deepcopy(body); descendant['x'][0][1] = sid + 1
+        moved = mapping.validate_proposal(self.version, self.compiled, descendant)
+        descendant_field = next(f for f in moved['fields'] if f['label'] == prior['label'])
+        self.assertNotEqual(descendant_field['locator'], prior['locator'])
+        self.assertNotEqual(descendant_field['context'], long_context)
+        foreign_slot = payload['fields'][1]['slots'][0]
+        foreign = copy.deepcopy(body)
+        foreign['x'][0][1] = next(n for n, row in enumerate(payload['slots']) if row['slot'] == foreign_slot)
+        with self.assertRaises(ValidationError): mapping.validate_proposal(self.version, self.compiled, foreign)
+
+    def test_complete_long_labels_are_priced_in_actual_request_and_old_profile_refuses(self):
+        original_fields = copy.deepcopy(self.version.fields)
+        for length in (334, 409, 1000):
+            self.version.fields = [{**original_fields[0], 'label': 'Q' * length}]
+            compiled = mapping.compile_request(self.version, self.config)
+            payload = json.loads(compiled['request']['messages'][0]['content'])
+            self.assertEqual(payload['fields'][0]['label'], 'Q' * length)
+            self.assertEqual(compiled['input_token_bound'], len(mapping.canonical(compiled['request']).encode()) + 12000)
+            self.assertEqual(compiled['request']['max_tokens'], 20000)
+            cost = (Decimal(compiled['input_token_bound']) * Decimal('2') + Decimal(20000) * Decimal('10')) / 1000000
+            self.assertGreaterEqual(Decimal(compiled['maximum_cost']), cost)
+        self.version.refresh_from_db()
+        self.assertEqual(self.version.fields, original_fields)
+        with self.assertRaises(ValidationError):
+            mapping.request_profile({**self.config, 'mapping_contract': 'blank-mapping-v2',
+                'mapping_request_profile': self.compiled['profile'],
+                'mapping_profile_sha256': self.compiled['profile_sha256']})
+
     def test_full_outline_and_fixed_schema_preserve_long_source_and_untrusted_words(self):
         request=self.compiled['request'];payload=json.loads(request['messages'][0]['content'])
         self.assertTrue(any(len(row['text'])>120 for row in payload['slots']))

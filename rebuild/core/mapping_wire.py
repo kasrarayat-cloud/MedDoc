@@ -5,6 +5,7 @@ All offsets are Python/Unicode code points, not UTF-8 bytes or UTF-16 units.
 """
 from typing import Annotated
 from django.core.exceptions import ValidationError
+from documents.mapping_limits import MAX_MAPPING_LABEL
 from pydantic import BaseModel, ConfigDict, Field
 from . import v3_mapping
 
@@ -45,7 +46,7 @@ INSTRUCTIONS=(' Array positions are request-bound numeric IDs. Return f groups k
  '[owner ID, role code, option index]: roles 0=slot text,1=slot heading,2=slot row_label,3=slot options[index],'
  '4=existing field label. Use only target-owned slot references; role4 is only for that same field replacement '
  'at its existing destination. Spans use Unicode code-point offsets, end exclusive, never byte offsets; '
- 'labels 1..300 characters and options 1..200 characters. Never shorten source text to fit. '
+ f'labels 1..{MAX_MAPPING_LABEL} characters and options 1..200 characters. Never shorten source text to fit. '
  'Every r field needs exactly one change. When more changes/options are needed than the envelope permits, '
  'set e=true and mark remaining affected fields/slots uncertain; all slots still require verdicts.')
 
@@ -86,7 +87,7 @@ def expand(payload,response):
             if owner!=sid:raise ValidationError('Source text belongs to another destination.')
             row=payload['slots'][owner]
             text=row.get('options',[])[index] if role==3 else row.get(('text','heading','row_label')[role],'')
-        if not 0<=start<end<=len(text) or end-start>(300 if label else 200):
+        if not 0<=start<end<=len(text) or end-start>(MAX_MAPPING_LABEL if label else 200):
             raise ValidationError('Invalid Unicode source span; source text was not truncated.')
         return text[start:end]
     for change in body['x']:
