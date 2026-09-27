@@ -1363,3 +1363,49 @@ class AnEmptyFieldIsNotAClearedAnswer(OrdinaryDraft, TestCase):
         # (and a draft of empty fields alone clears nothing the page warns of or the save names)
         empty = Encounter(template_review={}, answers={'a': {'text': '', 'status': 'missing'}, 'b': {'text': '', 'status': 'conflict'}})
         self.assertEqual(views.cleared_sentence(views.review_state_counts(empty, codes=False)), '')
+
+
+@override_settings(**TEST_SETTINGS)
+class TheSaveNamesAClinicianDecisions(OrdinaryDraft, TestCase):
+    """Refutation round 4, R4-4: the sentence named only how many answers a clinician had reviewed, so an acceptance made
+    without the review tick vanished from it. The refuter's input: a clinician accepts one suggestion without ticking
+    reviewed and leaves the other blank; an employee saves changed notes — told "the answer draft (2 answers, 1 reviewed by
+    a clinician)" while the audit recorded answers_accepted_suggestion: 1. The sentence now names accepted suggestions and
+    decisions to leave blank, from the counts the audit records."""
+
+    def test_the_refuters_acceptance_and_blank_decision_are_named(self):
+        _template, version = self.upload(self.make_docx(), 'docx')
+        encounter = self.create_encounter(version, 'Fictional software test only.\nSymptoms: no chest pain\nExamination: normal gait')
+        self.post(f'/encounters/{encounter.pk}/generate/', encounter)
+        self.assertTrue(run_one())
+        encounter.refresh_from_db()
+        first, second = sorted(encounter.answers)
+        self.assertTrue(encounter.answers[first].get('suggestion'))                  # (the control: an offer to accept)
+        self.post(f'/encounters/{encounter.pk}/save/', encounter, {
+            'answer_' + first: '', 'accept_' + first: 'on',
+            'answer_' + second: '', 'blank_' + second: 'on', 'blank_shown_' + second: '1'})
+        self.assertEqual(sorted((a['status'], bool(a.get('accepted_suggestion')), a['reviewed']) for a in encounter.answers.values()),
+                         [('edited', True, False), ('left_blank', False, True)])       # (the control: accepted, not ticked)
+        self.client.force_login(self.member('guards-decisions-employee', 'employee'))
+        response = self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': encounter.notes + '\nPlan: synthetic.'})
+        self.assertEqual((last_event('encounter.notes_saved', encounter).get('cleared'), shown_messages(response).strip()),
+                         (cleared(accepted_suggestion=1, left_blank=1, with_clinician_review=1),
+                          'Notes saved. Cleared, and recorded under your name: the answer draft (2 answers: 1 accepted suggestion '
+                          'and 1 decision to leave blank; 1 reviewed by a clinician). Generate and review a new answer draft.'))
+
+    def test_decisions_are_named_within_the_answers_they_are_part_of(self):
+        counts = dict.fromkeys(views.review_state_counts(Encounter(answers={}, template_review={}), codes=False), 0)
+        said = lambda **states: views.cleared_sentence({**counts, **{'answers_' + key: value for key, value in states.items()}})
+        self.assertEqual(said(accepted_suggestion=1),
+                         'Cleared, and recorded under your name: the answer draft (1 answer: 1 accepted suggestion; not reviewed). ')
+        self.assertEqual(said(accepted_suggestion=1, edited_not_accepted=1),
+                         'Cleared, and recorded under your name: the answer draft (2 answers, including 1 accepted suggestion; '
+                         'none reviewed). ')
+        self.assertEqual(said(left_blank=2, unreviewed_unedited=3, with_clinician_review=2),
+                         'Cleared, and recorded under your name: the answer draft (5 answers, including 2 decisions to leave '
+                         'blank; 2 reviewed by a clinician). ')
+        self.assertEqual(said(accepted_suggestion=2, left_blank=1, with_clinician_review=3),
+                         'Cleared, and recorded under your name: the answer draft (3 answers: 2 accepted suggestions and 1 '
+                         'decision to leave blank; 3 reviewed by a clinician). ')
+        self.assertEqual(said(reviewed_unedited=2, with_clinician_review=2),    # (no decision: the sentence as before)
+                         'Cleared, and recorded under your name: the answer draft (2 answers, 2 reviewed by a clinician). ')
