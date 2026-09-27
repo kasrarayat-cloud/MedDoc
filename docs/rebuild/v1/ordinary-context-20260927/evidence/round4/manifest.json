@@ -83,6 +83,10 @@
       "sha256": "bc25878f42a3beb9339cc8f7ab0a87b33e1169de3dcc70e43eedbf7a314c4ada",
       "bytes": 1699
     },
+    "ordinary-continuation-root-after.json": {
+      "sha256": "675e5b6db629c4e98f104700d29a1674b3455b29898b539ad5ccf967e5d8ab40",
+      "bytes": 10568
+    },
     "ordinary-continuation-root-red.json": {
       "sha256": "ed10211965958568bb6d56457e0b3fcd100d7577de18147ca4485aea17db83f0",
       "bytes": 3456
@@ -90,6 +94,22 @@
     "ordinary-continuation-root.py": {
       "sha256": "fd1c5c6565666336e35fc72af3b0796da4f5892e0a8e7127ea5d48541e2840fe",
       "bytes": 2557
+    },
+    "ordinary-continuation-round4-root.py": {
+      "sha256": "c1aa66c32376b07d6c149bad882d4bab34d7c5c20ee782245c20f4977d3b1362",
+      "bytes": 2557
+    },
+    "ordinary-round4-root.json": {
+      "sha256": "00f69b57d3b574f01b64a9e892ab5999a527ae36e2ffad190cfd64cfcd51ac2d",
+      "bytes": 14874
+    },
+    "ordinary-round4-root.py": {
+      "sha256": "04ea3b3afda584e037c9a81424423aeac0a2e1b03317455634b4a5fe980d0d26",
+      "bytes": 3141
+    },
+    "ordinary-suffix-root-after.json": {
+      "sha256": "8a299dffdb37fa73b2a46489a5cb306d3a32abf4342e48ef9da6e4fe37692f17",
+      "bytes": 205
     },
     "ordinary-suffix-root-red.json": {
       "sha256": "c8928d56de082d0b0080b5d2ac5ab976ecf20c9e2c6c3fc0bfc43133c736db54",

@@ -39,6 +39,7 @@ Literal coupling remains structural, not a general semantic contradiction detect
 | Original final reviewer script | Replayed unchanged,21 cases. Unowned change/addition/owner, foreign/future variants and donor suffix all conflict and forced-old-supported decisions refuse. Complete continuation and affirmative conditional Plan remain supported. `repaired-independent.json`. |
 | Current-profile identity | **30/30 identical** to base, digest `d3bf17e6f8361534a652b6a9822ed91b2c7ceeca055ce004f6dad535e8da6a08`. Final-source result and preceding same-round result retained separately. |
 | Same15 known notes and unchanged picks | **10/12 and18/77**, unchanged. Every original1/12 and5/77 and intermediate result remains retained. |
+| Root independent exact-source verification | Original nine cases, all three unowned continuation cases and donor suffix pass, including forced-old-supported refusal. Scripts and before/after results retained here. |
 | Independent finished-diff refutation | **Pending** on source 66d58870. Source is frozen; parent routes review before integration. |
 
 No network/provider, spending, activation, holdout or new corpus operation was performed. These are synthetic inputs and mock model selections; they prove deterministic paths, not live Sonnet quality, actual served model identity, native Microsoft Word acceptance or the60-file compatibility target. Dedicated notes PostgreSQL55706 was used with `--keepdb`; no test remains active. Missing-staticfiles warnings are preserved.
