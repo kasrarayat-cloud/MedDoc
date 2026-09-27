@@ -2,6 +2,7 @@
 """Private, nonclinical recovery-stage alerts. No database access or backup mutation."""
 import argparse
 from contextlib import contextmanager
+import copy
 from datetime import datetime, timedelta, timezone
 import fcntl
 import io
@@ -814,34 +815,8 @@ def validate_incident(value):
                        'Invalid incident record.')
 
 
-def read_notices():
-    """The sidecar ledger, or None where no release that keeps one has written it yet."""
-    path = DIRECTORY / NOTICES_FILE
-    if not path.exists() and not path.is_symlink():
-        return None
-    value = json.loads(backup.read_private(path, 65536))
-    backup.require(type(value) is dict and set(value) == {'format', 'incident', 'announced_at'}
-                   and type(value['format']) is int and value['format'] == 1
-                   and type(value['announced_at']) is dict and set(value['announced_at']) == set(SEVERITY_RANK)
-                   and (value['incident'] is None
-                        or type(value['incident']) is dict and set(value['incident']) == set(RECORD_KEYS)),
-                   'Invalid incident notices.')
-    for when in value['announced_at'].values():
-        if when is not None:
-            timestamp(when)
-    if value['incident'] is not None:
-        validate_incident(value['incident'])
-    return value
-
-
-def read_state():
-    path = DIRECTORY / 'status.json'
-    if not path.exists() and not path.is_symlink():
-        # Partial recovery may lose mutable state while retaining a durable
-        # request record. Do not invent a fresh incident and send again.
-        backup.require(not any(DIRECTORY.glob('incident-*')), 'Incident state is missing.')
-        return initial_state()
-    value = json.loads(backup.read_private(path, 65536))
+def validate_status(value):
+    """status.json's own invariants: format 1 and exactly its six keys, as every release reads it."""
     backup.require(type(value) is dict and set(value) == set(STATUS_KEYS)
                    and type(value['format']) is int and value['format'] == 1
                    and value['condition'] in ERRORS
@@ -853,7 +828,86 @@ def read_state():
     for key in ('incident_id', 'incident_attempt'):
         backup.require(value[key] is None or isinstance(value[key], str)
                        and re.fullmatch(r'[a-f0-9]{32}', value[key]), 'Invalid incident identity.')
-    notices = read_notices() or {'incident': None, 'announced_at': no_announcements()}
+
+
+def validate_layer(value):
+    """One layer of the ledger: the incident record it describes (None once closed) and its stamps."""
+    backup.require(type(value['announced_at']) is dict and set(value['announced_at']) == set(SEVERITY_RANK)
+                   and (value['incident'] is None
+                        or type(value['incident']) is dict and set(value['incident']) == set(RECORD_KEYS)),
+                   'Invalid incident notices.')
+    for when in value['announced_at'].values():
+        if when is not None:
+            timestamp(when)
+    if value['incident'] is not None:
+        validate_incident(value['incident'])
+
+
+def layer(state):
+    return {'incident': {key: state[key] for key in RECORD_KEYS} if state['incident_id'] else None,
+            'announced_at': dict(state['announced_at'])}
+
+
+def superseded(state):
+    """What a notice's ledger write keeps until status.json commits the notice: the exact status.json
+    the check began from, and the ledger layer that described it."""
+    return copy.deepcopy({'status': {key: state[key] for key in STATUS_KEYS}, **layer(state)})
+
+
+def read_notices():
+    """The sidecar ledger, or None where no release that keeps one has written it yet."""
+    path = DIRECTORY / NOTICES_FILE
+    if not path.exists() and not path.is_symlink():
+        return None
+    value = json.loads(backup.read_private(path, 65536))
+    backup.require(type(value) is dict and set(value) == {'format', 'incident', 'announced_at', 'committed'}
+                   and type(value['format']) is int and value['format'] == 1, 'Invalid incident notices.')
+    validate_layer(value)
+    committed = value['committed']
+    if committed is not None:
+        backup.require(type(committed) is dict and set(committed) == {'status', 'incident', 'announced_at'},
+                       'Invalid incident notices.')
+        validate_status(committed['status'])
+        validate_layer(committed)
+    return value
+
+
+def requested(prefix):
+    """Whether any request record exists for this identity: a pending or result file, or either one's
+    name taken by anything at all. Existence is the evidence; its content is read elsewhere."""
+    return any((DIRECTORY / (prefix + suffix)).exists() or (DIRECTORY / (prefix + suffix)).is_symlink()
+               for suffix in ('-pending.json', '-result.json'))
+
+
+def uncommitted(notices, status):
+    """⚠️ THE LEDGER RAN AHEAD OF status.json: a notice's first write landed and its second did not.
+
+    status.json is still EXACTLY the one the check began from, which the ledger kept as it wrote the
+    notice. status.json is the commit point, and a request only ever begins after both writes, so
+    the notice the ledger names never began: its layer is discarded and the one it superseded is
+    read. The next check then plans whatever is owed, as though the crashed check never ran.
+    """
+    committed = notices['committed']
+    if committed is None or committed['status'] != status:
+        return None
+    discarded = notices['incident'] and notices['incident']['incident_attempt']
+    backup.require(discarded and discarded != status['incident_attempt']
+                   and not requested('incident-' + discarded),
+                   'Incident notice already requested.')
+    return committed
+
+
+def read_state():
+    path = DIRECTORY / 'status.json'
+    if not path.exists() and not path.is_symlink():
+        # Partial recovery may lose mutable state while retaining a durable
+        # request record. Do not invent a fresh incident and send again.
+        backup.require(not any(DIRECTORY.glob('incident-*')), 'Incident state is missing.')
+        return initial_state()
+    value = json.loads(backup.read_private(path, 65536))
+    validate_status(value)
+    notices = read_notices() or {'incident': None, 'announced_at': no_announcements(), 'committed': None}
+    notices = uncommitted(notices, value) or notices
     # ⚠️ A STAMP COUNTS ONLY IF status.json RECORDS A REQUEST NO EARLIER THAN IT. Every notice
     # stamps its severity with the very instant status.json then records as last_attempt_at. A
     # stamp later than that (or any stamp before status.json records a request at all) was written
@@ -895,24 +949,29 @@ def read_state():
     return state
 
 
-def write_state(state):
-    """Two files and one rule: the ledger only ever DESCRIBES status.json's incident.
+def write_state(state, supersedes=None):
+    """Two files and one rule: status.json is the commit point, and the ledger describes it.
 
-    status.json is the commit point every release reads. While an incident is open the ledger is
-    written FIRST, so a crash between the two leaves status.json at a shape the ledger, or the
-    first-notice reading above, still explains. When the incident is closed status.json goes first,
-    so the ledger's older record is inert from the moment it lands. The ledger is created on first
-    need: a monitor that has never announced anything has no ledger.
+    While an incident is open the ledger is written FIRST. A write that makes a NOTICE passes what
+    it supersedes (the exact status.json the check began from and the ledger layer describing it),
+    and the ledger keeps that until the check's next write. So a crash between the two files leaves
+    status.json byte-for-byte what the ledger kept, and read_state reads the kept layer: the notice
+    status.json never named is discarded, provably unsent, because a request only begins after both
+    writes. Any other write in an open incident changes nothing status.json names, so the ledger's
+    record still matches it. When the incident is closed status.json goes first, so the ledger's
+    older record is inert from the moment it lands. The ledger is created on first need: a monitor
+    that has never announced anything has no ledger.
 
     The state is held to the same invariants on the way OUT as on the way in: an inconsistent
     incident is refused here (and the check fails closed) rather than persisted for the next
     check to trip over, or for a stale key to be silently dropped.
     """
     validate_incident(state)
+    backup.require(supersedes is None or state['incident_id'] and state['incident_attempt'],
+                   'Only a notice supersedes a ledger layer.')
     status = {key: state[key] for key in STATUS_KEYS}
     ledger = DIRECTORY / NOTICES_FILE
-    notices = {'format': 1, 'announced_at': dict(state['announced_at']),
-               'incident': {key: state[key] for key in RECORD_KEYS} if state['incident_id'] else None}
+    notices = {'format': 1, **layer(state), 'committed': supersedes}
     if state['incident_id']:
         scheduled.atomic_status(ledger, notices)
         scheduled.atomic_status(DIRECTORY / 'status.json', status)
@@ -1018,8 +1077,7 @@ def attempt_alert(values, condition, identity, at, *, test=False, notice='initia
     # A result is independent evidence of a request even when a damaged or
     # incomplete recovery lost its pending marker. Never send before inspecting
     # either artifact; malformed/unsafe artifacts also suppress a new request.
-    if (result_path.exists() or result_path.is_symlink()
-            or pending.exists() or pending.is_symlink()):
+    if requested(prefix):
         return receipt(prefix)
     record = {'format': 1, 'kind': 'authorized_test' if test else 'operational',
               'condition': condition, 'attempted_at': at.isoformat(), 'outcome': 'pending',
@@ -1214,6 +1272,7 @@ def check(at=None):
     try:
         with locked():
             state = read_state()
+            began = superseded(state)
             try:
                 values = read_configuration()
             except Exception:
@@ -1272,8 +1331,9 @@ def check(at=None):
                                                                 else announced + [condition]))
                     state['announced_at'][severity(condition)] = at.isoformat()
                     # Persist the identity before sending: a crash between state
-                    # and pending receipt fails closed, requiring operator review.
-                    write_state(state)
+                    # and pending receipt fails closed, requiring operator review. A crash
+                    # between the ledger and status.json leaves `began` to be read instead.
+                    write_state(state, supersedes=began)
                     alert = attempt_alert(values, condition, identity, at, notice=notice, incident=context)
             write_state(state)
             incident = incident_summary(state, at, deferred_until=deferred_until,

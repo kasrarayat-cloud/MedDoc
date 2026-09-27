@@ -131,6 +131,15 @@ first need, refused if malformed). A release without the sidecar never opens it,
 so reverting `backup_alerts.py` is a complete rollback: no state repair. The
 current monitor adopts whatever an earlier release leaves behind, reading what an
 unrecorded first notice announced from that notice's own receipt.
+
+While an incident is open the sidecar is written before `status.json`, and a
+write that makes a notice also keeps, until the next write, the exact
+`status.json` it began from and what the sidecar said about it. A check stopped
+between the two files therefore leaves `status.json` exactly as kept: the
+monitor reads the kept record and discards the newer notice, which provably
+never began (no request record exists, and a request only follows both writes),
+and the next check sends whatever is owed. `status.json` is the commit point: a
+notice it names with no request record still fails closed for operator review.
 An in-flight send stopped during rollback remains uncertain. If source has moved
 since installation, the exact-source gate requires a new reviewed scope; do not
 bypass it or apply an old declaration to different source.

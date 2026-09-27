@@ -768,6 +768,11 @@ class IncidentNotificationTests(unittest.TestCase):
                  ('ledger', {'format': 2}), ('ledger', {'unexpected': 'private-canary'}),
                  ('ledger', {'announced_at': {'warning': None}}),
                  ('ledger', {'announced_at': {'warning': 'private-canary', 'failure': None}}),
+                 # A kept layer is validated whether or not it matches status.json: one that does not
+                 # match is never read, so only the ledger's own validation can refuse it.
+                 ('ledger', {'committed': 'private-canary'}),
+                 ('ledger', {'committed': {'status': dict(status, format=2), 'incident': None,
+                                           'announced_at': {'warning': None, 'failure': None}}}),
                  # A malformed record of an incident that is already over: nothing merges it, so
                  # only the ledger's own validation can refuse it.
                  ('stale', {'incident_attempt_count': 'private-canary'})]
@@ -1277,6 +1282,22 @@ class IncidentLedgerTests(unittest.TestCase):
         for hours in (6, 7):
             a.check(self.at + timedelta(hours=hours))
         self.assertEqual(self.sender.call_count, 3, 'and it is sent once')
+
+    def test_a_request_record_for_the_discarded_notice_refuses(self):
+        """The recovery discards a notice only because nothing can have been sent for it. If a request
+        record exists for it anyway, that premise is false: fail closed and send nothing."""
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        self.health.return_value = 'backup_stale'
+        crash, _ = self.crash_on_second_write()
+        with crash, self.assertRaises(KeyboardInterrupt):
+            a.check(self.at + timedelta(hours=2))
+        phantom = self.ledger()['incident']['incident_attempt']
+        a.backup.write_private(self.alerts / f'incident-{phantom}-pending.json', b'{}')
+        for hours in (3, 30):
+            result, code = a.check(self.at + timedelta(hours=hours))
+            self.assertEqual((code, result['condition']), (1, 'monitoring_state_unavailable'))
+        self.sender.assert_called_once()
 
     def test_the_recovered_notice_is_exactly_the_one_status_json_names_even_a_reminder(self):
         """What is recovered is the committed record itself, not a guess at it: a reminder cannot be
