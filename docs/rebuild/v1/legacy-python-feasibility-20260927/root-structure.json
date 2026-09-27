@@ -1,0 +1,29 @@
+{
+  "synthetic_input": {
+    "path": "/opt/meddoc-pro/.worktrees/v1-host-readiness/rebuild/.runtime/legacy-python-feasibility-20260927/synthetic/input.docx",
+    "sha256": "c0a2788947662e10b73e724c6177dfceb16dc687f3f1b1520b7899af6cec6cea",
+    "anchors": 0,
+    "ffData": 1,
+    "checked": 1,
+    "media": 0,
+    "headers": 1
+  },
+  "synthetic_output": {
+    "path": "/opt/meddoc-pro/.worktrees/v1-host-readiness/rebuild/.runtime/legacy-python-feasibility-20260927/synthetic/output.docx",
+    "sha256": "dd457efc9dbd293b67b52d8d191de8a339e376855ac2168ee54e4f5ade4f5933",
+    "anchors": 0,
+    "ffData": 0,
+    "checked": 0,
+    "media": 0,
+    "headers": 1
+  },
+  "d19_output": {
+    "path": "/opt/meddoc-pro/.worktrees/v1-host-readiness/rebuild/.runtime/legacy-python-feasibility-20260927/d19/output.docx",
+    "sha256": "d0b2ef8528146cbcb3c7f292d1026d211f96817291bffb1665f6738771364a8b",
+    "anchors": 0,
+    "ffData": 0,
+    "checked": 0,
+    "media": 0,
+    "headers": 0
+  }
+}

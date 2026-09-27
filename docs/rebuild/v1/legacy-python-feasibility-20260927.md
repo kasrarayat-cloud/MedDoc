@@ -136,3 +136,12 @@ This is a local rejected-engine decision, not a deployed converter or launch
 claim. Next safe action: retain the explicit DOC exception and review the
 authorized development DOCX failure evidence before proposing a bounded shared
 repair. Keep maintenance and synthetic-only enforcement unchanged.
+
+
+### Root readback
+
+Root independently read the preserved synthetic packages and rejected D19 output, without
+executing the converter again. The original synthetic `ffData` and checked element counts
+are1/1; output counts0/0. The D19 output has zero anchors, media or header parts. Exact hashes
+match the author's receipts. `legacy-python-feasibility-20260927/root-structure.json` retains
+this narrower independent observation; it does not claim a new original or render review.

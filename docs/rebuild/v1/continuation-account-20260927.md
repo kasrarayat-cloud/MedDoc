@@ -2,7 +2,7 @@
 
 **Milestone: invited U.S. real-patient V1 launch completion. Not ready to launch.**
 This account records the continuation package; `V1-BLOCKERS.md` remains the single blocker list.
-Final source identity and verification results will be appended after the remaining finished-diff reviews.
+Source identities and verification results are recorded below; further necessary clinical and Word repairs remain active in isolated worktrees.
 
 ## Preserved and recovered state
 
@@ -98,3 +98,30 @@ served model, and perform reviewed cutover before admitting invited real-patient
 
 `V1-EXTERNAL-REQUEST.md` is the one consolidated request. No launch date or completion percentage is
 defensible until the external work is scheduled and the engineering gates pass.
+
+
+## 20:46 UTC engineering checkpoint
+
+Reviewed clinical source is locally integrated throughaa4e8c0d (generation
+923439aed9bde6eba34a26bf551b2d583a247a6bec7ba00e8679b2632d6c6f41). The literal allergy and
+examination subjects, exact nonsmoker relation, source-topic barriers, value-span binding and
+Unicode denial checks retain their original failed probes and independent finished-diff reviews.
+Root255 combined clinical/Word checks passed on the immediately preceding source;85 checks
+for the literal-subject union then passed. The historical full core run remains recorded as
+1,969 tests with7 failure records,2 errors and31 skips. Targeted repairs have been checked;
+this is not a claim of a clean final full-suite/CI run.
+
+The same15 retained synthetic inputs still yield12/12 on the five-note subset and23/77 on
+the ten r1 notes. Their original selections and denominator have not changed. Necessary
+patient/source relationship work continues; no mandatory labelled-note contract is substituted.
+
+Original-development rights reconciliation supports33/40 files for private offline synthetic
+replay only, with seven held. It does not authorize provider upload or change the compatibility
+denominator. The attempted Python FOSS legacy converter was rejected after silent loss of
+initials, branding, signing lines and a checked control. Binary DOC remains an explicit
+exception, while editable DOCX breadth remains an unresolved V1 engineering requirement.
+
+Remote release/v1 was confirmed at11d075646b28dfd52df89cbfdbd9551d314ba358 before the later
+local documentation and literal-subject integration. No V1 PR or final candidate CI exists
+at this checkpoint. Nothing here changes the installeddedac162 application or its admission
+state. The pending external request remains unapproved.
