@@ -214,6 +214,21 @@ class ConfigurationStatusNamesTheModel(SimpleTestCase):
         self.assertNotIn('inactive', report.lower())
         self.assertIn('request profile: legacy (the pre-profile request, unchanged)', report)
 
+    def test_each_request_profile_state_carries_its_severity(self):
+        """R2-4. The badge is what an operator reads first, and no test asserted it: turning the rollback red, or the
+        not-the-rollback case green, survived the whole suite. Each state is pinned to its severity."""
+        from core import admin_console
+        for label, overrides, env, severity, prefix in (
+                ('rollback', SONNET_46, {}, 'success', 'legacy (the pre-profile request, unchanged) '),
+                ('rollback + us', dict(SONNET_46, AI_INFERENCE_GEO='us'), {}, 'warning', 'NOT the pre-profile request: '),
+                ('sonnet 5', SONNET_5, {}, 'success', 'explicit '),
+                ('invalid', dict(SONNET_5, AI_EFFORT='max'), {}, 'error', 'INVALID — '),
+                ('unavailable', SONNET_5, {'QUILLMD_PROVIDER_DISCOUNT_RATE': 'x'}, 'error', 'UNAVAILABLE — ')):
+            with self.subTest(case=label), override_settings(**overrides), patch.dict(os.environ, {**PRICE_ENV, **env}):
+                row = next(r for r in admin_console.language_model_rows() if r['name'] == 'request profile')
+                self.assertEqual(row['severity'], severity)
+                self.assertTrue(row['value'].startswith(prefix), row['value'])
+
     def test_a_refused_discount_is_reported_without_stopping_the_screen(self):
         out = StringIO()
         with override_settings(**SONNET_5), patch.dict(os.environ, {**PRICE_ENV, 'QUILLMD_PROVIDER_DISCOUNT_RATE': 'x'}):

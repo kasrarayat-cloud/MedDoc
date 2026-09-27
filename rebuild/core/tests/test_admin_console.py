@@ -803,6 +803,20 @@ class LanguageModelOnTheServicesPage(ConsoleFixture):
                 self.assertIn(version, body)
 
 
+    def test_the_profile_row_renders_its_severity_badge(self):
+        """R2-4. The template's badge was never asserted: removing it survived the suite."""
+        import os
+        from core.tests.test_sonnet5_profile import PRICE_ENV, SONNET_46, SONNET_5
+        self.sign_in()
+        for overrides, severity, text in ((SONNET_46, 'success', 'legacy (the pre-profile request, unchanged)'),
+                                          (dict(SONNET_46, AI_INFERENCE_GEO='us'), 'warning', 'NOT the pre-profile request'),
+                                          (dict(SONNET_5, AI_EFFORT='max'), 'error', 'INVALID — every generation')):
+            with self.subTest(severity=severity), override_settings(**overrides), patch.dict(os.environ, PRICE_ENV):
+                response = self.client.get('/console/services/')
+                self.assertEqual(response.status_code, 200, 'the page must render before its text means anything')
+                self.assertIn(f'<span class="badge {severity}">{severity}</span> {text}', response.content.decode())
+
+
 class ConsoleAccessControl(ConsoleFixture):
     ROUTES = ['/console/', '/console/audit/', '/console/organizations/', '/console/services/',
               '/console/usage.csv']
