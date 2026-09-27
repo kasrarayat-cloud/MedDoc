@@ -1397,5 +1397,106 @@ class NestedCheckboxControls(unittest.TestCase):
         self.assertEqual(refused.exception.code, "invalid_mapping")
 
 
+def wrap_in_control(el):
+    """Wrap a table cell (w:tr/w:sdt/w:tc) or a whole row (w:tbl/w:sdt/w:tr) in a content control, in place."""
+    sdt = OxmlElement("w:sdt")
+    sdt.append(OxmlElement("w:sdtPr"))
+    content = OxmlElement("w:sdtContent")
+    sdt.append(content)
+    el.getparent().replace(el, sdt)
+    content.append(el)
+    return sdt
+
+
+def yes_no_grid(doc, rows=("Chest pain", "Dyspnea")):
+    table = doc.add_table(rows=len(rows) + 1, cols=3)
+    for c, h in enumerate(["Symptom", "Yes", "No"]):
+        table.cell(0, c).text = h
+    for r, label in enumerate(rows, 1):
+        table.cell(r, 0).text = label
+        table.cell(r, 1).text = "☐"
+        table.cell(r, 2).text = "☐"
+    return table
+
+
+class WrappedCellsAndRows(unittest.TestCase):
+    """Round 3 P1: a content control wrapping a whole table cell (w:tr/w:sdt/w:tc) or a whole row (w:tbl/w:sdt/w:tr)
+    is looked through, so every cell keeps its column; the table_rows writer counts columns as the index does."""
+
+    def test_a_wrapped_yes_cell_keeps_every_later_cell_in_its_column(self):
+        from documents import word_v3
+        doc = Document()
+        doc.add_paragraph("Synthetic review of systems")
+        table = yes_no_grid(doc)
+        wrap_in_control(table.cell(1, 1)._tc)
+        data = docx_bytes(doc)
+        fields = word_v3.inspect(data)["fields"]
+        chest = fields_by_label(fields)["Chest pain"]
+        self.assertEqual((chest["kind"], chest["options"]), ("choice", ["Yes", "No"]))
+        rows = paragraphs_bytes(word_v3.fill(data, fields, {chest["key"]: "No"}))
+        self.assertEqual(rows[rows.index("Chest pain"):rows.index("Chest pain") + 3], ["Chest pain", "☐", "☒"])
+        rows = paragraphs_bytes(word_v3.fill(data, fields, {chest["key"]: "Yes"}))
+        self.assertEqual(rows[rows.index("Chest pain"):rows.index("Chest pain") + 3], ["Chest pain", "☒", "☐"])
+        places = {row["slot"]: row for row in word_v3.outline(data)["slots"]}
+        self.assertIn("word/document.xml#b/tbl[0]/tr[1]/tc[1]", places, "the wrapped cell is a place of its own")
+        self.assertFalse([f for f in fields if f["locator"]["target"].get("type") == "sdt_text"],
+                         "the control around the cell is not an answer area")
+
+    def test_a_wrapped_answer_cell_takes_its_answer(self):
+        from documents import word_v3
+        doc = Document()
+        doc.add_paragraph("Synthetic intake")
+        table = doc.add_table(rows=2, cols=2)
+        table.cell(0, 0).text = "Allergies"
+        table.cell(1, 0).text = "Plan"
+        wrap_in_control(table.cell(0, 1)._tc)
+        data = docx_bytes(doc)
+        fields = word_v3.inspect(data)["fields"]
+        self.assertEqual([(f["label"], f["locator"]["target"]["type"]) for f in fields], [("Allergies", "cell"), ("Plan", "cell")])
+        out = word_v3.fill(data, fields, {fields[0]["key"]: "None documented", fields[1]["key"]: "Review"})
+        self.assertEqual(paragraphs_bytes(out)[1:], ["Allergies", "None documented", "Plan", "Review"])
+
+    def test_a_wrapped_row_is_read_in_its_place(self):
+        from documents import word_v3
+        doc = Document()
+        doc.add_paragraph("Synthetic review of systems")
+        table = yes_no_grid(doc, rows=("Chest pain", "Dyspnea", "Cough"))
+        wrap_in_control(table.rows[1]._tr)
+        data = docx_bytes(doc)
+        fields = word_v3.inspect(data)["fields"]
+        by = fields_by_label(fields)
+        self.assertEqual({label: by[label]["options"] for label in ("Chest pain", "Dyspnea", "Cough")},
+                         {"Chest pain": ["Yes", "No"], "Dyspnea": ["Yes", "No"], "Cough": ["Yes", "No"]})
+        rows = paragraphs_bytes(word_v3.fill(data, fields, {by["Chest pain"]["key"]: "No", by["Cough"]["key"]: "Yes"}))
+        self.assertEqual(rows[rows.index("Chest pain"):], ["Chest pain", "☐", "☒", "Dyspnea", "☐", "☐", "Cough", "☒", "☐"])
+
+    def medication_log(self, wrapped):
+        doc = Document()
+        doc.add_paragraph("Synthetic medications")
+        table = doc.add_table(rows=3, cols=3)
+        for c, h in enumerate(["Medication", "Dose", "Route"]):
+            table.cell(0, c).text = h
+        for r in (1, 2):
+            tr = table.rows[r]._tr
+            before = OxmlElement("w:gridBefore")
+            before.set(qn("w:val"), "1")
+            tr.get_or_add_trPr().append(before)
+            tr.remove(tr.findall(qn("w:tc"))[0])
+        if wrapped:
+            wrap_in_control(table.rows[2]._tr)
+        return docx_bytes(doc)
+
+    def test_the_table_rows_writer_counts_columns_as_the_index_does(self):
+        """Found repairing P1: log rows that skip a grid column (w:gridBefore) - the writer put the dose under Route and
+        dropped the route."""
+        from documents import word_v3
+        for wrapped in (False, True):
+            data = self.medication_log(wrapped)
+            field = next(f for f in word_v3.inspect(data)["fields"] if f["kind"] == "table_rows")
+            self.assertEqual((field["options"], field["locator"]["target"]["rows"]), (["Dose", "Route"], [1, 2]), wrapped)
+            out = word_v3.fill(data, [field], {field["key"]: [["10 mg", "oral"], ["5 mg", "iv"], ["1 g", "topical"]]})
+            self.assertEqual(paragraphs_bytes(out)[4:], ["10 mg", "oral", "5 mg", "iv", "1 g", "topical"], wrapped)
+
+
 if __name__ == "__main__":
     unittest.main()
