@@ -1,0 +1,25 @@
+{
+  "head": "aa4e8c0d0c0f935bdc35012263e5881bbd703ace",
+  "generation_sha256": "923439aed9bde6eba34a26bf551b2d583a247a6bec7ba00e8679b2632d6c6f41",
+  "author_changed": [
+    "v3_field_subjects",
+    "v3_preceding_reading",
+    "validate_tab_selections"
+  ],
+  "root_changed": [
+    "judged_context",
+    "plain_value",
+    "v3_option_answer",
+    "v3_preceding_reading"
+  ],
+  "overlap": [
+    "v3_preceding_reading"
+  ],
+  "overlap_dependency_operations": {
+    "declarations_assign": 1,
+    "factual_union": 1,
+    "return_metadata": 1
+  },
+  "all_other_changes_preserved": true,
+  "overlap_returns_exact_root_when_three_author_statements_removed": true
+}

@@ -114,3 +114,26 @@ Source is frozen with independent refutation complete. Next safe action: let the
 integrate the union and measure unchanged retained cases. Do not call this
 standalone preparation a retained-case fix, compatibility qualification, native
 Word acceptance or a deployed change.
+
+
+## Reviewed release union — 2026-09-27T20:37Z
+
+Integrated locally as `aa4e8c0d0c0f935bdc35012263e5881bbd703ace`, generation SHA256
+`923439aed9bde6eba34a26bf551b2d583a247a6bec7ba00e8679b2632d6c6f41`. The one overlapping
+function was resolved as a union: removing the author's declaration assignment, declaration
+factual alternative and returned declaration metadata recovers the exact pre-merge root AST.
+All other independently changed definitions exactly match their respective parents. Evidence
+is in `evidence/final-independent/literal-subjects-merge-union.json`.
+
+Root reran eight exact destination-context cases and three Unicode-denial cases against the
+union: all passed. The targeted literal-subject/context/input/topics/nonsmoker checks ran
+**85 tests, all passing in34.389s**, on isolated PostgreSQL55707 with fixture AI. They include
+actual mock-worker, review/save/finalization and original Word export paths. No live model or
+native Microsoft Word claim follows. Earlier255 combined checks remain evidence for their
+recorded source; this85-run checks the changed union.
+
+A single replay of the same15 retained notes, original field definitions and original selected
+spans remains **12/12 on the five-note subset and23/77 on the ten r1 notes**. Every selected
+status/text pair is unchanged from the prior nominal-denial candidate. This repair does not
+close broad ordinary-note usefulness or improve that denominator. All first failures, scoped
+examination REDs, final independent21-case evidence and root outputs are retained.

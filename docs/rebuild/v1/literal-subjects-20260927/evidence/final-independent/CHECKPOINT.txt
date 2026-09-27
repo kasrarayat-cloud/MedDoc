@@ -1,0 +1,1 @@
+Scoped examination guard refutation finished. Source 03e584be: all four original failures closed; other 17 replay cases unchanged; both actual same-label synthetic table exports passed. NOTHING FOUND in the narrow repair. No active process. Next root verification and exact candidate integration; preserve all original failed evidence.

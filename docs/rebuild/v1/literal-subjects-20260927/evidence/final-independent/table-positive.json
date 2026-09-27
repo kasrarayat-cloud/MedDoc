@@ -1,0 +1,137 @@
+{
+  "generation_sha256": "03e584bed9ab5e6bb7d6e17c4b46233136aac0132f6d48772970fa739204986a",
+  "engine_sha256": "190c470192e49005166e3d2b6b792772dd7284d616bdf2977854a19306de4e80",
+  "original_sha256": "3ab0287f89ea477d391225c52591e9a26b6069ffe224ff35e1cce75c98ebaf7c",
+  "cases": [
+    {
+      "case": "neuro",
+      "notes": "No known drug allergies. Neurological examination is normal.",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "Allergies",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Examination",
+          "kind": "text",
+          "context": "Examination",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[1]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+          }
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "No known drug allergies.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "Neurological examination is normal.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Neurological examination is normal.",
+              "start": 25,
+              "end": 60
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "governed_decisions": [],
+      "export_sha256": "7ebd6b27175ccb2d6914365ca09e78c070c971518529285ba6f972f10a4437e7",
+      "export_text": "Synthetic ordinary input formAllergiesNo known drug allergies.ExaminationNeurological examination is normal."
+    },
+    {
+      "case": "heart",
+      "notes": "No known drug allergies. Heart and lung examination was normal.",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "Allergies",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Examination",
+          "kind": "text",
+          "context": "Examination",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[1]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+          }
+        }
+      ],
+      "answers": {
+        "Allergies": {
+          "text": "No known drug allergies.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 0,
+              "end": 24
+            }
+          ],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "Heart and lung examination was normal.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Heart and lung examination was normal.",
+              "start": 25,
+              "end": 63
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "governed_decisions": [],
+      "export_sha256": "2c0307b6a63ee308e9df06bf2e438ed0740dd471aa7e9419939cfd80aae81c47",
+      "export_text": "Synthetic ordinary input formAllergiesNo known drug allergies.ExaminationHeart and lung examination was normal."
+    }
+  ]
+}

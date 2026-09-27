@@ -111,3 +111,13 @@ signing areas passed in176.521s. This closes the remaining original full-core ap
 it does not turn the earlier failed1,969 run into a passing run or qualify unseen forms/live Sonnet5.
 Both sides of the AST merge were preserved (two author definitions/four existing release definitions,
 no overlap). The later literal-Allergies/examination dependency remains separate and unintegrated here.
+
+
+### 2026-09-27T20:37Z literal-source dependency union
+
+Literal NKA/examination subjects are now locally integrated asaa4e8c0d; the preceding255-run's
+unintegrated status was true at its recorded source only. Root85 changed-union checks passed
+34.389s, plus8 destination-context and3 Unicode-denial probes. AST union evidence and exact
+source hashes are in `literal-subjects-20260927/evidence/final-independent/`. Retained original
+15-input results remain12/12 and23/77 with no selected status/text changes. Full candidate CI,
+useful ordinary-note acceptance and actual Sonnet5 verification remain open.
