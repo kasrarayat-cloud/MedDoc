@@ -635,6 +635,13 @@ def sentence_boundaries(stripped, labels, parsed=None):
     return boundaries
 
 
+class SourceUnits(list):
+    """The same serialized source units, with local scope causes for shared validation."""
+    def __init__(self):
+        super().__init__()
+        self.scope_causes = []
+
+
 def source_units(notes, fields, *, context_labels=()):
     """Offer complete source sentences with exact offsets, never word fragments.
 
@@ -653,9 +660,11 @@ def source_units(notes, fields, *, context_labels=()):
     # in a note of more than one line each make EVERY answer in the note inherited: held, never adopted. Reading them
     # only from heading-like lines (dd51c49a) adopted 'Polyp in the sigmoid colon.' under 'Findings: none of the
     # following were seen.', the cephalexin after 'If the wound looks infected ...' and 'He had a myocardial infarction'
-    # after 'Family history is significant for her father.'. The price is stated, not hidden: one 'Return if symptoms
-    # worsen.' holds every answer in its note, and an unpunctuated multi-line dictation adopts nothing (F6: 0 of 6).
-    units=[]; offset=0; inherited=bool(QUOTED_SOURCE.search(notes))
+    # after 'Family history is significant for her father.'. Preserve the causes and their offsets: the v3 shared
+    # reader may scope a complete explicit Plan return instruction, while the tab contract keeps the original flag.
+    units=SourceUnits(); offset=0; inherited=bool(QUOTED_SOURCE.search(notes))
+    if (quoted := QUOTED_SOURCE.search(notes)):
+        units.scope_causes.append(('quotation', quoted.start(), quoted.end()))
     multiline=sum(bool(line.strip()) for line in notes.splitlines())>1
     for line in notes.splitlines(keepends=True):
         stripped=line.strip()
@@ -663,17 +672,23 @@ def source_units(notes, fields, *, context_labels=()):
             offset+=len(line); continue
         start=offset+line.index(stripped)
         parsed=labelled_value(stripped,labels)
-        if ends_in_colon(stripped) or INHERITED_SCOPE.search(stripped): inherited=True
+        if ends_in_colon(stripped):
+            inherited=True; units.scope_causes.append(('heading', start, start + len(stripped)))
+        for scope in INHERITED_SCOPE.finditer(stripped):
+            inherited=True; units.scope_causes.append(('lexical', start + scope.start(), start + scope.end()))
         if not re.search(r'[.!?]["\')\]]?$',stripped) and not (parsed and parsed[1]):
             # A lone unpunctuated statement is still complete under the old
             # contract; multiple fragments can inherit an omitted heading.
             inherited=inherited or multiline
+            if multiline: units.scope_causes.append(('unfinished', start, start + len(stripped)))
         boundaries=sentence_boundaries(stripped,labels,parsed if whole_labelled_lines else None)
         local=0
         for end,next_start in boundaries+[(len(stripped),len(stripped))]:
             quote=stripped[local:end]
             if quote:
-                if ':' in quote and UNSCOPED_NEGATIVE_HEADING.search(quote): inherited=True   # (it needs a colon: without one it backtracked per denial word)
+                if ':' in quote and UNSCOPED_NEGATIVE_HEADING.search(quote):
+                    inherited=True
+                    units.scope_causes.append(('negative_heading', start + local, start + end))
                 if len(units)>=1000: raise ValidationError('Source exceeds 1,000 complete statements; split explicitly. Nothing was truncated.')
                 correction=INLINE_CORRECTION.search(quote)
                 units.append({'id':len(units)+1,'quote':quote,'start':start+local,'end':start+end,
@@ -1684,6 +1699,7 @@ def judged_context(governance, notes, index, label, evidence):
     if len(governance) > 11 and evidence:
         scope = governance[11]
         warnings = list(scope['corrections'])
+        warnings += v3_preceding_warnings(scope.get('preceding'), label, evidence)
         if re.search(SUBJECTS[0], str(label or ''), re.I):
             spans = {(entry.get('start'), entry.get('end')) for entry in evidence}
             warnings += [unit for unit in scope['units'] if (unit['start'], unit['end']) not in spans]
@@ -1691,7 +1707,9 @@ def judged_context(governance, notes, index, label, evidence):
             # Keep every warning's location; never turn this into an adoptable suggestion.
             unique = {unit['id']: unit for unit in warnings}
             return [{'quote': unit['quote'], 'start': unit['start'], 'end': unit['end'],
-                     'after': unit['start'] >= evidence[0].get('end', 0), 'same': False}
+                     'after': unit['start'] >= evidence[0].get('end', 0),
+                     'same': not re.search(r'[\r\n]', notes[min(unit['end'], evidence[0].get('end', 0)):
+                                                           max(unit['start'], evidence[0].get('start', 0))])}
                     for unit in unique.values()]
     if not index or not evidence:
         return governed_context(governance, notes, evidence)
@@ -1725,7 +1743,7 @@ def judged_context(governance, notes, index, label, evidence):
     return None if found is None else list(found)
 
 
-def governance_for(notes, fields, context_labels=(), narrative=False):
+def governance_for(notes, fields, context_labels=(), narrative=False, *, v3_units=None, v3_parsed=None):
     """The note's governance for this form, computed once: on the qualified Word form labelled lines never govern,
     and the answered-question exception reads answers the way this form's validator does. Its last element is the
     occurrence index, so the page judges a stored answer over every occurrence exactly as generation does."""
@@ -1747,7 +1765,7 @@ def governance_for(notes, fields, context_labels=(), narrative=False):
         # Blank paragraphs never erase a spoken correction or prove that consent remains in force.
         asked, context, _ = v3_generation_fields(fields, context_labels)
         try:
-            note_units = source_units(notes, asked, context_labels=context)[0]
+            note_units = v3_units if v3_units is not None else source_units(notes, asked, context_labels=context)[0]
             corrections = [unit for unit in note_units
                            if any(SELF_CORRECTION.search(reading) for reading in readings(unit['quote']))]
         except ValidationError:
@@ -1755,7 +1773,8 @@ def governance_for(notes, fields, context_labels=(), narrative=False):
             # No automatic answer is released when this reader cannot establish its context.
             note_units = [{'id': 0, 'quote': notes, 'start': 0, 'end': len(notes)}]
             corrections = note_units
-        result += ({'units': note_units, 'corrections': corrections},)
+        result += ({'units': note_units, 'corrections': corrections,
+                    'preceding': v3_preceding_reading(notes, asked, context, note_units, v3_parsed)},)
     return result
 
 
@@ -2030,7 +2049,7 @@ BLANK_LINE = re.compile(r'\n[ \t\r]*\n')
 #: with no listed verb, scope, denial, self-correction, pointer or `UNSETTLED` word. These word lists only ever HOLD.
 #: ⚠️ IT DOES NOT READ MEANING, AND SAYS SO: a plain value that contradicts an earlier answer by meaning alone ('Consent
 #: obtained: yes. Plan: consent Friday.') still passes. That residual is stated, not solved by another word list.
-PLAIN_ANSWERS = frozenset(('yes', 'no', 'none', 'nil', 'negative', 'positive', 'normal', 'absent', 'nkda'))
+PLAIN_ANSWERS = frozenset(('yes', 'no', 'none', 'none known', 'nil', 'negative', 'positive', 'normal', 'absent', 'nkda'))
 PLAIN_CHARACTERS = re.compile(r"(?:[^\W_]|[ /'\u2019%\u00b0+\u2212<>=#.\-])++")
 PLAIN_STOPS = re.compile(r'(?<=[0-9])\.(?=[0-9])|' + LETTER_BEFORE + r'(?:dr|mr|mrs|ms|prof)\.(?= )', re.I)
 #: Words that may put another answer in doubt: time and deferral, withdrawal, status, doubt, attribution to someone else.
@@ -2104,6 +2123,208 @@ def paragraph_neighbours(notes, units, plain):
     return found
 
 
+# This is a destination contract, not a clinical synonym list. Specific questions,
+# side/row fields, options and consent cannot use the general narrative exception.
+GENERAL_NARRATIVE_FIELDS = frozenset(('history', 'history of present illness', 'hpi', 'chief complaint',
+                                     'reason for visit', 'plan', 'treatment plan', 'management plan'))
+HISTORY_NARRATIVE_FIELDS = GENERAL_NARRATIVE_FIELDS - {'plan', 'treatment plan', 'management plan'}
+EXPLICIT_PATIENT_SUBJECT = re.compile(r'^(?:the\s+)?patient\s+', re.I)
+PLAN_FIELDS = frozenset(('plan', 'treatment plan', 'management plan'))
+RETURN_IF_INSTRUCTION = re.compile(r'return\s+if\s+[^.!?\r\n:]+\.', re.I)
+
+
+def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None):
+    """One bounded source-context reading used by generation and stored-answer governance.
+
+    An unrelated plain named answer does not establish the subject of a following
+    explicit patient sentence or a statement naming its own general narrative field.
+    Exact unique field anchors establish complete source blocks for bidirectional
+    context. Correction, consent, subject, side and type guards still apply.
+    """
+    labels = recognized_labels(fields, context_labels)
+    named = {}
+    for field in fields:
+        named.setdefault(question_key(field['label']), []).append(field)
+    general = {label for label, matches in named.items() if len(matches) == 1
+               and matches[0].get('kind') in ('text', 'long_text') and label in GENERAL_NARRATIVE_FIELDS}
+    parsed = ({u['id']: value for u, value in zip(units, parsed_units)} if parsed_units is not None else
+              {u['id']: tab_source_value(u['quote'], labels) for u in units})
+    colon = {u['id']: bool(labelled_value(u['quote'], labels)) for u in units}
+    plain = {u['id']: bool(colon[u['id']] and parsed[u['id']] and len(named.get(parsed[u['id']][0], ())) == 1
+                           and plain_value(parsed[u['id']][1])) for u in units}
+    ends_read, shapes_read = {}, {}
+    def patient_sentence(unit):
+        text = unit['quote']
+        if not (EXPLICIT_PATIENT_SUBJECT.match(text) and FINITE_STATEMENT_V3.search(text)):
+            return False
+        if unit['id'] not in ends_read: ends_read[unit['id']] = inner_sentence_end(text)
+        if unit['id'] not in shapes_read:
+            shapes_read[unit['id']] = ends_read[unit['id']] or v3_shape_holds(text, text)
+        return not (UNSETTLED.search(text) or INHERITED_SCOPE.search(text) or shapes_read[unit['id']])
+    before, independent, groups, group, patients = {}, {}, [], [], {}
+    prefix_safe = True
+    previous = None
+    for unit in units:
+        if previous is None or BLANK_LINE.search(notes, previous['end'], unit['start']):
+            if group: groups.append(group)
+            group = []; previous = None; prefix_safe = True
+        group.append(unit)
+        before[unit['id']] = previous
+        own = parsed[unit['id']]
+        # Explicit patient subject avoids inheriting a physician's or relative's
+        # subject. A pronoun alone never establishes this boundary.
+        patient = patient_sentence(unit)
+        patients[unit['id']] = patient
+        if previous is not None and prefix_safe and plain[previous['id']]:
+            destinations = general & HISTORY_NARRATIVE_FIELDS if patient and own is None else (
+                {own[0]} if own and own[0] in general and not colon[unit['id']]
+                and not UNSETTLED.search(own[1]) else set())
+            for label in destinations:
+                independent.setdefault(label, set()).add(unit['id'])
+        prefix_safe = prefix_safe and (plain[unit['id']] or patient)
+        previous = unit
+    if group: groups.append(group)
+    blocks, block_of, barriers = [], {}, {}
+    conditional_spans, conditional_units, conditional_multisentence = [], set(), set()
+    for group in groups:
+        group_blocks, block = [], []
+        for unit in group:
+            own = parsed[unit['id']]
+            # Only an exact, unique form subject starts another topic. Context-only
+            # labels and repeated questions cannot establish a write destination.
+            patient_after_plain = bool(len(block) == 1 and plain[block[0]['id']]
+                                       and own is None and patients[unit['id']])
+            if block and ((own and len(named.get(own[0], ())) == 1) or patient_after_plain):
+                group_blocks.append(block); block = []
+            block.append(unit)
+        if block: group_blocks.append(block)
+        for position, block in enumerate(group_blocks):
+            index = len(blocks)
+            own = parsed[block[0]['id']]
+            owner = own[0] if own and len(named.get(own[0], ())) == 1 else None
+            value = '\n'.join([own[1] if own else block[0]['quote'], *(u['quote'] for u in block[1:])])
+            local_conditional = []
+            if owner in PLAN_FIELDS:
+                for unit in block:
+                    pieces = sentence_spans(unit['quote'])
+                    found = []
+                    for low, high in pieces:
+                        text = unit['quote'][low:high]
+                        own_part = parsed[unit['id']] if low == 0 else None
+                        part = ((own_part[0], text[own_part[2]:], own_part[2])
+                                if own_part and own_part[2] <= len(text) else None)
+                        shift = part[2] if part else 0
+                        instruction = text[shift:]
+                        if (RETURN_IF_INSTRUCTION.fullmatch(instruction)
+                                and not any(UNSETTLED.search(r) or SELF_CORRECTION.search(r)
+                                            or SCOPE_POINTER.search(r) for r in readings(instruction))):
+                            span = (unit['start'] + low + shift, unit['start'] + high)
+                            found.append((low, high)); local_conditional.append(span)
+                            conditional_units.add(unit['id'])
+                    # A labelled Plan's retained tail can contain its complete return
+                    # instruction on the same line. Only that exact two-part form is relaxed.
+                    if (len(pieces) == 2 and found == [pieces[1]] and parsed[unit['id']]
+                            and parsed[unit['id']][0] == owner):
+                        conditional_multisentence.add(unit['id'])
+            conditional_spans.extend(local_conditional)
+            scoped_words = all(any(low <= match.start() + unit['start'] and match.end() + unit['start'] <= high
+                                   for low, high in local_conditional)
+                               for unit in block for match in INHERITED_SCOPE.finditer(unit['quote']))
+            # A named topic is not automatically a harmless boundary: a pointer,
+            # unresolved list or nonplain specific answer retains its earlier hold.
+            narrative = (owner in general and (FINITE_STATEMENT_V3.search(
+                value if colon[block[0]['id']] else block[0]['quote']) or local_conditional))
+            safe = bool(scoped_words and ((owner and plain_value(value)) or (
+                (narrative or patients[block[0]['id']])
+                and not any(UNSETTLED.search(text) or SELF_CORRECTION.search(text) or SCOPE_POINTER.search(text)
+                            for text in readings(value)))))
+            barriers[index] = safe
+            blocks.append({'units': block, 'owner': owner, 'position': position,
+                           'group_start': index - position, 'group_count': len(group_blocks)})
+            for unit in block: block_of[unit['id']] = index
+    plain_values = [bool(parsed[u['id']] and parsed[u['id']][0] in named
+                         and (plain_value(parsed[u['id']][1]) or (len(named[parsed[u['id']][0]]) == 1
+                              and plain_printed_side_option(named[parsed[u['id']][0]][0], parsed[u['id']][1]))))
+                    for u in units]
+    return {'units': units, 'spans': {(u['start'], u['end']): u for u in units}, 'parsed': parsed,
+            'colon': colon, 'before': before, 'independent': independent, 'general': general, 'groups': groups,
+            'ends_read': ends_read, 'shapes_read': shapes_read, 'blocks': blocks, 'block_of': block_of,
+            'barriers': barriers, 'patients': patients, 'named': named,
+            'neighbours': paragraph_neighbours(notes, units, plain_values),
+            'conditional_spans': conditional_spans, 'conditional_units': conditional_units,
+            'conditional_multisentence': conditional_multisentence,
+            'inherited_causes': [cause for cause in getattr(units, 'scope_causes', ())
+                if cause[0] != 'lexical' or not any(low <= cause[1] and cause[2] <= high for low, high in conditional_spans)]}
+
+
+
+def v3_scope_selection(reading, label, evidence):
+    """Complete source blocks keep their own context without inheriting another topic.
+
+    This returns source IDs only. It never composes values or accepts a partial
+    block. Other blocks remain relevant when they carry existing scope warnings.
+    """
+    label = question_key(label)
+    spans = {(entry.get('start'), entry.get('end')) for entry in evidence}
+    chosen = {reading['spans'][span]['id'] for span in spans if span in reading['spans']}
+    before, after, complete = set(), set(), set()
+    for index in {reading['block_of'][unit] for unit in chosen}:
+        block = reading['blocks'][index]
+        ids = {u['id'] for u in block['units']}
+        if not ids <= chosen: continue
+        owner = block['owner']
+        if owner != label:
+            if (owner is not None or label not in reading['general'] & HISTORY_NARRATIVE_FIELDS
+                    or not reading['patients'][block['units'][0]['id']]):
+                continue
+        elif len(reading['named'].get(label, ())) != 1:
+            continue
+        # A specific clinical field does not absorb unrelated continuation prose.
+        if label not in reading['general'] and len(ids) > 1: continue
+        complete.update(ids)
+        # The complete block retains its own preceding source sentences.
+        before.update(unit['id'] for unit in block['units'][1:])
+        low, high = block['group_start'], block['group_start'] + block['group_count']
+        if all(reading['barriers'][other] for other in range(low, index)):
+            before.update(ids)
+        if all(reading['barriers'][other] for other in range(index + 1, high)):
+            after.update(ids)
+    return {'before': before, 'after': after, 'complete': complete}
+
+
+def v3_preceding_warnings(reading, label, evidence):
+    """The same paragraph/source-block context on generation, page, save and finalize."""
+    if not reading: return []
+    label = question_key(label)
+    spans = {(entry.get('start'), entry.get('end')) for entry in evidence}
+    scoped = v3_scope_selection(reading, label, evidence)
+    complete = set()
+    if label in reading['general']:
+        for group in reading['groups']:
+            if len(group) > 1 and not any(reading['parsed'][u['id']] for u in group):
+                if all((u['start'], u['end']) in spans for u in group):
+                    complete.update(u['id'] for u in group)
+    warnings = {}
+    starts = [unit['start'] for unit in reading['units']]
+    for kind, start, end in reading['inherited_causes']:
+        index = bisect.bisect_right(starts, start) - 1
+        if index >= 0:
+            unit = reading['units'][index]; warnings[unit['id']] = unit
+    for span in spans:
+        unit = reading['spans'].get(span)
+        if not unit: continue
+        before, changer = reading['neighbours'][unit['id']]
+        if (before and not reading['colon'][unit['id']] and unit['id'] not in complete
+                and unit['id'] not in reading['independent'].get(label, ()) and unit['id'] not in scoped['before']):
+            warnings[before['id']] = before
+        if changer and unit['id'] not in complete and unit['id'] not in scoped['after']:
+            # A complete block carries every continuation in its source order.
+            if not (unit['id'] in scoped['complete'] and changer['id'] in scoped['complete']
+                    and reading['block_of'][unit['id']] == reading['block_of'][changer['id']]):
+                warnings[changer['id']] = changer
+    return list(warnings.values())
+
+
 def nearby_entry(notes, unit, near, after):
     """A neighbouring unit shown beside a held candidate, in the shape of a governing line (`same`: no line break
     between them)."""
@@ -2123,8 +2344,9 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
         # ⚠️ CONTRACT v3 READS GOVERNANCE WITH THE PAGE'S, SAVE'S AND FINALIZATION'S ONE READER (R9): `governance_for`, per
         # line, over every occurrence. Read per sentence here, a correction line was exempted as 'its own answer' that
         # finalization then refused ('Plan: rest. Allergies: none.' / 'Allergies: correction, penicillin.').
-        governance=governance_for(notes,fields,context_labels)
+        governance=governance_for(notes,fields,context_labels,v3_units=units,v3_parsed=parsed_units)
         index=governance[10]
+        inherited=bool(governance[11]['preceding']['inherited_causes'])
     else:
         governance=heading_governance(notes,labels)
         index=occurrence_index(notes,labels,units,parsed_units)
@@ -2143,7 +2365,8 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
     printed_side={unit['id']:bool(parsed and colon_labelled[unit['id']] and len(named_fields.get(parsed[0],()))==1
                                  and plain_printed_side_option(named_fields[parsed[0]][0],parsed[1]))
                   for unit,parsed in zip(units,parsed_units)} if v3 else {}
-    ends_read,shape_read={},{}
+    ends_read,shape_read=((governance[11]['preceding']['ends_read'], governance[11]['preceding']['shapes_read'])
+                         if v3 else ({}, {}))
     def ends_inside(unit):
         if unit['id'] not in ends_read: ends_read[unit['id']]=inner_sentence_end(unit['quote'])
         return ends_read[unit['id']]
@@ -2208,8 +2431,19 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             if parsed and parsed[1]: explicit.setdefault(value,unit)
         evidence=[]; texts=[]; guarded=False; nearby={}
         choices=[by_id[value] for value in item.unit_ids] if isinstance(item,UnitSelection) else item.quotes
-        if v3 and item.key in complete_paragraphs:
-            choices=sorted(choices, key=lambda unit: unit['start'])
+        scoped = v3_scope_selection(governance[11]['preceding'], label,
+                    [choice if isinstance(choice,dict) else allowed[choice][0] for choice in choices if isinstance(choice,dict) or choice in allowed]) if v3 else {}
+        if v3 and scoped['complete']:
+            # An unlabelled paragraph selected into two questions is not a unique
+            # destination. The old complete-paragraph path has the same constraint.
+            unowned = {unit for unit in scoped['complete']
+                       if governance[11]['preceding']['blocks'][governance[11]['preceding']['block_of'][unit]]['owner'] is None}
+            competitors = set().union(*(set(other.unit_ids) for key, other in selected.items()
+                                      if key != item.key and isinstance(other, UnitSelection)))
+            if unowned & competitors:
+                scoped = {name: ids - unowned for name, ids in scoped.items()}
+        if v3 and (item.key in complete_paragraphs or scoped['complete']):
+            choices=sorted(choices, key=lambda unit: unit['start'] if isinstance(unit,dict) else allowed[unit][0]['start'])
         for choice in choices:
             quote=choice['quote'] if isinstance(choice,dict) else choice
             if quote not in allowed and v3 and isinstance(choice,dict):
@@ -2231,7 +2465,8 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             # A verbless fragment ('Left knee.', 'Warfarin 5 mg daily.') is held: the verb-list rule of the tab contract
             # (round 2, F3: 'four or more words and a closing mark' adopted 'Warfarin 5 mg daily.' before 'Stopped last
             # month.' and the question 'Nausea, vomiting or abdominal pain?' as its own answer).
-            if ':' not in quote and not finite.search(quote): guarded=True
+            if (':' not in quote and not finite.search(quote) and not (v3 and unit['id'] in scoped['complete']
+                    and unit['id'] in governance[11]['preceding']['conditional_units'])): guarded=True
             own_value=parsed_of[unit['id']]
             if v3 and own_value and own_value[1] and POINTER_ONLY_VALUE.fullmatch(own_value[1].strip()):
                 guarded=True
@@ -2244,16 +2479,25 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
                 # (a) Anything written after it in its paragraph other than another asked question's PLAIN labelled value
                 #     may change it (the lead's rule held only for the NEXT unit; a correction one labelled line further on
                 #     was adopted past; round 3: a split-off 'Plan: to be obtained tomorrow.' was exempt as labelled).
-                if changer is not None and unit['id'] not in complete_paragraphs.get(item.key, ()):
+                if (changer is not None and unit['id'] not in complete_paragraphs.get(item.key, ())
+                        and unit['id'] not in scoped['after'] and not (unit['id'] in scoped['complete']
+                            and changer['id'] in scoped['complete']
+                            and governance[11]['preceding']['block_of'][unit['id']] == governance[11]['preceding']['block_of'][changer['id']])):
                     guarded=True; nearby.setdefault(changer['id'],(unit,changer,True))
                 # (b) An unlabelled or 'Label is ...' sentence depends on the one before it in its paragraph for its subject
                 #     and scope ('He had a myocardial infarction' after a sentence about her father; 'Diagnosis was breast
                 #     cancer.' after one about her sister). A colon-labelled value names its question.
-                if before is not None and not colon_labelled[unit['id']] and unit['id'] not in complete_paragraphs.get(item.key, ()):
+                if (before is not None and not colon_labelled[unit['id']] and unit['id'] not in complete_paragraphs.get(item.key, ())
+                        and unit['id'] not in governance[11]['preceding']['independent'].get(label, ())
+                        and unit['id'] not in scoped['before']):
                     guarded=True; nearby.setdefault(before['id'],(unit,before,False))
                 # (c) More than one sentence in one unit (a labelled line's remainder, a lowercase continuation), and
                 # (d)-(f) (`v3_shape_holds`): read once per unit (`shape_holds`).
-                if shape_holds(unit,own_value): guarded=True
+                if shape_holds(unit,own_value):
+                    conditional_tail = (unit['id'] in scoped['complete']
+                        and unit['id'] in governance[11]['preceding']['conditional_multisentence']
+                        and not v3_shape_holds(unit['quote'], own_value[1] if own_value else unit['quote']))
+                    if not conditional_tail: guarded=True
             # Dates and consent are not inferred from a procedure date or general
             # narrative. These source subjects must themselves be documented.
             if any(re.search(subject,label,re.I) and not re.search(subject,quote,re.I) for subject in SUBJECTS): guarded=True
@@ -2268,7 +2512,9 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
                     used[quote]=item.key
             # Identical wording at two source positions can be two separate instructions (take a tablet,
             # wait, take a tablet). Whole-paragraph adoption retains each occurrence in source order.
-            if value and (value not in texts or unit['id'] in complete_paragraphs.get(item.key, ())): texts.append(value)
+            if value and (value not in texts or unit['id'] in complete_paragraphs.get(item.key, ())
+                          or (v3 and label in governance[11]['preceding']['general']
+                              and unit['id'] in scoped['complete'])): texts.append(value)
         conflict=item.conflict or len(explicit)>1 or injection or (inherited and bool(texts)) or guarded
         if len(explicit)>1:
             evidence=[{k:unit[k] for k in ('quote','start','end')} for unit in explicit.values()]
