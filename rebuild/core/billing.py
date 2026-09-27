@@ -111,10 +111,13 @@ def sandbox_hold(job):
 #: The database triggers the sandbox-money rule relies on, as (table, trigger, function, pg_trigger.tgtype): without
 #: them a statement can relabel sandbox evidence as live. tgtype bits: 1 row, 2 before, 8 delete, 16 update, 32 truncate.
 PAYMENT_EVIDENCE_GUARDS=(
-    ('core_ledgerentry','ledger_append_only','quillmd_append_only',27),                    # 0003
-    ('core_webhookevent','webhook_evidence_immutable','quillmd_webhook_evidence_guard',27), # 0008
-    ('core_payment','payment_livemode_immutable','quillmd_livemode_guard',19),              # 0020
-    ('core_webhookevent','webhook_livemode_immutable','quillmd_livemode_guard',19),         # 0020
+    ('core_ledgerentry','ledger_append_only','quillmd_append_only',27),                    # 0003: no UPDATE or DELETE
+    ('core_webhookevent','webhook_evidence_immutable','quillmd_webhook_evidence_guard',27), # 0008: no DELETE
+    ('core_payment','payment_evidence_immutable','quillmd_payment_evidence_guard',27),      # 0020: no DELETE, no relabel
+    ('core_webhookevent','webhook_livemode_immutable','quillmd_livemode_guard',19),         # 0020: mode fixed
+    ('core_payment','payment_no_truncate','quillmd_refuse_truncate',34),                    # 0020: no TRUNCATE
+    ('core_webhookevent','webhook_no_truncate','quillmd_refuse_truncate',34),               # 0020
+    ('core_ledgerentry','ledger_no_truncate','quillmd_refuse_truncate',34),                 # 0020
 )
 
 

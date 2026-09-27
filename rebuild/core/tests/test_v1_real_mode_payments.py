@@ -613,9 +613,11 @@ class ReversingThePaymentModeMigration(SyntheticFixture, TransactionTestCase):
             cursor.execute("SELECT count(*) FROM information_schema.columns WHERE column_name = 'livemode' "
                            "AND table_name IN ('core_payment', 'core_webhookevent')")
             columns = cursor.fetchone()[0]
-            cursor.execute("SELECT count(*) FROM pg_trigger WHERE tgname IN ('payment_livemode_immutable', 'webhook_livemode_immutable')")
+            cursor.execute("SELECT count(*) FROM pg_trigger WHERE tgname IN ('payment_evidence_immutable', 'webhook_livemode_immutable', "
+                           "'payment_no_truncate', 'webhook_no_truncate', 'ledger_no_truncate')")
             triggers = cursor.fetchone()[0]
-            cursor.execute("SELECT count(*) FROM pg_proc WHERE proname = 'quillmd_livemode_guard'")
+            cursor.execute("SELECT count(*) FROM pg_proc WHERE proname IN ('quillmd_payment_evidence_guard', 'quillmd_livemode_guard', "
+                           "'quillmd_refuse_truncate')")
             functions = cursor.fetchone()[0]
         return columns, triggers, functions
 
@@ -632,7 +634,7 @@ class ReversingThePaymentModeMigration(SyntheticFixture, TransactionTestCase):
             for private in (live.stripe_session, 'pi_live_rb', 'evt_live_rb', str(live.pk), self.user.email):
                 self.assertNotIn(private, str(refused.exception))
             self.assertIn(('core', '0020_payment_livemode'), MigrationRecorder(connection).applied_migrations())
-            self.assertEqual(self.schema(), (2, 2, 1))
+            self.assertEqual(self.schema(), (2, 5, 3))
             self.assertIs(Payment.objects.get(pk=live.pk).livemode, True)
             self.assertIs(WebhookEvent.objects.get(event_id='evt_live_rb').livemode, True)
             with override_settings(STRIPE_SECRET_KEY='rk_live_synthetic_adapter', **REAL, **LIVE):
@@ -641,18 +643,24 @@ class ReversingThePaymentModeMigration(SyntheticFixture, TransactionTestCase):
         finally:
             self.to_leaf()
 
-    def test_a_live_payment_alone_or_a_live_event_alone_refuses_too(self):
+    def test_a_live_payment_alone_refuses_too(self):
         with override_settings(STRIPE_SECRET_KEY='rk_live_synthetic_adapter', **REAL, **LIVE):
             self.checkout('live-never-paid')  # A live checkout nobody has paid yet: its row alone is live evidence.
         try:
             with self.assertRaisesRegex(IrreversibleError, r'1 payment row\(s\) and 0 Stripe event row\(s\) are recorded as live'):
                 MigrationExecutor(connection).migrate(self.BEFORE_0020)
-            Payment.objects.all().delete()
-            WebhookEvent.objects.create(event_id='evt_live_unmatched', kind='checkout.session.expired', payload_hash='0' * 64,
-                                        object_data={}, status='reconciliation', livemode=True)
+            self.assertEqual(self.schema(), (2, 5, 3))
+        finally:
+            self.to_leaf()
+
+    def test_a_live_event_alone_refuses_too(self):
+        # (A Payment row can no longer be deleted to leave the event alone: 0020's guard. So no payment is made here.)
+        WebhookEvent.objects.create(event_id='evt_live_unmatched', kind='checkout.session.expired', payload_hash='0' * 64,
+                                    object_data={}, status='reconciliation', livemode=True)
+        try:
             with self.assertRaisesRegex(IrreversibleError, r'0 payment row\(s\) and 1 Stripe event row\(s\) are recorded as live'):
                 MigrationExecutor(connection).migrate(self.BEFORE_0020)
-            self.assertEqual(self.schema(), (2, 2, 1))
+            self.assertEqual(self.schema(), (2, 5, 3))
         finally:
             self.to_leaf()
 
@@ -664,5 +672,5 @@ class ReversingThePaymentModeMigration(SyntheticFixture, TransactionTestCase):
             self.assertEqual(self.schema(), (0, 0, 0))
         finally:
             self.to_leaf()
-        self.assertEqual(self.schema(), (2, 2, 1))
+        self.assertEqual(self.schema(), (2, 5, 3))
         self.assertIsNone(Payment.objects.get(pk=payment.pk).livemode)

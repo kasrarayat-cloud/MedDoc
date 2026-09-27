@@ -52,11 +52,28 @@ GUARDS = {
     ('core_webhookevent', 'webhook_evidence_immutable'):
         'CREATE TRIGGER webhook_evidence_immutable BEFORE UPDATE OR DELETE ON core_webhookevent FOR EACH ROW '
         'EXECUTE FUNCTION quillmd_webhook_evidence_guard()',
-    ('core_payment', 'payment_livemode_immutable'):
-        'CREATE TRIGGER payment_livemode_immutable BEFORE UPDATE ON core_payment FOR EACH ROW EXECUTE FUNCTION quillmd_livemode_guard()',
+    ('core_payment', 'payment_evidence_immutable'):
+        'CREATE TRIGGER payment_evidence_immutable BEFORE UPDATE OR DELETE ON core_payment FOR EACH ROW '
+        'EXECUTE FUNCTION quillmd_payment_evidence_guard()',
     ('core_webhookevent', 'webhook_livemode_immutable'):
         'CREATE TRIGGER webhook_livemode_immutable BEFORE UPDATE ON core_webhookevent FOR EACH ROW EXECUTE FUNCTION quillmd_livemode_guard()',
+    ('core_payment', 'payment_no_truncate'):
+        'CREATE TRIGGER payment_no_truncate BEFORE TRUNCATE ON core_payment FOR EACH STATEMENT EXECUTE FUNCTION quillmd_refuse_truncate()',
+    ('core_webhookevent', 'webhook_no_truncate'):
+        'CREATE TRIGGER webhook_no_truncate BEFORE TRUNCATE ON core_webhookevent FOR EACH STATEMENT EXECUTE FUNCTION quillmd_refuse_truncate()',
+    ('core_ledgerentry', 'ledger_no_truncate'):
+        'CREATE TRIGGER ledger_no_truncate BEFORE TRUNCATE ON core_ledgerentry FOR EACH STATEMENT EXECUTE FUNCTION quillmd_refuse_truncate()',
 }
+#: What 0020 itself installs, and the trigger name an earlier version of it used.
+INSTALLED_BY_0020 = ['payment_evidence_immutable', 'webhook_livemode_immutable', 'payment_no_truncate', 'webhook_no_truncate',
+                     'ledger_no_truncate']
+DROP_EVERYTHING_0020_INSTALLS = ['DROP TRIGGER payment_evidence_immutable ON core_payment',
+                                 'DROP TRIGGER webhook_livemode_immutable ON core_webhookevent',
+                                 'DROP TRIGGER payment_no_truncate ON core_payment',
+                                 'DROP TRIGGER webhook_no_truncate ON core_webhookevent',
+                                 'DROP TRIGGER ledger_no_truncate ON core_ledgerentry',
+                                 'DROP FUNCTION quillmd_payment_evidence_guard()', 'DROP FUNCTION quillmd_livemode_guard()',
+                                 'DROP FUNCTION quillmd_refuse_truncate()']
 BEFORE_0020 = [('core', '0019_clinicinvitation')]
 
 
@@ -109,8 +126,10 @@ class TheLaunchersCheckRequiresEveryGuard(TestCase):
 
     def test_a_guard_recreated_narrower_conditional_or_on_another_function_is_reported(self):
         for (table, name), create in GUARDS.items():
-            narrower = create.replace('BEFORE UPDATE OR DELETE', 'BEFORE DELETE').replace('BEFORE UPDATE ON', 'BEFORE INSERT ON')
-            conditional = create.replace('FOR EACH ROW', 'FOR EACH ROW WHEN (false)')
+            narrower = (create.replace('BEFORE UPDATE OR DELETE', 'BEFORE DELETE').replace('BEFORE UPDATE ON', 'BEFORE INSERT ON')
+                        .replace('BEFORE TRUNCATE', 'AFTER TRUNCATE'))
+            conditional = create.replace('FOR EACH ROW', 'FOR EACH ROW WHEN (false)').replace(
+                'FOR EACH STATEMENT', 'FOR EACH STATEMENT WHEN (false)')
             other_function = create.rsplit('EXECUTE FUNCTION', 1)[0] + 'EXECUTE FUNCTION quillmd_job_financial_guard()'
             for change, replacement in (('narrower', narrower), ('conditional', conditional), ('another function', other_function)):
                 with self.subTest(guard=name, change=change):
@@ -134,8 +153,14 @@ class TheLaunchersCheckRequiresEveryGuard(TestCase):
 
 
 class ReversingAnEarlierPaymentModeMigration(TransactionTestCase):
-    """The refuter's R4-4 upgrade path: a database that applied the earlier 0020, which installed no trigger. With no live
-    rows its reverse must run, and re-applying installs every guard."""
+    """The refuter's R4-4 upgrade path: a database that applied an earlier 0020 (the first installed no trigger, the
+    second only payment_livemode_immutable and webhook_livemode_immutable). With no live rows its reverse must run, and
+    re-applying installs every guard."""
+
+    def setUp(self):
+        # Every guard is in place and enabled when each test starts, including after the previous test's flush, which
+        # lifts the TRUNCATE guards for itself alone (core/tests/__init__.py).
+        self.assertEqual(real_mode_payment_problems(), [])
 
     def tearDown(self):
         # Whatever happened above, leave every guard installed for the tests that follow.
@@ -146,26 +171,51 @@ class ReversingAnEarlierPaymentModeMigration(TransactionTestCase):
         super().tearDown()
 
     def test_a_database_that_applied_the_trigger_less_0020_is_refused_then_reverses_and_reapplies(self):
-        execute('DROP TRIGGER payment_livemode_immutable ON core_payment',
-                'DROP TRIGGER webhook_livemode_immutable ON core_webhookevent',
-                'DROP FUNCTION quillmd_livemode_guard()')
+        execute(*DROP_EVERYTHING_0020_INSTALLS)
         self.assertIn(('core', '0020_payment_livemode'), MigrationRecorder(connection).applied_migrations())
-        self.assertEqual(reported(real_mode_payment_problems()), {'payment_livemode_immutable', 'webhook_livemode_immutable'})
+        self.assertEqual(reported(real_mode_payment_problems()), set(INSTALLED_BY_0020))
         MigrationExecutor(connection).migrate(BEFORE_0020)
         self.assertNotIn(('core', '0020_payment_livemode'), MigrationRecorder(connection).applied_migrations())
         to_leaf()
         self.assertEqual(real_mode_payment_problems(), [])
 
     def test_one_missing_trigger_does_not_stop_the_reverse(self):
-        execute('DROP TRIGGER webhook_livemode_immutable ON core_webhookevent')
-        MigrationExecutor(connection).migrate(BEFORE_0020)  # Before: 'trigger "webhook_livemode_immutable" ... does not exist'.
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT count(*) FROM pg_trigger WHERE tgname LIKE '%livemode%'")
-            self.assertEqual(cursor.fetchone()[0], 0)
-            cursor.execute("SELECT count(*) FROM pg_proc WHERE proname = 'quillmd_livemode_guard'")
-            self.assertEqual(cursor.fetchone()[0], 0)
+        for name, table in (('webhook_livemode_immutable', 'core_webhookevent'), ('payment_evidence_immutable', 'core_payment'),
+                            ('ledger_no_truncate', 'core_ledgerentry')):
+            with self.subTest(missing=name):
+                execute(f'DROP TRIGGER {name} ON {table}')
+                MigrationExecutor(connection).migrate(BEFORE_0020)  # Before: 'trigger "..." ... does not exist'.
+                self.assertEqual(self.installed(), (0, 0))
+                to_leaf()
+                self.assertEqual(real_mode_payment_problems(), [])
+                self.assertEqual(self.installed(), (5, 3))
+
+    def test_the_round_3_version_with_its_earlier_trigger_name_reverses_and_reapplies(self):
+        """The second earlier 0020 guarded core_payment with payment_livemode_immutable (livemode only) and installed no
+        TRUNCATE guard: the check names what is missing, and reverse plus re-apply replaces the old trigger."""
+        execute(*DROP_EVERYTHING_0020_INSTALLS)
+        execute("CREATE FUNCTION quillmd_livemode_guard() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN "
+                "IF NEW.livemode IS DISTINCT FROM OLD.livemode THEN RAISE EXCEPTION 'A recorded payment mode is immutable'; "
+                "END IF; RETURN NEW; END; $$",
+                'CREATE TRIGGER payment_livemode_immutable BEFORE UPDATE ON core_payment FOR EACH ROW EXECUTE FUNCTION quillmd_livemode_guard()',
+                GUARDS[('core_webhookevent', 'webhook_livemode_immutable')])
+        self.assertEqual(reported(real_mode_payment_problems()),
+                         {'payment_evidence_immutable', 'payment_no_truncate', 'webhook_no_truncate', 'ledger_no_truncate'})
+        MigrationExecutor(connection).migrate(BEFORE_0020)
+        self.assertEqual(self.installed(), (0, 0))
         to_leaf()
         self.assertEqual(real_mode_payment_problems(), [])
+        self.assertEqual(self.installed(), (5, 3))
+
+    @staticmethod
+    def installed():
+        """(triggers 0020 or an earlier version of it installs, their functions) present now."""
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT count(*) FROM pg_trigger WHERE tgname = ANY(%s)', [INSTALLED_BY_0020 + ['payment_livemode_immutable']])
+            triggers = cursor.fetchone()[0]
+            cursor.execute('SELECT count(*) FROM pg_proc WHERE proname = ANY(%s)',
+                           [['quillmd_payment_evidence_guard', 'quillmd_livemode_guard', 'quillmd_refuse_truncate']])
+            return triggers, cursor.fetchone()[0]
 
 
 SETTINGS = dict(STRIPE_WEBHOOK_SECRET=SECRET, ADMIN_SITE=False, QUILLMD_PREVIEW_AUTH_ENABLED=False, STORAGES=STORAGES,
@@ -281,19 +331,24 @@ class SandboxEvidenceCannotBeRelabelledLive(SyntheticFixture, TestCase):
         self.assert_real_mode_never_spends(wallet, 'after-A3', steps)
         self.assertTrue(steps[0][1].startswith('refused: QuillMD payment evidence cannot be truncated (core_webhookevent)'), steps)
         # Every table the check reads refuses TRUNCATE, however it is named. (A plain TRUNCATE core_payment is refused
-        # before any trigger, by core_refund's foreign key; naming core_refund too reaches the trigger.)
+        # before any trigger, by core_refund's foreign key; naming core_refund too reaches the trigger.) Inside this test's
+        # transaction the deferred foreign-key checks of the rows written above are still pending, and PostgreSQL refuses to
+        # TRUNCATE a table with pending trigger events before any trigger runs; a real session has committed its writes.
+        # Run those checks now, so that each refusal below is the guard's own.
+        execute('SET CONSTRAINTS ALL IMMEDIATE')
         for table, statements in (('core_payment', ['TRUNCATE core_payment, core_refund', 'TRUNCATE core_payment CASCADE',
                                                     'TRUNCATE core_payment RESTART IDENTITY CASCADE']),
                                   ('core_webhookevent', ['TRUNCATE core_webhookevent', 'TRUNCATE core_webhookevent CASCADE']),
                                   ('core_ledgerentry', ['TRUNCATE core_ledgerentry', 'TRUNCATE core_ledgerentry CASCADE'])):
             for statement in statements:
                 with self.subTest(statement=statement):
-                    self.assertTrue(attempt(sql(statement)).startswith(
-                        f'refused: QuillMD payment evidence cannot be truncated ({table})'))
-        self.assertTrue(attempt(sql('TRUNCATE core_payment')).startswith('refused: '))
+                    outcome = attempt(sql(statement))
+                    self.assertTrue(outcome.startswith(f'refused: QuillMD payment evidence cannot be truncated ({table})'), outcome)
+        outcome = attempt(sql('TRUNCATE core_payment'))
+        self.assertTrue(outcome.startswith('refused: '), outcome)
         # A TRUNCATE of another table that CASCADEs into these is refused too.
-        self.assertTrue(attempt(sql('TRUNCATE core_wallet CASCADE')).startswith(
-            'refused: QuillMD payment evidence cannot be truncated'))
+        outcome = attempt(sql('TRUNCATE core_wallet CASCADE'))
+        self.assertTrue(outcome.startswith('refused: QuillMD payment evidence cannot be truncated'), outcome)
         self.assertEqual((Payment.objects.count(), WebhookEvent.objects.count(), LedgerEntry.objects.filter(kind='payment').count()),
                          (1, 1, 1))
 
@@ -333,25 +388,39 @@ class SandboxEvidenceCannotBeRelabelledLive(SyntheticFixture, TestCase):
                 f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {role}',
                 f'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {role}',
                 f'GRANT TRUNCATE ON core_payment, core_refund, core_webhookevent, core_ledgerentry TO {role}',
+                'SET CONSTRAINTS ALL IMMEDIATE',  # See test_A3: no pending foreign-key events, so each TRUNCATE meets the guard.
                 f'SET ROLE {role}')
         try:
+            # (what the probe role runs, its outcome, the refusal it must meet)
             steps = [
                 ('A2: sandbox row expired, intent cleared', attempt(sql(
-                    "UPDATE core_payment SET status = 'expired', stripe_intent = NULL WHERE id = %s", [payment.pk]))),
+                    "UPDATE core_payment SET status = 'expired', stripe_intent = NULL WHERE id = %s", [payment.pk])),
+                 'Recorded payment evidence is immutable'),
                 ('A2: live checkout takes the intent', attempt(sql(
-                    'UPDATE core_payment SET stripe_intent = %s WHERE id = %s', [intent, live.pk]))),
-                ('A3: truncate Stripe events', attempt(sql('TRUNCATE core_webhookevent'))),
-                ('A1: delete the sandbox payment', attempt(sql('DELETE FROM core_payment WHERE id = %s', [payment.pk]))),
-                ('A1: insert a live payment with its intent', attempt(self.forge_live(wallet, intent, 'cs_forged_runtime'))),
-                ('truncate payments', attempt(sql('TRUNCATE core_payment, core_refund'))),
-                ('truncate the ledger', attempt(sql('TRUNCATE core_ledgerentry'))),
-                ('relabel the mode', attempt(sql('UPDATE core_payment SET livemode = true WHERE id = %s', [payment.pk]))),
+                    'UPDATE core_payment SET stripe_intent = %s WHERE id = %s', [intent, live.pk])),
+                 'duplicate key value violates unique constraint'),
+                ('A3: truncate Stripe events', attempt(sql('TRUNCATE core_webhookevent')),
+                 'QuillMD payment evidence cannot be truncated (core_webhookevent)'),
+                ('A1: delete the sandbox payment', attempt(sql('DELETE FROM core_payment WHERE id = %s', [payment.pk])),
+                 'Payment evidence cannot be deleted'),
+                ('A1: insert a live payment with its intent', attempt(self.forge_live(wallet, intent, 'cs_forged_runtime')),
+                 'duplicate key value violates unique constraint'),
+                ('truncate payments', attempt(sql('TRUNCATE core_payment, core_refund')),
+                 'QuillMD payment evidence cannot be truncated (core_payment)'),
+                ('truncate the ledger', attempt(sql('TRUNCATE core_ledgerentry')),
+                 'QuillMD payment evidence cannot be truncated (core_ledgerentry)'),
+                ('relabel the mode', attempt(sql('UPDATE core_payment SET livemode = true WHERE id = %s', [payment.pk])),
+                 'A recorded payment mode is immutable'),
                 ('move the payment to another wallet', attempt(sql(
-                    'UPDATE core_payment SET wallet_id = %s WHERE id = %s', [other.pk, payment.pk]))),
-                ('delete a Stripe event', attempt(sql('DELETE FROM core_webhookevent'))),
-                ('drop a guard', attempt(sql('DROP TRIGGER webhook_livemode_immutable ON core_webhookevent'))),
-                ('disable the guards', attempt(sql('ALTER TABLE core_payment DISABLE TRIGGER USER'))),
-                ('switch triggers off for the session', attempt(sql('SET session_replication_role = replica'))),
+                    'UPDATE core_payment SET wallet_id = %s WHERE id = %s', [other.pk, payment.pk])),
+                 'Recorded payment evidence is immutable'),
+                ('delete a Stripe event', attempt(sql('DELETE FROM core_webhookevent')), 'Signed payment evidence cannot be deleted'),
+                ('drop a guard', attempt(sql('DROP TRIGGER webhook_livemode_immutable ON core_webhookevent')),
+                 'must be owner of relation core_webhookevent'),
+                ('disable the guards', attempt(sql('ALTER TABLE core_payment DISABLE TRIGGER USER')),
+                 'must be owner of table core_payment'),
+                ('switch triggers off for the session', attempt(sql('SET session_replication_role = replica')),
+                 'permission denied to set parameter "session_replication_role"'),
             ]
             # Positive control: the probe role writes what the application writes.
             control = attempt(sql("UPDATE core_payment SET checkout_url = 'https://checkout.stripe.com/c/pay/probe' WHERE id = %s",
@@ -361,9 +430,9 @@ class SandboxEvidenceCannotBeRelabelledLive(SyntheticFixture, TestCase):
         self.assertEqual(control, 'done')
         self.assert_real_mode_never_spends(wallet, 'after-runtime-role', steps)
         self.assertEqual(len(real_mode_payment_problems()), 3, real_mode_payment_problems())
-        for name, outcome in steps:
+        for name, outcome, reason in steps:
             with self.subTest(statement=name):
-                self.assertTrue(outcome.startswith('refused: '), outcome)
+                self.assertTrue(outcome.startswith('refused: ' + reason), outcome)
 
 
 @override_settings(**SETTINGS)
