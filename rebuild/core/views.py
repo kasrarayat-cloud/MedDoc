@@ -411,7 +411,10 @@ def encounter_detail(request,pk):
         try:
             requirements=wm_resolve(e,request.user)
             resolved_ok=True
-            if can_finalize:
+            # ⚠️ A FINALIZED RECORD IS NOT RE-REVIEWED BY WHOEVER VIEWS IT: its receipt is the review. Evaluated as the
+            # reader's own, a second clinician was told the record's review was incomplete (the signer's identity is not
+            # theirs) and was shown the template's original wordings. (Ported from feat/wm-narrative.)
+            if can_finalize and e.status!='finalized':
                 assessment=wm_review.evaluate_review(e,request.user,decisions,resolved_requirements=requirements)
         except (ValidationError,DocumentError) as exc:
             review_error=error_message(exc)
@@ -692,8 +695,27 @@ def save_answers(request,pk):
             if variant not in {item['id'] for item in requirement['variants']}:
                 return document_refusal(request,e,'Choose an approved statement alternative. No changes were saved.',400)
             decisions[key]={'reviewed':reviewed,'evidence':evidence,'variant':variant}
+    previous_decisions=dict((e.template_review or {}).get('decisions') or {}) if is_wm else {}
     e.answers=answers;e.revision=target_revision;e.status='review';wm_review.invalidate_review(e)
-    if is_wm and Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists():
+    clinician=is_wm and Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists()
+    if is_wm and not clinician and previous_decisions:
+        # ⚠️ A NON-CLINICIAN'S SAVE DISCARDED THE CLINICIAN'S STATEMENT DECISIONS WITHOUT A WORD: the review is emptied
+        # above and only a clinician's save rebuilds one, so the chosen wordings and their sources vanished and the next
+        # page fell back to the mapping's defaults. They are kept — each unreviewed (a review is its reader's own), bound
+        # to this revision, as schema 0, which finalization never accepts. A wording the saver left as it was keeps the
+        # clinician's sources; one the saver changed is the saver's unreviewed choice. (Ported from feat/wm-narrative.)
+        kept={key for key,decision in decisions.items() if isinstance(previous_decisions.get(key),dict)
+              and previous_decisions[key].get('variant')==decision['variant']}
+        e.template_review={'schema':0,'decisions':{key:dict(previous_decisions[key] if key in kept else decision,reviewed=False)
+                                                   for key,decision in decisions.items()},
+                           'binding':wm_review.binding(e),'reviewer_id':str(request.user.pk)}
+        if any(decisions[key]['evidence']!=previous_decisions[key].get('evidence') for key in kept):
+            review_errors.append('A statement source you changed was not kept: a statement keeps the clinician\'s wording and '
+                                 'sources until a clinician reviews it. Ask a clinician to change the source.')
+        if any(isinstance(decision,dict) and decision.get('reviewed') for decision in previous_decisions.values()):
+            review_errors.append('The prewritten statement choices a clinician reviewed were kept but are no longer reviewed. '
+                                 'A clinician must review them again.')
+    if clinician:
         try:
             resolved=wm_resolve(e,request.user,decisions)
             for requirement in resolved:
@@ -718,10 +740,14 @@ def save_answers(request,pk):
             review_errors.append(error_message(exc))
     # A review is the reader's own, so saving without a tick removes a colleague's; record which.
     withdrawn_reviews=sorted(key for key,answer in answers.items() if (previous_answers.get(key) or {}).get('reviewed') and not answer.get('reviewed'))
+    stored=(e.template_review or {}).get('decisions') or {}
+    withdrawn_statement_reviews=sorted(key for key,decision in previous_decisions.items()
+                                       if isinstance(decision,dict) and decision.get('reviewed') and not (stored.get(key) or {}).get('reviewed'))
     e.save(update_fields=['answers','revision','status','template_review'])
     audit(request.user,'encounter.answers_saved',e.pk,department=e.department,revision=e.revision,
           accepted_suggestions=sorted(newly_accepted),withdrawn_acceptances=sorted(withdrawn),
-          left_blank=sorted(newly_blank),withdrawn_blank_decisions=sorted(withdrawn_blank),withdrawn_reviews=withdrawn_reviews)
+          left_blank=sorted(newly_blank),withdrawn_blank_decisions=sorted(withdrawn_blank),withdrawn_reviews=withdrawn_reviews,
+          withdrawn_statement_reviews=withdrawn_statement_reviews)
     if is_wm:audit(request.user,'encounter.template_review_saved',e.pk,department=e.department,revision=e.revision,complete=e.template_review.get('assessment',{}).get('complete',False))
     messages.success(request,'Edits saved. Review every answer before finalizing.')
     for message in dict.fromkeys(review_errors):messages.warning(request,'Review remains incomplete: '+message)

@@ -19,7 +19,8 @@ from core.jobs import run_one
 from core.models import AuditEvent, Job, Membership, TemplateVersion, User
 from core.wm_review import BACKEND, ORIGINAL_SHA256
 from .test_security import SyntheticFixture
-from .test_workflow import TEST_SETTINGS, DocumentWorkflow
+from . import test_workflow
+from .test_workflow import TEST_SETTINGS
 
 REFUSED = 'a new draft would replace them. Nothing was sent or charged.'
 
@@ -65,9 +66,11 @@ class BrowserSaveForm(HTMLParser):
 class GenerationRefusedOverReviewOnOrdinaryForms(TestCase):
     """A generation replaces every answer and review decision (`jobs.py` adoption). The page offers it only before any
     answer exists, but the server queued it for any POST carrying the current revision."""
-    # DocumentWorkflow's fixture and helpers, without re-running its own tests.
-    setUp, make_docx, upload = DocumentWorkflow.setUp, DocumentWorkflow.make_docx, DocumentWorkflow.upload
-    create_encounter, generate = DocumentWorkflow.create_encounter, DocumentWorkflow.generate
+    # DocumentWorkflow's fixture and helpers, without re-running its own tests (imported by module for the same reason:
+    # a TestCase class in this module's namespace would be collected here again).
+    workflow = test_workflow.DocumentWorkflow
+    setUp, make_docx, upload = workflow.setUp, workflow.make_docx, workflow.upload
+    create_encounter, generate = workflow.create_encounter, workflow.generate
     NOTES = 'Symptoms: No chest pain.\nExamination: Normal gait.'
 
     def drafted(self):
@@ -262,3 +265,81 @@ class GenerationRefusedOverWordStatementDecisions(OfflineWordForm):
         self.assertEqual(Job.objects.filter(encounter=self.encounter).count(), 0)
         self.assertEqual((self.encounter.answers, self.encounter.template_review), before)
         self.assertContains(response, REFUSED)
+
+
+class EmployeeSaveKeepsStatementDecisions(OfflineWordForm):
+    """An employee's save rebuilt nothing of the clinician's statement review: `invalidate_review` emptied it, only a
+    clinician's save rebuilds one, so the chosen wordings, their sources and the reviews vanished without a word and the
+    next page fell back to the mapping's defaults."""
+
+    def test_an_employees_plain_save_keeps_the_decisions_unreviewed_bound_and_says_so(self):
+        reviewed = self.clinician_reviews()
+        employee = self.member('wm-guards-employee', 'employee')
+        self.client.force_login(employee)
+        response = self.save()
+        review = self.encounter.template_review
+        self.assertEqual(set(review.get('decisions') or {}), {'claim_9', 'claim_32', 'claim_46'})
+        for key, decision in reviewed['decisions'].items():
+            self.assertEqual(review['decisions'][key], {**decision, 'reviewed': False}, key)
+        self.assertEqual(review['schema'], 0)                              # (never accepted by finalization)
+        self.assertEqual(review['binding'], wm_review.binding(self.encounter))
+        event = AuditEvent.objects.filter(action='encounter.answers_saved', target=str(self.encounter.pk)).latest('created_at')
+        self.assertEqual(event.details['withdrawn_statement_reviews'], ['claim_32', 'claim_46', 'claim_9'])
+        self.assertContains(response, 'were kept but are no longer reviewed')
+        self.assertNotContains(response, 'was not kept')                   # (nothing was changed under a wording)
+        # The clinician's page shows the kept wording, not the default, and asks for the review again.
+        self.client.force_login(self.user)
+        page = self.page()
+        self.assertEqual(BrowserSaveForm.of(page)['claim_variant_claim_32'], 'not_assessed')
+        self.assertIn(NOT_ASSESSED, {row['key']: row['text'] for row in page.context['wm_requirements']}['claim_32'])
+
+    def test_a_source_an_employee_changes_under_the_clinicians_wording_is_not_kept_and_the_saver_is_told(self):
+        reviewed = self.clinician_reviews()
+        self.client.force_login(self.member('wm-guards-employee-2', 'employee'))
+        response = self.save({'claim_source_claim_32': 'Prewritten statement: Exam type: TYPE OF EXAM: Full Study'})
+        self.assertEqual(self.encounter.template_review['decisions']['claim_32']['evidence'],
+                         reviewed['decisions']['claim_32']['evidence'])
+        self.assertContains(response, 'A statement source you changed was not kept')
+
+    def test_a_wording_the_employee_changes_is_kept_as_the_employees_unreviewed_choice(self):
+        self.clinician_reviews()
+        self.client.force_login(self.member('wm-guards-employee-3', 'employee'))
+        self.save({'claim_variant_claim_32': 'negative'})
+        decision = self.encounter.template_review['decisions']['claim_32']
+        self.assertEqual((decision['variant'], decision['reviewed']), ('negative', False))
+
+
+class AFinalizedRecordIsNotReReviewedByItsReader(OfflineWordForm):
+    """A finalized record was re-evaluated as the reader's own review: for any clinician but the signer, the signer's
+    identity no longer resolved to the reader and the page said the Word review was incomplete, showing the template's
+    original wordings instead of the finalized ones."""
+
+    def finalized(self):
+        self.clinician_reviews()
+        self.encounter.status = 'finalized'; self.encounter.finalized_by = self.user
+        self.encounter.finalized_at = timezone.now(); self.encounter.export_path = 'exports/synthetic.docx'
+        self.encounter.export_sha256 = '0' * 64
+        self.encounter.save()
+
+    def test_a_second_clinician_sees_the_finalized_record_as_finalized(self):
+        self.finalized()
+        self.client.force_login(self.member('wm-guards-clinician-b', 'clinician', full_name='Clinician B'))
+        page = self.page()
+        self.assertEqual(page.context['wm_review_error'], '')
+        shown = {row['key']: row for row in page.context['wm_requirements']}
+        self.assertEqual(shown['claim_32']['text'], NOT_ASSESSED)          # the finalized wording
+        self.assertEqual(shown['claim_46']['text'], 'SYNTHETIC Clinician A')  # its signer, not the reader
+        self.assertEqual({row['key']: row['review_errors'] for row in shown.values()},
+                         {'claim_9': [], 'claim_32': [], 'claim_46': []})
+        self.assertEqual({row['key']: (row['status'], row['review_errors']) for row in page.context['answer_rows']},
+                         {field['key']: ('supported', []) for field in FIELDS})
+        self.assertNotContains(page, 'Word review is incomplete')
+
+    def test_a_record_not_yet_finalized_is_still_the_readers_own_review(self):
+        """The control: before finalization the reader's page is their own review, so another clinician's ticks are not
+        theirs."""
+        self.clinician_reviews()
+        self.client.force_login(self.member('wm-guards-clinician-c', 'clinician', full_name='Clinician C'))
+        page = self.page()
+        errors = {row['key']: row['review_errors'] for row in page.context['answer_rows']}
+        self.assertTrue(all(errors.values()), errors)
