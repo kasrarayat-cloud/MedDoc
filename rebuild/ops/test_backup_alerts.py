@@ -2206,6 +2206,89 @@ class FailClosedMeansAlertTests(unittest.TestCase):
             self.assertNotIn('state_unreadable', result)
         self.sender.assert_called_once()
 
+    def unreadable_again(self):
+        (self.alerts / 'status.json').write_text('not json')
+
+    def test_a_restart_that_announced_a_healthy_backup_never_holds_a_failure(self):
+        """⚠️ R3-1, round 3, the refuter's exact sequence. status.json unreadable at +10 min while the
+        backup is healthy: one restart notice, "Condition: healthy". At +2 h status.json is unreadable
+        again and the backup has FAILED: the once-a-day limit refused 266 checks (22 h 10 min) with no
+        email, neither check nor status reported the backup condition, and the failure was first
+        emailed at +24 h 10 min. The limit must never hold a condition more severe than the one the
+        last restart notice announced, exactly as a rise inside an incident is never held."""
+        a.check(self.at)
+        self.unreadable_again()
+        result, _ = a.check(self.at + timedelta(minutes=10))
+        self.assertEqual((result['condition'], result.get('state_restarted'), self.sender.call_count), ('healthy', True, 1))
+        self.assert_restart_notice('state_invalid', 'healthy')
+        self.health.return_value = 'backup_failed'
+        self.unreadable_again()
+        result, code = a.check(self.at + timedelta(hours=2))
+        self.assertEqual((code, result['condition'], result.get('state_unreadable'), result.get('state_restarted'),
+                          self.sender.call_count), (1, 'backup_failed', 'state_invalid', True, 2),
+                         'a restart notice that announced a healthy backup held a failure for 22 hours')
+        self.assert_restart_notice('state_invalid', 'backup_failed')
+
+    def test_only_a_strict_rise_over_the_last_restart_notice_lifts_the_daily_limit(self):
+        """The incident rule, applied to restarts: measured against the LAST restart notice, so the same
+        or a lower severity is held for the day and each rise is announced once."""
+        steps = [(timedelta(0), 'healthy', 'healthy', True),                       # announces healthy
+                 (timedelta(minutes=30), 'healthy', 'healthy', False),             # same: held
+                 (timedelta(hours=1), 'healthy', 'offsite_capacity_low', True),    # a warning rises over it
+                 (timedelta(hours=2), 'healthy', 'offsite_next_run_budget_low', False),  # a warning: held
+                 (timedelta(hours=3), 'healthy', 'healthy', False),                # lower: held
+                 (timedelta(hours=4), 'backup_failed', 'healthy', True),           # a failure rises over it
+                 (timedelta(hours=5), 'backup_stale', 'healthy', False),           # a failure: held
+                 (timedelta(hours=6), 'healthy', 'offsite_capacity_low', False)]   # lower: held
+        a.backup.write_private(self.alerts / 'status.json', b'not json')
+        sent = 0
+        for offset, local, remote, announced in steps:
+            with self.subTest(offset=offset):
+                self.health.return_value = local
+                self.recovery.return_value['condition'] = remote
+                condition = remote if local == 'healthy' else local
+                self.unreadable_again()
+                result, code = a.check(self.at + offset)
+                sent += announced
+                self.assertEqual((result.get('state_restarted'), self.sender.call_count), (announced, sent))
+                if announced:
+                    self.assertEqual(result['condition'], condition)
+                    self.assert_restart_notice('state_invalid', condition)
+                else:
+                    self.assertEqual((code, result['condition'], result.get('backup_condition')),
+                                     (1, 'monitoring_state_unavailable', condition))
+
+    def test_a_held_restart_reports_the_backup_condition_and_what_it_is_holding(self):
+        """⚠️ R3-1: while a restart is held, check() and status() still compute the backup condition and
+        report it, with when the next restart notice may be sent and what the last one announced."""
+        self.health.return_value = 'backup_failed'
+        a.backup.write_private(self.alerts / 'status.json', b'not json')
+        a.check(self.at)                                                    # the restart announces the failure
+        self.assertEqual(self.sender.call_count, 1)
+        until = (self.at + timedelta(hours=24)).isoformat()
+        for minutes, local, remote in ((60, 'backup_failed', 'healthy'), (65, 'backup_stale', 'healthy'),
+                                       (70, 'healthy', 'offsite_capacity_low'), (75, 'healthy', 'healthy')):
+            with self.subTest(minutes=minutes):
+                self.health.return_value = local
+                self.recovery.return_value['condition'] = remote
+                condition = remote if local == 'healthy' else local
+                self.unreadable_again()
+                before = {path.name: path.read_bytes() for path in self.alerts.iterdir()}
+                result, code = a.check(self.at + timedelta(minutes=minutes))
+                self.assertEqual((code, result['condition'], result.get('state_unreadable'), result.get('state_restarted'),
+                                  result.get('next_state_notice_at'), result.get('backup_condition'),
+                                  result.get('last_state_notice_condition')),
+                                 (1, 'monitoring_state_unavailable', 'state_invalid', False, until, condition, 'backup_failed'),
+                                 'a held restart reported neither the backup condition nor what it holds')
+                self.assertEqual({path.name: path.read_bytes() for path in self.alerts.iterdir()}, before,
+                                 'a held restart changes nothing')
+                shown, _ = a.status(self.at + timedelta(minutes=minutes + 1))
+                self.assertEqual((shown['condition'], shown.get('state_unreadable'), shown.get('backup_condition'),
+                                  shown.get('next_state_notice_at'), shown.get('last_state_notice_condition')),
+                                 ('monitoring_state_unavailable', 'state_invalid', condition, until, 'backup_failed'),
+                                 'status() did not report the backup condition while the state is unreadable')
+        self.assertEqual(self.sender.call_count, 1)
+
 
 class RecoveryStageTests(unittest.TestCase):
     def setUp(self):
