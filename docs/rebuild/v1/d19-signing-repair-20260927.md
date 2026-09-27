@@ -206,3 +206,21 @@ This commit is reviewed preparation in draft state; root's final independent
 refutation is still pending at handoff, and committing does not integrate it.
 No deployment or launch is authorized by this report. Preserve this worktree and
 the complete runtime evidence if interrupted.
+
+## Root integration and independent evidence
+
+Locally integrated at `6e8ca616cb6608c58ee836ebcef4d6e75c5c5a2f` after 14 independent
+export/protection controls and 14 separate admission controls returned no finding in their stated
+claims. Root separately passed ten engine controls and six admission controls. The AST union
+preserves both D19 generation definitions and all eleven other changed root definitions, with no
+overlap. Root inspected the retained original/long images and confirmed eight visible original
+initials boxes versus seven after long-answer reflow. D19 remains an automatic failure.
+
+The combined signing and existing Word workflow run executed **87 tests: 86 passed, one failed**
+in 115.180 seconds. The failed prior positive is the unique `Indication: synthetic knee review`
+alongside ambiguous repeated Pain/Comments destinations. Root independently reproduced the same
+parsed form with old and current generation source: old source supports Indication; the integrated
+source holds it with all three lines as context. This shared ordinary-context regression stays open
+for a bounded repair; it is not hidden by changing the test expectation. The original failed run
+and source comparison are retained in the independent evidence directory. No full combined green
+or compatibility claim follows from the bounded D19 protections.

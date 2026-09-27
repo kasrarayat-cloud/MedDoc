@@ -1,0 +1,28 @@
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-release/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+......................................................../opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-release/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+.................F.............
+======================================================================
+FAIL: test_a_labelled_line_fills_none_of_the_repeated_questions (core.tests.test_word_v3_workflow.V3RepeatedQuestions.test_a_labelled_line_fills_none_of_the_repeated_questions)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_word_v3_workflow.py", line 1052, in test_a_labelled_line_fills_none_of_the_repeated_questions
+    self.assertEqual((answer["status"], answer["text"]), ("supported", "synthetic knee review"))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'synthetic knee review')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'synthetic knee review')
+
+----------------------------------------------------------------------
+Ran 87 tests in 115.180s
+
+FAILED (failures=1)
+Destroying test database for alias 'default'...
+Found 87 test(s).
+System check identified no issues (0 silenced).

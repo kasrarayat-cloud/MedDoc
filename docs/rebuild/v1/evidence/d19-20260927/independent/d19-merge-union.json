@@ -1,0 +1,26 @@
+{
+  "base": "e9e44e08",
+  "author": "9e04ff7810144737138eeab2012e0f95170336b8",
+  "release": "6e8ca616cb6608c58ee836ebcef4d6e75c5c5a2f",
+  "author_changed": [
+    "v3_adopted",
+    "v3_generation_fields"
+  ],
+  "root_changed": [
+    "SourceUnits",
+    "governance_for",
+    "judged_context",
+    "source_units",
+    "v3_field_subjects",
+    "v3_medication_complement_holds",
+    "v3_preceding_reading",
+    "v3_preceding_warnings",
+    "v3_related_source_blocks",
+    "v3_scope_selection",
+    "validate_tab_selections"
+  ],
+  "overlap": [],
+  "all_author_preserved": true,
+  "all_root_preserved": true,
+  "generation_sha256": "addcfe2739ae0f5acb743fc94ecd484a063e5d71b62591fe48099356bf5ababf"
+}

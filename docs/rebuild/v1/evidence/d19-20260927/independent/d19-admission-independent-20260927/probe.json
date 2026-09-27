@@ -1,0 +1,66 @@
+{
+  "source_hashes": {
+    "core/jobs.py": "ad1f9e4334b11cdc932605fbeb0f097267de810b51e4f61b099348d83d1095aa",
+    "core/v3_mapping.py": "c64d3eb48df6175b692c4f0af6ebbcb85a2382eafdd645498e0ca0e994242698",
+    "core/views.py": "b33a170ad224ad828fcc8874d4481235567f4ddd3b7c93fcff839a810a995511",
+    "documents/word_v3.py": "190c470192e49005166e3d2b6b792772dd7284d616bdf2977854a19306de4e80"
+  },
+  "cases": [
+    {
+      "case": "floating-warnings-omitted",
+      "refusal": "Generation is unavailable for this form's floating initials layout. Nothing was sent or charged; the unchanged form and mapping remain available."
+    },
+    {
+      "case": "floating-unrelated-old-warning",
+      "refusal": "Generation is unavailable for this form's floating initials layout. Nothing was sent or charged; the unchanged form and mapping remain available."
+    },
+    {
+      "case": "ordinary-positive",
+      "refusal": ""
+    },
+    {
+      "case": "copied-ordinary-file-with-floating-hash",
+      "refusal": "The original form could not be verified for generation. Nothing was sent or charged. Ask an administrator to check the original before trying again."
+    },
+    {
+      "case": "missing-original",
+      "refusal": "The original form could not be verified for generation. Nothing was sent or charged. Ask an administrator to check the original before trying again."
+    },
+    {
+      "case": "known-refusal-warning",
+      "refusal": "Generation is unavailable for this form's floating initials layout. Nothing was sent or charged; the unchanged form and mapping remain available."
+    },
+    {
+      "case": "copied-warning-only-refuses",
+      "refusal": "Generation is unavailable for this form's floating initials layout. Nothing was sent or charged; the unchanged form and mapping remain available."
+    },
+    {
+      "case": "wrong-contract",
+      "refusal": "The original form could not be verified for generation. Nothing was sent or charged. Ask an administrator to check the original before trying again."
+    },
+    {
+      "case": "missing-contract",
+      "refusal": "The original form could not be verified for generation. Nothing was sent or charged. Ask an administrator to check the original before trying again."
+    },
+    {
+      "case": "wrong-digest",
+      "refusal": "The original form could not be verified for generation. Nothing was sent or charged. Ask an administrator to check the original before trying again."
+    },
+    {
+      "case": "missing-digest",
+      "refusal": "The original form could not be verified for generation. Nothing was sent or charged. Ask an administrator to check the original before trying again."
+    },
+    {
+      "case": "parser-unavailable",
+      "refusal": "The original form could not be verified for generation. Nothing was sent or charged. Ask an administrator to check the original before trying again."
+    },
+    {
+      "case": "unsafe-path",
+      "refusal": "The original form could not be verified for generation. Nothing was sent or charged. Ask an administrator to check the original before trying again."
+    },
+    {
+      "case": "missing-os-source",
+      "refusal": "The original form could not be verified for generation. Nothing was sent or charged. Ask an administrator to check the original before trying again."
+    }
+  ]
+}

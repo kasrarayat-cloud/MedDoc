@@ -1,0 +1,76 @@
+{
+  "source_sha256": "190c470192e49005166e3d2b6b792772dd7284d616bdf2977854a19306de4e80",
+  "cases": [
+    {
+      "floating": false,
+      "mode": "paragraph_options",
+      "expected_refusal": true,
+      "refused": true,
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand."
+    },
+    {
+      "floating": false,
+      "mode": "stripped_flag",
+      "expected_refusal": true,
+      "refused": true,
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand."
+    },
+    {
+      "floating": false,
+      "mode": "copy",
+      "expected_refusal": true,
+      "refused": true,
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand."
+    },
+    {
+      "floating": false,
+      "mode": "normal",
+      "expected_refusal": false,
+      "refused": false,
+      "signing_bytes_unchanged": true
+    },
+    {
+      "floating": false,
+      "mode": "blank",
+      "expected_refusal": false,
+      "refused": false,
+      "signing_bytes_unchanged": true
+    },
+    {
+      "floating": true,
+      "mode": "paragraph_options",
+      "expected_refusal": true,
+      "refused": true,
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand."
+    },
+    {
+      "floating": true,
+      "mode": "stripped_flag",
+      "expected_refusal": true,
+      "refused": true,
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand."
+    },
+    {
+      "floating": true,
+      "mode": "copy",
+      "expected_refusal": true,
+      "refused": true,
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand."
+    },
+    {
+      "floating": true,
+      "mode": "normal",
+      "expected_refusal": true,
+      "refused": true,
+      "message": "Filled export is unavailable for this form's floating initials boxes: answer reflow can clip or move a box away from its question. The unchanged original remains available. This layout needs qualification before any nonempty export."
+    },
+    {
+      "floating": true,
+      "mode": "blank",
+      "expected_refusal": false,
+      "refused": false,
+      "signing_bytes_unchanged": true
+    }
+  ],
+  "passed": true
+}

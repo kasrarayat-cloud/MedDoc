@@ -1,0 +1,41 @@
+{
+  "source_sha256": "c64d3eb48df6175b692c4f0af6ebbcb85a2382eafdd645498e0ca0e994242698",
+  "cases": [
+    {
+      "name": "early-warning",
+      "pass": true,
+      "result": "Generation is unavailable for this form's floating initials layout. Nothing was sent or charged; the unchanged form and mapping remain available.",
+      "inspections": 0
+    },
+    {
+      "name": "source-warning",
+      "pass": true,
+      "result": "Generation is unavailable for this form's floating initials layout. Nothing was sent or charged; the unchanged form and mapping remain available.",
+      "inspections": 1
+    },
+    {
+      "name": "hash-mismatch",
+      "pass": true,
+      "result": "The original form could not be verified for generation. Nothing was sent or charged. Ask an administrator to check the original before trying again.",
+      "inspections": 1
+    },
+    {
+      "name": "contract-mismatch",
+      "pass": true,
+      "result": "The original form could not be verified for generation. Nothing was sent or charged. Ask an administrator to check the original before trying again.",
+      "inspections": 1
+    },
+    {
+      "name": "missing-source",
+      "pass": true,
+      "result": "The original form could not be verified for generation. Nothing was sent or charged. Ask an administrator to check the original before trying again.",
+      "inspections": 1
+    },
+    {
+      "name": "ordinary",
+      "pass": true,
+      "result": "",
+      "inspections": 1
+    }
+  ]
+}
