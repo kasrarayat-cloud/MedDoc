@@ -1,0 +1,1741 @@
+{
+ "source": "the qualified WM IOV original (sha256 c1852a49…), as inspected by the pinned adapter; blank form metadata, no patient data",
+ "original_sha256": "c1852a492221cfa0d144c9c0a60b700a7363a2cca7630aa988ee8b6329e1868b",
+ "backend": {
+  "backend": "wm-iov-foss-v2",
+  "source_sha256": "c1852a492221cfa0d144c9c0a60b700a7363a2cca7630aa988ee8b6329e1868b",
+  "mapping_digest": "0fcc5e36dfe589a190a726f059c45b10364f3d02f312aea5fc8935d16ea05072"
+ },
+ "fields": [
+  {
+   "key": "sdt_1519045110",
+   "label": "Practice address",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "1519045110"
+   },
+   "options": [
+    "250 E. Yale Loop, Suite E, Irvine, CA 92604",
+    "9220 Haven Avenue, Suite 320, Rancho Cucamonga, CA 91730",
+    "2572 Atlantic Avenue, Long Beach, CA 90806",
+    "17609 Ventura Blvd, Suite 106, Encino, CA 91316",
+    "17609 Ventura Blvd, Suite LL08, Encino, CA 91316"
+   ]
+  },
+  {
+   "key": "sdt_1475334564",
+   "label": "Exam side",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "1475334564"
+   },
+   "options": [
+    "Bilateral Detailed",
+    "Unilateral - Right Leg Detailed; Left Leg Screening",
+    "Unilateral - Left Leg Detailed; Right Leg Screening",
+    "Bilateral Screening",
+    "Bilateral Limited",
+    "Unilateral - Right Leg Limited; Left Leg Screening",
+    "Unilateral - Left Leg Limited; Right Leg Screening"
+   ]
+  },
+  {
+   "key": "sdt_469715844",
+   "label": "Referring physician",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "469715844"
+   },
+   "options": [
+    "Maged S. Mikhail, MD, RPVI, RVT",
+    "Khashayar Sarabi, MD, RPVI",
+    "Hooman Shabatian, MD, MS",
+    "Shahram Salimitari, MD",
+    "Momoka Nishino, NP-C"
+   ]
+  },
+  {
+   "key": "sdt_-1477830258",
+   "label": "Ultrasound technologist",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "-1477830258"
+   },
+   "options": [
+    "Yana Bennett, RVT, RDMS",
+    "Beatriz Tena, RVS",
+    "Jennifer Martinez, RVT, RDMS",
+    "Judy De La Torre, RVT",
+    "Uyen Phan, RVT",
+    "Tiffany Le, RVT",
+    "Roxanne Garcera, RVS"
+   ]
+  },
+  {
+   "key": "sdt_-388341802",
+   "label": "Ultrasound machine",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "-388341802"
+   },
+   "options": [
+    "GE Logiq V2, 6-12 MHz Transducer",
+    "Mindray M7, L12-4s MHz Transducer",
+    "Mindray M8, L12-4s MHz Transducer",
+    "GE Versana, L6-12 MHz Transducer",
+    "GE Logiq e, L4-20t MHz Transducer"
+   ]
+  },
+  {
+   "key": "sdt_143014188",
+   "label": "Exam location",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "143014188"
+   },
+   "options": [
+    "Irvine, CA",
+    "Long Beach, CA",
+    "Encino, CA",
+    "Rancho Cucamonga, CA"
+   ]
+  },
+  {
+   "key": "sdt_-1124008635",
+   "label": "Clinical indication: leg pain",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "-1124008635"
+   },
+   "options": [
+    "Leg pain"
+   ]
+  },
+  {
+   "key": "sdt_269290727",
+   "label": "Clinical indication: swelling",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "269290727"
+   },
+   "options": [
+    "Swelling",
+    "Leg edema"
+   ]
+  },
+  {
+   "key": "sdt_722175654",
+   "label": "Clinical indication: heaviness",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "722175654"
+   },
+   "options": [
+    "Heaviness"
+   ]
+  },
+  {
+   "key": "sdt_-770853925",
+   "label": "Clinical indication: history or skin changes",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "-770853925"
+   },
+   "options": [
+    "Previous vein treatment",
+    "Leg ulcer",
+    "Vein rupture",
+    "Skin changes or dermatitis",
+    "Thrombophlebitis"
+   ]
+  },
+  {
+   "key": "sdt_-49312682",
+   "label": "Clinical indication: sensory symptoms",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "-49312682"
+   },
+   "options": [
+    "Numbness in leg",
+    "Cramping",
+    "Restless Legs"
+   ]
+  },
+  {
+   "key": "sdt_2005853103",
+   "label": "Clinical indication: asymptomatic or itching",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "2005853103"
+   },
+   "options": [
+    "Asymptomatic",
+    "Itching"
+   ]
+  },
+  {
+   "key": "sdt_-1316494373",
+   "label": "Diagnosis",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "-1316494373"
+   },
+   "options": [
+    "Chronic venous hypertension with other complications of right lower extremity",
+    "Chronic venous hypertension with other complications of left lower extremity",
+    "Chronic venous hypertension with other complications of bilateral lower extremities",
+    "Varicose veins of lower extremity with other complications of right lower extremity",
+    "Varicose veins of lower extremity with other complications of left lower extremity",
+    "Varicose veins of lower extremity with other complications of bilateral lower extremities"
+   ]
+  },
+  {
+   "key": "sdt_429781496",
+   "label": "Technique: venous systems",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "429781496"
+   },
+   "options": [
+    "deep and superficial",
+    "superficial"
+   ]
+  },
+  {
+   "key": "sdt_-1287346867",
+   "label": "Right previous treatment: vein",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "-1287346867"
+   },
+   "options": [
+    "great saphenous vein",
+    "anterior accessory great saphenous vein",
+    "posterior accessory great saphenous vein",
+    "small saphenous vein"
+   ]
+  },
+  {
+   "key": "sdt_-346030703",
+   "label": "Right previous treatment: start",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "-346030703"
+   },
+   "options": [
+    "saphenofemoral junction",
+    "proximal thigh",
+    "mid thigh",
+    "distal thigh",
+    "knee",
+    "saphenopopliteal junction",
+    "proximal calf",
+    "mid calf"
+   ]
+  },
+  {
+   "key": "sdt_599910328",
+   "label": "Right previous treatment: end",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "599910328"
+   },
+   "options": [
+    "mid thigh",
+    "distal thigh",
+    "knee",
+    "proximal calf",
+    "mid calf",
+    "distal calf"
+   ]
+  },
+  {
+   "key": "sdt_1706206184",
+   "label": "Right previous treatment: outcome",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "1706206184"
+   },
+   "options": [
+    "and is absent.",
+    ", however, there has been a recurrence."
+   ]
+  },
+  {
+   "key": "sdt_1093284141",
+   "label": "Left previous treatment: vein",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "1093284141"
+   },
+   "options": [
+    "great saphenous vein",
+    "anterior accessory great saphenous vein",
+    "posterior accessory great saphenous vein",
+    "small saphenous vein"
+   ]
+  },
+  {
+   "key": "sdt_-505521617",
+   "label": "Left previous treatment: start",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "-505521617"
+   },
+   "options": [
+    "saphenofemoral junction",
+    "proximal thigh",
+    "mid thigh",
+    "distal thigh",
+    "knee",
+    "saphenopopliteal junction",
+    "proximal calf",
+    "mid calf"
+   ]
+  },
+  {
+   "key": "sdt_519430350",
+   "label": "Left previous treatment: end",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "519430350"
+   },
+   "options": [
+    "mid thigh",
+    "distal thigh",
+    "knee",
+    "proximal calf",
+    "mid calf",
+    "distal calf"
+   ]
+  },
+  {
+   "key": "sdt_-1268837810",
+   "label": "Left previous treatment: outcome",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "-1268837810"
+   },
+   "options": [
+    "and is absent.",
+    ", however, there has been a recurrence."
+   ]
+  },
+  {
+   "key": "sdt_-892962961",
+   "label": "Right impression: vein",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "-892962961"
+   },
+   "options": [
+    "great saphenous vein",
+    "anterior accessory great saphenous vein",
+    "posterior accessory great saphenous vein",
+    "small saphenous vein",
+    "retained great saphenous vein",
+    "retained anterior accessory great saphenous vein",
+    "retained posterior accessory great saphenous vein",
+    "retained small saphenous vein",
+    "duplicate great saphenous vein",
+    "duplicate small saphenous vein"
+   ]
+  },
+  {
+   "key": "sdt_-213273323",
+   "label": "Right impression: reflux or absence",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "-213273323"
+   },
+   "options": [
+    "reflux positive.",
+    "is absent."
+   ]
+  },
+  {
+   "key": "sdt_-170105994",
+   "label": "Right deep venous system",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "-170105994"
+   },
+   "options": [
+    "without evidence of obstruction or insufficiency.",
+    "with evidence of an acute DVT of CFV, FV, POP V, PTV.",
+    "with evidence of a chronic DVT of CFV, FV, POP V, PTV."
+   ]
+  },
+  {
+   "key": "sdt_2001841928",
+   "label": "Left impression: vein",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "2001841928"
+   },
+   "options": [
+    "great saphenous vein",
+    "anterior accessory great saphenous vein",
+    "posterior accessory great saphenous vein",
+    "small saphenous vein",
+    "retained great saphenous vein",
+    "retained anterior accessory great saphenous vein",
+    "retained posterior accessory great saphenous vein",
+    "retained small saphenous vein",
+    "duplicate great saphenous vein",
+    "duplicate small saphenous vein"
+   ]
+  },
+  {
+   "key": "sdt_605543147",
+   "label": "Left impression: reflux or absence",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "605543147"
+   },
+   "options": [
+    "reflux positive.",
+    "is absent."
+   ]
+  },
+  {
+   "key": "sdt_-1029175652",
+   "label": "Left deep venous system",
+   "kind": "choice",
+   "locator": {
+    "part": "word/document.xml",
+    "sdt_id": "-1029175652"
+   },
+   "options": [
+    "without evidence of obstruction or insufficiency.",
+    "with evidence of an acute DVT of CFV, FV, POP V, PTV.",
+    "with evidence of a chronic DVT of CFV, FV, POP V, PTV."
+   ]
+  },
+  {
+   "key": "date_of_service",
+   "label": "Date of service",
+   "kind": "text",
+   "locator": {
+    "body_paragraph": 4,
+    "expected_text_sha256": "46f2db4d661f89524e058ddf1de0a0df1bff2616205c696f72fd628299b097cc"
+   },
+   "options": []
+  },
+  {
+   "key": "patient_id",
+   "label": "Patient ID",
+   "kind": "text",
+   "locator": {
+    "body_paragraph": 5,
+    "expected_text_sha256": "9e33c98c9961f0551d1bfa0ea83dbefc7d3477d3cfe041e9b2a669cdb7ad7a6b"
+   },
+   "options": []
+  },
+  {
+   "key": "patient_name",
+   "label": "Patient name",
+   "kind": "text",
+   "locator": {
+    "body_paragraph": 6,
+    "expected_text_sha256": "3a10d222716c3ae167ac8bce77a69c5a3755887e850fc242a7f802f7b57fdbe3"
+   },
+   "options": []
+  },
+  {
+   "key": "date_of_birth",
+   "label": "Date of birth",
+   "kind": "text",
+   "locator": {
+    "body_paragraph": 7,
+    "expected_text_sha256": "190e2a69abaea105e561156f7c35c9c65d7b75a2f03ec51802bd71f8ff2afb2a"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_1_1",
+   "label": "Right GSV at the SFJ: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 1,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_1_2",
+   "label": "Right GSV at the SFJ: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 1,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_2_1",
+   "label": "Right GSV at the Proximal Thigh: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 2,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_2_2",
+   "label": "Right GSV at the Proximal Thigh: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 2,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_3_1",
+   "label": "Right GSV at the Knee: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 3,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_3_2",
+   "label": "Right GSV at the Knee: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 3,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_4_1",
+   "label": "Right GSV Below Knee: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 4,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_4_2",
+   "label": "Right GSV Below Knee: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 4,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_5_1",
+   "label": "Right SSV at the SPJ: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 5,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_5_2",
+   "label": "Right SSV at the SPJ: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 5,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_6_1",
+   "label": "Right SSV at the Proximal Calf: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 6,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_6_2",
+   "label": "Right SSV at the Proximal Calf: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 6,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_7_1",
+   "label": "Right AAGSV at the SFJ: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 7,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_7_2",
+   "label": "Right AAGSV at the SFJ: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 7,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_8_1",
+   "label": "Right AAGSV at the Proximal Thigh: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 8,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_8_2",
+   "label": "Right AAGSV at the Proximal Thigh: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 8,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_9_1",
+   "label": "Right PAGSV at the SFJ: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 9,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_9_2",
+   "label": "Right PAGSV at the SFJ: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 9,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_10_1",
+   "label": "Right PAGSV at the Proximal Thigh: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 10,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_10_2",
+   "label": "Right PAGSV at the Proximal Thigh: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 10,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_11_1",
+   "label": "Right tributary row 11: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 11,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_11_2",
+   "label": "Right tributary row 11: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 11,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "location_11",
+   "label": "Right tributary row 11: anatomical location",
+   "kind": "text",
+   "locator": {
+    "table": 0,
+    "row": 11,
+    "column": 0,
+    "marker": "<<insert location>>"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_12_1",
+   "label": "Right tributary row 12: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 12,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_12_2",
+   "label": "Right tributary row 12: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 12,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "location_12",
+   "label": "Right tributary row 12: anatomical location",
+   "kind": "text",
+   "locator": {
+    "table": 0,
+    "row": 12,
+    "column": 0,
+    "marker": "<<insert location>>"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_13_1",
+   "label": "Right tributary row 13: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 13,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_13_2",
+   "label": "Right tributary row 13: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 13,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "location_13",
+   "label": "Right tributary row 13: anatomical location",
+   "kind": "text",
+   "locator": {
+    "table": 0,
+    "row": 13,
+    "column": 0,
+    "marker": "<<insert location>>"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_15_1",
+   "label": "Left GSV at the SFJ: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 15,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_15_2",
+   "label": "Left GSV at the SFJ: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 15,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_16_1",
+   "label": "Left GSV at the Proximal Thigh: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 16,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_16_2",
+   "label": "Left GSV at the Proximal Thigh: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 16,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_17_1",
+   "label": "Left GSV at the Knee: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 17,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_17_2",
+   "label": "Left GSV at the Knee: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 17,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_18_1",
+   "label": "Left GSV Below Knee: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 18,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_18_2",
+   "label": "Left GSV Below Knee: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 18,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_19_1",
+   "label": "Left SSV at the SPJ: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 19,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_19_2",
+   "label": "Left SSV at the SPJ: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 19,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_20_1",
+   "label": "Left SSV at the Proximal Calf: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 20,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_20_2",
+   "label": "Left SSV at the Proximal Calf: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 20,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_21_1",
+   "label": "Left AAGSV at the SFJ: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 21,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_21_2",
+   "label": "Left AAGSV at the SFJ: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 21,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_22_1",
+   "label": "Left AAGSV at the Proximal Thigh: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 22,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_22_2",
+   "label": "Left AAGSV at the Proximal Thigh: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 22,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_23_1",
+   "label": "Left PAGSV at the SFJ: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 23,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_23_2",
+   "label": "Left PAGSV at the SFJ: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 23,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_24_1",
+   "label": "Left PAGSV at the Proximal Thigh: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 24,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_24_2",
+   "label": "Left PAGSV at the Proximal Thigh: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 24,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_25_1",
+   "label": "Left tributary row 25: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 25,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_25_2",
+   "label": "Left tributary row 25: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 25,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "location_25",
+   "label": "Left tributary row 25: anatomical location",
+   "kind": "text",
+   "locator": {
+    "table": 0,
+    "row": 25,
+    "column": 0,
+    "marker": "<<insert location>>"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_26_1",
+   "label": "Left tributary row 26: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 26,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_26_2",
+   "label": "Left tributary row 26: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 26,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "location_26",
+   "label": "Left tributary row 26: anatomical location",
+   "kind": "text",
+   "locator": {
+    "table": 0,
+    "row": 26,
+    "column": 0,
+    "marker": "<<insert location>>"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_27_1",
+   "label": "Left tributary row 27: diameter (mm)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 27,
+    "column": 1,
+    "unit": "mm"
+   },
+   "options": []
+  },
+  {
+   "key": "measurement_27_2",
+   "label": "Left tributary row 27: reflux time (ms)",
+   "kind": "measurement",
+   "locator": {
+    "table": 0,
+    "row": 27,
+    "column": 2,
+    "unit": "ms"
+   },
+   "options": []
+  },
+  {
+   "key": "location_27",
+   "label": "Left tributary row 27: anatomical location",
+   "kind": "text",
+   "locator": {
+    "table": 0,
+    "row": 27,
+    "column": 0,
+    "marker": "<<insert location>>"
+   },
+   "options": []
+  }
+ ],
+ "review_requirements": [
+  {
+   "key": "claim_9",
+   "label": "Prewritten statement: Exam type",
+   "kind": "assertion",
+   "body_paragraph": 9,
+   "text": "TYPE OF EXAM: Full Study",
+   "text_sha256": "eb5388c9de6ef7603cb1ef9a13512b03f194e4c3648c539b73a0dceef8499e7d",
+   "control_keys": [],
+   "variants": [
+    {
+     "id": "original",
+     "label": "Documented full study",
+     "text_template": "TYPE OF EXAM: Full Study",
+     "required_control_keys": [],
+     "empty_control_keys": []
+    },
+    {
+     "id": "exam_choice",
+     "label": "Use the documented exam selection",
+     "text_template": "TYPE OF EXAM: {sdt_1475334564}",
+     "required_control_keys": [
+      "sdt_1475334564"
+     ],
+     "empty_control_keys": []
+    }
+   ],
+   "default_variant": "exam_choice",
+   "original_text": "TYPE OF EXAM: Full Study",
+   "original_text_sha256": "eb5388c9de6ef7603cb1ef9a13512b03f194e4c3648c539b73a0dceef8499e7d",
+   "selected_variant": "",
+   "changed": false
+  },
+  {
+   "key": "claim_11",
+   "label": "Prewritten statement: Interpreting physician",
+   "kind": "identity",
+   "body_paragraph": 11,
+   "text": "INTERPRETING PHYSICIAN: Maged S. Mikhail, MD, RPVI, RVT",
+   "text_sha256": "87ad75bc924a6ee245e6cd7470273b7b48686eb1da20e8b2e5d972fa462dac37",
+   "control_keys": [],
+   "variants": [
+    {
+     "id": "trusted",
+     "label": "Actual authenticated interpreting clinician",
+     "text_template": "INTERPRETING PHYSICIAN: {signer_name}",
+     "required_control_keys": [],
+     "empty_control_keys": []
+    }
+   ],
+   "default_variant": "trusted",
+   "original_text": "INTERPRETING PHYSICIAN: Maged S. Mikhail, MD, RPVI, RVT",
+   "original_text_sha256": "87ad75bc924a6ee245e6cd7470273b7b48686eb1da20e8b2e5d972fa462dac37",
+   "selected_variant": "",
+   "changed": false
+  },
+  {
+   "key": "claim_19",
+   "label": "Prewritten statement: Technique",
+   "kind": "assertion",
+   "body_paragraph": 19,
+   "text": "A duplex Doppler color flow ultrasound study was performed in the upright position with and without manual augmentation of flow and/or Valsalva maneuver, documenting the condition of the Choose an item. venous systems of the extremity, including the saphenofemoral junction, saphenopopliteal junction, great saphenous vein, small saphenous vein and perforator veins, as well as the precise location and extent of the varicosities to be treated. This study documents reflux as lasting more than 500 milliseconds in either the saphenous veins or the perforator veins. ",
+   "text_sha256": "e9c9c543095d7b5ddef413799fa5a1fc967c4b1ad2fd218caf318c8c6dd5f11a",
+   "control_keys": [
+    "sdt_429781496"
+   ],
+   "variants": [
+    {
+     "id": "original",
+     "label": "Original technique including reflux over 500 ms",
+     "text_template": "A duplex Doppler color flow ultrasound study was performed in the upright position with and without manual augmentation of flow and/or Valsalva maneuver, documenting the condition of the {sdt_429781496} venous systems of the extremity, including the saphenofemoral junction, saphenopopliteal junction, great saphenous vein, small saphenous vein and perforator veins, as well as the precise location and extent of the varicosities to be treated. This study documents reflux as lasting more than 500 milliseconds in either the saphenous veins or the perforator veins. ",
+     "required_control_keys": [
+      "sdt_429781496"
+     ],
+     "empty_control_keys": []
+    },
+    {
+     "id": "technique_only",
+     "label": "Documented technique without assuming a positive reflux finding",
+     "text_template": "A duplex Doppler color flow ultrasound study was performed in the upright position with and without manual augmentation of flow and/or Valsalva maneuver, documenting the condition of the {sdt_429781496} venous systems of the extremity, including the saphenofemoral junction, saphenopopliteal junction, great saphenous vein, small saphenous vein and perforator veins, as well as the precise location and extent of the varicosities to be treated.",
+     "required_control_keys": [
+      "sdt_429781496"
+     ],
+     "empty_control_keys": []
+    },
+    {
+     "id": "not_documented",
+     "label": "Technique details explicitly not documented",
+     "text_template": "Technique details were not documented.",
+     "required_control_keys": [],
+     "empty_control_keys": [
+      "sdt_429781496"
+     ]
+    }
+   ],
+   "default_variant": "technique_only",
+   "original_text": "A duplex Doppler color flow ultrasound study was performed in the upright position with and without manual augmentation of flow and/or Valsalva maneuver, documenting the condition of the Choose an item. venous systems of the extremity, including the saphenofemoral junction, saphenopopliteal junction, great saphenous vein, small saphenous vein and perforator veins, as well as the precise location and extent of the varicosities to be treated. This study documents reflux as lasting more than 500 milliseconds in either the saphenous veins or the perforator veins. ",
+   "original_text_sha256": "e9c9c543095d7b5ddef413799fa5a1fc967c4b1ad2fd218caf318c8c6dd5f11a",
+   "selected_variant": "",
+   "changed": false
+  },
+  {
+   "key": "claim_23",
+   "label": "Prewritten statement: Right previous treatment",
+   "kind": "assertion",
+   "body_paragraph": 23,
+   "text": "       The Choose an item. from the Choose an item. to the Choose an item. was found to have had previous treatment Choose an item. ",
+   "text_sha256": "d948875a7e5a23fbc8dae3128c2296d94edc9de2e4c419779d545aedf2c2d3eb",
+   "control_keys": [
+    "sdt_-1287346867",
+    "sdt_-346030703",
+    "sdt_599910328",
+    "sdt_1706206184"
+   ],
+   "variants": [
+    {
+     "id": "original",
+     "label": "Documented right prior treatment",
+     "text_template": "       The {sdt_-1287346867} from the {sdt_-346030703} to the {sdt_599910328} was found to have had previous treatment{right_treatment_connector}{sdt_1706206184} ",
+     "required_control_keys": [
+      "sdt_-1287346867",
+      "sdt_-346030703",
+      "sdt_599910328",
+      "sdt_1706206184"
+     ],
+     "empty_control_keys": []
+    },
+    {
+     "id": "none",
+     "label": "Documented no right prior treatment",
+     "text_template": "       No previous treatment in the right lower extremity.",
+     "required_control_keys": [],
+     "empty_control_keys": [
+      "sdt_-1287346867",
+      "sdt_-346030703",
+      "sdt_599910328",
+      "sdt_1706206184"
+     ]
+    },
+    {
+     "id": "not_documented",
+     "label": "Right prior-treatment history explicitly not documented",
+     "text_template": "       Previous treatment history was not documented for the right lower extremity.",
+     "required_control_keys": [],
+     "empty_control_keys": [
+      "sdt_-1287346867",
+      "sdt_-346030703",
+      "sdt_599910328",
+      "sdt_1706206184"
+     ]
+    }
+   ],
+   "default_variant": "original",
+   "original_text": "       The Choose an item. from the Choose an item. to the Choose an item. was found to have had previous treatment Choose an item. ",
+   "original_text_sha256": "d948875a7e5a23fbc8dae3128c2296d94edc9de2e4c419779d545aedf2c2d3eb",
+   "selected_variant": "",
+   "changed": false
+  },
+  {
+   "key": "claim_27",
+   "label": "Prewritten statement: Left previous treatment",
+   "kind": "assertion",
+   "body_paragraph": 27,
+   "text": "       The Choose an item. from the Choose an item. to the Choose an item. was found to have had previous treatment Choose an item. ",
+   "text_sha256": "d948875a7e5a23fbc8dae3128c2296d94edc9de2e4c419779d545aedf2c2d3eb",
+   "control_keys": [
+    "sdt_1093284141",
+    "sdt_-505521617",
+    "sdt_519430350",
+    "sdt_-1268837810"
+   ],
+   "variants": [
+    {
+     "id": "original",
+     "label": "Documented left prior treatment",
+     "text_template": "       The {sdt_1093284141} from the {sdt_-505521617} to the {sdt_519430350} was found to have had previous treatment{left_treatment_connector}{sdt_-1268837810} ",
+     "required_control_keys": [
+      "sdt_1093284141",
+      "sdt_-505521617",
+      "sdt_519430350",
+      "sdt_-1268837810"
+     ],
+     "empty_control_keys": []
+    },
+    {
+     "id": "none",
+     "label": "Documented no left prior treatment",
+     "text_template": "       No previous treatment in the left lower extremity.",
+     "required_control_keys": [],
+     "empty_control_keys": [
+      "sdt_1093284141",
+      "sdt_-505521617",
+      "sdt_519430350",
+      "sdt_-1268837810"
+     ]
+    },
+    {
+     "id": "not_documented",
+     "label": "Left prior-treatment history explicitly not documented",
+     "text_template": "       Previous treatment history was not documented for the left lower extremity.",
+     "required_control_keys": [],
+     "empty_control_keys": [
+      "sdt_1093284141",
+      "sdt_-505521617",
+      "sdt_519430350",
+      "sdt_-1268837810"
+     ]
+    }
+   ],
+   "default_variant": "original",
+   "original_text": "       The Choose an item. from the Choose an item. to the Choose an item. was found to have had previous treatment Choose an item. ",
+   "original_text_sha256": "d948875a7e5a23fbc8dae3128c2296d94edc9de2e4c419779d545aedf2c2d3eb",
+   "selected_variant": "",
+   "changed": false
+  },
+  {
+   "key": "claim_30",
+   "label": "Prewritten statement: Right impression",
+   "kind": "assertion",
+   "body_paragraph": 30,
+   "text": "Right Choose an item. is Choose an item.",
+   "text_sha256": "a180210349777a7173f3390d14f6c1fb078a55552d96b01f1a67c9f0d86ec0b3",
+   "control_keys": [
+    "sdt_-892962961",
+    "sdt_-213273323"
+   ],
+   "variants": [
+    {
+     "id": "selected",
+     "label": "Documented right vein and finding",
+     "text_template": "Right {sdt_-892962961}{right_reflux_connector}{sdt_-213273323}",
+     "required_control_keys": [
+      "sdt_-892962961",
+      "sdt_-213273323"
+     ],
+     "empty_control_keys": []
+    },
+    {
+     "id": "not_documented",
+     "label": "Right saphenous-vein findings explicitly not documented",
+     "text_template": "Right saphenous-vein findings were not documented.",
+     "required_control_keys": [],
+     "empty_control_keys": [
+      "sdt_-892962961",
+      "sdt_-213273323"
+     ]
+    },
+    {
+     "id": "not_assessed",
+     "label": "Right saphenous veins explicitly not assessed",
+     "text_template": "Right saphenous veins were not assessed.",
+     "required_control_keys": [],
+     "empty_control_keys": [
+      "sdt_-892962961",
+      "sdt_-213273323"
+     ]
+    }
+   ],
+   "default_variant": "selected",
+   "original_text": "Right Choose an item. is Choose an item.",
+   "original_text_sha256": "a180210349777a7173f3390d14f6c1fb078a55552d96b01f1a67c9f0d86ec0b3",
+   "selected_variant": "",
+   "changed": false
+  },
+  {
+   "key": "claim_31",
+   "label": "Prewritten statement: Right deep venous system",
+   "kind": "assertion",
+   "body_paragraph": 31,
+   "text": "Right deep venous system Choose an item.",
+   "text_sha256": "0827a76797f89aa9a01c68243417c4903caf140a8b4c3b6ca43b62be8893cd70",
+   "control_keys": [
+    "sdt_-170105994"
+   ],
+   "variants": [
+    {
+     "id": "selected",
+     "label": "Documented right deep-system finding",
+     "text_template": "Right deep venous system {sdt_-170105994}",
+     "required_control_keys": [
+      "sdt_-170105994"
+     ],
+     "empty_control_keys": []
+    },
+    {
+     "id": "not_documented",
+     "label": "Right deep-system findings explicitly not documented",
+     "text_template": "Right deep venous system findings were not documented.",
+     "required_control_keys": [],
+     "empty_control_keys": [
+      "sdt_-170105994"
+     ]
+    },
+    {
+     "id": "not_assessed",
+     "label": "Right deep venous system explicitly not assessed",
+     "text_template": "Right deep venous system was not assessed.",
+     "required_control_keys": [],
+     "empty_control_keys": [
+      "sdt_-170105994"
+     ]
+    }
+   ],
+   "default_variant": "selected",
+   "original_text": "Right deep venous system Choose an item.",
+   "original_text_sha256": "0827a76797f89aa9a01c68243417c4903caf140a8b4c3b6ca43b62be8893cd70",
+   "selected_variant": "",
+   "changed": false
+  },
+  {
+   "key": "claim_32",
+   "label": "Prewritten statement: Right saphenous reflux finding",
+   "kind": "assertion",
+   "body_paragraph": 32,
+   "text": "No saphenous reflux in right lower extremity.",
+   "text_sha256": "a94d3d45fb3233814ed04c9d63e75d119a9c47fac81af68a4e10e391acb43ef0",
+   "control_keys": [],
+   "variants": [
+    {
+     "id": "negative",
+     "label": "Documented no right saphenous reflux",
+     "text_template": "No saphenous reflux in right lower extremity.",
+     "required_control_keys": [],
+     "empty_control_keys": []
+    },
+    {
+     "id": "positive",
+     "label": "Documented positive right saphenous reflux",
+     "text_template": "Saphenous reflux is present in the right lower extremity.",
+     "required_control_keys": [],
+     "empty_control_keys": []
+    },
+    {
+     "id": "not_documented",
+     "label": "Right saphenous reflux explicitly not documented",
+     "text_template": "Saphenous reflux status was not documented in the right lower extremity.",
+     "required_control_keys": [],
+     "empty_control_keys": []
+    },
+    {
+     "id": "not_assessed",
+     "label": "Right saphenous reflux explicitly not assessed",
+     "text_template": "Saphenous reflux was not assessed in the right lower extremity.",
+     "required_control_keys": [],
+     "empty_control_keys": []
+    }
+   ],
+   "default_variant": "negative",
+   "original_text": "No saphenous reflux in right lower extremity.",
+   "original_text_sha256": "a94d3d45fb3233814ed04c9d63e75d119a9c47fac81af68a4e10e391acb43ef0",
+   "selected_variant": "",
+   "changed": false
+  },
+  {
+   "key": "claim_34",
+   "label": "Prewritten statement: Left impression",
+   "kind": "assertion",
+   "body_paragraph": 34,
+   "text": "Left Choose an item. is Choose an item.",
+   "text_sha256": "29a7d5e588ff876c33f14bbe405b87067ca202ec8d8421d1e7fc248f1dd0b10f",
+   "control_keys": [
+    "sdt_2001841928",
+    "sdt_605543147"
+   ],
+   "variants": [
+    {
+     "id": "selected",
+     "label": "Documented left vein and finding",
+     "text_template": "Left {sdt_2001841928}{left_reflux_connector}{sdt_605543147}",
+     "required_control_keys": [
+      "sdt_2001841928",
+      "sdt_605543147"
+     ],
+     "empty_control_keys": []
+    },
+    {
+     "id": "not_documented",
+     "label": "Left saphenous-vein findings explicitly not documented",
+     "text_template": "Left saphenous-vein findings were not documented.",
+     "required_control_keys": [],
+     "empty_control_keys": [
+      "sdt_2001841928",
+      "sdt_605543147"
+     ]
+    },
+    {
+     "id": "not_assessed",
+     "label": "Left saphenous veins explicitly not assessed",
+     "text_template": "Left saphenous veins were not assessed.",
+     "required_control_keys": [],
+     "empty_control_keys": [
+      "sdt_2001841928",
+      "sdt_605543147"
+     ]
+    }
+   ],
+   "default_variant": "selected",
+   "original_text": "Left Choose an item. is Choose an item.",
+   "original_text_sha256": "29a7d5e588ff876c33f14bbe405b87067ca202ec8d8421d1e7fc248f1dd0b10f",
+   "selected_variant": "",
+   "changed": false
+  },
+  {
+   "key": "claim_35",
+   "label": "Prewritten statement: Left deep venous system",
+   "kind": "assertion",
+   "body_paragraph": 35,
+   "text": "Left deep venous system Choose an item.",
+   "text_sha256": "47740011ad9662742283436fe3af15ceaa3273a950dad53abf7c45fb501a9c68",
+   "control_keys": [
+    "sdt_-1029175652"
+   ],
+   "variants": [
+    {
+     "id": "selected",
+     "label": "Documented left deep-system finding",
+     "text_template": "Left deep venous system {sdt_-1029175652}",
+     "required_control_keys": [
+      "sdt_-1029175652"
+     ],
+     "empty_control_keys": []
+    },
+    {
+     "id": "not_documented",
+     "label": "Left deep-system findings explicitly not documented",
+     "text_template": "Left deep venous system findings were not documented.",
+     "required_control_keys": [],
+     "empty_control_keys": [
+      "sdt_-1029175652"
+     ]
+    },
+    {
+     "id": "not_assessed",
+     "label": "Left deep venous system explicitly not assessed",
+     "text_template": "Left deep venous system was not assessed.",
+     "required_control_keys": [],
+     "empty_control_keys": [
+      "sdt_-1029175652"
+     ]
+    }
+   ],
+   "default_variant": "selected",
+   "original_text": "Left deep venous system Choose an item.",
+   "original_text_sha256": "47740011ad9662742283436fe3af15ceaa3273a950dad53abf7c45fb501a9c68",
+   "selected_variant": "",
+   "changed": false
+  },
+  {
+   "key": "claim_36",
+   "label": "Prewritten statement: Left saphenous reflux finding",
+   "kind": "assertion",
+   "body_paragraph": 36,
+   "text": "No saphenous reflux in left lower extremity.",
+   "text_sha256": "37ea24c8ce61bba2398ea6808874dcfed8ee7c34a1a28ad2830ebdfde0ba5c06",
+   "control_keys": [],
+   "variants": [
+    {
+     "id": "negative",
+     "label": "Documented no left saphenous reflux",
+     "text_template": "No saphenous reflux in left lower extremity.",
+     "required_control_keys": [],
+     "empty_control_keys": []
+    },
+    {
+     "id": "positive",
+     "label": "Documented positive left saphenous reflux",
+     "text_template": "Saphenous reflux is present in the left lower extremity.",
+     "required_control_keys": [],
+     "empty_control_keys": []
+    },
+    {
+     "id": "not_documented",
+     "label": "Left saphenous reflux explicitly not documented",
+     "text_template": "Saphenous reflux status was not documented in the left lower extremity.",
+     "required_control_keys": [],
+     "empty_control_keys": []
+    },
+    {
+     "id": "not_assessed",
+     "label": "Left saphenous reflux explicitly not assessed",
+     "text_template": "Saphenous reflux was not assessed in the left lower extremity.",
+     "required_control_keys": [],
+     "empty_control_keys": []
+    }
+   ],
+   "default_variant": "negative",
+   "original_text": "No saphenous reflux in left lower extremity.",
+   "original_text_sha256": "37ea24c8ce61bba2398ea6808874dcfed8ee7c34a1a28ad2830ebdfde0ba5c06",
+   "selected_variant": "",
+   "changed": false
+  },
+  {
+   "key": "claim_39",
+   "label": "Prewritten statement: Clinical correlation",
+   "kind": "assertion",
+   "body_paragraph": 39,
+   "text": "Clinical correlation with the above findings is required.",
+   "text_sha256": "df5bca0a427dd5c6e8670db11c00dc61e1500a34e26204c5c78169cfc8286625",
+   "control_keys": [],
+   "variants": [
+    {
+     "id": "original",
+     "label": "Documented original statement",
+     "text_template": "Clinical correlation with the above findings is required.",
+     "required_control_keys": [],
+     "empty_control_keys": []
+    }
+   ],
+   "default_variant": "original",
+   "original_text": "Clinical correlation with the above findings is required.",
+   "original_text_sha256": "df5bca0a427dd5c6e8670db11c00dc61e1500a34e26204c5c78169cfc8286625",
+   "selected_variant": "",
+   "changed": false
+  },
+  {
+   "key": "claim_45",
+   "label": "Prewritten statement: Signature timestamp",
+   "kind": "signature",
+   "body_paragraph": 45,
+   "text": "Electronically Signed On <<insert date and time>> By:",
+   "text_sha256": "add6135346f2b13e5e175838bfe564fd1aae4cbde244fa409da497993d55462f",
+   "control_keys": [],
+   "variants": [
+    {
+     "id": "trusted",
+     "label": "Actual finalization time",
+     "text_template": "Electronically Signed On <<insert date and time>> By:",
+     "required_control_keys": [],
+     "empty_control_keys": []
+    }
+   ],
+   "default_variant": "trusted",
+   "original_text": "Electronically Signed On <<insert date and time>> By:",
+   "original_text_sha256": "add6135346f2b13e5e175838bfe564fd1aae4cbde244fa409da497993d55462f",
+   "selected_variant": "",
+   "changed": false
+  },
+  {
+   "key": "claim_46",
+   "label": "Prewritten statement: Signer identity",
+   "kind": "identity",
+   "body_paragraph": 46,
+   "text": "Maged S. Mikhail, MD, RPVI, RVT",
+   "text_sha256": "1348a9b7f5f1d05d1b79c8bdd71cbacea70c8bb78c5e47d15cd81d985727fe26",
+   "control_keys": [],
+   "variants": [
+    {
+     "id": "trusted",
+     "label": "Actual authenticated signer",
+     "text_template": "{signer_name}",
+     "required_control_keys": [],
+     "empty_control_keys": []
+    }
+   ],
+   "default_variant": "trusted",
+   "original_text": "Maged S. Mikhail, MD, RPVI, RVT",
+   "original_text_sha256": "1348a9b7f5f1d05d1b79c8bdd71cbacea70c8bb78c5e47d15cd81d985727fe26",
+   "selected_variant": "",
+   "changed": false
+  }
+ ]
+}
