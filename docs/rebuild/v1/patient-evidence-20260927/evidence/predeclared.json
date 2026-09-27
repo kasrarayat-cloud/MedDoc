@@ -1,0 +1,27 @@
+[
+  [
+    "original",
+    null,
+    "Original four source selections are currently held."
+  ],
+  [
+    "smoking-assessment",
+    "daily cigarette smoking.",
+    "The nonsmoker source cannot be declared independent of this opposing Assessment by actor alone."
+  ],
+  [
+    "medication-cessation-assessment",
+    "ibuprofen cessation.",
+    "The medication source cannot be declared independent of this changed medication status by actor alone."
+  ],
+  [
+    "allergy-anaphylaxis-assessment",
+    "penicillin anaphylaxis.",
+    "Retain the earlier exact NKA-class hold."
+  ],
+  [
+    "allergy-hypersensitivity-assessment",
+    "penicillin hypersensitivity.",
+    "Retain the earlier exact NKA-class hold."
+  ]
+]

@@ -1,0 +1,34 @@
+{
+  "Chief complaint": {
+    "status": "conflict",
+    "text": ""
+  },
+  "History of present illness": {
+    "status": "conflict",
+    "text": ""
+  },
+  "Medications": {
+    "status": "conflict",
+    "text": ""
+  },
+  "Allergies": {
+    "status": "conflict",
+    "text": ""
+  },
+  "Smoker": {
+    "status": "conflict",
+    "text": ""
+  },
+  "Examination": {
+    "status": "supported",
+    "text": "Neurological examination is normal."
+  },
+  "Assessment": {
+    "status": "supported",
+    "text": "tension-type headache."
+  },
+  "Plan": {
+    "status": "supported",
+    "text": "to start amitriptyline 10 mg at night.\nShe will follow up in six weeks."
+  }
+}
