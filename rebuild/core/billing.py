@@ -78,12 +78,24 @@ def sandbox_funded(wallet):
     """Whether any money this wallet ever received came from a payment not recorded as live.
 
     A payment is live only when its checkout was created in live mode (Payment.livemode is True). Rows recorded before
-    the mode was stored are sandbox: live mode did not exist then. Both the wallet's Payment rows (paid or not) and
-    its 'payment' ledger credits are read, so a credit whose Payment row is not live, or is missing, counts.
+    the mode was stored are sandbox: live mode did not exist then. Only payments that FUNDED the wallet count: a
+    checkout nobody paid (creating, pending, processing, uncertain, failed, expired) put no money in it, so an
+    abandoned sandbox checkout never freezes a balance live money funded. Two readers, so no route is missed: the
+    wallet's paid Payment rows, and its 'payment' ledger credits, where a credit whose Payment row is not live, or is
+    missing, counts whatever that row's status says.
     """
-    if Payment.objects.filter(wallet=wallet).exclude(livemode=True).exists(): return True
+    if Payment.objects.filter(wallet=wallet,status='paid').exclude(livemode=True).exists(): return True
     live=[f'payment:{intent}' for intent in Payment.objects.filter(wallet=wallet,livemode=True,stripe_intent__isnull=False).values_list('stripe_intent',flat=True)]
     return LedgerEntry.objects.filter(wallet=wallet,kind='payment').exclude(key__in=live).exists()
+
+
+def real_mode_refuses(wallet):
+    """Whether real data mode refuses this paid balance: it holds money a payment not recorded as live funded.
+
+    One rule, two readers: reserve() never holds it, and checkout never takes live money into it (that money could
+    never be spent). Always False in synthetic mode, which spends sandbox money as before.
+    """
+    return real_data_mode() and sandbox_funded(wallet)
 
 
 def real_mode_payment_problems():
@@ -135,7 +147,7 @@ def reserve(job,maximum_cost=None,*,charge_limit=None):
     locked={w.pk:w for w in Wallet.objects.select_for_update().filter(pk__in=[promo.pk,payer.pk]).order_by('pk')}
     # Real data mode never spends sandbox-funded money: the whole request is refused, before any hold, rather than
     # quietly skipping a balance the payer can see.
-    if real_data_mode() and sandbox_funded(locked[payer.pk]):
+    if real_mode_refuses(locked[payer.pk]):
         raise ValidationError('This paid balance holds sandbox (test) payments, which never fund requests in real data mode. '
                               'No provider request was made.')
     available=sum((w.balance-w.reserved for w in locked.values()),ZERO)
