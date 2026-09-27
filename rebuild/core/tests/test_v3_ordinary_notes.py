@@ -141,6 +141,12 @@ class OrdinaryNotesOnV3Forms(SimpleTestCase):
             findings = run(notes, {'Findings': [line]}, fields=fields)['Findings']
             self.assertEqual((findings['status'], findings['text']), ('conflict', ''), line)
             self.assertEqual((findings.get('own_evidence') or findings['evidence'])[0]['quote'], line, line)
+        # Alone on its line it is still HELD, never offered for one click (F8: without R4's list 'as listed;' was offered,
+        # the note-wide scope word making it a suggestion rather than a hold).
+        for line in ('Findings: as follows.', 'Findings: see below.', 'Findings: listed below.', 'Findings: as listed;'):
+            findings = run(line, {'Findings': [line]}, fields=fields)['Findings']
+            self.assertEqual((findings['status'], findings['text'], findings.get('suggestion')), ('conflict', '', None), line)
+            self.assertEqual(findings['held_candidate']['text'], line.split(': ', 1)[1], line)
         for notes in ('Plan: as follows.\nIce and rest.', 'Plan: see below.'):
             line = notes.split('\n')[0]
             self.assertEqual(run(notes, {'Plan': [line]})['Plan']['status'], 'conflict', notes)
