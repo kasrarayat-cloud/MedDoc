@@ -298,13 +298,23 @@ def language_model_rows():
     value comes from `core.generation.configuration()`, the function enqueue snapshots.
 
     Each row is {'name', 'value', 'severity'}; severity is '' for a plain setting, else success / warning / error.
+
+    ⚠️ OUTSIDE LIVE MODE NOTHING HERE IS SENT. `generate()` answers from the synthetic fixture before it reads the profile,
+    so a fixture deployment configured with an unlisted model printed 'INVALID — every generation is refused' while every
+    generation succeeded, and a legacy one printed a request that is never made. Not live, the section opens by saying no
+    provider request is sent, and every value is still shown but marked INACTIVE.
     """
     import json
     from django.conf import settings
     from django.core.exceptions import ValidationError
     from . import generation
     unset = lambda value: value if isinstance(value, str) and value.strip() else '(unset)'
-    rows = []
+    live = settings.AI_MODE == 'live'
+    inactive = '' if live else ' (inactive: QUILLMD_AI_MODE is not live)'
+    rows = [] if live else [{'name': 'provider requests', 'severity': 'warning',
+                             'value': f'NONE — QUILLMD_AI_MODE is {unset(settings.AI_MODE)}, not live: generation answers from '
+                                      'the synthetic fixture and sends no provider request. The values below are configured '
+                                      'but INACTIVE.'}]
     for name, value in (('QUILLMD_AI_MODEL', settings.AI_MODEL),
                         ('QUILLMD_AI_INPUT_RATE', settings.AI_INPUT_RATE),
                         ('QUILLMD_AI_OUTPUT_RATE', settings.AI_OUTPUT_RATE),
@@ -314,7 +324,7 @@ def language_model_rows():
                         ('QUILLMD_AI_INFERENCE_GEO', settings.AI_INFERENCE_GEO)):
         # Thinking and effort are read only for claude-sonnet-5; saying so stops a 4.6 operator reading them as live.
         scope = ' (read only for claude-sonnet-5)' if name in ('QUILLMD_AI_THINKING', 'QUILLMD_AI_EFFORT') else ''
-        rows.append({'name': name, 'value': unset(value) + scope, 'severity': ''})
+        rows.append({'name': name, 'value': unset(value) + scope + inactive, 'severity': ''})
     try:
         config = generation.configuration()
     except ValidationError as error:
@@ -336,8 +346,10 @@ def language_model_rows():
                            + json.dumps(profile, sort_keys=True), 'warning')
     else:
         value, severity = ('explicit ' + json.dumps(profile, sort_keys=True), 'success')
+    if not live:
+        value, severity = 'INACTIVE — no provider request is sent while QUILLMD_AI_MODE is not live. In live mode: ' + value, ''
     rows.append({'name': 'request profile', 'value': value, 'severity': severity})
-    rows.append({'name': 'pricing_version', 'value': config['pricing_version'], 'severity': ''})
+    rows.append({'name': 'pricing_version', 'value': config['pricing_version'] + inactive, 'severity': ''})
     return rows
 
 

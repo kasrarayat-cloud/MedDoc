@@ -158,7 +158,8 @@ class ConfigurationStatusNamesTheModel(SimpleTestCase):
         from core import admin_console
         cases = {'sonnet 5': SONNET_5, 'invalid effort': dict(SONNET_5, AI_EFFORT='max'), 'rollback': SONNET_46,
                  'rollback + us': dict(SONNET_46, AI_INFERENCE_GEO='us'),
-                 'unlisted claude id': dict(SONNET_46, AI_MODEL='claude-mythos-preview')}
+                 'unlisted claude id': dict(SONNET_46, AI_MODEL='claude-mythos-preview'),
+                 'fixture mode': dict(SONNET_5, AI_MODE='fixture')}
         for label, overrides in cases.items():
             for discount in ('0', 'x'):
                 with self.subTest(case=label, discount=discount), override_settings(**overrides), \
@@ -172,7 +173,8 @@ class ConfigurationStatusNamesTheModel(SimpleTestCase):
                                         'confirmed):')
                     section = [line.strip() for line in lines[start + 1:lines.index('Media tools:')]]
                     mirror = [f"{row['name']}: {row['value']}" for row in rows.get('language_model', [])]
-                    self.assertEqual(len(section), 9)                  # 7 settings + request profile + pricing_version
+                    # 7 settings + request profile + pricing_version, and outside live mode the 'provider requests' line.
+                    self.assertEqual(len(section), 9 if overrides['AI_MODE'] == 'live' else 10)
                     self.assertEqual(mirror, section)
                     self.assertNotIn('canary', repr(rows))
                     by_name = {row['name']: row for row in rows.get('language_model', [])}
@@ -181,6 +183,36 @@ class ConfigurationStatusNamesTheModel(SimpleTestCase):
                         self.assertEqual(profile.get('severity'), 'error')
                         self.assertTrue(profile.get('value', '').startswith(('INVALID — every generation is refused',
                                                                               'UNAVAILABLE')))
+
+    def test_outside_live_mode_the_section_says_nothing_is_sent_and_marks_every_value_inactive(self):
+        """R2-2. generate() answers from the synthetic fixture before it reads the profile, so in fixture mode an unlisted
+        model printed 'INVALID — every generation is refused' while every generation succeeded, and a legacy one printed a
+        request that is never made. Not live: the first line says no provider request is sent; every value is marked
+        INACTIVE; no profile verdict is presented as the running state."""
+        from core import admin_console
+        for label, overrides in (('unlisted model', dict(SONNET_46, AI_MODE='fixture', AI_MODEL='claude-opus-5')),
+                                 ('rollback', dict(SONNET_46, AI_MODE='fixture')),
+                                 ('sonnet 5', dict(SONNET_5, AI_MODE='fixture'))):
+            with self.subTest(case=label):
+                report, _ = self.report(**overrides)
+                with override_settings(**overrides), patch.dict(os.environ, PRICE_ENV):
+                    rows = admin_console.language_model_rows()
+                self.assertEqual(rows[0]['name'], 'provider requests')
+                self.assertTrue(rows[0]['value'].startswith('NONE — QUILLMD_AI_MODE is fixture, not live'))
+                self.assertEqual(rows[0]['severity'], 'warning')
+                self.assertIn('provider requests: NONE — QUILLMD_AI_MODE is fixture, not live', report)
+                for row in rows[1:]:
+                    self.assertIn('INACTIVE' if row['name'] == 'request profile' else '(inactive: QUILLMD_AI_MODE is not live)',
+                                  row['value'], row['name'])
+                    self.assertIn(row['severity'], ('', 'error'))     # error only for UNAVAILABLE, which is real here
+                for claim in ('request profile: INVALID', 'request profile: legacy', 'request profile: explicit',
+                              'request profile: NOT the pre-profile'):
+                    self.assertNotIn(claim, report)
+        # Positive control: in live mode the same section has no such line and presents the profile as the running state.
+        report, _ = self.report(**SONNET_46)
+        self.assertNotIn('provider requests:', report)
+        self.assertNotIn('inactive', report.lower())
+        self.assertIn('request profile: legacy (the pre-profile request, unchanged)', report)
 
     def test_a_refused_discount_is_reported_without_stopping_the_screen(self):
         out = StringIO()
