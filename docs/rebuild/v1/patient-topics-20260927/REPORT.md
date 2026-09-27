@@ -1,5 +1,10 @@
 # Explicit patient source topics — bounded V1 repair
 
+**Historical candidate report: source05857929 was independently refuted.**
+See [REFUTATION-1.md](REFUTATION-1.md) for the preserved finding, bounded
+containment and current result of three automatic gains, 12/12 and 26/77.
+The four-gain result below remains first-pass evidence, not an accepted claim.
+
 Worktree `/opt/meddoc-pro/.worktrees/v1-patient-topics`, branch
 `v1/patient-topics`, base `aa4e8c0d0c0f935bdc35012263e5881bbd703ace`.
 Frozen source: **058579292a10ccb7377d979a6feaff44953491c6**.
