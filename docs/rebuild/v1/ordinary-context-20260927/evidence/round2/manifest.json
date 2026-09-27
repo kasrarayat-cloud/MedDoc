@@ -1,0 +1,32 @@
+{
+  "source_commit": "1747bb2dbce6a8799af08c477164e2ac0d5a5976",
+  "source_sha256": {
+    "rebuild/core/generation.py": "f6e8789f73cf006b05f2bd51bca78b6051610588746cef32cdf9af53f863d1c4",
+    "rebuild/core/tests/test_v3_ordinary_context.py": "9d9dbab9aba923e9591cb7a752be99a8a457ed395b1235a05934e9357849e6cc"
+  },
+  "files": {
+    "affected-paths.log": "c6d6e9132f5f568fa9e0bfbce028410a597faeb4ee04fb19f10517e64b7778ef",
+    "before-duplicate-fix-known-results.json": "50f63cd743df610a35ca4e0088fd399813e5fc08d34589181e16f7390cbf8aa4",
+    "before-duplicate-fix-known-results.log": "1bb05d5dc70181ed1894e0697efe3f75dca514ae63407569eadee86afce7fe99",
+    "context-final.log": "6c73da72483ff631f53a469ae93ddc6fad70e6bb56d2493dd82c4c7685360d7f",
+    "context-first.log": "feb9f339e5fc2e5e7138e72b3d5de4031e048ebe8ff8aa6dde946896dfa55c1f",
+    "duplicate-subject-probe.py": "21bebf1caf64d715a477cd65174b24db71d8421277c2b9e53cad70cf5d46bd66",
+    "duplicate-subject-red.json": "48406b07072bea255f281d3ca6a5865596f2a874114ad375ec0e0c9619d27870",
+    "duplicate-subject-repaired.json": "e13e544dff97e90e5767165c3d3412d33fd4da7714bd6a20fb7dca4a5a321337",
+    "generation-before-duplicate-fix.py": "8a7e249eba764d91c8501794622c75a64a8217b0b1264c93533950c0d6eec940",
+    "identity-final.json": "d3bf17e6f8361534a652b6a9822ed91b2c7ceeca055ce004f6dad535e8da6a08",
+    "identity-final.log": "6543d9ae6b9bb45705d367dc8154657d2935fd7746c7dc7e2497b44dba60a65d",
+    "independent-REPORT.md": "60ce25bec918276df1d4ecb52e066637807eeccfeee39d9dfed990660bd5f5f4",
+    "independent-base.json": "5a2ec814379286df568684724ed3fada06781d7dfec9eb4992568346338f1aee",
+    "independent-probe.json": "74b9891e68956f08639e4fccffc8f14b1819b9a61fa13193e1448d5a0ca5347e",
+    "independent-probe.py": "e9fb5a50822288248559bfef4c0065c19cb7d913712d045228673e6e8241fa13",
+    "independent-repaired.json": "3345c971f2b66e7bf5165c1c025327ee5d437c89a808f8e8c5d699d77836a4c2",
+    "known-results.json": "2af39e1ef3a65e3c54210cd791586fb8c34b7ff8c4765363f6dc51573f56cc85",
+    "known-results.log": "1bb05d5dc70181ed1894e0697efe3f75dca514ae63407569eadee86afce7fe99",
+    "measure-known.py": "9ceb242235f5a96656d5a0ccf3569a3d5c4f8bab9869dbba9e4ca9f5abe2d744",
+    "question-fixed.log": "821fa2029cba72481c8e71ead5b38da49bb4c355da7d1dbb318dde002478a0b7",
+    "question-red.log": "78016f4d8dd09f5a3102c59fa7e826d480b1da845ba2bf221baed98fed43908d",
+    "subjects-first.log": "4efff43d51df7b6b7e31b855ab389782d3ab5918a878e14db0ff101a233a5904",
+    "subjects-red.log": "97f565ab957d1ba923abe2478e337025ede85d31809abd2bf92829eec74c6c28"
+  }
+}

@@ -1,5 +1,7 @@
 # Ordinary source-context repair — 2026-09-27
 
+> Historical first context report retained below. Independent review subsequently found a defect; the repair, later candidate and current results are in [ROUND2.md](ROUND2.md). Source0825 is superseded by1747bb2d, which requires a new finished-diff refutation.
+
 ## Candidate and scope
 
 Prepared locally on `v1/ordinary-context`, worktree `/opt/meddoc-pro/.worktrees/v1-ordinary-context`, base `ebcddc2a0fc09630ab96c62ef84028f3c567cf03`, source commit `0825ba8a04e37082e91e7280225394bf1b314611`. Generation SHA256 `fda33a9985894eab4f99d64007ab1c6b516b0d5348a5455d9bf54d9e1ef4efcf`. Parent owns release integration; this branch was not pushed, merged, installed or activated. Mandatory independent finished-diff refutation is PENDING at this handoff.

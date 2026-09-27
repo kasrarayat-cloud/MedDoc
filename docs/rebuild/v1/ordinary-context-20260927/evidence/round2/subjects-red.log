@@ -1,0 +1,29 @@
+FF.
+======================================================================
+FAIL: test_complete_retained_note9_has_seven_supported_unchanged_answers (core.tests.test_v3_ordinary_context.ExactClinicalSubjects.test_complete_retained_note9_has_seven_supported_unchanged_answers)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 293, in test_complete_retained_note9_has_seven_supported_unchanged_answers
+    self.assertEqual(answers[label]['status'], 'supported', (label, answers[label]))
+AssertionError: 'conflict' != 'supported'
+- conflict
++ supported
+ : ('Chief complaint', {'text': '', 'status': 'conflict', 'evidence': [{'quote': 'Patient presents for medication review.', 'start': 0, 'end': 39}], 'reviewed': False, 'held_candidate': {'text': 'Patient presents for medication review.', 'evidence': [{'quote': 'Patient presents for medication review.', 'start': 0, 'end': 39}], 'context': [{'quote': 'Current medications are atorvastatin 20 mg and metformin 1000 mg.', 'start': 40, 'end': 105, 'after': True, 'same': False}], 'reason': 'Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose "Leave blank — reviewed".'}})
+
+======================================================================
+FAIL: test_retained_independent_examination_and_assessment_keep_source_words (core.tests.test_v3_ordinary_context.ExactClinicalSubjects.test_retained_independent_examination_and_assessment_keep_source_words)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 266, in test_retained_independent_examination_and_assessment_keep_source_words
+    self.assertEqual(answers[label]['status'], 'supported', (label, notes, answers[label]))
+AssertionError: 'conflict' != 'supported'
+- conflict
++ supported
+ : ('Chief complaint', 'Patient presents for medication review.\nAllergies: codeine.\nOn examination there is a small effusion and medial joint line tenderness.\nAssessment is a probable medial meniscus tear.\nPlan: continue current medications.', {'text': '', 'status': 'conflict', 'evidence': [{'quote': 'Patient presents for medication review.', 'start': 0, 'end': 39}], 'reviewed': False, 'held_candidate': {'text': 'Patient presents for medication review.', 'evidence': [{'quote': 'Patient presents for medication review.', 'start': 0, 'end': 39}], 'context': [{'quote': 'On examination there is a small effusion and medial joint line tenderness.', 'start': 60, 'end': 134, 'after': True, 'same': False}], 'reason': 'Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose "Leave blank — reviewed".'}})
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.207s
+
+FAILED (failures=2)
+Found 3 test(s).
+System check identified no issues (0 silenced).
