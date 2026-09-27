@@ -112,7 +112,8 @@ def explicit_origin_problem(env, app_base_url, allowed_hosts):
     return public_https_origin_problem(app_base_url, allowed_hosts)
 
 
-def real_mode_problems(env, *, allowed_hosts, session_cookie_secure, csrf_cookie_secure, email_mode, app_base_url):
+def real_mode_problems(env, *, allowed_hosts, session_cookie_secure, csrf_cookie_secure, email_mode, app_base_url,
+                       stripe_mode, stripe_secret_key):
     """Every reason QUILLMD_DATA_MODE=real may not start, as '<SETTING> <requirement>' lines.
 
     An empty list means the production-required settings are present and safe. The keyword
@@ -143,6 +144,12 @@ def real_mode_problems(env, *, allowed_hosts, session_cookie_secure, csrf_cookie
         problems.append('QUILLMD_MFA_REQUIRED_ALL must be 1')
     if raw(env, 'QUILLMD_DEEPGRAM_MIP_OPT_OUT', 'true') != 'true':
         problems.append("QUILLMD_DEEPGRAM_MIP_OPT_OUT must be 'true'")
+    # Real data mode takes payments only in live mode, or none at all. With a sandbox mode and any
+    # server key present, a payment made with Stripe's public test card would become paid balance
+    # that funds real provider calls. Any value counts as present, computed or configured.
+    if stripe_mode != 'live' and (stripe_secret_key or raw(env, 'STRIPE_SECRET_KEY')):
+        problems.append("QUILLMD_STRIPE_MODE must be 'live' while STRIPE_SECRET_KEY is set "
+                        '(a sandbox payment would become spendable credit); unset STRIPE_SECRET_KEY to run without payments')
     origin = explicit_origin_problem(env, app_base_url, allowed_hosts)
     if origin:
         problems.append(f'QUILLMD_APP_BASE_URL {origin}')

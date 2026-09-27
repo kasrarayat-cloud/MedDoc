@@ -172,3 +172,81 @@ class LiveCheckoutAndSettlement(SyntheticFixture, TestCase):
         wallet.refresh_from_db()
         self.assertEqual(wallet.balance, 10)
         self.assertEqual(LedgerEntry.objects.filter(wallet=wallet, kind='payment').count(), 1)
+
+
+#: Real data mode as settings computes it. Startup refuses real mode with a sandbox key; these tests
+#: override past that refusal to prove the second wall: checkout and the webhook refuse on their own.
+REAL = dict(SYNTHETIC_ONLY=False, QUILLMD_DATA_MODE='real')
+REAL_SANDBOX = dict(REAL, QUILLMD_STRIPE_MODE='test', STRIPE_LIVE_ENABLED=False, STRIPE_SECRET_KEY='sk_test_synthetic_adapter')
+
+
+class RealDataModeEventNamespace(SimpleTestCase):
+    @override_settings(**REAL_SANDBOX)
+    def test_real_mode_with_sandbox_stripe_refuses_every_event(self):
+        for livemode in (False, True, None):
+            with self.subTest(livemode=livemode), self.assertRaises(ValidationError):
+                validate_event_environment(event(livemode))
+
+    @override_settings(**REAL_SANDBOX)
+    def test_real_mode_recorder_refuses_a_sandbox_event_before_any_write(self):
+        # The stand-in row would let a write that is reached return normally, so reaching it fails an assertion.
+        stored = (SimpleNamespace(semantic_hash='', kind='checkout.session.completed'), True)
+        with patch('core.billing.WebhookEvent.objects.get_or_create', return_value=stored) as create:
+            with self.assertRaises(ValidationError):
+                record_stripe_event(event(False, {'id': 'cs_test_x', 'livemode': False}), 'synthetic-hash')
+        create.assert_not_called()
+
+    @override_settings(**REAL, **LIVE)
+    def test_real_mode_with_live_stripe_keeps_only_livemode_true(self):
+        validate_event_environment(event(True))
+        for livemode in (False, None):
+            with self.subTest(livemode=livemode), self.assertRaises(ValidationError):
+                validate_event_environment(event(livemode))
+
+
+@override_settings(STRIPE_WEBHOOK_SECRET=SECRET, ADMIN_SITE=False, QUILLMD_PREVIEW_AUTH_ENABLED=False, STORAGES=STORAGES)
+class RealDataModeTakesOnlyLivePayments(SyntheticFixture, TestCase):
+    """R1: in real data mode a sandbox checkout never reaches Stripe and a livemode=false event never becomes balance."""
+    setUp = LiveCheckoutAndSettlement.setUp
+    checkout = LiveCheckoutAndSettlement.checkout
+    signed = LiveCheckoutAndSettlement.signed
+
+    def paid_session(self, payment, livemode):
+        return {'id': payment.stripe_session, 'payment_status': 'paid', 'currency': 'usd', 'amount_total': payment.amount_cents,
+                'metadata': {'payment_id': str(payment.pk)}, 'payment_intent': f'pi_{payment.stripe_session}', 'mode': 'payment',
+                'livemode': livemode}
+
+    @override_settings(**REAL_SANDBOX)
+    def test_sandbox_checkout_is_refused_before_any_provider_call(self):
+        response, api = self.checkout('real-sandbox-click')
+        self.assertEqual(response.status_code, 302)
+        api.assert_not_called()
+        self.assertFalse(Payment.objects.exists())
+        self.assertIn('Payments are not available', str(list(response.wsgi_request._messages)[0]))
+
+    @override_settings(**REAL_SANDBOX)
+    def test_a_sandbox_event_never_credits_a_real_mode_wallet(self):
+        wallet = Wallet.objects.get(user=self.user, kind='paid')
+        before = wallet.balance
+        payment = Payment.objects.create(user=self.user, wallet=wallet, amount_cents=5000, stripe_session='cs_test_real_sandbox')
+        response = self.signed(event(False, self.paid_session(payment, False), 'evt_test_real_sandbox'))
+        self.assertEqual(response.status_code, 400)
+        wallet.refresh_from_db()
+        self.assertEqual(wallet.balance, before)
+        self.assertFalse(WebhookEvent.objects.exists())
+        self.assertFalse(LedgerEntry.objects.filter(kind='payment').exists())
+        payment.refresh_from_db()
+        self.assertNotEqual(payment.status, 'paid')
+
+    @override_settings(STRIPE_SECRET_KEY='rk_live_synthetic_adapter', **REAL, **LIVE)
+    def test_real_mode_with_live_stripe_checks_out_and_credits_only_live_events(self):
+        response, api = self.checkout('real-live-click')
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(api.call_count, 1)
+        self.assertEqual(api.call_args.kwargs['success_url'], 'https://app.quillmd.com/billing/?payment=processing')
+        payment = Payment.objects.get(user=self.user)
+        self.assertEqual(self.signed(event(False, self.paid_session(payment, False), 'evt_sandbox_in_live')).status_code, 400)
+        self.assertEqual(self.signed(event(True, self.paid_session(payment, True), 'evt_live_in_real')).status_code, 200)
+        wallet = Wallet.objects.get(user=self.user, kind='paid')
+        self.assertEqual(wallet.balance, 10)
+        self.assertEqual(LedgerEntry.objects.filter(wallet=wallet, kind='payment').count(), 1)

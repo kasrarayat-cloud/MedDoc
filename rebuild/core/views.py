@@ -1094,6 +1094,9 @@ def checkout_return_origin():
 def checkout(request):
     import stripe
     from .billing import checkout_form
+    from .stripe_validation import sandbox_payments_refused
+    # Real data mode checks out only in live mode: no Payment row and no provider call otherwise.
+    if sandbox_payments_refused():messages.error(request,'Payments are not available. No charge was made.');return redirect('billing')
     form=checkout_form(request.user,request.POST)
     if not form.is_valid():messages.error(request,'Confirm a one-time amount between $5 and $500.');return redirect('billing')
     live=settings.QUILLMD_STRIPE_MODE=='live'

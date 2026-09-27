@@ -49,6 +49,11 @@ REFUSALS = [
     ('QUILLMD_APP_BASE_URL', {'QUILLMD_APP_BASE_URL': 'https://app.quillmd.com/billing'}),
     ('QUILLMD_APP_BASE_URL', {'QUILLMD_APP_BASE_URL': 'https://someone:secret@app.quillmd.com'}),
     ('QUILLMD_APP_BASE_URL', {'QUILLMD_APP_BASE_URL': 'https://unlisted.example'}),
+    # R1: a sandbox payment mode with any server key would turn Stripe's public test card into paid balance.
+    ('QUILLMD_STRIPE_MODE', {'STRIPE_SECRET_KEY': f'sk_test_{PRIVATE_VALUE}'}),
+    ('QUILLMD_STRIPE_MODE', {'STRIPE_SECRET_KEY': f'rk_test_{PRIVATE_VALUE}', 'QUILLMD_STRIPE_MODE': 'test'}),
+    ('QUILLMD_STRIPE_MODE', {'STRIPE_SECRET_KEY': f'sk_live_{PRIVATE_VALUE}'}),
+    ('QUILLMD_STRIPE_MODE', {'STRIPE_SECRET_KEY': PRIVATE_VALUE, 'STRIPE_WEBHOOK_SECRET': PRIVATE_VALUE}),
 ]
 
 
@@ -67,7 +72,9 @@ def problems(env):
     https = env.get('QUILLMD_HTTPS', '0') == '1'
     return profile.real_mode_problems(env, allowed_hosts=ALLOWED, session_cookie_secure=https, csrf_cookie_secure=https,
                                       email_mode=env.get('QUILLMD_EMAIL_MODE', 'file'),
-                                      app_base_url=env.get('QUILLMD_APP_BASE_URL', 'http://localhost:9130'))
+                                      app_base_url=env.get('QUILLMD_APP_BASE_URL', 'http://localhost:9130'),
+                                      stripe_mode=profile.choice(env, 'QUILLMD_STRIPE_MODE', profile.STRIPE_MODES, 'test'),
+                                      stripe_secret_key=env.get('STRIPE_SECRET_KEY', ''))
 
 
 def start(env, expression='{"synthetic": s.SYNTHETIC_ONLY, "mode": s.QUILLMD_DATA_MODE}'):
@@ -131,7 +138,8 @@ class RealModeRequirements(SimpleTestCase):
     def test_secure_cookies_are_checked_as_computed(self):
         """The cookie flags are passed in from settings, so a future derivation that drops them still refuses."""
         found = profile.real_mode_problems(COMPLETE_REAL, allowed_hosts=ALLOWED, session_cookie_secure=False, csrf_cookie_secure=False,
-                                           email_mode='resend', app_base_url='https://app.quillmd.com')
+                                           email_mode='resend', app_base_url='https://app.quillmd.com',
+                                           stripe_mode='test', stripe_secret_key='')
         self.assertEqual([line.split()[0] for line in found], ['SESSION_COOKIE_SECURE', 'CSRF_COOKIE_SECURE'])
 
     def test_the_values_settings_will_use_are_checked_not_a_tidied_copy(self):
@@ -174,6 +182,36 @@ class RealModeRefusesToStart(SimpleTestCase):
                 result = start({'QUILLMD_DATA_MODE': value})
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn('QUILLMD_DATA_MODE must be one of: synthetic, real.', result.stderr)
+
+
+class RealModeTakesOnlyLivePaymentsOrNone(SimpleTestCase):
+    """R1: real data mode starts with payments off (no server key) or with live Stripe, never with a sandbox key."""
+    LIVE = {'QUILLMD_STRIPE_MODE': 'live', 'STRIPE_SECRET_KEY': 'rk_live_synthetic_never_real',
+            'STRIPE_WEBHOOK_SECRET': 'whsec_synthetic_never_real'}
+    EXPRESSION = '{"mode": s.QUILLMD_DATA_MODE, "stripe": s.QUILLMD_STRIPE_MODE}'
+
+    def test_payments_off_starts(self):
+        """No server key: no checkout can be made. A webhook secret alone is harmless (real mode refuses every sandbox event)."""
+        for extra in ({}, {'STRIPE_SECRET_KEY': ''}, {'STRIPE_WEBHOOK_SECRET': 'whsec_synthetic_never_real'}):
+            with self.subTest(extra=sorted(extra)):
+                result = start(environment(extra), self.EXPRESSION)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(json.loads(result.stdout), {'mode': 'real', 'stripe': 'test'})
+
+    def test_live_stripe_starts(self):
+        result = start(environment(self.LIVE), self.EXPRESSION)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), {'mode': 'real', 'stripe': 'live'})
+
+    def test_a_sandbox_key_refuses_to_start_and_names_the_mode_not_the_key(self):
+        for key in ('sk_test_synthetic_never_real', 'rk_test_synthetic_never_real', 'sk_live_synthetic_never_real'):
+            with self.subTest(key=key[:8]):
+                result = start(environment({'STRIPE_SECRET_KEY': key, 'STRIPE_WEBHOOK_SECRET': 'whsec_synthetic_never_real'}))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, '')
+                self.assertTrue(any(item.startswith("QUILLMD_STRIPE_MODE must be 'live'") for item in refusal_items(result.stderr)),
+                                result.stderr[-400:])
+                self.assertNotIn('synthetic_never_real', result.stderr)
 
 
 class HealthReportsRealMode(SimpleTestCase):

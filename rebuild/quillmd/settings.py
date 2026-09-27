@@ -121,7 +121,7 @@ SECURE_HSTS_SECONDS=31536000 if SESSION_COOKIE_SECURE else 0
 # The messages name settings, never their values.
 _refusals=[]
 if QUILLMD_DATA_MODE=='real':
-    _refusals+=_profile.real_mode_problems(os.environ,allowed_hosts=ALLOWED_HOSTS,session_cookie_secure=SESSION_COOKIE_SECURE,csrf_cookie_secure=CSRF_COOKIE_SECURE,email_mode=QUILLMD_EMAIL_MODE,app_base_url=QUILLMD_APP_BASE_URL)
+    _refusals+=_profile.real_mode_problems(os.environ,allowed_hosts=ALLOWED_HOSTS,session_cookie_secure=SESSION_COOKIE_SECURE,csrf_cookie_secure=CSRF_COOKIE_SECURE,email_mode=QUILLMD_EMAIL_MODE,app_base_url=QUILLMD_APP_BASE_URL,stripe_mode=QUILLMD_STRIPE_MODE,stripe_secret_key=STRIPE_SECRET_KEY)
 if QUILLMD_STRIPE_MODE=='live':
     _refusals+=_profile.stripe_live_problems(os.environ,allowed_hosts=ALLOWED_HOSTS,secret_key=STRIPE_SECRET_KEY,webhook_secret=STRIPE_WEBHOOK_SECRET,app_base_url=QUILLMD_APP_BASE_URL)
 if _refusals:
