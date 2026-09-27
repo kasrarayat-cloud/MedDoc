@@ -153,9 +153,10 @@ def real_mode_problems(env, *, allowed_hosts, session_cookie_secure, csrf_cookie
     if raw(env, 'QUILLMD_PREVIEW_AUTH_ENABLED', '0') == '1':
         problems.append('QUILLMD_PREVIEW_AUTH_ENABLED must be off')
     # The preview gate's shared login is appended to invitation and recovery email, with
-    # copy that tells the recipient to use synthetic information only.
+    # copy that tells the recipient to use synthetic information only. Any value refuses, whitespace
+    # included: settings keeps it unstripped, and a blank-looking one makes every account email fail.
     for name in ('QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME', 'QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD'):
-        if raw(env, name):
+        if env.get(name):
             problems.append(f'{name} must be unset')
     if raw(env, 'QUILLMD_MFA_REQUIRED_ALL', '0') != '1':
         problems.append('QUILLMD_MFA_REQUIRED_ALL must be 1')

@@ -38,6 +38,10 @@ REFUSALS = [
     ('QUILLMD_PREVIEW_AUTH_ENABLED', {'QUILLMD_PREVIEW_AUTH_ENABLED': '1'}),
     ('QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME', {'QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME': PRIVATE_VALUE}),
     ('QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD', {'QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD': PRIVATE_VALUE}),
+    # F4: whitespace is a value to settings (unstripped), and a blank-looking login makes every account email fail.
+    ('QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME', {'QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME': '   '}),
+    ('QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD', {'QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD': '   '}),
+    ('QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD', {'QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD': '\t'}),
     ('QUILLMD_MFA_REQUIRED_ALL', {'QUILLMD_MFA_REQUIRED_ALL': '0'}),
     ('QUILLMD_MFA_REQUIRED_ALL', {'QUILLMD_MFA_REQUIRED_ALL': None}),
     ('QUILLMD_DEEPGRAM_MIP_OPT_OUT', {'QUILLMD_DEEPGRAM_MIP_OPT_OUT': 'false'}),
@@ -189,6 +193,23 @@ class RealModeRefusesToStart(SimpleTestCase):
                 result = start({'QUILLMD_DATA_MODE': value})
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn('QUILLMD_DATA_MODE must be one of: synthetic, real.', result.stderr)
+
+
+class PreviewLoginMustBeTrulyUnset(SimpleTestCase):
+    """F4: an empty assignment is unset and starts; any other value, whitespace included, refuses."""
+    def test_an_empty_assignment_starts(self):
+        for name in ('QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME', 'QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD'):
+            with self.subTest(name=name):
+                self.assertEqual(problems(environment({name: ''})), [])
+                result = start(environment({name: ''}))
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_whitespace_refuses_at_start(self):
+        for name in ('QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME', 'QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD'):
+            with self.subTest(name=name):
+                result = start(environment({name: '   '}))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(f'{name} must be unset', refusal_items(result.stderr))
 
 
 class OriginIsAnOriginOnly(SimpleTestCase):
