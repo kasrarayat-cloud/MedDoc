@@ -991,6 +991,26 @@ class ModeSwitch(OutcomeFixture, TestCase):
             self.assertTrue(row['value'].startswith('0 queued, 0 running, 0 in reconciliation — '), row['value'])
             self.assertEqual(row['severity'], '')
 
+    def test_outside_live_mode_running_live_jobs_alone_make_the_row_a_warning(self):
+        """F-E (round 4). A live job already sent when the deployment was switched to fixture is still in flight: the switch
+        is not clean until it ends, so the row warns. Narrowing the warning to queued jobs alone survived every test, because
+        no test had a running live job and nothing else."""
+        from core import admin_console
+        with override_settings(**SONNET_46):
+            job = enqueue(self.fresh_encounter(), self.user)
+        Job.objects.filter(pk=job.pk).update(state='running')
+        with override_settings(**self.FIXTURE):
+            row = admin_console.language_model_rows()[-1]
+        self.assertTrue(row['value'].startswith('0 queued, 1 running, 0 in reconciliation — QUILLMD_AI_MODE is not live'),
+                        row['value'])
+        self.assertEqual(row['severity'], 'warning')
+        # Positive control: once it has ended nothing live is left and the same row is plain.
+        Job.objects.filter(pk=job.pk).update(state='succeeded')
+        with override_settings(**self.FIXTURE):
+            row = admin_console.language_model_rows()[-1]
+        self.assertTrue(row['value'].startswith('0 queued, 0 running, 0 in reconciliation — '), row['value'])
+        self.assertEqual(row['severity'], '')
+
     def test_the_console_counts_running_and_reconciliation_jobs_and_drained_needs_all_three_at_0(self):
         """F-B / F-F (round 4). The migration note defines drained as no generation queued, running OR in reconciliation,
         but the row counted only queued and running, so a live job stranded in reconciliation (an uncertain provider outcome,
