@@ -323,6 +323,7 @@ class Credentials(unittest.TestCase):
         self.assertEqual(c.evidence_gaps(d, c.load_ledger(d / 'ledger'), 1),
                          ['attempt 1 has no manifest entry', 'attempt 1: its adopted draft is not scored'])
         c.complete_manifest(d)
+        self.assertTrue((d / 'manifest' / '001-C14.json').exists(), 'the entry was not completed')
         entry = json.loads((d / 'manifest' / '001-C14.json').read_text())
         self.assertTrue(entry['completed_after_interruption'])
         self.assertEqual(entry['notes_sha256'], hashlib.sha256(c.frozen_notes('C14').encode()).hexdigest())
