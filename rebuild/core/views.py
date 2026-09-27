@@ -1002,6 +1002,7 @@ def generate_view(request,pk):
             raise ValidationError("These answers include a clinician's review or decisions, and a new draft would replace them. "
                                   'Nothing was sent or charged. To generate again, a clinician can use "Clear answers and '
                                   'review to generate again" under the notes: it asks for confirmation and is recorded.')
+        if refusal:=v3_mapping.generation_refusal(e.template_version):raise ValidationError(refusal)
         quoted=usage_quote(request,e)
         job=enqueue(e,request.user,config=quoted,expected_revision=e.revision)
         if getattr(job,'reused',False):

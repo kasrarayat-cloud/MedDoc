@@ -141,6 +141,57 @@ explaining the unavailable filled export and linking the unchanged form. No
 new styling, palette, typography or layout system was added. Rendered HTML tests
 assert that the warning and recovery link are present before editing/finalizing.
 
+## Follow-up: refuse unusable generation before reserving or sending
+
+Root found that the export warning did not prevent a billed generation. Before this
+follow-up, the synthetic floating form could POST a valid quote and create a job,
+direct enqueue did not refuse, and an existing queued job reached a mocked provider
+and finished successfully. The synthetic receipt recorded cost **$0.01**, with
+**$0.015** charged to a synthetic wallet, although any nonempty export was certain
+to refuse. No real provider was called and no real funds were used.
+
+The new generation-only guard runs before HTTP quote acceptance, inside locked
+enqueue before job/reservation creation, and in worker dispatch before generation.
+Stored warnings can refuse early; they are **not claimed immutable**, and missing
+warnings cannot authorize. For v3 originals without that warning the existing
+bounded, isolated document inspection runs again; its SHA-256 and v3 contract must
+match the selected version's template. Source failure/integrity mismatch refuses
+with a fixed message without document contents or paths. No cache or historical
+metadata migration was added. Original download, mapping review and blank export
+remain available. Worker replay raises the existing `NoProviderRequest`, recording
+failure and releasing the existing hold atomically without a receipt or usage row.
+Generation refusal does not block independent voice transcription/review.
+
+New retained evidence (in the same runtime and committed evidence directories):
+
+| Evidence | Result |
+|---|---|
+| `17-admission-red.log` | All 3 admission controls failed before repair: HTTP, direct enqueue, worker replay. |
+| `18-admission-billing-red.log` | Exact worker proof: succeeded, one mocked provider call, one receipt, $0.01 cost / $0.015 synthetic charge. |
+| `19-admission-focused.log` | All 13 checks passed in 21.457 seconds: prior 6 workflow checks plus 7 admission controls. |
+| `admission-artifact-hashes.json` | Binds these three logs and the four changed source/test files; original 41-artifact manifest unchanged. |
+
+The seven new controls assert HTTP refusal before quote/reserve, direct enqueue
+refusal, old worker replay with warnings removed releasing a real synthetic hold,
+missing historical warnings detected from source, source mismatch/parser failure
+refusal without private details, supported nonfloating generation with mocked
+settlement, and independent voice with its reviewed-transcript delivery path.
+Network connection denial remains active. All tests used isolated DB55702; the
+runner destroyed its test database. An initial test-file editing command used the
+wrong relative path and made no edit; the first three-test RED still ran and is
+retained. The one-test billing RED then added the explicit synthetic-cost evidence.
+
+Only `core/jobs.py`, `core/v3_mapping.py`, `core/views.py` and the existing core
+signing test module changed in this follow-up. Word engine and HTML are unchanged
+from the first draft. Existing non-v3 paths bypass this new inspection. Old v3
+synthetic fixtures with missing originals may now fail source verification; they
+must supply a valid synthetic original rather than weaken this guard. No broad
+suite was restarted. Root owns the combined release checks and final refutation.
+
+This closes an avoidable billing path, **not D19 compatibility**. It does not
+establish actual model behavior, native Word acceptance or a faithful filled
+export for the refused class.
+
 ## Remaining limits / safe next action
 
 The binary `.doc` exception remains. D19's converted document is not an automatic

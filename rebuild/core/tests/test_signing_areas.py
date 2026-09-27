@@ -134,3 +134,158 @@ class SigningWorkflow(V3Fixture, TestCase):
         encounter.refresh_from_db()
         self.client.post(f'/encounters/{encounter.pk}/finalize/', {'revision': encounter.revision, 'reviewed': 'on'})
         encounter.refresh_from_db(); self.assertEqual(encounter.status, 'finalized')
+
+
+@override_settings(**{**V3, 'AI_MODE': 'live', 'AI_PROVIDER': 'anthropic', 'AI_MODEL': 'claude-sonnet-5',
+                      'AI_THINKING': 'disabled', 'AI_EFFORT': 'medium', 'AI_INFERENCE_GEO': '',
+                      'AI_INPUT_RATE': '2', 'AI_OUTPUT_RATE': '10', 'AI_CACHED_RATE': '.2'})
+class SigningGenerationAdmission(V3Fixture, TestCase):
+    """Financial admission controls use synthetic wallets and mocked results; network is denied."""
+    def setUp(self):
+        super().setUp()
+        self.original = signing_form()
+        self.template, self.version = self.uploaded(data=self.original, name='Synthetic floating admission')
+        self.version = self.confirm(self.template, self.version)
+        self.assertEqual(self.new_encounter(self.version, notes='Participant ID: SYNTHETIC-123').status_code, 302)
+        self.encounter = Encounter.objects.latest('created_at')
+        self.network = patch('socket.socket.connect', side_effect=AssertionError('Network denied'))
+        self.network.start(); self.addCleanup(self.network.stop)
+
+    def assert_no_financial_request(self):
+        from core.models import Job, Reservation, Usage, ProviderReceipt, Wallet
+        self.assertFalse(Job.objects.exists())
+        self.assertFalse(Reservation.objects.exists())
+        self.assertFalse(Usage.objects.exists())
+        self.assertFalse(ProviderReceipt.objects.exists())
+        self.assertFalse(Wallet.objects.exclude(reserved=0).exists())
+
+    def test_http_refuses_before_quote_and_leaves_original_and_mapping_available(self):
+        from core import billing, views
+        with patch('core.views.usage_quote', wraps=views.usage_quote) as quote, \
+                patch('core.jobs.reserve', wraps=billing.reserve) as reserve, \
+                patch('core.jobs.generation.generate') as provider:
+            token = self.client.get(f'/encounters/{self.encounter.pk}/').context['usage_quote']
+            response = self.client.post(f'/encounters/{self.encounter.pk}/generate/',
+                                       {'revision': self.encounter.revision, 'usage_quote': token}, follow=True)
+        self.assert_no_financial_request()
+        quote.assert_not_called(); reserve.assert_not_called(); provider.assert_not_called()
+        self.assertContains(response, 'Generation is unavailable')
+        self.assertContains(response, 'Nothing was sent or charged')
+        self.assertEqual(self.client.get(f'/templates/{self.template.pk}/').status_code, 200)
+        download = self.client.get(f'/templates/{self.template.pk}/original/')
+        self.assertEqual(b''.join(download.streaming_content), self.original)
+
+    def test_direct_enqueue_refuses_before_job_and_reservation(self):
+        from core.jobs import enqueue
+        from django.core.exceptions import ValidationError
+        with patch('core.jobs.reserve') as reserve, patch('core.jobs.generation.generate') as provider:
+            with self.assertRaisesMessage(ValidationError, 'Generation is unavailable'):
+                enqueue(self.encounter, self.user)
+        self.assert_no_financial_request()
+        reserve.assert_not_called(); provider.assert_not_called()
+
+    def test_old_queued_job_refuses_before_provider_and_releases_real_hold(self):
+        from decimal import Decimal
+        from core.billing import reserve
+        from core.jobs import run_one
+        from core.models import Job, Reservation, Usage, ProviderReceipt, Wallet
+        from core.models import Template
+        Template.objects.filter(pk=self.template.pk).update(warnings=[])
+        config = generation.configuration()
+        job = Job.objects.create(encounter=self.encounter, user=self.user, kind='generation',
+                                 revision=self.encounter.revision, request_key='synthetic-old-floating', config=config)
+        reserve(job, Decimal('.02'))
+        self.assertTrue(Reservation.objects.filter(job=job, state='held').exists())
+        fixture = generation.generate(self.encounter.notes, self.version.fields, {**config, 'mode': 'fixture'})
+        result = (fixture[0], Decimal('.01'), {'input_tokens': 5000, 'output_tokens': 0},
+                  {'input_per_million': '2', 'output_per_million': '10'},
+                  'anthropic:synthetic-offline', 'synthetic-admission', False)
+        with patch('core.jobs.generation.generate', return_value=result) as provider:
+            self.assertTrue(run_one())
+        job.refresh_from_db()
+        self.assertEqual(job.state, 'failed', {'state': job.state, 'provider_calls': provider.call_count,
+                         'usage_costs': list(Usage.objects.filter(job=job).values_list('actual_cost', 'charged_cost')),
+                         'receipt_count': ProviderReceipt.objects.filter(job=job).count()})
+        provider.assert_not_called()
+        self.assertIn('Generation is unavailable', job.error)
+        self.assertFalse(Usage.objects.filter(job=job).exists())
+        self.assertFalse(ProviderReceipt.objects.filter(job=job).exists())
+        self.assertFalse(Reservation.objects.filter(job=job, state='held').exists())
+        self.assertEqual(Reservation.objects.get(job=job).state, 'released')
+        self.assertFalse(Wallet.objects.exclude(reserved=0).exists())
+        self.encounter.refresh_from_db(); self.assertEqual(self.encounter.answers, {})
+
+
+    def test_missing_historical_warning_still_refuses_direct_enqueue(self):
+        from core.jobs import enqueue
+        from core.models import Template
+        from django.core.exceptions import ValidationError
+        Template.objects.filter(pk=self.template.pk).update(warnings=[])
+        with self.assertRaisesMessage(ValidationError, 'Generation is unavailable'):
+            enqueue(self.encounter, self.user)
+        self.assert_no_financial_request()
+
+    def test_integrity_or_unavailable_parser_refuses_without_source_detail(self):
+        from core.jobs import enqueue
+        from core.models import Template
+        from documents import DocumentError
+        from django.core.exceptions import ValidationError
+        Template.objects.filter(pk=self.template.pk).update(warnings=[])
+        path = private_path(self.template.original_path)
+        path.write_bytes(signing_form(table=False))
+        with self.assertRaisesMessage(ValidationError, 'could not be verified'):
+            enqueue(self.encounter, self.user)
+        path.write_bytes(self.original)
+        with patch('documents.inspect_template', side_effect=DocumentError('SYNTHETIC PRIVATE DETAIL')):
+            with self.assertRaisesMessage(ValidationError, 'could not be verified') as caught:
+                enqueue(self.encounter, self.user)
+        self.assertNotIn('SYNTHETIC PRIVATE DETAIL', str(caught.exception))
+        self.assert_no_financial_request()
+
+    def test_nonfloating_form_can_queue_hold_and_complete_generation(self):
+        from decimal import Decimal
+        from core.jobs import enqueue, run_one
+        from core.models import Reservation, Usage, ProviderReceipt
+        template, version = self.uploaded(data=signing_form(table=False), name='Synthetic supported admission')
+        version = self.confirm(template, version)
+        self.new_encounter(version, notes='Participant ID: SYNTHETIC-123')
+        encounter = Encounter.objects.latest('created_at')
+        job = enqueue(encounter, self.user)
+        self.assertTrue(Reservation.objects.filter(job=job, state='held').exists())
+        config = generation.configuration()
+        fixture = generation.generate(encounter.notes, version.fields, {**config, 'mode': 'fixture'})
+        result = (fixture[0], Decimal('.01'), {'input_tokens': 5000, 'output_tokens': 0},
+                  {'input_per_million': '2', 'output_per_million': '10'},
+                  'anthropic:synthetic-offline', 'synthetic-supported-admission', False)
+        with patch('core.jobs.generation.generate', return_value=result) as provider:
+            self.assertTrue(run_one())
+        provider.assert_called_once()
+        job.refresh_from_db(); self.assertEqual(job.state, 'succeeded')
+        self.assertEqual(Usage.objects.get(job=job).charged_cost, Decimal('.015'))
+        self.assertTrue(ProviderReceipt.objects.filter(job=job).exists())
+        encounter.refresh_from_db()
+        key = next(f['key'] for f in version.fields if not f.get('write_protected'))
+        self.assertEqual(encounter.answers[key]['text'], 'SYNTHETIC-123')
+
+    def test_independent_voice_on_floating_form_keeps_its_reviewed_transcript_path(self):
+        import os
+        from decimal import Decimal
+        from core.jobs import enqueue, run_one
+        from core.models import Reservation, Usage
+        from core.tests.audio_fixtures import wav_bytes
+        path = private_path('audio/' + 'a'*48 + '.wav')
+        path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(wav_bytes())
+        with patch.dict(os.environ, {'QUILLMD_DEEPGRAM_RATE_PER_MINUTE': '.006', 'QUILLMD_DEEPGRAM_RATE_PER_SECOND': ''}):
+            config = {**generation.configuration(), 'transcript_review_required': True}
+            job = enqueue(self.encounter, self.user, kind='transcription', input_path='audio/'+'a'*48+'.wav', config=config)
+        self.assertTrue(Reservation.objects.filter(job=job, state='held').exists())
+        response = ('SYNTHETIC dictated note', Decimal('.001'), {'duration_seconds': '10'},
+                    {'usd_per_minute': '.006'}, 'deepgram:synthetic-offline', 'synthetic-voice-admission', False)
+        with patch('core.jobs.transcribe', return_value=response) as provider:
+            self.assertTrue(run_one())
+        provider.assert_called_once()
+        job.refresh_from_db(); self.assertEqual(job.state, 'succeeded')
+        self.assertEqual(Usage.objects.get(job=job).charged_cost, Decimal('.0015'))
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.notes, 'Participant ID: SYNTHETIC-123')
+        self.assertIn('SYNTHETIC dictated note', private_path(job.result_path).read_text())

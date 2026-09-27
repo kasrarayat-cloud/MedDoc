@@ -55,6 +55,38 @@ def export_refusal(template):
     return FLOATING_INITIALS_REFUSAL if FLOATING_INITIALS_REFUSAL in template.warnings else ''
 
 
+
+GENERATION_EXPORT_REFUSAL = ("Generation is unavailable for this form's floating initials layout. "
+                             "Nothing was sent or charged; the unchanged form and mapping remain available.")
+GENERATION_SOURCE_REFUSAL = ("The original form could not be verified for generation. Nothing was sent or charged. "
+                            "Ask an administrator to check the original before trying again.")
+
+
+def generation_refusal(version):
+    """Before quoting/holding/sending: today's source-bound export restriction also applies to old v3 jobs.
+
+    Stored warnings can refuse early, but their absence never authorizes generation. Inspect the original again
+    in the existing document sandbox and bind its digest to the selected version's template. Never rewrite old
+    mappings, warnings, jobs or receipts. Voice transcription does not depend on filled-form export.
+    """
+    if not is_v3_version(version):
+        return ''
+    if export_refusal(version.template):
+        return GENERATION_EXPORT_REFUSAL
+    from documents import DocumentError, inspect_template
+    from documents.word_v3 import FLOATING_INITIALS_REFUSAL
+    from .security import private_path
+    try:
+        result = inspect_template(private_path(version.template.original_path), engine=CONTRACT)
+    except (DocumentError, OSError, ValueError, ValidationError):
+        return GENERATION_SOURCE_REFUSAL
+    if result.get('sha256') != version.template.sha256 or result.get('contract') != CONTRACT:
+        return GENERATION_SOURCE_REFUSAL
+    if FLOATING_INITIALS_REFUSAL in result.get('warnings', []):
+        return GENERATION_EXPORT_REFUSAL
+    return ''
+
+
 def too_many_fields(count):
     return (f'This form has {count} answer areas (signature and initials areas are not counted). QuillMD can generate '
             f'answers for at most {GENERATION_FIELD_LIMIT} per form today, so the form was not added and nothing was '
