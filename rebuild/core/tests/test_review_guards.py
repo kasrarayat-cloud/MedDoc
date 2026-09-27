@@ -313,6 +313,56 @@ class AnUntouchedNotesSaveRoundTrips(OrdinaryDraft, TestCase):
         self.assertEqual(content, '\n\nSynthetic words.')
 
 
+def transcript_help(page, job):
+    return re.search(r'<p class="helptext" id="transcript-help-%s">(.*?)</p>' % job.pk, page.content.decode(), re.S).group(1)
+
+
+CLEARS = "including a clinician's"
+
+
+@override_settings(**TEST_SETTINGS)
+class TheNotesPageSaysWhatAChangedSaveClears(OrdinaryDraft, TestCase):
+    """Refutation round 2, R2-2 and its INFO: a changed notes save clears the answers, the review decisions and the
+    accepted codes, whoever saves it. The page said so only while answers existed, and not plainly."""
+
+    def test_accepted_codes_alone_are_warned_about_in_the_notes_and_transcript_help(self):
+        encounter, _keys = self.reviewed_draft()
+        self.accepted_code(encounter)
+        self.post(f'/encounters/{encounter.pk}/clear-review/', encounter, {'confirm_clear': 'on'})
+        self.assertEqual(encounter.answers, {})                                     # (the control: only the code is left)
+        job = self.transcript_awaiting_review(encounter)
+        page = self.client.get(f'/encounters/{encounter.pk}/')
+        self.assertIn('accepted codes', notes_help(page))
+        self.assertIn('accepted codes', transcript_help(page, job))
+
+    def test_statement_decisions_alone_are_warned_about(self):
+        encounter, _keys = self.reviewed_draft()
+        Encounter.objects.filter(pk=encounter.pk).update(answers={}, template_review={'decisions': {'claim_1': {'variant': 'a'}}})
+        self.assertIn('review decision', notes_help(self.client.get(f'/encounters/{encounter.pk}/')))
+
+    def test_nothing_to_clear_says_nothing_about_clearing(self):
+        _template, version = self.upload(self.make_docx(), 'docx')
+        encounter = self.create_encounter(version, self.NOTES)
+        code = self.accepted_code(encounter)
+        CodeSuggestion.objects.filter(pk=code.pk).update(accepted_by=None, accepted_at=None)   # (a suggestion nobody accepted)
+        self.assertNotIn('clears', notes_help(self.client.get(f'/encounters/{encounter.pk}/')))
+
+    def test_the_person_saving_is_told_plainly_before_and_after(self):
+        """INFO: any member's changed save clears a clinician's review. Left as it is, and said plainly to whoever saves."""
+        encounter, _keys = self.reviewed_draft()
+        self.client.force_login(self.member('guards-notes-employee-2', 'employee'))
+        help_text = notes_help(self.client.get(f'/encounters/{encounter.pk}/'))
+        for words in ('Saving changed notes clears', CLEARS, 'accepted codes', 'recorded under your name',
+                      'Saving them unchanged clears nothing'):
+            self.assertIn(words, help_text)
+        response = self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': encounter.notes + '\nPlan: synthetic.'})
+        self.assertEqual(encounter.answers, {})
+        self.assertContains(response, 'The answer draft, its review decisions and accepted codes were cleared')
+        # (and a save that had nothing to clear does not claim it cleared anything)
+        response = self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': encounter.notes + '\nPlan: again.'})
+        self.assertNotContains(response, 'were cleared')
+
+
 @override_settings(**TEST_SETTINGS)
 class ClearAnswersAndReviewToGenerateAgain(OrdinaryDraft, TestCase):
     """R1(c): the explicit way to generate again over a decided draft — POST only, owner or clinician, confirmed, refused

@@ -472,7 +472,7 @@ def encounter_detail(request,pk):
                 transcript_reviews.append({'job':job,'raw':raw,'text':transcript,'empty':not (raw or '').strip() and not (transcript or '').strip()})
             except (ValidationError,OSError,ValueError):
                 job.display_error='The retained transcript could not be verified. Contact an administrator; do not resubmit a paid recording.'
-    return render(request,'encounter_detail.html',{'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
+    return render(request,'encounter_detail.html',{'notes_save_clears':notes_save_clears(e),'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
         'signer_name':' '.join((request.user.get_full_name() or request.user.email).split())})
 
@@ -490,6 +490,11 @@ def same_text(posted,stored):
     one leading line break (LF, CRLF or CR) missing from the post is ignored."""
     posted,stored=(text.replace('\r\n','\n').replace('\r','\n') for text in (posted,stored))
     return posted==stored or (stored.startswith('\n') and posted==stored[1:])
+
+def notes_save_clears(e):
+    """Whether a changed notes save would clear something: the answer draft, statement decisions or accepted codes."""
+    return (bool(e.answers) or bool((e.template_review or {}).get('decisions'))
+            or CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False).exists())
 
 def review_state_counts(e,codes=True):
     """What clearing this draft discards, as counts only (never clinical text), for its audit row."""
@@ -1406,7 +1411,7 @@ def encounter_notes(request,pk):
     # CRLF, which is the same text), so every evidence offset stays valid. A reviewed transcript is always a change.
     if transcript_job is None and same_text(notes,e.notes):
         messages.info(request,'Notes unchanged — nothing was cleared.');return redirect('encounter_detail',pk=pk)
-    cleared=review_state_counts(e)
+    cleared=review_state_counts(e);clears=notes_save_clears(e)
     e.notes=notes;e.answers={};e.revision+=1;e.status='draft';wm_review.invalidate_review(e);e.save(update_fields=['notes','answers','revision','status','template_review'])
     CodeSuggestion.objects.filter(encounter=e).update(accepted_by=None,accepted_at=None)
     CodeSuggestion.objects.filter(encounter=e).delete()
@@ -1416,7 +1421,10 @@ def encounter_notes(request,pk):
         audit(request.user,'transcription.applied',transcript_job.pk,department=e.department,revision=e.revision,
               mode=request.POST['transcript_mode'],raw_sha256=hashlib.sha256(raw_transcript.encode()).hexdigest(),
               corrected_sha256=hashlib.sha256(corrected.encode()).hexdigest(),corrected=corrected.replace('\r\n','\n')!=raw_transcript.replace('\r\n','\n'))
-    messages.success(request,'Notes saved. Generate and review a new answer draft.');return redirect('encounter_detail',pk=pk)
+    # (said plainly to whoever saved: any member's changed save clears a clinician's review — refutation round 2)
+    messages.success(request,('Notes saved. The answer draft, its review decisions and accepted codes were cleared, and the '
+                              'clearing is recorded under your name. ' if clears else 'Notes saved. ')+'Generate and review a new answer draft.')
+    return redirect('encounter_detail',pk=pk)
 
 def review_transcript(job):
     """Read only the bounded, hash-bound retained result for a reviewed transcript."""
