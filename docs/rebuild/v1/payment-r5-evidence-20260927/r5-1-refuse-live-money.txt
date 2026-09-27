@@ -1,0 +1,31 @@
+Found 1 test(s).
+System check identified no issues (0 silenced).
+
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-blockers/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+F
+======================================================================
+FAIL: test_live_funded_real_mode_reconciliation_collects_the_supported_difference (core.tests.test_v1_payment_refutation_r5.PaymentBehaviorPins.test_live_funded_real_mode_reconciliation_collects_the_supported_difference)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 39, in test_live_funded_real_mode_reconciliation_collects_the_supported_difference
+    self.assertEqual((usage.charged_cost, row.ledger_status, row.charge_delta, wallet.balance, wallet.reserved),
+AssertionError: Tuples differ: (Decimal('1.5'), 'pending_funds', Decimal('1.200000000000')[41 chars]12')) != (Decimal('1.5'), 'applied', Decimal('1.2'), Decimal('7.3'), Decimal('0'))
+
+First differing element 1:
+'pending_funds'
+'applied'
+
++ (Decimal('1.5'), 'applied', Decimal('1.2'), Decimal('7.3'), Decimal('0'))
+- (Decimal('1.5'),
+-  'pending_funds',
+-  Decimal('1.200000000000'),
+-  Decimal('8.500000000000'),
+-  Decimal('0E-12'))
+
+----------------------------------------------------------------------
+Ran 1 test in 0.230s
+
+FAILED (failures=1)
+Destroying test database for alias 'default'...

@@ -23,7 +23,9 @@ The reverse refuses while any row is recorded as live: dropping the column erase
 migration records every row NULL, which real data mode treats as sandbox money it never spends. A database with no live
 rows still reverses, even with a trigger already missing or named as an earlier version of this migration named it:
 earlier versions installed fewer guards, and a database that applied one (its plan is empty, so it never receives the
-rest) is reversed and re-applied to get them. real_mode_payment_check reports the guards missing until then.
+rest) can reverse and re-apply ONLY while it has no live rows. If it has since recorded any live Payment or Stripe
+event, the reverse refuses and a separately reviewed forward migration is required; never erase/relabel those rows
+to make the reverse pass. real_mode_payment_check reports missing or altered guards until they are installed.
 """
 
 from django.db import migrations, models

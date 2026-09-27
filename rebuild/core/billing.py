@@ -149,24 +149,74 @@ PAYMENT_EVIDENCE_GUARDS=(
     ('core_ledgerentry','ledger_no_truncate','quillmd_refuse_truncate',34),                 # 0020
 )
 
+# SHA256 of the exact prosrc installed by migrations 0003, 0008 and 0020. Do not learn these from
+# the inspected database: that would certify a replacement function as its own expected value.
+PAYMENT_GUARD_FUNCTION_SHA256={
+    'quillmd_append_only':'8d5ec86a531621ac1de53c85109dfb5122f9142b1cb66dcfc377e0945d869764',
+    'quillmd_webhook_evidence_guard':'797abc46124f7f810165cd8058731387c10bbad141f840f8fddc5b0b5f732f8c',
+    'quillmd_payment_evidence_guard':'4c4c2a8c49133266a8bf61181f1d6ca764ee8e98d5de262cb59eac99190520bd',
+    'quillmd_livemode_guard':'231e4fd6d5f23b0b38d9b4353add5b26cb31b62c571ccb0987e06705cf6b32cf',
+    'quillmd_refuse_truncate':'1f42decb7308aa5ee0a2f5425bd3ca1e8edf244ef3ff5a3faffe0c1dd6b4f447',
+}
+
 
 def missing_payment_evidence_guards():
-    """The PAYMENT_EVIDENCE_GUARDS that are missing, disabled, replica-only, conditional or not as installed. Read-only.
+    """Fixed labels for failed payment-evidence checks; read-only, with no row or unexpected object names returned.
 
-    A migration amended after a database applied it never re-runs there (the plan is empty), so the guards are read
-    from pg_trigger rather than inferred from django_migrations.
+    Compare every full trigger definition, enabled state, schema-qualified function identity and installed prosrc
+    hash. Refuse other row or statement triggers, except PostgreSQL's internal foreign-key constraint triggers.
+    Require origin both now and in the effective role/database login default. Run on the target database as the
+    runtime role: SET ROLE alone does not apply login settings, so pg_db_role_setting is inspected as well.
+
+    An amended migration never re-runs where already applied. These catalog reads provide point-in-time evidence;
+    an owner able to change the guards and this checker can defeat it. This is not a lock against that owner.
     """
+    tables=sorted({table for table,_,_,_ in PAYMENT_EVIDENCE_GUARDS})
     with connection.cursor() as cursor:
-        cursor.execute("SELECT c.relname,t.tgname,p.proname,t.tgtype,t.tgenabled,t.tgqual IS NULL FROM pg_trigger t "
+        cursor.execute("SELECT current_schema(),quote_ident(current_schema()),current_setting('session_replication_role')")
+        schema,quoted_schema,replication=cursor.fetchone()
+        cursor.execute("SELECT c.relname,t.tgname,p.proname,t.tgtype,t.tgenabled,pg_get_triggerdef(t.oid),"
+                       "pn.nspname,p.prosrc,p.oid::regproc::text,p.pronargs,t.tgisinternal,con.contype "
+                       "FROM pg_trigger t "
                        "JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace "
-                       "JOIN pg_proc p ON p.oid=t.tgfoid WHERE n.nspname=current_schema() AND NOT t.tgisinternal")
+                       "JOIN pg_proc p ON p.oid=t.tgfoid JOIN pg_namespace pn ON pn.oid=p.pronamespace "
+                       "LEFT JOIN pg_constraint con ON con.oid=t.tgconstraint "
+                       "WHERE n.nspname=current_schema() AND c.relname=ANY(%s)",[tables])
         present={(table,name):row for table,name,*row in cursor.fetchall()}
+        # PostgreSQL precedence: role+database > role > database > all roles/databases. These
+        # persistent settings need not be reflected in an already-open connection's current_setting.
+        cursor.execute("SELECT split_part(setting,'=',2) FROM pg_db_role_setting s "
+                       "CROSS JOIN LATERAL unnest(s.setconfig) AS setting "
+                       "WHERE s.setdatabase IN (0,(SELECT oid FROM pg_database WHERE datname=current_database())) "
+                       "AND s.setrole IN (0,(SELECT oid FROM pg_roles WHERE rolname=current_user)) "
+                       "AND split_part(setting,'=',1)='session_replication_role' "
+                       "ORDER BY (s.setrole<>0) DESC,(s.setdatabase<>0) DESC LIMIT 1")
+        default=cursor.fetchone()
 
     def installed(table,name,function,kind):
         row=present.get((table,name))
-        # tgenabled 'O' fires in ordinary sessions and 'A' always; 'R' (replica only) and 'D' (disabled) never fire here.
-        return row is not None and row[0]==function and row[1]==kind and row[2] in ('O','A') and row[3]
-    return [name for table,name,function,kind in PAYMENT_EVIDENCE_GUARDS if not installed(table,name,function,kind)]
+        if row is None: return False
+        actual_function,actual_kind,enabled,definition,namespace,body,sql_function,nargs,internal,_=row
+        event={27:'DELETE OR UPDATE',19:'UPDATE',34:'TRUNCATE'}[kind]
+        each='ROW' if kind & 1 else 'STATEMENT'
+        expected=(f'CREATE TRIGGER {name} BEFORE {event} ON {quoted_schema}.{table} '
+                  f'FOR EACH {each} EXECUTE FUNCTION {sql_function}()')
+        # 'A' always fires, including origin; 'R' and 'D' do not. Full definition also checks
+        # UPDATE OF columns, WHEN, arguments, constraint/deferred forms and transition relations.
+        return (actual_function==function and namespace==schema and nargs==0 and not internal
+                and actual_kind==kind and enabled in ('O','A') and definition==expected
+                and hashlib.sha256(body.encode()).hexdigest()==PAYMENT_GUARD_FUNCTION_SHA256[function])
+    failed=[name for table,name,function,kind in PAYMENT_EVIDENCE_GUARDS if not installed(table,name,function,kind)]
+    expected_keys={(table,name) for table,name,_,_ in PAYMENT_EVIDENCE_GUARDS}
+    for table in tables:
+        extra=[row for key,row in present.items() if key[0]==table and key not in expected_keys and row[1] & 1
+               and not (row[8] and row[9]=='f' and row[4]=='pg_catalog' and row[0].startswith('RI_FKey_'))]
+        if extra: failed.append(f'unexpected_row_triggers:{table}')
+        statements=[row for key,row in present.items() if key[0]==table and key not in expected_keys and not row[1] & 1]
+        if statements: failed.append(f'unexpected_statement_triggers:{table}')
+    if replication!='origin' or default is not None and default[0]!='origin':
+        failed.append('session_replication_role')
+    return failed
 
 
 def real_mode_payment_problems():
@@ -188,8 +238,9 @@ def real_mode_payment_problems():
         if sandbox_funded(wallet) or ledger!=wallet.balance: unexplained+=1
     if unexplained: problems.append(f'{unexplained} paid wallet(s) holding money that live payments do not wholly explain')
     missing=missing_payment_evidence_guards()
-    if missing: problems.append(f'{len(missing)} payment evidence guard trigger(s) missing, disabled or altered ({", ".join(missing)}), '
-                                'which migrations 0003, 0008 and 0020 install')
+    if missing: problems.append(f'{len(missing)} payment evidence guard check(s) failed ({", ".join(missing)}); '
+                                'require the guards installed by migrations 0003, 0008 and 0020, no extra row/statement triggers, '
+                                'and session_replication_role origin')
     return problems
 
 

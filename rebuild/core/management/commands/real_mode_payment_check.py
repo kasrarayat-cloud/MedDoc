@@ -3,9 +3,12 @@
 Real data mode runs on a database that has never held sandbox payments. This command refuses (exit status 1)
 when the database holds any payment or Stripe event row not recorded as live, or any paid wallet holding money
 that live payments do not wholly explain, or when any database trigger that keeps that evidence from being relabelled
-is missing, disabled or altered (core.billing.PAYMENT_EVIDENCE_GUARDS, read from pg_trigger). It prints counts and
-trigger names only, never a payment's identifier, address or amount, and it runs inside a READ ONLY transaction, so
-it cannot write even by mistake. It never calls Stripe.
+is missing, disabled or altered (full definition, function schema and installed body hash), an unexpected row or statement trigger
+exists, or the current/effective persistent runtime session_replication_role is not origin. See
+core.billing.missing_payment_evidence_guards for the exact checks. Connect as the target runtime role/database.
+It prints counts and fixed labels only, never a payment's identifier, address or amount, and it runs inside a READ
+ONLY transaction, so it cannot write even by mistake. It never calls Stripe. This is point-in-time evidence, not a
+lock against an owner who can alter the database and this checker.
 
 A startup check inside every process is not used instead: settings and AppConfig.ready() also run for
 migrate, makemigrations, the test runner and collectstatic, often before the database exists or is migrated,

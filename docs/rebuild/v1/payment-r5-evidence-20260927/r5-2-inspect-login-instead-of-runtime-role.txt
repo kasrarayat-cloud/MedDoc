@@ -1,0 +1,18 @@
+Found 1 test(s).
+System check identified no issues (0 silenced).
+
+Creating test database for alias 'default'...
+F
+======================================================================
+FAIL: test_set_role_does_not_hide_the_runtime_roles_persistent_replication_mode (core.tests.test_v1_payment_refutation_r5.RuntimeReplicationPins.test_set_role_does_not_hide_the_runtime_roles_persistent_replication_mode)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 194, in test_set_role_does_not_hide_the_runtime_roles_persistent_replication_mode
+    self.assertTrue(any('session_replication_role' in problem for problem in problems), problems)
+AssertionError: False is not true : []
+
+----------------------------------------------------------------------
+Ran 1 test in 0.027s
+
+FAILED (failures=1)
+Destroying test database for alias 'default'...

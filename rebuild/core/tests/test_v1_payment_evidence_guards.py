@@ -5,7 +5,8 @@ applied the earlier version never receives the guards (`migrate` plans nothing),
 exist; reversing it then failed on the trigger it expected to drop. Now `real_mode_payment_problems()`, and therefore
 `manage.py real_mode_payment_check`, which the V1 launcher runs before any surface starts, reads pg_trigger (read-only)
 and reports every guard real data mode relies on that is missing, disabled, conditional or not what the migrations
-installed; and 0020's reverse tolerates a missing trigger, so such a database can be reversed and re-applied.
+installed; and 0020's reverse tolerates a missing trigger, so such a database can be reversed and re-applied while
+it has no live rows. Live evidence requires a separately reviewed forward migration instead.
 
 R4-1 (round-4 refutation): real data mode decides whether a paid balance holds sandbox money from Payment rows (their
 existence, wallet, status, stripe_intent and livemode), Stripe event rows (their livemode) and 'payment' ledger credits.
@@ -86,7 +87,7 @@ def execute(*statements):
 def reported(problems):
     """The guard names the check's guard line names; empty when there is no such line."""
     for problem in problems:
-        found = re.search(r'guard trigger\(s\) missing, disabled or altered \(([^)]*)\)', problem)
+        found = re.search(r'guard check\(s\) failed \(([^)]*)\)', problem)
         if found:
             return set(found.group(1).split(', '))
     return set()
@@ -147,7 +148,7 @@ class TheLaunchersCheckRequiresEveryGuard(TestCase):
                 call_command('real_mode_payment_check', stdout=StringIO())
             transaction.set_rollback(True)
         message = str(refused.exception)
-        self.assertIn('2 payment evidence guard trigger(s) missing, disabled or altered', message)
+        self.assertIn('2 payment evidence guard check(s) failed', message)
         self.assertEqual(reported([message]), {'ledger_append_only', 'webhook_livemode_immutable'})
         self.assertEqual(real_mode_payment_problems(), [])
 
@@ -200,7 +201,9 @@ class ReversingAnEarlierPaymentModeMigration(TransactionTestCase):
                 'CREATE TRIGGER payment_livemode_immutable BEFORE UPDATE ON core_payment FOR EACH ROW EXECUTE FUNCTION quillmd_livemode_guard()',
                 GUARDS[('core_webhookevent', 'webhook_livemode_immutable')])
         self.assertEqual(reported(real_mode_payment_problems()),
-                         {'payment_evidence_immutable', 'payment_no_truncate', 'webhook_no_truncate', 'ledger_no_truncate'})
+                         {'payment_evidence_immutable', 'payment_no_truncate', 'webhook_no_truncate', 'ledger_no_truncate',
+                          # R5 compares the installed body bytes and refuses the extra old row trigger too.
+                          'webhook_livemode_immutable', 'unexpected_row_triggers:core_payment'})
         MigrationExecutor(connection).migrate(BEFORE_0020)
         self.assertEqual(self.installed(), (0, 0))
         to_leaf()

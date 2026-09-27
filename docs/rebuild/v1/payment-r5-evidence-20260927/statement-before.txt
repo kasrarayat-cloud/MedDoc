@@ -1,0 +1,1 @@
+.venv/bin/python: can't open file '/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/blockers-repair5/astra-recovery/statement-probe.py': [Errno 2] No such file or directory

@@ -1,0 +1,57 @@
+{
+  "source_sha256": "130b4a666d1effe0f15d6e4de2a7898234a7a7eb097b3a0607778a2b4f461f85",
+  "baseline_tests": 11,
+  "mutants": [
+    {
+      "name": "r5-1-refuse-live-money",
+      "exit_code": 1,
+      "killed": true
+    },
+    {
+      "name": "r5-3-ignore-organization",
+      "exit_code": 1,
+      "killed": true
+    },
+    {
+      "name": "r5-4-check-balance-before-audit",
+      "exit_code": 1,
+      "killed": true
+    },
+    {
+      "name": "r5-2-ignore-definition",
+      "exit_code": 1,
+      "killed": true
+    },
+    {
+      "name": "r5-2-ignore-function-schema",
+      "exit_code": 1,
+      "killed": true
+    },
+    {
+      "name": "r5-2-ignore-function-body",
+      "exit_code": 1,
+      "killed": true
+    },
+    {
+      "name": "r5-2-ignore-extra-triggers",
+      "exit_code": 1,
+      "killed": true
+    },
+    {
+      "name": "r5-2-ignore-current-replication",
+      "exit_code": 1,
+      "killed": true
+    },
+    {
+      "name": "r5-2-ignore-persistent-replication",
+      "exit_code": 1,
+      "killed": true
+    },
+    {
+      "name": "r5-2-inspect-login-instead-of-runtime-role",
+      "exit_code": 1,
+      "killed": true
+    }
+  ],
+  "worktree_untouched": true
+}

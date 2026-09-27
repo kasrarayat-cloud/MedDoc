@@ -1,0 +1,19 @@
+Found 1 test(s).
+System check identified no issues (0 silenced).
+
+Creating test database for alias 'default'...
+F
+======================================================================
+FAIL: test_the_same_function_name_and_body_in_another_schema_is_not_the_installed_function (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_the_same_function_name_and_body_in_another_schema_is_not_the_installed_function)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 131, in test_the_same_function_name_and_body_in_another_schema_is_not_the_installed_function
+    self.assertEqual(guards.reported(billing.real_mode_payment_problems()), {'payment_evidence_immutable'})
+AssertionError: Items in the second set but not the first:
+'payment_evidence_immutable'
+
+----------------------------------------------------------------------
+Ran 1 test in 0.027s
+
+FAILED (failures=1)
+Destroying test database for alias 'default'...
